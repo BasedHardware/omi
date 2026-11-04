@@ -1,4 +1,4 @@
-<!-- feature-flag-registry as-of: 2026-11-02 -->
+<!-- feature-flag-registry as-of: 2026-11-03 -->
 
 # Feature-flag authority registry
 
@@ -463,7 +463,7 @@ and an explicit empty literal renders as `''`.
 | `BATCH_PIPELINE_RECOVERY_TASKS_ENABLED` | Request-backed paid quarantine recovery survives ordinary revision draining | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `BATCH_PIPELINE_RECOVERY_WAKE_LEASE_SECONDS` | One outstanding quarantine-recovery delivery task per paid intent; lease before a lost wake is repaired; default 600, 0 = legacy 120s wake on every sweep | backend | env | closed | — | — | — | — | keep | keep | — | dazheng |
 | `BATCH_PIPELINE_SECOND_MULTILINGUAL_ENABLED` | Ship-on Soniox second chance after valid-empty Modulate held recovery; false restores Modulate-only ordinary recovery; independent language-guard recovery retains its separate switch and cap | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
-| `BATCH_PIPELINE_SERVING_METRICS_MIN_REFRESH_SECONDS` | Default 30; each batch serving instance refreshes its queue gauges at most once per interval | backend | env | closed | — | — | — | — | keep | keep | — | dazheng |
+| `BATCH_PIPELINE_SERVING_METRICS_MIN_REFRESH_SECONDS` | Default 30; each batch serving instance refreshes its queue gauges at most once per interval | backend | env | closed | — | — | 60 | — | keep | keep | — | dazheng |
 | `BATCH_PIPELINE_SHARED_EMBEDDING_TRUNK_ENABLED` | Default on unless false; the serial batch GPU chain runs the WeSpeaker embedding trunk once per 10 s chunk of a unit and pools it per local speaker, instead of once per (chunk, speaker) pair | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `BATCH_PIPELINE_SWEEP_OWNER_CHAIN_ENABLED` | Default on; when the periodic projection sweep advances an owner's chain head it keeps walking that owner's result log in chain order instead of waiting for its cursor to wrap | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `BATCH_PIPELINE_VAD_SEGMENTATION_REUSE_ENABLED` | Default on unless false; on the serial batch GPU chain a unit diarized at full length takes the raw segmentation scores its own VAD pass computed instead of a second segmentation forward | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
@@ -515,8 +515,17 @@ and an explicit empty literal renders as `''`.
 | `ENRICHMENT_BACKFILL_ROUTING_ENABLED` | Default on; new non-first-summary backfill enrichment uses the existing backfill queue while retaining enrichment handler and identity | backend | env | open | — | — | — | — | keep | keep | — | two-lane lead |
 | `ENRICHMENT_MAX_AGE_HOURS` | Default 72 hours: park historical enrichment without deleting its durable obligation; 0 disables new parking | backend | env | closed | — | — | {value: "72", category: ops_kill} | — | keep | keep | — | two-lane lead |
 | `EPISODES_ENABLED` | Default on unless set to a non-on value; live episodes overlay (per-moment gpt-5-nano update, provisional items, /v1/episodes capability). Off reports enabled=false and apps keep today's per-conversation UI | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
+| `EPISODE_ATTACH_CONTENT_GATE_ENABLED` | Default on; skip only verified completed semantic attach inputs | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
+| `EPISODE_ATTACH_DUPLICATES_DEDUPE_ENABLED` | Default on; omit duplicate-group CAS when its membership set is already present | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
+| `EPISODE_ATTACH_MEMBERSHIP_DEDUPE_ENABLED` | Default on; omit value-identical episode link and reverse membership writes | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
+| `EPISODE_ATTACH_NOOP_SCHEDULE_ENABLED` | Default on; skip episode scheduling after unchanged sync reprocessing | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
+| `EPISODE_ATTACH_OPTIMIZATIONS_ENABLED` | Default on; umbrella rollback for both rounds of episode attach read and write reductions | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
+| `EPISODE_ATTACH_OWNER_REUSE_ENABLED` | Default on; reuse the placed owner and omit unused recorded owner reads | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
+| `EPISODE_ATTACH_ROW_VISIBILITY_ENABLED` | Default on; use the supplied row for the attach visibility precheck | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
+| `EPISODE_ATTACH_WALK_CONTEXT_ENABLED` | Default on; reuse walk owner and visibility with transactional validation | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `EPISODE_CARRY_ON_SESSION_END` | Default on; wait one moment-pause window after a pusher session ends, then flush its carried transcript if no reconnect arrives | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `EPISODE_COMPOSER` | Default on unless set off; a closed episode whose members all finished processing gets one gpt-6-luna summary over member summaries plus the full transcript (title, notes, chapters) | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
+| `EPISODE_COMPOSE_SETTLE_ENABLED` | Default on; gate closed-episode composes on speech, names and membership, with a 10-minute background quiet window capped at 25 minutes; foreground reads bypass settling | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `EPISODE_HARD_CAP_ACROSS_CONVERSATIONS` | Default on; enforce the strict episode-wide hard cap during attachment and moment rotation, carrying the running summary and unresolved items to the successor | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `EPISODE_LIVE_TIMER_START_ENABLED` | Default on; send the authoritative live episode timer start to current apps | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `EPISODE_MOMENT_OUTPUT_VALIDATOR` | Default on; retry once when live moment bullets are mostly verbatim transcript or contain speaker labels | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
@@ -597,6 +606,7 @@ and an explicit empty literal renders as `''`.
 | `PUSHER_AUDIO_FILE_INCREMENTAL_ENABLED` | Default on; refresh the live pusher audio_files projection from exact uploaded-object metadata between full prefix rebuilds; 0 restores per-flush listing | backend | env | open | — | — | — | — | keep | keep | — | planscost |
 | `PUSHER_PROJECTION_QUEUE_WAIT_BOUND_ENABLED` | Default on; bound only committed pusher projection queue capacity waits to the existing 300-second receive-liveness budget | backend | env | open | — | — | — | — | keep | keep | — | two-lane lead |
 | `RATE_LIMIT_SHADOW_MODE` | Shadow backend rate limits | backend | env | closed | — | — | — | — | keep | keep | — | unowned |
+| `RECORDING_SPEAKER_RENAME_ENABLED` | Default on; bounded scoped recording speaker naming. Off reports disabled and clients use explicit single-conversation assignments. | backend, mobile | env | open | — | — | — | — | keep | keep | — | speakerrename |
 | `RECORD_AUDIO_PARTIAL_ENABLED` | Default on; finish unprovable stored recordings explicitly partial after 30 minutes and admit serial late-audio fills | backend | env | open | — | — | — | — | keep | keep | — | two-lane lead |
 | `RECORD_BARRIER_INLINE_FINISH` | Default on; finish pusher record custody inline after durable tail and existing projection drain, bounded to 20 seconds | backend | env | open | — | — | — | — | keep | keep | — | two-lane lead |
 | `RECORD_SEAL_OVERLAP_TRIM_ENABLED` | Default on; earlier retained objects own divergent overlap frames in seal proof and admission manifests | backend | env | open | {value: 'true', category: ops_kill} | true (backend-listen (chart), pusher (chart)); {value: 'true', category: ops_kill} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | true (backend-listen (chart), pusher (chart)); {value: 'true', category: ops_kill} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | — | keep | keep | — | two-lane lead |
@@ -994,7 +1004,6 @@ their code default (`fail` tells you which way a missing value resolves).
 - `BATCH_PIPELINE_RECOVERY_WAKE_LEASE_SECONDS` — One outstanding quarantine-recovery delivery task per paid intent; lease before a lost wake is repaired; default 600, 0 = legacy 120s wake on every sweep (fail: closed)
 - `BATCH_PIPELINE_REUSE_LIVE_ENABLED` — Default-off GPU-chain pre-STT reuse; requires existing lineage gates and full-span words-of-record quality proof (fail: closed)
 - `BATCH_PIPELINE_SECOND_MULTILINGUAL_ENABLED` — Ship-on Soniox second chance after valid-empty Modulate held recovery; false restores Modulate-only ordinary recovery; independent language-guard recovery retains its separate switch and cap (fail: open)
-- `BATCH_PIPELINE_SERVING_METRICS_MIN_REFRESH_SECONDS` — Default 30; each batch serving instance refreshes its queue gauges at most once per interval (fail: closed)
 - `BATCH_PIPELINE_SHADOW_LANGUAGE_ONLY` — Default false; classify one canonical batch unit per selected legacy upload instead of entering the idle GPU shadow; no route or publication (fail: closed)
 - `BATCH_PIPELINE_SHADOW_LANGUAGE_PROBES_PER_HOUR` — Default and maximum 500 fleet-wide pair attempts per UTC hour; zero or malformed denies; minute pacing and two 120-second slots also apply (fail: closed)
 - `BATCH_PIPELINE_SHADOW_RECOVERY_API_URL` — Explicit HTTPS existing record-recovery CPU role for shadow recovery; URL is also its OIDC audience; blank fails closed (fail: closed)
@@ -1103,12 +1112,21 @@ their code default (`fail` tells you which way a missing value resolves).
 - `EPISODES_ENABLED` — Default on unless set to a non-on value; live episodes overlay (per-moment gpt-5-nano update, provisional items, /v1/episodes capability). Off reports enabled=false and apps keep today's per-conversation UI (fail: open)
 - `EPISODES_PERCENT` — Default 100; stable salted uid bucket admitted to episodes when EPISODES_ENABLED is on. Admission alone spends nothing: listen and the finalizer also need a client that called /v1/episodes within 14 days (Redis episodes:client_seen:{uid}). Invalid values admit only the allowlist (fail: closed)
 - `EPISODES_UID_ALLOWLIST` — Comma-separated uids always admitted to episodes while EPISODES_ENABLED is on; empty admits nobody extra (fail: closed)
+- `EPISODE_ATTACH_CONTENT_GATE_ENABLED` — Default on; skip only verified completed semantic attach inputs (fail: open)
+- `EPISODE_ATTACH_DUPLICATES_DEDUPE_ENABLED` — Default on; omit duplicate-group CAS when its membership set is already present (fail: open)
+- `EPISODE_ATTACH_MEMBERSHIP_DEDUPE_ENABLED` — Default on; omit value-identical episode link and reverse membership writes (fail: open)
+- `EPISODE_ATTACH_NOOP_SCHEDULE_ENABLED` — Default on; skip episode scheduling after unchanged sync reprocessing (fail: open)
+- `EPISODE_ATTACH_OPTIMIZATIONS_ENABLED` — Default on; umbrella rollback for both rounds of episode attach read and write reductions (fail: open)
+- `EPISODE_ATTACH_OWNER_REUSE_ENABLED` — Default on; reuse the placed owner and omit unused recorded owner reads (fail: open)
+- `EPISODE_ATTACH_ROW_VISIBILITY_ENABLED` — Default on; use the supplied row for the attach visibility precheck (fail: open)
+- `EPISODE_ATTACH_WALK_CONTEXT_ENABLED` — Default on; reuse walk owner and visibility with transactional validation (fail: open)
 - `EPISODE_BOUNDARIES_MODE` — Hard meeting evidence for episodes and occasion conversations; off|shadow|serve, default shadow (fail: closed)
 - `EPISODE_BOUNDARIES_MODE_SERVE_PERCENT` — Serve cohort percentage in shadow mode, default 0 (fail: closed)
 - `EPISODE_BOUNDARIES_MODE_SERVE_UID_SHA256S` — Serve cohort account digests in shadow mode, default empty; never raw account identifiers (fail: closed)
 - `EPISODE_BOUNDARIES_MODE_SHADOW_PERCENT` — Boundary evidence database writes sampled in shadow; default 5 percent, serve cohort always writes (fail: closed)
 - `EPISODE_CARRY_ON_SESSION_END` — Default on; wait one moment-pause window after a pusher session ends, then flush its carried transcript if no reconnect arrives (fail: open)
 - `EPISODE_COMPOSER` — Default on unless set off; a closed episode whose members all finished processing gets one gpt-6-luna summary over member summaries plus the full transcript (title, notes, chapters) (fail: open)
+- `EPISODE_COMPOSE_SETTLE_ENABLED` — Default on; gate closed-episode composes on speech, names and membership, with a 10-minute background quiet window capped at 25 minutes; foreground reads bypass settling (fail: open)
 - `EPISODE_HARD_CAP_ACROSS_CONVERSATIONS` — Default on; enforce the strict episode-wide hard cap during attachment and moment rotation, carrying the running summary and unresolved items to the successor (fail: open)
 - `EPISODE_LIVE_TIMER_START_ENABLED` — Default on; send the authoritative live episode timer start to current apps (fail: open)
 - `EPISODE_MOMENT_OUTPUT_VALIDATOR` — Default on; retry once when live moment bullets are mostly verbatim transcript or contain speaker labels (fail: open)
@@ -1225,6 +1243,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `PUSHER_PROJECTION_QUEUE_WAIT_BOUND_ENABLED` — Default on; bound only committed pusher projection queue capacity waits to the existing 300-second receive-liveness budget (fail: open)
 - `RATE_LIMIT_SHADOW_MODE` — Shadow backend rate limits (fail: closed)
 - `RECORDING_SESSION_MODE` — Select recording session migration mode (fail: closed)
+- `RECORDING_SPEAKER_RENAME_ENABLED` — Default on; bounded scoped recording speaker naming. Off reports disabled and clients use explicit single-conversation assignments. (fail: open)
 - `RECORD_AUDIO_PARTIAL_ENABLED` — Default on; finish unprovable stored recordings explicitly partial after 30 minutes and admit serial late-audio fills (fail: open)
 - `RECORD_BARRIER_INLINE_FINISH` — Default on; finish pusher record custody inline after durable tail and existing projection drain, bounded to 20 seconds (fail: open)
 - `RECORD_SEAL_REPAIR_ENABLED` — Default on; CPU seal workers and retained repair cron use canonical privacy and tail proof with isolated row budgets (fail: open)

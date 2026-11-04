@@ -207,3 +207,51 @@ def test_an_unreadable_receipt_still_walks(composer_on, monkeypatch):
     monkeypatch.setattr(service.episode_receipts, 'get_consumed_ids', boom)
     moments = [object(), object()]
     assert list(service.unconsumed_moments(UID, 'c1', moments, _collaborators(FakeModel(), now=T0))) == moments
+
+
+@pytest.mark.parametrize('enabled', [True, False])
+def test_recovery_receipt_cache_rollback(monkeypatch, enabled):
+    monkeypatch.setenv('EPISODE_ATTACH_OPTIMIZATIONS_ENABLED', str(enabled))
+    monkeypatch.setenv(config.EPISODE_COMPOSER_ENV, 'off')
+    store = StrictFirestore()
+    model = FakeModel({'title': 'Lunch', 'bullets': ['A']}, *[{'bullets': ['A', str(i)]} for i in range(12)])
+    live = _live_episode(store, model)
+    calls = []
+    real = service.episode_receipts.get_consumed_ids
+
+    def counted(uid, namespace, **kwargs):
+        calls.append(namespace)
+        return real(uid, namespace, **kwargs)
+
+    monkeypatch.setattr(service.episode_receipts, 'get_consumed_ids', counted)
+    c = _collaborators(model, now=T0 + timedelta(minutes=2), store=store)
+    assert service._record_recovered(UID, live['id'], 'c1', _replay_row(), c) == 'applied'
+    assert len(model.calls) > 3
+    batches = len(list(service.recovery.moments('c1', _replay_row(), now=c.now(), calendar_identity=None)))
+    assert calls == ['c1', 'content-v1:c1'] * (1 if enabled else batches)
+
+
+def test_recovery_refreshes_receipts_after_another_writer_wins_cas(monkeypatch):
+    monkeypatch.setenv(config.EPISODE_COMPOSER_ENV, 'off')
+    store = StrictFirestore()
+    model = FakeModel({'title': 'Lunch'}, *[{'bullets': [str(i)]} for i in range(12)])
+    live = _live_episode(store, model)
+    real_update = episodes_db.update_episode
+    raced = []
+
+    def competing_write(*args, **kwargs):
+        stored = real_update(*args, **kwargs)
+        if not raced:
+            raced.append(stored)
+            # The competing writer committed exactly these words, but our CAS
+            # lost. Retry must observe its receipt rather than feed them twice.
+            raise episodes_db.EpisodeConflict('state_version_changed')
+        return stored
+
+    monkeypatch.setattr(episodes_db, 'update_episode', competing_write)
+    row = _replay_row()
+    batches = len(list(service.recovery.moments('c1', row, now=T0, calendar_identity=None)))
+    c = _collaborators(model, now=T0 + timedelta(minutes=2), store=store)
+    assert service._record_recovered(UID, live['id'], 'c1', row, c) == 'applied'
+    assert raced
+    assert len(model.calls) == 1 + batches

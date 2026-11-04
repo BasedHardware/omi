@@ -15079,5 +15079,42 @@ class AppLocalizationsDe extends AppLocalizations {
   String get liveAudioSavedDetail => 'Sprecher und endgültiges Transkript erscheinen hier beim Hochladen.';
 
   @override
+  String get speakerWholeRecording => 'Auf die gesamte Aufnahme anwenden';
+
+  @override
+  String get speakerSelectionChanged => 'Die Sprecherzuordnung hat sich geändert. Wähle die Zeilen erneut aus.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'Die Aufnahme ist zu groß. Wähle weniger Zeilen in einem Gespräch.',
+        'partial': 'Einige Zeilen wurden gespeichert. Wähle die übrigen und versuche es erneut.',
+        'other': 'Einige Zeilen wurden gespeichert. Wähle die übrigen und versuche es erneut.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerRecordingCoverage(String state, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count Zeilen nur in den verfügbaren Gesprächen umbenannt.',
+      one: '1 Zeilen nur in den verfügbaren Gesprächen umbenannt.',
+    );
+    String _temp1 = intl.Intl.selectLogic(
+      state,
+      {
+        'scope': 'Weitere Zeilen dieser Stimme (Aufnahmeumfang unbestätigt)',
+        'other': '$_temp0',
+      },
+    );
+    return '$_temp1';
+  }
+
+  @override
   String get episodeFinishingUp => 'Wird fertiggestellt…';
 }

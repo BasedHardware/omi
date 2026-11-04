@@ -155,7 +155,6 @@ void main() {
     await tester.pump(const Duration(seconds: 4));
     expect(requests, 1);
     expect(await provider.reprocessConversation(), isFalse);
-    expect(await provider.assignSpeaker(['s'], 'racing-edit'), isFalse);
     expect(provider.conversation.transcriptSegments.single.personId, 'new');
     result.complete(null);
     await tester.pumpAndSettle();

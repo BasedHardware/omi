@@ -14994,5 +14994,42 @@ class AppLocalizationsSl extends AppLocalizations {
   String get liveAudioSavedDetail => 'Govorci in končni prepis se bodo tukaj prikazali med nalaganjem.';
 
   @override
+  String get speakerWholeRecording => 'Uporabi za celoten posnetek';
+
+  @override
+  String get speakerSelectionChanged => 'Govorec se je spremenil. Znova izberite vrstice.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'Posnetek je prevelik. Izberite manj vrstic v enem pogovoru.',
+        'partial': 'Nekatere vrstice so shranjene. Izberite preostale in poskusite znova.',
+        'other': 'Nekatere vrstice so shranjene. Izberite preostale in poskusite znova.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerRecordingCoverage(String state, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Preimenovanih $count vrstic samo v razpoložljivih pogovorih.',
+      one: 'Preimenovanih 1 vrstic samo v razpoložljivih pogovorih.',
+    );
+    String _temp1 = intl.Intl.selectLogic(
+      state,
+      {
+        'scope': 'Druge vrstice tega glasu (obseg posnetka ni potrjen)',
+        'other': '$_temp0',
+      },
+    );
+    return '$_temp1';
+  }
+
+  @override
   String get episodeFinishingUp => 'Zaključevanje…';
 }

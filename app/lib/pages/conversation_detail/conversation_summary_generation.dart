@@ -93,6 +93,40 @@ Future<List<App>> fetchConversationSuggestedSummaryApps(String conversationId) a
 /// states and stale-response guards), the last failed summary request, the saved default template
 /// and which summary source the Summary tab shows. ConversationDetailProvider mixes it in.
 mixin ConversationSummaryGeneration on ChangeNotifier {
+  String? _preferredSummarizationAppId;
+
+  String? get preferredSummarizationAppId => _preferredSummarizationAppId;
+
+  Future<bool> setPreferredSummarizationApp(String appId) async {
+    if (!await preferredSummaryAppWrite(appId)) return false;
+    rememberDefaultSummaryTemplateAppId(appId);
+    _preferredSummarizationAppId = appId;
+    SharedPreferencesUtil().preferredSummarizationAppId = appId;
+    notifyListeners();
+    return true;
+  }
+
+  void loadPreferredSummarizationApp() {
+    _preferredSummarizationAppId = SharedPreferencesUtil().preferredSummarizationAppId;
+  }
+
+  void trackLastUsedSummarizationApp(String appId) {
+    SharedPreferencesUtil().lastUsedSummarizationAppId = appId;
+    notifyListeners();
+  }
+
+  String? getLastUsedSummarizationAppId() {
+    final lastUsedId = SharedPreferencesUtil().lastUsedSummarizationAppId;
+    return lastUsedId.isEmpty ? null : lastUsedId;
+  }
+
+  App? getLastUsedSummarizationApp() {
+    final lastUsedId = getLastUsedSummarizationAppId();
+    if (lastUsedId == null || appProvider == null) return null;
+
+    return appProvider!.apps.firstWhereOrNull((app) => app.id == lastUsedId && app.worksWithMemories() && app.enabled);
+  }
+
   ServerConversation? get conversationOrNull;
   ServerConversation get conversation;
   AppProvider? get appProvider;

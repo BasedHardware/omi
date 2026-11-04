@@ -15015,5 +15015,42 @@ class AppLocalizationsKn extends AppLocalizations {
   String get liveAudioSavedDetail => 'ಅಪ್‌ಲೋಡ್ ಆಗುತ್ತಿದ್ದಂತೆ ಮಾತನಾಡುವವರು ಮತ್ತು ಅಂತಿಮ ಪ್ರತಿಲೇಖನ ಇಲ್ಲಿ ಬರುತ್ತವೆ.';
 
   @override
+  String get speakerWholeRecording => 'ಸಂಪೂರ್ಣ ರೆಕಾರ್ಡಿಂಗ್‌ಗೆ ಅನ್ವಯಿಸಿ';
+
+  @override
+  String get speakerSelectionChanged => 'ಮಾತನಾಡುವವರು ಬದಲಾಗಿದ್ದಾರೆ. ಸಾಲುಗಳನ್ನು ಮತ್ತೆ ಆಯ್ಕೆಮಾಡಿ.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'ರೆಕಾರ್ಡಿಂಗ್ ತುಂಬಾ ದೊಡ್ಡದಾಗಿದೆ. ಒಂದು ಸಂಭಾಷಣೆಯಲ್ಲಿ ಕಡಿಮೆ ಸಾಲುಗಳನ್ನು ಆಯ್ಕೆಮಾಡಿ.',
+        'partial': 'ಕೆಲವು ಸಾಲುಗಳನ್ನು ಉಳಿಸಲಾಗಿದೆ. ಉಳಿದ ಸಾಲುಗಳನ್ನು ಆಯ್ಕೆಮಾಡಿ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.',
+        'other': 'ಕೆಲವು ಸಾಲುಗಳನ್ನು ಉಳಿಸಲಾಗಿದೆ. ಉಳಿದ ಸಾಲುಗಳನ್ನು ಆಯ್ಕೆಮಾಡಿ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerRecordingCoverage(String state, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ಲಭ್ಯವಿರುವ ಸಂಭಾಷಣೆಗಳಲ್ಲಿ ಮಾತ್ರ $count ಸಾಲುಗಳ ಹೆಸರನ್ನು ಬದಲಿಸಲಾಗಿದೆ.',
+      one: 'ಲಭ್ಯವಿರುವ ಸಂಭಾಷಣೆಗಳಲ್ಲಿ ಮಾತ್ರ 1 ಸಾಲುಗಳ ಹೆಸರನ್ನು ಬದಲಿಸಲಾಗಿದೆ.',
+    );
+    String _temp1 = intl.Intl.selectLogic(
+      state,
+      {
+        'scope': 'ಈ ಧ್ವನಿಯ ಇತರ ಸಾಲುಗಳು (ರೆಕಾರ್ಡಿಂಗ್ ವ್ಯಾಪ್ತಿ ದೃಢಪಟ್ಟಿಲ್ಲ)',
+        'other': '$_temp0',
+      },
+    );
+    return '$_temp1';
+  }
+
+  @override
   String get episodeFinishingUp => 'ಪೂರ್ಣಗೊಳಿಸಲಾಗುತ್ತಿದೆ…';
 }

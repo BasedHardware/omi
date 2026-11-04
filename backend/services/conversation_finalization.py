@@ -57,7 +57,10 @@ from utils.observability.journeys import (
     record_conversation_finalization_client_terminal,
 )
 
+from utils.lifecycle_metrics import PhaseMetrics
+
 logger = logging.getLogger(__name__)
+_byok_phase_metrics = PhaseMetrics('omi_finalization_byok', ['state'])
 
 REPLAY_OLDEST_OVERDUE_AGE = Gauge(
     'listen_finalization_replay_oldest_overdue_age_seconds',
@@ -690,6 +693,13 @@ def get_listen_finalization_tasks_max_attempts_for_worker() -> int:
 
 
 def _publish_job_metrics(*, firestore_client: Any = None) -> None:
+    from database._client import get_firestore_client
+    from database.lifecycle_metrics_queries import blocked_byok
+
+    now = time.time()
+    _byok_phase_metrics.refresh(
+        now, lambda: blocked_byok(firestore_client if firestore_client is not None else get_firestore_client(), now)
+    )
     try:
         summary = jobs_db.get_finalization_job_summary(firestore_client=firestore_client)
     except Exception:

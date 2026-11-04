@@ -25,7 +25,9 @@ The admission stage drives the real `register_recording`, `drain_recordings` and
 a loopback Firestore emulator (namespace `batch_pipeline_test_replayharness`), a local-directory storage
 adapter, fakeredis and a fake clock. Outbound network, ambient credentials and cloud clients are refused.
 Contention cases run several real drain loops concurrently; they are synthetic stress shapes, not
-production frequency.
+production frequency. Whether retries exhaust depends on scheduling and host load, so
+`admission-drain-contention` usually stops on `FirestoreContentionExhausted` but can admit cleanly. CI
+accepts only those two outcomes for it; repeat it locally before reading a single run as a fix.
 
 ## Add a case
 
