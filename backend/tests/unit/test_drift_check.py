@@ -460,7 +460,7 @@ def test_prod_source_model_reads_deploy_flags_and_the_ops_file():
     # The workflow's env-scoped backend_sync_memory fallback reaches the source model, so a
     # future regression of the prod 6Gi costcut is drift, not silence.
     assert model['backend-sync'].scale['memory'] == '6Gi'
-    assert model['backend-sync-backfill'].scale['memory'] == '3Gi'
+    assert model['backend-sync-backfill'].scale['memory'] == '2Gi'
     assert model['backend-sync-backfill'].ops_scale['service_max'] == {
         'owner': 'redis_guard',
         'floor': 8,
@@ -473,7 +473,7 @@ def test_staging_source_model_composes():
     model = dc.source_model('staging')
 
     assert model['backend-integration'].ops_env['SUMMARY_DEBT_REPAIR_ENABLED'] == 'true'
-    assert model['backend-sync-backfill'].scale['concurrency'] == 6
+    assert model['backend-sync-backfill'].scale['concurrency'] == 10
     # 2026-10-24 right-sizing: the overlay's warm override is gone, so the source
     # model declares every staging service cold and a cold live leader matches source.
     assert model['backend-integration'].scale['revision_min'] == 0

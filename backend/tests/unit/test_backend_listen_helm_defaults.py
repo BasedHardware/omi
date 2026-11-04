@@ -338,5 +338,5 @@ def test_prod_listen_hpa_scales_on_cpu_with_socket_guards():
     }
     # 2026-10-29 retire100: batch at 100% takes consented mobile off the live
     # leg; the floor drops to the residual (opt-outs + desktop) size. The 10-24
-    # note's peak path (max 60, requests, guards) is unchanged. Rollback: 30.
-    assert (hpa['spec']['minReplicas'], hpa['spec']['maxReplicas']) == (20, 60)
+    # note's peak path (max 60, requests, guards) is unchanged. margin-20 floor 12; rollback 20.
+    assert (hpa['spec']['minReplicas'], hpa['spec']['maxReplicas']) == (12, 60)

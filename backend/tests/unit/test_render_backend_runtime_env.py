@@ -495,7 +495,7 @@ def test_backend_integration_deploy_pins_mcp_serving_capacity():
     # backend-sync DOES carry --cpu=2 (#21668): its 6-8Gi memory requires >=2
     # CPU on Cloud Run, and 1-CPU deploys of 8Gi are rejected outright.
     # 2026-10-24 costcut mirror: backend now pins its OWN live shape (prod-scoped
-    # 8Gi/2 CPU/20/3/100) instead of inheriting it revision-to-revision; --cpu=2
+    # margin-20 4Gi/2 CPU/20/3/100) instead of inheriting it; --cpu=2
     # is legitimate there for the same #21668 pairing, but every
     # integration-specific flag below still must not leak onto it.
     integration_flags = _deploy_backend_stack_step_flags('deploy-backend-integration')
@@ -525,7 +525,7 @@ def test_backend_integration_deploy_pins_mcp_serving_capacity():
     assert '--cpu=2' in sync_flags
     # Backend's own prod shape (dev branch empty: dev keeps inheriting).
     assert (
-        "${{ inputs.runtime_env == 'prod' && '--cpu=2 --memory=8Gi --concurrency=20"
+        "${{ inputs.runtime_env == 'prod' && '--cpu=2 --memory=4Gi --concurrency=20"
         " --min-instances=3 --max-instances=100' || '' }}"
     ) in backend_flags
 
@@ -1366,9 +1366,12 @@ def test_firestore_train_preserves_monthly_reader_scope_and_cloud_run_overrides(
         # Only prod backend-sync restores monthly reads for compute admission (admitscope 2026-11-01).
         # All other services/jobs (including listen/pusher) retain the guard literal.
         wanted = {**expected}
+        if environment == 'prod' and (name.startswith('cloud_run/') or name.startswith('gke/')):
+            wanted.update(memory_list_index_window=100)
         if environment == 'prod' and name == 'cloud_run/backend-sync':
+            before_monthly = dict(wanted)
             wanted.update(usage_month_cache=100, usage_month_total=100)
-            assert {key for key in wanted if wanted[key] != expected[key]} == {
+            assert {key for key in wanted if wanted[key] != before_monthly[key]} == {
                 'usage_month_cache',
                 'usage_month_total',
             }
@@ -1388,5 +1391,8 @@ def test_firestore_train_preserves_monthly_reader_scope_and_cloud_run_overrides(
         values_path = _SCRIPT.parents[1] / 'charts' / chart / f'{environment}_omi_{chart.replace("-", "_")}_values.yaml'
         values = yaml.safe_load(values_path.read_text())
         chart_env = {entry['name']: entry.get('value') for entry in values['env']}
-        assert json.loads(chart_env['FIRESTORE_READ_LEVERS']) == expected
+        chart_expected = dict(expected)
+        if environment == 'prod':
+            chart_expected.update(memory_list_index_window=100)
+        assert json.loads(chart_env['FIRESTORE_READ_LEVERS']) == chart_expected
         assert chart_env['FSR_USAGE_MONTH_TOTAL_EPOCH'] == 'v1'
