@@ -14417,9 +14417,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get processingAction => 'منتظر ریکارڈنگز پروسیس کریں';
 
   @override
-  String processingProgress(int current, int total) {
-    return 'آپ کی منتظر ریکارڈنگز پروسیس ہو رہی ہیں…';
-  }
+  String get processingProgress => 'آپ کی منتظر ریکارڈنگز پروسیس ہو رہی ہیں…';
 
   @override
   String get processingDeferred => 'پروسیسنگ کی منتظر';

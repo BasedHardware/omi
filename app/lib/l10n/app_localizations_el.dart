@@ -14499,9 +14499,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get processingAction => 'Επεξεργασία εγγραφών σε αναμονή';
 
   @override
-  String processingProgress(int current, int total) {
-    return 'Γίνεται επεξεργασία των εγγραφών σε αναμονή…';
-  }
+  String get processingProgress => 'Γίνεται επεξεργασία των εγγραφών σε αναμονή…';
 
   @override
   String get processingDeferred => 'Σε αναμονή επεξεργασίας';

@@ -14320,9 +14320,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get processingAction => 'معالجة التسجيلات المنتظرة';
 
   @override
-  String processingProgress(int current, int total) {
-    return 'جارٍ معالجة تسجيلاتك المنتظرة…';
-  }
+  String get processingProgress => 'جارٍ معالجة تسجيلاتك المنتظرة…';
 
   @override
   String get processingDeferred => 'في انتظار المعالجة';

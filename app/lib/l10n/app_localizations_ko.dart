@@ -14203,9 +14203,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get processingAction => '대기 중인 녹음 처리';
 
   @override
-  String processingProgress(int current, int total) {
-    return '대기 중인 녹음을 처리하는 중…';
-  }
+  String get processingProgress => '대기 중인 녹음을 처리하는 중…';
 
   @override
   String get processingDeferred => '처리 대기 중';

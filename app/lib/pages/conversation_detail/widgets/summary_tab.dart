@@ -53,7 +53,8 @@ class SummaryTab extends StatefulWidget {
       this.currentResultIndex = -1,
       this.summarySearchResultOffset = 0,
       this.onTapWhenSearchEmpty,
-      this.onShowActionItemInTranscript});
+      this.onShowActionItemInTranscript,
+      this.onOpenTranscript});
 
   @override
   State<SummaryTab> createState() => _SummaryTabState();

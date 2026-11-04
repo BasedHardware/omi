@@ -18493,17 +18493,6 @@
     "@buildAndShareYourCustomApp": {
         "description": "Subtitle for create app button"
     },
-    "@processingProgress": {
-        "description": "Progress label showing current/total items",
-        "placeholders": {
-            "current": {
-                "type": "int"
-            },
-            "total": {
-                "type": "int"
-            }
-        }
-    },
     "onboardingChooseYourPreference": "Choose your preference",
     "@onboardingChooseYourPreference": {
         "description": "Onboarding step description for language selection"

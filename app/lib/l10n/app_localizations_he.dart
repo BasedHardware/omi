@@ -14299,9 +14299,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get processingAction => 'עיבוד הקלטות ממתינות';
 
   @override
-  String processingProgress(int current, int total) {
-    return 'ההקלטות הממתינות שלך בעיבוד…';
-  }
+  String get processingProgress => 'ההקלטות הממתינות שלך בעיבוד…';
 
   @override
   String get processingDeferred => 'ממתין לעיבוד';

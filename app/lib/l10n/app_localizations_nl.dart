@@ -14443,9 +14443,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get processingAction => 'Wachtende opnamen verwerken';
 
   @override
-  String processingProgress(int current, int total) {
-    return 'Je wachtende opnamen worden verwerkt…';
-  }
+  String get processingProgress => 'Je wachtende opnamen worden verwerkt…';
 
   @override
   String get processingDeferred => 'Wacht op verwerking';

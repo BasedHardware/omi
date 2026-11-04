@@ -14197,9 +14197,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get processingAction => '待機中の録音を処理';
 
   @override
-  String processingProgress(int current, int total) {
-    return '待機中の録音を処理しています…';
-  }
+  String get processingProgress => '待機中の録音を処理しています…';
 
   @override
   String get processingDeferred => '処理待ち';

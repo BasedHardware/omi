@@ -14448,9 +14448,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get processingAction => 'Procesar grabaciones pendientes';
 
   @override
-  String processingProgress(int current, int total) {
-    return 'Procesando tus grabaciones pendientes…';
-  }
+  String get processingProgress => 'Procesando tus grabaciones pendientes…';
 
   @override
   String get processingDeferred => 'En espera de procesamiento';

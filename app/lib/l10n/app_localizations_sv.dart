@@ -14412,9 +14412,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get processingAction => 'Bearbeta väntande inspelningar';
 
   @override
-  String processingProgress(int current, int total) {
-    return 'Bearbetar dina väntande inspelningar…';
-  }
+  String get processingProgress => 'Bearbetar dina väntande inspelningar…';
 
   @override
   String get processingDeferred => 'Väntar på bearbetning';

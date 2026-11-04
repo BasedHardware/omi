@@ -705,7 +705,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       if ((!pastDeadline && (scheduler.hasScheduledFrame || scheduler.transientCallbackCount > 0))) return;
       timer.cancel();
       _homeWidgetFreshnessTimer = null;
-      unawaited(tasks.ensureHomeWidgetPreviewLoaded());
+      unawaited(tasks.ensureLoaded(showShimmer: false));
     });
   }
 

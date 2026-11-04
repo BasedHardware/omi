@@ -14403,9 +14403,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get processingAction => 'Zpracovat čekající nahrávky';
 
   @override
-  String processingProgress(int current, int total) {
-    return 'Zpracovávání čekajících nahrávek…';
-  }
+  String get processingProgress => 'Zpracovávání čekajících nahrávek…';
 
   @override
   String get processingDeferred => 'Čeká na zpracování';

@@ -14503,9 +14503,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get processingAction => 'காத்திருக்கும் பதிவுகளைச் செயலாக்கு';
 
   @override
-  String processingProgress(int current, int total) {
-    return 'உங்கள் காத்திருக்கும் பதிவுகள் செயலாக்கப்படுகின்றன…';
-  }
+  String get processingProgress => 'உங்கள் காத்திருக்கும் பதிவுகள் செயலாக்கப்படுகின்றன…';
 
   @override
   String get processingDeferred => 'செயலாக்கத்திற்குக் காத்திருக்கிறது';

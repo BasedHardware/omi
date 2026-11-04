@@ -14513,9 +14513,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get processingAction => 'Wartende Aufnahmen verarbeiten';
 
   @override
-  String processingProgress(int current, int total) {
-    return 'Deine wartenden Aufnahmen werden verarbeitet…';
-  }
+  String get processingProgress => 'Deine wartenden Aufnahmen werden verarbeitet…';
 
   @override
   String get processingDeferred => 'Wartet auf Verarbeitung';

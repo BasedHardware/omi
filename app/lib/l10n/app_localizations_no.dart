@@ -14408,9 +14408,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get processingAction => 'Behandle ventende opptak';
 
   @override
-  String processingProgress(int current, int total) {
-    return 'Behandler ventende opptak…';
-  }
+  String get processingProgress => 'Behandler ventende opptak…';
 
   @override
   String get processingDeferred => 'Venter på behandling';

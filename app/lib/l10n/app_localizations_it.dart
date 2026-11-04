@@ -14480,9 +14480,7 @@ class AppLocalizationsIt extends AppLocalizations {
   String get processingAction => 'Elabora registrazioni in attesa';
 
   @override
-  String processingProgress(int current, int total) {
-    return 'Elaborazione delle registrazioni in attesa…';
-  }
+  String get processingProgress => 'Elaborazione delle registrazioni in attesa…';
 
   @override
   String get processingDeferred => 'In attesa di elaborazione';

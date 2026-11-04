@@ -14434,9 +14434,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get processingAction => 'Обробити записи в очікуванні';
 
   @override
-  String processingProgress(int current, int total) {
-    return 'Обробка записів в очікуванні…';
-  }
+  String get processingProgress => 'Обробка записів в очікуванні…';
 
   @override
   String get processingDeferred => 'Очікує на обробку';

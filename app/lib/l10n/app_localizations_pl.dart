@@ -14448,9 +14448,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String get processingAction => 'Przetwórz oczekujące nagrania';
 
   @override
-  String processingProgress(int current, int total) {
-    return 'Przetwarzanie oczekujących nagrań…';
-  }
+  String get processingProgress => 'Przetwarzanie oczekujących nagrań…';
 
   @override
   String get processingDeferred => 'Oczekuje na przetworzenie';

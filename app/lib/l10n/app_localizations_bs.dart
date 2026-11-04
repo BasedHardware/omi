@@ -14432,9 +14432,7 @@ class AppLocalizationsBs extends AppLocalizations {
   String get processingAction => 'Obradi snimke na čekanju';
 
   @override
-  String processingProgress(int current, int total) {
-    return 'Obrada vaših snimaka na čekanju…';
-  }
+  String get processingProgress => 'Obrada vaših snimaka na čekanju…';
 
   @override
   String get processingDeferred => 'Čeka obradu';

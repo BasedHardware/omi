@@ -14462,9 +14462,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get processingAction => 'Várakozó felvételek feldolgozása';
 
   @override
-  String processingProgress(int current, int total) {
-    return 'A várakozó felvételeid feldolgozása…';
-  }
+  String get processingProgress => 'A várakozó felvételeid feldolgozása…';
 
   @override
   String get processingDeferred => 'Feldolgozásra vár';

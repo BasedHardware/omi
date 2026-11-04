@@ -14399,9 +14399,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get processingAction => 'پردازش ضبط‌های منتظر';
 
   @override
-  String processingProgress(int current, int total) {
-    return 'در حال پردازش ضبط‌های منتظر شما…';
-  }
+  String get processingProgress => 'در حال پردازش ضبط‌های منتظر شما…';
 
   @override
   String get processingDeferred => 'در انتظار پردازش';

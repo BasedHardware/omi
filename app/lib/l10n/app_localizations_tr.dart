@@ -14417,9 +14417,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get processingAction => 'Bekleyen kayıtları işle';
 
   @override
-  String processingProgress(int current, int total) {
-    return 'Bekleyen kayıtlarınız işleniyor…';
-  }
+  String get processingProgress => 'Bekleyen kayıtlarınız işleniyor…';
 
   @override
   String get processingDeferred => 'İşlenmeyi bekliyor';

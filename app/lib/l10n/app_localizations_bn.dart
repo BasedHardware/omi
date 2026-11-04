@@ -14400,9 +14400,7 @@ class AppLocalizationsBn extends AppLocalizations {
   String get processingAction => 'অপেক্ষমাণ রেকর্ডিং প্রক্রিয়া করুন';
 
   @override
-  String processingProgress(int current, int total) {
-    return 'আপনার অপেক্ষমাণ রেকর্ডিং প্রক্রিয়া করা হচ্ছে…';
-  }
+  String get processingProgress => 'আপনার অপেক্ষমাণ রেকর্ডিং প্রক্রিয়া করা হচ্ছে…';
 
   @override
   String get processingDeferred => 'প্রক্রিয়াকরণের অপেক্ষায়';

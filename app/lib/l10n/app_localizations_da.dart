@@ -14394,9 +14394,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get processingAction => 'Behandl ventende optagelser';
 
   @override
-  String processingProgress(int current, int total) {
-    return 'Behandler dine ventende optagelser…';
-  }
+  String get processingProgress => 'Behandler dine ventende optagelser…';
 
   @override
   String get processingDeferred => 'Venter på behandling';

@@ -14399,9 +14399,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get processingAction => 'Spracovať čakajúce nahrávky';
 
   @override
-  String processingProgress(int current, int total) {
-    return 'Spracúvanie čakajúcich nahrávok…';
-  }
+  String get processingProgress => 'Spracúvanie čakajúcich nahrávok…';
 
   @override
   String get processingDeferred => 'Čaká na spracovanie';

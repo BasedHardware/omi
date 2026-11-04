@@ -444,6 +444,7 @@ class CaptureController extends ChangeNotifier
         _wedgeMonitorOverride = captureWedgeMonitor,
         _calendarGapMonitor = calendarGapMonitor,
         _preferences = preferences ?? SharedPreferencesUtil() {
+    _boundExternalProjection = (outOfCredits, topConversationId);
     var retainedOnPhone = OnDeviceTranscriptionController.instance.shouldKeepAudioLocal;
     void onOverflowChanged() {
       final next = OnDeviceTranscriptionController.instance.shouldKeepAudioLocal;
@@ -727,6 +728,10 @@ class CaptureController extends ChangeNotifier
     _phoneMic.probeStallAfterForeground();
   }
 
+  /// Adapters read mutable providers: compare with previously published
+  /// values so re-binding an equal projection stays quiet.
+  late (bool, String?) _boundExternalProjection;
+
   /// Called from the proxy provider on every upstream notify (conversations,
   /// chat, people, usage). Only an actual change of the backing actions is a
   /// capture state change; re-notifying here would rebuild every capture
@@ -735,6 +740,12 @@ class CaptureController extends ChangeNotifier
     final next = actions ?? const NoopCaptureExternalActions();
     if (next == externalActions) return;
     externalActions = next;
+    // A first-time binding that publishes the same projection (no credits
+    // flag, no top conversation) is not a state change: the adapters read the
+    // mutable providers live, so the listeners have nothing new to render.
+    final projection = (outOfCredits, topConversationId);
+    if (projection == _boundExternalProjection) return;
+    _boundExternalProjection = projection;
     notifyListeners();
   }
 
@@ -4536,7 +4547,6 @@ class CaptureController extends ChangeNotifier
     final conversationId = speakerAssignmentConversation?.id;
     final sessionId = activeCaptureSessionId;
     if (segmentIds.isEmpty || conversationId == null || speakerAssignmentClosed) return false;
-    final identity = speakerAssignmentIdentity;
     final targets = [
       for (final segment in segments)
         if (segment.speakerId == speakerId) segment.id,

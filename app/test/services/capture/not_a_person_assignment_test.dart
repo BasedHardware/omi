@@ -25,7 +25,8 @@ class _Actions extends NoopCaptureExternalActions {
   }
 
   @override
-  Future<bool> assignSpeaker(String id, List<String> ids, String person, {int? speakerId}) async {
+  Future<bool> assignSpeaker(String id, List<String> ids, String person,
+      {int? speakerId, (String, String)? voice}) async {
     assigned++;
     return true;
   }

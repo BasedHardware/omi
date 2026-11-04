@@ -14397,9 +14397,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get processingAction => 'Töötle ootel salvestisi';
 
   @override
-  String processingProgress(int current, int total) {
-    return 'Sinu ootel salvestiste töötlemine…';
-  }
+  String get processingProgress => 'Sinu ootel salvestiste töötlemine…';
 
   @override
   String get processingDeferred => 'Ootab töötlemist';

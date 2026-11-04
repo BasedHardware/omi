@@ -14408,9 +14408,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get processingAction => 'Käsittele odottavat tallenteet';
 
   @override
-  String processingProgress(int current, int total) {
-    return 'Käsitellään odottavia tallenteitasi…';
-  }
+  String get processingProgress => 'Käsitellään odottavia tallenteitasi…';
 
   @override
   String get processingDeferred => 'Odottaa käsittelyä';

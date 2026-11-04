@@ -14455,9 +14455,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get processingAction => 'Обработване на чакащите записи';
 
   @override
-  String processingProgress(int current, int total) {
-    return 'Обработване на чакащите ви записи…';
-  }
+  String get processingProgress => 'Обработване на чакащите ви записи…';
 
   @override
   String get processingDeferred => 'Чака обработка';

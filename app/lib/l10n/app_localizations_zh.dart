@@ -14178,9 +14178,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get processingAction => '处理等待中的录音';
 
   @override
-  String processingProgress(int current, int total) {
-    return '正在处理等待中的录音…';
-  }
+  String get processingProgress => '正在处理等待中的录音…';
 
   @override
   String get processingDeferred => '等待处理';

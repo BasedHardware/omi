@@ -25497,11 +25497,11 @@ abstract class AppLocalizations {
   /// **'Process waiting recordings'**
   String get processingAction;
 
-  /// Progress label showing current/total items
+  /// No description provided for @processingProgress.
   ///
   /// In en, this message translates to:
   /// **'Processing your waiting recordings…'**
-  String processingProgress(int current, int total);
+  String get processingProgress;
 
   /// No description provided for @processingDeferred.
   ///

@@ -14518,9 +14518,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get processingAction => 'Iproseso ang naghihintay na mga recording';
 
   @override
-  String processingProgress(int current, int total) {
-    return 'Pinoproseso ang iyong naghihintay na mga recording…';
-  }
+  String get processingProgress => 'Pinoproseso ang iyong naghihintay na mga recording…';
 
   @override
   String get processingDeferred => 'Naghihintay ng pagproseso';

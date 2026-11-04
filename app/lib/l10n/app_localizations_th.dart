@@ -14332,9 +14332,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get processingAction => 'ประมวลผลบันทึกที่รออยู่';
 
   @override
-  String processingProgress(int current, int total) {
-    return 'กำลังประมวลผลบันทึกที่รออยู่…';
-  }
+  String get processingProgress => 'กำลังประมวลผลบันทึกที่รออยู่…';
 
   @override
   String get processingDeferred => 'รอประมวลผล';

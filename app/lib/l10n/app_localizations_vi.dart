@@ -14405,9 +14405,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get processingAction => 'Xử lý bản ghi đang chờ';
 
   @override
-  String processingProgress(int current, int total) {
-    return 'Đang xử lý các bản ghi đang chờ của bạn…';
-  }
+  String get processingProgress => 'Đang xử lý các bản ghi đang chờ của bạn…';
 
   @override
   String get processingDeferred => 'Đang chờ xử lý';

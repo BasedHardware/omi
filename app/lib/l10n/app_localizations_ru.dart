@@ -14452,9 +14452,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get processingAction => 'Обработать ожидающие записи';
 
   @override
-  String processingProgress(int current, int total) {
-    return 'Обработка ожидающих записей…';
-  }
+  String get processingProgress => 'Обработка ожидающих записей…';
 
   @override
   String get processingDeferred => 'Ожидает обработки';

@@ -270,12 +270,6 @@ class ActionItem {
       context: generated.context,
     );
   }
-    );
-  }
-
-  static fromJson(Map<String, dynamic> json) {
-    return ActionItem.fromGenerated(wire.GeneratedActionItem.fromJson(json), deleted: json['deleted'] ?? false);
-  }
 
   wire.GeneratedActionItem toGenerated() {
     return wire.GeneratedActionItem(

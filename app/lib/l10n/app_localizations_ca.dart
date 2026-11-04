@@ -14477,9 +14477,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get processingAction => 'Processa les gravacions pendents';
 
   @override
-  String processingProgress(int current, int total) {
-    return 'S\'estan processant les gravacions pendents…';
-  }
+  String get processingProgress => 'S\'estan processant les gravacions pendents…';
 
   @override
   String get processingDeferred => 'En espera de processament';

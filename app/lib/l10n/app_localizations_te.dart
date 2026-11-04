@@ -14465,9 +14465,7 @@ class AppLocalizationsTe extends AppLocalizations {
   String get processingAction => 'వేచి ఉన్న రికార్డింగ్‌లను ప్రాసెస్ చేయండి';
 
   @override
-  String processingProgress(int current, int total) {
-    return 'మీ వేచి ఉన్న రికార్డింగ్‌లు ప్రాసెస్ అవుతున్నాయి…';
-  }
+  String get processingProgress => 'మీ వేచి ఉన్న రికార్డింగ్‌లు ప్రాసెస్ అవుతున్నాయి…';
 
   @override
   String get processingDeferred => 'ప్రాసెసింగ్ కోసం వేచి ఉంది';

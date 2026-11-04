@@ -14437,9 +14437,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get processingAction => 'Apstrādāt gaidošos ierakstus';
 
   @override
-  String processingProgress(int current, int total) {
-    return 'Notiek gaidošo ierakstu apstrāde…';
-  }
+  String get processingProgress => 'Notiek gaidošo ierakstu apstrāde…';
 
   @override
   String get processingDeferred => 'Gaida apstrādi';
