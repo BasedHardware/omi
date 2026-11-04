@@ -40,7 +40,7 @@ spec:
             summary: "Episode drain is retrying after a fold or storage failure"
             description: "Check capacity limits and the bounded-drain runbook. Legacy remains the fallback."
         - alert: OmiEpisodeLogSweepStale
-          expr: time() - max(omi_episode_drain_sweep_observed_at_seconds) > 300
+          expr: time() - max(omi_episode_drain_sweep_observed_at_seconds) > 300 or absent(omi_episode_drain_sweep_observed_at_seconds)
           for: 5m
           labels: {severity: warning}
           annotations:

@@ -59,6 +59,16 @@ def test_duplicate_key_no_writes_and_payload_sealed(client):
     assert all(path[:2] == ('users', UID) for path in client.rows)
 
 
+def test_drift_sampling_client_failure_never_breaks_serving(client, monkeypatch):
+    monkeypatch.setattr(worker.random, 'random', lambda: 0)
+
+    def unavailable():
+        raise RuntimeError('client_unavailable')
+
+    monkeypatch.setattr(worker, 'get_firestore_client', unavailable)
+    assert worker.sample_read(UID, [{'id': 'episode'}]) is None
+
+
 def test_debounce_size_and_max_age_bound():
     state = {}
     for n in range(60):

@@ -79,7 +79,8 @@ This applies to every existing log, including shadow users at zero read percent.
 While any barrier/debt exists, reads use legacy policy. These barriers live in
 the same queued phase and carry the same queued deadline and alert.
 
-`OmiEpisodeLogSweepStale` detects missing sweep observations; silence in deadline
+The backend-sync collector retains both drain and view metric families.
+`OmiEpisodeLogSweepStale` detects stale or entirely absent sweep observations; silence in deadline
 counters is insufficient evidence of a healthy scheduler. The PrometheusRule in
 `charts/monitoring/episode-log/alerts.yaml` is a reviewable artifact for the train
 owner to install with the existing metrics scrape.

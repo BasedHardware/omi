@@ -260,8 +260,8 @@ def sweep(*, firestore_client=None, now=None):
 def sample_read(uid, rows, *, firestore_client=None):
     if not config.enabled(uid) or random.random() >= 0.01:
         return
-    client = firestore_client if firestore_client is not None else get_firestore_client()
     try:
+        client = firestore_client if firestore_client is not None else get_firestore_client()
         state = store.state(uid, firestore_client=client)
         token = _comparison_token(state)
         if not state.get('backfill_complete') or token is None:
