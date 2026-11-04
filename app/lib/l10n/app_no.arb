@@ -4526,5 +4526,5 @@
     "speakerWholeRecording": "Bruk på hele opptaket",
     "speakerSelectionChanged": "Taleren er endret. Velg linjene på nytt.",
     "speakerRenameIssue": "{reason, select, limit{Opptaket er for stort. Velg færre linjer i én samtale.} partial{Noen linjer ble lagret. Velg de resterende og prøv igjen.} other{Noen linjer ble lagret. Velg de resterende og prøv igjen.}}",
-    "speakerRecordingCoverage": "{state, select, scope{Andre linjer med denne stemmen (opptakets omfang er ubekreftet)} other{{count, plural, =1{Endret navn på 1 linjer bare i denne samtalen.} other{Endret navn på {count} linjer bare i denne samtalen.}}}}"
+    "speakerRecordingCoverage": "{state, select, scope{Andre linjer med denne stemmen (opptakets omfang er ubekreftet)} other{{count, plural, =1{Endret navn på 1 linjer bare i de tilgjengelige samtalene.} other{Endret navn på {count} linjer bare i de tilgjengelige samtalene.}}}}"
 }

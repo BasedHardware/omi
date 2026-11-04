@@ -14901,8 +14901,8 @@ class AppLocalizationsAr extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'تمت إعادة تسمية $count أسطر في هذه المحادثة فقط.',
-      one: 'تمت إعادة تسمية 1 أسطر في هذه المحادثة فقط.',
+      other: 'تمت إعادة تسمية $count أسطر في المحادثات المتاحة فقط.',
+      one: 'تمت إعادة تسمية 1 أسطر في المحادثات المتاحة فقط.',
     );
     String _temp1 = intl.Intl.selectLogic(
       state,

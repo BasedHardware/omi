@@ -15064,8 +15064,8 @@ class AppLocalizationsCa extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'S’han canviat $count línies només en aquesta conversa.',
-      one: 'S’han canviat 1 línies només en aquesta conversa.',
+      other: 'S’han canviat $count línies només en les converses disponibles.',
+      one: 'S’han canviat 1 línies només en les converses disponibles.',
     );
     String _temp1 = intl.Intl.selectLogic(
       state,

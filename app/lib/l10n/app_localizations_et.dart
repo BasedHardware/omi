@@ -14982,8 +14982,8 @@ class AppLocalizationsEt extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'Nimetati ümber $count rida ainult selles vestluses.',
-      one: 'Nimetati ümber 1 rida ainult selles vestluses.',
+      other: 'Nimetati ümber $count rida ainult saadaolevates vestlustes.',
+      one: 'Nimetati ümber 1 rida ainult saadaolevates vestlustes.',
     );
     String _temp1 = intl.Intl.selectLogic(
       state,

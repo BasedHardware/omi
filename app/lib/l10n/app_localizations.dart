@@ -26346,7 +26346,7 @@ abstract class AppLocalizations {
   /// Scope explanation or saved confirmation when full recording coverage is unconfirmed.
   ///
   /// In en, this message translates to:
-  /// **'{state, select, scope{Other lines from this voice (recording coverage unconfirmed)} other{{count, plural, =1{Renamed 1 line in this conversation only.} other{Renamed {count} lines in this conversation only.}}}}'**
+  /// **'{state, select, scope{Other lines from this voice (recording coverage unconfirmed)} other{{count, plural, =1{Renamed 1 line in the available conversations only.} other{Renamed {count} lines in the available conversations only.}}}}'**
   String speakerRecordingCoverage(String state, int count);
 }
 

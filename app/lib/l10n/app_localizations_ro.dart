@@ -15052,8 +15052,8 @@ class AppLocalizationsRo extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'S-au redenumit $count rânduri doar în această conversație.',
-      one: 'S-au redenumit 1 rânduri doar în această conversație.',
+      other: 'S-au redenumit $count rânduri doar în conversațiile disponibile.',
+      one: 'S-au redenumit 1 rânduri doar în conversațiile disponibile.',
     );
     String _temp1 = intl.Intl.selectLogic(
       state,

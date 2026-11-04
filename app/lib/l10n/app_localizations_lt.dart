@@ -15011,8 +15011,8 @@ class AppLocalizationsLt extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'Pervadinta $count eilučių tik šiame pokalbyje.',
-      one: 'Pervadinta 1 eilučių tik šiame pokalbyje.',
+      other: 'Pervadinta $count eilučių tik prieinamuose pokalbiuose.',
+      one: 'Pervadinta 1 eilučių tik prieinamuose pokalbiuose.',
     );
     String _temp1 = intl.Intl.selectLogic(
       state,

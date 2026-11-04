@@ -21,6 +21,20 @@
       "description": "Production speaker sheet uses unconfirmed-coverage wording for a legacy local rename; same synthetic fixture and real fonts as the before render.",
       "captured_by": "agent",
       "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-ios-coverage-feedback-before.png",
+      "platform": "mobile-ios",
+      "description": "Before: partial-success message claims this conversation only, even though legacy discovery can update several conversations.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "005-mobile-ios-coverage-feedback-after.png",
+      "platform": "mobile-ios",
+      "description": "After: partial-success message names only the available conversations, with no whole-recording claim. Same synthetic transcript and real fixture fonts.",
+      "captured_by": "agent",
+      "source": "visual-audit"
     }
   ]
 }

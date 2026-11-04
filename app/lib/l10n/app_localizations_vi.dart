@@ -14991,8 +14991,8 @@ class AppLocalizationsVi extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'Đã đổi tên $count dòng chỉ trong cuộc trò chuyện này.',
-      one: 'Đã đổi tên 1 dòng chỉ trong cuộc trò chuyện này.',
+      other: 'Đã đổi tên $count dòng chỉ trong các cuộc trò chuyện có sẵn.',
+      one: 'Đã đổi tên 1 dòng chỉ trong các cuộc trò chuyện có sẵn.',
     );
     String _temp1 = intl.Intl.selectLogic(
       state,

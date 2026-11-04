@@ -15032,8 +15032,8 @@ class AppLocalizationsPl extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'Zmieniono nazwy $count wierszy tylko w tej rozmowie.',
-      one: 'Zmieniono nazwy 1 wierszy tylko w tej rozmowie.',
+      other: 'Zmieniono nazwy $count wierszy tylko w dostępnych rozmowach.',
+      one: 'Zmieniono nazwy 1 wierszy tylko w dostępnych rozmowach.',
     );
     String _temp1 = intl.Intl.selectLogic(
       state,

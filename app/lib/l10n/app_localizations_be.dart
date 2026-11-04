@@ -15023,8 +15023,8 @@ class AppLocalizationsBe extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'Перайменавана $count радкоў толькі ў гэтай размове.',
-      one: 'Перайменавана 1 радкоў толькі ў гэтай размове.',
+      other: 'Перайменавана $count радкоў толькі ў даступных размовах.',
+      one: 'Перайменавана 1 радкоў толькі ў даступных размовах.',
     );
     String _temp1 = intl.Intl.selectLogic(
       state,

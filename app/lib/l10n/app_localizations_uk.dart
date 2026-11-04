@@ -15020,8 +15020,8 @@ class AppLocalizationsUk extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'Перейменовано $count рядків лише в цій розмові.',
-      one: 'Перейменовано 1 рядків лише в цій розмові.',
+      other: 'Перейменовано $count рядків лише в доступних розмовах.',
+      one: 'Перейменовано 1 рядків лише в доступних розмовах.',
     );
     String _temp1 = intl.Intl.selectLogic(
       state,

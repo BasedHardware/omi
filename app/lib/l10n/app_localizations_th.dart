@@ -14916,8 +14916,8 @@ class AppLocalizationsTh extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'เปลี่ยนชื่อ $count บรรทัดในบทสนทนานี้เท่านั้น',
-      one: 'เปลี่ยนชื่อ 1 บรรทัดในบทสนทนานี้เท่านั้น',
+      other: 'เปลี่ยนชื่อ $count บรรทัดในบทสนทนาที่มีอยู่เท่านั้น',
+      one: 'เปลี่ยนชื่อ 1 บรรทัดในบทสนทนาที่มีอยู่เท่านั้น',
     );
     String _temp1 = intl.Intl.selectLogic(
       state,

@@ -4561,5 +4561,5 @@
     "speakerWholeRecording": "Kaydın tamamına uygula",
     "speakerSelectionChanged": "Konuşmacı değişti. Satırları yeniden seçin.",
     "speakerRenameIssue": "{reason, select, limit{Kayıt çok büyük. Bir konuşmada daha az satır seçin.} partial{Bazı satırlar kaydedildi. Kalanları seçip tekrar deneyin.} other{Bazı satırlar kaydedildi. Kalanları seçip tekrar deneyin.}}",
-    "speakerRecordingCoverage": "{state, select, scope{Bu sesin diğer satırları (kayıt kapsamı doğrulanmadı)} other{{count, plural, =1{Yalnızca bu konuşmadaki 1 satır yeniden adlandırıldı.} other{Yalnızca bu konuşmadaki {count} satır yeniden adlandırıldı.}}}}"
+    "speakerRecordingCoverage": "{state, select, scope{Bu sesin diğer satırları (kayıt kapsamı doğrulanmadı)} other{{count, plural, =1{Yalnızca mevcut konuşmalardaki 1 satır yeniden adlandırıldı.} other{Yalnızca mevcut konuşmalardaki {count} satır yeniden adlandırıldı.}}}}"
 }

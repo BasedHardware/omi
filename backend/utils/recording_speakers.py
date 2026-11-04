@@ -1,8 +1,8 @@
 """Explicit naming across a recording; never joins embeddings or different scopes.
 
 Episode membership is authoritative. Outside episodes, indexed scopes are
-augmented by bounded legacy origin/session queries. Unprovable coverage stays
-local and is explicitly reported; no production migration is needed.
+augmented by bounded legacy origin/session queries. Legacy-only or excluded
+members make coverage partial; no production migration is needed.
 """
 
 from datetime import datetime, timezone
@@ -57,8 +57,12 @@ def members(uid, conversation_id, *, episode_id=None, extra_scopes=()):
         '',
     }
     coverage = 'complete' if episode else 'partial'
+    excluded_ids = set()
     if episode:
-        ids = list(dict.fromkeys(episode.get('conversation_ids') or []))
+        excluded_ids = set(episode.get('discarded_conversation_ids') or []) | set(
+            episode.get('duplicate_conversation_ids') or []
+        )
+        ids = list(dict.fromkeys([*(episode.get('conversation_ids') or []), *sorted(excluded_ids)]))
         check_budget(len(ids))
         if conversation_id not in ids:
             raise ValueError('Conversation is no longer in this recording')
@@ -68,30 +72,32 @@ def members(uid, conversation_id, *, episode_id=None, extra_scopes=()):
             if (row := (anchor if cid == conversation_id else conversations_db.get_conversation(uid, cid)))
         ]
     elif scopes:
-        indexed = scope_conversation_ids(uid, scopes)
+        indexed = set(scope_conversation_ids(uid, scopes))
         external = anchor.get('external_data') or {}
         origin = external.get('recording_origin_id') or external.get('recording_session_id')
-        legacy, proven = legacy_recording_conversation_ids(uid, origin) if origin else ([], False)
-        ids = list(dict.fromkeys([conversation_id, *indexed, *legacy]))
+        legacy = legacy_recording_conversation_ids(uid, origin) if origin else []
+        ids = list(dict.fromkeys([conversation_id, *sorted(indexed), *legacy]))
         check_budget(len(ids))
-        if proven:
-            coverage = 'complete'
-            rows = [dict(row, id=cid) for cid in ids if (row := conversations_db.get_conversation(uid, cid))]
-        else:
-            # An index hit cannot prove that older unindexed siblings do not exist.
-            # A generation's session id also rotates; never present it as an origin.
-            rows = [anchor]
-            record_fallback(
-                component='other', from_mode='other', to_mode='incumbent', reason='other', outcome='degraded'
-            )
+        # Origin stamps can themselves be incomplete. Only indexed membership
+        # proves coverage; legacy candidates may extend it, never certify it.
+        coverage = 'complete' if set(ids) <= indexed else 'partial'
+        rows = [dict(row, id=cid) for cid in ids if (row := conversations_db.get_conversation(uid, cid))]
     else:
-        rows = [anchor]
+        ids, rows = [conversation_id], [anchor]
+    check_budget(len(ids), sum(len(row.get('transcript_segments') or []) for row in rows))
     rows = [
         row
         for row in rows
-        if row and not row.get('deleted') and not row.get('is_locked') and not is_relevance_discarded(row)
+        if row
+        and row['id'] not in excluded_ids
+        and not row.get('deleted')
+        and not row.get('is_locked')
+        and not is_relevance_discarded(row)
     ]
-    check_budget(len(rows), sum(len(row.get('transcript_segments') or []) for row in rows))
+    if len(rows) != len(ids):
+        coverage = 'partial'
+    if coverage == 'partial':
+        record_fallback(component='other', from_mode='other', to_mode='incumbent', reason='other', outcome='degraded')
     return episode, [dict(row, transcript_segments=assignment_segments(row)) for row in rows], coverage
 
 
@@ -276,6 +282,8 @@ def assign(uid, conversation_id, body: RecordingSpeakerRequest, background_tasks
             # clients never roll those labels back after a later member fails.
             record_fallback(component='other', from_mode='other', to_mode='none', reason='other', outcome='degraded')
             applied.append({'conversation_id': cid, 'applied_count': 0, 'error': 'save_failed'})
+    if {row['conversation_id'] for row in applied if not row.get('error')} != set(by_id):
+        coverage = 'partial'
     return {
         'episode_id': episode['id'] if episode else None,
         'coverage': coverage,

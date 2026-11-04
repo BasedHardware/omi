@@ -14996,8 +14996,8 @@ class AppLocalizationsSr extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'Преименовано је $count редова само у овом разговору.',
-      one: 'Преименовано је 1 редова само у овом разговору.',
+      other: 'Преименовано је $count редова само у доступним разговорима.',
+      one: 'Преименовано је 1 редова само у доступним разговорима.',
     );
     String _temp1 = intl.Intl.selectLogic(
       state,

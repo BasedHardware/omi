@@ -15048,8 +15048,8 @@ class AppLocalizationsHu extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count sor átnevezve csak ebben a beszélgetésben.',
-      one: '1 sor átnevezve csak ebben a beszélgetésben.',
+      other: '$count sor átnevezve csak az elérhető beszélgetésekben.',
+      one: '1 sor átnevezve csak az elérhető beszélgetésekben.',
     );
     String _temp1 = intl.Intl.selectLogic(
       state,

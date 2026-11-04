@@ -14981,8 +14981,8 @@ class AppLocalizationsDa extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'Omdøbte $count linjer kun i denne samtale.',
-      one: 'Omdøbte 1 linjer kun i denne samtale.',
+      other: 'Omdøbte $count linjer kun i de tilgængelige samtaler.',
+      one: 'Omdøbte 1 linjer kun i de tilgængelige samtaler.',
     );
     String _temp1 = intl.Intl.selectLogic(
       state,

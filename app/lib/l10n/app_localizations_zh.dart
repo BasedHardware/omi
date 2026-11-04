@@ -14757,8 +14757,8 @@ class AppLocalizationsZh extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '仅重命名了此对话中的 $count 行。',
-      one: '仅重命名了此对话中的 1 行。',
+      other: '仅重命名了可用对话中的 $count 行。',
+      one: '仅重命名了可用对话中的 1 行。',
     );
     String _temp1 = intl.Intl.selectLogic(
       state,

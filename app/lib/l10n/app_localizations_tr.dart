@@ -15002,8 +15002,8 @@ class AppLocalizationsTr extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'Yalnızca bu konuşmadaki $count satır yeniden adlandırıldı.',
-      one: 'Yalnızca bu konuşmadaki 1 satır yeniden adlandırıldı.',
+      other: 'Yalnızca mevcut konuşmalardaki $count satır yeniden adlandırıldı.',
+      one: 'Yalnızca mevcut konuşmalardaki 1 satır yeniden adlandırıldı.',
     );
     String _temp1 = intl.Intl.selectLogic(
       state,

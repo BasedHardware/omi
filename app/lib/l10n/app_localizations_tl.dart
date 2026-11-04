@@ -15108,8 +15108,8 @@ class AppLocalizationsTl extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'Pinalitan ang pangalan ng $count linya sa usapang ito lang.',
-      one: 'Pinalitan ang pangalan ng 1 linya sa usapang ito lang.',
+      other: 'Pinalitan ang pangalan ng $count linya sa mga available na usapan lang.',
+      one: 'Pinalitan ang pangalan ng 1 linya sa mga available na usapan lang.',
     );
     String _temp1 = intl.Intl.selectLogic(
       state,

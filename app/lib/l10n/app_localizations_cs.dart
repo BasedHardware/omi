@@ -14987,8 +14987,8 @@ class AppLocalizationsCs extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'Přejmenováno $count řádků pouze v této konverzaci.',
-      one: 'Přejmenováno 1 řádků pouze v této konverzaci.',
+      other: 'Přejmenováno $count řádků pouze v dostupných konverzacích.',
+      one: 'Přejmenováno 1 řádků pouze v dostupných konverzacích.',
     );
     String _temp1 = intl.Intl.selectLogic(
       state,

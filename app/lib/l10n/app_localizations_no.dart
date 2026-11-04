@@ -14993,8 +14993,8 @@ class AppLocalizationsNo extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'Endret navn på $count linjer bare i denne samtalen.',
-      one: 'Endret navn på 1 linjer bare i denne samtalen.',
+      other: 'Endret navn på $count linjer bare i de tilgjengelige samtalene.',
+      one: 'Endret navn på 1 linjer bare i de tilgjengelige samtalene.',
     );
     String _temp1 = intl.Intl.selectLogic(
       state,

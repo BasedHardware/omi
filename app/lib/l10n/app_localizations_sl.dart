@@ -15017,8 +15017,8 @@ class AppLocalizationsSl extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'Preimenovanih $count vrstic samo v tem pogovoru.',
-      one: 'Preimenovanih 1 vrstic samo v tem pogovoru.',
+      other: 'Preimenovanih $count vrstic samo v razpoložljivih pogovorih.',
+      one: 'Preimenovanih 1 vrstic samo v razpoložljivih pogovorih.',
     );
     String _temp1 = intl.Intl.selectLogic(
       state,

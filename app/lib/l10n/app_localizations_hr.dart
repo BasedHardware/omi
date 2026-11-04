@@ -15025,8 +15025,8 @@ class AppLocalizationsHr extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'Preimenovano je $count redaka samo u ovom razgovoru.',
-      one: 'Preimenovano je 1 redaka samo u ovom razgovoru.',
+      other: 'Preimenovano je $count redaka samo u dostupnim razgovorima.',
+      one: 'Preimenovano je 1 redaka samo u dostupnim razgovorima.',
     );
     String _temp1 = intl.Intl.selectLogic(
       state,

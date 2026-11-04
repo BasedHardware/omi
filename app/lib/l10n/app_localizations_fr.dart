@@ -15112,8 +15112,8 @@ class AppLocalizationsFr extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count lignes renommées dans cette conversation uniquement.',
-      one: '1 lignes renommées dans cette conversation uniquement.',
+      other: '$count lignes renommées dans les conversations disponibles uniquement.',
+      one: '1 lignes renommées dans les conversations disponibles uniquement.',
     );
     String _temp1 = intl.Intl.selectLogic(
       state,

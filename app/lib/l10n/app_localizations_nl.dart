@@ -15028,8 +15028,8 @@ class AppLocalizationsNl extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count regels alleen in dit gesprek hernoemd.',
-      one: '1 regels alleen in dit gesprek hernoemd.',
+      other: '$count regels alleen in de beschikbare gesprekken hernoemd.',
+      one: '1 regels alleen in de beschikbare gesprekken hernoemd.',
     );
     String _temp1 = intl.Intl.selectLogic(
       state,

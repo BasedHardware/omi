@@ -15004,8 +15004,8 @@ class AppLocalizationsId extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'Mengganti nama $count baris hanya di percakapan ini.',
-      one: 'Mengganti nama 1 baris hanya di percakapan ini.',
+      other: 'Mengganti nama $count baris hanya di percakapan yang tersedia.',
+      one: 'Mengganti nama 1 baris hanya di percakapan yang tersedia.',
     );
     String _temp1 = intl.Intl.selectLogic(
       state,

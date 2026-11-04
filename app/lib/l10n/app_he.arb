@@ -11952,5 +11952,5 @@
     "speakerWholeRecording": "החל על כל ההקלטה",
     "speakerSelectionChanged": "הדובר השתנה. יש לבחור שוב את השורות.",
     "speakerRenameIssue": "{reason, select, limit{ההקלטה גדולה מדי. בחרו פחות שורות בשיחה אחת.} partial{חלק מהשורות נשמרו. בחרו את הנותרות ונסו שוב.} other{חלק מהשורות נשמרו. בחרו את הנותרות ונסו שוב.}}",
-    "speakerRecordingCoverage": "{state, select, scope{שורות נוספות של הקול הזה (כיסוי ההקלטה לא אושר)} other{{count, plural, =1{שונו שמות של 1 שורות בשיחה הזו בלבד.} other{שונו שמות של {count} שורות בשיחה הזו בלבד.}}}}"
+    "speakerRecordingCoverage": "{state, select, scope{שורות נוספות של הקול הזה (כיסוי ההקלטה לא אושר)} other{{count, plural, =1{שונו שמות של 1 שורות בשיחות הזמינות בלבד.} other{שונו שמות של {count} שורות בשיחות הזמינות בלבד.}}}}"
 }

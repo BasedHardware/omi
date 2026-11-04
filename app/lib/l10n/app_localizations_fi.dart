@@ -14993,8 +14993,8 @@ class AppLocalizationsFi extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'Nimetty $count riviä vain tässä keskustelussa.',
-      one: 'Nimetty 1 riviä vain tässä keskustelussa.',
+      other: 'Nimetty $count riviä vain saatavilla olevissa keskusteluissa.',
+      one: 'Nimetty 1 riviä vain saatavilla olevissa keskusteluissa.',
     );
     String _temp1 = intl.Intl.selectLogic(
       state,

@@ -14879,8 +14879,8 @@ class AppLocalizationsHe extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'שונו שמות של $count שורות בשיחה הזו בלבד.',
-      one: 'שונו שמות של 1 שורות בשיחה הזו בלבד.',
+      other: 'שונו שמות של $count שורות בשיחות הזמינות בלבד.',
+      one: 'שונו שמות של 1 שורות בשיחות הזמינות בלבד.',
     );
     String _temp1 = intl.Intl.selectLogic(
       state,

@@ -15023,8 +15023,8 @@ class AppLocalizationsLv extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'Pārdēvētas $count rindas tikai šajā sarunā.',
-      one: 'Pārdēvētas 1 rindas tikai šajā sarunā.',
+      other: 'Pārdēvētas $count rindas tikai pieejamajās sarunās.',
+      one: 'Pārdēvētas 1 rindas tikai pieejamajās sarunās.',
     );
     String _temp1 = intl.Intl.selectLogic(
       state,

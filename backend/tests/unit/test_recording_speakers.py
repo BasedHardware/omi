@@ -159,10 +159,9 @@ def test_non_episode_scope_fallback_includes_same_scope_only(recording, monkeypa
         'scope_conversation_ids',
         lambda uid, scopes: decisions_db.scope_conversation_ids(uid, scopes, firestore_client=client),
     )
-    # An index alone cannot prove historical coverage.
     result = edit('u', 'c1', request(), None)
-    assert result['applied_count'] == 1
-    assert result['coverage'] == 'partial'
+    assert result['applied_count'] == 3
+    assert result['coverage'] == 'complete'
 
 
 def test_real_http_route_renames_and_reports_member_counts(recording):
@@ -559,7 +558,7 @@ def test_legacy_unindexed_siblings_use_origin_and_first_generation_session(legac
     store, calls = legacy_recording
     transcript = service.transcript('u', anchor)
     assert {row['id'] for row in transcript['conversations']} == {'c0', 'c1', 'c2'}
-    assert transcript['coverage'] == 'complete'
+    assert transcript['coverage'] == 'partial'
     assert not any(
         'recording_speaker_scopes' in store.rows[('users', 'u', 'conversations', cid)] for cid in ['c0', 'c1', 'c2']
     )
@@ -574,7 +573,7 @@ def test_legacy_unindexed_siblings_use_origin_and_first_generation_session(legac
         ]
     )
     result = edit('u', anchor, body, None)
-    assert result['coverage'] == 'complete'
+    assert result['coverage'] == 'partial'
     assert result['applied_count'] == 3
     for cid in ['c0', 'c1', 'c2']:
         assert decode(store, cid)['transcript_segments'][0]['person_id'] == 'new'
@@ -599,14 +598,15 @@ def test_unproven_legacy_coverage_reports_partial_and_stays_local(legacy_recordi
     for cid in ['c0', 'c1', 'c2']:
         row = store.rows[('users', 'u', 'conversations', cid)]
         row['external_data'] = {'recording_session_id': identity} if identity else {}
-        row['recording_speaker_scopes'] = ['stream:1', 'stream:2']
+        row.pop('recording_speaker_scopes', None)
     assert service.transcript('u', 'c1')['coverage'] == 'partial'
-    assert [row['id'] for row in service.transcript('u', 'c1')['conversations']] == ['c1']
+    expected = {'c1'} if identity is None else {'c0', 'c1', 'c2'}
+    assert {row['id'] for row in service.transcript('u', 'c1')['conversations']} == expected
     result = edit('u', 'c1', request(), None)
     assert result['coverage'] == 'partial'
-    assert result['applied_count'] == 1
-    assert decode(store, 'c0')['transcript_segments'][0]['person_id'] == 'old'
-    assert decode(store, 'c2')['transcript_segments'][0]['person_id'] == 'old'
+    assert result['applied_count'] == len(expected)
+    for cid in ['c0', 'c2']:
+        assert decode(store, cid)['transcript_segments'][0]['person_id'] == ('new' if cid in expected else 'old')
 
 
 @pytest.mark.parametrize('budget', ['members', 'segments'])
@@ -666,3 +666,105 @@ def test_partial_coverage_survives_http_response_models(legacy_recording):
         assert saved.status_code == 200
         assert saved.json()['coverage'] == 'partial'
         assert saved.json()['applied_count'] == 1
+
+
+def test_partially_stamped_legacy_lineage_cannot_claim_complete(legacy_recording):
+    store, _ = legacy_recording
+    # First generation and a stamped rollover are discoverable; the intermediate
+    # rollover has neither an origin stamp nor the newly introduced scope index.
+    store.rows[('users', 'u', 'conversations', 'c1')]['external_data'].pop('recording_origin_id')
+    transcript = service.transcript('u', 'c0')
+    assert {row['id'] for row in transcript['conversations']} == {'c0', 'c2'}
+    assert transcript['coverage'] == 'partial'
+    body = request(
+        selections=[
+            RecordingSelection(
+                conversation_id='c0',
+                segment_ids=['c0-s'],
+                speaker_id=4,
+                voice=RecordingVoice(speaker_id_scope='stream:1', stream_speaker='SPEAKER_0'),
+            )
+        ]
+    )
+    result = edit('u', 'c0', body, None)
+    assert result['coverage'] == 'partial'
+    assert result['applied_count'] == 2
+    assert {row['conversation_id'] for row in result['conversations']} == {'c0', 'c2'}
+    assert decode(store, 'c1')['transcript_segments'][0]['person_id'] == 'old'
+
+
+@pytest.mark.parametrize('membership', ['scope', 'episode'])
+@pytest.mark.parametrize('excluded', ['is_locked', 'discarded', 'deleted', 'missing'])
+def test_excluded_discovered_member_makes_coverage_partial(legacy_recording, monkeypatch, membership, excluded):
+    store, _ = legacy_recording
+    if membership == 'episode':
+        monkeypatch.setattr(
+            service.episodes_db,
+            'get_episode_for_conversation',
+            lambda *args: {'id': 'e', 'conversation_ids': ['c0', 'c1', 'c2']},
+        )
+    for cid in ['c0', 'c1', 'c2']:
+        store.rows[('users', 'u', 'conversations', cid)]['recording_speaker_scopes'] = ['stream:1', 'stream:2']
+    if excluded == 'missing':
+        original = service.conversations_db.get_conversation
+        monkeypatch.setattr(
+            service.conversations_db, 'get_conversation', lambda uid, cid: None if cid == 'c2' else original(uid, cid)
+        )
+    else:
+        store.rows[('users', 'u', 'conversations', 'c2')][excluded] = True
+    before = deepcopy(store.rows[('users', 'u', 'conversations', 'c2')])
+    transcript = service.transcript('u', 'c1')
+    assert {row['id'] for row in transcript['conversations']} == {'c0', 'c1'}
+    assert transcript['coverage'] == 'partial'
+    result = edit('u', 'c1', request(), None)
+    assert result['coverage'] == 'partial'
+    assert result['applied_count'] == 2
+    assert store.rows[('users', 'u', 'conversations', 'c2')] == before
+
+
+def test_legacy_only_discovery_is_partial_until_all_members_are_indexed(legacy_recording):
+    store, _ = legacy_recording
+    assert edit('u', 'c1', request(), None)['coverage'] == 'partial'
+    # First rename repairs each known member's index. Legacy duplicates no longer
+    # widen the indexed set, and the same-value retry creates no new learning.
+    before = deepcopy(store.rows)
+    assert service.transcript('u', 'c1')['coverage'] == 'complete'
+    result = edit('u', 'c1', request(), None)
+    assert result['coverage'] == 'complete'
+    assert result['applied_count'] == 0
+    assert store.rows == before
+
+
+@pytest.mark.parametrize('raced', ['is_locked', 'discarded', 'deleted'])
+def test_assignment_race_downgrades_complete_discovery(recording, monkeypatch, raced):
+    original = service.commit_manual_assignment
+
+    def commit(uid, cid, **kwargs):
+        if cid == 'c2':
+            recording.rows[('users', uid, 'conversations', cid)][raced] = True
+        return original(uid, cid, **kwargs)
+
+    monkeypatch.setattr(service, 'commit_manual_assignment', commit)
+    assert service.transcript('u', 'c1')['coverage'] == 'complete'
+    result = edit('u', 'c1', request(), None)
+    assert result['coverage'] == 'partial'
+    assert result['applied_count'] == 2
+
+
+def test_skipping_member_without_selected_voice_is_partial(recording):
+    recording.rows[('users', 'u', 'conversations', 'c2')]['transcript_segments'][0]['speaker_id_scope'] = 'other'
+    result = edit('u', 'c1', request(), None)
+    assert result['applied_count'] == 2
+    assert result['coverage'] == 'partial'
+
+
+@pytest.mark.parametrize('field', ['discarded_conversation_ids', 'duplicate_conversation_ids'])
+def test_episode_exclusion_markers_are_retained_as_partial_evidence(recording, monkeypatch, field):
+    episode = {'id': 'e', 'conversation_ids': ['c0', 'c1'], field: ['c2']}
+    monkeypatch.setattr(service.episodes_db, 'get_episode_for_conversation', lambda *args: episode)
+    before = deepcopy(recording.rows[('users', 'u', 'conversations', 'c2')])
+    assert service.transcript('u', 'c1')['coverage'] == 'partial'
+    result = edit('u', 'c1', request(), None)
+    assert result['coverage'] == 'partial'
+    assert result['applied_count'] == 2
+    assert recording.rows[('users', 'u', 'conversations', 'c2')] == before

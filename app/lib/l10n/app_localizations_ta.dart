@@ -15092,8 +15092,8 @@ class AppLocalizationsTa extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'இந்த உரையாடலில் மட்டும் $count வரிகளின் பெயர் மாற்றப்பட்டது.',
-      one: 'இந்த உரையாடலில் மட்டும் 1 வரிகளின் பெயர் மாற்றப்பட்டது.',
+      other: 'கிடைக்கக்கூடிய உரையாடல்களில் மட்டும் $count வரிகளின் பெயர் மாற்றப்பட்டது.',
+      one: 'கிடைக்கக்கூடிய உரையாடல்களில் மட்டும் 1 வரிகளின் பெயர் மாற்றப்பட்டது.',
     );
     String _temp1 = intl.Intl.selectLogic(
       state,

@@ -15089,8 +15089,8 @@ class AppLocalizationsEl extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'Μετονομάστηκαν $count γραμμές μόνο σε αυτή τη συνομιλία.',
-      one: 'Μετονομάστηκαν 1 γραμμές μόνο σε αυτή τη συνομιλία.',
+      other: 'Μετονομάστηκαν $count γραμμές μόνο στις διαθέσιμες συνομιλίες.',
+      one: 'Μετονομάστηκαν 1 γραμμές μόνο στις διαθέσιμες συνομιλίες.',
     );
     String _temp1 = intl.Intl.selectLogic(
       state,

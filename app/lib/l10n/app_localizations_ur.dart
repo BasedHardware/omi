@@ -15001,8 +15001,8 @@ class AppLocalizationsUr extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'صرف اس گفتگو میں $count سطروں کا نام بدلا گیا۔',
-      one: 'صرف اس گفتگو میں 1 سطروں کا نام بدلا گیا۔',
+      other: 'صرف دستیاب گفتگو میں $count سطروں کا نام بدلا گیا۔',
+      one: 'صرف دستیاب گفتگو میں 1 سطروں کا نام بدلا گیا۔',
     );
     String _temp1 = intl.Intl.selectLogic(
       state,

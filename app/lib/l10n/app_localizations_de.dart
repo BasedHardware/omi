@@ -15102,8 +15102,8 @@ class AppLocalizationsDe extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count Zeilen nur in diesem Gespräch umbenannt.',
-      one: '1 Zeilen nur in diesem Gespräch umbenannt.',
+      other: '$count Zeilen nur in den verfügbaren Gesprächen umbenannt.',
+      one: '1 Zeilen nur in den verfügbaren Gesprächen umbenannt.',
     );
     String _temp1 = intl.Intl.selectLogic(
       state,

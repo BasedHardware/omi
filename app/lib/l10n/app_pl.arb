@@ -4561,5 +4561,5 @@
     "speakerWholeRecording": "Zastosuj do całego nagrania",
     "speakerSelectionChanged": "Mówca się zmienił. Wybierz wiersze ponownie.",
     "speakerRenameIssue": "{reason, select, limit{Nagranie jest za duże. Wybierz mniej wierszy w jednej rozmowie.} partial{Niektóre wiersze zapisano. Wybierz pozostałe i spróbuj ponownie.} other{Niektóre wiersze zapisano. Wybierz pozostałe i spróbuj ponownie.}}",
-    "speakerRecordingCoverage": "{state, select, scope{Inne wiersze tego głosu (zakres nagrania niepotwierdzony)} other{{count, plural, =1{Zmieniono nazwy 1 wierszy tylko w tej rozmowie.} other{Zmieniono nazwy {count} wierszy tylko w tej rozmowie.}}}}"
+    "speakerRecordingCoverage": "{state, select, scope{Inne wiersze tego głosu (zakres nagrania niepotwierdzony)} other{{count, plural, =1{Zmieniono nazwy 1 wierszy tylko w dostępnych rozmowach.} other{Zmieniono nazwy {count} wierszy tylko w dostępnych rozmowach.}}}}"
 }

@@ -14974,8 +14974,8 @@ class AppLocalizationsEn extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'Renamed $count lines in this conversation only.',
-      one: 'Renamed 1 line in this conversation only.',
+      other: 'Renamed $count lines in the available conversations only.',
+      one: 'Renamed 1 line in the available conversations only.',
     );
     String _temp1 = intl.Intl.selectLogic(
       state,

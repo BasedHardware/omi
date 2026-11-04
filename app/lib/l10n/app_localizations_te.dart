@@ -15052,8 +15052,8 @@ class AppLocalizationsTe extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'ఈ సంభాషణలో మాత్రమే $count పంక్తుల పేరు మార్చబడింది.',
-      one: 'ఈ సంభాషణలో మాత్రమే 1 పంక్తుల పేరు మార్చబడింది.',
+      other: 'అందుబాటులో ఉన్న సంభాషణల్లో మాత్రమే $count పంక్తుల పేరు మార్చబడింది.',
+      one: 'అందుబాటులో ఉన్న సంభాషణల్లో మాత్రమే 1 పంక్తుల పేరు మార్చబడింది.',
     );
     String _temp1 = intl.Intl.selectLogic(
       state,

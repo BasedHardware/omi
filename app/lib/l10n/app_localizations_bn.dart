@@ -14984,8 +14984,8 @@ class AppLocalizationsBn extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'শুধু এই কথোপকথনে $count লাইনের নাম বদলানো হয়েছে।',
-      one: 'শুধু এই কথোপকথনে 1 লাইনের নাম বদলানো হয়েছে।',
+      other: 'শুধু উপলব্ধ কথোপকথনে $count লাইনের নাম বদলানো হয়েছে।',
+      one: 'শুধু উপলব্ধ কথোপকথনে 1 লাইনের নাম বদলানো হয়েছে।',
     );
     String _temp1 = intl.Intl.selectLogic(
       state,

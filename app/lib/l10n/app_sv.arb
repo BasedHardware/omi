@@ -4526,5 +4526,5 @@
     "speakerWholeRecording": "Använd för hela inspelningen",
     "speakerSelectionChanged": "Talaren har ändrats. Välj raderna igen.",
     "speakerRenameIssue": "{reason, select, limit{Inspelningen är för stor. Välj färre rader i en konversation.} partial{Vissa rader sparades. Välj de återstående och försök igen.} other{Vissa rader sparades. Välj de återstående och försök igen.}}",
-    "speakerRecordingCoverage": "{state, select, scope{Andra rader med denna röst (inspelningens omfattning är obekräftad)} other{{count, plural, =1{Bytte namn på 1 rader bara i den här konversationen.} other{Bytte namn på {count} rader bara i den här konversationen.}}}}"
+    "speakerRecordingCoverage": "{state, select, scope{Andra rader med denna röst (inspelningens omfattning är obekräftad)} other{{count, plural, =1{Bytte namn på 1 rader bara i de tillgängliga konversationerna.} other{Bytte namn på {count} rader bara i de tillgängliga konversationerna.}}}}"
 }

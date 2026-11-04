@@ -15066,8 +15066,8 @@ class AppLocalizationsIt extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'Rinominate $count righe solo in questa conversazione.',
-      one: 'Rinominate 1 righe solo in questa conversazione.',
+      other: 'Rinominate $count righe solo nelle conversazioni disponibili.',
+      one: 'Rinominate 1 righe solo nelle conversazioni disponibili.',
     );
     String _temp1 = intl.Intl.selectLogic(
       state,

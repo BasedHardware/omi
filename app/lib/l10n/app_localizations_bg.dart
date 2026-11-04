@@ -15040,8 +15040,8 @@ class AppLocalizationsBg extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'Преименувани са $count реда само в този разговор.',
-      one: 'Преименувани са 1 реда само в този разговор.',
+      other: 'Преименувани са $count реда само в наличните разговори.',
+      one: 'Преименувани са 1 реда само в наличните разговори.',
     );
     String _temp1 = intl.Intl.selectLogic(
       state,

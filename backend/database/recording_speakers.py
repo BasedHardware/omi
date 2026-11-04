@@ -111,7 +111,7 @@ def prepare_assignment(
 
 
 def scope_conversation_ids(uid, scopes, *, firestore_client=None):
-    """Indexed UID-local lookup, bounded before hydration (including hidden rows)."""
+    """Bounded UID-local candidates, including hidden ids so coverage cannot omit them."""
     from google.cloud.firestore_v1.base_query import FieldFilter
     from config.recording_speakers import MAX_MEMBERS, MAX_SCOPES, SCOPE_INDEX_FIELD, check_budget
 
@@ -122,16 +122,14 @@ def scope_conversation_ids(uid, scopes, *, firestore_client=None):
     query = collection.where(filter=FieldFilter(SCOPE_INDEX_FIELD, 'array_contains_any', sorted(scopes)))
     snapshots = list(query.select(['deleted', 'discarded', 'is_locked']).limit(MAX_MEMBERS + 1).stream())
     check_budget(len(snapshots))
-    return [
-        s.id for s in snapshots if not any((s.to_dict() or {}).get(k) for k in ('deleted', 'discarded', 'is_locked'))
-    ]
+    return [s.id for s in snapshots]
 
 
 def legacy_recording_conversation_ids(uid, origin_id, *, firestore_client=None):
     """Bounded origin lookup plus the first generation's pre-origin session stamp.
 
     Session ids rotate on rollover, so session equality alone cannot establish
-    complete recording coverage. A matching origin stamp is the proof.
+    complete recording coverage. Retain hidden ids as evidence of exclusions.
     """
     from google.cloud.firestore_v1.base_query import FieldFilter
     from config.recording_speakers import MAX_MEMBERS, check_budget
@@ -139,18 +137,14 @@ def legacy_recording_conversation_ids(uid, origin_id, *, firestore_client=None):
     client = firestore_client if firestore_client is not None else get_firestore_client()
     collection = client.collection('users').document(uid).collection('conversations')
     candidates = {}
-    origin_found = False
     for field in ('recording_origin_id', 'recording_session_id'):
         query = collection.where(filter=FieldFilter(f'external_data.{field}', '==', origin_id))
         snapshots = list(query.select(['deleted', 'discarded', 'is_locked']).limit(MAX_MEMBERS + 1).stream())
         check_budget(len(snapshots))
-        origin_found |= field == 'recording_origin_id' and bool(snapshots)
         for snapshot in snapshots:
             candidates[snapshot.id] = snapshot.to_dict() or {}
         check_budget(len(candidates))
-    return [
-        cid for cid, row in candidates.items() if not any(row.get(k) for k in ('deleted', 'discarded', 'is_locked'))
-    ], origin_found
+    return list(candidates)
 
 
 def same_assignment(transaction, client, uid, current, expected_voices, intent):

@@ -15038,8 +15038,8 @@ class AppLocalizationsKn extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'ಈ ಸಂಭಾಷಣೆಯಲ್ಲಿ ಮಾತ್ರ $count ಸಾಲುಗಳ ಹೆಸರನ್ನು ಬದಲಿಸಲಾಗಿದೆ.',
-      one: 'ಈ ಸಂಭಾಷಣೆಯಲ್ಲಿ ಮಾತ್ರ 1 ಸಾಲುಗಳ ಹೆಸರನ್ನು ಬದಲಿಸಲಾಗಿದೆ.',
+      other: 'ಲಭ್ಯವಿರುವ ಸಂಭಾಷಣೆಗಳಲ್ಲಿ ಮಾತ್ರ $count ಸಾಲುಗಳ ಹೆಸರನ್ನು ಬದಲಿಸಲಾಗಿದೆ.',
+      one: 'ಲಭ್ಯವಿರುವ ಸಂಭಾಷಣೆಗಳಲ್ಲಿ ಮಾತ್ರ 1 ಸಾಲುಗಳ ಹೆಸರನ್ನು ಬದಲಿಸಲಾಗಿದೆ.',
     );
     String _temp1 = intl.Intl.selectLogic(
       state,

@@ -14782,8 +14782,8 @@ class AppLocalizationsKo extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '이 대화에서만 $count줄의 이름을 변경했습니다.',
-      one: '이 대화에서만 1줄의 이름을 변경했습니다.',
+      other: '사용 가능한 대화에서만 $count줄의 이름을 변경했습니다.',
+      one: '사용 가능한 대화에서만 1줄의 이름을 변경했습니다.',
     );
     String _temp1 = intl.Intl.selectLogic(
       state,

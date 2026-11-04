@@ -14984,8 +14984,8 @@ class AppLocalizationsFa extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'نام $count خط فقط در این گفتگو تغییر کرد.',
-      one: 'نام 1 خط فقط در این گفتگو تغییر کرد.',
+      other: 'نام $count خط فقط در گفتگوهای موجود تغییر کرد.',
+      one: 'نام 1 خط فقط در گفتگوهای موجود تغییر کرد.',
     );
     String _temp1 = intl.Intl.selectLogic(
       state,

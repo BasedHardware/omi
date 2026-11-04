@@ -14972,8 +14972,8 @@ class AppLocalizationsHi extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'केवल इस बातचीत में $count पंक्तियों का नाम बदला गया।',
-      one: 'केवल इस बातचीत में 1 पंक्तियों का नाम बदला गया।',
+      other: 'केवल उपलब्ध बातचीत में $count पंक्तियों का नाम बदला गया।',
+      one: 'केवल उपलब्ध बातचीत में 1 पंक्तियों का नाम बदला गया।',
     );
     String _temp1 = intl.Intl.selectLogic(
       state,

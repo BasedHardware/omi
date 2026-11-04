@@ -4526,5 +4526,5 @@
     "speakerWholeRecording": "Aplică întregii înregistrări",
     "speakerSelectionChanged": "Vorbitorul s-a schimbat. Selectează din nou rândurile.",
     "speakerRenameIssue": "{reason, select, limit{Înregistrarea este prea mare. Selectează mai puține rânduri dintr-o conversație.} partial{Unele rânduri au fost salvate. Selectează-le pe cele rămase și încearcă din nou.} other{Unele rânduri au fost salvate. Selectează-le pe cele rămase și încearcă din nou.}}",
-    "speakerRecordingCoverage": "{state, select, scope{Alte rânduri ale acestei voci (acoperirea înregistrării neconfirmată)} other{{count, plural, =1{S-au redenumit 1 rânduri doar în această conversație.} other{S-au redenumit {count} rânduri doar în această conversație.}}}}"
+    "speakerRecordingCoverage": "{state, select, scope{Alte rânduri ale acestei voci (acoperirea înregistrării neconfirmată)} other{{count, plural, =1{S-au redenumit 1 rânduri doar în conversațiile disponibile.} other{S-au redenumit {count} rânduri doar în conversațiile disponibile.}}}}"
 }

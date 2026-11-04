@@ -15037,8 +15037,8 @@ class AppLocalizationsRu extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'Переименовано $count строк только в этом разговоре.',
-      one: 'Переименовано 1 строк только в этом разговоре.',
+      other: 'Переименовано $count строк только в доступных разговорах.',
+      one: 'Переименовано 1 строк только в доступных разговорах.',
     );
     String _temp1 = intl.Intl.selectLogic(
       state,

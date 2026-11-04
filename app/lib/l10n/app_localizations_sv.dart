@@ -14998,8 +14998,8 @@ class AppLocalizationsSv extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'Bytte namn på $count rader bara i den här konversationen.',
-      one: 'Bytte namn på 1 rader bara i den här konversationen.',
+      other: 'Bytte namn på $count rader bara i de tillgängliga konversationerna.',
+      one: 'Bytte namn på 1 rader bara i de tillgängliga konversationerna.',
     );
     String _temp1 = intl.Intl.selectLogic(
       state,

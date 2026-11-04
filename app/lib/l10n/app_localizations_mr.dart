@@ -14997,8 +14997,8 @@ class AppLocalizationsMr extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'फक्त या संभाषणातील $count ओळींची नावे बदलली.',
-      one: 'फक्त या संभाषणातील 1 ओळींची नावे बदलली.',
+      other: 'फक्त उपलब्ध संभाषणांतील $count ओळींची नावे बदलली.',
+      one: 'फक्त उपलब्ध संभाषणांतील 1 ओळींची नावे बदलली.',
     );
     String _temp1 = intl.Intl.selectLogic(
       state,

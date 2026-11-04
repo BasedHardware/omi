@@ -15026,8 +15026,8 @@ class AppLocalizationsMs extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'Menamakan semula $count baris dalam perbualan ini sahaja.',
-      one: 'Menamakan semula 1 baris dalam perbualan ini sahaja.',
+      other: 'Menamakan semula $count baris dalam perbualan yang tersedia sahaja.',
+      one: 'Menamakan semula 1 baris dalam perbualan yang tersedia sahaja.',
     );
     String _temp1 = intl.Intl.selectLogic(
       state,

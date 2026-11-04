@@ -14983,8 +14983,8 @@ class AppLocalizationsSk extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'Premenovaných $count riadkov iba v tejto konverzácii.',
-      one: 'Premenovaných 1 riadkov iba v tejto konverzácii.',
+      other: 'Premenovaných $count riadkov iba v dostupných konverzáciách.',
+      one: 'Premenovaných 1 riadkov iba v dostupných konverzáciách.',
     );
     String _temp1 = intl.Intl.selectLogic(
       state,

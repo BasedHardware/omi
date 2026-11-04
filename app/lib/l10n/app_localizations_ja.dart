@@ -14776,8 +14776,8 @@ class AppLocalizationsJa extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'この会話内の$count行のみ名前を変更しました。',
-      one: 'この会話内の1行のみ名前を変更しました。',
+      other: '利用可能な会話内の$count行のみ名前を変更しました。',
+      one: '利用可能な会話内の1行のみ名前を変更しました。',
     );
     String _temp1 = intl.Intl.selectLogic(
       state,
