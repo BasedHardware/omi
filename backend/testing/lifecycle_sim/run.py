@@ -37,6 +37,15 @@ def main():
         'BATCH_PIPELINE_PERCENT': '100',
         'BATCH_PIPELINE_LIVE_ADMISSION_ENABLED': 'true',
         'BATCH_PIPELINE_LIVE_RECORD_ENABLED': 'true',
+        'BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED': 'false',
+        # Same external model boundaries as pipeline_sim: synthetic samples
+        # do not exercise paid-spend admission or a real local-VAD model.
+        'STT_CAP_DISPATCH_ENFORCEMENT': 'false',
+        'STT_CAP_OFFLINE_ENFORCEMENT': 'false',
+        'BATCH_PIPELINE_WORKER_SILENCE_DISPOSITION_ENABLED': 'false',
+        'BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED': 'false',
+        'OMP_NUM_THREADS': '1',
+        'OPENBLAS_NUM_THREADS': '1',
         'OPENAI_API_KEY': 'fake-key-for-hermetic-simulation',
         'PYTEST_DISABLE_PLUGIN_AUTOLOAD': '1',
         'LIFECYCLE_SIM_STATE_DIR': str(root),

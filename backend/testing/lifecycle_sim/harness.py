@@ -56,7 +56,7 @@ class LifecycleSim:
         self.uid = 'synthetic-lifecycle-' + uuid.uuid4().hex[:12]
         self.cid = str(uuid.uuid4())
         self.fault = fault
-        self.store = FirestoreStore('batch_pipeline_test_lifecycle', firestore_client=stack.firestore)
+        self.store = FirestoreStore(f'batch_pipeline_test_lifecycle_{self.cid[:8]}', firestore_client=stack.firestore)
         self.storage = create_storage_client()
         self.artifacts = artifacts_for(self.store)
         self.ref = stack.firestore.collection('users').document(self.uid).collection('conversations').document(self.cid)
@@ -196,7 +196,15 @@ class LifecycleSim:
             producer_proof=self.proof(),
         )
         dispositions = [entry['disposition'] for entry in plan['entries']]
-        assert not set(dispositions) & {'read_error', 'unavailable', 'proof_refused'}, 'fixture no-job proof failed'
+        assert not set(dispositions) & {
+            'read_error',
+            'unavailable',
+            'proof_refused',
+            'privacy_refused',
+            'not_batch_owned',
+            'not_completed',
+            'upload_pending',
+        }, 'fixture no-job proof or authority failed'
         result = record_seal_nojob.apply_backfill(self.store, plan, plan['plan_sha256'])
         assert not result.get('write_error'), 'fixture no-job transaction failed'
         return result
@@ -226,7 +234,7 @@ class LifecycleSim:
     async def complete(self):
         """Run the real recovery processing coordinator with the stack's leaves."""
         install_finalizer_leaves()
-        conversation = deserialize_conversation(self.row())
+        conversation = deserialize_conversation(processing.conversations_db.get_conversation(self.uid, self.cid))
         await asyncio.to_thread(
             processing.process_conversation,
             self.uid,

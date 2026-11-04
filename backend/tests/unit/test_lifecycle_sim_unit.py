@@ -2,6 +2,7 @@
 
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
+import sys
 from unittest.mock import AsyncMock, Mock
 
 import pytest
@@ -10,6 +11,7 @@ from testing.lifecycle_sim.clock import age_job_row, aged_job_fields
 from testing.lifecycle_sim.faults import BoundaryFault, InjectedLifecycleFault
 from testing.lifecycle_sim.preflight import HermeticRefusal, preflight
 from testing.lifecycle_sim import listener_faults
+from testing.lifecycle_sim import run as simulator_runner
 
 
 @pytest.fixture
@@ -57,6 +59,16 @@ def test_preflight_refuses_reachable_adc(environment, tmp_path, location):
     adc.write_text('{}')
     with pytest.raises(HermeticRefusal, match='application default credentials'):
         preflight(tmp_path, environ=environment)
+
+
+def test_runner_refuses_before_constructing_stack(monkeypatch, tmp_path):
+    construct = Mock()
+    monkeypatch.setattr(simulator_runner, 'Stack', construct)
+    monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'real-project')
+    monkeypatch.setattr(sys, 'argv', ['simulator', '--state-dir', str(tmp_path)])
+    with pytest.raises(HermeticRefusal):
+        simulator_runner.main()
+    construct.assert_not_called()
 
 
 def test_age_job_preserves_evidence_and_shifts_numeric_and_datetime_deadlines():

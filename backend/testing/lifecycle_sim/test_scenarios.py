@@ -7,6 +7,7 @@ import time
 from types import SimpleNamespace
 
 import pytest
+from google.api_core.exceptions import Aborted
 
 from database import record_audio
 from testing.lifecycle_sim.faults import BoundaryFault, InjectedLifecycleFault
@@ -79,6 +80,7 @@ async def test_sealed_record_pending_admitted_within_budget(lifecycle_sim, monke
     original = live.admit_recording
     first_entered, duplicate_entered, release = asyncio.Event(), asyncio.Event(), asyncio.Event()
     active, peak = 0, 0
+    errors = []
 
     async def observe(store, pending, **kwargs):
         nonlocal active, peak
@@ -92,6 +94,9 @@ async def test_sealed_record_pending_admitted_within_budget(lifecycle_sim, monke
         try:
             await release.wait()
             return await original(store, pending, **kwargs)
+        except Exception as error:
+            errors.append(error)
+            raise
         finally:
             active -= 1
 
@@ -112,11 +117,13 @@ async def test_sealed_record_pending_admitted_within_budget(lifecycle_sim, monke
             duplicate.cancel()
             await asyncio.gather(duplicate, return_exceptions=True)
     monkeypatch.setattr(live, 'admit_recording', original)
+    assert all(isinstance(error, Aborted) for error in errors), 'admission failed for a non-contention reason'
     await sim.tick()
-    invariant(
-        sim.phase in {ConversationPhase.TRANSCRIBED, ConversationPhase.COMPLETE, ConversationPhase.SETTLED},
-        'sealed record_pending missed admission budget',
-    )
+    assert sim.phase in {
+        ConversationPhase.TRANSCRIBED,
+        ConversationPhase.COMPLETE,
+        ConversationPhase.SETTLED,
+    }, 'fixture could not drive the admitted row to a transcript'
     invariant(peak == 1, f'record_pending entered admission concurrently on {peak} replicas; expected one lease owner')
 
 

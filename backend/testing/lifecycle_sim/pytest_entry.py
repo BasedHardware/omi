@@ -19,6 +19,8 @@ def main():
                 'asyncio',
                 '-v',
                 '--tb=short',
+                '--junitxml',
+                str(Path(os.environ['LIFECYCLE_SIM_STATE_DIR']) / 'results.xml'),
                 str(Path(__file__).with_name('test_scenarios.py')),
                 *sys.argv[1:],
             ]
