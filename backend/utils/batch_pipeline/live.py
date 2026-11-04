@@ -37,6 +37,7 @@ from utils.batch_pipeline.scheduler import owner_key
 from utils.batch_pipeline.source_audio import MAGIC, MAX_REFERENCES, read_reference, batch_timing_store
 from utils.batch_pipeline.record_barrier import validate_record_tail
 from utils.batch_pipeline.record_language import prove_manifest
+from utils.batch_pipeline.language_receipt import admission as language_admission_receipt
 from utils.batch_pipeline.record_partial import drain_partial, record_failure as record_partial_failure
 from config.record_seal_rules import overlap_trim_enabled
 from utils.executors import db_executor, storage_executor, run_blocking
@@ -307,6 +308,14 @@ async def admit_recording(store, pending, *, now=None, provider_outbox_factory=N
     # from the durable upload. The pending obligation has no TTL.
     validate_record_tail(units, row.get('finished_at'))
     validate_record_tail(units, current.get('finished_at'))
+    from utils.batch_pipeline.language_receipt import auto_language_cohort
+
+    receipt_enabled = auto_language_cohort(
+        server_batch_only=row.get('server_batch_only') is True,
+        client_platform=row.get('client_platform'),
+        native_record=True,
+        language=row.get('language'),
+    )
     items = [
         WorkItem(
             hashlib.sha256(f'{content}:{i}'.encode()).hexdigest(),
@@ -318,6 +327,7 @@ async def admit_recording(store, pending, *, now=None, provider_outbox_factory=N
             conversation_id=conversation_id,
             privacy_generation=pending['privacy_generation'],
             requires_compute_admission=True,
+            language_receipt_enabled=True if receipt_enabled else None,
         )
         for i, (start, duration, _) in enumerate(units)
     ]
@@ -338,7 +348,7 @@ async def admit_recording(store, pending, *, now=None, provider_outbox_factory=N
         record_origin=True,
         native_record=True,
     )
-    staged = []
+    staged, language_receipts = [], {}
     for item, (_, _, refs) in zip(items, units):
         context = {
             'owner_id': uid,
@@ -366,6 +376,8 @@ async def admit_recording(store, pending, *, now=None, provider_outbox_factory=N
         }
         if row.get('server_batch_only') is True:
             manifest = await prove_manifest(store, artifacts, item, manifest)
+        if item.language_receipt_enabled:
+            language_receipts[item.segment_id] = language_admission_receipt(manifest['context'])
         uri = await run_blocking(
             storage_executor, artifacts.stage_audio, item, MAGIC + json.dumps(manifest, separators=(',', ':')).encode()
         )
@@ -392,6 +404,7 @@ async def admit_recording(store, pending, *, now=None, provider_outbox_factory=N
             'total_audio_seconds': sum(i.duration_seconds for i in staged),
             'lane': 'fresh',
             'record_ranges': [{'start': i.capture_at, 'end': i.capture_at + i.duration_seconds} for i in staged],
+            **({'language_receipts': language_receipts} if language_receipts else {}),
             **({'server_batch_only': True} if row.get('server_batch_only') is True else {}),
         },
     )

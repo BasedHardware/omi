@@ -268,6 +268,30 @@ def test_lease_expiry_backoff_and_stale_result_fencing():
     assert not queue.complete(WorkResult('a', 'gs://results/changed'), second.token, 999)
 
 
+def test_result_receipt_persists_and_optional_receipt_is_rolling_idempotent():
+    from utils.batch_pipeline.language_receipt import observation
+
+    store = MemoryStore()
+    queue = Scheduler(store)
+    queue.enqueue(item('receipt'), 0)
+    lease = queue.pull(0)[0]
+    receipt = observation('en', 'parakeet', [{'word': 'hello'}])
+    with_receipt = WorkResult('receipt', 'gs://results/receipt', language_receipt=receipt)
+    assert queue.complete(with_receipt, lease.token, 1)
+    assert store.rows['jobs', 'receipt']['result']['language_receipt'] == receipt
+    assert queue.complete(with_receipt, lease.token, 2)
+    changed = observation('en', 'parakeet', [{'word': 'Привет'}])
+    assert not queue.complete(WorkResult('receipt', 'gs://results/receipt', language_receipt=changed), lease.token, 3)
+
+    queue.enqueue(item('legacy'), 4)
+    legacy_lease = queue.pull(4)[0]
+    without_receipt = WorkResult('legacy', 'gs://results/legacy')
+    assert queue.complete(without_receipt, legacy_lease.token, 5)
+    assert 'language_receipt' not in store.rows['jobs', 'legacy']['result']
+    replay_with_receipt = WorkResult('legacy', 'gs://results/legacy', language_receipt=receipt)
+    assert queue.complete(replay_with_receipt, legacy_lease.token, 6)
+
+
 def test_admission_deferred_re_lease_records_relet_true_first_lease_false():
     from prometheus_client import CollectorRegistry
     from utils.batch_pipeline.metrics import QueueMetrics
