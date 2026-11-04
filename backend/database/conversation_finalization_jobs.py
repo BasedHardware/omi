@@ -1764,7 +1764,7 @@ def terminalize_exhausted_requeued_job(
     client = _client(firestore_client)
     transaction = client.transaction()
     transactional = firestore.transactional(_terminalize_exhausted_requeued_job_txn)
-    return transactional(
+    closed = transactional(
         transaction,
         _job_ref(client, job_id),
         expected_status,
@@ -1776,6 +1776,9 @@ def terminalize_exhausted_requeued_job(
         client.collection(FINALIZATION_PROJECTION_COLLECTION),
         lambda uid: user_time_zone(client, uid),
     )
+    if closed:
+        stop_quiet_checks_for_job(job_id, firestore_client=client)
+    return closed
 
 
 def get_finalization_job(job_id: str, *, firestore_client: Any = None) -> dict[str, Any] | None:

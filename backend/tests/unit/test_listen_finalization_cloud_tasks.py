@@ -2718,7 +2718,8 @@ def test_hub_grant_emits_info_log_and_requeue_counter_once(monkeypatch, caplog):
     ]
 
 
-def test_hub_dead_letter_second_exhaustion_emits_observability_exactly_once(monkeypatch, caplog):
+@pytest.mark.parametrize('requires_byok', [False, True])
+def test_hub_dead_letter_second_exhaustion_emits_observability_exactly_once(monkeypatch, caplog, requires_byok):
     caplog.set_level(logging.INFO, logger=finalization_service.logger.name)
     monkeypatch.setattr(
         finalization_service.jobs_db, 'grant_finalization_budget_requeue', MagicMock(return_value='already_requeued')
@@ -2732,6 +2733,7 @@ def test_hub_dead_letter_second_exhaustion_emits_observability_exactly_once(monk
                 'created_at': datetime(2026, 1, 1, tzinfo=timezone.utc),
                 'attempt_count': 5,
                 'budget_requeue_count': 1,
+                'requires_byok': requires_byok,
             }
         ),
     )
@@ -2751,6 +2753,13 @@ def test_hub_dead_letter_second_exhaustion_emits_observability_exactly_once(monk
         if record.getMessage().startswith('listen finalization dead_letter terminal=')
     ]
     assert len(emits) == 1
+    (terminal_log,) = [
+        record
+        for record in caplog.records
+        if record.getMessage().startswith('listen finalization dead_letter terminal=')
+    ]
+    assert terminal_log.levelno == (logging.WARNING if requires_byok else logging.ERROR)
+    assert terminal_log.exc_info is None
     assert emits[0] == (
         f'listen finalization dead_letter terminal=True job_hash={job_hash} cause=processing_failed '
         f'budget_requeues=1 attempt_count=5 dispatch_generation=1 source=worker'
