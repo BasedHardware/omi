@@ -166,8 +166,8 @@ jobs:
     if: github.event_name == 'schedule' || needs.changes.outputs.has_app_dart == 'true'
     # The analyzer ratchet plus the full flutter test suite now needs 27-30 min
     # of wall time on ubuntu-latest (the suite alone is ~26 min); 30 min cancelled
-    # runs that had already printed "All tests passed" (PR #24370). The same suite
-    # under far timezones (dart-tests-kiritimati) already gets 60.
+    # runs that had already printed "All tests passed" (PR #24370). The far-timezone
+    # second pass of this same suite already runs with a 60-min ceiling.
     timeout-minutes: 40
     steps:
       - name: Checkout code
