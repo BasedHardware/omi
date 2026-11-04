@@ -2283,10 +2283,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get firmwareUsbWarning => 'USB connection during updates may damage your device.';
 
   @override
-  String get firmwareBatteryAbove15 => 'Battery Above 15%';
+  String get firmwareBatteryRequirement => 'Battery Above 30%';
 
   @override
-  String get firmwareEnsureBattery => 'Ensure your device has 15% battery.';
+  String get firmwareEnsureBattery => 'Ensure your device has 30% battery.';
 
   @override
   String get firmwareStableConnection => 'Stable Connection';
@@ -10573,8 +10573,12 @@ class AppLocalizationsEn extends AppLocalizations {
       'The update couldn\'t be downloaded, and your device wasn\'t changed. Check your internet connection, then try again.';
 
   @override
+  String get firmwareBatteryUnavailable =>
+      'Battery level isn\'t available yet. Wait a moment and reconnect if it stays this way.';
+
+  @override
   String firmwareBatteryTooLow(int level) {
-    return 'Battery is at $level%. Charge your device to at least 15% before updating.';
+    return 'Battery is at $level%. Charge your device to at least 30% before updating.';
   }
 
   @override

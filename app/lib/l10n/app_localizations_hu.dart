@@ -2296,10 +2296,10 @@ class AppLocalizationsHu extends AppLocalizations {
   String get firmwareUsbWarning => 'Az USB-kapcsolat a frissítések során károsíthatja az eszközt.';
 
   @override
-  String get firmwareBatteryAbove15 => 'Akkumulátor 15% felett';
+  String get firmwareBatteryRequirement => 'Akkumulátor 30% felett';
 
   @override
-  String get firmwareEnsureBattery => 'Győződjön meg róla, hogy az eszköz akkumulátora 15%.';
+  String get firmwareEnsureBattery => 'Győződjön meg róla, hogy az eszköz akkumulátora 30%.';
 
   @override
   String get firmwareStableConnection => 'Stabil kapcsolat';
@@ -10628,8 +10628,12 @@ class AppLocalizationsHu extends AppLocalizations {
       'A frissítést nem sikerült letölteni, az eszköz nem változott. Ellenőrizd az internetkapcsolatot, majd próbáld újra.';
 
   @override
+  String get firmwareBatteryUnavailable =>
+      'Az akkumulátor töltöttsége még nem érhető el. Várj egy kicsit, és csatlakozz újra, ha ez nem változik.';
+
+  @override
   String firmwareBatteryTooLow(int level) {
-    return 'Az akkumulátor $level%-on áll. Frissítés előtt töltsd legalább 15%-ra.';
+    return 'Az akkumulátor $level%-on áll. Frissítés előtt töltsd legalább 30%-ra.';
   }
 
   @override

@@ -2302,10 +2302,10 @@ class AppLocalizationsTl extends AppLocalizations {
       'Ang koneksyon ng USB sa panahon ng mga update ay maaaring makasama sa iyong device.';
 
   @override
-  String get firmwareBatteryAbove15 => 'Baterya sa Itaas ng 15%';
+  String get firmwareBatteryRequirement => 'Baterya sa Itaas ng 30%';
 
   @override
-  String get firmwareEnsureBattery => 'Siguraduhin na ang iyong device ay may 15% na baterya.';
+  String get firmwareEnsureBattery => 'Siguraduhin na ang iyong device ay may 30% na baterya.';
 
   @override
   String get firmwareStableConnection => 'Matatag na Koneksyon';
@@ -10673,8 +10673,12 @@ class AppLocalizationsTl extends AppLocalizations {
       'Hindi ma-download ang update at walang nagbago sa device mo. Tingnan ang koneksyon sa internet, saka subukang muli.';
 
   @override
+  String get firmwareBatteryUnavailable =>
+      'Hindi pa available ang antas ng baterya. Maghintay sandali at kumonekta muli kung ganito pa rin.';
+
+  @override
   String firmwareBatteryTooLow(int level) {
-    return 'Nasa $level% ang baterya. I-charge ang device nang hindi bababa sa 15% bago mag-update.';
+    return 'Nasa $level% ang baterya. I-charge ang device nang hindi bababa sa 30% bago mag-update.';
   }
 
   @override

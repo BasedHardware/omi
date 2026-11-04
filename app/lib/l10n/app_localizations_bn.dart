@@ -2284,10 +2284,10 @@ class AppLocalizationsBn extends AppLocalizations {
   String get firmwareUsbWarning => 'আপডেট সময় USB সংযোগ আপনার ডিভাইস ক্ষতিগ্রস্ত করতে পারে।';
 
   @override
-  String get firmwareBatteryAbove15 => 'ব্যাটারি ১৫% এর উপরে';
+  String get firmwareBatteryRequirement => 'ব্যাটারি ৩০% এর উপরে';
 
   @override
-  String get firmwareEnsureBattery => 'আপনার ডিভাইসে ১৫% ব্যাটারি নিশ্চিত করুন।';
+  String get firmwareEnsureBattery => 'আপনার ডিভাইসে ৩০% ব্যাটারি নিশ্চিত করুন।';
 
   @override
   String get firmwareStableConnection => 'স্থিতিশীল সংযোগ';
@@ -10586,8 +10586,12 @@ class AppLocalizationsBn extends AppLocalizations {
       'আপডেট ডাউনলোড করা যায়নি, আপনার ডিভাইসে কোনো পরিবর্তন হয়নি। ইন্টারনেট সংযোগ দেখে আবার চেষ্টা করুন।';
 
   @override
+  String get firmwareBatteryUnavailable =>
+      'ব্যাটারির চার্জের মাত্রা এখনও পাওয়া যাচ্ছে না। একটু অপেক্ষা করুন, আর একই অবস্থা থাকলে আবার সংযোগ করুন।';
+
+  @override
   String firmwareBatteryTooLow(int level) {
-    return 'ব্যাটারি $level%। আপডেটের আগে ডিভাইসটি অন্তত 15% চার্জ করুন।';
+    return 'ব্যাটারি $level%। আপডেটের আগে ডিভাইসটি অন্তত 30% চার্জ করুন।';
   }
 
   @override

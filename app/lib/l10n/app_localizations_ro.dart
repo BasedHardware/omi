@@ -2291,10 +2291,10 @@ class AppLocalizationsRo extends AppLocalizations {
   String get firmwareUsbWarning => 'Conexiunea USB în timpul actualizărilor poate deteriora dispozitivul.';
 
   @override
-  String get firmwareBatteryAbove15 => 'Baterie peste 15%';
+  String get firmwareBatteryRequirement => 'Baterie peste 30%';
 
   @override
-  String get firmwareEnsureBattery => 'Asigurați-vă că dispozitivul are 15% baterie.';
+  String get firmwareEnsureBattery => 'Asigurați-vă că dispozitivul are 30% baterie.';
 
   @override
   String get firmwareStableConnection => 'Conexiune stabilă';
@@ -10635,8 +10635,12 @@ class AppLocalizationsRo extends AppLocalizations {
       'Actualizarea nu a putut fi descărcată, iar dispozitivul nu a fost modificat. Verifică conexiunea la internet, apoi încearcă din nou.';
 
   @override
+  String get firmwareBatteryUnavailable =>
+      'Nivelul bateriei nu este încă disponibil. Așteaptă puțin și reconectează dispozitivul dacă situația persistă.';
+
+  @override
   String firmwareBatteryTooLow(int level) {
-    return 'Bateria este la $level%. Încarcă dispozitivul la cel puțin 15% înainte de actualizare.';
+    return 'Bateria este la $level%. Încarcă dispozitivul la cel puțin 30% înainte de actualizare.';
   }
 
   @override

@@ -2286,10 +2286,10 @@ class AppLocalizationsRu extends AppLocalizations {
   String get firmwareUsbWarning => 'USB-соединение во время обновлений может повредить ваше устройство.';
 
   @override
-  String get firmwareBatteryAbove15 => 'Батарея выше 15%';
+  String get firmwareBatteryRequirement => 'Батарея выше 30%';
 
   @override
-  String get firmwareEnsureBattery => 'Убедитесь, что у вашего устройства 15% заряда батареи.';
+  String get firmwareEnsureBattery => 'Убедитесь, что у вашего устройства 30% заряда батареи.';
 
   @override
   String get firmwareStableConnection => 'Стабильное соединение';
@@ -10624,8 +10624,12 @@ class AppLocalizationsRu extends AppLocalizations {
       'Не удалось скачать обновление, устройство не изменилось. Проверьте подключение к интернету и повторите попытку.';
 
   @override
+  String get firmwareBatteryUnavailable =>
+      'Уровень заряда батареи пока недоступен. Подождите немного и подключите устройство заново, если ничего не изменится.';
+
+  @override
   String firmwareBatteryTooLow(int level) {
-    return 'Заряд батареи $level%. Перед обновлением зарядите устройство хотя бы до 15%.';
+    return 'Заряд батареи $level%. Перед обновлением зарядите устройство хотя бы до 30%.';
   }
 
   @override

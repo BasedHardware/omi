@@ -4434,13 +4434,13 @@ abstract class AppLocalizations {
   /// Firmware update step title about battery level
   ///
   /// In en, this message translates to:
-  /// **'Battery Above 15%'**
-  String get firmwareBatteryAbove15;
+  /// **'Battery Above 30%'**
+  String get firmwareBatteryRequirement;
 
   /// Description for battery requirement during firmware update
   ///
   /// In en, this message translates to:
-  /// **'Ensure your device has 15% battery.'**
+  /// **'Ensure your device has 30% battery.'**
   String get firmwareEnsureBattery;
 
   /// Firmware update step title about internet connection
@@ -19287,10 +19287,16 @@ abstract class AppLocalizations {
   /// **'The update couldn\'t be downloaded, and your device wasn\'t changed. Check your internet connection, then try again.'**
   String get firmwareDownloadFailedMessage;
 
+  /// Shown when a pendant firmware update is blocked because its battery level is unknown and it is not charging.
+  ///
+  /// In en, this message translates to:
+  /// **'Battery level isn\'t available yet. Wait a moment and reconnect if it stays this way.'**
+  String get firmwareBatteryUnavailable;
+
   /// Firmware update blocked by low battery
   ///
   /// In en, this message translates to:
-  /// **'Battery is at {level}%. Charge your device to at least 15% before updating.'**
+  /// **'Battery is at {level}%. Charge your device to at least 30% before updating.'**
   String firmwareBatteryTooLow(int level);
 
   /// Pre-flight sheet button that starts a firmware update

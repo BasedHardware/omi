@@ -2281,10 +2281,10 @@ class AppLocalizationsId extends AppLocalizations {
   String get firmwareUsbWarning => 'Koneksi USB selama pembaruan dapat merusak perangkat Anda.';
 
   @override
-  String get firmwareBatteryAbove15 => 'Baterai di atas 15%';
+  String get firmwareBatteryRequirement => 'Baterai di atas 30%';
 
   @override
-  String get firmwareEnsureBattery => 'Pastikan perangkat Anda memiliki baterai 15%.';
+  String get firmwareEnsureBattery => 'Pastikan perangkat Anda memiliki baterai 30%.';
 
   @override
   String get firmwareStableConnection => 'Koneksi stabil';
@@ -10588,8 +10588,12 @@ class AppLocalizationsId extends AppLocalizations {
       'Pembaruan tidak dapat diunduh dan perangkat Anda tidak berubah. Periksa koneksi internet, lalu coba lagi.';
 
   @override
+  String get firmwareBatteryUnavailable =>
+      'Level baterai belum tersedia. Tunggu sebentar dan sambungkan kembali jika masih seperti ini.';
+
+  @override
   String firmwareBatteryTooLow(int level) {
-    return 'Baterai $level%. Isi daya perangkat minimal 15% sebelum memperbarui.';
+    return 'Baterai $level%. Isi daya perangkat minimal 30% sebelum memperbarui.';
   }
 
   @override

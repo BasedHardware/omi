@@ -2278,10 +2278,10 @@ class AppLocalizationsEt extends AppLocalizations {
   String get firmwareUsbWarning => 'USB-ühendus värskenduste ajal võib teie seadet kahjustada.';
 
   @override
-  String get firmwareBatteryAbove15 => 'Aku üle 15%';
+  String get firmwareBatteryRequirement => 'Aku üle 30%';
 
   @override
-  String get firmwareEnsureBattery => 'Veenduge, et teie seadmel on 15% akut.';
+  String get firmwareEnsureBattery => 'Veenduge, et teie seadmel on 30% akut.';
 
   @override
   String get firmwareStableConnection => 'Stabiilne ühendus';
@@ -10576,8 +10576,12 @@ class AppLocalizationsEt extends AppLocalizations {
       'Värskendust ei õnnestunud alla laadida ja seadet ei muudetud. Kontrolli internetiühendust ja proovi uuesti.';
 
   @override
+  String get firmwareBatteryUnavailable =>
+      'Aku laetuse tase pole veel saadaval. Oota veidi ja ühenda seade uuesti, kui see ei muutu.';
+
+  @override
   String firmwareBatteryTooLow(int level) {
-    return 'Aku on $level%. Lae seade enne värskendamist vähemalt 15%-ni.';
+    return 'Aku on $level%. Lae seade enne värskendamist vähemalt 30%-ni.';
   }
 
   @override

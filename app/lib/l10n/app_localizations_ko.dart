@@ -2243,10 +2243,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get firmwareUsbWarning => '업데이트 중 USB 연결은 기기를 손상시킬 수 있습니다.';
 
   @override
-  String get firmwareBatteryAbove15 => '배터리 15% 이상';
+  String get firmwareBatteryRequirement => '배터리 30% 이상';
 
   @override
-  String get firmwareEnsureBattery => '기기 배터리가 15%인지 확인하세요.';
+  String get firmwareEnsureBattery => '기기 배터리가 30%인지 확인하세요.';
 
   @override
   String get firmwareStableConnection => '안정적인 연결';
@@ -10426,8 +10426,11 @@ class AppLocalizationsKo extends AppLocalizations {
   String get firmwareDownloadFailedMessage => '업데이트를 다운로드하지 못했으며 기기는 변경되지 않았습니다. 인터넷 연결을 확인한 후 다시 시도하세요.';
 
   @override
+  String get firmwareBatteryUnavailable => '아직 배터리 잔량을 확인할 수 없습니다. 잠시 기다린 후에도 그대로라면 다시 연결해 주세요.';
+
+  @override
   String firmwareBatteryTooLow(int level) {
-    return '배터리가 $level%입니다. 업데이트 전에 기기를 15% 이상 충전하세요.';
+    return '배터리가 $level%입니다. 업데이트 전에 기기를 30% 이상 충전하세요.';
   }
 
   @override

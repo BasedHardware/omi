@@ -2378,11 +2378,8 @@
     "@firmwareUsbWarning": {
         "description": "Warning about USB connection during firmware update"
     },
-    "firmwareBatteryAbove15": "ಬ್ಯಾಟರಿ 15% ಮೇಲಿದೆ",
-    "@firmwareBatteryAbove15": {
-        "description": "Firmware update step title about battery level"
-    },
-    "firmwareEnsureBattery": "ನಿಮ್ಮ ಯಂತ್ರದಲ್ಲಿ 15% ಬ್ಯಾಟರಿ ಇದೆ ಎಂದು ಖಚಿತ ಮಾಡಿ.",
+    "firmwareBatteryRequirement": "ಬ್ಯಾಟರಿ 30% ಮೇಲಿದೆ",
+    "firmwareEnsureBattery": "ನಿಮ್ಮ ಯಂತ್ರದಲ್ಲಿ 30% ಬ್ಯಾಟರಿ ಇದೆ ಎಂದು ಖಚಿತ ಮಾಡಿ.",
     "@firmwareEnsureBattery": {
         "description": "Description for battery requirement during firmware update"
     },
@@ -10771,7 +10768,8 @@
     "firmwareUpdateFailedTitle": "ಅಪ್‌ಡೇಟ್ ವಿಫಲವಾಗಿದೆ",
     "firmwareUpdateFailedMessage": "ಅಪ್‌ಡೇಟ್ ಪೂರ್ಣಗೊಂಡಿಲ್ಲ. ನಿಮ್ಮ ಸಾಧನ ಈಗಲೂ ಪ್ರಸ್ತುತ ಫರ್ಮ್‌ವೇರ್‌ನಲ್ಲಿದೆ ಮತ್ತು ಬಳಸಲು ಸುರಕ್ಷಿತವಾಗಿದೆ. ಚಾರ್ಜ್ ಮಾಡಿ ಫೋನ್ ಹತ್ತಿರ ಇಡಿ, ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
     "firmwareDownloadFailedMessage": "ಅಪ್‌ಡೇಟ್ ಡೌನ್‌ಲೋಡ್ ಆಗಲಿಲ್ಲ, ನಿಮ್ಮ ಸಾಧನ ಬದಲಾಗಿಲ್ಲ. ಇಂಟರ್ನೆಟ್ ಸಂಪರ್ಕ ಪರಿಶೀಲಿಸಿ, ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
-    "firmwareBatteryTooLow": "ಬ್ಯಾಟರಿ {level}% ಇದೆ. ಅಪ್‌ಡೇಟ್ ಮಾಡುವ ಮೊದಲು ಸಾಧನವನ್ನು ಕನಿಷ್ಠ 15% ಚಾರ್ಜ್ ಮಾಡಿ.",
+    "firmwareBatteryUnavailable": "ಬ್ಯಾಟರಿ ಮಟ್ಟ ಇನ್ನೂ ಲಭ್ಯವಿಲ್ಲ. ಸ್ವಲ್ಪ ಕಾಯಿರಿ, ಇದೇ ರೀತಿ ಮುಂದುವರಿದರೆ ಮತ್ತೆ ಸಂಪರ್ಕಿಸಿ.",
+    "firmwareBatteryTooLow": "ಬ್ಯಾಟರಿ {level}% ಇದೆ. ಅಪ್‌ಡೇಟ್ ಮಾಡುವ ಮೊದಲು ಸಾಧನವನ್ನು ಕನಿಷ್ಠ 30% ಚಾರ್ಜ್ ಮಾಡಿ.",
     "startUpdate": "ಅಪ್‌ಡೇಟ್ ಪ್ರಾರಂಭಿಸಿ",
     "otaNotSupported": "ಈ ಫರ್ಮ್‌ವೇರ್ ಅನ್ನು Wi-Fi ಮೂಲಕ ಅಪ್‌ಡೇಟ್ ಮಾಡಲು ಸಾಧ್ಯವಿಲ್ಲ.",
     "otaConnectFailed": "{deviceName} ಗೆ ಸಂಪರ್ಕಿಸಲು ಆಗಲಿಲ್ಲ. ಅದನ್ನು ಆನ್ ಆಗಿ ಹತ್ತಿರ ಇಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",

@@ -2287,10 +2287,10 @@ class AppLocalizationsUr extends AppLocalizations {
   String get firmwareUsbWarning => 'اپ ڈیٹ کے دوران USB کنکشن آپ کے ڈیوائس کو نقصان پہنچا سکتا ہے۔';
 
   @override
-  String get firmwareBatteryAbove15 => 'بیٹری 15 فیصد سے اوپر';
+  String get firmwareBatteryRequirement => 'بیٹری 30 فیصد سے اوپر';
 
   @override
-  String get firmwareEnsureBattery => 'یقینی بنائیں کہ آپ کے ڈیوائس میں 15 فیصد بیٹری ہے۔';
+  String get firmwareEnsureBattery => 'یقینی بنائیں کہ آپ کے ڈیوائس میں 30 فیصد بیٹری ہے۔';
 
   @override
   String get firmwareStableConnection => 'مستحکم کنکشن';
@@ -10597,8 +10597,12 @@ class AppLocalizationsUr extends AppLocalizations {
       'اپ ڈیٹ ڈاؤن لوڈ نہیں ہو سکی اور آپ کی ڈیوائس تبدیل نہیں ہوئی۔ انٹرنیٹ کنکشن چیک کریں، پھر دوبارہ کوشش کریں۔';
 
   @override
+  String get firmwareBatteryUnavailable =>
+      'بیٹری کی سطح ابھی دستیاب نہیں ہے۔ کچھ دیر انتظار کریں اور اگر یہی حالت رہے تو دوبارہ منسلک ہوں۔';
+
+  @override
   String firmwareBatteryTooLow(int level) {
-    return 'بیٹری $level% ہے۔ اپ ڈیٹ سے پہلے ڈیوائس کو کم از کم 15% تک چارج کریں۔';
+    return 'بیٹری $level% ہے۔ اپ ڈیٹ سے پہلے ڈیوائس کو کم از کم 30% تک چارج کریں۔';
   }
 
   @override

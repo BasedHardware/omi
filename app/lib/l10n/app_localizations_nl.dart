@@ -2285,10 +2285,10 @@ class AppLocalizationsNl extends AppLocalizations {
   String get firmwareUsbWarning => 'USB-verbinding tijdens updates kan uw apparaat beschadigen.';
 
   @override
-  String get firmwareBatteryAbove15 => 'Batterij boven 15%';
+  String get firmwareBatteryRequirement => 'Batterij boven 30%';
 
   @override
-  String get firmwareEnsureBattery => 'Zorg ervoor dat uw apparaat 15% batterij heeft.';
+  String get firmwareEnsureBattery => 'Zorg ervoor dat uw apparaat 30% batterij heeft.';
 
   @override
   String get firmwareStableConnection => 'Stabiele verbinding';
@@ -10611,8 +10611,12 @@ class AppLocalizationsNl extends AppLocalizations {
       'De update kon niet worden gedownload en je apparaat is niet gewijzigd. Controleer je internetverbinding en probeer het opnieuw.';
 
   @override
+  String get firmwareBatteryUnavailable =>
+      'Het batterijniveau is nog niet beschikbaar. Wacht even en verbind opnieuw als dit zo blijft.';
+
+  @override
   String firmwareBatteryTooLow(int level) {
-    return 'De batterij staat op $level%. Laad je apparaat op tot minstens 15% voordat je bijwerkt.';
+    return 'De batterij staat op $level%. Laad je apparaat op tot minstens 30% voordat je bijwerkt.';
   }
 
   @override

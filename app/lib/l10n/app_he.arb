@@ -2378,11 +2378,8 @@
     "@firmwareUsbWarning": {
         "description": "Warning about USB connection during firmware update"
     },
-    "firmwareBatteryAbove15": "סוללה מעל 15%",
-    "@firmwareBatteryAbove15": {
-        "description": "Firmware update step title about battery level"
-    },
-    "firmwareEnsureBattery": "וודא שהמכשיר שלך בעל 15% סוללה.",
+    "firmwareBatteryRequirement": "סוללה מעל 30%",
+    "firmwareEnsureBattery": "וודא שהמכשיר שלך בעל 30% סוללה.",
     "@firmwareEnsureBattery": {
         "description": "Description for battery requirement during firmware update"
     },
@@ -10771,7 +10768,8 @@
     "firmwareUpdateFailedTitle": "העדכון נכשל",
     "firmwareUpdateFailedMessage": "העדכון לא הסתיים. המכשיר עדיין עם הקושחה הנוכחית ובטוח לשימוש. השאירו אותו טעון וקרוב לטלפון ונסו שוב.",
     "firmwareDownloadFailedMessage": "לא ניתן היה להוריד את העדכון והמכשיר לא השתנה. בדקו את החיבור לאינטרנט ונסו שוב.",
-    "firmwareBatteryTooLow": "הסוללה על {level}%. יש לטעון את המכשיר ל-15% לפחות לפני העדכון.",
+    "firmwareBatteryUnavailable": "רמת הסוללה עדיין אינה זמינה. יש להמתין רגע ולהתחבר מחדש אם המצב נמשך.",
+    "firmwareBatteryTooLow": "הסוללה על {level}%. יש לטעון את המכשיר ל-30% לפחות לפני העדכון.",
     "startUpdate": "התחלת העדכון",
     "otaNotSupported": "לא ניתן לעדכן את הקושחה הזו דרך Wi-Fi.",
     "otaConnectFailed": "לא ניתן להתחבר אל {deviceName}. השאירו אותו דלוק וקרוב ונסו שוב.",

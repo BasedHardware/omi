@@ -2378,11 +2378,8 @@
     "@firmwareUsbWarning": {
         "description": "Warning about USB connection during firmware update"
     },
-    "firmwareBatteryAbove15": "شارژ باتری بالای 15 درصد",
-    "@firmwareBatteryAbove15": {
-        "description": "Firmware update step title about battery level"
-    },
-    "firmwareEnsureBattery": "مطمئن شوید دستگاه شما 15 درصد شارژ دارد.",
+    "firmwareBatteryRequirement": "شارژ باتری بالای 30 درصد",
+    "firmwareEnsureBattery": "مطمئن شوید دستگاه شما 30 درصد شارژ دارد.",
     "@firmwareEnsureBattery": {
         "description": "Description for battery requirement during firmware update"
     },
@@ -10771,7 +10768,8 @@
     "firmwareUpdateFailedTitle": "به‌روزرسانی ناموفق بود",
     "firmwareUpdateFailedMessage": "به‌روزرسانی کامل نشد. دستگاه شما همچنان میان‌افزار فعلی را دارد و استفاده از آن امن است. آن را شارژ و نزدیک تلفن نگه دارید، سپس دوباره امتحان کنید.",
     "firmwareDownloadFailedMessage": "به‌روزرسانی دانلود نشد و دستگاه شما تغییری نکرد. اتصال اینترنت را بررسی کنید و دوباره امتحان کنید.",
-    "firmwareBatteryTooLow": "باتری {level}٪ است. پیش از به‌روزرسانی، دستگاه را دست‌کم تا ۱۵٪ شارژ کنید.",
+    "firmwareBatteryUnavailable": "سطح باتری هنوز در دسترس نیست. کمی صبر کنید و اگر وضعیت همین‌طور ماند، دوباره متصل شوید.",
+    "firmwareBatteryTooLow": "باتری {level}٪ است. پیش از به‌روزرسانی، دستگاه را دست‌کم تا ۳۰٪ شارژ کنید.",
     "startUpdate": "شروع به‌روزرسانی",
     "otaNotSupported": "این میان‌افزار از طریق Wi-Fi به‌روز نمی‌شود.",
     "otaConnectFailed": "اتصال به {deviceName} ممکن نشد. آن را روشن و نزدیک نگه دارید و دوباره امتحان کنید.",

@@ -2378,11 +2378,8 @@
     "@firmwareUsbWarning": {
         "description": "Warning about USB connection during firmware update"
     },
-    "firmwareBatteryAbove15": "Батарэя вышэй за 15%",
-    "@firmwareBatteryAbove15": {
-        "description": "Firmware update step title about battery level"
-    },
-    "firmwareEnsureBattery": "Пераканайцеся, што ў вашага прыбору 15% батарэі.",
+    "firmwareBatteryRequirement": "Батарэя вышэй за 30%",
+    "firmwareEnsureBattery": "Пераканайцеся, што ў вашага прыбору 30% батарэі.",
     "@firmwareEnsureBattery": {
         "description": "Description for battery requirement during firmware update"
     },
@@ -10771,7 +10768,8 @@
     "firmwareUpdateFailedTitle": "Абнаўленне не ўдалося",
     "firmwareUpdateFailedMessage": "Абнаўленне не завяршылася. Прылада працуе на бягучай прашыўцы, ёю можна бяспечна карыстацца. Зарадзіце яе і трымайце побач з тэлефонам, потым паспрабуйце зноў.",
     "firmwareDownloadFailedMessage": "Не ўдалося спампаваць абнаўленне, прылада не змянілася. Праверце падключэнне да інтэрнэту і паспрабуйце зноў.",
-    "firmwareBatteryTooLow": "Зарад батарэі {level}%. Зарадзіце прыладу хаця б да 15% перад абнаўленнем.",
+    "firmwareBatteryUnavailable": "Узровень зараду батарэі пакуль недаступны. Пачакайце крыху і падключыце прыладу зноў, калі нічога не зменіцца.",
+    "firmwareBatteryTooLow": "Зарад батарэі {level}%. Зарадзіце прыладу хаця б да 30% перад абнаўленнем.",
     "startUpdate": "Пачаць абнаўленне",
     "otaNotSupported": "Гэтую прашыўку нельга абнавіць праз Wi-Fi.",
     "otaConnectFailed": "Не ўдалося падключыцца да {deviceName}. Трымайце прыладу ўключанай і побач, потым паспрабуйце зноў.",

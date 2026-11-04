@@ -2286,10 +2286,10 @@ class AppLocalizationsLv extends AppLocalizations {
   String get firmwareUsbWarning => 'USB savienojums atjaunināšanas laikā var sabojāt jūsu ierīci.';
 
   @override
-  String get firmwareBatteryAbove15 => 'Akumulators virs 15%';
+  String get firmwareBatteryRequirement => 'Akumulators virs 30%';
 
   @override
-  String get firmwareEnsureBattery => 'Pārliecinieties, ka jūsu ierīcē ir 15% akumulators.';
+  String get firmwareEnsureBattery => 'Pārliecinieties, ka jūsu ierīcē ir 30% akumulators.';
 
   @override
   String get firmwareStableConnection => 'Stabils savienojums';
@@ -10613,8 +10613,12 @@ class AppLocalizationsLv extends AppLocalizations {
       'Atjauninājumu neizdevās lejupielādēt, un ierīce netika mainīta. Pārbaudiet interneta savienojumu un mēģiniet vēlreiz.';
 
   @override
+  String get firmwareBatteryUnavailable =>
+      'Akumulatora uzlādes līmenis vēl nav pieejams. Uzgaidiet brīdi un izveidojiet savienojumu vēlreiz, ja nekas nemainās.';
+
+  @override
   String firmwareBatteryTooLow(int level) {
-    return 'Akumulators ir $level%. Pirms atjaunināšanas uzlādējiet ierīci vismaz līdz 15%.';
+    return 'Akumulators ir $level%. Pirms atjaunināšanas uzlādējiet ierīci vismaz līdz 30%.';
   }
 
   @override

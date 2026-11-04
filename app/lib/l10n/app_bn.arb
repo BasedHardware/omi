@@ -2378,11 +2378,8 @@
     "@firmwareUsbWarning": {
         "description": "Warning about USB connection during firmware update"
     },
-    "firmwareBatteryAbove15": "ব্যাটারি ১৫% এর উপরে",
-    "@firmwareBatteryAbove15": {
-        "description": "Firmware update step title about battery level"
-    },
-    "firmwareEnsureBattery": "আপনার ডিভাইসে ১৫% ব্যাটারি নিশ্চিত করুন।",
+    "firmwareBatteryRequirement": "ব্যাটারি ৩০% এর উপরে",
+    "firmwareEnsureBattery": "আপনার ডিভাইসে ৩০% ব্যাটারি নিশ্চিত করুন।",
     "@firmwareEnsureBattery": {
         "description": "Description for battery requirement during firmware update"
     },
@@ -10771,7 +10768,8 @@
     "firmwareUpdateFailedTitle": "আপডেট ব্যর্থ হয়েছে",
     "firmwareUpdateFailedMessage": "আপডেট শেষ হয়নি। আপনার ডিভাইস এখনও বর্তমান ফার্মওয়্যারে আছে এবং ব্যবহার নিরাপদ। চার্জ দিয়ে ফোনের কাছে রাখুন, তারপর আবার চেষ্টা করুন।",
     "firmwareDownloadFailedMessage": "আপডেট ডাউনলোড করা যায়নি, আপনার ডিভাইসে কোনো পরিবর্তন হয়নি। ইন্টারনেট সংযোগ দেখে আবার চেষ্টা করুন।",
-    "firmwareBatteryTooLow": "ব্যাটারি {level}%। আপডেটের আগে ডিভাইসটি অন্তত 15% চার্জ করুন।",
+    "firmwareBatteryUnavailable": "ব্যাটারির চার্জের মাত্রা এখনও পাওয়া যাচ্ছে না। একটু অপেক্ষা করুন, আর একই অবস্থা থাকলে আবার সংযোগ করুন।",
+    "firmwareBatteryTooLow": "ব্যাটারি {level}%। আপডেটের আগে ডিভাইসটি অন্তত 30% চার্জ করুন।",
     "startUpdate": "আপডেট শুরু করুন",
     "otaNotSupported": "এই ফার্মওয়্যার Wi-Fi-এর মাধ্যমে আপডেট করা যায় না।",
     "otaConnectFailed": "{deviceName}-এর সাথে সংযোগ করা যায়নি। এটি চালু ও কাছে রাখুন, তারপর আবার চেষ্টা করুন।",

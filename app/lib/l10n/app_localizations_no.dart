@@ -2278,10 +2278,10 @@ class AppLocalizationsNo extends AppLocalizations {
   String get firmwareUsbWarning => 'USB-tilkobling under oppdateringer kan skade enheten din.';
 
   @override
-  String get firmwareBatteryAbove15 => 'Batteri over 15%';
+  String get firmwareBatteryRequirement => 'Batteri over 30%';
 
   @override
-  String get firmwareEnsureBattery => 'Sørg for at enheten din har 15% batteri.';
+  String get firmwareEnsureBattery => 'Sørg for at enheten din har 30% batteri.';
 
   @override
   String get firmwareStableConnection => 'Stabil tilkobling';
@@ -10586,8 +10586,12 @@ class AppLocalizationsNo extends AppLocalizations {
       'Oppdateringen kunne ikke lastes ned, og enheten er ikke endret. Sjekk internettforbindelsen og prøv igjen.';
 
   @override
+  String get firmwareBatteryUnavailable =>
+      'Batterinivået er ikke tilgjengelig ennå. Vent et øyeblikk og koble til på nytt hvis det fortsetter.';
+
+  @override
   String firmwareBatteryTooLow(int level) {
-    return 'Batteriet er på $level %. Lad enheten til minst 15 % før du oppdaterer.';
+    return 'Batteriet er på $level %. Lad enheten til minst 30 % før du oppdaterer.';
   }
 
   @override

@@ -2281,10 +2281,10 @@ class AppLocalizationsFi extends AppLocalizations {
   String get firmwareUsbWarning => 'USB-yhteys päivitysten aikana voi vahingoittaa laitettasi.';
 
   @override
-  String get firmwareBatteryAbove15 => 'Akku yli 15%';
+  String get firmwareBatteryRequirement => 'Akku yli 30%';
 
   @override
-  String get firmwareEnsureBattery => 'Varmista, että laitteessasi on 15% akkua.';
+  String get firmwareEnsureBattery => 'Varmista, että laitteessasi on 30% akkua.';
 
   @override
   String get firmwareStableConnection => 'Vakaa yhteys';
@@ -10586,8 +10586,12 @@ class AppLocalizationsFi extends AppLocalizations {
       'Päivitystä ei voitu ladata, eikä laitettasi muutettu. Tarkista internetyhteys ja yritä uudelleen.';
 
   @override
+  String get firmwareBatteryUnavailable =>
+      'Akun varaustaso ei ole vielä saatavilla. Odota hetki ja yhdistä uudelleen, jos tilanne ei muutu.';
+
+  @override
   String firmwareBatteryTooLow(int level) {
-    return 'Akun varaus on $level %. Lataa laite vähintään 15 %:iin ennen päivitystä.';
+    return 'Akun varaus on $level %. Lataa laite vähintään 30 %:iin ennen päivitystä.';
   }
 
   @override

@@ -2286,10 +2286,10 @@ class AppLocalizationsBs extends AppLocalizations {
   String get firmwareUsbWarning => 'USB veza tijekom ažuriranja može oštetiti tvoj uređaj.';
 
   @override
-  String get firmwareBatteryAbove15 => 'Baterija iznad 15%';
+  String get firmwareBatteryRequirement => 'Baterija iznad 30%';
 
   @override
-  String get firmwareEnsureBattery => 'Provjeri da tvoj uređaj ima 15% baterije.';
+  String get firmwareEnsureBattery => 'Provjeri da tvoj uređaj ima 30% baterije.';
 
   @override
   String get firmwareStableConnection => 'Stabilna veza';
@@ -10609,8 +10609,12 @@ class AppLocalizationsBs extends AppLocalizations {
       'Ažuriranje nije moguće preuzeti i uređaj nije promijenjen. Provjerite internetsku vezu, pa pokušajte ponovo.';
 
   @override
+  String get firmwareBatteryUnavailable =>
+      'Nivo baterije još nije dostupan. Sačekajte trenutak i ponovo se povežite ako se to ne promijeni.';
+
+  @override
   String firmwareBatteryTooLow(int level) {
-    return 'Baterija je na $level%. Napunite uređaj na najmanje 15% prije ažuriranja.';
+    return 'Baterija je na $level%. Napunite uređaj na najmanje 30% prije ažuriranja.';
   }
 
   @override

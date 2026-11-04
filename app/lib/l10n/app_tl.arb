@@ -2378,11 +2378,8 @@
     "@firmwareUsbWarning": {
         "description": "Warning about USB connection during firmware update"
     },
-    "firmwareBatteryAbove15": "Baterya sa Itaas ng 15%",
-    "@firmwareBatteryAbove15": {
-        "description": "Firmware update step title about battery level"
-    },
-    "firmwareEnsureBattery": "Siguraduhin na ang iyong device ay may 15% na baterya.",
+    "firmwareBatteryRequirement": "Baterya sa Itaas ng 30%",
+    "firmwareEnsureBattery": "Siguraduhin na ang iyong device ay may 30% na baterya.",
     "@firmwareEnsureBattery": {
         "description": "Description for battery requirement during firmware update"
     },
@@ -10771,7 +10768,8 @@
     "firmwareUpdateFailedTitle": "Nabigo ang Update",
     "firmwareUpdateFailedMessage": "Hindi natapos ang update. Nasa kasalukuyang firmware pa rin ang device mo at ligtas itong gamitin. Panatilihin itong naka-charge at malapit sa telepono, saka subukang muli.",
     "firmwareDownloadFailedMessage": "Hindi ma-download ang update at walang nagbago sa device mo. Tingnan ang koneksyon sa internet, saka subukang muli.",
-    "firmwareBatteryTooLow": "Nasa {level}% ang baterya. I-charge ang device nang hindi bababa sa 15% bago mag-update.",
+    "firmwareBatteryUnavailable": "Hindi pa available ang antas ng baterya. Maghintay sandali at kumonekta muli kung ganito pa rin.",
+    "firmwareBatteryTooLow": "Nasa {level}% ang baterya. I-charge ang device nang hindi bababa sa 30% bago mag-update.",
     "startUpdate": "Simulan ang Update",
     "otaNotSupported": "Hindi maa-update ang firmware na ito sa Wi-Fi.",
     "otaConnectFailed": "Hindi makakonekta sa {deviceName}. Panatilihin itong naka-on at malapit, saka subukang muli.",
