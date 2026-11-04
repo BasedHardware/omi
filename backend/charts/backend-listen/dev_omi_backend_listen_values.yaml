@@ -252,7 +252,7 @@ env:
   - name: FSR_USAGE_MONTH_TTL_SECONDS
     value: "60"
   - name: FSR_SUBSCRIPTION_TTL_SECONDS
-    value: "60"
+    value: "55"
   - name: FSR_SERVING_CONFIG_TTL_SECONDS
     value: "60"
   - name: ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS

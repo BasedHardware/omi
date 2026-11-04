@@ -38,7 +38,7 @@ environments:
           FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
           FSR_USAGE_MONTH_TOTAL_EPOCH: {value: v1, category: rollout}
           FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
-          FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+          FSR_SUBSCRIPTION_TTL_SECONDS: {value: '55', category: rollout}
           FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
           ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
           CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
@@ -384,7 +384,7 @@ environments:
           FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
           FSR_USAGE_MONTH_TOTAL_EPOCH: {value: v1, category: rollout}
           FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
-          FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+          FSR_SUBSCRIPTION_TTL_SECONDS: {value: '55', category: rollout}
           FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
           ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
           CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
@@ -686,7 +686,7 @@ environments:
         FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
         FSR_USAGE_MONTH_TOTAL_EPOCH: {value: v1, category: rollout}
         FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
-        FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+        FSR_SUBSCRIPTION_TTL_SECONDS: {value: '55', category: rollout}
         FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
         ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
         CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
@@ -849,7 +849,7 @@ environments:
             FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
             FSR_USAGE_MONTH_TOTAL_EPOCH: {value: v1, category: rollout}
             FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
-            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '55', category: rollout}
             FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
             ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
             CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
@@ -1124,7 +1124,7 @@ environments:
             FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
             FSR_USAGE_MONTH_TOTAL_EPOCH: {value: v1, category: rollout}
             FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
-            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '55', category: rollout}
             FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
             ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
             CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
@@ -1417,7 +1417,7 @@ environments:
             FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
             FSR_USAGE_MONTH_TOTAL_EPOCH: {value: v1, category: rollout}
             FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
-            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '55', category: rollout}
             FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
             ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
             CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
@@ -1697,7 +1697,7 @@ environments:
             FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
             FSR_USAGE_MONTH_TOTAL_EPOCH: {value: v1, category: rollout}
             FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
-            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '55', category: rollout}
             FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
             ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
             CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
@@ -1881,7 +1881,7 @@ environments:
             FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
             FSR_USAGE_MONTH_TOTAL_EPOCH: {value: v1, category: rollout}
             FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
-            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '55', category: rollout}
             FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
             ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
             CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
@@ -1948,7 +1948,7 @@ environments:
             FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
             FSR_USAGE_MONTH_TOTAL_EPOCH: {value: v1, category: rollout}
             FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
-            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '55', category: rollout}
             FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
             ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
             CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
@@ -2001,7 +2001,7 @@ environments:
             FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
             FSR_USAGE_MONTH_TOTAL_EPOCH: {value: v1, category: rollout}
             FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
-            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '55', category: rollout}
             FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
             ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
             CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
@@ -2058,7 +2058,7 @@ environments:
             FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
             FSR_USAGE_MONTH_TOTAL_EPOCH: {value: v1, category: rollout}
             FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
-            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '55', category: rollout}
             FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
             ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
             CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
@@ -2156,7 +2156,7 @@ environments:
           FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
           FSR_USAGE_MONTH_TOTAL_EPOCH: {value: v1, category: rollout}
           FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
-          FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+          FSR_SUBSCRIPTION_TTL_SECONDS: {value: '55', category: rollout}
           FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
           ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
           CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
@@ -2605,7 +2605,7 @@ environments:
           FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
           FSR_USAGE_MONTH_TOTAL_EPOCH: {value: v1, category: rollout}
           FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
-          FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+          FSR_SUBSCRIPTION_TTL_SECONDS: {value: '55', category: rollout}
           FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
           ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
           CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
@@ -2871,7 +2871,7 @@ environments:
         FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
         FSR_USAGE_MONTH_TOTAL_EPOCH: {value: v1, category: rollout}
         FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
-        FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+        FSR_SUBSCRIPTION_TTL_SECONDS: {value: '55', category: rollout}
         FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
         ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
         CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
@@ -3081,7 +3081,7 @@ environments:
             FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
             FSR_USAGE_MONTH_TOTAL_EPOCH: {value: c2fs_20261026_r1, category: rollout}
             FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
-            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '55', category: rollout}
             FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
             ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
             CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
@@ -3482,7 +3482,7 @@ environments:
             FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
             FSR_USAGE_MONTH_TOTAL_EPOCH: {value: c2fs_20261026_r1, category: rollout}
             FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
-            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '55', category: rollout}
             FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
             ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
             CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
@@ -3900,7 +3900,7 @@ environments:
             FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
             FSR_USAGE_MONTH_TOTAL_EPOCH: {value: c2fs_20261026_r1, category: rollout}
             FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
-            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '55', category: rollout}
             FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
             ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
             CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
@@ -4285,7 +4285,7 @@ environments:
             FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
             FSR_USAGE_MONTH_TOTAL_EPOCH: {value: c2fs_20261026_r1, category: rollout}
             FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
-            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '55', category: rollout}
             FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
             ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
             CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
@@ -4536,7 +4536,7 @@ environments:
             FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
             FSR_USAGE_MONTH_TOTAL_EPOCH: {value: v1, category: rollout}
             FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
-            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '55', category: rollout}
             FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
             ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
             CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
@@ -4598,7 +4598,7 @@ environments:
             FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
             FSR_USAGE_MONTH_TOTAL_EPOCH: {value: v1, category: rollout}
             FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
-            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '55', category: rollout}
             FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
             ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
             CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
@@ -4652,7 +4652,7 @@ environments:
             FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
             FSR_USAGE_MONTH_TOTAL_EPOCH: {value: v1, category: rollout}
             FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
-            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '55', category: rollout}
             FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
             ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
             CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
@@ -4708,7 +4708,7 @@ environments:
             FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
             FSR_USAGE_MONTH_TOTAL_EPOCH: {value: v1, category: rollout}
             FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
-            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '55', category: rollout}
             FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
             ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
             CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}

@@ -53,7 +53,7 @@ environment_shared:
           value: '60'
           category: rollout
         FSR_SUBSCRIPTION_TTL_SECONDS:
-          value: '60'
+          value: '55'
           category: rollout
         FSR_SERVING_CONFIG_TTL_SECONDS:
           value: '60'
@@ -559,7 +559,7 @@ environment_shared:
           value: '60'
           category: rollout
         FSR_SUBSCRIPTION_TTL_SECONDS:
-          value: '60'
+          value: '55'
           category: rollout
         FSR_SERVING_CONFIG_TTL_SECONDS:
           value: '60'
@@ -820,7 +820,7 @@ environment_shared:
         value: '60'
         category: rollout
       FSR_SUBSCRIPTION_TTL_SECONDS:
-        value: '60'
+        value: '55'
         category: rollout
       FSR_SERVING_CONFIG_TTL_SECONDS:
         value: '60'
@@ -1022,7 +1022,7 @@ environment_shared:
             value: '60'
             category: rollout
           FSR_SUBSCRIPTION_TTL_SECONDS:
-            value: '60'
+            value: '55'
             category: rollout
           FSR_SERVING_CONFIG_TTL_SECONDS:
             value: '60'
@@ -1405,7 +1405,7 @@ environment_shared:
             value: '60'
             category: rollout
           FSR_SUBSCRIPTION_TTL_SECONDS:
-            value: '60'
+            value: '55'
             category: rollout
           FSR_SERVING_CONFIG_TTL_SECONDS:
             value: '60'
@@ -1764,7 +1764,7 @@ environment_shared:
             value: '60'
             category: rollout
           FSR_SUBSCRIPTION_TTL_SECONDS:
-            value: '60'
+            value: '55'
             category: rollout
           FSR_SERVING_CONFIG_TTL_SECONDS:
             value: '60'
@@ -2117,7 +2117,7 @@ environment_shared:
             value: '60'
             category: rollout
           FSR_SUBSCRIPTION_TTL_SECONDS:
-            value: '60'
+            value: '55'
             category: rollout
           FSR_SERVING_CONFIG_TTL_SECONDS:
             value: '60'
@@ -2341,7 +2341,7 @@ environment_shared:
             value: '60'
             category: rollout
           FSR_SUBSCRIPTION_TTL_SECONDS:
-            value: '60'
+            value: '55'
             category: rollout
           FSR_SERVING_CONFIG_TTL_SECONDS:
             value: '60'
@@ -2422,7 +2422,7 @@ environment_shared:
             value: '60'
             category: rollout
           FSR_SUBSCRIPTION_TTL_SECONDS:
-            value: '60'
+            value: '55'
             category: rollout
           FSR_SERVING_CONFIG_TTL_SECONDS:
             value: '60'
@@ -2487,7 +2487,7 @@ environment_shared:
             value: '60'
             category: rollout
           FSR_SUBSCRIPTION_TTL_SECONDS:
-            value: '60'
+            value: '55'
             category: rollout
           FSR_SERVING_CONFIG_TTL_SECONDS:
             value: '60'
@@ -2561,7 +2561,7 @@ environment_shared:
             value: '60'
             category: rollout
           FSR_SUBSCRIPTION_TTL_SECONDS:
-            value: '60'
+            value: '55'
             category: rollout
           FSR_SERVING_CONFIG_TTL_SECONDS:
             value: '60'

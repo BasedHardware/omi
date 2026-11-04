@@ -239,7 +239,7 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "FSR_DELETION_NEGATIVE_TTL_SECONDS": "30",
         "FSR_USAGE_MONTH_TTL_SECONDS": "60",
         "FSR_USAGE_MONTH_TOTAL_EPOCH": "v1",
-        "FSR_SUBSCRIPTION_TTL_SECONDS": "60",
+        "FSR_SUBSCRIPTION_TTL_SECONDS": "55",
         "FSR_SERVING_CONFIG_TTL_SECONDS": "60",
         "ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS": "30",
         "CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS": "30",
