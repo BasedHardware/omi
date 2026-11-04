@@ -1,3 +1,8 @@
+// The settings sidebar: section navigation plus its search model.
+//
+// Search is metadata-driven (keywords per SettingsSection) rather than
+// text-matching the views, so a settings row stays discoverable by concept even
+// when its on-screen title does not contain the search term.
 import OmiTheme
 import SwiftUI
 

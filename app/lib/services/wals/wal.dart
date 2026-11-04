@@ -1,3 +1,11 @@
+// The WAL (write-ahead log) model: chunked audio file naming, recording
+// metadata, and the chunk/flush timing constants shared by live and batch
+// capture paths.
+//
+// Filenames are a wire contract -- they carry source, codec and timing tokens
+// that backend sync intake decodes on, and a mislabeled codec token silently
+// decodes as the wrong codec (still HTTP 200), so naming schemes here must
+// stay in sync with backend/utils/sync (CUSTODY.md).
 import 'dart:math';
 
 import 'package:path_provider/path_provider.dart';
