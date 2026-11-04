@@ -433,6 +433,7 @@ def test_live_ownership_rotates_at_exactly_four_hours():
 
 def test_realtime_transport_does_not_open_arrival_time_episode_for_late_speech(monkeypatch):
     import asyncio
+    import threading
     from utils.episodes import live
 
     monkeypatch.setattr(live.client_gate, 'client_seen_cached', lambda uid: True)
@@ -440,7 +441,13 @@ def test_realtime_transport_does_not_open_arrival_time_episode_for_late_speech(m
         live.conversations_db, 'get_conversation_raw_snapshot', lambda *a, **kw: {'started_at': T0, 'source': 'omi'}
     )
     calls = []
-    monkeypatch.setattr(episode_finalize, 'schedule_synced_intake_attach', lambda *a: calls.append(a))
+    event_loop_thread = threading.get_ident()
+
+    def schedule(*args):
+        assert threading.get_ident() != event_loop_thread
+        calls.append(args)
+
+    monkeypatch.setattr(episode_finalize, 'schedule_synced_intake_attach', schedule)
 
     def reject(*a, **kw):
         raise AssertionError('historical speech reached live tracker')

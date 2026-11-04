@@ -175,6 +175,8 @@ def attach(
             # membership mutation invalidates it conservatively. The fence is
             # still read: a concurrent topology writer must serialize with us.
             # Unrelated windows need not invalidate this owner's proof.
+            # check_window rejects a new overlapping fixed window; converting
+            # this owner to a fixed boundary advances its revision instead.
             proof = owner.get('recorded_partition') or {}
             fact = (owner.get('recorded_members') or {}).get(cid)
             if (

@@ -34,6 +34,7 @@ def join_duplicates(
         duplicates_dedupe_enabled()
         and set(ids) <= set(owner.get('duplicate_conversation_ids') or [])
         and set(ids) <= set(owner.get('conversation_ids') or [])
+        and episodes.duplicate_memberships_match(uid, owner, ids, firestore_client=firestore_client)
     ):
         return owner
     duplicates = sorted(set(owner.get('duplicate_conversation_ids') or []) | set(ids))
