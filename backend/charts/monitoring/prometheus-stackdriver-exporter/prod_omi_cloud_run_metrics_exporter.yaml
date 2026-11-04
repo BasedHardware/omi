@@ -41,6 +41,8 @@ stackdriver:
       - 'prometheus.googleapis.com/omi_fallback_total/'
       - 'prometheus.googleapis.com/omi_firestore_documents_per_operation/'
       - 'prometheus.googleapis.com/omi_firestore_read_operations_total/'
+      - 'prometheus.googleapis.com/omi_home_rows_user_day_count_total/'
+      - 'prometheus.googleapis.com/omi_home_rows_user_day_sum_total/'
       - 'prometheus.googleapis.com/omi_journey_accepted_total/'
       - 'prometheus.googleapis.com/omi_journey_latency_seconds/'
       - 'prometheus.googleapis.com/omi_journey_terminal_total/'

@@ -145,6 +145,9 @@ env:
     value: "0"
   - name: SERVER_BATCH_ONLY_MOBILE_PERCENT
     value: "100"
+  # Expand only after the new web bundle is live; cached bundles lack batch UI.
+  - name: SERVER_BATCH_ONLY_WEB_PERCENT
+    value: "0"
   # Separate listen roll after mobile batch-only 100; lead expands by 2026-11-03.
   - name: SERVER_BATCH_ONLY_VISIBLE_RESTORE_PERCENT
     value: "0"
@@ -246,7 +249,7 @@ env:
   - name: FIRESTORE_READ_LEDGER
     value: "1"
   - name: FIRESTORE_READ_LEVERS
-    value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":5,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":5,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":5,"usage_month_cache":0,"usage_month_total":0}'
+    value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":5,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":5,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":5,"usage_month_cache":0,"usage_month_total":0}'
   - name: FSR_QUEUE_AGE_PUBLISHER
     value: "1"
   - name: FSR_QUEUE_AGE_LEASE_SECONDS
@@ -861,8 +864,9 @@ autoscaling:
   enabled: true
   # retire100: planned live residual is ~31% excluded conversations plus
   # ~5-6% desktop. Qualify the floor against fresh batch-100 demand before
-  # applying; max 60 and all scale-out signals stay intact. Rollback: 30.
-  minReplicas: 20
+  # applying; max 60 and all scale-out signals stay intact. margin-20 floor: 12.
+  # CPU request stays at 1 (24h pod p95 reaches 1.09 cores). Rollback: minReplicas 20.
+  minReplicas: 12
   maxReplicas: 60
   behavior:
     scaleDown:

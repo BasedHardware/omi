@@ -290,6 +290,9 @@ jobs:
             # Batch install runbook's rollout wait: one T4 replica on the dedicated pool.
             rollout_timeout=900s
           fi
+          # Siblings start together; share the wait budget so two slow rollouts
+          # cannot overrun this step's 45-minute deadline before diagnostics.
+          rollout_deadline=$((SECONDS + ${rollout_timeout%s}))
           if ! kubectl -n "$DEPLOY_NAMESPACE" rollout status "deploy/$TARGET_RELEASE" --timeout="$rollout_timeout"; then
             timeout 120 python3 backend/scripts/deploy_status_report.py --env "$DEPLOY_ENV" --include-gke --gke-service "$SERVICE" || true
             exit 1
@@ -302,6 +305,30 @@ jobs:
               exit 1
             fi
             echo "deploy/$TARGET_RELEASE is ready on $EXPECTED_DIGEST"
+          fi
+          # The T4 stockout fallback keeps its operator-set replicas across upgrades;
+          # when it is serving, it must roll out the same digest too.
+          if [[ "$SERVICE" == "batch-pipeline-worker" ]]; then
+            fallback="$TARGET_RELEASE-t4"
+            fallback_replicas="$(kubectl -n "$DEPLOY_NAMESPACE" get "deploy/$fallback" --request-timeout=30s \
+              --ignore-not-found -o jsonpath='{.spec.replicas}')"
+            if [[ -n "$fallback_replicas" && "$fallback_replicas" != "0" ]]; then
+              fallback_remaining=$((rollout_deadline - SECONDS))
+              if (( fallback_remaining <= 0 )); then
+                echo "::error::rollout budget exhausted before verifying deploy/$fallback"
+                exit 1
+              fi
+              kubectl -n "$DEPLOY_NAMESPACE" rollout status "deploy/$fallback" --timeout="${fallback_remaining}s" || exit 1
+              if [[ -n "${EXPECTED_DIGEST:-}" ]]; then
+                fallback_image="$(kubectl -n "$DEPLOY_NAMESPACE" get "deploy/$fallback" --request-timeout=30s \
+                  -o jsonpath='{.spec.template.spec.containers[0].image}')"
+                if [[ "$fallback_image" != *"@$EXPECTED_DIGEST" ]]; then
+                  echo "::error::deploy/$fallback rolled out $fallback_image, not the expected digest $EXPECTED_DIGEST"
+                  exit 1
+                fi
+              fi
+              echo "deploy/$fallback ($fallback_replicas replicas) is ready"
+            fi
           fi
           timeout 120 python3 backend/scripts/deploy_status_report.py --env "$DEPLOY_ENV" --include-gke --gke-service "$SERVICE"
 

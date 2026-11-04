@@ -22,7 +22,7 @@ exhaustion instead enters the bounded quarantine recovery while enabled.
 
 from utils.observability.stt_cap_dispatch import DispatchPath, DispatchReason, record_decision
 
-from dataclasses import asdict, dataclass, fields
+from dataclasses import dataclass, fields
 import asyncio
 import io
 import logging
@@ -109,6 +109,7 @@ FUNDING_RETRY_SECONDS = 60.0
 # Services this stage can actually call: Velma batch and Soniox async (failover capacity only;
 # the route table marks it failover_only). Deepgram is retired.
 _CALLABLE_SERVICES = frozenset(contracts.VENDOR_SERVICES)
+
 
 # --- attempt records -----------------------------------------------------------------------------
 
@@ -372,7 +373,7 @@ class ProviderSttStore:
                 )
                 _record_held_vad(job, measured_held_vad_speech_seconds)
             else:
-                job.update(state='result_ready', result=asdict(WorkResult(segment_id, result_uri or '', outcome)))
+                job.update(state='result_ready', result=WorkResult(segment_id, result_uri or '', outcome).to_dict())
             owner['revision'] = owner.get('revision', 0) + 1
             tx.put('owners', owner_key(job['owner_id']), owner)
             tx.put('jobs', segment_id, job)

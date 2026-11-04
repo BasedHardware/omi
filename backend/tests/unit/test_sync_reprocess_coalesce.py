@@ -18,6 +18,9 @@ def state(monkeypatch):
     from utils.enrichment import scan as enrichment_scan
 
     rows, tasks = {}, []
+    # Relative epoch clocks exercise coalescing independently of wall-clock
+    # history. The age-gate behavior suite explicitly enables its 72h policy.
+    monkeypatch.setenv('ENRICHMENT_MAX_AGE_HOURS', '0')
 
     def mutate(key, operation):
         new, result = operation(deepcopy(rows.get(key)))
@@ -1262,3 +1265,69 @@ def test_later_summary_keeps_legacy_callback_validation_and_completion(state, mo
             reprocess.run(key, token, callback, now=120)
         assert not rows[key].get('dormant')
         assert rows[key]['lease_until'] == 1920
+
+
+@pytest.mark.parametrize(
+    'change', ['none', 'timestamps', 'text', 'span', 'visibility', 'missing_owner', 'off', 'finalize_owed']
+)
+def test_episode_schedule_only_for_changed_reprocess_or_unattached(pipeline, monkeypatch, change):
+    from datetime import datetime, timedelta, timezone
+    from copy import deepcopy
+    from types import SimpleNamespace
+
+    start = datetime(2026, 11, 4, tzinfo=timezone.utc)
+    row = {
+        'id': 'c',
+        'source': 'omi',
+        'status': 'completed',
+        'episode_id': 'e',
+        'started_at': start,
+        'finished_at': start + timedelta(minutes=1),
+        'recorded_start': start,
+        'recorded_end': start + timedelta(minutes=1),
+        'discarded': False,
+        'transcript_segments': [{'id': 's', 'text': 'retained speech', 'start': 0, 'end': 60}],
+        'relevance_decision': {'trigger': 'sync_update', 'verdict': 'keep'},
+    }
+    if change == 'missing_owner':
+        row.pop('episode_id')
+    model = SimpleNamespace(**deepcopy(row), structured={}, language='en')
+    model.model_dump = lambda: {k: v for k, v in vars(model).items() if k != 'model_dump'}
+    monkeypatch.setattr(pipeline.conversations_db, 'get_conversation', lambda *_: row)
+    monkeypatch.setattr(pipeline, 'deserialize_conversation', lambda *_: model)
+    monkeypatch.setattr(pipeline, 'repair_fenced', lambda *_: False)
+    monkeypatch.setattr(pipeline.bridge_pending, 'live_finalization_owns', lambda *_: False)
+    monkeypatch.setattr(pipeline, 'occasion_relevance_enabled', lambda: True)
+    monkeypatch.setattr(pipeline, 'is_silent_redrive', lambda *_: False)
+    monkeypatch.setattr(pipeline, 'record_feature', lambda *a: None)
+    monkeypatch.setenv('EPISODE_ATTACH_NOOP_SCHEDULE_ENABLED', 'false' if change == 'off' else 'true')
+    from utils.episodes import finalize
+
+    monkeypatch.setattr(finalize, 'episodes_enabled_for', lambda _: True)
+    monkeypatch.setattr(finalize, 'lifecycle_executor', lambda *a, **kw: object())
+    # An equal processing pass may skip only with completed current finalize proof.
+    proof = Mock(return_value=change in {'none', 'timestamps'})
+    monkeypatch.setattr(finalize, 'skip_unchanged_schedule', proof)
+    schedule = Mock()
+    monkeypatch.setattr(finalize, 'submit_with_context', schedule)
+    monkeypatch.setattr(pipeline, 'schedule_after_finalization', finalize.schedule_after_finalization)
+
+    def process(**kw):
+        # Deliberately mutate the exact object passed by the caller.
+        if change == 'text':
+            model.transcript_segments[0]['text'] = 'new retained speech'
+        elif change == 'span':
+            model.recorded_end += timedelta(minutes=1)
+        elif change == 'visibility':
+            model.discarded = True
+        elif change == 'timestamps':
+            model.finished_at += timedelta(minutes=1)
+        return model
+
+    monkeypatch.setattr(pipeline, 'process_conversation', process)
+    token = pipeline.PROCESS_CONTEXT.set(None)
+    try:
+        pipeline._reprocess_conversation_after_update('u', 'c', 'en')
+    finally:
+        pipeline.PROCESS_CONTEXT.reset(token)
+    assert schedule.call_count == (0 if change in {'none', 'timestamps'} else 1)
