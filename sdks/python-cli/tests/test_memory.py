@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import json
 
-import pytest
-
 from omi_cli.main import app
 
 
@@ -106,51 +104,69 @@ def test_memory_unauthenticated_is_clear(config_path, cli_runner) -> None:
 
 
 def test_memory_get_missing_returns_not_found_exit_code(authed_profile, respx_mock, cli_runner) -> None:
-    """Client-side scan for a missing memory must surface as exit 5 (NotFoundError),
-    matching the documented agent contract — not exit 1 (UsageError)."""
-    respx_mock.get("/v1/dev/user/memories").respond(json=[])
+    """A server-side 404 on the direct get-by-id endpoint must surface as
+    exit 5 (NotFoundError), matching the documented agent contract."""
+    respx_mock.get("/v1/dev/user/memories/does-not-exist").respond(404)
     result = cli_runner.invoke(app, ["memory", "get", "does-not-exist"])
     assert result.exit_code == 5  # EXIT_NOT_FOUND
     assert "not found" in result.stderr.lower()
 
 
-def test_memory_get_found_in_later_page(authed_profile, respx_mock, cli_runner) -> None:
-    """Confirm the paging loop still finds an item past the first page."""
-    page1 = [
-        {"id": f"m{i}", "content": "x", "category": "core", "visibility": "private", "tags": []} for i in range(100)
-    ]
-    page2 = [{"id": "target", "content": "found me", "category": "core", "visibility": "private", "tags": []}]
-    import httpx
-
-    respx_mock.get("/v1/dev/user/memories").mock(
-        side_effect=[httpx.Response(200, json=page1), httpx.Response(200, json=page2)]
-    )
-    result = cli_runner.invoke(app, ["--json", "memory", "get", "target"])
-    assert result.exit_code == 0
-
-
-def test_memory_get_continues_after_short_filtered_page(authed_profile, respx_mock, cli_runner) -> None:
-    """A malformed record filtered by the API must not hide later memories."""
-    page1 = [
-        {"id": f"m{i}", "content": "x", "category": "core", "visibility": "private", "tags": []} for i in range(99)
-    ]
-    page2 = [{"id": "target", "content": "found me", "category": "core", "visibility": "private", "tags": []}]
-    import httpx
-
-    route = respx_mock.get("/v1/dev/user/memories").mock(
-        side_effect=[httpx.Response(200, json=page1), httpx.Response(200, json=page2)]
+def test_memory_get_uses_direct_endpoint(authed_profile, respx_mock, cli_runner) -> None:
+    """get-by-id must hit GET /v1/dev/user/memories/{id} directly — a single
+    request, no client-side page scan."""
+    route = respx_mock.get("/v1/dev/user/memories/target").respond(
+        json={"id": "target", "content": "found me", "category": "core", "visibility": "private", "tags": []}
     )
     result = cli_runner.invoke(app, ["--json", "memory", "get", "target"])
     assert result.exit_code == 0, result.output
-    assert len(route.calls) == 2
-    assert route.calls[1].request.url.params["offset"] == "100"
+    assert len(route.calls) == 1
+    payload = json.loads(result.stdout)
+    assert payload["id"] == "target"
+    assert payload["content"] == "found me"
 
 
-@pytest.mark.parametrize("command", [["memory", "list"], ["memory", "get", "m1"]])
-def test_memory_pretty_preserves_markup_like_content(authed_profile, respx_mock, cli_runner, command) -> None:
+def test_memory_get_traversal_id_cannot_reach_conversations(authed_profile, respx_mock, cli_runner) -> None:
+    """A traversal ID in ``memory get`` must stay inside the memories segment.
+
+    Before the fix, httpx resolved the dot-segments and this GET landed on
+    /v1/dev/user/conversations/abc — a different resource than the one asked for.
+    """
+    conversations = respx_mock.get("/v1/dev/user/conversations/abc").respond(
+        json={"id": "abc", "content": "not a memory"}
+    )
+    memory = respx_mock.get("/v1/dev/user/memories/x%2F..%2F..%2Fconversations%2Fabc").respond(
+        status_code=404, json={"detail": "Memory not found"}
+    )
+    result = cli_runner.invoke(app, ["--json", "memory", "get", "x/../../conversations/abc"])
+    assert not conversations.called
+    assert memory.called
+    assert result.exit_code == 5
+
+
+def test_memory_get_pretty_renders_item(authed_profile, respx_mock, cli_runner) -> None:
+    respx_mock.get("/v1/dev/user/memories/m1").respond(
+        json={"id": "m1", "content": "hello", "category": "core", "visibility": "private", "tags": []}
+    )
+    result = cli_runner.invoke(app, ["--no-color", "memory", "get", "m1"])
+    assert result.exit_code == 0, result.output
+    assert "m1" in result.stdout
+    assert "hello" in result.stdout
+
+
+def test_memory_list_pretty_preserves_markup_like_content(authed_profile, respx_mock, cli_runner) -> None:
     respx_mock.get("/v1/dev/user/memories").respond(
         json=[{"id": "m1", "content": "[draft] literal [/bold] :warning:", "tags": []}]
     )
-    result = cli_runner.invoke(app, ["--no-color", *command])
+    result = cli_runner.invoke(app, ["--no-color", "memory", "list"])
+    assert result.exit_code == 0, result.output
+    assert "[draft] literal [/bold] :warning:" in result.stdout
+
+
+def test_memory_get_pretty_preserves_markup_like_content(authed_profile, respx_mock, cli_runner) -> None:
+    respx_mock.get("/v1/dev/user/memories/m1").respond(
+        json={"id": "m1", "content": "[draft] literal [/bold] :warning:", "tags": []}
+    )
+    result = cli_runner.invoke(app, ["--no-color", "memory", "get", "m1"])
     assert result.exit_code == 0, result.output
     assert "[draft] literal [/bold] :warning:" in result.stdout
