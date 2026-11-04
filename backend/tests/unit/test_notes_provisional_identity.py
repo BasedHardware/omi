@@ -350,7 +350,6 @@ async def test_late_pass_refreshes_notes_once_including_all_rejected_pass(monkey
     path = ('users', UID, 'conversations', CID)
     db = StrictFirestore({path: raw})
     monkeypatch.setattr(late_module, 'get_firestore_client', lambda: db)
-    monkeypatch.setattr(late_module, 'meeting_notes_rich_context_enabled', lambda: True)
     monkeypatch.setattr(late_module, 'configured_screen_frames_bucket', lambda: 'synthetic-bucket')
     monkeypatch.setattr(late_module.conversations_db, 'get_conversation', lambda *a: deepcopy(db.rows[path]))
     monkeypatch.setattr(

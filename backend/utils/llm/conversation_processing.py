@@ -626,15 +626,16 @@ def _finish_shaped_notes(
     # Provisional meeting identities ride the parsed structure to the save seam
     # as server-only context (outside the client/model schema): roster entries,
     # screen-frame count and corroborated names, for the notes-identity stager.
-    roster = kwargs.get('roster')
-    meeting_context = kwargs.get('meeting_context')
+    roster = (inputs or {}).get('roster')
+    meeting_context = (inputs or {}).get('meeting_context')
+    evidence_frames = (inputs or {}).get('screen_frames') or ()
     has_identity_evidence = bool(
-        frames
+        evidence_frames
         or 'SCREEN MOMENTS' in (meeting_context or '')
         or (roster and any(e.kind != 'owner' for e in roster.entries))
     )
     if rich_mode and has_identity_evidence:
-        attach_notes_identity_context(structured, roster, len(frames), meeting_context or '')
+        attach_notes_identity_context(structured, roster, len(evidence_frames), meeting_context or '')
     return structured
 
 

@@ -102,6 +102,13 @@ def router():
         "database.conversations": _pkg("database.conversations"),
         "database.conversation_scan": _pkg("database.conversation_scan"),
         "database.hidden_noise_counts": _pkg("database.hidden_noise_counts"),
+        "database.account_deletion_marker": _pkg("database.account_deletion_marker"),
+        "database.legal_holds": _pkg("database.legal_holds"),
+        "google.oauth2": _pkg("google.oauth2"),
+        "database.action_items_cache": _pkg("database.action_items_cache"),
+        "utils.other.account_gate_http": _pkg("utils.other.account_gate_http"),
+        "database.people_generation": _pkg("database.people_generation"),
+        "database.notes_identity": _pkg("database.notes_identity"),
         "database.screen_frames": _pkg("database.screen_frames"),
         "database.action_items": _pkg("database.action_items"),
         "database.memories": _pkg("database.memories"),
@@ -219,7 +226,9 @@ def mirror(router, monkeypatch):
         "get_action_items_by_conversation",
         lambda uid, cid: conversation_holder["standalone"],
     )
-    monkeypatch.setattr(ai_db, "mark_action_item_completed", lambda uid, ai_id, value: marked.append((ai_id, value)))
+    monkeypatch.setattr(
+        ai_db, "mark_action_item_completed", lambda uid, ai_id, value: marked.append((ai_id, value)) or True
+    )
 
     def _get_action_item(uid, ai_id):
         fetched.append(ai_id)
@@ -229,8 +238,8 @@ def mirror(router, monkeypatch):
 
     notifications = ModuleType("utils.notifications")
 
-    def _sync(*, user_id, action_item_id, description, completed, due_at):
-        synced.append((action_item_id, completed))
+    def _sync(**kwargs):
+        synced.append((kwargs['action_item_id'], kwargs['completed']))
 
     notifications.sync_action_item_reminder = _sync
     monkeypatch.setitem(sys.modules, "utils.notifications", notifications)
