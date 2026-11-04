@@ -1715,7 +1715,7 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
-      "expression": "max((sum without(kind) (omi_finalization_pair_new_mismatch)) and (time() - omi_finalization_pair_observed_at_seconds < 2100))",
+      "expression": "max((sum without(kind) (omi_finalization_pair_new_mismatch)) and topk by(leg) (1, omi_finalization_pair_observed_at_seconds) and (time() - omi_finalization_pair_observed_at_seconds < 2100))",
       "file": "alerts/resilience.json",
       "issues": [],
       "metrics": [
@@ -1729,11 +1729,12 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
-      "expression": "max(sum without(kind) (omi_finalization_pair_mismatch))",
+      "expression": "max((sum without(kind) (omi_finalization_pair_mismatch)) and topk by(leg) (1, omi_finalization_pair_observed_at_seconds))",
       "file": "alerts/resilience.json",
       "issues": [],
       "metrics": [
-        "omi_finalization_pair_mismatch"
+        "omi_finalization_pair_mismatch",
+        "omi_finalization_pair_observed_at_seconds"
       ],
       "owner_title": "Lifecycle pair mismatch stock exceeds 25",
       "owner_uid": "omi-finalization-pair-stock",
@@ -1755,7 +1756,7 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
-      "expression": "max(omi_finalization_pair_scan_truncated and (time() - omi_finalization_pair_observed_at_seconds < 2100)) or vector(1)",
+      "expression": "max(omi_finalization_pair_scan_truncated and topk by(leg) (1, omi_finalization_pair_observed_at_seconds) and (time() - omi_finalization_pair_observed_at_seconds < 2100)) or vector(1)",
       "file": "alerts/resilience.json",
       "issues": [],
       "metrics": [

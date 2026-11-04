@@ -2128,6 +2128,7 @@ def test_pair_page_uses_recent_jobs_and_stock_stays_agent_tier():
         page = rules['omi-finalization-pair-drift']
         assert page['data'][0]['model']['expr'] == (
             'max((sum without(kind) (omi_finalization_pair_new_mismatch)) and '
+            'topk by(leg) (1, omi_finalization_pair_observed_at_seconds) and '
             '(time() - omi_finalization_pair_observed_at_seconds < 2100))'
         )
         assert page['data'][2]['model']['conditions'][0]['evaluator']['params'] == [25]
@@ -2149,7 +2150,15 @@ def test_pair_page_uses_recent_jobs_and_stock_stays_agent_tier():
             if uid.endswith(('-stale', '-blind')):
                 assert rule['noDataState'] == 'Alerting'
         stock = rules['omi-finalization-pair-stock']
-        assert stock['data'][0]['model']['expr'] == 'max(sum without(kind) (omi_finalization_pair_mismatch))'
+        assert stock['data'][0]['model']['expr'] == (
+            'max((sum without(kind) (omi_finalization_pair_mismatch)) and '
+            'topk by(leg) (1, omi_finalization_pair_observed_at_seconds))'
+        )
+        assert rules['omi-finalization-pair-drift-blind']['data'][0]['model']['expr'] == (
+            'max(omi_finalization_pair_scan_truncated and '
+            'topk by(leg) (1, omi_finalization_pair_observed_at_seconds) and '
+            '(time() - omi_finalization_pair_observed_at_seconds < 2100)) or vector(1)'
+        )
         repair = rules['omi-enrichment-summary-repair-stock']
         assert repair['data'][0]['model']['expr'] == 'max(omi_enrichment_summary_repair_count)'
         assert repair['data'][2]['model']['conditions'][0]['evaluator']['params'] == [100]

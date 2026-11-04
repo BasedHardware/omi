@@ -80,6 +80,13 @@ to jobs with `created_at` within 24 hours and at/after 2026-11-04 09:27Z. The
 recent gauge pages at >25 for 30m; stock is agent tier. Each leg retains its own
 page and clock while other legs run. The 35-minute freshness budget covers the
 nominal 15-minute rotation plus the 10-minute bridge and one-minute offset.
+Across replicas, page, stock and blind values use only the newest successful
+observation of each leg. `topk by(leg)` selects the observer clock while keeping
+its labels, so the matching value comes from that same observer. A newer clear
+therefore supersedes an older bad snapshot; a different leg's clear cannot
+erase the retained jobs observation. Merely taking the maximum of every
+still-fresh replica would allow one old bad sample to satisfy the pending timer
+after a later leader had already observed recovery.
 Stale checks the freshest observer of each leg, so a busy jobs leg cannot hide
 starvation of the queued/processing legs. The four closed kinds are
 terminal-job/queued-mirror, terminal-job/processing-mirror, live-job/missing-
@@ -106,3 +113,14 @@ can prove >100 but cannot report total stock. Settled receipts have no numeric
 due date. This metric is repair-fence stock, not attempt count or a retry cap.
 There is no numeric retry cap in the current source; uicleanup owns that policy
 debt (ruling 4256d5). Its stock and stale rules are agent tier.
+
+The offline semantic regression at
+`tests/unit/test_lifecycle_pair_alert_semantics.py` evaluates the committed
+queries with Prometheus `promtool test rules`, including the pending timer.
+Provide `PROMTOOL_BIN` outside the test and run it through the canonical selected
+`backend/test.sh` harness. It performs no download, network request or server
+startup. The engine check explicitly skips when no tool is provided; the
+always-on rule contract still pins the reviewed expressions. Local release
+validation includes the real engine check. Cases cover a newer clear, ongoing
+drift across leader changes, independent legs, stale observations and absent
+observers.
