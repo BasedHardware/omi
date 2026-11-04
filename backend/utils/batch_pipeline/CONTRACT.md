@@ -70,6 +70,12 @@ record. Live transcription is a preview; the batch result is the record.
   backoff; one token per lease).
   `BATCH_PULL_MULTI_LEASE_ENABLED=false` restores one lease per transaction
   (Helm: `worker.pullMultiLeaseEnabled=false`).
+  A pull stops at a claimed fresh shard only on a pump's first lane. Its other
+  lanes, finding every eligible fresh shard claimed, lease recent/deep backfill
+  instead of returning empty: the claimant is serving that fresh work, and the
+  first lane keeps fresh-first per pump. A shared live GPU never borrows.
+  `BATCH_PULL_BUSY_BORROW_ENABLED=false` restores strict fresh-first on every lane
+  (Helm: `worker.pullBusyBorrowEnabled=false`).
   The existing Sync Cloud Tasks batch emulator gate runs the three-puller
   concurrency regression after its process-level batch scenarios.
 - **Receipts**: durable upload status via `intake.py:durable_status`
