@@ -256,8 +256,10 @@ def protect_segments(segments: list[Any], uid: str) -> None:
             segment[FIELD] = value
     except Exception:
         _unavailable('evidence_dropped')
-<<<<<<< HEAD
+        _unavailable('evidence_dropped')
+        _protect_timing_markers(pending, uid)
         return
+    _protect_timing_markers(pending, uid)
     if rejected:
         _unavailable('evidence_dropped', segments=rejected, fault=_primary_fault(rejected_faults))
 
@@ -283,9 +285,6 @@ def _reveal_fault(error: BaseException) -> str:
             return 'unwritable'
         return 'unknown'
     return 'key_unavailable'
-=======
-        _protect_timing_markers(pending, uid)
->>>>>>> origin/main
 
 
 def reveal_segments(segments: list[Any], uid: str) -> None:
@@ -307,13 +306,10 @@ def reveal_segments(segments: list[Any], uid: str) -> None:
     now = time.time()
     total = 0
     decoded_bytes = 0
-<<<<<<< HEAD
     failures: list[tuple[str, int]] = []
-=======
     timing_units: dict[str, Any] = {}
     timing_bytes = 0
     timing_encoded_bytes = 0
->>>>>>> origin/main
     for index, segment in enumerate(segments):
         if not isinstance(segment, dict):
             continue
@@ -360,7 +356,6 @@ def reveal_segments(segments: list[Any], uid: str) -> None:
             segment.update(
                 {key: value for key, value in values.items() if key in GROUPING_INTERNAL_FIELDS and key != FIELD}
             )
-<<<<<<< HEAD
         except Exception as error:
             failures.append((_reveal_fault(error), index))
     if failures:
@@ -369,6 +364,15 @@ def reveal_segments(segments: list[Any], uid: str) -> None:
             counts[fault] = counts.get(fault, 0) + 1
         primary_fault = _primary_fault(counts)
         _unavailable('evidence_unavailable', segments=len(failures), fault=primary_fault)
+    members = {
+        sid: {**label, 'scope': marker['scope'], 'timing_store': marker['timing_store']}
+        for marker in timing_units.values()
+        for sid, label in marker['segments'].items()
+    }
+    for segment in segments:
+        if isinstance(segment, dict) and isinstance(segment.get('id'), str) and segment['id'] in members:
+            segment['provider_speaker'] = dict(members[segment['id']])
+
 
 
 def _primary_fault(counts: dict[str, int]) -> str:
@@ -393,15 +397,3 @@ def _primary_fault(counts: dict[str, int]) -> str:
     if unwritable or unknown:
         return 'unwritable' if unwritable >= unknown else 'unknown'
     return 'unknown'
-=======
-        except Exception:
-            _unavailable('evidence_unavailable')
-    members = {
-        sid: {**label, 'scope': marker['scope'], 'timing_store': marker['timing_store']}
-        for marker in timing_units.values()
-        for sid, label in marker['segments'].items()
-    }
-    for segment in segments:
-        if isinstance(segment, dict) and isinstance(segment.get('id'), str) and segment['id'] in members:
-            segment['provider_speaker'] = dict(members[segment['id']])
->>>>>>> origin/main
