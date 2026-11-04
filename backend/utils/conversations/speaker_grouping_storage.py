@@ -256,7 +256,6 @@ def protect_segments(segments: list[Any], uid: str) -> None:
             segment[FIELD] = value
     except Exception:
         _unavailable('evidence_dropped')
-        _unavailable('evidence_dropped')
         _protect_timing_markers(pending, uid)
         return
     _protect_timing_markers(pending, uid)
@@ -319,10 +318,12 @@ def reveal_segments(segments: list[Any], uid: str) -> None:
         if encrypted is None:
             continue
         try:
-            if not isinstance(encrypted, str) or len(encrypted) > MAX_ENCODED_BYTES:
+            total += len(encrypted)
+            if index >= MAX_SEGMENTS or total > MAX_ENCODED_BYTES or not isinstance(encrypted, str):
                 raise ValueError('capacity')
             plaintext = encryption.decrypt(encrypted, uid)
-            if plaintext == encrypted:
+            decoded_bytes += len(plaintext.encode())
+            if plaintext == encrypted or decoded_bytes > MAX_BYTES:
                 raise ValueError('authentication')
             record = json.loads(plaintext)
             if record['id'] != segment.get('id'):
@@ -344,10 +345,6 @@ def reveal_segments(segments: list[Any], uid: str) -> None:
                 continue
             if not isinstance(record.get('values'), dict):
                 raise ValueError('binding')
-            total += len(encrypted)
-            decoded_bytes += len(plaintext.encode())
-            if index >= MAX_SEGMENTS or total > MAX_ENCODED_BYTES or decoded_bytes > MAX_BYTES:
-                raise ValueError('capacity')
             values = record['values']
             expires = values.get('speaker_grouping_shadow_expires_at', 0)
             if not isinstance(expires, (int, float)) or not now < expires <= now + PREDICTION_TTL_SECONDS:

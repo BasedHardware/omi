@@ -26,6 +26,16 @@ _TRANSIENT_AVAILABILITY_ERRORS = (ServiceUnavailable, DeadlineExceeded, Internal
 
 
 def _retry_error_cause(error: BaseException) -> BaseException | None:
+    """The fault a drained ``google.api_core`` retry budget last saw.
+
+    ``RetryError.cause`` is the documented accessor; the raise site also chains
+    it (``raise final_exc from source_exc``), so ``__cause__`` covers an
+    envelope type the pinned SDK pins differently.
+    """
+    if isinstance(error, RetryError):
+        cause = getattr(error, "cause", None)
+        if cause is not None:
+            return cause
     return error.__cause__
 
 

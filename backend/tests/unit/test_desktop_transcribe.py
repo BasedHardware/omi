@@ -341,6 +341,12 @@ def _desktop_transcribe_isolation():
         _api_core_exceptions.AlreadyExists = type('AlreadyExists', (Exception,), {})
         _api_core_exceptions.Conflict = type('Conflict', (Exception,), {})
         _api_core_exceptions.NotFound = type('NotFound', (Exception,), {})
+        # Names the utils.firestore_transient_types tree (unification
+        # asyncfix) imports at module import time; the stub must cover
+        # every symbol or any lazy import of that module inside a test
+        # dies with ImportError (live 2026-11-04: 64 setup errors).
+        for _name in ('DeadlineExceeded', 'InternalServerError', 'RetryError', 'ServiceUnavailable'):
+            setattr(_api_core_exceptions, _name, type(_name, (Exception,), {}))
         _gcs = _install_module('google.cloud.storage')
         _gcs.Client = MagicMock
         _tasks_v2 = _install_module('google.cloud.tasks_v2')

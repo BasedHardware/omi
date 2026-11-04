@@ -79,7 +79,7 @@ from google.api_core.exceptions import (
 )
 
 from database import recording_sessions
-from database._client import _retry_error_cause, is_transient_availability_error
+from utils.firestore_transient_types import _retry_error_cause, is_transient_availability_error
 from database.firestore_transaction_retry import (
     FirestoreContentionExhausted,
     run_with_transaction_contention_retry,
