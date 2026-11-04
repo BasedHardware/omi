@@ -385,6 +385,10 @@ def mark_update(
     candidate: FirstSummaryPolicy | None = None
 
     def update(old: Row | None) -> tuple[Row, tuple[Row, bool]]:
+        from utils.enrichment.age_gate import parked
+
+        if old and parked(old):
+            return old, ({**old, '_wake': False}, True)
         nonlocal candidate
         if stamps is not None:
             stamps.clear()  # A CAS or transaction retry re-runs this operation.
@@ -920,6 +924,11 @@ def sweep(
             return update
 
         try:
+            if not injected:
+                from utils.enrichment.age_gate import park_if_expired
+
+                if park_if_expired(snapshot.id, None, now=current, client=bound):
+                    continue
             status, row = mutate(snapshot.id, repair)
             if status == 'expired' and 'expired' in counts:
                 counts['expired'] += 1
