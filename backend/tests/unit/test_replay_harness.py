@@ -120,9 +120,29 @@ def test_control_pass_and_unreproduced_expected_stop(manifest):
 @pytest.mark.parametrize('name', STAGES[1:])
 def test_reserved_boundaries_cannot_pass(name, manifest):
     stage = asyncio.run(NotImplementedStage(name).run(None, None))
-    assert stage.reason == 'not_implemented' and stage.status == 'stopped'
+    assert stage.reason == 'not_implemented' and stage.status == 'not_implemented'
     value = replace(validate_manifest(manifest), stages={name: {'expect': 'pass'}})
     assert not item_report(value, [stage])['expectation_met']
+    value = replace(value, expect=None, stages={name: {'expect_stop_stage': name, 'expect_reason': 'not_implemented'}})
+    assert not item_report(value, [stage])['expectation_met']
+
+
+@pytest.mark.parametrize('name', STAGES[1:])
+@pytest.mark.parametrize('stop', [False, True])
+def test_manifest_rejects_every_unimplemented_stage(name, stop, manifest):
+    manifest.pop('expect', None)
+    manifest['stages'] = {name: {'expect_stop_stage': name, 'expect_reason': '.*'} if stop else {'expect': 'pass'}}
+    with pytest.raises(ValueError, match='not_implemented'):
+        validate_manifest(manifest)
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.Draft202012Validator(JSON_SCHEMA).validate(manifest)
+
+
+def test_not_implemented_status_never_satisfies_admission_stop(manifest):
+    manifest.pop('expect', None)
+    manifest['stages'] = {'admission': {'expect_stop_stage': 'admission', 'expect_reason': 'not_implemented'}}
+    stage = StageResult('admission', 'not_implemented', reason='not_implemented')
+    assert not item_report(validate_manifest(manifest), [stage])['expectation_met']
 
 
 def test_manifest_dataclass_round_trip(manifest):
@@ -150,3 +170,71 @@ def test_emulator_endpoint_refuses_cloud_and_invalid_ports(monkeypatch, endpoint
     monkeypatch.setenv('FIRESTORE_EMULATOR_HOST', endpoint)
     with pytest.raises(RuntimeError, match='loopback'):
         emulator_endpoint()
+
+
+def test_existing_emulator_ci_selects_and_runs_replay():
+    import yaml
+
+    root = Path(__file__).resolve().parents[3]
+    workflow = yaml.load((root / '.github/workflows/backend-emulator-proofs.yml').read_text(), Loader=yaml.BaseLoader)
+    for trigger in ('push', 'pull_request'):
+        paths = workflow['on'][trigger]['paths']
+        assert 'backend/testing/replay_harness/**' in paths
+        assert 'backend/tests/integration/test_replay_harness_firestore.py' in paths
+        assert 'backend/utils/batch_pipeline/**' in paths
+    runner = (root / 'backend/scripts/run-emulator-proofs.sh').read_text()
+    assert 'tests/integration/test_replay_harness_firestore.py' in runner
+
+
+def test_operation_identity_does_not_confuse_contention_transactions():
+    case = load_case(FIXTURES / 'admission-drain-contention')
+    for operation, transaction, expected in [
+        ('due', None, False),
+        ('defer', 'utils.batch_pipeline.live.drain_recordings.defer', False),
+        ('read_pending', 'utils.batch_pipeline.live.drain_recordings.drain_one.lambda', False),
+        ('admit', 'database.batch_pipeline_policy.load_job_policy.commit', False),
+        ('admit', 'database.batch_pipeline_intake.admit.commit', True),
+    ]:
+        error = type('FirestoreContentionExhausted', (RuntimeError,), {})('PRIVATE')
+        observation = record_exception(error, 'admission', operation=operation, transaction=transaction)
+        result = StageResult('admission', 'stopped', **observation, observations=[observation])
+        assert item_report(case.manifest, [result])['expectation_met'] == expected
+        assert 'PRIVATE' not in json.dumps(observation)
+
+
+def test_observer_preserves_admission_return_errors_and_drain_boundaries():
+    from types import SimpleNamespace
+    from testing.replay_harness.stages.observe import AdmissionObserver
+
+    def commit(_):
+        raise ValueError('PRIVATE')
+
+    store = SimpleNamespace(run=lambda body: body(None), due=lambda *a: (_ for _ in ()).throw(TimeoutError('PRIVATE')))
+
+    async def admit(fail=False):
+        if fail:
+            return await asyncio.to_thread(store.run, commit)
+        return {'unchanged': True}
+
+    live = SimpleNamespace(admit_recording=admit)
+
+    async def drive():
+        with AdmissionObserver(live, store) as observer:
+            assert await live.admit_recording() == {'unchanged': True}
+            with pytest.raises(ValueError, match='PRIVATE'):
+                await live.admit_recording(True)
+            with pytest.raises(TimeoutError):
+                store.due('record_pending')
+
+            def defer(_):
+                raise RuntimeError('PRIVATE')
+
+            with pytest.raises(RuntimeError):
+                store.run(defer)
+        assert live.admit_recording is admit
+        return observer.errors
+
+    errors = asyncio.run(drive())
+    assert [e['operation'] for e in errors] == ['admit', 'due', 'defer']
+    assert errors[0]['transaction'].endswith('.commit')
+    assert 'PRIVATE' not in json.dumps(errors)

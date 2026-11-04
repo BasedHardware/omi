@@ -3,7 +3,9 @@
 ``stages`` selects the boundaries to execute, in pipeline order. Each boundary
 contains either ``expect: pass`` or ``expect_stop_stage`` + ``expect_reason``.
 Reason patterns are regex searches over sanitized class/site tokens, never
-exception messages. ``seed_blob_sha256`` lists SHA256 digests of seed files.
+exception messages. Reserved, unimplemented stages cannot have expectations.
+``seed_blob_sha256`` lists SHA256 digests of seed files. Optional ``notes``
+describes a synthetic mechanism without inventing production evidence.
 """
 
 from dataclasses import asdict, dataclass, field
@@ -16,6 +18,7 @@ from typing import Any
 
 SCHEMA_VERSION = 1
 STAGES = ('admission', 'worker', 'projection', 'final_pass', 'titling', 'episodes')
+IMPLEMENTED_STAGES = ('admission',)
 _STAGE_SCHEMA = {
     'type': 'object',
     'additionalProperties': False,
@@ -54,6 +57,7 @@ JSON_SCHEMA = {
         'created': {'type': 'string', 'format': 'date-time'},
         'prod_evidence': {'type': 'object'},
         'expect': {'const': 'pass'},
+        'notes': {'type': 'string', 'minLength': 1},
         'stages': {
             'type': 'object',
             'minProperties': 1,
@@ -63,7 +67,7 @@ JSON_SCHEMA = {
                     **_STAGE_SCHEMA,
                     'properties': {**_STAGE_SCHEMA['properties'], 'expect_stop_stage': {'const': stage}},
                 }
-                for stage in STAGES
+                for stage in IMPLEMENTED_STAGES
             },
         },
     },
@@ -81,11 +85,13 @@ class Manifest:
     stages: dict[str, dict[str, str]]
     schema_version: int = SCHEMA_VERSION
     expect: str | None = None
+    notes: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         value = asdict(self)
-        if self.expect is None:
-            del value['expect']
+        for optional in ('expect', 'notes'):
+            if value[optional] is None:
+                del value[optional]
         return value
 
 
@@ -119,9 +125,13 @@ def validate_manifest(value: Any) -> Manifest:
         raise ValueError('prod_evidence must be an object')
     if 'expect' in value and value['expect'] != 'pass':
         raise ValueError('invalid top-level expectation')
+    if 'notes' in value and (not isinstance(value['notes'], str) or not value['notes'].strip()):
+        raise ValueError('notes must be nonempty text')
     stages = value['stages']
     if not isinstance(stages, dict) or not stages or stages.keys() - set(STAGES):
         raise ValueError('stages must select known boundaries')
+    if stages.keys() - set(IMPLEMENTED_STAGES):
+        raise ValueError('expectations on not_implemented stages are forbidden')
     for stage, expectation in stages.items():
         if not isinstance(expectation, dict):
             raise ValueError('stage expectation must be an object')

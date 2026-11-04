@@ -14,4 +14,4 @@ class NotImplementedStage:
         self.name = name
 
     async def run(self, case: Case, environment) -> StageResult:
-        return StageResult(self.name, 'stopped', reason='not_implemented', guard='not_implemented')
+        return StageResult(self.name, 'not_implemented', reason='not_implemented', guard='not_implemented')

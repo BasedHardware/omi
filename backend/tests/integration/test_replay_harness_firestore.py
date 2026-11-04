@@ -16,18 +16,7 @@ def test_admission_seed_cases(tmp_path):
     from testing.replay_harness.runner import run_cases
     from testing.replay_harness.report import write_report, table
 
-    items = asyncio.run(
-        run_cases(
-            [
-                FIXTURES / name
-                for name in (
-                    'admission-not-durable',
-                    'admission-drain-contention',
-                    'admission-control',
-                )
-            ]
-        )
-    )
+    items = asyncio.run(run_cases(sorted(FIXTURES.iterdir())))
     write_report(items, tmp_path)
     print('\n' + table(items))
     by_id = {item['item']: item for item in items}
@@ -42,7 +31,13 @@ def test_admission_seed_cases(tmp_path):
     assert 'retained_capture_not_durable' in by_id['admission-not-durable']['stop_reason']
     control = by_id['admission-control']
     assert control['verdict'] == 'PASS'
-    assert control['stages'][0]['details']['admitted'] == 1
+    assert control['stages'][0]['details']['verified_recordings'] == 1
+    assert by_id['admission-regional-only']['verdict'] == 'PASS'
+    assert 'validate_record_tail' in by_id['admission-partial-inventory']['stop_reason']
+    assert 'TimeoutError' in by_id['admission-archive-listing-failure']['stop_reason']
+    contention = by_id['admission-drain-contention']['stages'][0]
+    assert contention['operation'] == 'admit'
+    assert contention['transaction'] == 'database.batch_pipeline_intake.admit.commit'
 
 
 def test_environment_refuses_cloud_and_uses_local_leaves():
@@ -79,3 +74,74 @@ def test_environment_refuses_cloud_and_uses_local_leaves():
         root = environment.storage.root
     assert not root.exists()
     assert dict(os.environ) == previous
+
+
+@pytest.mark.parametrize('missing', ['artifact', 'blob'])
+def test_missing_staging_for_one_of_two_recordings_fails(monkeypatch, missing):
+    if not os.getenv('FIRESTORE_EMULATOR_HOST'):
+        pytest.skip('loopback Firestore emulator required; no cloud fallback')
+    from dataclasses import replace
+    from urllib.parse import urlsplit
+    from testing.replay_harness.manifest import load_case
+    from testing.replay_harness.env import replay_environment
+    from testing.replay_harness.stages import admission
+    from testing.replay_harness.report import item_report
+    from database.batch_pipeline_staging import artifact_id
+
+    original = admission.verify_recordings
+
+    def remove_one_staged_recording(store, storage, recordings):
+        assert len(recordings) == 2
+        second = recordings[1]
+        job = store.client.collection(f'{store.namespace}_jobs').document(second.segment_id).get().to_dict()
+        uri = job['audio_uri']
+        if missing == 'artifact':
+            store.client.collection(f'{store.namespace}_artifacts').document(
+                artifact_id(second.segment_id, uri)
+            ).delete()
+        else:
+            parsed = urlsplit(uri)
+            storage.bucket(parsed.netloc).blob(parsed.path.lstrip('/'), generation=int(parsed.fragment)).delete()
+        # The first recording is still completely staged; it cannot mask the second.
+        original(store, storage, recordings[:1])
+        return original(store, storage, recordings)
+
+    monkeypatch.setattr(admission, 'verify_recordings', remove_one_staged_recording)
+    case = replace(
+        load_case(FIXTURES / 'admission-control'),
+        corpus={'admission': {'rows': 2, 'drainers': 1, 'durable': True, 'distinct_owners': True}},
+    )
+
+    async def run():
+        with replay_environment() as environment:
+            result = await admission.AdmissionDriver().run(case, environment)
+            return item_report(case.manifest, [result])
+
+    report = asyncio.run(run())
+    assert report['verdict'] == 'FAIL' and not report['expectation_met']
+    assert report['stages'][0]['operation'] == 'verify'
+    assert report['stages'][0]['details']['admitted'] == 2
+    assert ('missing_artifact' if missing == 'artifact' else 'NotFound') in report['stop_reason']
+
+
+def test_privacy_block_is_captured_at_real_admission_boundary():
+    if not os.getenv('FIRESTORE_EMULATOR_HOST'):
+        pytest.skip('loopback Firestore emulator required; no cloud fallback')
+    from dataclasses import replace
+    from testing.replay_harness.manifest import load_case
+    from testing.replay_harness.env import replay_environment
+    from testing.replay_harness.stages.admission import AdmissionDriver
+
+    case = replace(
+        load_case(FIXTURES / 'admission-control'),
+        corpus={'admission': {'rows': 1, 'durable': True, 'privacy_blocked': True}},
+    )
+
+    async def run():
+        with replay_environment() as environment:
+            return await AdmissionDriver().run(case, environment)
+
+    result = asyncio.run(run())
+    assert result.exception_type == 'BatchPrivacyBlocked'
+    assert result.operation == 'admit' and 'BatchPrivacyBlocked' in result.reason
+    assert result.details['pending'] == 1

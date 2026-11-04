@@ -159,10 +159,17 @@ def replay_environment():
                 self.upload_from_string(stream.read(), **kwargs)
 
         class ReplayBucket(LocalBucket):
+            def list_blobs(self, prefix='', *args, **kwargs):
+                if local.archive_listing_failure and prefix.startswith('raw-live/'):
+                    raise TimeoutError('synthetic raw archive listing failure')
+                return super().list_blobs(prefix, *args, **kwargs)
+
             def blob(self, name, generation=None):
                 return ReplayBlob(self, name, generation)
 
         class ReplayStorage(LocalStorageClient):
+            archive_listing_failure = False
+
             def bucket(self, name):
                 return ReplayBucket(self.root, name)
 
