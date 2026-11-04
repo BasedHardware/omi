@@ -32,6 +32,8 @@ def recording(world, monkeypatch):
         store.rows[('users', 'u', 'conversations', cid)] = dict(
             id=cid,
             status='completed',
+            recording_speaker_scopes=['stream:1', 'stream:2'],
+            recording_speaker_scopes_at_creation=True,
             transcript_segments=[
                 dict(segments[1], id=f'{cid}-s', speaker_id_scope='stream:1', speaker='SPEAKER_0', speaker_id=4),
                 dict(segments[1], id=f'{cid}-other', speaker_id_scope='stream:2', speaker='SPEAKER_0', speaker_id=5),
@@ -545,6 +547,8 @@ def legacy_recording(recording, monkeypatch):
     )
     for n in range(3):
         row = recording.rows[('users', 'u', 'conversations', f'c{n}')]
+        row.pop('recording_speaker_scopes', None)
+        row.pop('recording_speaker_scopes_at_creation', None)
         row['external_data'] = (
             {'recording_session_id': 'origin'}
             if n == 0
@@ -622,7 +626,10 @@ def test_legacy_fallback_enforces_caps_before_any_write(legacy_recording, monkey
     assert store.rows == before
 
 
-def test_retry_repairs_only_missing_scope_index_without_new_receipt_or_learning(recording):
+@pytest.mark.parametrize('creation_indexed', [False, True])
+def test_retry_repairs_only_missing_scope_index_without_new_receipt_or_learning(recording, creation_indexed):
+    if not creation_indexed:
+        recording.rows[('users', 'u', 'conversations', 'c1')].pop('recording_speaker_scopes_at_creation')
     edit('u', 'c1', request(), None)
     row = recording.rows[('users', 'u', 'conversations', 'c1')]
     row.pop('recording_speaker_scopes')
@@ -705,6 +712,7 @@ def test_excluded_discovered_member_makes_coverage_partial(legacy_recording, mon
         )
     for cid in ['c0', 'c1', 'c2']:
         store.rows[('users', 'u', 'conversations', cid)]['recording_speaker_scopes'] = ['stream:1', 'stream:2']
+        store.rows[('users', 'u', 'conversations', cid)]['recording_speaker_scopes_at_creation'] = True
     if excluded == 'missing':
         original = service.conversations_db.get_conversation
         monkeypatch.setattr(
@@ -722,17 +730,76 @@ def test_excluded_discovered_member_makes_coverage_partial(legacy_recording, mon
     assert store.rows[('users', 'u', 'conversations', 'c2')] == before
 
 
-def test_legacy_only_discovery_is_partial_until_all_members_are_indexed(legacy_recording):
+def test_legacy_index_repairs_never_certify_creation_time_coverage(legacy_recording):
     store, _ = legacy_recording
     assert edit('u', 'c1', request(), None)['coverage'] == 'partial'
-    # First rename repairs each known member's index. Legacy duplicates no longer
-    # widen the indexed set, and the same-value retry creates no new learning.
+    # Even repairing every known member cannot prove there is no invisible
+    # intermediate generation. The same-value retry creates no new learning.
     before = deepcopy(store.rows)
-    assert service.transcript('u', 'c1')['coverage'] == 'complete'
+    assert service.transcript('u', 'c1')['coverage'] == 'partial'
     result = edit('u', 'c1', request(), None)
-    assert result['coverage'] == 'complete'
+    assert result['coverage'] == 'partial'
     assert result['applied_count'] == 0
     assert store.rows == before
+
+
+def test_c0_c2_repaired_indexes_cannot_hide_an_invisible_c1(legacy_recording):
+    store, _ = legacy_recording
+    for cid in ['c0', 'c2']:
+        row = store.rows[('users', 'u', 'conversations', cid)]
+        row['recording_speaker_scopes'] = ['stream:1', 'stream:2']
+    intermediate = store.rows[('users', 'u', 'conversations', 'c1')]
+    intermediate['external_data'].pop('recording_origin_id')
+    before = deepcopy(intermediate)
+    body = request(
+        selections=[
+            RecordingSelection(
+                conversation_id='c0',
+                segment_ids=['c0-s'],
+                speaker_id=4,
+                voice=RecordingVoice(speaker_id_scope='stream:1', stream_speaker='SPEAKER_0'),
+            )
+        ]
+    )
+
+    for expected_changes in [2, 0]:
+        transcript = service.transcript('u', 'c0')
+        assert {row['id'] for row in transcript['conversations']} == {'c0', 'c2'}
+        assert transcript['coverage'] == 'partial'
+        outcome = edit('u', 'c0', body, None)
+        assert outcome['coverage'] == 'partial'
+        assert outcome['applied_count'] == expected_changes
+        assert {row['conversation_id'] for row in outcome['conversations']} == {'c0', 'c2'}
+        assert store.rows[('users', 'u', 'conversations', 'c1')] == before
+        for cid in ['c0', 'c2']:
+            assert (
+                store.rows[('users', 'u', 'conversations', cid)].get('recording_speaker_scopes_at_creation') is not True
+            )
+
+
+@pytest.mark.parametrize('membership', ['scope', 'episode'])
+@pytest.mark.parametrize('marker', [None, False, 'true'])
+def test_every_member_needs_true_creation_provenance(recording, monkeypatch, membership, marker):
+    if membership == 'scope':
+        monkeypatch.setattr(service.episodes_db, 'get_episode_for_conversation', lambda *args: None)
+        monkeypatch.setattr(service, 'scope_conversation_ids', lambda *args: ['c0', 'c1', 'c2'])
+    row = recording.rows[('users', 'u', 'conversations', 'c2')]
+    row['recording_speaker_scopes_at_creation'] = marker
+    assert service.transcript('u', 'c1')['coverage'] == 'partial'
+    assert edit('u', 'c1', request(), None)['coverage'] == 'partial'
+    assert recording.rows[('users', 'u', 'conversations', 'c2')].get('recording_speaker_scopes_at_creation') == marker
+
+
+@pytest.mark.parametrize('membership', ['scope', 'episode'])
+def test_creation_indexed_members_can_report_complete(recording, monkeypatch, membership):
+    if membership == 'scope':
+        monkeypatch.setattr(service.episodes_db, 'get_episode_for_conversation', lambda *args: None)
+        monkeypatch.setattr(service, 'scope_conversation_ids', lambda *args: ['c0', 'c1', 'c2'])
+    assert service.transcript('u', 'c1')['coverage'] == 'complete'
+    assert edit('u', 'c1', request(), None)['coverage'] == 'complete'
+    assert edit('u', 'c1', request(), None)['coverage'] == 'complete'
+    for cid in ['c0', 'c1', 'c2']:
+        assert recording.rows[('users', 'u', 'conversations', cid)]['recording_speaker_scopes_at_creation'] is True
 
 
 @pytest.mark.parametrize('raced', ['is_locked', 'discarded', 'deleted'])

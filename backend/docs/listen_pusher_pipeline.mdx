@@ -4867,10 +4867,12 @@ voice accepted by the existing carry collector. `PATCH /v1/episodes/{episode_id}
 fans out to episode members in either direction; `PATCH /v1/conversations/{id}/recording-speakers`
 is available outside episode admission and discovers same-scope conversations within the UID
 when there is no episode, using a bounded `recording_speaker_scopes` array query rather
-than a UID-wide transcript scan. Transcript writes stamp that index before encryption;
-historical unindexed rows stay local until rewritten. Discovery budgets are 64 members,
-10,000 lines, and 30 lookup scopes; exceeding them produces a typed 413 before assignment
-writes. Deleted/discarded members are excluded and the transaction rechecks visibility.
+than a UID-wide transcript scan; bounded origin/session queries supplement legacy discovery.
+Transcript writes stamp the index before encryption. Complete coverage also requires every
+member's `recording_speaker_scopes_at_creation: true` proof; only absent-document creation
+sets it. Later repairs cannot certify unseen generations. Excluded members or failed saves
+make coverage partial; mobile then names only the available conversations. Budgets of 64
+members, 10,000 lines and 30 scopes fail with 413 before writes; transactions recheck visibility.
 Each member commits its own receipt after whole-request prevalidation and a transactional
 voice fence. The response reports successes and failures per member, so mobile rolls back
 only failed members after a late conflict. Identical recording retries are read-only and

@@ -32,7 +32,7 @@ from models.transcript_segment import TranscriptSegment, legacy_conversation_seg
 from utils import encryption
 from utils.conversation_page_cursor import BookmarkDict, decode_cursor, encode_cursor, query_scope
 from config.firestore_read_levers import lever_enabled
-from config.recording_speakers import stamp_scope_index
+from config.recording_speakers import stamp_scope_index, with_creation_scope_index
 from utils.conversations.fragment_visibility import is_completed_rule_discard, is_user_curated
 from utils.conversations.fragment_visibility import SETTLING_FIELDS, is_settling_fragment
 from utils.conversations.transcript_hash import (
@@ -1209,7 +1209,7 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
         summary_changed = processing_backlog.stage_transition(
             transaction, uid, conversation_data['id'], {}, write_data, firestore_client=db
         )
-        transaction.set(conversation_ref, write_data)
+        transaction.set(conversation_ref, with_creation_scope_index(write_data))
 
     run_transactional(db, _write_processing_result)
     stop_quiet_check_for_conversation(uid, conversation_data['id'], firestore_client=db)

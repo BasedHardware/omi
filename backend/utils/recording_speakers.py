@@ -1,13 +1,13 @@
 """Explicit naming across a recording; never joins embeddings or different scopes.
 
-Episode membership is authoritative. Outside episodes, indexed scopes are
-augmented by bounded legacy origin/session queries. Legacy-only or excluded
-members make coverage partial; no production migration is needed.
+Episode membership and indexed scopes are augmented by bounded legacy
+origin/session queries. Completeness requires creation-time index provenance;
+later index repairs cannot certify a legacy lineage. No migration is needed.
 """
 
 from datetime import datetime, timezone
 
-from config.recording_speakers import MAX_SCOPES, MAX_MEMBERS, check_budget, enabled
+from config.recording_speakers import MAX_SCOPES, MAX_MEMBERS, SCOPE_INDEX_AT_CREATION_FIELD, check_budget, enabled
 
 from database import conversations as conversations_db, episodes as episodes_db
 from database.recording_speakers import scope_conversation_ids, legacy_recording_conversation_ids
@@ -78,8 +78,8 @@ def members(uid, conversation_id, *, episode_id=None, extra_scopes=()):
         legacy = legacy_recording_conversation_ids(uid, origin) if origin else []
         ids = list(dict.fromkeys([conversation_id, *sorted(indexed), *legacy]))
         check_budget(len(ids))
-        # Origin stamps can themselves be incomplete. Only indexed membership
-        # proves coverage; legacy candidates may extend it, never certify it.
+        # Indexed membership is necessary but insufficient: old renames may
+        # have indexed only c0/c2 while leaving an invisible c1 behind.
         coverage = 'complete' if set(ids) <= indexed else 'partial'
         rows = [dict(row, id=cid) for cid in ids if (row := conversations_db.get_conversation(uid, cid))]
     else:
@@ -94,7 +94,7 @@ def members(uid, conversation_id, *, episode_id=None, extra_scopes=()):
         and not row.get('is_locked')
         and not is_relevance_discarded(row)
     ]
-    if len(rows) != len(ids):
+    if len(rows) != len(ids) or any(row.get(SCOPE_INDEX_AT_CREATION_FIELD) is not True for row in rows):
         coverage = 'partial'
     if coverage == 'partial':
         record_fallback(component='other', from_mode='other', to_mode='incumbent', reason='other', outcome='degraded')

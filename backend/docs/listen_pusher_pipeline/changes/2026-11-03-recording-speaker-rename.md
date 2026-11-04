@@ -32,8 +32,8 @@ scope/provider-label pair, including through reconnects. Discovery excludes disc
 rows (also rechecked inside each assignment transaction). Episode membership is bounded
 before hydration; the non-episode path uses the indexed `recording_speaker_scopes` array,
 stamped before transcript encryption on every transcript write. It never scans historical
-transcripts. Historical rows without this index stay local until rewritten; no production
-backfill is part of this PR. Budgets are 64 discovered members, 10,000 hydrated/target lines,
+transcripts. Bounded origin/session queries also find historical unindexed members;
+no production backfill is part of this PR. Budgets are 64 discovered members, 10,000 hydrated/target lines,
 and 30 scopes per indexed lookup; over-budget requests fail before any assignment write
 with HTTP 413 / `recording_speaker_limit_exceeded`.
 
@@ -42,3 +42,13 @@ response. A late stale or failed member cannot turn earlier successes into a bla
 mobile retains successful labels and rolls back only unsuccessful members (including Undo).
 Same-value recording retries validate the current receipt, voice default and latest decision
 map, then return without any writes, generation bump or learning job.
+
+Coverage is conservative because legacy origin stamps and later index repairs can
+both miss intermediate generations. `complete` additionally requires every discovered
+member to have `recording_speaker_scopes_at_creation: true`, no excluded members,
+and successful assignment of every member. Only transactions creating an absent
+conversation stamp that marker when its transcript scope index is present (including
+an empty live transcript). Ordinary writes preserve existing provenance but cannot
+add it; rename repairs never set it. Thus indexed c0/c2 cannot certify an invisible
+legacy c1. Any missing proof returns `partial`, and mobile reports only the available
+conversations. This needs no generation-chain assumption, new query, index or migration.
