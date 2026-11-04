@@ -340,10 +340,10 @@ dropped capabilities, and bounded CPU/memory keep the Job small.
 
 ## Cloud Run rollback: approved scoped identity
 
-Production keeps `batch.enabled: false` (see `prod_omi_incluster_guards_values.yaml`)
-until the deployer RBAC for the `-batch` objects is approved (access change,
-David) and g2's trusted producer exists; `batch.cloudRunRollbackEnabled` stays
-true there so re-enabling needs only the `batch.enabled` flip. Development
+Production keeps both `batch.enabled` and `batch.cloudRunRollbackEnabled`
+false (see `prod_omi_incluster_guards_values.yaml`): David removed batch
+auto-rollback on 2026-11-04, so batch step-backs are manual lead decisions.
+Re-enabling needs both flips and David's approval. Development
 leaves the writer off entirely.
 The dedicated KSA/GSA, four service-level `roles/run.developer` bindings,
 runtime-SA actAs if required, and exact-KSA WIF binding are described in
