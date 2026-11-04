@@ -29,7 +29,7 @@ environments:
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
           REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
           SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
-          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":100,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0}',
+          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":5,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_decision_cache":100,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":25,"people_scan_dedupe":100,"privacy_checks_shadow":100,"privacy_ttl60":100,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0}',
             category: rollout}
           FSR_QUEUE_AGE_PUBLISHER: {value: '1', category: rollout}
           FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -38,7 +38,7 @@ environments:
           FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
           FSR_USAGE_MONTH_TOTAL_EPOCH: {value: v1, category: rollout}
           FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
-          FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+          FSR_SUBSCRIPTION_TTL_SECONDS: {value: '55', category: rollout}
           FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
           ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
           CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
@@ -218,7 +218,7 @@ environments:
             value: http://parakeet.omiapi.com
           HOSTED_SPEAKER_EMBEDDING_API_URL:
             category: service_discovery
-            value: http://172.16.48.49/diarizer
+            value: http://diarizer.omiapi.com:80
           LISTEN_QUIET_FINALIZATION_ENABLED:
             value: 'true'
             category: ops_kill
@@ -329,7 +329,7 @@ environments:
             value: ''
           HOSTED_TRANSLATION_API_URL:
             category: service_discovery
-            value: http://172.16.48.49/nllb
+            value: http://nllb.omiapi.com
           OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
           TRANSCRIPTION_SHADOW_ENABLED: {value: 'false', category: rollout}
           TRANSCRIPTION_SHADOW_KILL_SWITCH: {value: 'false', category: rollout}
@@ -375,7 +375,7 @@ environments:
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
           REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
           SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
-          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":100,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0}',
+          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":5,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_decision_cache":100,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":25,"people_scan_dedupe":100,"privacy_checks_shadow":100,"privacy_ttl60":100,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0}',
             category: rollout}
           FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
           FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -384,7 +384,7 @@ environments:
           FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
           FSR_USAGE_MONTH_TOTAL_EPOCH: {value: v1, category: rollout}
           FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
-          FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+          FSR_SUBSCRIPTION_TTL_SECONDS: {value: '55', category: rollout}
           FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
           ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
           CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
@@ -426,7 +426,7 @@ environments:
           MEETING_NOTES_EVIDENCE_WAIT_SECONDS: {value: '25', category: rollout}
           HOSTED_SPEAKER_EMBEDDING_API_URL:
             category: service_discovery
-            value: http://172.16.48.49/diarizer
+            value: http://diarizer.omiapi.com:80
           DREAM_AGENT_ELIGIBILITY: {value: allowlist, category: rollout}
           DREAM_AGENT_UID_ALLOWLIST: {category: rollout, value: ''}
           DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
@@ -677,7 +677,7 @@ environments:
         LLM_GATEWAY_ACCOUNTING_ENABLED: {value: 'true', category: rollout}
         FIRESTORE_READ_LEDGER:
           value: '1'
-        FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":100,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0}',
+        FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":5,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_decision_cache":100,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":25,"people_scan_dedupe":100,"privacy_checks_shadow":100,"privacy_ttl60":100,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0}',
           category: rollout}
         FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
         FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -686,7 +686,7 @@ environments:
         FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
         FSR_USAGE_MONTH_TOTAL_EPOCH: {value: v1, category: rollout}
         FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
-        FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+        FSR_SUBSCRIPTION_TTL_SECONDS: {value: '55', category: rollout}
         FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
         ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
         CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
@@ -840,7 +840,7 @@ environments:
               category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":100,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":5,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_decision_cache":100,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":25,"people_scan_dedupe":100,"privacy_checks_shadow":100,"privacy_ttl60":100,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -849,7 +849,7 @@ environments:
             FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
             FSR_USAGE_MONTH_TOTAL_EPOCH: {value: v1, category: rollout}
             FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
-            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '55', category: rollout}
             FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
             ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
             CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
@@ -936,7 +936,7 @@ environments:
               value: http://parakeet.omiapi.com
             HOSTED_SPEAKER_EMBEDDING_API_URL:
               category: service_discovery
-              value: http://172.16.48.49/diarizer
+              value: http://diarizer.omiapi.com:80
             LISTEN_QUIET_FINALIZATION_ENABLED:
               value: 'true'
               category: ops_kill
@@ -1115,7 +1115,7 @@ environments:
               category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":100,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":5,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_decision_cache":100,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":25,"people_scan_dedupe":100,"privacy_checks_shadow":100,"privacy_ttl60":100,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -1124,7 +1124,7 @@ environments:
             FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
             FSR_USAGE_MONTH_TOTAL_EPOCH: {value: v1, category: rollout}
             FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
-            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '55', category: rollout}
             FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
             ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
             CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
@@ -1201,7 +1201,7 @@ environments:
               value: http://parakeet.omiapi.com
             HOSTED_SPEAKER_EMBEDDING_API_URL:
               category: service_discovery
-              value: http://172.16.48.49/diarizer
+              value: http://diarizer.omiapi.com:80
             LISTEN_QUIET_FINALIZATION_ENABLED:
               value: 'true'
               category: ops_kill
@@ -1408,7 +1408,7 @@ environments:
               category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":100,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":5,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_decision_cache":100,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":25,"people_scan_dedupe":100,"privacy_checks_shadow":100,"privacy_ttl60":100,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -1417,7 +1417,7 @@ environments:
             FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
             FSR_USAGE_MONTH_TOTAL_EPOCH: {value: v1, category: rollout}
             FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
-            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '55', category: rollout}
             FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
             ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
             CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
@@ -1494,7 +1494,7 @@ environments:
               value: http://parakeet.omiapi.com
             HOSTED_SPEAKER_EMBEDDING_API_URL:
               category: service_discovery
-              value: http://172.16.48.49/diarizer
+              value: http://diarizer.omiapi.com:80
             LISTEN_QUIET_FINALIZATION_ENABLED:
               value: 'true'
               category: ops_kill
@@ -1688,7 +1688,7 @@ environments:
               category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":100,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":5,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_decision_cache":100,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":25,"people_scan_dedupe":100,"privacy_checks_shadow":100,"privacy_ttl60":100,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -1697,7 +1697,7 @@ environments:
             FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
             FSR_USAGE_MONTH_TOTAL_EPOCH: {value: v1, category: rollout}
             FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
-            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '55', category: rollout}
             FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
             ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
             CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
@@ -1756,7 +1756,7 @@ environments:
               value: http://parakeet.omiapi.com
             HOSTED_SPEAKER_EMBEDDING_API_URL:
               category: service_discovery
-              value: http://172.16.48.49/diarizer
+              value: http://diarizer.omiapi.com:80
             LISTEN_QUIET_FINALIZATION_ENABLED:
               value: 'true'
               category: ops_kill
@@ -1872,7 +1872,7 @@ environments:
           env:
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":100,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":5,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_decision_cache":100,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":25,"people_scan_dedupe":100,"privacy_checks_shadow":100,"privacy_ttl60":100,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -1881,7 +1881,7 @@ environments:
             FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
             FSR_USAGE_MONTH_TOTAL_EPOCH: {value: v1, category: rollout}
             FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
-            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '55', category: rollout}
             FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
             ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
             CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
@@ -1939,7 +1939,7 @@ environments:
               secret: REDIS_DB_PASSWORD
               version: latest
           env:
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":100,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":5,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_decision_cache":100,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":25,"people_scan_dedupe":100,"privacy_checks_shadow":100,"privacy_ttl60":100,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -1948,7 +1948,7 @@ environments:
             FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
             FSR_USAGE_MONTH_TOTAL_EPOCH: {value: v1, category: rollout}
             FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
-            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '55', category: rollout}
             FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
             ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
             CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
@@ -1992,7 +1992,7 @@ environments:
           env:
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":100,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":5,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_decision_cache":100,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":25,"people_scan_dedupe":100,"privacy_checks_shadow":100,"privacy_ttl60":100,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -2001,7 +2001,7 @@ environments:
             FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
             FSR_USAGE_MONTH_TOTAL_EPOCH: {value: v1, category: rollout}
             FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
-            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '55', category: rollout}
             FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
             ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
             CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
@@ -2049,7 +2049,7 @@ environments:
           env:
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":100,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":5,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_decision_cache":100,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":25,"people_scan_dedupe":100,"privacy_checks_shadow":100,"privacy_ttl60":100,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -2058,7 +2058,7 @@ environments:
             FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
             FSR_USAGE_MONTH_TOTAL_EPOCH: {value: v1, category: rollout}
             FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
-            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '55', category: rollout}
             FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
             ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
             CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
@@ -2147,7 +2147,7 @@ environments:
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
           REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
           SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
-          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":100,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0}',
+          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":5,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_decision_cache":100,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":25,"people_scan_dedupe":100,"privacy_checks_shadow":100,"privacy_ttl60":100,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0}',
             category: rollout}
           FSR_QUEUE_AGE_PUBLISHER: {value: '1', category: rollout}
           FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -2156,7 +2156,7 @@ environments:
           FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
           FSR_USAGE_MONTH_TOTAL_EPOCH: {value: v1, category: rollout}
           FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
-          FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+          FSR_SUBSCRIPTION_TTL_SECONDS: {value: '55', category: rollout}
           FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
           ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
           CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
@@ -2596,7 +2596,7 @@ environments:
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
           REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
           SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
-          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":100,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0}',
+          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":5,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_decision_cache":100,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":25,"people_scan_dedupe":100,"privacy_checks_shadow":100,"privacy_ttl60":100,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0}',
             category: rollout}
           FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
           FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -2605,7 +2605,7 @@ environments:
           FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
           FSR_USAGE_MONTH_TOTAL_EPOCH: {value: v1, category: rollout}
           FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
-          FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+          FSR_SUBSCRIPTION_TTL_SECONDS: {value: '55', category: rollout}
           FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
           ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
           CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
@@ -2862,7 +2862,7 @@ environments:
         LLM_GATEWAY_ACCOUNTING_ENABLED: {value: 'true', category: rollout}
         FIRESTORE_READ_LEDGER:
           value: '1'
-        FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":100,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0}',
+        FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":5,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_decision_cache":100,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":25,"people_scan_dedupe":100,"privacy_checks_shadow":100,"privacy_ttl60":100,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0}',
           category: rollout}
         FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
         FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -2871,7 +2871,7 @@ environments:
         FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
         FSR_USAGE_MONTH_TOTAL_EPOCH: {value: v1, category: rollout}
         FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
-        FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+        FSR_SUBSCRIPTION_TTL_SECONDS: {value: '55', category: rollout}
         FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
         ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
         CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
@@ -3072,7 +3072,7 @@ environments:
               category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":100,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":5,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_decision_cache":100,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":25,"people_scan_dedupe":100,"privacy_checks_shadow":100,"privacy_ttl60":100,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -3081,7 +3081,7 @@ environments:
             FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
             FSR_USAGE_MONTH_TOTAL_EPOCH: {value: c2fs_20261026_r1, category: rollout}
             FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
-            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '55', category: rollout}
             FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
             ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
             CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
@@ -3473,7 +3473,7 @@ environments:
               category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":100,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":100,"usage_month_total":100}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":5,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_decision_cache":100,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":25,"people_scan_dedupe":100,"privacy_checks_shadow":100,"privacy_ttl60":100,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":100,"usage_month_total":100}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -3482,7 +3482,7 @@ environments:
             FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
             FSR_USAGE_MONTH_TOTAL_EPOCH: {value: c2fs_20261026_r1, category: rollout}
             FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
-            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '55', category: rollout}
             FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
             ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
             CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
@@ -3644,6 +3644,9 @@ environments:
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
             BATCH_VENDOR_ROUTE_TABLE: {value: '{"schema_version":1,"table_version":"en-overflow-1104","selection":"ordered","gpu_floor_percent":0.0,"routes":{"gpu":{"price_usd_per_audio_hour":null,"daily_audio_hours_cap":null,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"},"modulate":{"price_usd_per_audio_hour":0.06,"daily_audio_hours_cap":3000.0,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"}},"rows":[{"language_class":"en","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"modulate","quality_tier":"accepted","quality_source":"legacy_parity"}]},{"language_class":"gpu_supported","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"}]},{"language_class":"gpu_unsupported","options":[{"route":"modulate","quality_tier":"accepted","quality_source":"legacy_parity"}]},{"language_class":"*","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"}]}]}',
               category: rollout}
+            BATCH_ALLOWANCE_HOLD_RETRY_SECONDS:
+              value: '7200'
+              category: ops_kill
             STT_GPU_FLEET_OFF:
               value: 'true'
               category: ops_kill
@@ -3893,7 +3896,7 @@ environments:
               category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":100,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":5,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_decision_cache":100,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":25,"people_scan_dedupe":100,"privacy_checks_shadow":100,"privacy_ttl60":100,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -3902,7 +3905,7 @@ environments:
             FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
             FSR_USAGE_MONTH_TOTAL_EPOCH: {value: c2fs_20261026_r1, category: rollout}
             FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
-            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '55', category: rollout}
             FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
             ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
             CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
@@ -4057,6 +4060,9 @@ environments:
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
             BATCH_VENDOR_ROUTE_TABLE: {value: '{"schema_version":1,"table_version":"en-overflow-1104","selection":"ordered","gpu_floor_percent":0.0,"routes":{"gpu":{"price_usd_per_audio_hour":null,"daily_audio_hours_cap":null,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"},"modulate":{"price_usd_per_audio_hour":0.06,"daily_audio_hours_cap":3000.0,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"}},"rows":[{"language_class":"en","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"modulate","quality_tier":"accepted","quality_source":"legacy_parity"}]},{"language_class":"gpu_supported","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"}]},{"language_class":"gpu_unsupported","options":[{"route":"modulate","quality_tier":"accepted","quality_source":"legacy_parity"}]},{"language_class":"*","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"}]}]}',
               category: rollout}
+            BATCH_ALLOWANCE_HOLD_RETRY_SECONDS:
+              value: '7200'
+              category: ops_kill
             STT_GPU_FLEET_OFF:
               value: 'true'
               category: ops_kill
@@ -4280,7 +4286,7 @@ environments:
               category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":100,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":5,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_decision_cache":100,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":25,"people_scan_dedupe":100,"privacy_checks_shadow":100,"privacy_ttl60":100,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -4289,7 +4295,7 @@ environments:
             FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
             FSR_USAGE_MONTH_TOTAL_EPOCH: {value: c2fs_20261026_r1, category: rollout}
             FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
-            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '55', category: rollout}
             FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
             ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
             CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
@@ -4401,6 +4407,9 @@ environments:
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'on', category: rollout}
             BATCH_VENDOR_ROUTE_TABLE: {value: '{"schema_version":1,"table_version":"en-overflow-1104","selection":"ordered","gpu_floor_percent":0.0,"routes":{"gpu":{"price_usd_per_audio_hour":null,"daily_audio_hours_cap":null,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"},"modulate":{"price_usd_per_audio_hour":0.06,"daily_audio_hours_cap":3000.0,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"}},"rows":[{"language_class":"en","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"modulate","quality_tier":"accepted","quality_source":"legacy_parity"}]},{"language_class":"gpu_supported","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"}]},{"language_class":"gpu_unsupported","options":[{"route":"modulate","quality_tier":"accepted","quality_source":"legacy_parity"}]},{"language_class":"*","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"}]}]}',
               category: rollout}
+            BATCH_ALLOWANCE_HOLD_RETRY_SECONDS:
+              value: '7200'
+              category: ops_kill
             STT_GPU_FLEET_OFF:
               value: 'true'
               category: ops_kill
@@ -4533,7 +4542,7 @@ environments:
           env:
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":100,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":5,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_decision_cache":100,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":25,"people_scan_dedupe":100,"privacy_checks_shadow":100,"privacy_ttl60":100,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -4542,7 +4551,7 @@ environments:
             FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
             FSR_USAGE_MONTH_TOTAL_EPOCH: {value: v1, category: rollout}
             FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
-            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '55', category: rollout}
             FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
             ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
             CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
@@ -4595,7 +4604,7 @@ environments:
               secret: REDIS_DB_PASSWORD
               version: latest
           env:
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":100,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":5,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_decision_cache":100,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":25,"people_scan_dedupe":100,"privacy_checks_shadow":100,"privacy_ttl60":100,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -4604,7 +4613,7 @@ environments:
             FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
             FSR_USAGE_MONTH_TOTAL_EPOCH: {value: v1, category: rollout}
             FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
-            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '55', category: rollout}
             FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
             ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
             CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
@@ -4649,7 +4658,7 @@ environments:
           env:
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":100,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":5,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_decision_cache":100,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":25,"people_scan_dedupe":100,"privacy_checks_shadow":100,"privacy_ttl60":100,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -4658,7 +4667,7 @@ environments:
             FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
             FSR_USAGE_MONTH_TOTAL_EPOCH: {value: v1, category: rollout}
             FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
-            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '55', category: rollout}
             FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
             ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
             CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
@@ -4705,7 +4714,7 @@ environments:
           env:
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":100,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":5,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_decision_cache":100,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":25,"people_scan_dedupe":100,"privacy_checks_shadow":100,"privacy_ttl60":100,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -4714,7 +4723,7 @@ environments:
             FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
             FSR_USAGE_MONTH_TOTAL_EPOCH: {value: v1, category: rollout}
             FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
-            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '55', category: rollout}
             FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
             ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
             CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}

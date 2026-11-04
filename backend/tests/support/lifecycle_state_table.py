@@ -1,4 +1,4 @@
-"""Reviewed legacy lifecycle inventory for WP-B (source base 563e6c240944).
+"""Reviewed legacy lifecycle inventory for WP-B (B2 source base 43085bb24061).
 
 This is a declaration of existing mechanisms, not a new runtime state machine.
 Phase strings are the compatibility reader's strings. Derived phases do not
@@ -9,6 +9,7 @@ It proves ownership/field coverage, not execution or bounded liveness (WP-B2).
 """
 
 from dataclasses import dataclass
+import math
 
 from tests.support.lifecycle_ast import EntryPath, builders
 from tests.support.lifecycle_writer_inventory import FIELD_SITES
@@ -50,6 +51,8 @@ class State:
     deadline_entries: tuple[EntryPath, ...] = ()
     alert_required: bool = True
     quiescent: bool = False
+    deadline_exemption: str = ''
+    exit_exemption: str = ''
 
     @property
     def key(self):
@@ -224,6 +227,8 @@ def row(
     stamped=False,
     alert_required=None,
     quiescent=False,
+    deadline_exemption='',
+    exit_exemption='',
 ):
     entries = DEADLINE_ENTRIES.get(f'{machine}:{state}', ())
     entered_by = (
@@ -248,6 +253,8 @@ def row(
         entries,
         not terminal if alert_required is None else alert_required,
         quiescent,
+        deadline_exemption,
+        exit_exemption,
     )
 
 
@@ -324,8 +331,18 @@ STATES = (
             'record_audio',
             'capturing',
             ('record_upload_sessions',),
-            exit=RECORD_REPAIR,
-            note='Proof repair exists for job-backed captures; bounded dwell waits on freshtitles open-producer-token fix, no PR yet',
+            exit=Exit('callback-only', 'database/record_audio.py:set_record_upload_pending'),
+            deadline_exemption='No producer TTL: live custody is cleared only by exact-token finish; lead2 9d457c / 4bf62d',
+            exit_exemption='Interactive live custody awaits exact-token finish, not automatic expiration; 4bf62d',
+            note='Live producer custody; dwell visibility remains required even though age cannot clear its token',
+        ),
+        row(
+            'record_audio_orphan',
+            'capturing',
+            ('record_upload_sessions',),
+            exit=Exit('sweeper', 'utils/batch_pipeline/record_seal_sweeper.py:sweep'),
+            deadline_exemption='No producer TTL: proven-dead repair needs scoped producer and retained-tail evidence; lead2 9d457c / 4bf62d',
+            note='Conditional orphan view, not a new persisted phase: producer proven dead, complete retained-tail evidence, job-backed repair',
         ),
         row(
             'record_audio',
@@ -561,10 +578,10 @@ class OrderingRule:
 
 ORDERING_RULES = (
     OrderingRule(
-        'finalization_after_batch_result_or_durable_rearm',
-        ('record_lane_owner', 'finalization_status', 'batch_result_count', 'rearm_on_result_commit'),
-        (Writer(FINALIZATION_MODULE, '_mark_finalization_completed_txn'),),
-        'phase ordering follow-up, no fix PR yet; uicleanup intake; ruling f1e35a',
+        'late_result_commit_rearms_titling',
+        ('record_lane_owner', 'completed_before_results', 'batch_result_count', 'rearm_on_result_commit'),
+        (Writer('database/batch_pipeline_projection.py', 'ProjectionStore.mark_enrichment'),),
+        'covered by B2 durable late-result rearm control; e13891 corrects the initial f1e35a premise',
     ),
     OrderingRule(
         'completed_capture_has_closed_audio',
@@ -575,17 +592,37 @@ ORDERING_RULES = (
 )
 
 
-def ordering_holds(rule, row, *, batch_result_count=0, rearm_on_result_commit=False):
+def durable_titling_rearm(before, after):
+    """A pending outbox increment is durable evidence; an unchanged row is not."""
+    old_version = (before or {}).get('version', 0)
+    row = after or {}
+    version = row.get('version')
+    due = row.get('due_at')
+    return bool(
+        type(old_version) is int
+        and type(version) is int
+        and version > old_version
+        and not row.get('dormant')
+        and isinstance(row.get('task_token'), str)
+        and row['task_token']
+        and type(due) in (int, float)
+        and math.isfinite(due)
+    )
+
+
+def ordering_holds(rule, row, *, batch_result_count=0, rearm_on_result_commit=False, completed_before_results=False):
     """Pure cross-store contract; B2 supplies simulator-derived store evidence.
 
-    A rearm is a durable obligation bound to the future result-commit event,
-    rather than an earlier callback or a completed/title bit. No account
+    Early completion alone is allowed. If results later commit after that
+    completion, their commit must durably rearm titling (e13891). A caller
+    supplies the prior completion and current result/outbox store evidence.
+    A completed/title bit alone is insufficient evidence of rearm. No account
     identifiers, fetching, client construction or other IO belongs here.
     """
     if row.get('record_lane_owner') not in {'batch_live_v1', 'batch_sync_v1'} or row.get('deleted'):
         return True
-    if rule.name == 'finalization_after_batch_result_or_durable_rearm':
-        return row.get('finalization_status') != 'completed' or batch_result_count > 0 or rearm_on_result_commit
+    if rule.name == 'late_result_commit_rearms_titling':
+        return not completed_before_results or batch_result_count == 0 or rearm_on_result_commit
     if rule.name == 'completed_capture_has_closed_audio':
         return row.get('status') != 'completed' or bool(
             row.get('record_audio_closed')

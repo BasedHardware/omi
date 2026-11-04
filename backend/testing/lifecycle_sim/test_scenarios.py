@@ -14,11 +14,13 @@ from database import record_audio
 from database import conversation_finalization_jobs as finalization_jobs
 from testing.lifecycle_sim.faults import BoundaryFault, InjectedLifecycleFault
 from testing.lifecycle_sim.harness import LifecycleSim
+from tests.support.lifecycle_state_table import durable_titling_rearm
 from testing.listen_pusher_stack.run import Stack, _wait_for_port
 from utils.batch_pipeline import live
 from utils.batch_pipeline import record_producer_proof
 from utils.conversations.phase import ConversationPhase
 from utils.conversations import process_conversation as processing
+from utils.enrichment import outbox
 
 
 class LifecycleInvariantError(AssertionError):
@@ -220,12 +222,21 @@ async def test_open_sessions_dead_producer_sealed_within_budget(lifecycle_sim, m
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(
-    strict=True,
-    raises=LifecycleInvariantError,
-    reason='waits on lifecycle finalization ordering fix, no PR yet (lead ruling a50c5b)',
+@pytest.mark.parametrize(
+    'closed',
+    [
+        pytest.param(True, id='results-before-finalization'),
+        pytest.param(
+            False,
+            id='closed-before-completed',
+            marks=pytest.mark.xfail(
+                strict=True,
+                raises=LifecycleInvariantError,
+                reason='waits on lifecycle capture completion ordering fix, no PR yet (lead ruling a50c5b)',
+            ),
+        ),
+    ],
 )
-@pytest.mark.parametrize('closed', [True, False], ids=['results-before-finalization', 'closed-before-completed'])
 async def test_server_batch_completion_ordering(lifecycle_sim, closed):
     sim = lifecycle_sim
     sim.seed(sessions={} if closed else {'synthetic-open-producer': True})
@@ -252,6 +263,8 @@ async def test_server_batch_completion_ordering(lifecycle_sim, closed):
     if closed:
         prematurely_completed = finalization['status'] == 'completed'
         completed_job_id = sim.row()['finalization_job_id']
+        outbox_ref = sim.stack.firestore.collection(outbox.COLLECTION).document(outbox.key(sim.uid, sim.cid))
+        before_outbox = outbox_ref.get().to_dict() or {}
         await sim.tick()
         assert sim.row().get('transcript_segments'), 'fixture batch results did not commit'
         row = sim.row()
@@ -263,8 +276,9 @@ async def test_server_batch_completion_ordering(lifecycle_sim, closed):
             row['finalization_job_id'] != completed_job_id
             or latest['dispatch_generation'] > finalization['dispatch_generation']
         )
+        rearmed = rearmed or durable_titling_rearm(before_outbox, outbox_ref.get().to_dict())
         if prematurely_completed:
-            invariant(rearmed, 'finalization completed with zero batch results and no re-armed generation')
+            invariant(rearmed, 'late batch results committed without a durable titling rearm')
         else:
             invariant(
                 latest['status'] == 'queued' or rearmed,
