@@ -10,15 +10,13 @@ dataPlaneProject: based-hardware
 stage: prod
 namespace: batch_pipeline_prod
 secretName: prod-omi-backend-secrets
-# Preserve the audited live floor/ceiling through the next Helm roll (lead
-# af6df5, 2026-11-03). replicaCount and autoscaling.minReplicas are one floor
-# setting; change both. The chart's former 4/16 would reset live 6/12.
-# OD-first: all replicas pin to the on-demand pool; Spot stays opportunistic.
-# Rollback of this source correction must not scale the live floor down.
-replicaCount: 6
+# margin-20: lower the off-peak warm floor from 6 to 4; day demand still scales
+# to max 12. replicaCount and autoscaling.minReplicas are one floor: change both.
+# Rollback: restore both to 6. OD-first placement and scale-out signals stay intact.
+replicaCount: 4
 autoscaling:
   enabled: true
-  minReplicas: 6
+  minReplicas: 4
   maxReplicas: 12
   balancedPools:
     enabled: false
