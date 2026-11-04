@@ -160,3 +160,39 @@ def test_remote_read_rule_overrides_env_and_can_rollback_without_deploy(client, 
         assert reads.selected(UID) is expected
     monkeypatch.setenv('EPISODES_LOG_ENABLED', 'off')
     assert reads.selected(UID) is False
+
+
+@pytest.mark.parametrize('status', ['pending_deletion', 'running', 'completed', None])
+def test_accepted_or_invalid_deletion_blocks_new_async_facts_and_leases(client, status):
+    client.rows[('account_deletions', UID)] = {'wipe_status': status}
+    assert (
+        store.append(UID, 'late', [{'kind': 'member_refresh', 'cid': 'c', 'payload': {}}], firestore_client=client)
+        is None
+    )
+    assert store.claim(UID, firestore_client=client) is None
+    assert not any(key[:2] == ('users', UID) for key in client.rows)
+    with pytest.raises(store.AccountBlocked):
+        store.policy_barrier(UID, 'c', 'token', entering=True, firestore_client=client)
+
+
+def test_deletion_accepted_after_claim_fences_publication_without_recreating_views(client):
+    store.append(
+        UID, 'before', [{'kind': 'member_refresh', 'cid': 'c', 'payload': {}}], firestore_client=client, now=NOW
+    )
+    claim = store.claim(UID, firestore_client=client, now=NOW + timedelta(minutes=3))
+    client.rows[('account_deletions', UID)] = {'wipe_status': 'pending_deletion'}
+    with pytest.raises(store.LostLease, match='account_deletion_fenced'):
+        store.publish(
+            UID,
+            claim,
+            1,
+            {},
+            {'e': {'title': 'must not resurrect'}},
+            {},
+            firestore_client=client,
+            now=NOW + timedelta(minutes=4),
+        )
+    assert ('users', UID, 'episode_views', 'e') not in client.rows
+    assert store.state(UID, firestore_client=client).get('cursor', 0) == 0
+    client.rows[('account_deletions', UID)] = {'wipe_status': 'cancelled'}
+    assert store.account_allowed(UID, firestore_client=client)

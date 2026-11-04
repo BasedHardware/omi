@@ -8,6 +8,7 @@ from database import episode_log as store, episodes
 from database._client import get_firestore_client
 from utils import omi_flags
 from utils.episodes import home_read
+from utils.episodes.visibility import visible_episode
 from utils.episodes.log.codec import digest, loads
 from utils.encryption import decrypt
 
@@ -110,7 +111,7 @@ def by_id(uid, eid, *, firestore_client=None):
         if not raw:
             return None
         if not raw.get('recorded_merged_into'):
-            return episodes.unseal(uid, raw)
+            return visible_episode(uid, episodes.unseal(uid, raw), firestore_client=client)
         eid = raw['recorded_merged_into']
     return None
 

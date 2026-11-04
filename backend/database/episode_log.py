@@ -15,6 +15,8 @@ from google.cloud.firestore_v1 import FieldFilter
 
 from config import episode_log as config
 from database._client import get_firestore_client, run_transactional
+from database.account_deletion_marker import account_deletion_document
+from database.account_deletion_policy import account_deletion_marker_blocks_access
 from utils.encryption import encrypt, decrypt
 from utils.episodes.log.codec import dumps, loads, digest
 
@@ -32,6 +34,23 @@ class LostLease(RuntimeError):
 
 class ProjectionCapacity(RuntimeError):
     pass
+
+
+class AccountBlocked(RuntimeError):
+    pass
+
+
+def account_allowed(uid, *, firestore_client, transaction=None):
+    """Uncached, transaction-bound fence on the same customer data plane.
+
+    The durable authority survives recursive erasure. Reading it in publication
+    serializes an already-running worker against accepted deletion, so it cannot
+    recreate views after their collection has been swept.
+    """
+    snapshot = account_deletion_document(uid, firestore_client=firestore_client).get(transaction=transaction)
+    return not account_deletion_marker_blocks_access(
+        marker_exists=snapshot.exists, raw_status=(snapshot.to_dict() or {}).get('wipe_status')
+    )
 
 
 def root(client, uid):
@@ -134,6 +153,8 @@ def append(uid, key, events, *, firestore_client=None, now=None, urgent=False):
 
     @firestore.transactional
     def commit(transaction):
+        if not account_allowed(uid, firestore_client=client, transaction=transaction):
+            return None
         capture = Capture(transaction, client, uid)
         exists = root(client, uid).collection('episode_facts').document(key).get(transaction=transaction).exists
         if exists:
@@ -156,6 +177,8 @@ def claim(uid, *, firestore_client=None, now=None):
 
     @firestore.transactional
     def commit(transaction):
+        if not account_allowed(uid, firestore_client=client, transaction=transaction):
+            return None
         ref = owner_ref(client, uid)
         row = ref.get(transaction=transaction).to_dict() or {}
         if derive_phase(row, now) in {'idle', 'running'} or row['drain_at'] > now:
@@ -239,6 +262,8 @@ def publish(uid, claimed, cursor, fold_state, views, links, *, firestore_client=
 
     @firestore.transactional
     def commit(transaction):
+        if not account_allowed(uid, firestore_client=client, transaction=transaction):
+            raise LostLease('episode_account_deletion_fenced')
         ref = owner_ref(client, uid)
         row = ref.get(transaction=transaction).to_dict() or {}
         if (
@@ -359,6 +384,8 @@ def policy_barrier(uid, cid, token, *, entering, firestore_client=None, now=None
 
     @firestore.transactional
     def commit(transaction):
+        if not account_allowed(uid, firestore_client=client, transaction=transaction):
+            raise AccountBlocked('episode_account_deletion_fenced')
         capture = Capture(transaction, client, uid)
         barriers = dict(capture.state.get('policy_barriers') or {})
         if entering:
@@ -381,6 +408,8 @@ def recover_policy_barriers(uid, *, firestore_client=None, now=None):
 
     @firestore.transactional
     def commit(transaction):
+        if not account_allowed(uid, firestore_client=client, transaction=transaction):
+            return None
         capture = Capture(transaction, client, uid)
         barriers = dict(capture.state.get('policy_barriers') or {})
         expired = {token: value for token, value in barriers.items() if value['deadline_at'] <= now}
@@ -408,6 +437,8 @@ def finish_backfill(uid, *, firestore_client=None):
 
     @firestore.transactional
     def commit(transaction):
+        if not account_allowed(uid, firestore_client=client, transaction=transaction):
+            raise AccountBlocked('episode_account_deletion_fenced')
         capture = Capture(transaction, client, uid)
         capture.state['backfill_complete'] = True
         capture.state['backfill_watermark'] = int(capture.state.get('next_seq', 0)) + 1

@@ -273,6 +273,8 @@ def sweep(*, firestore_client=None, now=None):
         try:
             if not store.redrive_scan(uid, state, firestore_client=client, now=now) or not config.enabled(uid):
                 continue
+            if not store.account_allowed(uid, firestore_client=client):
+                continue
             phase = 'running' if state.get('lease_owner') else store.derive_phase(state, now)
             metrics.observe_state(state, phase, now)
             store.recover_policy_barriers(uid, firestore_client=client, now=now)

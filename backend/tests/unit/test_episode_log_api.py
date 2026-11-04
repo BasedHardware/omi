@@ -149,3 +149,27 @@ def test_pending_compose_caps_conditional_cache_age_after_restart():
     clock = home_clock({'e': row}, {}, {}, set(), NOW)
     assert clock['deadline_at'] == NOW + timedelta(seconds=COMPOSER_MAX_SETTLE_SECONDS)
     assert clock['cid'] == 'c'
+
+
+def test_read_flip_live_row_still_uses_canonical_member_visibility(monkeypatch):
+    from utils.episodes import visibility
+
+    http, _ = setup(monkeypatch)
+    client = StrictFirestore()
+    client.rows[('users', 'test', 'episode_view_links', 'current')] = {'episode_id': 'e'}
+    client.rows[('users', 'test', 'episode_views', 'e')] = {
+        'id': 'e',
+        'status': 'live',
+        'started_at': NOW,
+        'last_activity_at': NOW,
+        'conversation_ids': ['hidden'],
+        'title': 'must not render',
+    }
+    monkeypatch.setattr(reads, 'get_firestore_client', lambda: client)
+    monkeypatch.setattr(reads.episodes, 'unseal', lambda uid, row: row)
+    monkeypatch.setattr(
+        visibility.conversations, 'get_conversation_raw_snapshot', lambda *args, **kwargs: {'discarded': True}
+    )
+    monkeypatch.setattr(api.service, 'live_episode', lambda uid: None)
+    response = http.get('/v1/episodes/live')
+    assert response.status_code == 200 and response.json() == {'enabled': True, 'episode': None}

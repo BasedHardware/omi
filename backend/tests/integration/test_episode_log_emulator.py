@@ -118,3 +118,25 @@ def test_fixed_window_fact_capture_uses_real_transactional_batch_get(db):
         fold.apply(fact)
     assert cursor == state['next_seq'] and result['id'] == 'fixed'
     assert fold.rows()['fixed']['conversation_ids'] == result['conversation_ids'] == ['c']
+
+
+def test_accepted_deletion_fences_a_previously_claimed_worker(db):
+    client, uid = db
+    store.append(
+        uid, 'before', [{'kind': 'member_refresh', 'cid': 'c', 'payload': {}}], firestore_client=client, now=NOW
+    )
+    claim = store.claim(uid, firestore_client=client, now=NOW + timedelta(minutes=3))
+    client.collection('account_deletions').document(uid).set({'wipe_status': 'pending_deletion'})
+    with pytest.raises(store.LostLease, match='account_deletion_fenced'):
+        store.publish(
+            uid,
+            claim,
+            1,
+            {},
+            {'e': {'title': 'must not resurrect'}},
+            {},
+            firestore_client=client,
+            now=NOW + timedelta(minutes=4),
+        )
+    assert not store.root(client, uid).collection('episode_views').document('e').get().exists
+    assert store.append(uid, 'late', [], firestore_client=client) is None
