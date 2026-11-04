@@ -72,7 +72,7 @@ void main() {
     var notifications = 0;
     device.addListener(() => notifications++);
     for (var i = 0; i < 4; i++) {
-      device.setProviders(capture, _Recordings());
+      device.bindProviders(capture, _Recordings());
     }
     expect(notifications, 0);
     expect(device.captureProvider, capture);

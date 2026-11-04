@@ -342,6 +342,14 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     notifyListeners();
   }
 
+  /// Silent reference wiring for setup paths (e.g. quick actions): the device
+  /// read models do not derive from these dependencies, so re-binding them by
+  /// reference emits no device-state notifications.
+  void bindProviders(CaptureProvider provider, LocalRecordingsProvider recordingsProvider) {
+    captureProvider = provider;
+    localRecordingsProvider = recordingsProvider;
+  }
+
   Future<void> setConnectedDevice(BtDevice? device) async {
     final generation = _sessionGeneration;
     final endedDevice = device == null ? (pairedDevice ?? connectedDevice) : null;
