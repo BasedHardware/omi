@@ -94,11 +94,12 @@ def _attach_recorded_window(
     candidates: Callable | None = None,
     fence_row: Any = None,
     pending_at: datetime | None = None,
+    log_capture: Any = None,
 ) -> dict[str, Any]:
     client = firestore_client if firestore_client is not None else get_firestore_client()
 
     def attach(transaction):
-        log_capture = episode_log.prepare(transaction, client, uid)
+        capture = log_capture if log_capture is not None else episode_log.prepare(transaction, client, uid)
         root = client.collection('users').document(uid)
         links = root.collection('episode_links')
         fence = links.document('recorded_timeline')
@@ -113,7 +114,7 @@ def _attach_recorded_window(
             uid, started, finished, firestore_client=client, transaction=transaction
         )
         log_fixed = []
-        if log_capture is not None:
+        if capture is not None:
             refs = [
                 root.collection('episodes').document(row['id'])
                 for row in rows
@@ -235,7 +236,7 @@ def _attach_recorded_window(
             transaction.update(root.collection('conversations').document(conversation_id), pending_patch)
         transaction.set(fence, {'version': int(revision.get('version') or 0) + 1})
         episode_log.mutation(
-            log_capture,
+            capture,
             before=[*log_fixed, *([existing] if existing else [])],
             after=[result],
             span={'cid': conversation_id, 'start': started, 'end': finished, 'source': source},
@@ -296,6 +297,10 @@ def attach_recorded(
 
     @firestore.transactional
     def attach(transaction):
+        # Match live/sync writers: owner first, then legacy timeline/member locks.
+        # Passing one capture through both strategies avoids lock-order inversion
+        # and ensures every SDK retry reads a fresh owner snapshot.
+        log_capture = episode_log.prepare(transaction, client, uid)
         # Both attachment strategies share one read phase and one fence. Cache
         # only inside this callback: Firestore retries must issue fresh queries.
         fence = client.collection('users').document(uid).collection('episode_links').document('recorded_timeline')
@@ -353,6 +358,7 @@ def attach_recorded(
             transaction=transaction,
             fence_row=revision,
             pending_at=pending_at,
+            log_capture=log_capture,
         )
         if canonical is not None:
             episode_attach_memo.stamp(transaction, client, uid, conversation_id, key, canonical['id'])
@@ -370,6 +376,7 @@ def attach_recorded(
             candidates=reuse_candidates,
             fence_row=revision,
             pending_at=pending_at,
+            log_capture=log_capture,
         )
         result.pop('_window_end')
         episode_attach_memo.stamp(transaction, client, uid, conversation_id, key, result['id'])

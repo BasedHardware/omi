@@ -158,6 +158,7 @@ def attach(
     transaction=None,
     fence_row=None,
     pending_at=None,
+    log_capture=None,
 ):
     """One fenced transaction, or None when an established boundary owns intake."""
     client = firestore_client
@@ -166,6 +167,7 @@ def attach(
     fence = root.collection('episode_links').document('recorded_timeline')
 
     def commit(transaction):
+        capture = log_capture if log_capture is not None else episode_log.prepare(transaction, client, uid)
         revision = fence_row if fence_row is not None else (fence.get(transaction=transaction).to_dict() or {})
         linked = root.collection('episode_links').document(cid).get(transaction=transaction).to_dict() or {}
         pending_patch = episode_batch_pending.read_patch(transaction, client, uid, cid, pending_at)
@@ -211,7 +213,6 @@ def attach(
                     full = episodes.unseal(uid, owner)
                     if full is not None:
                         if pending_patch:
-                            capture = episode_log.prepare(transaction, client, uid)
                             transaction.update(root.collection('conversations').document(cid), pending_patch)
                             episode_log.member_changed(capture, [cid])
                         return {**full, '_recorded_windows': [full]}
@@ -293,7 +294,6 @@ def attach(
         assignments = {member: [row['id'] for row in result if member in row['conversation_ids']] for member in members}
         if any(not ids for ids in assignments.values()):
             raise episodes.EpisodeConflict('recorded_member_unassigned')
-        log_capture = episode_log.prepare(transaction, client, uid)
         for row in previous.values():
             if row['id'] not in new_ids:
                 owner = next(
@@ -333,7 +333,7 @@ def attach(
             if row['id'] not in new_ids
         ]
         episode_log.mutation(
-            log_capture,
+            capture,
             before=list(previous.values()),
             after=[*result, *redirects],
             span={'cid': cid, 'start': start, 'end': end, 'source': source},

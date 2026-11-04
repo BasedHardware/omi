@@ -5,16 +5,53 @@ from unittest.mock import Mock
 import pytest
 from config import episode_log as config
 from database import episode_log as store, episodes
-from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreDocument
 from utils.episodes import home_read
 from utils.episodes.log import metrics, reads, worker
 from utils.episodes.log.codec import loads
 from utils.episodes.log.fold import Fold
 from utils.episodes.log.policy import home_policy_write
 from utils.encryption import decrypt
+from tests.unit.episode_log_support.oracle import Oracle
 
 NOW = datetime(2026, 11, 4, tzinfo=timezone.utc)
 UID = 'review-user'
+
+
+@pytest.mark.parametrize('strategy', ['canonical', 'fallback'])
+def test_live_and_recorded_transactions_share_owner_first_lock_order(client, monkeypatch, strategy):
+    from database import episode_recorded_components
+
+    reads = []
+    original = StrictFirestoreDocument.get
+
+    def observed(ref, *args, **kwargs):
+        if kwargs.get('transaction') is not None:
+            reads.append(ref.path)
+        return original(ref, *args, **kwargs)
+
+    monkeypatch.setattr(StrictFirestoreDocument, 'get', observed)
+    if strategy == 'fallback':
+        monkeypatch.setattr(episode_recorded_components, 'attach', lambda *args, **kwargs: None)
+    owner = ('users', UID, 'episode_log_state', 'owner')
+    with Oracle(UID) as oracle:
+        oracle.attach('recorded', NOW, NOW + timedelta(minutes=1))
+        assert reads[0] == owner and reads.count(owner) == 1
+        reads.clear()
+        episodes.commit_moment(
+            UID,
+            expected_episode_id=None,
+            expected_version=None,
+            new_episode={
+                'id': 'live',
+                'status': 'live',
+                'started_at': NOW + timedelta(hours=10),
+                'last_activity_at': NOW + timedelta(hours=10, minutes=1),
+                'conversation_ids': [],
+            },
+            firestore_client=oracle.store,
+        )
+        assert reads[0] == owner and reads.count(owner) == 1
 
 
 @pytest.fixture
