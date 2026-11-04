@@ -191,10 +191,18 @@ night hours from becoming a rollback solely because quantiles are undefined. Thr
 trip after the full arming window. A fresh usable reading resets the counter.
 Prometheus warnings and incomplete/old query results count as blind. The v2
 counter also gets an explicit freshness check beyond the original script.
+V2 has its own 15-minute request count: a fresh zero count permits its NaN
+p95 even while listen is busy on v1. A missing query result, stale counter,
+or nonfinite p95 with nonzero v2 traffic remains blind. The guard does not
+substitute v1 latency for v2 latency; the endpoints measure different work.
 
-The only serving write is P77 `step_fast.build(old, 12, rollback=True)`:
-JSON Patch tests the **entire observed `/spec`**, sets minReplicas=12, and restores
-the Value=3 latency metric. Metric/cap/downscale drift assertions are retained.
+The serving rollback retains P77's atomic whole-spec test and latency metric:
+JSON Patch tests the **entire observed `/spec`**, sets minReplicas=12, restores
+maxReplicas=12 when capped lower, and restores the Value=3 latency metric.
+Integer live caps from 1 through the chart's rollback cap (12) are accepted;
+caps outside that range and all other metric/downscale drift still fail the Job.
+Ordinary floor scheduling preserves the live cap and refuses a target above it;
+only a safety rollback restores the cap to 12.
 Scale-up must match either the legacy +1 pod/60s policy with zero stabilization,
 or P77r's exact zero-stabilization, selectPolicy Max, +4 pods/15s policy.
 Concurrent changes fail the test, with no retry against a newly read

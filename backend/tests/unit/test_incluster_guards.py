@@ -27,6 +27,7 @@ def values():
         first_over30=6,
         post_p95=0.5,
         v2_p95=1,
+        v2_count=100,
         first_count=150,
         admission_count=100,
         dcgm_nonzero=1,
@@ -393,6 +394,34 @@ def test_reference_rollback_exact_and_atomic():
     assert old == before
 
 
+@pytest.mark.parametrize('cap', [1, 4, 6, 12])
+def test_capped_hpa_rollback_restores_capacity_atomically(cap):
+    old = objects()[0]['spec']
+    old.update(minReplicas=cap, maxReplicas=cap)
+    before = deepcopy(old)
+    assert guard.workload_only(old) == (cap < guard.ROLLBACK_REPLICAS)
+    patch = guard.build_rollback(old)
+    assert patch[0] == {'op': 'test', 'path': '/spec', 'value': before}
+    restored = deepcopy(old)
+    for operation in patch[1:]:
+        assert operation['op'] == 'replace'
+        restored[operation['path'].removeprefix('/spec/')] = operation['value']
+    assert restored['minReplicas'] == restored['maxReplicas'] == guard.ROLLBACK_REPLICAS
+    assert restored['metrics'] == [*before['metrics'], guard.LATENCY]
+    assert guard.rolled_back(restored)
+    assert not guard.workload_only(restored)
+    assert restored['behavior'] == before['behavior']
+    assert old == before
+
+
+@pytest.mark.parametrize('cap', [0, -1, 13, 6.0, True, None, '6'])
+def test_rollback_rejects_invalid_caps(cap):
+    old = objects()[0]['spec']
+    old['maxReplicas'] = cap
+    with pytest.raises(AssertionError, match='Unexpected cap'):
+        guard.build_rollback(old)
+
+
 def test_proposed_scale_up_can_rollback_actual_rendered_production_hpa():
     chart = ROOT / 'backend/charts/parakeet'
     output = subprocess.check_output(
@@ -409,6 +438,7 @@ def test_proposed_scale_up_can_rollback_actual_rendered_production_hpa():
         text=True,
     )
     old = next(obj['spec'] for obj in yaml.safe_load_all(output) if obj and obj['kind'] == 'HorizontalPodAutoscaler')
+    assert old['maxReplicas'] == guard.ROLLBACK_REPLICAS
     assert old['behavior']['scaleUp'] == guard.FAST_SCALE_UP
     patch = guard.build_rollback(old)
     assert patch[0] == {'op': 'test', 'path': '/spec', 'value': old}
@@ -426,8 +456,10 @@ def test_proposed_scale_up_drift_refuses(key, bad):
 
 
 @pytest.mark.parametrize('drift', ['cap', 'extra', 'duplicate', 'missing', 'requests', 'gpu', 'up', 'down'])
-def test_drift_refuses(drift):
+@pytest.mark.parametrize('cap', [4, 6, 12])
+def test_drift_refuses(drift, cap):
     old = objects()[0]['spec']
+    old.update(minReplicas=cap, maxReplicas=cap)
     if drift == 'cap':
         old['maxReplicas'] = 13
     if drift == 'extra':
@@ -693,6 +725,54 @@ def test_floor_schedule_dry_run_and_cap_refusals(monkeypatch, caplog):
     assert guard.run(client, True, 24 * 3600) == 0  # lower 12 -> 8, kill switch first
     assert '"result": "dry_run"' in caplog.text
     assert all(path == 'state' for path, _ in client.patches)
+
+
+@pytest.mark.parametrize('cap', [4, 6])
+def test_capped_hpa_floor_schedule_respects_cap_and_arming(cap, caplog):
+    client = FakeClient()
+    client.hpa['spec'].update(minReplicas=cap, maxReplicas=cap)
+    state = {'identity': guard.state_identity(client.hpa, client.dep), 'since': 0}
+    # An ordinary scheduled raise cannot undo the operator's cap.
+    guard.apply_floor_schedule(client, client.hpa, client.dep, state, {}, [cap + 1] * 24, 900, False)
+    assert not client.patches
+    assert 'refused_target_above_cap' in caplog.text
+    # A lower still requires a full window and usable current measurements.
+    target = cap - 1
+    guard.apply_floor_schedule(client, client.hpa, client.dep, state, {}, [target] * 24, 899, False)
+    assert not client.patches
+    assert 'deferred_guard_not_armed' in caplog.text
+    guard.apply_floor_schedule(client, client.hpa, client.dep, state, {'blind': ['v2_p95']}, [target] * 24, 900, False)
+    assert not client.patches
+    assert 'deferred_guard_blind' in caplog.text
+    guard.apply_floor_schedule(client, client.hpa, client.dep, state, {}, [target] * 24, 900, False)
+    assert client.patches == [
+        (
+            'hpa',
+            [
+                {'op': 'test', 'path': '/spec', 'value': client.hpa['spec']},
+                {'op': 'replace', 'path': '/spec/minReplicas', 'value': target},
+            ],
+        )
+    ]  # The schedule changes only the floor, preserving maxReplicas=cap.
+
+
+@pytest.mark.parametrize('cap', [4, 6])
+@pytest.mark.parametrize('dry_run', [False, True])
+def test_capped_hpa_three_blind_v2_runs_reach_rollback(cap, dry_run, monkeypatch, caplog):
+    monkeypatch.setattr(guard, 'load_floor_schedule', lambda: [8] * 24)
+    client = FakeClient()
+    client.hpa['spec'].update(minReplicas=cap, maxReplicas=cap)
+    client.hpa['status']['desiredReplicas'] = cap
+    client.dep['status']['readyReplicas'] = cap
+    client.signals.update(v2_p95=float('nan'), live_requests_max=cap)
+    assert guard.run(client, dry_run, 0) == 0  # WARMUP, first blind reading
+    assert guard.run(client, dry_run, 300) == 0  # WARMUP retains cap, blind count 2
+    assert guard.run(client, dry_run, 900) == 1  # armed, blind count 3 -> TRIP
+    assert client.state['blind'] == 3
+    assert 'missing_or_nonfinite_v2_p95' in caplog.text
+    hpa_writes = [patch for path, patch in client.patches if path == 'hpa']
+    assert hpa_writes == ([] if dry_run else [guard.build_rollback(client.hpa['spec'])])
+    assert 'parakeet_rollback' in caplog.text
 
 
 def test_scheduled_lower_waits_for_armed_guard_not_a_fresh_warmup(monkeypatch, caplog):
@@ -1123,7 +1203,7 @@ def test_guard_chart_selects_its_behavioral_suite_on_future_changes(path):
 
 def test_fresh_quiet_nan_arithmetic_is_low_sample_not_three_blind_trips():
     hpa, dep = objects()
-    v = dict(values(), first_count=0, admission_count=0, dcgm_nonzero=0)
+    v = dict(values(), first_count=0, admission_count=0, dcgm_nonzero=0, v2_count=0)
     for key in ('first_p95', 'post_p95', 'v2_p95', 'refusal_fraction', 'first_p95_baseline'):
         v[key] = float('nan')
     state = {}
@@ -1136,6 +1216,48 @@ def test_fresh_quiet_nan_arithmetic_is_low_sample_not_three_blind_trips():
     v['first_p95'] = float('nan')
     v['first_stale'] = 121
     assert guard.evaluate(v)['blind']
+
+
+def test_v2_queries_use_the_same_endpoint_and_window_for_count_quantile_and_freshness():
+    expressions = guard.queries('prod-omi-backend')
+    for key in ('v2_count', 'v2_p95', 'v2_stale'):
+        assert '{namespace="prod-omi-backend",exported_endpoint="v2_transcribe"}' in expressions[key]
+    assert expressions['v2_count'].startswith('sum(increase(parakeet_request_duration_seconds_count')
+    assert '[15m]' in expressions['v2_count']
+    assert '[15m]' in expressions['v2_p95']
+
+
+def test_fresh_idle_v2_with_busy_listen_does_not_accumulate_blind_runs():
+    hpa, dep = objects()
+    signals = dict(values(), v2_count=0, v2_p95=float('nan'))
+    state = {}
+    for now in (0, 300, 600, 900, 1200, 1500):
+        verdict, state, reading = guard.decide(hpa, dep, [], signals, state, now)
+        assert verdict == ('WARMUP' if now < 900 else 'CLEAN')
+        assert not reading['blind']
+        assert state['blind'] == 0
+    # Idle v2 must not mask harm measured by another gate.
+    signals['post_p95'] = 3
+    assert guard.decide(hpa, dep, [], signals, state, 1800)[0] == 'TRIP'
+
+
+@pytest.mark.parametrize(
+    'bad',
+    [
+        {'v2_count': None},
+        {'v2_count': float('nan')},
+        {'v2_count': 1},
+        {'v2_stale': None},
+        {'v2_stale': 121},
+        {'v2_stale': -1},
+        {'v2_p95': None},
+        {'v2_p95': float('inf')},
+    ],
+)
+def test_idle_v2_exception_never_masks_missing_stale_or_nonzero_sample_failures(bad):
+    signals = dict(values(), v2_count=0, v2_p95=float('nan'))
+    signals.update(bad)
+    assert guard.evaluate(signals)['blind']
 
 
 def test_render_packages_exact_entrypoint_and_shared_logging_module():

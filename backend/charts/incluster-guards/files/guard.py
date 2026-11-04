@@ -192,6 +192,7 @@ def queries(namespace):
         + inc('omi_stt_window_first_text_seconds_bucket', '{job="backend-listen-metrics",le="30.0"}'),
         'post_p95': f'histogram_quantile(0.95,sum by(le)(rate(omi_stt_window_post_seconds_bucket{sel}[15m])))',
         'v2_p95': f'histogram_quantile(0.95,sum by(le)(rate(parakeet_request_duration_seconds_bucket{v2}[15m])))',
+        'v2_count': inc('parakeet_request_duration_seconds_count', v2),
         'refusal_fraction': f'({refused} or ({accepted} * 0)) / (({accepted}) + ({refused} or ({accepted} * 0)))',
         'admission_count': f'({accepted}) + ({refused} or ({accepted} * 0))',
         'dcgm_nonzero': f'max(max_over_time(DCGM_FI_DEV_GPU_UTIL{gpu}[15m]))',
@@ -228,8 +229,8 @@ def workload_only(spec):
 
 
 def build_rollback(old):
-    """Exact step_fast.build(old, 12, rollback=True) patch and drift assertions."""
-    assert old['maxReplicas'] == 12, 'Unexpected cap'
+    """Restore rollback capacity, including an operator-capped workload HPA."""
+    assert type(old['maxReplicas']) is int and 1 <= old['maxReplicas'] <= ROLLBACK_REPLICAS, 'Unexpected cap'
     metrics = old['metrics']
     names = [m.get('pods', m.get('external', {})).get('metric', {}).get('name') for m in metrics]
     assert set(names) <= {
@@ -262,6 +263,13 @@ def build_rollback(old):
     restored.append(copy.deepcopy(LATENCY))
     return [
         {'op': 'test', 'path': '/spec', 'value': copy.deepcopy(old)},
+        # Restore the cap in the same atomic patch as the floor, or Kubernetes
+        # rejects minReplicas=12 under an operator's maxReplicas=4/6 cap.
+        *(
+            [{'op': 'replace', 'path': '/spec/maxReplicas', 'value': ROLLBACK_REPLICAS}]
+            if old['maxReplicas'] < ROLLBACK_REPLICAS
+            else []
+        ),
         {'op': 'replace', 'path': '/spec/minReplicas', 'value': ROLLBACK_REPLICAS},
         {'op': 'replace', 'path': '/spec/metrics', 'value': restored},
     ]
@@ -279,7 +287,17 @@ def evaluate(values):
     # Prometheus returns NaN for idle histogram/ratio arithmetic. Fresh low counts
     # distinguish that expected lack of samples from a missing series/query error
     # (None). It remains LOW_SAMPLE, never CLEAN, without rolling back quiet hours.
-    idle_nan = {'first_p95', 'post_p95', 'v2_p95', 'refusal_fraction'} if low and fresh else set()
+    idle_nan = {'first_p95', 'post_p95', 'refusal_fraction'} if low and fresh else set()
+    # v2 can be idle while live-window traffic uses v1. Its fresh zero count
+    # explains NaN quantile arithmetic independently of listen sample volume;
+    # missing/failed queries (None), stale counters and nonzero counts still blind.
+    if (
+        finite(values.get('v2_count'))
+        and values['v2_count'] == 0
+        and finite(values.get('v2_stale'))
+        and 0 <= values['v2_stale'] <= 120
+    ):
+        idle_nan.add('v2_p95')
     # The weekly first_p95 evidence (quantile + its sample count) is optional
     # (retention, metric age, sparse hour): its absence selects the fallback
     # threshold instead of blinding the whole reading. The weekly refusal
