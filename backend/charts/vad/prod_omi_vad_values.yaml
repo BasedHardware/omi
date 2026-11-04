@@ -3,7 +3,9 @@
 # Declare variables to be passed into your templates.
 
 # This will set the replicaset count more information can be found here: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/
-replicaCount: 1
+replicaCount: 0
+fleetRetired: true
+maintenanceMode: true
 
 # This sets the container image more information can be found here: https://kubernetes.io/docs/concepts/containers/images/
 image:
@@ -58,7 +60,8 @@ service:
 
 # This block is for setting up the ingress for more information can be found here: https://kubernetes.io/docs/concepts/services-networking/ingress/
 ingress:
-  enabled: true
+  # Shared Gateway remains; retire the dedicated hosted-VAD load balancer.
+  enabled: false
   className: ""
   annotations:
     kubernetes.io/ingress.class: "gce-internal"

@@ -5,8 +5,8 @@ metadata:
   labels:
     {{- include "vad.labels" . | nindent 4 }}
 spec:
-  {{- if .Values.maintenanceMode }}
-  # Explicit zero invokes HPA maintenance mode; keep the HPA and its positive minimum.
+  {{- if or .Values.fleetRetired .Values.maintenanceMode }}
+  # Retirement removes the HPA; explicit maintenance alone retains its positive minimum.
   replicas: 0
   {{- else if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
