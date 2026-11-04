@@ -131,7 +131,18 @@ def test_batch_has_an_isolated_route_and_preserves_900_second_timeout(environmen
         assert 'cloud.google.com/gke-nodepool' not in pod['nodeSelector']
     else:
         assert pod['nodeSelector']['cloud.google.com/gke-nodepool'] == 'diarizer-batch-pool'
-    assert 'affinity' not in pod
+    if environment == 'prod':
+        preference = pod['affinity']['nodeAffinity']['preferredDuringSchedulingIgnoredDuringExecution']
+        assert preference == [
+            {
+                'weight': 100,
+                'preference': {
+                    'matchExpressions': [{'key': 'cloud.google.com/gke-spot', 'operator': 'In', 'values': ['true']}]
+                },
+            }
+        ]
+    else:
+        assert 'affinity' not in pod
     assert (
         object_for(objects, 'HealthCheckPolicy')['spec']['default']['config']['httpHealthCheck']['requestPath']
         == '/health'
@@ -154,3 +165,113 @@ def test_gateway_requires_reserved_address():
     )
     assert result.returncode != 0
     assert 'addressName must name a reserved regional internal address' in result.stderr
+
+
+@pytest.mark.parametrize('digest', ['a' * 64, 'b' * 64])
+def test_batch_warm_fallback_rolls_with_primary_image_in_the_same_release(digest):
+    directory = CHARTS / 'diarizer'
+    output = subprocess.check_output(
+        [
+            'helm',
+            'template',
+            'prod-omi-diarizer-batch',
+            str(directory),
+            '--namespace',
+            'prod-omi-backend',
+            '-f',
+            str(directory / 'prod_omi_diarizer_values.yaml'),
+            '-f',
+            str(directory / 'prod_omi_diarizer_batch_values.yaml'),
+            '--set-string',
+            'image.digest=sha256:' + digest,
+        ],
+        text=True,
+    )
+    documents = [obj for obj in yaml.safe_load_all(output) if obj]
+    burst = {(obj['kind'], obj['metadata']['name']): (obj, '') for obj in documents}
+    assert len(documents) == len(burst)  # No duplicate Helm resource identities.
+    warm_deploy = burst[('Deployment', 'prod-omi-diarizer-batch-fallback')][0]
+    warm = warm_deploy['spec']['template']
+    primary = object_for(burst, 'Deployment')
+    assert warm_deploy['spec']['replicas'] == 1
+    assert len([kind for kind, _ in burst if kind == 'HorizontalPodAutoscaler']) == 1
+    assert len([kind for kind, _ in burst if kind == 'HTTPRoute']) == 1
+    assert not any(kind == 'Ingress' for kind, _ in burst)
+    assert warm['spec']['nodeSelector'] == {
+        'service': 'diarizer-batch',
+        'env': 'prod',
+        'cloud.google.com/gke-nodepool': 'diarizer-batch-pool',
+        'cloud.google.com/gke-provisioning': 'standard',
+    }
+    assert 'affinity' not in warm['spec']
+    # One Helm upgrade renders both workloads from the same image/runtime spec.
+    assert len([kind for kind, _ in burst if kind == 'Deployment']) == 2
+    for deploy, other in [(warm_deploy, primary), (primary, warm_deploy)]:
+        selector = deploy['spec']['selector']['matchLabels']
+        assert not all(other['spec']['template']['metadata']['labels'].get(k) == v for k, v in selector.items())
+    warm_container = warm['spec']['containers'][0]
+    primary_pod = primary['spec']['template']
+    assert warm['spec']['serviceAccountName'] == primary_pod['spec']['serviceAccountName']
+    for key in ('image', 'command', 'env', 'resources', 'tolerations', 'startupProbe', 'readinessProbe'):
+        if key == 'tolerations':
+            assert warm['spec'][key] == primary_pod['spec'][key]
+        else:
+            assert warm_container[key] == primary_pod['spec']['containers'][0][key]
+    assert warm_container['image'].endswith('@sha256:' + digest)
+    for (kind, _), (service, _) in burst.items():
+        if kind != 'Service':
+            continue
+        selector = service['spec']['selector']
+        assert selector == {'app.kubernetes.io/name': 'diarizer', 'omi.ai/diarizer-batch-route': 'prod'}
+        for template in (warm, primary_pod):
+            assert all(template['metadata']['labels'].get(k) == v for k, v in selector.items())
+        embedding = object_for(render('prod', 'diarizer'), 'Deployment')['spec']['template']
+        assert not all(embedding['metadata']['labels'].get(k) == v for k, v in selector.items())
+    assert object_for(burst, 'HorizontalPodAutoscaler')['spec']['maxReplicas'] + warm_deploy['spec']['replicas'] == 18
+
+
+def test_batch_bootstrap_keeps_old_service_selectors_until_warm_floor_is_ready():
+    directory = CHARTS / 'diarizer'
+    args = ['helm', 'template', 'prod-omi-diarizer-batch', str(directory)]
+    for filename in (
+        'prod_omi_diarizer_values.yaml',
+        'prod_omi_diarizer_batch_values.yaml',
+        'prod_omi_diarizer_batch_bootstrap_values.yaml',
+    ):
+        args += ['-f', str(directory / filename)]
+    args += ['--set-string', 'image.tag=bootstrap-contract']
+    objects = [obj for obj in yaml.safe_load_all(subprocess.check_output(args, text=True)) if obj]
+    deployments = [obj for obj in objects if obj['kind'] == 'Deployment']
+    assert len(deployments) == 2
+    for deploy in deployments:
+        assert (
+            deploy['spec']['template']['spec']['nodeSelector']['cloud.google.com/gke-nodepool'] == 'diarizer-batch-pool'
+        )
+    for service in (obj for obj in objects if obj['kind'] == 'Service'):
+        assert service['spec']['selector'] == {
+            'app.kubernetes.io/name': 'diarizer',
+            'app.kubernetes.io/instance': 'prod-omi-diarizer-batch',
+        }
+    # Drain stage retains 17 primary + 1 warm. Only the final rollback upgrade
+    # removes the drained warm Deployment and restores 18 primary replicas.
+    hpa = next(obj for obj in objects if obj['kind'] == 'HorizontalPodAutoscaler')
+    assert hpa['spec']['maxReplicas'] == 17
+    unsafe = subprocess.run(args + ['--set', 'autoscaling.maxReplicas=18'], capture_output=True, text=True)
+    assert unsafe.returncode != 0
+    assert 'primary replicas plus the warm fallback exceed' in unsafe.stderr
+    rollback = list(
+        yaml.safe_load_all(
+            subprocess.check_output(
+                args + ['--set', 'warmFallback.enabled=false', '--set', 'autoscaling.maxReplicas=18'], text=True
+            )
+        )
+    )
+    rollback_deployments = [obj for obj in rollback if obj and obj['kind'] == 'Deployment']
+    assert len(rollback_deployments) == 1
+    assert (
+        rollback_deployments[0]['spec']['template']['spec']['nodeSelector']['cloud.google.com/gke-nodepool']
+        == 'diarizer-batch-pool'
+    )
+    assert (
+        next(obj for obj in rollback if obj and obj['kind'] == 'HorizontalPodAutoscaler')['spec']['maxReplicas'] == 18
+    )

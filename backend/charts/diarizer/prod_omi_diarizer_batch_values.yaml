@@ -1,4 +1,5 @@
-# David-only floor 1; lift to 6 after cohort qualification (max 18).
+# Autoscaled burst plus one fixed warm Deployment in the same Helm release.
+# Combined steady-state ceiling is 18 (17 here + 1 fallback); allow rollout surge.
 # Separate release only: -f prod_omi_diarizer_values.yaml -f this file.
 # Lead-owned opt-in deployment; never install over prod-omi-diarizer.
 fullnameOverride: prod-omi-diarizer-batch
@@ -14,7 +15,17 @@ gateway:
   timeoutSeconds: 900
 # Replace the inherited embedding affinity entirely. Both label and taint
 # isolate batch capacity from existing embedding and other GPU workloads.
-affinity: null
+affinity:
+  nodeAffinity:
+    # Helm merges maps with prod values: remove the embedding-only requirement.
+    requiredDuringSchedulingIgnoredDuringExecution: null
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        preference:
+          matchExpressions:
+            - key: cloud.google.com/gke-spot
+              operator: In
+              values: ["true"]
 # No cloud.google.com/gke-nodepool pin: every diarizer-batch pool carries the
 # service/env labels and omi.ai taint, so a pool can be replaced by label
 # (2026-11-01: n1-standard-8 diarizer-batch-pool -> n1-standard-4
@@ -38,6 +49,21 @@ strategy:
   rollingUpdate:
     maxUnavailable: 0
     maxSurge: 1
+warmFallback:
+  enabled: true
+  nodeSelector:
+    service: diarizer-batch
+    env: prod
+    cloud.google.com/gke-nodepool: diarizer-batch-pool
+    cloud.google.com/gke-provisioning: standard
+# Both Deployments serve through the existing ClusterIP and Gateway Service.
+# The warm Deployment uses a suffixed instance label, so controllers cannot overlap.
+podLabels:
+  omi.ai/diarizer-batch-route: prod
+service:
+  selectorLabels:
+    app.kubernetes.io/name: diarizer
+    omi.ai/diarizer-batch-route: prod
 tolerations:
   - key: omi.ai/diarizer-batch
     operator: Equal
@@ -60,7 +86,7 @@ podMonitoring:
 autoscaling:
   enabled: true
   minReplicas: 1
-  maxReplicas: 18
+  maxReplicas: 17
   requestLatencyP99: null
   # 2026-11-01 (marginfleet): raised 1 -> 2. Target 1 provisioned one T4 node
   # per queued item while the 7d queue was p50=0, max=4, fleet avg 0.53 and the
