@@ -431,7 +431,7 @@ def serve(
     try:
         server = HTTPServer((host, port), handler)
     except OSError as exc:
-        raise UsageError(f"Could not bind http://{host}:{port}", detail=str(exc)) from exc
+        raise UsageError(f"Could not bind http://{host}:{port}") from exc
 
     with server:
         bound_port = server.server_address[1]

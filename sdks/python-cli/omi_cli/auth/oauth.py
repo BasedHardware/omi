@@ -252,7 +252,7 @@ def refresh_id_token(profile_name: str) -> str:
                 data={"grant_type": "refresh_token", "refresh_token": profile.refresh_token},
             )
     except httpx.HTTPError as exc:
-        raise TransportError("Could not reach Firebase token service", detail=str(exc)) from exc
+        raise TransportError("Could not reach Firebase token service") from exc
 
     if resp.status_code != 200:
         raise AuthError(
@@ -360,7 +360,7 @@ def _exchange_firebase_token_for_dev_key(api_base: str, id_token: str) -> str:
                 json={"name": key_name, "scopes": _CLI_KEY_SCOPES},
             )
         except httpx.HTTPError as exc:
-            raise TransportError(f"Could not reach {base}{_DEV_KEYS_PATH}", detail=str(exc)) from exc
+            raise TransportError(f"Could not reach {base}{_DEV_KEYS_PATH}") from exc
 
     if resp.status_code not in (200, 201):
         raise AuthError(
@@ -419,7 +419,7 @@ def _exchange_code_for_custom_token(api_base: str, code: str, redirect_uri: str,
                 },
             )
     except httpx.HTTPError as exc:
-        raise TransportError(f"Could not reach {token_url}", detail=str(exc)) from exc
+        raise TransportError(f"Could not reach {token_url}") from exc
 
     if resp.status_code != 200:
         raise AuthError(
@@ -446,7 +446,7 @@ def _firebase_signin_with_custom_token(custom_token: str) -> tuple[str, str, int
                 json={"token": custom_token, "returnSecureToken": True},
             )
     except httpx.HTTPError as exc:
-        raise TransportError("Could not reach Firebase sign-in service", detail=str(exc)) from exc
+        raise TransportError("Could not reach Firebase sign-in service") from exc
 
     if resp.status_code != 200:
         raise AuthError(
