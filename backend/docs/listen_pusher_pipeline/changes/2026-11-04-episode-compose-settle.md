@@ -13,6 +13,17 @@ infrastructure. Pending metadata survives restarts; a later finalize or read
 reconstructs the process-local queue. The cap bounds debounce on a running
 process; it is not a durable execution SLA during instance shutdown.
 
+Persisted pending work remains eligible for read recovery when the switch is
+off; it then composes immediately. With the switch on, a later trigger preserves
+the original pending-time cap, and a read bypasses settling. Failed pending-state
+writes fall through to scheduling and immediate composition with the existing
+fingerprint/lease checks, emitting shared fallback telemetry rather than losing
+speech or name changes.
+
+Phase-shadow mismatches during settling are expected: `needs_compose` sees
+pending freshness work while the read-only phase projection still says
+`COMPOSED`. This does not change the phase decision.
+
 Tests: `backend/tests/unit/test_episode_composer.py` exercises narrow triggers, genuine
 late speech/name/membership/discard changes, settle/cap/restart behavior, read
 promotion, stale/superseded retries, rollback and bounded metric labels.

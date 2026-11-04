@@ -814,6 +814,50 @@ def test_background_settles_without_claiming_lease_or_holding_worker(store, monk
     assert store.episode['compose_activity_at'] >= store.episode['compose_pending_since']
 
 
+@pytest.mark.parametrize('change', ['speech', 'name'])
+@pytest.mark.parametrize('failure', ['cas_exhausted', 'storage_error', 'gate_only'])
+def test_failed_pending_write_still_schedules_and_eventually_composes(store, monkeypatch, change, failure):
+    calls = []
+    c = _c(calls=calls)
+    assert composer.compose(UID, 'ep1', collaborators=c) == 'composed'
+    old_stamp = store.episode['composed_fingerprint']
+    segment = store.rows['c1']['transcript_segments'][1]
+    segment['text' if change == 'speech' else 'person_name'] = 'New speech' if change == 'speech' else 'Arjan'
+    _schedule_seam(store, monkeypatch)
+    write = store.update_episode
+    attempts = []
+    fallbacks = []
+    monkeypatch.setattr(composer, 'record_fallback', lambda **kw: fallbacks.append(kw))
+
+    def fail_pending(*args, **kw):
+        if kw['updates'].get('compose_pending_since'):
+            attempts.append(kw['updates'])
+            if failure != 'gate_only' or len(attempts) <= 3:
+                if failure == 'storage_error':
+                    raise RuntimeError('storage unavailable')
+                raise composer.episodes_db.EpisodeConflict('state_version_changed')
+        return write(*args, **kw)
+
+    monkeypatch.setattr(composer.episodes_db, 'update_episode', fail_pending)
+    assert composer.after_finalized(UID, 'c1', 'finalized', c, row=store.rows['c1']) == 'finalized'
+    if failure == 'gate_only':
+        # Once metadata writes recover, the scheduled worker durably retains its retry.
+        assert len(calls) == 1 and composer._deferred and store.episode['compose_pending_since']
+        store.episode['compose_pending_since'] -= timedelta(minutes=11)
+        store.episode['compose_activity_at'] -= timedelta(minutes=11)
+        composer._deferred[(UID, 'ep1')] = (0, c)
+        composer._schedule_due()
+    else:
+        # Even persistent metadata failure must pay now rather than lose this last finalize.
+        assert len(attempts) == (6 if failure == 'cas_exhausted' else 2)
+    assert len(calls) == 2 and store.episode['composed_fingerprint'] != old_stamp
+    assert not composer._deferred and store.episode['compose_pending_since'] is None
+    assert fallbacks and all(f['reason'] == 'enqueue_failed' and f['outcome'] == 'degraded' for f in fallbacks)
+    # The immediate fallback still stamps and deduplicates the paid evidence normally.
+    assert composer.compose(UID, 'ep1', collaborators=c) == 'unchanged'
+    assert len(calls) == 2
+
+
 def test_identical_finalizes_do_not_extend_quiet_window(store, monkeypatch):
     c = _c()
     _schedule_seam(store, monkeypatch)
@@ -859,6 +903,75 @@ def test_pending_window_survives_process_local_queue_loss(store, monkeypatch):
     _schedule_seam(store, monkeypatch)
     composer.schedule_for_conversation(UID, 'c1', collaborators=c, row=store.rows['c1'])
     assert len(calls) == 1 and store.episode['compose_pending_since'] is None
+
+
+@pytest.mark.parametrize('enabled', ['on', 'off'])
+@pytest.mark.parametrize('change', ['speech', 'name'])
+def test_read_recovers_persisted_pending_evidence_after_restart(store, monkeypatch, enabled, change):
+    calls = []
+    c = _c(calls=calls)
+    assert composer.compose(UID, 'ep1', collaborators=c) == 'composed'
+    old_stamp = store.episode['composed_fingerprint']
+    segment = store.rows['c1']['transcript_segments'][1]
+    segment['text' if change == 'speech' else 'person_name'] = 'Late speech' if change == 'speech' else 'Arjan'
+    _schedule_seam(store, monkeypatch)
+    composer.schedule_for_conversation(UID, 'c1', collaborators=c, row=store.rows['c1'])
+    assert len(calls) == 1 and store.episode['compose_pending_since']
+    # Keep only persisted state, as after an instance restart and optional rollback.
+    for state in (composer._deferred, composer._recent, composer._inflight, composer._rerun, composer._foreground):
+        state.clear()
+    monkeypatch.setenv(config.EPISODE_COMPOSE_SETTLE_ENABLED_ENV, enabled)
+    assert composer.needs_compose(store.episode)
+    schedule = composer.schedule
+    monkeypatch.setattr(composer, 'schedule', lambda uid, eid, **kw: schedule(uid, eid, collaborators=c, **kw))
+    assert (
+        home_read.schedule_missed_composes(
+            UID, [store.episode], [{'id': 'ep1', 'members': [{'id': 'c1'}, {'id': 'c2'}]}]
+        )
+        == 1
+    )
+    assert len(calls) == 2 and store.episode['composed_fingerprint'] != old_stamp
+    assert store.episode['compose_pending_since'] is None and not composer._deferred
+
+
+def test_later_trigger_after_restart_preserves_pending_cap_despite_new_speech(store, monkeypatch):
+    calls = []
+    c = _c(calls=calls)
+    assert composer.compose(UID, 'ep1', collaborators=c) == 'composed'
+    store.rows['c1']['transcript_segments'][0]['text'] += ' Late speech.'
+    _schedule_seam(store, monkeypatch)
+    composer.schedule_for_conversation(UID, 'c1', collaborators=c, row=store.rows['c1'])
+    store.episode['compose_pending_since'] -= timedelta(minutes=20)
+    store.episode['compose_activity_at'] -= timedelta(minutes=2)
+    first = store.episode['compose_pending_since']
+    for state in (composer._deferred, composer._recent, composer._inflight, composer._rerun, composer._foreground):
+        state.clear()
+    store.rows['c1']['transcript_segments'][0]['text'] += ' Still uploading.'
+    composer.schedule_for_conversation(UID, 'c1', collaborators=c, row=store.rows['c1'])
+    assert len(calls) == 1 and store.episode['compose_pending_since'] == first
+    assert 299 < composer._deferred[(UID, 'ep1')][0] - composer.time.monotonic() <= 300
+    # The recovered worker pays at the persisted cap even if activity is still recent.
+    store.episode['compose_pending_since'] -= timedelta(minutes=6)
+    composer._deferred[(UID, 'ep1')] = (0, c)
+    composer._schedule_due()
+    assert len(calls) == 2 and store.episode['compose_pending_since'] is None and not composer._deferred
+
+
+def test_rollback_drains_pending_marker_without_paying_if_speech_was_reverted(store, monkeypatch):
+    calls = []
+    c = _c(calls=calls)
+    assert composer.compose(UID, 'ep1', collaborators=c) == 'composed'
+    old_text = store.rows['c1']['transcript_segments'][0]['text']
+    store.rows['c1']['transcript_segments'][0]['text'] += ' Late speech.'
+    assert composer.compose(UID, 'ep1', collaborators=c, background=True) == 'settling'
+    store.rows['c1']['transcript_segments'][0]['text'] = old_text
+    composer._deferred.clear()
+    monkeypatch.setenv(config.EPISODE_COMPOSE_SETTLE_ENABLED_ENV, 'off')
+    assert composer.needs_compose(store.episode)
+    _schedule_seam(store, monkeypatch)
+    assert composer.schedule(UID, 'ep1', collaborators=c, throttle=True)
+    assert len(calls) == 1 and store.episode['compose_pending_since'] is None
+    assert not composer.needs_compose(store.episode)
 
 
 def test_read_promotes_deferred_compose_even_inside_throttle_window(store, monkeypatch):

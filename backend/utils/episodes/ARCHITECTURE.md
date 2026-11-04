@@ -280,6 +280,12 @@ episode's final notes in one `episode_composer` call (gpt-6-luna, low effort):
   `compose` and `force=True` bypass settling. Turning the switch off restores the
   full-fingerprint scheduling and immediate-retry behavior. No composer version
   bump or eager recompose wave.
+  Persisted pending work remains read-eligible with the switch off, so rollback
+  after restart drains it immediately. With the switch on, a later trigger
+  retains the persisted first-pending cap; a read bypasses the quiet window.
+  If pending-state persistence fails, finalizers still schedule and workers
+  bypass settling, retaining the normal fingerprint/lease checks. This favors
+  paying over losing new speech or names and emits shared fallback telemetry.
   Legacy episodes have no narrow trigger stamp: an unchanged full fingerprint
   backfills it without a paid call. A changed full fingerprint conservatively
   composes once behind the background settle window, because the old hash cannot

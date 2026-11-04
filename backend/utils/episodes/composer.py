@@ -61,6 +61,7 @@ from utils.episodes.visibility import hidden_member
 from utils.speakers.display import sanitize_speaker_text
 from utils.llm.clients import get_llm
 from utils.llm.usage_tracker import track_usage
+from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
 
@@ -641,17 +642,21 @@ def _compose(uid: str, episode_id: str, c: Any, *, force: bool, background: bool
         and episode.get('composed_notes') == notes_hash(episode)
         and not episode.get('summary_needs_regeneration')
     ):
-        if episode_compose_settle_enabled() and episode.get('composed_evidence') is None:
+        if episode.get('compose_pending_since') or (
+            episode_compose_settle_enabled() and episode.get('composed_evidence') is None
+        ):
             _write(uid, episode_id, c, _trigger_stamp(episode, members))
         return 'unchanged'
     if not force and _backed_off(episode, print_):
         return 'backoff'
     if episode_compose_settle_enabled() and background and not force:
-        episode = _observe_evidence(uid, episode, c, _evidence(members))
-        delay = settle_delay(episode)
-        if delay > 0:
-            _defer(uid, episode_id, c, delay)
-            return 'settling'
+        observed = _observe_evidence(uid, episode, c, _evidence(members))
+        if observed is not None:
+            episode = observed
+            delay = settle_delay(episode)
+            if delay > 0:
+                _defer(uid, episode_id, c, delay)
+                return 'settling'
     invoke = (c.extras or {}).get('compose_invoke')
     if invoke is None and getattr(c, 'invoke', None) is not None:
         # Collaborators that fake the incremental model never reach the real composer model.
@@ -775,8 +780,10 @@ def _trigger_stamp(episode: Mapping[str, Any], members: Sequence[Mapping[str, An
     }
 
 
-def _observe_evidence(uid: str, episode: Mapping[str, Any], c: Any, evidence: Mapping[str, str]) -> dict[str, Any]:
-    """Persist wall-clock arrival activity separately from the episode's recorded-time boundaries."""
+def _observe_evidence(
+    uid: str, episode: Mapping[str, Any], c: Any, evidence: Mapping[str, str]
+) -> Optional[dict[str, Any]]:
+    """Persist arrival activity; failure bypasses settling, never the compose or its lease."""
     now = datetime.now(timezone.utc)
     membership = sorted(_retained_ids(episode))
     if (
@@ -794,10 +801,22 @@ def _observe_evidence(uid: str, episode: Mapping[str, Any], c: Any, evidence: Ma
             'compose_pending_membership': membership,
         }
 
-    outcome = _write(uid, str(episode['id']), c, observe)
-    if outcome != 'written':
-        raise ComposeFailed('settle_state_conflict')
-    return episodes_db.get_episode(uid, str(episode['id']), firestore_client=c.firestore_client) or dict(episode)
+    try:
+        outcome = _write(uid, str(episode['id']), c, observe)
+        if outcome != 'written':
+            raise ComposeFailed('settle_state_conflict')
+        return episodes_db.get_episode(uid, str(episode['id']), firestore_client=c.firestore_client) or dict(episode)
+    except Exception as error:
+        logger.warning('event=episode_compose_settle outcome=bypassed exception_type=%s', type(error).__name__)
+        record_fallback(
+            component='conversation_notes',
+            from_mode='episode_compose_settling',
+            to_mode='episode_compose_immediate',
+            reason='enqueue_failed',
+            outcome='degraded',
+            log=logger,
+        )
+        return None
 
 
 def settle_delay(episode: Mapping[str, Any], *, now: Optional[datetime] = None) -> float:
@@ -829,9 +848,10 @@ def needs_compose(episode: Optional[Mapping[str, Any]], *, visible_member_ids: O
     """
     if not episode or policy.is_live(episode) or not episode_composer_enabled():
         return False
+    # A restart loses the local queue. Rollback must still drain persisted pending evidence.
+    if episode.get('compose_pending_since'):
+        return True
     if episode_compose_settle_enabled():
-        if episode.get('compose_pending_since'):
-            return True
         membership = episode.get('composed_membership')
         if membership is not None and membership != sorted(_retained_ids(episode)):
             return True
