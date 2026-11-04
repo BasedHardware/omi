@@ -71,6 +71,12 @@ batch-replay:
 	@test -n "$(REF)" -a -n "$(BASE)" -a -n "$(CORPUS)" -a -n "$(OUTPUT)" || (echo 'Required: REF BASE CORPUS OUTPUT'; exit 2)
 	backend/.venv/bin/python -I backend/testing/batch_replay/gate.py --ref "$(REF)" --base "$(BASE)" --corpus "$(CORPUS)" --output "$(OUTPUT)"
 
+# Local stage replay; expected incident stops are successful reproductions.
+.PHONY: replay-harness
+replay-harness:
+	@test -n "$(CASES)" -a -n "$(OUTPUT)" || (echo 'Required: CASES OUTPUT'; exit 2)
+	cd backend && .venv/bin/python -m testing.replay_harness run $(foreach case,$(CASES),--case "$(abspath $(case))") --output "$(abspath $(OUTPUT))"
+
 # Backend ratchet guard tests (test_*ratchet*.py plus the reason-label enums)
 # through backend/test.sh; included by scripts/pr-preflight --all for backend
 # changes so CI-only ratchets surface before the push, not after it.

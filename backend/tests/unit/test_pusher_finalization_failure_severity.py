@@ -25,7 +25,9 @@ import logging
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from fastapi import HTTPException
 
+import services.conversation_finalization as finalization_service
 import utils.pusher_finalization as pusher_finalization
 from utils.conversations.finalizer import ConversationFinalizationDisposition, ConversationFinalizationError
 from database import conversation_finalization_jobs as jobs_db
@@ -123,7 +125,7 @@ async def test_terminal_finalization_failure_stays_error(monkeypatch, inline_run
         'get_listen_finalization_tasks_max_attempts',
         MagicMock(return_value=1),
     )
-    monkeypatch.setattr(pusher_finalization, 'final_attempt_failed', MagicMock(return_value=True))
+    monkeypatch.setattr(pusher_finalization, 'final_attempt_failed', MagicMock(return_value='dead_letter'))
     monkeypatch.setattr(
         pusher_finalization,
         'finalize_persisted_conversation',
@@ -146,4 +148,125 @@ async def test_terminal_finalization_failure_stays_error(monkeypatch, inline_run
     assert all(
         r.levelno == logging.ERROR for r in records
     ), 'terminal=True dead-lettering is the fault signal and must stay at ERROR'
+    assert all('terminal=True' in r.getMessage() for r in records)
+
+
+@pytest.mark.anyio
+async def test_first_exhaustion_requeue_queues_the_job_and_stays_warning(monkeypatch, inline_run_blocking, caplog):
+    """First exhaustion grants the one delayed requeue: the session hears the
+    existing job_queued shape (non-terminal) and the failure stays WARNING."""
+    monkeypatch.setattr(jobs_db, 'claim_finalization_job', _claim(attempt_count=0))
+    monkeypatch.setattr(
+        pusher_finalization,
+        'get_listen_finalization_tasks_max_attempts',
+        MagicMock(return_value=1),
+    )
+    monkeypatch.setattr(pusher_finalization, 'final_attempt_failed', MagicMock(return_value='requeued'))
+    monkeypatch.setattr(
+        pusher_finalization,
+        'finalize_persisted_conversation',
+        AsyncMock(side_effect=ConversationFinalizationError('processing_failed')),
+    )
+
+    websocket = _PusherWebSocket()
+    with caplog.at_level(logging.DEBUG, logger=pusher_finalization.logger.name):
+        await pusher_finalization.process_conversation_task(
+            'uid-1',
+            'conversation-1',
+            'en',
+            websocket,
+            finalization_job_id='job-1',
+            dispatch_generation=1,
+        )
+
+    assert any(
+        b'job_queued' in payload and b'"terminal":false' in payload.replace(b' ', b'') for payload in websocket.sent
+    )
+    records = [r for r in caplog.records if 'pusher finalization failed' in r.getMessage()]
+    assert records, 'expected a pusher finalization failure record'
+    assert all(r.levelno == logging.WARNING for r in records)
+    assert all('terminal=False' in r.getMessage() for r in records)
+
+
+@pytest.mark.anyio
+async def test_byok_pusher_exhaustion_dead_letters_without_a_requeue(monkeypatch, inline_run_blocking, caplog):
+    """BYOK jobs reach the hub via the pusher and are refused the requeue:
+    first exhaustion dead-letters immediately, exactly as today."""
+    monkeypatch.setattr(jobs_db, 'claim_finalization_job', _claim(attempt_count=0))
+    monkeypatch.setattr(
+        pusher_finalization,
+        'get_listen_finalization_tasks_max_attempts',
+        MagicMock(return_value=1),
+    )
+    grant = MagicMock(return_value='conflict')
+    monkeypatch.setattr(jobs_db, 'grant_finalization_budget_requeue', grant)
+    monkeypatch.setattr(jobs_db, 'mark_finalization_dead_letter', MagicMock(return_value=True))
+    monkeypatch.setattr(jobs_db, 'get_finalization_job', MagicMock(return_value={'budget_requeue_count': 0}))
+    monkeypatch.setattr(
+        finalization_service,
+        'record_capture_finalization_terminal',
+        MagicMock(),
+    )
+    monkeypatch.setattr(
+        finalization_service,
+        'record_conversation_finalization_client_terminal',
+        MagicMock(),
+    )
+    monkeypatch.setattr(
+        pusher_finalization,
+        'finalize_persisted_conversation',
+        AsyncMock(side_effect=ConversationFinalizationError('processing_failed')),
+    )
+
+    websocket = _PusherWebSocket()
+    with caplog.at_level(logging.DEBUG, logger=pusher_finalization.logger.name):
+        await pusher_finalization.process_conversation_task(
+            'uid-1',
+            'conversation-1',
+            'en',
+            websocket,
+            byok_keys={'openai': 'sk-user'},
+            finalization_job_id='job-1',
+            dispatch_generation=1,
+        )
+
+    grant.assert_called_once_with('job-1', 1, 7, 'processing_failed')
+    records = [r for r in caplog.records if 'pusher finalization failed' in r.getMessage()]
+    assert records and all('terminal=True' in r.getMessage() for r in records)
+    assert any(b'"terminal":true' in payload.replace(b' ', b'') for payload in websocket.sent)
+
+
+@pytest.mark.anyio
+async def test_terminal_byok_failure_keeps_the_warning_downclass(monkeypatch, inline_run_blocking, caplog):
+    """The BYOK-aware severity downclass survives the requeue change: even at
+    terminal=True, a BYOK provider failure stays WARNING, never ERROR."""
+    monkeypatch.setattr(jobs_db, 'claim_finalization_job', _claim(attempt_count=1))
+    monkeypatch.setattr(
+        pusher_finalization,
+        'get_listen_finalization_tasks_max_attempts',
+        MagicMock(return_value=1),
+    )
+    monkeypatch.setattr(pusher_finalization, 'final_attempt_failed', MagicMock(return_value='dead_letter'))
+    error = ConversationFinalizationError('processing_failed')
+    error.__cause__ = HTTPException(503, detail={'code': 'byok_rate_limit'})
+    monkeypatch.setattr(
+        pusher_finalization,
+        'finalize_persisted_conversation',
+        AsyncMock(side_effect=error),
+    )
+
+    websocket = _PusherWebSocket()
+    with caplog.at_level(logging.DEBUG, logger=pusher_finalization.logger.name):
+        await pusher_finalization.process_conversation_task(
+            'uid-1',
+            'conversation-1',
+            'en',
+            websocket,
+            finalization_job_id='job-1',
+            dispatch_generation=1,
+        )
+
+    records = [r for r in caplog.records if 'pusher finalization failed' in r.getMessage()]
+    assert records, 'expected a pusher finalization failure record'
+    assert all(r.levelno == logging.WARNING for r in records)
     assert all('terminal=True' in r.getMessage() for r in records)
