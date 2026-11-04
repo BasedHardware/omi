@@ -15015,4 +15015,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Говорителите и окончателната транскрипция ще се появят тук при качването.';
+
+  @override
+  String get episodeFinishingUp => 'Завършване…';
 }

@@ -535,6 +535,7 @@ overlay:
           ENRICHMENT_ROUTE: {value: enrichment_queue, category: rollout}
           ENRICHMENT_TASKS_QUEUE: {value: enrichment, category: reliability}
           ENRICHMENT_MAX_AGE_HOURS: {value: "72", category: ops_kill}
+          ENRICHMENT_FRESH_TASKS_QUEUE: {value: enrichment-fresh, category: reliability}
           ENRICHMENT_TASKS_HANDLER_URL: {value: 'https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run', category: reliability}
           ENRICHMENT_TASKS_OIDC_AUDIENCE: {value: 'https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run', category: service_auth}
 
@@ -894,6 +895,7 @@ overlay:
           ENRICHMENT_ROUTE: {value: enrichment_queue, category: rollout}
           ENRICHMENT_TASKS_QUEUE: {value: enrichment, category: reliability}
           ENRICHMENT_MAX_AGE_HOURS: {value: "72", category: ops_kill}
+          ENRICHMENT_FRESH_TASKS_QUEUE: {value: enrichment-fresh, category: reliability}
           ENRICHMENT_TASKS_HANDLER_URL: {value: 'https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run', category: reliability}
           ENRICHMENT_TASKS_OIDC_AUDIENCE: {value: 'https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run', category: service_auth}
           # Plan C8: provider-STT wakes (BYOK and non-Parakeet units) on the provider-stt queue, served by
@@ -1290,6 +1292,7 @@ overlay:
           ENRICHMENT_ROUTE: {value: enrichment_queue, category: rollout}
           ENRICHMENT_TASKS_QUEUE: {value: enrichment, category: reliability}
           ENRICHMENT_MAX_AGE_HOURS: {value: "72", category: ops_kill}
+          ENRICHMENT_FRESH_TASKS_QUEUE: {value: enrichment-fresh, category: reliability}
           ENRICHMENT_TASKS_HANDLER_URL: {value: 'https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run', category: reliability}
           ENRICHMENT_TASKS_OIDC_AUDIENCE: {value: 'https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run', category: service_auth}
 
@@ -1647,6 +1650,7 @@ overlay:
           ENRICHMENT_ROUTE: {value: enrichment_queue, category: rollout}
           ENRICHMENT_TASKS_QUEUE: {value: enrichment, category: reliability}
           ENRICHMENT_MAX_AGE_HOURS: {value: "72", category: ops_kill}
+          ENRICHMENT_FRESH_TASKS_QUEUE: {value: enrichment-fresh, category: reliability}
           ENRICHMENT_TASKS_HANDLER_URL: {value: 'https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run', category: reliability}
           ENRICHMENT_TASKS_OIDC_AUDIENCE: {value: 'https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run', category: service_auth}
           # Plan C8: provider-STT wakes (BYOK and non-Parakeet units) on the provider-stt queue, served by

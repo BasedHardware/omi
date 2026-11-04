@@ -3231,6 +3231,9 @@ environments:
             ENRICHMENT_MAX_AGE_HOURS:
               value: '72'
               category: ops_kill
+            ENRICHMENT_FRESH_TASKS_QUEUE:
+              value: enrichment-fresh
+              category: reliability
             ENRICHMENT_TASKS_HANDLER_URL:
               value: https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run
               category: reliability
@@ -3645,6 +3648,9 @@ environments:
             ENRICHMENT_MAX_AGE_HOURS:
               value: '72'
               category: ops_kill
+            ENRICHMENT_FRESH_TASKS_QUEUE:
+              value: enrichment-fresh
+              category: reliability
             ENRICHMENT_TASKS_HANDLER_URL:
               value: https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run
               category: reliability
@@ -4053,6 +4059,9 @@ environments:
             ENRICHMENT_MAX_AGE_HOURS:
               value: '72'
               category: ops_kill
+            ENRICHMENT_FRESH_TASKS_QUEUE:
+              value: enrichment-fresh
+              category: reliability
             ENRICHMENT_TASKS_HANDLER_URL:
               value: https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run
               category: reliability
@@ -4392,6 +4401,9 @@ environments:
             ENRICHMENT_MAX_AGE_HOURS:
               value: '72'
               category: ops_kill
+            ENRICHMENT_FRESH_TASKS_QUEUE:
+              value: enrichment-fresh
+              category: reliability
             ENRICHMENT_TASKS_HANDLER_URL:
               value: https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run
               category: reliability
