@@ -210,6 +210,8 @@ class Gateway:
                 QUEUE_AGE.labels(self.adapter.channel).observe(
                     max(0, (datetime.now(timezone.utc) - received_dt).total_seconds())
                 )
+            else:
+                logger.debug("Failed to coerce received_at for QUEUE_AGE metric: %s", payload.get('received_at'))
             async with asyncio.timeout(TURN_TIMEOUT_SECONDS):
                 return await self._process_claimed(path, payload)
         except BaseException as error:

@@ -21,7 +21,7 @@ def inbox_message(payload):
     payload = dict(payload)
     clock = coerce_utc_datetime(payload.get('received_at'))
     if clock is None:
-        raise ValueError('received_at must be timezone aware')
+        raise ValueError('received_at must be a valid timestamp')
     payload['received_at'] = clock
     payload['media'] = tuple(
         a if isinstance(a, Artifact) else Artifact(**a) for a in (payload.get('media') or ())
