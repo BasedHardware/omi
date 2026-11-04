@@ -1417,6 +1417,20 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
+      "expression": "max(omi_finalization_byok_new_oldest_age_seconds and ignoring(state, lane) (time() - omi_finalization_byok_observed_at_seconds < 1200))",
+      "file": "alerts/resilience.json",
+      "issues": [],
+      "metrics": [
+        "omi_finalization_byok_new_oldest_age_seconds",
+        "omi_finalization_byok_observed_at_seconds"
+      ],
+      "owner_title": "New BYOK blocked state exceeds three days",
+      "owner_uid": "omi-finalization-byok-dwell-page",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
       "expression": "max(omi_queue_oldest_ready_age_seconds) > 21600 or absent(omi_queue_oldest_ready_age_seconds) or max(omi_queue_oldest_ready_sample_unknown) > 0",
       "file": "alerts/resilience.json",
       "issues": [],
@@ -1534,6 +1548,168 @@
       ],
       "owner_title": "Reason enums - unknown reason ratio elevated",
       "owner_uid": "omi-reason-unknown-ratio",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max(omi_batch_record_pending_new_oldest_age_seconds and ignoring(state, lane) (time() - omi_batch_record_pending_observed_at_seconds < 900))",
+      "file": "alerts/resilience.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_record_pending_new_oldest_age_seconds",
+        "omi_batch_record_pending_observed_at_seconds"
+      ],
+      "owner_title": "Record admission exceeds two hours",
+      "owner_uid": "omi-record-pending-dwell",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "(time() - max(omi_batch_record_pending_observed_at_seconds)) or vector(1e9)",
+      "file": "alerts/resilience.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_record_pending_observed_at_seconds"
+      ],
+      "owner_title": "Record admission exceeds two hours observer stale",
+      "owner_uid": "omi-record-pending-dwell-stale",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max(omi_batch_record_pending_scan_truncated and ignoring(state, lane) (time() - omi_batch_record_pending_observed_at_seconds < 900)) or vector(1)",
+      "file": "alerts/resilience.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_record_pending_observed_at_seconds",
+        "omi_batch_record_pending_scan_truncated"
+      ],
+      "owner_title": "Record admission exceeds two hours scan blind",
+      "owner_uid": "omi-record-pending-dwell-blind",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max(omi_batch_record_pending_count)",
+      "file": "alerts/resilience.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_record_pending_count"
+      ],
+      "owner_title": "Record admission stock exceeds 5000",
+      "owner_uid": "omi-record-pending-stock",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max(omi_record_seal_nojob_count)",
+      "file": "alerts/resilience.json",
+      "issues": [],
+      "metrics": [
+        "omi_record_seal_nojob_count"
+      ],
+      "owner_title": "Completed batch capture has no job",
+      "owner_uid": "omi-record-nojob-stock",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "(max(omi_record_seal_nojob_scan_truncated) or vector(1)) + (((time() - max(omi_record_seal_nojob_observed_at_seconds)) >= bool 900) or vector(1))",
+      "file": "alerts/resilience.json",
+      "issues": [],
+      "metrics": [
+        "omi_record_seal_nojob_observed_at_seconds",
+        "omi_record_seal_nojob_scan_truncated"
+      ],
+      "owner_title": "No-job observation stale or blind",
+      "owner_uid": "omi-record-nojob-blind",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max(omi_enrichment_obligation_new_oldest_age_seconds{lane=\"fresh\"} and ignoring(state, lane) (time() - omi_enrichment_obligation_observed_at_seconds < 1200))",
+      "file": "alerts/resilience.json",
+      "issues": [],
+      "metrics": [
+        "omi_enrichment_obligation_new_oldest_age_seconds",
+        "omi_enrichment_obligation_observed_at_seconds"
+      ],
+      "owner_title": "Fresh enrichment exceeds one hour",
+      "owner_uid": "omi-enrichment-fresh-dwell",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "(time() - max(omi_enrichment_obligation_observed_at_seconds)) or vector(1e9)",
+      "file": "alerts/resilience.json",
+      "issues": [],
+      "metrics": [
+        "omi_enrichment_obligation_observed_at_seconds"
+      ],
+      "owner_title": "Fresh enrichment exceeds one hour observer stale",
+      "owner_uid": "omi-enrichment-fresh-dwell-stale",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max(omi_enrichment_obligation_scan_truncated and ignoring(state, lane) (time() - omi_enrichment_obligation_observed_at_seconds < 1200)) or vector(1)",
+      "file": "alerts/resilience.json",
+      "issues": [],
+      "metrics": [
+        "omi_enrichment_obligation_observed_at_seconds",
+        "omi_enrichment_obligation_scan_truncated"
+      ],
+      "owner_title": "Fresh enrichment exceeds one hour scan blind",
+      "owner_uid": "omi-enrichment-fresh-dwell-blind",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max(omi_enrichment_obligation_count{lane=\"backfill\"})",
+      "file": "alerts/resilience.json",
+      "issues": [],
+      "metrics": [
+        "omi_enrichment_obligation_count"
+      ],
+      "owner_title": "Enrichment backfill stock exceeds 20000",
+      "owner_uid": "omi-enrichment-backlog-depth",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "(time() - max(omi_finalization_byok_observed_at_seconds)) or vector(1e9)",
+      "file": "alerts/resilience.json",
+      "issues": [],
+      "metrics": [
+        "omi_finalization_byok_observed_at_seconds"
+      ],
+      "owner_title": "New BYOK blocked state exceeds three days observer stale",
+      "owner_uid": "omi-finalization-byok-dwell-page-stale",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max(omi_finalization_byok_scan_truncated and ignoring(state, lane) (time() - omi_finalization_byok_observed_at_seconds < 1200)) or vector(1)",
+      "file": "alerts/resilience.json",
+      "issues": [],
+      "metrics": [
+        "omi_finalization_byok_observed_at_seconds",
+        "omi_finalization_byok_scan_truncated"
+      ],
+      "owner_title": "New BYOK blocked state exceeds three days scan blind",
+      "owner_uid": "omi-finalization-byok-dwell-page-blind",
       "panel": null,
       "pointer": "/data/0/model/expr",
       "scope": "normalized-omi-consumer-source-review"
@@ -1956,6 +2132,25 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
+      "expression": "sum(increase(omi_home_rows_user_day_sum_total[$__range])) / sum(increase(omi_home_rows_user_day_count_total[$__range])) and sum(increase(omi_home_rows_user_day_count_total[$__range])) > 0",
+      "file": "dashboards/general/omi-core-features.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_home_rows_user_day_count_total",
+        "omi_home_rows_user_day_sum_total"
+      ],
+      "owner_title": "Omi Core Features",
+      "owner_uid": "omi-core-features",
+      "panel": {
+        "id": 94,
+        "title": "Home rows / user / day"
+      },
+      "pointer": "/panels/30/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
       "expression": "sum by (journey,outcome) (rate(omi_journey_terminal_total[5m]))",
       "file": "dashboards/general/omi-core-features.json",
       "issues": [],
@@ -1968,7 +2163,7 @@
         "id": 6,
         "title": "Terminal outcomes by journey"
       },
-      "pointer": "/panels/29/panels/0/targets/0/expr",
+      "pointer": "/panels/31/panels/0/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -1984,7 +2179,7 @@
         "id": 7,
         "title": "Accepted vs settled"
       },
-      "pointer": "/panels/29/panels/1/targets/0/expr",
+      "pointer": "/panels/31/panels/1/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -2000,7 +2195,7 @@
         "id": 7,
         "title": "Accepted vs settled"
       },
-      "pointer": "/panels/29/panels/1/targets/1/expr",
+      "pointer": "/panels/31/panels/1/targets/1/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -2016,7 +2211,7 @@
         "id": 8,
         "title": "Stale terminal events by journey"
       },
-      "pointer": "/panels/29/panels/2/targets/0/expr",
+      "pointer": "/panels/31/panels/2/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -2032,7 +2227,7 @@
         "id": 9,
         "title": "Journey latency p95"
       },
-      "pointer": "/panels/29/panels/3/targets/0/expr",
+      "pointer": "/panels/31/panels/3/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -2048,7 +2243,7 @@
         "id": 33,
         "title": "Retries, dead letters, reconciliations"
       },
-      "pointer": "/panels/30/panels/2/targets/2/expr",
+      "pointer": "/panels/32/panels/2/targets/2/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -2066,7 +2261,7 @@
         "id": 90,
         "title": "Capture failures by reason"
       },
-      "pointer": "/panels/30/panels/4/targets/0/expr",
+      "pointer": "/panels/32/panels/4/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -2084,7 +2279,7 @@
         "id": 62,
         "title": "Pendant sessions accepted"
       },
-      "pointer": "/panels/31/panels/0/targets/0/expr",
+      "pointer": "/panels/33/panels/0/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -2100,7 +2295,7 @@
         "id": 64,
         "title": "Live sessions by platform \u2014 pendant vs phone"
       },
-      "pointer": "/panels/31/panels/1/targets/0/expr",
+      "pointer": "/panels/33/panels/1/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -2116,7 +2311,7 @@
         "id": 64,
         "title": "Live sessions by platform \u2014 pendant vs phone"
       },
-      "pointer": "/panels/31/panels/1/targets/1/expr",
+      "pointer": "/panels/33/panels/1/targets/1/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -2132,7 +2327,7 @@
         "id": 46,
         "title": "Conversation length p10 / p50 / p90 by source"
       },
-      "pointer": "/panels/32/panels/0/targets/0/expr",
+      "pointer": "/panels/34/panels/0/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -2148,7 +2343,7 @@
         "id": 46,
         "title": "Conversation length p10 / p50 / p90 by source"
       },
-      "pointer": "/panels/32/panels/0/targets/1/expr",
+      "pointer": "/panels/34/panels/0/targets/1/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -2164,7 +2359,7 @@
         "id": 46,
         "title": "Conversation length p10 / p50 / p90 by source"
       },
-      "pointer": "/panels/32/panels/0/targets/2/expr",
+      "pointer": "/panels/34/panels/0/targets/2/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -2181,7 +2376,7 @@
         "id": 47,
         "title": "Short conversations (< 2 min) by source"
       },
-      "pointer": "/panels/32/panels/1/targets/0/expr",
+      "pointer": "/panels/34/panels/1/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -2199,7 +2394,7 @@
         "id": 49,
         "title": "Conversations per day (completed, by source)"
       },
-      "pointer": "/panels/32/panels/3/targets/0/expr",
+      "pointer": "/panels/34/panels/3/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -2215,7 +2410,7 @@
         "id": 77,
         "title": "Rolling 1h discard share by service / trigger"
       },
-      "pointer": "/panels/32/panels/4/targets/0/expr",
+      "pointer": "/panels/34/panels/4/targets/0/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -2231,7 +2426,7 @@
         "id": 68,
         "title": "Resumed cohort age"
       },
-      "pointer": "/panels/33/panels/5/targets/0/expr",
+      "pointer": "/panels/35/panels/5/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -2247,7 +2442,7 @@
         "id": 69,
         "title": "Cohort age now"
       },
-      "pointer": "/panels/33/panels/6/targets/0/expr",
+      "pointer": "/panels/35/panels/6/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -2265,7 +2460,7 @@
         "id": 37,
         "title": "PTT attempts"
       },
-      "pointer": "/panels/35/panels/0/targets/0/expr",
+      "pointer": "/panels/37/panels/0/targets/0/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -2283,7 +2478,7 @@
         "id": 38,
         "title": "PTT duration p95 (success)"
       },
-      "pointer": "/panels/35/panels/1/targets/0/expr",
+      "pointer": "/panels/37/panels/1/targets/0/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -2301,7 +2496,7 @@
         "id": 39,
         "title": "PTT issues"
       },
-      "pointer": "/panels/35/panels/2/targets/0/expr",
+      "pointer": "/panels/37/panels/2/targets/0/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -2317,7 +2512,7 @@
         "id": 40,
         "title": "PTT terminal outcomes"
       },
-      "pointer": "/panels/35/panels/3/targets/0/expr",
+      "pointer": "/panels/37/panels/3/targets/0/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -2333,7 +2528,7 @@
         "id": 41,
         "title": "PTT issues by class"
       },
-      "pointer": "/panels/35/panels/4/targets/0/expr",
+      "pointer": "/panels/37/panels/4/targets/0/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -2349,7 +2544,7 @@
         "id": 42,
         "title": "PTT attempts by client kind"
       },
-      "pointer": "/panels/35/panels/5/targets/0/expr",
+      "pointer": "/panels/37/panels/5/targets/0/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -2367,7 +2562,7 @@
         "id": 51,
         "title": "Live transcription transport success"
       },
-      "pointer": "/panels/36/panels/0/targets/0/expr",
+      "pointer": "/panels/38/panels/0/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -2385,7 +2580,7 @@
         "id": 52,
         "title": "Conversation finalization settle success"
       },
-      "pointer": "/panels/36/panels/1/targets/0/expr",
+      "pointer": "/panels/38/panels/1/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -2403,7 +2598,7 @@
         "id": 53,
         "title": "Mobile chat transport success"
       },
-      "pointer": "/panels/36/panels/2/targets/0/expr",
+      "pointer": "/panels/38/panels/2/targets/0/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -2421,7 +2616,7 @@
         "id": 54,
         "title": "Desktop chat transport success"
       },
-      "pointer": "/panels/36/panels/3/targets/0/expr",
+      "pointer": "/panels/38/panels/3/targets/0/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -2439,7 +2634,7 @@
         "id": 55,
         "title": "Desktop proactivity success (success + failure)"
       },
-      "pointer": "/panels/36/panels/4/targets/0/expr",
+      "pointer": "/panels/38/panels/4/targets/0/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -2457,7 +2652,7 @@
         "id": 56,
         "title": "Desktop proactivity degraded share"
       },
-      "pointer": "/panels/36/panels/5/targets/0/expr",
+      "pointer": "/panels/38/panels/5/targets/0/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -2475,7 +2670,7 @@
         "id": 57,
         "title": "Conversation finalization accepted"
       },
-      "pointer": "/panels/36/panels/6/targets/0/expr",
+      "pointer": "/panels/38/panels/6/targets/0/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -2493,7 +2688,7 @@
         "id": 58,
         "title": "Client journeys reporting (of 8)"
       },
-      "pointer": "/panels/36/panels/7/targets/0/expr",
+      "pointer": "/panels/38/panels/7/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -2511,7 +2706,7 @@
         "id": 59,
         "title": "Capture unknown-kind share"
       },
-      "pointer": "/panels/36/panels/8/targets/0/expr",
+      "pointer": "/panels/38/panels/8/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -2527,7 +2722,7 @@
         "id": 60,
         "title": "Memory retrieval \u2014 tool-gated volume"
       },
-      "pointer": "/panels/36/panels/9/targets/0/expr",
+      "pointer": "/panels/38/panels/9/targets/0/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -2543,7 +2738,7 @@
         "id": 79,
         "title": "Client journey issues by reason and outcome"
       },
-      "pointer": "/panels/36/panels/10/targets/0/expr",
+      "pointer": "/panels/38/panels/10/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -2559,7 +2754,7 @@
         "id": 71,
         "title": "Chat search paths and outcomes"
       },
-      "pointer": "/panels/37/panels/0/targets/0/expr",
+      "pointer": "/panels/39/panels/0/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -2575,7 +2770,7 @@
         "id": 16,
         "title": "Lifecycle events over time"
       },
-      "pointer": "/panels/38/panels/1/targets/0/expr",
+      "pointer": "/panels/40/panels/1/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -2591,7 +2786,7 @@
         "id": 17,
         "title": "Cancellations by reason (voluntary vs involuntary)"
       },
-      "pointer": "/panels/38/panels/2/targets/0/expr",
+      "pointer": "/panels/40/panels/2/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -2607,7 +2802,7 @@
         "id": 18,
         "title": "Cancellation requests by plan"
       },
-      "pointer": "/panels/38/panels/3/targets/0/expr",
+      "pointer": "/panels/40/panels/3/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -3421,7 +3616,7 @@
   ],
   "counts": {
     "explicit_bridge": 25,
-    "query_consumers": 225
+    "query_consumers": 239
   },
   "schema_version": 1,
   "source": "repository, not live Grafana export"

@@ -254,7 +254,9 @@ def timeline_store(monkeypatch):
     return store
 
 
-def test_deadline_commits_with_membership_and_close_replay_is_a_true_noop(timeline_store):
+@pytest.mark.parametrize('optimizations', ['true', 'false'])
+def test_deadline_commits_with_membership_and_close_replay_is_a_true_noop(timeline_store, monkeypatch, optimizations):
+    monkeypatch.setenv('EPISODE_ATTACH_OPTIMIZATIONS_ENABLED', optimizations)
     store = timeline_store
     path = ('users', 'owner', 'conversations', 'capture')
     store.rows[path] = capture(finished_at=None)

@@ -22,7 +22,7 @@ exhaustion instead enters the bounded quarantine recovery while enabled.
 
 from utils.observability.stt_cap_dispatch import DispatchPath, DispatchReason, record_decision
 
-from dataclasses import asdict, dataclass, fields
+from dataclasses import dataclass, fields
 import asyncio
 import io
 import logging
@@ -56,6 +56,7 @@ from utils.batch_pipeline.recovery_disposition import (
     inspect_audio,
     result_outcome,
     silence_payload,
+    log_result_held,
 )
 from utils.batch_pipeline.scheduler import owner_key
 from utils.batch_pipeline.provider_stt_admission import PENDING, SttRoute
@@ -108,6 +109,7 @@ FUNDING_RETRY_SECONDS = 60.0
 # Services this stage can actually call: Velma batch and Soniox async (failover capacity only;
 # the route table marks it failover_only). Deepgram is retired.
 _CALLABLE_SERVICES = frozenset(contracts.VENDOR_SERVICES)
+
 
 # --- attempt records -----------------------------------------------------------------------------
 
@@ -371,7 +373,7 @@ class ProviderSttStore:
                 )
                 _record_held_vad(job, measured_held_vad_speech_seconds)
             else:
-                job.update(state='result_ready', result=asdict(WorkResult(segment_id, result_uri or '', outcome)))
+                job.update(state='result_ready', result=WorkResult(segment_id, result_uri or '', outcome).to_dict())
             owner['revision'] = owner.get('revision', 0) + 1
             tx.put('owners', owner_key(job['owner_id']), owner)
             tx.put('jobs', segment_id, job)
@@ -909,8 +911,10 @@ class ProviderSttStage:
         # encrypted object is reconciled by a later delivery without a vendor call.
         silence = response.get('outcome') == 'silence'
         outcome = VendorAttemptOutcome.SILENCE if silence else VendorAttemptOutcome.OK
+        stage = 'persist'
         try:
             uri = self.artifacts.persist_recovery_result(item, response, token)
+            stage = 'settle'
             settled = self.protocol.settle(
                 segment_id,
                 token,
@@ -922,13 +926,15 @@ class ProviderSttStage:
             )
         except BatchPrivacyBlocked:
             raise
-        except Exception:
+        except Exception as error:
+            log_result_held('provider', stage, exception_type=type(error).__name__)
             return UnitOutcome('retry', 'dependency_warming', provider_reason=route.provider_reason)
         if settled:
             vendor_metrics.attempt(plan.service, outcome, 0.0 if silence else duration)
             if not silence:
                 self._record_attempt(plan.service, outcome, latency)
         else:
+            log_result_held('provider', 'settle', reason='refused')
             # The attempt was settled elsewhere (abandoned, then failed over): never overwrite.
             vendor_metrics.late_result(plan.service, 'ignored')
         self._log('settled' if settled else 'superseded', 'none')

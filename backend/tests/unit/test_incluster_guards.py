@@ -432,7 +432,7 @@ def test_proposed_scale_up_can_rollback_actual_rendered_production_hpa():
             '-f',
             str(chart / 'prod_omi_parakeet_values.yaml'),
             '--set',
-            'image.tag=test',
+            'image.tag=test,fleetRetired=false,maintenanceMode=false',
         ],
         text=True,
     )
@@ -909,10 +909,7 @@ def test_floor_schedule_renders_into_script_configmap_only_when_enabled():
         for obj in render_docs('prod')
         if obj['kind'] == 'ConfigMap' and obj['metadata']['name'] == 'prod-omi-incluster-guards-script'
     )
-    # The production override must survive rendering: the hourly writer would
-    # otherwise restore the inherited 8..12 floor after a floor-only HPA apply.
-    # L4 stockout hold (ruling 1ca4cb); exit restores [4] * 12 + [7] * 12.
-    assert json.loads(prod['data']['floors.json']) == [7] * 24
+    assert 'floors.json' not in prod['data']
     default = next(
         obj
         for obj in render_docs('prod', overlay=False)
@@ -920,7 +917,9 @@ def test_floor_schedule_renders_into_script_configmap_only_when_enabled():
     )
     assert 'floors.json' not in default['data']
     with pytest.raises(subprocess.CalledProcessError):
-        render_docs('prod', '--set', 'floorSchedule.hours={1,2}')
+        render_docs(
+            'prod', '--set', 'parakeetSuspended=false,floorSchedule.enabled=true', '--set', 'floorSchedule.hours={1,2}'
+        )
     kinds = {(doc['kind'], doc['metadata']['name']) for doc in render_docs('prod')}
     assert not any(name.endswith('-floor') for _, name in kinds)
 
@@ -973,6 +972,8 @@ def test_helm_state_configmaps_keep_job_owned_fields_out_of_apply(environment, b
         environment,
         '--set',
         f'batch.enabled={str(batch_enabled).lower()}',
+        '--set',
+        f'batch.cloudRunRollbackEnabled={str(batch_enabled).lower()}',
         '--set',
         f'enabled={str(enabled).lower()}',
     )
@@ -1047,7 +1048,7 @@ def test_helm_rbac_and_cpu_placement(environment):
             'apiGroups': ['autoscaling'],
             'resources': ['horizontalpodautoscalers'],
             'resourceNames': [f'{environment}-omi-parakeet'],
-            'verbs': ['get', 'patch'],
+            'verbs': ['get'] if environment == 'prod' else ['get', 'patch'],
         },
         {
             'apiGroups': ['apps'],
@@ -1090,7 +1091,15 @@ def test_helm_rbac_and_cpu_placement(environment):
 
 def test_cloud_run_gate_refuses_unapproved_identity_or_namespace():
     with pytest.raises(subprocess.CalledProcessError):
-        render('prod', '--set', 'batch.enabled=true', '--set', 'batch.gcpServiceAccount=wrong@example.com')
+        render(
+            'prod',
+            '--set',
+            'batch.enabled=true',
+            '--set',
+            'batch.cloudRunRollbackEnabled=true',
+            '--set',
+            'batch.gcpServiceAccount=wrong@example.com',
+        )
     with pytest.raises(subprocess.CalledProcessError):
         render('dev', '--set', 'batch.cloudRunRollbackEnabled=true')
 
@@ -1114,8 +1123,15 @@ def test_prod_overlay_defers_batch_guard_objects_until_deployer_rbac_and_produce
     assert not rendered & BATCH_GUARD_OBJECTS
     assert ('PodMonitor', 'prod-omi-incluster-guards-batch') in rendered  # Predates the batch guard; stays live.
     assert ('CronJob', 'prod-omi-incluster-guards') in rendered
-    # The default toggle stays on: re-enabling in prod needs only this flip.
-    reenabled = {(doc['kind'], doc['metadata']['name']) for doc in render_docs('prod', '--set', 'batch.enabled=true')}
+    # Batch auto-rollback is removed (David, 2026-11-04): batch.enabled alone renders nothing.
+    enabled_only = {
+        (doc['kind'], doc['metadata']['name']) for doc in render_docs('prod', '--set', 'batch.enabled=true')
+    }
+    assert not enabled_only & BATCH_GUARD_OBJECTS
+    reenabled = {
+        (doc['kind'], doc['metadata']['name'])
+        for doc in render_docs('prod', '--set', 'batch.enabled=true', '--set', 'batch.cloudRunRollbackEnabled=true')
+    }
     assert BATCH_GUARD_OBJECTS <= reenabled
     # Default values alone render no batch objects, exactly as before the toggle.
     assert (
@@ -1846,7 +1862,7 @@ def test_identity_change_resets_window(tmp_path, monkeypatch):
 
 
 def test_helm_dedicated_identity_state_only_rbac_and_cpu_placement():
-    docs = render_docs('prod', '--set', 'batch.enabled=true')
+    docs = render_docs('prod', '--set', 'batch.enabled=true', '--set', 'batch.cloudRunRollbackEnabled=true')
     resources = {d['kind']: d for d in docs if d and d['metadata']['name'] == 'prod-omi-incluster-guards-batch'}
     assert resources['ServiceAccount']['metadata']['annotations'] == {
         'iam.gke.io/gcp-service-account': 'omi-batch-rollback-guard@based-hardware.iam.gserviceaccount.com'

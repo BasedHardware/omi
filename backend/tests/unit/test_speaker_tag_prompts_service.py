@@ -50,6 +50,7 @@ class World:
         monkeypatch.setattr(service.users_db, 'create_person', lambda uid, data: self.created.append(data) or data)
         monkeypatch.setattr(service.users_db, 'get_people', lambda uid: list(self.people.values()))
         monkeypatch.setattr(service.conversations_db, 'get_conversations', lambda *a, **k: [])
+        monkeypatch.setattr(service.conversations_db, 'get_conversation', lambda *a, **k: {})
         monkeypatch.setattr(
             service, 'emit_product_event', lambda **kwargs: self.events.append((kwargs['event'], kwargs['properties']))
         )

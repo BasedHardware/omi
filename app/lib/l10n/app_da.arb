@@ -4564,5 +4564,6 @@
     "episodeCoversUpTo": "Dækker frem til {time} · fulde noter, når det er slut",
     "liveTranscribedUpTo": "Transskriberet frem til {time}",
     "liveAudioSaved": "{duration} gemt",
-    "liveAudioSavedDetail": "Talere og den endelige transskription dukker op her under upload."
+    "liveAudioSavedDetail": "Talere og den endelige transskription dukker op her under upload.",
+    "episodeFinishingUp": "Afslutter…"
 }

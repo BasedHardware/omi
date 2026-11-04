@@ -14751,4 +14751,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'アップロードが進むと、話者と最終的な文字起こしがここに表示されます。';
+
+  @override
+  String get episodeFinishingUp => '仕上げ中…';
 }

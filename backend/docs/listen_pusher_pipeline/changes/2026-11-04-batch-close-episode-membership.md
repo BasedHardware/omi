@@ -12,7 +12,15 @@ status write and no paid work. Privacy, locks, deletion, discard and donor guard
 remain authoritative. Failed attachment emits shared fallback telemetry and
 leaves ordinary finalization as its existing repair path; source rows remain
 available while waiting. Existing episode admission and recorded-time kill
-switches control this metadata attachment; no new flag is added.
+switches control this metadata attachment. `EPISODE_BATCH_CLOSE_ATTACH_ENABLED`
+additionally restores attach-after-transcription when disabled.
+
+After merging episodes batch 1, pending deadlines share its outer fenced
+transaction and candidate reuse. A close replay requires the current canonical
+partition proof and committed archive bounds; it does not use processing clocks
+or claim completed transcript recovery in the sync memo. Close replay idempotency
+also holds when `EPISODE_ATTACH_OPTIMIZATIONS_ENABLED` is off. Sync attachment,
+composer settling and foreground-read behavior retain their batch-1 controls.
 
 Backend deployment is owned by the rollout lead. Home settling/title reads are
 PR #24497; the mobile joined paint, neutral placeholders and unattached processing

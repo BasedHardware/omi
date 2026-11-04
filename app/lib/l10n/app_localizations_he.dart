@@ -14854,4 +14854,7 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'הדוברים והתמליל הסופי יופיעו כאן במהלך ההעלאה.';
+
+  @override
+  String get episodeFinishingUp => 'מסיימים…';
 }

@@ -794,6 +794,7 @@ async def test_auto_partial_freezes_audio_proof_without_changing_custody(source,
     row = source[1].rows[ROW]
     row.update(
         language='multi',
+        client_platform='ios',
         external_data={'server_batch_only': True},
         has_content=True,
         server_batch_audio_start=100,
@@ -819,6 +820,17 @@ async def test_auto_partial_freezes_audio_proof_without_changing_custody(source,
         if path[0] == 'batch_pipeline_dev_jobs' and not job.get('partial_coordinator')
     ]
     assert len(jobs) == 1 and classify.call_count == 1
+    intakes = [
+        intake
+        for path, intake in source[1].rows.items()
+        if path[0] == 'batch_pipeline_dev_intakes' and intake.get('record_partial_parent')
+    ]
+    assert len(intakes) == 1
+    assert intakes[0]['language_receipts'][jobs[0]['segment_id']] == {
+        'version': 1,
+        'language': language,
+        'evidence': 'audio_lid' if language == 'en' else 'unavailable',
+    }
     work = live.WorkItem(**{key: jobs[0][key] for key in live.WorkItem.__dataclass_fields__ if key in jobs[0]})
     context = read_context(audio.artifacts.fetch_audio(work))
     assert stt_language(context, duration_seconds=1) == language
