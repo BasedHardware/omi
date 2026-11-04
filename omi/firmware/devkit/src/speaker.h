@@ -15,10 +15,13 @@ int speaker_init();
  * @brief Endpoint function for streaming audio
  *
  * Call this function in the following way (Via ble)
- * 1. Send a 2 byte packet containing the audio data size
- * 2. Send to the ble notify id 400 byte packets (with notify), with each 2 bytes being the audio data
- * 3. Repeat step 2 until the audio data is sent. Then the speaker will automatically play the sound
- * when the audio data sent is equal to the audio data size sent in step 1
+ * 1. Send a 4 byte little-endian packet containing the audio data size in bytes
+ * 2. Send the PCM as writes of at most 400 bytes (16-bit signed mono, 8 kHz).
+ *    The device notifies after every write to pump the next one.
+ * 3. Each packet is queued and played as it arrives; playback starts with the
+ *    first packet and drains after the byte count written equals the size sent.
+ * 4. To stream a second clip while idle, go back to step 1. A length-header
+ *    sized packet (4 bytes) arriving mid-stream is treated as audio.
  *
  * @return The amount of data successfully sent in bytes.
  */
@@ -32,6 +35,15 @@ uint16_t speak(uint16_t len, const void *buf);
  * @return 0 if successful, negative errno code if error
  */
 int play_boot_sound();
+
+/**
+ * @brief Play the "speak now" cue (two ascending blips)
+ *
+ * Called on double-tap so the user learns audibly that a voice-agent turn has
+ * been opened for the paired app. No-op when no speaker is initialized; skipped
+ * while a BLE audio stream owns the queue.
+ */
+void play_talk_cue(void);
 
 /**
  * @brief Initialize the Haptic Pin

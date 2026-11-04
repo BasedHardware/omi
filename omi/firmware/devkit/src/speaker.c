@@ -14,9 +14,19 @@
 
 LOG_MODULE_REGISTER(speaker, CONFIG_LOG_DEFAULT_LEVEL);
 
-#define MAX_BLOCK_SIZE 10000 // 24000 * 2
+// Block geometry mirrors the original burst implementation: one 10 KB stereo
+// block = 312 ms of 8 kHz audio. The queue is sized so a whole clip is
+// enqueued BEFORE START: i2s_nrfx is only race-safe for thread-side writes in
+// the READY state - once the ISR owns the buffer chain, a thread supplying
+// next-buffers alongside an END event strands the peripheral in
+// I2S_STATE_ERROR (observed live: every write after the first post-START
+// write returned -EIO until reboot). Seven blocks = ~2.2 s per continuous
+// stream; longer content chains back-to-back streams (each re-arms after the
+// previous DRAIN, which the write retry below waits out).
+#define MAX_BLOCK_SIZE 10000
+#define I2S_TX_BLOCK_SIZE 10000
+#define I2S_TX_BLOCK_COUNT 7
 
-#define BLOCK_COUNT 2
 #define SAMPLE_FREQUENCY 8000
 #define NUMBER_OF_CHANNELS 2
 #define PACKET_SIZE 400
@@ -26,17 +36,24 @@ LOG_MODULE_REGISTER(speaker, CONFIG_LOG_DEFAULT_LEVEL);
 #define PI 3.14159265358979323846
 
 #define MAX_HAPTIC_DURATION 5000
-K_MEM_SLAB_DEFINE_STATIC(mem_slab, MAX_BLOCK_SIZE, BLOCK_COUNT, 2);
+// A 4-byte write re-arms the length header only while the stream is idle, or
+// after the host has been quiet for this long: mid-stream, four bytes can be
+// legitimate tail audio.
+#define STREAM_IDLE_REARM_MS 2000
+
+K_MEM_SLAB_DEFINE_STATIC(mem_slab, I2S_TX_BLOCK_SIZE, I2S_TX_BLOCK_COUNT, 2);
 
 struct device *audio_speaker;
 
-static void *rx_buffer;
-static void *buzz_buffer;
-static int16_t *ptr2;
-static int16_t *clear_ptr;
-
-static uint16_t current_length;
-static uint16_t offset;
+// Accumulation buffer: mono packets are duplicated into stereo here, and the
+// buffer is handed to the I2S driver one full 10 KB block at a time.
+static uint8_t tx_block[I2S_TX_BLOCK_SIZE];
+static size_t tx_used;
+static uint32_t stream_remaining;
+static bool stream_active;
+static bool stream_started;
+static bool speaker_ready;
+static int64_t last_packet_ms;
 
 struct gpio_dt_spec haptic_gpio_pin = {.port = DEVICE_DT_GET(DT_NODELABEL(gpio1)),
                                        .pin = 11,
@@ -146,88 +163,142 @@ int speaker_init()
         // .format = I2S_FMT_DATA_FORMAT_I2S,
         .options =
             I2S_OPT_FRAME_CLK_MASTER | I2S_OPT_BIT_CLK_MASTER | I2S_OPT_BIT_CLK_GATED, // how to configure the mclock
-        .frame_clk_freq = SAMPLE_FREQUENCY,                                            /* Sampling rate */
-        .mem_slab = &mem_slab,        /* Memory slab to store rx/tx data */
-        .block_size = MAX_BLOCK_SIZE, /* size of ONE memory block in bytes */
-        .timeout = -1, /* Number of milliseconds to wait in case Tx queue is full or RX queue is empty, or 0, or
-                          SYS_FOREVER_MS */
+        .frame_clk_freq = SAMPLE_FREQUENCY,      /* Sampling rate */
+        .mem_slab = &mem_slab,                   /* Memory slab to store rx/tx data */
+        .block_size = I2S_TX_BLOCK_SIZE,         /* same geometry the burst path proved */
+        .timeout = 1000,                         /* a full Tx queue stalls the write up to this long;
+                                                    the stalled write delays the BLE response, which
+                                                    paces the host - no fixed sleep needed */
     };
     int err = i2s_configure(audio_speaker, I2S_DIR_TX, &config);
     if (err) {
         LOG_ERR("Failed to configure Speaker (%d)", err);
         return -1;
     }
-    err = k_mem_slab_alloc(&mem_slab, &rx_buffer, K_MSEC(200));
-    if (err) {
-        LOG_INF("Failed to allocate memory for speaker%d)", err);
-        return -1;
+
+    stream_remaining = 0;
+    stream_active = false;
+    stream_started = false;
+    tx_used = 0;
+    last_packet_ms = 0;
+    speaker_ready = true;
+
+    return 0;
+}
+
+// Enqueue the accumulation buffer as one full pre-START block. Thread-side
+// writes are ONLY race-safe before START: i2s_nrfx_write, when called while
+// RUNNING with the ISR mid-END, calls next_buffers_set out of turn, fails
+// with -EIO, and the missed END strands the peripheral in I2S_STATE_ERROR
+// (observed live: first block plays, every later write dies until reboot).
+// So speak() queues every block in READY and STARTs once, at stream end.
+static int flush_block(void)
+{
+    if (tx_used == 0) {
+        return 0;
     }
-
-    err = k_mem_slab_alloc(&mem_slab, &buzz_buffer, K_MSEC(200));
-    if (err) {
-        LOG_INF("Failed to allocate for chime (%d)", err);
-        return -1;
+    if (tx_used < I2S_TX_BLOCK_SIZE) {
+        memset(&tx_block[tx_used], 0, I2S_TX_BLOCK_SIZE - tx_used);
     }
+    tx_used = 0;
 
-    memset(rx_buffer, 0, MAX_BLOCK_SIZE);
-    memset(buzz_buffer, 0, MAX_BLOCK_SIZE);
+    void *block;
+    int ret = k_mem_slab_alloc(&mem_slab, &block, K_MSEC(1000));
+    if (ret) {
+        LOG_WRN("No free I2S block (%d), dropping", ret);
+        return ret;
+    }
+    memcpy(block, tx_block, I2S_TX_BLOCK_SIZE);
 
+    // A previous stream's DRAIN leaves the driver in STOPPING, where writes
+    // return -EIO; the retry waits it out (<= ~600 ms) so back-to-back
+    // transmissions from compat clients lose nothing.
+    for (int r = 0; r < 12; r++) {
+        ret = i2s_write(audio_speaker, block, I2S_TX_BLOCK_SIZE);
+        if (ret == 0 || ret != -EIO) {
+            break;
+        }
+        k_sleep(K_MSEC(50));
+    }
+    if (ret) {
+        LOG_WRN("Failed to write I2S block: %d", ret);
+        k_mem_slab_free(&mem_slab, block); // write did not take ownership
+        return ret;
+    }
     return 0;
 }
 
 uint16_t speak(uint16_t len, const void *buf) // direct from bt
 {
-    uint16_t amount = 0;
-    amount = len;
-    if (len == 4) // if stage 1
-    {
-        current_length = ((uint32_t *) buf)[0];
-        LOG_INF("About to write %u bytes", current_length);
-        ptr2 = (int16_t *) rx_buffer;
-        clear_ptr = (int16_t *) rx_buffer;
-    } else { // if not stage 1
-        if (current_length > PACKET_SIZE) {
-            LOG_INF("Data length: %u", len);
-            current_length = current_length - PACKET_SIZE;
-            LOG_INF("remaining data: %u", current_length);
-
-            for (int i = 0; i < (int) (len / 2); i++) {
-                *ptr2++ = ((int16_t *) buf)[i];
-                *ptr2++ = ((int16_t *) buf)[i];
-            }
-            offset = offset + len;
-        } else if (current_length < PACKET_SIZE) {
-            LOG_INF("entered the final stretch");
-            LOG_INF("Data length: %u", len);
-            current_length = current_length - len;
-            LOG_INF("remaining data: %u", current_length);
-            // memcpy(rx_buffer+offset, buf, len);
-            for (int i = 0; i < len / 2; i++) {
-                *ptr2++ = ((int16_t *) buf)[i];
-                *ptr2++ = ((int16_t *) buf)[i];
-            }
-            offset = offset + len;
-            LOG_INF("offset: %u", offset);
-            offset = 0;
-            int res = i2s_write(audio_speaker, rx_buffer, MAX_BLOCK_SIZE);
-            if (res < 0) {
-                LOG_PRINTK("Failed to write I2S data: %d\n", res);
-            }
-            i2s_trigger(audio_speaker, I2S_DIR_TX, I2S_TRIGGER_START); // calls are probably non blocking
-            if (res != 0) {
-                LOG_PRINTK("Failed to drain I2S transmission: %d\n", res);
-            }
-            res = i2s_trigger(audio_speaker, I2S_DIR_TX, I2S_TRIGGER_DRAIN);
-            if (res != 0) {
-                LOG_PRINTK("Failed to drain I2S transmission: %d\n", res);
-            }
-            // clear the buffer
-            k_sleep(K_MSEC(4000));
-
-            memset(clear_ptr, 0, MAX_BLOCK_SIZE);
-        }
+    if (len == 0) {
+        return 0;
     }
-    return amount;
+
+    int64_t now = k_uptime_get();
+
+    // A 4-byte write arms a new stream while idle, or after the host has gone
+    // quiet: mid-stream those four bytes are tail audio, not a header. This is
+    // also why the old firmware stalled on a total that was a multiple of
+    // PACKET_SIZE - its '>' and '<' branches left the == case unhandled.
+    if (len == 4 && (!stream_active || now - last_packet_ms > STREAM_IDLE_REARM_MS)) {
+        stream_remaining = ((const uint32_t *) buf)[0];
+        stream_active = stream_remaining > 0;
+        stream_started = false;
+        tx_used = 0;
+        // Self-heal: an overflowed stream can strand i2s_nrfx in
+        // I2S_STATE_ERROR (sticky: every write -EIO until reset). PREPARE is
+        // the driver's ERROR->READY recovery and is rejected harmlessly from
+        // every other state, so a new transmission always clears the trap.
+        (void)i2s_trigger(audio_speaker, I2S_DIR_TX, I2S_TRIGGER_PREPARE);
+        LOG_INF("About to write %u bytes", stream_remaining);
+        return len;
+    }
+
+    if (!stream_active) {
+        LOG_WRN("Speaker data before header, dropped %u bytes", len);
+        return 0;
+    }
+    last_packet_ms = now;
+
+    // Duplicate mono samples into both channels in the accumulation buffer. A
+    // packet that would overflow the current block is split across two flushes.
+    const int16_t *mono = (const int16_t *) buf;
+    size_t samples = len / 2;
+    for (size_t i = 0; i < samples; i++) {
+        if (tx_used + 2 * sizeof(int16_t) > I2S_TX_BLOCK_SIZE) {
+            flush_block();
+        }
+        int16_t *out = (int16_t *) &tx_block[tx_used];
+        out[0] = mono[i];
+        out[1] = mono[i];
+        tx_used += 2 * sizeof(int16_t);
+    }
+
+    stream_remaining = stream_remaining > len ? stream_remaining - len : 0;
+
+    if (stream_remaining == 0) {
+        int ret = flush_block();
+        // All blocks are queued in READY; one START hands the chain to the ISR,
+        // which supplies each block at END and drives STOPPING -> READY after
+        // the DRAIN below. No further thread-side writes happen during play.
+        int start_ret = i2s_trigger(audio_speaker, I2S_DIR_TX, I2S_TRIGGER_START);
+        if (start_ret == 0) {
+            stream_started = true;
+        } else {
+            LOG_WRN("Failed to start I2S stream: %d", start_ret);
+        }
+        if (stream_started) {
+            ret = i2s_trigger(audio_speaker, I2S_DIR_TX, I2S_TRIGGER_DRAIN);
+            if (ret) {
+                LOG_WRN("Failed to drain I2S transmission: %d", ret);
+            }
+        }
+        stream_active = false;
+        stream_started = false;
+        LOG_INF("Speaker stream done");
+    }
+
+    return len;
 }
 
 void generate_gentle_chime(int16_t *buffer, int num_samples)
@@ -251,33 +322,71 @@ void generate_gentle_chime(int16_t *buffer, int num_samples)
 
 int play_boot_sound(void)
 {
-    int ret;
-    int16_t *buffer = (int16_t *) buzz_buffer;
-    const int samples_per_block = MAX_BLOCK_SIZE / (NUM_CHANNELS * sizeof(int16_t));
+    int16_t *buffer = (int16_t *) tx_block;
+    const int chime_frames = MAX_BLOCK_SIZE / (NUM_CHANNELS * sizeof(int16_t));
 
-    generate_gentle_chime(buffer, samples_per_block);
+    generate_gentle_chime(buffer, chime_frames);
     LOG_INF("Writing to speaker");
     k_sleep(K_MSEC(100));
-    ret = i2s_write(audio_speaker, buffer, MAX_BLOCK_SIZE);
+
+    tx_used = MAX_BLOCK_SIZE; // exactly one block
+    flush_block();
+
+    int ret = i2s_trigger(audio_speaker, I2S_DIR_TX, I2S_TRIGGER_START);
     if (ret) {
-        LOG_ERR("Failed to write initial I2S data: %d", ret);
+        LOG_ERR("Chime start failed: %d", ret);
         return ret;
     }
-
-    ret = i2s_trigger(audio_speaker, I2S_DIR_TX, I2S_TRIGGER_START);
-    if (ret) {
-        LOG_ERR("Failed to start I2S transmission: %d", ret);
-        return ret;
-    }
-
     ret = i2s_trigger(audio_speaker, I2S_DIR_TX, I2S_TRIGGER_DRAIN);
-    if (ret != 0) {
+    if (ret) {
         LOG_ERR("Failed to drain I2S transmission: %d", ret);
         return ret;
     }
-    k_sleep(K_MSEC(3000));
+    // DRAIN stops the peripheral once the queue empties (~0.3 s of chime).
+    k_sleep(K_MSEC(500));
 
     return 0;
+}
+
+void play_talk_cue(void)
+{
+    if (!speaker_ready) {
+        return;
+    }
+    if (stream_active) {
+        // A BLE stream owns the queue right now; interleaved cue blocks would
+        // garble the audio mid-sentence. The BLE DOUBLE_TAP notify still fires.
+        LOG_INF("Talk cue skipped: speaker stream in progress");
+        return;
+    }
+
+    // Two quick ascending blips (A5 -> E6, ~83 ms each): "speak now".
+    // Padded into one block - the same write size the burst path proved.
+    int16_t *buffer = (int16_t *) tx_block;
+    const int note_samples = SAMPLE_FREQUENCY / 12;
+    const float freqs[2] = {880.0f, 1318.51f};
+    for (int note = 0; note < 2; note++) {
+        for (int i = 0; i < note_samples; i++) {
+            float t = (float) i / SAMPLE_FREQUENCY;
+            float sample = sinf(2 * PI * freqs[note] * t) * (1.0f - t * 10.0f) * 0.5f;
+            int16_t v = (int16_t) (sample * 32767);
+            int idx = note * note_samples + i;
+            buffer[idx * 2] = v;
+            buffer[idx * 2 + 1] = v;
+        }
+    }
+    tx_used = 2 * note_samples * NUM_CHANNELS * sizeof(int16_t);
+    flush_block(); // queue-only (READY): pads to a full block and enqueues
+
+    int ret = i2s_trigger(audio_speaker, I2S_DIR_TX, I2S_TRIGGER_START);
+    if (ret) {
+        LOG_WRN("Talk cue start failed: %d", ret);
+        return;
+    }
+    ret = i2s_trigger(audio_speaker, I2S_DIR_TX, I2S_TRIGGER_DRAIN);
+    if (ret) {
+        LOG_WRN("Talk cue drain failed: %d", ret);
+    }
 }
 
 int init_haptic_pin()
