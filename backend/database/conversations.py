@@ -68,6 +68,7 @@ from database.sync_assignment import (
 from database.sync_conversation_snapshot import read_redirected, resolve_snapshot
 from database.sync_live_overlap import find_sync_live_overlap_candidates
 from utils.sync.live_overlap import live_overlap_enabled
+from .notes_identity import stage_notes_identity
 from .audio_timeline import group_chunks_by_coverage
 from .capture_groups import CAPTURE_GROUP_FIELD, leave_capture_group, preserve_duplicate_hint, transcript_fingerprint
 from .firestore_index_registry import (
@@ -862,6 +863,18 @@ def _reapply_current_manual_assignments(uid: str, write_data: dict, existing: di
     write_data['data_protection_level'] = level
 
 
+def _stage_notes_identity(transaction, user_ref, write_data, existing):
+    return stage_notes_identity(
+        transaction,
+        user_ref,
+        write_data,
+        existing,
+        decode_segments=_decode_transcript_segments_strict,
+        decode_receipt=decode_manual_speaker_assignments,
+        encode=_prepare_conversation_for_write,
+    )
+
+
 def is_soft_deleted(conversation: Optional[Mapping[str, Any]]) -> bool:
     """Whether a conversation is a soft-deleted tombstone.
 
@@ -1198,6 +1211,7 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
                 write_data.setdefault('structured', {})['overview'] = existing['user_overview']
 
             _reapply_current_manual_assignments(uid, write_data, existing)
+            _stage_notes_identity(transaction, user_ref, write_data, existing)
             filter_processing_write(transaction, user_ref, write_data)
             guard_match_score_size(write_data, existing, getattr(conversation_ref, 'path', None))
 
@@ -1210,6 +1224,7 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
             return
 
         write_data.setdefault('has_photos', False)
+        _stage_notes_identity(transaction, user_ref, write_data, {})
         filter_processing_write(transaction, user_ref, write_data)
 
         summary_receipt = summary_delivery.creation_result(write_data, uid)
@@ -1280,6 +1295,7 @@ def persist_processing_result_with_lifecycle(
         first_completed = False
         notes_refresh_state_write = None
         write_data = copy.deepcopy(conversation_data)
+        evidence_refresh = write_data.pop('_notes_evidence_reprocess', False)
         # Capture-group membership has one writer (database.capture_groups).
         write_data.pop(CAPTURE_GROUP_FIELD, None)
         existing_snapshot = conversation_ref.get(transaction=transaction)
@@ -1322,6 +1338,7 @@ def persist_processing_result_with_lifecycle(
             existing.get('deleted')
             or summary_delivery.repair_fenced(existing)
             or summary_delivery.processing_fenced(existing)
+            or (evidence_refresh and effective_user_title(existing.get('user_title')))
         ):
             return False
         if smart_merge_refresh is not None:
@@ -1428,6 +1445,7 @@ def persist_processing_result_with_lifecycle(
             write_data.setdefault('structured', {})['overview'] = existing['user_overview']
 
         _reapply_current_manual_assignments(uid, write_data, existing)
+        _stage_notes_identity(transaction, user_ref, write_data, existing)
         filter_processing_write(transaction, user_ref, write_data)
         guard_match_score_size(write_data, existing, getattr(conversation_ref, 'path', None))
 
@@ -1485,10 +1503,18 @@ def create_conversation_if_absent_with_lifecycle(uid: str, conversation_data: di
 
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_data['id'])
-
     summary_receipt = summary_delivery.creation_result(conversation_data, uid)
     delivery_outcome = summary_terminal_outcome({}, conversation_data)
-    created, summary_changed = conversation_recorded_time.create_if_absent(uid, conversation_data, firestore_client=db)
+    created, summary_changed = conversation_recorded_time.create_if_absent(
+        uid,
+        conversation_data,
+        firestore_client=db,
+        stage_identity=(
+            (lambda transaction, data: _stage_notes_identity(transaction, user_ref, data, {}))
+            if '_notes_identity' in conversation_data
+            else None
+        ),
+    )
     if not created:
         _sync_conversation_search_index(uid, conversation_data['id'])
         return False

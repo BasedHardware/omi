@@ -696,6 +696,9 @@ def _get_structured(
         raise conversation_processing_http_exception(e) from e
 
 
+get_structured = _get_structured
+
+
 def _get_conversation_obj(
     uid: str,
     structured: Structured,
@@ -2895,6 +2898,9 @@ def process_conversation(
         # Rollback keeps generating normally; clear server-only checkpoints in
         # this existing write so they cannot describe replacement outputs.
         payload.update({NOTES_HASH: None, NOTES_OUTPUT_HASH: None, L1_HASH: None})
+    notes_identity = getattr(structured, '_notes_identity', None)
+    if notes_identity is not None and not conversation.discarded:
+        payload['_notes_identity'] = notes_identity
     if relevance is not None:
         # Server-side audit record, deliberately outside the client wire model.
         payload[RELEVANCE_DECISION_FIELD] = relevance.as_record()

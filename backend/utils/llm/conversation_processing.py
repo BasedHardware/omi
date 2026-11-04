@@ -65,6 +65,7 @@ from utils.llm.meeting_notes_validation import (
     sanitize_structured_speaker_placeholders,
     strip_speaker_placeholders,
     validate_rich_meeting_notes,
+    attach_notes_identity_context,
     validate_structured_source_segment_ids,
 )
 from config.refactor_modes import serving_for
@@ -622,6 +623,18 @@ def _finish_shaped_notes(
         event.duration = min(event.duration, 180)
         event.created = False
     structured.overview = render_sections_markdown(structured.sections) or structured.overview
+    # Provisional meeting identities ride the parsed structure to the save seam
+    # as server-only context (outside the client/model schema): roster entries,
+    # screen-frame count and corroborated names, for the notes-identity stager.
+    roster = kwargs.get('roster')
+    meeting_context = kwargs.get('meeting_context')
+    has_identity_evidence = bool(
+        frames
+        or 'SCREEN MOMENTS' in (meeting_context or '')
+        or (roster and any(e.kind != 'owner' for e in roster.entries))
+    )
+    if rich_mode and has_identity_evidence:
+        attach_notes_identity_context(structured, roster, len(frames), meeting_context or '')
     return structured
 
 

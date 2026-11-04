@@ -3997,6 +3997,7 @@ export interface PageContext {
 }
 
 export interface Participant {
+  alias?: string | null;
   email?: string | null;
   evidence?: string | null;
   is_ai_agent?: boolean;
@@ -4004,6 +4005,7 @@ export interface Participant {
   organization?: string | null;
   role?: string | null;
   source: "roster" | "transcript";
+  speaker_bindings?: Array<number>;
 }
 
 export interface PayPalPaymentDetailsResponse {

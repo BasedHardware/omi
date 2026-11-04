@@ -1,4 +1,4 @@
-"""Approved screen frames as notes evidence: roster names, SCREEN MOMENTS, images.
+"""Approved screen frames as notes evidence: SCREEN MOMENTS and images, without a roster join.
 
 Pins the three consumption paths and, most importantly, that frame images reach
 the provider as image parts through every hop of the notes call (LangChain
@@ -38,10 +38,7 @@ from utils.conversations.screen_frame_evidence import (  # noqa: E402
     load_capture_group_frame_evidence,
     load_notes_frame_images,
     load_screen_frame_evidence,
-    screen_frame_agent_names,
-    screen_frame_names,
     screen_moment_lines,
-    with_screen_frame_participants,
 )
 from utils.llm.meeting_notes_rich_prompts import NotesFrameImage, screen_frames_message  # noqa: E402
 
@@ -455,7 +452,10 @@ class TestWiring:
 
         def pack(uid, conversation, roster, **kwargs):
             captured.update(kwargs)
-            return None
+            return MeetingContextPack(
+                screen_text='synthetic OCR digest' if kwargs['include_screen_text'] else '',
+                screen_moments=kwargs['screen_moments'],
+            )
 
         sources = SimpleNamespace(
             load_people_documents=lambda uid: [],
@@ -471,191 +471,27 @@ class TestWiring:
             finished_at=START + timedelta(minutes=30),
             transcript_segments=[],
         )
-        roster, _block, _desktop, images, frame_count = wiring.rich_notes_inputs(
+        roster, block, _desktop, images, _frame_count = wiring.rich_notes_inputs(
             'u', conversation, None, 'UTC', include_background=True, include_screen_text=screen_text
         )
         names = [entry.display_name for entry in roster.entries if entry.kind == 'human']
-        return names, images, captured.get('screen_moments'), loaded, frame_count
+        return names, images, captured.get('screen_moments'), loaded, block
 
-    def test_images_attach_when_screen_text_is_not_requested(self, monkeypatch):
-        names, images, moments, loaded, count = self._run(monkeypatch, screen_text=False)
-        assert (names, images, moments, loaded) == (['Jordan Rivera'], FRAMES, (), ['conv-1'])
-        assert count == 1  # the approved-frame volume, not the attached-image count
+    def test_everything_off_reads_no_frames(self, monkeypatch):
+        names, images, moments, loaded, _block = self._run(monkeypatch, screen_text=False, frames=False)
+        assert (names, images, moments, loaded) == ([], (), (), [])
 
-    def test_screen_text_and_images_are_attached_together(self, monkeypatch):
-        names, images, moments, _loaded, _count = self._run(monkeypatch, screen_text=True)
-        assert names == ['Jordan Rivera'] and images == FRAMES
+    def test_screen_text_flag_adds_moments_without_roster_names(self, monkeypatch):
+        names, images, moments, _loaded, _block = self._run(monkeypatch, screen_text=True, frames=False)
+        assert names == [] and images == ()
         assert moments == ('- [+02:00] Google Meet call (on screen: Jordan Rivera)',)
 
-    def test_frame_count_reports_available_evidence_beyond_the_image_cap(self, monkeypatch):
-        from utils.conversations import meeting_notes_wiring as wiring
+    def test_frames_flag_alone_attaches_images_only(self, monkeypatch):
+        names, images, moments, _loaded, _block = self._run(monkeypatch, screen_text=False, frames=True)
+        assert names == [] and images == FRAMES and moments == ()
 
-        evidence = tuple(_evidence(f'f{index}', index) for index in range(6))
-        monkeypatch.setattr(wiring, 'load_capture_group_frame_evidence', lambda uid, conv: evidence)
-        monkeypatch.setattr(
-            wiring, 'load_notes_frame_images', lambda *a: FRAMES[:1]
-        )  # reads mostly fail: one image attached
-        monkeypatch.setattr(
-            wiring,
-            'meeting_context_sources',
-            lambda: SimpleNamespace(
-                load_people_documents=lambda uid: [],
-                resolve_owner_identity=lambda uid: ('David Zhang', ()),
-                gather_meeting_context_pack=lambda *a, **k: None,
-            ),
-        )
-        conversation = SimpleNamespace(
-            id='conv-count',
-            source='desktop',
-            external_data={'conversation_role': 'meeting'},
-            started_at=START,
-            finished_at=START + timedelta(minutes=30),
-            transcript_segments=[],
-        )
-        _roster, _block, _desktop, images, count = wiring.rich_notes_inputs(
-            'u', conversation, None, 'UTC', include_background=True, include_screen_text=False
-        )
-        assert len(images) == 1 and count == 6
-
-
-class TestCaptureGroupFrames:
-    """A split meeting's frames live under the desktop members' conversation ids."""
-
-    def test_kill_switch_keeps_only_own_frames(self, monkeypatch):
-        monkeypatch.setenv('CAPTURE_GROUP_PRIMARY_NOTES_REFRESH_ENABLED', 'off')
-        queried = []
-        monkeypatch.setattr(
-            evidence_mod,
-            'load_screen_frame_evidence',
-            lambda uid, cid: queried.append(cid) or (_evidence('own', 5),),
-        )
-        result = load_capture_group_frame_evidence('u', self._conversation([('pendant', 'omi'), ('half-b', 'desktop')]))
-        assert queried == ['pendant']
-        assert [item.frame_id for item in result] == ['own']
-
-    def _conversation(self, members):
-        confirmed = {'method': 'overlap_shared_speech_v1'}
-        return SimpleNamespace(
-            id='pendant',
-            capture_group=SimpleNamespace(
-                id='group-1',
-                primary_id='pendant',
-                revision=1,
-                members=[SimpleNamespace(id=mid, source=source, evidence=confirmed) for mid, source in members],
-            ),
-        )
-
-    def _frames_by_conversation(self, monkeypatch, frames):
-        from utils.conversations import screen_frame_evidence as mod
-
-        monkeypatch.setattr(
-            mod, 'load_screen_frame_evidence', lambda uid, cid: tuple(frames.get(cid, ())), raising=True
-        )
-        monkeypatch.setattr(
-            mod.conversations_db,
-            'get_conversation_raw_snapshot',
-            lambda uid, cid, **kw: {
-                'visibility': 'shared',
-                'screenshot_sharing_enabled': True,
-                'external_data': {'conversation_role': 'meeting'},
-            },
-        )
-        return mod
-
-    def test_member_frames_join_own_evidence_oldest_first(self, monkeypatch):
-        frames = {
-            'pendant': (_evidence('own', 5),),
-            'half-b': (_evidence('b1', 1), _evidence('b2', 8)),
-            'half-c': (_evidence('c1', 12),),
-        }
-        mod = self._frames_by_conversation(monkeypatch, frames)
-        merged = mod.load_capture_group_frame_evidence(
-            'u', self._conversation([('pendant', 'omi'), ('half-b', 'desktop'), ('half-c', 'desktop')])
-        )
-        assert [item.frame_id for item in merged] == ['b1', 'own', 'b2', 'c1']
-        assert {item.conversation_id for item in merged} == {'pendant', 'half-b', 'half-c'}
-
-    def test_non_desktop_members_are_never_queried(self, monkeypatch):
-        frames = {'pendant': (_evidence('own', 5),), 'watch': (_evidence('w', 1),)}
-        mod = self._frames_by_conversation(monkeypatch, frames)
-        merged = mod.load_capture_group_frame_evidence(
-            'u', self._conversation([('pendant', 'omi'), ('watch', 'watch')])
-        )
-        assert [item.frame_id for item in merged] == ['own']
-        assert merged[0].conversation_id == 'pendant'
-
-    def test_member_frame_reads_are_capped(self, monkeypatch):
-        queried: list[str] = []
-
-        def recorder(uid, cid):
-            queried.append(cid)
-            return ()
-
-        from utils.conversations import screen_frame_evidence as mod
-
-        monkeypatch.setattr(mod, 'load_screen_frame_evidence', recorder)
-        monkeypatch.setattr(
-            mod.conversations_db,
-            'get_conversation_raw_snapshot',
-            lambda uid, cid, **kw: {
-                'visibility': 'shared',
-                'screenshot_sharing_enabled': True,
-                'external_data': {'conversation_role': 'meeting'},
-            },
-        )
-        members = [('pendant', 'omi')] + [(f'desktop-{index}', 'desktop') for index in range(5)]
-        mod.load_capture_group_frame_evidence('u', self._conversation(members))
-        assert queried == ['pendant', 'desktop-0', 'desktop-1', 'desktop-2']
-
-    @pytest.mark.parametrize(
-        ('visibility', 'screenshot_sharing_enabled'),
-        [('private', True), ('shared', False)],
-    )
-    def test_private_or_opted_out_member_frames_never_reach_primary(
-        self, monkeypatch, visibility, screenshot_sharing_enabled
-    ):
-        queried: list[str] = []
-        from utils.conversations import screen_frame_evidence as mod
-
-        monkeypatch.setattr(
-            mod,
-            'load_screen_frame_evidence',
-            lambda uid, cid: queried.append(cid) or (_evidence(cid, 1),),
-        )
-        monkeypatch.setattr(
-            mod.conversations_db,
-            'get_conversation_raw_snapshot',
-            lambda uid, cid, **kw: {
-                'visibility': visibility,
-                'screenshot_sharing_enabled': screenshot_sharing_enabled,
-                'external_data': {'conversation_role': 'meeting'},
-            },
-        )
-        merged = mod.load_capture_group_frame_evidence(
-            'u', self._conversation([('pendant', 'omi'), ('half-b', 'desktop')])
-        )
-        assert queried == ['pendant']
-        assert [item.conversation_id for item in merged] == ['pendant']
-
-    def test_member_frames_download_under_their_own_conversation_path(self, monkeypatch):
-        from utils.conversations import screen_frame_evidence as mod
-
-        monkeypatch.setenv('BUCKET_SCREEN_FRAMES', PROD)
-        member_frame = ScreenFrameEvidence(
-            frame_id='b1',
-            captured_at=START,
-            role='strip',
-            banner_suitability=0.5,
-            names=('Jordan Rivera',),
-            summary='Meet call',
-            conversation_id='half-b',
-        )
-        downloads: list[tuple[str, str]] = []
-        monkeypatch.setattr(
-            mod,
-            'download_screen_frame_bytes',
-            lambda uid, cid, fid, timeout=None: downloads.append((cid, fid)) or _jpeg(200, 100),
-        )
-        images = load_notes_frame_images('u', 'pendant', (member_frame,), START)
-        assert downloads == [('half-b', 'b1')]
-        assert images[0].frame_id == 'b1'
+    def test_frames_and_ocr_digest_survive_without_roster_join(self, monkeypatch):
+        names, images, moments, _, block = self._run(monkeypatch, screen_text=True, frames=True)
+        assert names == [] and images == FRAMES
+        assert moments == ('- [+02:00] Google Meet call (on screen: Jordan Rivera)',)
+        assert 'synthetic OCR digest' in block and 'SCREEN MOMENTS' in block

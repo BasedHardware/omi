@@ -423,6 +423,7 @@ class GeneratedSection {
 }
 
 class GeneratedParticipant {
+  final String? alias;
   final String? email;
   final String? evidence;
   final bool isAiAgent;
@@ -430,8 +431,10 @@ class GeneratedParticipant {
   final String? organization;
   final String? role;
   final String source;
+  final List<int>? speakerBindings;
 
   const GeneratedParticipant({
+    this.alias,
     this.email,
     this.evidence,
     this.isAiAgent = false,
@@ -439,10 +442,12 @@ class GeneratedParticipant {
     this.organization,
     this.role,
     required this.source,
+    this.speakerBindings,
   });
 
   factory GeneratedParticipant.fromJson(Map<String, dynamic> json) {
     return GeneratedParticipant(
+      alias: _readFieldValue<String>(_readField(json, const ["alias"]), "alias", _readString, requiredField: false, nullable: true),
       email: _readFieldValue<String>(_readField(json, const ["email"]), "email", _readString, requiredField: false, nullable: true),
       evidence: _readFieldValue<String>(_readField(json, const ["evidence"]), "evidence", _readString, requiredField: false, nullable: true),
       isAiAgent: _required(_readFieldValue<bool>(_readField(json, const ["is_ai_agent"]), "is_ai_agent", _readBool, requiredField: false, nullable: false, defaultValue: false), "is_ai_agent"),
@@ -450,11 +455,13 @@ class GeneratedParticipant {
       organization: _readFieldValue<String>(_readField(json, const ["organization"]), "organization", _readString, requiredField: false, nullable: true),
       role: _readFieldValue<String>(_readField(json, const ["role"]), "role", _readString, requiredField: false, nullable: true),
       source: _required(_readFieldValue<String>(_readField(json, const ["source"]), "source", _readString, requiredField: true, nullable: false), "source"),
+      speakerBindings: _readFieldValue<List<int>>(_readField(json, const ["speaker_bindings"]), "speaker_bindings", _readIntList, requiredField: false, nullable: true),
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
+      'alias': alias,
       'email': email,
       'evidence': evidence,
       'is_ai_agent': isAiAgent,
@@ -462,6 +469,7 @@ class GeneratedParticipant {
       'organization': organization,
       'role': role,
       'source': source,
+      'speaker_bindings': speakerBindings,
     };
   }
 }
