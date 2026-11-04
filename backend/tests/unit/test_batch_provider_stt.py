@@ -1274,3 +1274,45 @@ def test_native_provider_placeholder_conversion_preserves_owner_fence(world, cha
         assert store.run(lambda tx: enqueue(tx, work, 100, policy=POLICY))
         assert job(store, work.segment_id)['state'] == PENDING
         assert not [key for key in store.rows if key[0] in {'queues', 'control'}]
+
+
+# GPU-overflow spend (omi_batch_pipeline_vendor_overflow_audio_seconds_total, the $50/day alert):
+# billed vendor audio for a unit routed over a capable GPU (provider_reason 'none') counts on every
+# settle path, including reconciliation; capability routing to a vendor never counts.
+EN_OVERFLOW = SttRoute('provider', 'none', 'modulate', 'en')
+
+
+def _overflow_spent():
+    from utils.batch_pipeline import vendor_route_metrics as metrics
+
+    return metrics.OVERFLOW_AUDIO.labels(route='modulate')._value.get()
+
+
+@pytest.mark.parametrize('route,counts', [(EN_OVERFLOW, True), (JA, False)])
+def test_a_reconciled_saved_result_counts_overflow_spend(world, monkeypatch, route, counts):
+    _, store = world
+    unit = item('p1', 10)
+    admit(monkeypatch, store, [unit], 'content-p', route)
+    artifacts, vendor = Artifacts(), Vendor()
+    artifacts.fail_persist = True
+    before = _overflow_spent()
+    assert stage(store, artifacts, vendor).run('p1').outcome == 'retry'  # billed, then settle never ran
+    assert _overflow_spent() == before
+    artifacts.fail_persist = False
+    token = job(store, 'p1')['provider_intent']['token']
+    artifacts.results[f'gs://synthetic/results/p1/{token}.enc'] = Vendor()(None, 'ja', SPEECH, service='modulate')
+    assert stage(store, artifacts, vendor, now=310.0).run('p1').reason == 'processed'
+    assert _overflow_spent() - before == (unit.duration_seconds if counts else 0)
+
+
+@pytest.mark.parametrize('route,counts', [(EN_OVERFLOW, True), (JA, False)])
+def test_an_abandoned_billed_intent_counts_overflow_spend(world, monkeypatch, route, counts):
+    _, store = world
+    unit = item('p1', 10)
+    admit(monkeypatch, store, [unit], 'content-p', route)
+    artifacts, vendor = Artifacts(), Vendor()
+    artifacts.fail_persist = True
+    stage(store, artifacts, vendor).run('p1')
+    before = _overflow_spent()
+    stage(store, artifacts, vendor, now=200.0 + ABANDON_SECONDS + 1).run('p1')
+    assert _overflow_spent() - before == (unit.duration_seconds if counts else 0)
