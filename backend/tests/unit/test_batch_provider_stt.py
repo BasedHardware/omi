@@ -1343,3 +1343,93 @@ def test_an_abandoned_silent_intent_never_counts_overflow_spend(world, monkeypat
     assert attempt_audio._value.get() == before_audio
     abandoned = [a for a in job(store, 'p1').get('provider_attempts') or [] if a.get('outcome') == 'abandoned']
     assert abandoned and all(a['audio_seconds'] == 0 for a in abandoned)
+
+
+# A strict-VAD-silent unit never reaches the vendor: an abandoned intent for it settles as the same
+# local silence (lead2 ccadcc), never an ABANDONED vendor attempt that bills audio or feeds the breaker.
+
+
+def _real_health(clock):
+    from utils.batch_pipeline import route_selection
+    from utils.batch_pipeline import vendor_health as health_module
+
+    return health_module.VendorHealthService(
+        shared=health_module.MemoryStore(),
+        local=health_module.MemoryStore(),
+        routes=lambda: route_selection.current_table()[0].routes,
+        enabled=lambda: True,
+        clock=clock,
+        rng=lambda: 0.5,
+        background=False,
+    )
+
+
+def _silent_abandon(store, artifacts, vendor, health, segment_id, started):
+    first = ProviderSttStage(
+        store,
+        artifacts,
+        stt=vendor,
+        inspect=lambda *_: SILENCE,
+        clock=lambda: started,
+        health=health,
+        armed=lambda: True,
+    )
+    artifacts.fail_persist = True
+    assert first.run(segment_id).outcome == 'retry'  # local silence computed, its save failed
+    artifacts.fail_persist = False
+    late = started + ABANDON_SECONDS + 1
+    replay = ProviderSttStage(
+        store, artifacts, stt=vendor, inspect=lambda *_: SILENCE, clock=lambda: late, health=health, armed=lambda: True
+    )
+    return replay.run(segment_id)
+
+
+def test_a_silent_unit_intent_is_marked_vendor_skipped(world, monkeypatch):
+    _, store = world
+    admit(monkeypatch, store, [item('p1', 10)], 'content-p', JA)
+    artifacts, vendor = Artifacts(), Vendor()
+    artifacts.fail_persist = True
+    stage(store, artifacts, vendor, inspect=lambda *_: SILENCE).run('p1')
+    assert vendor.calls == 0
+    assert job(store, 'p1')['provider_intent']['vendor_skipped'] is True
+
+
+def test_a_speech_unit_intent_is_not_marked_vendor_skipped(world, monkeypatch):
+    _, store = world
+    admit(monkeypatch, store, [item('p1', 10)], 'content-p', JA)
+    artifacts, vendor = Artifacts(), Vendor()
+    artifacts.fail_persist = True
+    stage(store, artifacts, vendor).run('p1')
+    assert vendor.calls == 1
+    assert 'vendor_skipped' not in job(store, 'p1')['provider_intent']
+
+
+def test_an_abandoned_skipped_intent_settles_as_silence_without_billing(world, monkeypatch):
+    _, store = world
+    admit(monkeypatch, store, [item('p1', 10)], 'content-p', JA)
+    artifacts, vendor = Artifacts(), Vendor()
+    health = _real_health(lambda: 200.0)
+    outcome = _silent_abandon(store, artifacts, vendor, health, 'p1', 200.0)
+    assert outcome.reason == 'processed' and vendor.calls == 0
+    row = job(store, 'p1')
+    assert row['state'] == 'result_ready'
+    outcomes = [a.get('outcome') for a in row.get('provider_attempts') or []]
+    assert 'abandoned' not in outcomes and outcomes[-1] == 'silence'
+    assert all(a.get('audio_seconds', 0) == 0 for a in row['provider_attempts'])
+
+
+def test_a_burst_of_abandoned_silent_intents_never_opens_a_healthy_vendors_breaker(world, monkeypatch):
+    # lead2 ccadcc: five or more silent units whose silence saves failed, reconciled within five
+    # minutes, used to record five ABANDONED vendor failures and could open Modulate's breaker.
+    _, store = world
+    units = [item(f'p{n}', 10 + n) for n in range(6)]
+    admit(monkeypatch, store, units, 'content-p', JA)
+    artifacts, vendor = Artifacts(), Vendor()
+    now = [200.0]
+    health = _real_health(lambda: now[0])
+    for n, unit in enumerate(units):
+        now[0] = 200.0 + ABANDON_SECONDS + 1 + n * 30  # all six within five minutes
+        assert _silent_abandon(store, artifacts, vendor, health, unit.segment_id, 200.0).reason == 'processed'
+    assert vendor.calls == 0
+    allowed, _ = health.allows('modulate')
+    assert allowed
