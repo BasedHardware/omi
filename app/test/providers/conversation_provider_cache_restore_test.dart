@@ -43,8 +43,7 @@ void main() {
         isSignedIn: () => true,
         conversationListFetcher: () async => (items: page, ok: true),
         dailySummariesChecker: () async => false)
-      ..conversations = [overlap, absent, older, boundaryTie, deleted]
-      ..hiddenNoiseCountsFetcherOverride = (_, __) async => <DateTime, int>{};
+      ..conversations = [overlap, absent, older, boundaryTie, deleted];
     provider.memoriesToDelete[deleted.id] = deleted;
     addTearDown(provider.dispose);
     await provider.getInitialConversations(checkDailySummaries: false);

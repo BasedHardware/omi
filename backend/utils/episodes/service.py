@@ -583,7 +583,7 @@ def _attach_once(
         owner = episode_owning_recorded_time(uid, started_at, firestore_client=c.firestore_client)
         late = is_late((started_at, ended_at or started_at), now)
         if owner or late:
-            placed = _attach_recorded(uid, conversation_id, {'source': source}, started_at, started_at, c)
+            placed = attach_recorded(uid, conversation_id, {'source': source}, started_at, started_at, c)
             if owner and not policy.is_live(owner) and not late:
                 resumed = episode_timeline.resume_recorded(
                     uid,
@@ -1404,7 +1404,7 @@ def _attach_synced_once(uid: str, conversation_id: str, row: Mapping[str, Any], 
         span = conversation_span(row)
         if span is None:
             return 'no_episode'
-        _attach_recorded(uid, conversation_id, row, span.recorded_start, span.recorded_end, c)
+        attach_recorded(uid, conversation_id, row, span.recorded_start, span.recorded_end, c)
         return 'recorded'
     if started is None:
         return 'no_episode'
@@ -1424,7 +1424,7 @@ def _attach_synced_once(uid: str, conversation_id: str, row: Mapping[str, Any], 
     return _rejoin_closed_synced(uid, conversation_id, row, started, finished, c, allow_reopen=True)
 
 
-def _attach_recorded(uid, conversation_id, row, started, finished, c) -> dict[str, Any]:
+def attach_recorded(uid, conversation_id, row, started, finished, c, *, pending_transcription=False) -> dict[str, Any]:
     template = new_episode(
         conversation_id=conversation_id,
         started_at=started,
@@ -1432,8 +1432,7 @@ def _attach_recorded(uid, conversation_id, row, started, finished, c) -> dict[st
         calendar_identity=_calendar_identity(row),
         now=_now(c),
     )
-    source = getattr(row.get('source'), 'value', row.get('source'))
-    template['sources'] = [source] if source else []
+    template['sources'] = [source] if (source := getattr(row.get('source'), 'value', row.get('source'))) else []
     placed = episode_timeline.attach_recorded(
         uid,
         conversation_id,
@@ -1443,6 +1442,7 @@ def _attach_recorded(uid, conversation_id, row, started, finished, c) -> dict[st
         choose=choose_recorded_episode,
         new_episode=template,
         firestore_client=c.firestore_client,
+        pending_at=template['created_at'] if pending_transcription else None,
         attach_row=row,
     )
     placed.pop('_recorded_windows', None)
@@ -1478,7 +1478,7 @@ def _attach_synced(
         c,
         absorbed_from=absorbed_from,
         attach_once=_attach_synced_once,
-        attach_recorded=_attach_recorded,
+        attach_recorded=attach_recorded,
         repoint_absorbed=_repoint_absorbed,
         repoint_donors=_repoint_sync_donors,
         end_discarded=_end_discarded,

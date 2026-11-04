@@ -11,6 +11,8 @@ import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/backend/schema/review.dart';
 import 'package:omi/pages/activity/activity_seen.dart';
 import 'package:omi/pages/activity/needs_attention_section.dart';
+import 'package:omi/pages/conversations/widgets/capture_continuity_dogfood_banner.dart';
+import 'package:omi/pages/on_device/on_device_queue_banner.dart';
 import 'package:omi/pages/home/widgets/home_daily_recaps.dart';
 import 'package:omi/pages/review/recent_changes_page.dart';
 import 'package:omi/pages/review/review_page.dart';
@@ -346,7 +348,14 @@ class _ActivityPageState extends State<ActivityPage> with WidgetsBindingObserver
     }
     return Scaffold(
       appBar: AppBar(leading: const OmiBackButton(), title: Text(l.activity)),
-      body: body,
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const CaptureContinuityDogfoodBanner(),
+          const OnDeviceQueueBanner(),
+          Expanded(child: body),
+        ],
+      ),
     );
   }
 }

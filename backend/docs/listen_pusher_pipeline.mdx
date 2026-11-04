@@ -324,7 +324,27 @@ Pusher opcode 101 still commits PCM through
 The lifecycle loop uses accepted local audio activity while capture continues,
 then flushes original custody before finalization. The raw-only finalizer writes
 an idempotent `record_pending` job before completing the capture and its no-effects
-fanout receipt. Batch waits for `record_audio_closed`, verifies source generations,
+fanout receipt. At the archive-close barrier, eligible batch captures attach to
+their episode by committed audio bounds before finalization is queued. This uses
+the shared fenced recorded-time transaction, without a client-seen or paid-call
+gate. Existing `EPISODES_ENABLED`/cohort admission and
+`EPISODE_RECORDED_TIME_ENABLED` switches gate attachment. The scoped ship-on
+`EPISODE_BATCH_CLOSE_ATTACH_ENABLED` switch (default true; false/off/0/no disables)
+restores attach-after-transcription while preserving every other episode path.
+Membership atomically stamps `episode_transcription_pending_at` and
+`episode_transcription_deadline_at` (entry plus the batch timeliness 2h SLA;
+normal target 30m), once only. Home projects untranscribed members as
+`status=processing`, title “Transcribing…”, with committed audio bounds. A
+finalization dead letter, failed status/upload, or elapsed deadline projects
+`status=failed`, title “Couldn't transcribe”. A durable `record_projection_revision`
+restores normal metadata even after expiry. This is a read projection, never a
+cancellation or deletion of retained audio or retry work. The unlabeled
+`omi_episode_batch_pending_overdue_reads_total` counter records overdue member
+observations; an info rule sits beside batch timeliness rules in the pending
+monitoring catalog (no alert provisioning in this PR). Failure emits shared
+`record_fallback` telemetry (`outcome=degraded`) and leaves finalization as the
+repair path.
+Batch waits for `record_audio_closed`, verifies source generations,
 and derives work-unit bounds from persisted sample spans. It inherits the named
 language and retains ordinary privacy, compute/funding and language guardrails.
 Live transcription usage and live-transcript success metrics exclude intentional

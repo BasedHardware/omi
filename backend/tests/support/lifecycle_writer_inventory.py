@@ -2657,7 +2657,7 @@ FIELD_SITES = {
         (
             'project_episode',
             'status',
-            "row.get('status') or 'completed'",
+            "status; literal aliases=[('status', ('failed', 'processing'))]",
             ('emoji', 'finished_at', 'id', 'started_at', 'status', 'title'),
         )
     ],

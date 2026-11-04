@@ -11,5 +11,9 @@ def recorded_episodes_enabled() -> bool:
     return os.getenv('EPISODE_RECORDED_TIME_ENABLED', 'true').strip().lower() not in {'false', 'off', '0', 'no'}
 
 
+def batch_close_attach_enabled() -> bool:
+    return os.getenv('EPISODE_BATCH_CLOSE_ATTACH_ENABLED', 'true').strip().lower() not in {'false', 'off', '0', 'no'}
+
+
 def live_timer_start_enabled() -> bool:
     return os.getenv('EPISODE_LIVE_TIMER_START_ENABLED', 'true').strip().lower() not in {'false', 'off', '0', 'no'}
