@@ -49,6 +49,38 @@ class RecoveryReceipts:
             self.exists = True
 
 
+def read_receipts(uid, moment, c, episode, consumption_owner):
+    """Read both namespaces once, preserving legacy adoption and revision checks."""
+    recovered = moment.trigger == 'sync_recovery'
+    receipt_state = moment.recovery_receipts if recovered else None
+    if receipt_state is not None:
+        consumed, receipts_exist, consumed_content = receipt_state.read(episode)
+    else:
+        consumed, receipts_exist = episode_receipts.get_consumed_ids(
+            uid,
+            moment.conversation_id,
+            # The finalization tail replays the whole stored transcript: only the
+            # archives hold ids old enough to matter there. Live batches are recent.
+            all_shards=moment.trigger == 'finalize' or recovered,
+            firestore_client=c.firestore_client,
+        )
+        consumed_content, _ = (
+            episode_receipts.get_consumed_ids(
+                uid,
+                recovery.receipt_namespace(moment.conversation_id),
+                all_shards=True,
+                firestore_client=c.firestore_client,
+            )
+            if recovered
+            else (set(), False)
+        )
+    if not receipts_exist:
+        # Pre-receipts episodes kept consumption in their document; adopt it into
+        # the receipts on this write so the finalization tail still dedupes.
+        consumed |= set(((consumption_owner or {}).get('applied_segment_ids') or {}).get(moment.conversation_id) or [])
+    return consumed, receipts_exist, consumed_content
+
+
 def unconsumed_moments(
     uid: str, conversation_id: str, moments: Iterable[MomentInput], collaborators: Any, *, receipts=None
 ) -> Iterator[MomentInput]:

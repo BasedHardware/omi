@@ -82,7 +82,13 @@ from utils.episodes.moment import MomentInput
 from utils.episodes.moment_order import newest_moments, timeline_moments
 from utils.episodes.state import apply_update, clean_text, is_placeholder_heading, provisional_items, render_state
 from utils.episodes.visibility import visible_episode, hidden_conversation
-from utils.episodes.recorded_recovery import RecoveryReceipts, record_walk, record_windows, unconsumed_moments
+from utils.episodes.recorded_recovery import (
+    RecoveryReceipts,
+    read_receipts,
+    record_walk,
+    record_windows,
+    unconsumed_moments,
+)
 from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
@@ -812,31 +818,7 @@ def _record_moment_once(
             uid, moment.conversation_id, firestore_client=c.firestore_client
         )
     receipt_state = moment.recovery_receipts if recovered else None
-    if receipt_state is not None:
-        consumed, receipts_exist, consumed_content = receipt_state.read(episode)
-    else:
-        consumed, receipts_exist = episode_receipts.get_consumed_ids(
-            uid,
-            moment.conversation_id,
-            # The finalization tail replays the whole stored transcript: only the
-            # archives hold ids old enough to matter there. Live batches are recent.
-            all_shards=moment.trigger == 'finalize' or recovered,
-            firestore_client=c.firestore_client,
-        )
-        consumed_content, _ = (
-            episode_receipts.get_consumed_ids(
-                uid,
-                recovery.receipt_namespace(moment.conversation_id),
-                all_shards=True,
-                firestore_client=c.firestore_client,
-            )
-            if recovered
-            else (set(), False)
-        )
-    if not receipts_exist:
-        # Pre-receipts episodes kept consumption in their document; adopt it into
-        # the receipts on this write so the finalization tail still dedupes.
-        consumed |= set(((consumption_owner or {}).get('applied_segment_ids') or {}).get(moment.conversation_id) or [])
+    consumed, receipts_exist, consumed_content = read_receipts(uid, moment, c, episode, consumption_owner)
     segments, selected_ids, selected_content = recovery.select_segments(
         recovery.uncovered_segments(moment, episode),
         consumed,
