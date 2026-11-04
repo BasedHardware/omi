@@ -102,9 +102,8 @@ def test_row_at_the_ceiling_is_closed_with_a_shrinking_status_only_write():
 
     assert outcome == 'closed'
     assert len(updates) == 1
-    # Status only: the transcript and every other field stay exactly as stored, and the
-    # optional deterministic title is dropped because it cannot fit.
-    assert updates[0][1] == {'status': 'completed'}
+    # No room for a decision: retain content outside the default list.
+    assert updates[0][1] == {'status': 'failed'}
     after = {**row, **updates[0][1]}
     assert estimate_firestore_document_bytes(after, _PATH) < estimate_firestore_document_bytes(row, _PATH)
 
