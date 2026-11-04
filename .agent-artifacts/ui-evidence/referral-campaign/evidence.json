@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-referral-program.png",
+      "platform": "mobile-ios",
+      "description": "Enabled referral candidate in iPhone simulator with local fixture account; existing signed-link backend, no live claim.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}
