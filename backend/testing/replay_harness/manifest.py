@@ -17,8 +17,8 @@ import re
 from typing import Any
 
 SCHEMA_VERSION = 1
-STAGES = ('capture_upload', 'admission', 'worker', 'projection', 'final_pass', 'titling', 'episodes')
-IMPLEMENTED_STAGES = ('capture_upload', 'admission', 'titling')
+STAGES = ('capture_upload', 'admission', 'worker', 'projection', 'final_pass', 'titling', 'episodes', 'privacy_cache')
+IMPLEMENTED_STAGES = ('capture_upload', 'admission', 'titling', 'privacy_cache')
 _STAGE_SCHEMA = {
     'type': 'object',
     'additionalProperties': False,

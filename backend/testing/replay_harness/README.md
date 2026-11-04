@@ -4,7 +4,8 @@ Replays real or synthetic pipeline inputs through the actual product code, local
 each item stops at and why. A fix ships only after its failing cases replay to the expected outcome.
 
 Stages, in order (`manifest.STAGES`): `admission`, `worker`, `projection`, `final_pass`, `titling`,
-`episodes`. Today only `admission` is implemented. The others report `not_implemented`, which can never
+`episodes`, `privacy_cache`. Implemented boundaries are `capture_upload`, `admission`, `titling` and
+`privacy_cache`. The others report `not_implemented`, which can never
 satisfy an expectation, and a manifest may not expect a stop at an unimplemented stage.
 
 `batch_replay/` remains the projection deploy gate. This package owns per-case stage expectations.
@@ -68,3 +69,61 @@ umask 077
 Corpora live under `/Volumes/Ephemeral/scratch/replay-corpus/` (mode `0700`), never in Git, and are deleted
 when the program that needed them ends. Output is printed as counts, statuses and exception types only.
 Capture at detection time: a fix that lands first erases the failing input.
+
+## Privacy cache replay
+
+`privacy_cache` is a schema-v1 boundary that compares real cached readers with
+`fresh_reads()` authority on the loopback Firestore emulator. Each transition
+owns a fresh replay environment, fakeredis and virtual cache clock. The stage
+forces privacy levers on only inside that environment; shadow is off so it
+cannot hide candidate behavior. It seeds the before state, warms the real
+reader, invokes the real writer, then probes at +0/+1/+59/+60/+61/+300 seconds.
+The batch authority check additionally starts a new attempt for ground truth,
+since its memo is independent of the Redis/request bypass. Candidate reads retain
+a real privacy session across the transition; authority reads temporarily leave
+that session so its separate memo cannot mask a mismatch.
+
+Any unequal decision at or after +60s stops with
+`privacy_cache:staleness_bound_exceeded`; details include only the family, kind,
+fault and offset, never identifiers. Earlier differences are recorded separately.
+The report counts completed transitions, scheduled probes, overlap probes and
+bounded mismatches, and gives the largest sampled stale offset per family.
+A reported zero means no probe observed stale state; it does not measure latency
+between probes. Idempotent tombstone retries count as transitions too.
+
+Families cover deletion marker state-machine arcs, tombstone creation/retry,
+legal-hold placement/release and destructive-operation acquire/finish/takeover,
+batch generation advance/purge completion, subscription/BYOK changes and the
+currently uncached data-protection level. The external-write cache checks
+account deletion and destructive gates; the separate uncached legal-hold reader
+checks hold placement. Data-protection writers remain unfenced and uncached;
+this replay does not authorize adding a cache to them.
+
+The fixed-seed generator covers every kind and every family/fault pair in its
+120-transition smoke prefix. Faults include persistent Redis outage, both
+invalidations lost with Redis reads available, BEGIN-token loss, overlapping
+writers/readers, a reader held inside the real BEGIN fence, and a request memo
+spanning the real writer. Cache publication/memo events verify eligible warm
+paths actually exercise the optimization. Two emulator mutation tests raise
+the subscription TTL to 120s and lose invalidations: both BYOK directions must
+stop at +60s. Boundary controls with the real TTL must pass exactly at +60s.
+
+```bash
+unset GOOGLE_APPLICATION_CREDENTIALS CLOUDSDK_CONFIG CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE
+export PATH=/opt/homebrew/opt/openjdk@21/bin:$PATH
+/Users/dazheng/workspace/omi/bin/omi-heavy run -- \
+  node_modules/.bin/firebase emulators:exec --only firestore --project demo-omi-isolated-tests \
+  'make replay-harness OUTPUT=/Volumes/Ephemeral/scratch/privacy-smoke'
+/Users/dazheng/workspace/omi/bin/omi-heavy run -- \
+  node_modules/.bin/firebase emulators:exec --only firestore --project demo-omi-isolated-tests \
+  'make replay-privacy-full OUTPUT=/Volumes/Ephemeral/scratch/privacy-full'
+```
+
+`make replay-harness` defaults to the committed smoke; explicit `CASES` still
+selects other fixtures. `make replay-privacy-full` generates 1,000 transitions
+under `OUTPUT`, then writes reports under `OUTPUT/report`; reports stay out of
+Git. Generate variants from `backend/` with
+`.venv/bin/python -m testing.replay_harness.gen_privacy_timeline --output <dir>`
+(`--seed`, `--transitions`, `--mix` JSON family weights and `--faults` comma list).
+This is synthetic emulator qualification only. Recorded Tier-S timelines and
+the required two-hour production shadow are separate work packages.
