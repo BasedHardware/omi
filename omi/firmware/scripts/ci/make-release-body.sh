@@ -59,7 +59,8 @@ PY
   echo "### What's Changed"
   changelog_emitted=0
   IFS='|' read -ra _items <<< "${CHANGELOG:-}"
-  for _it in "${_items[@]}"; do
+  # Bash 3.2 treats an empty read array as unbound under set -u.
+  for _it in "${_items[@]:-}"; do
     _t="$(printf '%s' "$_it" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
     if [ -n "$_t" ]; then
       echo "- $_t"
