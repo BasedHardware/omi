@@ -1,0 +1,45 @@
+# Lifecycle alarms
+
+WP-C evidence date: 2026-11-04. Owner: two-lane lead. These observations never
+change state, schedule work, or replay historical obligations.
+
+New page rules live in `alerts/resilience.json`, already in the metrics-egress
+workflow's trigger list. Every new rule, including agent companions and stock
+rules, is listed in `live-alert-gate.json`, so the existing gate-based import
+includes it. `alert-rules.json` is the combined mirror. No workflow change is
+needed. Deploy emitters and reconcile their indexes before importing rules.
+The dev/prod Cloud Run exporter allowlists and sync-sidecar keep filter carry
+these four metric families. Their existing ten-minute collection and one-minute
+offset, plus the five-minute producer cadence, need a 20-minute freshness
+budget for enrichment/BYOK. Direct batch samples keep the 15-minute budget.
+
+| Source | Page cohort and budget | Bounded observation |
+| --- | --- | --- |
+| Record admission | `record_pending`, `enqueued_at` in last 24h, >2h for 10m | 1000 oldest cohort jobs; stock COUNT capped at 5001 |
+| Enrichment | active fresh obligations, `first_pending_at` in last 24h, >1h for 10m | 1000 oldest cohort rows; dormant receipts excluded; backfill stock COUNT capped at 20001 |
+| BYOK | `blocked_byok_at` in last 7d, >3d for 1h | 1000 oldest cohort rows; stamp written on initial entry and stranded-job reclaim |
+| No job | agent stock only, >0 for 30m | 128 owner/name-indexed conversations and at most 128 job existence reads |
+
+Every source samples at most every five minutes per observer, with ten-second
+RPC deadlines and no SDK retry loop. A failed read preserves its previous
+values and timestamp. Queries return only aggregate gauges with closed label
+sets; identities remain transient in memory. Metrics do not store log text.
+
+The freshness companions treat absent/never-taken samples as blind. The scan
+companions flag full pages or capped counts. Count saturation is conservative:
+it stays blind even where the oldest cohort row can still prove a breach.
+Agent rules use the existing silent receiver policy; page rules reach Telegram.
+
+Known legacy stock (record_pending aged 8–72h, BYOK aged 13d, 2000+ dead letters)
+does not enter the new dwell pages. The existing dead-letter stock rule is
+included in the import gate and remains agent tier. Unstamped historical BYOK
+rows remain covered by existing informational age/stock metrics. No backfill.
+
+No-job discovery is a fixed bounded prefix, not a census. Saturation stays
+explicitly blind; a healthy prefix cannot prove global absence. No seal-entry
+timestamp exists, so no no-job dwell page is claimed (thread-owner ruling
+135c64). A separately owned seal-clock follow-up is needed for that page.
+
+Enrichment's backfill stock includes backfill-labeled pending first summaries;
+the fresh age gauge also includes those summaries, matching watchdog promotion.
+Fresh count is the recent-cohort sampled count, not a fleet-wide total.

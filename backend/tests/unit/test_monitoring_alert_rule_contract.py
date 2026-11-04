@@ -2024,12 +2024,6 @@ def test_finalization_latched_states_have_dwell_stock_and_daily_loss_alerts():
             'agent',
             '15m',
         ),
-        'omi-finalization-byok-dwell-page': (
-            'max(listen_finalization_oldest_blocked_byok_age_seconds)',
-            604800,
-            'page',
-            '15m',
-        ),
         'omi-finalization-dead-letter-stock': (
             'max(listen_finalization_jobs{status="dead_letter"})',
             1000,
@@ -2073,3 +2067,36 @@ def test_finalization_latched_states_have_dwell_stock_and_daily_loss_alerts():
             assert rule['annotations']['safe_next_action']
             assert rule['notification_settings']['receiver'] == 'Omi - Services Alerting (Telegram)'
             assert ('mute_time_intervals' in rule['notification_settings']) == (tier != 'page')
+
+
+def test_lifecycle_pages_use_new_cohorts_freshness_and_imported_blind_companions():
+    specs = {
+        'omi-record-pending-dwell': ('omi_batch_record_pending', '', 7200, '10m'),
+        'omi-enrichment-fresh-dwell': ('omi_enrichment_obligation', '{lane="fresh"}', 3600, '10m'),
+        'omi-finalization-byok-dwell-page': ('omi_finalization_byok', '', 259200, '1h'),
+    }
+    gate = set(json.loads((MONITORING / 'live-alert-gate.json').read_text())['uids'])
+    for rules in _all_rule_exports().values():
+        for uid, (prefix, selector, threshold, pending) in specs.items():
+            freshness = 900 if prefix == 'omi_batch_record_pending' else 1200
+            page = rules[uid]
+            assert page['data'][0]['model']['expr'] == (
+                f'max({prefix}_new_oldest_age_seconds{selector}) and on() '
+                f'((time() - max({prefix}_observed_at_seconds)) < {freshness})'
+            )
+            assert page['data'][2]['model']['conditions'][0]['evaluator']['params'] == [threshold]
+            assert page['for'] == pending
+            assert page['noDataState'] == 'OK'
+            assert page['labels']['tier'] == 'page'
+            assert not page['notification_settings']['mute_time_intervals']
+            for suffix in ('', '-stale', '-blind'):
+                rule = rules[uid + suffix]
+                assert rule['uid'] in gate
+                assert rule['annotations']['evidence_date'] == '2026-11-04'
+                assert rule['annotations']['intended_final_threshold']
+                if suffix:
+                    assert rule['labels']['tier'] == 'agent'
+                    assert rule['noDataState'] == 'Alerting'
+                    assert prefix in rule['data'][0]['model']['expr']
+    assert 'omi-record-nojob-dwell' not in gate
+    assert {'omi-record-nojob-stock', 'omi-record-nojob-blind', 'omi-finalization-dead-letter-stock'} <= gate
