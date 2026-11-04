@@ -141,7 +141,7 @@ from config.memory_rollout import MemoryRolloutMode, rollout_mode_env_value
 from utils.client_device import DeviceScopeRequest
 from utils.memory.device_scope_filter import memory_matches_device
 from utils.memory.memory_system import MemorySystem
-from utils.memory.memory_api_contract import MemoryApiExposure, memory_api_payload
+from utils.memory.memory_api_contract import MemoryApiExposure, memory_api_payload, memory_provenance_timestamps
 from utils.memory.universal_list_cursor import (
     StreamKeyset,
     UniversalListCursorError,
@@ -3668,6 +3668,7 @@ class MemoryService:
                 "content": match.memory.content,
                 "category": match.memory.category.value,
                 "relevance_score": round(float(match.score), 4),
+                **memory_provenance_timestamps(match.memory.model_dump()),
             }
             for match in self.search(uid, query, limit=limit)
         ]

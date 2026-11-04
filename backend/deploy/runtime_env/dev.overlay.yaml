@@ -219,7 +219,7 @@ overlay:
           value: parakeet,modulate-velma-2
           category: stt_policy
         STT_SERVICE_MODELS:
-          value: modulate-velma-2,soniox,parakeet
+          value: modulate-velma-2,soniox
           category: stt_policy
         GOOGLE_CLOUD_PROJECT:
           value: based-hardware-dev
@@ -270,7 +270,7 @@ overlay:
     config_map:
       entries:
         STT_SERVICE_MODELS:
-          value: modulate-velma-2,soniox,parakeet
+          value: modulate-velma-2,soniox
           source: literal
         CONVERSATION_SUMMARIZED_APP_IDS:
           source: environment
@@ -580,6 +580,8 @@ overlay:
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
           # Lead ruling01d584: activation waits for approved CPU-role secret access.
           BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED: {value: 'false', category: ops_kill}
+          # Lead hold: keep disabled until newly admitted words have independent acoustic evidence.
+          BATCH_PIPELINE_GUARDED_LONG_RECOVERY_MAX_SECONDS: {value: '0', category: ops_kill}
           BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE:
             value: https://backend-integration-dt5lrfkkoa-uc.a.run.app
             category: service_auth

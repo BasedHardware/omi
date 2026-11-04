@@ -14,7 +14,11 @@ import type { TranscriptionSocket } from '@/lib/transcriptionSocket';
 // Types
 export type AudioMode = 'mic-only' | 'mic-and-system';
 export type RecordingState =
-  'idle' | 'initializing' | 'recording' | 'paused' | 'processing';
+  | 'idle'
+  | 'initializing'
+  | 'recording'
+  | 'paused'
+  | 'processing';
 
 export interface TranscriptSegment {
   id: string;
@@ -29,6 +33,8 @@ interface RecordingContextValue {
   state: RecordingState;
   audioMode: AudioMode;
   segments: TranscriptSegment[];
+  isBatchSession: boolean;
+  setBatchSession: (isBatch: boolean) => void;
   duration: number;
   micLevel: number;
   systemLevel: number;
@@ -77,6 +83,7 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<RecordingState>('idle');
   const [audioMode, setAudioMode] = useState<AudioMode>('mic-only');
   const [segments, setSegments] = useState<TranscriptSegment[]>([]);
+  const [isBatchSession, setBatchSession] = useState(false);
   const [duration, setDuration] = useState(0);
   const [micLevel, setMicLevel] = useState(0);
   const [systemLevel, setSystemLevel] = useState(0);
@@ -136,6 +143,8 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
         state,
         audioMode,
         segments,
+        isBatchSession,
+        setBatchSession,
         duration,
         micLevel,
         systemLevel,

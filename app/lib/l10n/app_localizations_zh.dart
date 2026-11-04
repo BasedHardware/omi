@@ -14598,4 +14598,181 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get searchNoiseFilter => '短片段';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 段对话',
+      one: '1 段对话',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 处',
+      one: '1 处',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return '显示全部 $count 处';
+  }
+
+  @override
+  String get reviewChangeSeeEvidence => '查看依据';
+
+  @override
+  String get reviewChangeViewTask => '查看任务';
+
+  @override
+  String get dreamReportShadowBanner => '预览模式：Dream 会显示它将要更改的内容，但目前不会更改你账户中的任何内容。';
+
+  @override
+  String dreamReportStats(int records, int tokens) {
+    return '已读取 $records 项 · $tokens 个 token';
+  }
+
+  @override
+  String get dreamReportFeedback => '已报告给 Omi 团队';
+
+  @override
+  String dreamReportPasses(int count, int limit) {
+    return '今天已运行 $count/$limit 次';
+  }
+
+  @override
+  String dreamReportQueued(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 项更改等待处理',
+      one: '1 项更改等待处理',
+      zero: '没有等待处理的更改',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportDropped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '已跳过 $count 项较早的更改',
+      one: '已跳过 1 项较早的更改',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportPrivacyHeld(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '出于隐私考虑，已扣留 $count 份报告',
+      one: '出于隐私考虑，已扣留 1 份报告',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncStepLabelDownload => 'Omi → 手机';
+
+  @override
+  String get syncStepLabelUpload => '上传';
+
+  @override
+  String get syncStepLabelTranscribe => '转录';
+
+  @override
+  String get syncDetailsForSupport => '供支持团队使用';
+
+  @override
+  String get episodeOnDeviceNotesFootnote => '在你说话时于本机起草。完整笔记将随最终转写一同生成。';
+
+  @override
+  String get episodeOnThisPhone => '在本机';
+
+  @override
+  String get livePreviewNoEngineTitle => '正在安全录制';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return '还有 $duration 的录音待处理';
+  }
+
+  @override
+  String get onTheWayDetailsForSupport => '支持详情';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '已隐藏 $count 段短录音',
+      one: '已隐藏 1 段短录音',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => '显示';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '隐藏 $count 段短录音',
+      one: '隐藏 1 段短录音',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get speakerWholeRecording => '应用到整段录音';
+
+  @override
+  String get speakerSelectionChanged => '说话人已更改。请重新选择这些行。';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': '录音太大。请在一个对话中选择更少的行。',
+        'partial': '部分行已保存。请选择其余行并重试。',
+        'other': '部分行已保存。请选择其余行并重试。',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerRecordingCoverage(String state, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '仅重命名了可用对话中的 $count 行。',
+      one: '仅重命名了可用对话中的 1 行。',
+    );
+    String _temp1 = intl.Intl.selectLogic(
+      state,
+      {
+        'scope': '此声音的其他行（录音覆盖范围未确认）',
+        'other': '$_temp0',
+      },
+    );
+    return '$_temp1';
+  }
+
+  @override
+  String get episodeFinishingUp => '即将完成…';
 }

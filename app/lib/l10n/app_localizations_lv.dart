@@ -14862,4 +14862,183 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get searchNoiseFilter => 'Īsi klipi';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Sarunas: $count',
+      one: '1 saruna',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Vietas: $count',
+      one: '1 vieta',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'Rādīt visus ($count)';
+  }
+
+  @override
+  String get reviewChangeSeeEvidence => 'Skatīt pierādījumus';
+
+  @override
+  String get reviewChangeViewTask => 'Skatīt uzdevumu';
+
+  @override
+  String get dreamReportShadowBanner =>
+      'Priekšskatījuma režīms: Dream parāda, ko tas mainītu, taču jūsu kontā pagaidām nekas nemainās.';
+
+  @override
+  String dreamReportStats(int records, int tokens) {
+    return 'Izlasīti $records vienumi · $tokens marķieri';
+  }
+
+  @override
+  String get dreamReportFeedback => 'Paziņots Omi komandai';
+
+  @override
+  String dreamReportPasses(int count, int limit) {
+    return 'Šodien $count no $limit piegājieniem';
+  }
+
+  @override
+  String dreamReportQueued(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count izmaiņas gaida',
+      one: '1 izmaiņa gaida',
+      zero: 'Nav gaidošu izmaiņu',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportDropped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count vecākas izmaiņas izlaistas',
+      one: '1 vecāka izmaiņa izlaista',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportPrivacyHeld(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ziņojumi aizturēti privātuma dēļ',
+      one: '1 ziņojums aizturēts privātuma dēļ',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncStepLabelDownload => 'Omi → tālrunis';
+
+  @override
+  String get syncStepLabelUpload => 'Augšupielāde';
+
+  @override
+  String get syncStepLabelTranscribe => 'Atšifrēšana';
+
+  @override
+  String get syncDetailsForSupport => 'Atbalstam';
+
+  @override
+  String get episodeOnDeviceNotesFootnote =>
+      'Tapat jūsu tālrunī, kamēr runājat. Pilnās piezīmes ieradīsies kopā ar galīgo transkripciju.';
+
+  @override
+  String get episodeOnThisPhone => 'Šajā tālrunī';
+
+  @override
+  String get livePreviewNoEngineTitle => 'Droši ieraksta';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return '$duration tiek apstrādāts';
+  }
+
+  @override
+  String get onTheWayDetailsForSupport => 'Informācija atbalsta komandai';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Paslēpti $count īsi ieraksti',
+      one: 'Paslēpts 1 īss ieraksts',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => 'Rādīt';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Slēpt $count īsus ierakstus',
+      one: 'Slēpt 1 īsu ierakstu',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get speakerWholeRecording => 'Lietot visam ierakstam';
+
+  @override
+  String get speakerSelectionChanged => 'Runātājs ir mainījies. Atlasiet rindas vēlreiz.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'Ieraksts ir pārāk liels. Atlasiet mazāk rindu vienā sarunā.',
+        'partial': 'Dažas rindas ir saglabātas. Atlasiet atlikušās un mēģiniet vēlreiz.',
+        'other': 'Dažas rindas ir saglabātas. Atlasiet atlikušās un mēģiniet vēlreiz.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerRecordingCoverage(String state, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Pārdēvētas $count rindas tikai pieejamajās sarunās.',
+      one: 'Pārdēvētas 1 rindas tikai pieejamajās sarunās.',
+    );
+    String _temp1 = intl.Intl.selectLogic(
+      state,
+      {
+        'scope': 'Citas šīs balss rindas (ieraksta aptvērums nav apstiprināts)',
+        'other': '$_temp0',
+      },
+    );
+    return '$_temp1';
+  }
+
+  @override
+  String get episodeFinishingUp => 'Pabeidzam…';
 }

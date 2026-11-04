@@ -12,14 +12,18 @@ Mirrors ``utils.enrichment.outbox.run`` outcome for outcome, with every settleme
 | redirected | STALE redirected | consumer: ``custody.transfer_redirect`` moved the obligation |
 | blocked (empty budget spent) | STALE empty_output_blocked | consumer: ``record_empty_failure`` retired it |
 | callback pending / empty output | RETRY callback_pending | ``release``: 409, the queue retry claims again |
+| transient Firestore / gateway fault | RETRY dependency_warming | ``release``: 409, the queue retry claims again |
 
 A consumer-side write leaves nothing for ``run_push`` to settle, so it reports STALE: this delivery no
-longer owns a lease. Every lease heartbeats (120s lease, 30s beat), so a long summary never outlives it.
+longer owns a lease. Every lease heartbeats (120s lease, 30s beat), so a long summary never outlives it, up
+to a 1500s hold cap after which a hung callback's lease lapses for the sweep to re-wake.
 """
 
 from __future__ import annotations
+from utils.observability.delivery import record_delivery
 
 import logging
+import re
 import threading
 import time
 from contextlib import contextmanager
@@ -34,16 +38,75 @@ from utils.sync import processing_hold
 
 logger = logging.getLogger(__name__)
 
+_TRANSIENT_HTTP_STATUSES = frozenset({429, 500, 502, 503, 504})
+
+
+def _transient_dependency(error: BaseException) -> bool:
+    """A Firestore or LLM-gateway transport fault (typed, never message text), anywhere in the cause chain.
+
+    Prod 11-03: Firestore ``Aborted`` on the conversation claim and gateway embedding 503s/read timeouts
+    answered 500. A 500 keeps the 120s lease, so the queue's own retry is consumed as BUSY and the
+    obligation waits for the maintenance sweep; a 409 releases the lease and the retry claims again.
+    """
+    import httpx
+    from google.api_core import exceptions as google_errors
+
+    transient = (
+        google_errors.Aborted,
+        google_errors.DeadlineExceeded,
+        google_errors.InternalServerError,
+        google_errors.ServiceUnavailable,
+        google_errors.TooManyRequests,
+        httpx.TimeoutException,
+        httpx.NetworkError,
+    )
+    seen: set[int] = set()
+    current: BaseException | None = error
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, transient):
+            return True
+        if isinstance(current, httpx.HTTPStatusError):
+            return current.response.status_code in _TRANSIENT_HTTP_STATUSES
+        current = current.__cause__ or current.__context__
+    return False
+
+
+# Public name for the age-gate route's dependency-fault check.
+transient_dependency = _transient_dependency
+
+
+def _cause(error: BaseException) -> str:
+    # FirstSummaryCallbackPending carries fixed literals ('redirect target changed'); keep a bounded token.
+    return re.sub(r'[^a-z0-9]+', '_', str(error).lower()).strip('_')[:40] or 'unspecified'
+
+
+def _callback_pending(cause: str, now: float) -> Result:
+    """Every callback_pending 409 names its cause: one reason covers four different waits."""
+    logger.info('event=enrichment_consumer outcome=retry reason=callback_pending cause=%s', cause)
+    return Result(Outcome.RETRY, RetryReason.CALLBACK_PENDING, available_at=now)
+
 
 @contextmanager
 def _beating(
     heartbeat: Callable[[], bool], seconds: float, context: dict[str, Any] | None
 ) -> Iterator[threading.Event]:
-    """Renew the lease until the block exits; ``lost`` is set when a renewal is refused."""
+    """Renew the lease until the block exits; ``lost`` is set when a renewal is refused.
+
+    Renewal stops after ``max_hold_seconds``: a callback hung on a dependency then lets its lease lapse, so the
+    maintenance sweep fences it and re-wakes the row, instead of heartbeating one obligation forever. A callback
+    that finishes before the lease lapses still settles normally.
+    """
     stopped, lost = threading.Event(), threading.Event()
+    hold_until = time.monotonic() + EnrichmentConsumer.max_hold_seconds
 
     def renew() -> None:
         while not stopped.wait(seconds):
+            if time.monotonic() >= hold_until:
+                logger.warning(
+                    'event=enrichment_heartbeat outcome=hold_cap max_hold_s=%.0f', EnrichmentConsumer.max_hold_seconds
+                )
+                return
             try:
                 if not heartbeat():
                     lost.set()
@@ -67,6 +130,8 @@ class EnrichmentConsumer:
     role: ClassVar[Role] = Role.WORKERS
     lease_seconds: ClassVar[float] = 120.0
     heartbeat_seconds: ClassVar[float] = 30.0
+    # The 1500s dispatch deadline is the longest any wake may run; past it the callback is treated as hung.
+    max_hold_seconds: ClassVar[float] = 1500.0
 
     def __init__(self, outbox: Any = None, process: Callable[[str, str, str], Any] | None = None):
         if outbox is None:
@@ -84,6 +149,19 @@ class EnrichmentConsumer:
         return enrich_conversation
 
     def process(self, claim: Claim, heartbeat: Callable[[], bool]) -> Result:
+        # Covers every store/gateway call below, including the effects-only path and the empty-output strike.
+        # A consumer-side write that already moved ownership makes the release refuse, so that settles STALE.
+        try:
+            return self._deliver(claim, heartbeat)
+        except Exception as error:
+            if not _transient_dependency(error):
+                raise
+            logger.warning(
+                'event=enrichment_consumer outcome=retry reason=dependency exception_type=%s', type(error).__name__
+            )
+            return Result(Outcome.RETRY, RetryReason.DEPENDENCY_WARMING, available_at=time.time())
+
+    def _deliver(self, claim: Claim, heartbeat: Callable[[], bool]) -> Result:
         from config.summary_guarantee import ADMITTED_OWNER, preserves_admitted
         from database._client import get_firestore_client
         from database.summary_processing import record_empty_failure
@@ -145,13 +223,13 @@ class EnrichmentConsumer:
                     if context and context.get('hold_skipped'):
                         discarded = True
                     if output is None and preserves_admitted(row) and not discarded and not blocked and not custody:
-                        return Result(Outcome.RETRY, RetryReason.CALLBACK_PENDING, available_at=now)
+                        return _callback_pending('admitted_no_output', now)
                     if output is not None and not summary_seen and not discarded and not blocked:
                         raise summary_delivery.SummaryOutputUnavailable('first-summary output is empty')
         except processing_hold.ProcessingDeferred as error:
             return Result(Outcome.DEFERRED, ConsumerReason.NOT_DUE, available_at=error.available_at)
-        except rows.FirstSummaryCallbackPending:
-            return Result(Outcome.RETRY, RetryReason.CALLBACK_PENDING, available_at=now)
+        except rows.FirstSummaryCallbackPending as error:
+            return _callback_pending(_cause(error), now)
         except HTTPException as error:
             # Processing's HTTP contract for a failed LLM/provider/app step: retry without a fast 5xx.
             if not (error.status_code == 429 or error.status_code >= 500):
@@ -168,7 +246,8 @@ class EnrichmentConsumer:
             if not context or not record_empty_failure(
                 get_firestore_client(), rows.COLLECTION, claim.row_id, claim.lease_token, claim.wake_token
             ):
-                return Result(Outcome.RETRY, RetryReason.CALLBACK_PENDING, available_at=now)
+                return _callback_pending('empty_output_unrecorded', now)
+            record_delivery('summary', 'failed')
             empty_blocked = True
         finally:
             ADMITTED_OWNER.reset(tokens[4])
@@ -188,8 +267,8 @@ class EnrichmentConsumer:
                 pending = transfer_redirect(
                     claim.row_id, claim.wake_token, claim.lease_token, str(context['redirect_to']), now=now
                 )
-            except rows.FirstSummaryCallbackPending:
-                return Result(Outcome.RETRY, RetryReason.CALLBACK_PENDING, available_at=now)
+            except rows.FirstSummaryCallbackPending as error:
+                return _callback_pending('redirect_' + _cause(error), now)
             if pending is not None:
                 rows.wake_row(pending)  # Transactional custody survives a lost enqueue acknowledgement.
             return Result(Outcome.STALE, ConsumerReason.REDIRECTED)
@@ -198,6 +277,7 @@ class EnrichmentConsumer:
                 Outcome.DEFERRED,
                 ConsumerReason.NOT_DUE,
                 available_at=context.get('defer_until', now + rows.LIVE_DEFER_SECONDS),
+                defer_cause=str(context['defer_reason']),
             )
         if superseded:
             if retry_revision is not None:

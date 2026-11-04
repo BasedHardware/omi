@@ -8,6 +8,7 @@ import 'package:omi/widgets/shimmer_with_timeout.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/held_audio/held_audio_views.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
@@ -15,10 +16,12 @@ import 'package:omi/pages/review/widgets/review_entry_card.dart';
 import 'package:omi/pages/episodes/episode_presentation.dart';
 import 'live_episode_visibility.dart';
 import 'home_rows.dart';
+import 'home_rows_health.dart';
 import 'package:omi/pages/episodes/live_episode_row.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/episode_provider.dart';
+import 'package:omi/providers/home_provider.dart';
 import 'package:omi/services/capture/empty_recording_notice.dart';
 import 'package:omi/providers/local_recordings_provider.dart';
 import 'package:omi/providers/review_provider.dart';
@@ -61,7 +64,7 @@ enum _ConversationListRowKind {
   conversation,
   recording,
   heldRecording,
-  groupSpacer
+  groupSpacer,
 }
 
 typedef _ConversationListRow = ({
@@ -300,13 +303,59 @@ class ConversationsPage extends StatefulWidget {
   State<ConversationsPage> createState() => _ConversationsPageState();
 }
 
-class _ConversationsPageState extends State<ConversationsPage> with AutomaticKeepAliveClientMixin {
+class _ConversationsPageState extends State<ConversationsPage>
+    with AutomaticKeepAliveClientMixin, WidgetsBindingObserver {
   TextEditingController textController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final GlobalKey<HomeDailyRecapsState> _recapsKey = GlobalKey<HomeDailyRecapsState>();
   String? _loadMoreFilterKey;
   String? _lastLoadMoreRequestKey;
   bool _isBootstrapping = true;
+  bool _initialOverlayPending = false;
+  Completer<void>? _initialOverlayReady;
+  ({String owner, HomeEpisodeLayout layout})? _fallbackHomeLayout;
+  final Set<String> _paintedStandaloneIds = {};
+  bool _homeTabActive = true;
+  bool _wasBackgrounded = false;
+  HomeProvider? _watchedHome;
+
+  void _releaseHomeLayout() {
+    _fallbackHomeLayout = null;
+    _paintedStandaloneIds.clear();
+  }
+
+  void _onHomeProviderChanged() {
+    final home = _watchedHome;
+    if (home == null) return;
+    final active = home.selectedIndex == HomeProvider.homeTab;
+    if (active == _homeTabActive) return;
+    _homeTabActive = active;
+    // Re-entering Home releases an outage-era grouping. With nothing held,
+    // a tab switch must not rebuild this page (tab_switch perf budget).
+    if (active && (_fallbackHomeLayout != null || _paintedStandaloneIds.isNotEmpty) && mounted) {
+      setState(_releaseHomeLayout);
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final home = context.read<HomeProvider?>();
+    if (identical(home, _watchedHome)) return;
+    _watchedHome?.removeListener(_onHomeProviderChanged);
+    _watchedHome = home;
+    _homeTabActive = home == null || home.selectedIndex == HomeProvider.homeTab;
+    home?.addListener(_onHomeProviderChanged);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.hidden) _wasBackgrounded = true;
+    if (state == AppLifecycleState.resumed && _wasBackgrounded) {
+      _wasBackgrounded = false;
+      if (mounted) setState(_releaseHomeLayout);
+    }
+  }
 
   @override
   bool get wantKeepAlive => true;
@@ -333,6 +382,9 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    final lifecycle = WidgetsBinding.instance.lifecycleState;
+    _wasBackgrounded = lifecycle == AppLifecycleState.paused || lifecycle == AppLifecycleState.hidden;
     HomeDailyRecapsSetting.reload();
     _scheduleDayRollover();
     _pendingWork.addListener(_onPendingWorkChanged);
@@ -344,13 +396,43 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
       if (episodes != null) unawaited(episodes.refreshLive());
       final conversationProvider = context.read<ConversationProvider>();
       episodes?.observeHomeConversations(conversationProvider);
+      final today = DateUtils.dateOnly(DateTime.now());
+      final initialFrom = conversationProvider.groupedConversations.keys.fold<DateTime>(
+        today.subtract(const Duration(days: 7)),
+        (oldest, day) => day.isBefore(oldest) ? day : oldest,
+      );
+      _initialOverlayPending = widget.requestInitialLoad && episodes != null;
+      Future<bool> loadOverlay(DateTime from) =>
+          episodes!.refreshHome(from, today.add(const Duration(days: 1)), bootstrap: true).onError((error, stack) {
+            Logger.error('Initial Home overlay failed: $error');
+            return false;
+          });
+      var overlay = _initialOverlayPending ? loadOverlay(initialFrom) : Future.value(true);
+      var overlayFrom = initialFrom;
       try {
-        if (widget.requestInitialLoad && conversationProvider.conversations.isEmpty) {
-          await conversationProvider.getInitialConversations();
-        } else if (widget.requestInitialLoad) {
-          // Still check for daily summaries even if conversations are cached
+        if (widget.requestInitialLoad) {
+          await conversationProvider.getInitialConversations(checkDailySummaries: false);
+          if (!mounted) return;
           _scheduleDeferred(conversationProvider.checkHasDailySummaries);
+          // The first page may reach beyond seven days. Cover its actual range
+          // under the same single deadline, rather than exposing older members.
+          final days = conversationProvider.groupedConversations.keys;
+          final oldest = days.isEmpty ? today : days.reduce((a, b) => a.isBefore(b) ? a : b);
+          if (episodes != null && oldest.isBefore(initialFrom)) {
+            overlayFrom = oldest;
+            overlay = loadOverlay(oldest);
+          }
+          final settled = _settleInitialOverlay(overlay, () => loadOverlay(overlayFrom));
+          unawaited(
+            settled.whenComplete(() {
+              if (mounted) setState(() => _initialOverlayPending = false);
+            }),
+          );
+          await settled.timeout(const Duration(milliseconds: 500), onTimeout: () {});
         }
+      } catch (error, stack) {
+        Logger.error('Initial Home conversations failed: $error\n$stack');
+        _initialOverlayPending = false;
       } finally {
         if (mounted) setState(() => _isBootstrapping = false);
       }
@@ -377,6 +459,47 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
       }
     });
     _deferred.add(timer);
+  }
+
+  /// Retry failed history before publishing source rows; persistent failure keeps
+  /// the last cached projection after a short deadline. All timers leave with Home.
+  Future<void> _settleInitialOverlay(Future<bool> first, Future<bool> Function() retry) {
+    final ready = _initialOverlayReady = Completer<void>();
+    Timer? deadline;
+    void finish() {
+      if (ready.isCompleted) return;
+      deadline?.cancel();
+      _deferred.remove(deadline);
+      ready.complete();
+    }
+
+    Future<void> attempt(Future<bool> read, int retries) async {
+      final complete = await read;
+      if (ready.isCompleted || !mounted) return;
+      if (complete) {
+        finish();
+      } else {
+        if (deadline == null) {
+          deadline = Timer(const Duration(seconds: 2), () {
+            if (ready.isCompleted || !mounted) return;
+            // A retry may still publish after this deadline. Pin only layout so
+            // that result cannot regroup rows the reader has already seen.
+            _fallbackHomeLayout = (
+              owner: SharedPreferencesUtil().uid,
+              layout: HomeEpisodeLayout(context.read<EpisodeProvider?>()?.homeEpisodes ?? const []),
+            );
+            finish();
+          });
+          _deferred.add(deadline!);
+        }
+        if (retries > 0) {
+          _scheduleDeferred(() => attempt(retry(), retries - 1));
+        }
+      }
+    }
+
+    unawaited(attempt(first, 2));
+    return ready.future;
   }
 
   bool _requestMoreIfNeeded(ConversationProvider provider) {
@@ -441,8 +564,15 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _watchedHome?.removeListener(_onHomeProviderChanged);
+    _watchedHome = null;
     _pendingWork.removeListener(_onPendingWorkChanged);
     _dayTimer?.cancel();
+    if (_initialOverlayReady != null && !_initialOverlayReady!.isCompleted) {
+      _initialOverlayReady!.complete();
+    }
+    _initialOverlayReady = null;
     for (final timer in _deferred) {
       timer.cancel();
     }
@@ -542,13 +672,18 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
           _conversationPageSnapshot(conversationProvider, recordingsProvider),
       builder: (context, snapshot, child) {
         final convoProvider = context.read<ConversationProvider>();
-        final hiddenByLive = episodeLive ? hiddenLiveConversations(episodes!.liveConversationIds) : const <String>{};
+        final defaultHome = !convoProvider.hasActiveSearch &&
+            !_hasActiveFilter(convoProvider) &&
+            !convoProvider.showShortConversations &&
+            !convoProvider.showDiscardedConversations &&
+            !convoProvider.isSelectionModeActive;
+        final hiddenByLive =
+            episodeLive && defaultHome ? hiddenLiveConversations(episodes!.liveConversationIds) : const <String>{};
         // Unsynced local recordings (batch/offline mode) shown inline with conversations,
         // grouped into the same date buckets. Only in the default view (no search/folder/
         // starred/daily-summaries filter).
-        final bool showRecordings = convoProvider.previousQuery.isEmpty &&
-            convoProvider.selectedFolderId == null &&
-            !convoProvider.showStarredOnly;
+        final bool showRecordings =
+            !convoProvider.hasActiveSearch && convoProvider.selectedFolderId == null && !convoProvider.showStarredOnly;
         final recordingsByDate = <DateTime, List<LocalRecording>>{};
         if (showRecordings) {
           // Batch/offline-mode recordings captured locally — a separate subsystem
@@ -578,13 +713,13 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                 for (final entry in convoProvider.groupedConversations.entries)
                   entry.key: [
                     for (final c in entry.value)
-                      if (!hiddenByLive.contains(c.id)) c
-                  ]
+                      if (!hiddenByLive.contains(c.id)) c,
+                  ],
               };
         final projectedEpisodes = <String, HomeRow>{};
         final projectedMemberIds = <String>{};
         final projectedProcessingIds = <String>{};
-        if (episodesOn && showRecordings && !convoProvider.isSelectionModeActive) {
+        if (defaultHome) {
           final today = DateTime.now();
           final days = conversationsByDate.keys;
           final from = days.isEmpty
@@ -592,14 +727,25 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
               : days.reduce((a, b) => a.isBefore(b) ? a : b);
           final to = DateTime(today.year, today.month, today.day + 1);
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) unawaited(episodes!.refreshHome(from, to));
+            if (mounted && episodesOn && !_isBootstrapping && !_initialOverlayPending) {
+              unawaited(episodes!.refreshHome(from, to));
+            }
           });
+          final latestEpisodes = episodes?.homeEpisodes ?? const [];
+          final heldLayout = _fallbackHomeLayout;
+          final holdingLayout = heldLayout != null && heldLayout.owner == SharedPreferencesUtil().uid;
+          final paintEpisodes = holdingLayout
+              ? heldLayout.layout.apply(latestEpisodes, standaloneIds: _paintedStandaloneIds)
+              : latestEpisodes;
           final projected = buildHomeRows(
             [for (final list in conversationsByDate.values) ...list],
-            episodes!.homeEpisodes,
-            enabled: true,
+            paintEpisodes,
+            enabled: episodesOn,
+            groupAwaitingTranscript: true,
+            processingTitle: context.l10n.wrappedProcessingDefault,
+            finishingTitle: context.l10n.episodeFinishingUp,
             liveConversationIds: hiddenByLive,
-            deletedIds: {...convoProvider.memoriesToDelete.keys, ...episodes.hiddenHomeMembers},
+            deletedIds: {...convoProvider.memoriesToDelete.keys, ...(episodes?.hiddenHomeMembers ?? const <String>{})},
             knownConversations: snapshot.conversations,
             processingConversations: snapshot.processingConversations,
           );
@@ -609,6 +755,19 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             projectedMemberIds.addAll(row.episodeConversationIds);
             if (row.isProcessing) projectedProcessingIds.add(row.conversation.id);
             if (row.episode != null) projectedEpisodes[row.conversation.id] = row;
+            if (holdingLayout && !_isBootstrapping && !_initialOverlayPending) {
+              if (row.episode == null) {
+                _paintedStandaloneIds.add(row.conversation.id);
+              } else if (row.episode!.id.isEmpty) {
+                // An unassigned Processing run is also an already-painted row.
+                _paintedStandaloneIds.addAll(row.episodeConversationIds);
+              }
+            }
+          }
+          if (holdingLayout && !_isBootstrapping && !_initialOverlayPending) {
+            _paintedStandaloneIds.addAll(snapshot.processingConversations
+                .where((row) => !projectedMemberIds.contains(row.id))
+                .map((row) => row.id));
           }
         }
         // Only the default view: a search or folder shows what it matched.
@@ -641,21 +800,47 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                 withLive,
                 [
                   for (final c in snapshot.processingConversations)
-                    if (!projectedMemberIds.contains(c.id)) c
+                    if (!projectedMemberIds.contains(c.id)) c,
                 ],
                 DateTime.now())
             : withLive;
+
+        if (showRecordings &&
+            !convoProvider.isSelectionModeActive &&
+            !convoProvider.showDiscardedConversations &&
+            !isShowingConversationSkeleton) {
+          final visible = conversationRows
+              .where((row) =>
+                  row.kind == _ConversationListRowKind.conversation ||
+                  row.kind == _ConversationListRowKind.liveEpisode ||
+                  row.kind == _ConversationListRowKind.processing ||
+                  row.kind == _ConversationListRowKind.recording)
+              .length;
+          HomeRowsHealth.note(visible);
+        }
 
         return RefreshIndicator(
           onRefresh: () async {
             HapticFeedback.mediumImpact();
             _lastLoadMoreRequestKey = null;
             unawaited(_pendingWork.refresh());
+            // Pull-to-refresh is an explicit layout boundary. Keep the held
+            // projection until both reads finish, so provider notifications
+            // during this refresh cannot expose half of the new grouping.
             episodes?.invalidateHome();
             if (context.read<EpisodeProvider?>() case final episodes?) unawaited(episodes.refreshLive());
+            final today = DateUtils.dateOnly(DateTime.now());
+            final from = convoProvider.groupedConversations.keys.fold<DateTime>(
+              today.subtract(const Duration(days: 7)),
+              (oldest, day) => day.isBefore(oldest) ? day : oldest,
+            );
+            final history = episodes == null
+                ? Future.value(true)
+                : episodes.refreshHome(from, today.add(const Duration(days: 1)), force: true);
             Provider.of<CaptureProvider>(context, listen: false).refreshInProgressConversations();
             await Future.wait([
               convoProvider.getInitialConversations(),
+              history,
               Provider.of<LocalRecordingsProvider>(context, listen: false).refresh(),
               if (_recapsKey.currentState != null) _recapsKey.currentState!.refresh(),
               // Review's entry hides when caught up; a pull is how a hidden one comes back.
@@ -663,6 +848,11 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                   when review.availability != ReviewAvailability.off)
                 review.load(),
             ]);
+            final historyReady = await history;
+            if (mounted && historyReady) {
+              if (_initialOverlayReady case final ready? when !ready.isCompleted) ready.complete();
+              setState(_releaseHomeLayout);
+            }
           },
           color: OmiColors.onAccent,
           backgroundColor: OmiColors.accent,
@@ -706,7 +896,11 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                 ),
               // Typed HTTP status precedes empty/loading/hero so an outage is
               // never the new-account empty state. Unset (data) keeps production.
-              if (showTypedStatus &&
+              if (_isBootstrapping)
+                _buildLoadingShimmer()
+              else if (_initialOverlayPending)
+                SliverToBoxAdapter(child: OmiLoadingState(label: context.l10n.episodeFinishingUp))
+              else if (showTypedStatus &&
                   conversationsByDate.values.every((list) => list.isEmpty) &&
                   snapshot.conversations.isEmpty &&
                   !hasProcessingConversations &&
@@ -841,8 +1035,11 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                           conversation: row.conversation!,
                           conversationIdx: row.conversationIndex,
                           date: row.date,
-                          fillingSeconds: homeRowFilling(filling, row.conversation!.id,
-                              projectedEpisodes[row.conversation!.id]?.episodeConversationIds),
+                          fillingSeconds: homeRowFilling(
+                            filling,
+                            row.conversation!.id,
+                            projectedEpisodes[row.conversation!.id]?.episodeConversationIds,
+                          ),
                           homeEpisode: projectedEpisodes[row.conversation!.id]?.episode,
                         );
                       case _ConversationListRowKind.recording:

@@ -14623,4 +14623,181 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get searchNoiseFilter => '짧은 클립';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '대화 $count개',
+      one: '대화 1개',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count곳',
+      one: '1곳',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return '$count개 모두 보기';
+  }
+
+  @override
+  String get reviewChangeSeeEvidence => '근거 보기';
+
+  @override
+  String get reviewChangeViewTask => '할 일 보기';
+
+  @override
+  String get dreamReportShadowBanner => '미리보기 모드: Dream이 변경할 내용을 보여 주지만, 아직 계정에는 아무것도 바뀌지 않습니다.';
+
+  @override
+  String dreamReportStats(int records, int tokens) {
+    return '항목 $records개 읽음 · 토큰 $tokens개';
+  }
+
+  @override
+  String get dreamReportFeedback => 'Omi 팀에 보고됨';
+
+  @override
+  String dreamReportPasses(int count, int limit) {
+    return '오늘 $count/$limit회 실행';
+  }
+
+  @override
+  String dreamReportQueued(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '변경 $count 건 대기 중',
+      one: '변경 1건 대기 중',
+      zero: '대기 중인 변경 없음',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportDropped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '이전 변경 $count 건 건너뜀',
+      one: '이전 변경 1건 건너뜀',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportPrivacyHeld(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '개인정보 보호를 위해 리포트 $count 건 보류',
+      one: '개인정보 보호를 위해 리포트 1건 보류',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncStepLabelDownload => 'Omi → 휴대폰';
+
+  @override
+  String get syncStepLabelUpload => '업로드';
+
+  @override
+  String get syncStepLabelTranscribe => '텍스트 변환';
+
+  @override
+  String get syncDetailsForSupport => '지원팀용';
+
+  @override
+  String get episodeOnDeviceNotesFootnote => '말하는 동안 휴대전화에서 초안이 작성됩니다. 전체 노트는 최종 스크립트와 함께 도착합니다.';
+
+  @override
+  String get episodeOnThisPhone => '이 휴대전화에서';
+
+  @override
+  String get livePreviewNoEngineTitle => '안전하게 기록 중입니다';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return '$duration 처리 중';
+  }
+
+  @override
+  String get onTheWayDetailsForSupport => '고객지원용 세부 정보';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '짧은 클립 $count개 숨겨짐',
+      one: '짧은 클립 1개 숨겨짐',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => '표시';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '짧은 클립 $count개 숨기기',
+      one: '짧은 클립 1개 숨기기',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get speakerWholeRecording => '녹음 전체에 적용';
+
+  @override
+  String get speakerSelectionChanged => '화자가 변경되었습니다. 줄을 다시 선택해 주세요.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': '녹음이 너무 큽니다. 한 대화에서 더 적은 줄을 선택하세요.',
+        'partial': '일부 줄이 저장되었습니다. 나머지 줄을 선택하고 다시 시도하세요.',
+        'other': '일부 줄이 저장되었습니다. 나머지 줄을 선택하고 다시 시도하세요.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerRecordingCoverage(String state, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '사용 가능한 대화에서만 $count줄의 이름을 변경했습니다.',
+      one: '사용 가능한 대화에서만 1줄의 이름을 변경했습니다.',
+    );
+    String _temp1 = intl.Intl.selectLogic(
+      state,
+      {
+        'scope': '이 목소리의 다른 줄 (녹음 범위 미확인)',
+        'other': '$_temp0',
+      },
+    );
+    return '$_temp1';
+  }
+
+  @override
+  String get episodeFinishingUp => '마무리 중…';
 }

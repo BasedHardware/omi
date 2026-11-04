@@ -284,7 +284,6 @@ def wire_common_stubs(install) -> SimpleNamespace:
     rate_limit.RATE_LIMIT_SHADOW = False
     subscription = install('utils.subscription', ModuleType('utils.subscription'))
     subscription.enforce_chat_quota = MagicMock()
-    subscription.is_trial_paywalled = MagicMock(return_value=False)
 
     auth = install('utils.other.endpoints', ModuleType('utils.other.endpoints'))
 

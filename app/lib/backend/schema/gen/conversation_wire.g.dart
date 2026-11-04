@@ -34,6 +34,7 @@ class GeneratedTranscriptSegment {
   final String? personId;
   final String? speaker;
   final int? speakerId;
+  final String? speakerIdScope;
   final String? speakerLabelSource;
   final bool speechProfileProcessed;
   final double start;
@@ -49,6 +50,7 @@ class GeneratedTranscriptSegment {
     this.personId,
     this.speaker = "SPEAKER_00",
     this.speakerId,
+    this.speakerIdScope,
     this.speakerLabelSource,
     this.speechProfileProcessed = true,
     required this.start,
@@ -66,6 +68,7 @@ class GeneratedTranscriptSegment {
       personId: _readFieldValue<String>(_readField(json, const ["person_id"]), "person_id", _readString, requiredField: false, nullable: true),
       speaker: _readFieldValue<String>(_readField(json, const ["speaker"]), "speaker", _readString, requiredField: false, nullable: true, defaultValue: "SPEAKER_00"),
       speakerId: _readFieldValue<int>(_readField(json, const ["speaker_id"]), "speaker_id", _readInt, requiredField: false, nullable: true),
+      speakerIdScope: _readFieldValue<String>(_readField(json, const ["speaker_id_scope"]), "speaker_id_scope", _readString, requiredField: false, nullable: true),
       speakerLabelSource: _readFieldValue<String>(_readField(json, const ["speaker_label_source"]), "speaker_label_source", _readString, requiredField: false, nullable: true),
       speechProfileProcessed: _required(_readFieldValue<bool>(_readField(json, const ["speech_profile_processed"]), "speech_profile_processed", _readBool, requiredField: false, nullable: false, defaultValue: true), "speech_profile_processed"),
       start: _required(_readFieldValue<double>(_readField(json, const ["start"]), "start", _readDouble, requiredField: true, nullable: false), "start"),
@@ -84,6 +87,7 @@ class GeneratedTranscriptSegment {
       'person_id': personId,
       'speaker': speaker,
       'speaker_id': speakerId,
+      'speaker_id_scope': speakerIdScope,
       'speaker_label_source': speakerLabelSource,
       'speech_profile_processed': speechProfileProcessed,
       'start': start,
@@ -1975,6 +1979,7 @@ class GeneratedSyncJobStatusResponse {
   final int? retryAfter;
   final String status;
   final int successfulSegments;
+  final int totalFiles;
   final int totalSegments;
 
   const GeneratedSyncJobStatusResponse({
@@ -1990,6 +1995,7 @@ class GeneratedSyncJobStatusResponse {
     this.retryAfter,
     required this.status,
     this.successfulSegments = 0,
+    this.totalFiles = 0,
     this.totalSegments = 0,
   });
 
@@ -2007,6 +2013,7 @@ class GeneratedSyncJobStatusResponse {
       retryAfter: _readFieldValue<int>(_readField(json, const ["retry_after"]), "retry_after", _readInt, requiredField: false, nullable: true),
       status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
       successfulSegments: _required(_readFieldValue<int>(_readField(json, const ["successful_segments"]), "successful_segments", _readInt, requiredField: false, nullable: false, defaultValue: 0), "successful_segments"),
+      totalFiles: _required(_readFieldValue<int>(_readField(json, const ["total_files"]), "total_files", _readInt, requiredField: false, nullable: false, defaultValue: 0), "total_files"),
       totalSegments: _required(_readFieldValue<int>(_readField(json, const ["total_segments"]), "total_segments", _readInt, requiredField: false, nullable: false, defaultValue: 0), "total_segments"),
     );
   }
@@ -2025,6 +2032,7 @@ class GeneratedSyncJobStatusResponse {
       'retry_after': retryAfter,
       'status': status,
       'successful_segments': successfulSegments,
+      'total_files': totalFiles,
       'total_segments': totalSegments,
     };
   }

@@ -10,23 +10,16 @@ dataPlaneProject: based-hardware
 stage: prod
 namespace: batch_pipeline_prod
 secretName: prod-omi-backend-secrets
-# GPU floor: 4 on-demand L4 workers held through vendor outages and L4
-# stockouts (vendor routing, vendorscope-ops option B; was 3, lead 114a22).
-# A stockout only fails scale-up, so the floor must already be standing. This
-# value and autoscaling.minReplicas are one floor setting; change both.
-# Rollback: 3. See docs/runbooks/batch-vendor-routing-capacity.md.
-replicaCount: 4
-# Latent queue scaler per the lead-accepted 100% capacity plan (f05065):
-# demand-driven, min 4 / max 16, OD-first - all replicas pin to the on-demand
-# pool; Spot stays opportunistic and out of this cutover. Above 16 only as a
-# second qualified step. This latent budget authorizes no capacity and creates
-# no HPA while enabled is false; op1 raises batch-pipeline-pool's node max (3
-# -> 16) in the same reviewed qualification window that enables it, using a
-# real scale-up during the 25% soak as the scheduling proof.
+# Preserve the audited live floor/ceiling through the next Helm roll (lead
+# af6df5, 2026-11-03). replicaCount and autoscaling.minReplicas are one floor
+# setting; change both. The chart's former 4/16 would reset live 6/12.
+# OD-first: all replicas pin to the on-demand pool; Spot stays opportunistic.
+# Rollback of this source correction must not scale the live floor down.
+replicaCount: 6
 autoscaling:
   enabled: true
-  minReplicas: 4
-  maxReplicas: 16
+  minReplicas: 6
+  maxReplicas: 12
   balancedPools:
     enabled: false
 # OD-first placement: the worker pins to the on-demand pool so the guaranteed
@@ -36,6 +29,11 @@ nodeSelector:
   cloud.google.com/gke-nodepool: batch-pipeline-pool
   service: batch-pipeline
   env: prod
+# L4 stockout fallback (11-01: 13 workers Pending on L4 at peak). Ships at zero
+# replicas; scale <release>-t4 up only while L4 workers are Pending, then back
+# to 0. Needs batch-pipeline-t4-pool (n1-standard-8 + T4, zones a/b/c/f).
+t4Fallback:
+  enabled: true
 tolerations:
   - key: omi.ai/batch-pipeline
     operator: Equal
@@ -52,9 +50,17 @@ tolerations:
 # untouched. All three pools are on-demand g2-standard-8 + L4 with only the
 # nvidia.com/gpu taint. Kill switch: enabled false (removes -borrow and its HPA).
 borrowedNodePools:
+  # Streaming fleet retired (2026-11-04): enabling these pools now requires
+  # a new lead/principal ruling; never resume old streaming GPU spend.
   enabled: false
   pools: [parakeet-pool, parakeet-pool-b, parakeet-pool-v2]
 worker:
+  servingMetricsMinRefreshSeconds: 60
+  # Control-loop defaults; rollback independently with 64 / false / 2 / {}.
+  controlCandidateFanout: 16
+  admissionParallelCalls: true
+  idlePollMaxSeconds: 10
+  firestoreReadLevers: '{"batch_privacy_memoize":100}'
   # Preserve the measured profiling-on state across the scaler Helm upgrade.
   stageProfilingEnabled: true
   # #24213 IO 5 did not run in qualification (NO-GO 2026-11-01); hold the prior 3.

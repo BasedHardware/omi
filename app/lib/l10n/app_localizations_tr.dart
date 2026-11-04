@@ -14841,4 +14841,183 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get searchNoiseFilter => 'Kısa klipler';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count konuşma',
+      one: '1 konuşma',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count yer',
+      one: '1 yer',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return '$count öğenin tümünü göster';
+  }
+
+  @override
+  String get reviewChangeSeeEvidence => 'Kanıtı gör';
+
+  @override
+  String get reviewChangeViewTask => 'Görevi görüntüle';
+
+  @override
+  String get dreamReportShadowBanner =>
+      'Önizleme modu: Dream neyi değiştireceğini gösterir, ancak hesabında henüz hiçbir şey değişmez.';
+
+  @override
+  String dreamReportStats(int records, int tokens) {
+    return '$records öğe okundu · $tokens token';
+  }
+
+  @override
+  String get dreamReportFeedback => 'Omi ekibine bildirildi';
+
+  @override
+  String dreamReportPasses(int count, int limit) {
+    return 'Bugün $count/$limit tur';
+  }
+
+  @override
+  String dreamReportQueued(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count değişiklik bekliyor',
+      one: '1 değişiklik bekliyor',
+      zero: 'Bekleyen değişiklik yok',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportDropped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count eski değişiklik atlandı',
+      one: '1 eski değişiklik atlandı',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportPrivacyHeld(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count bildirim gizlilik nedeniyle tutuldu',
+      one: '1 bildirim gizlilik nedeniyle tutuldu',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncStepLabelDownload => 'Omi → telefon';
+
+  @override
+  String get syncStepLabelUpload => 'Yükleme';
+
+  @override
+  String get syncStepLabelTranscribe => 'Yazıya dök';
+
+  @override
+  String get syncDetailsForSupport => 'Destek için';
+
+  @override
+  String get episodeOnDeviceNotesFootnote =>
+      'Konuşurken telefonunda hazırlanıyor. Tam notlar nihai transkriptle birlikte gelecek.';
+
+  @override
+  String get episodeOnThisPhone => 'Bu telefonda';
+
+  @override
+  String get livePreviewNoEngineTitle => 'Güvenle kaydediyor';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return '$duration hâlâ işleniyor';
+  }
+
+  @override
+  String get onTheWayDetailsForSupport => 'Destek için ayrıntılar';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count kısa kayıt gizlendi',
+      one: '1 kısa kayıt gizlendi',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => 'Göster';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count kısa kaydı gizle',
+      one: '1 kısa kaydı gizle',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get speakerWholeRecording => 'Kaydın tamamına uygula';
+
+  @override
+  String get speakerSelectionChanged => 'Konuşmacı değişti. Satırları yeniden seçin.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'Kayıt çok büyük. Bir konuşmada daha az satır seçin.',
+        'partial': 'Bazı satırlar kaydedildi. Kalanları seçip tekrar deneyin.',
+        'other': 'Bazı satırlar kaydedildi. Kalanları seçip tekrar deneyin.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerRecordingCoverage(String state, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Yalnızca mevcut konuşmalardaki $count satır yeniden adlandırıldı.',
+      one: 'Yalnızca mevcut konuşmalardaki 1 satır yeniden adlandırıldı.',
+    );
+    String _temp1 = intl.Intl.selectLogic(
+      state,
+      {
+        'scope': 'Bu sesin diğer satırları (kayıt kapsamı doğrulanmadı)',
+        'other': '$_temp0',
+      },
+    );
+    return '$_temp1';
+  }
+
+  @override
+  String get episodeFinishingUp => 'Tamamlanıyor…';
 }

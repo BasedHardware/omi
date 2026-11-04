@@ -230,7 +230,7 @@ def query_vectors(
 
     xq = query_vector if query_vector is not None else embeddings.embed_query(query)
     xc = owner_index(index, uid, index_name=_pinecone_index_name).query(
-        vector=xq, top_k=k, include_metadata=False, filter=filter_data, namespace="ns1"
+        caller='query_vectors', vector=xq, top_k=k, include_metadata=False, filter=filter_data, namespace="ns1"
     )
     matches: List[Any] = xc['matches']
     return [item['id'].replace(f'{uid}-', '') for item in matches]
@@ -268,7 +268,13 @@ def query_vectors_by_metadata(
         )
 
     xc = owner_index(index, uid, index_name=_pinecone_index_name).query(
-        vector=vector, filter=filter_data, namespace="ns1", include_values=False, include_metadata=True, top_k=1000
+        caller='query_vectors_by_metadata',
+        vector=vector,
+        filter=filter_data,
+        namespace="ns1",
+        include_values=False,
+        include_metadata=True,
+        top_k=1000,
     )
     if not xc['matches']:
         # Relax-retry when the structured people/topics/entities $or clause produced no hits, dropping
@@ -280,6 +286,7 @@ def query_vectors_by_metadata(
             and_clauses.pop(1)
             logger.warning(f'query_vectors_by_metadata retrying without structured filters: {json.dumps(filter_data)}')
             xc = owner_index(index, uid, index_name=_pinecone_index_name).query(
+                caller='query_vectors_by_metadata',
                 vector=vector,
                 filter=filter_data,
                 namespace="ns1",
@@ -373,6 +380,7 @@ def query_workstream_association_candidates(
     if index is None or not summary.strip():
         return []
     response = owner_index(index, uid, index_name=_pinecone_index_name).query(
+        caller='query_workstream_association_candidates',
         vector=embeddings.embed_query(summary),
         top_k=max(1, min(limit, 20)),
         include_metadata=True,
@@ -559,7 +567,12 @@ def find_similar_memories(
     filter_data = build_legacy_memory_vector_filter(uid, subject_entity_id=subject_entity_id)
 
     xc = owner_index(index, uid, index_name=_pinecone_index_name).query(
-        vector=vector, top_k=limit, include_metadata=True, filter=filter_data, namespace=MEMORIES_NAMESPACE
+        caller='find_similar_memories',
+        vector=vector,
+        top_k=limit,
+        include_metadata=True,
+        filter=filter_data,
+        namespace=MEMORIES_NAMESPACE,
     )
 
     results: List[Dict[str, Any]] = []
@@ -768,6 +781,7 @@ def query_memory_vector_candidates(
             else build_default_memory_vector_filter(uid)
         )
     response = owner_index(index, uid, index_name=_pinecone_index_name).query(
+        caller='query_memory_vector_candidates',
         vector=vector,
         top_k=bounded_limit,
         include_metadata=True,
@@ -849,7 +863,12 @@ def find_similar_x_posts(uid: str, content: str, limit: int = 10) -> List[Dict[s
         return []
     vector = embeddings.embed_query(content)
     xc = owner_index(index, uid, index_name=_pinecone_index_name).query(
-        vector=vector, top_k=limit, include_metadata=True, filter={'uid': uid}, namespace=X_POSTS_NAMESPACE
+        caller='find_similar_x_posts',
+        vector=vector,
+        top_k=limit,
+        include_metadata=True,
+        filter={'uid': uid},
+        namespace=X_POSTS_NAMESPACE,
     )
     matches: List[Any] = xc.get('matches', [])
     return [
@@ -944,6 +963,7 @@ def search_screen_activity_vectors(
         filter_data['appName'] = app_filter
 
     xc = owner_index(index, uid, index_name=_pinecone_index_name).query(
+        caller='search_screen_activity_vectors',
         vector=query_vector,
         top_k=k,
         include_metadata=True,
@@ -1087,7 +1107,12 @@ def search_action_items_by_vector(uid: str, query: str, limit: int = 10, min_sco
         filter_data: Dict[str, Any] = {'uid': uid}
 
         xc = owner_index(index, uid, index_name=_pinecone_index_name).query(
-            vector=vector, top_k=limit, include_metadata=True, filter=filter_data, namespace=ACTION_ITEMS_NAMESPACE
+            caller='search_action_items_by_vector',
+            vector=vector,
+            top_k=limit,
+            include_metadata=True,
+            filter=filter_data,
+            namespace=ACTION_ITEMS_NAMESPACE,
         )
 
         matches: List[Any] = xc.get('matches', [])
@@ -1132,6 +1157,7 @@ def find_similar_action_items(uid: str, query: str, threshold: float = 0.6, limi
     try:
         vector = embeddings.embed_query(prepared_query)
         xc = owner_index(index, uid, index_name=_pinecone_index_name).query(
+            caller='find_similar_action_items',
             vector=vector,
             top_k=limit,
             include_metadata=True,
@@ -1306,6 +1332,7 @@ def search_transcript_chunks(
     if timeout_seconds is not None:
         query_kwargs['_request_timeout'] = timeout_seconds
     xc = owner_index(index, uid, index_name=_pinecone_index_name).query(
+        caller='search_transcript_chunks',
         vector=vector,
         top_k=limit,
         include_metadata=True,

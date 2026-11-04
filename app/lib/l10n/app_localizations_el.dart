@@ -14928,4 +14928,183 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get searchNoiseFilter => 'Σύντομα κλιπ';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count συνομιλίες',
+      one: '1 συνομιλία',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count σημεία',
+      one: '1 σημείο',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'Εμφάνιση όλων ($count)';
+  }
+
+  @override
+  String get reviewChangeSeeEvidence => 'Δείτε τα στοιχεία';
+
+  @override
+  String get reviewChangeViewTask => 'Προβολή εργασίας';
+
+  @override
+  String get dreamReportShadowBanner =>
+      'Λειτουργία προεπισκόπησης: το Dream δείχνει τι θα άλλαζε, αλλά τίποτα στον λογαριασμό σου δεν αλλάζει ακόμα.';
+
+  @override
+  String dreamReportStats(int records, int tokens) {
+    return 'Διαβάστηκαν $records στοιχεία · $tokens tokens';
+  }
+
+  @override
+  String get dreamReportFeedback => 'Αναφέρθηκε στην ομάδα του Omi';
+
+  @override
+  String dreamReportPasses(int count, int limit) {
+    return '$count από $limit περάσματα σήμερα';
+  }
+
+  @override
+  String dreamReportQueued(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count αλλαγές σε αναμονή',
+      one: '1 αλλαγή σε αναμονή',
+      zero: 'Καμία αλλαγή σε αναμονή',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportDropped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count παλαιότερες αλλαγές παραλείφθηκαν',
+      one: '1 παλαιότερη αλλαγή παραλείφθηκε',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportPrivacyHeld(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count αναφορές κρατήθηκαν για λόγους απορρήτου',
+      one: '1 αναφορά κρατήθηκε για λόγους απορρήτου',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncStepLabelDownload => 'Omi → τηλέφωνο';
+
+  @override
+  String get syncStepLabelUpload => 'Μεταφόρτωση';
+
+  @override
+  String get syncStepLabelTranscribe => 'Απομαγνητοφώνηση';
+
+  @override
+  String get syncDetailsForSupport => 'Για την υποστήριξη';
+
+  @override
+  String get episodeOnDeviceNotesFootnote =>
+      'Συντάσσονται στο τηλέφωνό σας καθώς μιλάτε. Οι πλήρεις σημειώσεις έρχονται με την τελική απομαγνητοφώνηση.';
+
+  @override
+  String get episodeOnThisPhone => 'Σε αυτό το τηλέφωνο';
+
+  @override
+  String get livePreviewNoEngineTitle => 'Ασφαλή εγγραφή';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return 'Απομένουν $duration';
+  }
+
+  @override
+  String get onTheWayDetailsForSupport => 'Λεπτομέρειες για την υποστήριξη';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Κρύφτηκαν $count σύντομα αποσπάσματα',
+      one: 'Κρύφτηκε 1 σύντομο απόσπασμα',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => 'Εμφάνιση';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Απόκρυψη $count σύντομων αποσπασμάτων',
+      one: 'Απόκρυψη 1 σύντομου αποσπάσματος',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get speakerWholeRecording => 'Εφαρμογή σε όλη την εγγραφή';
+
+  @override
+  String get speakerSelectionChanged => 'Ο ομιλητής άλλαξε. Επιλέξτε ξανά τις γραμμές.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'Η εγγραφή είναι πολύ μεγάλη. Επιλέξτε λιγότερες γραμμές σε μία συνομιλία.',
+        'partial': 'Αποθηκεύτηκαν ορισμένες γραμμές. Επιλέξτε τις υπόλοιπες και δοκιμάστε ξανά.',
+        'other': 'Αποθηκεύτηκαν ορισμένες γραμμές. Επιλέξτε τις υπόλοιπες και δοκιμάστε ξανά.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerRecordingCoverage(String state, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Μετονομάστηκαν $count γραμμές μόνο στις διαθέσιμες συνομιλίες.',
+      one: 'Μετονομάστηκαν 1 γραμμές μόνο στις διαθέσιμες συνομιλίες.',
+    );
+    String _temp1 = intl.Intl.selectLogic(
+      state,
+      {
+        'scope': 'Άλλες γραμμές αυτής της φωνής (η κάλυψη εγγραφής δεν επιβεβαιώθηκε)',
+        'other': '$_temp0',
+      },
+    );
+    return '$_temp1';
+  }
+
+  @override
+  String get episodeFinishingUp => 'Ολοκλήρωση…';
 }

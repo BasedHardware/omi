@@ -47,6 +47,7 @@ from tests.support.firestore_usage_units_driver import DRIVER as USAGE_UNITS_DRI
 from tests.support.firestore_batch_pipeline_drivers import entries as batch_pipeline_entries
 from tests.support.firestore_batch_privacy_drivers import entries as batch_privacy_entries
 from tests.support.firestore_memory_ledger_drivers import registry_extension as memory_ledger_drivers
+from tests.support.firestore_lifecycle_metrics_drivers import entries as lifecycle_metrics_entries
 from models.announcement import AnnouncementType
 from models.candidate import CandidateStatus
 from models.chat_first import ChatFirstSubject
@@ -142,6 +143,7 @@ _DEV_KEY = 'omi_dev_' + 'a' * 32
 _MCP_KEY = 'omi_mcp_' + 'a' * 32
 
 BODY_DIGEST = {
+    'database.lifecycle_metrics_queries._where': '51d3e38b20df6800101fbf671471d2538c487d9c702698c6a9ad221c43f89a79',
     'database.batch_pipeline_store.FirestoreStore.ready_for_capacity': '975eabd92f43ba5da3d847439f4d8e3592525ccd31c11dcac6463365535eac10',
     'database.batch_pipeline_store.FirestoreStore.oldest_admissible_ready': '293687cc6708d7ab2f673cb2984e6bb8cbfe581fa526db8c1040fd011dc00107',
     'database.batch_pipeline_projection_release.release_page': '51d879075128af7e074b0ab3ccdb376e2171678351cad3ade376a3a3f78e2e69',
@@ -157,6 +159,7 @@ BODY_DIGEST = {
     'database.batch_pipeline_store.FirestoreStore.projection_page': 'bc9fe5cd08a05748eaa118af15031abdcb1a68d91d7f0b74bf177a27eb980a94',
     'database.batch_pipeline_store.FirestoreStore.projection_successor': '96adabf372104327c5a8065ef2ff06621648ee242b3415d04b047d50ded9e6b1',
     'database.batch_pipeline_store.FirestoreTransaction.service_frontier': '74aa1993996cdc9ca93a1141de64dfc7e05a9d831a67860ddbb8a64d55520a02',
+    'database.batch_pipeline_store.FirestoreStore.control_candidates': 'c1ce9e8170a7fde0e6a82c44a2db0c0c18909cba723e9cefd402cfe1f7993df9',
     'database.batch_pipeline_store.FirestoreStore.control_candidate': 'd82ee8b1c03be61b104e25304d6a0a732a9b59453fd302f4e7794a75622d65ad',
     'database.batch_pipeline_store.FirestoreStore.oldest_retry': '8d77904364b37100b5816f0252831ef6cf8807930dba8671cdc56bf603340315',
     'database.batch_pipeline_staging.reap': '39b0e41ad13a7bc50bb8f987b6f78d11253663fd15baf39ca6663fb9f1fde377',
@@ -179,7 +182,8 @@ BODY_DIGEST = {
     'database.action_items._harvest_legacy_docs': 'f4b8069a91feae96d257470687bc383bb0652b002a009e79979815be58814f9a',
     'database.action_items._probe_legacy_completion_rows': '57a375ed6e56cdd9c6156ef4cee5944dbfb089a2477844c5b9c52de9a3214a30',
     # Re-reviewed: quiet admission uses the shared speech clock; query/read shapes are unchanged.
-    'database.conversation_finalization_jobs._create_or_get_finalization_intent_txn': 'a6c91232a5a2cff334260675817331cb46b5b670cad91acd6bdd9c46ed58ee67',
+    # Re-reviewed 2026-11-04: atomic blocked_byok_at metadata only; query ownership is unchanged.
+    'database.conversation_finalization_jobs._create_or_get_finalization_intent_txn': '9ead08b44085a755f8f1669059d955658b0cc6cf3c2172a12737a056bf562bef',
     'database.durable_queue_age._publish_queue_ages': '58e66cfc32f39bdc2e9b1e6c805d18599c1ff14be8dbcff68eadc23506656d9b',
     'database.firestore_query_types.FirestoreQuerySpec.build': '2c26a157a8e87be2bcfef668e3bd5cdc0a9c0d96e0b56bada98c30741c8be01a',
     # Re-reviewed: positional .where converted to filter=FieldFilter — same field/op/value shape.
@@ -359,6 +363,13 @@ _add(
     )
 )
 _add(DriverEntry('database.action_items.get_action_item_ids', base={'uid': UID}, neutrals={'budget': _BUDGET}))
+_add(
+    DriverEntry(
+        'database.action_item_dedup.may_have_recent_dedup_candidates',
+        base={'uid': UID, 'cutoff': T0},
+        neutrals={'excluded_conversation_ids': (set(), 'Python-only exclusion after bounded timestamp queries')},
+    )
+)
 _add(
     DriverEntry(
         'database.action_items.get_action_items',
@@ -1056,7 +1067,10 @@ _add(
             'uid': UID,
             'episode': {'id': 'recorded-1', 'started_at': T0, 'last_activity_at': T1},
         },
-        neutrals={'rows': (None, 'preloaded rows reuse the recorded_candidates query shape')},
+        neutrals={
+            'rows': (None, 'preloaded rows reuse the recorded_candidates query shape'),
+            'fence_row': (None, 'preloaded timeline fence document; no query shape effect'),
+        },
     )
 )
 _add(
@@ -1069,6 +1083,7 @@ _add(
 _add(
     DriverEntry(
         'database.episode_timeline.attach_recorded',
+        neutrals={'attach_row': (None, 'optional semantic memo; no candidate query effect')},
         base={
             'uid': UID,
             'conversation_id': 'recorded-1',
@@ -1093,7 +1108,12 @@ _add(
             'choose': lambda rows, start, end: None,
             'new_episode': {'id': 'recorded-1'},
         },
-        neutrals={'expected_episode_id': (None, 'membership fence; never changes the recorded-candidates query shape')},
+        neutrals={
+            'expected_episode_id': (None, 'membership fence; never changes the recorded-candidates query shape'),
+            'transaction': (None, 'reuse the enclosing transaction read phase; same query shape'),
+            'candidates': (None, 'attempt-local reuse of the registered recorded_candidates builder'),
+            'fence_row': (None, 'preloaded timeline fence document; no query shape effect'),
+        },
         patchers=(_stub('database.episodes.seal', {'id': 'recorded-1'}),),
     )
 )
@@ -1116,6 +1136,18 @@ _add(
             ),
             _stub('database.episodes.seal', {'id': 'owner'}),
         ),
+    )
+)
+_add(
+    DriverEntry(
+        'database.recording_speakers.scope_conversation_ids',
+        base={'uid': UID, 'scopes': frozenset({'stream:1'})},
+    )
+)
+_add(
+    DriverEntry(
+        'database.recording_speakers.legacy_recording_conversation_ids',
+        base={'uid': UID, 'origin_id': 'origin-1'},
     )
 )
 _add(DriverEntry('database.conversations.get_conversation_ids', base={'uid': UID}))
@@ -1183,6 +1215,13 @@ _add(
         'database.stale_conversation_recovery.get_stale_recovery_page',
         base={'uid': UID, 'cutoff': T0},
         neutrals={'now': (T1, 'claim clock; does not change serving query')},
+    )
+)
+_add(
+    DriverEntry(
+        'database.recurring_voice_privacy.scrub_transcripts',
+        base={'uid': UID},
+        profiles=(CallerProfile('recurring-optout-transcript-scrub', {}),),
     )
 )
 _add(DriverEntry('database.conversations.iter_all_conversation_photos', base={'uid': UID}))
@@ -2515,6 +2554,14 @@ _add(
 )
 _add(
     DriverEntry(
+        'database.sync_backfill_sequencer.worker_candidates',
+        domains={'after_uid': [None, UID]},
+        neutrals={'limit': _LIMIT},
+        patchers=_SYNC_PROD,
+    )
+)
+_add(
+    DriverEntry(
         'database.sync_backfill_sequencer.due_pending',
         domains={'now': [None, T0]},
         neutrals={'limit': _LIMIT},
@@ -2547,6 +2594,7 @@ _add(
         'database.sync_backfill_sequencer.finish_job',
         base={'uid': UID, 'job_id': 'shape-job', 'epoch': 1, 'outcome': 'completed'},
         domains={'now': [None, T0]},
+        neutrals={'worker_token': (None, 'execution fencing does not change the pending-presence query')},
         setup=_seed(f'sync_backfill_sequencer/{UID}', {'active_job_id': 'shape-job', 'active_epoch': 1}),
         patchers=_SYNC_PROD,
     )
@@ -2929,6 +2977,7 @@ _add(
         neutrals={
             'include_dismissed': (False, 'post-read visibility filter; does not alter the Firestore query shape'),
             'memoize': (False, 'task-attempt memo opt-in; read-through only, does not alter the Firestore query shape'),
+            'memo_site': ('other', 'closed telemetry site; does not alter the Firestore query shape'),
         },
     )
 )
@@ -3095,6 +3144,7 @@ _add(
 
 for entry in (
     *batch_pipeline_entries(),
+    *lifecycle_metrics_entries(),
     *batch_privacy_entries(),
     *memory_ledger_drivers(),
     *outside_drivers.DRIVERS.values(),
@@ -3559,7 +3609,13 @@ _add(
             'client': (None, 'defaults to the shared Firestore client'),
             'wake': (None, 'task creator runs per row after the query'),
         },
-        patchers=(_stub('utils.enrichment.outbox._mutate', None), _stub('utils.enrichment.outbox.owns_runtime', True)),
+        patchers=(
+            _stub('utils.enrichment.outbox._mutate', None),
+            _stub('utils.enrichment.outbox.owns_runtime', True),
+            # The independently driven metrics reader has a process-local
+            # throttle, so it must not change this driver's repeated captures.
+            _stub('utils.enrichment.scan.observe', None),
+        ),
     )
 )
 

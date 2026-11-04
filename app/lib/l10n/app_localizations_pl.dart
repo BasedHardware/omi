@@ -14871,4 +14871,183 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get searchNoiseFilter => 'Krótkie klipy';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Rozmowy: $count',
+      one: '1 rozmowa',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Miejsca: $count',
+      one: '1 miejsce',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'Pokaż wszystkie ($count)';
+  }
+
+  @override
+  String get reviewChangeSeeEvidence => 'Zobacz dowody';
+
+  @override
+  String get reviewChangeViewTask => 'Zobacz zadanie';
+
+  @override
+  String get dreamReportShadowBanner =>
+      'Tryb podglądu: Dream pokazuje, co by zmienił, ale na Twoim koncie nic się jeszcze nie zmienia.';
+
+  @override
+  String dreamReportStats(int records, int tokens) {
+    return 'Odczytano elementów: $records · tokenów: $tokens';
+  }
+
+  @override
+  String get dreamReportFeedback => 'Zgłoszono zespołowi Omi';
+
+  @override
+  String dreamReportPasses(int count, int limit) {
+    return '$count z $limit przebiegów dzisiaj';
+  }
+
+  @override
+  String dreamReportQueued(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count zmiany czekają',
+      one: '1 zmiana czeka',
+      zero: 'Brak oczekujących zmian',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportDropped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count starszej zmiany pominięto',
+      one: '1 starsza zmiana pominięta',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportPrivacyHeld(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count zgłoszenia wstrzymano ze względu na prywatność',
+      one: '1 zgłoszenie wstrzymane ze względu na prywatność',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncStepLabelDownload => 'Omi → telefon';
+
+  @override
+  String get syncStepLabelUpload => 'Wysyłanie';
+
+  @override
+  String get syncStepLabelTranscribe => 'Transkrypcja';
+
+  @override
+  String get syncDetailsForSupport => 'Dla pomocy technicznej';
+
+  @override
+  String get episodeOnDeviceNotesFootnote =>
+      'Tworzone na Twoim telefonie w trakcie rozmowy. Pełne notatki pojawią się wraz z ostateczną transkrypcją.';
+
+  @override
+  String get episodeOnThisPhone => 'Na tym telefonie';
+
+  @override
+  String get livePreviewNoEngineTitle => 'Bezpiecznie nagrywa';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return '$duration w drodze';
+  }
+
+  @override
+  String get onTheWayDetailsForSupport => 'Szczegóły dla działu wsparcia';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Ukryto $count krótkich klipów',
+      one: 'Ukryto 1 krótki klip',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => 'Pokaż';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Ukryj $count krótkich klipów',
+      one: 'Ukryj 1 krótki klip',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get speakerWholeRecording => 'Zastosuj do całego nagrania';
+
+  @override
+  String get speakerSelectionChanged => 'Mówca się zmienił. Wybierz wiersze ponownie.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'Nagranie jest za duże. Wybierz mniej wierszy w jednej rozmowie.',
+        'partial': 'Niektóre wiersze zapisano. Wybierz pozostałe i spróbuj ponownie.',
+        'other': 'Niektóre wiersze zapisano. Wybierz pozostałe i spróbuj ponownie.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerRecordingCoverage(String state, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Zmieniono nazwy $count wierszy tylko w dostępnych rozmowach.',
+      one: 'Zmieniono nazwy 1 wierszy tylko w dostępnych rozmowach.',
+    );
+    String _temp1 = intl.Intl.selectLogic(
+      state,
+      {
+        'scope': 'Inne wiersze tego głosu (zakres nagrania niepotwierdzony)',
+        'other': '$_temp0',
+      },
+    );
+    return '$_temp1';
+  }
+
+  @override
+  String get episodeFinishingUp => 'Kończenie…';
 }

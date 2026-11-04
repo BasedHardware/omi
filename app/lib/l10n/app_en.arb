@@ -18143,5 +18143,189 @@
     "searchNoiseFilter": "Short clips",
     "@searchNoiseFilter": {
         "description": "Search filter chip: show only short clips (noise or media) that Home hides"
+    },
+    "reviewChangeConversationCount": "{count, plural, =1{1 conversation} other{{count} conversations}}",
+    "@reviewChangeConversationCount": {
+        "description": "How many conversations one change touched",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "reviewChangePlaceCount": "{count, plural, =1{1 place} other{{count} places}}",
+    "@reviewChangePlaceCount": {
+        "description": "How many places in transcripts one change touched",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "reviewChangeShowAll": "Show all {count}",
+    "@reviewChangeShowAll": {
+        "description": "Button opening every place a change landed",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "reviewChangeSeeEvidence": "See evidence",
+    "@reviewChangeSeeEvidence": {
+        "description": "Button showing the conversation evidence behind a change"
+    },
+    "reviewChangeViewTask": "View task",
+    "@reviewChangeViewTask": {
+        "description": "Button opening the tasks list from a task change"
+    },
+    "dreamReportShadowBanner": "Preview mode: Dream shows what it would change, but nothing in your account changes yet.",
+    "@dreamReportShadowBanner": {
+        "description": "Banner when the agent runs in shadow mode. Keep 'Dream' untranslated."
+    },
+    "dreamReportStats": "Read {records} items · {tokens} tokens",
+    "@dreamReportStats": {
+        "description": "Technical stats for a run: items read and model tokens used.",
+        "placeholders": {
+            "records": {
+                "type": "int"
+            },
+            "tokens": {
+                "type": "int"
+            }
+        }
+    },
+    "dreamReportFeedback": "Reported to the Omi team",
+    "@dreamReportFeedback": {
+        "description": "Section label for anonymous diagnostics sent to developers. 'Omi' is a product name."
+    },
+    "dreamReportPasses": "{count} of {limit} passes today",
+    "@dreamReportPasses": {
+        "description": "How many scheduled agent passes ran today out of the daily limit.",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            },
+            "limit": {
+                "type": "int"
+            }
+        }
+    },
+    "dreamReportQueued": "{count, plural, =0{No changes waiting} =1{1 change waiting} other{{count} changes waiting}}",
+    "@dreamReportQueued": {
+        "description": "How many changed items are queued for the agent to look at.",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "dreamReportDropped": "{count, plural, =1{1 older change skipped} other{{count} older changes skipped}}",
+    "@dreamReportDropped": {
+        "description": "How many old queued changes were dropped because the queue was full.",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "dreamReportPrivacyHeld": "{count, plural, =1{1 report held back for privacy} other{{count} reports held back for privacy}}",
+    "@dreamReportPrivacyHeld": {
+        "description": "Diagnostics the privacy filter refused to send.",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "syncStepLabelDownload": "Omi → phone",
+    "@syncStepLabelDownload": {
+        "description": "Tiny label under the first of three Offline Sync progress segments: moving audio from the Omi device to the phone."
+    },
+    "syncStepLabelUpload": "Upload",
+    "@syncStepLabelUpload": {
+        "description": "Tiny label under the second of three Offline Sync progress segments: uploading to Omi."
+    },
+    "syncStepLabelTranscribe": "Transcribe",
+    "@syncStepLabelTranscribe": {
+        "description": "Tiny label under the third of three Offline Sync progress segments: server transcription."
+    },
+    "syncDetailsForSupport": "For support",
+    "@syncDetailsForSupport": {
+        "description": "Sync details section header for raw technical counts meant for customer support."
+    },
+    "episodeOnDeviceNotesFootnote": "Drafted on your phone as you talk. The full notes arrive with the final transcript.",
+    "@episodeOnDeviceNotesFootnote": {
+        "description": "Footnote under on-device live notes."
+    },
+    "episodeOnThisPhone": "On this phone",
+    "@episodeOnThisPhone": {
+        "description": "Tag on notes drafted on-device from the live preview."
+    },
+    "livePreviewNoEngineTitle": "Recording safely",
+    "@livePreviewNoEngineTitle": {
+        "description": "No-engine preview card title."
+    },
+    "onTheWayCatchingUp": "{duration} catching up",
+    "@onTheWayCatchingUp": {
+        "description": "Headline of the On the Way page: how much recorded audio is still uploading or being turned into conversations. {duration} is like '8h 14m'.",
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "onTheWayDetailsForSupport": "Details for support",
+    "@onTheWayDetailsForSupport": {
+        "description": "Small text link at the bottom of On the Way, and the title of the page it opens: a plain technical list of every pending recording with its status codes, meant for the support team."
+    },
+    "homeNoiseFoldHidden": "{count, plural, =1{1 short clip hidden} other{{count} short clips hidden}}",
+    "@homeNoiseFoldHidden": {
+        "description": "Quiet line at the end of a day on the Home list: how many very short or noise-only recordings Omi folded away from that day. {count} is a whole number.",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "homeNoiseFoldShow": "Show",
+    "@homeNoiseFoldShow": {
+        "description": "Tappable word after the hidden-clips count on Home; reveals the folded short recordings in place."
+    },
+    "homeNoiseFoldHide": "{count, plural, =1{Hide 1 short clip} other{Hide {count} short clips}}",
+    "@homeNoiseFoldHide": {
+        "description": "Tappable line at the end of a day on Home after the user revealed the short recordings; folds them away again. {count} is a whole number.",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "speakerWholeRecording": "Apply to the whole recording",
+    "speakerSelectionChanged": "The speaker changed. Select the lines again.",
+    "speakerRenameIssue": "{reason, select, limit{Recording too large. Select fewer lines in one conversation.} partial{Some lines were saved. Select the remaining lines and try again.} other{Some lines were saved. Select the remaining lines and try again.}}",
+    "@speakerRenameIssue": {
+        "description": "Speaker rename budget refusal or partial member save; successful labels remain applied.",
+        "placeholders": {
+            "reason": {
+                "type": "String"
+            }
+        }
+    },
+    "speakerRecordingCoverage": "{state, select, scope{Other lines from this voice (recording coverage unconfirmed)} other{{count, plural, =1{Renamed 1 line in the available conversations only.} other{Renamed {count} lines in the available conversations only.}}}}",
+    "@speakerRecordingCoverage": {
+        "description": "Scope explanation or saved confirmation when full recording coverage is unconfirmed.",
+        "placeholders": {
+            "state": {
+                "type": "String"
+            },
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "episodeFinishingUp": "Finishing up…",
+    "@episodeFinishingUp": {
+        "description": "Neutral Home row title while an episode summary is being completed."
     }
 }

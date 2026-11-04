@@ -1,4 +1,5 @@
 from dataclasses import replace
+import math
 from pathlib import Path
 
 from prometheus_client import CollectorRegistry
@@ -6,6 +7,7 @@ from unittest.mock import Mock
 import pytest
 import yaml
 
+from utils.batch_pipeline.contracts import Priority
 from utils.batch_pipeline.metrics import QueueMetrics
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore, item
 from utils.batch_pipeline.scheduler import Scheduler
@@ -112,6 +114,81 @@ def test_queue_age_and_stale_refresh_retains_previous_sample(monkeypatch):
     assert registry.get_sample_value('omi_batch_pipeline_events_total', {'event': 'completed'}) == 1
     with pytest.raises(ValueError):
         metrics.record('user-id')
+
+
+def test_min_refresh_interval_skips_reads_and_a_failure_retries_next_call(monkeypatch):
+    registry = CollectorRegistry()
+    metrics = QueueMetrics(registry, min_refresh_seconds=30)
+    store = MemoryStore()
+    Scheduler(store).enqueue(item('a'), 0)
+    calls = []
+    oldest = store.oldest
+
+    def counted(*args, **kwargs):
+        calls.append(args)
+        return oldest(*args, **kwargs)
+
+    monkeypatch.setattr(store, 'oldest', counted)
+    freshness = {'worker_release': 'unscoped', 'namespace': 'unscoped'}
+    metrics.refresh(store, 100)
+    reads = len(calls)
+    assert reads > 0
+    metrics.refresh(store, 129)
+    assert len(calls) == reads
+    assert registry.get_sample_value('omi_batch_pipeline_metrics_refreshed_at_seconds', freshness) == 100
+
+    def unavailable(*args, **kwargs):
+        raise RuntimeError('store unavailable')
+
+    monkeypatch.setattr(store, 'oldest', unavailable)
+    with pytest.raises(RuntimeError):
+        metrics.refresh(store, 130)
+    assert registry.get_sample_value('omi_batch_pipeline_metrics_refreshed_at_seconds', freshness) == 100
+    # A failed sample does not start a new interval: the next call reads again.
+    monkeypatch.setattr(store, 'oldest', counted)
+    metrics.refresh(store, 131)
+    assert len(calls) > reads
+    assert registry.get_sample_value('omi_batch_pipeline_metrics_refreshed_at_seconds', freshness) == 131
+
+
+def test_a_refresh_started_during_another_skips_its_reads(monkeypatch):
+    metrics = QueueMetrics(CollectorRegistry(), min_refresh_seconds=30)
+    store = MemoryStore()
+    calls = []
+    oldest = store.oldest
+
+    def overlapping(*args, **kwargs):
+        calls.append(args)
+        if len(calls) == 1:
+            metrics.refresh(store, 100)  # a second caller arriving mid-read
+        return oldest(*args, **kwargs)
+
+    monkeypatch.setattr(store, 'oldest', overlapping)
+    metrics.refresh(store, 100)
+    assert len(calls) == 2 * len(list(Priority))
+
+
+def test_zero_min_refresh_interval_reads_on_every_call(monkeypatch):
+    metrics = QueueMetrics(CollectorRegistry())
+    store = MemoryStore()
+    calls = []
+    oldest = store.oldest
+    monkeypatch.setattr(store, 'oldest', lambda *a, **k: calls.append(a) or oldest(*a, **k))
+    metrics.refresh(store, 100)
+    reads = len(calls)
+    metrics.refresh(store, 100)
+    assert len(calls) == 2 * reads
+
+
+@pytest.mark.parametrize(
+    ('raw', 'expected'),
+    [('', 30.0), ('off', 0.0), ('0', 0.0), ('-5', 0.0), ('45', 45.0), ('61', 30.0), ('0.5', 30.0), ('bad', 30.0)],
+)
+def test_serving_metrics_min_refresh_seconds_is_bounded_below_the_guard_blind_window(monkeypatch, raw, expected):
+    from config.batch_pipeline import serving_metrics_min_refresh_seconds
+
+    monkeypatch.setenv('BATCH_PIPELINE_SERVING_METRICS_MIN_REFRESH_SECONDS', raw)
+    assert serving_metrics_min_refresh_seconds() == expected
 
 
 def test_admission_hold_reason_counter_counts_policy_defers_and_folds_unknown():
@@ -366,12 +443,12 @@ def test_firestore_oldest_walks_past_policy_holds():
     from database.batch_pipeline_store import OLDEST_POLICY_HOLD_SCAN_LIMIT
 
     # Review r1/r2 P1s: a scan truncated at the bound with holds in every row
-    # must fail toward tripping on the oldest hold's age - a fresh zero could
+    # must report an incomplete scan - a fresh zero could
     # bless a ramp while a real commitment sits unmeasured just past the bound.
     # A FIFO that is exactly as long as the bound, or shorter, is not
     # truncated: zero is truthful.
     truncated = Client([Doc({**held, 'enqueued_at': float(n)}) for n in range(OLDEST_POLICY_HOLD_SCAN_LIMIT + 1)])
-    assert oldest(truncated, 'omi', 2) == 0.0
+    assert math.isnan(oldest(truncated, 'omi', 2))
     exactly_bound = Client([Doc({**held, 'enqueued_at': float(n)}) for n in range(OLDEST_POLICY_HOLD_SCAN_LIMIT)])
     assert oldest(exactly_bound, 'omi', 2) is None
     just_short = Client([Doc({**held, 'enqueued_at': float(n)}) for n in range(OLDEST_POLICY_HOLD_SCAN_LIMIT - 1)])
@@ -382,6 +459,70 @@ def _deep_oldest_age(registry):
     return registry.get_sample_value(
         'omi_batch_pipeline_oldest_age_seconds',
         {'priority': 'deep', 'worker_release': 'unscoped', 'namespace': 'unscoped'},
+    )
+
+
+@pytest.mark.parametrize('state', ['dead', 'quarantined', 'committed', 'privacy_blocked'])
+def test_oldest_and_retry_skip_dispositioned_rows_but_keep_completed_result_ready(state):
+    from database.batch_pipeline_store import oldest, oldest_retry
+
+    class Doc:
+        def __init__(self, job):
+            self.job = job
+
+        def to_dict(self):
+            return self.job
+
+    class Query:
+        def __init__(self, jobs):
+            self.jobs = jobs
+
+        def collection(self, *args):
+            return self
+
+        def where(self, *args):
+            return self
+
+        def order_by(self, *args):
+            return self
+
+        def limit(self, limit):
+            self.bound = limit
+            return self
+
+        def stream(self):
+            return iter(Doc(job) for job in self.jobs[: self.bound])
+
+    disposed = {'state': state, 'enqueued_at': 1, 'retry_started_at': 2, 'merge_pending': True}
+    active = {
+        'state': 'result_ready',
+        'enqueued_at': 100,
+        'retry_started_at': 200,
+        'merge_pending': True,
+        'terminal_disposition': {'state': 'completed'},
+    }
+    assert oldest(Query([disposed, active]), 'synthetic', 0) == 100
+    assert oldest_retry(Query([disposed, active]), 'synthetic', 0) == 200
+    assert oldest(Query([disposed]), 'synthetic', 0) is None
+    assert oldest_retry(Query([disposed]), 'synthetic', 0) is None
+    assert math.isnan(oldest(Query([disposed] * 501), 'synthetic', 0))
+    assert math.isnan(oldest_retry(Query([disposed] * 501), 'synthetic', 0))
+
+
+def test_incomplete_age_sample_preserves_nan_without_blocking_other_queue_signals():
+    registry = CollectorRegistry()
+    metrics = QueueMetrics(registry)
+    store = MemoryStore()
+    store.oldest = lambda priority, ready_only: None if ready_only or priority else float('nan')
+    metrics.refresh(store, 1000)
+    labels = {'priority': 'fresh', 'worker_release': 'unscoped', 'namespace': 'unscoped'}
+    assert math.isnan(registry.get_sample_value('omi_batch_pipeline_oldest_age_seconds', labels))
+    assert registry.get_sample_value('omi_batch_pipeline_ready_age_seconds', labels) == 0
+    assert (
+        registry.get_sample_value(
+            'omi_batch_pipeline_metrics_refreshed_at_seconds', {'worker_release': 'unscoped', 'namespace': 'unscoped'}
+        )
+        == 1000
     )
 
 
@@ -469,9 +610,9 @@ def test_firestore_oldest_skips_a_decisionless_job_with_a_last_allowance_hold():
     commitment = {'merge_pending': True, 'enqueued_at': 2.0}
     assert oldest(Client([Doc({**parked, 'enqueued_at': 1.0}), Doc(commitment)]), 'omi', 1) == 2.0
     assert oldest(Client([Doc({**parked, 'enqueued_at': 1.0})]), 'omi', 1) is None
-    # The #23638 truncation sentinel still fails toward tripping on the oldest
-    # hold when marker-only holds fill the scan bound.
+    # Marker-only holds have the same incomplete-scan contract as current
+    # allowance decisions: never fabricate late work or report a fresh zero.
     truncated = [Doc({**parked, 'enqueued_at': float(n)}) for n in range(OLDEST_POLICY_HOLD_SCAN_LIMIT + 1)]
-    assert oldest(Client(truncated), 'omi', 1) == 0.0
+    assert math.isnan(oldest(Client(truncated), 'omi', 1))
     exact = [Doc({**parked, 'enqueued_at': float(n)}) for n in range(OLDEST_POLICY_HOLD_SCAN_LIMIT)]
     assert oldest(Client(exact), 'omi', 1) is None

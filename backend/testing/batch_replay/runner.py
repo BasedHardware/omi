@@ -7,7 +7,6 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import ExitStack
 from contextvars import copy_context
 from copy import deepcopy
-from dataclasses import asdict
 from datetime import datetime, timezone
 from functools import lru_cache
 import hashlib
@@ -390,7 +389,7 @@ def _replay(corpus):
             continue
         lane = unit.get('lane')
         log.jobs[sid] = {
-            **asdict(item),
+            **item.to_dict(),
             'policy_parts': log.policy_parts,
             **({'fresh_capture': lane == 'fresh'} if lane in {'fresh', 'backfill'} else {}),
         }

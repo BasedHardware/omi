@@ -11,7 +11,10 @@ import os
 from copy import deepcopy
 from contextvars import ContextVar
 from datetime import datetime
-from typing import Any, Mapping, cast
+from typing import Any, Callable, Mapping, cast
+from utils.conversations import phase_shadow
+
+from utils.observability.delivery import record_delivery
 
 from prometheus_client import Counter, Gauge, Histogram
 from config.summary_guarantee import deadline_seconds, enabled
@@ -120,6 +123,7 @@ def prepare(data: Row, uid: str, *, now: float | None = None) -> None:
         data.setdefault('summary_lane', lane(data))
 
 
+@phase_shadow.compare('summary_repair', accepts=lambda result: result is None)
 def refusal(row: Row) -> str | None:
     if row.get('status') != 'completed' or row.get('deleted') or row.get('discarded'):
         return 'lifecycle'
@@ -297,3 +301,20 @@ def emit(receipt: Row | None) -> None:
         LATENCY.labels(receipt['lane']).observe(receipt['latency'])
     if receipt['present'] and receipt.get('closed_latency') is not None:
         CLOSED_LATENCY.labels(receipt['lane']).observe(receipt['closed_latency'])
+
+
+def emit_result(
+    uid: str,
+    changed: bool,
+    receipt: Row | None,
+    outcome: str | None,
+    invalidate: Callable[[str], None],
+    persisted: bool = True,
+) -> None:
+    """Preserve post-commit housekeeping and count only committed terminals."""
+    if changed:
+        invalidate(uid)
+    if persisted:
+        emit(receipt)
+        if outcome is not None:
+            record_delivery('summary', outcome)

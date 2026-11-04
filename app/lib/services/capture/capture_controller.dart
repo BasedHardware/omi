@@ -1,3 +1,4 @@
+import 'package:omi/services/capture/capture_speaker_assignment.dart';
 import 'package:omi/models/voice_question_result.dart';
 import 'package:omi/services/capture/live_held_audio_state.dart';
 import 'package:omi/models/stt_provider.dart';
@@ -114,7 +115,7 @@ part 'capture_voice_questions.dart';
 enum _VoiceCommandTrigger { toggle, legacyLongPress }
 
 class CaptureController extends ChangeNotifier
-    with MessageNotifierMixin
+    with MessageNotifierMixin, CaptureSpeakerAssignment
     implements ITransctiptSegmentSocketServiceListener {
   static const MethodChannel _nativeBleTranscriptChannel = MethodChannel('com.friend.ios/native_ble_transcript');
   static const int _maxInProgressConversationRefreshAttempts = 30;
@@ -194,23 +195,17 @@ class CaptureController extends ChangeNotifier
     return !phone.isFrameDurable(positioned);
   }
 
-  /// Account change with no open socket: the WAL cleanup that follows drops
-  /// its in-memory tail, so frames this router kept off the socket are
-  /// written to the batch journal for the OLD owner (recovered and uploaded
-  /// through the ordinary sync path when that owner is back).
+  /// Account cleanup discards the WAL tail. Preserve suppressed, not-yet-durable
+  /// frames in the old owner's batch journal for later sync.
   bool _preserveSuppressedForAccountChange(List<HeldPendantFrame> frames) =>
-      _mobileStandardBatch?.preserveForOwner(
-        [for (final frame in frames) (frame.payload, frame.capturedAt ?? _now())],
-        codec: _localPreview.pendantCodec,
-        recordingSessionId: activeRecordingId,
-      ) ??
-      false;
+      _localPreview.preserveForAccountChange(frames, _mobileStandardBatch, activeRecordingId);
   LivePreviewController? get livePreview => _localPreview.preview;
   bool get localPreviewAdmitted => _localPreview.admitted;
 
   void installLivePreview(LivePreviewController preview) {
     if (_captureControllerDisposed) return preview.dispose();
     lifetime.own(_localPreview.install(preview, _deviceAudioListeners, _phoneMicAudioListeners));
+    lifetime.listenTo(preview, _checkLocalPreviewEngine);
   }
 
   final CaptureLivenessWatchdog _livenessWatchdog = CaptureLivenessWatchdog();
@@ -230,6 +225,7 @@ class CaptureController extends ChangeNotifier
     return _captureEvidenceIdentity.rootFor(sync, sync.captureEvidenceGeneration, _preferences.uid);
   }
 
+  @override
   CaptureExternalActions externalActions;
   DeviceOnboardingProvider? deviceOnboardingProvider;
 
@@ -764,6 +760,7 @@ class CaptureController extends ChangeNotifier
 
   ServerConversation? _conversation;
   DateTime? get liveTranscriptStartedAt => _conversation?.startedAt;
+  @override
   List<TranscriptSegment> segments = [];
   List<ConversationPhoto> photos = [];
 
@@ -786,6 +783,7 @@ class CaptureController extends ChangeNotifier
   /// Per-recording identity is [activeRecordingId] (and the native mic session
   /// id). Downstream semantic controls must use that fresh identity, not this
   /// getter, as the authoritative live capture session.
+  @override
   String? get activeCaptureSessionId => _sessionStartSeconds == 0 ? null : 'live-$_sessionStartSeconds';
 
   /// Client-minted UUID shared by capture, `/v4/listen`, and the resulting
@@ -1025,8 +1023,7 @@ class CaptureController extends ChangeNotifier
   int _segmentsPhotosVersion = 0;
   int get segmentsPhotosVersion => _segmentsPhotosVersion;
   Map<String, SpeakerLabelSuggestionEvent> suggestionsBySegmentId = {};
-  final Map<int, String> _manualSpeakerDefaults = {};
-  List<String> taggingSegmentIds = [];
+  final Map<Object, String> _manualSpeakerDefaults = {};
 
   bool hasTranscripts = false;
 
@@ -1823,7 +1820,7 @@ class CaptureController extends ChangeNotifier
     final refusal = allowed
         ? _localPreviewRefusal(codec, customStt: effectiveConfig != null)
         : LocalPreviewClientRefusal.killSwitch;
-    final localPreview = _localPreview.preview != null && refusal == null;
+    final localPreview = _localPreview.preview != null && refusal == null && !_localPreview.engineUnavailableForCapture;
     if (refusal != null) _localPreview.preview?.clientRefused(refusal.wireName, midSession: false);
     _localPreview.language = language;
 
@@ -2216,7 +2213,6 @@ class CaptureController extends ChangeNotifier
     final revision = _preferences.capturePolicy.revision;
     if (!_admitsCapture(revision)) return false;
     Logger.debug('streamAudioToWs in capture_provider');
-    _startMetricsTracking();
     _localPreview.pendantCodec = codec;
     final subscription = await _getBleAudioBytesListener(
       deviceId,
@@ -2322,9 +2318,11 @@ class CaptureController extends ChangeNotifier
       await subscription?.cancel();
       return false;
     }
+    if (subscription == null) return false;
+    _startMetricsTracking();
     _bleBytesStream = lifetime.takeSubscription(_bleBytesStream, subscription);
     notifyListeners();
-    return subscription != null;
+    return true;
   }
 
   LocalPreviewClientRefusal? _localPreviewRefusal(BleAudioCodec codec, {required bool customStt}) =>
@@ -2349,6 +2347,12 @@ class CaptureController extends ChangeNotifier
     _localPreview.refuseForSocket(send: _sendPendantToSocket);
     _mobileStandardBatch?.dropLocalPreview();
   }
+
+  void _checkLocalPreviewEngine() => _localPreview.refuseUnavailableEngine(
+      sendControl: (reason) =>
+          _socket?.sendText(jsonEncode({'type': 'local_preview_engine_unavailable', 'reason': reason.wireName})),
+      send: _sendPendantToSocket,
+      dropLocalPreview: () => _mobileStandardBatch?.dropLocalPreview());
 
   /// The pendant sender while a transcription socket is still connected.
   void Function(HeldPendantFrame frame)? get _openSocketSender =>
@@ -2437,7 +2441,7 @@ class CaptureController extends ChangeNotifier
       return Future.value(null);
     }
     if (_fenceUplinkForSync()) return null;
-    return connection.getBleAudioBytesListener(onAudioBytesReceived: onAudioBytesReceived);
+    return await connection.getBleAudioBytesListener(onAudioBytesReceived: onAudioBytesReceived);
   }
 
   Future<StreamSubscription?> _getBleButtonListener(
@@ -2553,6 +2557,9 @@ class CaptureController extends ChangeNotifier
     }
     if (foregroundAudioReady) {
       await _preferences.saveBool('nativeBleForegroundReady', true);
+    } else {
+      Logger.debug('[_initiateDeviceAudioStreaming] streamAudioToWs returned false for device $deviceId');
+      return;
     }
 
     // Update state (limitless is excluded: the pendant records on-device, so the
@@ -4315,63 +4322,38 @@ class CaptureController extends ChangeNotifier
     notifyListeners();
   }
 
-  Future<bool> assignSpeakerToConversation(
-    int speakerId,
-    String personId,
-    String personName,
-    List<String> segmentIds, {
-    bool applyToSpeaker = false,
-  }) async {
-    final conversationId = _conversation?.id;
-    final sessionId = activeCaptureSessionId;
-    if (segmentIds.isEmpty || conversationId == null || taggingSegmentIds.isNotEmpty) return false;
-    final targets = List<String>.of(segmentIds);
-    taggingSegmentIds = targets;
-    notifyListeners();
-    try {
-      final finalPersonId = personId.isEmpty ? (await externalActions.createPerson(personName))?.id : personId;
-      if (finalPersonId == null || finalPersonId.isEmpty) return false;
-      final saved = await externalActions.assignSpeaker(
-        conversationId,
-        targets,
-        finalPersonId,
-        speakerId: applyToSpeaker ? speakerId : null,
-      );
-      if (!saved) return false;
-      if (_conversation?.id != conversationId || activeCaptureSessionId != sessionId) return true;
-      if (applyToSpeaker) {
-        _manualSpeakerDefaults[speakerId] = finalPersonId;
-      } else {
-        _manualSpeakerDefaults.remove(speakerId);
-      }
-      for (final segment in segments) {
-        if (applyToSpeaker ? segment.speakerId == speakerId : targets.contains(segment.id)) {
-          segment.isUser = finalPersonId == 'user';
-          segment.personId = segment.isUser ? null : finalPersonId;
-          segment.speakerLabelSource = 'manual';
-        }
-      }
-      _segmentsPhotosVersion++;
-      if (_socket?.state == SocketServiceState.connected &&
-          !OnDeviceTranscriptionController.instance.shouldKeepAudioLocal) {
-        _socket?.send(
-          jsonEncode({
-            'type': 'speaker_assigned',
-            'speaker_id': speakerId,
-            'person_id': finalPersonId,
-            'person_name': personName,
-            'segment_ids': targets,
-          }),
-        );
-      }
-      suggestionsBySegmentId.removeWhere((key, value) => targets.contains(key));
-      return true;
-    } catch (_) {
-      return false;
-    } finally {
-      taggingSegmentIds = [];
-      notifyListeners();
+  @override
+  ServerConversation? get speakerAssignmentConversation => _conversation;
+  @override
+  bool get speakerAssignmentClosed => lifetime.isClosed;
+  @override
+  Object get speakerAssignmentIdentity =>
+      (_preferences.uid, _sessionOwner?.token.generation, _sessionOwner?.token.identity);
+  @override
+  void speakerLabelsChanged() => _segmentsPhotosVersion++;
+  @override
+  void publishSpeakerAssignment(int speakerId, String finalPersonId, String personName, List<String> targets,
+      bool applyToSpeaker, int generation) {
+    final anchor = segments.where((line) => targets.contains(line.id)).firstOrNull;
+    final voiceKey = anchor?.recordingVoice ?? speakerId;
+    if (applyToSpeaker) {
+      _manualSpeakerDefaults[voiceKey] = finalPersonId;
+    } else {
+      _manualSpeakerDefaults.remove(voiceKey);
     }
+    if (_socket?.state == SocketServiceState.connected &&
+        !OnDeviceTranscriptionController.instance.shouldKeepAudioLocal) {
+      _socket?.send(
+        jsonEncode({
+          'type': 'speaker_assigned',
+          'speaker_id': speakerId,
+          'person_id': finalPersonId,
+          'person_name': personName,
+          'segment_ids': targets,
+        }),
+      );
+    }
+    suggestionsBySegmentId.removeWhere((key, value) => targets.contains(key));
   }
 
   @override

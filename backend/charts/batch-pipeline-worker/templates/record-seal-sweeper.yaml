@@ -1,4 +1,4 @@
-{{- if and .Values.enabled (or .Values.recordSealSweeper.enabled .Values.recordSealRepair.enabled) (eq .Values.stage "prod") }}
+{{- if and .Values.enabled (or .Values.recordSealSweeper.enabled .Values.recordSealRepair.enabled .Values.recordSealWorker.enabled) (eq .Values.stage "prod") }}
 {{- if ne .Release.Namespace "prod-omi-backend" }}
 {{- fail "record seal sweeper requires prod-omi-backend; dev verification uses hermetic fixtures" }}
 {{- end }}
@@ -33,7 +33,7 @@ kind: CronJob
 metadata:
   name: record-seal-sweeper
 spec:
-  schedule: "*/5 * * * *"
+  schedule: "0 * * * *"
   concurrencyPolicy: Forbid
   startingDeadlineSeconds: 60
   successfulJobsHistoryLimit: 1

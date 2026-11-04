@@ -91,16 +91,25 @@ def held(monkeypatch, tmp_path):
 
     monkeypatch.setattr(cap_hold, 'recovery_directory', lambda uid: Directory())
     calls = []
+    decoded = []
     answer = {'response': JSONResponse(status_code=202, content={'status': 'queued'})}
 
     async def accept_upload(**kwargs):
         calls.append(kwargs)
         units = list(kwargs['decode'](3600))
-        assert units and units[0].capture_at == 1700000000.0
+        decoded.extend(units)
+        assert units and units[0].capture_at == float(meta['timestamp'])
         return answer['response']
 
     monkeypatch.setattr(intake, 'accept_upload', accept_upload)
-    return SimpleNamespace(calls=calls, answer=answer, directory=Directory, snapshot=SimpleNamespace(id='hold-1'))
+    return SimpleNamespace(
+        calls=calls,
+        decoded=decoded,
+        meta=meta,
+        answer=answer,
+        directory=Directory,
+        snapshot=SimpleNamespace(id='hold-1'),
+    )
 
 
 @pytest.mark.asyncio
@@ -115,6 +124,22 @@ async def test_admits_under_the_derived_identity_and_is_idempotent(held):
     assert (call['conversation_id'], call['source'], call['lane']) == ('conv-1', 'omi', 'backfill')
     assert held.calls[1]['content_id'] == content_id  # a retried sweep re-presents the same content
     assert held.directory.cleaned
+
+
+@pytest.mark.asyncio
+async def test_early_hold_enters_batch_with_frozen_storage_clock_and_raw_identity(held, monkeypatch):
+    from utils.capture import coverage
+
+    monkeypatch.setenv('SYNC_EARLY_CAPTURE_CLAMP_ENABLED', 'false')
+    monkeypatch.setenv(coverage.FLAG, 'off')
+    held.meta.update(timestamp=788918400, early_capture_offset=788918400 - (1800000000 - 3))
+    result = await adapter.admit_held(UID, held.snapshot, {'state': 'held'})
+    assert result.outcome == 'admitted'
+    [unit] = held.decoded
+    assert unit.capture_at == 788918400
+    assert unit.stored_capture_at == 1800000000 - 3
+    assert unit.stored_capture_at + unit.duration_seconds == 1800000000
+    assert held.calls[0]['content_id'] == adapter.held_content_id(UID, 'hold-1')
 
 
 @pytest.mark.asyncio
@@ -226,6 +251,19 @@ async def test_on_keeps_the_legacy_recovery_path(hook, monkeypatch):
     monkeypatch.setattr(adapter, 'enabled_for', lambda row, mode=None, uid=None: False)
     assert await cap_hold_recovery.recover_selected(UID, hook.snapshot) is True
     assert ('legacy',) in hook.events and ('erase',) not in hook.events
+
+
+@pytest.mark.asyncio
+async def test_an_automatic_release_never_falls_back_to_legacy_recovery(hook, monkeypatch):
+    from utils import backlog_release
+
+    monkeypatch.setattr(adapter, 'enabled_for', lambda row, mode=None, uid=None: False)
+    token = backlog_release.source.set('trial')
+    try:
+        assert await cap_hold_recovery.recover_selected(UID, hook.snapshot) is False
+    finally:
+        backlog_release.source.reset(token)
+    assert hook.events == [('release', 'lease')]
 
 
 @pytest.mark.asyncio

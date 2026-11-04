@@ -75,6 +75,22 @@ def _alert_rules() -> list[dict[str, Any]]:
     return loaded
 
 
+def test_lifecycle_alerts_share_existing_egress_trigger_and_gate_import():
+    workflow = (REPO / '.github/workflows/gcp_cloud_run_metrics_egress.yml').read_text()
+    assert "'backend/charts/monitoring/alerts/resilience.json'" in workflow
+    assert "'backend/charts/monitoring/live-alert-gate.json'" in workflow
+    rules = json.loads((MONITORING / 'alerts/resilience.json').read_text())
+    lifecycle = {rule['uid']: rule for rule in rules if rule['annotations'].get('evidence_date') == '2026-11-04'}
+    assert len(lifecycle) == 13
+    gate = set(json.loads((MONITORING / 'live-alert-gate.json').read_text())['uids'])
+    assert set(lifecycle) <= gate
+    importer = (REPO / 'backend/scripts/verify_pusher_live_alert_route.py').read_text()
+    assert 'for uid in load_gated_uids(committed)' in importer
+    for uid, rule in lifecycle.items():
+        assert rule['labels']['alert_identity'] == uid
+        assert rule['notification_settings']['receiver'] == 'Omi - Services Alerting (Telegram)'
+
+
 def test_inventory_file_exists_and_versioned():
     inventory = _load_inventory()
     assert inventory['version'] == 1
@@ -186,6 +202,10 @@ SYNC_NAMESPACES = ('backend-sync', 'backend-sync-backfill', 'backend-integration
 # family from the backend/desktop-backend/notifications-job namespaces, and
 # mirror the change into both <env>_omi_cloud_run_metrics_exporter.yaml files.
 CLOUD_RUN_EXPORTER_PREFIXES = [
+    'prometheus.googleapis.com/omi_batch_record_pending_',
+    'prometheus.googleapis.com/omi_record_seal_nojob_',
+    'prometheus.googleapis.com/omi_enrichment_obligation_',
+    'prometheus.googleapis.com/omi_finalization_byok_',
     'prometheus.googleapis.com/omi_capture_finalization_failures_total/',
     'prometheus.googleapis.com/omi_capture_finalization_reconciliations_total/',
     'prometheus.googleapis.com/omi_chat_search_tool_outcomes_total/',
@@ -202,6 +222,8 @@ CLOUD_RUN_EXPORTER_PREFIXES = [
     'prometheus.googleapis.com/omi_fallback_total/',
     'prometheus.googleapis.com/omi_firestore_documents_per_operation/',
     'prometheus.googleapis.com/omi_firestore_read_operations_total/',
+    'prometheus.googleapis.com/omi_home_rows_user_day_count_total/',
+    'prometheus.googleapis.com/omi_home_rows_user_day_sum_total/',
     'prometheus.googleapis.com/omi_journey_accepted_total/',
     'prometheus.googleapis.com/omi_journey_latency_seconds/',
     'prometheus.googleapis.com/omi_journey_terminal_total/',
@@ -236,6 +258,10 @@ CLOUD_RUN_SYNC_EXPORTER_FILTER = (
 # consumer, read from GMP by the rightsizing runbook) alone re-created ~13k live
 # series per backend-sync instance generation through this release.
 CLOUD_RUN_SYNC_EXPORTER_PREFIXES = [
+    'prometheus.googleapis.com/omi_batch_record_pending_',
+    'prometheus.googleapis.com/omi_record_seal_nojob_',
+    'prometheus.googleapis.com/omi_enrichment_obligation_',
+    'prometheus.googleapis.com/omi_finalization_byok_',
     'prometheus.googleapis.com/omi_sync_dispatch_attempts_total/',
     'prometheus.googleapis.com/omi_sync_upload_total/',
     'prometheus.googleapis.com/omi_sync_transcription_job_total/',

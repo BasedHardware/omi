@@ -14891,4 +14891,183 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get searchNoiseFilter => 'చిన్న క్లిప్‌లు';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count సంభాషణలు',
+      one: '1 సంభాషణ',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count చోట్ల',
+      one: '1 చోటు',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'మొత్తం $count చూపించు';
+  }
+
+  @override
+  String get reviewChangeSeeEvidence => 'ఆధారం చూడండి';
+
+  @override
+  String get reviewChangeViewTask => 'పనిని చూడండి';
+
+  @override
+  String get dreamReportShadowBanner =>
+      'ప్రివ్యూ మోడ్: Dream ఏమి మారుస్తుందో చూపిస్తుంది, కానీ మీ ఖాతాలో ఇంకా ఏమీ మారదు.';
+
+  @override
+  String dreamReportStats(int records, int tokens) {
+    return '$records అంశాలు చదివింది · $tokens టోకెన్లు';
+  }
+
+  @override
+  String get dreamReportFeedback => 'Omi బృందానికి నివేదించింది';
+
+  @override
+  String dreamReportPasses(int count, int limit) {
+    return 'ఈరోజు $count/$limit పాస్‌లు';
+  }
+
+  @override
+  String dreamReportQueued(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count మార్పులు వేచి ఉన్నాయి',
+      one: '1 మార్పు వేచి ఉంది',
+      zero: 'వేచి ఉన్న మార్పులు లేవు',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportDropped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count పాత మార్పులు దాటవేయబడ్డాయి',
+      one: '1 పాత మార్పు దాటవేయబడింది',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportPrivacyHeld(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'గోప్యత కోసం $count నివేదికలు ఆపివేయబడ్డాయి',
+      one: 'గోప్యత కోసం 1 నివేదిక ఆపివేయబడింది',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncStepLabelDownload => 'Omi → ఫోన్';
+
+  @override
+  String get syncStepLabelUpload => 'అప్‌లోడ్';
+
+  @override
+  String get syncStepLabelTranscribe => 'ట్రాన్స్క్రిప్షన్';
+
+  @override
+  String get syncDetailsForSupport => 'సపోర్ట్ కోసం';
+
+  @override
+  String get episodeOnDeviceNotesFootnote =>
+      'మీరు మాట్లాడుతున్నప్పుడు మీ ఫోన్‌లోనే రూపొందుతాయి. పూర్తి నోట్స్ చివరి ట్రాన్స్‌క్రిప్ట్‌తో వస్తాయి.';
+
+  @override
+  String get episodeOnThisPhone => 'ఈ ఫోన్‌లో';
+
+  @override
+  String get livePreviewNoEngineTitle => 'సురక్షితంగా రికార్డ్ అవుతోంది';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return '$duration పూర్తి అవుతోంది';
+  }
+
+  @override
+  String get onTheWayDetailsForSupport => 'సపోర్ట్ కోసం వివరాలు';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count చిన్న క్లిప్‌లు దాచబడ్డాయి',
+      one: '1 చిన్న క్లిప్ దాచబడింది',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => 'చూపండి';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count చిన్న క్లిప్‌లను దాచండి',
+      one: '1 చిన్న క్లిప్‌ను దాచండి',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get speakerWholeRecording => 'మొత్తం రికార్డింగ్‌కు వర్తింపజేయండి';
+
+  @override
+  String get speakerSelectionChanged => 'వక్త మారారు. పంక్తులను మళ్లీ ఎంచుకోండి.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'రికార్డింగ్ చాలా పెద్దది. ఒక సంభాషణలో తక్కువ పంక్తులను ఎంచుకోండి.',
+        'partial': 'కొన్ని పంక్తులు సేవ్ అయ్యాయి. మిగిలిన వాటిని ఎంచుకుని మళ్లీ ప్రయత్నించండి.',
+        'other': 'కొన్ని పంక్తులు సేవ్ అయ్యాయి. మిగిలిన వాటిని ఎంచుకుని మళ్లీ ప్రయత్నించండి.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerRecordingCoverage(String state, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'అందుబాటులో ఉన్న సంభాషణల్లో మాత్రమే $count పంక్తుల పేరు మార్చబడింది.',
+      one: 'అందుబాటులో ఉన్న సంభాషణల్లో మాత్రమే 1 పంక్తుల పేరు మార్చబడింది.',
+    );
+    String _temp1 = intl.Intl.selectLogic(
+      state,
+      {
+        'scope': 'ఈ స్వరంలోని ఇతర పంక్తులు (రికార్డింగ్ పరిధి నిర్ధారణ కాలేదు)',
+        'other': '$_temp0',
+      },
+    );
+    return '$_temp1';
+  }
+
+  @override
+  String get episodeFinishingUp => 'పూర్తి చేస్తోంది…';
 }

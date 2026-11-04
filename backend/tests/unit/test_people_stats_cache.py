@@ -779,6 +779,8 @@ def test_assign_conversation_speaker_invalidates_before_observers(writer_env, mo
     store, invalidated = writer_env
     import database.speaker_assignment_effects as effects
     import database.speaker_learning_jobs as learning
+    import database.people_stats_cache as stats_cache
+    from utils.observability import speaker_identification
 
     events = []
 
@@ -786,12 +788,12 @@ def test_assign_conversation_speaker_invalidates_before_observers(writer_env, mo
         invalidated.append(uid)
         events.append(('invalidate', uid))
 
-    monkeypatch.setattr(conversations_db, 'invalidate_people_stats_cache', record_invalidation)
+    monkeypatch.setattr(stats_cache, 'invalidate_people_stats_cache', record_invalidation)
     current = {'id': 'c1', 'transcript_segments': [{'id': 's0', 'person_id': 'p1'}]}
     monkeypatch.setattr(
         effects,
         'run_assignment_transaction',
-        lambda client, assign: (current, {'person_id': 'p1'}, [], [{'id': 's0'}]),
+        lambda client, assign, **kwargs: (current, {'person_id': 'p1'}, [], [{'id': 's0'}]),
     )
     monkeypatch.setattr(learning, 'extract_learning_receipt_markers', lambda *a, **k: None)
     monkeypatch.setattr(
@@ -800,7 +802,7 @@ def test_assign_conversation_speaker_invalidates_before_observers(writer_env, mo
         lambda *_a, **_k: events.append(('learning_events', None)),
     )
     monkeypatch.setattr(
-        conversations_db,
+        speaker_identification,
         'record_speaker_review',
         lambda uid, *_a, **_k: events.append(('speaker_review', uid)),
     )

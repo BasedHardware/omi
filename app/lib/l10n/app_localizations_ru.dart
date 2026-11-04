@@ -14876,4 +14876,183 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get searchNoiseFilter => 'Короткие клипы';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Разговоров: $count',
+      one: '1 разговор',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Мест: $count',
+      one: '1 место',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'Показать все ($count)';
+  }
+
+  @override
+  String get reviewChangeSeeEvidence => 'Показать доказательства';
+
+  @override
+  String get reviewChangeViewTask => 'Открыть задачу';
+
+  @override
+  String get dreamReportShadowBanner =>
+      'Режим предпросмотра: Dream показывает, что изменил бы, но в вашем аккаунте пока ничего не меняется.';
+
+  @override
+  String dreamReportStats(int records, int tokens) {
+    return 'Прочитано элементов: $records · токенов: $tokens';
+  }
+
+  @override
+  String get dreamReportFeedback => 'Отправлено команде Omi';
+
+  @override
+  String dreamReportPasses(int count, int limit) {
+    return '$count из $limit запусков сегодня';
+  }
+
+  @override
+  String dreamReportQueued(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count изменения ожидают',
+      one: '1 изменение ожидает',
+      zero: 'Нет ожидающих изменений',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportDropped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count более старых изменения пропущено',
+      one: '1 более старое изменение пропущено',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportPrivacyHeld(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count отчёта задержано из соображений конфиденциальности',
+      one: '1 отчёт задержан из соображений конфиденциальности',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncStepLabelDownload => 'Omi → телефон';
+
+  @override
+  String get syncStepLabelUpload => 'Загрузка';
+
+  @override
+  String get syncStepLabelTranscribe => 'Расшифровка';
+
+  @override
+  String get syncDetailsForSupport => 'Для поддержки';
+
+  @override
+  String get episodeOnDeviceNotesFootnote =>
+      'Создаются на вашем телефоне, пока вы говорите. Полные заметки появятся вместе с финальной расшифровкой.';
+
+  @override
+  String get episodeOnThisPhone => 'На этом телефоне';
+
+  @override
+  String get livePreviewNoEngineTitle => 'Безопасная запись';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return '$duration в пути';
+  }
+
+  @override
+  String get onTheWayDetailsForSupport => 'Подробности для поддержки';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Скрыто $count коротких записей',
+      one: 'Скрыта 1 короткая запись',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => 'Показать';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Скрыть $count коротких записей',
+      one: 'Скрыть 1 короткую запись',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get speakerWholeRecording => 'Применить ко всей записи';
+
+  @override
+  String get speakerSelectionChanged => 'Говорящий изменился. Выберите строки заново.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'Запись слишком большая. Выберите меньше строк в одном разговоре.',
+        'partial': 'Некоторые строки сохранены. Выберите оставшиеся и попробуйте снова.',
+        'other': 'Некоторые строки сохранены. Выберите оставшиеся и попробуйте снова.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerRecordingCoverage(String state, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Переименовано $count строк только в доступных разговорах.',
+      one: 'Переименовано 1 строк только в доступных разговорах.',
+    );
+    String _temp1 = intl.Intl.selectLogic(
+      state,
+      {
+        'scope': 'Другие строки этого голоса (охват записи не подтверждён)',
+        'other': '$_temp0',
+      },
+    );
+    return '$_temp1';
+  }
+
+  @override
+  String get episodeFinishingUp => 'Завершение…';
 }

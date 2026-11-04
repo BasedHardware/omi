@@ -175,15 +175,10 @@ Future<_Usage> _pump(
   return usage;
 }
 
-/// A UTC midnight far enough ahead that every local zone still sees a future day.
-/// Far-east and far-west zones put that instant on different local calendar days, so the
-/// expected label is the local day of the same epoch the sheet formats. A frozen past
-/// midnight makes the sheet say the plan already ended.
-final int _periodEndSeconds = () {
-  final todayUtc = DateTime.now().toUtc();
-  final midnight = DateTime.utc(todayUtc.year, todayUtc.month, todayUtc.day).add(const Duration(days: 40));
-  return midnight.millisecondsSinceEpoch ~/ 1000;
-}();
+/// 2099-11-03 00:00:00 UTC, far enough ahead that the period never ends during a run. Far-east and far-west zones put that instant on different
+/// local calendar days, so the expected label is the local day of the same epoch
+/// the sheet formats.
+final int _periodEndSeconds = DateTime.utc(2099, 11, 3).millisecondsSinceEpoch ~/ 1000;
 
 String _date(WidgetTester tester) {
   final context = tester.element(find.byType(PlansSheet));

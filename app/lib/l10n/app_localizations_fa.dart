@@ -14823,4 +14823,183 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get searchNoiseFilter => 'کلیپ‌های کوتاه';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count گفتگو',
+      one: '۱ گفتگو',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count مورد',
+      one: '۱ مورد',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'نمایش همه ($count)';
+  }
+
+  @override
+  String get reviewChangeSeeEvidence => 'مشاهده شواهد';
+
+  @override
+  String get reviewChangeViewTask => 'مشاهده کار';
+
+  @override
+  String get dreamReportShadowBanner =>
+      'حالت پیش‌نمایش: Dream نشان می‌دهد چه چیزی را تغییر می‌داد، اما هنوز چیزی در حساب شما تغییر نمی‌کند.';
+
+  @override
+  String dreamReportStats(int records, int tokens) {
+    return '$records مورد خوانده شد · $tokens توکن';
+  }
+
+  @override
+  String get dreamReportFeedback => 'به تیم Omi گزارش شد';
+
+  @override
+  String dreamReportPasses(int count, int limit) {
+    return '$count از $limit اجرا امروز';
+  }
+
+  @override
+  String dreamReportQueued(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count تغییر در انتظار',
+      one: '۱ تغییر در انتظار',
+      zero: 'تغییری در انتظار نیست',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportDropped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count تغییر قدیمی‌تر نادیده گرفته شد',
+      one: '۱ تغییر قدیمی‌تر نادیده گرفته شد',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportPrivacyHeld(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count گزارش به دلیل حریم خصوصی نگه داشته شد',
+      one: '۱ گزارش به دلیل حریم خصوصی نگه داشته شد',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncStepLabelDownload => 'Omi → گوشی';
+
+  @override
+  String get syncStepLabelUpload => 'آپلود';
+
+  @override
+  String get syncStepLabelTranscribe => 'رونویسی';
+
+  @override
+  String get syncDetailsForSupport => 'برای پشتیبانی';
+
+  @override
+  String get episodeOnDeviceNotesFootnote =>
+      'همان‌طور که حرف می‌زنی روی گوشی‌ات نوشته می‌شود. یادداشت‌های کامل همراه با پی‌نوشت نهایی می‌رسند.';
+
+  @override
+  String get episodeOnThisPhone => 'روی این گوشی';
+
+  @override
+  String get livePreviewNoEngineTitle => 'با امنیت ضبط می‌کند';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return '$duration درحال تکمیل';
+  }
+
+  @override
+  String get onTheWayDetailsForSupport => 'جزئیات برای پشتیبانی';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count کلیپ کوتاه مخفی شده‌اند',
+      one: '۱ کلیپ کوتاه مخفی شده',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => 'نمایش';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'مخفی‌کردن $count کلیپ کوتاه',
+      one: 'مخفی‌کردن ۱ کلیپ کوتاه',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get speakerWholeRecording => 'اعمال به کل ضبط';
+
+  @override
+  String get speakerSelectionChanged => 'گوینده تغییر کرده است. خط‌ها را دوباره انتخاب کنید.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'ضبط خیلی بزرگ است. خط‌های کمتری از یک گفتگو انتخاب کنید.',
+        'partial': 'بعضی خط‌ها ذخیره شدند. خط‌های باقی‌مانده را انتخاب و دوباره تلاش کنید.',
+        'other': 'بعضی خط‌ها ذخیره شدند. خط‌های باقی‌مانده را انتخاب و دوباره تلاش کنید.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerRecordingCoverage(String state, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'نام $count خط فقط در گفتگوهای موجود تغییر کرد.',
+      one: 'نام 1 خط فقط در گفتگوهای موجود تغییر کرد.',
+    );
+    String _temp1 = intl.Intl.selectLogic(
+      state,
+      {
+        'scope': 'خطوط دیگر این صدا (پوشش ضبط تأیید نشده)',
+        'other': '$_temp0',
+      },
+    );
+    return '$_temp1';
+  }
+
+  @override
+  String get episodeFinishingUp => 'در حال اتمام…';
 }

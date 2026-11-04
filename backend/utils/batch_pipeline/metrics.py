@@ -1,16 +1,34 @@
 """Queue-age autoscaling export. Refresh from a supervised worker, never import IO."""
 
 import logging
+import math
+import threading
 
 from prometheus_client import CollectorRegistry, Gauge, Histogram, Counter, REGISTRY
 
-from database.batch_pipeline_store import Store, FirestoreStore, PROJECTION_OBLIGATION_STATES
+from config.batch_timeliness import (
+    SLA_SECONDS,
+    TERMINAL_EMPTY_IS_PROCESSED,
+    batch_timeliness_alarm_enabled,
+    timeliness_epoch,
+    timeliness_interval_seconds,
+)
+from database.batch_pipeline_store import Store, FirestoreStore, PROJECTION_OBLIGATION_STATES, timeliness_sample
 from utils.batch_pipeline.contracts import Priority, WORK_OUTCOMES
 from utils.observability.reasons import AdmissionHoldReason, ReasonFamily, reason_label
+from utils.lifecycle_metrics import PhaseMetrics
 
 LABELS = {Priority.FRESH: 'fresh', Priority.RECENT: 'recent', Priority.DEEP: 'deep'}
 AGE_TARGETS = {Priority.FRESH: 30, Priority.RECENT: 300, Priority.DEEP: 3600}
 PARK_REASONS = frozenset({'privacy', 'pool_duration', 'pool_unit_kind', 'shared_live_policy'})
+
+
+def age_seconds(started: float | None, now: float) -> float:
+    # Preserve an explicitly incomplete bounded scan as NaN. max(0, NaN)
+    # would silently turn unknown debt into a healthy zero.
+    if started is None:
+        return 0
+    return max(0.0, now - started) if math.isfinite(started) else float('nan')
 
 
 class QueueMetrics:
@@ -21,8 +39,13 @@ class QueueMetrics:
         worker_release: str = 'unscoped',
         namespace: str = 'unscoped',
         capacity_sampling: bool = False,
+        min_refresh_seconds: float = 0.0,
     ):
         self.scope = (worker_release, namespace)
+        # Serving instances share one global queue; workers keep 0 for the HPA.
+        self.min_refresh_seconds = min_refresh_seconds
+        self._refresh_due = 0.0
+        self._refresh_lock = threading.Lock()
         self.capacity_sampling = capacity_sampling
         self.projection_age = Gauge(
             'omi_batch_projection_obligation_oldest_age_seconds',
@@ -34,6 +57,45 @@ class QueueMetrics:
             'Last successful oldest projection obligation observation',
             registry=registry,
         )
+        # 2-hour timeliness alarm (David, 2026-11-02). Alert-only: no scheduler, ramp or rollback guard reads it.
+        self.timeliness_age = Gauge(
+            'omi_batch_timeliness_new_oldest_age_seconds',
+            'Oldest unpublished unit admitted (projection legs: committed) at or after the epoch; alarm above 7200s',
+            ['leg'],
+            registry=registry,
+        )
+        self.timeliness_over_sla = Gauge(
+            'omi_batch_timeliness_new_over_sla_units',
+            'Units admitted at or after the epoch and still unpublished past the 2h SLA, by counted leg',
+            ['leg'],
+            registry=registry,
+        )
+        self.timeliness_backlog = Gauge(
+            'omi_batch_timeliness_backlog_units',
+            'Unpublished units from before the epoch, by leg; kept visible, never alarmed',
+            ['leg'],
+            registry=registry,
+        )
+        self.timeliness_truncated = Gauge(
+            'omi_batch_timeliness_scan_truncated',
+            '1 when a leg\'s bounded walk may hide an older unpublished unit',
+            ['leg'],
+            registry=registry,
+        )
+        self.timeliness_observed_at = Gauge(
+            'omi_batch_timeliness_observed_at_seconds',
+            'Last successful timeliness sample',
+            registry=registry,
+        )
+        self.timeliness_samples = Counter(
+            'omi_batch_timeliness_samples_total',
+            'Timeliness sample attempts by outcome',
+            ['outcome'],
+            registry=registry,
+        )
+        self._timeliness_due = 0.0
+        self.record_pending = PhaseMetrics('omi_batch_record_pending', ['state'], registry=registry)
+        self.nojob = PhaseMetrics('omi_record_seal_nojob', ['kind'], registry=registry)
         self.oldest_age = Gauge(
             'omi_batch_pipeline_oldest_age_seconds',
             'Oldest admitted uncommitted item age',
@@ -135,6 +197,27 @@ class QueueMetrics:
             raise ValueError('static head scheduling event required')
 
     def refresh(self, store: Store, now: float) -> None:
+        if self.min_refresh_seconds <= 0:
+            self._refresh(store, now)
+            return
+        # The serving loop and the /metrics handler share this object across
+        # executors: reserve the interval before reading so concurrent callers
+        # skip. A skipped call reads nothing and changes nothing; a failed
+        # refresh releases its reservation so the next call reads again.
+        due = now + self.min_refresh_seconds
+        with self._refresh_lock:
+            if now < self._refresh_due:
+                return
+            previous, self._refresh_due = self._refresh_due, due
+        try:
+            self._refresh(store, now)
+        except BaseException:
+            with self._refresh_lock:
+                if self._refresh_due == due:
+                    self._refresh_due = previous
+            raise
+
+    def _refresh(self, store: Store, now: float) -> None:
         # Collect every query before changing gauges. Failed refresh retains last
         # values and does not advance freshness; adapters must reject stale data.
         samples = []
@@ -162,18 +245,55 @@ class QueueMetrics:
                     'event=batch_capacity_sample outcome=unavailable exception_type=%s', type(error).__name__
                 )
         for priority, pending, ready, retry in samples:
-            self.oldest_age.labels(LABELS[priority], *self.scope).set(
-                max(0.0, now - pending) if pending is not None else 0
-            )
+            self.oldest_age.labels(LABELS[priority], *self.scope).set(age_seconds(pending, now))
             self.ready_age.labels(LABELS[priority], *self.scope).set(max(0.0, now - ready) if ready is not None else 0)
-            self.retry_age.labels(LABELS[priority], *self.scope).set(max(0.0, now - retry) if retry is not None else 0)
+            self.retry_age.labels(LABELS[priority], *self.scope).set(age_seconds(retry, now))
         self.refreshed_at.labels(*self.scope).set(now)
         if capacity:
             for priority, count in capacity:
                 self.ready_units.labels(LABELS[priority], *self.scope).set(count)
             self.capacity_refreshed_at.labels(*self.scope).set(now)
         if isinstance(store, FirestoreStore):
+            from database.lifecycle_metrics_queries import record_pending, nojob
+
+            self.record_pending.refresh(now, lambda: record_pending(store.client, store.namespace, now))
+            self.nojob.refresh(now, lambda: nojob(store.client, store.namespace))
+            self.refresh_timeliness(store, now)
             self.refresh_projection(store, now)
+
+    def refresh_timeliness(self, store: FirestoreStore, now: float) -> None:
+        """At most one sample per interval per process; a failed sample keeps last values and freshness."""
+        if now < self._timeliness_due:
+            return
+        self._timeliness_due = now + timeliness_interval_seconds()
+        if not batch_timeliness_alarm_enabled():
+            self.timeliness_samples.labels('disabled').inc()
+            return
+        try:
+            sample = timeliness_sample(
+                store.client,
+                store.namespace,
+                timeliness_epoch(),
+                now,
+                SLA_SECONDS,
+                terminal_empty_processed=TERMINAL_EMPTY_IS_PROCESSED,
+            )
+        except Exception as error:
+            self.timeliness_samples.labels('error').inc()
+            logging.getLogger(__name__).warning(
+                'event=batch_timeliness_sample outcome=unavailable exception_type=%s', type(error).__name__
+            )
+            return
+        for leg, started in sample['new_oldest'].items():
+            self.timeliness_age.labels(leg).set(max(0.0, now - started) if started is not None else 0)
+        for leg, units in sample['new_over_sla'].items():
+            self.timeliness_over_sla.labels(leg).set(units)
+        for leg, units in sample['backlog'].items():
+            self.timeliness_backlog.labels(leg).set(units)
+        for leg, truncated in sample['truncated'].items():
+            self.timeliness_truncated.labels(leg).set(1 if truncated else 0)
+        self.timeliness_observed_at.set(now)
+        self.timeliness_samples.labels('ok').inc()
 
     def refresh_projection(self, store: FirestoreStore, now: float) -> None:
         # Reuses the indexed discovery shape, one row, including durable holds.

@@ -14931,4 +14931,183 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get searchNoiseFilter => 'சிறு கிளிப்புகள்';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count உரையாடல்கள்',
+      one: '1 உரையாடல்',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count இடங்கள்',
+      one: '1 இடம்',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'அனைத்து $count-ஐயும் காட்டு';
+  }
+
+  @override
+  String get reviewChangeSeeEvidence => 'ஆதாரத்தைப் பார்';
+
+  @override
+  String get reviewChangeViewTask => 'பணியைப் பார்';
+
+  @override
+  String get dreamReportShadowBanner =>
+      'முன்னோட்ட முறை: Dream எதை மாற்றியிருக்கும் என்பதைக் காட்டுகிறது, ஆனால் உங்கள் கணக்கில் இன்னும் எதுவும் மாறாது.';
+
+  @override
+  String dreamReportStats(int records, int tokens) {
+    return '$records உருப்படிகள் படிக்கப்பட்டன · $tokens டோக்கன்கள்';
+  }
+
+  @override
+  String get dreamReportFeedback => 'Omi குழுவுக்குத் தெரிவிக்கப்பட்டது';
+
+  @override
+  String dreamReportPasses(int count, int limit) {
+    return 'இன்று $count/$limit சுற்றுகள்';
+  }
+
+  @override
+  String dreamReportQueued(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count மாற்றங்கள் காத்திருக்கின்றன',
+      one: '1 மாற்றம் காத்திருக்கிறது',
+      zero: 'காத்திருக்கும் மாற்றங்கள் இல்லை',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportDropped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count பழைய மாற்றங்கள் தவிர்க்கப்பட்டன',
+      one: '1 பழைய மாற்றம் தவிர்க்கப்பட்டது',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportPrivacyHeld(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'தனியுரிமைக்காக $count அறிக்கைகள் நிறுத்தி வைக்கப்பட்டன',
+      one: 'தனியுரிமைக்காக 1 அறிக்கை நிறுத்தி வைக்கப்பட்டது',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncStepLabelDownload => 'Omi → ஃபோன்';
+
+  @override
+  String get syncStepLabelUpload => 'பதிவேற்றம்';
+
+  @override
+  String get syncStepLabelTranscribe => 'எழுத்தாக்கம்';
+
+  @override
+  String get syncDetailsForSupport => 'ஆதரவுக்காக';
+
+  @override
+  String get episodeOnDeviceNotesFootnote =>
+      'நீங்கள் பேசும்போது உங்கள் ஃபோனிலேயே எழுதப்படுகிறது. முழு குறிப்புகள் இறுதி எழுத்துப்பிரதியுடன் வரும்.';
+
+  @override
+  String get episodeOnThisPhone => 'இந்த ஃபோனில்';
+
+  @override
+  String get livePreviewNoEngineTitle => 'பாதுகாப்பாக பதிவு செய்கிறது';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return '$duration வழியில் உள்ளது';
+  }
+
+  @override
+  String get onTheWayDetailsForSupport => 'ஆதரவுக்கான விவரங்கள்';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count குறுகிய பதிவுகள் மறைக்கப்பட்டன',
+      one: '1 குறுகிய பதிவு மறைக்கப்பட்டது',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => 'காட்டவும்';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count குறுகிய பதிவுகளை மறைக்கவும்',
+      one: '1 குறுகிய பதிவை மறைக்கவும்',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get speakerWholeRecording => 'முழுப் பதிவுக்கும் பயன்படுத்து';
+
+  @override
+  String get speakerSelectionChanged => 'பேச்சாளர் மாறிவிட்டார். வரிகளை மீண்டும் தேர்ந்தெடுக்கவும்.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'பதிவு மிகப் பெரியது. ஒரு உரையாடலில் குறைவான வரிகளைத் தேர்ந்தெடுக்கவும்.',
+        'partial': 'சில வரிகள் சேமிக்கப்பட்டன. மீதமுள்ள வரிகளைத் தேர்ந்தெடுத்து மீண்டும் முயற்சிக்கவும்.',
+        'other': 'சில வரிகள் சேமிக்கப்பட்டன. மீதமுள்ள வரிகளைத் தேர்ந்தெடுத்து மீண்டும் முயற்சிக்கவும்.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerRecordingCoverage(String state, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'கிடைக்கக்கூடிய உரையாடல்களில் மட்டும் $count வரிகளின் பெயர் மாற்றப்பட்டது.',
+      one: 'கிடைக்கக்கூடிய உரையாடல்களில் மட்டும் 1 வரிகளின் பெயர் மாற்றப்பட்டது.',
+    );
+    String _temp1 = intl.Intl.selectLogic(
+      state,
+      {
+        'scope': 'இந்தக் குரலின் பிற வரிகள் (பதிவின் வரம்பு உறுதிப்படுத்தப்படவில்லை)',
+        'other': '$_temp0',
+      },
+    );
+    return '$_temp1';
+  }
+
+  @override
+  String get episodeFinishingUp => 'முடிக்கப்படுகிறது…';
 }

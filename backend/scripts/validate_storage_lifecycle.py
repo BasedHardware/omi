@@ -21,10 +21,10 @@ The load-bearing facts this guards:
   always keeps the newest generation of every object name (David, 10-23: delete
   noncurrent ``.opus.enc`` only after the regen check; see the storage-ops
   README for why this shape satisfies it).
-* Every ``SetStorageClass`` rule must be prefix-scoped to exactly ``chunks/``.
-  A rule targets either COLDLINE (from STANDARD/MULTI_REGIONAL, the p76 batch
-  transition) or ARCHIVE (from COLDLINE only — the later-class move for the
-  already-Coldline batch stock, David 11-01); at most one rule of each target.
+* At most one ``SetStorageClass`` rule is permitted, targeting COLDLINE from
+  STANDARD/MULTI_REGIONAL and prefix-scoped to exactly ``chunks/``. David
+  dropped the prod-stock ARCHIVE transition on 11-02 because of its one-time
+  operation cost. The new-empty-bucket forward policy is a separate contract.
 * All other noncurrent-version rules (``isLive: false`` and friends) are
   forbidden: a bucket-wide noncurrent rule would move ``playback/`` noncurrent
   versions to Coldline, which the 30-day Delete rule then early-deletes.
@@ -41,7 +41,6 @@ from typing import Any
 CHUNKS_PREFIX = "chunks/"
 ALLOWED_ACTIONS = {"Delete", "SetStorageClass"}
 ALLOWED_SOURCE_CLASSES = {"STANDARD", "MULTI_REGIONAL"}
-ARCHIVE_SOURCE_CLASSES = {"COLDLINE"}
 NONCURRENT_CONDITION_KEYS = ("daysSinceNoncurrentTime", "noncurrentTimeBefore", "numNewerVersions")
 
 PROD_BUCKET = "omi-private-cloud-sync"
@@ -97,8 +96,7 @@ def validate_desired_document(document: Mapping[str, Any]) -> list[str]:
         errors.append("desired document must contain lifecycle.rule as a list")
         return errors
 
-    coldline_rules = 0
-    archive_rules = 0
+    set_class_rules = 0
     noncurrent_delete_rules = 0
     for index, rule in enumerate(lifecycle["rule"]):
         if not isinstance(rule, Mapping):
@@ -141,24 +139,9 @@ def validate_desired_document(document: Mapping[str, Any]) -> list[str]:
                         )
         else:  # SetStorageClass
             target_class = action.get("storageClass")
-            if target_class == "COLDLINE":
-                allowed_sources = ALLOWED_SOURCE_CLASSES
-                coldline_rules += 1
-            elif target_class == "ARCHIVE":
-                # Later-class transition for the already-Coldline batch stock
-                # (David, 11-01); only Coldline objects may move to Archive,
-                # and only on the prod bucket — the approval names the prod
-                # Coldline stock, not the dev bucket.
-                if bucket != PROD_BUCKET:
-                    errors.append(
-                        f"desired rule {index} targets ARCHIVE; ARCHIVE transitions are approved for "
-                        f"{PROD_BUCKET} only, not {bucket!r}"
-                    )
-                allowed_sources = ARCHIVE_SOURCE_CLASSES
-                archive_rules += 1
-            else:
-                allowed_sources = None
-                errors.append(f"desired rule {index} must set storageClass COLDLINE or ARCHIVE, got {target_class!r}")
+            set_class_rules += 1
+            if target_class != "COLDLINE":
+                errors.append(f"desired rule {index} must set storageClass COLDLINE, got {target_class!r}")
             age = condition.get("age")
             if not isinstance(age, int) or isinstance(age, bool) or age < 30:
                 errors.append(f"desired rule {index} must carry an integer age >= 30, got {age!r}")
@@ -169,26 +152,19 @@ def validate_desired_document(document: Mapping[str, Any]) -> list[str]:
                 )
             source_classes = condition.get("matchesStorageClass")
             classes_ok = (
-                allowed_sources is not None
-                and isinstance(source_classes, list)
+                isinstance(source_classes, list)
                 and all(isinstance(c, str) for c in source_classes)
-                and sorted(source_classes) == sorted(allowed_sources)
+                and sorted(source_classes) == sorted(ALLOWED_SOURCE_CLASSES)
             )
             if not classes_ok:
                 errors.append(
                     f"desired rule {index} matchesStorageClass must be exactly "
-                    f"{sorted(allowed_sources) if allowed_sources is not None else '<unsupported target>'}, "
+                    f"{sorted(ALLOWED_SOURCE_CLASSES)}, "
                     f"got {source_classes!r}"
                 )
 
-    if coldline_rules > 1:
-        errors.append(
-            f"desired document declares {coldline_rules} COLDLINE SetStorageClass rules; at most one is expected"
-        )
-    if archive_rules > 1:
-        errors.append(
-            f"desired document declares {archive_rules} ARCHIVE SetStorageClass rules; at most one is expected"
-        )
+    if set_class_rules > 1:
+        errors.append(f"desired document declares {set_class_rules} SetStorageClass rules; at most one is expected")
     if noncurrent_delete_rules > 1:
         errors.append(
             f"desired document declares {noncurrent_delete_rules} scoped noncurrent Delete rules; at most one is expected"
