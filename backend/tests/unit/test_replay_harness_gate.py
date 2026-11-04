@@ -96,9 +96,10 @@ def test_mixed_stress_outcomes_are_unstable_not_regressions(case, mixed_side):
             reports[side] = [[before, after, after]]
     result = gate.compare([case], reports)
     assert result['cases'][0]['classification'] == 'unstable'
-    assert result['verdict'] == 'REGRESSION_ONLY'
-    assert not result['cases'][0]['inconclusive']
-    assert gate.exit_code(result['verdict'], regression_only=True) == 0
+    asymmetric = mixed_side == 'candidate'
+    assert result['verdict'] == ('INCONCLUSIVE' if asymmetric else 'REGRESSION_ONLY')
+    assert result['cases'][0]['inconclusive'] == asymmetric
+    assert gate.exit_code(result['verdict'], regression_only=True) == int(asymmetric)
     assert len(result['cases'][0]['baseline']['outcomes']) == len(result['cases'][0]['candidate']['outcomes']) == 3
 
 
@@ -433,18 +434,122 @@ def test_stress_target_fix_requires_five_unanimous_runs(case, repeats):
     assert result['verdict'] == ('PASS' if repeats >= 5 else 'DIAGNOSTIC')
 
 
-def test_unstable_non_target_does_not_block_a_proven_target(case):
+@pytest.mark.parametrize(
+    'baseline_mixed,retry_status,classification,verdict',
+    [
+        (False, 'mixed', 'unstable', 'INCONCLUSIVE'),
+        (False, 'stopped', 'still_failing', 'PASS'),
+        (False, 'pass', 'unstable', 'INCONCLUSIVE'),
+        (True, None, 'unstable', 'PASS'),
+    ],
+)
+def test_asymmetric_stress_retry_in_ship_gate(
+    case, tmp_path, monkeypatch, baseline_mixed, retry_status, classification, verdict
+):
     target = replace(case, manifest=replace(case.manifest, gate={'fixed_by_ref': True}))
-    stress = replace(case, corpus={'admission': {'drainers': 8}})
+    stress = replace(
+        case, corpus={'admission': {'drainers': 8}}, manifest=replace(case.manifest, id='synthetic-stress')
+    )
+    mixed = [outcome(), outcome('pass'), outcome('pass')]
+    before = mixed if baseline_mixed else [outcome()] * 3
+    after = mixed
+    retry = mixed if retry_status == 'mixed' else [outcome(retry_status)] * 3
+    responses = [[[outcome()], before], [[outcome('pass')], after]]
+    if not baseline_mixed:
+        responses.append([retry])
+    calls, active = [], []
+
+    @contextmanager
+    def snapshot(repo, sha, output, label):
+        active.append(label)
+        yield tmp_path / label
+        active.pop()
+
+    def run_side(backend, cases, repeats, timeout):
+        calls.append(([c.manifest.id for c in cases], repeats, timeout))
+        assert active == ['baseline' if len(calls) == 1 else 'candidate']
+        assert backend == tmp_path / active[0]
+        return responses.pop(0)
+
+    monkeypatch.setattr(gate, 'load_case', lambda path: target if path == 'target' else stress)
+    monkeypatch.setattr(gate, 'backend_snapshot', snapshot)
+    monkeypatch.setattr(gate, 'run_side', run_side)
+    monkeypatch.setattr(gate, 'resolve_refs', lambda *_: {'baseline': 'b' * 40, 'candidate': 'a' * 40})
+    output = tmp_path / 'output'
+    assert gate.gate(tmp_path, ['target', 'stress'], 'REF', 'BASE', output, worker_timeout=123) == (
+        0 if verdict == 'PASS' else 1
+    )
+    result = json.loads((output / 'gate.json').read_text())
+    assert [r['classification'] for r in result['cases']] == ['fixed', classification]
+    assert result['verdict'] == verdict
+    row = result['cases'][1]
+    assert row['inconclusive'] == (verdict == 'INCONCLUSIVE')
+    assert row['candidate']['outcomes'] == after + ([] if baseline_mixed else retry)
+    assert row['candidate']['retry_start'] == (None if baseline_mixed else 3)
+    assert len(calls) == (2 if baseline_mixed else 3) and not responses
+    assert all(k == 3 and timeout == 123 for _, k, timeout in calls)
+    if not baseline_mixed:
+        assert calls[-1][0] == [stress.manifest.id]
+
+
+@pytest.mark.parametrize('exception_batch', ['initial', 'retry'])
+def test_retry_never_hides_new_exception(case, exception_batch):
+    case = replace(case, corpus={'admission': {'drainers': 8}})
+    after = [outcome(), outcome('pass'), outcome('pass')]
+    retry = [outcome()] * 3
+    rare = outcome(exception_type='TypeError', site='product.new')
+    (after if exception_batch == 'initial' else retry)[0] = rare
+    result = gate.compare([case], {'baseline': [[outcome()] * 3], 'candidate': [after], 'candidate_retry': {0: retry}})
+    assert result['cases'][0]['classification'] == 'still_failing'
+    assert len(result['cases'][0]['candidate']['outcomes']) == 6
+    assert result['verdict'] == 'FAIL'
+    assert result['new_exception_sites'] == [{'exception_type': 'TypeError', 'site': 'product.new'}]
+
+
+def test_retry_does_not_combine_small_batches_into_ship_sample(case):
+    case = replace(case, corpus={'admission': {'drainers': 8}})
     result = gate.compare(
-        [target, stress],
+        [case],
         {
-            'baseline': [[outcome()], [outcome(), outcome('pass'), outcome('pass')]],
-            'candidate': [[outcome('pass')], [outcome()] * 3],
+            'baseline': [[outcome()] * 2],
+            'candidate': [[outcome(), outcome('pass')]],
+            'candidate_retry': {0: [outcome()] * 2},
+        },
+        repeats=2,
+    )
+    assert result['verdict'] == 'DIAGNOSTIC'
+    assert result['cases'][0]['insufficient_repeats']
+
+
+def test_unanimous_passing_baseline_accepts_equal_retry(case):
+    case = replace(case, corpus={'admission': {'drainers': 8}})
+    result = gate.compare(
+        [case],
+        {
+            'baseline': [[outcome('pass')] * 3],
+            'candidate': [[outcome(), outcome('pass'), outcome('pass')]],
+            'candidate_retry': {0: [outcome('pass')] * 3},
         },
     )
-    assert [r['classification'] for r in result['cases']] == ['fixed', 'unstable']
-    assert result['verdict'] == 'PASS'
+    assert result['cases'][0]['classification'] == 'unchanged_pass'
+    assert result['verdict'] == 'REGRESSION_ONLY'
+
+
+def test_mixed_target_cannot_be_proven_fixed_by_unanimous_passing_retry(case):
+    case = replace(
+        case, corpus={'admission': {'drainers': 8}}, manifest=replace(case.manifest, gate={'fixed_by_ref': True})
+    )
+    result = gate.compare(
+        [case],
+        {
+            'baseline': [[outcome()] * 5],
+            'candidate': [[outcome(), *[outcome('pass')] * 4]],
+            'candidate_retry': {0: [outcome('pass')] * 5},
+        },
+        repeats=5,
+    )
+    assert result['cases'][0]['classification'] == 'unstable'
+    assert result['verdict'] == 'INCONCLUSIVE'
 
 
 def test_unstable_still_rejects_new_exception_from_any_run(case):

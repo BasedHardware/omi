@@ -120,27 +120,51 @@ def exception_sites(outcomes):
     }
 
 
+def baseline_unanimous(case, outcomes):
+    # The reason matcher also examines sanitized observations. Every BASE run
+    # must agree on reproduction, not only on its primary reason.
+    return unanimous(
+        outcomes, key=lambda outcome: (outcome_key(outcome), reproduces_expected_stop(outcome, case.manifest))
+    )
+
+
+def needs_retry(case, before, after):
+    return repeats_for(case, 3) > 1 and baseline_unanimous(case, before) is not None and unanimous(after) is None
+
+
 def compare(cases, reports, key=b'', repeats=3):
     rows = []
     baseline_exceptions, candidate_exceptions = set(), set()
-    for case, before, after in zip(cases, reports['baseline'], reports['candidate'], strict=True):
+    for index, (case, before, after) in enumerate(zip(cases, reports['baseline'], reports['candidate'], strict=True)):
+        retry = reports.get('candidate_retry', {}).get(index, [])
         baseline_exceptions.update(exception_sites(before))
-        candidate_exceptions.update(exception_sites(after))
-        # The reason matcher also examines sanitized observations. Every BASE
-        # run must agree on reproduction, not only on its primary reason.
-        baseline = unanimous(
-            before, key=lambda outcome: (outcome_key(outcome), reproduces_expected_stop(outcome, case.manifest))
-        )
+        candidate_exceptions.update(exception_sites(after + retry))
+        baseline = baseline_unanimous(case, before)
         candidate = unanimous(after)
+        asymmetric = needs_retry(case, before, after)
+        if asymmetric and retry:
+            confirmed = baseline_unanimous(case, retry)
+            # Only an equal confirmation can clear initial REF instability.
+            # Neither mixed batch can establish a fix or regression.
+            if (
+                confirmed is not None
+                and outcome_key(confirmed) == outcome_key(baseline)
+                and (
+                    reproduces_expected_stop(confirmed, case.manifest)
+                    == reproduces_expected_stop(baseline, case.manifest)
+                )
+            ):
+                candidate = confirmed
         load_sensitive = repeats_for(case, 3) > 1
         target = bool((case.manifest.gate or {}).get('fixed_by_ref'))
         expected_runs = repeats_for(case, repeats)
         incomplete = (
             len(before) != expected_runs
             or len(after) != expected_runs
+            or (bool(retry) and (not asymmetric or len(retry) != expected_runs))
             or any(
                 not o['stages'] or any(s['status'] not in ('pass', 'stopped') for s in o['stages'])
-                for o in before + after
+                for o in before + after + retry
             )
         )
         unstable = load_sensitive and (baseline is None or candidate is None)
@@ -167,9 +191,13 @@ def compare(cases, reports, key=b'', repeats=3):
                 'classification': classification,
                 'incomplete': incomplete,
                 'insufficient_repeats': insufficient,
-                'inconclusive': incomplete or (target and unstable),
+                'inconclusive': incomplete or (unstable and (target or asymmetric)),
                 'baseline': {'outcomes': before, 'unanimous': baseline},
-                'candidate': {'outcomes': after, 'unanimous': candidate},
+                'candidate': {
+                    'outcomes': after + retry,
+                    'retry_start': len(after) if retry else None,
+                    'unanimous': candidate,
+                },
             }
         )
     new_sites = [
@@ -185,7 +213,7 @@ def compare(cases, reports, key=b'', repeats=3):
     )
     verdict = 'FAIL'
     if not hard_failure:
-        if any(row['fixed_by_ref'] and row['classification'] == 'unstable' for row in rows):
+        if any(row['inconclusive'] for row in rows):
             verdict = 'INCONCLUSIVE'
         elif any(row['insufficient_repeats'] for row in rows):
             verdict = 'DIAGNOSTIC'
@@ -290,6 +318,15 @@ def gate(repo, directories, ref, base, output, repeats=3, regression_only=False,
     for label in ('baseline', 'candidate'):
         with backend_snapshot(repo, refs[label], output, label) as backend:
             reports[label] = run_side(backend, cases, repeats, worker_timeout)
+            if label == 'candidate':
+                retry_indices = [
+                    index
+                    for index, case in enumerate(cases)
+                    if needs_retry(case, reports['baseline'][index], reports['candidate'][index])
+                ]
+                if retry_indices:
+                    retried = run_side(backend, [cases[index] for index in retry_indices], repeats, worker_timeout)
+                    reports['candidate_retry'] = dict(zip(retry_indices, retried, strict=True))
     if identity != adapter_digest() or digests != [case_digest(c) for c in cases]:
         raise ValueError('adapter or case changed during replay')
     result = {

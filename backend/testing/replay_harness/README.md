@@ -121,11 +121,20 @@ shipping. No emulator-wide flush or production client is used.
 `K` (`--repeats`, default 3) controls runs **per side** for multi-drainer admission
 stress shapes, detected from corpus geometry rather than the case name. Other
 cases run once. Repeated outcomes are compared by `(status, stop stage, reason)`.
-If either side is not unanimous, the case is `unstable`: all runs remain in the
-report, and the case never counts as fixed, regressed or changed_reason. There
-is no majority vote. BASE unanimity also checks that every run agrees on
-reproducing the expected stop, including matches in sanitized observations. New exception class/sites from **any** run still fail the
-gate, including exceptions observed only in an unstable case.
+If BASE is mixed, the case is `unstable`: it never counts as fixed, regressed or
+changed_reason. If BASE is unanimous but REF is mixed, the gate automatically
+runs **one additional batch of K REF runs for that case**, using the same REF
+snapshot and fresh namespaces. Only a unanimous retry matching BASE clears the
+instability and permits normal classification. A mixed retry or a unanimous
+retry differing from BASE leaves the case `unstable` and produces `INCONCLUSIVE`
+(nonzero), even for a non-target case. The initial mixed batch can never prove a
+fix. There is no majority vote or further retry. BASE unanimity also checks that
+every run agrees on reproducing the expected stop, including matches in sanitized
+observations. Every initial and retry outcome remains in `candidate.outcomes`;
+`candidate.retry_start` gives the retry's zero-based starting index, or null if
+none was needed. `candidate.unanimous` describes the accepted initial batch or
+equal retry. New exception class/sites from **any** run still fail the gate,
+including exceptions from the initial batch of a recovered case.
 
 Ship comparisons require `K >= 3` for non-target stress cases and `K >= 5` for
 stress cases declaring `fixed_by_ref`. Smaller samples produce `DIAGNOSTIC`
@@ -149,7 +158,7 @@ case is `fixed`; the later outcome and any new exceptions remain visible. PASS r
 target to be `fixed`, no `regressed` cases, no new exception class/site across the
 corpus, and no inconclusive or unimplemented outcomes. Every `changed_reason`
 fails closed, including movement to either an earlier or a later stop. Untargeted
-known failures and unstable **non-target** stress cases may remain. A declared
+known failures and **BASE-mixed non-target** stress cases may remain. A declared
 target that is unstable produces `INCONCLUSIVE` (nonzero) instead of PASS; a
 separate regression, incomplete report or new exception still takes precedence
 as FAIL. A ship PASS requires at least one target, every target proven fixed,

@@ -35,7 +35,8 @@ def test_identical_refs(tmp_path, trial):
     assert result['verdict'] == 'REGRESSION_ONLY'
     assert not {'fixed', 'regressed'} & {r['classification'] for r in result['cases']}
     stress = next(r for r in result['cases'] if len(r['baseline']['outcomes']) > 1)
-    assert len(stress['baseline']['outcomes']) == len(stress['candidate']['outcomes']) == 3
+    assert len(stress['baseline']['outcomes']) == 3
+    assert len(stress['candidate']['outcomes']) == (6 if stress['candidate']['retry_start'] else 3)
     assert set(p.name for p in output.iterdir()) == {'gate.json', 'gate.md', 'identity.key'}
 
 
