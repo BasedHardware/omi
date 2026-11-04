@@ -54,7 +54,6 @@ KNOWN_LEVERS = frozenset(
         'finjob_candidate_queries',  # conversation_finalization_jobs:{scan_in_progress,get_abandoned_byok,get_stale_processing}
         'action_items_ttl120',  # action_items_cache: 120s default reuse under action_items_page
         'lifecycle_record_pending_head',  # lifecycle_metrics_queries:record_pending head(1)+count, key=namespace
-        'held_audio_rows_cache',  # held_audio_summary:_load_rows, 60s Redis reuse keyed on the summary
     }
 )
 

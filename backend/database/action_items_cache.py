@@ -88,12 +88,14 @@ def list_cache_ttl_seconds(uid: str = '') -> int:
         # Version-bumped on every write, so a longer TTL only lengthens reuse of an
         # unchanged list. Lever action_items_ttl120 lifts the default to 120s, cutting the
         # repeat-poll misses of the 30s base (cl2-infracost 2026-11-04).
-        default = max(ttl, _PAGE_LEVER_DEFAULT_TTL_SECONDS) if lever_enabled('action_items_ttl120', uid) else ttl
-        override = os.getenv('ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS', str(default)).strip()
+        override = os.getenv('ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS', str(ttl)).strip()
         try:
             ttl = int(override)
         except ValueError:
             logger.warning('ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS is not an integer; using base TTL')
+        if ttl > 0 and lever_enabled('action_items_ttl120', uid):
+            # Wins over the deployed page override (30s in prod); 0 still disables.
+            ttl = max(ttl, _PAGE_LEVER_DEFAULT_TTL_SECONDS)
     return max(0, min(ttl, _TTL_MAX_SECONDS))
 
 
