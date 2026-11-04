@@ -92,6 +92,13 @@ run_proof "recovery/admission parity PL-057/072/086 (sim + emulator)" \
   env OMI_REQUIRE_STORE_BACKENDS="${OMI_REQUIRE_STORE_BACKENDS:-sim,emulator}" \
   "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_recovery_admission_conformance.py
 
+# PL-042: the same durable-enqueue invariant over the old and new outboxes.
+# This script selects the existing proof workflow; require its available legs
+# rather than allowing a missing emulator to produce a passing skipped matrix.
+run_proof "PL-042 outbox durability (sim + emulator required; Postgres when available)" \
+  env OMI_REQUIRE_STORE_BACKENDS="${OMI_REQUIRE_STORE_BACKENDS:-sim,emulator}" \
+  "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_parity_outbox_durability.py
+
 if (( ${#failures[@]} )); then
   echo
   echo "Emulator proofs failed: ${#failures[@]}"
