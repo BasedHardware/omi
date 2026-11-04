@@ -66,9 +66,22 @@ def enabled(segments) -> bool:
     return has_batch_authority(segments) and default_on(BATCH_CONVERSATION_SPEAKERS_ENV)
 
 
+def batch_unit_scope(segment) -> str | None:
+    """Original batch unit namespace: one opaque ID, never a lane or conversation."""
+    scope = (segment.provider_speaker or {}).get('scope') or segment.speaker_id_scope or ''
+    prefix = 'final:batch:'
+    unit = scope.removeprefix(prefix)
+    return scope if scope.startswith(prefix) and unit and ':' not in unit else None
+
+
 def final_pass_enabled_for(uid: str, segments) -> bool:
     """Reuse the transcription-final-pass hash assignment; no new batch admission."""
-    if not uid or not enabled(segments) or not default_on('BATCH_FINAL_PASS_ENABLED'):
+    if (
+        not uid
+        or not enabled(segments)
+        or not any(batch_unit_scope(s) for s in segments)
+        or not default_on('BATCH_FINAL_PASS_ENABLED')
+    ):
         return False
     try:
         percent = float(os.getenv('BATCH_FINAL_PASS_PERCENT', '100'))

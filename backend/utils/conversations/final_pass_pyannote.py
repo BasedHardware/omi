@@ -1,5 +1,6 @@
 """Synchronous leaf operation called in the existing bounded shadow worker."""
 
+import logging
 import time
 import uuid
 from models.diarization import OMI_EMBEDDING_SPACE
@@ -16,6 +17,7 @@ import httpx
 from prometheus_client import Counter, Histogram
 
 from models.transcript_segment import TranscriptSegment
+from utils.conversations.final_pass_errors import error_details
 from utils.conversations.final_pass_assignment import assign_words, name_centroids, skip_single_speaker
 
 OUTCOMES = Counter('omi_transcription_final_pass_total', 'Pyannote final-pass outcomes', ['outcome', 'lane'])
@@ -43,6 +45,7 @@ def run_final_pass(
     lane='legacy',
     include_assignments=False,
     diarizer_backend=None,
+    record_outcome=True,
 ):
     began = time.monotonic()
     try:
@@ -127,7 +130,8 @@ def run_final_pass(
         )
         AGREEMENT.labels(lane=lane).observe(agreement)
         outcome = 'skipped_single' if skipped else 'diarized'
-        OUTCOMES.labels(lane=lane, outcome=outcome).inc()
+        if record_outcome:
+            OUTCOMES.labels(lane=lane, outcome=outcome).inc()
         return segments, {
             **({'assignments': assigned, 'centroids': output['centroids']} if include_assignments else {}),
             'outcome': outcome,
@@ -144,7 +148,12 @@ def run_final_pass(
         }
     except Exception as error:
         reason = 'timeout' if isinstance(error, (TimeoutError, httpx.TimeoutException)) else 'service'
-        OUTCOMES.labels(lane=lane, outcome='failed:' + reason).inc()
+        details = error_details(error)
+        logging.getLogger(__name__).warning(
+            'event=final_pass outcome=failed exception_type=%s reason=%s', details['exception_type'], details['reason']
+        )
+        if record_outcome:
+            OUTCOMES.labels(lane=lane, outcome='failed:' + reason).inc()
         record_fallback(
             component='stt_selection',
             from_mode='whole_conversation_diarizer',
@@ -152,6 +161,6 @@ def run_final_pass(
             reason='timeout' if reason == 'timeout' else 'other',
             outcome='degraded',
         )
-        return None, {'outcome': 'failed:' + reason}
+        return None, {'outcome': 'failed:' + reason, **details}
     finally:
         LATENCY.labels(lane=lane).observe(time.monotonic() - began)

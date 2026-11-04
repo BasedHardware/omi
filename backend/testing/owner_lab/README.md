@@ -130,3 +130,54 @@ reports the production repair counters (`repairs_by_kind`:
 FAIL, and an expected name is only scored when the snapshot supports it —
 without support the identity contract forbids naming that person, so the
 expectation is skipped instead of failed.
+
+## Batch speaker final-pass repro
+
+The earlier speaker lab used full private-cloud-sync audio. Production uses the
+staged batch units, their projection receipts and retained encrypted results,
+then reconstructs segment IDs and assembles audio on each unit's capture clock.
+Full playback bypasses scope selection, expired references, merged receipts,
+point-word grouping, part geometry and duration checks; its success does not
+qualify the production path.
+
+`final_pass_repro.py` calls the real `run_batch_final_pass`, `_units`, `_assemble`
+and `_run`. Use the owner-only `guard.py` supplied outside Git (not distributed
+with this bench). UID, encryption secret, selected conversation IDs (a JSON
+list), and optional diarizer URL must arrive through owner-only `0600` files.
+Run from `backend/` with read-only credentials and the production-equivalent
+stage/bucket configuration supplied by the operator:
+
+```bash
+.venv/bin/python -m testing.owner_lab.final_pass_repro \
+  --uid-file /private/uid --secret-file /private/encryption-secret \
+  --conversations-file /private/conversation-selection.json --diarizer stub
+
+.venv/bin/python -m testing.owner_lab.final_pass_repro \
+  --uid-file /private/uid --secret-file /private/encryption-secret \
+  --conversations-file /private/conversation-selection.json --diarizer http \
+  --diarizer-url-file /private/diarizer-url
+```
+
+The stub returns projection voices on the reconstructed unit word clock and
+checks plumbing only. HTTP uses the real `HttpDiarizer`, including production
+VAD compaction. Neither result measures slot pressure or spend admission:
+`_reserve_budget` admits in-process; recurring learning and label application
+are captured without publishing. Application still executes on a private copy,
+so grouping and changed-segment counts are checked. The SDK write fence rejects
+Firestore document/batch/transaction writes, GCS mutations and Redis writes;
+empty read-only Firestore commits remain allowed.
+
+Each JSONL case is identified by selection index (no UID or transcript), with
+one terminal outcome, safe code-owned exception message, failing unit, scope
+kinds, coverage, changed segments and speakers. The final JSONL row reports
+success rate. Keep the selection and output outside Git with mode `0600`.
+The CLI suppresses library logs to prevent provider errors from leaking private
+content. A missing/undecodable conversation produces `failed_load`, never an
+empty-transcript success. Production flags keep their normal values; disabled
+or out-of-cohort cases report `skipped_ineligible`.
+
+Mixed lanes are supported only for positive-duration segments with batch-unit
+evidence. Other lanes and point-only segments are preserved. Missing required
+batch segments fail closed; expired artifacts and receipts for another
+conversation report `skipped_expired` and `skipped_merged`. Retention starts
+at completed projection, after enrichment is queued; reading never extends it.

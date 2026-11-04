@@ -1,7 +1,7 @@
 """Batch final pass on each unit's staged PCM and admitted capture clock.
 
 After successful revalidation, retained private recurring profiles may be published.
-Incomplete conversation coverage leaves every resolver label unchanged.
+Only batch-backed positive-duration segments are candidates for relabeling.
 """
 
 import io
@@ -13,8 +13,13 @@ import time
 import wave
 from datetime import datetime, timezone
 
-from config.batch_conversation_speakers import BATCH_CONVERSATION_SCOPE, final_pass_enabled_for, recurring_enabled_for
-from database.batch_final_pass import load_reference
+from config.batch_conversation_speakers import (
+    BATCH_CONVERSATION_SCOPE,
+    batch_unit_scope,
+    final_pass_enabled_for,
+    recurring_enabled_for,
+)
+from database.batch_final_pass import load_reference, ReferenceUnavailable
 from database import recurring_voices
 from utils.observability.recurring_voices import identity_speech
 from utils.speakers.recurring_voices import near_misses
@@ -22,12 +27,13 @@ from utils.product_telemetry import emit_product_event
 from database.batch_pipeline_store import FirestoreStore
 from database.redis_db import create_bounded_redis_client
 from models.conversation import ConversationSpeakers
+from utils.batch_pipeline.contracts import projection_speech_spans
 from utils.batch_pipeline.artifact_policy import artifacts_for
 from utils.batch_pipeline.artifact_reads import ArtifactReadBudget, ArtifactReadLimit
-from utils.batch_pipeline.contracts import projection_speech_spans
 from utils.batch_pipeline.projection_parts import split_result, bounded_projection_words
 from utils.batch_pipeline.projection_segments import projection_segments
 from utils.conversations.final_pass_assignment import assign_words
+from utils.conversations.final_pass_errors import error_details
 from utils.conversations.final_pass_pyannote import run_final_pass, OUTCOMES, OWNER_DELTA
 from utils.manual_speaker_assignments import manual_owner_reserved
 from utils.observability.fallback import record_fallback
@@ -39,6 +45,7 @@ from utils.sync.stage import current_stage
 logger = logging.getLogger(__name__)
 
 _SLOTS = threading.BoundedSemaphore(1)
+_SLOT_WAIT_SECONDS = 60
 _RESERVE = """
 for i = 1, 2 do
   local spent = tonumber(redis.call('hget', KEYS[i], 'audio_ms') or '0')
@@ -86,22 +93,29 @@ def _reserve_budget(seconds):
         return False
 
 
-def _fallback(outcome):
+def _fallback(outcome, **details):
     OUTCOMES.labels(
         lane='batch', outcome=reason_label(ReasonFamily.BATCH_FINAL_PASS, outcome, BatchFinalPassOutcome)
     ).inc()
-    logger.info('event=batch_final_pass outcome=%s', outcome)
+    logger.info(
+        'event=batch_final_pass outcome=%s exception_type=%s reason=%s',
+        outcome,
+        details.get('exception_type', ''),
+        details.get('reason', ''),
+    )
     record_fallback(
         component='stt_selection',
         from_mode='batch_final_pass',
         to_mode='legacy_speaker_matching',
         reason=(
             'recovery_budget'
-            if outcome in {'failed_read_budget', 'skipped_budget'}
+            if outcome in {'failed_read_budget', 'skipped_budget', 'skipped_slot_timeout'}
             else 'unavailable' if outcome == 'failed_incomplete_coverage' else 'other'
         ),
         outcome='degraded',
     )
+
+    return {'outcome': outcome, **details}
 
 
 class IncompleteCoverage(ValueError):
@@ -129,13 +143,8 @@ def _assemble(units):
 
 
 def _units(uid, conversation, read_budget):
-    scopes = {
-        (s.provider_speaker or {}).get('scope') or s.speaker_id_scope or '' for s in conversation.transcript_segments
-    }
     units = sorted(
-        s.removeprefix('final:batch:')
-        for s in scopes
-        if s.startswith('final:batch:') and not s.startswith(BATCH_CONVERSATION_SCOPE)
+        {scope.removeprefix('final:batch:') for s in conversation.transcript_segments if (scope := batch_unit_scope(s))}
     )
     if len(units) > 128:
         raise ValueError('unit limit')
@@ -154,55 +163,79 @@ def _units(uid, conversation, read_budget):
                 if (wav.getnchannels(), wav.getframerate(), wav.getsampwidth()) != (1, 16000, 2):
                     raise ValueError('unit PCM format')
                 pcm = wav.readframes(wav.getnframes())
-            if abs(len(pcm) / 32000 - item.duration_seconds) > 0.001:
+            if abs(len(pcm) / 32000 - item.duration_seconds) > 0.1 + 1 / 16000 + 1e-9:
                 raise ValueError('unit duration')
             total_bytes += len(pcm)
             if total_bytes > 7200 * 32000:
                 raise OverflowError('audio too long')
             words = []
-            if binding.record_origin:
+            # Record-origin projection does not split by VAD. Older committed
+            # results may predate speech_spans; rebuilding their segments needs
+            # the words and diarization, not a fresh admission decision.
+            if binding.record_origin and 'speech_spans' in payload:
                 projection_speech_spans(payload, item.duration_seconds)
             parts = [(item, payload)] if binding.record_origin else split_result(item, payload)
             for part, output in parts:
                 segments = projection_segments(part, binding, output, batch_segment_id=unit, policy=policy)
-                local = bounded_projection_words(output['words'], part.duration_seconds)
-                mapped = assign_words(local, [dict(start=s.start, end=s.end, speaker=s.id) for s in segments])
+                # Projection uses the decoded result clock, which may differ
+                # from admitted metadata by the worker's decode tolerance.
+                local = bounded_projection_words(output['words'], float(output['audio_seconds']))
+                mapped = assign_words(
+                    local, [dict(start=s.start, end=s.end, speaker=s.id) for s in segments if s.end > s.start]
+                )
+                projection_voices = {s.id: s.speaker for s in segments}
                 for word in mapped:
-                    if word['speaker'] is not None:
+                    if word['speaker'] is not None and word['timestamp'][1] > word['timestamp'][0]:
                         words.append(
                             dict(
                                 text=word['word'],
                                 segment_id=word['speaker'],
+                                projection_speaker=(unit, projection_voices[word['speaker']]),
                                 timestamp=[t + (part.capture_at - item.capture_at) for t in word['timestamp']],
                             )
                         )
             yield item, pcm, words, lambda unit=unit, reference=reference: (
                 load_reference(store, uid, unit, conversation.id) == reference
             )
-        except (OverflowError, ArtifactReadLimit, IncompleteCoverage):
-            raise
         except Exception as error:
-            logger.warning('event=batch_final_pass outcome=unit_unavailable exception_type=%s', type(error).__name__)
-            raise IncompleteCoverage('unit unavailable') from error
+            error.failing_unit = unit
+            details = error_details(error)
+            logger.warning(
+                'event=batch_final_pass outcome=unit_unavailable exception_type=%s reason=%s',
+                details['exception_type'],
+                details['reason'],
+            )
+            if isinstance(error, (OverflowError, ArtifactReadLimit, IncompleteCoverage, ReferenceUnavailable)):
+                raise
+            failure = IncompleteCoverage('unit unavailable')
+            failure.failing_unit = unit
+            raise failure from error
 
 
 def run_batch_final_pass(uid, conversation, receipt, *, load_prints, apply):
     if not final_pass_enabled_for(uid, conversation.transcript_segments):
-        return
-    if not _SLOTS.acquire(blocking=False):
-        _fallback('skipped_budget')
-        return
+        return {'outcome': 'skipped_ineligible'}
+    if not _SLOTS.acquire(timeout=_SLOT_WAIT_SECONDS):
+        return _fallback('skipped_slot_timeout', reason='slot_wait_timeout')
     try:
-        _run(uid, conversation, receipt, load_prints, apply)
-    except OverflowError:
-        _fallback('failed_too_long')
-    except ArtifactReadLimit:
-        _fallback('failed_read_budget')
-    except IncompleteCoverage:
-        _fallback('failed_incomplete_coverage')
+        return _run(uid, conversation, receipt, load_prints, apply)
     except Exception as error:
-        logger.warning('event=batch_final_pass outcome=failed exception_type=%s', type(error).__name__)
-        _fallback('failed_batch_audio')
+        outcome = (
+            error.outcome
+            if isinstance(error, ReferenceUnavailable)
+            else (
+                'failed_too_long'
+                if isinstance(error, OverflowError)
+                else (
+                    'failed_read_budget'
+                    if isinstance(error, ArtifactReadLimit)
+                    else 'failed_incomplete_coverage' if isinstance(error, IncompleteCoverage) else 'failed_batch_audio'
+                )
+            )
+        )
+        return _fallback(
+            outcome, **error_details(error.__cause__ or error), failing_unit=getattr(error, 'failing_unit', None)
+        )
     finally:
         _SLOTS.release()
 
@@ -223,17 +256,16 @@ def _run(uid, conversation, receipt, load_prints, apply):
         for w in words
         if w['segment_id'] in stored
     ]
-    if {w['segment_id'] for w in words} != set(stored):
+    covered = {s.id for s in conversation.transcript_segments if batch_unit_scope(s) and s.end > s.start}
+    words = [w for w in words if w['segment_id'] in covered]
+    if {w['segment_id'] for w in words} != covered:
         raise IncompleteCoverage('unplaced segments')
     updates = {}
     next_id = max((s.speaker_id or 0 for s in conversation.transcript_segments), default=0) + 1
     identities, statuses = {}, {}
 
     def reserve_attempt(seconds):
-        admitted = _reserve_budget(seconds)
-        if not admitted:
-            _fallback('skipped_budget')
-        return admitted
+        return _reserve_budget(seconds)
 
     expected = None
     if recurring_enabled_for(uid, conversation.transcript_segments):
@@ -263,15 +295,17 @@ def _run(uid, conversation, receipt, load_prints, apply):
         lane='batch',
         include_assignments=True,
         diarizer_backend=HttpDiarizer('pyannote', reserve_attempt=reserve_attempt),
+        record_outcome=False,
     )
     if passed is None:
-        return  # Shared runner records its service/timeout fallback.
+        return _fallback(
+            'skipped_budget' if outcome.get('reason') == 'diarizer_attempt_budget' else 'failed_batch_audio',
+            **{key: outcome[key] for key in ('exception_type', 'reason') if key in outcome},
+        )
     if outcome.get('naming_outcome') == 'incompatible_space':
-        _fallback('failed_incompatible_space')
-        return
+        return _fallback('failed_incompatible_space')
     if not all(check() for check in checks) or not final_pass_enabled_for(uid, conversation.transcript_segments):
-        _fallback('failed_revoked')
-        return
+        return _fallback('failed_revoked')
     labels_by_voice = {s.speaker: s for s in passed if s.speaker is not None}
     by_segment = {}
     for word in outcome['assignments']:
@@ -286,13 +320,14 @@ def _run(uid, conversation, receipt, load_prints, apply):
         abs(final_owner - original_owner) / max(original_owner, final_owner, 0.001)
     )
     voice_ids = {}
+    unassigned = False
     for segment_id, labels in by_segment.items():
         if None in labels:
-            _fallback('failed_unassigned_words')
+            unassigned = True
             continue
         voices = set(labels)
         if len(voices) != 1:
-            _fallback('failed_unassigned_words')
+            unassigned = True
             continue
         voice = voices.pop()
         if voice not in voice_ids:
@@ -311,7 +346,7 @@ def _run(uid, conversation, receipt, load_prints, apply):
         if any(s.id == sid and s.speaker_label_source != 'manual' for s in conversation.transcript_segments)
     }
     if not updates:
-        return
+        return _fallback('failed_unassigned_words' if unassigned else 'skipped_no_changes')
     candidate = conversation.model_copy(deep=True)
     apply(
         candidate,
@@ -397,3 +432,14 @@ def _run(uid, conversation, receipt, load_prints, apply):
             'speakers': len(voice_ids),
         },
     )
+
+    if unassigned:
+        return _fallback('failed_unassigned_words', changed_segments=len(updates), speaker_count=len(voice_ids))
+    OUTCOMES.labels(lane='batch', outcome='success').inc()
+    logger.info('event=batch_final_pass outcome=success')
+    return {
+        'outcome': 'success',
+        'changed_segments': len(updates),
+        'speaker_count': len(voice_ids),
+        'covered_segments': len(covered),
+    }

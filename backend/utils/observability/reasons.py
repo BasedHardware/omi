@@ -297,6 +297,10 @@ class BatchFinalPassOutcome(StrEnum):
 
     UNKNOWN = 'unknown'
     SKIPPED_BUDGET = 'skipped_budget'
+    SKIPPED_EXPIRED = 'skipped_expired'
+    SKIPPED_MERGED = 'skipped_merged'
+    SKIPPED_SLOT_TIMEOUT = 'skipped_slot_timeout'
+    SKIPPED_NO_CHANGES = 'skipped_no_changes'
     TOO_LONG = 'failed_too_long'
     READ_BUDGET = 'failed_read_budget'
     INCOMPLETE_COVERAGE = 'failed_incomplete_coverage'

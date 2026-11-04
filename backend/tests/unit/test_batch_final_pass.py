@@ -396,7 +396,8 @@ def test_reference_is_read_only_and_requires_bound_owner_and_conversation(refere
     before = deepcopy(client.rows)
     assert references.load_reference(store, UID, 'unit-a', 'conversation') is not None
     assert references.load_reference(store, 'other-owner', 'unit-a', 'conversation') is None
-    assert references.load_reference(store, UID, 'unit-a', 'other-conversation') is None
+    with pytest.raises(references.ReferenceUnavailable, match='skipped_merged'):
+        references.load_reference(store, UID, 'unit-a', 'other-conversation')
     assert client.rows == before
 
 
@@ -414,7 +415,11 @@ def test_reference_refuses_expired_erasing_or_changed_artifacts(reference_store,
                     'wrong_kind': {'kind': 'voice_evidence'},
                 }[refusal]
             )
-    assert references.load_reference(store, UID, 'unit-a', 'conversation') is None
+    if refusal == 'expired':
+        with pytest.raises(references.ReferenceUnavailable, match='skipped_expired'):
+            references.load_reference(store, UID, 'unit-a', 'conversation')
+    else:
+        assert references.load_reference(store, UID, 'unit-a', 'conversation') is None
 
 
 def test_reference_privacy_deletion_fence(reference_store):
@@ -504,7 +509,8 @@ def test_sync_off_reference_available_until_24_hours_after_projection(reference_
     before = deepcopy(client.rows)
     assert references.load_reference(store, UID, 'unit-a', 'conversation') is not None
     Clock.current = due
-    assert references.load_reference(store, UID, 'unit-a', 'conversation') is None
+    with pytest.raises(references.ReferenceUnavailable, match='skipped_expired'):
+        references.load_reference(store, UID, 'unit-a', 'conversation')
     assert client.rows == before  # Reading never renews retention.
 
 
@@ -676,3 +682,497 @@ def test_recurring_pass_refuses_an_incomplete_person_roster(lane, monkeypatch, f
     batch.run_batch_final_pass(UID, lane.conversation, {}, load_prints=REAL_LOAD_PRINTS, apply=lambda *a, **kw: None)
     assert not writes and not lane.gpu
     assert lane.conversation.model_dump() == before
+
+
+@pytest.fixture
+def prod_shaped(monkeypatch):
+    """Literal persisted projection, independently specified (never projected here)."""
+    from models.transcript_segment import TranscriptSegment
+
+    monkeypatch.setenv('BATCH_CONVERSATION_SPEAKERS_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_FINAL_PASS_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_FINAL_PASS_PERCENT', '100')
+    monkeypatch.setattr(batch, 'current_stage', lambda: 'dev')
+    binding = ProjectionBinding(UID, 'job', 'content', ('unit-a',), private_cloud_sync_enabled=True, record_origin=True)
+    payload = {
+        'audio_seconds': 8,
+        'speech_seconds': 8,
+        'speech_spans': [{'start': 0, 'end': 8}],
+        'words_provider': 'parakeet',
+        'words': [{'word': 'Hello', 'timestamp': [0.2, 2.8]}, {'word': 'there.', 'timestamp': [3, 5.8]}],
+        'diarization': {'turns': [{'start': 0, 'end': 8, 'speaker': 'SPEAKER_00'}]},
+    }
+    items = {'unit-a': WorkItem('unit-a', UID, CAPTURE, 'gs://fake/unit-a#1', 8, Priority.FRESH, privacy_generation=0)}
+    audio = {'unit-a': b'\x01\0' * (8 * 16000)}
+    segments = [
+        TranscriptSegment(
+            is_user=False,
+            id='932fc062-cfd5-5cc1-b6b4-3ce28580abff',
+            text='Hello there.',
+            start=900.2,
+            end=905.8,
+            speaker='SPEAKER_00',
+            speaker_id=0,
+            speaker_id_scope='final:batch:unit-a',
+            person_id='resolver-person',
+            stt_provider='parakeet',
+        )
+    ]
+    conversation = Conversation(
+        id='conversation',
+        created_at=datetime.fromtimestamp(CAPTURE, timezone.utc),
+        started_at=datetime.fromtimestamp(CAPTURE, timezone.utc),
+        finished_at=datetime.fromtimestamp(CAPTURE + 8, timezone.utc),
+        structured=Structured(),
+        transcript_segments=segments,
+    )
+    reads, gpu, fallbacks = [], [], []
+    lane = SimpleNamespace(
+        conversation=conversation,
+        binding=binding,
+        payload=payload,
+        items=items,
+        audio=audio,
+        reads=reads,
+        gpu=gpu,
+        fallbacks=fallbacks,
+    )
+
+    def reference(store, uid, unit, cid):
+        reads.append(unit)
+        return items[unit], 'gs://fake/result#1', lane.binding, ProjectionPolicy(authoritative_labels=True)
+
+    def fetch(item, *, read_budget):
+        read_budget.begin()
+        body = wav(audio[item.segment_id])
+        read_budget.reserve(len(body))
+        return body
+
+    def diarize(pcm, backend, *args, **kwargs):
+        if backend.reserve_attempt is not None and not backend.reserve_attempt(len(pcm) / 32000):
+            raise RuntimeError('diarizer_attempt_budget')
+        gpu.append(pcm)
+        return {
+            'turns': [{'start': 0, 'end': len(pcm) / 32000, 'speaker': 'voice'}],
+            'overlaps': [],
+            'centroids': {'voice': {'embedding': [1.0, 0.0], 'evidence_seconds': 12}},
+            'embedding_space': OMI_EMBEDDING_SPACE,
+            'version': 'test',
+            'provenance': {'backend': 'pyannote'},
+        }
+
+    lane.artifacts = SimpleNamespace(load_result=lambda *a, **kw: payload, fetch_audio=fetch)
+    monkeypatch.setattr(batch, 'FirestoreStore', lambda *_: object())
+    monkeypatch.setattr(batch, 'load_reference', reference)
+    monkeypatch.setattr(batch, 'artifacts_for', lambda _: lane.artifacts)
+    monkeypatch.setattr(batch, '_reserve_budget', lambda _: True)
+    monkeypatch.setattr(batch, 'record_fallback', lambda **kw: fallbacks.append(kw))
+    monkeypatch.setattr(batch.recurring_voices, 'checkpoint', lambda *a, **kw: None)
+    monkeypatch.setattr(final, 'record_fallback', lambda **kw: fallbacks.append(kw))
+    monkeypatch.setattr(final, 'diarize_with_speech_compaction', diarize)
+    monkeypatch.setattr(batch, 'emit_product_event', lambda **kw: None)
+    return lane
+
+
+def run_prod(lane):
+    return batch.run_batch_final_pass(
+        UID,
+        lane.conversation,
+        {},
+        load_prints=lambda *a, **kw: {'user': [1.0, 0.0]},
+        apply=stage.apply_speaker_resolution,
+    )
+
+
+@pytest.mark.parametrize('scope', ['final:batch:sync:opaque', 'sync:opaque', 'live:opaque'])
+@pytest.mark.parametrize('resolved', [False, True])
+def test_prod_mixed_scope_only_changes_batch_evidenced_part(prod_shaped, scope, resolved):
+    lane = prod_shaped
+    other = lane.conversation.transcript_segments[0].model_copy(deep=True)
+    other.id, other.speaker_id_scope = 'synthetic-other-segment', scope
+    if resolved:
+        other.provider_speaker = {'id': 0, 'scope': scope, 'provider': 'parakeet'}
+        other.speaker_id_scope = 'final:batch:conversation:conversation'
+    lane.conversation.transcript_segments.append(other)
+    before = other.model_dump()
+    result = run_prod(lane)
+    assert set(lane.reads) == {'unit-a'}
+    assert lane.gpu
+    assert result['outcome'] == 'success'
+    assert lane.conversation.transcript_segments[0].is_user
+    assert lane.conversation.transcript_segments[1].model_dump() == before
+    assert result['changed_segments'] == 1
+
+
+def test_sync_only_is_ineligible_without_unit_reads(prod_shaped):
+    lane = prod_shaped
+    lane.conversation.transcript_segments[0].speaker_id_scope = 'final:batch:sync:opaque'
+    result = run_prod(lane)
+    assert not lane.reads and not lane.gpu
+    assert result['outcome'] == 'skipped_ineligible'
+
+
+def test_point_words_do_not_poison_real_segment_mapping(prod_shaped):
+    from models.transcript_segment import TranscriptSegment
+
+    lane = prod_shaped
+    lane.payload['words'].append({'word': '.', 'timestamp': [6, 6]})
+    point = TranscriptSegment(
+        is_user=False,
+        id='9033d5ea-76fb-5cb7-8988-64c32cbf1e4c',
+        text='.',
+        start=906,
+        end=906,
+        speaker_id=1,
+        speaker_id_scope='final:batch:unit-a',
+        person_id='resolver-person',
+    )
+    lane.conversation.transcript_segments.append(point)
+    before = point.model_dump()
+    result = run_prod(lane)
+    assert lane.conversation.transcript_segments[0].is_user
+    assert result['outcome'] == 'success'
+    assert lane.conversation.transcript_segments[1].model_dump() == before
+
+
+def test_record_origin_replays_legacy_committed_result_without_vad_spans(prod_shaped):
+    del prod_shaped.payload['speech_spans']
+    result = run_prod(prod_shaped)
+    assert prod_shaped.gpu and prod_shaped.conversation.transcript_segments[0].is_user
+    assert result['outcome'] == 'success'
+
+
+@pytest.mark.parametrize('duration', [7.999, 7.995, 7.9, 8.1])
+def test_sample_clock_tolerates_worker_metadata_rounding(prod_shaped, duration):
+    lane = prod_shaped
+    lane.items['unit-a'] = replace(lane.items['unit-a'], duration_seconds=duration)
+    result = run_prod(lane)
+    assert lane.gpu and lane.conversation.transcript_segments[0].is_user
+    assert result['outcome'] == 'success'
+
+
+def test_large_duration_disagreement_remains_a_failure(prod_shaped):
+    lane = prod_shaped
+    lane.items['unit-a'] = replace(lane.items['unit-a'], duration_seconds=7.8)
+    result = run_prod(lane)
+    assert result['outcome'] == 'failed_incomplete_coverage'
+    assert result['reason'] == 'unit duration'
+    assert result['failing_unit'] == 'unit-a'
+    assert not lane.gpu
+
+
+def test_multipart_unit_uses_original_part_ids_and_offsets(prod_shaped, monkeypatch):
+    from models.transcript_segment import TranscriptSegment
+
+    lane = prod_shaped
+    lane.binding = replace(lane.binding, record_origin=False)
+    lane.items['unit-a'] = replace(lane.items['unit-a'], duration_seconds=140, requires_compute_admission=True)
+    lane.audio['unit-a'] = b'\x01\0' * (140 * 16000)
+    lane.payload.update(
+        audio_seconds=140,
+        speech_seconds=7,
+        speech_spans=[{'start': 0, 'end': 3}, {'start': 130, 'end': 134}],
+        words=[{'word': 'First.', 'timestamp': [0.2, 2.8]}, {'word': 'Last.', 'timestamp': [130.2, 133.8]}],
+        diarization={'turns': [{'start': 0, 'end': 140, 'speaker': 'SPEAKER_00'}]},
+    )
+    lane.conversation.transcript_segments = [
+        TranscriptSegment(
+            is_user=False, id=sid, text=text, start=start, end=end, speaker_id=0, speaker_id_scope='final:batch:unit-a'
+        )
+        for sid, text, start, end in [
+            ('98608d85-b3c4-5638-a12a-468466e8eeaf', 'First.', 900.2, 902.8),
+            ('cf5bd53e-f3d2-5a8c-bedc-bb4336f19cdf', 'Last.', 1030.2, 1033.8),
+        ]
+    ]
+    monkeypatch.setattr(
+        batch,
+        'load_reference',
+        lambda *a: (
+            lane.items['unit-a'],
+            'gs://fake/result#1',
+            lane.binding,
+            ProjectionPolicy(authoritative_labels=True),
+        ),
+    )
+    seen = []
+    original = batch.run_final_pass
+
+    def capture(pcm, words, *args, **kwargs):
+        seen.extend(w['timestamp'] for w in words)
+        return original(pcm, words, *args, **kwargs)
+
+    monkeypatch.setattr(batch, 'run_final_pass', capture)
+    assert run_prod(lane)['outcome'] == 'success'
+    assert seen == [[0.2, 2.8], [130.2, 133.8]]
+    assert all(s.is_user for s in lane.conversation.transcript_segments)
+
+
+@pytest.mark.parametrize('kind,outcome', [('expired', 'skipped_expired'), ('merged', 'skipped_merged')])
+def test_real_artifact_lifecycle_is_not_a_coverage_failure(prod_shaped, reference_store, monkeypatch, kind, outcome):
+    lane = prod_shaped
+    store, client = reference_store
+    if kind == 'expired':
+        for path, row in client.rows.items():
+            if path[0].endswith('_artifacts'):
+                row['cleanup_after'] = datetime.now(timezone.utc) - timedelta(seconds=1)
+    else:
+        client.rows[(store.namespace + '_results', 'unit-a')]['projection_parts']['0'][
+            'conversation_id'
+        ] = 'synthetic-donor'
+    monkeypatch.setattr(batch, 'FirestoreStore', lambda *_: store)
+    monkeypatch.setattr(batch, 'load_reference', references.load_reference)
+    result = run_prod(lane)
+    assert result['outcome'] == outcome
+    assert result['reason'] == outcome and result['failing_unit'] == 'unit-a'
+    assert not lane.gpu
+
+
+def test_contended_slot_waits_and_then_runs(prod_shaped, monkeypatch):
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
+    slot = threading.BoundedSemaphore(1)
+    assert slot.acquire()
+    monkeypatch.setattr(batch, '_SLOTS', slot)
+    entered = threading.Event()
+    options = []
+
+    class ObservedSlot:
+        def acquire(self, **kwargs):
+            options.append(kwargs)
+            entered.set()
+            return slot.acquire(**kwargs)
+
+        def release(self):
+            slot.release()
+
+    monkeypatch.setattr(batch, '_SLOTS', ObservedSlot())
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(run_prod, prod_shaped)
+        try:
+            assert entered.wait(2)
+        finally:
+            slot.release()
+        result = future.result(timeout=5)
+        assert options == [{'timeout': 60}]
+        assert result['outcome'] == 'success'
+
+
+def test_contended_slot_timeout_has_distinct_terminal_outcome(prod_shaped, monkeypatch):
+    import threading
+
+    slot = threading.BoundedSemaphore(1)
+    assert slot.acquire()
+    monkeypatch.setattr(batch, '_SLOTS', slot)
+    monkeypatch.setattr(batch, '_SLOT_WAIT_SECONDS', 0.001)
+    try:
+        assert run_prod(prod_shaped)['outcome'] == 'skipped_slot_timeout'
+        assert not prod_shaped.gpu
+    finally:
+        slot.release()
+
+
+def batch_outcome_counts():
+    return {
+        tuple(sample.labels.items()): sample.value
+        for metric in batch.OUTCOMES.collect()
+        for sample in metric.samples
+        if sample.name.endswith('_total') and sample.labels['lane'] == 'batch'
+    }
+
+
+@pytest.mark.parametrize('failure', ['none', 'unassigned', 'budget', 'diarizer'])
+def test_exactly_one_terminal_outcome_per_conversation(prod_shaped, monkeypatch, failure):
+    lane = prod_shaped
+    lane.items['unit-b'] = replace(lane.items['unit-a'], segment_id='unit-b', capture_at=CAPTURE + 8)
+    lane.audio['unit-b'] = b'\x02\0' * (8 * 16000)
+    second = lane.conversation.transcript_segments[0].model_copy(deep=True)
+    second.id = '4395ed2b-8f7d-5bd0-a816-39bb22221a63'
+    second.speaker_id_scope = 'final:batch:unit-b'
+    second.start, second.end = 908.2, 913.8
+    lane.conversation.transcript_segments.append(second)
+    if failure == 'unassigned':
+        original = final.diarize_with_speech_compaction
+
+        def gap(*args, **kwargs):
+            result = original(*args, **kwargs)
+            result['turns'] = []
+            return result
+
+        monkeypatch.setattr(final, 'diarize_with_speech_compaction', gap)
+    elif failure == 'budget':
+        monkeypatch.setattr(batch, '_reserve_budget', lambda _: False)
+    elif failure == 'diarizer':
+        monkeypatch.setattr(
+            final,
+            'diarize_with_speech_compaction',
+            lambda *a, **kw: (_ for _ in ()).throw(ValueError('synthetic PRIVATE text')),
+        )
+    before = batch_outcome_counts()
+    run_prod(lane)
+    after = batch_outcome_counts()
+    assert sum(after.values()) - sum(before.values()) == 1
+
+
+def test_diagnostics_never_echo_arbitrary_exception_content(prod_shaped, monkeypatch, caplog):
+    monkeypatch.setattr(
+        prod_shaped.artifacts,
+        'load_result',
+        lambda *a, **kw: (_ for _ in ()).throw(ValueError('synthetic PRIVATE text')),
+    )
+    result = run_prod(prod_shaped)
+    assert result['exception_type'] == 'ValueError' and result['reason'] == 'unclassified'
+    assert 'PRIVATE' not in caplog.text
+
+
+def test_owner_lab_stub_runs_real_units_assembly_and_runner(prod_shaped, monkeypatch):
+    from testing.owner_lab import final_pass_repro as lab
+
+    lane = prod_shaped
+    calls = []
+    original = batch.run_final_pass
+
+    def runner(*args, **kwargs):
+        calls.append(True)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(batch, 'run_final_pass', runner)
+    # The lane fixture replaces compaction; restore the production path so the
+    # lab's DiarizerBackend is actually consumed by the shared runner.
+    from utils.stt.vad_compaction import diarize_with_speech_compaction
+
+    monkeypatch.setattr(final, 'diarize_with_speech_compaction', diarize_with_speech_compaction)
+    monkeypatch.setattr(batch.recurring_voices, 'checkpoint', lambda *a, **kw: ('synthetic',))
+    result = lab.reproduce(UID, lane.conversation, {}, load_prints=lambda *a, **kw: {})
+    assert result['outcome'] == 'success'
+    assert result['segment_coverage'] == {'total': 1, 'required': 1, 'placed': 1}
+    assert result['apply_calls'] == 1 and result['learn_calls'] == 0  # stub has no centroids
+    assert result['changed_segments'] == 1 and result['speaker_count'] == 1
+    assert calls and set(lane.reads) == {'unit-a'}
+    assert UID not in str(result) and 'Hello' not in str(result)
+
+
+def test_owner_lab_http_uses_real_http_diarizer_and_captures_learning(prod_shaped, monkeypatch, tmp_path):
+    from testing.owner_lab import final_pass_repro as lab
+    from utils.stt.vad_compaction import diarize_with_speech_compaction
+
+    monkeypatch.setattr(final, 'diarize_with_speech_compaction', diarize_with_speech_compaction)
+    monkeypatch.setenv('TRANSCRIPTION_FINAL_PASS_VAD_COMPACTION_ENABLED', 'false')
+    monkeypatch.setenv('HOSTED_DIARIZATION_API_URL', 'http://synthetic.invalid')
+    monkeypatch.setattr(batch.recurring_voices, 'checkpoint', lambda *a, **kw: ('synthetic',))
+    monkeypatch.setattr(batch.recurring_voices, 'learn', lambda *a, **kw: pytest.fail('real learning called'))
+    calls = []
+
+    def post(url, **kwargs):
+        calls.append(url)
+        return httpx.Response(
+            200,
+            request=httpx.Request('POST', url),
+            json={
+                'turns': [{'start': 0, 'end': 8, 'speaker': 'voice'}],
+                'overlaps': [],
+                'centroids': {'voice': {'embedding': [1.0, 0.0], 'evidence_seconds': 8}},
+                'embedding_space': OMI_EMBEDDING_SPACE,
+                'version': 'test',
+                'provenance': {'backend': 'pyannote'},
+            },
+        )
+
+    monkeypatch.setattr(httpx, 'post', post)
+    result = lab.reproduce(UID, prod_shaped.conversation, {}, diarizer='http', load_prints=lambda *a, **kw: {})
+    assert result['outcome'] == 'success'
+    assert result['learn_calls'] == 1 and result['apply_calls'] == 1
+    assert calls == ['http://synthetic.invalid/v2/diarization']
+
+
+def test_result_duration_at_float_rounded_decode_boundary(prod_shaped):
+    lane = prod_shaped
+    lane.items['unit-a'] = replace(lane.items['unit-a'], duration_seconds=1)
+    lane.audio['unit-a'] = b'\x01\0' * 17600
+    lane.payload.update(
+        audio_seconds=1.1,
+        speech_seconds=1.1,
+        speech_spans=[{'start': 0, 'end': 1.1}],
+        words=[{'word': 'Hello there.', 'timestamp': [0.2, 0.8]}],
+        diarization={'turns': [{'start': 0, 'end': 1.1, 'speaker': 'SPEAKER_00'}]},
+    )
+    assert run_prod(lane)['outcome'] == 'success'
+
+
+def test_record_origin_still_refuses_malformed_present_vad(prod_shaped):
+    prod_shaped.payload['speech_spans'] = [{'start': 2, 'end': 1}]
+    result = run_prod(prod_shaped)
+    assert result['outcome'] == 'failed_incomplete_coverage'
+    assert result['reason'] == 'ordered nonoverlapping VAD spans required'
+
+
+def test_eof_word_uses_decoded_result_clock_not_rounded_admission(prod_shaped):
+    lane = prod_shaped
+    lane.items['unit-a'] = replace(lane.items['unit-a'], duration_seconds=7.9)
+    lane.payload['words'] = [{'word': 'Hello there.', 'timestamp': [7.999, 8.0]}]
+    lane.conversation.transcript_segments[0].start = 907.999
+    lane.conversation.transcript_segments[0].end = 908
+    result = run_prod(lane)
+    assert lane.gpu and lane.conversation.transcript_segments[0].is_user
+    assert result['outcome'] == 'success'
+
+
+def test_owner_lab_cli_outputs_cases_and_success_rate_without_private_logs(prod_shaped, monkeypatch, capsys):
+    import json
+    import sys
+    from types import ModuleType
+    from testing.owner_lab import final_pass_repro as lab
+    from database import conversations as db
+    from utils.stt.vad_compaction import diarize_with_speech_compaction
+
+    guard = ModuleType('testing.owner_lab.guard')
+    reads = []
+    guard.owner_uid = lambda path: reads.append(path) or UID
+    guard.load_secret = lambda path: reads.append(path)
+    guard.read_private = lambda path, kind: reads.append(path) or '["conversation", "synthetic-missing"]'
+    monkeypatch.setitem(sys.modules, 'testing.owner_lab.guard', guard)
+    row = prod_shaped.conversation.model_dump()
+
+    def get(_uid, cid, **kw):
+        print('synthetic PRIVATE transcript')  # Accidental library stdout must be suppressed too.
+        return {**row, '_recovery_transcript_decoded': True} if cid == 'conversation' else None
+
+    monkeypatch.setattr(db, 'get_conversation', get)
+    monkeypatch.setattr(db, 'get_manual_speaker_receipt', lambda *a: {})
+    monkeypatch.setattr(stage, 'load_voiceprints_for_resolution', lambda *a, **kw: {})
+    monkeypatch.setattr(final, 'diarize_with_speech_compaction', diarize_with_speech_compaction)
+    with monkeypatch.context() as context:
+        # main is a CLI process; restore its global logging suppression in this test process.
+        import logging
+
+        context.setattr(logging, 'disable', lambda level: None)
+        lab.main(
+            [
+                '--uid-file',
+                '/private/uid',
+                '--secret-file',
+                '/private/secret',
+                '--conversations-file',
+                '/private/selection',
+                '--diarizer',
+                'stub',
+            ]
+        )
+    output = capsys.readouterr().out
+    results = [json.loads(line) for line in output.splitlines()]
+    assert [r['outcome'] for r in results[:-1]] == ['success', 'failed_load']
+    assert results[-1]['success_rate'] == 0.5
+    assert reads == ['/private/uid', '/private/secret', '/private/selection']
+    assert 'PRIVATE' not in output and UID not in output and 'Hello' not in output
+
+
+def test_vendor_recovery_result_reconstructs_the_same_stored_batch_segment(prod_shaped, monkeypatch):
+    lane = prod_shaped
+    monkeypatch.setenv('BATCH_VENDOR_SPEAKER_TURNS_ENABLED', 'true')
+    lane.payload.update(recovery_version=1, words_provider='modulate')
+    for word in lane.payload['words']:
+        word['speaker'] = 'SPEAKER_00'
+    lane.conversation.transcript_segments[0].stt_provider = 'modulate'
+    result = run_prod(lane)
+    assert lane.gpu and lane.conversation.transcript_segments[0].is_user
+    assert result['outcome'] == 'success'
