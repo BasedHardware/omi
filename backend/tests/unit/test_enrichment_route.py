@@ -248,6 +248,21 @@ async def test_legacy_sync_handler_delegates_to_the_consumer_when_routed(rows, m
 
 
 @pytest.mark.asyncio
+async def test_legacy_bound_slow_delivery_logs_its_end_too(rows, monkeypatch, caplog):
+    from routers import batch_pipeline
+
+    caplog.set_level(logging.INFO)
+    monkeypatch.setenv('ENRICHMENT_ROUTE', 'enrichment_queue')
+    monkeypatch.setattr(route, 'SLOW_DELIVERY_SECONDS', 0.0)
+    monkeypatch.setattr(consumer_module.EnrichmentConsumer, '_callback', lambda self: Mock(return_value=None))
+    token = rows[0][KEY]['task_token']
+    response = await batch_pipeline.enrichment_response({'kind': 'sync_reprocess', 'key': KEY, 'task_token': token})
+    assert response.status_code == 200
+    ends = [r.getMessage() for r in caplog.records if r.getMessage().startswith('event=enrichment_delivery ')]
+    assert len(ends) == 1 and ends[0].startswith('event=enrichment_delivery outcome=done reason=processed wait_s=')
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize('status,code', [(500, 409), (502, 409), (429, 409), (400, 500)])
 async def test_legacy_handler_retries_processing_dependency_failures_without_5xx(monkeypatch, status, code):
     """Lane 4 staging replay 10-19: 51/63 sync-jobs deliveries answered 500 on HTTPException from processing."""
