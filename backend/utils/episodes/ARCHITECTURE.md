@@ -507,3 +507,12 @@ When atomic sync intake appends meaningful speech, its new content revision
 invalidates an older automatic model/Jev/deterministic discard. Transport replays
 and content still needing fragment review retain the assessment; user decisions remain authoritative.
 The final-discard predicate continues to ignore the intake hint itself.
+
+## Episode fact log and shadow views
+
+The batch-2 log and owner live below `users/{uid}` and publish separate sealed
+`episode_views` and Home payloads. Legacy transactions append facts atomically;
+the drain never writes legacy namespaces or performs paid work. The log is
+the input to the shared phase derivation, with no second status field.
+The [episode-log runbook](../../docs/runbooks/episode-log.md) owns replay, lease
+deadlines, kill switches, backfill, drift, conditional reads and the cohort ramp.

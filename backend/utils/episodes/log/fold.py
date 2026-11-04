@@ -171,6 +171,8 @@ class Fold:
                     set(row.get('sources') or []) | set(self.metadata.get(ep.id, {}).get('sources') or [])
                 )
                 row['closed_at'] = self.metadata.get(ep.id, {}).get('closed_at')
+                if self.metadata.get(ep.id, {}).get('recorded_members') is None:
+                    row.pop('recorded_members', None)  # A wedge must never become automatic on replay.
             rows[ep.id] = row
         for eid, target in p.redirects.items():
             rows[eid] = {**deepcopy(self.metadata.get(eid, {})), 'id': eid, 'recorded_merged_into': target}

@@ -48,7 +48,9 @@ def test_not_ready_and_policy_changed_use_legacy_projection(monkeypatch):
     monkeypatch.setattr(api.home_read, 'project_episodes', project)
     params = {'from': NOW.isoformat(), 'to': NOW.isoformat()}
     query.side_effect = ValueError('episode_home_policy_changed')
-    assert http.get('/v1/episodes', params=params).status_code == 200
+    response = http.get('/v1/episodes', params=params)
+    assert response.status_code == 200
+    assert response.json() == {'enabled': True, 'episodes': [], 'next_cursor': None}
     assert legacy.called and project.called
     monkeypatch.setattr(reads, 'ready', lambda uid: None)
     query.reset_mock()

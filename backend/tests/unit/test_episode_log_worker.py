@@ -112,6 +112,7 @@ def test_switch_off_no_io(monkeypatch):
     assert store.append(UID, 'k', [], firestore_client=client) is None
     assert store.prepare(Mock(), client, UID) is None
     assert worker.drain(UID, firestore_client=client) == 'disabled'
+    assert worker.sweep(firestore_client=client) == {'disabled': 1}
     assert not worker.mark_dirty(UID, 'c', {'id': 'c'}, firestore_client=client)
     assert not client.method_calls
 
@@ -301,3 +302,44 @@ def test_member_policy_dirty_fact_joins_conversation_commit_only_for_existing_lo
     change(client.transaction())
     assert store.state(UID, firestore_client=client)['next_seq'] == 1
     assert client.rows[ref.path]['discarded']
+
+
+def test_backfilled_wedge_remains_nonautomatic_in_the_materialized_view():
+    row = {
+        'id': 'wedge',
+        'status': 'closed',
+        'close_reason': 'gap',
+        'started_at': NOW,
+        'last_activity_at': NOW,
+        'conversation_ids': ['c'],
+    }
+    fold = Fold(UID)
+    fold.apply({'kind': 'fence', 'payload': {'row': row}})
+    assert 'recorded_members' not in fold.rows()['wedge']
+    restored = Fold(UID, loads(dumps(fold.checkpoint())))
+    assert 'recorded_members' not in restored.rows()['wedge'] and restored.projector.episodes[0].fixed
+
+
+def test_drift_ignores_volatile_wire_clock_and_absent_empty_content():
+    left = {'status': 'closed', 'home_row': {'members': [], 'state_updated_at': NOW}}
+    right = {
+        'status': 'closed',
+        'title': '',
+        'bullets': [],
+        'home_row': {'members': [], 'state_updated_at': NOW + timedelta(seconds=1)},
+    }
+    assert set(metrics.differences(left, right).values()) == {'match'}
+
+
+def test_caught_up_policy_barrier_still_has_queued_deadline_and_recovery(client):
+    store.policy_barrier(UID, 'c', 'token', entering=True, firestore_client=client, now=NOW)
+    claimed = store.claim(UID, firestore_client=client, now=NOW + timedelta(minutes=3))
+    row = store.publish(UID, claimed, 1, {}, {}, {}, firestore_client=client, now=NOW + timedelta(minutes=4))
+    assert row['cursor'] == row['next_seq']
+    assert store.derive_phase(row, NOW + timedelta(minutes=4)) == 'queued'
+    assert row['queued_entered_at'] == NOW and row['scan_at'] == row['queued_deadline_at'] == NOW + timedelta(
+        minutes=25
+    )
+    prior = store.recover_policy_barriers(UID, firestore_client=client, now=NOW + timedelta(minutes=26))
+    assert prior['queued_deadline_at'] == NOW + timedelta(minutes=25)
+    assert store.state(UID, firestore_client=client)['next_seq'] == 2

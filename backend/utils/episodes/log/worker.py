@@ -88,6 +88,9 @@ def drain(uid, *, firestore_client=None, now=None):
     fixed_now = now
     now = now or datetime.now(timezone.utc)
     started = time.monotonic()
+    recovered = store.recover_policy_barriers(uid, firestore_client=client, now=now)
+    if recovered:
+        metrics.observe_state(recovered, 'queued', now)
     claimed = store.claim(uid, firestore_client=client, now=now)
     if not claimed:
         return 'not_due'
@@ -186,6 +189,7 @@ def sweep(*, firestore_client=None, now=None):
     now = now or datetime.now(timezone.utc)
     client = firestore_client if firestore_client is not None else get_firestore_client()
     if not config.default_on('EPISODES_LOG_ENABLED'):
+        metrics.SWEEP_OBSERVED.set(time.time())  # A deliberate kill is not a stale scheduler.
         return {'disabled': 1}
     outcomes = {'scanned': 0, 'redriven': 0, 'error': 0}
     for uid, state in store.due_owners(now, firestore_client=client):

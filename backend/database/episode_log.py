@@ -44,7 +44,7 @@ def owner_ref(client, uid):
 
 def derive_phase(state, now):
     """Pure job phase from log watermarks and lease facts, never a status field."""
-    if int(state.get('cursor', 0)) >= int(state.get('next_seq', 0)):
+    if int(state.get('cursor', 0)) >= int(state.get('next_seq', 0)) and not state.get('policy_barriers'):
         return 'idle'
     if state.get('lease_owner') and state.get('lease_until') and state['lease_until'] > now:
         return 'running'
@@ -268,11 +268,15 @@ def publish(uid, claimed, cursor, fold_state, views, links, *, firestore_client=
             home_rows_ready=config.home_enabled(),
         )
         if cursor == row['next_seq']:
+            barriers = list((row.get('policy_barriers') or {}).values())
+            first = min((value['entered_at'] for value in barriers), default=None)
+            deadline = min((value['deadline_at'] for value in barriers), default=None)
             result.update(
-                pending_since=None,
-                queued_entered_at=None,
-                queued_deadline_at=None,
-                scan_at=min((value['deadline_at'] for value in row.get('policy_barriers', {}).values()), default=None),
+                pending_since=first,
+                queued_entered_at=first,
+                queued_deadline_at=deadline,
+                drain_at=deadline if barriers else row.get('drain_at'),
+                scan_at=deadline,
             )
         else:
             result.update(drain_at=now, scan_at=now)
@@ -330,7 +334,11 @@ def policy_barrier(uid, cid, token, *, entering, firestore_client=None, now=None
         capture = Capture(transaction, client, uid)
         barriers = dict(capture.state.get('policy_barriers') or {})
         if entering:
-            barriers[token] = {'cid': cid, 'deadline_at': now + timedelta(seconds=config.MAX_AGE_SECONDS)}
+            barriers[token] = {
+                'cid': cid,
+                'entered_at': now,
+                'deadline_at': now + timedelta(seconds=config.MAX_AGE_SECONDS),
+            }
         else:
             barriers.pop(token, None)
         capture.state['policy_barriers'] = barriers
@@ -350,6 +358,7 @@ def recover_policy_barriers(uid, *, firestore_client=None, now=None):
         expired = {token: value for token, value in barriers.items() if value['deadline_at'] <= now}
         if not expired:
             return
+        prior = dict(capture.state)
         capture.state['policy_barriers'] = {token: value for token, value in barriers.items() if token not in expired}
         capture.stage(
             [
@@ -360,6 +369,7 @@ def recover_policy_barriers(uid, *, firestore_client=None, now=None):
         )
         capture.state.update(drain_at=now, scan_at=now)
         transaction.set(capture.ref, capture.state)
+        return prior
 
     return run_transactional(client, commit, transient=True)
 

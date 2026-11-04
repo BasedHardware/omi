@@ -12,7 +12,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_serializer
 
 EpisodeStatus = Literal['live', 'closed']
 EpisodeCloseReason = Literal['user', 'gap', 'idle', 'hard_cap', 'source_change', 'calendar_boundary', 'moved_on']
@@ -116,3 +116,10 @@ class EpisodeListResponse(BaseModel):
     home_version: Optional[str] = None
     episodes: list[Episode] = Field(default_factory=list)
     next_cursor: Optional[str] = None
+
+    @model_serializer(mode='wrap')
+    def omit_absent_home_version(self, handler):
+        data = handler(self)
+        if self.home_version is None:
+            data.pop('home_version', None)
+        return data

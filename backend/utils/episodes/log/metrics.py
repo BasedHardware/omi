@@ -74,7 +74,15 @@ def comparable(row):
         'sources',
     ):
         result[key] = sorted(result[key] or [])
-    result['content_hash'] = digest({key: row.get(key) for key in CONTENT})
+    for key in ('member_activity', 'parallel_content_spans'):
+        result[key] = result[key] or {}
+    home = result.get('home_row')
+    if isinstance(home, dict):
+        home = {key: value for key, value in home.items() if key != 'state_updated_at'}
+        home['conversation_ids'] = sorted(home.get('conversation_ids') or [])
+        home['members'] = sorted(home.get('members') or [], key=lambda member: member['id'])
+        result['home_row'] = home
+    result['content_hash'] = digest({key: row.get(key) or ('' if key in {'title', 'lede'} else []) for key in CONTENT})
     return result
 
 

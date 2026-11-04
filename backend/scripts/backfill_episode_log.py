@@ -16,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from google.cloud import firestore
 from config import episode_log as config
 from database import episode_log as store, episodes
-from google.cloud.firestore_v1 import FieldPath
+from google.cloud.firestore_v1.field_path import FieldPath
 from utils.episodes.log.backfill import convert, PAGE_SIZE
 from utils.episodes.log.codec import loads
 
