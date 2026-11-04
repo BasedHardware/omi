@@ -15083,4 +15083,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Lalabas dito ang mga nagsasalita at huling transcript habang nag-a-upload.';
+
+  @override
+  String get episodeFinishingUp => 'Tinatapos…';
 }

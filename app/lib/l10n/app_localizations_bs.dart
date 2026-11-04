@@ -14992,4 +14992,7 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Govornici i konačni transkript pojavit će se ovdje tokom otpremanja.';
+
+  @override
+  String get episodeFinishingUp => 'Završavamo…';
 }
