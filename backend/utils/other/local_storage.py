@@ -263,16 +263,16 @@ def gcs_http_pool_maxsize() -> int:
 def _size_http_pool(client):
     """Mount a pool sized to executor concurrency; keep the default on failure."""
     try:
-        import requests.adapters
-
         size = gcs_http_pool_maxsize()
         session = client._http  # AuthorizedSession, created once per client
         current = session.get_adapter('https://storage.googleapis.com/')
-        # Only replace the plain default adapter; a subclass (google-auth's mTLS
-        # adapter) carries client-certificate state that must be kept.
-        if type(current) is not requests.adapters.HTTPAdapter:
+        adapter_class = type(current)
+        # Only replace the plain default adapter (no `requests` import in utils);
+        # a subclass such as google-auth's mTLS adapter carries client-certificate
+        # state that must be kept.
+        if (adapter_class.__module__, adapter_class.__name__) != ('requests.adapters', 'HTTPAdapter'):
             return client
-        session.mount('https://', requests.adapters.HTTPAdapter(pool_connections=4, pool_maxsize=size))
+        session.mount('https://', adapter_class(pool_connections=4, pool_maxsize=size))
     except Exception as error:  # an unsized pool is the previous behaviour, never a startup failure
         logging.getLogger(__name__).warning(
             'event=gcs_http_pool outcome=default exception_type=%s', type(error).__name__
