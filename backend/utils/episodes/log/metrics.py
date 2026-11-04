@@ -30,6 +30,9 @@ CONTENT = ('title', 'bullets', 'lede', 'follow_ups', 'people', 'open_questions',
 DRIFT = reuse_or_create(
     Counter, 'omi_episode_view_drift_total', 'Legacy vs log projection digests.', ['field', 'outcome']
 )
+COMPARE_SKIPPED = reuse_or_create(
+    Counter, 'omi_episode_view_compare_skipped_total', 'Comparisons deferred until an aligned watermark.', ['reason']
+)
 SWEEP_OBSERVED = reuse_or_create(
     Gauge, 'omi_episode_drain_sweep_observed_at_seconds', 'Last successful bounded sweep.', []
 )

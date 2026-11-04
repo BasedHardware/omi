@@ -69,7 +69,18 @@ def _legacy(uid, eid, client):
     return episodes.unseal(uid, raw)
 
 
-def compare_rows(uid, rows, homes, client):
+def _comparison_token(state):
+    if not state or state.get('cursor') != state.get('next_seq') or state.get('policy_barriers'):
+        return None
+    return state.get('cursor'), state.get('home_version'), state.get('epoch')
+
+
+def compare_rows(uid, rows, homes, client, *, cursor=None):
+    token = _comparison_token(store.state(uid, firestore_client=client))
+    if token is None or (cursor is not None and token[0] != cursor):
+        metrics.COMPARE_SKIPPED.labels(reason='pending').inc()
+        return
+    comparisons = []
     for eid, row in rows.items():
 
         def read():
@@ -78,7 +89,18 @@ def compare_rows(uid, rows, homes, client):
                 legacy['home_row'] = home_read.project_episode(uid, legacy, list_row=True)
             return legacy
 
-        metrics.compare(read(), dict(row, home_row=homes.get(eid)), reread=read)
+        legacy = read()
+        view = dict(row, home_row=homes.get(eid)) if row is not None else None
+        if any(value != 'match' for value in metrics.differences(legacy, view).values()):
+            legacy = read()
+        comparisons.append((legacy, view))
+    # Legacy mutations append in the same transaction. Bracket every source
+    # read with one watermark: ordinary queue lag is never projection drift.
+    if _comparison_token(store.state(uid, firestore_client=client)) != token:
+        metrics.COMPARE_SKIPPED.labels(reason='inflight').inc()
+        return
+    for legacy, view in comparisons:
+        metrics.compare(legacy, view)
 
 
 def drain(uid, *, firestore_client=None, now=None):
@@ -167,7 +189,7 @@ def drain(uid, *, firestore_client=None, now=None):
         # Never redrain a committed batch just because an observational read fails.
         outcome = 'drained'
         try:
-            compare_rows(uid, changed, homes, client)
+            compare_rows(uid, changed, homes, client, cursor=cursor)
         except Exception as error:
             logger.warning('event=episode_view_compare outcome=error exception_type=%s', type(error).__name__)
         if result.get('scan_at'):
@@ -193,12 +215,12 @@ def sweep(*, firestore_client=None, now=None):
         return {'disabled': 1}
     outcomes = {'scanned': 0, 'redriven': 0, 'error': 0}
     for uid, state in store.due_owners(now, firestore_client=client):
-        if not config.enabled(uid):
-            continue
         outcomes['scanned'] += 1
-        phase = 'running' if state.get('lease_owner') else store.derive_phase(state, now)
-        metrics.observe_state(state, phase, now)
         try:
+            if not store.redrive_scan(uid, state, firestore_client=client, now=now) or not config.enabled(uid):
+                continue
+            phase = 'running' if state.get('lease_owner') else store.derive_phase(state, now)
+            metrics.observe_state(state, phase, now)
             store.recover_policy_barriers(uid, firestore_client=client, now=now)
             wake(uid, now)
             outcomes['redriven'] += 1
@@ -214,22 +236,18 @@ def sample_read(uid, rows, *, firestore_client=None):
         return
     client = firestore_client if firestore_client is not None else get_firestore_client()
     try:
+        state = store.state(uid, firestore_client=client)
+        token = _comparison_token(state)
+        if not state.get('backfill_complete') or token is None:
+            metrics.COMPARE_SKIPPED.labels(reason='unready_sample').inc()
+            return
+        views, homes = {}, {}
         for row in rows[:3]:
             snapshot = store.root(client, uid).collection('episode_views').document(row['id']).get().to_dict()
             view = episodes.unseal(uid, snapshot)
-            legacy = _legacy(uid, row['id'], client)
-
-            def read():
-                legacy_row = _legacy(uid, row['id'], client)
-                if legacy_row is not None and config.home_enabled() and not legacy_row.get('recorded_merged_into'):
-                    legacy_row['home_row'] = home_read.project_episode(uid, legacy_row, list_row=True)
-                return legacy_row
-
-            if config.home_enabled():
-                if legacy is not None and not legacy.get('recorded_merged_into'):
-                    legacy['home_row'] = home_read.project_episode(uid, legacy, list_row=True)
-                if view is not None and snapshot.get('home_payload'):
-                    view['home_row'] = loads(decrypt(snapshot['home_payload'], uid))
-            metrics.compare(legacy, view, reread=read)
+            views[row['id']] = view
+            if config.home_enabled() and view is not None and snapshot.get('home_payload'):
+                homes[row['id']] = loads(decrypt(snapshot['home_payload'], uid))
+        compare_rows(uid, views, homes, client, cursor=token[0])
     except Exception as error:
         logger.warning('event=episode_view_sample outcome=error exception_type=%s', type(error).__name__)

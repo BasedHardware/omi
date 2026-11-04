@@ -13,6 +13,7 @@ from tests.unit.episode_log_support.oracle import Oracle
 from utils.episodes import home_read, composer
 from utils.encryption import decrypt
 from utils.episodes.log import worker, metrics, reads
+from utils.episodes.log.policy import home_policy_write
 from utils.episodes.log.codec import dumps, loads
 from utils.episodes.log.fold import Fold
 from utils.episodes.log.key import gate_digest
@@ -343,3 +344,107 @@ def test_caught_up_policy_barrier_still_has_queued_deadline_and_recovery(client)
     prior = store.recover_policy_barriers(UID, firestore_client=client, now=NOW + timedelta(minutes=26))
     assert prior['queued_deadline_at'] == NOW + timedelta(minutes=25)
     assert store.state(UID, firestore_client=client)['next_seq'] == 2
+
+
+def test_drift_only_counts_a_stable_caught_up_watermark(client, monkeypatch):
+    monkeypatch.setenv('EPISODES_HOME_ROWS_ENABLED', 'off')
+    path = ('users', UID, 'episode_log_state', 'owner')
+    client.rows[path] = {'cursor': 1, 'next_seq': 2, 'home_version': 1, 'epoch': 1}
+    legacy = Mock(return_value={'id': 'e', 'title': 'same'})
+    compare = Mock()
+    monkeypatch.setattr(worker, '_legacy', legacy)
+    monkeypatch.setattr(metrics, 'compare', compare)
+    worker.compare_rows(UID, {'e': {'id': 'e', 'title': 'same'}}, {}, client, cursor=1)
+    legacy.assert_not_called()
+    compare.assert_not_called()
+    client.rows[path]['next_seq'] = 1
+    worker.compare_rows(UID, {'e': {'id': 'e', 'title': 'same'}}, {}, client, cursor=1)
+    assert compare.call_count == 1
+    compare.reset_mock()
+
+    def concurrent_append(*args):
+        client.rows[path]['next_seq'] = 2
+        return {'id': 'e', 'title': 'newer legacy'}
+
+    legacy.side_effect = concurrent_append
+    worker.compare_rows(UID, {'e': {'id': 'e', 'title': 'same'}}, {}, client, cursor=1)
+    compare.assert_not_called()
+
+
+def test_read_sampling_waits_for_backfill_then_caps_at_three_rows(client, monkeypatch):
+    monkeypatch.setenv('EPISODES_HOME_ROWS_ENABLED', 'off')
+    monkeypatch.setattr(worker.random, 'random', lambda: 0)
+    monkeypatch.setattr(episodes, 'unseal', lambda uid, row: row)
+    legacy = Mock(return_value={'title': 'same'})
+    compare = Mock()
+    monkeypatch.setattr(worker, '_legacy', legacy)
+    monkeypatch.setattr(metrics, 'compare', compare)
+    path = ('users', UID, 'episode_log_state', 'owner')
+    client.rows[path] = {'cursor': 1, 'next_seq': 1, 'home_version': 1, 'epoch': 1}
+    rows = [{'id': str(index)} for index in range(4)]
+    for row in rows:
+        client.rows[('users', UID, 'episode_views', row['id'])] = {'title': 'same'}
+    worker.sample_read(UID, rows, firestore_client=client)
+    compare.assert_not_called()
+    client.rows[path]['backfill_complete'] = True
+    worker.sample_read(UID, rows, firestore_client=client)
+    assert compare.call_count == legacy.call_count == 3
+
+
+@pytest.mark.parametrize('enabled', ['on', 'off'])
+@pytest.mark.parametrize('fails', [False, True])
+def test_shadow_member_policy_edits_dirty_before_read_flip(client, monkeypatch, enabled, fails):
+    monkeypatch.setenv('EPISODES_LOG_READ_PERCENT', '0')
+    monkeypatch.setenv('EPISODES_LOG_ENABLED', enabled)
+    monkeypatch.setattr(store, 'get_firestore_client', lambda: client)
+    path = ('users', UID, 'episode_log_state', 'owner')
+    client.rows[path] = {'cursor': 0, 'next_seq': 0}
+
+    @home_policy_write
+    def edit(uid, conversation_id):
+        assert bool(client.rows[path].get('policy_barriers')) == (enabled == 'on')
+        if fails:
+            raise ValueError('synthetic failed member write')
+        return 'edited'
+
+    if fails:
+        with pytest.raises(ValueError, match='synthetic failed member write'):
+            edit(UID, 'c')
+    else:
+        assert edit(UID, 'c') == 'edited'
+    assert not client.rows[path].get('policy_barriers')
+    assert client.rows[path]['next_seq'] == (2 if enabled == 'on' else 0)
+
+
+def test_bounded_sweep_rotates_disabled_and_failed_users_without_changing_deadlines(client, monkeypatch):
+    for uid in ('a-disabled', 'b-failed', 'c-healthy'):
+        client.rows[('users', uid, 'episode_log_state', 'owner')] = {
+            'cursor': 0,
+            'next_seq': 1,
+            'scan_at': NOW - timedelta(seconds=1),
+            'drain_at': NOW,
+            'queued_entered_at': NOW - timedelta(minutes=25),
+            'queued_deadline_at': NOW,
+        }
+
+    def due(now, **kwargs):
+        return sorted(
+            (key[1], deepcopy(value))
+            for key, value in client.rows.items()
+            if key[2] == 'episode_log_state' and value['scan_at'] <= now
+        )[:2]
+
+    monkeypatch.setattr(store, 'due_owners', due)
+    monkeypatch.setattr(config, 'enabled', lambda uid: uid != 'a-disabled')
+    wake = Mock(side_effect=[RuntimeError('synthetic task dispatch failure'), None])
+    monkeypatch.setattr(worker, 'wake', wake)
+    first = worker.sweep(firestore_client=client, now=NOW)
+    second = worker.sweep(firestore_client=client, now=NOW)
+    assert first == {'scanned': 2, 'redriven': 0, 'error': 1}
+    assert second == {'scanned': 1, 'redriven': 1, 'error': 0}
+    assert wake.call_args.args[0] == 'c-healthy'
+    for uid in ('a-disabled', 'b-failed', 'c-healthy'):
+        state = store.state(uid, firestore_client=client)
+        assert state['scan_at'] == NOW + timedelta(minutes=2)
+        assert state['drain_at'] == state['queued_deadline_at'] == NOW
+        assert not store.redrive_scan(uid, dict(state, next_seq=0), firestore_client=client, now=NOW)

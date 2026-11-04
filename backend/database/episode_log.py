@@ -325,6 +325,27 @@ def due_owners(now, *, limit=config.SWEEP_SIZE, firestore_client=None):
     return [(doc.reference.parent.parent.id, doc.to_dict()) for doc in query.stream()]
 
 
+def redrive_scan(uid, observed, *, firestore_client=None, now=None):
+    """Rotate a bounded sweep page, including disabled or failing users.
+
+    Only discovery moves: drain_at and all phase deadlines stay intact. A
+    concurrent append/claim wins instead of having its scan deadline replaced.
+    """
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    now = now or datetime.now(timezone.utc)
+
+    @firestore.transactional
+    def commit(transaction):
+        ref = owner_ref(client, uid)
+        row = ref.get(transaction=transaction).to_dict() or {}
+        if any(row.get(key) != observed.get(key) for key in ('scan_at', 'epoch', 'next_seq', 'cursor')):
+            return False
+        transaction.update(ref, {'scan_at': now + timedelta(seconds=config.SWEEP_REDRIVE_SECONDS)})
+        return True
+
+    return run_transactional(client, commit, transient=True)
+
+
 def policy_barrier(uid, cid, token, *, entering, firestore_client=None, now=None):
     client = firestore_client if firestore_client is not None else get_firestore_client()
     now = now or datetime.now(timezone.utc)

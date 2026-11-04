@@ -51,6 +51,9 @@ stable future 30-second bucket per UID; concurrent producers deduplicate. There
 is no sleeping executor or new queue. The existing two-minute sync sequencer
 Scheduler endpoint also sweeps at most 32 due owners and redrives wakes. Thus
 an append whose producer dies before enqueue remains discoverable.
+Each observed owner rotates its scan time by two minutes using a guarded update,
+including disabled users and failed task dispatches. This prevents a permanently
+failing first page from starving later users; phase and drain deadlines do not move.
 
 Each drain handles at most 64 facts and publishes at most 128 changed view/link
 documents. It checkpoints the pure fold with compressed, independently sealed
@@ -72,6 +75,7 @@ a follow-up capacity extension if measured accounts reach this guard.
 Member policy edits fence view reads before the change and append refresh debt
 when it finishes. A killed writer's barrier has a 25-minute deadline; the sweep
 refreshes current member policy and unblocks only after that fact drains.
+This applies to every existing log, including shadow users at zero read percent.
 While any barrier/debt exists, reads use legacy policy. These barriers live in
 the same queued phase and carry the same queued deadline and alert.
 
@@ -163,12 +167,18 @@ Require nonzero comparison volume and fresh sweep observations, not just a zero
 error rate. `omi_episode_view_drift_total{field,outcome}` has a fixed field set
 and no UID labels: post-drain canonical digest compare plus 1% list-read sampling (at most three rows per sampled request).
 A mismatch is re-read once before counting to reduce in-flight false positives.
+Comparisons bracket source reads with a caught-up log watermark. Pending batches,
+concurrent mutations, and sampled users awaiting backfill are deferred through
+`omi_episode_view_compare_skipped_total{reason}` rather than counted as drift.
+Require nonzero aligned comparison volume before treating zero drift as evidence.
 Never compare randomized ciphertext bytes. Watch composer and moment receipts
 for a recomposition/double-consumption wave, task dispatch failures, and Home 200/
 304 wire canaries in admitted and legacy cohorts. Roll reads back before repair.
 
 Cost forecast from the supplied 2026-11-04 aggregate study: the conservative dual-write here budgets roughly
 $5–12/day in extra fact/dirty writes at the current trigger rate, plus the bounded wake/sweep overhead (study allowance $0–2/day).
+Allow another $1–2/day for control-document reads and scan rotation: roughly
+$6–16/day total shadow overhead, to be verified against billed operations.
 Home rows and conditional requests target $6–10/day of read savings after the
 cohort/app ramp. The design's broader **$30–40/day incremental batch-2 saving**
 includes retiring eager legacy consolidation, which this dual-write PR does not

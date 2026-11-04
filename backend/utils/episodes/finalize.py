@@ -24,7 +24,6 @@ from typing import Any, Mapping
 from config.episodes import episodes_enabled_for
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.episodes import client_gate
-from utils.episodes.log import worker as log_worker
 from utils.executors import ExecutorSaturatedError, lifecycle_executor, submit_with_context, submit_with_context_retry
 from utils.observability.fallback import record_fallback
 
@@ -46,6 +45,7 @@ def attach_synced_at_intake(uid: str, conversation_id: str, row: Mapping[str, An
         if not client_gate.client_seen_cached(uid):
             return 'skipped_no_client'
         from utils.episodes.service import attach_synced_intake
+        from utils.episodes.log import worker as log_worker
 
         normalized = dict(row) if isinstance(row, Mapping) else {}
         raw_source = normalized.get('source')
