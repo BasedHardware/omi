@@ -491,6 +491,16 @@ _SONIOX_OUTCOMES = {
 }
 
 
+def _vendor_skipped(intent: dict) -> bool:
+    """True when the stage answered this intent's unit as local silence without a vendor call.
+
+    New intents carry ``vendor_skipped``. An intent minted by an older worker has only the
+    strict-VAD measurement: spans are validated with ``start < end``, so 0 measured speech
+    seconds means no spans, the same condition ``_call_sync`` uses to skip the vendor.
+    """
+    return bool(intent.get('vendor_skipped')) or intent.get('measured_vad_speech_seconds') == 0
+
+
 def _speech_seconds(inspected: tuple | None) -> float | None:
     """Strict-VAD speech seconds from ``inspect_audio``'s (pcm, duration, spans), or None."""
     if not inspected:
@@ -1068,7 +1078,7 @@ class ProviderSttStage:
                 # A billed result saved before a failed settle is still overflow spend.
                 vendor_metrics.overflow_attempt(route, intent['service'], 0.0 if silence else item.duration_seconds)
             return UnitOutcome('done', 'processed' if settled else 'superseded')
-        if self.clock() - intent['started_at'] > ABANDON_SECONDS and intent.get('vendor_skipped'):
+        if self.clock() - intent['started_at'] > ABANDON_SECONDS and _vendor_skipped(intent):
             return self._settle_skipped_silence(segment_id, intent, item, route)
         if self.clock() - intent['started_at'] > ABANDON_SECONDS:
             failure = {'stage': 'provider', 'reason': 'abandoned_running'}
