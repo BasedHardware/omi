@@ -102,6 +102,14 @@ SHAPE_POST = Histogram(
     buckets=(0.1, 0.5, 1, 2, 3, 4, 8, 15),
 )
 SHAPE_OUTCOME = Counter('omi_stt_shape_posts_total', 'Window POST result by actual destination', ['arm', 'outcome'])
+# The closed shape-POST outcome vocabulary; anything outside it reports 'error'.
+SHAPE_OUTCOMES = frozenset({'success', 'empty', 'error', 'queue_timeout', 'cancelled'})
+
+
+def bounded_shape_outcome(outcome: str) -> str:
+    return outcome if outcome in SHAPE_OUTCOMES else 'error'
+
+
 SHAPE_SESSIONS = Counter('omi_stt_shape_sessions_total', 'Admitted window legs by pinned experiment arm', ['arm'])
 SHAPE_INFLIGHT = Gauge('omi_stt_shape_posts_inflight', 'Accepted listener POSTs by shape destination', ['arm'])
 for _shape_arm in ('control', 'canary'):
@@ -110,7 +118,7 @@ for _shape_arm in ('control', 'canary'):
     SHAPE_SESSIONS.labels(arm=_shape_arm)
     SHAPE_INFLIGHT.labels(arm=_shape_arm)
     for _shape_outcome in ('success', 'empty', 'error', 'queue_timeout', 'cancelled'):
-        SHAPE_OUTCOME.labels(arm=_shape_arm, outcome=_shape_outcome)
+        SHAPE_OUTCOME.labels(arm=_shape_arm, outcome=bounded_shape_outcome(_shape_outcome))
 WINDOW_FIRST_TEXT = Histogram(
     'omi_stt_window_first_text_seconds',
     'Wall seconds from first VAD speech sent to first nonempty windowed transcript',

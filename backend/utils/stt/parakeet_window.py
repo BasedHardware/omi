@@ -27,7 +27,14 @@ from utils.stt.window_replicas import QueueTimeout, can_route_replicas, post_win
 from utils.stt import window_replicas as replica_http
 from utils.http_client import get_stt_client, get_stt_semaphore
 from utils.executors import run_blocking, db_executor
-from utils.stt.live_metrics import SHAPE_FIRST_TEXT, SHAPE_POST, SHAPE_OUTCOME, SHAPE_SESSIONS, SHAPE_INFLIGHT
+from utils.stt.live_metrics import (
+    SHAPE_FIRST_TEXT,
+    SHAPE_POST,
+    SHAPE_OUTCOME,
+    SHAPE_SESSIONS,
+    SHAPE_INFLIGHT,
+    bounded_shape_outcome,
+)
 from utils.observability.fallback import FirstTextDeadlineDiagnostics, ReplayLagDiagnostics, record_fallback
 from utils.observability.reasons import LiveSttReason, ReasonFamily, reason_label
 from utils.stt import streaming as st
@@ -1437,7 +1444,7 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
             if shape_measured:
                 SHAPE_INFLIGHT.labels(arm=shape_arm).dec()
                 SHAPE_POST.labels(arm=shape_arm).observe(time.monotonic() - started)
-                SHAPE_OUTCOME.labels(arm=shape_arm, outcome=outcome).inc()
+                SHAPE_OUTCOME.labels(arm=shape_arm, outcome=bounded_shape_outcome(outcome)).inc()
             WINDOW_POSTS.labels(outcome=outcome).inc()
             WINDOW_LATENCY.observe(time.monotonic() - started)
             WINDOW_CONTEXT.observe(dur)

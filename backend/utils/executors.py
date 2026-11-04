@@ -38,6 +38,7 @@ import asyncio
 import atexit
 import contextvars
 import functools
+import importlib
 import logging
 import os
 import queue
@@ -541,13 +542,18 @@ def _classify_byok_halt_in_context(fn: Callable[P, T]) -> Callable[P, T]:
     stays untagged and remains a loud server fault.
     """
 
+    @functools.wraps(fn)
     def run(*args: P.args, **kwargs: P.kwargs) -> T:
         try:
             return fn(*args, **kwargs)
         except BaseException as error:
-            from utils.llm.gateway_error_contract import is_byok_quota_error
+            # Late-bound like merge_before_processing.py: executors sits below
+            # utils.byok in the import graph (see _byok_detail_code), so a
+            # static gateway_error_contract import would drag utils.cloud_tasks
+            # into the GPU worker runtime image closure.
+            gateway_error_contract = importlib.import_module('utils.llm.gateway_error_contract')
 
-            if is_byok_quota_error(error):
+            if gateway_error_contract.is_byok_quota_error(error):
                 setattr(error, 'omi_byok_halt_class', 'byok_quota')
             raise
 
