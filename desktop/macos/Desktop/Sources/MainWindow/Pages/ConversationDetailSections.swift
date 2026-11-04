@@ -78,7 +78,7 @@ struct ConversationActionItemsSection: View {
       item: item,
       displayDescription: ConversationSummarySelection.presentableText(
         item.description, segments: conversation.transcriptSegments),
-      taskState: taskState(index: index, linkedTaskID: linkedTaskID),
+      taskState: taskState(index: index, identity: identity, linkedTaskID: linkedTaskID),
       transcriptTitle: sourceIDs.isEmpty ? "Transcript" : "Source",
       onTaskAction: { taskAction(index) },
       onOpenTranscript: {
