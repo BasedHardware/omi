@@ -22,7 +22,6 @@
 #endif
 #ifndef CONFIG_OMI_NATIVE_SIM
 #include <zephyr/drivers/gpio.h>
-#include <zephyr/drivers/spi.h>
 #include <zephyr/fatal.h>
 #include <zephyr/init.h>
 #include <zephyr/sys/poweroff.h>
@@ -451,7 +450,6 @@ void k_sys_fatal_error_handler(unsigned int reason, const struct arch_esf *esf)
 }
 
 static const struct gpio_dt_spec safe_button = GPIO_DT_SPEC_GET(DT_NODELABEL(usr_btn), gpios);
-static const struct gpio_dt_spec sd_cs = SPI_CS_GPIOS_DT_SPEC_GET(DT_NODELABEL(sdhc0));
 
 /* DFU stages into the external NOR; prove SAFE can reach it before advertising. */
 static bool secondary_readable(void)
@@ -468,16 +466,12 @@ static bool secondary_readable(void)
 
 void safe_mode_run(void)
 {
-    /* SD hog is ON at boot; NOR shares SPI3, so never suspend the bus here. */
-    const struct gpio_dt_spec sd = GPIO_DT_SPEC_GET(DT_NODELABEL(sdcard_en_pin), gpios);
-    const struct gpio_dt_spec mic = GPIO_DT_SPEC_GET(DT_NODELABEL(pdm_en_pin), gpios);
-    (void) gpio_pin_configure_dt(&sd, GPIO_OUTPUT_INACTIVE);
-    /* The SPI driver idles the unpowered card's CS high, which back-powers the
-     * card through its input clamp; the half-alive card then corrupts SPI3 and
-     * every NOR (secondary slot) transfer times out. Park CS at 0 V like sd_card.c.
+    /* Keep the SD rail as the boot hog and MCUboot leave it (ON): with it off the
+     * shared SPI3 bus times out and the DFU secondary slot in the external NOR is
+     * unreachable, so SAFE could never stage an image. NOR shares SPI3, so never
+     * suspend the bus here either.
      */
-    (void) gpio_pin_configure_dt(&sd_cs, GPIO_OUTPUT);
-    (void) gpio_pin_set_raw(sd_cs.port, sd_cs.pin, 0);
+    const struct gpio_dt_spec mic = GPIO_DT_SPEC_GET(DT_NODELABEL(pdm_en_pin), gpios);
     (void) gpio_pin_configure_dt(&mic, GPIO_OUTPUT_INACTIVE);
     (void) led_start();
     printk("Safe mode initialized: BLE DFU only\n");
