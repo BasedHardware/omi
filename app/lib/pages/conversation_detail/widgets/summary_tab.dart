@@ -26,6 +26,7 @@ import 'package:uuid/uuid.dart';
 
 import 'conversation_action_items_section.dart';
 import 'conversation_screenshots_section.dart';
+import 'summary_task_recovery.dart';
 import 'feedback_prompt_policy.dart';
 import 'feedback_sheet.dart';
 
@@ -169,6 +170,12 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
                                 },
                               ),
                         // After the note's sections, before the screenshots: the Mac's order.
+                        if (conversation != null &&
+                            !_isEditing &&
+                            !summarySelection.isApp &&
+                            !provider.isLoading &&
+                            !provider.loadingReprocessConversation)
+                          SliverToBoxAdapter(child: SummaryTaskRecovery(conversation: conversation)),
                         if (!discarded && conversation != null)
                           ConversationActionItemsSection(
                             items: conversation.structured.actionItems,
