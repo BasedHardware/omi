@@ -15050,4 +15050,7 @@ class AppLocalizationsKn extends AppLocalizations {
     );
     return '$_temp1';
   }
+
+  @override
+  String get episodeFinishingUp => 'ಪೂರ್ಣಗೊಳಿಸಲಾಗುತ್ತಿದೆ…';
 }

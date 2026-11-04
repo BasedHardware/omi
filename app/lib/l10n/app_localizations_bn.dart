@@ -14996,4 +14996,7 @@ class AppLocalizationsBn extends AppLocalizations {
     );
     return '$_temp1';
   }
+
+  @override
+  String get episodeFinishingUp => 'শেষ করা হচ্ছে…';
 }

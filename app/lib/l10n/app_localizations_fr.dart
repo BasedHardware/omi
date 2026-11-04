@@ -15124,4 +15124,7 @@ class AppLocalizationsFr extends AppLocalizations {
     );
     return '$_temp1';
   }
+
+  @override
+  String get episodeFinishingUp => 'Finalisation…';
 }

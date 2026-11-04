@@ -4526,5 +4526,6 @@
     "speakerWholeRecording": "Áp dụng cho toàn bộ bản ghi",
     "speakerSelectionChanged": "Người nói đã thay đổi. Hãy chọn lại các dòng.",
     "speakerRenameIssue": "{reason, select, limit{Bản ghi quá lớn. Hãy chọn ít dòng hơn trong một cuộc trò chuyện.} partial{Một số dòng đã được lưu. Hãy chọn các dòng còn lại và thử lại.} other{Một số dòng đã được lưu. Hãy chọn các dòng còn lại và thử lại.}}",
-    "speakerRecordingCoverage": "{state, select, scope{Các dòng khác của giọng này (chưa xác nhận phạm vi bản ghi)} other{{count, plural, =1{Đã đổi tên 1 dòng chỉ trong các cuộc trò chuyện có sẵn.} other{Đã đổi tên {count} dòng chỉ trong các cuộc trò chuyện có sẵn.}}}}"
+    "speakerRecordingCoverage": "{state, select, scope{Các dòng khác của giọng này (chưa xác nhận phạm vi bản ghi)} other{{count, plural, =1{Đã đổi tên 1 dòng chỉ trong các cuộc trò chuyện có sẵn.} other{Đã đổi tên {count} dòng chỉ trong các cuộc trò chuyện có sẵn.}}}}",
+    "episodeFinishingUp": "Đang hoàn tất…"
 }

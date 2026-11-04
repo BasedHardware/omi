@@ -15052,4 +15052,7 @@ class AppLocalizationsBg extends AppLocalizations {
     );
     return '$_temp1';
   }
+
+  @override
+  String get episodeFinishingUp => 'Завършване…';
 }

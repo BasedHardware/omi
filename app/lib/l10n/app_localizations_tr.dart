@@ -15014,4 +15014,7 @@ class AppLocalizationsTr extends AppLocalizations {
     );
     return '$_temp1';
   }
+
+  @override
+  String get episodeFinishingUp => 'Tamamlanıyor…';
 }

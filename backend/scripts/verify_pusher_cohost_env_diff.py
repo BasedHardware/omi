@@ -239,12 +239,13 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "MOBILE_STANDARD_BATCH_ENABLED",
             "MOBILE_STANDARD_BATCH_PERCENT",
             "MOBILE_STANDARD_BATCH_UIDS",
-            # Only listen reads the mobile server-batch-only cohort: server_batch.selected via
+            # Only listen reads the mobile/web server-batch-only cohorts: server_batch.selected via
             # request_eligible and via eligible <- create_in_progress_conversation, both called only
             # from routers/listen. Pusher's finalizer uses owned/has_audio and never admits capture.
             "SERVER_BATCH_ONLY_MOBILE_PERCENT",
-            # Same listen-only admission path for learned auto-language mobile captures.
+            # Same listen-only admission path for learned auto-language mobile/web captures.
             "SERVER_BATCH_ONLY_AUTO_LANGUAGE_PERCENT",
+            "SERVER_BATCH_ONLY_WEB_PERCENT",
             # Only listen opens visibility-gated Modulate previews; pusher
             # retains raw custody/finalization and never evaluates this cohort.
             "SERVER_BATCH_ONLY_VISIBLE_RESTORE_PERCENT",

@@ -15065,4 +15065,7 @@ class AppLocalizationsMk extends AppLocalizations {
     );
     return '$_temp1';
   }
+
+  @override
+  String get episodeFinishingUp => 'Се завршува…';
 }

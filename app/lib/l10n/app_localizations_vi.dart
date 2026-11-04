@@ -15003,4 +15003,7 @@ class AppLocalizationsVi extends AppLocalizations {
     );
     return '$_temp1';
   }
+
+  @override
+  String get episodeFinishingUp => 'Đang hoàn tất…';
 }

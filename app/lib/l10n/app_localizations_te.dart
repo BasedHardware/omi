@@ -15064,4 +15064,7 @@ class AppLocalizationsTe extends AppLocalizations {
     );
     return '$_temp1';
   }
+
+  @override
+  String get episodeFinishingUp => 'పూర్తి చేస్తోంది…';
 }

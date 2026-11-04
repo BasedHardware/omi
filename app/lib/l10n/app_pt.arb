@@ -4561,5 +4561,6 @@
     "speakerWholeRecording": "Aplicar a toda a gravação",
     "speakerSelectionChanged": "O falante mudou. Selecione as linhas novamente.",
     "speakerRenameIssue": "{reason, select, limit{A gravação é muito grande. Selecione menos linhas em uma conversa.} partial{Algumas linhas foram salvas. Selecione as restantes e tente novamente.} other{Algumas linhas foram salvas. Selecione as restantes e tente novamente.}}",
-    "speakerRecordingCoverage": "{state, select, scope{Outras linhas desta voz (cobertura da gravação não confirmada)} other{{count, plural, =1{1 linhas renomeadas apenas nas conversas disponíveis.} other{{count} linhas renomeadas apenas nas conversas disponíveis.}}}}"
+    "speakerRecordingCoverage": "{state, select, scope{Outras linhas desta voz (cobertura da gravação não confirmada)} other{{count, plural, =1{1 linhas renomeadas apenas nas conversas disponíveis.} other{{count} linhas renomeadas apenas nas conversas disponíveis.}}}}",
+    "episodeFinishingUp": "Finalizando…"
 }

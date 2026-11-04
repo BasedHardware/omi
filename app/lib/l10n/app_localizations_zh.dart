@@ -14769,4 +14769,7 @@ class AppLocalizationsZh extends AppLocalizations {
     );
     return '$_temp1';
   }
+
+  @override
+  String get episodeFinishingUp => '即将完成…';
 }

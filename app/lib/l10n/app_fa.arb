@@ -11952,5 +11952,6 @@
     "speakerWholeRecording": "اعمال به کل ضبط",
     "speakerSelectionChanged": "گوینده تغییر کرده است. خط‌ها را دوباره انتخاب کنید.",
     "speakerRenameIssue": "{reason, select, limit{ضبط خیلی بزرگ است. خط‌های کمتری از یک گفتگو انتخاب کنید.} partial{بعضی خط‌ها ذخیره شدند. خط‌های باقی‌مانده را انتخاب و دوباره تلاش کنید.} other{بعضی خط‌ها ذخیره شدند. خط‌های باقی‌مانده را انتخاب و دوباره تلاش کنید.}}",
-    "speakerRecordingCoverage": "{state, select, scope{خطوط دیگر این صدا (پوشش ضبط تأیید نشده)} other{{count, plural, =1{نام 1 خط فقط در گفتگوهای موجود تغییر کرد.} other{نام {count} خط فقط در گفتگوهای موجود تغییر کرد.}}}}"
+    "speakerRecordingCoverage": "{state, select, scope{خطوط دیگر این صدا (پوشش ضبط تأیید نشده)} other{{count, plural, =1{نام 1 خط فقط در گفتگوهای موجود تغییر کرد.} other{نام {count} خط فقط در گفتگوهای موجود تغییر کرد.}}}}",
+    "episodeFinishingUp": "در حال اتمام…"
 }

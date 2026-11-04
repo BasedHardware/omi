@@ -4526,5 +4526,6 @@
     "speakerWholeRecording": "Taikyti visam įrašui",
     "speakerSelectionChanged": "Kalbėtojas pasikeitė. Pasirinkite eilutes dar kartą.",
     "speakerRenameIssue": "{reason, select, limit{Įrašas per didelis. Pasirinkite mažiau eilučių viename pokalbyje.} partial{Kai kurios eilutės išsaugotos. Pasirinkite likusias ir bandykite dar kartą.} other{Kai kurios eilutės išsaugotos. Pasirinkite likusias ir bandykite dar kartą.}}",
-    "speakerRecordingCoverage": "{state, select, scope{Kitos šio balso eilutės (įrašo aprėptis nepatvirtinta)} other{{count, plural, =1{Pervadinta 1 eilučių tik prieinamuose pokalbiuose.} other{Pervadinta {count} eilučių tik prieinamuose pokalbiuose.}}}}"
+    "speakerRecordingCoverage": "{state, select, scope{Kitos šio balso eilutės (įrašo aprėptis nepatvirtinta)} other{{count, plural, =1{Pervadinta 1 eilučių tik prieinamuose pokalbiuose.} other{Pervadinta {count} eilučių tik prieinamuose pokalbiuose.}}}}",
+    "episodeFinishingUp": "Baigiama…"
 }

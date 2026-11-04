@@ -15009,4 +15009,7 @@ class AppLocalizationsMr extends AppLocalizations {
     );
     return '$_temp1';
   }
+
+  @override
+  String get episodeFinishingUp => 'पूर्ण करत आहे…';
 }

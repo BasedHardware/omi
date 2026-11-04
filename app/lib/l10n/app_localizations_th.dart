@@ -14928,4 +14928,7 @@ class AppLocalizationsTh extends AppLocalizations {
     );
     return '$_temp1';
   }
+
+  @override
+  String get episodeFinishingUp => 'กำลังดำเนินการให้เสร็จ…';
 }

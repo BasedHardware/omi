@@ -15005,4 +15005,7 @@ class AppLocalizationsFi extends AppLocalizations {
     );
     return '$_temp1';
   }
+
+  @override
+  String get episodeFinishingUp => 'Viimeistellään…';
 }

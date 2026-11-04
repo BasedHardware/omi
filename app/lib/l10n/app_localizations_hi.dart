@@ -14984,4 +14984,7 @@ class AppLocalizationsHi extends AppLocalizations {
     );
     return '$_temp1';
   }
+
+  @override
+  String get episodeFinishingUp => 'पूरा किया जा रहा है…';
 }

@@ -18319,5 +18319,9 @@
                 "type": "int"
             }
         }
+    },
+    "episodeFinishingUp": "Finishing up…",
+    "@episodeFinishingUp": {
+        "description": "Neutral Home row title while an episode summary is being completed."
     }
 }

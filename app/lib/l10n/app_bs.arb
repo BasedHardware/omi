@@ -11952,5 +11952,6 @@
     "speakerWholeRecording": "Primijeni na cijeli snimak",
     "speakerSelectionChanged": "Govornik se promijenio. Ponovo odaberite redove.",
     "speakerRenameIssue": "{reason, select, limit{Snimak je prevelik. Odaberite manje redova u jednom razgovoru.} partial{Neki redovi su sačuvani. Odaberite preostale i pokušajte ponovo.} other{Neki redovi su sačuvani. Odaberite preostale i pokušajte ponovo.}}",
-    "speakerRecordingCoverage": "{state, select, scope{Drugi redovi ovog glasa (obuhvat snimka nije potvrđen)} other{{count, plural, =1{Preimenovano je 1 redova samo u dostupnim razgovorima.} other{Preimenovano je {count} redova samo u dostupnim razgovorima.}}}}"
+    "speakerRecordingCoverage": "{state, select, scope{Drugi redovi ovog glasa (obuhvat snimka nije potvrđen)} other{{count, plural, =1{Preimenovano je 1 redova samo u dostupnim razgovorima.} other{Preimenovano je {count} redova samo u dostupnim razgovorima.}}}}",
+    "episodeFinishingUp": "Završavamo…"
 }

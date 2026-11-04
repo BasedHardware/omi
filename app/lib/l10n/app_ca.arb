@@ -4526,5 +4526,6 @@
     "speakerWholeRecording": "Aplica a tota la gravació",
     "speakerSelectionChanged": "El parlant ha canviat. Torna a seleccionar les línies.",
     "speakerRenameIssue": "{reason, select, limit{La gravació és massa gran. Selecciona menys línies en una conversa.} partial{S’han desat algunes línies. Selecciona les restants i torna-ho a provar.} other{S’han desat algunes línies. Selecciona les restants i torna-ho a provar.}}",
-    "speakerRecordingCoverage": "{state, select, scope{Altres línies d’aquesta veu (cobertura de la gravació no confirmada)} other{{count, plural, =1{S’han canviat 1 línies només en les converses disponibles.} other{S’han canviat {count} línies només en les converses disponibles.}}}}"
+    "speakerRecordingCoverage": "{state, select, scope{Altres línies d’aquesta veu (cobertura de la gravació no confirmada)} other{{count, plural, =1{S’han canviat 1 línies només en les converses disponibles.} other{S’han canviat {count} línies només en les converses disponibles.}}}}",
+    "episodeFinishingUp": "Enllestint…"
 }

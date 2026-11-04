@@ -4526,5 +4526,6 @@
     "speakerWholeRecording": "Lietot visam ierakstam",
     "speakerSelectionChanged": "Runātājs ir mainījies. Atlasiet rindas vēlreiz.",
     "speakerRenameIssue": "{reason, select, limit{Ieraksts ir pārāk liels. Atlasiet mazāk rindu vienā sarunā.} partial{Dažas rindas ir saglabātas. Atlasiet atlikušās un mēģiniet vēlreiz.} other{Dažas rindas ir saglabātas. Atlasiet atlikušās un mēģiniet vēlreiz.}}",
-    "speakerRecordingCoverage": "{state, select, scope{Citas šīs balss rindas (ieraksta aptvērums nav apstiprināts)} other{{count, plural, =1{Pārdēvētas 1 rindas tikai pieejamajās sarunās.} other{Pārdēvētas {count} rindas tikai pieejamajās sarunās.}}}}"
+    "speakerRecordingCoverage": "{state, select, scope{Citas šīs balss rindas (ieraksta aptvērums nav apstiprināts)} other{{count, plural, =1{Pārdēvētas 1 rindas tikai pieejamajās sarunās.} other{Pārdēvētas {count} rindas tikai pieejamajās sarunās.}}}}",
+    "episodeFinishingUp": "Pabeidzam…"
 }

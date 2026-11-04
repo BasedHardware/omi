@@ -14788,4 +14788,7 @@ class AppLocalizationsJa extends AppLocalizations {
     );
     return '$_temp1';
   }
+
+  @override
+  String get episodeFinishingUp => '仕上げ中…';
 }

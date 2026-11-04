@@ -15013,4 +15013,7 @@ class AppLocalizationsUr extends AppLocalizations {
     );
     return '$_temp1';
   }
+
+  @override
+  String get episodeFinishingUp => 'مکمل کیا جا رہا ہے…';
 }

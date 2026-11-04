@@ -26348,6 +26348,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{state, select, scope{Other lines from this voice (recording coverage unconfirmed)} other{{count, plural, =1{Renamed 1 line in the available conversations only.} other{Renamed {count} lines in the available conversations only.}}}}'**
   String speakerRecordingCoverage(String state, int count);
+
+  /// Neutral Home row title while an episode summary is being completed.
+  ///
+  /// In en, this message translates to:
+  /// **'Finishing up…'**
+  String get episodeFinishingUp;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
