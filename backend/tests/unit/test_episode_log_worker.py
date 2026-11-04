@@ -1,0 +1,303 @@
+"""Durability, rollback, migration and privacy contracts; no customer IO."""
+
+from copy import deepcopy
+from datetime import datetime, timedelta, timezone
+from google.cloud import firestore
+from unittest.mock import Mock
+
+import pytest
+from config import episode_log as config
+from database import episode_log as store, episodes
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+from tests.unit.episode_log_support.oracle import Oracle
+from utils.episodes import home_read, composer
+from utils.encryption import decrypt
+from utils.episodes.log import worker, metrics, reads
+from utils.episodes.log.codec import dumps, loads
+from utils.episodes.log.fold import Fold
+from utils.episodes.log.key import gate_digest
+from utils.episodes.log.backfill import convert
+
+NOW = datetime(2026, 11, 4, tzinfo=timezone.utc)
+UID = 'log-unit-user'
+
+
+@pytest.fixture
+def client(monkeypatch):
+    monkeypatch.setenv('EPISODES_LOG_ENABLED', 'on')
+    monkeypatch.setenv('EPISODES_ENABLED', 'on')
+    monkeypatch.setenv('EPISODES_PERCENT', '100')
+    client = StrictFirestore()
+    monkeypatch.setattr(
+        store,
+        'fact_page',
+        lambda u, after, through, limit=64, **kwargs: sorted(
+            [
+                v
+                for k, v in client.rows.items()
+                if k[:3] == ('users', u, 'episode_facts') and after < v['seq'] <= through
+            ],
+            key=lambda v: v['seq'],
+        )[:limit],
+    )
+    return client
+
+
+def append(client, key='a', now=NOW):
+    return store.append(
+        UID, key, [{'kind': 'member_refresh', 'cid': 'c', 'payload': {}}], firestore_client=client, now=now
+    )
+
+
+def test_duplicate_key_no_writes_and_payload_sealed(client):
+    assert append(client) == NOW + timedelta(minutes=3)
+    count = sum(len(t.sets) + len(t.creates) for t in client.transactions)
+    assert append(client) is None
+    assert sum(len(t.sets) + len(t.creates) for t in client.transactions) == count
+    assert 'member_refresh' not in client.rows[('users', UID, 'episode_facts', 'a')]['payload']
+    assert all(path[:2] == ('users', UID) for path in client.rows)
+
+
+def test_debounce_size_and_max_age_bound():
+    state = {}
+    for n in range(60):
+        state = store.dirty_state(state, NOW + timedelta(seconds=n * 30))
+        assert state['drain_at'] <= NOW + timedelta(minutes=25)
+    for n in range(5):
+        at = NOW + timedelta(minutes=35, seconds=n)
+        state = store.dirty_state(state, at)
+    assert state['drain_at'] == at
+    assert 'status' not in state
+
+
+def test_killed_mid_drain_redrives_and_lost_lease_never_publishes(client):
+    append(client)
+    first = store.claim(UID, firestore_client=client, now=NOW + timedelta(minutes=3))
+    assert first and store.claim(UID, firestore_client=client, now=NOW + timedelta(minutes=4)) is None
+    assert not any(path[2] == 'episode_views' for path in client.rows)
+    second = store.claim(UID, firestore_client=client, now=NOW + timedelta(minutes=14))
+    assert second['epoch'] == first['epoch'] + 1
+    events, cursor = store.read_batch(UID, second, firestore_client=client)
+    assert len(events) == 1 and cursor == 1
+    assert store.state(UID, firestore_client=client).get('cursor', 0) == 0
+    for claimed, at in ((first, NOW + timedelta(minutes=14)), (second, NOW + timedelta(minutes=25))):
+        with pytest.raises(store.LostLease):
+            store.publish(UID, claimed, 1, {}, {'e': {'id': 'e'}}, {}, firestore_client=client, now=at)
+    assert not any(path[2] == 'episode_views' for path in client.rows)
+
+
+def test_append_during_drain_remains_dirty(client):
+    append(client)
+    first = store.claim(UID, firestore_client=client, now=NOW + timedelta(minutes=3))
+    append(client, 'b', NOW + timedelta(minutes=4))
+    state = store.publish(UID, first, 1, {}, {}, {}, firestore_client=client, now=NOW + timedelta(minutes=4))
+    assert state['next_seq'] == 2 and state['cursor'] == 1
+    assert state['scan_at'] == NOW + timedelta(minutes=4) and not state['lease_owner']
+
+
+def test_retry_has_entry_deadline_and_exit(client):
+    append(client)
+    claimed = store.claim(UID, firestore_client=client, now=NOW + timedelta(minutes=3))
+    at = NOW + timedelta(minutes=4)
+    assert store.retry(UID, claimed, firestore_client=client, now=at)
+    row = store.state(UID, firestore_client=client)
+    assert store.derive_phase(row, at) == 'retrying' and row['retry_at'] == at + timedelta(seconds=30)
+    claimed = store.claim(UID, firestore_client=client, now=row['retry_at'])
+    assert store.derive_phase(claimed['state'], row['retry_at']) == 'running'
+
+
+def test_switch_off_no_io(monkeypatch):
+    monkeypatch.setenv('EPISODES_LOG_ENABLED', 'off')
+    client = Mock()
+    assert store.append(UID, 'k', [], firestore_client=client) is None
+    assert store.prepare(Mock(), client, UID) is None
+    assert worker.drain(UID, firestore_client=client) == 'disabled'
+    assert not worker.mark_dirty(UID, 'c', {'id': 'c'}, firestore_client=client)
+    assert not client.method_calls
+
+
+def test_drift_bounded_and_reread_handles_inflight_writer():
+    expected = {'id': 'e', 'status': 'closed', 'title': 'kept'}
+    assert set(metrics.compare({'status': 'live'}, expected, reread=lambda: expected).values()) == {'match'}
+    observed = metrics.compare(expected, dict(expected, title='changed'))
+    assert observed['content_hash'] == 'mismatch' and set(observed) == set(metrics.FIELDS)
+    assert metrics.DRIFT._labelnames == ('field', 'outcome')
+
+
+def test_key_catches_revision_bounds_discard_donor_terminal_state():
+    row = {
+        'id': 'c',
+        'started_at': NOW,
+        'finished_at': NOW + timedelta(seconds=10),
+        'sync_content_revision': 4,
+        'transcript_segments': [{'text': 'hello', 'start': 0, 'end': 10}],
+    }
+    initial = gate_digest(row)
+    for change in (
+        {'discarded': True},
+        {'sync_merged_from': ['donor']},
+        {'sync_content_revision': 5},
+        {'status': 'failed'},
+        {'finished_at': NOW + timedelta(seconds=20)},
+    ):
+        assert gate_digest(dict(row, **change)) != initial
+    assert gate_digest(row) == initial
+
+
+def test_real_atomic_facts_replay_and_checkpoint_resume(client):
+    uid = 'proto-u'
+    with Oracle(uid) as oracle:
+        for cid, a, b in [('a', 0, 60), ('b', 3600, 3660), ('bridge', 1200, 2500)]:
+            oracle.attach(cid, NOW + timedelta(seconds=a), NOW + timedelta(seconds=b))
+        oracle.discard('a')
+        oracle.repoint('b', 'bridge')
+        state = store.state(uid, firestore_client=oracle.store)
+        events, _ = store.read_batch(uid, {'state': state}, firestore_client=oracle.store)
+        fold = Fold(uid)
+        for event in events[:2]:
+            fold.apply(event)
+        fold = Fold(uid, loads(dumps(fold.checkpoint())))
+        for event in events[2:]:
+            fold.apply(event)
+        actual = fold.rows()
+        for path, row in oracle.store.rows.items():
+            if path[:3] != ('users', uid, 'episodes'):
+                continue
+            for field in (
+                'started_at',
+                'last_activity_at',
+                'recorded_members',
+                'conversation_ids',
+                'discarded_conversation_ids',
+                'member_activity',
+                'recorded_merged_into',
+            ):
+                left, right = actual[path[-1]].get(field), row.get(field)
+                if field in {'conversation_ids', 'discarded_conversation_ids'}:
+                    left, right = sorted(left or []), sorted(right or [])
+                assert left == right, (path[-1], field)
+
+
+def test_backfill_dry_run_fingerprint_archives_redirect_fences(client):
+    row = {
+        'id': 'fixed',
+        'status': 'closed',
+        'started_at': NOW,
+        'last_activity_at': NOW,
+        'composed_fingerprint': 'paid',
+        'composed_notes': 'notes',
+        'composer_version': 3,
+        'wrap_up_requested_at': NOW,
+        'conversation_ids': ['c'],
+    }
+    records = [
+        {'namespace': 'episodes', 'id': 'fixed', 'data': row},
+        {'namespace': 'episodes', 'id': 'old', 'data': dict(row, id='old', recorded_merged_into='fixed')},
+        {'namespace': 'episode_links', 'id': 'c', 'data': {'episode_id': 'fixed'}},
+        {'namespace': 'episode_segment_receipts', 'id': 'content-v1:c', 'data': {'ids': ['new']}},
+        {'namespace': 'receipt_archive', 'id': 'content-v1:c', 'archive': 0, 'data': {'ids': ['old']}},
+    ]
+    assert convert(UID, records, firestore_client=client)['written'] == 0 and not client.rows
+    convert(UID, records, apply=True, firestore_client=client)
+    events, _ = store.read_batch(UID, {'state': store.state(UID, firestore_client=client)}, firestore_client=client)
+    fold = Fold(UID)
+    for event in events:
+        fold.apply(event)
+    assert fold.rows()['fixed']['composed_fingerprint'] == 'paid'
+    assert fold.rows()['old']['recorded_merged_into'] == 'fixed'
+    assert fold.receipts['content-v1:c'] == ['new', 'old']
+    assert fold.links['c']['episode_id'] == 'fixed' and fold.projector.episodes[0].fixed
+
+
+def test_policy_barrier_blocks_reads_recovers_at_deadline(client, monkeypatch):
+    monkeypatch.setattr(reads, 'selected', lambda uid: True)
+    store.policy_barrier(UID, 'c', 't', entering=True, firestore_client=client, now=NOW)
+    assert reads.ready(UID, firestore_client=client) is None
+    store.recover_policy_barriers(UID, firestore_client=client, now=NOW + timedelta(minutes=26))
+    row = store.state(UID, firestore_client=client)
+    assert not row['policy_barriers'] and row['next_seq'] == 2 and row['scan_at'] == NOW + timedelta(minutes=26)
+
+
+def test_conditional_version_scoped_to_user_window_page_policy(monkeypatch):
+    state = {'home_version': 5}
+    a = reads.version(UID, state, NOW, NOW + timedelta(days=1), 50, None)
+    assert a != reads.version('other', state, NOW, NOW + timedelta(days=1), 50, None)
+    assert a != reads.version(UID, state, NOW, NOW + timedelta(days=2), 50, None)
+    assert a != reads.version(UID, state, NOW, NOW + timedelta(days=1), 50, 'page2')
+    monkeypatch.setenv('HOME_HIDE_BELOW_FLOOR_ROWS', 'off')
+    assert a != reads.version(UID, state, NOW, NOW + timedelta(days=1), 50, None)
+
+
+def test_real_drain_recovers_failure_publishes_sealed_home_and_never_changes_legacy(client, monkeypatch):
+
+    uid = 'proto-u'
+    with Oracle(uid) as oracle:
+        oracle.attach('c', NOW, NOW + timedelta(seconds=60))
+    client = oracle.store
+    monkeypatch.setattr(
+        store,
+        'fact_page',
+        lambda u, after, through, limit=64, **kwargs: sorted(
+            [
+                v
+                for k, v in client.rows.items()
+                if k[:3] == ('users', u, 'episode_facts') and after < v['seq'] <= through
+            ],
+            key=lambda v: v['seq'],
+        )[:limit],
+    )
+    monkeypatch.setattr(episodes, 'unseal', lambda uid, row: row)
+    monkeypatch.setattr(
+        home_read,
+        '_read_members',
+        lambda *args, **kwargs: {
+            'c': {
+                'structured': {'title': 'Synthetic member', 'emoji': '🗒️'},
+                'started_at': NOW,
+                'status': 'completed',
+                'discarded': False,
+            },
+        },
+    )
+    paid = Mock(side_effect=AssertionError('drain invoked paid composer'))
+    monkeypatch.setattr(composer, 'compose', paid)
+    legacy = {k: deepcopy(v) for k, v in client.rows.items() if k[2] in {'episodes', 'episode_links', 'conversations'}}
+    store.finish_backfill(uid, firestore_client=client)
+    at = store.state(uid, firestore_client=client)['drain_at']
+    publish = store.publish
+    monkeypatch.setattr(store, 'publish', Mock(side_effect=RuntimeError('synthetic killed drain')))
+    with pytest.raises(RuntimeError, match='synthetic killed drain'):
+        worker.drain(uid, firestore_client=client, now=at)
+    pending = store.state(uid, firestore_client=client)
+    assert pending.get('cursor', 0) == 0 and pending['retry_at']
+    monkeypatch.setattr(store, 'publish', publish)
+    monkeypatch.setattr(worker, 'wake', lambda *args: None)
+    assert worker.drain(uid, firestore_client=client, now=pending['retry_at']) == 'drained'
+    assert store.state(uid, firestore_client=client)['cursor'] == pending['next_seq']
+    assert store.checkpoint(uid, firestore_client=client)['metadata']
+    view = next(v for k, v in client.rows.items() if k[2] == 'episode_views')
+    home = loads(decrypt(view['home_payload'], uid))
+    assert home['members'][0]['title'] == 'Synthetic member'
+    assert 'Synthetic member' not in view['home_payload']
+    assert all(client.rows[k] == value for k, value in legacy.items())
+    paid.assert_not_called()
+
+
+def test_member_policy_dirty_fact_joins_conversation_commit_only_for_existing_log(client):
+    root = client.collection('users').document(UID)
+    ref = root.collection('conversations').document('c')
+    client.rows[ref.path] = {'discarded': False}
+
+    @firestore.transactional
+    def change(transaction):
+        capture = store.prepare_member_change(transaction, root)
+        ref.get(transaction=transaction)
+        store.member_changed(capture, ['c'])
+        transaction.update(ref, {'discarded': True})
+
+    change(client.transaction())
+    assert not any(path[2] == 'episode_facts' for path in client.rows)
+    client.rows[('users', UID, 'episode_log_state', 'owner')] = {'cursor': 0, 'next_seq': 0}
+    change(client.transaction())
+    assert store.state(UID, firestore_client=client)['next_seq'] == 1
+    assert client.rows[ref.path]['discarded']

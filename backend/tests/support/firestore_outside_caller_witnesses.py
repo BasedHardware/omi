@@ -14,6 +14,8 @@ from typing import Any
 import pytest
 
 import routers.episodes as episodes_router
+import utils.episodes.log.reads as episode_log_reads
+from fastapi import Response
 import routers.desktop_prompts as desktop_prompts_router
 import routers.desktop_tts_updates as desktop_tts_updates_router
 import routers.fair_use_admin as fair_use_admin_router
@@ -95,9 +97,11 @@ def _run_expired_sync_status(monkeypatch: pytest.MonkeyPatch, capture: HelperCap
 
 def _run_episode_home(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
     monkeypatch.setattr(episodes_router, '_admitted', lambda uid, channel: True)
+    monkeypatch.setattr(episode_log_reads, 'ready', lambda uid: None)
     trial(
         capture,
         episodes_router.list_episodes,
+        response=Response(),
         start=FROZEN_NOW,
         end=FROZEN_NOW,
         limit=25,
@@ -107,9 +111,21 @@ def _run_episode_home(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -
     )
 
 
+def _run_episode_log_home(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
+    trial(capture, episode_log_reads.list_window, SHAPE_UID, FROZEN_NOW, FROZEN_NOW, limit=25)
+
+
 WITNESSES: dict[str, CallerWitness] = {
     witness.key: witness
     for witness in (
+        CallerWitness(
+            'utils/episodes/log/reads.py:list_window:utils.episodes.home_read.list_episode_window',
+            'utils.episodes.home_read.list_episode_window',
+            'utils.episodes.home_read.list_episode_window',
+            ('request-episode-home',),
+            1,
+            _run_episode_log_home,
+        ),
         CallerWitness(
             'routers/episodes.py:list_episodes:utils.episodes.home_read.list_episode_window',
             'utils.episodes.home_read.list_episode_window',

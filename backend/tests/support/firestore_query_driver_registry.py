@@ -3807,3 +3807,22 @@ for _function in ('projected_stream_iter',):
             },
         )
     )
+
+
+_add(DriverEntry('database.episode_log.due_owners', base={'now': T0}, neutrals={'limit': _PAGE}))
+
+_add(
+    DriverEntry(
+        'database.episode_log.fact_page', base={'uid': UID, 'after': 0, 'through': 64}, neutrals={'limit': _PAGE}
+    )
+)
+
+_add(
+    DriverEntry(
+        'database.episode_log.read_batch',
+        base={
+            'uid': UID,
+            'claimed': {'state': {'cursor': 0, 'next_seq': 0}},
+        },
+    )
+)

@@ -509,7 +509,7 @@ _driver(
 _driver(
     'utils.episodes.home_read.list_episode_window',
     base={'uid': UID, 'start': T0},
-    domains={'end': (T0, T1)},
+    domains={'end': (T0, T1), 'namespace': ('episodes', 'episode_views')},
     neutrals={'limit': LIMIT, 'cursor': (None, 'snapshot continuation changes the position only')},
     profile='request-episode-home',
 )
