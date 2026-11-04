@@ -197,7 +197,7 @@ def _expire_budget_once_running(monkeypatch, running: threading.Event) -> None:
 
     async def expired(work, timeout):
         assert timeout == route.DELIVERY_BUDGET_SECONDS  # the production budget, not a shrunk one
-        await asyncio.get_running_loop().run_in_executor(None, running.wait, 10)
+        assert await asyncio.get_running_loop().run_in_executor(None, running.wait, 10)  # expire only mid-callback
         raise asyncio.TimeoutError
 
     monkeypatch.delenv('ENRICHMENT_DELIVERY_BUDGET_SECONDS', raising=False)
