@@ -762,3 +762,13 @@ def test_outbox_with_conflicting_identity_is_refused(tmp_path, outbox):
         'status': 'refused',
         'exception_type': 'CaptureRefused',
     }
+
+
+@pytest.mark.parametrize('nested_owner, status', [('someone-else', 'refused'), (UID, 'complete'), (None, 'complete')])
+def test_job_projection_binding_owner_must_match_pinned_uid(tmp_path, nested_owner, status):
+    db = OwnerDB()
+    db.job = dict(db.job, projection_binding={'owner_id': nested_owner, 'conversation_id': CID})
+    result = capture.capture_owner(db, OwnerStorage(), tmp_path, digest, UID, [CID], BUCKETS)
+    assert result['items'][0]['status'] == status
+    if status == 'refused':
+        assert not (tmp_path / ('owner-' + digest(CID))).exists()

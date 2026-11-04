@@ -425,6 +425,11 @@ def capture_owner_item(db, storage, output, digest, uid, cid, buckets):
     jobs.update({unit: docs[PREFIX + 'jobs/' + unit] for unit in units if PREFIX + 'jobs/' + unit in docs})
     for row in jobs.values():
         owner_row(row, uid)
+        # The whole job is persisted; a nested binding owner must match too, or
+        # a foreign uid and its references would survive the pinned-uid scrub.
+        binding = row.get('projection_binding')
+        if isinstance(binding, dict) and binding.get('owner_id') is not None:
+            owner_row(binding, uid)
     results = {unit: docs[PREFIX + 'results/' + unit] for unit in units if PREFIX + 'results/' + unit in docs}
     for row in results.values():
         if row.get('owner_key') != owner_hash:
