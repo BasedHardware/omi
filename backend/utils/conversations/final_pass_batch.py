@@ -11,6 +11,9 @@ import os
 import threading
 import time
 import wave
+from contextvars import ContextVar
+from contextlib import contextmanager
+from prometheus_client import Counter
 from datetime import datetime, timezone
 
 from config.batch_conversation_speakers import (
@@ -45,6 +48,41 @@ from utils.sync.stage import current_stage
 logger = logging.getLogger(__name__)
 
 _SLOTS = threading.BoundedSemaphore(1)
+_RECORD_TERMINAL = ContextVar('batch_final_pass_terminal', default=True)
+_IDENTITY_ONLY = ContextVar('batch_final_pass_identity_only', default=False)
+UNIT_SKIPS = Counter(
+    'omi_transcription_final_pass_unit_skips_total', 'Units omitted by whole-pass shared-unit abstention', ['reason']
+)
+
+
+@contextmanager
+def terminal_metrics(enabled):
+    token = _RECORD_TERMINAL.set(enabled)
+    try:
+        yield
+    finally:
+        _RECORD_TERMINAL.reset(token)
+
+
+@contextmanager
+def identity_only_attempt():
+    # Recurring learning stamps the conversation in its own transaction. Keep
+    # inference read-only until the retry's identity CAS; normal passes still learn.
+    token = _IDENTITY_ONLY.set(True)
+    try:
+        with terminal_metrics(False):
+            yield
+    finally:
+        _IDENTITY_ONLY.reset(token)
+
+
+def count_terminal(outcome):
+    if _RECORD_TERMINAL.get():
+        OUTCOMES.labels(
+            lane='batch', outcome=reason_label(ReasonFamily.BATCH_FINAL_PASS, outcome, BatchFinalPassOutcome)
+        ).inc()
+
+
 _RESERVE = """
 for i = 1, 2 do
   local spent = tonumber(redis.call('hget', KEYS[i], 'audio_ms') or '0')
@@ -93,9 +131,7 @@ def _reserve_budget(seconds):
 
 
 def _fallback(outcome, **details):
-    OUTCOMES.labels(
-        lane='batch', outcome=reason_label(ReasonFamily.BATCH_FINAL_PASS, outcome, BatchFinalPassOutcome)
-    ).inc()
+    count_terminal(outcome)
     logger.info(
         'event=batch_final_pass outcome=%s exception_type=%s reason=%s',
         outcome,
@@ -141,6 +177,39 @@ def _assemble(units):
     return bytes(pcm), words, checks
 
 
+def _references(store, uid, conversation, units, read_budget):
+    references, errors, shared = {}, [], []
+    for unit in units:
+        read_budget.timeout(60)
+        try:
+            reference = load_reference(store, uid, unit, conversation.id)
+            if reference is None:
+                raise IncompleteCoverage('unit unavailable')
+            references[unit] = reference
+        except Exception as error:
+            error.failing_unit = unit
+            logger.warning(
+                'event=batch_final_pass outcome=unit_unavailable exception_type=%s reason=%s',
+                error_details(error)['exception_type'],
+                error_details(error)['reason'],
+            )
+            errors.append(error)
+            if isinstance(error, ReferenceUnavailable) and error.outcome == 'skipped_shared_unit':
+                shared.append(error)
+    if shared:
+        UNIT_SKIPS.labels(reason='shared_unit').inc(len(shared))
+        UNIT_SKIPS.labels(reason='blocked_by_shared_unit').inc(len(units) - len(shared))
+        raise shared[0]
+    if errors:
+        error = errors[0]
+        if isinstance(error, (OverflowError, ArtifactReadLimit, IncompleteCoverage, ReferenceUnavailable)):
+            raise error
+        failure = IncompleteCoverage('unit unavailable')
+        failure.failing_unit = error.failing_unit
+        raise failure from error
+    return references
+
+
 def _units(uid, conversation, read_budget):
     units = sorted(
         {scope.removeprefix('final:batch:') for s in conversation.transcript_segments if (scope := batch_unit_scope(s))}
@@ -149,13 +218,12 @@ def _units(uid, conversation, read_budget):
         raise ValueError('unit limit')
     store = FirestoreStore(f'batch_pipeline_{current_stage()}')
     artifacts = artifacts_for(store)
+    references = _references(store, uid, conversation, units, read_budget)
     total_bytes = 0
     for unit in units:
         read_budget.timeout(60)
         try:
-            reference = load_reference(store, uid, unit, conversation.id)
-            if reference is None:
-                raise IncompleteCoverage('unit unavailable')
+            reference = references[unit]
             item, uri, binding, policy = reference
             payload = artifacts.load_result(item, uri, read_budget=read_budget)
             with wave.open(io.BytesIO(artifacts.fetch_audio(item, read_budget=read_budget))) as wav:
@@ -220,24 +288,25 @@ def run_batch_final_pass(uid, conversation, receipt, *, load_prints, apply, requ
     if not final_pass_enabled_for(uid, conversation.transcript_segments):
         return {'outcome': 'skipped_ineligible'}
     if not _SLOTS.acquire(blocking=False):
-        # Persist before returning to the shared postprocess pool. mark increments
-        # an active obligation's version, so its completion retains this retry;
-        # named Cloud Tasks plus the enrichment sweep repair a lost enqueue.
+        # The processing boundary supplies a dedicated, capped speaker-only
+        # obligation. Retry deliveries settle their own existing obligation.
         try:
             if requeue is None:
                 raise RuntimeError('retry_custody_required')
-            requeue(uid, conversation.id, conversation.language or 'en')
+            queued = requeue(uid, conversation.id, conversation.language or 'en')
+            if queued is not None and queued.get('outcome') != 'deferred_slot_busy':
+                return queued
         except Exception as error:
             _fallback('failed_requeue', **error_details(error))
             raise  # Do not acknowledge delivery when durable custody failed.
         record_fallback(
             component='stt_selection',
             from_mode='batch_final_pass',
-            to_mode='enrichment_retry',
+            to_mode='speaker_final_pass_retry',
             reason='recovery_budget',
             outcome='degraded',
         )
-        logger.info('event=batch_final_pass outcome=deferred_slot_busy reason=enrichment_outbox')
+        logger.info('event=batch_final_pass outcome=deferred_slot_busy reason=speaker_final_pass_outbox')
         return {'outcome': 'deferred_slot_busy'}
     try:
         return _run(uid, conversation, receipt, load_prints, apply)
@@ -388,7 +457,7 @@ def _run(uid, conversation, receipt, load_prints, apply):
         ),
     )
     recurring_labels = {}
-    if expected is not None and outcome.get('centroids'):
+    if not _IDENTITY_ONLY.get() and expected is not None and outcome.get('centroids'):
         try:
             eligible = {
                 voice: centroid
@@ -458,7 +527,7 @@ def _run(uid, conversation, receipt, load_prints, apply):
 
     if unassigned:
         return _fallback('failed_unassigned_words', changed_segments=len(updates), speaker_count=len(voice_ids))
-    OUTCOMES.labels(lane='batch', outcome='success').inc()
+    count_terminal('success')
     logger.info('event=batch_final_pass outcome=success')
     return {
         'outcome': 'success',

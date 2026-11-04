@@ -21,7 +21,7 @@ from database import batch_final_pass as references
 from database.batch_pipeline_store import FirestoreStore
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
-from tests.unit.test_sync_reprocess_coalesce import state as outbox_state  # noqa: F401
+from tests.unit.fixtures.speaker_final_pass_retry import retry_state  # noqa: F401
 from models.audio_file import AudioFile
 from models.conversation import Conversation
 from models.diarization import OMI_EMBEDDING_SPACE
@@ -778,7 +778,7 @@ def prod_shaped(monkeypatch):
 
 
 def run_prod(lane):
-    from utils.enrichment import outbox
+    from utils.conversations import final_pass_retry as retry
 
     return batch.run_batch_final_pass(
         UID,
@@ -786,7 +786,7 @@ def run_prod(lane):
         {},
         load_prints=lambda *a, **kw: {'user': [1.0, 0.0]},
         apply=stage.apply_speaker_resolution,
-        requeue=outbox.mark,
+        requeue=lambda *args: retry.enqueue(UID, lane.conversation),
     )
 
 
@@ -935,37 +935,15 @@ def test_real_artifact_lifecycle_is_not_a_coverage_failure(prod_shaped, referenc
 
 @pytest.mark.parametrize('distinct_conversations', [False, True])
 def test_slot_saturation_requeues_without_waiting_on_shared_pool(
-    prod_shaped, outbox_state, monkeypatch, distinct_conversations
+    prod_shaped, retry_state, monkeypatch, distinct_conversations
 ):
     import threading
     from concurrent.futures import ThreadPoolExecutor, wait
-    from utils.enrichment import outbox
+    from utils.conversations import final_pass_retry as retry
 
-    rows, tasks = outbox_state
-    real_slot = threading.BoundedSemaphore(1)
-    assert real_slot.acquire()
-    options = []
-
-    class ObservedSlot:
-        def acquire(self, **kwargs):
-            options.append(kwargs)
-            assert kwargs == {'blocking': False}
-            return real_slot.acquire(**kwargs)
-
-        def release(self):
-            real_slot.release()
-
-    monkeypatch.setattr(batch, '_SLOTS', ObservedSlot())
-    # The fake CAS store is serial; retain production's per-row atomicity under
-    # 96 simultaneous callers and test the real durable mark operation.
-    mutate = outbox._mutate
-    lock = threading.Lock()
-
-    def atomic_mutate(*args):
-        with lock:
-            return mutate(*args)
-
-    monkeypatch.setattr(outbox, '_mutate', atomic_mutate)
+    slot = threading.BoundedSemaphore(1)
+    assert slot.acquire()
+    monkeypatch.setattr(batch, '_SLOTS', slot)
     cases = []
     for index in range(96):
         conversation = prod_shaped.conversation.model_copy(deep=True)
@@ -977,82 +955,48 @@ def test_slot_saturation_requeues_without_waiting_on_shared_pool(
         futures = [pool.submit(run_prod, case) for case in cases]
         try:
             done, pending = wait(futures, timeout=5)
-            # Check while the sole slot is still held: no waiter may need it to
-            # return, and unrelated postprocess work must have a free thread.
             assert not pending
             assert pool.submit(lambda: 'available').result(timeout=1) == 'available'
             assert {future.result()['outcome'] for future in done} == {'deferred_slot_busy'}
         finally:
-            real_slot.release()
-    assert len(options) == 96
-    assert not prod_shaped.gpu
-    assert batch_outcome_counts() == before  # deferrals are not terminal results
+            slot.release()
     count = 96 if distinct_conversations else 1
-    assert len(rows) == count and len(tasks) == count
-    assert {row['version'] for row in rows.values()} == {1 if distinct_conversations else 96}
+    assert len(retry_state.rows) == count
+    assert len({(key, row['token']) for key, row in retry_state.wakes}) == count
+    assert {row['attempts'] for row in retry_state.rows.values()} == {0}
+    assert batch_outcome_counts() == before and not prod_shaped.gpu
     cases_by_id = {case.conversation.id: case for case in cases}
-    for key, row in list(rows.items()):
-        assert (
-            outbox.run(
-                key, row['task_token'], lambda uid, cid, language: run_prod(cases_by_id[cid]), now=row['due_at'] + 1
-            )
-            == 'processed'
-        )
-    assert len(prod_shaped.gpu) == count and not rows
+
+    def run_only(uid, cid, scope):
+        with batch.terminal_metrics(False):
+            return run_prod(cases_by_id[cid])
+
+    monkeypatch.setattr(retry, 'run_only', run_only)
+    for key, row in list(retry_state.rows.items()):
+        retry_state.clock[0] = row['due_at'] + 1
+        assert retry.consume(key, row['token'])['outcome'] == 'success'
+    assert len(prod_shaped.gpu) == count
+    assert {row['outcome'] for row in retry_state.rows.values()} == {'success'}
     assert sum(batch_outcome_counts().values()) - sum(before.values()) == count
 
 
-def test_slot_deferral_during_enrichment_keeps_retry_after_current_completion(prod_shaped, outbox_state, monkeypatch):
+def test_slot_deferral_persistence_failure_propagates(prod_shaped, retry_state, monkeypatch):
     import threading
-    from utils.enrichment import outbox
 
-    rows, tasks = outbox_state
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'false')
     slot = threading.BoundedSemaphore(1)
     assert slot.acquire()
     monkeypatch.setattr(batch, '_SLOTS', slot)
-    outbox.mark(UID, prod_shaped.conversation.id, 'en')
-    key = outbox.key(UID, prod_shaped.conversation.id)
-    try:
-
-        def callback(*_):
-            assert run_prod(prod_shaped)['outcome'] == 'deferred_slot_busy'
-
-        assert outbox.run(key, tasks[-1]['task_token'], callback, now=rows[key]['due_at'] + 1) == 'processed'
-        assert rows[key]['version'] == 2 and rows[key]['lease_until'] == 0
-        assert len(tasks) == 2
-    finally:
-        slot.release()
-    assert (
-        outbox.run(key, tasks[-1]['task_token'], lambda *_: run_prod(prod_shaped), now=rows[key]['due_at'] + 1)
-        == 'processed'
+    monkeypatch.setattr(
+        retry_state.store, '_mutate', lambda *a: (_ for _ in ()).throw(RuntimeError('synthetic failure'))
     )
-    assert prod_shaped.gpu and not rows
-
-
-@pytest.mark.parametrize('failure_point', ['persist', 'enqueue'])
-def test_slot_deferral_custody_failure_propagates(prod_shaped, outbox_state, monkeypatch, failure_point):
-    import threading
-    from utils.enrichment import outbox
-
-    rows, _ = outbox_state
-    slot = threading.BoundedSemaphore(1)
-    assert slot.acquire()
-    monkeypatch.setattr(batch, '_SLOTS', slot)
-
-    def fail(*args, **kwargs):
-        raise RuntimeError('synthetic enqueue or persistence failure')
-
-    monkeypatch.setattr(outbox, '_mutate' if failure_point == 'persist' else '_enqueue', fail)
     before = batch_outcome_counts()
     try:
         with pytest.raises(RuntimeError):
             run_prod(prod_shaped)
     finally:
         slot.release()
-    assert bool(rows) == (failure_point == 'enqueue')  # lost enqueue retains sweep-repairable debt
+    assert not retry_state.rows
     assert sum(batch_outcome_counts().values()) - sum(before.values()) == 1
-    assert not prod_shaped.gpu
 
 
 def batch_outcome_counts():
@@ -1360,8 +1304,10 @@ def test_enrichment_resolver_passes_retry_custody_to_batch(lane, monkeypatch):
     received = []
 
     from utils.conversations import processing_speakers
-    from utils.enrichment import outbox
+    from utils.conversations import final_pass_retry as retry
 
+    enqueued = []
+    monkeypatch.setattr(retry, 'enqueue', lambda uid, c: enqueued.append((uid, c)))
     original = batch.run_batch_final_pass
 
     def run(*args, **kwargs):
@@ -1370,7 +1316,9 @@ def test_enrichment_resolver_passes_retry_custody_to_batch(lane, monkeypatch):
 
     monkeypatch.setattr(batch, 'run_batch_final_pass', run)
     assert processing_speakers.resolve_speakers_for_processing(UID, lane.conversation)
-    assert received == [outbox.mark] and lane.gpu
+    assert len(received) == 1 and lane.gpu
+    received[0](UID, lane.conversation.id, 'en')
+    assert enqueued == [(UID, lane.conversation)]
 
 
 def test_missing_retry_custody_never_silently_drops_busy_pass(prod_shaped, monkeypatch):
@@ -1386,3 +1334,43 @@ def test_missing_retry_custody_never_silently_drops_busy_pass(prod_shaped, monke
             )
     finally:
         slot.release()
+
+
+def test_shared_units_count_one_conversation_and_each_omitted_unit(prod_shaped, monkeypatch):
+    lane = prod_shaped
+    for unit in ('unit-b', 'unit-c'):
+        segment = lane.conversation.transcript_segments[0].model_copy(deep=True)
+        segment.id, segment.speaker_id_scope = unit + '-segment', 'final:batch:' + unit
+        lane.conversation.transcript_segments.append(segment)
+
+    def reference(store, uid, unit, cid):
+        if unit != 'unit-c':
+            raise references.ReferenceUnavailable('skipped_shared_unit')
+        return (
+            replace(lane.items['unit-a'], segment_id='unit-c'),
+            'gs://fake/result#1',
+            lane.binding,
+            ProjectionPolicy(),
+        )
+
+    monkeypatch.setattr(batch, 'load_reference', reference)
+    monkeypatch.setattr(
+        lane.artifacts, 'load_result', lambda *a, **kw: pytest.fail('whole-pass skip must read no artifacts')
+    )
+    original = lane.conversation.model_copy(deep=True)
+
+    def counts():
+        return {
+            sample.labels['reason']: sample.value
+            for metric in batch.UNIT_SKIPS.collect()
+            for sample in metric.samples
+            if sample.name.endswith('_total')
+        }
+
+    before_units, before_conversations = counts(), batch_outcome_counts()
+    assert run_prod(lane)['outcome'] == 'skipped_shared_unit'
+    assert lane.conversation == original and not lane.gpu
+    after = counts()
+    assert after['shared_unit'] - before_units.get('shared_unit', 0) == 2
+    assert after['blocked_by_shared_unit'] - before_units.get('blocked_by_shared_unit', 0) == 1
+    assert sum(batch_outcome_counts().values()) - sum(before_conversations.values()) == 1

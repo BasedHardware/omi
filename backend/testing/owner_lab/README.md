@@ -188,15 +188,46 @@ The pass cannot yet trim their audio with sufficient ownership precision.
 Recurring centroids must have at least one word assigned to an updated segment
 in this conversation; the recurring-profile evidence thresholds still apply.
 
-Slot admission never waits in the shared postprocess pool. A busy call durably
-marks the existing enrichment outbox (`sync_reprocess_outbox`) through a
-callback supplied by conversation processing and returns
-`deferred_slot_busy`; its named Cloud Task and repair sweep retain retry custody,
-including a mark made during an active enrichment lease. Enrichment replay runs
-speaker resolution again. A failed mark/enqueue propagates to the delivery
-caller rather than acknowledging lost work. Invocations that run the pass or
-fail to preserve retry custody emit one terminal
-`omi_transcription_final_pass_total` outcome. Ineligible calls and durable slot
-deferrals are outside that contract; deferrals emit fallback
-telemetry. The replay suppresses Prometheus writes inside `reproduce()`, so it
-cannot change the default registry's counters, histograms or label children.
+Slot admission never waits in the shared postprocess pool. A busy call creates
+its own content-free obligation in
+`batch_pipeline_<stage>_speaker_final_pass_outbox`. Named Cloud Tasks (`bfp-...`)
+use the existing enrichment/sync task bindings, with the distinct
+`batch_final_pass` kind. This does not mark `sync_reprocess_outbox` or rerun
+notes, memories, integrations, or full enrichment.
+
+One immutable unit/segment membership has at most four retry claims, with
+exponential backoff (30/60/120/240 seconds, multiplied by random 0.5–1.5 jitter).
+Duplicate wakes are fenced by token and lease. Attempts survive expired leases,
+and closed receipts cannot reopen or reset the cap. Sustained contention closes
+once with `skipped_slot_exhausted`; other exhausted retries use
+`skipped_retry_exhausted`. The existing enrichment maintenance schedule repairs
+lost wakes in the dedicated collection. Existing queued tasks keep their token;
+repair checks advance separately so queued work cannot pin discovery.
+
+The retry reloads the current conversation and manual receipt, runs only
+`run_batch_final_pass`, and uses the existing revision-fenced identity-only
+persistence transaction. Retried inference abstains from recurring-profile
+learning: that learner stamps the conversation and would invalidate the identity
+CAS. Normal admitted passes retain recurring learning. A changed revision defers
+within the same cap. The
+consumer records a terminal result only after settlement; duplicate deliveries
+cannot count it again. Ineligible calls and durable deferrals remain outside
+the terminal counter contract. The replay suppresses Prometheus writes inside
+`reproduce()`, including counters, histograms and lazy label children.
+
+The whole-pass shared-unit skip remains the precision-first default. No partial
+processing or recurring learning occurs when any reference is shared or
+unsettled. `omi_transcription_final_pass_total{lane="batch",
+outcome="skipped_shared_unit"}` counts one conversation attempt.
+`omi_transcription_final_pass_unit_skips_total` counts each omitted unit with
+code-owned reasons: `shared_unit` for rejected references, and
+`blocked_by_shared_unit` for the other units omitted with that conversation.
+The backend-integration GMP keep-list retains both counters.
+
+The speaker retry/outbox dependency stays out of the **GPU batch-pipeline
+worker** import closure. Pusher's finalizer reaches it through
+`process_conversation` → `processing_speakers`. Pusher's source closure and its
+checked-in `backend/pusher/pylock.toml` were verified: Firestore 2.20.0, Cloud
+Tasks 2.16.4, and Prometheus 0.21.1 cover the dedicated outbox. Both the role and
+legacy Pusher source surfaces passed closure validation; the role image installs
+that Pusher lock.

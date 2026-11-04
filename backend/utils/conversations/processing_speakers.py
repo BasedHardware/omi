@@ -7,6 +7,8 @@ keep the full enrichment scheduler dependency out of that shared layer.
 
 def resolve_speakers_for_processing(uid, conversation):
     from utils.conversations import speaker_resolution
-    from utils.enrichment.outbox import mark
+    from utils.conversations.final_pass_retry import enqueue
 
-    return speaker_resolution.resolve_speakers_for_processing(uid, conversation, requeue_final_pass=mark)
+    return speaker_resolution.resolve_speakers_for_processing(
+        uid, conversation, requeue_final_pass=lambda *args: enqueue(uid, conversation)
+    )

@@ -65,7 +65,10 @@ def test_already_buffered_redis_pipeline_cannot_write():
         Pipeline.execute(SimpleNamespace(command_stack=[(('SET', 'synthetic-key', 'value'), {})]))
 
 
-def test_sync_scrape_keeps_batch_final_pass_terminal_metric():
+@pytest.mark.parametrize(
+    'metric', ['omi_transcription_final_pass_total', 'omi_transcription_final_pass_unit_skips_total']
+)
+def test_sync_scrape_keeps_batch_final_pass_terminal_metric(metric):
     import re
     from pathlib import Path
     import yaml
@@ -73,7 +76,7 @@ def test_sync_scrape_keeps_batch_final_pass_terminal_metric():
     config = yaml.safe_load((Path(__file__).resolve().parents[2] / 'deploy/cloud_run_gmp_sync.yaml').read_text())
     rules = config['spec']['endpoints'][0]['metricRelabeling']
     for rule in rules:
-        values = ['omi_transcription_final_pass_total' if label == '__name__' else '' for label in rule['sourceLabels']]
+        values = [metric if label == '__name__' else '' for label in rule['sourceLabels']]
         matches = re.fullmatch(rule['regex'], ';'.join(values)) is not None
         assert not ((rule['action'] == 'keep' and not matches) or (rule['action'] == 'drop' and matches))
 

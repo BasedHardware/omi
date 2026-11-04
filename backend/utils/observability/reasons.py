@@ -301,6 +301,8 @@ class BatchFinalPassOutcome(StrEnum):
     SKIPPED_MERGED = 'skipped_merged'
     SHARED_UNIT = 'skipped_shared_unit'
     REQUEUE = 'failed_requeue'
+    SLOT_EXHAUSTED = 'skipped_slot_exhausted'
+    RETRY_EXHAUSTED = 'skipped_retry_exhausted'
     SKIPPED_NO_CHANGES = 'skipped_no_changes'
     TOO_LONG = 'failed_too_long'
     READ_BUDGET = 'failed_read_budget'
