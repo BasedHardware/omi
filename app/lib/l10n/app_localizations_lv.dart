@@ -15000,5 +15000,42 @@ class AppLocalizationsLv extends AppLocalizations {
   String get liveAudioSavedDetail => 'Runātāji un galīgā transkripcija šeit parādīsies augšupielādes laikā.';
 
   @override
+  String get speakerWholeRecording => 'Lietot visam ierakstam';
+
+  @override
+  String get speakerSelectionChanged => 'Runātājs ir mainījies. Atlasiet rindas vēlreiz.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'Ieraksts ir pārāk liels. Atlasiet mazāk rindu vienā sarunā.',
+        'partial': 'Dažas rindas ir saglabātas. Atlasiet atlikušās un mēģiniet vēlreiz.',
+        'other': 'Dažas rindas ir saglabātas. Atlasiet atlikušās un mēģiniet vēlreiz.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerRecordingCoverage(String state, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Pārdēvētas $count rindas tikai pieejamajās sarunās.',
+      one: 'Pārdēvētas 1 rindas tikai pieejamajās sarunās.',
+    );
+    String _temp1 = intl.Intl.selectLogic(
+      state,
+      {
+        'scope': 'Citas šīs balss rindas (ieraksta aptvērums nav apstiprināts)',
+        'other': '$_temp0',
+      },
+    );
+    return '$_temp1';
+  }
+
+  @override
   String get episodeFinishingUp => 'Pabeidzam…';
 }

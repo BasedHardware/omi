@@ -14753,5 +14753,42 @@ class AppLocalizationsJa extends AppLocalizations {
   String get liveAudioSavedDetail => 'アップロードが進むと、話者と最終的な文字起こしがここに表示されます。';
 
   @override
+  String get speakerWholeRecording => '録音全体に適用';
+
+  @override
+  String get speakerSelectionChanged => '話者が変わりました。行を選び直してください。';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': '録音が大きすぎます。1つの会話で選択する行を減らしてください。',
+        'partial': '一部の行は保存されました。残りの行を選択して、もう一度お試しください。',
+        'other': '一部の行は保存されました。残りの行を選択して、もう一度お試しください。',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerRecordingCoverage(String state, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '利用可能な会話内の$count行のみ名前を変更しました。',
+      one: '利用可能な会話内の1行のみ名前を変更しました。',
+    );
+    String _temp1 = intl.Intl.selectLogic(
+      state,
+      {
+        'scope': 'この声の他の行（録音全体の範囲は未確認）',
+        'other': '$_temp0',
+      },
+    );
+    return '$_temp1';
+  }
+
+  @override
   String get episodeFinishingUp => '仕上げ中…';
 }

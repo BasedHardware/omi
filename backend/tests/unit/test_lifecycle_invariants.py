@@ -26,16 +26,57 @@ METRIC_MODULES = (
 )
 
 
+def phase_metric_gauge_names(tree):
+    """Expand literal instances using only Gauge suffixes in the real factory."""
+    factory = ast.parse(function_source('utils/lifecycle_metrics.py:PhaseMetrics.__init__'))
+    suffixes = set()
+    for node in ast.walk(factory):
+        if not (
+            isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == 'Gauge' and node.args
+        ):
+            continue
+        name = node.args[0]
+        if (
+            isinstance(name, ast.BinOp)
+            and isinstance(name.op, ast.Add)
+            and isinstance(name.left, ast.Name)
+            and name.left.id == 'prefix'
+            and isinstance(name.right, ast.Constant)
+            and isinstance(name.right.value, str)
+        ):
+            suffixes.add(name.right.value)
+    prefixes = {
+        node.args[0].value
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == 'PhaseMetrics'
+        and node.args
+        and isinstance(node.args[0], ast.Constant)
+        and isinstance(node.args[0].value, str)
+    }
+    return {prefix + suffix for prefix in prefixes for suffix in suffixes}
+
+
 @lru_cache(maxsize=1)
 def gauge_names():
     result = set()
     for module in METRIC_MODULES:
         tree = ast.parse((BACKEND / module).read_text())
+        result.update(phase_metric_gauge_names(tree))
         for node in ast.walk(tree):
             if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == 'Gauge' and node.args:
                 if isinstance(node.args[0], ast.Constant):
                     result.add(node.args[0].value)
     return result
+
+
+def test_phase_metric_inventory_requires_declared_prefix_and_gauge_suffix():
+    tree = ast.parse("PhaseMetrics('declared', []); Counter('made_up_prefix', [])")
+    names = phase_metric_gauge_names(tree)
+    assert 'declared_new_oldest_age_seconds' in names
+    assert 'made_up_prefix_new_oldest_age_seconds' not in names
+    assert 'declared_made_up_suffix' not in names
 
 
 @lru_cache(maxsize=1)

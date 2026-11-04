@@ -14959,5 +14959,42 @@ class AppLocalizationsEt extends AppLocalizations {
   String get liveAudioSavedDetail => 'Kõnelejad ja lõplik transkriptsioon ilmuvad siia üleslaadimise ajal.';
 
   @override
+  String get speakerWholeRecording => 'Rakenda kogu salvestisele';
+
+  @override
+  String get speakerSelectionChanged => 'Kõneleja muutus. Vali read uuesti.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'Salvestis on liiga suur. Vali ühes vestluses vähem ridu.',
+        'partial': 'Mõned read salvestati. Vali ülejäänud ja proovi uuesti.',
+        'other': 'Mõned read salvestati. Vali ülejäänud ja proovi uuesti.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerRecordingCoverage(String state, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Nimetati ümber $count rida ainult saadaolevates vestlustes.',
+      one: 'Nimetati ümber 1 rida ainult saadaolevates vestlustes.',
+    );
+    String _temp1 = intl.Intl.selectLogic(
+      state,
+      {
+        'scope': 'Selle hääle muud read (salvestise ulatus kinnitamata)',
+        'other': '$_temp0',
+      },
+    );
+    return '$_temp1';
+  }
+
+  @override
   String get episodeFinishingUp => 'Lõpetamine…';
 }

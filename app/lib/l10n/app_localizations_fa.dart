@@ -14961,5 +14961,42 @@ class AppLocalizationsFa extends AppLocalizations {
   String get liveAudioSavedDetail => 'گویندگان و متن نهایی هنگام بارگذاری اینجا نمایش داده می‌شوند.';
 
   @override
+  String get speakerWholeRecording => 'اعمال به کل ضبط';
+
+  @override
+  String get speakerSelectionChanged => 'گوینده تغییر کرده است. خط‌ها را دوباره انتخاب کنید.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'ضبط خیلی بزرگ است. خط‌های کمتری از یک گفتگو انتخاب کنید.',
+        'partial': 'بعضی خط‌ها ذخیره شدند. خط‌های باقی‌مانده را انتخاب و دوباره تلاش کنید.',
+        'other': 'بعضی خط‌ها ذخیره شدند. خط‌های باقی‌مانده را انتخاب و دوباره تلاش کنید.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerRecordingCoverage(String state, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'نام $count خط فقط در گفتگوهای موجود تغییر کرد.',
+      one: 'نام 1 خط فقط در گفتگوهای موجود تغییر کرد.',
+    );
+    String _temp1 = intl.Intl.selectLogic(
+      state,
+      {
+        'scope': 'خطوط دیگر این صدا (پوشش ضبط تأیید نشده)',
+        'other': '$_temp0',
+      },
+    );
+    return '$_temp1';
+  }
+
+  @override
   String get episodeFinishingUp => 'در حال اتمام…';
 }
