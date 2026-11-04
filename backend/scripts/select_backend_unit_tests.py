@@ -20,6 +20,7 @@ if str(BACKEND_DIR) not in sys.path:
 
 from tests.support.firestore_serving_query_inventory import is_serving_query_inventory_path  # noqa: E402
 from tests.support.background_task_ratchet_scope import is_background_task_ratchet_path  # noqa: E402
+from tests.support.sync_legacy_ratchet_scope import is_sync_legacy_ratchet_path  # noqa: E402
 
 FULL_TEST_ROOTS = (
     BACKEND_DIR / 'tests' / 'unit',
@@ -201,6 +202,17 @@ BACKGROUND_TASK_RATCHET_TESTS = (
     'tests/unit/test_background_task_ratchet.py',
     'tests/unit/test_revision_drain_harness.py',
 )
+
+# Legacy-sync import ratchet: no new importer of the retiring legacy sync
+# modules (plan C class (a)) may slip past changed-file CI and only fail the
+# post-merge --all run. Selection uses the shared scope predicate
+# (tests/support/sync_legacy_ratchet_scope.py) so the ratchet runs for every
+# importer path its walk can scan, mirroring the background-task ratchet.
+# Only the ratchet itself: test_workflow_contracts.py stays out of this
+# cross-cutting set — it covers the background-task ratchet and other
+# workflows, and is selected by its own declared contract sources
+# (testing/workflow_contracts.json) plus the backend/testing/ full-run prefix.
+SYNC_LEGACY_RATCHET_TESTS = ('tests/unit/test_sync_legacy_import_ratchet.py',)
 
 # Shared with the canonical release manifest's named trigger. Do not copy the
 # inventory's directory exclusions into a second set of workflow path globs.
@@ -674,6 +686,8 @@ def tests_for_changed_paths(changed_paths: list[str], all_tests: list[str]) -> t
     # module. Keep the source fallback unchanged while always running its guard.
     if any(path.startswith(('backend/database/', 'backend/utils/')) and path.endswith('.py') for path in changed_paths):
         selected.update(test for test in LIFECYCLE_INVARIANT_TESTS if test in all_tests)
+    if any(is_sync_legacy_ratchet_path(path) for path in changed_paths):
+        selected.update(test for test in SYNC_LEGACY_RATCHET_TESTS if test in all_tests)
     if any(path.startswith(BATCH_STAGE_ENV_RATCHET_PREFIXES) for path in changed_paths):
         selected.update(test for test in BATCH_STAGE_ENV_RATCHET_TESTS if test in all_tests)
     if any(path.startswith(FLAG_BUDGET_PREFIXES) for path in changed_paths):
