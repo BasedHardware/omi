@@ -168,11 +168,14 @@ def upload_held_audio(
 
 
 def hold_started_at(metadata: dict) -> int | None:
-    """Recording start from plaintext hold metadata, before it is encrypted."""
+    """Stored recording start; raw metadata remains the capture identity."""
     value = metadata.get('timestamp')
-    if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
         return None
-    return int(value)
+    offset = metadata.get('early_capture_offset', 0.0)
+    if isinstance(offset, (int, float)) and not isinstance(offset, bool):
+        value -= offset
+    return int(value) if value > 0 else None
 
 
 def hold_manifest(fields: dict, seconds: float, now: float, started_at: int | None) -> dict:
@@ -568,6 +571,7 @@ async def hold_capture_if_exhausted(
     *,
     receipts: dict | None = None,
     source_frame_maps: dict | None = None,
+    early_capture_offsets: dict[str, float] | None = None,
     admission: dict | None = None,
     dispatch_path: DispatchPath = DispatchPath.SYNC_V1,
     **context: Any,
@@ -593,6 +597,11 @@ async def hold_capture_if_exhausted(
                 'full_capture': True,
                 'file_name': Path(path).name,
                 'source_frame_map': (source_frame_maps or {}).get(path),
+                **(
+                    {'early_capture_offset': early_capture_offsets[path]}
+                    if early_capture_offsets and path in early_capture_offsets
+                    else {}
+                ),
             },
             allowance.reason,
             receipt,

@@ -7,6 +7,13 @@ Run this explicit, local-only gauntlet when changing the listen WebSocket,
 backend/testing/listen_pusher_stack/run.sh --keep
 ```
 
+On a loaded development host, `--startup-timeout 120` gives each owned process
+up to 120 seconds to bind its loopback port. This bounded option accepts 20–300
+seconds and leaves the normal 20-second floor (45 seconds for backend/worker)
+unchanged. It does not alter scenario assertions or production settings.
+The live-client restart scenario waits for its owned pusher in a worker thread
+so a slow import cannot block the harness WebSocket's ping/pong processing.
+
 Prerequisites are the backend virtual environment (`backend/scripts/sync-python-deps.sh`),
 the root Node dependencies (`npm ci`), Redis, and Java 21+. The runner discovers
 Homebrew's `openjdk@21` automatically when `java` is not already on `PATH` and

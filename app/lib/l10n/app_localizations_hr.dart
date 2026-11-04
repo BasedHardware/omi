@@ -15004,4 +15004,7 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Govornici i konačni transkript pojavit će se ovdje tijekom prijenosa.';
+
+  @override
+  String get episodeFinishingUp => 'Dovršavanje…';
 }

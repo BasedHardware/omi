@@ -14970,4 +14970,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Người nói và bản chép cuối cùng sẽ xuất hiện ở đây khi tải lên.';
+
+  @override
+  String get episodeFinishingUp => 'Đang hoàn tất…';
 }

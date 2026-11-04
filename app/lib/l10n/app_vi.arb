@@ -4523,5 +4523,6 @@
     "episodeCoversUpTo": "Đến {time} · ghi chú đầy đủ khi kết thúc",
     "liveTranscribedUpTo": "Đã chép đến {time}",
     "liveAudioSaved": "Đã lưu {duration}",
-    "liveAudioSavedDetail": "Người nói và bản chép cuối cùng sẽ xuất hiện ở đây khi tải lên."
+    "liveAudioSavedDetail": "Người nói và bản chép cuối cùng sẽ xuất hiện ở đây khi tải lên.",
+    "episodeFinishingUp": "Đang hoàn tất…"
 }

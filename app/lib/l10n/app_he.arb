@@ -11946,5 +11946,6 @@
     "episodeCoversUpTo": "מכסה עד {time} · הערות מלאות בסיום",
     "liveTranscribedUpTo": "תומלל עד {time}",
     "liveAudioSaved": "{duration} נשמרו",
-    "liveAudioSavedDetail": "הדוברים והתמליל הסופי יופיעו כאן במהלך ההעלאה."
+    "liveAudioSavedDetail": "הדוברים והתמליל הסופי יופיעו כאן במהלך ההעלאה.",
+    "episodeFinishingUp": "מסיימים…"
 }

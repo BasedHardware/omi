@@ -149,7 +149,7 @@ rates, including Japanese and minority-language switches. Unit tests with fake
 classifiers do not establish ASR quality.
 
 The default-on
-`omi_listen_server_batch_suppression_total{decision,reason,client_platform}`
+`omi_listen_server_batch_suppression_total{decision,reason,client_platform,language}`
 counts each `suppress_live` decision at STT initialization, including retries and
 reinitializations. `decision` is `suppressed|live`; reasons are
 `suppressed|language_auto|language_unsupported|profile_mismatch|private_sync_off|

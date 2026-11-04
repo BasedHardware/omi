@@ -4523,5 +4523,6 @@
     "episodeCoversUpTo": "Katab kuni {time} · täielikud märkmed lõpus",
     "liveTranscribedUpTo": "Transkribeeritud kuni {time}",
     "liveAudioSaved": "{duration} salvestatud",
-    "liveAudioSavedDetail": "Kõnelejad ja lõplik transkriptsioon ilmuvad siia üleslaadimise ajal."
+    "liveAudioSavedDetail": "Kõnelejad ja lõplik transkriptsioon ilmuvad siia üleslaadimise ajal.",
+    "episodeFinishingUp": "Lõpetamine…"
 }

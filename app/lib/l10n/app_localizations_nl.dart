@@ -15007,4 +15007,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Sprekers en het definitieve transcript verschijnen hier tijdens het uploaden.';
+
+  @override
+  String get episodeFinishingUp => 'Afronden…';
 }

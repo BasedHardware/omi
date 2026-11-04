@@ -1,5 +1,10 @@
 # Batch projection and timeliness alarms
 
+The all-epoch compute-queue alarm and bounded-scan blindness page are in
+`../alerts/batch-queue-safety.json`; see
+`../../../docs/runbooks/batch-queue-safety.md`. They are independent of the
+epoch-scoped delivery rules below. They do not waive held recovery or custody.
+
 `alerts.yaml` holds the projection-obligation PrometheusRule. Prod runs no Alertmanager, so that file is a record,
 not a live route. Live alerts are Grafana-managed rules in `../alerts/*.json`.
 
@@ -53,19 +58,25 @@ The metric is alert-only. No scheduler, ramp, hard-3 rollback trigger or gate re
 
 ### Apply (lead)
 
-The rules live in `../pending/batch-timeliness.json` until the series exist in prod, because the monitoring
-contracts reject rules that read metrics missing from `metric-inventory.prod.json`.
+The producer is now present in prod and the measured metric inventory includes its series. The three rules
+live in `../alerts/batch-timeliness.json`, in the combined export and the existing `live-alert-gate.json` import
+set. Gate changes trigger the existing metrics-egress workflow; no workflow change is needed. A committed
+definition is not evidence that production Grafana has imported it.
 
-1. Deploy a batch worker image that contains this change.
+1. Deploy the batch worker image and queue-age guard chart containing this fix **before** importing any
+   queue-safety pages. Keep the audited worker min 6 / max 12 bounds.
 2. Confirm in Prometheus that `max(omi_batch_timeliness_observed_at_seconds) > 0` and that
    `omi_batch_timeliness_samples_total{outcome="ok"}` increases.
-3. Move the three rule objects from `../pending/batch-timeliness.json` into `../alerts/batch-timeliness.json` and append
-   them to `../alert-rules.json`. Refresh `metric-inventory.prod.json` with its documented generator, then run the
-   monitoring contract tests.
-4. Import with the documented Grafana rule provisioning path (`--apply --backup-file <new-file>`).
+3. Run the monitoring contracts. Dispatch the existing metrics-egress workflow for production at the reviewed
+   main SHA, or use the documented Grafana provisioning path (`--apply --backup-file <new-file>`).
+4. Read back every gated UID, its definition, unpaused state and receiver; distinguish import proof from actual
+   notification-delivery proof.
 
-All three rules are agent tier: Grafana keeps their state, and Telegram stays muted (`omi-tier-silent`). Change `tier`
-to `page` only if David wants the alarm on his phone.
+`omi-batch-unit-unpublished-2h` is page tier with human audience and no agent mute interval: it uses the existing
+Telegram receiver. The stale and truncated-scan diagnostics remain agent tier. The independent queue-safety blind
+rule is page tier. The single lateness rule combines the new-cohort delivery legs with all-epoch active
+compute commitments. Each source has its own freshness gate; no separate queue lateness UID duplicates it.
+No contact point, secret or notification-policy tree is changed.
 
 Rollback: set `BATCH_TIMELINESS_ALARM_ENABLED=false` on the worker (gauges freeze and the stale rule fires), or pause
 the three Grafana rules. The index step: merge triggers the Firestore index reconcile; approve its prod job and wait

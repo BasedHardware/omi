@@ -8,6 +8,14 @@ set -euo pipefail
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 cd "$ROOT"
 
+# Do not pass a caller's repository selection to nested fixture Git commands.
+# GIT_NAMESPACE is repository-scoped but absent from Git's local-env-vars list.
+GIT_LOCAL_ENV_VARS="$(git rev-parse --local-env-vars)"
+for git_env_var in $GIT_LOCAL_ENV_VARS GIT_NAMESPACE; do
+  unset "$git_env_var"
+done
+unset GIT_LOCAL_ENV_VARS git_env_var
+
 # shellcheck source=dev-harness/_resolve_python.sh
 source scripts/dev-harness/_resolve_python.sh
 PYTHON_BIN="$(dev_harness_python)"

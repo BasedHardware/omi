@@ -186,7 +186,7 @@ async def test_cancelled_rollover_keeps_entire_pristine_drain(monkeypatch):
 def test_decoder_encoding_failures_have_specific_type(monkeypatch, blob, compressed):
     monkeypatch.setattr(db.encryption, 'decrypt', lambda value, _owner: value)
     with pytest.raises(db.TranscriptSegmentsDecodeError, match='undecodable transcript_segments'):
-        db._decode_transcript_segments_blob('synthetic', blob, compressed)
+        db.decode_transcript_segments_blob('synthetic', blob, compressed)
 
 
 @pytest.mark.asyncio
@@ -387,7 +387,7 @@ def test_nested_json_is_a_decoder_failure_and_remains_finalizable(monkeypatch):
     blob = _nested_transcript_blob()
     monkeypatch.setattr(db.encryption, 'decrypt', lambda value, _owner: value)
     with pytest.raises(db.TranscriptSegmentsDecodeError) as caught:
-        db._decode_transcript_segments_blob('synthetic', blob, False)
+        db.decode_transcript_segments_blob('synthetic', blob, False)
     assert isinstance(caught.value.__cause__, RecursionError)
     # This is the lifecycle's real content predicate. It must admit recovery
     # without interpreting malformed data as empty or raising again.

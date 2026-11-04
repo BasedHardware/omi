@@ -14980,4 +14980,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'اپ لوڈ کے ساتھ مقررین اور حتمی ٹرانسکرپٹ یہاں آئیں گے۔';
+
+  @override
+  String get episodeFinishingUp => 'مکمل کیا جا رہا ہے…';
 }

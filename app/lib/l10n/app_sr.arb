@@ -11946,5 +11946,6 @@
     "episodeCoversUpTo": "Покрива до {time} · потпуне белешке по завршетку",
     "liveTranscribedUpTo": "Транскрибовано до {time}",
     "liveAudioSaved": "Сачувано {duration}",
-    "liveAudioSavedDetail": "Говорници и коначни транскрипт појавиће се овде током отпремања."
+    "liveAudioSavedDetail": "Говорници и коначни транскрипт појавиће се овде током отпремања.",
+    "episodeFinishingUp": "Завршавање…"
 }

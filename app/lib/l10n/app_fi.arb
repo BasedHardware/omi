@@ -4523,5 +4523,6 @@
     "episodeCoversUpTo": "Kattaa klo {time} asti · täydet muistiinpanot lopuksi",
     "liveTranscribedUpTo": "Litteroitu klo {time} asti",
     "liveAudioSaved": "{duration} tallennettu",
-    "liveAudioSavedDetail": "Puhujat ja lopullinen litterointi tulevat tähän latauksen edetessä."
+    "liveAudioSavedDetail": "Puhujat ja lopullinen litterointi tulevat tähän latauksen edetessä.",
+    "episodeFinishingUp": "Viimeistellään…"
 }

@@ -4523,5 +4523,6 @@
     "episodeCoversUpTo": "涵盖至 {time} · 结束后提供完整笔记",
     "liveTranscribedUpTo": "已转录至 {time}",
     "liveAudioSaved": "已保存 {duration}",
-    "liveAudioSavedDetail": "上传时，说话人和最终转录内容会显示在这里。"
+    "liveAudioSavedDetail": "上传时，说话人和最终转录内容会显示在这里。",
+    "episodeFinishingUp": "即将完成…"
 }

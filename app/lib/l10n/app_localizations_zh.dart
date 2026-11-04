@@ -14735,4 +14735,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => '上传时，说话人和最终转录内容会显示在这里。';
+
+  @override
+  String get episodeFinishingUp => '即将完成…';
 }

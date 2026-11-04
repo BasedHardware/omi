@@ -137,7 +137,6 @@ def test_screen_activity_sync_writes_rows_and_embeddings(monkeypatch):
 def test_slow_sync_logs_phase_durations_without_uid(monkeypatch, caplog):
     ticks = iter(range(12))
     monkeypatch.setattr(desktop_screen_crisp, "time", SimpleNamespace(perf_counter=lambda: next(ticks)))
-    monkeypatch.setattr(desktop_screen_crisp, "is_desktop_trial_paywalled", lambda *_: False)
     _entitle(monkeypatch)
     _enable_frame_requests(monkeypatch)
     monkeypatch.setattr(desktop_screen_crisp, "upsert_screen_activity", lambda uid, rows: len(rows))
@@ -280,21 +279,6 @@ def test_screen_activity_vector_treats_canonical_naive_timestamp_as_utc(monkeypa
     assert routes == [(raw_index, 'user-1', {'index_name': vector_db._pinecone_index_name})]
     assert upserts[0]['vectors'][0]['metadata']['uid'] == 'user-1'
     assert upserts[0]["vectors"][0]["metadata"]["timestamp"] == 1785024000
-
-
-@pytest.mark.asyncio
-async def test_screen_activity_rejects_paywalled_desktop_user(monkeypatch):
-    async def run_blocking(_, function, *args):
-        return function(*args)
-
-    monkeypatch.setattr(desktop_screen_crisp, "run_blocking", run_blocking)
-    monkeypatch.setattr(desktop_screen_crisp, "is_desktop_trial_paywalled", lambda uid, platform: True)
-
-    with pytest.raises(HTTPException) as error:
-        await desktop_screen_crisp._authorized_desktop_user("user")
-
-    assert error.value.status_code == 402
-    assert error.value.detail == "trial_expired"
 
 
 def test_a_free_desktop_user_syncs_rows_but_no_vectors(monkeypatch):

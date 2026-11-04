@@ -14999,4 +14999,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Учасники й остаточна транскрипція з\'являться тут під час завантаження.';
+
+  @override
+  String get episodeFinishingUp => 'Завершення…';
 }

@@ -102,6 +102,13 @@ cloud_tasks:
     max_attempts: -1
     min_backoff: 10s
     max_backoff: 300s
+  staging-enrichment-fresh:
+    # Keep the reserved queue contract mirrored with production.
+    max_concurrent_dispatches: 5
+    max_dispatches_per_second: 2
+    max_attempts: -1
+    min_backoff: 10s
+    max_backoff: 300s
   staging-provider-stt:
     # Mirrors prod's provider-stt queue; create_queues.sh made it at 16/5 and the config-train raises it.
     max_concurrent_dispatches: 48

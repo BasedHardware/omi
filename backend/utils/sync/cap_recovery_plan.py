@@ -55,6 +55,7 @@ async def ensure_plan(
             'source_position_map': source_maps.get(path),
             **({'recording_session_id': meta['recording_session_id']} if meta.get('recording_session_id') else {}),
             'lineage_binding': bindings.get(path, meta.get('lineage_binding')),
+            **({'early_capture_offset': meta['early_capture_offset']} if meta.get('early_capture_offset') else {}),
         }
         if row.get('live_custody_version') == 4:
             from utils.encryption import encrypt

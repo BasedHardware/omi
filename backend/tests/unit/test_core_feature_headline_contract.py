@@ -145,6 +145,19 @@ def test_first_screen_is_exactly_the_agreed_panels():
     assert {p['id'] for p in panels} == {63, 3, 2, 73, 4, 20, 36, 70, *range(80, 88)}
 
 
+def test_home_rows_tile_is_an_average_not_a_success_rate():
+    dashboard = json.loads((MONITORING / 'dashboards/general/omi-core-features.json').read_text())
+    panel = next(p for p in dashboard['panels'] if p.get('title') == 'Home rows / user / day')
+    expr = panel['targets'][0]['expr']
+    assert 'omi_home_rows_user_day_sum_total' in expr
+    assert 'omi_home_rows_user_day_count_total' in expr
+    assert panel['fieldConfig']['defaults']['noValue'] == 'not reporting'
+    assert panel['fieldConfig']['defaults']['thresholds']['steps'] == [{'color': 'text', 'value': None}]
+    # Stays off the locked first screen (panels between the feature-health row and "Is anything stuck?").
+    stuck = next(i for i, p in enumerate(dashboard['panels']) if p['id'] == 27)
+    assert dashboard['panels'].index(panel) > stuck
+
+
 def test_no_panels_overlap_on_the_first_screen_or_inside_any_row():
     dashboard = json.loads((MONITORING / 'dashboards/general/omi-core-features.json').read_text())
     groups = [[p for p in dashboard['panels']]] + [p['panels'] for p in dashboard['panels'] if p.get('panels')]

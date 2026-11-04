@@ -15,7 +15,6 @@ from utils.memory.memory_service import MemoryService
 from utils.executors import db_executor, llm_executor, run_blocking
 from utils.observability.fallback import record_fallback
 from utils.other import endpoints as auth
-from utils.subscription import is_trial_paywalled
 
 router = APIRouter()
 Payload = Dict[str, Any]
@@ -304,8 +303,6 @@ async def extract_knowledge_graph(
     """
     if generated_compute_configured():
         await run_blocking(db_executor, require_generated_compute, uid, 'knowledge_graph')
-    if await run_blocking(db_executor, is_trial_paywalled, uid, 'desktop'):
-        raise HTTPException(status_code=402, detail='trial_expired')
     kg_mod = _knowledge_graph_llm_module()
     resolved_name = body.user_name or await run_blocking(db_executor, get_user_name, uid)
     user_name = (resolved_name or "User").strip() or "User"

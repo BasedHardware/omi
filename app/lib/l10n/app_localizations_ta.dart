@@ -15071,4 +15071,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'பதிவேற்றத்தின் போது பேசுபவர்களும் இறுதி படியெடுப்பும் இங்கே வரும்.';
+
+  @override
+  String get episodeFinishingUp => 'முடிக்கப்படுகிறது…';
 }

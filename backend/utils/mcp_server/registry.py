@@ -70,7 +70,7 @@ _TIMEZONE_INPUT = {
 }
 _FIELDS_INPUT = {
     'oneOf': [{'type': 'array', 'items': {'type': 'string'}}, {'type': 'string'}],
-    'description': 'Return only selected card fields; id is always included. Array or comma-separated names.',
+    'description': 'Return selected card fields; id is retained. Supports structured.title/overview/category/emoji and short aliases, plus discarded. Array or comma-separated names.',
 }
 _SUMMARY_ONLY_INPUT = {
     'type': 'boolean',
@@ -80,6 +80,7 @@ _SUMMARY_ONLY_INPUT = {
 
 _CONVERSATION_CARD_FIELDS: Dict[str, Any] = {
     'source': {'type': ['string', 'null']},
+    'discarded': {'type': 'boolean'},
     'is_call': {'type': ['boolean', 'null']},
     'call_platform': {'type': ['string', 'null']},
     'calendar_event_id': {'type': ['string', 'null']},
@@ -575,6 +576,11 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
         input_schema={
             "type": "object",
             "properties": {
+                "include_participants": {
+                    "type": "boolean",
+                    "default": True,
+                    "description": "Include participant roster metadata; false retains transcript speaker keys.",
+                },
                 "summary_only": _SUMMARY_ONLY_INPUT,
                 "fields": _FIELDS_INPUT,
                 "conversation_id": {"type": "string", "description": "The ID of the conversation to retrieve"},
@@ -616,13 +622,19 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
             "get_conversations or search_conversations returns several relevant ids. Each item returns the "
             "same bounded card and transcript as get_conversation_by_id with its own truncated flag; ids "
             "that resolve to nothing are listed in not_found. When the response budget is hit, later items "
-            "are listed in omitted_ids/next_ids with next_cursor. Budgets shrink evenly before omissions. "
-            "Items also expose the flat list card alongside the released nested conversation."
+            "are listed in omitted_ids/next_ids with next_cursor. Per-item limits are never reduced to fit a batch. "
+            "Each successful item has id and one nested conversation; locked items return id and an error. "
+            "The serialized response cap is 120000 characters; use include_participants=false for lean reads."
         ),
         annotations=_read_annotations("Get conversations by IDs"),
         input_schema={
             "type": "object",
             "properties": {
+                "include_participants": {
+                    "type": "boolean",
+                    "default": True,
+                    "description": "Include participant roster metadata; false keeps speaker keys on transcript segments.",
+                },
                 "summary_only": _SUMMARY_ONLY_INPUT,
                 "fields": _FIELDS_INPUT,
                 "cursor": _CURSOR_INPUT,
@@ -657,8 +669,17 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
                     "type": "array",
                     "items": {
                         "type": "object",
+                        "required": ["id"],
                         "properties": {
+                            "id": {"type": "string"},
                             "conversation": {"type": "object", "properties": dict(_CONVERSATION_CARD_FIELDS)},
+                            "truncated": {"type": "boolean"},
+                            "truncated_fields": {"type": "array", "items": {"type": "string"}},
+                            "error": {
+                                "type": "object",
+                                "required": ["code", "message"],
+                                "properties": {"code": {"type": "string"}, "message": {"type": "string"}},
+                            },
                         },
                     },
                 },

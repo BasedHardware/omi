@@ -15016,4 +15016,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Участники и итоговая расшифровка появятся здесь по мере загрузки.';
+
+  @override
+  String get episodeFinishingUp => 'Завершение…';
 }

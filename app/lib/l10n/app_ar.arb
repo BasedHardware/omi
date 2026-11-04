@@ -4523,5 +4523,6 @@
     "episodeCoversUpTo": "يغطي حتى {time} · الملاحظات الكاملة عند الانتهاء",
     "liveTranscribedUpTo": "تم النسخ حتى {time}",
     "liveAudioSaved": "تم حفظ {duration}",
-    "liveAudioSavedDetail": "ستظهر هنا أسماء المتحدثين والنص النهائي أثناء الرفع."
+    "liveAudioSavedDetail": "ستظهر هنا أسماء المتحدثين والنص النهائي أثناء الرفع.",
+    "episodeFinishingUp": "جارٍ الانتهاء…"
 }

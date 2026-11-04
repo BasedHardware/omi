@@ -106,18 +106,18 @@ test('arbitrarily named SwiftUI file is gated by immutable contents', async () =
   const f = fixture();
   f.github.rest.repos.compareCommitsWithBasehead = async () => ({data:{files:[{filename:'desktop/macos/Desktop/Sources/IntegrationNudges/IntegrationNudgeCard.swift'}],commits:[],total_commits:0}});
   const refs = [];
-  f.github.rest.repos.getContent = async ({ref}) => {refs.push(ref);return {data:{encoding:'base64',size:50,content:Buffer.from('import SwiftUI\nstruct IntegrationNudgeCard: View {}').toString('base64')}};};
+  f.github.rest.repos.getContent = async ({ref}) => {refs.push(ref);return {data:{encoding:'base64',size:Buffer.byteLength('import SwiftUI\nstruct IntegrationNudgeCard: View {}'),content:Buffer.from('import SwiftUI\nstruct IntegrationNudgeCard: View {}').toString('base64')}};};
   await run(f);
   assert.equal(f.statuses.at(-1).state,'failure');
   assert.deepEqual(refs,[f.p.base.sha,f.p.head.sha]);
-  f.github.rest.repos.getContent = async () => ({data:{encoding:'base64',size:40,content:Buffer.from('import Foundation\nclass Service {}').toString('base64')}});
+  f.github.rest.repos.getContent = async () => ({data:{encoding:'base64',size:Buffer.byteLength('import Foundation\nclass Service {}'),content:Buffer.from('import Foundation\nclass Service {}').toString('base64')}});
   await run(f); assert.equal(f.statuses.at(-1).state,'success');
 });
 
 test('arbitrarily named AppKit panel requires approval', async () => {
   const f = fixture();
   f.github.rest.repos.compareCommitsWithBasehead = async () => ({data:{files:[{filename:'desktop/macos/Desktop/Sources/Chrome/CustomChrome.swift'}],commits:[],total_commits:0}});
-  f.github.rest.repos.getContent = async () => ({data:{encoding:'base64',size:60,content:Buffer.from('import AppKit; class CustomChrome: NSPanel {}').toString('base64')}});
+  f.github.rest.repos.getContent = async () => ({data:{encoding:'base64',size:Buffer.byteLength('import AppKit; class CustomChrome: NSPanel {}'),content:Buffer.from('import AppKit; class CustomChrome: NSPanel {}').toString('base64')}});
   await run(f); assert.equal(f.statuses.at(-1).state,'failure');
 });
 
@@ -128,4 +128,50 @@ test('moved trigger still reconciles revoked approval on remaining locked-head P
   await run({...f,headSha:locked});
   assert.equal(f.statuses.at(-1).state,'failure');
   assert.ok(f.statuses.every(s => s.sha === locked));
+});
+
+function largeSwiftFixture(source) {
+  const f = fixture();
+  const filename = 'desktop/macos/Desktop/Sources/Generated/OmiApi.generated.swift';
+  f.github.rest.repos.compareCommitsWithBasehead = async () => ({data:{files:[{filename}],commits:[],total_commits:0}});
+  const body = source + ' '.repeat(1128966 - Buffer.byteLength(source));
+  const sha = require('node:crypto').createHash('sha1').update(`blob ${Buffer.byteLength(body)}\0${body}`).digest('hex');
+  const metadata = {encoding:'none',content:'',size:Buffer.byteLength(body),sha};
+  const refs = [], blobs = [];
+  f.github.rest.repos.getContent = async ({ref,path}) => {
+    refs.push(ref); assert.equal(path,filename); return {data:{...metadata}};
+  };
+  f.github.rest.git = {getBlob:async ({file_sha}) => {
+    blobs.push(file_sha);
+    return {data:{...metadata,encoding:'base64',content:Buffer.from(body).toString('base64')}};
+  }};
+  return {...f,metadata,refs,blobs};
+}
+test('large generated Swift is scanned at both immutable refs without a waiver', async () => {
+  const f = largeSwiftFixture('import Foundation\n');
+  await run(f);
+  assert.equal(f.statuses.at(-1).state,'success');
+  assert.deepEqual(f.refs,[f.p.base.sha,f.p.head.sha]);
+  assert.deepEqual(f.blobs,[f.metadata.sha,f.metadata.sha]);
+  const ui = largeSwiftFixture('import SwiftUI\n');
+  await run(ui);
+  assert.equal(ui.statuses.at(-1).state,'failure');
+  ui.comments[1].push(approve); await run(ui);
+  assert.equal(ui.statuses.at(-1).state,'success');
+});
+test('large Swift rejects absent, oversized, mismatched and truncated blob evidence', async () => {
+  for (const mutation of ['sha','size','encoding','content','404','500','oversize','missing-sha']) {
+    const f = largeSwiftFixture('import Foundation\n');
+    const getBlob = f.github.rest.git.getBlob;
+    f.github.rest.git.getBlob = async args => {
+      if (mutation === '404' || mutation === '500') throw Object.assign(new Error('blob unavailable'),{status:Number(mutation)});
+      const result = await getBlob(args);
+      result.data[mutation] = mutation === 'size' ? 1 : 'invalid';
+      return result;
+    };
+    if (mutation === 'oversize') f.metadata.size = 10000001;
+    if (mutation === 'missing-sha') delete f.metadata.sha;
+    await assert.rejects(run(f));
+    assert.equal(f.statuses.at(-1).state,'failure',mutation);
+  }
 });

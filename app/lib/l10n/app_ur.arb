@@ -11946,5 +11946,6 @@
     "episodeCoversUpTo": "{time} تک · ختم ہونے پر مکمل نوٹس",
     "liveTranscribedUpTo": "{time} تک ٹرانسکرائب ہوا",
     "liveAudioSaved": "{duration} محفوظ",
-    "liveAudioSavedDetail": "اپ لوڈ کے ساتھ مقررین اور حتمی ٹرانسکرپٹ یہاں آئیں گے۔"
+    "liveAudioSavedDetail": "اپ لوڈ کے ساتھ مقررین اور حتمی ٹرانسکرپٹ یہاں آئیں گے۔",
+    "episodeFinishingUp": "مکمل کیا جا رہا ہے…"
 }

@@ -522,6 +522,7 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
         entries = ',\n'.join(
             '        ' + json.dumps({'name': name, 'value': bindings[name]['value']})
             for name in (
+                'HOSTED_LID_API_URL',
                 'DREAM_AGENT_ELIGIBILITY',
                 'DREAM_ON_DEMAND_ENABLED',
                 'DEMAND_PROCESSING_ENABLED',
@@ -543,6 +544,7 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
     payload = re.sub(
         r'("backend-integration":\s*\{.*?"env":\s*\[)',
         r'\1{"name": "BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED", "value": "false"},'
+        r'{"name": "BATCH_PIPELINE_GUARDED_LONG_RECOVERY_MAX_SECONDS", "value": "0"},'
         r'{"name": "BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE", '
         r'"value": "https://backend-integration-dt5lrfkkoa-uc.a.run.app"},',
         payload,
@@ -552,7 +554,10 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
     payload = re.sub(
         r'("backend(?:-sync|-sync-backfill|-integration)?":\s*\{.*?"env":\s*\[)',
         r'\1\n        {"name": "BATCH_PIPELINE_SHADOW_PERCENT", "value": "0"},'
-        r'\n        {"name": "BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR", "value": "200"},',
+        r'\n        {"name": "BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR", "value": "200"},'
+        r'\n        {"name": "BATCH_CONTROL_CANDIDATE_FANOUT", "value": "16"},'
+        r'\n        {"name": "BATCH_ADMISSION_PARALLEL_CALLS", "value": "true"},'
+        r'\n        {"name": "BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS", "value": "10"},',
         payload,
         flags=re.DOTALL,
     )
@@ -1572,9 +1577,8 @@ def test_repo_prod_manifest_rejects_noncanonical_model_order_for_every_surface(t
                     entry['value'] = (
                         'parakeet,modulate-velma-2' if key == 'STT_SERVICE_MODELS' else 'modulate-velma-2,parakeet'
                     )
-                    # The live listener owns its configured streaming order.
-                    if key == 'STT_SERVICE_MODELS' and platform == 'gke' and service_name == 'backend-listen':
-                        continue
+                    # Plain Parakeet is no longer admissible even on the listener;
+                    # reviewed window aliases still have their separate policy.
                     changed_scopes.append((f'prod/{platform}/{service_name}', key))
 
     path = tmp_path / 'runtime_env.yaml'
@@ -3033,7 +3037,7 @@ def test_live_chain_ramp_accepts_policy_tokens_unconditionally():
 def test_non_listener_stt_models_accept_a_policy_ordered_subset():
     from scripts.runtime_env_validation.manifest import _validate_stt_serving_model_policy
 
-    env_map = {'STT_SERVICE_MODELS': {'value': 'modulate-velma-2,soniox,parakeet'}}
+    env_map = {'STT_SERVICE_MODELS': {'value': 'modulate-velma-2,soniox'}}
     config = {'gke': {'pusher': {'env': env_map}}}
     assert _validate_stt_serving_model_policy('prod', config) == []
 
@@ -3414,3 +3418,19 @@ def test_proactivity_v2_posthog_token_is_required_only_off_the_omi_flag_store():
     gateway_env['OMI_FLAGS_SOURCE']['value'] = 'dual'
     errors = manifest_validation._validate_proactivity_v2_flag_hosts('prod', env_config)
     assert [error.scope for error in errors] == ['prod/llm_gateway']
+
+
+def test_guarded_long_recovery_stays_disabled_and_hours_are_inert():
+    manifest = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())
+    for stage in ('dev', 'prod'):
+        services = manifest['environments'][stage]['cloud_run']['services']
+        cap = 'BATCH_PIPELINE_GUARDED_LONG_RECOVERY_MAX_SECONDS'
+        assert {name for name, service in services.items() if cap in service.get('env', {})} == {'backend-integration'}
+        assert services['backend-integration']['env'][cap] == {
+            'value': '0',
+            'category': 'ops_kill',
+        }
+        for name in ('backend-sync', 'backend-sync-backfill'):
+            env = services[name]['env']
+            assert env['SYNC_BACKFILL_GLOBAL_DAILY_HOURS']['value'] == '1665'
+            assert env.get('SYNC_BACKFILL_ADMISSION_LIMITS', {}).get('value', 'false') == 'false'

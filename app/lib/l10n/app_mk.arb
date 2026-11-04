@@ -11946,5 +11946,6 @@
     "episodeCoversUpTo": "Опфаќа до {time} · целосни белешки на крајот",
     "liveTranscribedUpTo": "Транскрибирано до {time}",
     "liveAudioSaved": "Зачувани {duration}",
-    "liveAudioSavedDetail": "Говорниците и конечната транскрипција ќе се појават тука при прикачувањето."
+    "liveAudioSavedDetail": "Говорниците и конечната транскрипција ќе се појават тука при прикачувањето.",
+    "episodeFinishingUp": "Се завршува…"
 }

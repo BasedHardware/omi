@@ -15031,4 +15031,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Vorbitorii și transcrierea finală vor apărea aici pe măsură ce se încarcă.';
+
+  @override
+  String get episodeFinishingUp => 'Se finalizează…';
 }

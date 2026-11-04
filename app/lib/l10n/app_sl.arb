@@ -11946,5 +11946,6 @@
     "episodeCoversUpTo": "Do {time} · popolni zapiski ob koncu",
     "liveTranscribedUpTo": "Prepisano do {time}",
     "liveAudioSaved": "Shranjeno {duration}",
-    "liveAudioSavedDetail": "Govorci in končni prepis se bodo tukaj prikazali med nalaganjem."
+    "liveAudioSavedDetail": "Govorci in končni prepis se bodo tukaj prikazali med nalaganjem.",
+    "episodeFinishingUp": "Zaključevanje…"
 }

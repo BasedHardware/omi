@@ -215,6 +215,10 @@ def test_prod_carries_both_stall_repoints_and_recovery_16_8():
     # Plan C prod activation: the config-train creates C3's enrichment and C8's provider-stt queues before the
     # backend roll that points ENRICHMENT_ROUTE / PROVIDER_STT_TASKS_* at them (draining needs provider_stt_live).
     assert queues['enrichment'].enabled is True
+    fresh = queues['enrichment-fresh']
+    assert fresh.enabled is True
+    assert (fresh.fields['max_concurrent_dispatches'], fresh.fields['max_dispatches_per_second']) == (5, 2.0)
+    assert fresh.fields['max_attempts'] == -1
     provider = queues['provider-stt']
     assert provider.enabled is True
     assert (provider.fields['max_concurrent_dispatches'], provider.fields['max_dispatches_per_second']) == (48, 10.0)

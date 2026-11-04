@@ -18298,6 +18298,10 @@
     "@liveAudioSavedDetail": {
         "description": "Under the saved-audio card's heading."
     },
+    "episodeFinishingUp": "Finishing up…",
+    "@episodeFinishingUp": {
+        "description": "Neutral Home row title while an episode summary is being completed."
+    },
     "@firmwareBatteryRequirement": {
         "description": "Firmware update step title about battery level"
     }

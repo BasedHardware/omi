@@ -93,6 +93,10 @@ spec:
           ports:
             - {name: http, containerPort: 8080}
           env:
+            - {name: BATCH_CONTROL_CANDIDATE_FANOUT, value: {{ .Values.worker.controlCandidateFanout | quote }}}
+            - {name: BATCH_ADMISSION_PARALLEL_CALLS, value: {{ .Values.worker.admissionParallelCalls | quote }}}
+            - {name: BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS, value: {{ .Values.worker.idlePollMaxSeconds | quote }}}
+            - {name: FIRESTORE_READ_LEVERS, value: {{ .Values.worker.firestoreReadLevers | quote }}}
             - {name: BATCH_SHARD_SPREAD_ENABLED, value: {{ .Values.worker.shardSpreadEnabled | quote }}}
             - {name: BATCH_PULL_MULTI_LEASE_ENABLED, value: {{ .Values.worker.pullMultiLeaseEnabled | quote }}}
             - {name: BATCH_PIPELINE_CONTENTION_RETRY_ENABLED, value: {{ .Values.worker.contentionRetryEnabled | quote }}}
