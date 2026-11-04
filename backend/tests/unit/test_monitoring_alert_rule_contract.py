@@ -1371,7 +1371,7 @@ _PROMQL_KEYWORDS = frozenset(
         "timestamp",
     }
 )
-_PROMQL_GROUP_CLAUSE = re.compile(r"\b(?:by|on|without|group_left|group_right)\s*\([^)]*\)")
+_PROMQL_GROUP_CLAUSE = re.compile(r"\b(?:by|on|ignoring|without|group_left|group_right)\s*\([^)]*\)")
 _HISTOGRAM_SUFFIXES = ("_bucket", "_sum", "_count")
 
 
@@ -2090,8 +2090,8 @@ def test_lifecycle_pages_use_new_cohorts_freshness_and_imported_blind_companions
             freshness = 900 if prefix == 'omi_batch_record_pending' else 1200
             page = rules[uid]
             assert page['data'][0]['model']['expr'] == (
-                f'max({prefix}_new_oldest_age_seconds{selector}) and on() '
-                f'((time() - max({prefix}_observed_at_seconds)) < {freshness})'
+                f'max({prefix}_new_oldest_age_seconds{selector} and ignoring(state, lane) '
+                f'(time() - {prefix}_observed_at_seconds < {freshness}))'
             )
             assert page['data'][2]['model']['conditions'][0]['evaluator']['params'] == [threshold]
             assert page['for'] == pending

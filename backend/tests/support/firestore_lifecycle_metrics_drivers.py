@@ -17,6 +17,6 @@ def entries():
             covered_by=tuple(prefix + name for name in ('record_pending', 'nojob', 'enrichment', 'blocked_byok')),
             reason='pure filter builder; terminal observations execute inside the named sampler drivers',
             expect_observed=False,
-            body_digest='0d9e02e0256fca2a42cc5ea34e8ef05cf4aab3f2d25ea8f953575b6d851e5b33',
+            body_digest='51d3e38b20df6800101fbf671471d2538c487d9c702698c6a9ad221c43f89a79',
         ),
     )

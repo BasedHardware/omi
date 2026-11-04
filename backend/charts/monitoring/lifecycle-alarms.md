@@ -12,6 +12,8 @@ The dev/prod Cloud Run exporter allowlists and sync-sidecar keep filter carry
 these four metric families. Their existing ten-minute collection and one-minute
 offset, plus the five-minute producer cadence, need a 20-minute freshness
 budget for enrichment/BYOK. Direct batch samples keep the 15-minute budget.
+Freshness is applied to each observer's value before replicas aggregate, so
+each included age or scan flag has its own recent observation timestamp.
 
 | Source | Page cohort and budget | Bounded observation |
 | --- | --- | --- |
