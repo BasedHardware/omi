@@ -74,8 +74,9 @@ run_proof "summary task recovery, concurrency and expiry" \
 
 # Job-store conformance (legacy-retire lane 12): sim + Firestore emulator legs here; the Postgres leg
 # skips in CI (no Postgres service, decision S6) and is proven locally/staging.
-run_proof "job-store conformance (sim + emulator)" \
-  env OMI_REQUIRE_STORE_BACKENDS="${OMI_REQUIRE_STORE_BACKENDS:-emulator}" \
+# Includes PL-141/142/143 scheduler pull ownership, expiry and abort/restart recovery.
+run_proof "job-store conformance (sim + emulator, including fenced scheduler pulls)" \
+  env "OMI_REQUIRE_STORE_BACKENDS=${OMI_REQUIRE_STORE_BACKENDS:-sim,emulator}" \
   "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_store_conformance.py \
   tests/integration/test_recovery_custody_conformance.py
 
