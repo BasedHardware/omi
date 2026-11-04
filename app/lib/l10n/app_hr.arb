@@ -11949,7 +11949,11 @@
     "liveTranscribedUpTo": "Transkribirano do {time}",
     "liveAudioSaved": "Spremljeno {duration}",
     "liveAudioSavedDetail": "Govornici i konačni transkript pojavit će se ovdje tijekom prijenosa.",
-    "referralGiftTitle": "Poklonite prijatelju mjesec Omi Pro",
-    "referralWebSteps": "1. Podijelite svoju osobnu poveznicu.\n2. Prijatelj se registrira na webu putem vaše poveznice.\n3. Novi računi koji ispunjavaju uvjete dobivaju 30 dana Omi Pro.",
-    "referralAffiliate": "Partnerski program"
+    "referralAffiliate": "Partnerski program",
+    "referralCampaignTerms": "Prijatelji dobivaju 10% popusta na Omi uređaje. Kupnje prva 2 različita prijatelja otključavaju 2 mjeseca Pro, kupnje sljedeća 3 različita prijatelja još 3. Najviše 5 prijatelja i ukupno 5 mjeseci.",
+    "referralMilestone": "{months} mjeseci Pro · {count}/{target} kupnji",
+    "referralClaim": "Preuzmi nagradu",
+    "referralClaimed": "Preuzeto {months} mjeseci Pro",
+    "referralRewardPending": "Nagrada se čuva do kraja plaćene pretplate.",
+    "referralCampaignTitle": "Preporučite Omi. Dobijte besplatni Pro."
 }

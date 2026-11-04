@@ -15000,12 +15000,28 @@ class AppLocalizationsLv extends AppLocalizations {
   String get liveAudioSavedDetail => 'Runātāji un galīgā transkripcija šeit parādīsies augšupielādes laikā.';
 
   @override
-  String get referralGiftTitle => 'Uzdāviniet draugam mēnesi Omi Pro';
-
-  @override
-  String get referralWebSteps =>
-      '1. Kopīgojiet savu personīgo saiti.\n2. Draugs reģistrējas tīmeklī, izmantojot jūsu saiti.\n3. Atbilstoši jauni konti saņem 30 dienas Omi Pro.';
-
-  @override
   String get referralAffiliate => 'Partneru programma';
+
+  @override
+  String get referralCampaignTerms =>
+      'Draugi saņem 10% atlaidi Omi ierīcēm. Pirmo 2 dažādo draugu pirkumi atver 2 Pro mēnešus, nākamo 3 dažādo draugu pirkumi vēl 3. Līdz 5 draugiem un kopā 5 mēnešiem.';
+
+  @override
+  String referralMilestone(int months, int count, int target) {
+    return '$months Pro mēneši · $count/$target pirkumi';
+  }
+
+  @override
+  String get referralClaim => 'Saņemt balvu';
+
+  @override
+  String referralClaimed(int months) {
+    return 'Saņemti $months Pro mēneši';
+  }
+
+  @override
+  String get referralRewardPending => 'Balva tiek glabāta līdz maksas abonementa beigām.';
+
+  @override
+  String get referralCampaignTitle => 'Iesakiet Omi. Saņemiet Pro bez maksas.';
 }

@@ -14,8 +14,9 @@ import 'package:omi/utils/platform/platform_manager.dart';
 /// A request owns its authenticated session until the link is used, not just
 /// until the HTTP response arrives. No referral URL is persisted.
 class ReferralLinkSession {
-  const ReferralLinkSession({required this.load, required this.isCurrent});
-  final Future<String> Function() load;
+  const ReferralLinkSession({required this.load, required this.isCurrent, this.claim});
+  final Future<ReferralCampaign> Function() load;
+  final Future<ReferralCampaign> Function()? claim;
   final bool Function() isCurrent;
 }
 
@@ -25,7 +26,11 @@ ReferralLinkSession _authenticatedSession() {
   return ReferralLinkSession(
     load: () async {
       if (snapshot == null || !auth.isSessionSnapshotCurrent(snapshot)) throw StateError('No current account');
-      return getReferralLink(session: snapshot);
+      return getReferralCampaign(session: snapshot);
+    },
+    claim: () async {
+      if (snapshot == null || !auth.isSessionSnapshotCurrent(snapshot)) throw StateError('No current account');
+      return getReferralCampaign(session: snapshot, claim: true);
     },
     isCurrent: () => snapshot != null && auth.isSessionSnapshotCurrent(snapshot),
   );
@@ -44,7 +49,8 @@ class ReferralPage extends StatefulWidget {
 class _ReferralPageState extends State<ReferralPage> with WidgetsBindingObserver {
   StreamSubscription<void>? _accountSubscription;
   ReferralLinkSession? _session;
-  String? _link;
+  ReferralCampaign? _campaign;
+  String? get _link => _campaign?.referralUrl;
   bool _loading = true;
   bool _busy = false;
   int _request = 0;
@@ -65,7 +71,8 @@ class _ReferralPageState extends State<ReferralPage> with WidgetsBindingObserver
     final invalidation = ++_request;
     setState(() {
       _session = null;
-      _link = null;
+      _busy = false;
+      _campaign = null;
       _loading = true;
     });
     // Auth generation events are synchronous. Capture only after the gateway
@@ -77,7 +84,11 @@ class _ReferralPageState extends State<ReferralPage> with WidgetsBindingObserver
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && _session?.isCurrent() != true) unawaited(_load());
+    if (state == AppLifecycleState.resumed &&
+        !_busy &&
+        (_campaign?.enabled != false || _session?.isCurrent() != true)) {
+      unawaited(_load());
+    }
   }
 
   Future<void> _load() async {
@@ -85,14 +96,14 @@ class _ReferralPageState extends State<ReferralPage> with WidgetsBindingObserver
     final session = (widget.createSession ?? _authenticatedSession)();
     setState(() {
       _session = session;
-      _link = null;
+      _campaign = null;
       _loading = true;
     });
     try {
       final link = await session.load().timeout(const Duration(seconds: 20));
       if (!mounted || request != _request) return;
       if (!session.isCurrent()) throw StateError('Account changed');
-      setState(() => _link = link);
+      setState(() => _campaign = link);
     } catch (_) {
       // Errors stay on this page with an explicit retry. Never reuse a stale link.
     } finally {
@@ -125,8 +136,50 @@ class _ReferralPageState extends State<ReferralPage> with WidgetsBindingObserver
     } catch (_) {
       if (mounted && request == _request) OmiFeedback.error(context, context.l10n.somethingWentWrong);
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted && request == _request) setState(() => _busy = false);
     }
+  }
+
+  Future<void> _claim() async {
+    final session = _session;
+    if (_busy ||
+        session == null ||
+        session.claim == null ||
+        _campaign?.enabled != true ||
+        (_campaign?.claimableMonths ?? 0) == 0) return;
+    if (!session.isCurrent()) {
+      await _load();
+      return;
+    }
+    final request = _request;
+    setState(() => _busy = true);
+    try {
+      final result = await session.claim!().timeout(const Duration(seconds: 20));
+      if (!mounted || request != _request || !session.isCurrent()) return;
+      setState(() => _campaign = result);
+    } catch (_) {
+      if (mounted && request == _request && session.isCurrent()) {
+        OmiFeedback.error(context, context.l10n.somethingWentWrong);
+      }
+    } finally {
+      if (mounted && request == _request) setState(() => _busy = false);
+    }
+  }
+
+  Widget _milestone(int target, int months) {
+    final count = _campaign!.milestoneProgress.clamp(0, target);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: OmiSpacing.md),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(context.l10n.referralMilestone(months, count, target), style: OmiType.callout),
+        const SizedBox(height: OmiSpacing.sm),
+        LinearProgressIndicator(
+            value: count / target,
+            color: OmiColors.accent,
+            backgroundColor: OmiColors.surface3,
+            semanticsLabel: context.l10n.referralMilestone(months, count, target)),
+      ]),
+    );
   }
 
   @override
@@ -146,7 +199,7 @@ class _ReferralPageState extends State<ReferralPage> with WidgetsBindingObserver
 
   @override
   Widget build(BuildContext context) {
-    if (!mobileReferralCampaignEnabled) return _affiliate(context);
+    if (!mobileReferralCampaignEnabled || _campaign?.enabled == false) return _affiliate(context);
     final l10n = context.l10n;
     return Scaffold(
       appBar: AppBar(leading: const OmiBackButton(), title: Text(l10n.referralProgram)),
@@ -157,15 +210,31 @@ class _ReferralPageState extends State<ReferralPage> with WidgetsBindingObserver
             const SizedBox(height: 16),
             const Icon(Icons.card_giftcard, size: 44),
             const SizedBox(height: 20),
-            Text(l10n.referralGiftTitle, textAlign: TextAlign.center, style: OmiType.title1),
+            Text(l10n.referralCampaignTitle, textAlign: TextAlign.center, style: OmiType.title1),
             const SizedBox(height: 24),
-            Text(l10n.referralWebSteps, style: OmiType.callout.copyWith(height: 1.6, color: OmiColors.textSecondary)),
+            Text(l10n.referralCampaignTerms,
+                style: OmiType.callout.copyWith(height: 1.6, color: OmiColors.textSecondary)),
             const SizedBox(height: 24),
             if (_loading)
               const Center(child: OmiSpinner())
-            else if (_link == null)
+            else if (_campaign == null)
               OmiErrorState(message: l10n.somethingWentWrong, onRetry: _load)
             else ...[
+              _milestone(2, 2),
+              _milestone(5, 3),
+              if (_campaign!.claimableMonths > 0)
+                OmiButton(
+                    key: const Key('referral-claim'),
+                    label: l10n.referralClaim,
+                    isLoading: _busy,
+                    onPressed: _busy ? null : _claim,
+                    expand: true),
+              if (_campaign!.claimedMonths > 0)
+                Text(l10n.referralClaimed(_campaign!.claimedMonths),
+                    key: const Key('referral-claimed'), style: OmiType.callout),
+              if (_campaign!.rewardStatus == 'pending_paid_subscription')
+                Text(l10n.referralRewardPending, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
+              const SizedBox(height: OmiSpacing.md),
               Text(_link!,
                   key: const Key('referral-link'),
                   maxLines: 2,

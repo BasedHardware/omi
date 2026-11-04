@@ -4523,7 +4523,11 @@
     "liveTranscribedUpTo": "Transcris până la {time}",
     "liveAudioSaved": "{duration} salvate",
     "liveAudioSavedDetail": "Vorbitorii și transcrierea finală vor apărea aici pe măsură ce se încarcă.",
-    "referralGiftTitle": "Oferă unui prieten o lună de Omi Pro",
-    "referralWebSteps": "1. Distribuie linkul personal.\n2. Prietenul se înscrie pe web prin linkul tău.\n3. Conturile noi eligibile primesc 30 de zile de Omi Pro.",
-    "referralAffiliate": "Program de afiliere"
+    "referralAffiliate": "Program de afiliere",
+    "referralCampaignTerms": "Prietenii primesc 10% reducere la dispozitivele Omi. Achizițiile primilor 2 prieteni diferiți deblochează 2 luni Pro, cele ale următorilor 3 prieteni diferiți încă 3. Maximum 5 prieteni și 5 luni în total.",
+    "referralMilestone": "{months} luni Pro · {count}/{target} achiziții",
+    "referralClaim": "Revendică recompensa",
+    "referralClaimed": "{months} luni Pro revendicate",
+    "referralRewardPending": "Recompensa se păstrează până se încheie abonamentul plătit.",
+    "referralCampaignTitle": "Recomandă Omi. Primește Pro gratuit."
 }

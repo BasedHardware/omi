@@ -14964,12 +14964,28 @@ class AppLocalizationsCs extends AppLocalizations {
   String get liveAudioSavedDetail => 'Mluvčí a konečný přepis se zde objeví během nahrávání.';
 
   @override
-  String get referralGiftTitle => 'Darujte příteli měsíc Omi Pro';
-
-  @override
-  String get referralWebSteps =>
-      '1. Sdílejte svůj osobní odkaz.\n2. Přítel se zaregistruje na webu přes váš odkaz.\n3. Nové způsobilé účty získají 30 dní Omi Pro.';
-
-  @override
   String get referralAffiliate => 'Partnerský program';
+
+  @override
+  String get referralCampaignTerms =>
+      'Přátelé získají 10% slevu na zařízení Omi. Nákupy prvních 2 různých přátel odemknou 2 měsíce Pro, nákupy dalších 3 různých přátel další 3 měsíce. Nejvýše 5 přátel a celkem 5 měsíců.';
+
+  @override
+  String referralMilestone(int months, int count, int target) {
+    return '$months měsíců Pro · $count/$target nákupů';
+  }
+
+  @override
+  String get referralClaim => 'Vyzvednout odměnu';
+
+  @override
+  String referralClaimed(int months) {
+    return 'Vyzvednuto $months měsíců Pro';
+  }
+
+  @override
+  String get referralRewardPending => 'Odměna je uložená do konce placeného předplatného.';
+
+  @override
+  String get referralCampaignTitle => 'Doporučte Omi. Získejte Pro zdarma.';
 }

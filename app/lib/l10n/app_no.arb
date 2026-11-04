@@ -4523,7 +4523,11 @@
     "liveTranscribedUpTo": "Transkribert frem til {time}",
     "liveAudioSaved": "{duration} lagret",
     "liveAudioSavedDetail": "Talere og den endelige transkripsjonen dukker opp her under opplasting.",
-    "referralGiftTitle": "Gi en venn en måned med Omi Pro",
-    "referralWebSteps": "1. Del din personlige lenke.\n2. Vennen registrerer seg på nettet via lenken din.\n3. Nye kontoer som oppfyller kravene får 30 dager med Omi Pro.",
-    "referralAffiliate": "Partnerprogram"
+    "referralAffiliate": "Partnerprogram",
+    "referralCampaignTerms": "Venner får 10% rabatt på Omi-enheter. Kjøp fra de første 2 forskjellige vennene låser opp 2 måneder Pro, kjøp fra de neste 3 forskjellige vennene gir 3 til. Maksimalt 5 venner og 5 måneder totalt.",
+    "referralMilestone": "{months} måneder Pro · {count}/{target} kjøp",
+    "referralClaim": "Hent belønning",
+    "referralClaimed": "{months} Pro-måneder hentet",
+    "referralRewardPending": "Belønningen lagres til det betalte abonnementet ditt utløper.",
+    "referralCampaignTitle": "Anbefal Omi. Få gratis Pro."
 }

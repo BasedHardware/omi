@@ -7,6 +7,27 @@
       "description": "Enabled referral candidate in iPhone simulator with local fixture account; existing signed-link backend, no live claim.",
       "captured_by": "agent",
       "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-pocket-match-start.png",
+      "platform": "mobile-ios",
+      "description": "Final enabled iPhone simulator candidate at zero purchases; real Firebase emulator SDK auth and local signed order ledger. No live checkout or grant.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-pocket-match-claim.png",
+      "platform": "mobile-ios",
+      "description": "Two distinct local signed purchasing friends unlock the two-month claim in the running final binary.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-ios-pocket-match-complete.png",
+      "platform": "mobile-ios",
+      "description": "Final running candidate after two UI claims totaling five months; consumed refund retains milestone credit, current valid orders four and milestone progress five. Local adapter only.",
+      "captured_by": "agent",
+      "source": "visual-audit"
     }
   ]
 }

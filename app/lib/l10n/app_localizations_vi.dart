@@ -14968,12 +14968,28 @@ class AppLocalizationsVi extends AppLocalizations {
   String get liveAudioSavedDetail => 'Người nói và bản chép cuối cùng sẽ xuất hiện ở đây khi tải lên.';
 
   @override
-  String get referralGiftTitle => 'Tặng bạn bè một tháng Omi Pro';
-
-  @override
-  String get referralWebSteps =>
-      '1. Chia sẻ liên kết cá nhân của bạn.\n2. Bạn bè đăng ký trên web qua liên kết của bạn.\n3. Tài khoản mới đủ điều kiện nhận 30 ngày Omi Pro.';
-
-  @override
   String get referralAffiliate => 'Chương trình tiếp thị liên kết';
+
+  @override
+  String get referralCampaignTerms =>
+      'Bạn bè được giảm 10% thiết bị Omi. Lượt mua của 2 người bạn khác nhau đầu tiên mở khóa 2 tháng Pro, lượt mua của 3 người bạn khác nhau tiếp theo thêm 3 tháng. Tối đa 5 bạn và tổng cộng 5 tháng.';
+
+  @override
+  String referralMilestone(int months, int count, int target) {
+    return '$months tháng Pro · $count/$target lượt mua';
+  }
+
+  @override
+  String get referralClaim => 'Nhận thưởng';
+
+  @override
+  String referralClaimed(int months) {
+    return 'Đã nhận $months tháng Pro';
+  }
+
+  @override
+  String get referralRewardPending => 'Phần thưởng được giữ đến khi gói trả phí kết thúc.';
+
+  @override
+  String get referralCampaignTitle => 'Giới thiệu Omi. Nhận Pro miễn phí.';
 }

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:url_launcher_platform_interface/url_launcher_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/http/api/referrals.dart';
@@ -12,7 +13,19 @@ import 'package:omi/services/auth_service.dart';
 import 'package:omi/services/auth/auth_token_result.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
-const link = 'https://omi.me/r/ref1.dXNlcg.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+const legacyLink = 'https://omi.me/r/ref1.dXNlcg.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+const link = 'https://omi.me/r/ref2.dXNlcg.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+const otherLink = 'https://omi.me/r/ref2.b3RoZXI.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+ReferralCampaign campaign({int purchases = 0, int claimed = 0, int claimable = 0, String url = link}) =>
+    ReferralCampaign.fromJson({
+      'campaign_id': 'omi_pocket_match_v1',
+      'enabled': true,
+      'referral_url': url,
+      'qualified_purchases': purchases,
+      'claimed_months': claimed,
+      'claimable_months': claimable,
+      'reward_status': 'ready'
+    });
 Widget host(Widget child) => MaterialApp(
       theme: buildOmiTheme(),
       localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -29,9 +42,35 @@ void main() {
   });
 
   test('accepts exact referral URLs and rejects foreign or modified URLs', () {
-    expect(validateReferralLink(link), link);
-    expect(validateReferralLink(link.replaceFirst('omi.me', 'api.omiapi.com')), contains('api.omiapi.com'));
+    expect(validateReferralLink(legacyLink), legacyLink);
+    expect(validateReferralLink(legacyLink.replaceFirst('omi.me', 'api.omiapi.com')), contains('api.omiapi.com'));
     for (final bad in [
+      legacyLink.replaceFirst('omi.me', 'evil.example'),
+      '$legacyLink?x=1',
+      '$legacyLink#x',
+      legacyLink.replaceFirst('omi.me', 'omi.me:443'),
+      legacyLink.replaceFirst('/r/', '/other/'),
+      legacyLink.replaceFirst('https:', 'http:'),
+      legacyLink.replaceFirst('omi.me', 'user@omi.me')
+    ]) {
+      expect(() => validateReferralLink(bad), throwsFormatException);
+    }
+  });
+
+  test('campaign snapshot validates typed progress and ref2 URLs', () {
+    final json = <String, dynamic>{
+      'campaign_id': 'omi_pocket_match_v1',
+      'enabled': true,
+      'referral_url': link,
+      'qualified_purchases': 2,
+      'claimed_months': 0,
+      'claimable_months': 2,
+      'reward_status': 'ready',
+      'future_field': true
+    };
+    expect(ReferralCampaign.fromJson(json).claimableMonths, 2);
+    for (final bad in [
+      legacyLink,
       link.replaceFirst('omi.me', 'evil.example'),
       '$link?x=1',
       '$link#x',
@@ -40,9 +79,221 @@ void main() {
       link.replaceFirst('https:', 'http:'),
       link.replaceFirst('omi.me', 'user@omi.me')
     ]) {
-      expect(() => validateReferralLink(bad), throwsFormatException);
+      expect(() => validateCampaignReferralLink(bad), throwsFormatException);
+    }
+
+    expect(() => ReferralCampaign.fromJson({...json, 'qualified_purchases': 1}), throwsFormatException);
+    expect(() => ReferralCampaign.fromJson({...json, 'referral_url': legacyLink}), throwsFormatException);
+    expect(() => ReferralCampaign.fromJson({...json, 'enabled': false}), throwsFormatException);
+  });
+
+  test('refunded progress preserves lifetime claimed months without new claimability', () {
+    for (final pair in [(4, 5), (0, 5), (1, 2)]) {
+      final json = <String, dynamic>{
+        'campaign_id': 'omi_pocket_match_v1',
+        'enabled': true,
+        'referral_url': link,
+        'qualified_purchases': pair.$1,
+        'claimed_months': pair.$2,
+        'claimable_months': 0,
+        'reward_status': 'active'
+      };
+      expect(ReferralCampaign.fromJson(json).claimedMonths, pair.$2);
+      for (final invalid in [2, 3, 5]) {
+        expect(() => ReferralCampaign.fromJson({...json, 'claimable_months': invalid}), throwsFormatException);
+      }
     }
   });
+
+  test('server milestones retain consumed friends after refunds and validate additive fields', () {
+    final json = <String, dynamic>{
+      'campaign_id': 'omi_pocket_match_v1',
+      'enabled': true,
+      'referral_url': link,
+      'qualified_purchases': 4,
+      'milestone_progress': 5,
+      'earned_months': 5,
+      'claimed_months': 2,
+      'claimable_months': 3,
+      'reward_status': 'active'
+    };
+    final parsed = ReferralCampaign.fromJson(json);
+    expect(parsed.qualifiedPurchases, 4);
+    expect(parsed.milestoneProgress, 5);
+    expect(parsed.earnedMonths, 5);
+    expect(parsed.claimableMonths, 3);
+    for (final patch in <Map<String, dynamic>>[
+      {'milestone_progress': -1},
+      {'milestone_progress': 6},
+      {'milestone_progress': 3},
+      {'milestone_progress': null},
+      {'milestone_progress': 5.0},
+      {'earned_months': -1},
+      {'earned_months': 3},
+      {'earned_months': 6},
+      {'earned_months': null},
+      {'earned_months': 2},
+      {'claimable_months': 0},
+      {'claimable_months': 5},
+    ]) {
+      expect(() => ReferralCampaign.fromJson({...json, ...patch}), throwsFormatException);
+    }
+    final old = Map<String, dynamic>.from(json)
+      ..remove('milestone_progress')
+      ..remove('earned_months');
+    old['claimable_months'] = 0;
+    expect(ReferralCampaign.fromJson(old).milestoneProgress, 4);
+    expect(ReferralCampaign.fromJson(old).earnedMonths, 2);
+    old['qualified_purchases'] = 0;
+    expect(ReferralCampaign.fromJson(old).earnedMonths, 2);
+  });
+
+  testWidgets('milestone UI uses consumed progress without changing current purchases', (tester) async {
+    final snapshot = ReferralCampaign.fromJson({
+      'campaign_id': 'omi_pocket_match_v1',
+      'enabled': true,
+      'referral_url': link,
+      'qualified_purchases': 4,
+      'milestone_progress': 5,
+      'earned_months': 5,
+      'claimed_months': 2,
+      'claimable_months': 3,
+      'reward_status': 'active'
+    });
+    await tester.pumpWidget(host(ReferralPage(
+        accountChanges: const Stream.empty(),
+        createSession: () => ReferralLinkSession(isCurrent: () => true, load: () async => snapshot))));
+    await tester.pumpAndSettle();
+    expect(find.text('3 months of Pro · 5/5 purchases'), findsOneWidget);
+    expect(find.byKey(const Key('referral-claim')), findsOneWidget);
+    expect(snapshot.qualifiedPurchases, 4);
+  }, skip: !mobileReferralCampaignEnabled);
+
+  testWidgets('claim uses server result, duplicates do not add months, reentry persists', (tester) async {
+    var stored = campaign(purchases: 2, claimable: 2);
+    var claims = 0;
+    ReferralPage page() => ReferralPage(
+        accountChanges: const Stream.empty(),
+        createSession: () => ReferralLinkSession(
+            isCurrent: () => true,
+            load: () async => stored,
+            claim: () async {
+              claims++;
+              return stored = campaign(purchases: 2, claimed: 2);
+            }));
+    await tester.pumpWidget(host(page()));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('referral-claim')));
+    await tester.tap(find.byKey(const Key('referral-claim')));
+    await tester.pumpAndSettle();
+    expect(claims, 1);
+    expect(find.byKey(const Key('referral-claim')), findsNothing);
+    expect(find.text('2 Pro months claimed'), findsOneWidget);
+    for (var i = 0; i < 3; i++) {
+      await tester.pumpWidget(host(const SizedBox()));
+      await tester.pumpWidget(host(page()));
+      await tester.pumpAndSettle();
+      expect(find.text('2 Pro months claimed'), findsOneWidget);
+      expect(claims, 1);
+    }
+  }, skip: !mobileReferralCampaignEnabled);
+
+  testWidgets('claim failure retains progress and retry accepts only server totals', (tester) async {
+    var attempts = 0;
+    await tester.pumpWidget(host(ReferralPage(
+        accountChanges: const Stream.empty(),
+        createSession: () => ReferralLinkSession(
+            isCurrent: () => true,
+            load: () async => campaign(purchases: 5, claimed: 2, claimable: 3),
+            claim: () async {
+              if (++attempts == 1) throw StateError('Offline');
+              return campaign(purchases: 5, claimed: 5);
+            }))));
+    await tester.pumpAndSettle();
+    for (var i = 0; i < 2; i++) {
+      await Scrollable.ensureVisible(tester.element(find.byKey(const Key('referral-claim'))), alignment: 0.5);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('referral-claim')));
+      await tester.pumpAndSettle();
+      if (i == 0) {
+        expect(find.text('2 Pro months claimed'), findsOneWidget);
+        await tester.pump(const Duration(seconds: 9));
+      }
+    }
+    expect(find.text('5 Pro months claimed'), findsOneWidget);
+    expect(find.byKey(const Key('referral-claim')), findsNothing);
+    expect(attempts, 2);
+  }, skip: !mobileReferralCampaignEnabled);
+
+  testWidgets('late claim cannot expose prior account rewards', (tester) async {
+    final changes = StreamController<void>.broadcast(sync: true);
+    final pending = Completer<ReferralCampaign>();
+    var generation = 0;
+    await tester.pumpWidget(host(ReferralPage(
+        accountChanges: changes.stream,
+        createSession: () {
+          final owner = generation;
+          return ReferralLinkSession(
+              isCurrent: () => owner == generation,
+              load: () async => owner == 0 ? campaign(purchases: 2, claimable: 2) : campaign(),
+              claim: () => pending.future);
+        })));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('referral-claim')));
+    await tester.tap(find.byKey(const Key('referral-claim')));
+    await tester.pump();
+    generation++;
+    changes.add(null);
+    await tester.pump();
+    pending.complete(campaign(purchases: 2, claimed: 2));
+    await tester.pumpAndSettle();
+    expect(find.text('2 Pro months claimed'), findsNothing);
+    expect(find.text('2 months of Pro · 0/2 purchases'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+    await changes.close();
+  }, skip: !mobileReferralCampaignEnabled);
+
+  testWidgets('async disabled campaign keeps browser fallback across three resumes', (tester) async {
+    final launcher = _ReferralBrowser();
+    final previous = UrlLauncherPlatform.instance;
+    UrlLauncherPlatform.instance = launcher;
+    addTearDown(() => UrlLauncherPlatform.instance = previous);
+    var loads = 0;
+    await tester.pumpWidget(host(ReferralPage(
+        accountChanges: const Stream.empty(),
+        createSession: () => ReferralLinkSession(
+            isCurrent: () => true,
+            load: () async {
+              loads++;
+              await Future<void>.delayed(const Duration(milliseconds: 100));
+              return ReferralCampaign.fromJson({
+                'campaign_id': 'omi_pocket_match_v1',
+                'enabled': false,
+                'referral_url': null,
+                'qualified_purchases': 0,
+                'claimed_months': 0,
+                'claimable_months': 0,
+                'reward_status': 'disabled'
+              });
+            }))));
+    await tester.pumpAndSettle();
+    expect(launcher.launches, 1);
+    for (var i = 0; i < 3; i++) {
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 150));
+      await tester.pumpAndSettle();
+      expect(launcher.launches, 1);
+      expect(loads, 1);
+      for (final key in ['referral-share', 'referral-copy', 'referral-claim']) {
+        expect(find.byKey(Key(key)), findsNothing);
+      }
+    }
+    await tester.tap(find.byKey(const Key('referral-open-browser')));
+    await tester.pumpAndSettle();
+    expect(launcher.launches, 2);
+  }, skip: !mobileReferralCampaignEnabled);
 
   testWidgets('default gate never creates a referral session', (tester) async {
     var calls = 0;
@@ -72,7 +323,7 @@ void main() {
               load: () async {
                 loads++;
                 if (loads == 1) throw StateError('Offline');
-                return link;
+                return campaign();
               }),
           shareLink: (url, origin) async {
             expect(url, link);
@@ -85,9 +336,13 @@ void main() {
     await tester.tap(find.text('Try Again'));
     await tester.pumpAndSettle();
     for (var i = 0; i < 3; i++) {
+      await Scrollable.ensureVisible(tester.element(find.byKey(const Key('referral-copy'))), alignment: 0.5);
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('referral-copy')));
       await tester.pumpAndSettle();
       expect(copied, link);
+      await Scrollable.ensureVisible(tester.element(find.byKey(const Key('referral-share'))), alignment: 0.5);
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('referral-share')));
       await tester.pumpAndSettle();
     }
@@ -111,7 +366,7 @@ void main() {
       data: const MediaQueryData(textScaler: TextScaler.linear(3.2)),
       child: ReferralPage(
         accountChanges: const Stream.empty(),
-        createSession: () => ReferralLinkSession(isCurrent: () => true, load: () async => link),
+        createSession: () => ReferralLinkSession(isCurrent: () => true, load: () async => campaign()),
         shareLink: (_, __) async {
           attempts++;
           if (attempts == 1) throw StateError('Share unavailable');
@@ -146,7 +401,7 @@ void main() {
           isCurrent: () => snapshot != null && auth.isSessionSnapshotCurrent(snapshot),
           load: () async {
             if (snapshot == null) throw StateError('Signed out');
-            return link;
+            return campaign();
           },
         );
       },
@@ -165,23 +420,24 @@ void main() {
 
   testWidgets('late account A result cannot replace account B link', (tester) async {
     final changes = StreamController<void>.broadcast(sync: true);
-    final old = Completer<String>();
+    final old = Completer<ReferralCampaign>();
     var generation = 0;
     await tester.pumpWidget(host(ReferralPage(
       accountChanges: changes.stream,
       createSession: () {
         final captured = generation;
         return ReferralLinkSession(
-            isCurrent: () => generation == captured, load: () => captured == 0 ? old.future : Future.value('$link-b'));
+            isCurrent: () => generation == captured,
+            load: () => captured == 0 ? old.future : Future.value(campaign(url: otherLink)));
       },
     )));
     generation = 1;
     changes.add(null);
     await tester.pumpAndSettle();
-    old.complete(link);
+    old.complete(campaign());
     await tester.pumpAndSettle();
     expect(find.text(link), findsNothing);
-    expect(find.text('$link-b'), findsOneWidget);
+    expect(find.text(otherLink), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
     await changes.close();
   }, skip: !mobileReferralCampaignEnabled);
@@ -196,5 +452,17 @@ final class _ReferralGateway implements AuthTokenGateway {
   @override
   Future<void> signOut() async {
     user = null;
+  }
+}
+
+final class _ReferralBrowser extends UrlLauncherPlatform {
+  int launches = 0;
+  @override
+  get linkDelegate => null;
+  @override
+  Future<bool> launchUrl(String url, LaunchOptions options) async {
+    expect(url, 'https://affiliate.omi.me/');
+    launches++;
+    return true;
   }
 }

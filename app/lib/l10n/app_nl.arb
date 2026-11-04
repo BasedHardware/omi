@@ -4523,7 +4523,11 @@
     "liveTranscribedUpTo": "Getranscribeerd tot {time}",
     "liveAudioSaved": "{duration} opgeslagen",
     "liveAudioSavedDetail": "Sprekers en het definitieve transcript verschijnen hier tijdens het uploaden.",
-    "referralGiftTitle": "Geef een vriend een maand Omi Pro",
-    "referralWebSteps": "1. Deel je persoonlijke link.\n2. Je vriend meldt zich op het web aan via je link.\n3. Nieuwe accounts die in aanmerking komen krijgen 30 dagen Omi Pro.",
-    "referralAffiliate": "Partnerprogramma"
+    "referralAffiliate": "Partnerprogramma",
+    "referralCampaignTerms": "Vrienden krijgen 10% korting op Omi-apparaten. Aankopen van de eerste 2 verschillende vrienden ontgrendelen 2 maanden Pro, aankopen van de volgende 3 verschillende vrienden nog 3 maanden. Maximaal 5 vrienden en 5 maanden.",
+    "referralMilestone": "{months} maanden Pro · {count}/{target} aankopen",
+    "referralClaim": "Beloning claimen",
+    "referralClaimed": "{months} Pro-maanden geclaimd",
+    "referralRewardPending": "Je beloning blijft bewaard tot je betaalde abonnement eindigt.",
+    "referralCampaignTitle": "Beveel Omi aan. Krijg gratis Pro."
 }

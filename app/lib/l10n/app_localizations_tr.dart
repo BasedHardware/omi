@@ -14979,12 +14979,28 @@ class AppLocalizationsTr extends AppLocalizations {
   String get liveAudioSavedDetail => 'Konuşmacılar ve son döküm, yükleme sırasında burada görünür.';
 
   @override
-  String get referralGiftTitle => 'Arkadaşına bir aylık Omi Pro hediye et';
-
-  @override
-  String get referralWebSteps =>
-      '1. Kişisel bağlantını paylaş.\n2. Arkadaşın bağlantın üzerinden webde kaydolur.\n3. Uygun yeni hesaplar 30 günlük Omi Pro alır.';
-
-  @override
   String get referralAffiliate => 'Satış ortaklığı programı';
+
+  @override
+  String get referralCampaignTerms =>
+      'Arkadaşlar Omi cihazlarında %10 indirim alır. İlk 2 farklı arkadaşın satın alması 2 ay Pro, sonraki 3 farklı arkadaşın satın alması ise 3 ay daha kazandırır. En fazla 5 arkadaş ve toplam 5 ay.';
+
+  @override
+  String referralMilestone(int months, int count, int target) {
+    return '$months ay Pro · $count/$target satın alma';
+  }
+
+  @override
+  String get referralClaim => 'Ödülü al';
+
+  @override
+  String referralClaimed(int months) {
+    return '$months ay Pro alındı';
+  }
+
+  @override
+  String get referralRewardPending => 'Ödülünüz ücretli aboneliğiniz bitene kadar saklanır.';
+
+  @override
+  String get referralCampaignTitle => 'Omi\'yi öner. Ücretsiz Pro kazan.';
 }

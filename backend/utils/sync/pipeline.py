@@ -359,7 +359,13 @@ def _firestore_doc_kind(error: BaseException) -> str:
 async def _resolve_fair_use_soft_cap_plan(uid: str):
     """Return the stored plan, falling back to the default soft-cap tier on read failure."""
     try:
-        fair_use_sub = await run_blocking(db_executor, users_db.get_existing_user_subscription, uid)
+        from utils.referral_campaign import campaign_enabled
+
+        fair_use_sub = (
+            await run_blocking(db_executor, users_db.get_user_valid_subscription, uid, provision=False)
+            if campaign_enabled()
+            else await run_blocking(db_executor, users_db.get_existing_user_subscription, uid)
+        )
         return fair_use_sub.plan if fair_use_sub else None
     except Exception as e:
         logger.warning(

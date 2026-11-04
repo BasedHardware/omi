@@ -4523,7 +4523,11 @@
     "liveTranscribedUpTo": "ถอดความถึง {time}",
     "liveAudioSaved": "บันทึกแล้ว {duration}",
     "liveAudioSavedDetail": "ผู้พูดและบทถอดความฉบับสุดท้ายจะปรากฏที่นี่ระหว่างอัปโหลด",
-    "referralGiftTitle": "มอบ Omi Pro หนึ่งเดือนให้เพื่อน",
-    "referralWebSteps": "1. แชร์ลิงก์ส่วนตัวของคุณ\n2. เพื่อนสมัครบนเว็บผ่านลิงก์ของคุณ\n3. บัญชีใหม่ที่มีสิทธิ์จะได้รับ Omi Pro 30 วัน",
-    "referralAffiliate": "โปรแกรมพันธมิตร"
+    "referralAffiliate": "โปรแกรมพันธมิตร",
+    "referralCampaignTerms": "เพื่อนรับส่วนลดอุปกรณ์ Omi 10% การซื้อของเพื่อนต่างคน 2 คนแรกปลดล็อก Pro 2 เดือน การซื้อของเพื่อนต่างคนอีก 3 คนปลดล็อกเพิ่ม 3 เดือน สูงสุด 5 คน รวม 5 เดือน",
+    "referralMilestone": "Pro {months} เดือน · ซื้อ {count}/{target} ครั้ง",
+    "referralClaim": "รับรางวัล",
+    "referralClaimed": "รับ Pro แล้ว {months} เดือน",
+    "referralRewardPending": "รางวัลจะเก็บไว้จนกว่าการสมัครแบบชำระเงินจะสิ้นสุด",
+    "referralCampaignTitle": "แนะนำ Omi รับ Pro ฟรี"
 }

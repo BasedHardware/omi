@@ -26325,23 +26325,47 @@ abstract class AppLocalizations {
   /// **'Speakers and the final transcript fill in here as it uploads.'**
   String get liveAudioSavedDetail;
 
-  /// No description provided for @referralGiftTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Give a friend a month of Omi Pro'**
-  String get referralGiftTitle;
-
-  /// No description provided for @referralWebSteps.
-  ///
-  /// In en, this message translates to:
-  /// **'1. Share your personal link.\n2. Your friend signs up on the web through your link.\n3. Eligible new accounts get 30 days of Omi Pro.'**
-  String get referralWebSteps;
-
   /// No description provided for @referralAffiliate.
   ///
   /// In en, this message translates to:
   /// **'Affiliate program'**
   String get referralAffiliate;
+
+  /// No description provided for @referralCampaignTerms.
+  ///
+  /// In en, this message translates to:
+  /// **'Friends get 10% off Omi hardware. Your first 2 friends who purchase unlock 2 months of Pro. The next 3 unlock 3 more. Up to 5 friends and 5 months total.'**
+  String get referralCampaignTerms;
+
+  /// No description provided for @referralMilestone.
+  ///
+  /// In en, this message translates to:
+  /// **'{months} months of Pro · {count}/{target} purchases'**
+  String referralMilestone(int months, int count, int target);
+
+  /// No description provided for @referralClaim.
+  ///
+  /// In en, this message translates to:
+  /// **'Claim Reward'**
+  String get referralClaim;
+
+  /// No description provided for @referralClaimed.
+  ///
+  /// In en, this message translates to:
+  /// **'{months} Pro months claimed'**
+  String referralClaimed(int months);
+
+  /// No description provided for @referralRewardPending.
+  ///
+  /// In en, this message translates to:
+  /// **'Your reward is saved until your paid subscription ends.'**
+  String get referralRewardPending;
+
+  /// No description provided for @referralCampaignTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Refer Omi. Get free Pro.'**
+  String get referralCampaignTitle;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

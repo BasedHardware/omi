@@ -15029,12 +15029,28 @@ class AppLocalizationsTe extends AppLocalizations {
   String get liveAudioSavedDetail => 'అప్‌లోడ్ అవుతున్నప్పుడు వక్తలు, తుది ట్రాన్స్‌క్రిప్ట్ ఇక్కడ కనిపిస్తాయి.';
 
   @override
-  String get referralGiftTitle => 'స్నేహితుడికి ఒక నెల Omi Pro ఇవ్వండి';
-
-  @override
-  String get referralWebSteps =>
-      '1. మీ వ్యక్తిగత లింక్ పంచుకోండి.\n2. మీ స్నేహితుడు మీ లింక్ ద్వారా వెబ్‌లో నమోదు చేస్తారు.\n3. అర్హత గల కొత్త ఖాతాలకు 30 రోజుల Omi Pro లభిస్తుంది.';
-
-  @override
   String get referralAffiliate => 'అఫిలియేట్ ప్రోగ్రామ్';
+
+  @override
+  String get referralCampaignTerms =>
+      'స్నేహితులకు Omi పరికరాలపై 10% తగ్గింపు. మొదటి 2 వేర్వేరు స్నేహితుల కొనుగోళ్లు 2 నెలల Pro, తదుపరి 3 వేర్వేరు స్నేహితుల కొనుగోళ్లు మరో 3 నెలలను అన్‌లాక్ చేస్తాయి. గరిష్ఠంగా 5 స్నేహితులు, మొత్తం 5 నెలలు.';
+
+  @override
+  String referralMilestone(int months, int count, int target) {
+    return '$months నెలల Pro · $count/$target కొనుగోళ్లు';
+  }
+
+  @override
+  String get referralClaim => 'బహుమతి పొందండి';
+
+  @override
+  String referralClaimed(int months) {
+    return '$months నెలల Pro పొందారు';
+  }
+
+  @override
+  String get referralRewardPending => 'చెల్లింపు సభ్యత్వం ముగిసే వరకు బహుమతి నిల్వ ఉంటుంది.';
+
+  @override
+  String get referralCampaignTitle => 'Omiని సూచించండి. ఉచిత Pro పొందండి.';
 }

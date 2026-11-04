@@ -4558,7 +4558,11 @@
     "liveTranscribedUpTo": "Ditranskripsi hingga {time}",
     "liveAudioSaved": "{duration} tersimpan",
     "liveAudioSavedDetail": "Pembicara dan transkrip akhir akan muncul di sini saat diunggah.",
-    "referralGiftTitle": "Beri teman sebulan Omi Pro",
-    "referralWebSteps": "1. Bagikan tautan pribadi Anda.\n2. Teman mendaftar di web melalui tautan Anda.\n3. Akun baru yang memenuhi syarat mendapat 30 hari Omi Pro.",
-    "referralAffiliate": "Program afiliasi"
+    "referralAffiliate": "Program afiliasi",
+    "referralCampaignTerms": "Teman mendapat diskon 10% perangkat Omi. Pembelian oleh 2 teman berbeda pertama membuka 2 bulan Pro, pembelian oleh 3 teman berbeda berikutnya 3 bulan lagi. Maksimal 5 teman dan total 5 bulan.",
+    "referralMilestone": "{months} bulan Pro · {count}/{target} pembelian",
+    "referralClaim": "Klaim hadiah",
+    "referralClaimed": "{months} bulan Pro diklaim",
+    "referralRewardPending": "Hadiah disimpan hingga langganan berbayar Anda berakhir.",
+    "referralCampaignTitle": "Rekomendasikan Omi. Dapatkan Pro gratis."
 }

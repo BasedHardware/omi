@@ -14970,12 +14970,28 @@ class AppLocalizationsFi extends AppLocalizations {
   String get liveAudioSavedDetail => 'Puhujat ja lopullinen litterointi tulevat tähän latauksen edetessä.';
 
   @override
-  String get referralGiftTitle => 'Anna ystävälle kuukausi Omi Prota';
-
-  @override
-  String get referralWebSteps =>
-      '1. Jaa henkilökohtainen linkkisi.\n2. Ystäväsi rekisteröityy verkossa linkkisi kautta.\n3. Ehdot täyttävät uudet tilit saavat 30 päivää Omi Prota.';
-
-  @override
   String get referralAffiliate => 'Kumppaniohjelma';
+
+  @override
+  String get referralCampaignTerms =>
+      'Ystävät saavat 10 % alennusta Omi-laitteista. Ensimmäisten 2 eri ystävän ostot avaavat 2 kuukautta Prota, seuraavien 3 eri ystävän ostot vielä 3. Enintään 5 ystävää ja yhteensä 5 kuukautta.';
+
+  @override
+  String referralMilestone(int months, int count, int target) {
+    return '$months kuukautta Prota · $count/$target ostoa';
+  }
+
+  @override
+  String get referralClaim => 'Lunasta palkinto';
+
+  @override
+  String referralClaimed(int months) {
+    return '$months Pro-kuukautta lunastettu';
+  }
+
+  @override
+  String get referralRewardPending => 'Palkinto säilyy maksullisen tilauksesi päättymiseen asti.';
+
+  @override
+  String get referralCampaignTitle => 'Suosittele Omia. Saat Pron ilmaiseksi.';
 }

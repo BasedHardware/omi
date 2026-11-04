@@ -4523,7 +4523,11 @@
     "liveTranscribedUpTo": "Trascritto fino alle {time}",
     "liveAudioSaved": "{duration} salvati",
     "liveAudioSavedDetail": "Gli interlocutori e la trascrizione finale appariranno qui durante il caricamento.",
-    "referralGiftTitle": "Regala a un amico un mese di Omi Pro",
-    "referralWebSteps": "1. Condividi il tuo link personale.\n2. Il tuo amico si registra sul web tramite il tuo link.\n3. I nuovi account idonei ricevono 30 giorni di Omi Pro.",
-    "referralAffiliate": "Programma di affiliazione"
+    "referralAffiliate": "Programma di affiliazione",
+    "referralCampaignTerms": "Gli amici hanno il 10% di sconto sui dispositivi Omi. Gli acquisti dei primi 2 amici diversi sbloccano 2 mesi di Pro, quelli dei successivi 3 amici diversi altri 3 mesi. Massimo 5 amici e 5 mesi.",
+    "referralMilestone": "{months} mesi di Pro · {count}/{target} acquisti",
+    "referralClaim": "Riscatta premio",
+    "referralClaimed": "{months} mesi di Pro riscattati",
+    "referralRewardPending": "Il premio è conservato fino alla fine del tuo abbonamento a pagamento.",
+    "referralCampaignTitle": "Consiglia Omi. Ottieni Pro gratis."
 }

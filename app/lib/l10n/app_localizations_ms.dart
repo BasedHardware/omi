@@ -15003,12 +15003,28 @@ class AppLocalizationsMs extends AppLocalizations {
   String get liveAudioSavedDetail => 'Penutur dan transkrip akhir akan muncul di sini semasa dimuat naik.';
 
   @override
-  String get referralGiftTitle => 'Hadiahkan rakan sebulan Omi Pro';
-
-  @override
-  String get referralWebSteps =>
-      '1. Kongsi pautan peribadi anda.\n2. Rakan mendaftar di web melalui pautan anda.\n3. Akaun baharu yang layak mendapat 30 hari Omi Pro.';
-
-  @override
   String get referralAffiliate => 'Program ahli gabungan';
+
+  @override
+  String get referralCampaignTerms =>
+      'Rakan mendapat diskaun 10% peranti Omi. Pembelian oleh 2 rakan berbeza pertama membuka 2 bulan Pro, pembelian oleh 3 rakan berbeza seterusnya 3 bulan lagi. Maksimum 5 rakan dan jumlah 5 bulan.';
+
+  @override
+  String referralMilestone(int months, int count, int target) {
+    return '$months bulan Pro · $count/$target pembelian';
+  }
+
+  @override
+  String get referralClaim => 'Tuntut ganjaran';
+
+  @override
+  String referralClaimed(int months) {
+    return '$months bulan Pro dituntut';
+  }
+
+  @override
+  String get referralRewardPending => 'Ganjaran disimpan sehingga langganan berbayar anda tamat.';
+
+  @override
+  String get referralCampaignTitle => 'Syorkan Omi. Dapatkan Pro percuma.';
 }

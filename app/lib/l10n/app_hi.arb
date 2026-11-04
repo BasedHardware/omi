@@ -4523,7 +4523,11 @@
     "liveTranscribedUpTo": "{time} तक ट्रांसक्राइब हुआ",
     "liveAudioSaved": "{duration} सहेजा गया",
     "liveAudioSavedDetail": "अपलोड के साथ वक्ता और अंतिम ट्रांसक्रिप्ट यहाँ दिखेंगे।",
-    "referralGiftTitle": "दोस्त को एक महीने का Omi Pro दें",
-    "referralWebSteps": "1. अपना निजी लिंक साझा करें।\n2. आपका दोस्त आपके लिंक से वेब पर साइन अप करता है।\n3. योग्य नए खातों को 30 दिनों का Omi Pro मिलता है।",
-    "referralAffiliate": "एफ़िलिएट प्रोग्राम"
+    "referralAffiliate": "एफ़िलिएट प्रोग्राम",
+    "referralCampaignTerms": "दोस्तों को Omi डिवाइस पर 10% छूट मिलती है। पहले 2 दोस्तों की खरीद से 2 महीने Pro और अगले 3 से 3 महीने और मिलते हैं। अधिकतम 5 दोस्त और कुल 5 महीने।",
+    "referralMilestone": "{months} महीने Pro · {count}/{target} खरीद",
+    "referralClaim": "इनाम लें",
+    "referralClaimed": "{months} महीने Pro लिए गए",
+    "referralRewardPending": "आपकी सशुल्क सदस्यता समाप्त होने तक इनाम सुरक्षित है।",
+    "referralCampaignTitle": "Omi की सिफारिश करें। मुफ़्त Pro पाएं।"
 }

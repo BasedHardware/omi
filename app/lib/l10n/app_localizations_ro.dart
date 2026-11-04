@@ -15029,12 +15029,28 @@ class AppLocalizationsRo extends AppLocalizations {
   String get liveAudioSavedDetail => 'Vorbitorii și transcrierea finală vor apărea aici pe măsură ce se încarcă.';
 
   @override
-  String get referralGiftTitle => 'Oferă unui prieten o lună de Omi Pro';
-
-  @override
-  String get referralWebSteps =>
-      '1. Distribuie linkul personal.\n2. Prietenul se înscrie pe web prin linkul tău.\n3. Conturile noi eligibile primesc 30 de zile de Omi Pro.';
-
-  @override
   String get referralAffiliate => 'Program de afiliere';
+
+  @override
+  String get referralCampaignTerms =>
+      'Prietenii primesc 10% reducere la dispozitivele Omi. Achizițiile primilor 2 prieteni diferiți deblochează 2 luni Pro, cele ale următorilor 3 prieteni diferiți încă 3. Maximum 5 prieteni și 5 luni în total.';
+
+  @override
+  String referralMilestone(int months, int count, int target) {
+    return '$months luni Pro · $count/$target achiziții';
+  }
+
+  @override
+  String get referralClaim => 'Revendică recompensa';
+
+  @override
+  String referralClaimed(int months) {
+    return '$months luni Pro revendicate';
+  }
+
+  @override
+  String get referralRewardPending => 'Recompensa se păstrează până se încheie abonamentul plătit.';
+
+  @override
+  String get referralCampaignTitle => 'Recomandă Omi. Primește Pro gratuit.';
 }

@@ -14997,12 +14997,28 @@ class AppLocalizationsUk extends AppLocalizations {
   String get liveAudioSavedDetail => 'Учасники й остаточна транскрипція з\'являться тут під час завантаження.';
 
   @override
-  String get referralGiftTitle => 'Подаруйте другу місяць Omi Pro';
-
-  @override
-  String get referralWebSteps =>
-      '1. Поділіться особистим посиланням.\n2. Друг реєструється в інтернеті через ваше посилання.\n3. Нові облікові записи, що відповідають умовам, отримують 30 днів Omi Pro.';
-
-  @override
   String get referralAffiliate => 'Партнерська програма';
+
+  @override
+  String get referralCampaignTerms =>
+      'Друзі отримують знижку 10% на пристрої Omi. Покупки перших 2 різних друзів дають 2 місяці Pro, покупки наступних 3 різних друзів — ще 3. Разом до 5 друзів і 5 місяців.';
+
+  @override
+  String referralMilestone(int months, int count, int target) {
+    return '$months міс. Pro · $count/$target покупок';
+  }
+
+  @override
+  String get referralClaim => 'Отримати винагороду';
+
+  @override
+  String referralClaimed(int months) {
+    return 'Отримано місяців Pro: $months';
+  }
+
+  @override
+  String get referralRewardPending => 'Винагороду збережено до завершення платної підписки.';
+
+  @override
+  String get referralCampaignTitle => 'Запрошуйте в Omi. Отримуйте Pro безкоштовно.';
 }

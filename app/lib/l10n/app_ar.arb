@@ -4523,7 +4523,11 @@
     "liveTranscribedUpTo": "تم النسخ حتى {time}",
     "liveAudioSaved": "تم حفظ {duration}",
     "liveAudioSavedDetail": "ستظهر هنا أسماء المتحدثين والنص النهائي أثناء الرفع.",
-    "referralGiftTitle": "امنح صديقًا شهرًا من Omi Pro",
-    "referralWebSteps": "1. شارك رابطك الشخصي.\n2. يسجل صديقك عبر الويب من خلال رابطك.\n3. تحصل الحسابات الجديدة المؤهلة على 30 يومًا من Omi Pro.",
-    "referralAffiliate": "برنامج التسويق بالعمولة"
+    "referralAffiliate": "برنامج التسويق بالعمولة",
+    "referralCampaignTerms": "يحصل أصدقاؤك على خصم 10% على أجهزة Omi. شراء أول صديقين مختلفين تفتحان شهرين من Pro، وشراء الأصدقاء الثلاثة المختلفين التاليين تفتح 3 أشهر أخرى. حتى 5 أصدقاء و5 أشهر إجمالاً.",
+    "referralMilestone": "{months} أشهر Pro · {count}/{target} مشتريات",
+    "referralClaim": "استلام المكافأة",
+    "referralClaimed": "تم استلام {months} أشهر Pro",
+    "referralRewardPending": "تُحفظ مكافأتك حتى انتهاء اشتراكك المدفوع.",
+    "referralCampaignTitle": "أحِل أصدقاءك إلى Omi. واحصل على Pro مجانًا."
 }

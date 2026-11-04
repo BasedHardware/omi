@@ -11949,7 +11949,11 @@
     "liveTranscribedUpTo": "Na-transcribe hanggang {time}",
     "liveAudioSaved": "{duration} na-save",
     "liveAudioSavedDetail": "Lalabas dito ang mga nagsasalita at huling transcript habang nag-a-upload.",
-    "referralGiftTitle": "Bigyan ang kaibigan ng isang buwang Omi Pro",
-    "referralWebSteps": "1. Ibahagi ang personal mong link.\n2. Mag-sign up ang kaibigan sa web gamit ang link mo.\n3. Makakakuha ang mga kwalipikadong bagong account ng 30 araw ng Omi Pro.",
-    "referralAffiliate": "Affiliate program"
+    "referralAffiliate": "Affiliate program",
+    "referralCampaignTerms": "May 10% diskuwento ang mga kaibigan sa Omi device. Ang pagbili ng unang 2 magkaibang kaibigan ay nagbibigay ng 2 buwang Pro, ang pagbili ng susunod na 3 pang magkaibang kaibigan ay 3 buwan pa. Hanggang 5 kaibigan at 5 buwan sa kabuuan.",
+    "referralMilestone": "{months} buwang Pro · {count}/{target} pagbili",
+    "referralClaim": "Kunin ang gantimpala",
+    "referralClaimed": "Nakuha ang {months} buwang Pro",
+    "referralRewardPending": "Nakatabi ang gantimpala hanggang matapos ang bayad mong subscription.",
+    "referralCampaignTitle": "Irekomenda ang Omi. Kumuha ng libreng Pro."
 }

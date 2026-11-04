@@ -4558,7 +4558,11 @@
     "liveTranscribedUpTo": "Расшифровано до {time}",
     "liveAudioSaved": "Сохранено {duration}",
     "liveAudioSavedDetail": "Участники и итоговая расшифровка появятся здесь по мере загрузки.",
-    "referralGiftTitle": "Подарите другу месяц Omi Pro",
-    "referralWebSteps": "1. Поделитесь личной ссылкой.\n2. Друг регистрируется в интернете по вашей ссылке.\n3. Новые аккаунты, соответствующие условиям, получают 30 дней Omi Pro.",
-    "referralAffiliate": "Партнёрская программа"
+    "referralAffiliate": "Партнёрская программа",
+    "referralCampaignTerms": "Друзья получают скидку 10% на устройства Omi. Покупки первых 2 разных друзей дают 2 месяца Pro, покупки следующих 3 разных друзей — ещё 3 месяца. Всего до 5 друзей и 5 месяцев.",
+    "referralMilestone": "{months} мес. Pro · {count}/{target} покупок",
+    "referralClaim": "Получить награду",
+    "referralClaimed": "Получено месяцев Pro: {months}",
+    "referralRewardPending": "Награда сохранена до окончания платной подписки.",
+    "referralCampaignTitle": "Приглашайте в Omi. Получайте Pro бесплатно."
 }

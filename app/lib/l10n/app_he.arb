@@ -11949,7 +11949,11 @@
     "liveTranscribedUpTo": "תומלל עד {time}",
     "liveAudioSaved": "{duration} נשמרו",
     "liveAudioSavedDetail": "הדוברים והתמליל הסופי יופיעו כאן במהלך ההעלאה.",
-    "referralGiftTitle": "תנו לחבר חודש של Omi Pro",
-    "referralWebSteps": "1. שתפו את הקישור האישי שלכם.\n2. החבר נרשם באתר דרך הקישור שלכם.\n3. חשבונות חדשים זכאים מקבלים 30 ימים של Omi Pro.",
-    "referralAffiliate": "תוכנית שותפים"
+    "referralAffiliate": "תוכנית שותפים",
+    "referralCampaignTerms": "חברים מקבלים 10% הנחה על מכשירי Omi. הרכישות של 2 החברים השונים הראשונים פותחות 2 חודשי Pro, והרכישות של 3 החברים השונים הבאים עוד 3. עד 5 חברים ו-5 חודשים בסך הכול.",
+    "referralMilestone": "{months} חודשי Pro · {count}/{target} רכישות",
+    "referralClaim": "קבלת פרס",
+    "referralClaimed": "התקבלו {months} חודשי Pro",
+    "referralRewardPending": "הפרס נשמר עד לסיום המנוי בתשלום.",
+    "referralCampaignTitle": "המליצו על Omi. קבלו Pro בחינם."
 }

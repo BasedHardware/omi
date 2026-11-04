@@ -18297,7 +18297,31 @@
     "@liveAudioSavedDetail": {
         "description": "Under the saved-audio card's heading."
     },
-    "referralGiftTitle": "Give a friend a month of Omi Pro",
-    "referralWebSteps": "1. Share your personal link.\n2. Your friend signs up on the web through your link.\n3. Eligible new accounts get 30 days of Omi Pro.",
-    "referralAffiliate": "Affiliate program"
+    "referralAffiliate": "Affiliate program",
+    "referralCampaignTerms": "Friends get 10% off Omi hardware. Your first 2 friends who purchase unlock 2 months of Pro. The next 3 unlock 3 more. Up to 5 friends and 5 months total.",
+    "referralMilestone": "{months} months of Pro · {count}/{target} purchases",
+    "@referralMilestone": {
+        "placeholders": {
+            "months": {
+                "type": "int"
+            },
+            "count": {
+                "type": "int"
+            },
+            "target": {
+                "type": "int"
+            }
+        }
+    },
+    "referralClaim": "Claim Reward",
+    "referralClaimed": "{months} Pro months claimed",
+    "@referralClaimed": {
+        "placeholders": {
+            "months": {
+                "type": "int"
+            }
+        }
+    },
+    "referralRewardPending": "Your reward is saved until your paid subscription ends.",
+    "referralCampaignTitle": "Refer Omi. Get free Pro."
 }

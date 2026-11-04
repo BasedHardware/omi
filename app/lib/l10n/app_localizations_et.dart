@@ -14959,12 +14959,28 @@ class AppLocalizationsEt extends AppLocalizations {
   String get liveAudioSavedDetail => 'Kõnelejad ja lõplik transkriptsioon ilmuvad siia üleslaadimise ajal.';
 
   @override
-  String get referralGiftTitle => 'Kingi sõbrale kuu Omi Pro\'d';
-
-  @override
-  String get referralWebSteps =>
-      '1. Jaga oma isiklikku linki.\n2. Sõber registreerub veebis sinu lingi kaudu.\n3. Sobivad uued kontod saavad 30 päeva Omi Pro\'d.';
-
-  @override
   String get referralAffiliate => 'Partnerprogramm';
+
+  @override
+  String get referralCampaignTerms =>
+      'Sõbrad saavad Omi seadmetelt 10% soodustust. Esimese 2 erineva sõbra ostud annavad 2 kuud Pro-d, järgmise 3 erineva sõbra ostud veel 3 kuud. Kuni 5 sõpra ja kokku 5 kuud.';
+
+  @override
+  String referralMilestone(int months, int count, int target) {
+    return '$months kuud Pro-d · $count/$target ostu';
+  }
+
+  @override
+  String get referralClaim => 'Võta preemia';
+
+  @override
+  String referralClaimed(int months) {
+    return '$months Pro-kuud võetud';
+  }
+
+  @override
+  String get referralRewardPending => 'Preemia säilib tasulise tellimuse lõpuni.';
+
+  @override
+  String get referralCampaignTitle => 'Soovita Omit. Saa Pro tasuta.';
 }

@@ -14988,12 +14988,28 @@ class AppLocalizationsLt extends AppLocalizations {
   String get liveAudioSavedDetail => 'Kalbėtojai ir galutinė transkripcija atsiras čia įkeliant.';
 
   @override
-  String get referralGiftTitle => 'Padovanokite draugui mėnesį „Omi Pro“';
-
-  @override
-  String get referralWebSteps =>
-      '1. Pasidalykite asmenine nuoroda.\n2. Draugas užsiregistruoja internete per jūsų nuorodą.\n3. Reikalavimus atitinkančios naujos paskyros gauna 30 dienų „Omi Pro“.';
-
-  @override
   String get referralAffiliate => 'Partnerių programa';
+
+  @override
+  String get referralCampaignTerms =>
+      'Draugai gauna 10% nuolaidą Omi įrenginiams. Pirmų 2 skirtingų draugų pirkimai atrakina 2 mėnesius Pro, kitų 3 skirtingų draugų pirkimai dar 3. Iki 5 draugų ir iš viso 5 mėnesių.';
+
+  @override
+  String referralMilestone(int months, int count, int target) {
+    return '$months mėn. Pro · $count/$target pirkimų';
+  }
+
+  @override
+  String get referralClaim => 'Atsiimti atlygį';
+
+  @override
+  String referralClaimed(int months) {
+    return 'Atsiimta $months mėn. Pro';
+  }
+
+  @override
+  String get referralRewardPending => 'Atlygis saugomas iki mokamos prenumeratos pabaigos.';
+
+  @override
+  String get referralCampaignTitle => 'Rekomenduokite Omi. Gaukite Pro nemokamai.';
 }

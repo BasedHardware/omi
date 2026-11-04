@@ -4523,7 +4523,11 @@
     "liveTranscribedUpTo": "Litteroitu klo {time} asti",
     "liveAudioSaved": "{duration} tallennettu",
     "liveAudioSavedDetail": "Puhujat ja lopullinen litterointi tulevat tähän latauksen edetessä.",
-    "referralGiftTitle": "Anna ystävälle kuukausi Omi Prota",
-    "referralWebSteps": "1. Jaa henkilökohtainen linkkisi.\n2. Ystäväsi rekisteröityy verkossa linkkisi kautta.\n3. Ehdot täyttävät uudet tilit saavat 30 päivää Omi Prota.",
-    "referralAffiliate": "Kumppaniohjelma"
+    "referralAffiliate": "Kumppaniohjelma",
+    "referralCampaignTerms": "Ystävät saavat 10 % alennusta Omi-laitteista. Ensimmäisten 2 eri ystävän ostot avaavat 2 kuukautta Prota, seuraavien 3 eri ystävän ostot vielä 3. Enintään 5 ystävää ja yhteensä 5 kuukautta.",
+    "referralMilestone": "{months} kuukautta Prota · {count}/{target} ostoa",
+    "referralClaim": "Lunasta palkinto",
+    "referralClaimed": "{months} Pro-kuukautta lunastettu",
+    "referralRewardPending": "Palkinto säilyy maksullisen tilauksesi päättymiseen asti.",
+    "referralCampaignTitle": "Suosittele Omia. Saat Pron ilmaiseksi."
 }

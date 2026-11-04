@@ -15085,12 +15085,28 @@ class AppLocalizationsTl extends AppLocalizations {
   String get liveAudioSavedDetail => 'Lalabas dito ang mga nagsasalita at huling transcript habang nag-a-upload.';
 
   @override
-  String get referralGiftTitle => 'Bigyan ang kaibigan ng isang buwang Omi Pro';
-
-  @override
-  String get referralWebSteps =>
-      '1. Ibahagi ang personal mong link.\n2. Mag-sign up ang kaibigan sa web gamit ang link mo.\n3. Makakakuha ang mga kwalipikadong bagong account ng 30 araw ng Omi Pro.';
-
-  @override
   String get referralAffiliate => 'Affiliate program';
+
+  @override
+  String get referralCampaignTerms =>
+      'May 10% diskuwento ang mga kaibigan sa Omi device. Ang pagbili ng unang 2 magkaibang kaibigan ay nagbibigay ng 2 buwang Pro, ang pagbili ng susunod na 3 pang magkaibang kaibigan ay 3 buwan pa. Hanggang 5 kaibigan at 5 buwan sa kabuuan.';
+
+  @override
+  String referralMilestone(int months, int count, int target) {
+    return '$months buwang Pro · $count/$target pagbili';
+  }
+
+  @override
+  String get referralClaim => 'Kunin ang gantimpala';
+
+  @override
+  String referralClaimed(int months) {
+    return 'Nakuha ang $months buwang Pro';
+  }
+
+  @override
+  String get referralRewardPending => 'Nakatabi ang gantimpala hanggang matapos ang bayad mong subscription.';
+
+  @override
+  String get referralCampaignTitle => 'Irekomenda ang Omi. Kumuha ng libreng Pro.';
 }

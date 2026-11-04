@@ -15025,12 +15025,28 @@ class AppLocalizationsHu extends AppLocalizations {
   String get liveAudioSavedDetail => 'A beszélők és a végleges átirat feltöltés közben itt jelennek meg.';
 
   @override
-  String get referralGiftTitle => 'Ajándékozz egy hónap Omi Prót egy barátodnak';
-
-  @override
-  String get referralWebSteps =>
-      '1. Oszd meg személyes linkedet.\n2. Barátod a linkeden keresztül regisztrál a weben.\n3. A jogosult új fiókok 30 nap Omi Prót kapnak.';
-
-  @override
   String get referralAffiliate => 'Partnerprogram';
+
+  @override
+  String get referralCampaignTerms =>
+      'A barátok 10% kedvezményt kapnak az Omi eszközökre. Az első 2 különböző barát vásárlása 2 hónap Pro-t, a következő 3 különböző barát vásárlása további 3 hónapot ad. Legfeljebb 5 barát, összesen 5 hónap.';
+
+  @override
+  String referralMilestone(int months, int count, int target) {
+    return '$months hónap Pro · $count/$target vásárlás';
+  }
+
+  @override
+  String get referralClaim => 'Jutalom igénylése';
+
+  @override
+  String referralClaimed(int months) {
+    return '$months Pro-hónap igényelve';
+  }
+
+  @override
+  String get referralRewardPending => 'A jutalom a fizetős előfizetés végéig megmarad.';
+
+  @override
+  String get referralCampaignTitle => 'Ajánld az Omit. Szerezz ingyen Pro-t.';
 }

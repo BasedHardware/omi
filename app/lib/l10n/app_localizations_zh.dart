@@ -14734,11 +14734,27 @@ class AppLocalizationsZh extends AppLocalizations {
   String get liveAudioSavedDetail => '上传时，说话人和最终转录内容会显示在这里。';
 
   @override
-  String get referralGiftTitle => '送朋友一个月 Omi Pro';
-
-  @override
-  String get referralWebSteps => '1. 分享你的专属链接。\n2. 朋友通过你的链接在网页上注册。\n3. 符合条件的新账户可获得 30 天 Omi Pro。';
-
-  @override
   String get referralAffiliate => '推广合作计划';
+
+  @override
+  String get referralCampaignTerms => '好友购买 Omi 硬件可享九折。前 2 位好友购买后解锁 2 个月 Pro，接下来 3 位再解锁 3 个月。最多 5 位好友，共 5 个月。';
+
+  @override
+  String referralMilestone(int months, int count, int target) {
+    return '$months 个月 Pro · $count/$target 次购买';
+  }
+
+  @override
+  String get referralClaim => '领取奖励';
+
+  @override
+  String referralClaimed(int months) {
+    return '已领取 $months 个月 Pro';
+  }
+
+  @override
+  String get referralRewardPending => '奖励将保留至你的付费订阅结束。';
+
+  @override
+  String get referralCampaignTitle => '推荐 Omi，免费享用 Pro。';
 }

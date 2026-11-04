@@ -4523,7 +4523,11 @@
     "liveTranscribedUpTo": "Prepísané do {time}",
     "liveAudioSaved": "Uložené {duration}",
     "liveAudioSavedDetail": "Rečníci a konečný prepis sa tu objavia počas nahrávania.",
-    "referralGiftTitle": "Darujte priateľovi mesiac Omi Pro",
-    "referralWebSteps": "1. Zdieľajte svoj osobný odkaz.\n2. Priateľ sa zaregistruje na webe cez váš odkaz.\n3. Nové oprávnené účty získajú 30 dní Omi Pro.",
-    "referralAffiliate": "Partnerský program"
+    "referralAffiliate": "Partnerský program",
+    "referralCampaignTerms": "Priatelia získajú 10% zľavu na zariadenia Omi. Nákupy prvých 2 rôznych priateľov odomknú 2 mesiace Pro, nákupy ďalších 3 rôznych priateľov ešte 3. Najviac 5 priateľov a spolu 5 mesiacov.",
+    "referralMilestone": "{months} mesiacov Pro · {count}/{target} nákupov",
+    "referralClaim": "Vyzdvihnúť odmenu",
+    "referralClaimed": "Vyzdvihnutých {months} mesiacov Pro",
+    "referralRewardPending": "Odmena sa uchová do konca plateného predplatného.",
+    "referralCampaignTitle": "Odporučte Omi. Získajte Pro zadarmo."
 }

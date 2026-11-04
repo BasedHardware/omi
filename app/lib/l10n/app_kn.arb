@@ -11949,7 +11949,11 @@
     "liveTranscribedUpTo": "{time} ವರೆಗೆ ಪ್ರತಿಲೇಖನವಾಗಿದೆ",
     "liveAudioSaved": "{duration} ಉಳಿಸಲಾಗಿದೆ",
     "liveAudioSavedDetail": "ಅಪ್‌ಲೋಡ್ ಆಗುತ್ತಿದ್ದಂತೆ ಮಾತನಾಡುವವರು ಮತ್ತು ಅಂತಿಮ ಪ್ರತಿಲೇಖನ ಇಲ್ಲಿ ಬರುತ್ತವೆ.",
-    "referralGiftTitle": "ಸ್ನೇಹಿತರಿಗೆ ಒಂದು ತಿಂಗಳ Omi Pro ನೀಡಿ",
-    "referralWebSteps": "1. ನಿಮ್ಮ ವೈಯಕ್ತಿಕ ಲಿಂಕ್ ಹಂಚಿಕೊಳ್ಳಿ.\n2. ನಿಮ್ಮ ಸ್ನೇಹಿತರು ನಿಮ್ಮ ಲಿಂಕ್ ಮೂಲಕ ವೆಬ್‌ನಲ್ಲಿ ನೋಂದಾಯಿಸುತ್ತಾರೆ.\n3. ಅರ್ಹ ಹೊಸ ಖಾತೆಗಳಿಗೆ 30 ದಿನಗಳ Omi Pro ಸಿಗುತ್ತದೆ.",
-    "referralAffiliate": "ಅಫಿಲಿಯೇಟ್ ಕಾರ್ಯಕ್ರಮ"
+    "referralAffiliate": "ಅಫಿಲಿಯೇಟ್ ಕಾರ್ಯಕ್ರಮ",
+    "referralCampaignTerms": "ಸ್ನೇಹಿತರಿಗೆ Omi ಸಾಧನಗಳ ಮೇಲೆ 10% ರಿಯಾಯಿತಿ. ಮೊದಲ 2 ವಿಭಿನ್ನ ಸ್ನೇಹಿತರ ಖರೀದಿಗಳು 2 ತಿಂಗಳ Pro, ಮುಂದಿನ 3 ವಿಭಿನ್ನ ಸ್ನೇಹಿತರ ಖರೀದಿಗಳು ಇನ್ನೂ 3 ತಿಂಗಳು ನೀಡುತ್ತವೆ. ಗರಿಷ್ಠ 5 ಸ್ನೇಹಿತರು ಮತ್ತು ಒಟ್ಟು 5 ತಿಂಗಳು.",
+    "referralMilestone": "{months} ತಿಂಗಳು Pro · {count}/{target} ಖರೀದಿಗಳು",
+    "referralClaim": "ಬಹುಮಾನ ಪಡೆಯಿರಿ",
+    "referralClaimed": "{months} ತಿಂಗಳ Pro ಪಡೆಯಲಾಗಿದೆ",
+    "referralRewardPending": "ನಿಮ್ಮ ಪಾವತಿಸಿದ ಚಂದಾದಾರಿಕೆ ಮುಗಿಯುವವರೆಗೆ ಬಹುಮಾನ ಉಳಿಯುತ್ತದೆ.",
+    "referralCampaignTitle": "Omi ಪರಿಚಯಿಸಿ. ಉಚಿತ Pro ಪಡೆಯಿರಿ."
 }

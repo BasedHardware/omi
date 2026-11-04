@@ -4523,7 +4523,11 @@
     "liveTranscribedUpTo": "Transkribuota iki {time}",
     "liveAudioSaved": "Išsaugota {duration}",
     "liveAudioSavedDetail": "Kalbėtojai ir galutinė transkripcija atsiras čia įkeliant.",
-    "referralGiftTitle": "Padovanokite draugui mėnesį „Omi Pro“",
-    "referralWebSteps": "1. Pasidalykite asmenine nuoroda.\n2. Draugas užsiregistruoja internete per jūsų nuorodą.\n3. Reikalavimus atitinkančios naujos paskyros gauna 30 dienų „Omi Pro“.",
-    "referralAffiliate": "Partnerių programa"
+    "referralAffiliate": "Partnerių programa",
+    "referralCampaignTerms": "Draugai gauna 10% nuolaidą Omi įrenginiams. Pirmų 2 skirtingų draugų pirkimai atrakina 2 mėnesius Pro, kitų 3 skirtingų draugų pirkimai dar 3. Iki 5 draugų ir iš viso 5 mėnesių.",
+    "referralMilestone": "{months} mėn. Pro · {count}/{target} pirkimų",
+    "referralClaim": "Atsiimti atlygį",
+    "referralClaimed": "Atsiimta {months} mėn. Pro",
+    "referralRewardPending": "Atlygis saugomas iki mokamos prenumeratos pabaigos.",
+    "referralCampaignTitle": "Rekomenduokite Omi. Gaukite Pro nemokamai."
 }

@@ -26,6 +26,7 @@ REFERRALS_ROUTER_PATH = Path(__file__).resolve().parents[2] / 'routers' / 'refer
 def _loaded_referrals_router() -> Iterator[ModuleType]:
     endpoints = ModuleType('utils.other.endpoints')
     endpoints.get_current_user_uid = lambda: 'test-user'
+    endpoints.get_current_user_uid_readonly = lambda: 'test-user'
     with stub_modules({'utils.other.endpoints': endpoints}):
         yield load_module_fresh('routers.referrals', str(REFERRALS_ROUTER_PATH))
 

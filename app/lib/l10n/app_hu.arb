@@ -4619,7 +4619,11 @@
     "liveTranscribedUpTo": "Átírva eddig: {time}",
     "liveAudioSaved": "{duration} mentve",
     "liveAudioSavedDetail": "A beszélők és a végleges átirat feltöltés közben itt jelennek meg.",
-    "referralGiftTitle": "Ajándékozz egy hónap Omi Prót egy barátodnak",
-    "referralWebSteps": "1. Oszd meg személyes linkedet.\n2. Barátod a linkeden keresztül regisztrál a weben.\n3. A jogosult új fiókok 30 nap Omi Prót kapnak.",
-    "referralAffiliate": "Partnerprogram"
+    "referralAffiliate": "Partnerprogram",
+    "referralCampaignTerms": "A barátok 10% kedvezményt kapnak az Omi eszközökre. Az első 2 különböző barát vásárlása 2 hónap Pro-t, a következő 3 különböző barát vásárlása további 3 hónapot ad. Legfeljebb 5 barát, összesen 5 hónap.",
+    "referralMilestone": "{months} hónap Pro · {count}/{target} vásárlás",
+    "referralClaim": "Jutalom igénylése",
+    "referralClaimed": "{months} Pro-hónap igényelve",
+    "referralRewardPending": "A jutalom a fizetős előfizetés végéig megmarad.",
+    "referralCampaignTitle": "Ajánld az Omit. Szerezz ingyen Pro-t."
 }

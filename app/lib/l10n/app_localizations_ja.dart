@@ -14753,11 +14753,27 @@ class AppLocalizationsJa extends AppLocalizations {
   String get liveAudioSavedDetail => 'アップロードが進むと、話者と最終的な文字起こしがここに表示されます。';
 
   @override
-  String get referralGiftTitle => '友達にOmi Proを1か月プレゼント';
-
-  @override
-  String get referralWebSteps => '1. あなた専用のリンクを共有します。\n2. 友達がそのリンクからウェブで登録します。\n3. 条件を満たす新規アカウントはOmi Proを30日間利用できます。';
-
-  @override
   String get referralAffiliate => 'アフィリエイトプログラム';
+
+  @override
+  String get referralCampaignTerms => '友達は Omi デバイスが10%オフに。最初の2人の購入でProを2か月、次の3人でさらに3か月獲得。最大5人、合計5か月です。';
+
+  @override
+  String referralMilestone(int months, int count, int target) {
+    return 'Pro $monthsか月 · 購入 $count/$target件';
+  }
+
+  @override
+  String get referralClaim => '特典を受け取る';
+
+  @override
+  String referralClaimed(int months) {
+    return 'Pro $monthsか月を受取済み';
+  }
+
+  @override
+  String get referralRewardPending => '有料サブスクリプション終了まで特典は保存されます。';
+
+  @override
+  String get referralCampaignTitle => 'Omiを紹介して、Proを無料で。';
 }

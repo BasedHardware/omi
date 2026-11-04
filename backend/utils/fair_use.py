@@ -339,7 +339,13 @@ def fair_use_caps_for_plan(plan: Optional[PlanType | str] = None) -> tuple[int, 
 def fair_use_caps_for_user(uid: str) -> tuple[int, int, int]:
     """Return the existing plan's fair-use caps without creating a subscription."""
     try:
-        subscription = users_db.get_existing_user_subscription(uid)
+        from utils.referral_campaign import campaign_enabled
+
+        subscription = (
+            users_db.get_user_valid_subscription(uid, provision=False)
+            if campaign_enabled()
+            else users_db.get_existing_user_subscription(uid)
+        )
         return fair_use_caps_for_plan(subscription.plan if subscription is not None else None)
     except Exception as error:
         logger.warning('fair_use: subscription lookup failed; using metered hard caps error=%s', type(error).__name__)

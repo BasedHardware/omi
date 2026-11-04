@@ -4523,7 +4523,11 @@
     "liveTranscribedUpTo": "Transkribeeritud kuni {time}",
     "liveAudioSaved": "{duration} salvestatud",
     "liveAudioSavedDetail": "Kõnelejad ja lõplik transkriptsioon ilmuvad siia üleslaadimise ajal.",
-    "referralGiftTitle": "Kingi sõbrale kuu Omi Pro'd",
-    "referralWebSteps": "1. Jaga oma isiklikku linki.\n2. Sõber registreerub veebis sinu lingi kaudu.\n3. Sobivad uued kontod saavad 30 päeva Omi Pro'd.",
-    "referralAffiliate": "Partnerprogramm"
+    "referralAffiliate": "Partnerprogramm",
+    "referralCampaignTerms": "Sõbrad saavad Omi seadmetelt 10% soodustust. Esimese 2 erineva sõbra ostud annavad 2 kuud Pro-d, järgmise 3 erineva sõbra ostud veel 3 kuud. Kuni 5 sõpra ja kokku 5 kuud.",
+    "referralMilestone": "{months} kuud Pro-d · {count}/{target} ostu",
+    "referralClaim": "Võta preemia",
+    "referralClaimed": "{months} Pro-kuud võetud",
+    "referralRewardPending": "Preemia säilib tasulise tellimuse lõpuni.",
+    "referralCampaignTitle": "Soovita Omit. Saa Pro tasuta."
 }

@@ -4523,7 +4523,11 @@
     "liveTranscribedUpTo": "Transkribēts līdz {time}",
     "liveAudioSaved": "Saglabāts {duration}",
     "liveAudioSavedDetail": "Runātāji un galīgā transkripcija šeit parādīsies augšupielādes laikā.",
-    "referralGiftTitle": "Uzdāviniet draugam mēnesi Omi Pro",
-    "referralWebSteps": "1. Kopīgojiet savu personīgo saiti.\n2. Draugs reģistrējas tīmeklī, izmantojot jūsu saiti.\n3. Atbilstoši jauni konti saņem 30 dienas Omi Pro.",
-    "referralAffiliate": "Partneru programma"
+    "referralAffiliate": "Partneru programma",
+    "referralCampaignTerms": "Draugi saņem 10% atlaidi Omi ierīcēm. Pirmo 2 dažādo draugu pirkumi atver 2 Pro mēnešus, nākamo 3 dažādo draugu pirkumi vēl 3. Līdz 5 draugiem un kopā 5 mēnešiem.",
+    "referralMilestone": "{months} Pro mēneši · {count}/{target} pirkumi",
+    "referralClaim": "Saņemt balvu",
+    "referralClaimed": "Saņemti {months} Pro mēneši",
+    "referralRewardPending": "Balva tiek glabāta līdz maksas abonementa beigām.",
+    "referralCampaignTitle": "Iesakiet Omi. Saņemiet Pro bez maksas."
 }
