@@ -19,9 +19,13 @@ class WhisperWindowPreviewEngine implements LivePreviewEngine {
     required this.transcribe,
     this.windowBytes = 4 * 32000,
     this.maxBufferedBytes = 30 * 32000,
-  });
+    DateTime Function()? now,
+  }) : _now = now ?? DateTime.now;
 
   final WhisperWindowTranscriber transcribe;
+  final DateTime Function() _now;
+  DateTime? _audioOrigin;
+  int _bufferOffset = 0;
 
   /// Four seconds of 16 kHz PCM16 per transcription.
   final int windowBytes;
@@ -50,16 +54,23 @@ class WhisperWindowPreviewEngine implements LivePreviewEngine {
     _running = true;
     _generation++;
     _buffer.clear();
+    _audioOrigin = null;
+    _bufferOffset = 0;
     return const LivePreviewStart(LivePreviewEngineKind.whisper, LivePreviewReason.ok, bundledInstalled: true);
   }
 
   @override
-  Future<bool> feedPcm16(Uint8List pcm) async {
+  Future<bool> feedPcm16(Uint8List pcm, {DateTime? startedAt}) async {
     if (!_running) return false;
     var accepted = true;
+    if (_buffer.isEmpty) {
+      _audioOrigin = startedAt ?? _now().subtract(Duration(microseconds: pcm.length * 1000000 ~/ 32000));
+      _bufferOffset = 0;
+    }
     _buffer.add(pcm);
     if (_buffer.length > maxBufferedBytes) {
       final kept = _buffer.takeBytes();
+      _bufferOffset += kept.length - maxBufferedBytes;
       _buffer.add(Uint8List.sublistView(kept, kept.length - maxBufferedBytes));
       accepted = false;
     }
@@ -73,6 +84,9 @@ class WhisperWindowPreviewEngine implements LivePreviewEngine {
     final window = Uint8List.sublistView(all, 0, windowBytes);
     if (all.length > windowBytes) _buffer.add(Uint8List.sublistView(all, windowBytes));
     final generation = _generation;
+    final startedAt = _audioOrigin?.add(Duration(microseconds: _bufferOffset * 1000000 ~/ 32000));
+    final endedAt = startedAt?.add(Duration(microseconds: windowBytes * 1000000 ~/ 32000));
+    _bufferOffset += windowBytes;
     final id = 'w${_window++}';
     _busy = true;
     unawaited(() async {
@@ -80,7 +94,8 @@ class WhisperWindowPreviewEngine implements LivePreviewEngine {
         final text = await transcribe(WavBytes.fromPcm(window, sampleRate: 16000, numChannels: 1).asBytes(), _language);
         final trimmed = text?.trim() ?? '';
         if (generation == _generation && _running && trimmed.isNotEmpty && !_results.isClosed) {
-          _results.add(LivePreviewResult(segmentId: id, text: trimmed, isFinal: true));
+          _results.add(
+              LivePreviewResult(segmentId: id, text: trimmed, isFinal: true, startedAt: startedAt, endedAt: endedAt));
         }
       } catch (_) {
         // The model failed to run: the engine is dead for this session.
@@ -151,7 +166,8 @@ class FallbackLivePreviewEngine implements LivePreviewEngine {
   }
 
   @override
-  Future<bool> feedPcm16(Uint8List pcm) => _active?.feedPcm16(pcm) ?? Future.value(false);
+  Future<bool> feedPcm16(Uint8List pcm, {DateTime? startedAt}) =>
+      _active?.feedPcm16(pcm, startedAt: startedAt) ?? Future.value(false);
 
   @override
   Future<void> stop() => _detach();

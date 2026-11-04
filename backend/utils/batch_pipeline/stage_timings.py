@@ -14,6 +14,7 @@ STAGES = frozenset(
         'pull',
         'admission',
         'worker_flight',
+        'worker_flight_deep',
         'publication',
         'renew',
         'ordered_merge',
@@ -27,6 +28,8 @@ STAGES = frozenset(
         'flight_diarize',
         'diarize',
         'persist',
+        'persist_settle',
+        'strict_vad_shadow',
         'cuda_sync',
     }
 )

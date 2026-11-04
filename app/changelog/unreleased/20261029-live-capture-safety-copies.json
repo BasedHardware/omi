@@ -1,0 +1,3 @@
+{
+  "change": "Live phone recordings keep a durable local safety copy until the server confirms them, so closing the app mid-recording no longer leaves the streamed part without a local copy; a typed chat draft is kept across app closes and restored when you reopen chat, and recordings whose automatic retry budget ran out retry again after a restart instead of waiting for a network change"
+}

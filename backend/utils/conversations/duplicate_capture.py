@@ -6,9 +6,11 @@ windows are primary; equal windows use the document ID for stable ordering.
 
 A window match is only a proposal. When both captures also share speech
 (``shared_speech``), they join one capture group (``database.capture_groups``),
-which records their shared event identity. Grouping is metadata only.
-The default-off desktop-call path accepts complementary speech under its
-meeting-role and window contract, and pins the desktop primary.
+which records their shared event identity. Grouping is metadata only. The
+former default-off desktop-call link that pinned the desktop primary was
+removed with the 2026-10-18 flag rulings (#22209); meeting identity now reaches
+the primary's notes through the members' calendar context and screen frames
+(``utils/conversations/capture_group_notes_refresh.py``).
 """
 
 from __future__ import annotations
@@ -19,13 +21,12 @@ import math
 import os
 import time
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Mapping
 
 from config.capture_shared_speech import shared_speech_mode
-from config.refactor_modes import serving_for
+from config.recorded_time_tolerances import CLOCK_SKEW_SECONDS
 from utils.capture.coverage_crossdevice import reconcile as reconcile_cross_device
-from utils.conversations.lifecycle_clocks import speech_clock, utc
 from database import capture_groups as capture_groups_db
 from database import conversations as conversations_db
 from database.capture_speech import get_shared_speech_snapshot
@@ -43,6 +44,7 @@ from utils.conversations.overlap_shared_speech import (
 )
 from utils.observability.fallback import record_fallback
 from utils.product_metrics import record_product_event
+from utils.episodes.finalize import schedule_group_attachments
 
 logger = logging.getLogger(__name__)
 MIN_OVERLAP_SECONDS = 60.0
@@ -75,13 +77,30 @@ def capture_record(record: Any, uid: str | None = None) -> CaptureRecord | None:
 
     if field('discarded') or field('status') != 'completed':
         return None
-    normalize = uid is not None and serving_for('LIFECYCLE_V2_MODE', uid)
-    start = utc(field('started_at')) if normalize else field('started_at')
-    finish = (
-        speech_clock(uid, {'finished_at': field('finished_at'), 'last_speech_at': field('last_speech_at')})
-        if normalize and uid is not None
-        else field('finished_at')
+    from utils.conversations.recorded_time import conversation_span
+
+    row = (
+        dict(record)
+        if isinstance(record, Mapping)
+        else {
+            name: field(name)
+            for name in (
+                'started_at',
+                'finished_at',
+                'created_at',
+                'recorded_start',
+                'recorded_end',
+                'arrival_at',
+                'clock',
+                'last_speech_at',
+                'transcript_segments',
+                'status',
+                'source',
+            )
+        }
     )
+    span = conversation_span(row)
+    start, finish = (span.recorded_start, span.recorded_end) if span else (None, None)
     if not isinstance(start, datetime) or not isinstance(finish, datetime):
         return None
     start = start if start.tzinfo else start.replace(tzinfo=timezone.utc)
@@ -124,7 +143,12 @@ def link_duplicate_captures(uid: str, conversation: Any) -> None:
         seconds = _threshold('CROSS_DEVICE_DEDUP_MIN_OVERLAP_SECONDS', MIN_OVERLAP_SECONDS)
         ratio = _threshold('CROSS_DEVICE_DEDUP_MIN_OVERLAP_RATIO', MIN_WINDOW_COVERAGE, 1.0)
         rows = conversations_db.get_conversations_finished_after(
-            uid, status='completed', finished_after=candidate.started_at, limit=CANDIDATE_PAGE_LIMIT
+            uid,
+            status='completed',
+            # Only candidate discovery uses the legacy clock. Recorded spans
+            # and the transaction recheck remain the overlap authority.
+            finished_after=candidate.started_at - timedelta(seconds=CLOCK_SKEW_SECONDS),
+            limit=CANDIDATE_PAGE_LIMIT,
         )
         if len(rows) == CANDIDATE_PAGE_LIMIT:
             _record_degraded()
@@ -287,6 +311,8 @@ def _group_with_overlap_speech(
                     expected_group_revision=expected_revision,
                     join_guard=shared_speech_group_guard,
                 )
+                if group_id:
+                    schedule_group_attachments(uid, list(windows))
                 outcome = 'applied' if group_id else 'conflict'
                 record_product_event('capture_group_joined', outcome=outcome)
             logger.info(
@@ -373,6 +399,8 @@ def _group_confirmed_captures(uid: str, conversation: Any, candidate: CaptureRec
                     other.conversation_id: other_fingerprint,
                 },
             )
+            if group_id:
+                schedule_group_attachments(uid, [candidate.conversation_id, other.conversation_id])
             record_product_event('capture_group_joined', outcome='applied' if group_id else 'conflict')
             if group_id and isinstance(own_row, dict):
                 primary = min((candidate, other), key=lambda row: row.primary_rank)

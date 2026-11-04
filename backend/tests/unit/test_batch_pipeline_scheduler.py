@@ -1,13 +1,17 @@
 """State-machine tests over an atomic snapshot store, not a Firestore emulator."""
 
 from copy import deepcopy
-from threading import RLock
+from dataclasses import replace
+from threading import Event, RLock, Thread, current_thread
+from unittest.mock import Mock
 
 import pytest
 
 from config.batch_pipeline import admit_or_legacy, enabled_for, priority_for, scheduler_control_key
+from database.batch_pipeline_shadow import pool_busy
+from tests.unit.fixtures.batch_shadow_metadata_query import metadata_client
 from utils.batch_pipeline.scheduler import owner_key
-from utils.batch_pipeline.contracts import Priority, WorkItem, WorkResult
+from utils.batch_pipeline.contracts import LeasedWork, Priority, WorkItem, WorkResult
 from utils.batch_pipeline.merge import OrderedMerge
 from utils.batch_pipeline.scheduler import Scheduler, LEASE_SECONDS
 
@@ -94,7 +98,22 @@ class MemoryStore:
         ]
         return min(jobs) if jobs else None
 
-    def control_candidate(self, priority, pool, now):
+    def acquire_pull_claim(self, shard, token, now, ttl):
+        with self.lock:
+            if self.rows.get(('pull_claims', shard), {}).get('expires_at', 0) > now:
+                return False
+            self.rows['pull_claims', shard] = {'token': token, 'expires_at': now + ttl}
+            return True
+
+    def control_candidate(self, priority, pool, now, *, worker_id='', exclude=()):
+        return next(
+            (key for key in self.control_candidates(priority, pool, now, worker_id=worker_id) if key not in exclude),
+            None,
+        )
+
+    def control_candidates(self, priority, pool, now, *, worker_id='', fanout=None):
+        import hashlib
+        from config.batch_pipeline import control_candidate_fanout
         from utils.batch_pipeline.control import field
 
         candidates = [
@@ -104,7 +123,11 @@ class MemoryStore:
             and v.get(field(priority, 'active'))
             and v[field(priority, pool + '_available_at')] <= now
         ]
-        return min(candidates)[2] if candidates else None
+        candidates.sort()
+        candidates = candidates[: control_candidate_fanout(fanout) if worker_id else 1]
+        if worker_id:
+            candidates.sort(key=lambda row: (row[0], hashlib.sha256(f'{worker_id}:{row[2]}'.encode()).digest()))
+        return [row[2] for row in candidates]
 
     def oldest_retry(self, priority):
         values = [
@@ -157,14 +180,43 @@ def item(segment, owner='heavy', capture=1, duration=30, priority=Priority.DEEP,
     return WorkItem(segment, owner, capture, f'gs://synthetic/{segment}', duration, priority, unit_kind)
 
 
-def test_heavy_owner_does_not_starve_light_owner():
+@pytest.mark.parametrize('timing_store', [None, 'batch', 'sync'])
+def test_job_timing_store_is_optional_durable_and_immutable(timing_store):
+    store = MemoryStore()
+    queue = Scheduler(store)
+    work = replace(item('clock'), timing_store=timing_store)
+    assert queue.enqueue(work, 0)
+    row = store.rows['jobs', work.segment_id]
+    if timing_store is None:
+        assert 'timing_store' not in row
+    else:
+        assert row['timing_store'] == timing_store
+    assert not queue.enqueue(work, 0)
+    assert queue.pull(1)[0].item == work
+    if timing_store is None:
+        # Rows written before omission remain idempotent too.
+        store.rows['jobs', work.segment_id]['timing_store'] = None
+        assert not queue.enqueue(work, 0)
+    for other in {None, 'batch', 'sync'} - {timing_store}:
+        with pytest.raises(ValueError, match='different immutable work'):
+            queue.enqueue(replace(work, timing_store=other), 0)
+
+
+@pytest.mark.parametrize('multi_lease', [False, True])
+def test_heavy_owner_does_not_starve_light_owner(monkeypatch, multi_lease):
+    monkeypatch.setenv('BATCH_PULL_MULTI_LEASE_ENABLED', str(multi_lease).lower())
     queue = Scheduler(MemoryStore())
     for n in range(30):
         queue.enqueue(item(f'h{n}'), 0)
     queue.enqueue(item('light', owner='light'), 0)
     pulled = queue.pull(1, 3)
-    assert 'light' in [v.item.owner_id for v in pulled[:2]]
     assert len(pulled) == 3
+    if not multi_lease:
+        assert 'light' in [v.item.owner_id for v in pulled[:2]]
+        return
+    # One shard transaction may fill the batch, but the service it charged
+    # puts the light owner's shard first on the very next pull.
+    assert 'light' in [v.item.owner_id for v in pulled + queue.pull(1, 1)]
 
 
 def test_duration_deficit_round_robin():
@@ -216,6 +268,104 @@ def test_lease_expiry_backoff_and_stale_result_fencing():
     assert not queue.complete(WorkResult('a', 'gs://results/changed'), second.token, 999)
 
 
+def test_admission_deferred_re_lease_records_relet_true_first_lease_false():
+    from prometheus_client import CollectorRegistry
+    from utils.batch_pipeline.metrics import QueueMetrics
+
+    registry = CollectorRegistry()
+    store = MemoryStore()
+    queue = Scheduler(store, metrics=QueueMetrics(registry))
+    queue.enqueue(item('held'), 0)
+    first = queue.pull(1)[0]
+    assert first.attempt == 1
+    assert queue.defer(
+        'held',
+        first.token,
+        2,
+        retry_after=60,
+        held_reason='allowance_exhausted',
+        admission_refused=True,
+    )
+    due = store.rows['jobs', 'held']['available_at']
+    assert queue.recover(due) == 1
+    second = queue.pull(due)[0]
+    # defer() refunded the attempt, so the re-lease is a relet only through
+    # the recorded refusal streak.
+    assert second.attempt == 1 and second.token != first.token
+    count = 'omi_batch_pipeline_owner_wait_seconds_count'
+    assert registry.get_sample_value(count, {'relet': 'false'}) == 1
+    assert registry.get_sample_value(count, {'relet': 'true'}) == 1
+
+
+def test_attempt_charged_re_lease_records_relet_true():
+    from prometheus_client import CollectorRegistry
+    from utils.batch_pipeline.metrics import QueueMetrics
+
+    registry = CollectorRegistry()
+    store = MemoryStore()
+    queue = Scheduler(store, metrics=QueueMetrics(registry))
+    queue.enqueue(item('a'), 0)
+    first = queue.pull(0)[0]
+    assert first.attempt == 1
+    assert queue.recover(181) == 1
+    assert queue.recover(186) == 1
+    second = queue.pull(186)[0]
+    assert second.attempt == 2
+    count = 'omi_batch_pipeline_owner_wait_seconds_count'
+    assert registry.get_sample_value(count, {'relet': 'false'}) == 1
+    assert registry.get_sample_value(count, {'relet': 'true'}) == 1
+
+
+@pytest.mark.parametrize('mode', ['off', 'shadow'])
+def test_due_retry_at_attempt_cap_can_still_be_dispatched(mode, monkeypatch):
+    # Shadow idle admission must follow this actual scheduler behavior, rather
+    # than treating an attempt count as an authoritative terminal state.
+    monkeypatch.setenv('CAPTURE_COVERAGE_MODE', mode)
+    store = MemoryStore()
+    queue = Scheduler(store)
+    queue.enqueue(item('at-cap'), 0)
+    lease = queue.pull(0)[0]
+    job = store.rows['jobs', 'at-cap']
+    job['attempt'] = job['policy_parts']['scheduler']['max_attempts']
+    cap = job['attempt']
+    assert queue.recover(LEASE_SECONDS + 1) == 1
+    retry = store.rows['jobs', 'at-cap']
+    assert retry['state'] == 'retry' and retry['attempt'] == cap
+    due = retry['available_at']
+    assert queue.recover(due) == 1
+    next_lease = queue.pull(due)[0]
+    assert next_lease.attempt == cap + 1
+    assert next_lease.token != lease.token
+
+
+def test_allowance_repark_is_idle_until_scheduler_takes_a_live_lease():
+    store = MemoryStore()
+    queue = Scheduler(store)
+    queue.enqueue(item('held-shadow-probe'), 0)
+    lease = queue.pull(0)[0]
+    assert queue.defer(
+        'held-shadow-probe',
+        lease.token,
+        1,
+        retry_after=3600,
+        held_reason='allowance_exhausted',
+        admission_refused=True,
+    )
+
+    def busy_at(now):
+        rows = [row for (table, key), row in store.rows.items() if table == 'jobs']
+        return pool_busy(metadata_client(rows), 'batch_pipeline_dev', now=now)
+
+    due = store.rows['jobs', 'held-shadow-probe']['available_at']
+    assert not busy_at(due)
+    assert queue.recover(due) == 1
+    assert store.rows['jobs', 'held-shadow-probe']['state'] == 'ready'
+    assert not busy_at(due)
+    next_lease = queue.pull(due)[0]
+    assert next_lease.token != lease.token
+    assert busy_at(due)  # Live leases retain priority during re-evaluation/dispatch.
+
+
 def test_failures_stop_at_default_ceiling_without_fabricating_result():
     store = MemoryStore()
     queue = Scheduler(store)
@@ -235,11 +385,68 @@ def test_failures_stop_at_default_ceiling_without_fabricating_result():
     assert job['state'] == 'quarantined' and not job['merge_pending']
     assert job['quarantine_reason'] == 'worker_failed' and job['recovery_state'] == 'held'
     assert 'retry_started_at' not in job and 'result' not in job
+    assert job['audio_uri'] == 'gs://synthetic/a'  # retained source for fenced operator recovery
     assert queue.recover(99999) == 0 and queue.pull(99999) == []
     assert not queue.redrive_dead('a', 99999)
     assert not queue.complete(WorkResult('a', 'gs://results/stale'), lease.token, 99999)
     assert OrderedMerge(store).commit_next('heavy', 99999) is None
     assert ('results', 'a') not in store.rows
+
+
+def test_contention_backoff_returns_prior_leases_and_suppresses_hot_repull(monkeypatch):
+    from database.firestore_transaction_retry import FirestoreContentionExhausted
+    from utils.batch_pipeline import scheduler as scheduler_module
+
+    now = [100.0]
+    monkeypatch.setattr(scheduler_module, 'monotonic', lambda: now[0])
+    monkeypatch.setattr(scheduler_module.random, 'random', lambda: 0.0)
+    queue = Scheduler(MemoryStore())
+    lease = LeasedWork(item('leased'), 'synthetic-token', 1, 120.0)
+    pull_one = Mock(side_effect=[[lease], FirestoreContentionExhausted('bounded'), []])
+    monkeypatch.setattr(queue, '_pull_one', pull_one)
+
+    assert queue.pull(0, 2) == [lease]
+    assert queue._contention_backoff_until == 100.5
+    assert queue.pull(1) == []
+    assert pull_one.call_count == 2
+    now[0] = 100.5
+    assert queue.pull(1) == []
+    assert pull_one.call_count == 3
+    assert queue._contention_failures == 0
+
+
+def test_overlapping_pull_cannot_clear_a_newer_contention_backoff(monkeypatch):
+    from database.firestore_transaction_retry import FirestoreContentionExhausted
+    from utils.batch_pipeline import scheduler as scheduler_module
+
+    now = [100.0]
+    monkeypatch.setattr(scheduler_module, 'monotonic', lambda: now[0])
+    monkeypatch.setattr(scheduler_module.random, 'random', lambda: 0.0)
+    queue = Scheduler(MemoryStore())
+    entered = Event()
+    finish = Event()
+
+    def pull_one(*_args, **_kwargs):
+        if current_thread().name == 'overlapping-pull':
+            entered.set()
+            assert finish.wait(timeout=5)
+            return None
+        raise FirestoreContentionExhausted('bounded')
+
+    monkeypatch.setattr(queue, '_pull_one', pull_one)
+    overlapping_pull = Thread(name='overlapping-pull', target=lambda: queue.pull(0))
+    overlapping_pull.start()
+    assert entered.wait(timeout=5)
+
+    assert queue.pull(1) == []
+    cooldown = queue._contention_backoff_until
+    assert cooldown == 100.5
+
+    finish.set()
+    overlapping_pull.join(timeout=5)
+    assert not overlapping_pull.is_alive()
+    assert queue._contention_backoff_until == cooldown
+    assert queue.pull(2) == []
 
 
 def test_out_of_order_completion_and_idempotent_ordered_commit():
@@ -467,6 +674,45 @@ def test_per_pool_unit_ceiling_and_malformed_capacity_fail_closed():
         assert queue.pull(10, capacity=capacity) == []
 
 
+def test_frame_exact_hour_with_clock_noise_leases_at_hour_ceiling():
+    # Prod 2026-11-01: record units are end - start of epoch clocks, so a full
+    # hour admitted as 3600.0000005s parked four owners' FIFOs for up to 40h.
+    from utils.batch_pipeline.contracts import PoolCapacity
+
+    queue = Scheduler(MemoryStore())
+    queue.enqueue(item('hour', duration=3600 + 4.76837158203125e-07), 0)
+    queue.enqueue(item('later', duration=30, capture=2), 0)
+    capacity = PoolCapacity(10, 1, max_item_seconds=3600)
+    assert queue.pull(10, capacity=capacity)[0].item.segment_id == 'hour'
+    assert queue.pull(10, capacity=capacity)[0].item.segment_id == 'later'
+
+
+def test_parked_heads_are_counted_by_bounded_reason(monkeypatch):
+    from dataclasses import replace
+    from prometheus_client import CollectorRegistry
+    from database.batch_pipeline_privacy import BatchPrivacyBlocked
+    from utils.batch_pipeline.contracts import PoolCapacity
+    from utils.batch_pipeline.metrics import QueueMetrics
+
+    registry = CollectorRegistry()
+    queue = Scheduler(MemoryStore(), metrics=QueueMetrics(registry))
+    queue.enqueue(item('long', duration=3601), 0)
+    queue.enqueue(replace(item('fenced', owner=colliding_owner('heavy')), conversation_id='deleted'), 0)
+    check = MemoryTransaction.check_privacy
+
+    def privacy(tx, uid, conversation_ids=(), expected_generation=None):
+        if 'deleted' in conversation_ids:
+            raise BatchPrivacyBlocked('synthetic deletion')
+        return check(tx, uid, conversation_ids, expected_generation)
+
+    monkeypatch.setattr(MemoryTransaction, 'check_privacy', privacy)
+    assert queue.pull(10, capacity=PoolCapacity(10, 1, max_item_seconds=3600)) == []
+    scope = {'priority': 'deep', 'worker_release': 'unscoped', 'namespace': 'unscoped'}
+    sample = 'omi_batch_pipeline_head_parked_total'
+    assert registry.get_sample_value(sample, {**scope, 'reason': 'pool_duration'}) == 1
+    assert registry.get_sample_value(sample, {**scope, 'reason': 'privacy'}) == 1
+
+
 def test_shared_gpu_exclusivity_survives_completion_and_lease_expiry(monkeypatch):
     from utils.batch_pipeline.contracts import PoolCapacity
 
@@ -512,19 +758,32 @@ def test_conversation_kind_never_runs_on_live_pool_even_when_short(monkeypatch):
     assert Scheduler(queue.store).pull(1)[0].item.unit_kind == 'conversation'
 
 
-def test_shards_weight_service_by_active_owner_count_and_preserve_global_priority():
+@pytest.mark.parametrize('multi_lease', [False, True])
+def test_shards_weight_service_by_active_owner_count_and_preserve_global_priority(monkeypatch, multi_lease):
+    monkeypatch.setenv('BATCH_PULL_MULTI_LEASE_ENABLED', str(multi_lease).lower())
     store = MemoryStore()
     queue = Scheduler(store)
     other = colliding_owner('heavy')
     assert scheduler_control_key(owner_key('light')) != scheduler_control_key(owner_key('heavy'))
     for owner in ('heavy', other, 'light'):
-        for n in range(12):
+        for n in range(24):
             queue.enqueue(item(f'{owner}-{n}', owner=owner), 0)
     queue.enqueue(item('fresh-across-shards', owner='fresh', priority=Priority.FRESH), 0)
     assert queue.pull(1)[0].item.segment_id == 'fresh-across-shards'
-    pulled = queue.pull(1, 18)
-    counts = {uid: sum(v.item.owner_id == uid for v in pulled) for uid in ('heavy', other, 'light')}
-    assert set(counts.values()) == {6}
+    if not multi_lease:
+        pulled = queue.pull(1, 18)
+        counts = {uid: sum(v.item.owner_id == uid for v in pulled) for uid in ('heavy', other, 'light')}
+        assert set(counts.values()) == {6}
+    else:
+        # Each transaction leases up to the batch from one shard and charges
+        # service per lease, so per-owner shares drift by at most one batch
+        # and the owner-count weighting restores them on the next shard turn.
+        counts = {uid: 0 for uid in ('heavy', other, 'light')}
+        for _ in range(4):
+            for lease in queue.pull(1, 9):
+                counts[lease.item.owner_id] += 1
+            assert max(counts.values()) - min(counts.values()) <= 9
+        assert min(counts.values()) >= 9
     assert ('control', 'scheduler') not in store.rows
     assert len([key for table, key in store.rows if table == 'control']) >= 2
 

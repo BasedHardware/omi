@@ -78,7 +78,18 @@ Parakeet model is not used for streaming yet (`bundled_not_built`). A running
 engine that dies reports a typed runtime failure (`engine_error`); the
 controller retries the selection once without it, else shows the no-engine
 state. Decode work runs in bounded slices (8 packets per event-loop turn). No engine is
-a calm "Transcribing…" state; there is never a cloud fallback.
+reported to capture once with its closed reason. Capture sends
+`local_preview_engine_unavailable` before refusing the socket (held frames flush,
+local preview drops from the batch journal). A one-way per-capture latch prevents
+later sockets from declaring; capture end resets it. The server clears the grant
+and declaration and may attach the existing visible Modulate restore, only with
+durable server batch custody and the existing visible-restore cohort. Renewals
+never re-grant. Restore opens only after 15 s of on-screen visibility and closes
+when hidden. Unowned sessions return to their normal non-preview cloud path,
+including any existing demand policy. A renewal revocation uses the same sticky
+transition and clears the declaration for restore. Deploy server
+first, then the Dart app build. `LOCAL_PREVIEW_ENGINE_RESCIND_ENABLED` is on unless
+set off; off counts the event and keeps the existing server grant.
 
 Pendant packets are copied, the 3-byte header stripped and decoded with a
 preview-only Opus decoder; the tap only enqueues into a bounded queue, and
@@ -98,19 +109,73 @@ downloaded Whisper model (`whisper_flutter_new`) runs as a windowed
 pseudo-stream (4 s windows, one at a time, 30 s bounded buffer, final lines
 only); otherwise none.
 
+## On-device live notes
+
+`LivePreviewNotes` (Dart) drafts up to four twelve-word bullets from the
+preview text, entirely on this phone, for the Summary tab's "So far" card while
+the session has no server running notes. iOS drafts with Apple Foundation
+Models (iOS 26+ with Apple Intelligence available) over
+`com.omi/live_preview_notes` (`LivePreviewNotesPlugin.swift`; the schema caps
+the array at four bullets, the clamp is the belt, generation runs detached off
+the main thread and a busy draft is dropped). Android ships no engine in this
+release. A session generation fences late results after any clear, including a silence clear-and-refill. New-word admission uses a monotonic session total, independent of the bounded prompt and line eviction. A draft runs at most once a minute and only after at least 40 new
+preview words. The shared Dart `LivePreviewWordBudget` and matching native
+clamp budget Han/Kana/Hangul-syllable/Thai runs at one word per two graphemes
+(rounded up), and other non-whitespace runs at one word; script transitions
+end a run. This deterministic approximation bounds mixed and unspaced text
+without depending on OS tokenizers. The prompt is capped to the newest ~1500 words (AFM's context
+budget is prompt plus completion). When the engine is unavailable or errors,
+the card shows the quiet "Notes start when the final transcript arrives."
+line — there is no cloud fallback. The preview and the notes never leave the
+phone and are never logged; they clear on capture stop, account change and the
+controller's own conversation-gap clear. Once server running notes exist the
+card shows those, as before.
+
 ## UI and hand-off
 
 `LivePreviewController` is a separate model from `CaptureController.segments`
 (never in LocalSegmentStore, the REST poll, `_segmentArrivals` or conversation
 creation). Lines clear on capture stop/account change, and after a silence as
 long as the conversation timeout; the conversation list's normal refresh shows
-the record.
+the record. Home's listening row reads the running session duration (the same
+`LiveStartAnchor` start the live page counts from — local capture start is authoritative,
+with the server episode start used only until a local capture start is known) in its tile, as whole
+minutes under the live dot, and, for an admitted preview, the newest preview words on line two,
+trimmed at the start so the latest stay visible. The live page's one-line header adds
+"· since <time>" and a small Continues pill for the previous episode. The
+Summary tab shows at most four notes (on-device, above, or the newest server notes) and a
+"Live" card of the newest preview text (no speaker label, trimmed at the start) with an Open
+transcript link. The Transcript
+tab shows final segments first, then a "Live on this phone" divider, then the
+preview lines the finals do not already cover (union of final audio-time intervals; timed words allow partial hand-off; the
+volatile tail reads lighter). The API has no processed-through watermark, so a
+client watermark trails the latest final segment end by 10 seconds to leave a
+recent out-of-order batch hole intact; older uncovered gaps are final-authoritative,
+including silence or noise the server omitted. Untimed preview lines expire
+after the watermark advances 10 seconds beyond their first observed time. The
+tab has one quiet "Final transcript about <N>s
+behind" line replacing the uploading pill (failed/retrying uploads keep their
+actionable pill). Before engine rescind is available (or outside the visible-restore cohort),
+with no on-device engine the tab can show the calm "Recording safely" card; its "Turn on live text" link appears only where the platform can
+deep-link to its speech settings (a denied speech permission).
+
+Audio feed timestamps are minted at the capture tap before bounded decoding,
+so a queued PCM slice and a late recognition result do not shift the preview's
+audio time to delivery time. iOS carries recognized word/phrase ranges; Android
+14+ requests optional word-start timing; Whisper carries the window range.
+Missing timing (including Android 13 recognizers) is kept conservatively. Final
+coverage uses the server conversation origin, independently of the local capture
+timer shown on Home. Preview words and timing stay display-only and in memory.
+Coverage scans merged, time-sorted intervals and preview ranges in one forward
+pass; sorting is only needed for an out-of-order batch/result list.
 
 ## Telemetry
 
 `Live Preview Engine` (engine, reason, platform, os_major, bundled_installed),
-`Live Preview First Word` (latency_ms from first fed audio) and `Live Preview
-Session Ended` (preview_words, preview_audio_ms, dropped_audio_ms). `Live Preview Verdict` is one row per socket that declared local_preview
+`Live Preview First Word` (latency_ms from first fed audio), `Live Preview
+Session Ended` (preview_words, preview_audio_ms, dropped_audio_ms), and
+`Live Preview Notes` (engine, outcome, latency_ms, bullet_count — one row per
+draft attempt, never any text). `Live Preview Verdict` is one row per socket that declared local_preview
 (observational only): verdict (granted, refused, timeout, overflow,
 socket_closed), platform, verdict_latency_ms from the request, hold_duration_ms,
 held_frames and hold_timeout_replayed; `live-preview-verdict.sql` reads p50/p95

@@ -365,6 +365,8 @@ void main() {
       device,
       transport,
       streamHealthWindow: const Duration(minutes: 1),
+      setupSettleDelay: const Duration(milliseconds: 10),
+      reconnectSettleDelay: const Duration(milliseconds: 10),
     );
     final emittedPages = <Map<String, dynamic>>[];
     final pageSubscription = connection.getFlashPageStream().listen(emittedPages.add);
@@ -868,6 +870,8 @@ void main() {
       device,
       transport,
       streamHealthWindow: const Duration(minutes: 1),
+      setupSettleDelay: const Duration(milliseconds: 10),
+      reconnectSettleDelay: const Duration(milliseconds: 10),
     );
 
     await connection.connect();
@@ -875,7 +879,9 @@ void main() {
 
     transport.emitState(DeviceTransportState.disconnected);
     transport.emitState(DeviceTransportState.connected);
-    await Future<void>.delayed(const Duration(milliseconds: 450));
+    // 5x the injected 10 ms reconnect settle window; the default-window
+    // equivalent of this wait was 450 ms.
+    await Future<void>.delayed(const Duration(milliseconds: 50));
 
     expect(transport.writes.length, 4, reason: 'a reconnect must repeat time sync before realtime activation');
     expect(decodeWrapperCommand(transport.writes[2])['messageNumber'], 6);
@@ -891,6 +897,8 @@ void main() {
       device,
       transport,
       streamHealthWindow: const Duration(milliseconds: 10),
+      setupSettleDelay: const Duration(milliseconds: 10),
+      reconnectSettleDelay: const Duration(milliseconds: 10),
       storageStatusTimeout: const Duration(milliseconds: 10),
     );
 
@@ -915,6 +923,8 @@ void main() {
       device,
       transport,
       streamHealthWindow: const Duration(minutes: 1),
+      setupSettleDelay: const Duration(milliseconds: 10),
+      reconnectSettleDelay: const Duration(milliseconds: 10),
       storageStatusTimeout: const Duration(milliseconds: 10),
     );
 

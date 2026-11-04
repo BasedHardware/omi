@@ -15,7 +15,6 @@ from utils.llm.screen_task_admission import (
     screen_task_build_floor_refusal,
     screen_task_stopped,
 )
-from utils.subscription import is_desktop_trial_paywalled
 from utils.metrics import SCREEN_TASK_GATE_FRAMES_TOTAL
 
 logger = logging.getLogger(__name__)
@@ -73,9 +72,6 @@ async def screen_task_gate(
             detail={'error': 'plan_gated', 'reason': decision.reason},
             headers={'X-Omi-Retryable': 'false'},
         )
-    if await run_blocking(db_executor, is_desktop_trial_paywalled, uid, 'desktop'):
-        SCREEN_TASK_GATE_FRAMES_TOTAL.labels(outcome='trial_expired').inc()
-        raise HTTPException(status_code=402, detail='trial_expired', headers={'X-Omi-Retryable': 'false'})
     existing = '\n'.join(task[:512] for task in body.related_tasks)
     state = (
         f'User: {body.user_context}. App: {body.app_name}.\nEXISTING TASKS:\n{existing}\n'

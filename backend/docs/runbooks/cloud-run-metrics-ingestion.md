@@ -62,8 +62,8 @@ hourly `ALIGN_PERCENTILE_99`, then `REDUCE_MAX` across revisions) peaked at
 **1.60 CPU-seconds per 60s sample**; 0.25 CPU supplies 15 CPU-seconds/minute.
 The matching memory p99 peaked at **211 MiB**, so its 512Mi limit stays.
 Application resources, billing mode, probes, scrape configuration and metric
-families keep their existing settings. Desktop and jobs retain 1 CPU / 512Mi;
-the sync services retain the profile below.
+families keep their existing settings. Desktop uses its separately qualified
+profile below; jobs retain 1 CPU / 512Mi and sync retains its own profile.
 
 On the 2026-10-24 billed backend CPU line ($14.80/day, total allocation 3 CPU),
 the fixed-instance estimate is **$3.70/day, $111/30 days**. This is a model:
@@ -90,6 +90,54 @@ the first rollout. Complete the production ramp by **2026-10-28**, owned by the
 lead, only if every gate passes; otherwise retain the old revision and report
 the blocked saving. No production mutation is part of the sizing PR.
 
+## Desktop collector CPU
+
+The service named `desktop-backend` defaults to **0.25 vCPU / 512Mi** in either
+project. The existing application allocation, broad 30s scrape configuration,
+metric families, probes, secret delivery, billing mode and warm floor remain.
+Other service/job profiles are independent. Pass **`--desktop-collector-cpu 1`**
+on a subsequent attachment to restore the old collector allocation.
+
+Native per-container metrics for 2026-10-20..26 (seven complete UTC days), hourly
+`ALIGN_PERCENTILE_99` then `REDUCE_MAX` across revisions, peaked at **1.144
+CPU-seconds per 60s sample** and **72.2 MiB** for the collector. The new CPU
+allocation provides 15 CPU-seconds/minute. These are hourly p99 measurements,
+not absolute burst bounds or runtime acceptance at the smaller allocation.
+The application's matching CPU peak was 20.96 CPU-seconds/minute; do not reduce
+its 1 CPU or 1Gi memory from this evidence.
+
+The 10-24/25 **production** desktop CPU bill averaged **$2.7009/day** for app
+1 CPU + collector 1 CPU. At fixed instance time,
+`(1 - 0.25) / 2 * 2.7009` models **$1.0128/day, $30.4/30 days**. The separate
+dev CPU bill averaged $3.0471/day, but its starting resource profile was not
+readable under ro-prod; no dev saving is sized here. Smaller total CPU can
+trigger earlier autoscaling. This is an estimate; book only D+1 settled total
+service cost after checking instance time, CPU/memory and network give-back
+against that baseline.
+
+The lead owns the first rollout, **after the 2026-10-27 batch soak freeze clears**.
+Merging the helper change triggers the existing desktop development workflow;
+do not merge during the freeze. First validate the exact **app 1 + collector
+0.25 CPU**, gen2, always-allocated CPU service shape in dev and qualify its
+candidate readiness, fresh metrics and a representative load window. The
+backend/sync control-plane receipts below do not validate this desktop shape.
+Use the same **5% -> 25% -> 100%, one hour per step, including peak load**
+production acceptance gates as backend above, with the desktop request p95 as
+an additional gate. The first rollout needs the lead's candidate traffic ramp;
+the normal automatic full-promotion path is not that qualification.
+Complete by **2026-10-29** if every gate passes; otherwise retain the old
+revision and report the blocked saving. No metric gap, live p95 regression,
+accuracy or speaker-label regression, or Free-plan change is acceptable.
+
+Before any candidate apply, capture every `status.traffic` revision/percentage
+and keep its immutable revision. On regression restore that exact split with
+`gcloud run services update-traffic desktop-backend --project=based-hardware
+--region=us-central1 --to-revisions=<captured-revision=percent,...>`.
+For the 2026-10-27 09:2xZ readback, the split was
+`desktop-backend-00961-tsz=100`; refresh it before the lead's rollout. Preserve
+the 1-CPU option for the next attachment. No production apply was run for this
+proposal.
+
 ## Sync fleet cost profile
 
 Only `backend-sync`, `backend-sync-backfill`, and `backend-integration` use
@@ -110,8 +158,8 @@ function of reason, and only the `sync` lane meters audio seconds on this fleet,
 so they add at most ~70 series per instance (label-product bound 160 + 90),
 realistically 20–30. Sync/summary/storage fallback series
 remain; eagerly initialized live-STT fallback components are dropped. Backend
-keeps its broad 30s configuration with the CPU allocation above; desktop, listen,
-and jobs retain their existing allocation/configuration.
+keeps its broad 30s configuration with the CPU allocation above; desktop uses
+its own CPU profile above, while listen and jobs retain their existing profiles.
 
 The fleet and David gates currently read projection logs and durable job state;
 the fleet gate also reads native `run.googleapis.com/request_count`. These paths
@@ -257,7 +305,7 @@ There are three costs:
 
 1. GMP ingestion: at a 30-second interval, `S` exported series across `I` average active instances produce approximately `86,400 * S * I` samples per 30-day month. At the documented first-tier $0.06/million samples, 100 series across 10 instances is about $5.18/month.
 2. Cloud Monitoring reads: the isolated 30-second exporter reduces API series reads by about 30x compared with the existing 1-second exporter. Keep the `omi_` metric relabel and service filter narrow.
-3. Cloud Run resources: backend and desktop-backend retain a 1-vCPU / 512Mi collector; the three sync/integration services use the smaller profile qualified above. Always-allocated CPU is retained because Google warns request-based CPU can miss low-QPS scrapes. Instance CPU is the sum of container limits; the general fractional-instance restrictions do not alone establish that a fractional collector is invalid on a multi-container instance above 1 vCPU. The recorded three-service control-plane validation above is the configuration evidence, not runtime load acceptance. With prod min scale 1, desktop's main container and 1-vCPU sidecar are billed while idle; this reliability cost is material and must be reviewed against the Cloud Run billing report after rollout.
+3. Cloud Run resources: backend and desktop-backend default to a 0.25-vCPU / 512Mi collector with independent 1-CPU rollback options; the three sync/integration services use their smaller profile above. Always-allocated CPU is retained because Google warns request-based CPU can miss low-QPS scrapes. Instance CPU is the sum of container limits; the general fractional-instance restrictions do not alone establish that a fractional collector is invalid on a multi-container instance above 1 vCPU. The recorded sync control-plane validation is configuration evidence for that shape, not desktop qualification or runtime load acceptance. With prod min scale 1, desktop's application and sidecar are billed while idle; measure total service cost after the rollout.
 
 The 10,000-sample and 30-label scrape limits cap accidental explosions. A limit breach fails the scrape and should be treated as an observability incident, not raised without a label review.
 

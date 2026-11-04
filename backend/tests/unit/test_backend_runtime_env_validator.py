@@ -73,6 +73,7 @@ def with_memory_env(payload: str) -> str:
         {"name": "FIRST_SUMMARY_DEADLINE_PERCENT", "value": "0"},
         {"name": "BATCH_LIVE_STT_RETIRE_PERCENT", "value": "0"},
         {"name": "BATCH_PIPELINE_SERVING_ENABLED", "value": "false"},
+        {"name": "RECORD_SEAL_OVERLAP_TRIM_ENABLED", "value": "true"},
         {"name": "BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED", "value": "false"},
         {"name": "BATCH_PIPELINE_LIVE_ADMISSION_ENABLED", "value": "false"},
         {"name": "BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED", "value": "false"},
@@ -98,8 +99,7 @@ def with_memory_env(payload: str) -> str:
         {"name": "BUCKET_BATCH_PIPELINE", "value": ""},
         {"name": "BATCH_PIPELINE_UNIT_SECONDS", "value": "3600"},
         {"name": "BATCH_PIPELINE_SHARED_LIVE_ENABLED", "value": "false"},
-        {"name": "PLAYBACK_ON_DEMAND_ENABLED", "value": "false"},
-        {"name": "REPEAT_WORK_REVISION_ENABLED", "value": "false"},
+        {"name": "PLAYBACK_ON_DEMAND_ENABLED", "value": "true"},
         {"name": "REPEAT_WORK_LLM_VERSION", "value": "2026-10-16-v1"},
         {"name": "SYNC_POLL_BACKOFF_ENABLED", "value": "false"},
         {"name": "AUDIO_ARCHIVE_LIVE_ENABLED", "value": "true"},
@@ -136,7 +136,6 @@ def with_memory_env(payload: str) -> str:
         {"name": "POSTHOG_PROJECT_API_KEY", "valueFrom": {"secretKeyRef": {"name": "POSTHOG_PROJECT_API_KEY", "key": "latest"}}},
         {"name": "MEMORY_ENABLED", "value": "on"},
         {"name": "MEMORY_V3_CURSOR_SECRET_VERSION", "value": "dev-v1"},
-        {"name": "MEMORY_CANONICAL_MAINTENANCE_ENABLED", "value": "false"},
 '''
     return payload.replace(
         '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},',
@@ -397,14 +396,14 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
         '"FIRESTORE_READ_LEDGER", "value": "1"},\n        {"name": "PROMETHEUS_SIDECAR_PORT", "value": "9090"},',
     )
     # Keep dev snapshots complete while individual tests remove unrelated
-    # gateway/secret fields. Train 1 switches remain explicitly off in dev.
+    # gateway/secret fields. The repeat-work coalesce/dedupe switches resolve
+    # from code defaults since 2026-11-01 and are forbidden_env on the sync
+    # hosts, so dev snapshots must not carry them.
     for service in ('backend-sync', 'backend-sync-backfill'):
         payload = re.sub(
             rf'("{service}":\s*\{{.*?"env":\s*\[\s*\{{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\}},)',
             r'\1\n        {"name": "SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM", "value": "false"},'
-            r'\n        {"name": "SYNC_REPROCESS_COALESCE_ENABLED", "value": "false"},'
-            r'\n        {"name": "SYNC_REPROCESS_SETTLE_SECONDS", "value": "600"},'
-            r'\n        {"name": "CONVERSATION_LLM_INPUT_DEDUPE_ENABLED", "value": "false"},',
+            r'\n        {"name": "SYNC_REPROCESS_SETTLE_SECONDS", "value": "600"},',
             payload,
             count=1,
             flags=re.DOTALL,
@@ -523,6 +522,7 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
         entries = ',\n'.join(
             '        ' + json.dumps({'name': name, 'value': bindings[name]['value']})
             for name in (
+                'HOSTED_LID_API_URL',
                 'DREAM_AGENT_ELIGIBILITY',
                 'DREAM_ON_DEMAND_ENABLED',
                 'DEMAND_PROCESSING_ENABLED',
@@ -544,6 +544,7 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
     payload = re.sub(
         r'("backend-integration":\s*\{.*?"env":\s*\[)',
         r'\1{"name": "BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED", "value": "false"},'
+        r'{"name": "BATCH_PIPELINE_GUARDED_LONG_RECOVERY_MAX_SECONDS", "value": "0"},'
         r'{"name": "BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE", '
         r'"value": "https://backend-integration-dt5lrfkkoa-uc.a.run.app"},',
         payload,
@@ -553,7 +554,10 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
     payload = re.sub(
         r'("backend(?:-sync|-sync-backfill|-integration)?":\s*\{.*?"env":\s*\[)',
         r'\1\n        {"name": "BATCH_PIPELINE_SHADOW_PERCENT", "value": "0"},'
-        r'\n        {"name": "BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR", "value": "200"},',
+        r'\n        {"name": "BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR", "value": "200"},'
+        r'\n        {"name": "BATCH_CONTROL_CANDIDATE_FANOUT", "value": "16"},'
+        r'\n        {"name": "BATCH_ADMISSION_PARALLEL_CALLS", "value": "true"},'
+        r'\n        {"name": "BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS", "value": "10"},',
         payload,
         flags=re.DOTALL,
     )
@@ -588,7 +592,7 @@ STANDARD_CLOUD_RUN_SECRETS = {
 }
 
 
-def memory_maintenance_job_block(*, mode: str = 'off', cron: str = 'false') -> dict:
+def x_connector_sync_job_block() -> dict:
     """Minimal job contract for fixture manifests (keeps validator happy)."""
     return {
         'env': {
@@ -597,24 +601,10 @@ def memory_maintenance_job_block(*, mode: str = 'off', cron: str = 'false') -> d
                 'default': 'http://127.0.0.1:9',
                 'category': 'service_discovery',
             },
-            'OMI_LLM_GATEWAY_FEATURE_MODE': {'value': 'gateway', 'category': 'rollout'},
-            'OMI_LLM_CHAT_AGENT_ROUTE': {'value': 'gateway', 'category': 'rollout'},
-            'OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION': {'value': 'false', 'category': 'rollout'},
-            'MEMORY_ENABLED': {'value': 'off' if mode == 'off' else 'on', 'category': 'memory_rollout'},
-            'MEMORY_CANONICAL_MAINTENANCE_ENABLED': {'value': cron, 'category': 'memory_rollout'},
-            'OMI_BACKGROUND_FLEX_CAPABLE': {
-                'value': 'true' if cron == 'true' else 'false',
-                'category': 'memory_rollout',
-            },
+            'OMI_BACKGROUND_FLEX_CAPABLE': {'value': 'true', 'category': 'memory_rollout'},
         },
         'secrets': {
-            'SERVICE_ACCOUNT_JSON': {'secret': 'SERVICE_ACCOUNT_JSON', 'version': 'latest'},
-            'ENCRYPTION_SECRET': {'secret': 'ENCRYPTION_SECRET', 'version': 'latest'},
             'OMI_LLM_GATEWAY_SERVICE_TOKEN': {'secret': 'OMI_LLM_GATEWAY_SERVICE_TOKEN', 'version': 'latest'},
-            'OPENAI_API_KEY': {'secret': 'OPENAI_API_KEY', 'version': 'latest'},
-            'PINECONE_API_KEY': {'secret': 'PINECONE_API_KEY', 'version': 'latest'},
-            'TYPESENSE_HOST': {'secret': 'TYPESENSE_HOST', 'version': 'latest'},
-            'TYPESENSE_API_KEY': {'secret': 'TYPESENSE_API_KEY', 'version': 'latest'},
         },
     }
 
@@ -1454,16 +1444,26 @@ def test_parakeet_cloud_run_surface_requires_hosted_endpoint():
         ]
 
 
-def test_approved_soniox_binding_is_only_prod_recovery_and_gate_stays_off():
+def test_soniox_live_retirement_bindings_keep_recovery_gate_integration_only():
     manifest = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())
     for stage in ('dev', 'prod'):
         services = manifest['environments'][stage]['cloud_run']['services']
         holders = {name for name, service in services.items() if 'SONIOX_API_KEY' in service.get('secrets', {})}
-        assert holders == ({'backend-integration'} if stage == 'prod' else set())
-        assert (
-            services['backend-integration']['env']['BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED']['value']
-            == 'false'
+        # Lead 2026-11-02 17:42Z: reuse the existing key and runtime identity for
+        # live GPU retirement; the independent recovery gate remains integration-only.
+        assert holders == (
+            {'backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'} if stage == 'prod' else set()
         )
+        assert services['backend-integration']['env']['BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED'][
+            'value'
+        ] == ('true' if stage == 'prod' else 'false')
+        # Lead 5da7dc/ebc45a: only the prod recovery role runs independent language recovery.
+        assert {
+            name
+            for name, service in services.items()
+            if service.get('env', {}).get('BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED', {}).get('value')
+            == 'true'
+        } == ({'backend-integration'} if stage == 'prod' else set())
 
 
 @pytest.mark.parametrize('binding', [None, {'value': ' '}, {'secret': 'SONIOX_API_KEY', 'version': 'latest'}])
@@ -1577,9 +1577,8 @@ def test_repo_prod_manifest_rejects_noncanonical_model_order_for_every_surface(t
                     entry['value'] = (
                         'parakeet,modulate-velma-2' if key == 'STT_SERVICE_MODELS' else 'modulate-velma-2,parakeet'
                     )
-                    # The live listener owns its configured streaming order.
-                    if key == 'STT_SERVICE_MODELS' and platform == 'gke' and service_name == 'backend-listen':
-                        continue
+                    # Plain Parakeet is no longer admissible even on the listener;
+                    # reviewed window aliases still have their separate policy.
                     changed_scopes.append((f'prod/{platform}/{service_name}', key))
 
     path = tmp_path / 'runtime_env.yaml'
@@ -1863,12 +1862,11 @@ def test_cloud_run_workflow_reports_missing_gateway_url(tmp_path):
                         {
                             'uses': 'google-github-actions/deploy-cloudrun@v2',
                             'with': {
-                                'job': 'memory-maintenance-job',
+                                'job': 'x-connector-sync-job',
                                 'env_vars': (
                                     'MEMORY_MODE=off\n'
                                     'MEMORY_ENABLED_USERS=\n'
                                     'MEMORY_V3_GET_ENABLED=false\n'
-                                    'MEMORY_CANONICAL_MAINTENANCE_ENABLED=false\n'
                                     'MEMORY_CANONICAL_CONSOLIDATION_ENABLED=true\n'
                                 ),
                                 'secrets': (
@@ -1918,7 +1916,7 @@ def test_cloud_run_workflow_reports_missing_gateway_url(tmp_path):
                             }
                         },
                         'jobs': {
-                            'memory-maintenance-job': memory_maintenance_job_block(),
+                            'x-connector-sync-job': x_connector_sync_job_block(),
                         },
                     },
                 }
@@ -1967,9 +1965,9 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
                         {
                             'uses': 'google-github-actions/deploy-cloudrun@v2',
                             'with': {
-                                'job': 'memory-maintenance-job',
-                                'env_vars': '${{ steps.runtime-env.outputs.memory_maintenance_job_env_vars }}',
-                                'secrets': '${{ steps.runtime-env.outputs.memory_maintenance_job_secrets }}',
+                                'job': 'x-connector-sync-job',
+                                'env_vars': '${{ steps.runtime-env.outputs.x_connector_sync_job_env_vars }}',
+                                'secrets': '${{ steps.runtime-env.outputs.x_connector_sync_job_secrets }}',
                             },
                         },
                     ]
@@ -2035,7 +2033,7 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
                             }
                         },
                         'jobs': {
-                            'memory-maintenance-job': memory_maintenance_job_block(),
+                            'x-connector-sync-job': x_connector_sync_job_block(),
                         },
                     },
                 }
@@ -2285,7 +2283,7 @@ def test_provisional_prod_endpoint_requires_presence_but_not_exact_value(tmp_pat
                             }
                         },
                         'jobs': {
-                            'memory-maintenance-job': memory_maintenance_job_block(),
+                            'x-connector-sync-job': x_connector_sync_job_block(),
                         },
                     },
                 }
@@ -2492,7 +2490,7 @@ def test_prod_cloud_run_secret_bindings_exclude_stale_optional_secrets():
         assert stale_secrets.isdisjoint(secret_names), f'{service_name} introduces an unnecessary runtime secret mount'
 
 
-def test_memory_maintenance_job_contract_passes_for_repo_manifest():
+def test_memory_job_retirement_passes_for_repo_manifest():
     validator = load_validator()
     assert validator.validate_runtime_env(env='dev') == []
     assert validator.validate_runtime_env(env='prod') == []
@@ -2544,7 +2542,7 @@ def test_memory_maintenance_contract_rejects_retired_promotion_envs_when_new_con
     env_config = {
         'cloud_run': {
             'jobs': {
-                'memory-maintenance-job': {
+                'x-connector-sync-job': {
                     'env': {name: {'value': 'true', 'category': 'memory_rollout'} for name in retired}
                 }
             }
@@ -2556,7 +2554,7 @@ def test_memory_maintenance_contract_rejects_retired_promotion_envs_when_new_con
     actual = {(error.scope, error.message) for error in errors}
     expected = {
         (
-            'dev/cloud_run/jobs/memory-maintenance-job',
+            'dev/cloud_run/jobs/x-connector-sync-job',
             f'retired canonical memory env {name} is forbidden; use the minimal maintenance contract',
         )
         for name in retired
@@ -2593,49 +2591,6 @@ def test_live_cloud_run_state_rejects_retired_promotion_env():
     )
 
 
-def test_memory_maintenance_job_contract_rejects_missing_dev_capacity_flag():
-    validator = load_validator()
-    job = memory_maintenance_job_block()
-    job['flags'] = {
-        '--task-timeout': '3600s',
-        '--cpu': '2',
-        '--memory': '2Gi',
-    }
-    del job['flags']['--memory']
-
-    errors = validator._validate_memory_maintenance_job_contract(
-        'dev',
-        {'cloud_run': {'jobs': {'memory-maintenance-job': job}}},
-    )
-
-    assert (
-        validator.ValidationError(
-            'dev/cloud_run/jobs/memory-maintenance-job',
-            'missing required dev Cloud Run flag --memory',
-        )
-        in errors
-    )
-
-
-def test_memory_maintenance_job_contract_rejects_wrong_dev_capacity_value(tmp_path):
-    validator = load_validator()
-    manifest = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')
-    job = manifest['environments']['dev']['cloud_run']['jobs']['memory-maintenance-job']
-    job['flags']['--cpu'] = '1'
-    path = tmp_path / 'runtime_env.yaml'
-    write_yaml(path, manifest)
-
-    errors = validator.validate_runtime_env(env='dev', manifest_path=path)
-
-    assert (
-        validator.ValidationError(
-            'dev/cloud_run/jobs/memory-maintenance-job',
-            "dev Cloud Run flag --cpu must be '2'",
-        )
-        in errors
-    )
-
-
 def test_memory_maintenance_job_contract_rejects_notifications_job_maintenance_config(tmp_path):
     validator = load_validator()
     manifest = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')
@@ -2662,53 +2617,29 @@ def test_memory_maintenance_job_contract_rejects_notifications_job_maintenance_c
 
     actual = {(error.scope, error.message) for error in errors}
     expected = {
-        ('dev/cloud_run/jobs/notifications-job', f'env {name} belongs only on memory-maintenance-job')
+        ('dev/cloud_run/jobs/notifications-job', f'env {name} belongs to the retired memory job')
         for name in forbidden_env
     }
     expected.update(
         {
-            ('dev/cloud_run/jobs/notifications-job', f'secret {name} belongs only on memory-maintenance-job')
+            ('dev/cloud_run/jobs/notifications-job', f'secret {name} belongs to the retired memory job')
             for name in forbidden_secrets
         }
     )
     assert expected <= actual
 
 
-def test_memory_maintenance_job_contract_rejects_enabled_surface_without_enabled_job(tmp_path):
+def test_memory_job_retirement_rejects_reintroduced_job(tmp_path):
     validator = load_validator()
     manifest = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')
-    job = manifest['environments']['prod']['cloud_run']['jobs']['memory-maintenance-job']
-    # A request-path surface stays on while the maintenance job is off.
-    job['env']['MEMORY_ENABLED'] = {'value': 'off', 'category': 'memory_rollout'}
-    job['env']['MEMORY_CANONICAL_MAINTENANCE_ENABLED'] = {'value': 'false', 'category': 'memory_rollout'}
-
+    manifest['environments']['dev']['cloud_run']['jobs']['memory-maintenance-job'] = {'env': {}, 'secrets': {}}
     path = tmp_path / 'runtime_env.yaml'
     write_yaml(path, manifest)
-    errors = validator.validate_runtime_env(env='prod', manifest_path=path)
-    messages = [error.message for error in errors]
-    assert any('requires memory-maintenance-job' in message for message in messages)
+    errors = validator.validate_runtime_env(env='dev', manifest_path=path)
+    assert any('memory-maintenance-job is retired; remove its manifest block' in error.message for error in errors)
 
 
-def test_memory_maintenance_job_contract_allows_write_without_job_cron():
-    validator = load_validator()
-    env_config = copy.deepcopy(validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')['environments']['prod'])
-    job = env_config['cloud_run']['jobs']['memory-maintenance-job']
-    job['env']['MEMORY_CANONICAL_MAINTENANCE_ENABLED'] = {'value': 'false', 'category': 'memory_rollout'}
-    errors = validator._validate_memory_maintenance_job_contract('prod', env_config)
-    assert errors == []
-
-
-def test_memory_maintenance_job_contract_rejects_missing_job(tmp_path):
-    validator = load_validator()
-    manifest = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')
-    del manifest['environments']['prod']['cloud_run']['jobs']['memory-maintenance-job']
-    path = tmp_path / 'runtime_env.yaml'
-    write_yaml(path, manifest)
-    errors = validator.validate_runtime_env(env='prod', manifest_path=path)
-    assert any('missing cloud_run.jobs.memory-maintenance-job' in error.message for error in errors)
-
-
-def test_memory_maintenance_job_contract_rejects_request_path_cron(tmp_path):
+def test_memory_job_retirement_rejects_retired_cron_env_on_request_path(tmp_path):
     validator = load_validator()
     manifest = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')
     backend_env = manifest['environments']['dev']['cloud_run']['services']['backend']['env']
@@ -2716,7 +2647,47 @@ def test_memory_maintenance_job_contract_rejects_request_path_cron(tmp_path):
     path = tmp_path / 'runtime_env.yaml'
     write_yaml(path, manifest)
     errors = validator.validate_runtime_env(env='dev', manifest_path=path)
-    assert any('request-path surfaces' in error.message for error in errors)
+    assert (
+        validator.ValidationError(
+            'cloud_run/backend',
+            'retired memory env MEMORY_CANONICAL_MAINTENANCE_ENABLED must be absent',
+        )
+        in errors
+    )
+
+
+@pytest.mark.parametrize(
+    'retired_name',
+    ('MEMORY_CANONICAL_CONSOLIDATION_ENABLED', 'MEMORY_CANONICAL_MAINTENANCE_FLEX'),
+)
+def test_memory_job_retirement_rejects_retired_maintenance_controls_on_request_path(tmp_path, retired_name):
+    validator = load_validator()
+    manifest = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')
+    backend_env = manifest['environments']['dev']['cloud_run']['services']['backend']['env']
+    backend_env[retired_name] = {'value': 'true', 'category': 'memory_rollout'}
+    path = tmp_path / 'runtime_env.yaml'
+    write_yaml(path, manifest)
+    errors = validator.validate_runtime_env(env='dev', manifest_path=path)
+    assert (
+        validator.ValidationError(
+            'cloud_run/backend',
+            f'retired memory env {retired_name} must be absent',
+        )
+        in errors
+    )
+
+
+def test_memory_job_retirement_rejects_captured_after_window(tmp_path):
+    validator = load_validator()
+    manifest = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')
+    backend_env = manifest['environments']['prod']['cloud_run']['services']['backend']['env']
+    backend_env['MEMORY_MAINTENANCE_CAPTURED_AFTER'] = {'value': '2026-10-26T00:00:00Z', 'category': 'memory_rollout'}
+    path = tmp_path / 'runtime_env.yaml'
+    write_yaml(path, manifest)
+    errors = validator.validate_runtime_env(env='prod', manifest_path=path)
+    assert any(
+        'retired memory env MEMORY_MAINTENANCE_CAPTURED_AFTER must be absent' in error.message for error in errors
+    )
 
 
 def test_runtime_manifest_rejects_retired_per_user_memory_inventory(tmp_path):
@@ -2728,99 +2699,6 @@ def test_runtime_manifest_rejects_retired_per_user_memory_inventory(tmp_path):
     write_yaml(path, manifest)
     errors = validator.validate_runtime_env(env='dev', manifest_path=path)
     assert any('universal memory has no per-user runtime inventory' in error.message for error in errors)
-
-
-def test_memory_maintenance_job_contract_requires_gateway_luna_bindings_when_enabled(tmp_path):
-    validator = load_validator()
-    manifest = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')
-    job = manifest['environments']['dev']['cloud_run']['jobs']['memory-maintenance-job']
-    job['env']['MEMORY_CANONICAL_MAINTENANCE_ENABLED'] = {'value': 'true', 'category': 'memory_rollout'}
-    for name in (
-        'OMI_LLM_GATEWAY_URL',
-        'OMI_LLM_GATEWAY_FEATURE_MODE',
-        'OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION',
-    ):
-        del job['env'][name]
-    del job['secrets']['OMI_LLM_GATEWAY_SERVICE_TOKEN']
-    path = tmp_path / 'runtime_env.yaml'
-    write_yaml(path, manifest)
-
-    errors = validator.validate_runtime_env(env='dev', manifest_path=path)
-
-    messages = {error.message for error in errors}
-    assert {
-        'missing gateway env OMI_LLM_GATEWAY_URL while canonical maintenance is enabled',
-        'missing gateway env OMI_LLM_GATEWAY_FEATURE_MODE while canonical maintenance is enabled',
-        'missing gateway env OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION while canonical maintenance is enabled',
-        'missing gateway secret OMI_LLM_GATEWAY_SERVICE_TOKEN while canonical maintenance is enabled',
-    } <= messages
-
-
-def test_memory_maintenance_job_contract_rejects_pinned_gateway_endpoint_when_enabled(tmp_path):
-    validator = load_validator()
-    manifest = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')
-    job = manifest['environments']['dev']['cloud_run']['jobs']['memory-maintenance-job']
-    job['env']['MEMORY_CANONICAL_MAINTENANCE_ENABLED'] = {'value': 'true', 'category': 'memory_rollout'}
-    job['env']['OMI_LLM_GATEWAY_URL'] = {'value': 'http://172.16.63.232', 'category': 'service_discovery'}
-    path = tmp_path / 'runtime_env.yaml'
-    write_yaml(path, manifest)
-
-    errors = validator.validate_runtime_env(env='dev', manifest_path=path)
-
-    assert (
-        validator.ValidationError(
-            'dev/cloud_run/jobs/memory-maintenance-job',
-            'OMI_LLM_GATEWAY_URL must be derived from the verified gateway endpoint, not pinned directly',
-        )
-        in errors
-    )
-
-
-def test_memory_maintenance_job_contract_allows_prod_on_with_job_cron():
-    validator = load_validator()
-    env_config = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')['environments']['prod']
-    errors = validator._validate_memory_maintenance_job_contract('prod', env_config)
-    assert errors == []
-    job = env_config['cloud_run']['jobs']['memory-maintenance-job']
-    assert job['env']['MEMORY_CANONICAL_MAINTENANCE_ENABLED']['value'] == 'true'
-    assert 'MEMORY_CANONICAL_MAINTENANCE_FLEX' not in job['env']
-    assert 'MEMORY_CANONICAL_CONSOLIDATION_ENABLED' not in job['env']
-
-
-def test_memory_maintenance_job_contract_rejects_retired_semantic_selector():
-    validator = load_validator()
-    env_config = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')['environments']['dev']
-    job = env_config['cloud_run']['jobs']['memory-maintenance-job']
-    job['env']['MEMORY_CANONICAL_MAINTENANCE_FLEX'] = {'value': 'false', 'category': 'memory_rollout'}
-    errors = validator._validate_memory_maintenance_job_contract('dev', env_config)
-    assert any(
-        'retired cleanup env MEMORY_CANONICAL_MAINTENANCE_FLEX must be absent' in error.message for error in errors
-    )
-
-
-def test_memory_maintenance_auto_dev_workflow_is_listed_and_targets_job():
-    workflow = ROOT.parent / '.github/workflows/gcp_memory_maintenance_job_auto_dev.yml'
-    text = workflow.read_text(encoding='utf-8')
-    assert 'SERVICE: memory-maintenance-job' in text
-    assert 'branches: [ "main" ]' in text
-    assert "backend/**" in text
-    assert 'Dockerfile.memory_maintenance_job' in text
-    # Development-only lane: GitHub WIF as the dev deployer, never a JSON key.
-    assert "id-token: 'write'" in text
-    assert 'omi-gha-deploy-dev/providers/github' in text
-    assert 'secrets.GCP_CREDENTIALS' not in text
-    assert 'id: gateway-serving' in text
-    assert '--lane omi:auto:memory-l2' in text
-    assert 'OMI_LLM_GATEWAY_URL: ${{ steps.gateway-serving.outputs.gateway_url }}' in text
-    assert (
-        'flags: ${{ steps.runtime-env.outputs.cloud_run_flags }} '
-        '${{ steps.runtime-env.outputs.memory_maintenance_job_flags }}'
-    ) in text
-    manifest = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text(encoding='utf-8'))
-    assert (
-        '.github/workflows/gcp_memory_maintenance_job_auto_dev.yml'
-        in manifest['environments']['dev']['cloud_run']['workflow_files']
-    )
 
 
 def test_x_connector_sync_job_workflow_is_listed_and_targets_job():
@@ -3056,7 +2934,46 @@ def test_speaker_embedding_cluster_local_url_rejected_on_cloud_run():
     errors = validator.validate_speaker_embedding_hosts('prod', env_config)
     messages = [error.message for error in errors]
     assert any('not cluster-local DNS' in message for message in messages)
-    assert any('must match gke/backend-listen' in message for message in messages)
+    assert any('approved internal-ALB route' in message for message in messages)
+
+
+def test_speaker_embedding_cloud_run_must_use_approved_ilb_route():
+    validator = load_validator()
+    wrong = 'http://172.16.160.20/other'
+    env_config = {
+        'cloud_run': {
+            'services': {
+                'backend': {'env': {'HOSTED_SPEAKER_EMBEDDING_API_URL': {'value': wrong}}},
+                'backend-sync': {'env': {'HOSTED_SPEAKER_EMBEDDING_API_URL': {'value': wrong}}},
+            }
+        }
+    }
+
+    errors = validator.validate_speaker_embedding_hosts('prod', env_config)
+
+    assert errors
+    assert all('approved internal-ALB route' in error.message for error in errors)
+    assert all('http://172.16.160.20/diarizer' in error.message for error in errors)
+
+
+def test_speaker_embedding_disagreement_inside_one_topology_fails():
+    validator = load_validator()
+    env_config = {
+        'gke': {
+            'backend-listen': {
+                'env': {'HOSTED_SPEAKER_EMBEDDING_API_URL': {'value': 'http://a.example/diarizer'}},
+            },
+            'pusher': {
+                'env': {'HOSTED_SPEAKER_EMBEDDING_API_URL': {'value': 'http://b.example/diarizer'}},
+            },
+        }
+    }
+
+    errors = validator.validate_speaker_embedding_hosts('prod', env_config)
+
+    assert len(errors) == 1
+    assert errors[0].scope == 'prod/speaker-embedding'
+    assert 'disagrees across hosts' in errors[0].message
 
 
 @pytest.mark.parametrize('env_name', ['dev', 'prod'])
@@ -3079,13 +2996,13 @@ def _live_env_config():
         'region': 'us-central1',
         'cloud_run': {
             'services': {'backend': {}},
-            'jobs': {'memory-maintenance-job': {}, 'notifications-job': {}},
+            'jobs': {'x-connector-sync-job': {}, 'notifications-job': {}},
         },
     }
 
 
 def test_fetch_live_cloud_run_state_validates_services_only(monkeypatch):
-    # gcp_backend.yml deploys Cloud Run services, not jobs (memory-maintenance-job and
+    # gcp_backend.yml deploys Cloud Run services, not jobs (x-connector-sync-job and
     # notifications-job ship via separate workflows). The live check must describe services
     # only and never `gcloud run jobs describe` — that produced false deploy failures (a
     # not-found job crashed it; a separately-managed job's env legitimately differs).
@@ -3120,7 +3037,7 @@ def test_live_chain_ramp_accepts_policy_tokens_unconditionally():
 def test_non_listener_stt_models_accept_a_policy_ordered_subset():
     from scripts.runtime_env_validation.manifest import _validate_stt_serving_model_policy
 
-    env_map = {'STT_SERVICE_MODELS': {'value': 'modulate-velma-2,soniox,parakeet'}}
+    env_map = {'STT_SERVICE_MODELS': {'value': 'modulate-velma-2,soniox'}}
     config = {'gke': {'pusher': {'env': env_map}}}
     assert _validate_stt_serving_model_policy('prod', config) == []
 
@@ -3485,3 +3402,35 @@ def test_prod_backend_billing_key_rejects_non_public_binding(monkeypatch, mutati
         entry['valueFrom'] = {'secretKeyRef': {'name': 'POSTHOG_PROJECT_API_KEY', 'key': 'latest'}}
     errors = validator._validate_cloud_run(env_config, deployed, strict_provisional=False)
     assert any(error.scope == 'cloud_run/backend' and 'POSTHOG_BILLING_API_KEY' in error.message for error in errors)
+
+
+def test_proactivity_v2_posthog_token_is_required_only_off_the_omi_flag_store():
+    from scripts.runtime_env_validation import manifest as manifest_validation
+
+    validator = load_validator()
+    manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
+    env_config = copy.deepcopy(validator._get_env_config(manifest, 'prod'))
+    gateway_env = env_config['llm_gateway']['env']
+    assert gateway_env['OMI_FLAGS_SOURCE']['value'] == 'omi'
+    assert 'PROACTIVITY_V2_POSTHOG_TOKEN' not in gateway_env
+    assert manifest_validation._validate_proactivity_v2_flag_hosts('prod', env_config) == []
+
+    gateway_env['OMI_FLAGS_SOURCE']['value'] = 'dual'
+    errors = manifest_validation._validate_proactivity_v2_flag_hosts('prod', env_config)
+    assert [error.scope for error in errors] == ['prod/llm_gateway']
+
+
+def test_guarded_long_recovery_stays_disabled_and_hours_are_inert():
+    manifest = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())
+    for stage in ('dev', 'prod'):
+        services = manifest['environments'][stage]['cloud_run']['services']
+        cap = 'BATCH_PIPELINE_GUARDED_LONG_RECOVERY_MAX_SECONDS'
+        assert {name for name, service in services.items() if cap in service.get('env', {})} == {'backend-integration'}
+        assert services['backend-integration']['env'][cap] == {
+            'value': '0',
+            'category': 'ops_kill',
+        }
+        for name in ('backend-sync', 'backend-sync-backfill'):
+            env = services[name]['env']
+            assert env['SYNC_BACKFILL_GLOBAL_DAILY_HOURS']['value'] == '1665'
+            assert env.get('SYNC_BACKFILL_ADMISSION_LIMITS', {}).get('value', 'false') == 'false'

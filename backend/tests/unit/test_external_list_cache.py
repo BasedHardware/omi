@@ -15,6 +15,12 @@ from utils.other.timeout import TimeoutMiddleware
 from utils.observability.external_lists import EXTERNAL_LIST_HTTP_TOTAL, ExternalListMetricsMiddleware, ROUTES
 
 
+@pytest.fixture(autouse=True)
+def isolate_flights(monkeypatch):
+    monkeypatch.setattr(cache, '_flights', {})
+    monkeypatch.setenv('OMI_EXTERNAL_LIST_SINGLE_FLIGHT_ENABLED', 'false')
+
+
 class FakeRedis:
     def __init__(self):
         self.entries = {}

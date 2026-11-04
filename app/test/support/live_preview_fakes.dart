@@ -14,14 +14,15 @@ class FakeLivePreviewEngine implements LivePreviewEngine {
   /// Starts after the first, in order; falls back to [nextStart] when empty.
   final List<LivePreviewStart> laterStarts = [];
   final List<Uint8List> fed = [];
+  final List<DateTime?> fedStartedAt = [];
   int stops = 0;
   final StreamController<LivePreviewResult> _results = StreamController.broadcast(sync: true);
 
   @override
   Stream<LivePreviewResult> get results => _results.stream;
 
-  void emit(String id, String text, bool isFinal) =>
-      _results.add(LivePreviewResult(segmentId: id, text: text, isFinal: isFinal));
+  void emit(String id, String text, bool isFinal, {DateTime? startedAt, DateTime? endedAt}) => _results
+      .add(LivePreviewResult(segmentId: id, text: text, isFinal: isFinal, startedAt: startedAt, endedAt: endedAt));
 
   /// The running engine dies (what the native side reports as `failure`).
   void fail(LivePreviewEngineKind engine) => _results.addError(LivePreviewRuntimeFailure(engine));
@@ -37,8 +38,9 @@ class FakeLivePreviewEngine implements LivePreviewEngine {
   }
 
   @override
-  Future<bool> feedPcm16(Uint8List pcm) {
+  Future<bool> feedPcm16(Uint8List pcm, {DateTime? startedAt}) {
     fed.add(pcm);
+    fedStartedAt.add(startedAt);
     return feedResult?.call() ?? Future.value(true);
   }
 

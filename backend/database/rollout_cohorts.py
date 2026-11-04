@@ -9,6 +9,7 @@ from google.cloud import firestore
 
 from config.rollout_cohorts import COLLECTION, COHORT_ENVS, valid_uid
 from database._client import get_data_plane_firestore_client, run_transactional
+from database.rollout_membership_cache import read_memberships_cached
 
 STT_CAP_DOCUMENT = 'stt-cap-dispatch'
 HELD_CONTENT_DOCUMENT = 'held-content'
@@ -34,6 +35,10 @@ def read_held_content_cohort(*, firestore_client: Any | None = None) -> dict | N
 
 def read_memberships(uid: str, *, firestore_client: Any | None = None) -> dict[str, dict[str, bool]]:
     client = firestore_client or get_data_plane_firestore_client()
+    return read_memberships_cached(uid, client, lambda: _read_memberships(uid, client))
+
+
+def _read_memberships(uid: str, client: Any) -> dict[str, dict[str, bool]]:
     doc = client.collection(COLLECTION).document(uid).get(timeout=1.0, retry=None)
     if not doc.exists:
         return {}
@@ -70,7 +75,11 @@ def read_cohort_members(name: str, *, firestore_client: Any | None = None) -> tu
 RAMP_DOC_ID = '_ramp'
 RAMP_HISTORY_COLLECTION = 'history'
 RAMP_SCHEMA_VERSION = 1
-RAMP_NAMES = ('batch-pipeline', 'first-summary', 'batch-live-stt-retire')
+# A reader older than a name rejects the whole document (it serves last-known-good), so a new
+# name is written only after every `_ramp` reader runs a build that knows it.
+RAMP_NAMES = ('batch-pipeline', 'first-summary', 'batch-live-stt-retire', 'legacy-sync', 'batch-vendor-routing')
+# Names whose percent is a subset of the batch-pipeline bucket (same empty salt).
+BATCH_NESTED_RAMP_NAMES = ('batch-live-stt-retire', 'batch-vendor-routing')
 LEGACY_SYNC_MODES = ('on', 'draining', 'dark')
 # Serving reads stay within the runtime's cold-start budget. Operator tools (ramp_set, ramp_controller) build a
 # fresh client per process, and a cold channel plus token fetch from an operator host takes over 1s.
@@ -150,11 +159,12 @@ def normalize_ramp_document(raw: Any) -> dict[str, Any]:
 
 
 def check_ramp_nesting(env_doc: dict[str, Any]) -> None:
-    """Writer rule: batch-live-stt-retire never exceeds batch-pipeline (E decision 2)."""
+    """Writer rule: a batch-nested name never exceeds batch-pipeline (E decision 2)."""
     percents = env_doc['percents']
-    retire = percents.get('batch-live-stt-retire')
-    if retire is not None and retire > percents.get('batch-pipeline', 0.0):
-        raise RampDocumentError('batch-live-stt-retire exceeds batch-pipeline')
+    for name in BATCH_NESTED_RAMP_NAMES:
+        nested = percents.get(name)
+        if nested is not None and nested > percents.get('batch-pipeline', 0.0):
+            raise RampDocumentError(f'{name} exceeds batch-pipeline')
 
 
 def empty_ramp_env() -> dict[str, Any]:
@@ -191,6 +201,8 @@ def apply_ramp_change(before: dict[str, Any], change: Mapping[str, Any]) -> dict
             raise RampDocumentError('ramp percents change malformed')
         for name, value in percents.items():
             after['percents'][name] = _percent_value(value)
+        if 'legacy-sync' in percents and after['percents']['legacy-sync'] > after['percents'].get('batch-pipeline', 0):
+            raise RampDocumentError('legacy-sync exceeds batch-pipeline')
     if 'legacy_sync' in change:
         if change['legacy_sync'] not in LEGACY_SYNC_MODES:
             raise RampDocumentError('ramp legacy_sync change malformed')

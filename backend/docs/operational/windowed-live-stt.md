@@ -25,7 +25,10 @@ not unique failed sessions; caller and inner diagnostics can overlap.
 For a listen train carrying this fix, compare the new finalize/TypeError count,
 `send_failed` settlements, gate recovery stages, transcript availability and
 window POST latency against the previous release. Preserve the automatic gate;
-do not delete health keys or force an unbench. Deploy only in the approved
+do not delete health keys. For a confirmed false bench, an authorized operator
+can use the [audited per-target reset](../runbooks/live-stt-routing.md#audited-operator-cost-gate-reset)
+after the rolling deployment completes; it preserves automatic detection.
+Deploy only in the approved
 22:00–13:00Z window unless the lead rules otherwise.
 
 The September 2026 live-chain incident exposed three different contracts:
@@ -290,7 +293,17 @@ are fine. The live leg therefore posts `[anchor, now]` instead of a disjoint 6 s
 slice, emits completed sentences, and re-anchors at the end of the last emitted
 sentence so the next POST starts on a sentence boundary.
 
-The last sentence is held on a paced POST unless it ended ≥1.2 s ago with
+The startup POST is selected after eight admitted seconds (bounded by the normal
+pace), so continuous speech can produce text before the 12-second startup
+deadline. If no ordinary segment can emit while a startup or progress watchdog
+is armed and rescue is allowed, the default-on
+`PARAKEET_WINDOW_FIRST_TEXT_CUT_ENABLED` releases the nonempty held answer.
+Ordinary emittable segments and unarmed windows retain sentence anchoring.
+`PARAKEET_WINDOW_FIRST_POST_SECONDS=15` plus
+`PARAKEET_WINDOW_FIRST_TEXT_CUT_ENABLED=false` restores the previous behavior.
+Empty or stalled answers still expire and replay normally; the gate is unchanged.
+
+The ordinary paced decision holds the last sentence unless it ended ≥1.2 s ago with
 terminal punctuation (`.?!`). `finalize()` from the live VAD gate (300 ms hangover)
 is a **soft** pause POST: `[anchor, now]` with `force=False` as soon as pacing
 and the single in-flight slot allow. Managed windows enable this pause and
@@ -622,7 +635,19 @@ remain in series; allocation 0 sends no window traffic. Monitor real traffic
 before every increase because local memory headroom does not prove GPU
 throughput or transcript quality.
 
-`PARAKEET_WINDOW_REPLICA_RECOVERY_ENABLED` defaults on. For the internal HTTP
+`PARAKEET_WINDOW_REPLICA_RECOVERY_ENABLED` defaults on in code. The prod listen
+chart and prod runtime overlay explicitly set it to `false` (2026-10-30);
+ordinary listen deploys retain this override. Replica POST budgets capped by
+the remaining first-text deadline currently turn the chronic first-text tail
+into `timeout` provider-failure votes, incorrectly benching Parakeet in the cost
+router. The two-lane rollout lead owns this temporary override, with review due
+2026-11-06. Re-enable only after the durable fix censors deadline-capped POST
+timeouts as first-text deadlines while full-budget POST timeouts remain provider
+failures, with targeted classification tests and rollout verification. Change
+both prod declarations and recompose the runtime manifest; let the normal cost
+router recovery ladder promote Parakeet without resetting its gate.
+
+When enabled, for the internal HTTP
 family endpoint, each live-window POST selects a fresh DNS-ready GPU IP from
 the existing pressure poller. A 5xx, transport error, malformed response, or
 acquired POST timeout quarantines only that GPU in this listener process for

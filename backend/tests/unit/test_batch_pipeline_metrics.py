@@ -1,3 +1,5 @@
+from dataclasses import replace
+import math
 from pathlib import Path
 
 from prometheus_client import CollectorRegistry
@@ -5,6 +7,7 @@ from unittest.mock import Mock
 import pytest
 import yaml
 
+from utils.batch_pipeline.contracts import Priority
 from utils.batch_pipeline.metrics import QueueMetrics
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore, item
 from utils.batch_pipeline.scheduler import Scheduler
@@ -113,6 +116,109 @@ def test_queue_age_and_stale_refresh_retains_previous_sample(monkeypatch):
         metrics.record('user-id')
 
 
+def test_min_refresh_interval_skips_reads_and_a_failure_retries_next_call(monkeypatch):
+    registry = CollectorRegistry()
+    metrics = QueueMetrics(registry, min_refresh_seconds=30)
+    store = MemoryStore()
+    Scheduler(store).enqueue(item('a'), 0)
+    calls = []
+    oldest = store.oldest
+
+    def counted(*args, **kwargs):
+        calls.append(args)
+        return oldest(*args, **kwargs)
+
+    monkeypatch.setattr(store, 'oldest', counted)
+    freshness = {'worker_release': 'unscoped', 'namespace': 'unscoped'}
+    metrics.refresh(store, 100)
+    reads = len(calls)
+    assert reads > 0
+    metrics.refresh(store, 129)
+    assert len(calls) == reads
+    assert registry.get_sample_value('omi_batch_pipeline_metrics_refreshed_at_seconds', freshness) == 100
+
+    def unavailable(*args, **kwargs):
+        raise RuntimeError('store unavailable')
+
+    monkeypatch.setattr(store, 'oldest', unavailable)
+    with pytest.raises(RuntimeError):
+        metrics.refresh(store, 130)
+    assert registry.get_sample_value('omi_batch_pipeline_metrics_refreshed_at_seconds', freshness) == 100
+    # A failed sample does not start a new interval: the next call reads again.
+    monkeypatch.setattr(store, 'oldest', counted)
+    metrics.refresh(store, 131)
+    assert len(calls) > reads
+    assert registry.get_sample_value('omi_batch_pipeline_metrics_refreshed_at_seconds', freshness) == 131
+
+
+def test_a_refresh_started_during_another_skips_its_reads(monkeypatch):
+    metrics = QueueMetrics(CollectorRegistry(), min_refresh_seconds=30)
+    store = MemoryStore()
+    calls = []
+    oldest = store.oldest
+
+    def overlapping(*args, **kwargs):
+        calls.append(args)
+        if len(calls) == 1:
+            metrics.refresh(store, 100)  # a second caller arriving mid-read
+        return oldest(*args, **kwargs)
+
+    monkeypatch.setattr(store, 'oldest', overlapping)
+    metrics.refresh(store, 100)
+    assert len(calls) == 2 * len(list(Priority))
+
+
+def test_zero_min_refresh_interval_reads_on_every_call(monkeypatch):
+    metrics = QueueMetrics(CollectorRegistry())
+    store = MemoryStore()
+    calls = []
+    oldest = store.oldest
+    monkeypatch.setattr(store, 'oldest', lambda *a, **k: calls.append(a) or oldest(*a, **k))
+    metrics.refresh(store, 100)
+    reads = len(calls)
+    metrics.refresh(store, 100)
+    assert len(calls) == 2 * reads
+
+
+@pytest.mark.parametrize(
+    ('raw', 'expected'),
+    [('', 30.0), ('off', 0.0), ('0', 0.0), ('-5', 0.0), ('45', 45.0), ('61', 30.0), ('0.5', 30.0), ('bad', 30.0)],
+)
+def test_serving_metrics_min_refresh_seconds_is_bounded_below_the_guard_blind_window(monkeypatch, raw, expected):
+    from config.batch_pipeline import serving_metrics_min_refresh_seconds
+
+    monkeypatch.setenv('BATCH_PIPELINE_SERVING_METRICS_MIN_REFRESH_SECONDS', raw)
+    assert serving_metrics_min_refresh_seconds() == expected
+
+
+def test_admission_hold_reason_counter_counts_policy_defers_and_folds_unknown():
+    registry = CollectorRegistry()
+    metrics = QueueMetrics(registry)
+    metrics.record('admission_policy_deferred', reason='allowance_exhausted')
+    metrics.record('admission_policy_deferred', reason='free-text-escape')
+    # An unevaluated defer carries no reason; its lease never reached a decision.
+    metrics.record('admission_unevaluated_deferred', reason='ignored')
+    metrics.record('admission_policy_deferred')
+    assert (
+        registry.get_sample_value('omi_batch_pipeline_admission_hold_reasons_total', {'reason': 'allowance_exhausted'})
+        == 1
+    )
+    assert registry.get_sample_value('omi_batch_pipeline_admission_hold_reasons_total', {'reason': 'unknown'}) == 1
+    assert registry.get_sample_value('omi_batch_pipeline_admission_hold_reasons_total', {'reason': 'ignored'}) is None
+    assert registry.get_sample_value('omi_batch_pipeline_events_total', {'event': 'admission_policy_deferred'}) == 3
+
+    store = MemoryStore()
+    queue = Scheduler(store, metrics=metrics)
+    queue.enqueue(item('a'), 0)
+    lease = queue.pull(0)[0]
+    assert queue.defer('a', lease.token, 1, retry_after=60, held_reason='fair_use_restricted', admission_refused=True)
+    assert (
+        registry.get_sample_value('omi_batch_pipeline_admission_hold_reasons_total', {'reason': 'fair_use_restricted'})
+        == 1
+    )
+    assert registry.get_sample_value('omi_batch_pipeline_events_total', {'event': 'admission_policy_deferred'}) == 4
+
+
 def test_scheduler_records_new_transitions_without_duplicate_completion_count():
     from utils.batch_pipeline.contracts import WorkResult
     from utils.batch_pipeline.merge import OrderedMerge
@@ -127,7 +233,7 @@ def test_scheduler_records_new_transitions_without_duplicate_completion_count():
     assert queue.complete(result, lease.token, 11)
     assert queue.complete(result, lease.token, 12)
     assert registry.get_sample_value('omi_batch_pipeline_events_total', {'event': 'completed'}) == 1
-    assert registry.get_sample_value('omi_batch_pipeline_owner_wait_seconds_sum') == 10
+    assert registry.get_sample_value('omi_batch_pipeline_owner_wait_seconds_sum', {'relet': 'false'}) == 10
     merge = OrderedMerge(store, metrics=metrics)
     merge.commit_next('heavy', 13)
     merge.commit_next('heavy', 14)
@@ -337,13 +443,176 @@ def test_firestore_oldest_walks_past_policy_holds():
     from database.batch_pipeline_store import OLDEST_POLICY_HOLD_SCAN_LIMIT
 
     # Review r1/r2 P1s: a scan truncated at the bound with holds in every row
-    # must fail toward tripping on the oldest hold's age - a fresh zero could
+    # must report an incomplete scan - a fresh zero could
     # bless a ramp while a real commitment sits unmeasured just past the bound.
     # A FIFO that is exactly as long as the bound, or shorter, is not
     # truncated: zero is truthful.
     truncated = Client([Doc({**held, 'enqueued_at': float(n)}) for n in range(OLDEST_POLICY_HOLD_SCAN_LIMIT + 1)])
-    assert oldest(truncated, 'omi', 2) == 0.0
+    assert math.isnan(oldest(truncated, 'omi', 2))
     exactly_bound = Client([Doc({**held, 'enqueued_at': float(n)}) for n in range(OLDEST_POLICY_HOLD_SCAN_LIMIT)])
     assert oldest(exactly_bound, 'omi', 2) is None
     just_short = Client([Doc({**held, 'enqueued_at': float(n)}) for n in range(OLDEST_POLICY_HOLD_SCAN_LIMIT - 1)])
     assert oldest(just_short, 'omi', 2) is None
+
+
+def _deep_oldest_age(registry):
+    return registry.get_sample_value(
+        'omi_batch_pipeline_oldest_age_seconds',
+        {'priority': 'deep', 'worker_release': 'unscoped', 'namespace': 'unscoped'},
+    )
+
+
+@pytest.mark.parametrize('state', ['dead', 'quarantined', 'committed', 'privacy_blocked'])
+def test_oldest_and_retry_skip_dispositioned_rows_but_keep_completed_result_ready(state):
+    from database.batch_pipeline_store import oldest, oldest_retry
+
+    class Doc:
+        def __init__(self, job):
+            self.job = job
+
+        def to_dict(self):
+            return self.job
+
+    class Query:
+        def __init__(self, jobs):
+            self.jobs = jobs
+
+        def collection(self, *args):
+            return self
+
+        def where(self, *args):
+            return self
+
+        def order_by(self, *args):
+            return self
+
+        def limit(self, limit):
+            self.bound = limit
+            return self
+
+        def stream(self):
+            return iter(Doc(job) for job in self.jobs[: self.bound])
+
+    disposed = {'state': state, 'enqueued_at': 1, 'retry_started_at': 2, 'merge_pending': True}
+    active = {
+        'state': 'result_ready',
+        'enqueued_at': 100,
+        'retry_started_at': 200,
+        'merge_pending': True,
+        'terminal_disposition': {'state': 'completed'},
+    }
+    assert oldest(Query([disposed, active]), 'synthetic', 0) == 100
+    assert oldest_retry(Query([disposed, active]), 'synthetic', 0) == 200
+    assert oldest(Query([disposed]), 'synthetic', 0) is None
+    assert oldest_retry(Query([disposed]), 'synthetic', 0) is None
+    assert math.isnan(oldest(Query([disposed] * 501), 'synthetic', 0))
+    assert math.isnan(oldest_retry(Query([disposed] * 501), 'synthetic', 0))
+
+
+def test_incomplete_age_sample_preserves_nan_without_blocking_other_queue_signals():
+    registry = CollectorRegistry()
+    metrics = QueueMetrics(registry)
+    store = MemoryStore()
+    store.oldest = lambda priority, ready_only: None if ready_only or priority else float('nan')
+    metrics.refresh(store, 1000)
+    labels = {'priority': 'fresh', 'worker_release': 'unscoped', 'namespace': 'unscoped'}
+    assert math.isnan(registry.get_sample_value('omi_batch_pipeline_oldest_age_seconds', labels))
+    assert registry.get_sample_value('omi_batch_pipeline_ready_age_seconds', labels) == 0
+    assert (
+        registry.get_sample_value(
+            'omi_batch_pipeline_metrics_refreshed_at_seconds', {'worker_release': 'unscoped', 'namespace': 'unscoped'}
+        )
+        == 1000
+    )
+
+
+def test_allowance_hold_through_an_unevaluated_reevaluation_does_not_flap_the_proxy():
+    # 2026-10-27: the proxy flapped to ~54h when a held job's re-evaluation came
+    # back unevaluated: defer pops compute_decision (BLIND, never a false hold)
+    # and the job read as a decisionless commitment until the next re-hold.
+    registry = CollectorRegistry()
+    metrics = QueueMetrics(registry)
+    store = MemoryStore()
+    queue = Scheduler(store)
+    queue.enqueue(replace(item('held'), requires_compute_admission=True), 0)
+    lease = queue.pull(100)[0]
+    assert queue.defer('held', lease.token, 110, 60, held_reason='allowance_exhausted', admission_refused=True)
+    queue.recover(200)
+    lease = queue.pull(200)[0]
+    assert queue.defer('held', lease.token, 210, admission_refused=True)  # unevaluated RPC
+    job = store.rows['jobs', 'held']
+    assert 'compute_decision' not in job  # BLIND contract unchanged
+    assert job['last_policy_hold'] == {'reason': 'allowance_exhausted', 'at': 110}
+    metrics.refresh(store, 194_400)  # ~54h later: still parked, not a commitment
+    assert _deep_oldest_age(registry) == 0
+
+
+def test_lease_that_bypasses_admission_ends_the_parked_hold():
+    # Review (Luna): with offline enforcement off, a unit that does not require
+    # compute admission dispatches without authorize(); its lease is a real
+    # commitment, so a stale hold marker must not hide it from the proxy.
+    registry = CollectorRegistry()
+    metrics = QueueMetrics(registry)
+    store = MemoryStore()
+    queue = Scheduler(store)
+    queue.enqueue(item('held'), 0)
+    lease = queue.pull(100)[0]
+    assert queue.defer('held', lease.token, 110, 60, held_reason='allowance_exhausted', admission_refused=True)
+    queue.recover(200)
+    lease = queue.pull(200)[0]
+    assert queue.defer('held', lease.token, 210, admission_refused=True)
+    assert 'last_policy_hold' not in store.rows['jobs', 'held']
+    metrics.refresh(store, 1900)
+    assert _deep_oldest_age(registry) == 1900
+
+
+def test_firestore_oldest_skips_a_decisionless_job_with_a_last_allowance_hold():
+    from database.batch_pipeline_store import OLDEST_POLICY_HOLD_SCAN_LIMIT, is_allowance_policy_hold, oldest
+
+    parked = {'merge_pending': True, 'last_policy_hold': {'reason': 'allowance_exhausted', 'at': 1}}
+    assert is_allowance_policy_hold(parked)
+    assert not is_allowance_policy_hold({'last_policy_hold': {'reason': 'privacy_blocked', 'at': 1}})
+    # The current decision wins over the marker whenever one is recorded.
+    assert not is_allowance_policy_hold(
+        {**parked, 'compute_decision': {'outcome': 'allowed', 'reason': 'batch', 'at': 2}}
+    )
+
+    class Query:
+        def __init__(self, rows):
+            self.rows = rows
+
+        def where(self, *args, **kwargs):
+            return self
+
+        def order_by(self, *args, **kwargs):
+            return self
+
+        def limit(self, count):
+            return self
+
+        def stream(self):
+            return iter(self.rows)
+
+    class Doc:
+        def __init__(self, payload):
+            self.payload = payload
+
+        def to_dict(self):
+            return self.payload
+
+    class Client:
+        def __init__(self, rows):
+            self.rows = rows
+
+        def collection(self, name):
+            return Query(self.rows)
+
+    commitment = {'merge_pending': True, 'enqueued_at': 2.0}
+    assert oldest(Client([Doc({**parked, 'enqueued_at': 1.0}), Doc(commitment)]), 'omi', 1) == 2.0
+    assert oldest(Client([Doc({**parked, 'enqueued_at': 1.0})]), 'omi', 1) is None
+    # Marker-only holds have the same incomplete-scan contract as current
+    # allowance decisions: never fabricate late work or report a fresh zero.
+    truncated = [Doc({**parked, 'enqueued_at': float(n)}) for n in range(OLDEST_POLICY_HOLD_SCAN_LIMIT + 1)]
+    assert math.isnan(oldest(Client(truncated), 'omi', 1))
+    exact = [Doc({**parked, 'enqueued_at': float(n)}) for n in range(OLDEST_POLICY_HOLD_SCAN_LIMIT)]
+    assert oldest(Client(exact), 'omi', 1) is None

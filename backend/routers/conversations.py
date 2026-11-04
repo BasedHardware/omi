@@ -2,21 +2,28 @@ from utils.generated_compute import require_generated_compute, generated_compute
 import asyncio
 import hashlib
 import os
+from contextlib import nullcontext
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, BackgroundTasks
 from typing import Annotated, Any, Dict, List, Literal, Optional
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import database.conversation_scan as conversation_scan_db
 import database.conversations as conversations_db
+import database.hidden_noise_counts as hidden_noise_counts_db
 import database._client as db_client_module
 import database.action_items as action_items_db
 import database.redis_db as redis_db
+from database.account_deletion_marker import account_deletion_blocks_user_work
 import database.users as users_db
 from utils.agent_capabilities.errors import TRANSCRIPT_EDIT_HTTP_ERRORS
 from database import conversation_tombstones
+from database.legal_holds import destructive_operation_gate
+from utils.other.account_gate_http import account_gate_busy_http_exception
 from database.firestore_read_metrics import FirestoreReadSite
 from utils.list_version_check import ListVersionCheck
+from utils.conversations.list_filters import aware_datetime, reject_oversized_filter
 from database.vector_db import (
     delete_action_item_vector,
     delete_action_item_vectors_batch,
@@ -34,6 +41,7 @@ from models.calendar_context import CalendarMeetingContext
 from utils.free_tier_processing_policy import client_summaries_at_cap_enabled
 from models.client_processing import PROJECTION_FAMILY_FIELDS, ClientProcessing
 from models.conversation import (
+    ProcessConversationRequest,
     BulkAssignSegmentsRequest,
     CalendarEventLink,
     Conversation,
@@ -55,7 +63,7 @@ from models.conversation import (
     UpdateSummaryRequest,
     project_shared_conversation,
 )
-from utils.conversations.fragment_visibility import is_completed_rule_discard
+from utils.sync.bridge_pending import hidden_from_default_detail
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.reprocess_contract import DERIVED_EFFECTS_TRANSCRIPT_FIELD, FIRST_PARTY_SUMMARY_SOURCE
@@ -97,6 +105,7 @@ from utils.metrics import record_lazy_desktop_deferral
 from utils.memory.retraction_scope import retraction_can_be_skipped
 from utils.memory.canonical_memory_adapter import ConversationReplacementConflictError
 from utils import byok
+from utils.cloud_tasks import is_listen_finalization_dispatch_enabled
 from utils.conversations.search import (
     ConversationSearchUnavailableError,
     clamp_conversation_search_pagination,
@@ -290,21 +299,6 @@ def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
     return conversation
 
 
-class ProcessConversationRequest(BaseModel):
-    calendar_meeting_context: Optional[CalendarMeetingContext] = None
-    # Unvalidated on purpose: a malformed projection must not 422 a finished recording.
-    # Schema, size caps, and transcript-hash binding run in the handler.
-    client_processing: Optional[Any] = Field(
-        default=None,
-        description=(
-            "Untrusted client-authored display projection. Accepted as a raw payload "
-            "and validated in the handler so a malformed projection cannot 422 a "
-            "finished recording. Hash-bound to the persisted transcript. Display only "
-            "— never an input to intelligence."
-        ),
-    )
-
-
 # Provenance is untrusted client input. Bound it before it reaches a log
 # record so a newline / C0 control / oversized token cannot forge a second line.
 def _projection_provenance_for_log(raw: Any) -> tuple[Any, Any, Any]:
@@ -464,6 +458,20 @@ class ConversationsCountResponse(BaseModel):
     sources: List[str] | None = None
 
 
+class HiddenNoiseDayCount(BaseModel):
+    date: str
+    count: int
+
+
+class HiddenNoiseCountsResponse(BaseModel):
+    tz: str
+    start_date: datetime
+    end_date: datetime
+    days: List[HiddenNoiseDayCount]
+    total: int
+    truncated: bool
+
+
 class ConversationRecordingResponse(BaseModel):
     has_recording: bool
 
@@ -485,6 +493,12 @@ def process_in_progress_conversation(
     conversation = retrieve_in_progress_conversation(uid)
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation in progress not found")
+
+    if is_listen_finalization_dispatch_enabled() and not byok.has_byok_keys():
+        # Resolve Redis exactly once, then use the same transactional outbox as
+        # exact-ID finalization. A disconnected HTTP caller must not own the
+        # only processing attempt. BYOK retains its request-scoped credentials.
+        return finalize_conversation(conversation['id'], request=request, uid=uid)
 
     conversation = deserialize_conversation(conversation)
 
@@ -519,15 +533,8 @@ def process_in_progress_conversation(
             else:
                 logger.warning('Skipping malformed cached user geolocation for uid=%s', uid)
 
-    # Winner owns ingress. The accepted projection rides the admission CAS:
-    # status→processing and client_processing are one write. A later request
-    # (including a loser that late-binds) can only land after this commit, so
-    # a stalled second write cannot last-writer-wins an older projection over
-    # a newer one (section 1.7 (c)). A mutation failure is an admission
-    # failure — the row stays in_progress instead of stranding on processing
-    # with no durable job. Ingress-owned mutation only; the coordinator's
-    # existing-row persist still strips the field. Omit extra_updates when
-    # there is no projection so positional admit stubs keep working.
+    # Bind projection plus status in the admission CAS; failures retain in_progress.
+    # Losing requests only late-bind to the latest digest, never structured output.
     extra_updates = client_processing_mutation(client_projection) if client_projection is not None else None
     bind_report = _projection_bind_report()
     if extra_updates is None:
@@ -782,6 +789,7 @@ def reprocess_conversation(
 
     input_generation = attention_db.generation(conversation)
     was_discarded = bool(conversation.get('discarded'))
+    user_kept = was_discarded or bool(conversation.get('sync_relevance_user_kept'))
     # A hidden conversation's derived effects are not trusted to be current.
     effects_transcript = None if was_discarded else conversation.get(DERIVED_EFFECTS_TRANSCRIPT_FIELD)
     conversation = deserialize_conversation(conversation)
@@ -815,6 +823,7 @@ def reprocess_conversation(
             background_tasks,
             response,
             first_party_only=first_party_only,
+            user_kept=user_kept,
             derived_effects_transcript_sha256=effects_transcript if isinstance(effects_transcript, str) else None,
         )
     except Exception:
@@ -857,6 +866,7 @@ def execute_reprocess(
     response,
     *,
     first_party_only: bool = False,
+    user_kept: bool = False,
     derived_effects_transcript_sha256: Optional[str] = None,
 ):
     receipt_applied: list = []
@@ -866,6 +876,7 @@ def execute_reprocess(
         language_code,
         conversation,
         trigger=ProcessingTrigger.USER_REPROCESS,
+        user_kept=was_discarded or user_kept,
         app_id=app_id,
         explicit_app=explicit_app,
         app_usage_attribution=(
@@ -902,6 +913,10 @@ def _validate_reprocess_app_selection(uid: str, app_id: str) -> App:
     # validation. A module-level import would make those suites stub a graph they never call.
     from database.apps import get_app_by_id_db
     from utils.apps import get_available_app_model_by_id, is_user_app_enabled
+    from utils.default_summary_template import DEFAULT_SUMMARY_APP_ID, default_summary_app
+
+    if app_id == DEFAULT_SUMMARY_APP_ID:
+        return default_summary_app()
 
     if get_app_by_id_db(app_id) is None:
         raise HTTPException(status_code=404, detail='App not found')
@@ -918,24 +933,7 @@ def _validate_reprocess_app_selection(uid: str, app_id: str) -> App:
     return app
 
 
-def _ensure_aware(value: datetime) -> datetime:
-    # FastAPI parses a query datetime as naive or timezone-aware depending on whether the client
-    # included a UTC offset. Normalize to timezone-aware (UTC) so comparing the two ends of a date
-    # range never raises TypeError on mixed awareness (which would surface as a 500).
-    return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
-
-
-# Firestore 'in' filters accept at most 30 values (see database/apps.py, database/chat.py). Reject
-# an oversized status/source filter before it reaches the query so a caller cannot turn a
-# comma-separated filter into an unhandled 500. ConversationStatus and the source set are both
-# tiny, so a cap of 20 can never reject a request a real client would send.
-MAX_IN_FILTER_VALUES = 20
 LEGACY_SEGMENT_INDEX_PREFIX = '#index:'
-
-
-def _reject_oversized_filter(values: List[str], field_name: str) -> None:
-    if len(values) > MAX_IN_FILTER_VALUES:
-        raise HTTPException(status_code=400, detail=f"{field_name} accepts at most {MAX_IN_FILTER_VALUES} values")
 
 
 @router.get(
@@ -966,7 +964,7 @@ def get_conversations(
     starred: Optional[bool] = Query(None, description="Filter by starred status"),
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    if start_date is not None and end_date is not None and _ensure_aware(start_date) > _ensure_aware(end_date):
+    if start_date is not None and end_date is not None and aware_datetime(start_date) > aware_datetime(end_date):
         raise HTTPException(status_code=400, detail="start_date must be earlier than or equal to end_date")
     logger.info(f'get_conversations {uid} {limit} {offset} {statuses} {sources} {folder_id} {starred}')
     # force convos statuses to processing, completed on the empty filter
@@ -983,10 +981,13 @@ def get_conversations(
         )
 
     status_filter = statuses.split(",") if len(statuses) > 0 else []
-    _reject_oversized_filter(status_filter, "statuses")
-    _reject_oversized_filter(source_list, "sources")
+    reject_oversized_filter(status_filter, "statuses")
+    reject_oversized_filter(source_list, "sources")
 
-    version_check = ListVersionCheck.start(request, uid, 'conversations')
+    from utils.episodes import home_membership
+
+    held_request = home_membership.held_for(request)
+    version_check = ListVersionCheck.start(None if held_request else request, uid, 'conversations')
     if version_check.not_modified is not None:
         return version_check.not_modified
 
@@ -1009,6 +1010,15 @@ def get_conversations(
         list_fields_only=True,
     )
 
+    conversations = home_membership.project_list(
+        uid,
+        conversations,
+        request,
+        response,
+        filtered=bool(
+            include_discarded or sources or folder_id or starred is not None or statuses != 'processing,completed'
+        ),
+    )
     _heal_locked_conversations_if_eligible(uid, conversations)
     redact_conversations_for_list(conversations)
     if budget.truncated and response is not None:
@@ -1017,9 +1027,39 @@ def get_conversations(
     # Paid lock recovery depends on the current allowance (including rollover)
     # and must run on every locked-page read, even without a source mutation.
     version_check.finish(
-        response, truncated=budget.truncated, cacheable=not any(row.get('is_locked') for row in conversations)
+        response,
+        truncated=budget.truncated,
+        cacheable=not held_request and not any(row.get('is_locked') for row in conversations),
     )
     return conversations
+
+
+@router.get('/v1/conversations/hidden-noise-counts', tags=['conversations'], response_model=HiddenNoiseCountsResponse)
+def get_hidden_noise_counts(
+    start_date: datetime = Query(..., description='Inclusive start instant; naive timestamps use UTC'),
+    end_date: datetime = Query(..., description='Inclusive end instant; maximum window is 31 days'),
+    tz: str = Query('UTC', description='IANA timezone for local created_at day buckets'),
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """Count hidden noise/media without gating on MEDIA_NOISE_MODE for this uid.
+
+    Zero-count days are omitted. A 1000-row scan cap sets truncated=true when
+    hit; days and total then represent lower bounds. Locked rows are eligible;
+    deletion/merge tombstones never count; Dream duplicates count because the
+    include_discarded reveal list shows them. No hidden rows
+    returns empty days and total=0, even when the media/noise mode is disabled.
+    """
+    start_date = aware_datetime(start_date).astimezone(timezone.utc)
+    end_date = aware_datetime(end_date).astimezone(timezone.utc)
+    if start_date > end_date or end_date - start_date > timedelta(days=31):
+        raise HTTPException(status_code=400, detail='start_date and end_date must define a window of at most 31 days')
+    try:
+        zone = ZoneInfo(tz)
+    except (ZoneInfoNotFoundError, ValueError):
+        raise HTTPException(status_code=400, detail='tz must be a valid IANA timezone')
+    # Sync routes run in FastAPI's threadpool, as does the adjacent Home list.
+    counts = hidden_noise_counts_db.count_hidden_noise_by_day(uid, start_date, end_date, zone)
+    return {'tz': tz, 'start_date': start_date, 'end_date': end_date, **counts}
 
 
 @router.get('/v1/conversations/count', tags=['conversations'], response_model=ConversationsCountResponse)
@@ -1036,12 +1076,12 @@ def get_conversations_count(
     ),
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    if start_date is not None and end_date is not None and _ensure_aware(start_date) > _ensure_aware(end_date):
+    if start_date is not None and end_date is not None and aware_datetime(start_date) > aware_datetime(end_date):
         raise HTTPException(status_code=400, detail="start_date must be earlier than or equal to end_date")
     status_list = [s.strip() for s in statuses.split(',') if s.strip()] if statuses else []
     source_list = [s.strip() for s in sources.split(',') if s.strip()] if sources else []
-    _reject_oversized_filter(status_list, "statuses")
-    _reject_oversized_filter(source_list, "sources")
+    reject_oversized_filter(status_list, "statuses")
+    reject_oversized_filter(source_list, "sources")
     if len(source_list) > 1 and len(status_list) > 1:
         raise HTTPException(status_code=400, detail='multiple sources cannot be combined with multiple statuses')
     count = conversations_db.get_conversations_count(
@@ -1089,10 +1129,10 @@ def get_conversation_by_id(
         if conversation.get('source') != 'omi':
             raise HTTPException(status_code=404, detail="Conversation not found")
     # Omitted keeps the historical detail default (show a stored discard).
-    # A completed rule-discard is noise, not an archive row: the web permalink
-    # omits this flag, so it stays hidden unless the caller explicitly asks.
+    # Noise and pending live bridges stay out of the default detail response;
+    # the web permalink omits this flag, while explicit archive reads opt in.
     show_discarded = True if include_discarded is None else include_discarded
-    if is_completed_rule_discard(conversation) and include_discarded is not True:
+    if hidden_from_default_detail(conversation) and include_discarded is not True:
         raise HTTPException(status_code=404, detail="Conversation not found")
     if not conversations_db.is_visible_conversation(conversation, include_discarded=show_discarded):
         raise HTTPException(status_code=404, detail="Conversation not found")
@@ -1368,7 +1408,35 @@ def delete_conversation(
     http_request: Request = None,  # type: ignore[assignment]
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    logger.info(f'delete_conversation {conversation_id} {uid} cascade={cascade}')
+    db_client = getattr(db_client_module, 'db', None) if cascade else None
+    memory_service = MemoryService(db_client=db_client) if cascade else None
+    # Acquire before recording delete intent. A busy account returns a retryable
+    # 409 without leaving a tombstone on a still-live conversation. Nested
+    # memory retraction reuses this exact gate and token.
+    gate = (
+        destructive_operation_gate(uid, kind='explicit_memory_deletion', firestore_client=db_client)
+        if cascade
+        else nullcontext()
+    )
+    try:
+        with gate:
+            return _delete_conversation_under_gate(
+                conversation_id, background_tasks, cascade, http_request, uid, memory_service, db_client
+            )
+    except RuntimeError as error:
+        if type(error).__name__ not in {
+            'DestructiveGateTakeover',
+            'DestructiveOperationInProgress',
+            'LegalHoldAuthorityUnavailable',
+        }:
+            raise
+        raise account_gate_busy_http_exception() from error
+
+
+def _delete_conversation_under_gate(
+    conversation_id, background_tasks, cascade, http_request, uid, memory_service, db_client
+):
+    logger.info('event=conversation_delete cascade=%s', cascade)
 
     # Commit intent before retraction or cleanup; failures must never undo this guard.
     conversation_tombstones.record_deletion(uid, conversation_id)
@@ -1377,15 +1445,15 @@ def delete_conversation(
 
     if cascade:
         # Delete associated memories and action items first so partial failure cannot orphan derived data.
-        db_client = getattr(db_client_module, 'db', None)
-        memory_service = MemoryService(db_client=db_client)
         # Retraction is fenced with canonical intake; skip only when there is provably nothing to retract.
         # Any real memory still raises instead of being orphaned by conversation deletion.
+        # Preserve the post-intent retraction check: an earlier emptiness hint
+        # could miss a canonical commit that won immediately before the gate.
         if not retraction_can_be_skipped(uid, conversation_id, memory_service=memory_service, db_client=db_client):
             try:
                 memory_service.retract_conversation_memories(uid, conversation_id)
             except ConversationReplacementConflictError as error:
-                logger.exception('cascade retraction conflicted uid=%s conversation_id=%s', uid, conversation_id)
+                logger.exception('event=conversation_delete outcome=retraction_conflict')
                 # Concurrent same-account memory writes kept winning the
                 # account-global control CAS. Primary content has not been deleted yet, so
                 # fail closed with a retryable answer instead of an opaque 500;
@@ -1402,8 +1470,6 @@ def delete_conversation(
                     "LegalHoldAuthorityUnavailable",
                 }:
                     raise
-                from utils.other.account_gate_http import account_gate_busy_http_exception
-
                 raise account_gate_busy_http_exception() from error
 
         from utils.notifications import sync_action_item_reminder
@@ -1422,7 +1488,9 @@ def delete_conversation(
             try:
                 delete_action_item_vectors_batch(uid, [item['id'] for item in armed])
             except Exception as e:
-                logger.error(f"Error deleting task vectors for {conversation_id}: {e}")
+                logger.error(
+                    'event=conversation_delete action=task_vectors outcome=error exception_type=%s', type(e).__name__
+                )
         # Snapshot retained bridge donors before shared metadata cleanup removes them.
         source_ids = (
             (conversations_db.get_conversation(uid, conversation_id) or {}).get('sync_merged_from', [])
@@ -1990,6 +2058,14 @@ def get_shared_conversation_by_id(conversation_id: str):
         raise HTTPException(status_code=404, detail="Conversation is private")
 
     try:
+        if account_deletion_blocks_user_work(uid):
+            raise HTTPException(status_code=404, detail="Conversation is private")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail='Shared conversation unavailable') from exc
+
+    try:
         conversation = _get_valid_conversation_by_id(uid, conversation_id)
     except HTTPException:
         raise
@@ -2017,6 +2093,7 @@ class ConversationTopicRequest(BaseModel):
     model_config = {"extra": "forbid"}
 
     transcript: str = Field(..., min_length=1, max_length=100_000)
+    conversation_language: Optional[str] = Field(default=None, max_length=32)
 
 
 class ConversationTopicResponse(BaseModel):
@@ -2041,13 +2118,12 @@ async def generate_conversation_topic_endpoint(
     # build a minimal dependency graph, and utils.subscription pulls database.user_usage
     # in at import time.
     from utils.llm import conversation_topic as conversation_topic_llm
-    from utils.subscription import is_trial_paywalled
 
-    if await run_blocking(db_executor, is_trial_paywalled, uid, 'desktop'):
-        raise HTTPException(status_code=402, detail='trial_expired')
     topic = await run_blocking(
         llm_executor,
-        lambda: conversation_topic_llm.generate_conversation_topic(uid, body.transcript),
+        lambda: conversation_topic_llm.generate_conversation_topic(
+            uid, body.transcript, conversation_language=body.conversation_language
+        ),
     )
     if topic is None:
         raise HTTPException(status_code=502, detail="conversation_topic_failed")
@@ -2183,8 +2259,8 @@ async def search_conversations_endpoint(
 
     # Spoken-word hits (optional transcript-chunk index) are merged on page 1 only so
     # Typesense pagination stays stable. Snippets still attach for every hydrated hit.
-    # Over-fetch candidates on page 1 so lock/speaker/date filters can still fill per_page
-    # without permanently dropping displaced Typesense hits that lost the merge race.
+    # Over-fetch candidates on page 1 so lock/speaker/date filters can still fill per_page.
+    # Page 2 starts at the next Typesense page, so the per_page cut below keeps every hit of this one.
     merge_cap = effective_per_page
     if effective_page == 1 and (search_request.query or '').strip():
         merge_cap = min(effective_per_page * 2, 250)
@@ -2242,7 +2318,7 @@ async def search_conversations_endpoint(
         if conversation_matches_speaker(conversation, search_request.speaker_id)
         and conversation_matches_date_range(conversation, start_timestamp, end_timestamp)
     ]
-    conversations = conversations[:effective_per_page]
+    conversations = [c for i, c in enumerate(conversations) if i < effective_per_page or c.get('id') in typesense_ids]
     # Attach grep-style transcript snippets (start/end for seek-to-moment) before list redaction
     # clears segments on locked rows.
     if (search_request.query or '').strip():
@@ -2376,10 +2452,10 @@ def merge_conversations(
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:merge")),
 ):
     """Admit completed sources, merge into a new ID asynchronously, then notify the client."""
-    from utils.conversations.merge_conversations import validate_merge_compatibility, perform_merge_async
+    from utils.conversations.merge_conversations import validate_merge_compatibility
 
-    if len(request.conversation_ids) < 2:
-        raise HTTPException(status_code=400, detail="At least 2 conversations required to merge")
+    if not 2 <= len(request.conversation_ids) <= 100:
+        raise HTTPException(status_code=400, detail="Merge requires 2 to 100 conversations")
     if len(request.conversation_ids) != len(set(request.conversation_ids)):
         raise HTTPException(status_code=400, detail="Cannot merge duplicate conversations.")
 
@@ -2394,39 +2470,17 @@ def merge_conversations(
     if not is_valid:
         raise HTTPException(status_code=400, detail=error_message)
 
-    from config.refactor_modes import serving_for
-
-    if serving_for('LIFECYCLE_V2_MODE', uid):
-        job = lifecycle_service.merge_jobs.admit(uid, request.conversation_ids, request.reprocess)
-        if job is None:
-            raise HTTPException(status_code=409, detail='Conversation changed during merge admission')
-        background_tasks.add_task(lifecycle_service.merge_jobs.run, job['job_id'], job['dispatch_generation'])
-        return MergeConversationsResponse(
-            status='merging',
-            message='Merge started',
-            warning=warning_message,
-            conversation_ids=request.conversation_ids,
-        )
-
-    # refactor: superseded by lifecycle.merge_jobs when LIFECYCLE_V2_MODE=serve
-    admitted = []
-    for conv_id in request.conversation_ids:
-        if not lifecycle_service.begin_merge(uid, conv_id):
-            for prior_id in admitted:
-                lifecycle_service.complete(uid, prior_id)
-            raise HTTPException(status_code=409, detail='Conversation changed during merge admission')
-        admitted.append(conv_id)
-
-    background_tasks.add_task(
-        perform_merge_async,
-        uid=uid,
-        conversation_ids=request.conversation_ids,
-        reprocess=request.reprocess,
-    )
-
+    # Every manual merge needs durable admission/recovery. The broader lifecycle
+    # canary still controls capture/finalization; it cannot disable this safety
+    # contract or send a subset of users through non-recoverable source cleanup.
+    job = lifecycle_service.merge_jobs.admit(uid, request.conversation_ids, request.reprocess)
+    if job is None:
+        raise HTTPException(status_code=409, detail='Conversation changed during merge admission')
+    background_tasks.add_task(lifecycle_service.merge_jobs.run, job['job_id'], job['dispatch_generation'])
     return MergeConversationsResponse(
-        status="merging",
-        message="Merge started",
+        status='merging',
+        message='Merge started',
         warning=warning_message,
         conversation_ids=request.conversation_ids,
+        merged_conversation_id=job['merge_target_id'],
     )

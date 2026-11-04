@@ -12,8 +12,14 @@ from utils.memory.memory_service import MemoryService
 from models.product_memory import MemoryAccessPolicy, MemoryTier, MemoryItemStatus
 from models.memory_evidence import SourceState
 from utils.memory.canonical_visibility_filter import filter_canonical_default_visible_items
+from utils import dream_required_intake
 from database.task_intelligence_control import get_task_workflow_control
 from utils.agent_capabilities.errors import AgentRecordUnavailable
+
+
+def read_required_intake_candidate(uid, ref, context):
+    return dream_required_intake.read_candidate(uid, ref.split('/', 1)[1], context)
+
 
 READ_COLLECTIONS = {
     'conversations',

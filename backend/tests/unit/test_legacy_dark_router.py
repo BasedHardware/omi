@@ -47,7 +47,7 @@ async def test_router_never_creates_a_legacy_job_outside_on(monkeypatch, mode):
 
     module, saved, jobs, BytesIO = _router()
     try:
-        monkeypatch.setattr(legacy_dark, 'current_mode', lambda: mode)
+        monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: mode)
         monkeypatch.setattr(legacy_dark, 'read_ledger_row', lambda uid, content_id: None)
         module.legacy_fresh.enabled_for = MagicMock(return_value=True)
         module.create_sync_job = MagicMock()
@@ -66,7 +66,7 @@ async def test_router_acknowledges_completed_legacy_content_in_dark(monkeypatch)
 
     module, saved, jobs, BytesIO = _router()
     try:
-        monkeypatch.setattr(legacy_dark, 'current_mode', lambda: DARK)
+        monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: DARK)
         row = {'status': 'completed', 'result': COMPLETED, 'job_id': 'legacy-job'}
         monkeypatch.setattr(legacy_dark, 'read_ledger_row', lambda uid, content_id: row)
         module.create_sync_job = MagicMock()
@@ -90,7 +90,7 @@ async def test_router_acknowledges_a_legacy_final_pass_owner_without_a_ledger_ro
 
     module, saved, jobs, BytesIO = _router()
     try:
-        monkeypatch.setattr(legacy_dark, 'current_mode', lambda: mode)
+        monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: mode)
         monkeypatch.setattr(legacy_dark, 'read_ledger_row', lambda uid, content_id: None)
         module.registered_record_response = AsyncMock(return_value=RecordUploadRoute.LEGACY)
         module.create_sync_job = MagicMock()
@@ -114,7 +114,7 @@ async def test_router_admits_a_rehomed_final_pass_owner_to_batch(monkeypatch, mo
 
     module, saved, jobs, BytesIO = _router()
     try:
-        monkeypatch.setattr(legacy_dark, 'current_mode', lambda: mode)
+        monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: mode)
         monkeypatch.setattr(legacy_dark, 'read_ledger_row', MagicMock(side_effect=AssertionError('fence ran')))
         module.registered_record_response = AsyncMock(return_value=RecordUploadRoute.BATCH)
         module.accept_batch_upload = AsyncMock(
@@ -144,7 +144,7 @@ async def test_router_reads_the_legacy_mode_off_the_event_loop(monkeypatch):
         return await passthrough(executor, fn, *args, **kwargs)
 
     try:
-        monkeypatch.setattr(legacy_dark, 'current_mode', lambda: DARK)
+        monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: DARK)
         monkeypatch.setattr(legacy_dark, 'read_ledger_row', lambda uid, content_id: None)
         module.run_blocking = recording_run_blocking
         response = await _upload(module, BytesIO)
@@ -159,7 +159,7 @@ async def test_router_is_unchanged_at_on(monkeypatch):
     module, saved, jobs, BytesIO = _router()
     try:
         reads = []
-        monkeypatch.setattr(legacy_dark, 'current_mode', lambda: reads.append(ON) or ON)
+        monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: reads.append(ON) or ON)
         counter = legacy_dark.OMI_LEGACY_SYNC_ADMISSIONS_TOTAL.labels(reason='batch_not_enabled')
         before = counter._value.get()
         response = await _upload(module, BytesIO)
@@ -180,7 +180,7 @@ async def test_router_revalidates_a_stale_mode_read_before_creating_a_legacy_job
     module, saved, jobs, BytesIO = _router()
     try:
         reads = iter([ON, DRAINING])
-        monkeypatch.setattr(legacy_dark, 'current_mode', lambda: next(reads))
+        monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: next(reads))
         monkeypatch.setattr(legacy_dark, 'ADMISSION_REVALIDATE_SECONDS', -1)
         monkeypatch.setattr(legacy_dark, 'read_ledger_row', lambda uid, content_id: None)
         module.create_sync_job = MagicMock()
@@ -197,7 +197,7 @@ async def test_dark_sweep_stops_claims_but_keeps_enrichment_repair(monkeypatch):
 
     module, saved, jobs, BytesIO = _router()
     try:
-        monkeypatch.setattr(legacy_dark, 'current_mode', lambda: DARK)
+        monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: DARK)
         module.uid_sequencer.sweep = MagicMock(return_value={'claimed': 1})
         from utils.sync import reprocess
 
@@ -221,7 +221,7 @@ async def test_dark_wake_does_not_kick(monkeypatch):
 
     module, saved, jobs, BytesIO = _router()
     try:
-        monkeypatch.setattr(legacy_dark, 'current_mode', lambda: DARK)
+        monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: DARK)
         module.uid_sequencer.kick = MagicMock()
         request = MagicMock()
         request.json = AsyncMock(return_value={'uid': 'test-uid'})
@@ -229,6 +229,17 @@ async def test_dark_wake_does_not_kick(monkeypatch):
         assert response.status_code == 200
         assert json.loads(response.body)['status'] == 'legacy_dark'
         module.uid_sequencer.kick.assert_not_called()
+    finally:
+        _restore(saved)
+
+
+def test_v1_sync_local_files_is_gone():
+    module, saved, jobs, BytesIO = _router()
+    try:
+        response = module.sync_local_files(uid='test-uid')
+        assert response.status_code == 410
+        assert json.loads(response.body)['code'] == 'sync_v1_retired'
+        assert response.headers['deprecation'] == 'true'
     finally:
         _restore(saved)
 
@@ -241,7 +252,7 @@ async def test_dark_direct_backfill_never_runs_beside_a_live_sequencer_owner(mon
 
     module, saved, jobs, BytesIO = _router()
     try:
-        monkeypatch.setattr(legacy_dark, 'current_mode', lambda: mode)
+        monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: mode)
         request = MagicMock()
         request.json = AsyncMock(return_value={'uid': 'test-uid', 'job_id': 'job-1', 'lane': 'backfill'})
         module.uid_sequencer.enabled = MagicMock(return_value=True)

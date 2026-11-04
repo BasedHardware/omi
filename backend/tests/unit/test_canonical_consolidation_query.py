@@ -259,33 +259,6 @@ def test_observation_recovery_scans_past_a_page_of_review_rows():
     assert _pending_observation_ids(UID, db_client=db) == [ordinary.memory_id]
 
 
-def test_observation_recovery_forward_window_skips_pre_window_rows(monkeypatch):
-    from utils.memory.canonical_consolidation import _pending_observation_ids
-
-    window_start = NOW - timedelta(days=1)
-    monkeypatch.setenv('MEMORY_MAINTENANCE_CAPTURED_AFTER', window_start.isoformat().replace('+00:00', 'Z'))
-    backlog = [_item(f'old{i:02}', captured_at=NOW - timedelta(days=5)) for i in range(3)]
-    fresh = [_item(f'new{i:02}', captured_at=NOW - timedelta(hours=12)) for i in range(2)]
-    db = _CursorDb(_db_for([*backlog, *fresh]).rows)
-
-    assert _pending_observation_ids(UID, db_client=db) == ['new00', 'new01']
-    assert ('captured_at', '>=', window_start) in db.filters
-
-
-def test_observation_recovery_window_binds_the_query_so_backlog_cannot_consume_the_page(monkeypatch):
-    """Luna r1 P2: 250 pre-window observations must not delay one fresh row."""
-    from utils.memory.canonical_consolidation import _pending_observation_ids
-
-    window_start = NOW - timedelta(days=1)
-    monkeypatch.setenv('MEMORY_MAINTENANCE_CAPTURED_AFTER', window_start.isoformat().replace('+00:00', 'Z'))
-    backlog = [_item(f'old{i:03}', captured_at=NOW - timedelta(days=5, minutes=i)) for i in range(250)]
-    fresh = _item('new', captured_at=NOW - timedelta(hours=12))
-    db = _CursorDb(_db_for([*backlog, fresh]).rows)
-
-    assert _pending_observation_ids(UID, db_client=db) == ['new']
-    assert db.streamed_count == 1
-
-
 def test_recovery_checkpoint_cannot_recreate_metadata_during_account_deletion(monkeypatch):
     from utils.memory import canonical_consolidation as intake
 

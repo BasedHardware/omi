@@ -1,5 +1,67 @@
 # Physical-device performance runs
 
+## Virtual qualification without a personal phone
+
+Use a dedicated, synthetic Android emulator with an explicitly pinned system
+image. iOS simulator profile/release is unsupported by Flutter3.44.5; its debug
+path qualifies scenarios only. Neither path can replace physical-device release
+acceptance. From the repository root, with the selected emulator already booted:
+
+```bash
+bin/omi-heavy run -- nice -n 19 bash app/tool/perf_sim_profile.sh \
+  --platform android --device emulator-5580 --emulator-qualification \
+  --runtime-build '<exact ro.build.fingerprint>' --warmup-runs 1 --runs 3 \
+  --out /Volumes/Ephemeral/scratch/mobile-perf/baseline
+```
+
+Resolve `bin/omi-heavy` from the workspace when outside it. Admission verifies
+the explicit emulator serial, native emulator property, runtime fingerprint,
+display size/density and model before compilation and every launch. Virtual
+identity also binds the host-name hash, host OS/architecture and logical CPU
+count; reusing the same emulator serial/image on another host cannot qualify a
+comparison. Host names themselves are not exported. For iOS,
+use `--simulator-qualification --device <booted-simulator-UDID>` and pin the
+runtime's `buildversion` with `--runtime-build`; it remains debug-only.
+
+Every virtual batch requires 1–3 complete warmup launches retained as
+`warmup-N.json`, followed by at least three measured launches of the same
+binary. Warmup warms persistent shader/assets; it does not remove per-process
+JIT costs from iOS debug. Measured cold Home still restores the full cache in
+a fresh process. Cold here never means a fresh installation or native app boot.
+The fixture, real-time action sequence and 30-second launch interval are fixed.
+Keep the same emulator version, GPU backend, display/refresh rate and host
+conditions for a pair; runtime/image pins cannot remove host scheduling noise.
+Per-launch receipts record host load and CPU count separately from comparison
+identity. The Android heavy target alone uses a devProfile manifest overlay to
+remove native Firebase eager initialization; ordinary app targets retain it.
+An APK inspection checks DEV identity and the initializer's absence before any
+installation. This covers native startup that Dart's HTTP override cannot block
+([Firebase initialization](https://firebase.google.com/docs/reference/android/com/google/firebase/FirebaseApp)).
+
+Virtual launches require load1 no greater than the logical CPU count, fixed
+before measurement. `host_load.py` retains samples before, every second during,
+and after each launch. An overload before launch prevents it; an overload during
+launch lets it complete and retains its output, then invalidates the entire
+batch without retry. Every warmup and measured launch needs passing host-load
+evidence before the report can qualify a virtual baseline.
+
+All measured runs participate in the unchanged 15% p90 spread gate. Slow runs
+and frames are retained, including first exposure in warmup. No statistical
+outlier is silently dropped. A passing profile emulator batch is marked
+`qualified_virtual_baseline`; `accepted_baseline` remains false, and the
+physical baseline pointer cannot be updated from virtual results. The comparison
+tool accepts an explicit qualified virtual reference only with matching runtime
+and launch protocol. iOS debug cannot qualify a profile reference.
+
+Frame percentiles use nearest rank (`ceil(n*p)-1`), retaining the worst frame
+for both six and seven sparse cold samples. The earlier rounded `(n-1)*p`
+method changed rank between those counts. This is a protocol change requiring
+a new baseline; older failed batches remain failed. Sparse cold percentiles
+still have low statistical power: inspect frame count, worst frame and cold
+cache-ready operation time together. Each receipt now includes raw frame phase
+times and monotonic action markers for detail pushes/pops, flings and tab taps.
+Trace export remains a separate diagnostic with its overhead labeled.
+
 **Rule 1: never uninstall.** Flutter3.44.5 `flutter drive` stops and uninstalls
 the app by default. An earlier qualification attempt exposed the DEV sandbox
 to that cleanup; pre-existing DEV data could not be ruled out. Every invocation

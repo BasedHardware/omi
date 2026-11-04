@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from database import conversation_processing_recovery as processing_recovery
+
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
@@ -1196,7 +1198,60 @@ def test_committed_fanout_completes_after_crashed_claims_exhaust_budget():
     assert conversation_ref.data['status'] == 'completed'
 
 
-def test_durable_summary_reads_a_fixed_projection_shard_set_without_job_aggregations():
+class _SummaryJobQuery:
+    """Immutable filters with real COUNT semantics; document streams must stay bounded."""
+
+    def __init__(self, rows, filters=(), calls=None):
+        self.rows = rows
+        self.filters = list(filters)
+        self.calls = [] if calls is None else calls
+        self.clock = None
+        self.cap = None
+
+    def where(self, *, filter):
+        return _SummaryJobQuery(
+            self.rows, self.filters + [(filter.field_path, filter.op_string, filter.value)], self.calls
+        )
+
+    def order_by(self, clock):
+        self.clock = clock
+        return self
+
+    def limit(self, cap):
+        assert cap == 1
+        self.cap = cap
+        return self
+
+    def _matches(self, row):
+        for field, op, value in self.filters:
+            if field not in row:
+                return False
+            actual = row[field]
+            if op == '==' and actual != value:
+                return False
+            if op == '>=' and actual < value:
+                return False
+            if op == '<=' and actual > value:
+                return False
+        return True
+
+    def count(self):
+        assert self.cap is None and self.clock is None
+        self.calls.append(('count', self.filters, None))
+        value = sum(self._matches(row) for row in self.rows)
+        return SimpleNamespace(get=lambda: [[SimpleNamespace(value=value)]])
+
+    def stream(self):
+        assert self.cap == 1 and self.clock in ('created_at', 'terminal_at')
+        self.calls.append(('stream', self.filters, self.clock))
+        rows = sorted(
+            (row for row in self.rows if self._matches(row) and self.clock in row),
+            key=lambda row: row[self.clock],
+        )[: self.cap]
+        return iter(SimpleNamespace(to_dict=lambda row=row: dict(row)) for row in rows)
+
+
+def test_summary_counts_legacy_stock_while_other_totals_read_fixed_projection_shards():
     class Snapshot:
         def __init__(self, data):
             self.exists = data is not None
@@ -1236,28 +1291,8 @@ def test_durable_summary_reads_a_fixed_projection_shard_set_without_job_aggregat
 
             return Ref()
 
-    class JobQuery:
-        def __init__(self):
-            self.filtered_statuses: list[str] = []
-
-        def where(self, *, filter):
-            assert (filter.field_path, filter.op_string) == ('status', '==')
-            self.filtered_statuses.append(filter.value)
-            return self
-
-        def order_by(self, field):
-            assert field == 'created_at'
-            return self
-
-        def limit(self, value):
-            assert value == 1
-            return self
-
-        def stream(self):
-            return iter(())
-
     projection = Projection()
-    job_query = JobQuery()
+    job_query = _SummaryJobQuery([{'status': 'dead_letter'} for _ in range(2001)])
 
     class Client:
         def collection(self, name):
@@ -1269,7 +1304,12 @@ def test_durable_summary_reads_a_fixed_projection_shard_set_without_job_aggregat
     summary = jobs.get_finalization_job_summary(firestore_client=Client())
 
     assert len(projection.read_ids) == jobs.FINALIZATION_PROJECTION_SHARD_COUNT
-    assert sorted(job_query.filtered_statuses) == sorted(jobs.NONTERMINAL_JOB_STATUSES)
+    counts = [filters for kind, filters, _clock in job_query.calls if kind == 'count']
+    assert len(counts) == 2
+    assert counts[0] == [('status', '==', 'dead_letter')]
+    reads = [(filters, clock) for kind, filters, clock in job_query.calls if kind == 'stream']
+    assert len(reads) == 4  # Every document stream is ordered and capped at one row.
+    assert ([('status', '==', 'dead_letter')], 'terminal_at') in reads
     assert summary == {
         'accepted': 8,
         'success': 1,
@@ -1280,10 +1320,12 @@ def test_durable_summary_reads_a_fixed_projection_shard_set_without_job_aggregat
         'leased': 1,
         'blocked_byok': 2,
         'completed': 2,
-        'dead_letter': 1,
+        'dead_letter': 2001,
+        'byok_abandoned_last_24h': 0,
         'terminal_unknown': 0,
         'oldest_nonterminal_age_seconds': 0.0,
         'oldest_blocked_byok_age_seconds': 0.0,
+        'oldest_dead_letter_age_seconds': 0.0,
     }
 
 
@@ -1308,38 +1350,27 @@ def test_oldest_nonterminal_age_sees_jobs_that_carry_no_reconcile_after_at():
 
             return Ref()
 
-    class JobQuery:
-        def __init__(self):
-            self._status: str | None = None
-
-        def where(self, *, filter):
-            self._status = filter.value
-            return self
-
-        def order_by(self, field):
-            return self
-
-        def limit(self, value):
-            return self
-
-        def stream(self):
-            if self._status == 'blocked_byok':
-                return iter([Snapshot({'created_at': created_at - timedelta(days=10)})])
-            if self._status != 'queued':
-                return iter(())
-            # No ``reconcile_after_at`` key at all — exactly the resumed BYOK shape.
-            return iter([Snapshot({'status': 'queued', 'requires_byok': True, 'created_at': created_at})])
-
     class Client:
         def collection(self, name):
             if name == jobs.FINALIZATION_PROJECTION_COLLECTION:
                 return Projection()
-            return JobQuery()
+            return _SummaryJobQuery(
+                [
+                    {'status': 'queued', 'requires_byok': True, 'created_at': created_at},
+                    {'status': 'blocked_byok', 'created_at': created_at - timedelta(days=10)},
+                    {
+                        'status': 'dead_letter',
+                        'created_at': created_at - timedelta(days=20),
+                        'terminal_at': created_at + timedelta(days=25),
+                    },
+                ]
+            )
 
     summary = jobs.get_finalization_job_summary(firestore_client=Client())
 
     assert 29 * 24 * 3600 < summary['oldest_nonterminal_age_seconds'] < 31 * 24 * 3600
     assert 39 * 24 * 3600 < summary['oldest_blocked_byok_age_seconds'] < 41 * 24 * 3600
+    assert 4 * 24 * 3600 < summary['oldest_dead_letter_age_seconds'] < 6 * 24 * 3600
 
 
 class _BoundedReplayCollection:
@@ -1505,7 +1536,8 @@ class _OrphanClient:
 
     def collection(self, name: str):
         self.collection_calls.append(name)
-        raise AssertionError('stale orphan sweep must not use a collection-scoped query')
+        assert name == jobs.FINALIZATION_JOBS_COLLECTION
+        return _Collection(getattr(self, 'jobs', {'job-x': _Ref('job-x', {'status': 'queued'})}))
 
     def document(self, path: str) -> _OrphanDocRef:
         # The persisted sweep cursor resumes a collection-group scan by fetching
@@ -1696,7 +1728,7 @@ def test_stamp_processing_admission_if_absent_only_stamps_a_legacy_processing_ro
     now = _now()
     legacy = _Ref('legacy', {'status': 'processing', 'created_at': now - timedelta(days=1)})
 
-    stamped = jobs._stamp_processing_admission_if_absent_txn(transaction, legacy, now)
+    stamped = processing_recovery._stamp_processing_admission_if_absent_txn(transaction, legacy, now)
 
     assert stamped is True
     assert transaction.updates == [(legacy, {'processing_admitted_at': now})]
@@ -1708,8 +1740,8 @@ def test_stamp_processing_admission_if_absent_is_idempotent_and_fences_non_proce
     already = _Ref('already', {'status': 'processing', 'processing_admitted_at': now - timedelta(hours=2)})
     terminal = _Ref('terminal', {'status': 'completed'})
 
-    assert jobs._stamp_processing_admission_if_absent_txn(transaction, already, now) is False
-    assert jobs._stamp_processing_admission_if_absent_txn(transaction, terminal, now) is False
+    assert processing_recovery._stamp_processing_admission_if_absent_txn(transaction, already, now) is False
+    assert processing_recovery._stamp_processing_admission_if_absent_txn(transaction, terminal, now) is False
     assert transaction.updates == []
 
 
@@ -1728,7 +1760,7 @@ def test_complete_orphan_completes_only_an_unchanged_orphan_generation():
     admitted = now - timedelta(seconds=1000)
     orphan = _Ref('orphan', {'status': 'processing', 'processing_admitted_at': admitted})
 
-    completed = jobs._complete_orphan_conversation_txn(transaction, orphan, admitted, now)
+    completed = processing_recovery._complete_orphan_conversation_txn(transaction, orphan, admitted, now)
 
     assert completed is True
     assert transaction.updates == [(orphan, {'status': 'completed'})]
@@ -1748,7 +1780,7 @@ def test_complete_orphan_gives_an_untitled_row_its_deterministic_title():
         },
     )
 
-    assert jobs._complete_orphan_conversation_txn(transaction, orphan, admitted, now, 'uid-1') is True
+    assert processing_recovery._complete_orphan_conversation_txn(transaction, orphan, admitted, now, 'uid-1') is True
     assert transaction.updates == [
         (
             orphan,
@@ -1769,7 +1801,7 @@ def test_complete_orphan_fences_a_row_a_finalizer_claimed_after_discovery():
         'claimed', {'status': 'processing', 'processing_admitted_at': admitted, 'finalization_job_id': 'job-1'}
     )
 
-    assert jobs._complete_orphan_conversation_txn(transaction, claimed, admitted, now) is False
+    assert processing_recovery._complete_orphan_conversation_txn(transaction, claimed, admitted, now) is False
     assert transaction.updates == []
 
 
@@ -1780,7 +1812,7 @@ def test_complete_orphan_fences_a_live_processor_that_renewed_its_lease():
     # A live processor renewed its lease after discovery, advancing the generation.
     renewed = _Ref('renewed', {'status': 'processing', 'processing_admitted_at': now - timedelta(seconds=5)})
 
-    assert jobs._complete_orphan_conversation_txn(transaction, renewed, scanned, now) is False
+    assert processing_recovery._complete_orphan_conversation_txn(transaction, renewed, scanned, now) is False
     assert transaction.updates == []
 
 
@@ -1792,9 +1824,9 @@ def test_complete_orphan_fences_deferred_and_terminal_and_discarded_rows():
     terminal = _Ref('terminal', {'status': 'completed', 'processing_admitted_at': admitted})
     discarded = _Ref('discarded', {'status': 'processing', 'processing_admitted_at': admitted, 'discarded': True})
 
-    assert jobs._complete_orphan_conversation_txn(transaction, deferred, admitted, now) is False
-    assert jobs._complete_orphan_conversation_txn(transaction, terminal, admitted, now) is False
-    assert jobs._complete_orphan_conversation_txn(transaction, discarded, admitted, now) is False
+    assert processing_recovery._complete_orphan_conversation_txn(transaction, deferred, admitted, now) is False
+    assert processing_recovery._complete_orphan_conversation_txn(transaction, terminal, admitted, now) is False
+    assert processing_recovery._complete_orphan_conversation_txn(transaction, discarded, admitted, now) is False
     assert transaction.updates == []
 
 
@@ -1905,3 +1937,62 @@ def test_selfheal_cursor_preserves_verification_deadline(monkeypatch):
     cursor = jobs.get_in_progress_content_sweep_cursor(firestore_client=client)
 
     assert cursor['pending_verifications'] == [entry]
+
+
+def test_stale_processing_terminal_job_is_swept_only_after_admission_age(monkeypatch):
+    now = _now()
+    monkeypatch.setattr(jobs, '_now', lambda: now)
+    client = _OrphanClient(
+        [
+            _processing_snapshot('uid', 'fresh', admitted_at=now - timedelta(seconds=899), finalization_job_id='done'),
+            _processing_snapshot('uid', 'stuck', admitted_at=now - timedelta(seconds=901), finalization_job_id='done'),
+            _processing_snapshot('uid', 'legacy', admitted_at=None, finalization_job_id='done'),
+        ]
+    )
+    client.jobs = {'done': _Ref('done', {'status': 'completed', 'finalization_outcome': 'fenced'})}
+    found = jobs.get_stale_processing_orphan_candidates(stale_after=timedelta(seconds=900), firestore_client=client)
+    assert [(row['conversation_id'], row['legacy']) for row in found['candidates']] == [
+        ('stuck', False),
+        ('legacy', True),
+    ]
+
+
+def test_summary_abandonment_count_survives_restart_and_uses_terminal_time_window(monkeypatch):
+    now = datetime(2026, 11, 4, tzinfo=timezone.utc)
+    monkeypatch.setattr(jobs, '_now', lambda: now)
+    recent = {
+        'status': 'dead_letter',
+        'last_failure_code': 'byok_session_abandoned',
+        'terminal_at': now - timedelta(hours=1),
+        'created_at': now - timedelta(days=30),
+    }
+    rows = [
+        recent,
+        {**recent, 'terminal_at': now - timedelta(hours=24)},
+        {**recent, 'terminal_at': now - timedelta(hours=24, seconds=1)},
+        {**recent, 'terminal_at': now + timedelta(seconds=1)},
+        {**recent, 'last_failure_code': 'final_attempt_failed'},
+        {**recent, 'status': 'completed'},
+        {'status': 'dead_letter', 'last_failure_code': 'byok_session_abandoned'},
+    ]
+    query = _SummaryJobQuery(rows)
+
+    class Client:
+        def collection(self, name):
+            if name == jobs.FINALIZATION_JOBS_COLLECTION:
+                return query
+            return SimpleNamespace(document=lambda _id: SimpleNamespace(get=lambda: SimpleNamespace(exists=False)))
+
+    # No process counter or projection survived: committed job documents suffice.
+    first = jobs.get_finalization_job_summary(firestore_client=Client())
+    second = jobs.get_finalization_job_summary(firestore_client=Client())
+    assert first['byok_abandoned_last_24h'] == second['byok_abandoned_last_24h'] == 2
+    assert first['dead_letter'] == 6
+    assert first['accepted'] == first['failure'] == 0
+    window = [filters for kind, filters, _ in query.calls if kind == 'count'][1]
+    assert window == [
+        ('status', '==', 'dead_letter'),
+        ('last_failure_code', '==', jobs.BYOK_ABANDONED_FAILURE_CODE),
+        ('terminal_at', '>=', now - timedelta(hours=24)),
+        ('terminal_at', '<=', now),
+    ]

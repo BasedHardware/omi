@@ -97,10 +97,13 @@ def edit(kind, **kwargs):
     ],
 )
 def test_each_cleanup_applies_and_exactly_restores_missing_fields_on_undo_and_redo(store, operation):
+    generation = ('users', UID, 'people_meta', 'generation')
+    is_people = operation.target.startswith('people/')
     original = deepcopy(store.rows[('users', UID, *operation.target.split('/'))])
     seen = records(store)
     fences = dream_tools.proposal_fences(UID, {'records': seen})
     assert dream_tools.apply_edit(UID, operation, seen, expected_records=fences) == 'applied'
+    assert store.rows.get(generation) == ({'generation': 1} if is_people else None)
     path = ('users', UID, *operation.target.split('/'))
     after = deepcopy(store.rows[path])
     journal = next(
@@ -110,9 +113,11 @@ def test_each_cleanup_applies_and_exactly_restores_missing_fields_on_undo_and_re
     assert change['edit_kind'] == operation.kind and change['before']
     assert change['context']['segments'][0]['text'] == SPEECH
     review_changes.set_undone(UID, change['change_id'], True)
+    assert store.rows.get(generation) == ({'generation': 2} if is_people else None)
     assert store.rows[path] == original
     assert not review_changes.agent_change_allowed(UID, dream_tools.edit_key(operation, seen))
     review_changes.set_undone(UID, change['change_id'], False)
+    assert store.rows.get(generation) == ({'generation': 3} if is_people else None)
     assert store.rows[path] == after
 
 

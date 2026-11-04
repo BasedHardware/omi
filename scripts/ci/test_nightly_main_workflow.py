@@ -41,14 +41,27 @@ INTENTIONAL_BUDGET_CHANGES = {
     # cold-cache step needed recycling room. Run 40009383869 still exhausted
     # the Azure mirror slices; the step now uses official Ubuntu archives,
     # slices downloads only within 300s, and caps the whole install at 7m.
-    # 2026-10-26: the step budget rose 720s -> 900s with measured evidence
-    # (selection growth 1727 -> 2319 files since #21259 drifted shard walls
-    # to 725-841s on unrelated PRs; see the workflow's env comment), so the
-    # ceiling rises with it. 30m holds 900s tests + 72s checkout + 90s
-    # toolchain + 420s apt, leaving 318s for cache save and post-actions
-    # (test_nightly_main_native_audio.py). The test regression gate policy
-    # and warm-path walls stay unchanged, so budget_p50 stays 8.
+    # 25m held 720s tests + 72s checkout + 90s toolchain + 420s apt, leaving
+    # 198s for cache save and post-actions (test_nightly_main_native_audio.py).
+    # The test regression gate and warm-path walls stay unchanged, so
+    # budget_p50 stays 8. 2026-10-26: the step budget rose 720s -> 900s with
+    # measured evidence (selection growth 1727 -> 2319 files since #21259
+    # drifted shard walls to 725-841s on unrelated PRs; see the workflow's
+    # env comment), so the ceiling rises with it: 30m holds 900s tests + 72s
+    # checkout + 90s toolchain + 420s apt, leaving 318s for cache save and
+    # post-actions. The weighted eight-shard rebalance (#23767) later kept
+    # the 720s step line and scaled the p50 forecast to 6; the 900s budget
+    # still bounds every shard with headroom.
     ("backend-unit-tests.yml", "backend-unit-shard", "timeout-minutes"): "30",
+    # 2026-11-03 checkout stalls (run 41672443108): a trickling depth-one
+    # fetch exceeded 300s without tripping Git's low-speed retry. Increase the
+    # four test jobs' checkout caps 5->10 minutes and preserve test headroom
+    # with exactly five extra job minutes; unit shard hang caps are pinned
+    # above at 30.
+    ("backend-hermetic-e2e.yml", "hermetic-e2e", "timeout-minutes"): "20",
+    ("backend-hermetic-e2e.yml", "listen-pusher-stack-gauntlet", "timeout-minutes"): "25",
+    ("backend-hermetic-e2e.yml", "sync-cloud-tasks-stack-gauntlet", "timeout-minutes"): "25",
+    ("backend-hermetic-e2e.yml", "replay-harness-phase0a-gauntlet", "timeout-minutes"): "25",
 }
 
 

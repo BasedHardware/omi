@@ -603,19 +603,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
           ),
         ] else ...[
           const SliverPadding(padding: EdgeInsets.only(top: 6)),
-
-          // Build each category section (skip empty ones, skip overdue — rendered separately below)
-          for (final category in TaskCategory.values)
-            if (category != TaskCategory.overdue && (categorizedItems[category] ?? []).isNotEmpty)
-              _buildCategorySection(
-                category: category,
-                items: categorizedItems[category] ?? [],
-                provider: provider,
-              ),
-
-          // Overdue section — expanded by default
-          if ((categorizedItems[TaskCategory.overdue] ?? []).isNotEmpty)
-            _buildOverdueSection(items: categorizedItems[TaskCategory.overdue]!, provider: provider),
+          _buildDateSections(categorizedItems, provider),
         ],
 
         // Bottom padding so the last row scrolls clear of the nav bar
@@ -624,7 +612,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     );
   }
 
-  Widget _buildCategorySection({
+  _TaskSection _buildCategorySection({
     required TaskCategory category,
     required List<ActionItemWithMetadata> items,
     required ActionItemsProvider provider,
@@ -633,10 +621,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     final orderedItems = _getOrderedItems(category, items);
 
     final expanded = category != TaskCategory.noDeadline || _noDeadlineExpanded;
-    return _buildLazyTaskSection(
+    return _TaskSection(
       items: expanded ? orderedItems : const [],
-      provider: provider,
-      category: category,
       header: DragTarget<ActionItemWithMetadata>(
         onWillAcceptWithDetails: (details) {
           _setHoveredCategory(category);
@@ -737,12 +723,11 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     );
   }
 
-  Widget _buildOverdueSection({required List<ActionItemWithMetadata> items, required ActionItemsProvider provider}) {
+  _TaskSection _buildOverdueSection(
+      {required List<ActionItemWithMetadata> items, required ActionItemsProvider provider}) {
     final orderedItems = _getOrderedItems(TaskCategory.overdue, items);
-    return _buildLazyTaskSection(
+    return _TaskSection(
       items: _overdueExpanded ? orderedItems : const [],
-      provider: provider,
-      category: TaskCategory.overdue,
       header: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -783,60 +768,107 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     );
   }
 
-  /// Keep section headers and rows in the same scroll flow without mounting the
-  /// entire category. A task update now only rebuilds the viewport and cache.
-  Widget _buildLazyTaskSection({
-    required Widget header,
-    required List<ActionItemWithMetadata> items,
-    required ActionItemsProvider provider,
-    required TaskCategory category,
-  }) {
-    final indices = {for (var i = 0; i < items.length; i++) ValueKey(items[i].id): i};
-    return SliverPadding(
-      padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: OmiSpacing.xxs),
-      sliver: TweenAnimationBuilder<Color?>(
-        tween: ColorTween(
-          end: category != TaskCategory.overdue && _hoveredCategory == category && _hoveredItemId == null
-              ? OmiColors.surface1
-              : Colors.transparent,
-        ),
-        duration: const Duration(milliseconds: 200),
-        builder: (context, color, child) => DecoratedSliver(
-          decoration: BoxDecoration(color: color, borderRadius: OmiRadius.mdAll),
-          sliver: child,
-        ),
-        child: SliverMainAxisGroup(
-          slivers: [
-            SliverToBoxAdapter(child: header),
-            SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, index) => KeyedSubtree(
-                  key: ValueKey(items[index].id),
-                  child: _buildTaskItem(items[index], provider, category: category, categoryItems: items),
+  // One delegate across date sections: even a lazy list per section asks every
+  // offscreen section for its first row. Create/sort a section only when this
+  // delegate actually requests its header or rows.
+  Widget _buildDateSections(
+    Map<TaskCategory, List<ActionItemWithMetadata>> categorized,
+    ActionItemsProvider provider,
+  ) {
+    final categories = [
+      for (final category in TaskCategory.values)
+        if (category != TaskCategory.overdue && categorized[category]!.isNotEmpty) category,
+      if (categorized[TaskCategory.overdue]!.isNotEmpty) TaskCategory.overdue,
+    ];
+    final entries = <({TaskCategory category, int row})>[
+      for (final category in categories) ...[
+        (category: category, row: -1),
+        if ((category != TaskCategory.noDeadline || _noDeadlineExpanded) &&
+            (category != TaskCategory.overdue || _overdueExpanded))
+          for (var i = 0; i < categorized[category]!.length; i++) (category: category, row: i),
+        (category: category, row: -2),
+      ],
+    ];
+    final sections = <TaskCategory, _TaskSection>{};
+    _TaskSection sectionFor(TaskCategory category) => sections.putIfAbsent(
+          category,
+          () => category == TaskCategory.overdue
+              ? _buildOverdueSection(items: categorized[category]!, provider: provider)
+              : _buildCategorySection(category: category, items: categorized[category]!, provider: provider),
+        );
+    int? findIndex(Key key) {
+      if (key is ValueKey<(TaskCategory, int)>) {
+        final index = entries.indexWhere((entry) => (entry.category, entry.row) == key.value);
+        return index < 0 ? null : index;
+      }
+      if (key is! ValueKey<String>) return null;
+      // Only mounted rows request remapping. Resolve that row's category first
+      // and sort just that section, leaving non-visible categories untouched.
+      for (final category in categories) {
+        if (!categorized[category]!.any((item) => item.id == key.value)) continue;
+        final section = sectionFor(category);
+        final row = section.items.indexWhere((item) => item.id == key.value);
+        if (row < 0) return null;
+        final index = entries.indexWhere((entry) => entry.category == category && entry.row == row);
+        return index < 0 ? null : index;
+      }
+      return null;
+    }
+
+    return SliverList(
+      delegate: SliverChildBuilderDelegate(
+        (context, index) {
+          final entry = entries[index];
+          final section = sectionFor(entry.category);
+          final row = entry.row;
+          final key = row < 0 ? ValueKey((entry.category, row)) : ValueKey(section.items[row].id);
+          final hovered =
+              entry.category != TaskCategory.overdue && _hoveredCategory == entry.category && _hoveredItemId == null;
+          return Padding(
+            key: key,
+            padding: EdgeInsets.only(
+              left: OmiSpacing.md,
+              right: OmiSpacing.md,
+              top: row == -1 ? OmiSpacing.xxs : 0,
+              bottom: row == -2 ? OmiSpacing.xxs : 0,
+            ),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              decoration: BoxDecoration(
+                color: hovered ? OmiColors.surface1 : Colors.transparent,
+                borderRadius: BorderRadius.vertical(
+                  top: row == -1 ? const Radius.circular(OmiRadius.md) : Radius.zero,
+                  bottom: row == -2 ? const Radius.circular(OmiRadius.md) : Radius.zero,
                 ),
-                childCount: items.length,
-                findChildIndexCallback: (key) => indices[key],
               ),
+              child: row == -1
+                  ? section.header
+                  : row == -2
+                      ? _buildSectionEnd(entry.category)
+                      : _buildTaskItem(section.items[row], provider,
+                          category: entry.category, categoryItems: section.items),
             ),
-            SliverToBoxAdapter(
-              child: category == TaskCategory.overdue
-                  ? const SizedBox(height: OmiSpacing.sm)
-                  : DragTarget<ActionItemWithMetadata>(
-                      onWillAcceptWithDetails: (_) {
-                        _setHoveredCategory(category);
-                        return true;
-                      },
-                      onLeave: (_) => _setHoveredCategory(null),
-                      onAcceptWithDetails: (details) {
-                        _setHoveredCategory(null);
-                        if (_hoveredItemId == null) _updateTaskCategory(details.data, category);
-                      },
-                      builder: (context, candidates, rejected) => const SizedBox(height: OmiSpacing.sm),
-                    ),
-            ),
-          ],
-        ),
+          );
+        },
+        childCount: entries.length,
+        findChildIndexCallback: findIndex,
       ),
+    );
+  }
+
+  Widget _buildSectionEnd(TaskCategory category) {
+    if (category == TaskCategory.overdue) return const SizedBox(height: OmiSpacing.sm);
+    return DragTarget<ActionItemWithMetadata>(
+      onWillAcceptWithDetails: (_) {
+        _setHoveredCategory(category);
+        return true;
+      },
+      onLeave: (_) => _setHoveredCategory(null),
+      onAcceptWithDetails: (details) {
+        _setHoveredCategory(null);
+        if (_hoveredItemId == null) _updateTaskCategory(details.data, category);
+      },
+      builder: (context, candidates, rejected) => const SizedBox(height: OmiSpacing.sm),
     );
   }
 
@@ -1415,4 +1447,10 @@ class _SectionHeaderTapTarget extends StatelessWidget {
       ),
     );
   }
+}
+
+class _TaskSection {
+  const _TaskSection({required this.header, required this.items});
+  final Widget header;
+  final List<ActionItemWithMetadata> items;
 }

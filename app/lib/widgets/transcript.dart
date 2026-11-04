@@ -9,6 +9,8 @@ import 'package:flutter/rendering.dart'
         RenderAbstractViewport,
         RenderBox,
         RenderObject,
+        RenderViewport,
+        ViewportOffset,
         RenderSliverMultiBoxAdaptor,
         ScrollDirection,
         SliverMultiBoxAdaptorParentData;
@@ -29,6 +31,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/ui/ui.dart';
 
 part 'transcript_playback_scroll.dart';
+part 'transcript_rows_viewport.dart';
 
 // Use speaker colors from person.dart for bubble colors
 final List<Color> _speakerColors = speakerColors;
@@ -60,6 +63,12 @@ class TranscriptWidget extends StatefulWidget {
   final List<Widget> leadingItems;
   final List<String> leadingItemIds;
   final TranscriptSegmentBuilder? segmentBuilder;
+
+  /// Counts render objects inspected by scroll geometry reporting in tests.
+  @visibleForTesting
+  final VoidCallback? onScrollGeometryProbe;
+  @visibleForTesting
+  final VoidCallback? onScrollRevealProbe;
 
   /// Playback sync: the line containing the playhead is highlighted, and while
   /// [followCurrentSegment] the list keeps [followTargetSegmentId] near the top
@@ -120,6 +129,8 @@ class TranscriptWidget extends StatefulWidget {
     this.leadingItems = const [],
     this.leadingItemIds = const [],
     this.segmentBuilder,
+    this.onScrollGeometryProbe,
+    this.onScrollRevealProbe,
     this.onConfirmSpeakerLabel,
     this.onRejectSpeakerLabel,
     this.startedAt,
@@ -146,6 +157,7 @@ class TranscriptScrollState {
   int anchorSegmentIndex = 0;
   double anchorViewportOffset = 0;
   String? layoutIdentity;
+  String? liveBoundarySegmentId;
 
   void update({
     required double offset,
@@ -221,7 +233,21 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
 
   // Search result tracking
   final Map<String, GlobalKey> _segmentKeys = {};
+  final Map<String, int> _segmentIndices = {};
   final GlobalKey _listKey = GlobalKey();
+  final List<RenderSliverMultiBoxAdaptor> _cachedListSlivers = [];
+  final _liveCenterKey = const ValueKey('transcript_live_center');
+  String? _liveBoundaryId;
+
+  bool get _endAnchored => widget.followLatest && !widget.isConversationDetail;
+
+  // Keep the origin before the initially newest segment. Older rows grow upward;
+  // appends grow downward without moving a reader's existing scroll coordinates.
+  int get _liveBoundary {
+    final index = _segmentIndices[_liveBoundaryId] ?? widget.segments.length;
+    return widget.leadingItems.length + index + 1;
+  }
+
   final List<GlobalKey> _matchKeys = [];
   int _previousSearchResultIndex = -1;
 
@@ -263,6 +289,8 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   @override
   void initState() {
     super.initState();
+    _liveBoundaryId = widget.scrollState?.liveBoundarySegmentId ?? widget.segments.lastOrNull?.id;
+    widget.scrollState?.liveBoundarySegmentId = _liveBoundaryId;
     final savedState = widget.scrollState;
     final shouldRestorePosition = savedState?.hasPosition == true && !savedState!.isAtBottom;
     final canUseRawOffset = savedState?.layoutIdentity == null || savedState?.layoutIdentity == widget.layoutIdentity;
@@ -305,7 +333,10 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   }
 
   void _syncSegmentKeys() {
-    final currentIds = widget.segments.map((segment) => segment.id).toSet();
+    _segmentIndices
+      ..clear()
+      ..addEntries(widget.segments.indexed.map((entry) => MapEntry(entry.$2.id, entry.$1)));
+    final currentIds = _segmentIndices.keys.toSet();
     _segmentKeys.removeWhere((id, _) => !currentIds.contains(id));
     for (final segment in widget.segments) {
       _segmentKeys.putIfAbsent(segment.id, GlobalKey.new);
@@ -330,6 +361,8 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   @override
   void didUpdateWidget(TranscriptWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
+    _liveBoundaryId ??= widget.segments.lastOrNull?.id;
+    widget.scrollState?.liveBoundarySegmentId = _liveBoundaryId;
 
     final contentChanged = widget.contentVersion != oldWidget.contentVersion ||
         widget.segments.length != oldWidget.segments.length ||
@@ -519,8 +552,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
         final anchorContext = _segmentKeys[anchorId]?.currentContext;
         final anchor = anchorContext?.findRenderObject();
         if (anchor is RenderBox) {
-          final viewport = RenderAbstractViewport.of(anchor);
-          final anchorViewportOffset = viewport.getOffsetToReveal(anchor, 0).offset - _scrollController.offset;
+          final anchorViewportOffset = _viewportTopOf(anchor);
           final correction = anchorViewportOffset - scrollState.anchorViewportOffset;
           if (correction.abs() <= 0.5) break;
           final target = (_scrollController.offset + correction).clamp(
@@ -535,7 +567,8 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
         final itemIndex = widget.leadingItems.length + anchorIndex + 1;
         final itemCount = widget.leadingItems.length + widget.segments.length + 2;
         final fraction = itemIndex / max(1, itemCount - 1);
-        _scrollController.jumpTo(_scrollController.position.maxScrollExtent * fraction);
+        _scrollController.jumpTo(_scrollController.position.minScrollExtent +
+            (_scrollController.position.maxScrollExtent - _scrollController.position.minScrollExtent) * fraction);
         await WidgetsBinding.instance.endOfFrame;
       }
     } finally {
@@ -655,31 +688,38 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
       return;
     }
 
+    if (_endAnchored) {
+      _interruptAutoScroll();
+      _userHasScrolled = true;
+    }
+
     final matchKey = _matchKeys[widget.currentResultIndex];
     final context = matchKey.currentContext;
 
     if (context != null) {
       _scrollToContext(context);
     } else {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        final retryContext = matchKey.currentContext;
-        if (retryContext != null) {
-          _scrollToContext(retryContext);
-        } else {
-          _scrollToSearchResultFallback();
-        }
-      });
+      // A lazy match may be many viewports away. Start locating now: another
+      // post-frame callback alone does not schedule a frame on an idle list.
+      _scrollToSearchResultFallback();
     }
   }
 
   void _scrollToContext(BuildContext context) {
     _isAutoScrolling = true;
-    Scrollable.ensureVisible(
-      context,
-      duration: const Duration(milliseconds: 400),
-      curve: Curves.easeInOutCubic,
-      alignment: 0.35,
-    ).then((_) {
+    final renderObject = context.findRenderObject();
+    final Future<void> scroll;
+    if (_endAnchored && renderObject is RenderBox) {
+      final position = _scrollController.position;
+      final target = (position.pixels + _viewportTopOf(renderObject) - position.viewportDimension * 0.35)
+          .clamp(position.minScrollExtent, position.maxScrollExtent);
+      scroll = _scrollController.animateTo(target,
+          duration: const Duration(milliseconds: 400), curve: Curves.easeInOutCubic);
+    } else {
+      scroll = Scrollable.ensureVisible(context,
+          duration: const Duration(milliseconds: 400), curve: Curves.easeInOutCubic, alignment: 0.35);
+    }
+    scroll.then((_) {
       _isAutoScrolling = false;
     });
   }
@@ -812,6 +852,40 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
       deferShortVoices: widget.followLatest,
     );
     final searchBarHeight = widget.searchQuery.isNotEmpty ? 100.0 : 0.0;
+    Widget buildRow(BuildContext context, int idx) {
+      if (idx == 0) {
+        return SizedBox(
+            key: const ValueKey('transcript_header'),
+            height: (widget.topMargin ? 32 : 0) + (_endAnchored ? searchBarHeight : 0));
+      }
+
+      final leadingIndex = idx - 1;
+      if (leadingIndex < widget.leadingItems.length) {
+        return KeyedSubtree(
+          key: ValueKey('transcript-leading-${widget.leadingItemIds[leadingIndex]}'),
+          child: widget.leadingItems[leadingIndex],
+        );
+      }
+
+      final segmentIndex = idx - widget.leadingItems.length - 1;
+      if (segmentIndex == widget.segments.length) {
+        return SizedBox(key: const ValueKey('transcript_bottom_spacing'), height: widget.bottomMargin + 120);
+      }
+
+      final segment = widget.segments[segmentIndex];
+      final customSegment = widget.segmentBuilder?.call(context, segment, segmentIndex);
+      Widget child = customSegment == null
+          ? _buildSegmentItem(segmentIndex, people, names, askSegmentIds)
+          : Container(key: _segmentKeys[segment.id], child: customSegment);
+      // Padding, not a Column: a Column centers by default and hands its child loose
+      // width, so a line narrower than the list (a short reply without a name row)
+      // rendered centered instead of at the start like every other line.
+      if (widget.separator && segmentIndex > 0) {
+        child = Padding(padding: const EdgeInsets.only(top: 4), child: child);
+      }
+      return KeyedSubtree(key: ValueKey('transcript-segment-${segment.id}'), child: child);
+    }
+
     final transcriptList = NotificationListener<ScrollMetricsNotification>(
       onNotification: _onScrollMetrics,
       child: NotificationListener<ScrollNotification>(
@@ -828,44 +902,44 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                 widget.onTapWhenSearchEmpty!();
               }
             },
-            child: ListView.builder(
-              key: _listKey,
-              controller: _scrollController,
-              padding: EdgeInsets.only(top: searchBarHeight),
-              itemCount: widget.leadingItems.length + widget.segments.length + 2,
-              findChildIndexCallback: _findChildIndex,
-              itemBuilder: (context, idx) {
-                if (idx == 0) {
-                  return SizedBox(key: const ValueKey('transcript_header'), height: widget.topMargin ? 32 : 0);
-                }
-
-                final leadingIndex = idx - 1;
-                if (leadingIndex < widget.leadingItems.length) {
-                  return KeyedSubtree(
-                    key: ValueKey('transcript-leading-${widget.leadingItemIds[leadingIndex]}'),
-                    child: widget.leadingItems[leadingIndex],
-                  );
-                }
-
-                final segmentIndex = idx - widget.leadingItems.length - 1;
-                if (segmentIndex == widget.segments.length) {
-                  return SizedBox(key: const ValueKey('transcript_bottom_spacing'), height: widget.bottomMargin + 120);
-                }
-
-                final segment = widget.segments[segmentIndex];
-                final customSegment = widget.segmentBuilder?.call(context, segment, segmentIndex);
-                Widget child = customSegment == null
-                    ? _buildSegmentItem(segmentIndex, people, names, askSegmentIds)
-                    : Container(key: _segmentKeys[segment.id], child: customSegment);
-                // Padding, not a Column: a Column centers by default and hands its child loose
-                // width, so a line narrower than the list (a short reply without a name row)
-                // rendered centered instead of at the start like every other line.
-                if (widget.separator && segmentIndex > 0) {
-                  child = Padding(padding: const EdgeInsets.only(top: 4), child: child);
-                }
-                return KeyedSubtree(key: ValueKey('transcript-segment-${segment.id}'), child: child);
-              },
-            ),
+            child: _endAnchored
+                ? _LiveTranscriptScrollView(
+                    key: _listKey,
+                    controller: _scrollController,
+                    startAtLatest: !_userHasScrolled,
+                    center: _liveCenterKey,
+                    slivers: [
+                      SliverList(
+                        delegate: SliverChildBuilderDelegate(
+                          (context, index) => buildRow(context, _liveBoundary - 1 - index),
+                          childCount: _liveBoundary,
+                          findChildIndexCallback: (key) {
+                            final index = _findChildIndex(key);
+                            return index == null || index >= _liveBoundary ? null : _liveBoundary - 1 - index;
+                          },
+                        ),
+                      ),
+                      SliverList(
+                        key: _liveCenterKey,
+                        delegate: SliverChildBuilderDelegate(
+                          (context, index) => buildRow(context, _liveBoundary + index),
+                          childCount: widget.leadingItems.length + widget.segments.length + 2 - _liveBoundary,
+                          findChildIndexCallback: (key) {
+                            final index = _findChildIndex(key);
+                            return index == null || index < _liveBoundary ? null : index - _liveBoundary;
+                          },
+                        ),
+                      ),
+                    ],
+                  )
+                : ListView.builder(
+                    key: _listKey,
+                    controller: _scrollController,
+                    padding: EdgeInsets.only(top: searchBarHeight),
+                    itemCount: widget.leadingItems.length + widget.segments.length + 2,
+                    findChildIndexCallback: _findChildIndex,
+                    itemBuilder: buildRow,
+                  ),
           ),
         ),
       ),
@@ -922,8 +996,8 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     }
     if (key.value.startsWith(segmentPrefix)) {
       final id = key.value.substring(segmentPrefix.length);
-      final index = widget.segments.indexWhere((segment) => segment.id == id);
-      return index < 0 ? null : widget.leadingItems.length + index + 1;
+      final index = _segmentIndices[id];
+      return index == null ? null : widget.leadingItems.length + index + 1;
     }
     return null;
   }
@@ -1475,87 +1549,6 @@ class LiteTranscriptWidget extends StatelessWidget {
       ),
     );
   }
-}
-
-/// Rebuilds one transcript line only when that line gains or loses the playhead
-/// highlight. A reader fling moves the highlight often; rebuilding the list for
-/// each move lays out every visible line again.
-class _SegmentHighlight extends StatefulWidget {
-  const _SegmentHighlight({
-    required this.segmentId,
-    required this.highlighted,
-    required this.staticCurrent,
-    required this.builder,
-  });
-
-  final String segmentId;
-  final ValueListenable<String?>? highlighted;
-  final bool staticCurrent;
-  final Widget Function(BuildContext context, bool isCurrent) builder;
-
-  @override
-  State<_SegmentHighlight> createState() => _SegmentHighlightState();
-}
-
-class _SegmentHighlightState extends State<_SegmentHighlight> {
-  ValueListenable<String?>? _highlighted;
-  late bool _current;
-
-  @override
-  void initState() {
-    super.initState();
-    _current = _isCurrent;
-    _subscribe(widget.highlighted);
-  }
-
-  @override
-  void didUpdateWidget(_SegmentHighlight oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.highlighted != widget.highlighted || oldWidget.segmentId != widget.segmentId) {
-      _unsubscribe();
-      _current = _isCurrent;
-      _subscribe(widget.highlighted);
-    } else {
-      _current = _isCurrent;
-    }
-  }
-
-  @override
-  void dispose() {
-    _unsubscribe();
-    super.dispose();
-  }
-
-  bool get _isCurrent {
-    final highlighted = widget.highlighted;
-    if (highlighted != null) return highlighted.value == widget.segmentId;
-    return widget.staticCurrent;
-  }
-
-  void _subscribe(ValueListenable<String?>? highlighted) {
-    _highlighted = highlighted;
-    highlighted?.addListener(_onHighlight);
-  }
-
-  void _unsubscribe() {
-    _highlighted?.removeListener(_onHighlight);
-    _highlighted = null;
-  }
-
-  void _onHighlight() {
-    if (!mounted) return;
-    final next = _isCurrent;
-    if (next == _current) return;
-    _current = next;
-    // updateSegments() can sync the highlight from a parent build. That build
-    // already includes this line; setState here would assert.
-    final phase = SchedulerBinding.instance.schedulerPhase;
-    if (phase == SchedulerPhase.persistentCallbacks || phase == SchedulerPhase.midFrameMicrotasks) return;
-    setState(() {});
-  }
-
-  @override
-  Widget build(BuildContext context) => widget.builder(context, _isCurrent);
 }
 
 String getLastTranscript(

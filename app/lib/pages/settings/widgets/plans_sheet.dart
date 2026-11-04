@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/pages/paywall/paywall_pacing.dart';
 import 'package:omi/pages/settings/widgets/cancel_subscription_sheet.dart';
 import 'package:omi/models/subscription.dart';
 import 'package:omi/models/plan_storefront.dart';
@@ -20,6 +21,7 @@ import 'package:omi/pages/settings/widgets/plans/plan_cards.dart';
 import 'package:omi/pages/settings/widgets/plans/plan_display_name.dart';
 import 'package:omi/pages/settings/widgets/plans/plans_hero.dart';
 import 'package:omi/pages/settings/widgets/plans/training_data_option.dart';
+import 'package:omi/pages/settings/widgets/yearly_switch.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/providers/user_provider.dart';
@@ -86,7 +88,7 @@ class _PlansSheetState extends State<PlansSheet> {
   PlanStorefront? _storefront;
 
   String selectedPlan = 'yearly'; // 'yearly' or 'monthly'  (billing period)
-  String? selectedTierId; // 'unlimited', 'operator', 'architect'
+  String? selectedTierId; // backend plan_id, e.g. 'unlimited_v2'
   bool _isUpgrading = false;
   final bool _showTrainingDataOptIn = false; // Control visibility of training data opt-in
   bool _isSwitchingToFree = false;
@@ -324,11 +326,11 @@ class _PlansSheetState extends State<PlansSheet> {
     // Get the price ID from the available plans
     final usageProvider = context.read<UsageProvider>();
     final livePlan = usageProvider.subscription?.subscription.plan;
-    // The old Continue path is visible until the flag resolves. unlimited plans
-    // are not desktop-entitled, so the existing cross-tier hide does not cover them.
+    // The old Continue path is visible until the flag resolves. Neo is not
+    // desktop-entitled, so the existing cross-tier hide does not cover it.
     if (storefrontPrice == null &&
         !_storefrontGateResolved &&
-        (livePlan == PlanType.unlimited || livePlan == PlanType.unlimitedV2 || livePlan?.isUnknown == true)) {
+        (livePlan == PlanType.unlimited || livePlan?.isUnknown == true)) {
       return;
     }
     StorefrontCheckoutDecision? storefrontDecision;
@@ -366,7 +368,9 @@ class _PlansSheetState extends State<PlansSheet> {
     if (storefrontPrice != null &&
         (storefrontPrice.id != priceId ||
             storefrontPrice.interval != selectedPlanData['interval'] ||
-            storefrontPrice.amountMinor != selectedPlanData['unit_amount'])) {
+            storefrontPrice.amountMinor != selectedPlanData['unit_amount'] ||
+            storefrontPrice.currency.toLowerCase() !=
+                (selectedPlanData['currency'] ?? 'usd').toString().toLowerCase())) {
       OmiFeedback.error(context, context.l10n.selectedPlanNotAvailable);
       return;
     }
@@ -396,8 +400,8 @@ class _PlansSheetState extends State<PlansSheet> {
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (ctx) => OmiAlertDialog(
-          title: storefrontPrice?.confirmLines.isNotEmpty == true
-              ? (storefrontPrice!.ctaLabel ?? l10n.upgradeToAnnualPlan)
+          title: storefrontPrice?.formattedConfirmLines.isNotEmpty == true
+              ? (storefrontPrice!.formattedCtaLabel ?? l10n.upgradeToAnnualPlan)
               : l10n.upgradeToAnnualPlan,
           content: Material(
             type: MaterialType.transparency,
@@ -405,8 +409,8 @@ class _PlansSheetState extends State<PlansSheet> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (storefrontPrice?.confirmLines.isNotEmpty == true)
-                  ...storefrontPrice!.confirmLines.map((line) => Padding(
+                if (storefrontPrice?.formattedConfirmLines.isNotEmpty == true)
+                  ...storefrontPrice!.formattedConfirmLines.map((line) => Padding(
                       padding: const EdgeInsets.only(bottom: OmiSpacing.sm),
                       child: Text(line, style: OmiType.callout.copyWith(color: OmiColors.textPrimary))))
                 else ...[
@@ -432,8 +436,8 @@ class _PlansSheetState extends State<PlansSheet> {
           actions: [
             OmiDialogAction(label: l10n.cancel, onPressed: () => Navigator.of(ctx).pop(false)),
             OmiDialogAction(
-                label: storefrontPrice?.confirmLines.isNotEmpty == true
-                    ? (storefrontPrice!.ctaLabel ?? l10n.confirmUpgrade)
+                label: storefrontPrice?.formattedConfirmLines.isNotEmpty == true
+                    ? (storefrontPrice!.formattedCtaLabel ?? l10n.confirmUpgrade)
                     : l10n.confirmUpgrade,
                 isDefault: true,
                 onPressed: () => Navigator.of(ctx).pop(true)),
@@ -458,7 +462,8 @@ class _PlansSheetState extends State<PlansSheet> {
       billingInterval: isYearly ? 'year' : 'month',
       releaseUpgradingLock: releaseUpgradingLock,
       storefrontDecision: storefrontDecision,
-      confirmedByStorefront: isUpgradingFromMonthlyToAnnual && storefrontPrice?.confirmLines.isNotEmpty == true,
+      confirmedByStorefront:
+          isUpgradingFromMonthlyToAnnual && storefrontPrice?.formattedConfirmLines.isNotEmpty == true,
     );
   }
 
@@ -706,6 +711,7 @@ class _PlansSheetState extends State<PlansSheet> {
 
   @override
   void initState() {
+    PaywallPacing.markShown();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadAvailablePlans();
       _initializeStorefront();
@@ -873,6 +879,7 @@ class _PlansSheetState extends State<PlansSheet> {
                           textAlign: TextAlign.center,
                           style: secondary,
                         ),
+                        if (!hasScheduledUpgrade) const YearlySwitchPlansRow(),
                       ],
                       const SizedBox(height: OmiSpacing.xl),
                       // Features list - shown to all users
@@ -1159,7 +1166,8 @@ class _PlansSheetState extends State<PlansSheet> {
     }
 
     // Tier ordering
-    const tierOrder = ['plus', 'unlimited_v2', 'unlimited', 'operator', 'architect'];
+    // Omi Pro is the only plan sold; retired tiers appear only for their own subscribers.
+    const tierOrder = ['unlimited_v2', 'plus', 'unlimited', 'operator', 'architect'];
     final sortedTierIds = grouped.keys.toList()
       ..sort((a, b) {
         final ai = tierOrder.indexOf(a);
@@ -1224,13 +1232,21 @@ class _PlansSheetState extends State<PlansSheet> {
   /// Fallback for single-tier plan display (old monthly/yearly cards).
   Widget _buildLegacyPlanCards({required List<Map<String, dynamic>> plans}) {
     _keepCurrentPriceSelected(plans);
+    final tierId = plans.first['plan_id'];
+    final desktopAccess = tierId is String ? _tierGrantsDesktop(tierId) : null;
+    // A known tier shows its canonical name (e.g. Omi Pro), not a stale backend title.
+    final tierName = tierId is String ? planTitleForTier(tierId, const []) : null;
+    Map<String, dynamic> named(Map<String, dynamic> plan) => tierName == null
+        ? plan
+        : {...plan, 'title': '$tierName · ${plan['interval'] == 'year' ? l10n.billingYearly : l10n.billingMonthly}'};
     return Column(
       children: [
         _buildDynamicPlanOption(
           isSelected: selectedPlan == 'yearly',
-          planData: plans.firstWhere((plan) => plan['interval'] == 'year', orElse: () => plans.first),
+          planData: named(plans.firstWhere((plan) => plan['interval'] == 'year', orElse: () => plans.first)),
           saveTag: _monthsFreeLabel(annualMonthsFree(plans)),
           isPopular: true,
+          desktopAccess: desktopAccess,
           onTap: () {
             HapticFeedback.lightImpact();
             _cancelSelectionTouched = true;
@@ -1240,7 +1256,8 @@ class _PlansSheetState extends State<PlansSheet> {
         const SizedBox(height: 18),
         _buildDynamicPlanOption(
           isSelected: selectedPlan == 'monthly',
-          planData: plans.firstWhere((plan) => plan['interval'] == 'month', orElse: () => plans.first),
+          planData: named(plans.firstWhere((plan) => plan['interval'] == 'month', orElse: () => plans.first)),
+          desktopAccess: desktopAccess,
           onTap: () {
             HapticFeedback.lightImpact();
             _cancelSelectionTouched = true;
@@ -1278,7 +1295,7 @@ class _PlansSheetState extends State<PlansSheet> {
       isPopular: isPopular,
       title: planData['title'] as String,
       subtitle: interval == 'year' ? l10n.annualBillingSummary(12, planBillingTotal(planData)) : null,
-      price: planData['price_string'] as String,
+      price: l10n.billingRecurringPrice(planBillingTotal(planData), interval),
       onTap: onTap,
       isActive: isActive && !isCancelled,
       endsOnDate: endsOnDate,
@@ -1288,21 +1305,11 @@ class _PlansSheetState extends State<PlansSheet> {
     );
   }
 
-  /// Whether a plan tier includes the desktop (macOS) app. Neo (unlimited) is
-  /// mobile/web only; Operator and Architect include desktop. Keep in sync with
-  /// backend `DESKTOP_ENTITLED_PLAN_TYPES`. Returns null for unknown tiers.
+  /// Whether a plan tier includes the desktop (macOS) app, per
+  /// [PlanType.grantsDesktop]. Returns null for unknown tiers.
   bool? _tierGrantsDesktop(String tierId) {
-    switch (tierId) {
-      case 'operator':
-      case 'architect':
-        return true;
-      case 'unlimited':
-      case 'plus':
-      case 'unlimited_v2':
-        return false;
-      default:
-        return null;
-    }
+    final plan = PlanType.fromWire(tierId);
+    return plan.isUnknown ? null : plan.grantsDesktop;
   }
 
   String? _monthsFreeLabel(int? months) => months == null ? null : l10n.monthsFreeBadge(months);

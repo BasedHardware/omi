@@ -37,6 +37,13 @@ def with_poll_hint(status: dict, *, surface_open: bool = False) -> dict:
     interval, independent of previous hints. Surface-open callers can explicitly
     request foreground cadence on this read-only endpoint.
     """
+    # Custody holds do not benefit from foreground polling or the generic
+    # backoff rollback. Five minutes also matches held-partial reconciliation.
+    if status.get('status') == 'processing' and status.get('reason_code') in {
+        'batch_unit_held',
+        'batch_artifact_missing',
+    }:
+        return {**status, 'poll_after_ms': 300000}
     if not poll_backoff():
         return status
     result = dict(status)

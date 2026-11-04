@@ -8,16 +8,20 @@ from config.policy import RecoveryPolicy
 from config.prerecorded_stt import missing_provider_environment
 from config.stt_provider_policy import provider_is_enabled, STTServingSurface
 from utils.executors import run_blocking, sync_executor
-from utils.batch_pipeline.contracts import projection_speech_spans
+from utils.batch_pipeline.contracts import projection_speech_spans, worker_vad_word_spans
 from utils.batch_pipeline.recovery_disposition import (
     inspect_audio,
     silence_payload,
     at_stage,
+    stage_failure,
     RecoveryFailure,
+    RecoveryProviderFailed,
     MultilingualEmpty,
     WordsWithoutVad,
     result_outcome,
 )
+
+MODULATE_SAFE_UPLOAD_BYTES = 95 * 1024 * 1024
 
 
 def recognizer_attempt(operation):
@@ -43,7 +47,7 @@ def independent_ready():
     return provider_is_enabled('soniox', STTServingSurface.HELD_RECOVERY) and not missing_provider_environment('soniox')
 
 
-def transcribe(item, binding, audio, *, multilingual=None, force_recognition=False):
+def transcribe(item, binding, audio, *, multilingual=None, force_recognition=False, worker_speech=None):
     """Use the sync client directly, with no whole-upload coordinator or retries."""
     # Preserve the existing deferred STT boundary: its transitive encryption
     # module requires runtime secrets and cannot join credential-free imports.
@@ -55,10 +59,15 @@ def transcribe(item, binding, audio, *, multilingual=None, force_recognition=Fal
         if empty_asr_disposition_enabled():
             return silence_payload(duration)
         raise RecoveryFailure('strict_vad', 'no_speech')
-    output = canonical_wav(pcm)
     # attempts=2 disables all existing client retry branches. An uncertain call
     # must remain held, never be silently reissued by the recovery dispatcher.
     use_multilingual = RecoveryPolicy().speech_empty_multilingual if multilingual is None else multilingual
+    try:
+        output = recovery_audio(pcm) if use_multilingual else canonical_wav(pcm)
+    except Exception:
+        if not use_multilingual:
+            raise
+        raise RecoveryProviderFailed(duration, spans, worker_speech) from None
     if use_multilingual:
         # Unknown intake language currently selects Parakeet again. Its European
         # language model cannot recover unsupported-language speech by repadding.
@@ -70,27 +79,34 @@ def transcribe(item, binding, audio, *, multilingual=None, force_recognition=Fal
     else:
         dispatch = lambda: prerecorded_from_bytes(output, language=binding.language, return_language=True, attempts=2)
     with parakeet_caller('batch_recovery'):
-        response = at_stage('provider', 'provider_failed', dispatch)
+        try:
+            response = at_stage('provider', 'provider_failed', dispatch)
+        except RecoveryFailure as error:
+            if error.reason != 'provider_failed':
+                raise
+            raise RecoveryProviderFailed(duration, spans, worker_speech) from None
     words, language = at_stage(
         'response_validation',
         'invalid_response',
         lambda: validate_response(response, duration, spans, multilingual=use_multilingual),
     )
-    return words_payload(duration, spans, words, language)
+    return words_payload(duration, spans, words, language, worker_speech=worker_speech)
 
 
-def second_transcribe(item, audio, empty):
+def second_transcribe(item, audio, empty, second_chance=False, takeover_max_seconds=None):
     """One independent Soniox async call after Modulate's validated empty response."""
     from utils.stt.soniox_batch import transcribe as soniox_transcribe
 
     # Reuse the first call's strict VAD instead of running it again.
     output, duration, spans = independent_audio(item, audio, empty)
+    # Only an operator take-over carries its sealed plan bound to the Soniox gate.
+    scoped = {'takeover_max_seconds': takeover_max_seconds} if takeover_max_seconds is not None else {}
     response = at_stage(
         'provider',
         'provider_failed',
-        lambda: soniox_transcribe(output, duration),
+        lambda: soniox_transcribe(output, duration, second_chance=second_chance, **scoped),
     )
-    return independent_payload(response, duration, spans)
+    return independent_payload(response, duration, spans, getattr(empty, 'worker_speech', None))
 
 
 def independent_audio(item, audio, empty):
@@ -98,24 +114,26 @@ def independent_audio(item, audio, empty):
     return canonical_wav(pcm), duration, spans
 
 
-def independent_payload(response, duration, spans):
+def independent_payload(response, duration, spans, worker_speech=None):
     words, language = at_stage(
         'response_validation',
         'invalid_response',
         lambda: validate_response(response, duration, spans, multilingual=True),
     )
-    return {**words_payload(duration, spans, words, language), 'words_provider': 'soniox'}
+    return {**words_payload(duration, spans, words, language, worker_speech=worker_speech), 'words_provider': 'soniox'}
 
 
-async def second_transcribe_async(item, audio, empty):
+async def second_transcribe_async(item, audio, empty, second_chance=False):
     from utils.stt.soniox_batch import transcribe_async as soniox_transcribe_async
 
     output, duration, spans = await run_blocking(sync_executor, independent_audio, item, audio, empty)
     try:
-        response = await soniox_transcribe_async(output, duration)
-    except Exception:
-        raise RecoveryFailure('provider', 'provider_failed') from None
-    return await run_blocking(sync_executor, independent_payload, response, duration, spans)
+        response = await soniox_transcribe_async(output, duration, second_chance=second_chance)
+    except Exception as error:
+        raise stage_failure('provider', 'provider_failed', error) from None
+    return await run_blocking(
+        sync_executor, independent_payload, response, duration, spans, getattr(empty, 'worker_speech', None)
+    )
 
 
 def canonical_wav(pcm):
@@ -128,8 +146,30 @@ def canonical_wav(pcm):
     return output.getvalue()
 
 
+def recovery_audio(pcm):
+    """Keep small WAVs unchanged; losslessly compress large units before one POST.
+
+    Modulate accepts FLAC (https://platform.modulate.ai/pricing). Check the
+    encoded size too: noisy PCM may not compress enough. That refusal follows
+    the same guarded independent-provider path as a failed Modulate call.
+    """
+    # canonical_wav adds a 44-byte PCM header. Avoid allocating a second full
+    # uncompressed copy for large units while encoding FLAC.
+    if len(pcm) + 44 <= MODULATE_SAFE_UPLOAD_BYTES:
+        return canonical_wav(pcm)
+    import numpy as np
+    import soundfile as sf
+
+    compressed = io.BytesIO()
+    sf.write(compressed, np.frombuffer(pcm, dtype='<i2'), 16000, format='FLAC', subtype='PCM_16')
+    encoded = compressed.getvalue()
+    if len(encoded) > MODULATE_SAFE_UPLOAD_BYTES:
+        raise RecoveryFailure('provider', 'provider_failed')
+    return encoded
+
+
 def validate_response(response, duration, spans, *, multilingual):
-    from diarizer.batch_pipeline import validate_words
+    from utils.batch_pipeline.word_validation import validate_words
 
     if not isinstance(response, tuple) or len(response) != 2:
         raise ValueError('response shape')
@@ -144,7 +184,15 @@ def validate_response(response, duration, spans, *, multilingual):
     return words, language
 
 
-def words_payload(duration, spans, words, language):
+def words_payload(duration, spans, words, language, *, worker_speech=None):
+    evidence = None
+    if not spans and worker_speech:
+        # Strict CPU VAD can miss short low-energy speech that the GPU worker's
+        # bound VAD receipt measured. Words alone never prove speech: only with
+        # that independent measurement may their clocks place it, and
+        # speech_seconds stays the acoustic measure (lead ruling ef03d2).
+        spans = worker_vad_word_spans(words, duration, worker_speech)
+        evidence = {'speech_spans_source': 'worker_vad_word_clocks', 'worker_vad_speech_seconds': worker_speech}
     if not spans:
         raise WordsWithoutVad(len(words))
     # Preserve legacy speaker labels directly in build_incoming. Exclusive batch
@@ -158,6 +206,7 @@ def words_payload(duration, spans, words, language):
         'words_provider': 'legacy_sync',
         'language': language,
         'recovery_version': 1,
+        **(evidence or {}),
     }
     at_stage('payload_validation', 'invalid_payload', lambda: projection_speech_spans(payload, duration))
     return payload

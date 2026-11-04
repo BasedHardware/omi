@@ -114,6 +114,11 @@ envFrom:
 runtimeConfigMapName: prod-omi-backend-config
 
 env:
+  # Production retirement; false restores the old routes only after GPUs are ready.
+  - name: STT_GPU_FLEET_OFF
+    value: "true"
+  - name: RECORD_SEAL_OVERLAP_TRIM_ENABLED
+    value: "true"
   - name: LISTEN_QUIET_FINALIZATION_ENABLED
     value: 'true'
   - name: STT_CAP_DISPATCH_ENFORCEMENT
@@ -151,10 +156,6 @@ env:
   - name: DEMAND_PROCESSING_PERCENT
     value: "0"
   - name: PLAYBACK_ON_DEMAND_ENABLED
-    value: "false"
-  - name: REPEAT_WORK_REVISION_ENABLED
-    value: "false"
-  - name: CONVERSATION_LLM_INPUT_DEDUPE_ENABLED
     value: "true"
   - name: REPEAT_WORK_LLM_VERSION
     value: "2026-10-16-v1"
@@ -180,6 +181,8 @@ env:
     value: "0"
   - name: AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT
     value: "0"
+  - name: AUDIO_ARCHIVE_REGIONAL_CHUNKS_PERCENT
+    value: "0"
   - name: AUDIO_ARCHIVE_UID_ALLOWLIST
     value: ""
   - name: BUCKET_AUDIO_DERIVED
@@ -202,10 +205,16 @@ env:
     value: "phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y"
   - name: PROACTIVITY_V2_POSTHOG_HOST
     value: "https://us.posthog.com"
+  - name: OMI_FLAGS_FIRESTORE_PROJECT
+    value: "based-hardware"
+  - name: OMI_FLAGS_FIRESTORE_DATABASE
+    value: "omi-flags"
+  - name: OMI_FLAGS_SOURCE
+    value: "dual"
   - name: FIRESTORE_READ_LEDGER
     value: "1"
   - name: FIRESTORE_READ_LEVERS
-    value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":100,"candidates_page":100,"canonical_statuses_dedupe":100,"deletion_marker_cache":100,"finjob_candidate_queries":5,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100}'
+    value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":5,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":5,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":5,"usage_month_cache":0,"usage_month_total":0}'
   - name: FSR_QUEUE_AGE_PUBLISHER
     value: "0"
   - name: FSR_QUEUE_AGE_LEASE_SECONDS
@@ -385,8 +394,10 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: GROQ_API_KEY
+  # In-cluster callers reach diarizer by ClusterIP DNS; the internal-ALB
+  # route stays for Cloud Run callers (billed per GB inbound).
   - name: HOSTED_SPEAKER_EMBEDDING_API_URL
-    value: "http://172.16.160.20/diarizer"
+    value: "http://prod-omi-diarizer.prod-omi-backend.svc.cluster.local:8080"
   - name: PINECONE_API_KEY
     valueFrom:
       secretKeyRef:
@@ -509,12 +520,14 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: TYPESENSE_API_KEY
+  - name: HOSTED_LID_API_URL
+    value: ""
   - name: HOSTED_PARAKEET_API_URL
     value: "http://parakeet.omi.me"
   - name: STT_PRERECORDED_MODEL
     value: "parakeet,modulate-velma-2"
   - name: STT_SERVICE_MODELS
-    value: "modulate-velma-2,soniox,parakeet"
+    value: "modulate-velma-2,soniox"
   - name: RAPID_API_KEY
     valueFrom:
       secretKeyRef:
@@ -561,15 +574,20 @@ resources:
   # request 450m yields exactly three pods per n4-highmem-2 node — 3x450m =
   # 1350m of ~1530m allocatable after ~358m of DaemonSet requests, while
   # 4x450m = 1800m can never fit — and aggregate p99 usage (3x495m = 1485m)
-  # stays under the node's 1930m allocatable. CPU limit is unchanged, so
-  # per-pod burst headroom is identical to the 2-pods-per-node era. The HPA is
-  # unaffected: it scales on the external pusher_active_ws_connections_per_pod
-  # metric, not resource utilization.
+  # stays under the node's 1930m allocatable. The HPA is unaffected: it
+  # scales on the external pusher_active_ws_connections_per_pod metric, not
+  # resource utilization.
+  # CPU limit raised 0.7 -> 1.0 on 2026-10-27: with the 0.7 limit the pusher
+  # container was CFS-throttled in 22% of periods (steady over 1h and 6h)
+  # while its p99 usage was only 409m, so sub-100ms bursts on the live audio
+  # path were hitting the cap. Scheduling uses requests, so packing (three
+  # pods per node) and node count are unchanged; under node contention CFS
+  # still shares CPU by request weight.
   requests:
     cpu: 0.45
     memory: 2Gi
   limits:
-    cpu: 0.7
+    cpu: 1.0
     memory: 3.5Gi
 
 # This is to setup the liveness and readiness probes more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
@@ -643,6 +661,9 @@ strategy:
     maxUnavailable: 1
     maxSurge: 2
 
+# Endpoint removal at T+0; SIGTERM follows the 15s preStop sleep. Uvicorn's
+# 90s graceful budget reaches T+105: LB drain (60s) + background drain (30s)
+# fit before it, with 15s left inside the pod's 120s termination grace.
 terminationGracePeriodSeconds: 120
 lifecycle:
   preStop:
@@ -687,3 +708,21 @@ affinity:
               operator: In
               values:
                 - v3
+    # Soft preference only: n2rescue still carries the required labels above,
+    # so overflow capacity cannot regress. Without this term the scheduler
+    # spreads evenly across v3 and n2rescue, stranding half the fleet on
+    # n2rescue (9 of 16 nodes, 2026-10-29) even after load falls, because
+    # pusher pods never reschedule on their own.
+    # Deploy gate: pod-template change — per
+    # backend/docs/runbooks/audio-fleet.md, roll only in a verified
+    # traffic-free window or after a qualified admission drain; never onto
+    # active WS sessions (PDB 80% protects availability, not sessions).
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        preference:
+          matchExpressions:
+            - key: cloud.google.com/gke-nodepool
+              operator: In
+              values:
+                - pusher-pool-v3
+                - pusher-pool-v3-bc

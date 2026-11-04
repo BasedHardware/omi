@@ -396,7 +396,10 @@ export function budgetExhausted(data: PlanStorefront): boolean {
   );
 }
 
-/** Pro gates apply only below Pro on the ladder and only when the backend lists them. */
+/**
+ * Pro gates apply only below Pro on the ladder and only when the backend lists them.
+ * Omi Pro (`unlimited_v2`) is the only plan sold, so it clears every gate.
+ */
 export function shouldGate(
   data: PlanStorefront,
   feature: string,
@@ -406,6 +409,8 @@ export function shouldGate(
   if (!data.showSubscriptionUi || !current || current.legacy) return false;
   if (!data.usage.proGates.includes(feature)) return false;
   if (offLadder(current.planId) || offLadder(livePlanId)) return false;
+  if (samePlan(current.planId, 'unlimited_v2')) return false;
+  if (livePlanId && samePlan(livePlanId, 'unlimited_v2')) return false;
   const rank = Math.max(ladderRank(current.planId) ?? -1, ladderRank(livePlanId) ?? -1);
   return rank < (ladderRank('operator') as number);
 }

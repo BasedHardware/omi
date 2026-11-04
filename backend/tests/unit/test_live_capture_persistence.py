@@ -65,6 +65,8 @@ def speech_dict(sid, text, start, end, **extra):
 
 async def test_known_window_persists_and_wire_stays_clean(monkeypatch, telemetry):
     stack = FailoverStack(monkeypatch, v2=False)
+    row = stack.store.rows[('users', stack.request.uid, 'conversations', CONV)]
+    capture_start = row['started_at']
     loop_task = asyncio.create_task(stack.processor.process_loop())
     stack.tasks.append(loop_task)
     transcript_frames = []
@@ -80,8 +82,10 @@ async def test_known_window_persists_and_wire_stays_clean(monkeypatch, telemetry
         )
         assert stored['audio_capture_start'] == pytest.approx(T0 + 2.0, abs=0.75)
         assert stored['audio_capture_end'] == pytest.approx(T0 + 5.0, abs=0.75)
-        assert stored['start'] == pytest.approx(0.0, abs=0.01)
-        assert stored['end'] == pytest.approx(3.0, abs=0.01)
+        assert row['started_at'] == capture_start
+        expected_start = stack.state.first_audio_byte_timestamp + 2.0 - capture_start.timestamp()
+        assert stored['start'] == pytest.approx(expected_start, abs=0.01)
+        assert stored['end'] - stored['start'] == pytest.approx(3.0, abs=0.01)
 
         await _wait_for(
             lambda: transcript_frames and websocket.sent_json,

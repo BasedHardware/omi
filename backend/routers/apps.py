@@ -91,6 +91,7 @@ from database.redis_db import (
     get_apps_reviews,
 )
 from utils.apps import (
+    active_app_creator_records,
     get_available_apps,
     get_available_app_by_id,
     get_approved_available_apps,
@@ -550,17 +551,6 @@ def get_apps_v2(
 
     capabilities = get_capabilities_list()
 
-    if capability:
-        cache_key = f"apps:capability:v2:{capability}:offset={offset}:limit={limit}:reviews={int(include_reviews)}"
-    elif category:
-        cache_key = f"apps:category:v2:{category}:offset={offset}:limit={limit}:reviews={int(include_reviews)}"
-    else:
-        cache_key = f"apps:capability_groups:v2:offset={offset}:limit={limit}:reviews={int(include_reviews)}"
-
-    cached = get_generic_cache(cache_key)
-    if cached:
-        return cached
-
     # Fetch and filter approved public apps
     apps = get_approved_available_apps(include_reviews=include_reviews)
     approved_apps = [a for a in apps if a.approved and (a.private is None or not a.private)]
@@ -583,7 +573,6 @@ def get_apps_v2(
                 ),
             },
         }
-        set_generic_cache(cache_key, res, ttl=60 * 10)
         return res
 
     if category:
@@ -602,7 +591,6 @@ def get_apps_v2(
                 ),
             },
         }
-        set_generic_cache(cache_key, res, ttl=60 * 10)
         return res
 
     # Grouped response by capability
@@ -618,7 +606,6 @@ def get_apps_v2(
             'offset': offset,
         },
     }
-    set_generic_cache(cache_key, res, ttl=60 * 10)
     return res
 
 
@@ -633,12 +620,6 @@ def get_capability_apps_grouped_by_category(
     - For chat: Personality Clones, Productivity & Lifestyle, Social & Entertainment
     - For others: Productivity & Tools, Personal & Lifestyle, Social & Entertainment
     """
-
-    cache_key = f"apps:capability:{capability_id}:grouped:reviews={int(include_reviews)}"
-
-    cached = get_generic_cache(cache_key)
-    if cached:
-        return cached
 
     capabilities = get_capabilities_list()
 
@@ -669,7 +650,6 @@ def get_capability_apps_grouped_by_category(
             'groupCount': len(groups),
         },
     }
-    set_generic_cache(cache_key, res, ttl=60 * 10)
     return res
 
 
@@ -739,6 +719,7 @@ def search_apps(
         installed_apps=installed_apps or False,
         enabled_app_ids=enabled_app_ids,
     )
+    apps_data = active_app_creator_records(apps_data)
 
     user_enabled = set(get_enabled_apps(uid))
 

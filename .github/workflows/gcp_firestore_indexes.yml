@@ -96,13 +96,28 @@ jobs:
             --plan-additions | tee "$RUNNER_TEMP/index-plan.txt"
           sed -n '/^eligible=/p' "$RUNNER_TEMP/index-plan.txt" >> "$GITHUB_OUTPUT"
 
-  prebuild_pr_development_indexes:
+  # Read-only PR counterpart of the main-line writer. Since the 10-22 WIF
+  # tightening both deploy pools admit only refs/heads/main, so the former PR
+  # prebuild jobs (which wrote index builds through omi-ci-schema-prod@ /
+  # omi-ci-deployer-dev@ behind an environment approval) have failed at the
+  # Google Auth step on every eligible PR. PRs now get a dedicated read-only
+  # identity -- pool omi-gha-ci-pr, service account omi-ci-index-check@, whose
+  # only role lists indexes and field configs (no document access, no writes)
+  # -- and only ever plan: index builds start on main, behind the prod
+  # environment's required reviewer, exactly like every other schema write.
+  # The dev prebuild job is gone for the same reason: its only function was
+  # writing builds to based-hardware-dev, and development converges on merge
+  # via reconcile_development_composite_indexes below.
+  #
+  # No `environment:` on purpose. Reads need no approval, and the WIF binding
+  # pins the stable pull_request subject GitHub documents only for jobs that
+  # reference no environment; re-adding one breaks the subject match and the
+  # auth fails closed.
+  check_pr_prod_indexes:
     needs: plan_pr_indexes
-    if: needs.plan_pr_indexes.outputs.eligible == 'true'
-    environment: development
-    concurrency:
-      group: firestore-schema-development
-      cancel-in-progress: false
+    if: >-
+      needs.plan_pr_indexes.outputs.eligible == 'true' &&
+      github.event.pull_request.head.repo.full_name == github.repository
     permissions:
       contents: read
       id-token: write
@@ -132,70 +147,27 @@ jobs:
             --add-only-base "$RUNNER_TEMP/base-indexes.json" \
             --plan-additions | tee "$RUNNER_TEMP/index-plan.txt"
           grep -qx 'eligible=true' "$RUNNER_TEMP/index-plan.txt"
-      - name: Google Auth for approved PR index prebuild
+      - name: Google Auth for read-only PR index check
         uses: google-github-actions/auth@v3
         with:
-          workload_identity_provider: projects/1031333818730/locations/global/workloadIdentityPools/omi-gha-deploy-dev/providers/github
-          service_account: omi-ci-deployer-dev@based-hardware-dev.iam.gserviceaccount.com
+          # Read-only PR identity: the provider's attribute condition admits
+          # only pull_request events of this one workflow file from
+          # BasedHardware/omi (repository 776121034, owner 162546372).
+          workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-ci-pr/providers/github
+          service_account: omi-ci-index-check@based-hardware.iam.gserviceaccount.com
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v3
-      - name: Start additive PR index builds
+      # vars.RUNTIME_GCP_PROJECT_ID is environment-scoped (prod/development
+      # only; not defined at repository level), and this job deliberately
+      # binds no environment -- so the prod project id is pinned literally.
+      # The PR check is prod-only by design.
+      - name: Plan additive PR indexes read-only (no writes)
         run: |
           python3 backend/scripts/reconcile_firestore_indexes.py \
-            --project "${{ vars.RUNTIME_GCP_PROJECT_ID }}" \
+            --project "based-hardware" \
             --manifest "$RUNNER_TEMP/pr-indexes.json" \
             --add-only-base "$RUNNER_TEMP/base-indexes.json" \
-            --provision-missing \
-            --start-only
-
-  prebuild_pr_prod_indexes:
-    needs: plan_pr_indexes
-    if: needs.plan_pr_indexes.outputs.eligible == 'true'
-    environment: prod
-    permissions:
-      contents: read
-      id-token: write
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - name: Checkout trusted main controls
-        uses: actions/checkout@v7
-        with:
-          ref: ${{ github.event.pull_request.base.sha }}
-          persist-credentials: false
-      - name: Read pinned declarations as data
-        env:
-          MAIN_SHA: ${{ needs.plan_pr_indexes.outputs.main_sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          set -euo pipefail
-          git fetch --no-tags origin "$MAIN_SHA" "$HEAD_SHA"
-          git show "$MAIN_SHA:firestore.indexes.json" > "$RUNNER_TEMP/base-indexes.json"
-          git show "$HEAD_SHA:firestore.indexes.json" > "$RUNNER_TEMP/pr-indexes.json"
-      # Recheck the diff before auth; never import or run candidate PR code.
-      - name: Validate add-only declarations
-        run: |
-          set -euo pipefail
-          python3 backend/scripts/reconcile_firestore_indexes.py \
-            --manifest "$RUNNER_TEMP/pr-indexes.json" \
-            --add-only-base "$RUNNER_TEMP/base-indexes.json" \
-            --plan-additions | tee "$RUNNER_TEMP/index-plan.txt"
-          grep -qx 'eligible=true' "$RUNNER_TEMP/index-plan.txt"
-      - name: Google Auth for approved PR index prebuild
-        uses: google-github-actions/auth@v3
-        with:
-          workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github
-          service_account: omi-ci-schema-prod@based-hardware.iam.gserviceaccount.com
-      - name: Set up gcloud
-        uses: google-github-actions/setup-gcloud@v3
-      - name: Start additive PR index builds
-        run: |
-          python3 backend/scripts/reconcile_firestore_indexes.py \
-            --project "${{ vars.RUNTIME_GCP_PROJECT_ID }}" \
-            --manifest "$RUNNER_TEMP/pr-indexes.json" \
-            --add-only-base "$RUNNER_TEMP/base-indexes.json" \
-            --provision-missing \
-            --start-only
+            --dry-run
 
   reconcile_composite_indexes:
     # This is the explicit, human-approved writer. Backend deploy workflows

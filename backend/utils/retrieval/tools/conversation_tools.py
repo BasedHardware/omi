@@ -33,6 +33,8 @@ from utils.metrics import OMI_CHAT_SEARCH_TOOL_OUTCOMES_TOTAL
 from utils.observability.fallback import record_fallback
 from utils.retrieval.chat_scope import apply_chat_scope_dates, chat_scope_from_config
 from utils.retrieval.turn_refs import register_record_ref
+from utils.retrieval.tool_services.transcript_search import search_saved_transcripts_text
+from utils.retrieval.transcript_recall import begin_transcript_recall
 import logging
 from utils.model_text import (
     DisplayClock,
@@ -339,7 +341,7 @@ def get_conversations_tool(
         configurable: Any = cfg.get('configurable')
         uid = configurable.get('user_id')
     except (KeyError, TypeError, AttributeError) as e:
-        logger.error(f"❌ get_conversations_tool - error accessing config: {e}")
+        logger.error("❌ get_conversations_tool - error accessing config: %s", type(e).__name__)
         return "Error: Configuration not available"
 
     if not uid:
@@ -369,8 +371,10 @@ def get_conversations_tool(
             if start_dt.tzinfo is None:
                 return f"Error: start_date must include timezone in user's timezone format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-19T15:00:00-08:00'): {start_date}"
             logger.info("Parsed conversation start_date")
-        except ValueError as e:
-            return f"Error: Invalid start_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {start_date} - {str(e)}"
+        except ValueError:
+            return (
+                f"Error: Invalid start_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {start_date}"
+            )
 
     if end_date:
         try:
@@ -379,8 +383,8 @@ def get_conversations_tool(
             if end_dt.tzinfo is None:
                 return f"Error: end_date must include timezone in user's timezone format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-19T23:59:59-08:00'): {end_date}"
             logger.info("Parsed conversation end_date")
-        except ValueError as e:
-            return f"Error: Invalid end_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {end_date} - {str(e)}"
+        except ValueError:
+            return f"Error: Invalid end_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {end_date}"
 
     limit = min(limit, 5000)
 
@@ -425,7 +429,7 @@ def get_conversations_tool(
             locked_count = sum(1 for conversation in conversations_data if conversation.get('is_locked', False))
             conversations_data = [c for c in conversations_data if not c.get('is_locked', False)]
     except Exception as e:
-        logger.error(f"❌ Unexpected error retrieving conversations: {e}", exc_info=True)
+        logger.error("❌ Unexpected error retrieving conversations: %s", type(e).__name__, exc_info=True)
         return "An unexpected error occurred while fetching conversations. Please try again later."
 
     # Bound how many conversations are formatted for the chat model so a wide date range cannot
@@ -495,7 +499,7 @@ def get_conversations_tool(
 
                 conversations.append(conversation)
             except Exception as e:
-                logger.error(f"Error parsing conversation {conv_data.get('id')}: {str(e)}")
+                logger.error("Error parsing conversation %s: %s", conv_data.get('id'), type(e).__name__)
                 continue
 
         logger.info(f"🔍 get_conversations_tool - Converted {len(conversations)} conversation objects")
@@ -519,7 +523,7 @@ def get_conversations_tool(
         return result
 
     except Exception as e:
-        logger.error(f"❌ Unexpected error in get_conversations_tool: {e}", exc_info=True)
+        logger.error("❌ Unexpected error in get_conversations_tool: %s", type(e).__name__, exc_info=True)
         return "An unexpected error occurred while fetching conversations. Please try again later."
 
 
@@ -532,6 +536,8 @@ def search_conversations_tool(
     max_transcript_segments: int = 0,
     include_transcript: bool = True,
     include_timestamps: bool = False,
+    transcript_query: Optional[str] = None,
+    transcript_cursor: Optional[str] = None,
     config: RunnableConfig = None,  # type: ignore[reportAssignmentType]  # langchain injects at runtime; None default for direct calls
 ) -> str:
     """
@@ -539,6 +545,12 @@ def search_conversations_tool(
 
     Natural-language queries search titles/summaries and indexed transcript chunks - USE THIS FOR EVENTS/INCIDENTS.
     Canonical UUIDs and h.omi.me conversation links resolve to one exact conversation.
+
+    When asked to search transcripts or verify an exact spoken detail, set transcript_query to a few literal
+    words (e.g. "invoice", not "what was the invoice amount?"). This reads actual saved transcripts directly,
+    including unindexed old and new recordings, without relying on semantic search. Continue with the returned
+    transcript_cursor and unchanged query/dates until you find evidence or reach the end. A page with no match
+    is not a complete search. Never guess a detail after pushback; cite the returned verbatim source.
 
     This tool combines exact keyword matching on conversation titles/summaries (best for proper names
     like people or places) with AI embeddings that find semantically similar conversations even if
@@ -584,6 +596,8 @@ def search_conversations_tool(
         max_transcript_segments: Limit transcript segments (default: 0=none, suggest 20-50 for normal use, max: 1000)
         include_transcript: Include full transcript (default: True)
         include_timestamps: Add timestamps to transcript segments (default: False)
+        transcript_query: Literal words/phrase to search in saved transcripts directly, at most 200 characters.
+        transcript_cursor: Opaque continuation from direct transcript search; omit for a new query/date scope.
     Returns:
         Formatted string with matching conversations, including transcripts, summaries, action items, events, and
         metadata.
@@ -605,7 +619,7 @@ def search_conversations_tool(
         configurable: Any = cfg.get('configurable')
         uid = configurable.get('user_id')
     except (KeyError, TypeError, AttributeError) as e:
-        logger.error(f"❌ search_conversations_tool - error accessing config: {e}")
+        logger.error("❌ search_conversations_tool - error accessing config: %s", type(e).__name__)
         return "Error: Configuration not available"
 
     if not uid:
@@ -643,8 +657,10 @@ def search_conversations_tool(
             logger.info("Parsed conversation search start_date")
             start_dt = dt
             starts_at = int(dt.timestamp())
-        except ValueError as e:
-            return f"Error: Invalid start_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {start_date} - {str(e)}"
+        except ValueError:
+            return (
+                f"Error: Invalid start_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {start_date}"
+            )
 
     if end_date:
         try:
@@ -654,8 +670,8 @@ def search_conversations_tool(
             logger.info("Parsed conversation search end_date")
             end_dt = dt
             ends_at = int(dt.timestamp())
-        except ValueError as e:
-            return f"Error: Invalid end_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {end_date} - {str(e)}"
+        except ValueError:
+            return f"Error: Invalid end_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {end_date}"
 
     # Limit to reasonable max
     limit = min(limit, 20)
@@ -663,6 +679,39 @@ def search_conversations_tool(
     scoped_id = (scope or {}).get("conversation_id") if scope else None
     if scoped_id and exact_conversation_id and exact_conversation_id != str(scoped_id):
         return f"Error: Chat is scoped to conversation {scoped_id}; " f"cannot load a different conversation reference."
+
+    if transcript_cursor is not None and transcript_query is None:
+        return 'Error: transcript_cursor requires the original transcript_query.'
+    if transcript_query is not None:
+        if not include_transcript:
+            return 'Error: direct transcript search requires include_transcript=true.'
+        recall_evidence = begin_transcript_recall(configurable)
+
+        def cite_transcript(conversation):
+            with _collected_conversations_lock:
+                collected = configurable.setdefault('conversations_collected', [])
+                for index, card in enumerate(collected, start=1):
+                    if card.get('id') == conversation.id:
+                        number = index
+                        break
+                else:
+                    collected.append(conversation_to_citation_card(conversation))
+                    number = len(collected)
+                register_record_ref(configurable, 'conversations', conversation.id)
+                recall_evidence.found = True
+            return f'[{number}]'
+
+        return search_saved_transcripts_text(
+            str(uid),
+            transcript_query,
+            start_date=start_dt,
+            end_date=end_dt,
+            limit=limit,
+            cursor=transcript_cursor,
+            conversation_id=str(scoped_id or exact_conversation_id) if (scoped_id or exact_conversation_id) else None,
+            clock=display_clock,
+            citation_for=cite_transcript,
+        )
 
     conversations_data: List[Dict[str, Any]] = []
     withheld_locked = 0

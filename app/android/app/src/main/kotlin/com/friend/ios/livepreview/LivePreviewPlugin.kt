@@ -10,6 +10,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.ParcelFileDescriptor
+import android.speech.RecognitionPart
 import android.speech.RecognitionListener
 import android.speech.RecognitionSupport
 import android.speech.RecognitionSupportCallback
@@ -70,8 +71,13 @@ class LivePreviewPlugin private constructor(private val context: Context) :
         sink = null
     }
 
-    private fun emit(segmentId: String, text: String, isFinal: Boolean) {
-        main.post { sink?.success(mapOf("segmentId" to segmentId, "text" to text, "isFinal" to isFinal)) }
+    private fun emit(mine: Int, segmentId: String, text: String, isFinal: Boolean, spans: List<Map<String, Any>>) {
+        main.post {
+            if (mine != generation) return@post
+            sink?.success(mapOf("segmentId" to "$mine:$segmentId", "text" to text, "isFinal" to isFinal,
+                "startMs" to spans.firstOrNull()?.get("startMs"),
+                "endMs" to spans.lastOrNull()?.get("endMs"), "spans" to spans))
+        }
     }
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
@@ -88,7 +94,11 @@ class LivePreviewPlugin private constructor(private val context: Context) :
                     start(call.argument<String>("language") ?: "multi", generation, result)
                 }
             }
-            "feed" -> result.success((call.arguments as? ByteArray)?.let { session?.offer(it) } ?: false)
+            "feed" -> {
+                val pcm = call.argument<ByteArray>("pcm")
+                val startMs = call.argument<Number>("startMs")?.toLong()
+                result.success(pcm?.let { session?.offer(it, startMs) } ?: false)
+            }
             "stop" -> {
                 generation++
                 session?.stop()
@@ -164,7 +174,7 @@ class LivePreviewPlugin private constructor(private val context: Context) :
                             answer(LivePreviewPolicy.none(pick.reason), null)
                             return
                         }
-                        val candidate = OnDeviceSession(recognizer, tag, ::emit) { runtimeFailure(mine) }
+                        val candidate = OnDeviceSession(recognizer, tag, { id, text, isFinal, spans -> emit(mine, id, text, isFinal, spans) }) { runtimeFailure(mine) }
                         val started = try {
                             candidate.also { it.begin() }
                         } catch (error: Exception) {
@@ -197,7 +207,7 @@ class LivePreviewPlugin private constructor(private val context: Context) :
 private class OnDeviceSession(
     private val recognizer: SpeechRecognizer,
     private val languageTag: String,
-    private val emit: (String, String, Boolean) -> Unit,
+    private val emit: (String, String, Boolean, List<Map<String, Any>>) -> Unit,
     private val onFailure: () -> Unit,
 ) {
     companion object {
@@ -222,6 +232,7 @@ private class OnDeviceSession(
     @Volatile private var output: OutputStream? = null
     @Volatile private var stopped = false
     private var restartPending = false
+    private var audioOriginMs: Long? = null
 
     private val listener = object : RecognitionListener {
         override fun onReadyForSpeech(params: Bundle?) {}
@@ -232,15 +243,15 @@ private class OnDeviceSession(
         override fun onEvent(eventType: Int, params: Bundle?) {}
 
         override fun onPartialResults(partialResults: Bundle?) {
-            text(partialResults)?.let { emit(ids.current, it, false) }
+            text(partialResults)?.let { emit(ids.current, it, false, timedParts(partialResults)) }
         }
 
         override fun onSegmentResults(segmentResults: Bundle) {
-            text(segmentResults)?.let { emit(ids.id(isFinal = true), it, true) }
+            text(segmentResults)?.let { emit(ids.id(isFinal = true), it, true, timedParts(segmentResults)) }
         }
 
         override fun onResults(results: Bundle?) {
-            text(results)?.let { emit(ids.id(isFinal = true), it, true) }
+            text(results)?.let { emit(ids.id(isFinal = true), it, true, timedParts(results)) }
             restartLater(counted = false)
         }
 
@@ -250,6 +261,16 @@ private class OnDeviceSession(
             Log.w(TAG, "on-device recognizer error $error")
             restartLater(counted = LivePreviewPolicy.isRuntimeFailure(error))
         }
+    }
+
+    // Android exposes word starts, not word durations. A one-millisecond
+    // interval identifies that word; absent/unsupported timing stays unknown.
+    private fun timedParts(bundle: Bundle?): List<Map<String, Any>> {
+        val origin = audioOriginMs ?: return emptyList()
+        if (Build.VERSION.SDK_INT < 34) return emptyList()
+        val parts = bundle?.getParcelableArrayList(SpeechRecognizer.RECOGNITION_PARTS, RecognitionPart::class.java)
+            ?: return emptyList()
+        return LivePreviewPolicy.timedSpans(origin, parts.map { (it.formattedText ?: it.rawText) to it.timestampMillis })
     }
 
     private fun text(bundle: Bundle?): String? =
@@ -263,6 +284,7 @@ private class OnDeviceSession(
         val write = LivePreviewPolicy.startOnPipe(pipe[0], pipe[1]) { read ->
             val intent = baseIntent(languageTag).apply {
                 putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+                if (Build.VERSION.SDK_INT >= 34) putExtra(RecognizerIntent.EXTRA_REQUEST_WORD_TIMING, true)
                 putExtra(RecognizerIntent.EXTRA_AUDIO_SOURCE, read)
                 putExtra(RecognizerIntent.EXTRA_AUDIO_SOURCE_CHANNEL_COUNT, 1)
                 putExtra(RecognizerIntent.EXTRA_AUDIO_SOURCE_ENCODING, AudioFormat.ENCODING_PCM_16BIT)
@@ -273,6 +295,7 @@ private class OnDeviceSession(
             recognizer.setRecognitionListener(listener)
             recognizer.startListening(intent)
         }
+        audioOriginMs = null
         val previous = output
         output = ParcelFileDescriptor.AutoCloseOutputStream(write)
         previous?.let { stale -> writer.execute { runCatching { stale.close() } } }
@@ -302,8 +325,9 @@ private class OnDeviceSession(
     }
 
     /** Any thread; never blocks. False when the chunk was dropped. */
-    fun offer(pcm: ByteArray): Boolean {
+    fun offer(pcm: ByteArray, startedAtMs: Long?): Boolean {
         if (stopped || queued.get() >= MAX_QUEUED_CHUNKS) return false
+        if (audioOriginMs == null) audioOriginMs = startedAtMs ?: (System.currentTimeMillis() - pcm.size / 32)
         queued.incrementAndGet()
         writer.execute {
             try {

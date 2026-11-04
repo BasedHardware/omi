@@ -318,6 +318,50 @@ class TestUploadOpusEncoding:
         assert mock_blob.metadata.get('v2_start') is not None or 'start' in str(mock_blob.metadata)
 
 
+@requires_native_opus
+@pytest.mark.parametrize('protection', ['standard', 'enhanced'])
+def test_sync_upload_stamps_exact_pcm_extent_when_archive_routing_off(monkeypatch, protection):
+    from database import conversations as conversations_db
+    from utils.conversations.audio_placement import prepare_audio_coverage
+
+    bucket, blob = MagicMock(), MagicMock()
+    bucket.blob.return_value = blob
+    storage_mod.storage_client.bucket.return_value = bucket
+    monkeypatch.setattr(storage_mod.audio_archive, 'admitted', lambda *a: False)
+    monkeypatch.setattr(storage_mod.encryption, 'encrypt_audio_chunk', lambda data, uid: data)
+    timestamp = 1700000000.123456
+    samples = 37591  # Includes a partial final Opus frame.
+    path = storage_mod.upload_audio_chunk(
+        b'\x00\x00' * samples, 'synthetic-owner', 'synthetic-conversation', timestamp, protection
+    )
+    span = storage_mod.parse_span_blob_metadata(blob.metadata)
+    assert span == {'start': timestamp, 'samples': samples, 'sample_rate': 16000}
+    assert storage_mod.storage_client.bucket.call_args.args == (storage_mod.private_cloud_sync_bucket,)
+    decoded = storage_mod.decode_opus_to_pcm(blob.upload_from_string.call_args.args[0])
+    assert len(decoded) == samples * 2
+    assert f'{timestamp:.3f}' in path
+    # Exercise the actual listing -> manifest writer -> resolver validator seam,
+    # not merely the uploader's metadata dictionary. Missing spans on any file
+    # are the fleet's dominant first-pass manifest refusal.
+    blob.name = path
+    blob.size = len(blob.upload_from_string.call_args.args[0])
+    blob.generation = 7
+    blob.md5_hash = blob.crc32c = None
+    blob.bucket.name = storage_mod.private_cloud_sync_bucket
+    bucket.list_blobs.return_value = [blob]
+    monkeypatch.delenv('BUCKET_AUDIO_DERIVED', raising=False)
+    files = conversations_db.create_audio_files_from_chunks('synthetic-owner', 'synthetic-conversation')
+    manifest = [file.model_dump() for file in files]
+    coverage = prepare_audio_coverage(manifest)
+    assert coverage.validated
+    assert coverage.covers(timestamp, timestamp + samples / 16000)
+    # Legacy metadata produces a real but unproven manifest; never guess spans
+    # from compressed byte size to make that historical record look resolved.
+    blob.metadata = {}
+    legacy = conversations_db.create_audio_files_from_chunks('synthetic-owner', 'synthetic-conversation')
+    assert not prepare_audio_coverage([file.model_dump() for file in legacy]).validated
+
+
 class TestListAudioChunksExtensions:
     """Tests for list_audio_chunks with all extension types."""
 

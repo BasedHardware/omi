@@ -57,6 +57,7 @@ from google.api_core.exceptions import NotFound
 from starlette.websockets import WebSocketState
 
 import database.conversations as conversations_db
+from utils import pusher_audio_projection
 
 UID = 'uid'
 CONVERSATION_ID = 'conversation'
@@ -291,6 +292,8 @@ class SequencedWebSocket:
 
 @pytest.fixture
 def raced_pusher_session(monkeypatch):
+    monkeypatch.setenv('PUSHER_AUDIO_FILE_INCREMENTAL_ENABLED', '0')
+    monkeypatch.setattr(pusher_audio_projection.conversations_db, 'get_conversation_raw_snapshot', lambda *a, **kw: {})
     monkeypatch.setenv('AUDIO_DURABLE_OUTBOX_ENABLED', 'false')
     """Drive the pusher's private-cloud worker where update_conversation hits
     the read-then-delete race (False) on the first flush."""
@@ -330,9 +333,11 @@ def raced_pusher_session(monkeypatch):
 
         monkeypatch.setattr(pusher, 'upload_audio_chunks_batch', upload)
         monkeypatch.setattr(
-            pusher.conversations_db, 'create_audio_files_from_chunks', lambda uid, conversation_id: [_AudioFile()]
+            pusher_audio_projection.conversations_db,
+            'create_audio_files_from_chunks',
+            lambda uid, conversation_id: [_AudioFile()],
         )
-        monkeypatch.setattr(pusher.conversations_db, 'update_conversation', update_conversation)
+        monkeypatch.setattr(pusher_audio_projection.conversations_db, 'update_conversation', update_conversation)
         monkeypatch.setattr(pusher, 'record_fallback', lambda **kwargs: fallbacks.append(kwargs))
         return SequencedWebSocket(first_flush_handled)
 
@@ -393,7 +398,7 @@ async def test_pusher_flush_still_errors_on_a_real_storage_failure(raced_pusher_
         raise RuntimeError('storage exploded')
 
     mp = pytest.MonkeyPatch()
-    mp.setattr(pusher_mod.conversations_db, 'create_audio_files_from_chunks', flaky_create)
+    mp.setattr(pusher_audio_projection.conversations_db, 'create_audio_files_from_chunks', flaky_create)
     try:
         with caplog.at_level(logging.ERROR, logger='routers.pusher'):
             await pusher_mod._websocket_util_trigger(websocket, UID, SAMPLE_RATE)

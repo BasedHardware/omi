@@ -12,6 +12,8 @@ from database.firestore_index_registry import CANONICAL_CONSOLIDATION_QUERY
 from database.memory_collections import MemoryCollections
 from database.read_boundary import parse_snapshot_strict
 from database.firestore_transaction_retry import run_with_transaction_contention_retry
+from database.required_intake_fence import source_scope
+from database import required_intake_cursors
 from models.memory_admission import valid_required_processing_receipt
 from typing import Any, Dict, List, Literal, Optional
 from pydantic import BaseModel, Field, model_validator
@@ -23,6 +25,9 @@ from models.memory_apply import (
     ApplyStatus,
     MemoryControlState,
     WriterMode,
+    MemoryWriterClass,
+    WriterAdmissionError,
+    require_writer_admitted,
     build_patch_mutation_identity,
     memory_content_hash,
 )
@@ -38,8 +43,9 @@ from utils.memory.canonical_required_processing import (
     ProcessedRequiredMemory,
     commit_required_processing,
     is_pending_required_processing,
-    maintenance_captured_after,
+    list_receipted_required_processing_items,
 )
+from utils.memory.required_source_admission import source_revisions
 
 CONSOLIDATION_BY = "canonical_batched_consolidation"
 
@@ -430,7 +436,7 @@ class RequiredIntakeCompletion:
     failed_memory_ids: list[str] = field(default_factory=list)
 
 
-def _required_intake_page(uid, *, db_client, cursor=None, captured_after=None):
+def _required_intake_page(uid, *, db_client, cursor=None):
     """Bounded processed-intake query with stable capture/id pagination."""
     cursor = cursor or {}
     query = (
@@ -447,10 +453,6 @@ def _required_intake_page(uid, *, db_client, cursor=None, captured_after=None):
         .order_by('captured_at')
         .order_by('memory_id')
     )
-    if captured_after is not None:
-        # The captured_at range rides the same composite index: the equality
-        # prefix plus one range on the first ordered field stays served.
-        query = query.where(filter=FieldFilter('captured_at', '>=', captured_after))
     active_query = query
     if cursor.get('captured_at') is not None:
         if not isinstance(cursor['captured_at'], datetime) or not isinstance(cursor.get('memory_id'), str):
@@ -460,6 +462,93 @@ def _required_intake_page(uid, *, db_client, cursor=None, captured_after=None):
     if not snapshots and cursor:
         snapshots = list(query.limit(100).stream())
     return snapshots
+
+
+def complete_required_memory_item(uid, item, *, db_client, now, run_id):
+    """The existing required L2 route, addressed without scanning observations."""
+    audit = item.promotion or {}
+    control = _read_control_state(uid, db_client=db_client)
+    try:
+        require_writer_admitted(
+            control,
+            (
+                MemoryWriterClass.ledger
+                if item.ledger_schema_version == 'knowledge_ledger.v1'
+                else MemoryWriterClass.compatibility
+            ),
+        )
+    except WriterAdmissionError:
+        return False
+    if (
+        item.uid != uid
+        or item.account_generation != control.account_generation
+        or item.tier != MemoryLayer.short_term
+        or item.status != MemoryItemStatus.active
+        or item.processing_state != ProcessingState.processed
+        or item.source_state != SourceState.active
+        or not audit.get('required')
+        or audit.get('processing_status') != 'processed'
+        or audit.get('user_review') is False
+        or audit.get('is_locked')
+        or audit.get('is_dismissed')
+        or not valid_required_processing_receipt(
+            content=item.content or '', item_revision=item.item_revision, promotion=audit
+        )
+    ):
+        return False
+    revisions = source_revisions(uid, item, db_client=db_client)
+    if revisions is None:
+        return False
+    decision = ConsolidationAgentDecision(
+        source_memory_id=item.memory_id,
+        route='promote',
+        memory_text=item.content,
+        evidence_ids=[e.evidence_id for e in item.evidence],
+        subject_entity_id=item.subject_entity_id,
+        predicate=item.predicate,
+        arguments=item.arguments,
+        basis_for_memory='explicit',
+        confidence='high',
+        rationale='Complete receipted durable-required intake',
+    )
+    with source_scope(uid, revisions, completion_id=item.memory_id):
+        apply_consolidation_decision(
+            uid,
+            decision=decision,
+            pending_by_id={item.memory_id: item},
+            control=control,
+            run_id=run_id,
+            now=now,
+            db_client=db_client,
+        )
+    return True
+
+
+def complete_receipted_required_intake(uid, *, db_client, now, run_id, limit=5):
+    """Dream owns completion after inline success and crash recovery between phases."""
+    report = RequiredIntakeCompletion(uid=uid)
+    if limit <= 0:
+        return report
+    before, cursor, generation = required_intake_cursors.load(uid, 'completion', db_client=db_client)
+    items = list_receipted_required_processing_items(uid, db_client=db_client, cursor=cursor)
+    if not items and cursor:
+        items = list_receipted_required_processing_items(uid, db_client=db_client)
+    visited = None
+    for item in items:
+        if len(report.promoted_memory_ids) + len(report.failed_memory_ids) >= min(limit, 25):
+            break
+        visited = {'captured_at': item.captured_at, 'memory_id': item.memory_id}
+        try:
+            if complete_required_memory_item(uid, item, db_client=db_client, now=now, run_id=run_id):
+                report.promoted_memory_ids.append(item.memory_id)
+        except Exception as error:
+            logging.getLogger(__name__).warning(
+                'required_intake_completion_deferred error_type=%s', type(error).__name__
+            )
+            report.failed_memory_ids.append(item.memory_id)
+    if visited is not None or cursor:
+        required_intake_cursors.finish(uid, 'completion', before, visited, generation, db_client=db_client)
+    return report
 
 
 def complete_required_intake(uid, *, db_client, now, run_id, limit=25, job_budget_guard=None):
@@ -493,29 +582,9 @@ def complete_required_intake(uid, *, db_client, now, run_id, limit=25, job_budge
             content=item.content or '', item_revision=item.item_revision, promotion=audit
         ):
             continue
-        decision = ConsolidationAgentDecision(
-            source_memory_id=item.memory_id,
-            route='promote',
-            memory_text=item.content,
-            evidence_ids=[e.evidence_id for e in item.evidence],
-            subject_entity_id=item.subject_entity_id,
-            predicate=item.predicate,
-            arguments=item.arguments,
-            basis_for_memory='explicit',
-            confidence='high',
-            rationale='Complete receipted durable-required intake',
-        )
         try:
-            apply_consolidation_decision(
-                uid,
-                decision=decision,
-                pending_by_id={item.memory_id: item},
-                control=_read_control_state(uid, db_client=db_client),
-                run_id=run_id,
-                now=now,
-                db_client=db_client,
-            )
-            report.promoted_memory_ids.append(item.memory_id)
+            if complete_required_memory_item(uid, item, db_client=db_client, now=now, run_id=run_id):
+                report.promoted_memory_ids.append(item.memory_id)
         except ConsolidationApplySkipped:
             report.failed_memory_ids.append(item.memory_id)
     if visited is not None:
@@ -769,12 +838,7 @@ def _pending_observation_ids(uid, *, db_client):
     """Rotate over the existing registered query, including rows past TTL."""
     ref = db_client.document(f'{MemoryCollections(uid=uid).memory_runs}/observation_intake_cursor')
     cursor = ref.get().to_dict() or {}
-    # The forward-only maintenance window applies to observations too: bound
-    # the page query itself so pre-window rows cannot consume the 100-row scan
-    # budget and delay fresh observations for heavy accounts. Pre-window rows
-    # stay untouched until a separate ruling; the cursor still advances.
-    window_start = maintenance_captured_after()
-    rows = _required_intake_page(uid, db_client=db_client, cursor=cursor, captured_after=window_start)
+    rows = _required_intake_page(uid, db_client=db_client, cursor=cursor)
     items = [parse_snapshot_strict(MemoryItem, row) for row in rows]
     ids = []
     for item in items:

@@ -7,8 +7,9 @@ the model and the output contract now live here, behind ``get_llm('conv_structur
 
 from typing import Any, Optional, cast, Sequence, Mapping
 from config.llm_spend import topic_deterministic_short_enabled
+from config.episodes import episode_output_language_pinned
 from config.refactor_modes import serving_for
-from utils.llm.output_language import resolve_output_language
+from utils.llm.output_language import language_preference, normalize_language
 from utils.llm.notes_language_inputs import in_profile_segments
 from utils.llm.notes_short_clip import NOTES_MIN_WORDS
 from utils.conversations.deterministic_minimum import first_sentence, truncate_on_word_boundary
@@ -68,11 +69,19 @@ def generate_conversation_topic(
     """
     if serving_for('NOTES_PACKET_V2_MODE', uid) and segments is not None:
         transcript = ' '.join(str(segment.get('text') or '') for segment in in_profile_segments(segments))
+    language_pin_enabled = episode_output_language_pinned()
+    capture_language = normalize_language(conversation_language) if language_pin_enabled else ''
+    preference = language_preference(uid) if language_pin_enabled else ''
+    output_language = (preference or capture_language or 'en') if language_pin_enabled else ''
     text = (transcript or "").strip()
     if not text:
         return ConversationTopic(emoji="", title="")
-    if (serving_for('NOTES_PACKET_V2_MODE', uid) or topic_deterministic_short_enabled()) and (
-        transcript_word_count(text) < NOTES_MIN_WORDS
+    if (
+        (serving_for('NOTES_PACKET_V2_MODE', uid) or topic_deterministic_short_enabled())
+        and transcript_word_count(text) < NOTES_MIN_WORDS
+        and (
+            not language_pin_enabled or capture_language == output_language or (not capture_language and not preference)
+        )
     ):
         # An under-a-dozen-word transcript cannot earn its emoji-plus-title model
         # call: the deterministic first sentence is the same answer the notes
@@ -88,8 +97,8 @@ def generate_conversation_topic(
             transcript=text,
             format_instructions=parser.get_format_instructions(),
         )
-        if serving_for('NOTES_PACKET_V2_MODE', uid):
-            prompt = f'Write the title in {resolve_output_language(uid, conversation_language)}.\n\n' + prompt
+        if language_pin_enabled:
+            prompt = f'Write all output in {output_language}. Keep names and quoted words verbatim.\n\n' + prompt
         with track_usage(uid, Features.CONVERSATION_STRUCTURE):
             response = get_llm('conv_structure').invoke(prompt)
         try:

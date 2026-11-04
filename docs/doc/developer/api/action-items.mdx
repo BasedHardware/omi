@@ -1,5 +1,5 @@
 ---
-title: "Action Items"
+title: "Action items"
 icon: "list-check"
 description: "Create and retrieve action items (tasks/to-dos) via the Developer API"
 ---
@@ -23,8 +23,6 @@ description: "Create and retrieve action items (tasks/to-dos) via the Developer 
     Create up to 50
   </Card>
 </CardGroup>
-
----
 
 ## Get Action Items
 
@@ -116,8 +114,6 @@ description: "Create and retrieve action items (tasks/to-dos) via the Developer 
   </Accordion>
 </AccordionGroup>
 
----
-
 ## Create Action Item
 
 <Card title="POST /v1/dev/user/action-items" icon="upload" color="#3b82f6" horizontal>
@@ -204,10 +200,8 @@ description: "Create and retrieve action items (tasks/to-dos) via the Developer 
 </Accordion>
 
 <Tip>
-Push notifications are automatically sent to the Omi app if a `due_at` date is provided.
+Omi sends a push notification to the app if you set a `due_at` date.
 </Tip>
-
----
 
 ## Create Action Items (Batch)
 
@@ -295,8 +289,6 @@ Push notifications are automatically sent to the Omi app if a `due_at` date is p
   }
   ```
 </Accordion>
-
----
 
 ## Update Action Item
 
@@ -388,8 +380,6 @@ Push notifications are automatically sent to the Omi app if a `due_at` date is p
 When updating `due_at`, a push notification is sent to the Omi app to remind the user.
 </Tip>
 
----
-
 ## Delete Action Item
 
 <Card title="DELETE /v1/dev/user/action-items/{action_item_id}" icon="trash" color="#ef4444" horizontal>
@@ -452,8 +442,6 @@ When updating `due_at`, a push notification is sent to the Omi app to remind the
 <Warning>
 This action is permanent. Deleted action items cannot be recovered.
 </Warning>
-
----
 
 ## Use Case: Import Tasks
 
@@ -529,8 +517,6 @@ Import tasks from an external task management system into Omi:
     ```
   </Tab>
 </Tabs>
-
----
 
 ## Use Case: Get Pending Tasks
 

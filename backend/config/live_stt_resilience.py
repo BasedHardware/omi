@@ -24,6 +24,8 @@ SAME_TARGET_RETRY_ENV = 'LISTEN_STT_SAME_TARGET_RETRY_ENABLED'
 # 5. Live TDT HTTP failures quarantine the contacted GPU replica and get one
 #    different-replica retry inside the original POST/deadline budget.
 WINDOW_REPLICA_RECOVERY_ENV = 'PARAKEET_WINDOW_REPLICA_RECOVERY_ENABLED'
+# Recovery rejection needs a meaningful sample and the normal burst detector.
+RECOVERY_SAMPLE_GUARD_ENV = 'STT_ROUTING_RECOVERY_SAMPLE_GUARD_ENABLED'
 
 
 def _default_on(name: str) -> bool:
@@ -48,3 +50,7 @@ def same_target_retry_enabled() -> bool:
 
 def window_replica_recovery_enabled() -> bool:
     return _default_on(WINDOW_REPLICA_RECOVERY_ENV)
+
+
+def recovery_sample_guard_enabled() -> bool:
+    return _default_on(RECOVERY_SAMPLE_GUARD_ENV)

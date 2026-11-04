@@ -104,7 +104,7 @@ class TestGetConversationsByIds:
             result = sse.execute_tool(UID, "get_conversations_by_ids", {"conversation_ids": ["b", "a", "b", "c", "a"]})
         assert fetch.call_count == 1
         assert fetch.call_args.args[1] == ["b", "a", "c"]
-        assert fetch.call_args.kwargs == {"include_transcript": True, "include_discarded": True}
+        assert fetch.call_args.kwargs == {"include_transcript": True, "include_discarded": False}
         assert result == {
             "conversations": [],
             "not_found": ["b", "a", "c"],
@@ -172,14 +172,67 @@ class TestGetConversationsByIds:
                 UID, "get_conversations_by_ids", {"conversation_ids": [f"c{i}" for i in range(6)]}
             )
         assert result["truncated"] is True
-        assert len(result["conversations"]) == 6
+        assert 0 < len(result["conversations"]) < 6
         # Budget-omitted ids are absent from both lists — never labeled not_found.
         returned = {item["id"] for item in result["conversations"]}
         assert result["not_found"] == []
         omitted = {f"c{i}" for i in range(6)} - returned
-        assert omitted == set()
+        assert omitted == set(result["omitted_ids"])
+        assert result["next_cursor"]
+        assert all(
+            len(item["conversation"]["transcript_segments"][0]["text"]) == 24_000 for item in result["conversations"]
+        )
+        assert all(item["truncated"] is True for item in result["conversations"])
         serialized = json.dumps(result, ensure_ascii=False, separators=(",", ":"), default=str)
         assert len(serialized) <= MCP_CONVERSATION_BATCH_RESPONSE_MAX_CHARS
+
+    def test_large_rosters_page_without_shrinking_transcripts(self):
+        rows = {}
+        for i in range(5):
+            row = _conversation(f'c{i}')
+            row['transcript_segments'] = [
+                {'id': f's{j}', 'speaker_id': j, 'text': 'Synthetic planning discussion. ' * 3} for j in range(105)
+            ]
+            rows[row['id']] = row
+        seen = []
+        cursor = None
+        with patch.object(
+            conversations_handler.conversations_db, 'get_mcp_conversations_by_id', side_effect=_batch_fetch(rows)
+        ):
+            for _ in range(5):
+                args = {'conversation_ids': list(rows), 'max_segments': 200, 'max_chars': 20000}
+                if cursor:
+                    args['cursor'] = cursor
+                result = sse.execute_tool(UID, 'get_conversations_by_ids', args)
+                assert tool_response_serialized_chars(result) <= MCP_CONVERSATION_BATCH_RESPONSE_MAX_CHARS
+                for item in result['conversations']:
+                    assert 'transcript_segments' not in item
+                    assert len(item['conversation']['transcript_segments']) == 105
+                    assert item['truncated'] is False
+                    seen.append(item['id'])
+                cursor = result.get('next_cursor')
+                if not cursor:
+                    break
+        assert seen == list(rows)
+        assert cursor is None
+
+    def test_single_oversize_detail_returns_actionable_error(self):
+        row = _conversation('large', text='漢' * 50000)
+        with patch.object(conversations_handler.conversations_db, 'get_mcp_conversations_by_id', return_value=[row]):
+            with pytest.raises(ToolExecutionError, match='include_participants=false'):
+                sse.execute_tool(UID, 'get_conversations_by_ids', {'conversation_ids': ['large'], 'max_chars': 100000})
+
+    def test_optional_participants_keep_segment_identity(self):
+        with patch.object(
+            conversations_handler.conversations_db, 'get_mcp_conversations_by_id', return_value=[_conversation('c')]
+        ):
+            result = sse.execute_tool(
+                UID, 'get_conversations_by_ids', {'conversation_ids': ['c'], 'include_participants': False}
+            )
+        detail = result['conversations'][0]['conversation']
+        assert detail['participants_included'] is False
+        assert 'participants' not in detail
+        assert detail['transcript_segments'][0]['speaker_key']
 
     @pytest.mark.parametrize(
         "ids",
@@ -893,7 +946,7 @@ class TestConversationKeysetPage:
             ),
             _FakeDoc("p1", {"created_at": t0 - timedelta(minutes=1), "deleted": False}),
         ]
-        marked = lambda data, uid: {**data, "decrypted_for": uid}
+        marked = lambda data, uid, *, firestore_client=None: {**data, "decrypted_for": uid}
         query = _DescKeysetQuery(docs)
         with (
             self._stub_client(query),
@@ -1123,7 +1176,10 @@ class TestBatchResponseBudgetOverHttp:
         assert payload["truncated"] is True
         returned = {item["id"] for item in payload["conversations"]}
         omitted = set(rows) - returned
-        assert omitted == set()
+        assert omitted == set(payload["omitted_ids"])
+        assert payload["next_cursor"]
+        assert all(item["conversation"]["transcript_segments"][0]["text"] == text for item in payload["conversations"])
+        assert all(item["truncated"] is False for item in payload["conversations"])
         assert not (omitted & set(payload["not_found"]))
 
 

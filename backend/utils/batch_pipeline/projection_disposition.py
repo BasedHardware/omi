@@ -19,14 +19,21 @@ def mirror_assignment(store, session):
         logger.warning('event=jobstore_shadow op=refresh outcome=hook_error site=projection_assignment')
 
 
-def persist_disposition(session, *, quarantined=False):
+def persist_disposition(session, *, quarantined=False, privacy_deleted=False):
     # Recheck binding, ledger ownership, predecessor and privacy after planning.
     # A competing assignment receipt wins; never replace it with a no-op.
     try:
-        receipt = session.persist_empty(quarantined=True) if quarantined else session.persist_empty(superseded=True)
+        if privacy_deleted:
+            receipt = session.persist_empty(superseded=True, privacy_deleted=True)
+        else:
+            receipt = session.persist_empty(quarantined=True) if quarantined else session.persist_empty(superseded=True)
     except ProjectionReplay as replay:
         return replay.receipt
-    if quarantined:
+    if privacy_deleted:
+        logger.info(
+            'event=batch_projection action=assignment outcome=privacy_terminal fence_reason=conversation_deleted'
+        )
+    elif quarantined:
         logger.warning('event=batch_projection action=assignment outcome=ambiguous_generation_quarantined')
         record_fallback(component='sync_dispatch', from_mode='none', to_mode='none', reason='other', outcome='degraded')
     else:

@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nested/nested.dart';
 import 'package:provider/provider.dart';
+import 'package:omi/services/wals/wal_derived_sync_views.dart';
 import 'package:omi/app_globals.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/env/env.dart';
@@ -397,10 +398,14 @@ class PerfWorld {
 }
 
 /// Advance real fixture transport and then the fake-zone continuations. A single
-/// real delay cannot finish multi-step headers/body/SSE work in a fake clock.
+/// real delay cannot finish multi-step headers/body/SSE work in a fake clock,
+/// so the number of turns is the load-bearing part; loopback responses land in
+/// ~1-5 ms, so each turn only needs a short real wait. This runs inside every
+/// scroll fling iteration of the measured scenarios, so the per-turn delay was
+/// a large share of the gate's wall time at 20 ms x 5.
 Future<void> drainFixtureIo(WidgetTester tester, {int cycles = 5}) async {
   for (var i = 0; i < cycles; i++) {
-    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 8)));
     await tester.pump();
   }
 }
@@ -460,7 +465,7 @@ List<SingleChildWidget> providersFor(String name, PerfWorld world) => switch (na
 
 /// A sync in progress: a device catch-up with WALs still missing, read by the device page
 /// through its production selectors.
-class _PerfSyncProvider extends ChangeNotifier implements SyncProvider {
+class _PerfSyncProvider extends ChangeNotifier with WalDerivedSyncViews implements SyncProvider {
   @override
   SyncState get syncState => const SyncState(status: SyncStatus.syncing);
   @override
