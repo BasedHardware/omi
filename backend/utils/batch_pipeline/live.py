@@ -14,6 +14,7 @@ import json
 import logging
 import os
 import random
+import re
 import time
 
 from utils.conversations import phase_shadow
@@ -22,7 +23,7 @@ from config.policy import resolve_batch_policy
 from config.audio_archive import derived_audio_bucket
 from config.record_audio import require_record_audio_barrier, record_identity
 from config.record_partial import UNIT_SECONDS, UNIT_REFERENCES, INVENTORY_POLL_SECONDS
-from config.record_drain import record_drain_batch, record_drain_concurrency
+from config.record_drain import record_drain_batch, record_drain_concurrency, record_drain_lease_seconds
 from database.batch_pipeline_policy import load_job_policy
 from database.batch_ramp import ramp_admission_policy
 from config.batch_pipeline import Priority, RecordOwnerContention, record_capture_eligible
@@ -48,6 +49,16 @@ from config.server_batch import owned as server_batch_owned, has_audio as server
 logger = logging.getLogger(__name__)
 OWNER = 'batch_live_v1'
 UPLOAD_GRACE_SECONDS = 0
+# Admission refusals are literal lowercase phrases; anything else (which could
+# carry a value) is reported only as `other`.
+_STATIC_REASON = re.compile(r'[a-z][a-z /_-]{0,79}')
+
+
+def _retry_reason(error: BaseException) -> str:
+    if not isinstance(error, ValueError):
+        return '-'
+    text = str(error)
+    return text.replace(' ', '_') if _STATIC_REASON.fullmatch(text) else 'other'
 
 
 def reserve_recording(uid: str, conversation: dict) -> str | None:
@@ -402,6 +413,7 @@ async def drain_recordings(store, *, provider_outbox_factory=None) -> bool:
     started = time.monotonic()
     batch_size = record_drain_batch()
     concurrency = record_drain_concurrency()
+    lease_seconds = record_drain_lease_seconds()
     segments, partial_count = [], 0
     privacy_blocked = False
     # Every admission rewrites the owner's scheduler row, so two local workers
@@ -418,11 +430,29 @@ async def drain_recordings(store, *, provider_outbox_factory=None) -> bool:
             return
         busy_owners.add(owner)
         try:
-            await admit_and_defer(segment, pending)
+            lease = await run_blocking(db_executor, store.run, lambda tx: claim(tx, segment))
+            if lease is None:
+                return
+            await admit_and_defer(segment, pending, lease)
         finally:
             busy_owners.discard(owner)
 
-    async def admit_and_defer(segment, pending):
+    def claim(tx, segment):
+        # Every replica selects the same oldest page. Without a claim, each one
+        # repeated the same listing, download and staging for a row until the
+        # first finished, multiplying admission work by the replica count. A
+        # bounded lease moves the row out of other replicas' due pages; a
+        # crashed worker's row becomes due again when the lease ends.
+        latest = tx.get('jobs', segment)
+        now = time.time()
+        if latest.get('state') != 'record_pending' or latest.get('available_at', 0) > now:
+            return None
+        lease = now + lease_seconds
+        latest['available_at'] = lease
+        tx.put('jobs', segment, latest)
+        return lease
+
+    async def admit_and_defer(segment, pending, lease):
         nonlocal partial_count, privacy_blocked
         partial_count += bool(pending.get('partial_coordinator'))
         failed = False
@@ -442,7 +472,11 @@ async def drain_recordings(store, *, provider_outbox_factory=None) -> bool:
             failed = True
             if pending.get('partial_coordinator'):
                 record_partial_failure(error, run=pending.get('partial_run'))
-            logger.warning('event=batch_live_admission outcome=retry exception_type=%s', type(error).__name__)
+            logger.warning(
+                'event=batch_live_admission outcome=retry exception_type=%s reason=%s',
+                type(error).__name__,
+                _retry_reason(error),
+            )
 
         def defer(tx):
             # Admission can return without moving the obligation (for example
@@ -454,7 +488,10 @@ async def drain_recordings(store, *, provider_outbox_factory=None) -> bool:
                 delay = 60
                 if not failed and (latest.get('partial_run') or {}).get('complete'):
                     delay = INVENTORY_POLL_SECONDS
-                latest['available_at'] = max(latest.get('available_at', 0), time.time() + delay)
+                # Our own lease ends now; a later deferral written during
+                # admission (or another replica's newer lease) is kept.
+                current = latest.get('available_at', 0)
+                latest['available_at'] = max(0 if current == lease else current, time.time() + delay)
                 tx.put('jobs', segment, latest)
 
         await run_blocking(db_executor, store.run, defer)
@@ -466,13 +503,13 @@ async def drain_recordings(store, *, provider_outbox_factory=None) -> bool:
 
     try:
         segments = await run_blocking(db_executor, store.due, 'record_pending', time.time(), batch_size)
-        # Every replica selects the same oldest page; a per-replica order keeps
-        # replicas from admitting the same rows at once and exhausting contention.
+        # Every replica selects the same oldest page; a per-replica order plus
+        # the per-row lease keeps replicas from admitting the same rows at once.
         random.shuffle(segments)
         remaining = iter(segments)
         # Join every worker even on failure; a retry must not overlap unfinished
         # work from this pass. Across replicas the existing intake/partial CAS
-        # still decides admission; selection itself never claims or expires rows.
+        # still decides admission; the lease only hides a row, never expires it.
         results = await asyncio.gather(
             *(worker() for _ in range(min(concurrency, len(segments)))), return_exceptions=True
         )
