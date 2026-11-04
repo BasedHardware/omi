@@ -1,14 +1,20 @@
 # ruff: noqa: F401
+from __future__ import annotations
+
 import hashlib
 import logging
 import os
 from functools import lru_cache
-from typing import Any, Callable, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
-import anthropic
 import httpx
 from cachetools import TTLCache
-from langchain_anthropic import ChatAnthropic
+
+if TYPE_CHECKING:
+    # Runtime imports of the Anthropic bindings are deferred through the
+    # materialization helpers below; they exist statically for type checking.
+    import anthropic
+    from langchain_anthropic import ChatAnthropic
 
 try:
     from langchain_core.callbacks import BaseCallbackHandler
@@ -58,13 +64,59 @@ from utils.llm.model_config import (
     _get_model_config,
 )  # noqa: F401 - legacy clients-module QoS re-exports
 from utils.llm.providers import (
-    ChatGoogleGenerativeAI,
     GEMINI_OPENAI_BASE_URL,
     get_default_client,
     get_or_create_gemini_llm as _get_or_create_gemini_llm,
     get_or_create_openai_compatible_llm,
     _llm_cache,
 )  # noqa: F401 - legacy clients-module provider re-exports
+
+
+# The Anthropic bindings and the providers-module Gemini re-export are resolved
+# on first use: importing them eagerly drags the Anthropic SDK and the google
+# gRPC stack into every process that imports this module, and the backend unit
+# suite pays that once per isolated test file. Only constructing those clients
+# needs the classes. Resolution goes through these helpers (and module
+# ``__getattr__`` for external attribute access), so ``mock.patch`` of
+# ``utils.llm.clients.ChatAnthropic`` still sees the patched object.
+def _anthropic_module():
+    module = globals().get('anthropic')
+    if module is None:
+        import anthropic as _anthropic_sdk
+
+        module = globals()['anthropic'] = _anthropic_sdk
+    return module
+
+
+def _chat_anthropic_cls():
+    cls = globals().get('ChatAnthropic')
+    if cls is None:
+        from langchain_anthropic import ChatAnthropic as _chat_anthropic
+
+        cls = globals()['ChatAnthropic'] = _chat_anthropic
+    return cls
+
+
+def _chat_google_generative_ai_cls():
+    cls = globals().get('ChatGoogleGenerativeAI')
+    if cls is None:
+        from utils.llm.providers import ChatGoogleGenerativeAI as _chat_google_generative_ai
+
+        cls = globals()['ChatGoogleGenerativeAI'] = _chat_google_generative_ai
+    return cls
+
+
+def __getattr__(name: str) -> object:
+    if name == 'anthropic':
+        return _anthropic_module()
+    if name == 'ChatAnthropic':
+        return _chat_anthropic_cls()
+    if name == 'ChatGoogleGenerativeAI':
+        return _chat_google_generative_ai_cls()
+    if name == 'get_gateway_anthropic_client':
+        return _resolve_gateway_anthropic_client()
+    raise AttributeError(f'module {__name__!r} has no attribute {name!r}')
+
 
 try:
     from utils.llm.providers import get_or_create_omi_gateway_llm
@@ -133,12 +185,20 @@ except ImportError:
         raise RuntimeError('BYOK gateway LangChain client is unavailable')
 
 
-try:
-    from utils.llm.gateway_anthropic import get_gateway_anthropic_client
-except ImportError:
+# The gateway Anthropic client is resolved on first use through the module
+# ``__getattr__`` hook: importing it eagerly pulls the Anthropic SDK into
+# every process that imports this module, once per isolated test file.
+def _fallback_get_gateway_anthropic_client(*, byok_api_key=None):
+    raise RuntimeError('Omi gateway Anthropic client is unavailable')
 
-    def get_gateway_anthropic_client(*, byok_api_key=None):
-        raise RuntimeError('Omi gateway Anthropic client is unavailable')
+
+def _resolve_gateway_anthropic_client():
+    try:
+        from utils.llm.gateway_anthropic import get_gateway_anthropic_client as _gateway_anthropic_client
+    except ImportError:
+        _gateway_anthropic_client = _fallback_get_gateway_anthropic_client
+    globals()['get_gateway_anthropic_client'] = _gateway_anthropic_client
+    return _gateway_anthropic_client
 
 
 from utils.llm.usage_tracker import get_usage_callback
@@ -214,7 +274,7 @@ class _AnthropicClientProxy:
     def _default_client(self) -> anthropic.AsyncAnthropic:
         default = self._default
         if default is None:
-            default = anthropic.AsyncAnthropic(timeout=120.0, max_retries=1)
+            default = _anthropic_module().AsyncAnthropic(timeout=120.0, max_retries=1)
             object.__setattr__(self, '_default', default)
         return default
 
@@ -226,7 +286,7 @@ class _AnthropicClientProxy:
         # Anthropic Messages client onto omi:auto:chat-agent (surface mismatch
         # with the Luna/OpenAI lane).
         if should_route_chat_agent_through_gateway():
-            return get_gateway_anthropic_client(byok_api_key=byok)
+            return _resolve_gateway_anthropic_client()(byok_api_key=byok)
         if byok:
             return _cached_anthropic(byok)
         return self._default_client()
@@ -558,7 +618,7 @@ def _cached_anthropic(api_key: str) -> anthropic.AsyncAnthropic:
     cache_key = _hash_key(api_key)
     inst = _anthropic_cache.get(cache_key)
     if inst is None:
-        inst = anthropic.AsyncAnthropic(api_key=api_key, timeout=120.0, max_retries=1)
+        inst = _anthropic_module().AsyncAnthropic(api_key=api_key, timeout=120.0, max_retries=1)
         _anthropic_cache[cache_key] = inst
     return inst
 
@@ -567,7 +627,7 @@ def _cached_anthropic_chat(model: str, api_key: str, ctor_kwargs: Dict[str, Any]
     cache_key = f"{model}:{_hash_key(api_key)}:{hash(frozenset((k, repr(v)) for k, v in ctor_kwargs.items()))}"
     inst = _anthropic_chat_cache.get(cache_key)
     if inst is None:
-        inst = ChatAnthropic(model=model, api_key=api_key, **ctor_kwargs)
+        inst = _chat_anthropic_cls()(model=model, api_key=api_key, **ctor_kwargs)
         _anthropic_chat_cache[cache_key] = inst
     return inst
 
