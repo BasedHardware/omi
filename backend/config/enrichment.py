@@ -26,6 +26,11 @@ def route() -> EnrichmentRoute:
     return 'enrichment_queue' if value == 'enrichment_queue' else 'sync_handler'
 
 
+def max_age_hours() -> str:
+    # Host deployment setting for the historical-enrichment age gate; parsed by utils.enrichment.age_gate.
+    return os.getenv('ENRICHMENT_MAX_AGE_HOURS', '72')
+
+
 def primary_queue() -> str:
     return os.getenv('ENRICHMENT_TASKS_QUEUE', '').strip()
 
