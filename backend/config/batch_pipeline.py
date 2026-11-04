@@ -174,6 +174,28 @@ def shared_live_enabled() -> bool:
     return resolve_stage_policy('', 'scheduler').shared_live
 
 
+def control_candidate_fanout(fanout: int | None = None) -> int:
+    """Bound hint reads; 64 restores the previous candidate query width."""
+    try:
+        value = int(os.getenv('BATCH_CONTROL_CANDIDATE_FANOUT', '16') if fanout is None else fanout)
+    except ValueError:
+        return 16
+    return min(64, max(1, value))
+
+
+def admission_parallel_calls_enabled() -> bool:
+    return os.getenv('BATCH_ADMISSION_PARALLEL_CALLS', 'true').strip().lower() != 'false'
+
+
+def idle_poll_max_seconds() -> float:
+    """Bound empty-lane backoff; 2 restores fixed polling."""
+    try:
+        value = float(os.getenv('BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS', '10'))
+    except ValueError:
+        return 10.0
+    return min(30.0, max(2.0, value)) if math.isfinite(value) else 10.0
+
+
 SCHEDULER_SHARDS = 64
 
 
@@ -406,6 +428,34 @@ def recovery_dispatch_interval_seconds() -> float:
     return value if 1 <= value <= RECOVERY_DISPATCH_INTERVAL_MAX else RECOVERY_DISPATCH_INTERVAL_DEFAULT
 
 
+SERVING_METRICS_MIN_REFRESH_DEFAULT = 30.0
+SERVING_METRICS_MIN_REFRESH_MAX = 60.0
+
+
+def serving_metrics_min_refresh_seconds() -> float:
+    """Ship-on: one queue-gauge refresh per serving instance per interval.
+
+    Every serving instance refreshed the same global gauges on each 20 s
+    supervisor tick and each scrape; the policy-hold walk in ``oldest`` made
+    that about 1.6M Firestore reads/h at 28 instances. The guard calls the
+    sample blind after 120 s, so the cap stays at 60 s. ``off`` or a value
+    <= 0 is the kill switch: refresh on every call. Malformed or out-of-range
+    values keep the default.
+    """
+    raw = os.getenv('BATCH_PIPELINE_SERVING_METRICS_MIN_REFRESH_SECONDS', '').strip().lower()
+    if not raw:
+        return SERVING_METRICS_MIN_REFRESH_DEFAULT
+    if raw == 'off':
+        return 0.0
+    try:
+        value = float(raw)
+    except ValueError:
+        return SERVING_METRICS_MIN_REFRESH_DEFAULT
+    if value <= 0:
+        return 0.0
+    return value if 1 <= value <= SERVING_METRICS_MIN_REFRESH_MAX else SERVING_METRICS_MIN_REFRESH_DEFAULT
+
+
 ALLOWANCE_HOLD_RETRY_DEFAULT_SECONDS = 1800
 ALLOWANCE_HOLD_RETRY_MAX_SECONDS = 86400
 
@@ -451,6 +501,13 @@ def recovered_merge_release_enabled() -> bool:
     from config.policy import kill_switch
 
     return kill_switch('BATCH_PIPELINE_RECOVERED_MERGE_RELEASE_ENABLED')
+
+
+def recovery_owner_only_enabled() -> bool:
+    """Kill switch: post-recovery requests drain their owner without global maintenance."""
+    from config.policy import kill_switch
+
+    return kill_switch('BATCH_PIPELINE_RECOVERY_OWNER_ONLY_ENABLED')
 
 
 def sweep_owner_chain_enabled() -> bool:

@@ -1119,7 +1119,7 @@ def test_ensure_after_partial_relabel_supersession_admits_new_job(world, target)
 def test_pipeline_schedules_learning_retries_outside_private_cloud_gate():
     """Reprocessed conversations must trigger durable teaching even without fresh audio."""
     source = (Path(__file__).resolve().parents[2] / 'utils' / 'sync' / 'pipeline.py').read_text(encoding='utf-8')
-    start = source.index('async def _run_full_pipeline_background_async')
+    start = source.index('async def run_full_pipeline_background_async')
     end = source.find('\nasync def ', start + 1)
     body = source[start : end if end != -1 else len(source)]
     idx = body.index('schedule_person_voice_learning_retries')

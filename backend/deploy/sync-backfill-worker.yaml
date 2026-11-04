@@ -1,0 +1,38 @@
+# Desired pilot resources, not an installed-state receipt. infracost applies
+# only after the lead approves INV-AUTH/DATA bindings and a staging window.
+service: sync-backfill-worker
+image: backend-sync-backfill-worker
+namespace: prod-omi-backend
+admissionPercent: 0
+replicas: 1
+nodePool:
+  name: sync-backfill-pool
+  initialNodeCount: 1
+  locations: [us-central1-a]
+  config:
+    machineType: n2-standard-4
+    spot: false
+    preemptible: false
+    diskType: pd-balanced
+    diskSizeGb: 50
+    workloadMetadataConfig: {mode: GKE_METADATA}
+    taints: [{key: sync-backfill, value: "true", effect: NO_SCHEDULE}]
+  autoscaling:
+    enabled: true
+    totalMinNodeCount: 1
+    totalMaxNodeCount: 2
+  management: {autoRepair: true, autoUpgrade: true}
+iam:
+  # Actual projects, existing node SA and bucket inventory are operator inputs;
+  # there are no guessed principals or broad storage/admin grants here.
+  createServiceAccount: sync-backfill-worker
+  workloadIdentity:
+    role: roles/iam.workloadIdentityUser
+    kubernetesPrincipal: prod-omi-backend/sync-backfill-worker
+  serviceBindings:
+    - {service: backend-sync, role: roles/run.invoker}
+  dataBindings:
+    - {resource: approved-customer-firestore-project, role: roles/datastore.user}
+    - {resource: approved-sync-staging-and-audio-buckets, role: roles/storage.objectUser}
+  nodeServiceAccount: operator-supplied-existing-node-service-account
+  credentials: Workload Identity only; no service-account key export

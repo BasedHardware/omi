@@ -638,6 +638,23 @@ def test_index_flush_is_single_flight_and_keeps_late_deferrals(monkeypatch):
     assert calls == [('u', ['c1', 'c2'], ['c1'])]
 
 
+def test_scoped_index_flush_leaves_other_owners_for_periodic_work(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        conversations_db, 'index_sync_assignment', lambda uid, ids, donors: calls.append((uid, ids, donors))
+    )
+    index = ProjectionIndex()
+    index.defer('recovered-owner', 'recovered-conversation', [])
+    index.defer('unrelated-owner', 'unrelated-conversation', [])
+
+    assert index.flush('recovered-owner') == 1
+    assert calls == [('recovered-owner', ['recovered-conversation'], [])]
+    assert index.has_owed('unrelated-owner')
+    assert index.flush() == 1
+    assert calls[-1] == ('unrelated-owner', ['unrelated-conversation'], [])
+    assert not index.owed
+
+
 def test_index_sync_assignment_deletes_donors_and_converges_the_rest(monkeypatch):
     ops = []
     monkeypatch.setattr(conversations_db, '_delete_conversation_search_index', lambda uid, cid: ops.append(('d', cid)))

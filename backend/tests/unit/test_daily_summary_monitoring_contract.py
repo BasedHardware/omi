@@ -110,11 +110,13 @@ def test_recap_log_metrics_extract_bounded_labels(tmp_path):
 def test_feature_health_row_carries_the_daily_recap_outcome():
     doc = json.loads(DASHBOARD.read_text())
     top = doc['panels']
-    feature_row = top.index(next(p for p in top if p['title'] == 'Feature health — did the user get an outcome?'))
+    feature_row = top.index(
+        next(p for p in top if p['title'] == 'Feature health — user result where we can measure it')
+    )
     next_row = next(i for i, p in enumerate(top) if i > feature_row and p['type'] == 'row')
     stats = top[feature_row + 1 : next_row]
     recap = [p for p in stats if p['title'].startswith(('Daily recap', 'Recap'))]
-    assert [p['title'] for p in recap] == ['Daily recaps (3h)']
+    assert [p['title'] for p in recap] == ['Recap generation (last 3h)']
     recap_row = next(p for p in top if p['title'] == 'Daily recaps — generation and delivery job health')
     detail = recap_row['panels'][:3]
     assert [p['title'] for p in detail] == [

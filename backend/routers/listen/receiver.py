@@ -20,13 +20,22 @@ from collections import OrderedDict, deque
 from typing import Any, Dict, List, Optional, Tuple, cast
 
 from config import audio_timeline as audio_flags
+from routers.listen.preview_custody import claim_preview_batch_custody, archive_preview_frame
 from config.server_batch import suppress_live as server_batch_suppresses_live
-from config.cloud_live_stt import OFF, STREAM, resolve_cloud_live_stt_mode, suppresses_provider_stream
+from config.cloud_live_stt import resolve_cloud_live_stt_mode, suppresses_provider_stream
 from config.translation import resolve_ondemand_config
 from routers.listen.contracts import ConversationCaptureOrigin
 from routers.listen.batch_preview import capture_batch_preview
-from routers.listen.local_preview import admit_local_preview, note_deferred_stream_closed
+from routers.listen.local_preview import (
+    admit_local_preview,
+    batch_only_live_path,
+    note_deferred_stream_closed,
+    record_cloud_live_saved_seconds,
+    rescind_local_preview,
+    restore_non_preview_path,
+)
 from routers.listen.demand_routing import attach_live_demand
+from routers.listen.visible_restore import attach_visible_restore
 from routers.listen.demand_switch import switch_live_demand
 from routers.listen.lane_meter import LiveLaneMeter
 from utils.observability.demand_cohort import host_cohort, telemetry_call
@@ -178,7 +187,6 @@ from utils.metrics import (
     OMI_AUDIO_TIMELINE_PROVIDER_SOCKETS_TOTAL,
     OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL,
     OMI_CLOUD_LIVE_STT_MODE_SESSIONS_TOTAL,
-    OMI_CLOUD_LIVE_STT_SAVED_SECONDS_TOTAL,
     OMI_LISTEN_DEFERRED_STREAM_OPENED_TOTAL,
     OMI_LISTEN_AUDIO_DECODE_FAILURES_TOTAL,
     audio_timeline_provider_label,
@@ -852,26 +860,7 @@ class ListenReceiver(ReplayFilterMixin):
         pending.note_failure(typed if isinstance(typed, str) else None, continuing=continuing or departing)
 
     def _record_cloud_live_saved_seconds(self, request: Any, decoded_audio_bytes: int) -> None:
-        """Provider stream seconds this session's policy mode would not have spent. Telemetry only."""
-
-        try:
-            mode = getattr(self, '_cloud_live_mode', None) or STREAM
-            if mode == STREAM:
-                return
-            sample_rate = max(1, int(getattr(request, 'sample_rate', 16000)))
-            if mode == OFF:
-                if not getattr(self, 'cloud_live_suppressed', False):
-                    return  # The deferred stream opened; this audio went to a provider.
-                OMI_CLOUD_LIVE_STT_SAVED_SECONDS_TOTAL.labels(mode=mode).inc(decoded_audio_bytes / (sample_rate * 2))
-                return
-            # when_watched: hidden seconds (background + foreground-not-visible)
-            # would leave the paid vendor lane for the Parakeet window leg.
-            totals = self.host.state.realtime_demand.totals()
-            OMI_CLOUD_LIVE_STT_SAVED_SECONDS_TOTAL.labels(mode=mode).inc(
-                totals.get('background', 0.0) + totals.get('foreground', 0.0)
-            )
-        except Exception as error:
-            logger.warning('Cloud live mode telemetry failed type=%s', type(error).__name__)
+        record_cloud_live_saved_seconds(self, request, decoded_audio_bytes)
 
     def _emit_realtime_demand(self, request: Any, decoded_audio_bytes: int) -> None:
         """Report who could have watched this session live. Telemetry only; never raises."""
@@ -1007,7 +996,7 @@ class ListenReceiver(ReplayFilterMixin):
         same_provider: bool = False,
         replay_start_sample: int = 0,
     ) -> Any:
-        if getattr(self.host, 'server_batch_only', False) is True:
+        if batch_only_live_path(self.host):
             return None  # Includes failover, reconnect and idle-reopen callers.
         if managed_chain_enabled(self.host):
             from utils.stt.live_session import LiveChainSession
@@ -1201,6 +1190,9 @@ class ListenReceiver(ReplayFilterMixin):
         raise RuntimeError(f'Unsupported serving STT provider {self.host.stt_service!r}')
 
     async def _drain_stt_sockets(self) -> None:
+        restore = getattr(self, 'visible_restore', None)
+        if restore is not None:
+            await restore.shutdown()
         self._resilient_closing = True
         if (recovery := getattr(self, 'recovery', None)) is not None:
             recovery.mark_client_leaving()
@@ -1312,10 +1304,16 @@ class ListenReceiver(ReplayFilterMixin):
             return await ListenReceiver._initialize_stt(self)
 
     async def _initialize_stt(self) -> bool:
+        if getattr(self.host, '_local_preview_engine_rescinded', False) is True and batch_only_live_path(self.host):
+            self.cloud_live_suppressed = True
+            attach_visible_restore(self)
+            return True
         self.host.server_batch_only = server_batch_suppresses_live(self.host)
         self.host.server_batch_initialized = True
         if self.host.server_batch_only:
+            admit_local_preview(self.host)
             self.cloud_live_suppressed = True
+            attach_visible_restore(self)
             if not getattr(self, '_server_batch_logged', False):
                 logger.info('event=server_batch_only_admission mode=enabled')
                 self._server_batch_logged = True
@@ -1338,11 +1336,7 @@ class ListenReceiver(ReplayFilterMixin):
             # Multi-channel audio never reaches the deferred-open seam in _flush_stt_buffer.
             self.cloud_live_suppressed = (local_preview or off) and not getattr(self.host, 'is_multi_channel', False)
             if self.cloud_live_suppressed:
-                # Deferred, never dropped: no cloud streaming STT session opens yet
-                # (neither vendor nor the Parakeet window leg). Live segments are what
-                # keep a listen conversation alive and register it for batch, so the
-                # first audio that reaches the socket opens the stream as usual. A
-                # local-preview phone journals pendant audio for batch and sends none.
+                # Local-preview leakage first claims batch custody; other deferred audio opens live.
                 self._cloud_live_deferred_by = 'local_preview' if local_preview else 'off'
                 return True
         admission = getattr(self, 'cap_admission', None)
@@ -1434,7 +1428,7 @@ class ListenReceiver(ReplayFilterMixin):
             # Retained so a mid-session failover can rebuild the socket against the
             # next provider without re-deriving the callbacks or the gate.
             self._stt_rebuild = (self._build_stt_callbacks, request.sample_rate)
-            self.host.spawn(self._monitor_stt_death(), name='stt_death_monitor')
+            self._stt_death_monitor_task = self.host.spawn(self._monitor_stt_death(), name='stt_death_monitor')
             self.cap_paused = False
 
             return True
@@ -1499,7 +1493,10 @@ class ListenReceiver(ReplayFilterMixin):
     async def _open_deferred_stream(self) -> bool:
         """Audio reached a deferred session: open the provider stream it would have had."""
 
-        if getattr(self.host, 'server_batch_only', False) is True:
+        if batch_only_live_path(self.host):
+            restore = getattr(self, 'visible_restore', None)
+            if restore is not None:
+                return await restore.open()
             return True
         self._cloud_live_opening = True
         self.cloud_live_suppressed = False
@@ -2062,7 +2059,13 @@ class ListenReceiver(ReplayFilterMixin):
             await hold.notice()
 
     async def _flush_stt_buffer(self, buffer: bytearray, *, force: bool = False) -> None:
-        if getattr(getattr(self, 'host', None), 'server_batch_only', False) is True:
+        if buffer:
+            await claim_preview_batch_custody(self)
+        if batch_only_live_path(getattr(self, 'host', None)):
+            restore = getattr(self, 'visible_restore', None)
+            if restore is not None:
+                await restore.flush(buffer)
+                return
             buffer.clear()  # PCM forwarding and raw custody run independently below.
             self._stt_buffer_start_sample = None
             return
@@ -2435,6 +2438,9 @@ class ListenReceiver(ReplayFilterMixin):
                 # Custom STT may run without forwarding raw audio: set the clock origin, not the first-audio funnel.
                 state.first_audio_byte_timestamp = custom_stt_clock_origin(segments, time.time())
             self._enqueue_stt_segments(segments, provider=provider or 'custom')
+        elif kind == 'local_preview_engine_unavailable':
+            if rescind_local_preview(self.host, payload):
+                restore_non_preview_path(self)
         elif kind == 'speaker_assigned':
             await self._handle_speaker_assigned(payload)
         elif kind == 'client_state':
@@ -2453,7 +2459,10 @@ class ListenReceiver(ReplayFilterMixin):
                 )
             telemetry_call(self.host, 'demand_telemetry', 'observe_visibility', payload)
             demand = getattr(self, 'live_demand', None)
-            if demand is not None:
+            restore = getattr(self, 'visible_restore', None)
+            if restore is not None:
+                restore.observe(payload)
+            elif demand is not None:
                 demand.observe(payload)
             if payload.get('mobile_batch_capability_v1') is True:
                 # Client renews its bounded authorization lease. No audio is
@@ -2651,11 +2660,8 @@ class ListenReceiver(ReplayFilterMixin):
                     telemetry_call(self.host, 'demand_telemetry', 'capture', len(decoded) / (2 * request.sample_rate))
                     self._capture('capture_client_audio', decoded)
                     if self.capture_timeline is not None:
-                        # The decoded frame occupies an exact capture sample
-                        # range; ring buffer, STT buffer and pusher runs all
-                        # carry that position forward. The pusher projection
-                        # (opcode-101 start) is v2-only: with the flag off the
-                        # wire must stay byte-identical to the legacy session.
+                        # Ring, STT and pusher share exact capture samples. The
+                        # opcode-101 projection is v2-only; flag-off wire stays unchanged.
                         start_sample, end_sample, _ = self.capture_timeline.accept(decoded, now, time.monotonic())
                         if shadow is not None:  # D2 edge shadow copy, fire-and-forget
                             shadow.frame(start_sample, end_sample - start_sample, data)
@@ -2671,7 +2677,8 @@ class ListenReceiver(ReplayFilterMixin):
                                 payload=bytes(data),
                                 receipt_wall_time=now,
                             )
-                        await self.raw_archive.append(
+                        cancelled = await archive_preview_frame(
+                            self,
                             bytes(data),
                             self.host.state.current_conversation_id,
                             self.capture_timeline.wall(start_sample),
@@ -2685,6 +2692,8 @@ class ListenReceiver(ReplayFilterMixin):
                             if not buffer:
                                 self._stt_buffer_start_sample = start_sample
                             buffer.extend(decoded)
+                            if cancelled:
+                                raise asyncio.CancelledError
                             await self._flush_stt_buffer(buffer)
                         if self.host.audio_bytes_send is not None:
                             if self.capture_timeline_v2 or self.capture_timeline_spans:
@@ -2922,6 +2931,9 @@ class ListenReceiver(ReplayFilterMixin):
             buffer.clear()
 
     def finish(self) -> None:
+        restore = getattr(self, 'visible_restore', None)
+        if restore is not None:
+            restore.close()
         if self.recovery is not None:
             self.recovery.mark_client_leaving()
         demand = getattr(self, 'translation_demand', None)

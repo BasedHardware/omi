@@ -100,6 +100,10 @@ spec:
           ports:
             - {name: http, containerPort: 8080}
           env:
+            - {name: BATCH_CONTROL_CANDIDATE_FANOUT, value: {{ .Values.worker.controlCandidateFanout | quote }}}
+            - {name: BATCH_ADMISSION_PARALLEL_CALLS, value: {{ .Values.worker.admissionParallelCalls | quote }}}
+            - {name: BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS, value: {{ .Values.worker.idlePollMaxSeconds | quote }}}
+            - {name: FIRESTORE_READ_LEVERS, value: {{ .Values.worker.firestoreReadLevers | quote }}}
             - {name: BATCH_SHARD_SPREAD_ENABLED, value: {{ .Values.worker.shardSpreadEnabled | quote }}}
             - {name: BATCH_PULL_MULTI_LEASE_ENABLED, value: {{ .Values.worker.pullMultiLeaseEnabled | quote }}}
             - {name: BATCH_PIPELINE_CONTENTION_RETRY_ENABLED, value: {{ .Values.worker.contentionRetryEnabled | quote }}}
@@ -131,6 +135,8 @@ spec:
             # Pump processes sharing this pod's GPU; "1" is the single-process kill switch.
             - {name: BATCH_PIPELINE_WORKER_PROCESSES, value: {{ $processes | quote }}}
             - {name: BATCH_PIPELINE_WORKER_IO_CONCURRENCY, value: {{ .Values.worker.ioConcurrency | default 5 | quote }}}
+            # Prepare the budgeted flight prefix before the GPU lock; "false" is the kill switch.
+            - {name: BATCH_PIPELINE_PREPARE_FLIGHT_ENABLED, value: {{ .Values.worker.prepareFlightEnabled | quote }}}
             - {name: BATCH_PIPELINE_WORKER_ENABLED, value: "true"}
             - {name: BATCH_PIPELINE_ENABLED, value: "false"}
             - {name: BATCH_PIPELINE_PERCENT, value: "0"}
@@ -159,6 +165,10 @@ spec:
             - {name: BATCH_PIPELINE_FLIGHT_BATCHING_ENABLED, value: {{ .Values.worker.flightBatchingEnabled | quote }}}
             - {name: BATCH_PIPELINE_FLIGHT_BATCH_SECONDS, value: {{ .Values.worker.flightBatchSeconds | quote }}}
             - {name: BATCH_PIPELINE_SHARED_EMBEDDING_TRUNK_ENABLED, value: {{ .Values.worker.sharedEmbeddingTrunkEnabled | quote }}}
+            # Full-unit diarization reuses the VAD pass's raw segmentation scores; "false" is the kill switch.
+            - {name: BATCH_PIPELINE_VAD_SEGMENTATION_REUSE_ENABLED, value: {{ .Values.worker.vadSegmentationReuseEnabled | quote }}}
+            # CUDA-graph TDT decoding, asserted per call; "false" is the kill switch (asserted eager).
+            - {name: BATCH_PIPELINE_ASR_CUDA_GRAPHS_ENABLED, value: {{ .Values.worker.asrCudaGraphsEnabled | quote }}}
             - name: ENCRYPTION_SECRET
               valueFrom:
                 secretKeyRef:

@@ -1,7 +1,7 @@
 """The chat-quota gates must not run on the event loop.
 
 `enforce_chat_quota` and `enforce_desktop_chat_quota` are synchronous: they reach
-`is_trial_paywalled`, `users_db.is_byok_active` and `get_chat_quota_snapshot`, which read
+`users_db.is_byok_active` and `get_chat_quota_snapshot`, which read
 Firestore, and the desktop one additionally builds a Firestore client on first use, which
 loads credentials. Called bare from an `async def` handler they pin the event loop of the
 whole pod for the length of those reads.

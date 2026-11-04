@@ -20,6 +20,8 @@ Provides shared executors with strict separation (bulkhead pattern):
   Firestore subcollections). Bulkheaded so bursts of account deletions cannot
   starve normal post-processing.
 - storage_executor: audio file precaching, GCS operations.
+- pinecone_shutdown: lazy single-worker mutation settlement, isolated from
+  provider calls and the event loop's default executor during termination.
 - cimd_executor: hosted-MCP OAuth client-metadata (CIMD) lookups — DNS,
   connect, and body reads to arbitrary unauthenticated-supplied hosts, all
   inside one hard monotonic deadline. Bulkheaded so hostile client_id floods
@@ -286,8 +288,19 @@ record_barrier_executor = MonitoredThreadPoolExecutor(
     thread_name_prefix="record-barrier",
 )
 llm_executor = MonitoredThreadPoolExecutor(name="llm", max_workers=6, thread_name_prefix="llm")
+# Batch policy HTTP leaves only; coordinators stay in async Pump code.
+admission_executor = MonitoredThreadPoolExecutor(name="admission", max_workers=4, thread_name_prefix="admission")
 stripe_executor = MonitoredThreadPoolExecutor(name="stripe", max_workers=4, thread_name_prefix="stripe")
 sync_executor = MonitoredThreadPoolExecutor(name="sync", max_workers=16, thread_name_prefix="sync")
+# Optional per-window LID must not hold the shared sync coordination pool.
+# Bound outstanding calls; run_blocking awaits capacity without blocking a loop.
+record_language_executor = MonitoredThreadPoolExecutor(
+    name="record_language",
+    max_workers=4,
+    max_queue_size=8,
+    wait_on_saturation=True,
+    thread_name_prefix="record-language",
+)
 postprocess_executor = MonitoredThreadPoolExecutor(
     name="postprocess",
     # backend-integration raises this: its enrichment handler holds a thread per LLM-bound request.
@@ -327,7 +340,9 @@ _ALL_EXECUTORS = [
     record_barrier_executor,
     llm_executor,
     stripe_executor,
+    admission_executor,
     sync_executor,
+    record_language_executor,
     postprocess_executor,
     cleanup_executor,
     storage_executor,
@@ -366,6 +381,22 @@ def lifecycle_executor(uid: str, *, episode: bool = False) -> MonitoredThreadPoo
 
 _context_executor: MonitoredThreadPoolExecutor | None = None
 _context_executor_lock = threading.Lock()
+
+
+_pinecone_shutdown_executor: MonitoredThreadPoolExecutor | None = None
+_pinecone_shutdown_executor_lock = threading.Lock()
+
+
+def get_pinecone_shutdown_executor() -> MonitoredThreadPoolExecutor:
+    """One shutdown worker plus one retry slot; created only when draining."""
+    global _pinecone_shutdown_executor
+    with _pinecone_shutdown_executor_lock:
+        if _pinecone_shutdown_executor is None:
+            _pinecone_shutdown_executor = MonitoredThreadPoolExecutor(
+                name='pinecone_shutdown', max_workers=1, max_queue_size=1, thread_name_prefix='pinecone-shutdown'
+            )
+            _ALL_EXECUTORS.append(_pinecone_shutdown_executor)
+        return _pinecone_shutdown_executor
 
 
 def get_context_executor() -> MonitoredThreadPoolExecutor:

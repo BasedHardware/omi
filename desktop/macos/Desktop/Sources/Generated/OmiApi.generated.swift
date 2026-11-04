@@ -20164,7 +20164,7 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  public static func syncLocalFilesV2V2SyncLocalFilesPost(client: OmiApiClient, conversationId: String? = nil, recordingSessionId: String? = nil, audioStartSeconds: Double? = nil, audioEndSeconds: Double? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, xRequestID: String? = nil, xCloudTraceContext: String? = nil, xOmiSyncCaptureManifest: String? = nil, xOmiFirmwareVersion: String? = nil, xOmiDeviceModel: String? = nil, xOmiConversationGeolocation: String? = nil, authorization: String? = nil) async throws -> Void {
+  public static func syncLocalFilesV2V2SyncLocalFilesPost(client: OmiApiClient, conversationId: String? = nil, recordingSessionId: String? = nil, audioStartSeconds: Double? = nil, audioEndSeconds: Double? = nil, repairJobId: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, xRequestID: String? = nil, xCloudTraceContext: String? = nil, xOmiSyncCaptureManifest: String? = nil, xOmiFirmwareVersion: String? = nil, xOmiDeviceModel: String? = nil, xOmiConversationGeolocation: String? = nil, authorization: String? = nil) async throws -> Void {
     let _path = "/v2/sync-local-files"
     guard var components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
@@ -20181,6 +20181,9 @@ public enum OmiAPI {
     }
     if let audioEndSeconds {
       queryItems.append(URLQueryItem(name: "audio_end_seconds", value: String(audioEndSeconds)))
+    }
+    if let repairJobId {
+      queryItems.append(URLQueryItem(name: "repair_job_id", value: String(repairJobId)))
     }
     if !queryItems.isEmpty { components.queryItems = queryItems }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -20208,7 +20211,7 @@ public enum OmiAPI {
     return
   }
 
-  public static func getSyncJobStatusV2SyncLocalFilesJobIdGet(client: OmiApiClient, jobId: String, surfaceOpen: Bool? = nil, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
+  public static func getSyncJobStatusV2SyncLocalFilesJobIdGet(client: OmiApiClient, jobId: String, surfaceOpen: Bool? = nil, xOmiCustodyRepairProtocol: String? = nil, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v2/sync-local-files/\(jobId)"
     guard var components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
@@ -20225,6 +20228,7 @@ public enum OmiAPI {
     if let token = client.token {
       req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
     }
+    if let xOmiCustodyRepairProtocol { req.setValue(String(xOmiCustodyRepairProtocol), forHTTPHeaderField: "X-Omi-Custody-Repair-Protocol") }
     if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
     if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
     if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }

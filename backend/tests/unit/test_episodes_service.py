@@ -2230,3 +2230,45 @@ def test_a_stored_section_seconds_long_runs_to_the_next_on_its_recording():
     assert read[0]['started_at'] == first['started_at']
     assert read[0]['ended_at'] == second['started_at']
     assert read[1]['ended_at'] == second['ended_at']
+
+
+@pytest.mark.parametrize('read', ['live', 'lookup'])
+def test_idle_closing_read_schedules_compose_immediately(monkeypatch, read):
+    store = StrictFirestore()
+    _attach(store, 'c1', minutes=0)
+    first = episodes_db.get_current_episode(UID, firestore_client=store)
+    scheduled = []
+    monkeypatch.setattr(service.composer, 'schedule', lambda uid, eid, **kw: scheduled.append((uid, eid)))
+    reader = _collaborators(FakeModel(), now=T0 + timedelta(seconds=config.CLOSE_GAP_SECONDS + 1), store=store)
+    if read == 'live':
+        service.live_episode(UID, collaborators=reader)
+    else:
+        service.episode_for_conversation(UID, 'c1', collaborators=reader)
+    closed = episodes_db.get_episode(UID, first['id'], firestore_client=store)
+    assert closed['status'] == 'closed'
+    assert scheduled == [(UID, first['id'])]
+
+
+def test_idle_closing_list_read_schedules_compose_in_the_same_call(monkeypatch):
+    from utils.episodes import home_read
+
+    store = StrictFirestore()
+    _attach(store, 'c1', minutes=0)
+    first = episodes_db.get_current_episode(UID, firestore_client=store)
+    scheduled = []
+    monkeypatch.setattr(service.composer, 'schedule', lambda uid, eid, **kw: scheduled.append((uid, eid)))
+    monkeypatch.setattr(
+        home_read,
+        '_read_members',
+        lambda *a, **kw: {
+            'c1': {
+                'status': 'completed',
+                'started_at': T0,
+                'finished_at': T0 + timedelta(minutes=1),
+                'structured': {'title': 'A meeting', 'overview': 'Notes'},
+            }
+        },
+    )
+    wires = home_read.project_episodes(UID, [first], firestore_client=store)
+    assert wires[0]['status'] == 'closed'
+    assert scheduled == [(UID, first['id'])]

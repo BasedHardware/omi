@@ -16,7 +16,8 @@ the vendor again. A vendor-side failure may fail over to one other vendor (a
 second attempt, never the same vendor twice once billed); when no permitted
 vendor is healthy the unit parks in non-terminal ``vendor_held`` with its audio
 and owner order intact and is redriven later. Only exhausted attempts, or our own
-failures, settle terminal ``failed_held`` as before.
+failures, settle terminal ``failed_held`` as before. Guarded validated-empty
+exhaustion instead enters the bounded quarantine recovery while enabled.
 """
 
 from utils.observability.stt_cap_dispatch import DispatchPath, DispatchReason, record_decision
@@ -32,16 +33,21 @@ from uuid import uuid4
 import wave
 
 from config.batch_conversation_speakers import vendor_turns_enabled
+from config.batch_language_recovery import enabled as independent_recovery_enabled, language_guarded
 from config.batch_pipeline_vendor_failover import failover_enabled, held_redrive_enabled, held_redrive_seconds
-from config.policy import BatchUnitPolicy
-from config.stt_provider_policy import PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL, normalized_stt_language
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, BatchPrivacyReason
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
 from database.outbox import Claim, OutboxKind, Outcome
 from database.batch_pipeline_quarantine_recovery import RecoveryStore
 from utils.batch_pipeline import vendor_route_contracts as contracts
 from utils.batch_pipeline import vendor_route_metrics as vendor_metrics
-from utils.batch_pipeline.contracts import WorkItem, WorkResult, held_vad_census, projection_speech_spans
+from utils.batch_pipeline.contracts import (
+    WorkItem,
+    WorkResult,
+    held_vad_census,
+    projection_speech_spans,
+    validate_measured_vad,
+)
 from utils.batch_pipeline.recovery_disposition import (
     REASONS,
     STAGES,
@@ -50,8 +56,10 @@ from utils.batch_pipeline.recovery_disposition import (
     inspect_audio,
     result_outcome,
     silence_payload,
+    log_result_held,
 )
 from utils.batch_pipeline.scheduler import owner_key
+from utils.batch_pipeline.provider_stt_admission import PENDING, SttRoute
 from utils.batch_pipeline.vendor_route_contracts import (
     ATTEMPTS_FIELD,
     HOLD_FIELD,
@@ -75,8 +83,6 @@ from utils.workers.consumer import Result, Role
 
 logger = logging.getLogger(__name__)
 
-PARAKEET_MODEL = 'nvidia/parakeet-tdt-0.6b-v3'
-PENDING = 'provider_pending'
 RUNNING = 'provider_running'
 # Terminal: the content ledger no longer belongs to this unit's run, so its result can never project.
 SUPERSEDED = 'provider_superseded'
@@ -100,125 +106,9 @@ ABANDON_SECONDS = 900.0
 # Same wait as batch compute admission's cap deferral (admission.authorize).
 FUNDING_RETRY_SECONDS = 60.0
 
-SttRouteName = Literal['parakeet', 'provider']
-ProviderReason = Literal['none', 'byok', 'unsupported_language']
-ProviderService = Literal['none', 'byok', 'soniox', 'deepgram', 'modulate']
-_ROUTES = frozenset({'parakeet', 'provider'})
-_PROVIDER_REASONS = frozenset({'none', 'byok', 'unsupported_language'})
-_SERVICES = frozenset({'none', 'byok', 'soniox', 'deepgram', 'modulate'})
 # Services this stage can actually call: Velma batch and Soniox async (failover capacity only;
 # the route table marks it failover_only). Deepgram is retired.
 _CALLABLE_SERVICES = frozenset(contracts.VENDOR_SERVICES)
-
-
-@dataclass(frozen=True)
-class SttRoute:
-    """Admission-time STT route; the contract (c) policy fields of the same names."""
-
-    stt_route: SttRouteName
-    provider_reason: ProviderReason
-    provider_service: ProviderService
-    language: str
-
-    def __post_init__(self):
-        if self.stt_route not in _ROUTES:
-            raise ValueError('closed stt_route required')
-        if self.provider_reason not in _PROVIDER_REASONS:
-            raise ValueError('closed provider_reason required')
-        if self.provider_service not in _SERVICES:
-            raise ValueError('closed provider_service required')
-        if (self.stt_route == 'provider') != (self.provider_service != 'none'):
-            raise ValueError('a provider route names exactly one provider service')
-        if not self.language or len(self.language) > 16:
-            raise ValueError('bounded language required')
-
-
-def resolve_route(language: str | None, *, byok: bool = False) -> SttRoute:
-    """Decide once at admission. Unknown language is ``multi``: Parakeet, as legacy sync.
-
-    BYOK uploads are routed like every other upload (David, 10-19): sync
-    pre-recorded STT has never used a BYOK key, and enrichment runs on Omi's keys.
-    ``provider_reason='byok'`` only records the admission-time funding decision,
-    made while the validated keys were present, so later keyless stages never
-    re-hold the unit (contract (c): admission decides once).
-    """
-    normalized = normalized_stt_language(language) or 'multi'
-    if normalized in PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL[PARAKEET_MODEL]:
-        return SttRoute('parakeet', 'byok' if byok else 'none', 'none', normalized)
-    return SttRoute('provider', 'byok' if byok else 'unsupported_language', 'modulate', normalized[:16])
-
-
-def enqueue_in_transaction(tx, item: WorkItem, now: float, *, route: SttRoute, policy: BatchUnitPolicy) -> bool:
-    """Write a provider unit outside the GPU ring; the admission ``enqueue`` hook.
-
-    Mirrors ``Scheduler.enqueue_in_transaction``'s immutable-work check, owner
-    revision fence and late-capture watermark, but never touches queues or
-    control shards, so no GPU pull can lease it.
-    """
-    if route.stt_route != 'provider':
-        raise ValueError('only provider routes bypass the GPU ring')
-    if item.requires_compute_admission:
-        raise ValueError('provider units are funded by the provider stage, not GPU compute admission')
-    previous = tx.get('jobs', item.segment_id)
-    immutable = {**asdict(item), 'priority': int(item.priority)}
-    if previous:
-        if previous.get('state') == 'record_pending':
-            raise ValueError('a pending recording cannot take the provider route')
-        if any(
-            previous.get(key) != value
-            for key, value in immutable.items()
-            if not (key == 'privacy_generation' and value is None)
-        ) or previous.get('stt_route') != asdict(route):
-            raise ValueError('segment ID reused with different immutable work')
-        return False
-    key = owner_key(item.owner_id)
-    owner = tx.get('owners', key)
-    watermark = owner.get('watermark')
-    job = {
-        **immutable,
-        'policy': policy.to_dict(),
-        'policy_source': 'admission',
-        'protocol_version': 1,
-        'owner_key': key,
-        'enqueued_at': now,
-        'state': PENDING,
-        'attempt': 0,
-        'token': '',
-        'lease_until': 0.0,
-        'available_at': now,
-        'merge_pending': True,
-        'next': '',
-        'stt_route': asdict(route),
-        'late_capture': bool(
-            watermark and (item.capture_at, item.segment_id) <= (watermark['capture_at'], watermark['segment_id'])
-        ),
-    }
-    tx.put('jobs', item.segment_id, job)
-    owner['revision'] = owner.get('revision', 0) + 1
-    tx.put('owners', key, owner)
-    return True
-
-
-def provider_enqueue(route: SttRoute, outbox: Any, wakes: dict[str, str]) -> Callable[..., bool]:
-    """The admit() ``enqueue`` hook: the job row and its outbox row commit together.
-
-    ``wakes`` collects ``row_id -> wake_token``; the caller calls ``outbox.wake``
-    for each after the admission transaction commits (contract (b), invariant 4).
-    A retried transaction body overwrites the same keys.
-    """
-
-    def enqueue(tx: Any, item: WorkItem, now: float, *, policy: BatchUnitPolicy) -> bool:
-        created = enqueue_in_transaction(tx, item, now, route=route, policy=policy)
-        if created:
-            result = outbox.enqueue(
-                item.segment_id, item.owner_id, {'segment_id': item.segment_id}, now, tx=tx, now=now
-            )
-            if result.wake_token:
-                wakes[result.row_id] = result.wake_token
-        return created
-
-    return enqueue
-
 
 # --- attempt records -----------------------------------------------------------------------------
 
@@ -242,6 +132,19 @@ def attempts_of(job: dict) -> list[VendorAttempt]:
             table_version='pre_d',
         )
     ]
+
+
+def _exhausted_recovery_state(job: dict) -> str:
+    """Only guarded validated-empty answers may spend the bounded recovery intent."""
+    attempts = attempts_of(job)
+    if (
+        independent_recovery_enabled()
+        and language_guarded(job)
+        and attempts
+        and attempts[-1].outcome == VendorAttemptOutcome.EMPTY_VALIDATED
+    ):
+        return 'held'
+    return 'failed_held'
 
 
 def bounding_attempts(attempts: list[VendorAttempt]) -> list[VendorAttempt]:
@@ -324,9 +227,12 @@ def attempt_outcome_for(failure: RecoveryFailure) -> VendorAttemptOutcome:
 def _record_held_vad(job: dict, speech_seconds: float | None) -> None:
     """F2: a terminal failed_held unit carries its strict-VAD speech, as quarantine recovery's do, so
     the T2 observer measures it instead of falling back to the whole duration. Unmeasured stays unset."""
-    measured = held_vad_census(job, speech_seconds)
-    if measured is not None:
-        job['measured_held_vad_speech_seconds'] = measured
+    # Reconciliation has no in-memory call plan. Reuse the intent's pre-call
+    # measurement, keeping the greatest evidence across all settlement paths.
+    for seconds in (speech_seconds, (job.get('provider_intent') or {}).get('measured_vad_speech_seconds')):
+        measured = held_vad_census(job, seconds)
+        if measured is not None:
+            job['measured_held_vad_speech_seconds'] = measured
 
 
 class ProviderSttStore:
@@ -339,7 +245,16 @@ class ProviderSttStore:
     def read(self, segment_id: str) -> dict:
         return self.store.run(lambda tx: self.fence.checked(tx, segment_id)[0])
 
-    def start(self, segment_id: str, token: str, now: float, service: str, *, table_version: str = 'builtin'):
+    def start(
+        self,
+        segment_id: str,
+        token: str,
+        now: float,
+        service: str,
+        *,
+        table_version: str = 'builtin',
+        measured_vad_speech_seconds: float | None = None,
+    ):
         """CAS pending -> running, minting attempt N. Returns the job if running (ours or a prior
         intent), else None. Raises ``AttemptRefused`` when the paid-once bounds forbid the mint."""
         if service not in _CALLABLE_SERVICES:
@@ -356,15 +271,25 @@ class ProviderSttStore:
             attempts = bounding_attempts(attempts_of(job))
             number = check_new_attempt(attempts, service)
             attempt = VendorAttempt(number, service, token, binding.privacy_generation, now, table_version)
+            # A failover still owns the same immutable audio. Keep earlier
+            # evidence if its next inspection is unavailable or lower.
+            prior = (job.get('provider_intent') or {}).get('measured_vad_speech_seconds')
+            measurements = [
+                validate_measured_vad(value, job['duration_seconds'])
+                for value in (prior, measured_vad_speech_seconds)
+                if value is not None
+            ]
             job['state'] = RUNNING
             job[ATTEMPTS_FIELD] = [entry.to_dict() for entry in attempts] + [attempt.to_dict()]
-            # Unchanged shape, mirroring the current attempt: a pre-D worker still reconciles it.
+            # Mirror the current attempt; pre-D workers ignore the additive VAD evidence.
             job['provider_intent'] = {
                 'token': token,
                 'service': service,
                 'privacy_generation': binding.privacy_generation,
                 'started_at': now,
             }
+            if measurements:
+                job['provider_intent']['measured_vad_speech_seconds'] = max(measurements)
             tx.put('jobs', segment_id, job)
             return job
 
@@ -396,7 +321,8 @@ class ProviderSttStore:
 
         A failure fails over only when the attempt outcome is a vendor-side failover outcome and
         ``check_new_attempt`` still admits one of ``failover_to``; otherwise it is terminal
-        failed-held, never 'held', so quarantine recovery cannot spend another call. Returns
+        failed-held. Guarded validated-empty attempts enter bounded quarantine recovery
+        while its kill switch is on. Returns
         ``'failover'`` for the pending transition, ``'settled'`` otherwise, False when the
         attempt is no longer the unit's current one (a late result: nothing is written).
         """
@@ -442,7 +368,7 @@ class ProviderSttStore:
                     failure='worker_failed',
                     quarantine_reason='worker_failed',
                     quarantined_at=now,
-                    recovery_state='failed_held',
+                    recovery_state=_exhausted_recovery_state(job),
                 )
                 _record_held_vad(job, measured_held_vad_speech_seconds)
             else:
@@ -457,7 +383,7 @@ class ProviderSttStore:
     def terminal(
         self, segment_id: str, now: float, failure: dict, *, measured_held_vad_speech_seconds: float | None = None
     ) -> bool:
-        """Terminal failed-held for a pending unit no vendor may serve any more (attempts spent)."""
+        """Quarantine an exhausted unit; guarded empty answers may enter bounded recovery."""
 
         def commit(tx):
             job, _ = self.fence.checked(tx, segment_id)
@@ -471,7 +397,7 @@ class ProviderSttStore:
                 failure='worker_failed',
                 quarantine_reason='worker_failed',
                 quarantined_at=now,
-                recovery_state='failed_held',
+                recovery_state=_exhausted_recovery_state(job),
             )
             job.setdefault('provider_intent', {})['failure'] = {'stage': failure['stage'], 'reason': failure['reason']}
             _record_held_vad(job, measured_held_vad_speech_seconds)
@@ -648,7 +574,7 @@ def vendor_turns(words: list[dict], duration: float, *, fallback: bool = False) 
 async def transcribe_async(item: WorkItem, language: str | None, inspected: tuple, *, service: str) -> dict:
     """One vendor call, awaited on the event loop: Velma batch has no submit/poll mode, so the
     open request holds a socket, never an executor thread. No client retry (one paid POST)."""
-    from diarizer.batch_pipeline import validate_words
+    from utils.batch_pipeline.word_validation import validate_words
 
     pcm, duration, spans = inspected
     if service not in _CALLABLE_SERVICES:
@@ -925,7 +851,13 @@ class ProviderSttStage:
                 return service
         token = uuid4().hex
         try:
-            started = self.protocol.start(segment_id, token, self.clock(), service)
+            started = self.protocol.start(
+                segment_id,
+                token,
+                self.clock(),
+                service,
+                measured_vad_speech_seconds=_speech_seconds(inspected) if failure is None else None,
+            )
         except AttemptRefused:
             # Read-to-mint race on the attempt list; never mint past the bounds. Re-evaluate later.
             vendor_metrics.paid_intent_violation(service)
@@ -978,8 +910,10 @@ class ProviderSttStage:
         # encrypted object is reconciled by a later delivery without a vendor call.
         silence = response.get('outcome') == 'silence'
         outcome = VendorAttemptOutcome.SILENCE if silence else VendorAttemptOutcome.OK
+        stage = 'persist'
         try:
             uri = self.artifacts.persist_recovery_result(item, response, token)
+            stage = 'settle'
             settled = self.protocol.settle(
                 segment_id,
                 token,
@@ -991,13 +925,15 @@ class ProviderSttStage:
             )
         except BatchPrivacyBlocked:
             raise
-        except Exception:
+        except Exception as error:
+            log_result_held('provider', stage, exception_type=type(error).__name__)
             return UnitOutcome('retry', 'dependency_warming', provider_reason=route.provider_reason)
         if settled:
             vendor_metrics.attempt(plan.service, outcome, 0.0 if silence else duration)
             if not silence:
                 self._record_attempt(plan.service, outcome, latency)
         else:
+            log_result_held('provider', 'settle', reason='refused')
             # The attempt was settled elsewhere (abandoned, then failed over): never overwrite.
             vendor_metrics.late_result(plan.service, 'ignored')
         self._log('settled' if settled else 'superseded', 'none')

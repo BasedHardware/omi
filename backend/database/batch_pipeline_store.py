@@ -15,7 +15,7 @@ from typing import Any, Callable, Protocol, TypeVar
 from google.cloud import firestore
 from google.api_core.exceptions import AlreadyExists, FailedPrecondition, Aborted
 
-from config.batch_pipeline import contention_retry_enabled, SCHEDULER_SHARDS
+from config.batch_pipeline import contention_retry_enabled, control_candidate_fanout
 from config.firestore_read_levers import lever_enabled
 from database._client import get_data_plane_firestore_client
 from database.batch_pipeline_privacy import assert_batch_write_allowed, BatchPrivacyMemo
@@ -58,6 +58,9 @@ class Store(Protocol):
     def control_candidate(
         self, priority: int, pool: str, now: float, *, worker_id: str = '', exclude=()
     ) -> str | None: ...
+    def control_candidates(
+        self, priority: int, pool: str, now: float, *, worker_id: str = '', fanout: int | None = None
+    ) -> list[str]: ...
     def acquire_pull_claim(self, shard: str, token: str, now: float, ttl: float) -> bool: ...
     def quarantine_fenced(self, segment_id: str, now: float) -> bool: ...
     def longest_ready_pending(self, owner_key: str) -> dict | None: ...
@@ -147,7 +150,10 @@ class FirestoreTransaction:
         )
 
     def flush(self):
-        if len(self.writes) + len(self.patches) + len(self.external) > 450:
+        # Conversation patches set record_lane_owner, a batch-privacy authority
+        # field, so the commit-boundary fence appends one token write per owner.
+        fence_tokens = len({key.split('/', 1)[0] for table, key in self.patches if table == 'conversations'})
+        if len(self.writes) + len(self.patches) + len(self.external) + fence_tokens > 450:
             raise RuntimeError('batch transaction write budget exceeded')
         guarded = set()
         for (table, key), value in self.writes.items():
@@ -235,6 +241,11 @@ class FirestoreStore:
 
     def control_candidate(self, priority: int, pool: str, now: float, *, worker_id: str = '', exclude=()) -> str | None:
         return control_candidate(self.client, self.namespace, priority, pool, now, worker_id=worker_id, exclude=exclude)
+
+    def control_candidates(
+        self, priority: int, pool: str, now: float, *, worker_id: str = '', fanout: int | None = None
+    ) -> list[str]:
+        return control_candidates(self.client, self.namespace, priority, pool, now, worker_id=worker_id, fanout=fanout)
 
     def acquire_pull_claim(self, shard: str, token: str, now: float, ttl: float) -> bool:
         # One conditional write, no transaction or retrying read set. A stale
@@ -449,16 +460,16 @@ def due(client: Any, namespace: str, state: str, now: float, limit: int = 100) -
         .where('state', '==', state)
         .where(field, '<=', now)
         .order_by(field)
-        .limit(max(1, min(limit, 100)))
+        .limit(max(1, min(limit, 500 if state == 'record_pending' else 100)))
         .stream()
     )
     return [doc.id for doc in docs]
 
 
-# Bounded FIFO prefix the uncommitted-age proxy walks past policy holds. A
-# hold population that fills the entire prefix fails the proxy toward tripping
-# on the oldest hold's age (an unmeasured commitment may sit beyond the bound);
-# retiring the holds themselves stays with the custody track.
+# Bounded FIFO prefix walked past policy holds and dispositioned rows. An
+# exempt prefix with a sentinel exports NaN: an unmeasured commitment may sit
+# beyond the bound. The observer and pager report that incomplete scan as
+# blindness; retiring holds themselves stays with the custody track.
 OLDEST_POLICY_HOLD_SCAN_LIMIT = 500
 
 
@@ -586,28 +597,33 @@ def oldest(client: Any, namespace: str, priority: int, *, ready_only: bool = Fal
         .limit(OLDEST_POLICY_HOLD_SCAN_LIMIT + 1)
         .stream()
     )
-    oldest_hold: float | None = None
     scanned = 0
     for doc in docs:
         scanned += 1
         if scanned > OLDEST_POLICY_HOLD_SCAN_LIMIT:
             break  # the sentinel row exists: the scan was truncated
         job = doc.to_dict()
-        if is_policy_hold(job):
-            oldest_hold = oldest_hold if oldest_hold is not None else job['enqueued_at']
+        if is_queue_dispositioned(job) or is_policy_hold(job):
             continue
         return job['enqueued_at']
-    if scanned > OLDEST_POLICY_HOLD_SCAN_LIMIT and oldest_hold is not None:
-        # An unmeasured commitment may exist beyond the bound, so fail toward
-        # tripping on the oldest hold's age instead of publishing a false fresh
-        # zero.
-        return oldest_hold
+    if scanned > OLDEST_POLICY_HOLD_SCAN_LIMIT:
+        # An unmeasured commitment may exist beyond the bound. NaN is an
+        # incomplete measurement, never a hold misreported as late work or a
+        # false fresh zero. The guard and alert route treat this as blindness.
+        return float('nan')
     return None
 
 
 def control_candidate(
     client: Any, namespace: str, priority: int, pool: str, now: float, *, worker_id: str = '', exclude=()
 ) -> str | None:
+    candidates = control_candidates(client, namespace, priority, pool, now, worker_id=worker_id)
+    return next((key for key in candidates if key not in exclude), None)
+
+
+def control_candidates(
+    client: Any, namespace: str, priority: int, pool: str, now: float, *, worker_id: str = '', fanout: int | None = None
+) -> list[str]:
     if priority not in (0, 1, 2) or pool not in {'batch', 'live'}:
         raise ValueError('bounded priority and pool required')
     prefix = f'p{priority}_'
@@ -619,27 +635,198 @@ def control_candidate(
         .where(available, '<=', now)
         .order_by(service)
         .order_by(available)
-        .limit(SCHEDULER_SHARDS if worker_id else 1)
+        .limit(control_candidate_fanout(fanout) if worker_id else 1)
         .stream()
     )
     if worker_id:
         # Service remains the primary fairness key. Only equal-service shards
         # use worker affinity, and a busy shard can be skipped without writes.
-        docs = [doc for doc in docs if doc.id not in exclude]
         docs.sort(key=lambda doc: (doc.to_dict()[service], hashlib.sha256(f'{worker_id}:{doc.id}'.encode()).digest()))
-    return docs[0].id if docs else None
+    return [doc.id for doc in docs]
+
+
+def is_queue_dispositioned(job: dict[str, Any]) -> bool:
+    """Custody has left the compute queue; recovery/projection have their own alarms.
+
+    A completed terminal marker alone is insufficient: result_ready still owes
+    its ordered commit. Unknown states remain measured, so schema drift fails closed.
+    """
+    return job.get('state') in {'dead', 'quarantined', 'committed', 'privacy_blocked'}
 
 
 def oldest_retry(client: Any, namespace: str, priority: int) -> float | None:
-    docs = list(
+    docs = iter(
         client.collection(f'{namespace}_jobs')
         .where('priority', '==', priority)
         .where('retry_started_at', '>=', 0)
         .order_by('retry_started_at')
-        .limit(1)
+        .limit(OLDEST_POLICY_HOLD_SCAN_LIMIT + 1)
         .stream()
     )
-    return docs[0].to_dict()['retry_started_at'] if docs else None
+    for index, doc in enumerate(docs):
+        if index == OLDEST_POLICY_HOLD_SCAN_LIMIT:
+            return float('nan')
+        job = doc.to_dict()
+        if not is_queue_dispositioned(job) and not is_policy_hold(job):
+            return job['retry_started_at']
+    return None
+
+
+# 2-hour timeliness alarm (David, 2026-11-02). Indexes: jobs (state, enqueued_at), the capacity index, jobs
+# (priority, retry_started_at), jobs (state, recovery_state, enqueued_at) and results (projection_state, committed_at).
+TIMELINESS_ACTIVE_STATES = ('leased', 'result_ready')
+TIMELINESS_UNCOMMITTED_STATES = (*TIMELINESS_ACTIVE_STATES, 'ready', 'retry', 'vendor_held')
+TIMELINESS_HOLD_SCAN_LIMIT = 20
+TIMELINESS_PROJECTION_SCAN_LIMIT = 50
+
+
+def is_timeliness_hold(job: dict[str, Any], now: float) -> bool:
+    """A deliberate admission refusal (allowance, budget, fair use, daily ceiling) or a live vendor hold."""
+    return is_policy_hold(job, now) or (job.get('compute_decision') or {}).get('outcome') == 'held'
+
+
+def is_terminal_empty(job: dict[str, Any]) -> bool:
+    """Settled empty_asr, failed held, with no recoverable speech: measured held VAD speech exactly 0."""
+    return (
+        job.get('state') == 'quarantined'
+        and job.get('recovery_state') == 'failed_held'
+        and ((job.get('recovery') or {}).get('failure') or {}).get('reason') == 'empty_asr'
+        and job.get('measured_held_vad_speech_seconds') == 0
+    )
+
+
+def timeliness_sample(
+    client: Any, namespace: str, epoch: float, now: float, sla: float, *, terminal_empty_processed: bool = False
+) -> dict[str, Any]:
+    """Unpublished units by wait leg: oldest ``enqueued_at`` at or after ``epoch``, counts past ``sla`` for the
+    new cohort, and backlog counts before ``epoch``.
+
+    ``terminal_empty`` is always counted. With ``terminal_empty_processed`` those units leave the quarantined
+    leg: its count subtracts them exactly, so a page of them can hide a younger unit but never a breach.
+
+    Holds must never fill a bound: ``ready`` is read through the capacity index with the decision filtered in
+    the query, admission holds park in ``retry`` without ``retry_started_at`` (compute-failure retries are read
+    by that field), and live ``vendor_held`` units are walked apart from active work. Results carry no enqueue
+    time, so the projection leg reads the jobs behind its oldest committed rows; its counts clock from
+    ``committed_at``, a lower bound. ``truncated`` names a leg whose bounded prefix may hide an older unit.
+    """
+    jobs = client.collection(f'{namespace}_jobs')
+    results = client.collection(f'{namespace}_results')
+    due = now - sla
+
+    def first(query, field):
+        docs = list(query.order_by(field).limit(1).stream())
+        return docs[0].to_dict()[field] if docs else None
+
+    def count(query):
+        return int(query.count().get()[0][0].value)
+
+    def walk(query, field):
+        docs = [doc.to_dict() for doc in query.order_by(field).limit(TIMELINESS_HOLD_SCAN_LIMIT).stream()]
+        admitted = [
+            job['enqueued_at'] for job in docs if job['enqueued_at'] >= epoch and not is_timeliness_hold(job, now)
+        ]
+        full = len(docs) == TIMELINESS_HOLD_SCAN_LIMIT
+        # Ordered by admission, the first unheld row is the oldest. Ordered by any other clock, a full page
+        # may hide an older admission behind it.
+        return min(admitted, default=None), full and (not admitted or field != 'enqueued_at')
+
+    def committed_walk(query):
+        rows = list(
+            query.where('committed_at', '>=', epoch)
+            .order_by('committed_at')
+            .limit(TIMELINESS_PROJECTION_SCAN_LIMIT)
+            .stream()
+        )
+        refs = [jobs.document(row.id) for row in rows]
+        admitted = [
+            started
+            for snapshot in (client.get_all(refs, field_paths=['enqueued_at']) if refs else [])
+            for started in [(snapshot.to_dict() or {}).get('enqueued_at')]
+            if isinstance(started, (int, float)) and started >= epoch
+        ]
+        return min(admitted, default=None), len(rows) == TIMELINESS_PROJECTION_SCAN_LIMIT
+
+    walks = [
+        walk(
+            jobs.where('state', 'in', list(TIMELINESS_ACTIVE_STATES)).where('enqueued_at', '>=', epoch), 'enqueued_at'
+        ),
+        walk(jobs.where('state', '==', 'vendor_held').where('enqueued_at', '>=', epoch), 'enqueued_at'),
+    ]
+    for priority in (0, 1, 2):
+        ready = (
+            jobs.where('priority', '==', priority)
+            .where('state', '==', 'ready')
+            .where('merge_pending', '==', True)
+            .where('compute_decision.outcome', 'in', ['unattempted', 'allowed'])
+            .where('available_at', '>=', epoch)
+        )
+        walks.append(walk(ready, 'available_at'))
+        walks.append(
+            walk(jobs.where('priority', '==', priority).where('retry_started_at', '>=', epoch), 'retry_started_at')
+        )
+    projection = results.where('projection_state', 'in', list(PROJECTION_DISCOVERY_STATES))
+    projected, projection_truncated = committed_walk(projection)
+    quarantined = jobs.where('state', '==', 'quarantined')
+    legs = {
+        'quarantined': (quarantined, 'enqueued_at'),
+        # A quarantined projection receipt holds its committed job in the same transaction: the text never
+        # reached the conversation.
+        'assignment_held': (
+            jobs.where('state', '==', 'committed').where('recovery_state', '==', 'held'),
+            'enqueued_at',
+        ),
+        'projection': (projection, 'committed_at'),
+        # Ready receipts already in the conversation plus assignment holds; only the ledger waits. Visible only.
+        'quarantine_held_rows': (results.where('projection_state', '==', 'quarantine_held'), 'committed_at'),
+        # A subset of quarantined, matching is_terminal_empty. Visible only.
+        'terminal_empty': (
+            quarantined.where('recovery_state', '==', 'failed_held')
+            .where('recovery.failure.reason', '==', 'empty_asr')
+            .where('measured_held_vad_speech_seconds', '==', 0),
+            'enqueued_at',
+        ),
+    }
+    over_sla = {
+        leg: count(query.where(field, '>=', epoch).where(field, '<', due)) if due > epoch else 0
+        for leg, (query, field) in legs.items()
+    }
+    if terminal_empty_processed:
+        over_sla['quarantined'] -= over_sla['terminal_empty']
+        docs = [
+            doc.to_dict()
+            for doc in quarantined.where('enqueued_at', '>=', epoch)
+            .order_by('enqueued_at')
+            .limit(TIMELINESS_HOLD_SCAN_LIMIT)
+            .stream()
+        ]
+        kept = [job['enqueued_at'] for job in docs if not is_terminal_empty(job)]
+        # Past a full page of exempt rows the exact count still names a breach, and the last row bounds its age.
+        quarantined_oldest = kept[0] if kept else docs[-1]['enqueued_at'] if over_sla['quarantined'] and docs else None
+    else:
+        quarantined_oldest = first(quarantined.where('enqueued_at', '>=', epoch), 'enqueued_at')
+    return {
+        'new_oldest': {
+            'uncommitted': min((started for started, _ in walks if started is not None), default=None),
+            'quarantined': quarantined_oldest,
+            'assignment_held': first(legs['assignment_held'][0].where('enqueued_at', '>=', epoch), 'enqueued_at'),
+            'projection': projected,
+            'quarantine_held_rows': first(
+                legs['quarantine_held_rows'][0].where('committed_at', '>=', epoch), 'committed_at'
+            ),
+        },
+        'new_over_sla': over_sla,
+        'backlog': {
+            'uncommitted_incl_holds': count(
+                jobs.where('state', 'in', list(TIMELINESS_UNCOMMITTED_STATES)).where('enqueued_at', '<', epoch)
+            ),
+            **{leg: count(query.where(field, '<', epoch)) for leg, (query, field) in legs.items()},
+        },
+        'truncated': {
+            'uncommitted': any(truncated for _, truncated in walks),
+            'projection': projection_truncated,
+        },
+    }
 
 
 def service_frontier(client: Any, namespace: str, priority: int, *, transaction: Any = None) -> float:
