@@ -4,6 +4,10 @@ Recorded at **2026-11-04 16:14:06 UTC**. Owner: planscost.
 Repository: `BasedHardware/omi`, lane `lane/epbatch2`.
 Qualification refreshed at **2026-11-04 17:24:03 UTC**.
 Qualified source: `7a8c6fda8fe50b66789c7549fcd442f24e0e53e0`.
+Typed telemetry API follow-up: `8b9a9487e65409183999220df5b924465e970b1c`,
+qualified at **2026-11-04 18:54:04 UTC** with **68 focused tests** and the canonical
+full backend typecheck (**zero errors**). It exposes the existing bounded-label
+behavior through a typed public entry point; emitted label values are unchanged.
 [PR #24607](https://github.com/BasedHardware/omi/pull/24607) owns current head,
 review and CI state. This is a dated qualification/forecast record, not a live
 cost meter or a deployment receipt. Re-measure before any production ramp.
