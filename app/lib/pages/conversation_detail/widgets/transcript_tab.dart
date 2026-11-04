@@ -608,24 +608,25 @@ class _TranscriptHeading extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          Wrap(
+            spacing: OmiSpacing.sm,
+            runSpacing: OmiSpacing.xs,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              Expanded(
-                child: Align(
-                  alignment: AlignmentDirectional.centerStart,
-                  child: ConversationDetailChip(
-                    key: const Key('conversation_transcript_heading'),
-                    icon: const Icon(Icons.notes),
-                    label: label,
-                  ),
-                ),
+              ConversationDetailChip(
+                key: const Key('conversation_transcript_heading'),
+                icon: const Icon(Icons.notes),
+                label: label,
+                maxLines: null,
               ),
               if (onSelect != null)
-                OmiButton.tertiary(
+                OmiButton(
                   key: const Key('transcript_select_lines'),
+                  variant: OmiButtonVariant.tertiary,
                   label: "${l10n.selectOption} · ${l10n.transcript}",
                   icon: Icons.checklist,
                   size: OmiButtonSize.compact,
+                  maxLines: null,
                   onPressed: onSelect,
                 ),
             ],
