@@ -736,6 +736,9 @@ class CaptureController extends ChangeNotifier
   /// chat, people, usage). Only an actual change of the backing actions is a
   /// capture state change; re-notifying here would rebuild every capture
   /// listener, and DeviceProvider after it, on each chat token or list refresh.
+  // omi-perf-allow: proxy-hook-notify -- quiet vs notify is decided by the
+  // mutable projection comparison below, not by adapter identity: the adapters
+  // read their providers live, so a mutated instance must re-notify.
   void updateExternalActions(CaptureExternalActions? actions) {
     final next = actions ?? const NoopCaptureExternalActions();
     // The adapters read mutable providers live, so a mutated instance can
