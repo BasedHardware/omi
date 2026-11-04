@@ -96,3 +96,34 @@ worker:
   headPriorityEnabled: true
   workerSilenceDispositionEnabled: true
   correctnessMetricsEnabled: true
+# Seal repair runs in prod (lead2 2026-11-04 3b814c; omi-b3 c089a2). Committed here so a CI worker roll
+# keeps it on: the chart default (suspend: true, empty serverFlags) re-suspended repair on every roll.
+# serverFlags is the complete serving-role policy env (empty or invalid refuses IO). UID allowlists stay out of
+# git on purpose: batch is 100% and the final-pass allowlist only scopes one account's repair-time policy.
+# Rollback: recordSealRepair.suspend: true.
+recordSealRepair:
+  suspend: false
+  mode: apply
+  rowSeconds: 270
+  workers: 16
+  serverFlags:
+    K_SERVICE: backend
+    BATCH_PIPELINE_ENABLED: 'true'
+    BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: 'false'
+    BATCH_PIPELINE_PERCENT: '100'
+    BATCH_LIVE_STT_RETIRE_PERCENT: '0'
+    TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE: 'true'
+    TRANSCRIPTION_FINAL_PASS_DIARIZER: pyannote_shadow
+    TRANSCRIPTION_FINAL_PASS_PERCENT: '5'
+# Same policy map for the seal worker (lead2 3b814c). NOTE: live release r71 had NO recordSealWorker override,
+# so this turns on the worker's IO (empty serverFlags refuses IO). Rollback: recordSealWorker.serverFlags: {}.
+recordSealWorker:
+  serverFlags:
+    K_SERVICE: backend
+    BATCH_PIPELINE_ENABLED: 'true'
+    BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: 'false'
+    BATCH_PIPELINE_PERCENT: '100'
+    BATCH_LIVE_STT_RETIRE_PERCENT: '0'
+    TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE: 'true'
+    TRANSCRIPTION_FINAL_PASS_DIARIZER: pyannote_shadow
+    TRANSCRIPTION_FINAL_PASS_PERCENT: '5'

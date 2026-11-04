@@ -13,7 +13,8 @@ def test_cpu_placement_ceiling_and_identity():
     docs = documents()
     pod = docs[('Deployment', 'record-seal-worker')]['spec']['template']['spec']
     cron = docs[('CronJob', 'record-seal-repair')]['spec']
-    assert cron['suspend'] is True
+    # Prod keeps repair running alongside the worker (overlap, lead2 3b814c); suspend: true is the rollback.
+    assert cron['suspend'] is False
     assert docs[('CronJob', 'record-seal-sweeper')]['spec']['schedule'] == '0 * * * *'
     assert pod['serviceAccountName'] == cron['jobTemplate']['spec']['template']['spec']['serviceAccountName']
     assert 'nodeSelector' not in pod and 'tolerations' not in pod
@@ -35,11 +36,15 @@ def test_cpu_placement_ceiling_and_identity():
     assert metric['target'] == {'type': 'AverageValue', 'averageValue': '4'}
     env = {e['name']: e.get('value') for e in container['env']}
     assert env['RECORD_SEAL_REPAIR_ENABLED'] == 'true'
+    worker_flags = json.loads(env['RECORD_SEAL_REPAIR_SERVER_FLAGS'])
+    assert worker_flags['BATCH_PIPELINE_PERCENT'] == '100'
+    assert not any('ALLOWLIST' in key for key in worker_flags)
     assert env['RECORD_SEAL_OVERLAP_TRIM_ENABLED'] == env['RECORD_SEAL_UPLOAD_FAILED_REPAIR_ENABLED'] == 'true'
 
 
 def test_rollback_and_overlap_are_explicit_and_preserve_gpu_resources():
-    before = documents()
+    # Start from the rollback state explicitly, since prod values now run repair (suspend: false).
+    before = documents('--set', 'recordSealRepair.suspend=true')
     overlap = documents('--set', 'recordSealRepair.suspend=false')
     after = documents('--set', 'recordSealWorker.runtimeEnabled=false,recordSealRepair.suspend=false')
     assert overlap[('CronJob', 'record-seal-repair')]['spec']['suspend'] is False
