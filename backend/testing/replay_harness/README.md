@@ -106,11 +106,25 @@ seeded finalization/outbox rows before the next run; no emulator-wide flush is
 used. Both sides share only the running emulator, with fresh subprocesses per
 side. Do not run another gate into the same output directory concurrently.
 
+`--worker-timeout SECONDS` (`WORKER_TIMEOUT` in Make, default 1800) sends SIGTERM
+on expiry. The worker cancels its asyncio task so environment cleanup unwinds;
+the parent allows ten seconds of grace, then kills and waits for a stuck worker.
+Before each Firestore commit/batch-write, a private journal records only synthetic
+document names (never values). After a timeout or worker failure, the parent
+deletes those exact documents through the validated loopback emulator endpoint,
+including namespace rows, synthetic user children and global outbox/finalization
+rows. Local storage and the journal live below the parent's private temporary
+resource tree outside OUTPUT (on `/Volumes/Ephemeral/scratch` on this host) and
+are removed with it. The gate fails on timeout/cleanup error; no receipt can authorize
+shipping. No emulator-wide flush or production client is used.
+
 `K` (`--repeats`, default 3) controls runs **per side** for multi-drainer admission
 stress shapes, detected from corpus geometry rather than the case name. Other
 cases run once. Classification uses a strict majority of `(status, stop stage,
 reason)` outcomes; a tie or no strict majority fails as inconclusive. All runs
 are saved; any new exception class/site in even a minority run fails the gate.
+A load-sensitive case with `K < 3` can only produce `DIAGNOSTIC` (when otherwise
+clean), which always exits nonzero, including with `--regression-only`.
 
 | Classification | Meaning |
 |---|---|
@@ -123,22 +137,42 @@ are saved; any new exception class/site in even a minority run fails the gate.
 If REF passes the repaired stage then stops later, the case is `fixed`; the later
 outcome and any new exceptions remain visible. PASS requires every declared
 target to be `fixed`, no `regressed` cases, no new exception class/site across the
-corpus, and no inconclusive or unimplemented outcomes. Untargeted known failures
-may remain. PASS with no targets establishes regression coverage only.
+corpus, and no inconclusive or unimplemented outcomes. Every `changed_reason`
+fails closed, including movement to either an earlier or a later stop. Untargeted
+known failures may remain. A ship PASS also requires at least one target and
+`K >= 3` for every load-sensitive case.
+
+With zero targets, an otherwise clean comparison reports `REGRESSION_ONLY` and
+exits nonzero by default. Use `--regression-only` (Make: `REGRESSION_ONLY=1`) to
+exit zero with that distinct verdict for regression checks such as REF=BASE.
+This flag never turns `FAIL` or `DIAGNOSTIC` into a successful exit.
 
 `gate.json` contains SHAs, adapter identity, per-case identities/digests,
 classifications, all sanitized per-run stage reports and the verdict. `gate.md`
-is a short table. Case identities are **SHA-256 of manifest IDs for every tier**;
-raw IDs, scrub descriptions, notes, evidence, paths and case content never appear
-in gate output or stdout. `corpus_sha256` length-frames the relative names and raw
-bytes of manifest + corpus + local blobs/cassettes, in sorted order; moving a case
-does not change its digest. Content is read in place, including Tier C paths
-outside Git, and never copied into output. Child stdout/stderr is discarded;
-only the runner's sanitized outcome fields are retained. Keep output private
-(mode 0700 on creation). Exit codes: 0 PASS, 1 FAIL, 2 execution/input error.
+is a short table. Tier C identities are HMAC-SHA256 with a fresh random 32-byte
+key for each invocation, stored as `OUTPUT/identity.key` with mode 0600. Equality
+holds only within that invocation; rerunning even into the same OUTPUT rotates
+the key. Do not share the key with reports. Tier C reports contain **no content
+digest**. Tier S identities use SHA-256, and their `corpus_sha256` length-frames
+the relative names and bytes of manifest + corpus + local blobs/cassettes in
+sorted order. Those fixture/structure-only digests survive case relocation.
+Raw IDs, scrub descriptions, notes, evidence, paths and case content never appear
+in gate output or stdout. Content is read in place, including Tier C paths outside
+Git, and never copied into output. Child stdout/stderr is discarded; only the
+runner's sanitized outcome fields are retained. **Reports, keys, journals and
+logs stay outside Git**, including reports from synthetic Tier C proof cases.
 
-Run the proof suite (including all-fixture REF=BASE=HEAD and a throwaway,
-unpushed product commit that turns an expected stop into a pass):
+OUTPUT is created 0700. An existing OUTPUT must be a nonsymlink directory owned
+by the current user with mode exactly 0700; broader permissions are refused,
+without changing them. `gate.json`, `gate.md`, and the identity key are created
+0600, replacing stale named receipts without following symlinks. Temporary
+snapshot/resource directories are private and removed after execution.
+Exit codes: 0 ship PASS (or explicitly opted-in REGRESSION_ONLY), 1 rejected
+verdict (FAIL, DIAGNOSTIC, or ship-mode REGRESSION_ONLY), 2 execution/input error.
+
+Run the proof suite (all-fixture REF=BASE=HEAD in regression-only mode, a throwaway
+unpushed product commit that turns an expected stop into a pass, and forced
+worker-timeout recovery with both cooperative exit and SIGKILL escalation):
 
 ```bash
 /Users/dazheng/workspace/omi/bin/omi-heavy run -- \

@@ -64,9 +64,10 @@ def test_expected_reason_uses_runner_static_alias():
 def test_verdict_rules(case, target, before, after):
     case = replace(case, manifest=replace(case.manifest, gate={'fixed_by_ref': target}))
     result = gate.compare([case], {'baseline': [[outcome(before)]], 'candidate': [[outcome(after)]]})
-    assert (result['verdict'] == 'PASS') == (
-        before == 'stopped' and after == 'pass' if target else not (before == 'pass' and after == 'stopped')
-    )
+    expected = 'PASS' if target and before == 'stopped' and after == 'pass' else 'FAIL'
+    if not target and not (before == 'pass' and after == 'stopped'):
+        expected = 'REGRESSION_ONLY'
+    assert result['verdict'] == expected
 
 
 def test_new_exception_is_checked_in_every_observation_even_minority(case):
@@ -171,7 +172,7 @@ def test_tier_c_privacy_canary(tmp_path, monkeypatch, capsys):
     from testing.replay_harness import runner
 
     monkeypatch.setattr(runner, 'run_cases', fake_run_cases)
-    sanitized = asyncio.run(gate_worker.replay([{'path': str(directory), 'repeats': 1}]))
+    sanitized = asyncio.run(gate_worker.replay([{'path': str(directory), 'scopes': [None]}]))
     assert private_id not in json.dumps(sanitized) and private_text not in json.dumps(sanitized)
 
     @contextmanager
@@ -183,10 +184,26 @@ def test_tier_c_privacy_canary(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(gate, 'run_side', lambda *_: sanitized)
     monkeypatch.setattr(gate, 'adapter_digest', lambda: 'c' * 64)
     output = tmp_path / 'output'
-    assert gate.gate(tmp_path, [directory], 'REF', 'BASE', output) == 0
-    exposed = ''.join(p.read_text() for p in output.rglob('*') if p.is_file()) + capsys.readouterr().out
+    assert gate.gate(tmp_path, [directory], 'REF', 'BASE', output, regression_only=True) == 0
+    exposed = (
+        ''.join(p.read_text() for p in output.rglob('*') if p.name != 'identity.key' and p.is_file())
+        + capsys.readouterr().out
+    )
     assert private_id not in exposed and private_text not in exposed
-    assert set(p.name for p in output.iterdir()) == {'gate.json', 'gate.md'}
+    assert set(p.name for p in output.iterdir()) == {'gate.json', 'gate.md', 'identity.key'}
+    import hashlib, hmac, stat
+
+    key = (output / 'identity.key').read_bytes()
+    row = json.loads((output / 'gate.json').read_text())['cases'][0]
+    assert row['case_id'] == hmac.new(key, private_id.encode(), hashlib.sha256).hexdigest()
+    assert 'corpus_sha256' not in row
+    assert hashlib.sha256(private_id.encode()).hexdigest() not in exposed
+    assert gate.case_digest(case) not in exposed
+    other = tmp_path / 'other'
+    assert gate.gate(tmp_path, [directory], 'REF', 'BASE', other, regression_only=True) == 0
+    assert json.loads((other / 'gate.json').read_text())['cases'][0]['case_id'] != row['case_id']
+    for path in output.iterdir():
+        assert stat.S_IMODE(path.stat().st_mode) == 0o600
 
 
 def test_cli_error_does_not_print_path_or_manifest_content(tmp_path, capsys):
@@ -255,3 +272,124 @@ def test_snapshot_archive_is_immutable_and_removed_on_error(tmp_path):
     assert not list(output.iterdir())
     assert source.read_text() == 'uncommitted product'
     assert resolve_refs(repo, 'HEAD', 'HEAD')['candidate'] == sha
+
+
+@pytest.mark.parametrize(
+    'before,after',
+    [
+        (outcome(stage='titling'), outcome(stage='admission')),
+        (outcome(stage='admission'), outcome(stage='titling')),
+        (outcome(), outcome(reason='different')),
+    ],
+)
+def test_changed_reason_fails_closed_in_both_directions(case, before, after):
+    result = gate.compare([case], {'baseline': [[before]], 'candidate': [[after]]})
+    assert result['cases'][0]['classification'] == 'changed_reason'
+    assert result['verdict'] == 'FAIL'
+    assert gate.exit_code(result['verdict'], regression_only=True) != 0
+
+
+def test_zero_targets_is_regression_only_with_explicit_exit_opt_in(case):
+    result = gate.compare([case], {'baseline': [[outcome()]], 'candidate': [[outcome()]]})
+    assert result['verdict'] == 'REGRESSION_ONLY'
+    assert gate.exit_code(result['verdict']) != 0
+    assert gate.exit_code(result['verdict'], regression_only=True) == 0
+
+
+@pytest.mark.parametrize('repeats', [1, 2])
+def test_low_k_never_passes_ship_or_regression_mode(case, repeats):
+    case = replace(
+        case, corpus={'admission': {'drainers': 8}}, manifest=replace(case.manifest, gate={'fixed_by_ref': True})
+    )
+    result = gate.compare(
+        [case], {'baseline': [[outcome()] * repeats], 'candidate': [[outcome('pass')] * repeats]}, repeats=repeats
+    )
+    assert result['verdict'] == 'DIAGNOSTIC'
+    assert gate.exit_code(result['verdict']) != 0
+    assert gate.exit_code(result['verdict'], regression_only=True) != 0
+
+
+@pytest.mark.parametrize('mode', [0o755, 0o777, 0o750])
+def test_output_refuses_existing_public_directory(tmp_path, mode):
+    from testing.replay_harness.gate_resources import prepare_output
+
+    tmp_path.chmod(mode)
+    with pytest.raises(ValueError, match='0700'):
+        prepare_output(tmp_path)
+
+
+def test_output_refuses_wrong_owner_and_symlink(tmp_path, monkeypatch):
+    from testing.replay_harness import gate_resources
+
+    root = tmp_path / 'private'
+    gate_resources.prepare_output(root)
+    link = tmp_path / 'link'
+    link.symlink_to(root, target_is_directory=True)
+    with pytest.raises(ValueError):
+        gate_resources.prepare_output(link)
+    monkeypatch.setattr(gate_resources.os, 'getuid', lambda: -1)
+    with pytest.raises(ValueError):
+        gate_resources.prepare_output(root)
+
+
+def test_private_receipt_replaces_symlinks_without_touching_target(tmp_path):
+    from testing.replay_harness.gate_resources import private_write
+    import stat
+
+    victim = tmp_path / 'victim'
+    victim.write_text('unchanged')
+    receipt = tmp_path / 'gate.json'
+    receipt.symlink_to(victim)
+    private_write(receipt, b'private receipt')
+    assert victim.read_text() == 'unchanged'
+    assert not receipt.is_symlink()
+    assert stat.S_IMODE(receipt.stat().st_mode) == 0o600
+
+
+def test_journal_precedes_commit_and_retains_names_only(tmp_path):
+    from types import SimpleNamespace
+    from testing.replay_harness.gate_resources import DOCUMENT_PREFIX, journal_writes
+
+    name = DOCUMENT_PREFIX + 'batch_pipeline_test_owned_jobs/unit'
+    ledger = tmp_path / 'documents.jsonl'
+    calls = []
+
+    def commit(request):
+        assert json.loads(ledger.read_text()) == name
+        calls.append(request)
+
+    api = SimpleNamespace(commit=commit, batch_write=commit)
+    client = SimpleNamespace(_firestore_api=api)
+    with journal_writes(client, {'root': str(tmp_path)}):
+        request = {'writes': [{'update': {'name': name, 'fields': {'text': 'PRIVATE-PAYLOAD-CANARY'}}}]}
+        api.commit(request=request)
+        api.batch_write(request=request)
+    assert len(calls) == 2
+    assert ledger.read_text() == json.dumps(name) + '\n'
+    assert 'PRIVATE-PAYLOAD-CANARY' not in ledger.read_text()
+
+
+def test_parent_cleanup_deletes_only_journaled_documents(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from testing.replay_harness import gate_resources
+
+    scope = tmp_path / 'scope'
+    scope.mkdir()
+    name = gate_resources.DOCUMENT_PREFIX + 'users/synthetic-owner/conversations/unit'
+    (scope / 'documents.jsonl').write_text(json.dumps(name) + '\n')
+    requests = []
+
+    def connection(host, port, timeout):
+        assert (host, port, timeout) == ('127.0.0.1', 8085, 10)
+        return SimpleNamespace(
+            request=lambda method, path, headers: requests.append((method, path, headers)),
+            getresponse=lambda: SimpleNamespace(status=200),
+            close=lambda: None,
+        )
+
+    monkeypatch.setattr(gate_resources, 'HTTPConnection', connection)
+    gate_resources.cleanup_scopes(tmp_path, '127.0.0.1:8085')
+    assert requests == [('DELETE', f'/v1/{name}', {'Authorization': 'Bearer owner'})]
+    with pytest.raises(RuntimeError, match='loopback'):
+        gate_resources.cleanup_scopes(tmp_path, 'production.invalid:443')
+    assert len(requests) == 1

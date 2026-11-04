@@ -29,13 +29,13 @@ def evidence_output(tmp_path, label):
 
 def test_identical_refs(tmp_path):
     output = evidence_output(tmp_path, 'identical')
-    assert gate(ROOT, sorted(FIXTURES.iterdir()), 'HEAD', 'HEAD', output) == 0
+    assert gate(ROOT, sorted(FIXTURES.iterdir()), 'HEAD', 'HEAD', output, regression_only=True) == 0
     result = json.loads((output / 'gate.json').read_text())
-    assert result['verdict'] == 'PASS'
+    assert result['verdict'] == 'REGRESSION_ONLY'
     assert not {'fixed', 'regressed'} & {r['classification'] for r in result['cases']}
     stress = next(r for r in result['cases'] if len(r['baseline']['outcomes']) > 1)
     assert len(stress['baseline']['outcomes']) == len(stress['candidate']['outcomes']) == 3
-    assert set(p.name for p in output.iterdir()) == {'gate.json', 'gate.md'}
+    assert set(p.name for p in output.iterdir()) == {'gate.json', 'gate.md', 'identity.key'}
 
 
 def git(repo, *args, data=None):
@@ -92,6 +92,77 @@ def test_synthetic_product_fix(tmp_path, capsys):
     result = json.loads((output / 'gate.json').read_text())
     assert result['cases'][0]['classification'] == 'fixed'
     assert result['cases'][0]['fixed_by_ref']
+    assert result['verdict'] == 'PASS'
+    assert result['cases'][0]['identity_scheme'] == 'hmac-sha256'
+    assert 'corpus_sha256' not in result['cases'][0]
     exposed = (output / 'gate.json').read_text() + (output / 'gate.md').read_text() + capsys.readouterr().out
     assert 'OWNER-PRIVATE-CANARY' not in exposed and 'PRIVATE-TEXT-CANARY' not in exposed
-    assert set(p.name for p in output.iterdir()) == {'gate.json', 'gate.md'}
+    assert set(p.name for p in output.iterdir()) == {'gate.json', 'gate.md', 'identity.key'}
+
+
+@pytest.mark.parametrize('hard_kill', [False, True])
+def test_timeout_cleans_emulator_and_scratch(tmp_path, hard_kill):
+    from testing.replay_harness.gate import run_side
+    from testing.replay_harness.manifest import load_case
+    from testing.replay_snapshot import backend_snapshot, resolve_refs
+    from urllib.error import HTTPError
+    from urllib.request import Request, ProxyHandler, build_opener
+
+    marker = tmp_path / 'observed.json'
+    unwound = tmp_path / 'unwound'
+    worker = tmp_path / 'timeout_worker.py'
+    fixed_worker = ROOT / 'backend/testing/replay_harness/gate_worker.py'
+    # Use the actual environment and write journal, but block indefinitely after
+    # creating an owned namespace row, a synthetic user and local scratch.
+    worker.write_text(f'''import asyncio, importlib.util, json, pathlib, signal, sys
+spec = importlib.util.spec_from_file_location('worker', {str(fixed_worker)!r})
+worker = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(worker)
+backend = pathlib.Path(sys.argv[sys.argv.index('--backend') + 1])
+worker.configure_imports(backend)
+from testing.replay_harness import runner
+from testing.replay_harness.env import replay_environment
+async def stuck(_):
+    try:
+        with replay_environment() as environment:
+            user = environment.harness.seed_user('timeout-proof')
+            environment.harness.replay_users = [user]
+            job = environment.store.client.collection(environment.store.namespace + '_jobs').document('proof')
+            job.set({{'state': 'ready'}})
+            # A global row deliberately has no normal environment cleanup hook;
+            # the parent must remove it from the pre-commit journal on timeout.
+            global_ref = environment.store.client.collection('timeout_proof_global').document(user)
+            global_ref.set({{'synthetic': True}})
+            pathlib.Path({str(marker)!r}).write_text(json.dumps({{'documents': [job.path, 'users/' + user, global_ref.path], 'scratch': str(environment.storage.root)}}))
+            await asyncio.Event().wait()
+    finally:
+        pathlib.Path({str(unwound)!r}).write_text('cooperative exit')
+runner.run_cases = stuck
+if {hard_kill!r}:
+    async def ignore_term(request):
+        asyncio.get_running_loop().add_signal_handler(signal.SIGTERM, lambda: None)
+        return await worker.replay(request)
+    worker.cooperative_replay = ignore_term
+worker.main()
+''')
+    output = tmp_path / 'timeout-output'
+    output.mkdir(mode=0o700)
+    sha = resolve_refs(ROOT, 'HEAD', 'HEAD')['candidate']
+    with pytest.raises(subprocess.TimeoutExpired):
+        with backend_snapshot(ROOT, sha, output, 'timeout') as backend:
+            run_side(backend, [load_case(FIXTURES / 'admission-control')], 3, timeout=15, grace=2, worker=worker)
+    observed = json.loads(marker.read_text())
+    assert unwound.exists() is not hard_kill
+    assert not Path(observed['scratch']).exists()
+    assert not list(output.iterdir())
+    endpoint = os.environ['FIRESTORE_EMULATOR_HOST']
+    for path in observed['documents']:
+        with pytest.raises(HTTPError) as error:
+            build_opener(ProxyHandler({})).open(
+                Request(
+                    f'http://{endpoint}/v1/projects/demo-omi-isolated-tests/databases/(default)/documents/{path}',
+                    headers={'Authorization': 'Bearer owner'},
+                ),
+                timeout=5,
+            )
+        assert error.value.code == 404

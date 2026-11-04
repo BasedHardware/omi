@@ -81,7 +81,7 @@ replay-harness:
 .PHONY: replay-gate
 replay-gate:
 	@test -n "$(REF)" -a -n "$(BASE)" -a -n "$(CASES)" -a -n "$(OUTPUT)" || (echo 'Required: REF BASE CASES OUTPUT'; exit 2)
-	@backend/.venv/bin/python -I backend/testing/replay_harness/gate.py --ref "$(REF)" --base "$(BASE)" $(foreach case,$(CASES),--case "$(abspath $(case))") --output "$(abspath $(OUTPUT))" $(if $(K),--repeats "$(K)")
+	@backend/.venv/bin/python -I backend/testing/replay_harness/gate.py --ref "$(REF)" --base "$(BASE)" $(foreach case,$(CASES),--case "$(abspath $(case))") --output "$(abspath $(OUTPUT))" $(if $(K),--repeats "$(K)") $(if $(filter 1,$(REGRESSION_ONLY)),--regression-only) $(if $(WORKER_TIMEOUT),--worker-timeout "$(WORKER_TIMEOUT)")
 
 # Backend ratchet guard tests (test_*ratchet*.py plus the reason-label enums)
 # through backend/test.sh; included by scripts/pr-preflight --all for backend
