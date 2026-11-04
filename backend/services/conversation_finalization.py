@@ -37,11 +37,14 @@ from utils.cloud_tasks import (
 from utils.metrics import (
     CONVERSATION_ORPHANED_UNFINALIZED,
     LISTEN_FINALIZATION_BYOK_ABANDONMENTS_TOTAL,
+    LISTEN_FINALIZATION_BYOK_SESSION_ABANDONED_TOTAL,
+    LISTEN_FINALIZATION_BYOK_SESSION_ABANDONED_LAST_24H,
     LISTEN_FINALIZATION_DEAD_LETTER_TOTAL,
     LISTEN_FINALIZATION_DURABLE_JOBS,
     LISTEN_FINALIZATION_JOB_STATUS,
     LISTEN_FINALIZATION_OLDEST_NONTERMINAL_AGE_SECONDS,
     LISTEN_FINALIZATION_OLDEST_BLOCKED_BYOK_AGE_SECONDS,
+    LISTEN_FINALIZATION_OLDEST_DEAD_LETTER_AGE_SECONDS,
     LISTEN_FINALIZATION_SUMMARY_LAST_SUCCESS_TIMESTAMP_SECONDS,
     LISTEN_FINALIZATION_RETRIES_TOTAL,
     LISTEN_FINALIZATION_STALE_PROCESSING_RECONCILIATIONS_TOTAL,
@@ -54,7 +57,10 @@ from utils.observability.journeys import (
     record_conversation_finalization_client_terminal,
 )
 
+from utils.lifecycle_metrics import PhaseMetrics
+
 logger = logging.getLogger(__name__)
+_byok_phase_metrics = PhaseMetrics('omi_finalization_byok', ['state'])
 
 REPLAY_OLDEST_OVERDUE_AGE = Gauge(
     'listen_finalization_replay_oldest_overdue_age_seconds',
@@ -615,6 +621,7 @@ def reconcile_abandoned_byok_finalization_jobs(limit: int = 100, *, firestore_cl
             result['skipped'] += 1
             LISTEN_FINALIZATION_BYOK_ABANDONMENTS_TOTAL.labels(outcome='skipped').inc()
             continue
+        LISTEN_FINALIZATION_BYOK_SESSION_ABANDONED_TOTAL.inc()
         result['abandoned'] += 1
         if disposition['conversation_outcome'] == 'closed':
             result['conversations_closed'] += 1
@@ -686,6 +693,13 @@ def get_listen_finalization_tasks_max_attempts_for_worker() -> int:
 
 
 def _publish_job_metrics(*, firestore_client: Any = None) -> None:
+    from database._client import get_firestore_client
+    from database.lifecycle_metrics_queries import blocked_byok
+
+    now = time.time()
+    _byok_phase_metrics.refresh(
+        now, lambda: blocked_byok(firestore_client if firestore_client is not None else get_firestore_client(), now)
+    )
     try:
         summary = jobs_db.get_finalization_job_summary(firestore_client=firestore_client)
     except Exception:
@@ -693,6 +707,8 @@ def _publish_job_metrics(*, firestore_client: Any = None) -> None:
         return
     LISTEN_FINALIZATION_OLDEST_NONTERMINAL_AGE_SECONDS.set(float(summary['oldest_nonterminal_age_seconds']))
     LISTEN_FINALIZATION_OLDEST_BLOCKED_BYOK_AGE_SECONDS.set(float(summary['oldest_blocked_byok_age_seconds']))
+    LISTEN_FINALIZATION_OLDEST_DEAD_LETTER_AGE_SECONDS.set(float(summary['oldest_dead_letter_age_seconds']))
+    LISTEN_FINALIZATION_BYOK_SESSION_ABANDONED_LAST_24H.set(float(summary['byok_abandoned_last_24h']))
     for state in ('accepted', 'success', 'failure', 'stale', 'nonterminal', 'blocked_byok', 'terminal_unknown'):
         LISTEN_FINALIZATION_DURABLE_JOBS.labels(state=state).set(float(summary[state]))
     for status in ('queued', 'leased', 'blocked_byok', 'dead_letter'):

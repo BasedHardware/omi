@@ -15001,4 +15001,44 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Penutur dan transkrip akhir akan muncul di sini semasa dimuat naik.';
+
+  @override
+  String get speakerWholeRecording => 'Gunakan pada seluruh rakaman';
+
+  @override
+  String get speakerSelectionChanged => 'Penutur telah berubah. Pilih baris sekali lagi.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'Rakaman terlalu besar. Pilih lebih sedikit baris dalam satu perbualan.',
+        'partial': 'Beberapa baris telah disimpan. Pilih baris yang tinggal dan cuba lagi.',
+        'other': 'Beberapa baris telah disimpan. Pilih baris yang tinggal dan cuba lagi.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerRecordingCoverage(String state, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Menamakan semula $count baris dalam perbualan yang tersedia sahaja.',
+      one: 'Menamakan semula 1 baris dalam perbualan yang tersedia sahaja.',
+    );
+    String _temp1 = intl.Intl.selectLogic(
+      state,
+      {
+        'scope': 'Baris lain suara ini (liputan rakaman belum disahkan)',
+        'other': '$_temp0',
+      },
+    );
+    return '$_temp1';
+  }
+
+  @override
+  String get episodeFinishingUp => 'Sedang menyiapkan…';
 }

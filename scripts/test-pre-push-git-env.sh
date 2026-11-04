@@ -9,10 +9,16 @@ set -euo pipefail
 # (#11413, #11709, #11795, #12564); this pins the gate-level scrub that covers
 # every child at once.
 
-unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES
+# Do not pass a caller's repository selection to nested fixture Git commands.
+# GIT_NAMESPACE is repository-scoped but absent from Git's local-env-vars list.
+GIT_LOCAL_ENV_VARS="$(git rev-parse --local-env-vars)"
+for git_env_var in $GIT_LOCAL_ENV_VARS GIT_NAMESPACE; do
+  unset "$git_env_var"
+done
+unset GIT_LOCAL_ENV_VARS git_env_var
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-WORK="$(mktemp -d)"
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/omi-git-env.XXXXXX")"
 cleanup() { rm -rf "$WORK"; }
 trap cleanup EXIT
 

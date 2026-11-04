@@ -14968,4 +14968,44 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Talere og den endelige transkripsjonen dukker opp her under opplasting.';
+
+  @override
+  String get speakerWholeRecording => 'Bruk på hele opptaket';
+
+  @override
+  String get speakerSelectionChanged => 'Taleren er endret. Velg linjene på nytt.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'Opptaket er for stort. Velg færre linjer i én samtale.',
+        'partial': 'Noen linjer ble lagret. Velg de resterende og prøv igjen.',
+        'other': 'Noen linjer ble lagret. Velg de resterende og prøv igjen.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerRecordingCoverage(String state, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Endret navn på $count linjer bare i de tilgjengelige samtalene.',
+      one: 'Endret navn på 1 linjer bare i de tilgjengelige samtalene.',
+    );
+    String _temp1 = intl.Intl.selectLogic(
+      state,
+      {
+        'scope': 'Andre linjer med denne stemmen (opptakets omfang er ubekreftet)',
+        'other': '$_temp0',
+      },
+    );
+    return '$_temp1';
+  }
+
+  @override
+  String get episodeFinishingUp => 'Fullfører…';
 }

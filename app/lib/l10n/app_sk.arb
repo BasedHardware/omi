@@ -4522,5 +4522,10 @@
     "episodeCoversUpTo": "Pokrýva do {time} · úplné poznámky po dokončení",
     "liveTranscribedUpTo": "Prepísané do {time}",
     "liveAudioSaved": "Uložené {duration}",
-    "liveAudioSavedDetail": "Rečníci a konečný prepis sa tu objavia počas nahrávania."
+    "liveAudioSavedDetail": "Rečníci a konečný prepis sa tu objavia počas nahrávania.",
+    "speakerWholeRecording": "Použiť na celú nahrávku",
+    "speakerSelectionChanged": "Hovoriaci sa zmenil. Vyberte riadky znova.",
+    "speakerRenameIssue": "{reason, select, limit{Nahrávka je príliš veľká. Vyberte menej riadkov v jednej konverzácii.} partial{Niektoré riadky boli uložené. Vyberte zostávajúce a skúste to znova.} other{Niektoré riadky boli uložené. Vyberte zostávajúce a skúste to znova.}}",
+    "speakerRecordingCoverage": "{state, select, scope{Ďalšie riadky tohto hlasu (rozsah nahrávky nie je potvrdený)} other{{count, plural, =1{Premenovaných 1 riadkov iba v dostupných konverzáciách.} other{Premenovaných {count} riadkov iba v dostupných konverzáciách.}}}}",
+    "episodeFinishingUp": "Dokončuje sa…"
 }

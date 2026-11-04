@@ -39,6 +39,9 @@ from database.conversation_terminal_title import (
 from database.firestore_transaction_retry import run_with_transaction_contention_retry
 from database.firestore_index_registry import (
     FINALIZATION_OLDEST_NONTERMINAL_QUERY,
+    FINALIZATION_DEAD_LETTER_STOCK_QUERY,
+    FINALIZATION_OLDEST_DEAD_LETTER_QUERY,
+    FINALIZATION_BYOK_ABANDONED_WINDOW_QUERY,
     FINALIZATION_BYOK_RECLAIM_QUERY,
     FINALIZATION_BYOK_ABANDONMENT_QUERY,
     FINALIZATION_STALE_IN_PROGRESS_QUERY,
@@ -660,6 +663,7 @@ def _create_or_get_finalization_intent_txn(
             requires_byok = bool(requires_byok or loaded.get('listen_finalization_requires_byok'))
         status: FinalizationJobStatus = 'blocked_byok' if requires_byok else 'queued'
         job = {
+            **({'blocked_byok_at': now} if requires_byok else {}),
             'schema_version': 1,
             'uid': uid,
             'conversation_id': conversation_id,
@@ -1921,6 +1925,7 @@ def _claim_finalization_replay_txn(
             job_ref,
             {
                 'status': 'blocked_byok',
+                'blocked_byok_at': now,
                 'byok_last_activity_at': _job_last_activity_at(job),
                 'updated_at': now,
                 'lease_epoch': int(job.get('lease_epoch') or 0) + 1,
@@ -3055,13 +3060,11 @@ def advance_byok_abandonment_sweep_cursor(
 
 
 def get_finalization_job_summary(*, firestore_client: Any = None) -> dict[str, float | int]:
-    """Read one generation's fixed shard fan-in plus the oldest unfinished job.
+    """Publish generation-scoped outcomes and all-generation terminal inventory.
 
-    This deliberately never aggregates ``conversation_finalization_jobs``. A
-    backend-listen replica performs exactly ``FINALIZATION_PROJECTION_SHARD_COUNT``
-    projection-document reads, regardless of terminal history size. Pre-release
-    jobs carry no generation and remain absent from this new denominator; their
-    terminal field is still preserved on the authoritative job document.
+    Only this startup/periodic summary performs the two server-side COUNTs;
+    no job documents are downloaded for stock or the rolling abandonment count.
+    Other totals retain fixed shard reads; ages read one indexed row per status.
     """
     client = _client(firestore_client)
     now = _now()
@@ -3100,23 +3103,49 @@ def get_finalization_job_summary(*, firestore_client: Any = None) -> dict[str, f
                 except (ValueError, TypeError, OverflowError):
                     pass
 
+    # Include legacy rows without projection_generation; do not stream the stock.
+    dead_letter_stock = (
+        FINALIZATION_DEAD_LETTER_STOCK_QUERY.build(
+            jobs_collection, {'status': 'dead_letter'}, field_filter_factory=FieldFilter
+        )
+        .count()
+        .get()
+    )
+    abandoned_last_24h = (
+        FINALIZATION_BYOK_ABANDONED_WINDOW_QUERY.build(
+            jobs_collection,
+            {
+                'status': 'dead_letter',
+                'failure_code': BYOK_ABANDONED_FAILURE_CODE,
+                'after': now - timedelta(days=1),
+                'before': now,
+            },
+            field_filter_factory=FieldFilter,
+        )
+        .count()
+        .get()
+    )
+
     # One indexed oldest-row read per status, independent of terminal history.
     oldest_age_seconds = 0.0
     oldest_blocked_byok_age_seconds = 0.0
-    for status in sorted(NONTERMINAL_JOB_STATUSES):
+    oldest_dead_letter_age_seconds = 0.0
+    for status in sorted(NONTERMINAL_JOB_STATUSES | {'dead_letter'}):
+        clock = 'terminal_at' if status == 'dead_letter' else 'created_at'
+        spec = (
+            FINALIZATION_OLDEST_DEAD_LETTER_QUERY if status == 'dead_letter' else FINALIZATION_OLDEST_NONTERMINAL_QUERY
+        )
         oldest_query = (
-            FINALIZATION_OLDEST_NONTERMINAL_QUERY.build(
-                jobs_collection, {'status': status}, field_filter_factory=FieldFilter
-            )
-            .order_by('created_at')
-            .limit(1)
+            spec.build(jobs_collection, {'status': status}, field_filter_factory=FieldFilter).order_by(clock).limit(1)
         )
         for snapshot in oldest_query.stream():
-            created_at = parse_timestamp((snapshot.to_dict() or {}).get('created_at'))
-            if created_at is not None:
-                age = max(0.0, (now - created_at).total_seconds())
+            clock_at = parse_timestamp((snapshot.to_dict() or {}).get(clock))
+            if clock_at is not None:
+                age = max(0.0, (now - clock_at).total_seconds())
                 if status == 'blocked_byok':
                     oldest_blocked_byok_age_seconds = max(oldest_blocked_byok_age_seconds, age)
+                elif status == 'dead_letter':
+                    oldest_dead_letter_age_seconds = max(oldest_dead_letter_age_seconds, age)
                 else:
                     oldest_age_seconds = max(oldest_age_seconds, age)
     return {
@@ -3129,10 +3158,12 @@ def get_finalization_job_summary(*, firestore_client: Any = None) -> dict[str, f
         'leased': totals['leased'],
         'blocked_byok': totals['blocked_byok'],
         'completed': totals['completed'],
-        'dead_letter': totals['dead_letter'],
+        'dead_letter': int(dead_letter_stock[0][0].value),
+        'byok_abandoned_last_24h': int(abandoned_last_24h[0][0].value),
         # Every admitted generation terminal transition writes an outcome.
         # Historical terminals are intentionally out of this bounded generation.
         'terminal_unknown': 0,
         'oldest_nonterminal_age_seconds': oldest_age_seconds,
         'oldest_blocked_byok_age_seconds': oldest_blocked_byok_age_seconds,
+        'oldest_dead_letter_age_seconds': oldest_dead_letter_age_seconds,
     }

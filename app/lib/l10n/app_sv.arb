@@ -4522,5 +4522,10 @@
     "episodeCoversUpTo": "Täcker fram till {time} · fullständiga anteckningar när det är klart",
     "liveTranscribedUpTo": "Transkriberat fram till {time}",
     "liveAudioSaved": "{duration} sparat",
-    "liveAudioSavedDetail": "Talare och den slutliga transkriptionen visas här under uppladdningen."
+    "liveAudioSavedDetail": "Talare och den slutliga transkriptionen visas här under uppladdningen.",
+    "speakerWholeRecording": "Använd för hela inspelningen",
+    "speakerSelectionChanged": "Talaren har ändrats. Välj raderna igen.",
+    "speakerRenameIssue": "{reason, select, limit{Inspelningen är för stor. Välj färre rader i en konversation.} partial{Vissa rader sparades. Välj de återstående och försök igen.} other{Vissa rader sparades. Välj de återstående och försök igen.}}",
+    "speakerRecordingCoverage": "{state, select, scope{Andra rader med denna röst (inspelningens omfattning är obekräftad)} other{{count, plural, =1{Bytte namn på 1 rader bara i de tillgängliga konversationerna.} other{Bytte namn på {count} rader bara i de tillgängliga konversationerna.}}}}",
+    "episodeFinishingUp": "Slutför…"
 }

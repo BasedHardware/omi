@@ -11948,5 +11948,10 @@
     "episodeCoversUpTo": "Do {time} · popolni zapiski ob koncu",
     "liveTranscribedUpTo": "Prepisano do {time}",
     "liveAudioSaved": "Shranjeno {duration}",
-    "liveAudioSavedDetail": "Govorci in končni prepis se bodo tukaj prikazali med nalaganjem."
+    "liveAudioSavedDetail": "Govorci in končni prepis se bodo tukaj prikazali med nalaganjem.",
+    "speakerWholeRecording": "Uporabi za celoten posnetek",
+    "speakerSelectionChanged": "Govorec se je spremenil. Znova izberite vrstice.",
+    "speakerRenameIssue": "{reason, select, limit{Posnetek je prevelik. Izberite manj vrstic v enem pogovoru.} partial{Nekatere vrstice so shranjene. Izberite preostale in poskusite znova.} other{Nekatere vrstice so shranjene. Izberite preostale in poskusite znova.}}",
+    "speakerRecordingCoverage": "{state, select, scope{Druge vrstice tega glasu (obseg posnetka ni potrjen)} other{{count, plural, =1{Preimenovanih 1 vrstic samo v razpoložljivih pogovorih.} other{Preimenovanih {count} vrstic samo v razpoložljivih pogovorih.}}}}",
+    "episodeFinishingUp": "Zaključevanje…"
 }

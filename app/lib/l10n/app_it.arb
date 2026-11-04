@@ -4522,5 +4522,10 @@
     "episodeCoversUpTo": "Fino alle {time} · note complete alla fine",
     "liveTranscribedUpTo": "Trascritto fino alle {time}",
     "liveAudioSaved": "{duration} salvati",
-    "liveAudioSavedDetail": "Gli interlocutori e la trascrizione finale appariranno qui durante il caricamento."
+    "liveAudioSavedDetail": "Gli interlocutori e la trascrizione finale appariranno qui durante il caricamento.",
+    "speakerWholeRecording": "Applica a tutta la registrazione",
+    "speakerSelectionChanged": "Il parlante è cambiato. Seleziona di nuovo le righe.",
+    "speakerRenameIssue": "{reason, select, limit{La registrazione è troppo grande. Seleziona meno righe in una conversazione.} partial{Alcune righe sono state salvate. Seleziona le altre e riprova.} other{Alcune righe sono state salvate. Seleziona le altre e riprova.}}",
+    "speakerRecordingCoverage": "{state, select, scope{Altre righe di questa voce (copertura della registrazione non confermata)} other{{count, plural, =1{Rinominate 1 righe solo nelle conversazioni disponibili.} other{Rinominate {count} righe solo nelle conversazioni disponibili.}}}}",
+    "episodeFinishingUp": "Completamento…"
 }

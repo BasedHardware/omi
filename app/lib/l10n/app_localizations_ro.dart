@@ -15027,4 +15027,44 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Vorbitorii și transcrierea finală vor apărea aici pe măsură ce se încarcă.';
+
+  @override
+  String get speakerWholeRecording => 'Aplică întregii înregistrări';
+
+  @override
+  String get speakerSelectionChanged => 'Vorbitorul s-a schimbat. Selectează din nou rândurile.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'Înregistrarea este prea mare. Selectează mai puține rânduri dintr-o conversație.',
+        'partial': 'Unele rânduri au fost salvate. Selectează-le pe cele rămase și încearcă din nou.',
+        'other': 'Unele rânduri au fost salvate. Selectează-le pe cele rămase și încearcă din nou.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerRecordingCoverage(String state, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'S-au redenumit $count rânduri doar în conversațiile disponibile.',
+      one: 'S-au redenumit 1 rânduri doar în conversațiile disponibile.',
+    );
+    String _temp1 = intl.Intl.selectLogic(
+      state,
+      {
+        'scope': 'Alte rânduri ale acestei voci (acoperirea înregistrării neconfirmată)',
+        'other': '$_temp0',
+      },
+    );
+    return '$_temp1';
+  }
+
+  @override
+  String get episodeFinishingUp => 'Se finalizează…';
 }

@@ -15012,4 +15012,44 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Участники и итоговая расшифровка появятся здесь по мере загрузки.';
+
+  @override
+  String get speakerWholeRecording => 'Применить ко всей записи';
+
+  @override
+  String get speakerSelectionChanged => 'Говорящий изменился. Выберите строки заново.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'Запись слишком большая. Выберите меньше строк в одном разговоре.',
+        'partial': 'Некоторые строки сохранены. Выберите оставшиеся и попробуйте снова.',
+        'other': 'Некоторые строки сохранены. Выберите оставшиеся и попробуйте снова.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerRecordingCoverage(String state, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Переименовано $count строк только в доступных разговорах.',
+      one: 'Переименовано 1 строк только в доступных разговорах.',
+    );
+    String _temp1 = intl.Intl.selectLogic(
+      state,
+      {
+        'scope': 'Другие строки этого голоса (охват записи не подтверждён)',
+        'other': '$_temp0',
+      },
+    );
+    return '$_temp1';
+  }
+
+  @override
+  String get episodeFinishingUp => 'Завершение…';
 }

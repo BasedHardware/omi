@@ -14876,4 +14876,44 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'ستظهر هنا أسماء المتحدثين والنص النهائي أثناء الرفع.';
+
+  @override
+  String get speakerWholeRecording => 'تطبيق على التسجيل بأكمله';
+
+  @override
+  String get speakerSelectionChanged => 'تغيّر المتحدث. حدد الأسطر مرة أخرى.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'التسجيل كبير جدًا. حدد أسطرًا أقل في محادثة واحدة.',
+        'partial': 'تم حفظ بعض الأسطر. حدد الأسطر المتبقية وحاول مجددًا.',
+        'other': 'تم حفظ بعض الأسطر. حدد الأسطر المتبقية وحاول مجددًا.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerRecordingCoverage(String state, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'تمت إعادة تسمية $count أسطر في المحادثات المتاحة فقط.',
+      one: 'تمت إعادة تسمية 1 أسطر في المحادثات المتاحة فقط.',
+    );
+    String _temp1 = intl.Intl.selectLogic(
+      state,
+      {
+        'scope': 'أسطر أخرى لهذا الصوت (لم يتم تأكيد شمول التسجيل)',
+        'other': '$_temp0',
+      },
+    );
+    return '$_temp1';
+  }
+
+  @override
+  String get episodeFinishingUp => 'جارٍ الانتهاء…';
 }

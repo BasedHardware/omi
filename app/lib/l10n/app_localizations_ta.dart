@@ -15067,4 +15067,44 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'பதிவேற்றத்தின் போது பேசுபவர்களும் இறுதி படியெடுப்பும் இங்கே வரும்.';
+
+  @override
+  String get speakerWholeRecording => 'முழுப் பதிவுக்கும் பயன்படுத்து';
+
+  @override
+  String get speakerSelectionChanged => 'பேச்சாளர் மாறிவிட்டார். வரிகளை மீண்டும் தேர்ந்தெடுக்கவும்.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'பதிவு மிகப் பெரியது. ஒரு உரையாடலில் குறைவான வரிகளைத் தேர்ந்தெடுக்கவும்.',
+        'partial': 'சில வரிகள் சேமிக்கப்பட்டன. மீதமுள்ள வரிகளைத் தேர்ந்தெடுத்து மீண்டும் முயற்சிக்கவும்.',
+        'other': 'சில வரிகள் சேமிக்கப்பட்டன. மீதமுள்ள வரிகளைத் தேர்ந்தெடுத்து மீண்டும் முயற்சிக்கவும்.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerRecordingCoverage(String state, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'கிடைக்கக்கூடிய உரையாடல்களில் மட்டும் $count வரிகளின் பெயர் மாற்றப்பட்டது.',
+      one: 'கிடைக்கக்கூடிய உரையாடல்களில் மட்டும் 1 வரிகளின் பெயர் மாற்றப்பட்டது.',
+    );
+    String _temp1 = intl.Intl.selectLogic(
+      state,
+      {
+        'scope': 'இந்தக் குரலின் பிற வரிகள் (பதிவின் வரம்பு உறுதிப்படுத்தப்படவில்லை)',
+        'other': '$_temp0',
+      },
+    );
+    return '$_temp1';
+  }
+
+  @override
+  String get episodeFinishingUp => 'முடிக்கப்படுகிறது…';
 }

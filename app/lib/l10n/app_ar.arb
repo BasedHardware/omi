@@ -4522,5 +4522,10 @@
     "episodeCoversUpTo": "يغطي حتى {time} · الملاحظات الكاملة عند الانتهاء",
     "liveTranscribedUpTo": "تم النسخ حتى {time}",
     "liveAudioSaved": "تم حفظ {duration}",
-    "liveAudioSavedDetail": "ستظهر هنا أسماء المتحدثين والنص النهائي أثناء الرفع."
+    "liveAudioSavedDetail": "ستظهر هنا أسماء المتحدثين والنص النهائي أثناء الرفع.",
+    "speakerWholeRecording": "تطبيق على التسجيل بأكمله",
+    "speakerSelectionChanged": "تغيّر المتحدث. حدد الأسطر مرة أخرى.",
+    "speakerRenameIssue": "{reason, select, limit{التسجيل كبير جدًا. حدد أسطرًا أقل في محادثة واحدة.} partial{تم حفظ بعض الأسطر. حدد الأسطر المتبقية وحاول مجددًا.} other{تم حفظ بعض الأسطر. حدد الأسطر المتبقية وحاول مجددًا.}}",
+    "speakerRecordingCoverage": "{state, select, scope{أسطر أخرى لهذا الصوت (لم يتم تأكيد شمول التسجيل)} other{{count, plural, =1{تمت إعادة تسمية 1 أسطر في المحادثات المتاحة فقط.} other{تمت إعادة تسمية {count} أسطر في المحادثات المتاحة فقط.}}}}",
+    "episodeFinishingUp": "جارٍ الانتهاء…"
 }

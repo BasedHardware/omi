@@ -26324,6 +26324,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Speakers and the final transcript fill in here as it uploads.'**
   String get liveAudioSavedDetail;
+
+  /// No description provided for @speakerWholeRecording.
+  ///
+  /// In en, this message translates to:
+  /// **'Apply to the whole recording'**
+  String get speakerWholeRecording;
+
+  /// No description provided for @speakerSelectionChanged.
+  ///
+  /// In en, this message translates to:
+  /// **'The speaker changed. Select the lines again.'**
+  String get speakerSelectionChanged;
+
+  /// Speaker rename budget refusal or partial member save; successful labels remain applied.
+  ///
+  /// In en, this message translates to:
+  /// **'{reason, select, limit{Recording too large. Select fewer lines in one conversation.} partial{Some lines were saved. Select the remaining lines and try again.} other{Some lines were saved. Select the remaining lines and try again.}}'**
+  String speakerRenameIssue(String reason);
+
+  /// Scope explanation or saved confirmation when full recording coverage is unconfirmed.
+  ///
+  /// In en, this message translates to:
+  /// **'{state, select, scope{Other lines from this voice (recording coverage unconfirmed)} other{{count, plural, =1{Renamed 1 line in the available conversations only.} other{Renamed {count} lines in the available conversations only.}}}}'**
+  String speakerRecordingCoverage(String state, int count);
+
+  /// Neutral Home row title while an episode summary is being completed.
+  ///
+  /// In en, this message translates to:
+  /// **'Finishing up…'**
+  String get episodeFinishingUp;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

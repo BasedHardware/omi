@@ -14986,4 +14986,44 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Kalbėtojai ir galutinė transkripcija atsiras čia įkeliant.';
+
+  @override
+  String get speakerWholeRecording => 'Taikyti visam įrašui';
+
+  @override
+  String get speakerSelectionChanged => 'Kalbėtojas pasikeitė. Pasirinkite eilutes dar kartą.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'Įrašas per didelis. Pasirinkite mažiau eilučių viename pokalbyje.',
+        'partial': 'Kai kurios eilutės išsaugotos. Pasirinkite likusias ir bandykite dar kartą.',
+        'other': 'Kai kurios eilutės išsaugotos. Pasirinkite likusias ir bandykite dar kartą.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerRecordingCoverage(String state, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Pervadinta $count eilučių tik prieinamuose pokalbiuose.',
+      one: 'Pervadinta 1 eilučių tik prieinamuose pokalbiuose.',
+    );
+    String _temp1 = intl.Intl.selectLogic(
+      state,
+      {
+        'scope': 'Kitos šio balso eilutės (įrašo aprėptis nepatvirtinta)',
+        'other': '$_temp0',
+      },
+    );
+    return '$_temp1';
+  }
+
+  @override
+  String get episodeFinishingUp => 'Baigiama…';
 }

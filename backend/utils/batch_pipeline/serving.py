@@ -16,6 +16,8 @@ from config.batch_pipeline import (
     projection_hold_recovery_enabled,
     serving_metrics_min_refresh_seconds,
 )
+from database.outbox import OutboxKind, outbox_for
+from database.batch_privacy_attempt import with_batch_privacy_attempt
 from database.batch_pipeline_store import FirestoreStore
 from database.batch_pipeline_shadow_hook import shadow_from_env
 from database.batch_pipeline_staging import reap
@@ -108,6 +110,7 @@ class Serving:
             if self.merge.commit_next(owner_id, time.time(), release=release) is None:
                 break
 
+    @with_batch_privacy_attempt
     async def reconcile_async(
         self, *, recover_quarantine=False, periodic=False, owner_id=None, recovered=None, owner_only=False
     ):
@@ -324,12 +327,22 @@ def start_serving_from_env():
             except asyncio.TimeoutError:
                 pass
 
+    @with_batch_privacy_attempt
+    async def drain_tick():
+        service = await run_blocking(sync_executor, serving_for_stage, current_stage())
+        return await drain_recordings(
+            service.store, provider_outbox_factory=lambda: outbox_for(OutboxKind.PROVIDER_STT)
+        )
+
     async def drain():
         # Record admission must not wait for a full reconciliation pass.
         while not stop.is_set():
             try:
-                service = await run_blocking(sync_executor, serving_for_stage, current_stage())
-                await drain_recordings(service.store)
+                if await drain_tick():
+                    # Keep draining a backlog without the idle poll delay, but
+                    # always yield so shutdown and sibling loops can progress.
+                    await asyncio.sleep(0)
+                    continue
             except Exception as error:
                 logging.getLogger(__name__).error(
                     'event=batch_serving action=record_drain outcome=retry exception_type=%s', type(error).__name__

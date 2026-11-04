@@ -4522,5 +4522,10 @@
     "episodeCoversUpTo": "Kattaa klo {time} asti · täydet muistiinpanot lopuksi",
     "liveTranscribedUpTo": "Litteroitu klo {time} asti",
     "liveAudioSaved": "{duration} tallennettu",
-    "liveAudioSavedDetail": "Puhujat ja lopullinen litterointi tulevat tähän latauksen edetessä."
+    "liveAudioSavedDetail": "Puhujat ja lopullinen litterointi tulevat tähän latauksen edetessä.",
+    "speakerWholeRecording": "Käytä koko tallenteessa",
+    "speakerSelectionChanged": "Puhuja muuttui. Valitse rivit uudelleen.",
+    "speakerRenameIssue": "{reason, select, limit{Tallenne on liian suuri. Valitse vähemmän rivejä yhdestä keskustelusta.} partial{Osa riveistä tallennettiin. Valitse loput ja yritä uudelleen.} other{Osa riveistä tallennettiin. Valitse loput ja yritä uudelleen.}}",
+    "speakerRecordingCoverage": "{state, select, scope{Tämän äänen muut rivit (tallenteen kattavuus vahvistamatta)} other{{count, plural, =1{Nimetty 1 riviä vain saatavilla olevissa keskusteluissa.} other{Nimetty {count} riviä vain saatavilla olevissa keskusteluissa.}}}}",
+    "episodeFinishingUp": "Viimeistellään…"
 }

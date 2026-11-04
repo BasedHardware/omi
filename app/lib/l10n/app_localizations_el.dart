@@ -15064,4 +15064,44 @@ class AppLocalizationsEl extends AppLocalizations {
   @override
   String get liveAudioSavedDetail =>
       'Οι ομιλητές και η τελική απομαγνητοφώνηση θα εμφανιστούν εδώ κατά τη μεταφόρτωση.';
+
+  @override
+  String get speakerWholeRecording => 'Εφαρμογή σε όλη την εγγραφή';
+
+  @override
+  String get speakerSelectionChanged => 'Ο ομιλητής άλλαξε. Επιλέξτε ξανά τις γραμμές.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'Η εγγραφή είναι πολύ μεγάλη. Επιλέξτε λιγότερες γραμμές σε μία συνομιλία.',
+        'partial': 'Αποθηκεύτηκαν ορισμένες γραμμές. Επιλέξτε τις υπόλοιπες και δοκιμάστε ξανά.',
+        'other': 'Αποθηκεύτηκαν ορισμένες γραμμές. Επιλέξτε τις υπόλοιπες και δοκιμάστε ξανά.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerRecordingCoverage(String state, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Μετονομάστηκαν $count γραμμές μόνο στις διαθέσιμες συνομιλίες.',
+      one: 'Μετονομάστηκαν 1 γραμμές μόνο στις διαθέσιμες συνομιλίες.',
+    );
+    String _temp1 = intl.Intl.selectLogic(
+      state,
+      {
+        'scope': 'Άλλες γραμμές αυτής της φωνής (η κάλυψη εγγραφής δεν επιβεβαιώθηκε)',
+        'other': '$_temp0',
+      },
+    );
+    return '$_temp1';
+  }
+
+  @override
+  String get episodeFinishingUp => 'Ολοκλήρωση…';
 }

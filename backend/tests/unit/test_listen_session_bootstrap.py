@@ -149,6 +149,7 @@ async def test_expired_fair_use_restriction_does_not_meter_dg_budget(monkeypatch
     redis_client.get.return_value = None
     monkeypatch.setattr(fair_use, "fair_use_db", fair_use_db)
     monkeypatch.setattr(fair_use, "redis_client", redis_client)
+    monkeypatch.setattr(fair_use, "FAIR_USE_THROTTLE_DECAY_ENABLED", True)
 
     async def fake_run_blocking(_executor, fn, *args, **kwargs):
         name = getattr(fn, "__name__", "")
@@ -166,11 +167,23 @@ async def test_expired_fair_use_restriction_does_not_meter_dg_budget(monkeypatch
     monkeypatch.setattr(bootstrap, "FAIR_USE_RESTRICT_DAILY_DG_MS", 1800000)
     monkeypatch.setattr(bootstrap, "run_blocking", fake_run_blocking)
 
+    before = datetime.now(timezone.utc)
     base = await bootstrap.load_listen_connect_base("uid-expired-restrict", source="omi", use_custom_stt=False)
+    after = datetime.now(timezone.utc)
 
     assert base.fair_use_init_stage == "throttle"
     assert base.fair_use_track_dg_usage is False
     assert base.fair_use_dg_budget_exhausted is False
+    fair_use_db.update_fair_use_state.assert_called_once()
+    stage_entered_at = fair_use_db.update_fair_use_state.call_args.args[1]["stage_entered_at"]
+    assert before <= stage_entered_at <= after
     fair_use_db.update_fair_use_state.assert_called_once_with(
-        "uid-expired-restrict", {"stage": "throttle", "restrict_until": None}
+        "uid-expired-restrict",
+        {
+            "stage": "throttle",
+            "restrict_until": None,
+            "stage_entered_at": stage_entered_at,
+            "throttle_until": stage_entered_at + timedelta(days=7),
+            "warning_until": None,
+        },
     )

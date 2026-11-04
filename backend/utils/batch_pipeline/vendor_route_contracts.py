@@ -78,7 +78,7 @@ class RouteTableInvalid(ValueError):
 
 
 def normalized_language(language: str | None) -> str:
-    """The language key selection uses: unknown is ``multi``, as ``provider_stt.resolve_route``."""
+    """The language key selection uses: unknown is ``multi``, as ``provider_stt_admission.resolve_route``."""
     return normalized_stt_language(language) or 'multi'
 
 
@@ -268,7 +268,7 @@ def capable_options(table: RouteTable, language: str | None) -> tuple[RouteOptio
 
 
 # Terminal rung of the ladder and the kill-switch target: today's routing exactly. GPU for every
-# language deployed Parakeet serves, Modulate only where it cannot (provider_stt.resolve_route).
+# language deployed Parakeet serves, Modulate only where it cannot (provider_stt_admission.resolve_route).
 BUILTIN_TABLE: Final = RouteTable.from_dict(
     {
         'schema_version': SCHEMA_VERSION,

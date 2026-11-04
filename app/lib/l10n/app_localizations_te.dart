@@ -15027,4 +15027,44 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'అప్‌లోడ్ అవుతున్నప్పుడు వక్తలు, తుది ట్రాన్స్‌క్రిప్ట్ ఇక్కడ కనిపిస్తాయి.';
+
+  @override
+  String get speakerWholeRecording => 'మొత్తం రికార్డింగ్‌కు వర్తింపజేయండి';
+
+  @override
+  String get speakerSelectionChanged => 'వక్త మారారు. పంక్తులను మళ్లీ ఎంచుకోండి.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'రికార్డింగ్ చాలా పెద్దది. ఒక సంభాషణలో తక్కువ పంక్తులను ఎంచుకోండి.',
+        'partial': 'కొన్ని పంక్తులు సేవ్ అయ్యాయి. మిగిలిన వాటిని ఎంచుకుని మళ్లీ ప్రయత్నించండి.',
+        'other': 'కొన్ని పంక్తులు సేవ్ అయ్యాయి. మిగిలిన వాటిని ఎంచుకుని మళ్లీ ప్రయత్నించండి.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerRecordingCoverage(String state, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'అందుబాటులో ఉన్న సంభాషణల్లో మాత్రమే $count పంక్తుల పేరు మార్చబడింది.',
+      one: 'అందుబాటులో ఉన్న సంభాషణల్లో మాత్రమే 1 పంక్తుల పేరు మార్చబడింది.',
+    );
+    String _temp1 = intl.Intl.selectLogic(
+      state,
+      {
+        'scope': 'ఈ స్వరంలోని ఇతర పంక్తులు (రికార్డింగ్ పరిధి నిర్ధారణ కాలేదు)',
+        'other': '$_temp0',
+      },
+    );
+    return '$_temp1';
+  }
+
+  @override
+  String get episodeFinishingUp => 'పూర్తి చేస్తోంది…';
 }

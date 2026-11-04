@@ -14958,4 +14958,44 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Rečníci a konečný prepis sa tu objavia počas nahrávania.';
+
+  @override
+  String get speakerWholeRecording => 'Použiť na celú nahrávku';
+
+  @override
+  String get speakerSelectionChanged => 'Hovoriaci sa zmenil. Vyberte riadky znova.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'Nahrávka je príliš veľká. Vyberte menej riadkov v jednej konverzácii.',
+        'partial': 'Niektoré riadky boli uložené. Vyberte zostávajúce a skúste to znova.',
+        'other': 'Niektoré riadky boli uložené. Vyberte zostávajúce a skúste to znova.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerRecordingCoverage(String state, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Premenovaných $count riadkov iba v dostupných konverzáciách.',
+      one: 'Premenovaných 1 riadkov iba v dostupných konverzáciách.',
+    );
+    String _temp1 = intl.Intl.selectLogic(
+      state,
+      {
+        'scope': 'Ďalšie riadky tohto hlasu (rozsah nahrávky nie je potvrdený)',
+        'other': '$_temp0',
+      },
+    );
+    return '$_temp1';
+  }
+
+  @override
+  String get episodeFinishingUp => 'Dokončuje sa…';
 }

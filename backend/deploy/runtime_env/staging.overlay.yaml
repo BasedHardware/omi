@@ -123,6 +123,7 @@ cloud_run:
     sync-backfill-fresh: staging-sync-backfill-fresh
     batch-quarantine-recovery: staging-batch-quarantine-recovery
     enrichment: staging-enrichment
+    enrichment-fresh: staging-enrichment-fresh
     provider-stt: staging-provider-stt
     conversation-finalization: staging-conversation-finalization
     audio-merge: staging-audio-merge
@@ -185,6 +186,7 @@ overlay:
         env:
           ACCOUNT_DELETION_DISPATCH_MODE: {category: rollout, value: cloud_tasks}
           HOSTED_PARAKEET_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}
+          HOSTED_LID_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}
           HOSTED_DIARIZATION_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}
           HOSTED_SPEAKER_EMBEDDING_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}
       backend-sync:
@@ -192,6 +194,7 @@ overlay:
           SYNC_DISPATCH_MODE: {category: rollout, value: cloud_tasks}
           ACCOUNT_DELETION_DISPATCH_MODE: {category: rollout, value: cloud_tasks}
           HOSTED_PARAKEET_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}
+          HOSTED_LID_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}
           HOSTED_DIARIZATION_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}
           HOSTED_SPEAKER_EMBEDDING_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}
       backend-sync-backfill:
@@ -199,10 +202,12 @@ overlay:
           SYNC_DISPATCH_MODE: {category: rollout, value: cloud_tasks}
           ACCOUNT_DELETION_DISPATCH_MODE: {category: rollout, value: cloud_tasks}
           HOSTED_PARAKEET_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}
+          HOSTED_LID_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}
           HOSTED_DIARIZATION_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}
           HOSTED_SPEAKER_EMBEDDING_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}
       backend-integration:
         env:
           ACCOUNT_DELETION_DISPATCH_MODE: {category: rollout, value: cloud_tasks}
           HOSTED_PARAKEET_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}
+          HOSTED_LID_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}
           HOSTED_SPEAKER_EMBEDDING_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}

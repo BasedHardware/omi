@@ -4522,5 +4522,10 @@
     "episodeCoversUpTo": "{time}まで · 終了後に完全なメモ",
     "liveTranscribedUpTo": "{time}まで文字起こし済み",
     "liveAudioSaved": "{duration}を保存済み",
-    "liveAudioSavedDetail": "アップロードが進むと、話者と最終的な文字起こしがここに表示されます。"
+    "liveAudioSavedDetail": "アップロードが進むと、話者と最終的な文字起こしがここに表示されます。",
+    "speakerWholeRecording": "録音全体に適用",
+    "speakerSelectionChanged": "話者が変わりました。行を選び直してください。",
+    "speakerRenameIssue": "{reason, select, limit{録音が大きすぎます。1つの会話で選択する行を減らしてください。} partial{一部の行は保存されました。残りの行を選択して、もう一度お試しください。} other{一部の行は保存されました。残りの行を選択して、もう一度お試しください。}}",
+    "speakerRecordingCoverage": "{state, select, scope{この声の他の行（録音全体の範囲は未確認）} other{{count, plural, =1{利用可能な会話内の1行のみ名前を変更しました。} other{利用可能な会話内の{count}行のみ名前を変更しました。}}}}",
+    "episodeFinishingUp": "仕上げ中…"
 }

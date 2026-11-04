@@ -4522,5 +4522,10 @@
     "episodeCoversUpTo": "Tot {time} · volledige notities aan het eind",
     "liveTranscribedUpTo": "Getranscribeerd tot {time}",
     "liveAudioSaved": "{duration} opgeslagen",
-    "liveAudioSavedDetail": "Sprekers en het definitieve transcript verschijnen hier tijdens het uploaden."
+    "liveAudioSavedDetail": "Sprekers en het definitieve transcript verschijnen hier tijdens het uploaden.",
+    "speakerWholeRecording": "Toepassen op de hele opname",
+    "speakerSelectionChanged": "De spreker is gewijzigd. Selecteer de regels opnieuw.",
+    "speakerRenameIssue": "{reason, select, limit{De opname is te groot. Selecteer minder regels in één gesprek.} partial{Sommige regels zijn opgeslagen. Selecteer de overige en probeer het opnieuw.} other{Sommige regels zijn opgeslagen. Selecteer de overige en probeer het opnieuw.}}",
+    "speakerRecordingCoverage": "{state, select, scope{Andere regels van deze stem (bereik van opname onbevestigd)} other{{count, plural, =1{1 regels alleen in de beschikbare gesprekken hernoemd.} other{{count} regels alleen in de beschikbare gesprekken hernoemd.}}}}",
+    "episodeFinishingUp": "Afronden…"
 }

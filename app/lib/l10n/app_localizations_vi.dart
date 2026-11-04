@@ -14966,4 +14966,44 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Người nói và bản chép cuối cùng sẽ xuất hiện ở đây khi tải lên.';
+
+  @override
+  String get speakerWholeRecording => 'Áp dụng cho toàn bộ bản ghi';
+
+  @override
+  String get speakerSelectionChanged => 'Người nói đã thay đổi. Hãy chọn lại các dòng.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'Bản ghi quá lớn. Hãy chọn ít dòng hơn trong một cuộc trò chuyện.',
+        'partial': 'Một số dòng đã được lưu. Hãy chọn các dòng còn lại và thử lại.',
+        'other': 'Một số dòng đã được lưu. Hãy chọn các dòng còn lại và thử lại.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerRecordingCoverage(String state, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Đã đổi tên $count dòng chỉ trong các cuộc trò chuyện có sẵn.',
+      one: 'Đã đổi tên 1 dòng chỉ trong các cuộc trò chuyện có sẵn.',
+    );
+    String _temp1 = intl.Intl.selectLogic(
+      state,
+      {
+        'scope': 'Các dòng khác của giọng này (chưa xác nhận phạm vi bản ghi)',
+        'other': '$_temp0',
+      },
+    );
+    return '$_temp1';
+  }
+
+  @override
+  String get episodeFinishingUp => 'Đang hoàn tất…';
 }

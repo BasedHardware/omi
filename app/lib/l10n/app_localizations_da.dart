@@ -14956,4 +14956,44 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Talere og den endelige transskription dukker op her under upload.';
+
+  @override
+  String get speakerWholeRecording => 'Anvend på hele optagelsen';
+
+  @override
+  String get speakerSelectionChanged => 'Taleren er ændret. Vælg linjerne igen.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'Optagelsen er for stor. Vælg færre linjer i én samtale.',
+        'partial': 'Nogle linjer blev gemt. Vælg de resterende og prøv igen.',
+        'other': 'Nogle linjer blev gemt. Vælg de resterende og prøv igen.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerRecordingCoverage(String state, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Omdøbte $count linjer kun i de tilgængelige samtaler.',
+      one: 'Omdøbte 1 linjer kun i de tilgængelige samtaler.',
+    );
+    String _temp1 = intl.Intl.selectLogic(
+      state,
+      {
+        'scope': 'Andre linjer med denne stemme (optagelsens omfang er ubekræftet)',
+        'other': '$_temp0',
+      },
+    );
+    return '$_temp1';
+  }
+
+  @override
+  String get episodeFinishingUp => 'Afslutter…';
 }

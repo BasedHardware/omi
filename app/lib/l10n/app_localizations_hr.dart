@@ -15000,4 +15000,44 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Govornici i konačni transkript pojavit će se ovdje tijekom prijenosa.';
+
+  @override
+  String get speakerWholeRecording => 'Primijeni na cijelu snimku';
+
+  @override
+  String get speakerSelectionChanged => 'Govornik se promijenio. Ponovno odaberite retke.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'Snimka je prevelika. Odaberite manje redaka u jednom razgovoru.',
+        'partial': 'Neki su retci spremljeni. Odaberite preostale i pokušajte ponovno.',
+        'other': 'Neki su retci spremljeni. Odaberite preostale i pokušajte ponovno.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerRecordingCoverage(String state, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Preimenovano je $count redaka samo u dostupnim razgovorima.',
+      one: 'Preimenovano je 1 redaka samo u dostupnim razgovorima.',
+    );
+    String _temp1 = intl.Intl.selectLogic(
+      state,
+      {
+        'scope': 'Drugi retci ovog glasa (obuhvat snimke nije potvrđen)',
+        'other': '$_temp0',
+      },
+    );
+    return '$_temp1';
+  }
+
+  @override
+  String get episodeFinishingUp => 'Dovršavanje…';
 }

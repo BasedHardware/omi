@@ -15007,4 +15007,44 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Rozmówcy i końcowa transkrypcja pojawią się tutaj podczas przesyłania.';
+
+  @override
+  String get speakerWholeRecording => 'Zastosuj do całego nagrania';
+
+  @override
+  String get speakerSelectionChanged => 'Mówca się zmienił. Wybierz wiersze ponownie.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'Nagranie jest za duże. Wybierz mniej wierszy w jednej rozmowie.',
+        'partial': 'Niektóre wiersze zapisano. Wybierz pozostałe i spróbuj ponownie.',
+        'other': 'Niektóre wiersze zapisano. Wybierz pozostałe i spróbuj ponownie.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerRecordingCoverage(String state, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Zmieniono nazwy $count wierszy tylko w dostępnych rozmowach.',
+      one: 'Zmieniono nazwy 1 wierszy tylko w dostępnych rozmowach.',
+    );
+    String _temp1 = intl.Intl.selectLogic(
+      state,
+      {
+        'scope': 'Inne wiersze tego głosu (zakres nagrania niepotwierdzony)',
+        'other': '$_temp0',
+      },
+    );
+    return '$_temp1';
+  }
+
+  @override
+  String get episodeFinishingUp => 'Kończenie…';
 }

@@ -14959,4 +14959,44 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'আপলোড হওয়ার সাথে সাথে বক্তা ও চূড়ান্ত ট্রান্সক্রিপ্ট এখানে আসবে।';
+
+  @override
+  String get speakerWholeRecording => 'পুরো রেকর্ডিংয়ে প্রয়োগ করুন';
+
+  @override
+  String get speakerSelectionChanged => 'বক্তা বদলে গেছে। লাইনগুলো আবার বেছে নিন।';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'রেকর্ডিং খুব বড়। একটি কথোপকথনে কম লাইন বেছে নিন।',
+        'partial': 'কিছু লাইন সংরক্ষিত হয়েছে। বাকি লাইন বেছে নিয়ে আবার চেষ্টা করুন।',
+        'other': 'কিছু লাইন সংরক্ষিত হয়েছে। বাকি লাইন বেছে নিয়ে আবার চেষ্টা করুন।',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerRecordingCoverage(String state, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'শুধু উপলব্ধ কথোপকথনে $count লাইনের নাম বদলানো হয়েছে।',
+      one: 'শুধু উপলব্ধ কথোপকথনে 1 লাইনের নাম বদলানো হয়েছে।',
+    );
+    String _temp1 = intl.Intl.selectLogic(
+      state,
+      {
+        'scope': 'এই কণ্ঠের অন্য লাইন (রেকর্ডিংয়ের পরিধি নিশ্চিত নয়)',
+        'other': '$_temp0',
+      },
+    );
+    return '$_temp1';
+  }
+
+  @override
+  String get episodeFinishingUp => 'শেষ করা হচ্ছে…';
 }

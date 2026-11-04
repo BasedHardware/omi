@@ -14998,4 +14998,44 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Удзельнікі і канчатковая транскрыпцыя з\'явяцца тут падчас загрузкі.';
+
+  @override
+  String get speakerWholeRecording => 'Ужыць да ўсяго запісу';
+
+  @override
+  String get speakerSelectionChanged => 'Дакладчык змяніўся. Выберыце радкі зноў.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'Запіс занадта вялікі. Выберыце менш радкоў у адной размове.',
+        'partial': 'Некаторыя радкі захаваны. Выберыце астатнія і паспрабуйце зноў.',
+        'other': 'Некаторыя радкі захаваны. Выберыце астатнія і паспрабуйце зноў.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerRecordingCoverage(String state, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Перайменавана $count радкоў толькі ў даступных размовах.',
+      one: 'Перайменавана 1 радкоў толькі ў даступных размовах.',
+    );
+    String _temp1 = intl.Intl.selectLogic(
+      state,
+      {
+        'scope': 'Іншыя радкі гэтага голасу (ахоп запісу не пацверджаны)',
+        'other': '$_temp0',
+      },
+    );
+    return '$_temp1';
+  }
+
+  @override
+  String get episodeFinishingUp => 'Завяршаем…';
 }

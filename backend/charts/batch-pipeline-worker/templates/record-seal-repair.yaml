@@ -13,6 +13,7 @@ kind: CronJob
 metadata:
   name: record-seal-repair
 spec:
+  suspend: {{ .Values.recordSealRepair.suspend }}
   schedule: "*/5 * * * *"
   concurrencyPolicy: Forbid
   startingDeadlineSeconds: 60

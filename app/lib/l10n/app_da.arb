@@ -4564,5 +4564,10 @@
     "episodeCoversUpTo": "Dækker frem til {time} · fulde noter, når det er slut",
     "liveTranscribedUpTo": "Transskriberet frem til {time}",
     "liveAudioSaved": "{duration} gemt",
-    "liveAudioSavedDetail": "Talere og den endelige transskription dukker op her under upload."
+    "liveAudioSavedDetail": "Talere og den endelige transskription dukker op her under upload.",
+    "speakerWholeRecording": "Anvend på hele optagelsen",
+    "speakerSelectionChanged": "Taleren er ændret. Vælg linjerne igen.",
+    "speakerRenameIssue": "{reason, select, limit{Optagelsen er for stor. Vælg færre linjer i én samtale.} partial{Nogle linjer blev gemt. Vælg de resterende og prøv igen.} other{Nogle linjer blev gemt. Vælg de resterende og prøv igen.}}",
+    "speakerRecordingCoverage": "{state, select, scope{Andre linjer med denne stemme (optagelsens omfang er ubekræftet)} other{{count, plural, =1{Omdøbte 1 linjer kun i de tilgængelige samtaler.} other{Omdøbte {count} linjer kun i de tilgængelige samtaler.}}}}",
+    "episodeFinishingUp": "Afslutter…"
 }

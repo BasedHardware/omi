@@ -15,6 +15,7 @@ from database.review_queries import REVIEW_QUERY_SPECS
 from database.sync_pipeline_indexes import SYNC_PIPELINE_INDEX_REQUIREMENTS
 from database.batch_pipeline_indexes import BATCH_PIPELINE_INDEX_REQUIREMENTS
 from database.messaging_queries import MESSAGING_INDEX_REQUIREMENTS, MESSAGING_FIELD_REQUIREMENTS
+from database.lifecycle_metrics_indexes import INDEX_REQUIREMENTS as LIFECYCLE_METRICS_INDEX_REQUIREMENTS
 from .firestore_query_types import (
     FieldIndexRequirement,
     FirestoreIndexField,
@@ -39,6 +40,7 @@ def _contains(field_path: str) -> FirestoreIndexField:
 # These explicit requirements preserve the current deployed index set while
 # callers migrate one compound serving query at a time into QUERY_SPECS.
 INDEX_ONLY_REQUIREMENTS = (
+    *LIFECYCLE_METRICS_INDEX_REQUIREMENTS,
     *BATCH_PIPELINE_INDEX_REQUIREMENTS,
     *SYNC_PIPELINE_INDEX_REQUIREMENTS,
     *MESSAGING_INDEX_REQUIREMENTS,
@@ -1726,6 +1728,35 @@ FINALIZATION_OLDEST_NONTERMINAL_QUERY = FirestoreQuerySpec(
     index_fields=(_asc('status'), _asc('created_at'), _asc('__name__')),
 )
 
+FINALIZATION_DEAD_LETTER_STOCK_QUERY = FirestoreQuerySpec(
+    identifier='finalization_dead_letter_stock',
+    collection_group='conversation_finalization_jobs',
+    query_scope='COLLECTION',
+    filters=(FirestoreQueryFilter('status', '==', 'status'),),
+    index_fields=(),  # The automatic status single-field index serves COUNT.
+)
+
+FINALIZATION_OLDEST_DEAD_LETTER_QUERY = FirestoreQuerySpec(
+    identifier='finalization_oldest_dead_letter',
+    collection_group='conversation_finalization_jobs',
+    query_scope='COLLECTION',
+    filters=(FirestoreQueryFilter('status', '==', 'status'),),
+    index_fields=(_asc('status'), _asc('terminal_at'), _asc('__name__')),
+)
+
+FINALIZATION_BYOK_ABANDONED_WINDOW_QUERY = FirestoreQuerySpec(
+    identifier='finalization_byok_abandoned_window',
+    collection_group='conversation_finalization_jobs',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('status', '==', 'status'),
+        FirestoreQueryFilter('last_failure_code', '==', 'failure_code'),
+        FirestoreQueryFilter('terminal_at', '>=', 'after'),
+        FirestoreQueryFilter('terminal_at', '<=', 'before'),
+    ),
+    index_fields=(_asc('status'), _asc('last_failure_code'), _asc('terminal_at'), _asc('__name__')),
+)
+
 # WQ13: candidate filters are read-only and gated independently of loop leases.
 FINALIZATION_BYOK_ABANDONMENT_QUERY = FirestoreQuerySpec(
     identifier='finalization_byok_active_candidates',
@@ -2018,6 +2049,9 @@ QUERY_SPECS = (
     *MCP_CONVERSATION_CARD_QUERY_SPECS.values(),
     SYNC_RECORDING_LINEAGE_QUERY,
     FINALIZATION_OLDEST_NONTERMINAL_QUERY,
+    FINALIZATION_DEAD_LETTER_STOCK_QUERY,
+    FINALIZATION_OLDEST_DEAD_LETTER_QUERY,
+    FINALIZATION_BYOK_ABANDONED_WINDOW_QUERY,
     FINALIZATION_BYOK_ABANDONMENT_QUERY,
     FINALIZATION_BYOK_RECLAIM_QUERY,
     FINALIZATION_STALE_IN_PROGRESS_QUERY,

@@ -11948,5 +11948,10 @@
     "episodeCoversUpTo": "Pokriva do {time} · potpune bilješke po završetku",
     "liveTranscribedUpTo": "Transkribirano do {time}",
     "liveAudioSaved": "Spremljeno {duration}",
-    "liveAudioSavedDetail": "Govornici i konačni transkript pojavit će se ovdje tijekom prijenosa."
+    "liveAudioSavedDetail": "Govornici i konačni transkript pojavit će se ovdje tijekom prijenosa.",
+    "speakerWholeRecording": "Primijeni na cijelu snimku",
+    "speakerSelectionChanged": "Govornik se promijenio. Ponovno odaberite retke.",
+    "speakerRenameIssue": "{reason, select, limit{Snimka je prevelika. Odaberite manje redaka u jednom razgovoru.} partial{Neki su retci spremljeni. Odaberite preostale i pokušajte ponovno.} other{Neki su retci spremljeni. Odaberite preostale i pokušajte ponovno.}}",
+    "speakerRecordingCoverage": "{state, select, scope{Drugi retci ovog glasa (obuhvat snimke nije potvrđen)} other{{count, plural, =1{Preimenovano je 1 redaka samo u dostupnim razgovorima.} other{Preimenovano je {count} redaka samo u dostupnim razgovorima.}}}}",
+    "episodeFinishingUp": "Dovršavanje…"
 }

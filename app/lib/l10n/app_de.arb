@@ -4522,5 +4522,10 @@
     "episodeCoversUpTo": "Bis {time} · vollständige Notizen zum Schluss",
     "liveTranscribedUpTo": "Transkribiert bis {time}",
     "liveAudioSaved": "{duration} gespeichert",
-    "liveAudioSavedDetail": "Sprecher und endgültiges Transkript erscheinen hier beim Hochladen."
+    "liveAudioSavedDetail": "Sprecher und endgültiges Transkript erscheinen hier beim Hochladen.",
+    "speakerWholeRecording": "Auf die gesamte Aufnahme anwenden",
+    "speakerSelectionChanged": "Die Sprecherzuordnung hat sich geändert. Wähle die Zeilen erneut aus.",
+    "speakerRenameIssue": "{reason, select, limit{Die Aufnahme ist zu groß. Wähle weniger Zeilen in einem Gespräch.} partial{Einige Zeilen wurden gespeichert. Wähle die übrigen und versuche es erneut.} other{Einige Zeilen wurden gespeichert. Wähle die übrigen und versuche es erneut.}}",
+    "speakerRecordingCoverage": "{state, select, scope{Weitere Zeilen dieser Stimme (Aufnahmeumfang unbestätigt)} other{{count, plural, =1{1 Zeilen nur in den verfügbaren Gesprächen umbenannt.} other{{count} Zeilen nur in den verfügbaren Gesprächen umbenannt.}}}}",
+    "episodeFinishingUp": "Wird fertiggestellt…"
 }

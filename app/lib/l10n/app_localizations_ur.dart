@@ -14976,4 +14976,44 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'اپ لوڈ کے ساتھ مقررین اور حتمی ٹرانسکرپٹ یہاں آئیں گے۔';
+
+  @override
+  String get speakerWholeRecording => 'پوری ریکارڈنگ پر لاگو کریں';
+
+  @override
+  String get speakerSelectionChanged => 'بولنے والا بدل گیا ہے۔ سطریں دوبارہ منتخب کریں۔';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'ریکارڈنگ بہت بڑی ہے۔ ایک گفتگو میں کم سطریں منتخب کریں۔',
+        'partial': 'کچھ سطریں محفوظ ہوگئیں۔ باقی سطریں منتخب کرکے دوبارہ کوشش کریں۔',
+        'other': 'کچھ سطریں محفوظ ہوگئیں۔ باقی سطریں منتخب کرکے دوبارہ کوشش کریں۔',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerRecordingCoverage(String state, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'صرف دستیاب گفتگو میں $count سطروں کا نام بدلا گیا۔',
+      one: 'صرف دستیاب گفتگو میں 1 سطروں کا نام بدلا گیا۔',
+    );
+    String _temp1 = intl.Intl.selectLogic(
+      state,
+      {
+        'scope': 'اس آواز کی دوسری سطریں (ریکارڈنگ کا دائرہ غیر مصدقہ)',
+        'other': '$_temp0',
+      },
+    );
+    return '$_temp1';
+  }
+
+  @override
+  String get episodeFinishingUp => 'مکمل کیا جا رہا ہے…';
 }

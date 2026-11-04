@@ -11948,5 +11948,10 @@
     "episodeCoversUpTo": "{time} पर्यंत · संपल्यावर पूर्ण नोट्स",
     "liveTranscribedUpTo": "{time} पर्यंत ट्रान्सक्राइब झाले",
     "liveAudioSaved": "{duration} जतन केले",
-    "liveAudioSavedDetail": "अपलोड होताना वक्ते आणि अंतिम ट्रान्सक्रिप्ट येथे दिसतील."
+    "liveAudioSavedDetail": "अपलोड होताना वक्ते आणि अंतिम ट्रान्सक्रिप्ट येथे दिसतील.",
+    "speakerWholeRecording": "संपूर्ण रेकॉर्डिंगवर लागू करा",
+    "speakerSelectionChanged": "वक्ता बदलला आहे. ओळी पुन्हा निवडा.",
+    "speakerRenameIssue": "{reason, select, limit{रेकॉर्डिंग खूप मोठे आहे. एका संभाषणात कमी ओळी निवडा.} partial{काही ओळी जतन झाल्या. उरलेल्या ओळी निवडून पुन्हा प्रयत्न करा.} other{काही ओळी जतन झाल्या. उरलेल्या ओळी निवडून पुन्हा प्रयत्न करा.}}",
+    "speakerRecordingCoverage": "{state, select, scope{या आवाजाच्या इतर ओळी (रेकॉर्डिंगची व्याप्ती अपुष्ट)} other{{count, plural, =1{फक्त उपलब्ध संभाषणांतील 1 ओळींची नावे बदलली.} other{फक्त उपलब्ध संभाषणांतील {count} ओळींची नावे बदलली.}}}}",
+    "episodeFinishingUp": "पूर्ण करत आहे…"
 }

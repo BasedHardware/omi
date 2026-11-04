@@ -154,7 +154,9 @@ Outcome and speaker-failure logs include `uid_hash=sha256("sync-final-pass:" + u
 no transcript, audio, or stored record read is needed to count outcomes.
 
 Backfill has its own global speech allowance
-(`SYNC_BACKFILL_GLOBAL_DAILY_HOURS`, default 555), not a diarization-specific cap.
+(`SYNC_BACKFILL_GLOBAL_DAILY_HOURS`, code fallback 555; deployment declaration 1665).
+It binds only when `SYNC_BACKFILL_ADMISSION_LIMITS=true` (default false); Cloud
+Tasks queue concurrency paces uploads. This is not a diarization-specific cap.
 The shadow GPU-h estimate above covers the shadow planning load, not combined
 shadow plus fresh/backfill sync work. Stage E retains David's allowlist. The D
 hold recorded above met the three-hour clean-window gate; continue to assess
