@@ -73,7 +73,8 @@ def test_ops_train_values_match_the_live_right_sizing():
     model = dc.source_model('prod')
 
     sync = model['backend-sync'].ops_scale
-    assert (sync['service_min'], sync['service_max']) == (5, 40)
+    # Legacy-dark (2026-11-04, David e53a35) dropped the warm floor 5 -> 0.
+    assert (sync['service_min'], sync['service_max']) == (0, 40)
 
     # redis_guard owns the backfill cap between its bounds (live 16).
     backfill = model['backend-sync-backfill'].ops_scale
