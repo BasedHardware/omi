@@ -85,10 +85,8 @@ async def test_happy_path_reaches_complete(lifecycle_sim):
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(
-    strict=True, raises=LifecycleInvariantError, reason='waits on freshtitles record_pending drain lease fix PR #24587'
-)
 async def test_sealed_record_pending_admitted_within_budget(lifecycle_sim, monkeypatch):
+    # PR #24587 fixed the reproduced duplicate entry. Keep this regression green.
     sim = lifecycle_sim
     sim.seed()
     assert sim.seal() is None

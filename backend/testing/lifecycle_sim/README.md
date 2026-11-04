@@ -71,5 +71,9 @@ transport, proof and worker failures remain red. To verify the actual failing
 assertions locally, run `run.sh --keep --runxfail`; that option disables pytest
 xfail handling and is never part of the CI runner chain.
 
+The two-replica admission case is an ordinary green regression after #24587.
+It first reproduced duplicate entry on the earlier main, then tripped its
+strict XPASS on the merged fix before that obsolete marker was removed.
+
 Lead ruling `1c8084` (2026-11-04) requires unreproduced leaks to remain green
 or explicitly skipped, rather than manufacturing an expected failure.
