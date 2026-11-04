@@ -828,7 +828,6 @@ def sweep(
     if not owns_runtime():
         return counts
 
-    binding = _dispatch_binding()
     limit = max(1, min(100, limit))
     bound = client
     client = bound or get_firestore_client()
@@ -891,6 +890,9 @@ def sweep(
             if not expired and row.get('wake_check_after', 0) > current:
                 return old, ('skipped', None)
             if not injected and not valid_effects_binding(row):
+                binding = _dispatch_binding(
+                    backfill=row.get('summary_lane') == 'backfill' and not first_summary_pending(row)
+                )
                 if binding is None:
                     return old, ('unbound', None)
                 # Claim and fence the repaired binding in the same CAS. Any old

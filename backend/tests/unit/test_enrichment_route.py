@@ -16,7 +16,7 @@ import pytest
 
 from database.outbox_firestore import ENRICHMENT_OUTBOX
 from routers import enrichment as route
-from tests.unit.test_sync_reprocess_coalesce import state  # noqa: F401
+from tests.unit.test_sync_reprocess_coalesce import state, sweep_query  # noqa: F401
 from utils.enrichment import callback  # noqa: F401 (heavy import at collection time, not in a test call)
 from utils.enrichment import consumer as consumer_module
 from utils.enrichment import custody
@@ -271,6 +271,25 @@ def test_snapshot_first_summary_is_protected_after_env_rollback(split_binding, m
     row, _ = operation(old)
     assert reprocess.first_summary_pending(row)
     assert row['dispatch']['queue'] == 'enrichment'
+
+
+@pytest.mark.parametrize('pending', [False, True])
+def test_sweep_routes_previously_unbound_backfill_by_summary_state(split_binding, sweep_query, monkeypatch, pending):
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', str(pending).lower())
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
+    monkeypatch.delenv('ENRICHMENT_TASKS_HANDLER_URL')
+    monkeypatch.delenv('SYNC_TASKS_HANDLER_URL')
+    reprocess.mark('u', 'c', 'en', now=0, snapshot_summary=True)
+    row = split_binding[0][KEY]
+    assert row['dispatch'] is None and not split_binding[1]
+    token = row['task_token']
+
+    monkeypatch.setenv('ENRICHMENT_TASKS_HANDLER_URL', 'https://workers.invalid/v2/enrichment/run')
+    assert reprocess.sweep(now=10_000) == {'repaired': 1, 'error': 0}
+    repaired = split_binding[0][KEY]
+    assert repaired['dispatch']['queue'] == ('enrichment' if pending else 'sync-backfill-fresh')
+    assert repaired['task_token'] != token
+    assert split_binding[1][-1]['dispatch'] == repaired['dispatch']
 
 
 def test_not_due_wake_rearms_and_answers_200_not_due(state, monkeypatch):  # noqa: F811
