@@ -38,9 +38,9 @@ def ob(outbox_backend, monkeypatch):  # noqa: F811
     return outbox_backend
 
 
-def put(ob, label='owed', *, at=T0):
+def put(ob, label='owed', *, at=T0, **metadata):
     owner = ob.store_harness.uid('o')
-    return ob.outbox.enqueue(ob.key(owner, label), owner, ob.payload(label, language='en'), at, now=at)
+    return ob.outbox.enqueue(ob.key(owner, label), owner, ob.payload(label, language='en', **metadata), at, now=at)
 
 
 def take(ob, queued, *, now=T0, token=None, lease=LEASE):
@@ -96,7 +96,7 @@ def test_pl397_transient_dependency_retries_before_the_original_lease_expires(ob
         if len(calls) == 1:
             raise error
 
-    # Keep all clock authority synthetic, including consumer-side retry bookkeeping.
+    # Inject only the consumer clock; transport deadline clocks remain real.
     monkeypatch.setattr(enrichment_consumer, 'time', SimpleNamespace(time=lambda: T0 + 1))
     consumer = EnrichmentConsumer(ob.outbox, process=callback)
     retry = run_push(consumer, ob.outbox, queued.row_id, queued.wake_token, now=T0)
@@ -148,7 +148,10 @@ def test_pl397_retry_settlement_cannot_release_a_replacement_owner(ob, monkeypat
 
 
 @pytest.mark.parametrize('prefix_kind', ['leased', 'healthy_wake'])
-def test_pl398_bounded_watchdog_reaches_expired_debt_beyond_a_healthy_prefix(ob, prefix_kind):
+def test_pl398_bounded_watchdog_reaches_expired_debt_beyond_a_healthy_prefix(ob, prefix_kind, monkeypatch):
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_SECONDS', '120')
     # More than the legacy sweep's ten pages of two rows. A stateless rescan
     # never reaches the tail. Postgres/sim may select actionable rows directly.
     for index in range(23):
@@ -156,7 +159,7 @@ def test_pl398_bounded_watchdog_reaches_expired_debt_beyond_a_healthy_prefix(ob,
         claim = take(ob, queued, now=T0 + index, lease=10_000)
         if prefix_kind == 'healthy_wake':
             assert ob.outbox.defer(claim, T0 + index, 'conversation_missing', now=T0 + index)
-    tail = put(ob, 'lost-wake', at=T0 + 30)
+    tail = put(ob, 'lost-wake', at=T0 + 30, first_pending_at=T0 + 30, summary_deadline_at=T0 + 150)
     abandoned = take(ob, tail, now=T0 + 30)
     ob.wakes.clear()
     now = T0 + 200
@@ -174,6 +177,8 @@ def test_pl398_bounded_watchdog_reaches_expired_debt_beyond_a_healthy_prefix(ob,
     assert replacement.attempt == 2
     assert replacement.owner_id == abandoned.owner_id
     assert replacement.payload == abandoned.payload  # acceptance/deadline metadata is not renewed
+    assert replacement.payload['first_pending_at'] == T0 + 30
+    assert replacement.payload['summary_deadline_at'] == T0 + 150
     assert not ob.outbox.release(dataclasses.replace(replacement, lease_token=abandoned.lease_token), 'retry', now=now)
     assert ob.outbox.ack(replacement, 'processed', now=now)
     assert ob.outbox.claim_key(row_id, token, LEASE, now=now + 1) is Outcome.STALE
