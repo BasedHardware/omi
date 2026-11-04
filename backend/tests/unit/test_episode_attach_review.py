@@ -65,7 +65,7 @@ def test_durable_hook_retires_hidden_member_even_with_stale_supplied_row(lane, m
     # The durable caller retains its processing snapshot after the memo rejects
     # it. Exercise the full hook with that same stale row, without a fresh fetch.
     assert not finalize.skip_unchanged_schedule('u', 'same', visible, finalized=True)
-    monkeypatch.setattr(service.composer, 'after_finalized', lambda uid, cid, outcome, c: outcome)
+    monkeypatch.setattr(service.composer, 'after_finalized', lambda uid, cid, outcome, c, **_: outcome)
     assert (
         service.on_conversation_finalized('u', 'same', visible, trigger='sync_update', collaborators=c)
         == 'skipped_discarded'
