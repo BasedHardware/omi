@@ -141,3 +141,46 @@ async def test_only_lanes_after_the_first_ask_to_borrow(monkeypatch):
     stop.set()
     await asyncio.wait_for(running, 10)
     assert sorted(calls[:3]) == [False, True, True]
+
+
+@pytest.mark.asyncio
+async def test_all_deferred_cycle_pulls_again_without_idle_backoff(monkeypatch):
+    from utils.batch_pipeline import pump as module
+
+    pump = Pump(Scheduler(MemoryStore()), Worker(), capacity=lambda: PoolCapacity(time.time(), 8), poll_seconds=0.5)
+    stop = asyncio.Event()
+    calls = []
+    # Cycle 1 claims leases that admission defers (count 0); cycle 2 finds an
+    # empty queue; cycle 3 stops the lane.
+    script = iter([True, False, None])
+
+    async def run_once(**kwargs):
+        calls.append(time.monotonic())
+        step = next(script)
+        if step is None:
+            stop.set()
+        elif step:
+            module._CYCLE_CLAIMED.get()[0] = True
+        return 0
+
+    monkeypatch.setattr(pump, 'run_once', run_once)
+    await asyncio.wait_for(pump._lane(stop, maintain=False), 10)
+    assert len(calls) == 3
+    assert calls[1] - calls[0] < 0.25  # Deferred work is not an empty queue.
+    assert calls[2] - calls[1] >= 0.45  # A real empty pull still waits.
+
+
+@pytest.mark.asyncio
+async def test_flight_marks_its_cycle_claimed_only_when_leases_arrive(monkeypatch):
+    from utils.batch_pipeline import pump as module
+
+    queue = Scheduler(MemoryStore())
+    pump = Pump(queue, Worker(), capacity=lambda: PoolCapacity(time.time(), 8))
+    monkeypatch.setattr(queue, 'pull', lambda *args, **kwargs: [])
+    claimed = [False]
+    marker = module._CYCLE_CLAIMED.set(claimed)
+    try:
+        assert await pump._flight(None) == 0
+    finally:
+        module._CYCLE_CLAIMED.reset(marker)
+    assert claimed == [False]

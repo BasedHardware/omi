@@ -2,6 +2,7 @@
 
 import asyncio
 import contextlib
+import contextvars
 import logging
 import time
 import threading
@@ -40,6 +41,11 @@ from utils.batch_pipeline.stage_timings import StageTimings
 from utils.executors import admission_executor, db_executor, run_blocking, sync_executor
 
 logger = logging.getLogger(__name__)
+
+# Set per lane task: a cycle that claimed leases is not an empty queue, even
+# when every lease was deferred (allowance-exhausted owners), so it must not
+# grow the lane's idle backoff.
+_CYCLE_CLAIMED: contextvars.ContextVar[list | None] = contextvars.ContextVar('batch_cycle_claimed', default=None)
 
 # Maintenance re-reads every result_ready job each sweep to find its owner;
 # jobs blocked behind an ordered predecessor would otherwise cost one read
@@ -187,6 +193,8 @@ class Pump:
     ) -> None:
         idle_delay = self.poll_seconds
         while not stop_event.is_set():
+            claimed = [False]
+            marker = _CYCLE_CLAIMED.set(claimed)
             try:
                 count = await self.run_once(
                     stop_event=stop_event, maintain=maintain, borrow_when_fresh_busy=borrow_when_fresh_busy
@@ -200,7 +208,15 @@ class Pump:
                     error_site_field(error),
                 )
                 count = 0
-            if not count:
+                claimed[0] = False  # An error backs off like an empty queue.
+            finally:
+                _CYCLE_CLAIMED.reset(marker)
+            if not count and claimed[0]:
+                # Leased, then every lease deferred by admission (each carries
+                # its own retry delay): the queue is not empty, so pull again
+                # at once instead of backing off toward idlePollMaxSeconds.
+                idle_delay = self.poll_seconds
+            elif not count:
                 try:
                     await asyncio.wait_for(stop_event.wait(), timeout=idle_delay)
                 except asyncio.TimeoutError:
@@ -432,6 +448,9 @@ class Pump:
                     logger.info('event=batch_shadow_worker outcome=error exception_type=%s', type(error).__name__)
             return 0
         self._normal_flights += 1
+        cycle = _CYCLE_CLAIMED.get()
+        if cycle is not None:
+            cycle[0] = True
         claimed = leases
         done = asyncio.Event()
         lost: set[str] = set()
