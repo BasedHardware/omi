@@ -31,7 +31,7 @@ The self-hosted T2/fault harness remains available for engineering QA, but it is
 
 ## Failed Codemagic build rehearsal
 
-A failed canonical Codemagic check triggers **Desktop Release Recovery Required**. Its job summary and retained JSON capsule bind the build ID, immutable tag, source SHA, failed step, sanitized diagnostics, and whether the step is locally reproducible. This is the just-in-time handoff for operators and agents; do not infer a fix from the generic Codemagic check title alone.
+For a failed canonical Codemagic build, dispatch **Desktop Release Recovery Required** (`desktop_codemagic_failure_recovery.yml`) with the failed build ID; it no longer runs on every `check_run` event. Its job summary and retained JSON capsule bind the build ID, immutable tag, source SHA, failed step, sanitized diagnostics, and whether the step is locally reproducible. This is the just-in-time handoff for operators and agents; do not infer a fix from the generic Codemagic check title alone.
 
 For a locally reproducible bundle-audit or signed-smoke failure, run the capsule's exact command manually. On a managed Omi Mac:
 
