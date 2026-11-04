@@ -10,15 +10,19 @@ dataPlaneProject: based-hardware
 stage: prod
 namespace: batch_pipeline_prod
 secretName: prod-omi-backend-secrets
-# Preserve the audited live floor/ceiling through the next Helm roll (lead
-# af6df5, 2026-11-03). replicaCount and autoscaling.minReplicas are one floor
-# setting; change both. The chart's former 4/16 would reset live 6/12.
+# Floor 4 / ceiling 12 (cl2-gpueff 2026-11-04; supersedes lead af6df5's 6/12
+# only with lead2's sign-off on the PR). replicaCount and
+# autoscaling.minReplicas are one floor setting; change both. The floor binds
+# only off-peak (00-08Z): daytime demand holds the HPA above it. With
+# worker.processes 2, four pods run eight pump processes, more claim lanes than
+# the former six single-process pods. Helm keeps the live replica count on
+# upgrade; the HPA sheds to the floor at its own scale-down policy.
+# Rollback: 6 in both places (values-only).
 # OD-first: all replicas pin to the on-demand pool; Spot stays opportunistic.
-# Rollback of this source correction must not scale the live floor down.
-replicaCount: 6
+replicaCount: 4
 autoscaling:
   enabled: true
-  minReplicas: 6
+  minReplicas: 4
   maxReplicas: 12
   balancedPools:
     enabled: false
