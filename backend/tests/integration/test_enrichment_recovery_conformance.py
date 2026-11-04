@@ -220,9 +220,14 @@ def test_pl342_reason_change_and_reopening_start_fresh_custody_episodes(ob):
     token = ob.outbox.defer(resumed, next_due, 'pending_live_bridge', now=late)
     assert ob.wakes[-1] == (queued.row_id, token, next_due)
     changed = take(ob, queued, now=next_due, token=token)
+    if ob.name == 'emulator':
+        # The old backend retains a dormant first-summary receipt instead of
+        # deleting the row. Reopening that receipt must reset its episode too.
+        assert ob.outbox.record_summary(changed)
     assert ob.outbox.ack(changed, 'processed', now=next_due)
     # A new obligation with the same dedupe key cannot inherit the old age.
-    reopened = put(ob, at=next_due + 1)
-    claim = take(ob, reopened, now=next_due + 1)
-    token = ob.outbox.defer(claim, next_due + 121, 'conversation_missing', now=next_due + 1)
-    assert ob.wakes[-1] == (reopened.row_id, token, next_due + 121)
+    reopened_at = next_due + 6 * 3600 + 1
+    reopened = put(ob, at=reopened_at)
+    claim = take(ob, reopened, now=reopened_at)
+    token = ob.outbox.defer(claim, reopened_at + 120, 'pending_live_bridge', now=reopened_at)
+    assert ob.wakes[-1] == (reopened.row_id, token, reopened_at + 120)
