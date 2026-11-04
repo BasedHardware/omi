@@ -30,13 +30,18 @@ retained RAM restores a durable SAFE latch, via
 settings handlers. An interrupted DFU transaction has the narrow TRIAL check
 described below. A three-second P0.26 hold also latches recovery.
 
-The recovery branch powers SD and PDM enable low, initializes the LED, enables
+The recovery branch powers PDM enable low, leaves the SD rail on (as the boot
+hog and MCUboot leave it), logs whether the secondary slot is readable,
+initializes the LED, enables
 Bluetooth, registers diagnostics and starts connectable advertising at 1–2
 seconds. SMP, DIS and the configured static BAS service are registered by
 Zephyr; application audio/settings/features/time/storage/button/haptic services
 and connection callbacks are skipped. No SD initialization, mic, codec,
 capture, ring writer, pusher thread or battery work runs. NOR/SPI3 stays awake
-for the secondary slot. The existing advertising payload/name stays unchanged,
+for the secondary slot. Do not switch the SD rail off here: on the CV1 jig that
+made every SPI3 NOR transfer time out, so phone DFU in SAFE could never stage an
+image (`Safe mode secondary slot: UNREADABLE`). The fault proofs require the
+`readable` line on the SAFE boot. The existing advertising payload/name stays unchanged,
 including its audio service UUID; do not treat that advertisement alone as
 proof of capture availability. Read diagnostics.
 
