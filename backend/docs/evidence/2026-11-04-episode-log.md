@@ -15,6 +15,13 @@ Current-main integration: `fc02a9b9b7640126e7ef0625dac9d3c185bf0097`, based on
 Two complete green unit commands passed **5,115 cases** across 128 test-bearing
 files (131 selected paths, including three support modules); full backend typecheck
 has zero errors. The collector conflict retains both privacy and episode families.
+Review follow-up: `f0679c22d463b52860f090d8d629fc8c3cc30311`, qualified at
+**2026-11-04 21:16:56 UTC** with **203 focused tests**, including five new cases. Shared
+fallback telemetry covers enqueue failures at the wake boundary. Cached Home
+recovery excludes contained duplicate episodes while retaining fully hidden
+rows for stale-note cleanup. The integrated unit counts above precede this
+follow-up; these targeted reruns cover its affected boundaries. Current-head
+publication and complete CI remain owned by the PR.
 [PR #24607](https://github.com/BasedHardware/omi/pull/24607) owns current head,
 review and CI state. This is a dated qualification/forecast record, not a live
 cost meter or a deployment receipt. Re-measure before any production ramp.
