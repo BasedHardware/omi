@@ -362,3 +362,19 @@ def test_unreadable_kill_switch_fails_closed_and_is_polled_at_most_every_interva
     assert ttl_cache.disabled() and ttl_cache.disabled()
     assert len(calls) == 1
     ttl_cache.reset_for_tests()
+
+
+def test_deletion_marker_cache_never_seeds_from_a_stale_redis_negative(world, monkeypatch):
+    """Luna r1 P1 on #24622: a stale Redis absence must not get a fresh 60s on top of its own age."""
+    db, reads, _, clock = world
+    # The Redis negative cache is on and holds an absence; then a marker is written and both
+    # Redis invalidations are lost (the write happens straight in Firestore, no writer fence).
+    enable(monkeypatch, 'deletion_marker_cache')
+    assert marker.get_user_deletion_wipe_status(UID, firestore_client=db) is None
+    db.rows[MARKER] = {'wipe_status': 'pending'}
+    assert marker.get_user_deletion_wipe_status(UID, firestore_client=db) is None  # the pre-existing Redis staleness
+    enable(monkeypatch, 'deletion_marker_cache', 'privacy_ttl60')
+    # With the 60s cache on, the decision and its seed come from Firestore, not Redis.
+    assert marker.account_deletion_blocks_user_work(UID, firestore_client=db)
+    clock.now += 59
+    assert marker.account_deletion_blocks_user_work(UID, firestore_client=db)

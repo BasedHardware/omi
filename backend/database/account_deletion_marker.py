@@ -58,7 +58,7 @@ def get_user_deletion_wipe_status(uid: str, *, firestore_client: Any | None = No
                 ),
             )
 
-        status = _ttl_bounded_status(uid, client, read)
+        status = _ttl_bounded_status(uid, client, read, lambda: _s4_read_deletion_status(uid, firestore_client=client))
     except Exception:
         metrics.decision('deletion_marker', 'authority_unavailable')
         raise
@@ -66,8 +66,12 @@ def get_user_deletion_wipe_status(uid: str, *, firestore_client: Any | None = No
     return status
 
 
-def _ttl_bounded_status(uid: str, client: Any, read: Any) -> str | None:
+def _ttl_bounded_status(uid: str, client: Any, read: Any, direct: Any) -> str | None:
     """Reuse any marker status for at most 60s (David ruling 2026-11-04, lever privacy_ttl60).
+
+    With the lever on, every fill and every live decision comes from ``direct``,
+    a confirmed Firestore read. It is never ``read``, whose Redis negative cache
+    could hand back an already-aged absence and stretch the bound past 60s.
 
     Every status is reusable: a blocking status only delays a restore, and an
     absent or permitting status takes effect within the 60s bound. Read errors
@@ -90,7 +94,7 @@ def _ttl_bounded_status(uid: str, client: Any, read: Any) -> str | None:
         metrics.ttl_result('deletion_marker', 'hit')
         return cached[0]
     started = ttl_cache.DECISIONS.clock()
-    status = read()
+    status = direct()
     if shadow:
         try:
             live = 'account_deleted' if account_deletion_blocks_access(status) else 'allow'
