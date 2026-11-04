@@ -184,3 +184,42 @@ def test_batch_transcription_deadline_expires_cache_and_late_receipt_clears_cloc
     assert home_clock({'e': row}, {'c': member}, clock['members'], {'c'}, deadline)['deadline_at'] is None
     member['record_projection_revision'] = 1
     assert home_clock({'e': row}, {'c': member}, clock['members'], {'c'}, NOW)['deadline_at'] is None
+
+
+def test_cached_home_never_recovers_contained_duplicates_but_keeps_hidden_cleanup(monkeypatch):
+    from utils.episodes.log.codec import dumps
+    from utils.encryption import encrypt
+
+    list_window = reads.list_window
+    http, query = setup(monkeypatch)
+    query.side_effect = list_window
+    policy = reads.policy_version()
+    wire = {
+        'id': 'kept',
+        'status': 'closed',
+        'started_at': NOW,
+        'last_activity_at': NOW,
+        'members': [{'id': 'c', 'started_at': NOW}],
+    }
+    rows = []
+    for eid, payload in [('kept', wire), ('duplicate', dict(wire, id='duplicate')), ('hidden', None)]:
+        rows.append(
+            {
+                'id': eid,
+                'status': 'closed',
+                'compose_dirty': True,
+                'composed_fingerprint': 'paid' if eid == 'kept' else None,
+                'home_policy_version': policy,
+                'home_payload': encrypt(dumps(payload), 'test'),
+            }
+        )
+    monkeypatch.setattr(api.home_read, 'list_episode_window', lambda *args, **kwargs: (rows, 'next-page'))
+    repair = Mock()
+    monkeypatch.setattr(api.home_read, 'schedule_missed_composes', repair)
+    response = http.get('/v1/episodes', params={'from': NOW.isoformat(), 'to': NOW.isoformat()})
+    assert response.status_code == 200
+    assert [row['id'] for row in response.json()['episodes']] == ['kept']
+    assert response.json()['next_cursor'] == 'next-page'
+    repair.assert_called_once()
+    assert [row['id'] for row in repair.call_args.args[1]] == ['kept', 'hidden']
+    assert [row['id'] for row in repair.call_args.args[2]] == ['kept']

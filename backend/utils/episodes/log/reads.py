@@ -99,7 +99,11 @@ def list_window(uid, start, end, *, limit=50, cursor=None, firestore_client=None
             if wire is not None:
                 wires.append(wire)
     contained = home_read.contained_ids(rows, wires)
-    return rows, [wire for wire in wires if wire['id'] not in contained], next_cursor
+    # Keep recovery eligibility aligned with Home: historical contained rows
+    # must not spend the composer's bounded budget on the retained row's speech.
+    # Fully hidden rows still pass through so recovery can clear stale notes.
+    recovery_rows = [row for row in rows if str(row.get('id')) not in contained]
+    return recovery_rows, [wire for wire in wires if wire['id'] not in contained], next_cursor
 
 
 def by_id(uid, eid, *, firestore_client=None):
