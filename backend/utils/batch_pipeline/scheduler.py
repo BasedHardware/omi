@@ -13,6 +13,8 @@ from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.firestore_transaction_retry import FirestoreContentionExhausted
 from config.batch_pipeline import (
     FRESH_CAPTURE_LAG_SECONDS,
+    SCHEDULER_SHARDS,
+    control_candidate_fanout,
     pull_multi_lease_enabled,
     scheduler_control_key,
     shard_spread_enabled,
@@ -261,7 +263,8 @@ class Scheduler:
         watermark = owner.get('watermark')
         control = read_control(tx, scheduler_control_key(key))
         job = {
-            **immutable,
+            # Unstamped work keeps the legacy document shape; readers default to None.
+            **{key: value for key, value in immutable.items() if key != 'timing_store' or value is not None},
             'policy': policy.to_dict(),
             'policy_source': 'admission',
             'protocol_version': 1,
@@ -394,14 +397,34 @@ class Scheduler:
             spread = shard_spread_enabled()
             excluded = set()
             busy = False
+            candidates = None
+            refreshed = False
+            candidate_fanout = control_candidate_fanout()
             for _ in range(128):
                 if spread:
-                    shard = self.store.control_candidate(
-                        int(priority), self.pool, now, worker_id=self.worker_id, exclude=excluded
-                    )
+                    if candidates is None:
+                        candidates = self.store.control_candidates(
+                            int(priority), self.pool, now, worker_id=self.worker_id, fanout=candidate_fanout
+                        )
+                    shard = next((key for key in candidates if key not in excluded), None)
                 else:
                     shard = self.store.control_candidate(int(priority), self.pool, now)
                 if shard is None:
+                    if (
+                        spread
+                        and busy
+                        and not refreshed
+                        and candidate_fanout < SCHEDULER_SHARDS
+                        and candidates is not None
+                        and len(candidates) >= candidate_fanout
+                    ):
+                        # A full busy prefix proves nothing about the remaining
+                        # shards. Spend the sole refresh on the legacy width,
+                        # skipping every already-tried claim locally.
+                        candidates = None
+                        candidate_fanout = SCHEDULER_SHARDS
+                        refreshed = True
+                        continue
                     break
                 receipts, eligible = self._pull_shard(now, shard, priority, max_seconds, shared_gpu_id, max_leases)
                 if receipts:
@@ -418,6 +441,15 @@ class Scheduler:
                     excluded.add(shard)
                     busy = True
                     continue
+                if spread:
+                    if not eligible:
+                        excluded.add(shard)
+                    # Share one wide refresh budget with busy-window refill.
+                    # Later deficit rounds retry the eligible head locally.
+                    if not refreshed:
+                        candidates = None
+                        candidate_fanout = SCHEDULER_SHARDS
+                        refreshed = True
                 if eligible:
                     # Bounded deficit accrual must not bypass eligible fresh work.
                     continue
@@ -858,6 +890,29 @@ class Scheduler:
                     recovered += 1
                     observe_recovery(outcome, self.metrics)
         return recovered
+
+    @staticmethod
+    def restore_audio_in_transaction(tx: Transaction, job: dict, now: float) -> None:
+        """Requeue one CAS-verified missing-input repair under its original identity.
+
+        The artifact-missing store owns the content/privacy/staging checks. No
+        paid recovery intent or sibling receipt is reset by this queue mutation.
+        """
+        marker = job.get('artifact_disposition') or {}
+        if (
+            job.get('state') != 'quarantined'
+            or job.get('recovery_state') != 'failed_held'
+            or marker.get('state') != 'restored'
+            or job.get('result')
+            or job.get('merge_pending') is not False
+            or job.get('token')
+            or job.get('lease_until', 0) > now
+        ):
+            raise ValueError('verified missing-input repair required')
+        control = read_control(tx, scheduler_control_key(job['owner_key']))
+        job.update(state='ready', available_at=now, merge_pending=True, token='', lease_until=0.0)
+        _append(tx, control, job)
+        tx.put('jobs', job['segment_id'], job)
 
     @staticmethod
     def redrive_in_transaction(tx: Transaction, job: dict, now: float) -> bool:

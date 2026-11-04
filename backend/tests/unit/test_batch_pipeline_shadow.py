@@ -1,6 +1,7 @@
 """Shadow isolation and distributed spend state on strict Firestore transactions."""
 
 from dataclasses import replace
+from importlib import import_module
 from types import SimpleNamespace
 from unittest.mock import Mock
 from datetime import datetime, timezone
@@ -30,6 +31,16 @@ def repository(monkeypatch):
     from utils.batch_pipeline import quarantine_recovery as recovery
 
     assert recovery.SECOND_PROVIDER == 'soniox'
+    # build_incoming defers these imports in production. Warm them before the
+    # real two-second transaction deadline so this tests steady-state planning.
+    for module in (
+        'models.conversation',
+        'models.conversation_enums',
+        'utils.conversations.deterministic_minimum',
+        'utils.stt.pre_recorded',
+        'utils.sync.capture',
+    ):
+        import_module(module)
     monkeypatch.setenv('BATCH_PIPELINE_SHADOW_PERCENT', '100')
     monkeypatch.setenv('BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED', 'true')
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
@@ -709,3 +720,55 @@ def test_pre_shadow_normal_job_duplicates_keep_their_immutable_identity():
     before = deepcopy(store.rows)
     assert queue.enqueue(work, 2) is False
     assert store.rows == before
+
+
+@pytest.mark.parametrize('cap,duration,attempted', [('0', 61, False), ('600', 61, True), ('600', 601, False)])
+@pytest.mark.parametrize('answer', ['empty', 'words_without_vad'])
+def test_long_guarded_shadow_mirrors_single_modulate_admission(
+    repository, monkeypatch, cap, duration, attempted, answer
+):
+    monkeypatch.setenv('BATCH_PIPELINE_GUARDED_LONG_RECOVERY_MAX_SECONDS', cap)
+    item = running(repository, duration=duration, guarded=True)
+    words = [{'word': 'Synthetic', 'timestamp': [1, 2], 'speaker': '0'}]
+
+    def recognize(*args, **kwargs):
+        if answer == 'empty':
+            raise MultilingualEmpty(duration, [])
+        return words_payload(duration, [], words, 'vi')
+
+    first, second = Mock(side_effect=recognize), Mock()
+    outcome = recover(
+        repository,
+        SimpleNamespace(fetch_audio=lambda _: b'synthetic'),
+        item.segment_id,
+        stt=first,
+        second_stt=second,
+        inspect=lambda *args: (b'', duration, []),
+    )
+    settled = row(repository, item.segment_id)
+    assert outcome == ('failed_held' if attempted else 'paid_skipped')
+    assert first.call_count == int(attempted)
+    second.assert_not_called()
+    assert settled['recognizers']['soniox']['outcome'] == 'refused'
+    if attempted:
+        assert settled['paid_providers'] == ['modulate']
+        assert settled['recognizers']['modulate']['outcome'] == ('empty' if answer == 'empty' else 'words')
+    assert recover(repository, Mock(), item.segment_id, stt=first, second_stt=second) == 'held'
+    assert first.call_count == int(attempted)
+
+
+@pytest.mark.parametrize('silent', [None, False, True])
+@pytest.mark.parametrize('asr_empty', [False, True])
+def test_strict_silent_asr_empty_counter_requires_both_signals(monkeypatch, silent, asr_empty):
+    from utils.batch_pipeline import worker_metrics
+
+    counter = Mock()
+    monkeypatch.setattr(worker_metrics, 'STRICT_VAD', counter)
+    worker_metrics.strict_vad(silent, True, asr_empty=asr_empty)
+    labels = [call.args[0] for call in counter.labels.call_args_list]
+    assert ('strict_silent_asr_empty' in labels) is (silent is True and asr_empty)
+    assert ('strict_silent_pyannote_nonempty' in labels) is (silent is True and not asr_empty)
+    assert ('unavailable' in labels) is (silent is None and not asr_empty)
+    assert ('evaluated' in labels) is (silent is not None and not asr_empty)
+    if asr_empty:
+        assert labels == (['strict_silent_asr_empty'] if silent else [])

@@ -35,7 +35,7 @@ def client(monkeypatch):
     monkeypatch.setattr(
         router, 'resolve_transcription_allowance', lambda _: SimpleNamespace(reason='plan_allowance_exhausted')
     )
-    monkeypatch.setattr(router, 'retrieve_file_paths', lambda *_: ['synthetic.bin'])
+    monkeypatch.setattr(router, 'retrieve_file_paths', lambda *_: ['omi_1792152000.bin'])
     monkeypatch.setattr(router, 'archive_mobile_batch_raw_files', lambda *_: [])
     monkeypatch.setattr(router, 'decode_files_to_wav', lambda _: ['1792152000.wav'])
     monkeypatch.setattr(router, '_cleanup_files', Mock())
@@ -96,7 +96,7 @@ def test_ladder_denied_upload_reaches_custody_without_402(client, monkeypatch, u
     from config.policy import BatchUnitPolicy
 
     monkeypatch.setattr(router, 'resolve_batch_policy', lambda _: BatchUnitPolicy())
-    monkeypatch.setattr(router, '_retrieve_file_paths_v2', lambda *a: ['synthetic.bin'])
+    monkeypatch.setattr(router, '_retrieve_file_paths_v2', lambda *a: ['omi_1792152000.bin'])
     monkeypatch.setattr(router, 'compute_sync_content_id', lambda *a: 'held-content')
     monkeypatch.setattr(router, 'create_sync_job', Mock())
     monkeypatch.setattr(router, 'claim_sync_content', lambda *a: {'outcome': 'held', 'result': {'held_audio': True}})

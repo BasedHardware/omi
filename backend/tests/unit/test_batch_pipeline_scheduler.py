@@ -1,6 +1,7 @@
 """State-machine tests over an atomic snapshot store, not a Firestore emulator."""
 
 from copy import deepcopy
+from dataclasses import replace
 from threading import Event, RLock, Thread, current_thread
 from unittest.mock import Mock
 
@@ -105,17 +106,28 @@ class MemoryStore:
             return True
 
     def control_candidate(self, priority, pool, now, *, worker_id='', exclude=()):
+        return next(
+            (key for key in self.control_candidates(priority, pool, now, worker_id=worker_id) if key not in exclude),
+            None,
+        )
+
+    def control_candidates(self, priority, pool, now, *, worker_id='', fanout=None):
+        import hashlib
+        from config.batch_pipeline import control_candidate_fanout
         from utils.batch_pipeline.control import field
 
         candidates = [
             (v[field(priority, 'service')], v[field(priority, pool + '_available_at')], key)
             for (table, key), v in self.rows.items()
             if table == 'control'
-            and key not in exclude
             and v.get(field(priority, 'active'))
             and v[field(priority, pool + '_available_at')] <= now
         ]
-        return min(candidates)[2] if candidates else None
+        candidates.sort()
+        candidates = candidates[: control_candidate_fanout(fanout) if worker_id else 1]
+        if worker_id:
+            candidates.sort(key=lambda row: (row[0], hashlib.sha256(f'{worker_id}:{row[2]}'.encode()).digest()))
+        return [row[2] for row in candidates]
 
     def oldest_retry(self, priority):
         values = [
@@ -166,6 +178,28 @@ def colliding_owner(owner):
 
 def item(segment, owner='heavy', capture=1, duration=30, priority=Priority.DEEP, unit_kind='conversation'):
     return WorkItem(segment, owner, capture, f'gs://synthetic/{segment}', duration, priority, unit_kind)
+
+
+@pytest.mark.parametrize('timing_store', [None, 'batch', 'sync'])
+def test_job_timing_store_is_optional_durable_and_immutable(timing_store):
+    store = MemoryStore()
+    queue = Scheduler(store)
+    work = replace(item('clock'), timing_store=timing_store)
+    assert queue.enqueue(work, 0)
+    row = store.rows['jobs', work.segment_id]
+    if timing_store is None:
+        assert 'timing_store' not in row
+    else:
+        assert row['timing_store'] == timing_store
+    assert not queue.enqueue(work, 0)
+    assert queue.pull(1)[0].item == work
+    if timing_store is None:
+        # Rows written before omission remain idempotent too.
+        store.rows['jobs', work.segment_id]['timing_store'] = None
+        assert not queue.enqueue(work, 0)
+    for other in {None, 'batch', 'sync'} - {timing_store}:
+        with pytest.raises(ValueError, match='different immutable work'):
+            queue.enqueue(replace(work, timing_store=other), 0)
 
 
 @pytest.mark.parametrize('multi_lease', [False, True])

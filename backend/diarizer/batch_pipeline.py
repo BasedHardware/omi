@@ -7,7 +7,6 @@ chain. Missing results denote retryable failures per the scheduler contract.
 
 from concurrent.futures import Future, ThreadPoolExecutor, wait as wait_futures
 from dataclasses import dataclass
-from enum import Enum
 import math
 import logging
 import threading
@@ -59,11 +58,13 @@ from utils.batch_pipeline.diarization_gate import (
 )
 from utils.batch_pipeline.gpu_skip_metrics import record_compacted_unassigned, record_decision, record_unit_diarization
 from utils.batch_pipeline.errors import FatalGpuError
+from utils.batch_pipeline.word_validation import BatchValidationError, ValidationReason, validate_words
 from utils.batch_pipeline.language_metrics import record_route
 from utils.batch_pipeline.stage_timings import StageTimings
 from utils.batch_pipeline.worker_io import DecodeBudget, FirstDecode, PendingResults, PreparedFlight
 from utils.batch_pipeline import worker_metrics
 from utils.observability.fallback import record_fallback
+from utils.observability.reasons import WorkerValidationReason, WorkerValidationStage
 
 SAMPLE_RATE = 16000
 _GPU_CHAIN_LOCK = threading.Lock()
@@ -72,28 +73,6 @@ _GPU_CHAIN_LOCK = threading.Lock()
 # stays within this budget (~58 MB PCM16 + ~115 MB float32 in transit).
 PREFETCH_AHEAD_SECONDS = 1800
 logger = logging.getLogger(__name__)
-
-
-class ValidationReason(Enum):
-    UNSUPPORTED_LANGUAGE = 'unsupported_language'
-    WORD_SHAPE = 'word_shape'
-    WORD_CLOCK = 'word_clock'
-    WORD_SEQUENCE = 'word_sequence'
-    VAD_NONFINITE = 'vad_nonfinite'
-    VAD_ORDER = 'vad_order'
-    VAD_BOUNDS = 'vad_bounds'
-    EMPTY_ASR = 'empty_asr'
-    NO_OWNED_WORDS = 'no_owned_words'
-
-
-class BatchValidationError(ValueError):
-    """A closed reason code, never a provider exception message."""
-
-    def __init__(self, reason: object):
-        if not isinstance(reason, ValidationReason):
-            raise ValueError('invalid batch validation reason')
-        self.reason = reason.value
-        super().__init__(reason.value)
 
 
 def is_fatal_cuda_error(exc):
@@ -156,23 +135,6 @@ class LiveWords:
     words: Sequence[dict]
     full_source_coverage: bool
     record_quality: bool
-
-
-def validate_words(words, duration):
-    result = []
-    previous = -1.0
-    for word in words:
-        try:
-            start, end = map(float, word['timestamp'])
-        except ValueError:
-            raise BatchValidationError(ValidationReason.WORD_SHAPE) from None
-        if not all(math.isfinite(v) for v in (start, end)) or not 0 <= start <= end <= duration + 0.01:
-            raise BatchValidationError(ValidationReason.WORD_CLOCK)
-        if start < previous or not isinstance(word['word'], str) or not word['word'].strip():
-            raise BatchValidationError(ValidationReason.WORD_SEQUENCE)
-        previous = start
-        result.append({**word, 'timestamp': [start, end]})
-    return result
 
 
 def bounded_window_words(words, duration):
@@ -727,6 +689,18 @@ class PipelineWorker:
                 failed.add(item.segment_id)
                 self.counts['failed'] += 1
                 reason = exc.reason if isinstance(exc, BatchValidationError) else 'unclassified'
+                staged_audio_invalid = (
+                    stage == WorkerValidationStage.FETCH_DECODE.value
+                    and isinstance(exc, ValueError)
+                    and str(exc)
+                    in {
+                        'staging requires 16kHz mono PCM16 WAV',
+                        'invalid staged audio length',
+                        'truncated staged WAV',
+                    }
+                )
+                if staged_audio_invalid:
+                    reason = WorkerValidationReason.STAGED_AUDIO_INVALID.value
                 state = states.get(item.segment_id, {})
                 measured_vad = state.get('speech_seconds', strict_measurements.get(item.segment_id))
                 receipt = (
@@ -757,11 +731,12 @@ class PipelineWorker:
                             worker_vad_receipt=receipt,
                         )
                     )
-                elif isinstance(exc, BatchValidationError) and (
-                    reason == 'unsupported_language' or worker_validation_disposition_enabled()
+                elif staged_audio_invalid or (
+                    isinstance(exc, BatchValidationError)
+                    and (reason == 'unsupported_language' or worker_validation_disposition_enabled())
                 ):
-                    # Repeating the same validated GPU failure cannot establish
-                    # silence or corrupt audio. End this chain now and retain
+                    # Repeating terminal validation cannot repair staged bytes
+                    # or establish silence. End this chain now and retain
                     # custody for the independent privacy-fenced recovery path.
                     results.append(ValidationFailureWork(item.segment_id, stage, reason, measured_vad, receipt))
                 elif safety_net_enabled():
@@ -1180,22 +1155,26 @@ class PipelineWorker:
                             )
                         stage = 'assemble_words'
                     silence = state['silence_payload']
-                    if (
-                        not state['silence']
-                        and not words
-                        and not shapes[item.segment_id]['asr_words']
-                        and worker_silence_disposition_enabled()
-                    ):
-                        try:
-                            silence = inspect_silence(item, state['samples'])
-                        except Exception:
-                            # Unavailable/invalid strict VAD is never silence. Keep
-                            # the original empty-ASR quarantine and recovery route.
-                            silence = None
-                        if silence is not None:
-                            state['silence'] = True
-                            state['speech_spans'], state['speech_seconds'] = [], 0.0
-                            self.counts['silence'] += 1
+                    if not state['silence'] and not words and not shapes[item.segment_id]['asr_words']:
+                        if worker_silence_disposition_enabled():
+                            try:
+                                silence = inspect_silence(item, state['samples'])
+                            except Exception:
+                                # Unavailable/invalid strict VAD is never silence. Keep
+                                # the original empty-ASR quarantine and recovery route.
+                                silence = None
+                            if silence is not None:
+                                state['silence'] = True
+                                state['speech_spans'], state['speech_seconds'] = [], 0.0
+                                self.counts['silence'] += 1
+                        elif not item.shadow and strict_vad_shadow_sampled(item.segment_id):
+                            try:
+                                # Rollback qualification only: do not alter state or
+                                # suppress EMPTY_ASR when disposition is disabled.
+                                observed = inspect_silence(item, state['samples'])
+                                worker_metrics.strict_vad(observed is not None, True, asr_empty=True)
+                            except Exception:
+                                pass
                     if not state['silence'] and not words:
                         raise BatchValidationError(
                             ValidationReason.NO_OWNED_WORDS

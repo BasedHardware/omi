@@ -1,6 +1,7 @@
 """Worker death, stale claims and retry custody on the real Redis fence."""
 
 import asyncio
+import os
 from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
@@ -340,6 +341,16 @@ def test_bootstrap_refuses_unpinned_customer_project_before_clients(monkeypatch,
         worker_job.bootstrap()
 
 
+def test_blank_credential_env_is_unset_so_adc_uses_workload_identity(monkeypatch):
+    monkeypatch.setenv('GOOGLE_APPLICATION_CREDENTIALS', '')
+    monkeypatch.setenv('SERVICE_ACCOUNT_JSON', '  ')
+    monkeypatch.setenv('FIREBASE_AUTH_CREDENTIALS_PATH', '/keys/kept.json')
+    worker_job.drop_blank_credential_env()
+    assert 'GOOGLE_APPLICATION_CREDENTIALS' not in os.environ
+    assert 'SERVICE_ACCOUNT_JSON' not in os.environ
+    assert os.environ['FIREBASE_AUTH_CREDENTIALS_PATH'] == '/keys/kept.json'
+
+
 async def test_stale_claim_is_rechecked_after_redis_acquisition(execution, monkeypatch):
     redis, pipeline, cleanup = execution
     process = AsyncMock()
@@ -350,7 +361,8 @@ async def test_stale_claim_is_rechecked_after_redis_acquisition(execution, monke
     assert not sync_jobs.sync_job_run_lock_present('job')
 
 
-async def test_worker_runs_fenced_pipeline_without_request_budget(execution, monkeypatch):
+@pytest.mark.parametrize('capture_received_at', [None, 1800000000.0])
+async def test_worker_runs_fenced_pipeline_without_request_budget(execution, monkeypatch, capture_received_at):
     redis, pipeline, cleanup = execution
 
     async def process(*args, **kwargs):
@@ -358,6 +370,7 @@ async def test_worker_runs_fenced_pipeline_without_request_budget(execution, mon
         assert kwargs['content_run_bound'] is True
         assert kwargs['ledger_fence_active'] is True
         assert kwargs.get('inline_run_lock_token') is None
+        assert kwargs['capture_received_at'] == capture_received_at
         token = kwargs['run_lock_token']
         assert sync_jobs.renew_job_run_lock('job', token)
         assert sync_jobs.try_acquire_sync_job_run_lock('job') is None
@@ -366,7 +379,8 @@ async def test_worker_runs_fenced_pipeline_without_request_budget(execution, mon
         redis.set('sync_job:job', json.dumps(row))
 
     monkeypatch.setattr(pipeline, 'run_full_pipeline_background_async', process)
-    assert await worker_job.execute(LEASE, Client())
+    lease = {**LEASE, 'payload': {**LEASE['payload'], 'capture_received_at': capture_received_at}}
+    assert await worker_job.execute(lease, Client())
     cleanup.assert_awaited_once()
     assert not sync_jobs.sync_job_run_lock_present('job')
 

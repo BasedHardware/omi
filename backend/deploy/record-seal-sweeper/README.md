@@ -59,10 +59,10 @@ the definitions and verify an aggregate-only synthetic notification before
 declaring alert delivery accepted. No metric labels are extracted from log text.
 
 The backlog alert divides nonempty-cycle counts by successful-cycle counts,
-aligned over ten minutes and reduced across ephemeral Job pods. Every observed
+aligned over one hour and reduced across ephemeral Job pods. Every observed
 cycle must be nonempty for two hours; an empty reading or missing numerator
 resets the pending period. A separate absence condition detects no successful
-cycle for 30 minutes (after the metric has first produced data). The oldest-age
+hourly cycle for two hours (after the metric has first produced data). The oldest-age
 alert uses an exact `>14400` boolean in the producer, avoiding approximate
 histogram percentile thresholds. Any bare-token skip triggers the log-match
 policy. Distribution metrics retain sampled counts/ages for charts only.

@@ -182,7 +182,7 @@
    },
    "job_transitions": [
     "<1s ready",
-    "<1s leased",
+    "<5s leased",
     "<30s result_ready",
     "<30s committed",
     "<30s committed client:completed"
@@ -246,7 +246,7 @@
    },
    "job_transitions": [
     "<1s ready",
-    "<1s leased",
+    "<5s leased",
     "<30s result_ready",
     "<30s committed",
     "<30s committed client:completed"
@@ -310,7 +310,7 @@
    },
    "job_transitions": [
     "<1s ready",
-    "<5s leased",
+    "<30s leased",
     "<30s result_ready",
     "<30s committed",
     "<30s committed client:completed"
@@ -374,7 +374,7 @@
    },
    "job_transitions": [
     "<1s ready",
-    "<5s leased",
+    "<30s leased",
     "<30s result_ready",
     "<30s committed",
     "<30s committed client:completed"
@@ -438,7 +438,7 @@
    },
    "job_transitions": [
     "<1s ready",
-    "<5s leased",
+    "<30s leased",
     "<30s result_ready",
     "<30s committed",
     "<30s committed client:completed"

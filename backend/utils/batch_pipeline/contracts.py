@@ -81,6 +81,8 @@ class WorkItem:
     privacy_generation: int | None = None
     requires_compute_admission: bool = False
     shadow: bool = False
+    # CPU admission provenance, never inferred from record-origin speaker scopes.
+    timing_store: str | None = None
     language_receipt_enabled: bool | None = None
 
     def to_dict(self):
@@ -93,6 +95,8 @@ class WorkItem:
         return value
 
     def __post_init__(self):
+        if self.timing_store not in {None, 'batch', 'sync'}:
+            raise ValueError('invalid audio timing store')
         if not self.segment_id or len(self.segment_id) > 128 or '/' in self.segment_id:
             raise ValueError('segment_id must be a bounded opaque document ID')
         if not self.owner_id or '/' in self.owner_id or len(self.owner_id.encode()) > 256:

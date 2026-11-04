@@ -3,6 +3,21 @@
 # Preserve namespace + pod labels on both metrics. Empty/stale samples must be
 # unavailable (never replace with zero); HPA then retains capacity and alerts.
 external:
+  - seriesQuery: 'omi_record_seal_backlog{namespace!="",worker_release!=""}'
+    resources:
+      overrides:
+        namespace: {resource: namespace}
+    name:
+      matches: '^omi_record_seal_backlog$'
+      as: omi_record_seal_backlog
+    # Every CPU slot observes the global debt. Never sum it across replicas or
+    # replace unavailable/stale samples with zero (HPA must retain capacity).
+    metricsQuery: >-
+      max by (namespace, worker_release) (
+        omi_record_seal_backlog{<<.LabelMatchers>>}
+        and on (namespace, worker_release, pod)
+        (time() - omi_record_seal_refreshed_at_seconds < 60)
+      )
   - seriesQuery: 'omi_batch_pipeline_ready_age_seconds{namespace!="",worker_release!="",priority!=""}'
     resources:
       overrides:
