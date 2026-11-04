@@ -101,9 +101,11 @@ _kill_state: list = []  # [(next_poll_at, disabled)]
 
 
 def _read_kill_flag() -> bool:
-    from database.account_deletion_marker import account_deletion_firestore_client
+    # The data plane (where account_deletions lives) via the bare client seam: importing
+    # account_deletion_marker here would pull fsr_read_cache/Redis into the GPU batch image.
+    from database._client import get_data_plane_firestore_client
 
-    snapshot = account_deletion_firestore_client().collection(KILL_COLLECTION).document(KILL_DOCUMENT).get()
+    snapshot = get_data_plane_firestore_client().collection(KILL_COLLECTION).document(KILL_DOCUMENT).get()
     return bool(snapshot.exists and (snapshot.to_dict() or {}).get('disabled') is True)
 
 
