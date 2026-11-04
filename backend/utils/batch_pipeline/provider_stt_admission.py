@@ -70,7 +70,7 @@ def enqueue_in_transaction(
     if item.requires_compute_admission:
         raise ValueError('provider units are funded by the provider stage, not GPU compute admission')
     previous = tx.get('jobs', item.segment_id)
-    immutable = {**asdict(item), 'priority': int(item.priority)}
+    immutable = {**item.to_dict(), 'priority': int(item.priority)}
     pending_record = previous.get('state') == 'record_pending'
     if pending_record and not native_record:
         raise ValueError('a pending recording cannot take the provider route')
