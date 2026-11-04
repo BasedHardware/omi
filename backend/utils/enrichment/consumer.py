@@ -23,6 +23,7 @@ from __future__ import annotations
 from utils.observability.delivery import record_delivery
 
 import logging
+import re
 import threading
 import time
 from contextlib import contextmanager
@@ -69,6 +70,17 @@ def _transient_dependency(error: BaseException) -> bool:
             return current.response.status_code in _TRANSIENT_HTTP_STATUSES
         current = current.__cause__ or current.__context__
     return False
+
+
+def _cause(error: BaseException) -> str:
+    # FirstSummaryCallbackPending carries fixed literals ('redirect target changed'); keep a bounded token.
+    return re.sub(r'[^a-z0-9]+', '_', str(error).lower()).strip('_')[:40] or 'unspecified'
+
+
+def _callback_pending(cause: str, now: float) -> Result:
+    """Every callback_pending 409 names its cause: one reason covers four different waits."""
+    logger.info('event=enrichment_consumer outcome=retry reason=callback_pending cause=%s', cause)
+    return Result(Outcome.RETRY, RetryReason.CALLBACK_PENDING, available_at=now)
 
 
 @contextmanager
@@ -207,13 +219,13 @@ class EnrichmentConsumer:
                     if context and context.get('hold_skipped'):
                         discarded = True
                     if output is None and preserves_admitted(row) and not discarded and not blocked and not custody:
-                        return Result(Outcome.RETRY, RetryReason.CALLBACK_PENDING, available_at=now)
+                        return _callback_pending('admitted_no_output', now)
                     if output is not None and not summary_seen and not discarded and not blocked:
                         raise summary_delivery.SummaryOutputUnavailable('first-summary output is empty')
         except processing_hold.ProcessingDeferred as error:
             return Result(Outcome.DEFERRED, ConsumerReason.NOT_DUE, available_at=error.available_at)
-        except rows.FirstSummaryCallbackPending:
-            return Result(Outcome.RETRY, RetryReason.CALLBACK_PENDING, available_at=now)
+        except rows.FirstSummaryCallbackPending as error:
+            return _callback_pending(_cause(error), now)
         except HTTPException as error:
             # Processing's HTTP contract for a failed LLM/provider/app step: retry without a fast 5xx.
             if not (error.status_code == 429 or error.status_code >= 500):
@@ -230,7 +242,7 @@ class EnrichmentConsumer:
             if not context or not record_empty_failure(
                 get_firestore_client(), rows.COLLECTION, claim.row_id, claim.lease_token, claim.wake_token
             ):
-                return Result(Outcome.RETRY, RetryReason.CALLBACK_PENDING, available_at=now)
+                return _callback_pending('empty_output_unrecorded', now)
             record_delivery('summary', 'failed')
             empty_blocked = True
         finally:
@@ -251,8 +263,8 @@ class EnrichmentConsumer:
                 pending = transfer_redirect(
                     claim.row_id, claim.wake_token, claim.lease_token, str(context['redirect_to']), now=now
                 )
-            except rows.FirstSummaryCallbackPending:
-                return Result(Outcome.RETRY, RetryReason.CALLBACK_PENDING, available_at=now)
+            except rows.FirstSummaryCallbackPending as error:
+                return _callback_pending('redirect_' + _cause(error), now)
             if pending is not None:
                 rows.wake_row(pending)  # Transactional custody survives a lost enqueue acknowledgement.
             return Result(Outcome.STALE, ConsumerReason.REDIRECTED)

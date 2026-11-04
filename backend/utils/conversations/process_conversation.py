@@ -397,13 +397,7 @@ def _get_structured(
         task_intelligence_capture = _proposes_task_candidates(conversation)
         tz: Optional[str] = notification_db.get_user_time_zone(uid)
         tz_str: str = tz or ''
-        user_language = (
-            resolve_output_language(uid, language_code)
-            if serving_for('NOTES_PACKET_V2_MODE', uid)
-            else normalize_language(users_db.get_user_language_preference(uid))
-            or normalize_language(language_code)
-            or 'en'
-        )
+        user_language = resolve_output_language(uid, language_code, getattr(conversation, 'transcript_segments', None))
         summary_app_selected = selected_summary_app(uid, summary_app_selected, redis_db.get_user_preferred_app)
         minimum = quiet_minimum(
             uid,
@@ -792,7 +786,11 @@ def trigger_conversation_apps(
     if is_server_minimum(conversation) and not (app_id or first_party_only):
         return True
     if serving_for('NOTES_PACKET_V2_MODE', uid):
-        language_code = resolve_output_language(uid, normalize_language(conversation.language) or language_code)
+        language_code = resolve_output_language(
+            uid,
+            normalize_language(conversation.language) or language_code,
+            getattr(conversation, 'transcript_segments', None),
+        )
     else:
         # The legacy branch never resolved: a 'multi' capture tag reached app prompts verbatim.
         language_code = normalize_language(conversation.language) or normalize_language(language_code) or 'en'

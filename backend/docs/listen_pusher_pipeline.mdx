@@ -2969,8 +2969,16 @@ the same transaction it decodes the snapshot's transcript with the read path's
 own uid-keyed decode (strict: a blob that fails authentication is no
 transcript), and replaces an empty generated title with
 `deterministic_minimum_title` (the first sentence, else `Recording · 3:14 PM`
-in the user's zone). A real or user title is never touched. The legacy
-1 MiB orphan terminal is the one exception: its write must only shrink the
+in the user's zone). A real or user title is never touched. Home read neutralization also preserves
+these dead-letter titles, including when a blank `user_title` is present.
+`HOME_NEUTRAL_MINIMUM_TITLES` defaults on and affects only floor/short server
+minimums and loaded eight-word lazy placeholders; off preserves stored titles.
+It performs no transcript refetch. `HOME_HIDE_EPISODE_MEMBERS=off` restores
+member visibility, list-version checks and caching. `HOME_HIDE_BELOW_FLOOR_ROWS`
+(default on) controls floor/minimum visibility. `EPISODE_OUTPUT_LANGUAGE_PIN=off`
+restores preference-then-capture resolution for conversation notes and episodes;
+valid capture tags also survive when no transcript segments were supplied.
+The legacy 1 MiB orphan terminal is the one exception: its write must only shrink the
 document. Only the dead-letter sets `summary_retryable=true`, and only after
 a transient failure (`final_attempt_failed` / `processing_failed`) on a row
 whose summarizer input is usable (decoded transcript text, or a photo with a
