@@ -8,6 +8,7 @@ from database import episode_log as store, episodes
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreDocument
 from utils.episodes import home_read
 from utils.episodes.log import metrics, reads, worker
+from utils.episodes.log.worker import wake as real_wake
 from utils.episodes.log.codec import loads
 from utils.episodes.log.fold import Fold
 from utils.episodes.log.policy import home_policy_write
@@ -161,10 +162,17 @@ def test_wake_failure_after_publication_keeps_drain_committed(client, monkeypatc
         return result
 
     monkeypatch.setattr(store, 'publish', append_after_publish)
-    monkeypatch.setattr(worker, 'wake', Mock(side_effect=RuntimeError('queue unavailable')))
+    monkeypatch.setattr(worker, 'wake', real_wake)
+    monkeypatch.setattr(
+        worker.cloud_tasks, 'enqueue_episode_uid_wake', Mock(side_effect=RuntimeError('queue unavailable'))
+    )
+    fallback = Mock()
+    monkeypatch.setattr('utils.observability.fallback.record_fallback', fallback)
     assert worker.drain(UID, firestore_client=client, now=NOW + timedelta(minutes=4)) == 'drained'
     state = store.state(UID, firestore_client=client)
     assert state['cursor'] == state['next_seq'] == 1 and state['lease_owner'] is None
+    fallback.assert_called_once()
+    assert fallback.call_args.kwargs['outcome'] == 'degraded'
 
 
 def test_clock_capacity_never_silently_truncates_visibility_deadlines():

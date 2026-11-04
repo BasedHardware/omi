@@ -34,7 +34,20 @@ def wake(uid, deadline):
         ((seconds + config.WAKE_BUCKET_SECONDS - 1) // config.WAKE_BUCKET_SECONDS) * config.WAKE_BUCKET_SECONDS,
         (int(time.time()) // config.WAKE_BUCKET_SECONDS + 1) * config.WAKE_BUCKET_SECONDS,
     )
-    cloud_tasks.enqueue_episode_uid_wake(uid, hashlib.sha256(uid.encode()).hexdigest()[:24], bucket)
+    try:
+        cloud_tasks.enqueue_episode_uid_wake(uid, hashlib.sha256(uid.encode()).hexdigest()[:24], bucket)
+    except Exception:
+        from utils.observability.fallback import record_fallback
+
+        record_fallback(
+            component='sync_dispatch',
+            from_mode='episode_cloud_task',
+            to_mode='episode_sweep',
+            reason='enqueue_failed',
+            outcome='degraded',
+            log=logger,
+        )
+        raise
 
 
 def mark_dirty(uid, cid, row, *, firestore_client=None):

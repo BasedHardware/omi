@@ -470,7 +470,7 @@ def test_bounded_sweep_rotates_disabled_and_failed_users_without_changing_deadli
     monkeypatch.setattr(store, 'due_owners', due)
     monkeypatch.setattr(config, 'enabled', lambda uid: uid != 'a-disabled')
     wake = Mock(side_effect=[RuntimeError('synthetic task dispatch failure'), None])
-    monkeypatch.setattr(worker, 'wake', wake)
+    monkeypatch.setattr(worker.cloud_tasks, 'enqueue_episode_uid_wake', wake)
     first = worker.sweep(firestore_client=client, now=NOW)
     second = worker.sweep(firestore_client=client, now=NOW)
     assert first == {'scanned': 2, 'redriven': 0, 'error': 1}
@@ -531,3 +531,46 @@ def test_pending_metadata_only_close_dirties_shadow_once(client, monkeypatch):
         close()
         assert store.state(UID, firestore_client=oracle.store)['next_seq'] == before + 1
         assert oracle.store.rows[path]['episode_transcription_deadline_at'] == deadline
+
+
+@pytest.mark.parametrize('entry', ['member', 'home_clock', 'home_refresh'])
+def test_failed_wakes_emit_shared_degraded_metric_without_customer_labels(client, monkeypatch, caplog, entry):
+    from utils.metrics import OMI_FALLBACK_TOTAL
+
+    monkeypatch.setattr(store, 'append', Mock(return_value=NOW))
+    enqueue = Mock(side_effect=RuntimeError(UID + ': private audio text'))
+    monkeypatch.setattr(worker.cloud_tasks, 'enqueue_episode_uid_wake', enqueue)
+    counter = OMI_FALLBACK_TOTAL.labels(
+        component='sync_dispatch',
+        from_mode='episode_cloud_task',
+        to_mode='episode_sweep',
+        reason='enqueue_failed',
+        outcome='degraded',
+    )
+    before = counter._value.get()
+    if entry == 'member':
+        assert worker.mark_dirty(UID, 'c', {'status': 'completed'}) is True
+    elif entry == 'home_clock':
+        worker.note_home_clock(UID, {'home_refresh_cid': 'c', 'home_valid_until': NOW})
+    else:
+        worker.note_home_refresh(UID, 'e', 'refresh')
+    assert enqueue.call_count == 1
+    assert counter._value.get() == before + 1
+    assert 'reason=enqueue_failed outcome=degraded' in caplog.text
+    assert UID not in caplog.text and 'private audio text' not in caplog.text
+
+
+def test_successful_wake_does_not_emit_degraded_metric(monkeypatch):
+    from utils.metrics import OMI_FALLBACK_TOTAL
+
+    monkeypatch.setattr(worker.cloud_tasks, 'enqueue_episode_uid_wake', Mock())
+    counter = OMI_FALLBACK_TOTAL.labels(
+        component='sync_dispatch',
+        from_mode='episode_cloud_task',
+        to_mode='episode_sweep',
+        reason='enqueue_failed',
+        outcome='degraded',
+    )
+    before = counter._value.get()
+    worker.wake(UID, NOW)
+    assert counter._value.get() == before
