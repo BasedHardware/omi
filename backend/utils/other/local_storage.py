@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import shutil
 import threading
@@ -238,9 +239,40 @@ def create_storage_client():
     if os.environ.get('SERVICE_ACCOUNT_JSON'):
         service_account_info = json.loads(os.environ['SERVICE_ACCOUNT_JSON'])
         credentials = service_account.Credentials.from_service_account_info(service_account_info)  # type: ignore[reportUnknownMemberType]  # google.oauth2 partial stubs
-        return storage.Client(credentials=credentials)
+        return _size_http_pool(storage.Client(credentials=credentials))
     project = storage_client_project()
-    return storage.Client(project=project) if project else storage.Client()
+    client = storage.Client(project=project) if project else storage.Client()
+    return _size_http_pool(client)
+
+
+def gcs_http_pool_maxsize() -> int:
+    """Connections per GCS host for one process's shared client (default 128).
+
+    urllib3's default pool keeps 10 connections per host, while one process's
+    storage executor runs 128 workers against the same client. The overflow
+    opened and discarded a connection per call ("Connection pool is full"), which
+    slowed pusher teardown drains past their bounds (2026-11-04 admission jam).
+    """
+    try:
+        value = int(os.getenv('GCS_HTTP_POOL_MAXSIZE', '128'))
+    except ValueError:
+        return 128
+    return max(10, min(value, 512))
+
+
+def _size_http_pool(client):
+    """Mount a pool sized to executor concurrency; keep the default on failure."""
+    try:
+        import requests.adapters
+
+        size = gcs_http_pool_maxsize()
+        adapter = requests.adapters.HTTPAdapter(pool_connections=4, pool_maxsize=size)
+        client._http.mount('https://', adapter)  # AuthorizedSession; same credentials and retries
+    except Exception as error:  # an unsized pool is the previous behaviour, never a startup failure
+        logging.getLogger(__name__).warning(
+            'event=gcs_http_pool outcome=default exception_type=%s', type(error).__name__
+        )
+    return client
 
 
 _signing_token_lock = threading.Lock()

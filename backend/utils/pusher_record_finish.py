@@ -2,13 +2,30 @@
 
 import asyncio
 import logging
+import os
 from collections import Counter
 
 from utils.executors import start_background_task
 from utils.other.audio_outbox import AudioProjection
 
 logger = logging.getLogger(__name__)
-MAX_CLOSED_RECORD_DRAINS = 32
+
+
+def _closed_drain_cap() -> int:
+    """Closed sockets whose durable drain this process keeps (default 128).
+
+    A refused drain is cancelled with its producer tokens still set, so those
+    captures stay blocked until the pod restarts. Retained drains hold receipts,
+    not PCM, so the bound is about task count, not memory.
+    """
+    try:
+        value = int(os.getenv('PUSHER_MAX_CLOSED_RECORD_DRAINS', '128'))
+    except ValueError:
+        return 128
+    return max(32, min(value, 1024))
+
+
+MAX_CLOSED_RECORD_DRAINS = _closed_drain_cap()
 _closed_record_drains: set[asyncio.Task] = set()
 
 
