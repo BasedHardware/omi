@@ -297,6 +297,7 @@ async def _recover_row(uid: str, snapshot: Any, row: dict[str, Any]) -> bool:
                             else {}
                         ),
                         lineage_binding=context.get('lineage_binding'),
+                        early_capture_offset=context.get('early_capture_offset', 0.0),
                         sync_lane=meta.get('sync_lane', 'fresh'),
                         cap_recovery=True,
                         cap_dispatch_lane=lane,

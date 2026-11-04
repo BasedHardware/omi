@@ -4,7 +4,7 @@
     "orgID": 1,
     "folderUID": "betdycdziadc0e",
     "ruleGroup": "Batch timeliness",
-    "title": "Batch audio unit still unpublished 2h after admission",
+    "title": "Batch audio unit still unpublished after 2h",
     "condition": "E",
     "data": [
       {
@@ -20,7 +20,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(omi_batch_timeliness_new_oldest_age_seconds{leg=~\"uncommitted|quarantined|assignment_held|projection\"})",
+          "expr": "max(omi_batch_timeliness_new_oldest_age_seconds{leg=~\"uncommitted|quarantined|assignment_held|projection\"} >= 0) or vector(0)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -40,11 +40,51 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "time() - max(omi_batch_timeliness_observed_at_seconds)",
+          "expr": "(time() - max(omi_batch_timeliness_observed_at_seconds)) or vector(1e9)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
           "refId": "B"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(omi_batch_pipeline_oldest_age_seconds{namespace=\"prod-omi-backend\"} >= 0) or vector(0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C"
+        }
+      },
+      {
+        "refId": "F",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(time() - omi_batch_pipeline_metrics_refreshed_at_seconds{namespace=\"prod-omi-backend\"}) or vector(1e9)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "F"
         }
       },
       {
@@ -60,7 +100,7 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "$A > 7200 && $B < 900",
+          "expression": "($A > 7200 && $B < 900) || ($C > 7200 && $F < 120)",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
           "refId": "D",
@@ -110,31 +150,31 @@
         }
       }
     ],
-    "updated": "2026-11-02T00:00:00Z",
+    "updated": "2026-11-03T00:00:00Z",
     "noDataState": "OK",
     "execErrState": "KeepLast",
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
       "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
-      "summary": "A batch audio unit admitted after the timeliness epoch has not reached its owner within 2 hours (target: most audio within 30 minutes).",
+      "summary": "A batch unit is still unpublished after two hours (target: most audio within 30 minutes).",
       "user_impact": "An owner is missing the transcript for some recorded audio. Failed-held and quarantined units are the class that lost 165 segments on 2026-11-01.",
-      "scope": "omi_batch_timeliness_new_oldest_age_seconds from the batch worker queue sample, legs uncommitted (policy holds skipped), quarantined (held, prepared, running, failed_held), assignment_held (committed, projection receipt quarantined) and projection. quarantine_held_rows and backlog counts are visible but never alarm. Alert-only: no rollback or ramp guard reads it.",
+      "scope": "One lateness page: new-cohort uncommitted, quarantined, assignment-held and projection legs, plus all-epoch active compute commitments. Each source requires its own fresh sample; deliberate policy holds and dispositioned queue states remain excluded from the compute proxy.",
       "verification": "Read omi_batch_timeliness_new_over_sla_units and the leg label to find the class, then count that class with the batch custody census (counts only, ro-prod).",
       "safe_next_action": "Redrive or settle the unit through the batch recovery runbook. Never delete staged audio. Set BATCH_TIMELINESS_ALARM_ENABLED=false only to silence a broken sample, never a real breach.",
       "runbook": "backend/charts/monitoring/batch-projection/README.md",
-      "threshold": "$A > 7200 && $B < 900 for 5m",
-      "evaluated_bad": "Synthetic: a quarantined failed_held unit admitted after the epoch, 3h old.",
-      "evaluated_good": "Synthetic: only units admitted before the epoch are late, or every new unit published within 2h."
+      "threshold": "($A > 7200 && $B < 900) || ($C > 7200 && $F < 120) for 5m",
+      "evaluated_bad": "Synthetic: a new quarantined unit age 3h with a fresh timeliness sample, or an all-epoch compute commitment age 7201s with a fresh queue sample.",
+      "evaluated_good": "Synthetic: neither fresh source measures a unit older than 7200s; unmeasured queue priorities are covered separately by the blind page."
     },
     "labels": {
       "alert_identity": "omi-batch-unit-unpublished-2h",
       "component": "batch-pipeline",
       "impact": "product",
-      "severity": "warning",
+      "severity": "critical",
       "instatus_component": "speech-processing",
-      "tier": "agent",
-      "audience": "agent",
+      "tier": "page",
+      "audience": "human",
       "owner": "two-lane-lead"
     },
     "isPaused": false,
@@ -143,12 +183,10 @@
       "group_by": [
         "alertname"
       ],
-      "group_wait": "5m",
-      "group_interval": "1h",
-      "repeat_interval": "24h",
-      "mute_time_intervals": [
-        "omi-tier-silent"
-      ]
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h",
+      "mute_time_intervals": []
     },
     "record": null
   },
@@ -243,7 +281,7 @@
         }
       }
     ],
-    "updated": "2026-11-02T00:00:00Z",
+    "updated": "2026-11-03T00:00:00Z",
     "noDataState": "Alerting",
     "execErrState": "KeepLast",
     "for": "5m",
@@ -376,7 +414,7 @@
         }
       }
     ],
-    "updated": "2026-11-02T00:00:00Z",
+    "updated": "2026-11-03T00:00:00Z",
     "noDataState": "OK",
     "execErrState": "KeepLast",
     "for": "30m",

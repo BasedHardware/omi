@@ -117,7 +117,9 @@ def test_either_job_keeps_shared_narrow_pod_list_role():
     ]
     docs = documents('--set', 'recordSealRepair.enabled=false')
     assert ('CronJob', 'record-seal-repair') not in docs and ('Role', 'record-seal-sweeper') in docs
-    docs = documents('--set', 'recordSealSweeper.enabled=false,recordSealRepair.enabled=false')
+    docs = documents(
+        '--set', 'recordSealSweeper.enabled=false,recordSealRepair.enabled=false,recordSealWorker.enabled=false'
+    )
     assert not any(kind in {'CronJob', 'Role', 'RoleBinding'} for kind, _ in docs)
 
 

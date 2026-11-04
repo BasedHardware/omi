@@ -86,6 +86,8 @@ class Wire:
 @pytest.fixture(autouse=True)
 def defaults(monkeypatch):
     for name in (
+        'HOSTED_LID_API_URL',
+        'STT_GPU_FLEET_OFF',
         'STT_PRERECORDED_LANGUAGE_GUARD_ENABLED',
         'STT_PRERECORDED_SHORT_LID_GUARD_ENABLED',
         'STT_PRERECORDED_LANGUAGE_GATE_SHADOW',
@@ -493,3 +495,37 @@ def test_enforced_cohort_is_unchanged_by_the_skip(monkeypatch):
     before = skip_count('parakeet')
     assert lid.resolve_language('multi', wav(), confident_skip=True).evidence == 'self_lid'
     assert wire.vendor_calls == [] and skip_count('parakeet') == before
+
+
+@pytest.mark.parametrize('fleet_off', ['true', 'false'])
+def test_dedicated_cpu_url_takes_precedence_even_with_fleet_off(monkeypatch, fleet_off):
+    monkeypatch.setenv('HOSTED_LID_API_URL', ' http://cpu-lid.test/lid/ ')
+    monkeypatch.setenv('STT_GPU_FLEET_OFF', fleet_off)
+    calls = []
+    transport = httpx.MockTransport(lambda req: (calls.append(str(req.url)) or httpx.Response(200, json=gate_body())))
+    real_client = httpx.Client
+    monkeypatch.setattr(httpx, 'Client', lambda **kw: real_client(transport=transport, **kw))
+    assert gate.self_detect(wav(), surface='prerecorded').parakeet
+    assert calls == ['http://cpu-lid.test/lid/v2/language']
+
+
+@pytest.mark.parametrize('url', ['', '   '])
+@pytest.mark.parametrize('fleet_off', ['true', 'false'])
+def test_unset_dedicated_url_preserves_shared_fleet_behavior(monkeypatch, url, fleet_off):
+    monkeypatch.setenv('HOSTED_LID_API_URL', url)
+    monkeypatch.setenv('STT_GPU_FLEET_OFF', fleet_off)
+    wire = Wire(monkeypatch)
+    verdict = gate.self_detect(wav(), surface='batch')
+    assert bool(verdict) == (fleet_off == 'false')
+    assert wire.calls == ([] if fleet_off == 'true' else [GATE_URL])
+
+
+def test_cpu_failure_keeps_vendor_fallback_without_dialing_gpu(monkeypatch):
+    monkeypatch.setenv('HOSTED_LID_API_URL', 'http://cpu-lid.test')
+    monkeypatch.setenv('STT_GPU_FLEET_OFF', 'true')
+    calls = []
+    transport = httpx.MockTransport(lambda req: (calls.append(str(req.url)) or httpx.Response(503)))
+    real_client = httpx.Client
+    monkeypatch.setattr(httpx, 'Client', lambda **kw: real_client(transport=transport, **kw))
+    assert gate.self_detect(wav(), surface='batch') is None
+    assert calls == ['http://cpu-lid.test/v2/language']

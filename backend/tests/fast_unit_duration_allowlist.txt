@@ -549,3 +549,8 @@ tests/unit/test_batch_vendor_outage_drills.py
 # without losing the bound it proves. Measured 1.01-1.07s CPU on CI (2026-11-01).
 tests/unit/test_batch_pipeline_pull_multi_lease.py::test_long_heads_never_push_one_transaction_past_the_write_budget[None]
 tests/unit/test_batch_pipeline_pull_multi_lease.py::test_long_heads_never_push_one_transaction_past_the_write_budget[1000000]
+# First test in the file: runpy-loads render_backend_runtime_env and parses the composed
+# runtime_env.yaml prod listen manifest under file isolation. Manifest grew again with the
+# live-preview values (#24517). Measured 1.04s CPU on CI main run 41736493180 (2026-11-03);
+# ~1.1s twice on #24516 before that. Assertions unchanged and hermetic.
+tests/unit/test_listen_finalization_cloud_tasks.py::test_prod_listen_has_replay_binding_without_enabling_live_admission

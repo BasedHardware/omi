@@ -9,6 +9,7 @@ from config.batch_language_recovery import (
     language_guarded,
     below_silence_threshold,
     allowed,
+    long_recovery_allowed,
     enabled as independent_enabled,
 )
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
@@ -33,7 +34,12 @@ def guarded_recovery(repository, segment, item, job, audio, duration, spans, stt
             'vad_speech_seconds': speech,
         }
 
-    if not spans and not allowed(duration) and not (independent_enabled() and worker is not None):
+    if (
+        not spans
+        and not allowed(duration)
+        and not long_recovery_allowed(duration)
+        and not (independent_enabled() and worker is not None)
+    ):
         receipt('soniox', 'refused', None)
         return 'paid_skipped', receipts, None
     if not repository.paid(segment, 'modulate'):

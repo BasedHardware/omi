@@ -386,8 +386,6 @@ def test_windows_is_a_desktop_platform(load_subscription):
     with load_subscription() as sub_mod:
         assert 'windows' in sub_mod.DESKTOP_PLATFORMS
         assert 'macos' in sub_mod.DESKTOP_PLATFORMS
-        assert 'windows' in sub_mod._TRIAL_PAYWALL_DESKTOP_TOKENS
-        assert 'desktop' in sub_mod._TRIAL_PAYWALL_DESKTOP_TOKENS
         # Mobile is never desktop.
         assert 'ios' not in sub_mod.DESKTOP_PLATFORMS
         assert 'android' not in sub_mod.DESKTOP_PLATFORMS

@@ -63,6 +63,7 @@ async def upload(
     evidence=None,
     unit_count=1,
     paths=(),
+    record_origin=False,
 ):
     """Run a new sync upload through intake; staging raises so admission stops at custody."""
     staged = []
@@ -90,6 +91,7 @@ async def upload(
         return ProtectionContext('standard', 0)
 
     def stage(work, body):
+        assert work.timing_store == 'sync'
         staged.append(work)
         probe.staged_context = read_context(body)
         if stop_after_staging:
@@ -114,12 +116,12 @@ async def upload(
         paths=list(paths),
         lane='fresh',
         recording_age_seconds=0,
-        source='omi',
+        source='desktop' if record_origin else 'omi',
         should_lock=False,
         conversation_id=conversation_id,
         client_device_id=None,
         client_platform='ios',
-        policy=BatchUnitPolicy(batch_enabled=True, live_record_enabled=False),
+        policy=BatchUnitPolicy(batch_enabled=True, live_record_enabled=record_origin),
         evidence=evidence,
     )
     return response, staged, probe
@@ -128,6 +130,15 @@ async def upload(
 def admitted(response, staged) -> bool:
     # Reaching staging is batch custody; the synthetic staging failure answers 503.
     return response is not None and response.status_code == 503 and len(staged) == 1
+
+
+@pytest.mark.asyncio
+async def test_batch_sync_v1_record_origin_wal_admits_sync_timing(monkeypatch):
+    response, staged, _ = await upload(
+        monkeypatch, user_language='en', conversation_language='en', owner='batch_sync_v1', record_origin=True
+    )
+    assert admitted(response, staged)
+    assert staged[0].timing_store == 'sync'
 
 
 @pytest.mark.asyncio

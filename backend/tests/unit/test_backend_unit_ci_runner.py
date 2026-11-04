@@ -18,13 +18,22 @@ SORTED_PATHS = [f'tests/unit/test_{index:02d}.py' for index in range(13)]
 GUARD_ENV_LINE = 'test:0.1:1.0:1:not integration and not slow:auto:auto'
 
 
+@pytest.fixture(autouse=True)
+def isolated_worker_setting(monkeypatch):
+    monkeypatch.delenv('BACKEND_PYTEST_WORKERS', raising=False)
+
+
 def _write_executable(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding='utf-8')
     path.chmod(0o755)
 
 
-def test_runner_executes_the_same_selected_contract_as_ci(tmp_path):
+@pytest.mark.parametrize('workers', [None, '2'])
+def test_runner_executes_the_same_selected_contract_as_ci(tmp_path, monkeypatch, workers):
+    if workers is not None:
+        monkeypatch.setenv('BACKEND_PYTEST_WORKERS', workers)
+    guard_env_line = f'test:0.1:1.0:1:not integration and not slow:auto:{workers or "auto"}'
     backend = tmp_path / 'backend'
     scripts = backend / 'scripts'
     scripts.mkdir(parents=True)
@@ -123,11 +132,11 @@ printf 'test:%s:%s:%s:%s:%s:%s\\n' \\
         'select',
         f'preflight:{shell_python}',
         f'typecheck:{shell_python}',
-        'test:0.1:1.0:1:not integration and not slow:auto:auto',
+        guard_env_line,
         'select',
         f'preflight:{shell_python}',
         f'typecheck:{shell_python}',
-        'test:0.1:1.0:1:not integration and not slow:auto:auto',
+        guard_env_line,
     ]
 
 
@@ -218,7 +227,7 @@ def _run_shard(tmp_path: Path, backend: Path, runner: Path, arguments: list[str]
 
 
 @pytest.mark.parametrize('mode', ['--all', '--changed-files'])
-@pytest.mark.parametrize('total', [2, 4, 6])
+@pytest.mark.parametrize('total', [2, 4, 6, 8])
 def test_shards_partition_the_sorted_selection_exactly(tmp_path, mode, total):
     backend, runner = _sharded_fixture(tmp_path)
     changed_files = tmp_path / 'changed-files.txt'
