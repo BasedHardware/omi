@@ -7,7 +7,7 @@ p95/max upper bounds (GiB): backend 1.312/1.710, sync 1.007/3.786,
 backfill 0.882/1.149, integration 1.312/2.229. Sync and integration stay put.
 
 The deploy flags and staging shape must agree on backend 4Gi and backfill
-2Gi/concurrency 10. Rollback restores 8Gi and 3Gi/concurrency 6 respectively;
+2Gi/concurrency 6 (concurrency 10 unqualified, Luna P2 on #24596). Rollback restores 8Gi and 3Gi;
 service min/max ownership remains with the existing ops/Redis guard contract.
 """
 
@@ -59,7 +59,7 @@ def test_prod_deploy_flags_match_the_margin20_target():
     assert (backfill['memory'], backfill['cpu'], backfill['concurrency'], backfill['revision_min']) == (
         '2Gi',
         '2',
-        10,
+        6,
         0,
     )
 
