@@ -534,6 +534,7 @@ overlay:
           STT_GPU_FLEET_OFF: {value: 'true', category: ops_kill}
           ENRICHMENT_ROUTE: {value: enrichment_queue, category: rollout}
           ENRICHMENT_TASKS_QUEUE: {value: enrichment, category: reliability}
+          ENRICHMENT_MAX_AGE_HOURS: {value: "72", category: ops_kill}
           ENRICHMENT_FRESH_TASKS_QUEUE: {value: enrichment-fresh, category: reliability}
           ENRICHMENT_TASKS_HANDLER_URL: {value: 'https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run', category: reliability}
           ENRICHMENT_TASKS_OIDC_AUDIENCE: {value: 'https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run', category: service_auth}
@@ -893,6 +894,7 @@ overlay:
           STT_GPU_FLEET_OFF: {value: 'true', category: ops_kill}
           ENRICHMENT_ROUTE: {value: enrichment_queue, category: rollout}
           ENRICHMENT_TASKS_QUEUE: {value: enrichment, category: reliability}
+          ENRICHMENT_MAX_AGE_HOURS: {value: "72", category: ops_kill}
           ENRICHMENT_FRESH_TASKS_QUEUE: {value: enrichment-fresh, category: reliability}
           ENRICHMENT_TASKS_HANDLER_URL: {value: 'https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run', category: reliability}
           ENRICHMENT_TASKS_OIDC_AUDIENCE: {value: 'https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run', category: service_auth}
@@ -1289,6 +1291,7 @@ overlay:
           STT_GPU_FLEET_OFF: {value: 'true', category: ops_kill}
           ENRICHMENT_ROUTE: {value: enrichment_queue, category: rollout}
           ENRICHMENT_TASKS_QUEUE: {value: enrichment, category: reliability}
+          ENRICHMENT_MAX_AGE_HOURS: {value: "72", category: ops_kill}
           ENRICHMENT_FRESH_TASKS_QUEUE: {value: enrichment-fresh, category: reliability}
           ENRICHMENT_TASKS_HANDLER_URL: {value: 'https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run', category: reliability}
           ENRICHMENT_TASKS_OIDC_AUDIENCE: {value: 'https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run', category: service_auth}
@@ -1646,6 +1649,7 @@ overlay:
           STT_GPU_FLEET_OFF: {value: 'true', category: ops_kill}
           ENRICHMENT_ROUTE: {value: enrichment_queue, category: rollout}
           ENRICHMENT_TASKS_QUEUE: {value: enrichment, category: reliability}
+          ENRICHMENT_MAX_AGE_HOURS: {value: "72", category: ops_kill}
           ENRICHMENT_FRESH_TASKS_QUEUE: {value: enrichment-fresh, category: reliability}
           ENRICHMENT_TASKS_HANDLER_URL: {value: 'https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run', category: reliability}
           ENRICHMENT_TASKS_OIDC_AUDIENCE: {value: 'https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run', category: service_auth}
@@ -1705,6 +1709,10 @@ overlay:
           BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED:
             value: 'true'
             category: rollout
+          # Half the gauge walks; still below the guard's 120-second blind window.
+          BATCH_PIPELINE_SERVING_METRICS_MIN_REFRESH_SECONDS:
+            value: '60'
+            category: reliability
           BATCH_PIPELINE_PROJECTION_TIMING_ENABLED:
             value: 'true'
             category: rollout

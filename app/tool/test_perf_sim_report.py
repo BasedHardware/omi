@@ -12,18 +12,18 @@ spec.loader.exec_module(reporter)
 
 
 def receipt(mode='profile'):
-    scenarios = {name: {metric: 10 for metric in reporter.METRICS + reporter.STALL_METRICS} for name in reporter.SCENARIOS}
+    scenarios = {name: {metric: 10 for metric in reporter.METRICS + reporter.STALL_METRICS} for name in reporter.SCENARIOS if name != "wal_sync_upload_success"}
     for metrics in scenarios.values():
-        metrics.update(start_vm_us=1, end_vm_us=2)
-    scenarios['cold_start']['restored_from_cache'] = True
+        metrics.update(start_vm_us=1, end_vm_us=2, **{name: 0 for name in reporter.STALL_METRICS})
+    scenarios['cold_start'].update(restored_from_cache=True, cache_ready_us=1000000)
     return {'schema': 'omi-mobile-perf-sim/v2', 'complete': True, 'frame_policy': 'framework-requested/v1',
             'idle_preflight_frames': 0,
             'pacing': 'fixed-real-time/v1', 'foreground_before_measurement': True,
             'native_foreground_before_measurement': True,
             'storage_isolated': True, 'build_mode': mode,
             'timeline_enabled': False,
-            'acceptance_eligible': mode == 'profile', 'dataset': dict(reporter.HEAVY_DATASET),
-            'scenario_order': list(reporter.SCENARIOS), 'scenarios': scenarios}
+            'acceptance_eligible': mode == 'profile', 'dataset': {**reporter.HEAVY_DATASET, 'semantics': 'off', 'upload': 'refuse'},
+            'scenario_order': list(scenarios), 'scenarios': scenarios}
 
 
 def driver_response(mode='profile', run=1):
@@ -38,6 +38,88 @@ class ReportTests(unittest.TestCase):
         output = redirect_stdout(io.StringIO())
         output.__enter__()
         self.addCleanup(output.__exit__, None, None, None)
+
+    def batch(self, mutate):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for i in range(3):
+                value = driver_response('debug', i)
+                mutate(value['heavy_profile'], i)
+                (root / f'receipt-{i}.json').write_text(json.dumps(value))
+            return reporter.summarize(root, 3)
+
+    def test_sparse_p90_noise_does_not_gate_or_drop_runs(self):
+        def mutate(value, i):
+            for name in ('cold_start', 'home_idle_sync_refresh'):
+                for metric in reporter.P90_METRICS:
+                    value['scenarios'][name][metric] = [10, 164, 70][i]
+        result = self.batch(mutate)
+        self.assertTrue(result['variance_pass'])
+        self.assertEqual(result['scenarios']['cold_start']['build_p90_us'], [10, 164, 70])
+        self.assertEqual(result['scoring_protocol'], reporter.SCORING_PROTOCOL)
+
+    def test_upload_window_is_scored_as_sparse(self):
+        self.assertTrue(reporter.SCENARIOS['wal_sync_upload_success']['sparse'])
+        self.assertFalse(reporter.SCENARIOS['wal_sync_bg_fg']['sparse'])
+
+    def test_cold_readiness_keeps_fifteen_percent_gate(self):
+        for last, passed in ((1150000, True), (1150001, False)):
+            result = self.batch(lambda r, i: r['scenarios']['cold_start'].update(
+                cache_ready_us=last if i == 2 else 1000000))
+            self.assertEqual(result['variance_pass'], passed)
+            self.assertEqual(result['scenarios']['cold_start']['cache_ready_us'][-1], last)
+
+    def test_sparse_stall_budgets_apply_to_every_run_and_both_windows(self):
+        for scenario in ('cold_start', 'home_idle_sync_refresh'):
+            for metric, limit in reporter.SPARSE_STALL_LIMITS.items():
+                for value, passed in ((limit, True), (limit + 1, False)):
+                    result = self.batch(lambda r, i: r['scenarios'][scenario].update(
+                        {metric: value if i == 1 else 0}))
+                    self.assertEqual(result['variance_pass'], passed)
+                    self.assertEqual(result['scenarios'][scenario][metric][1], value)
+
+    def test_synced_history_is_diagnostic_not_standard_heavy_baseline(self):
+        result = self.batch(lambda r, i: r['dataset'].update(synced_wals=66222))
+        self.assertFalse(result['heavy_dataset'])
+        self.assertFalse(result['accepted_baseline'])
+
+    def test_dense_stalls_remain_diagnostic(self):
+        result = self.batch(lambda r, i: r['scenarios']['scroll_conversations'].update(
+            stalls_over_100ms=i * 100, stall_blocked_over_100ms_us=i * 999999))
+        self.assertTrue(result['variance_pass'])
+
+    def test_readiness_and_dataset_modes_required(self):
+        for bad in (None, 0, -1, True, float('inf')):
+            value = receipt()
+            value['scenarios']['cold_start']['cache_ready_us'] = bad
+            with self.assertRaises(ValueError):
+                reporter.validate(value)
+        for key in ('semantics', 'upload'):
+            value = receipt()
+            del value['dataset'][key]
+            with self.assertRaises(ValueError):
+                reporter.validate(value)
+
+    def test_semantics_cannot_mix_within_batch(self):
+        with self.assertRaisesRegex(ValueError, 'dataset'):
+            self.batch(lambda r, i: r['dataset'].update(semantics='on' if i == 1 else 'off'))
+
+    def test_upload_window_is_required_only_when_accepting(self):
+        value = receipt()
+        value['dataset'].update(upload='accept', upload_wals=12)
+        with self.assertRaises(ValueError):
+            reporter.validate(value)
+        window = dict(value['scenarios']['scroll_conversations'], uploaded_wals=12, completed_jobs=12)
+        value['scenarios']['wal_sync_upload_success'] = window
+        value['scenario_order'].append('wal_sync_upload_success')
+        self.assertIs(reporter.validate(value), value)
+        window['uploaded_wals'] = 11
+        with self.assertRaisesRegex(ValueError, 'upload/reconcile'):
+            reporter.validate(value)
+        window['uploaded_wals'] = 12
+        value['dataset']['upload'] = 'refuse'
+        with self.assertRaises(ValueError):
+            reporter.validate(value)
 
     def test_empty_or_incomplete_evidence_rejected(self):
         for change in ({'complete': False}, {'scenarios': {}}, {'storage_isolated': False},
@@ -68,7 +150,7 @@ class ReportTests(unittest.TestCase):
             for i in range(3):
                 value = driver_response(run=i)
                 if i == 2:
-                    value['heavy_profile']['scenarios']['cold_start']['build_p90_us'] = 12
+                    value['heavy_profile']['scenarios']['scroll_conversations']['build_p90_us'] = 12
                 (root / f'receipt-{i}.json').write_text(json.dumps(value))
                 (root / f'receipt-{i}-preservation.json').write_text(json.dumps({
                     'verified': True, 'bundle_id': 'com.friend-app-with-wearable.ios12.development'}))
