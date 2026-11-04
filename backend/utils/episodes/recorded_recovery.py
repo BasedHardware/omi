@@ -8,23 +8,61 @@ from utils.episodes import policy, recovery
 from utils.episodes.moment import MomentInput
 
 
+class RecoveryReceipts:
+    """One walk's receipts, bound to its owner's CAS revision.
+
+    Refresh after another writer changes the owner; advance only after our own
+    successful CAS. Failed notes never add speculative consumption.
+    """
+
+    def __init__(self, uid, conversation_id, collaborators, owner=None):
+        self.uid, self.conversation_id = uid, conversation_id
+        self.client = collaborators.firestore_client
+        self.episode_id = (owner or {}).get('id')
+        self.version = (owner or {}).get('state_version')
+        self.loaded = False
+
+    def read(self, owner=None):
+        if owner is not None and (owner.get('id'), owner.get('state_version')) != (self.episode_id, self.version):
+            self.loaded = False
+            self.episode_id, self.version = owner.get('id'), owner.get('state_version')
+        if not self.loaded:
+            self.legacy, self.exists = episode_receipts.get_consumed_ids(
+                self.uid, self.conversation_id, all_shards=True, firestore_client=self.client
+            )
+            # Content can exist independently (placed live speech writes only
+            # content proof), so an absent legacy base cannot skip this read.
+            self.content, _ = episode_receipts.get_consumed_ids(
+                self.uid,
+                recovery.receipt_namespace(self.conversation_id),
+                all_shards=True,
+                firestore_client=self.client,
+            )
+            self.loaded = True
+        return set(self.legacy), self.exists, set(self.content)
+
+    def committed(self, owner, receipts):
+        self.episode_id, self.version = owner['id'], owner['state_version']
+        self.legacy.update(receipts.get(self.conversation_id) or [])
+        self.content.update(receipts.get(recovery.receipt_namespace(self.conversation_id)) or [])
+        if self.conversation_id in receipts:
+            self.exists = True
+
+
 def unconsumed_moments(
-    uid: str, conversation_id: str, moments: Iterable[MomentInput], collaborators: Any
+    uid: str, conversation_id: str, moments: Iterable[MomentInput], collaborators: Any, *, receipts=None
 ) -> Iterator[MomentInput]:
     """Read the receipts once for the whole walk: a long capture replays hundreds of finished batches,
     and each would otherwise re-read the episode and every receipt shard just to skip itself."""
     try:
-        client = collaborators.firestore_client
-        legacy, _ = episode_receipts.get_consumed_ids(uid, conversation_id, all_shards=True, firestore_client=client)
-        content, _ = episode_receipts.get_consumed_ids(
-            uid, recovery.receipt_namespace(conversation_id), all_shards=True, firestore_client=client
-        )
+        receipts = receipts or RecoveryReceipts(uid, conversation_id, collaborators)
+        legacy, _, content = receipts.read()
     except Exception:
         yield from moments
         return
     for moment in moments:
         if recovery.select_segments(moment.segments, legacy, content, -1.0, recovered=True)[0]:
-            yield moment
+            yield replace(moment, recovery_receipts=receipts)
 
 
 def record_walk(
@@ -58,7 +96,8 @@ def record_windows(
     owner = windows[0]
     outcome = 'skipped_applied'
     walk = recovery.moments(conversation_id, row, now=now, calendar_identity=row.get('calendar_identity'))
-    for moment in unconsumed_moments(uid, conversation_id, walk, collaborators):
+    receipts = RecoveryReceipts(uid, conversation_id, collaborators, owner) if collaborators is not None else None
+    for moment in unconsumed_moments(uid, conversation_id, walk, collaborators, receipts=receipts):
         moment = replace(moment, ended_at=min(moment.ended_at, owner['last_activity_at']))
         outcome = record_moment(uid, moment, collaborators, member_episode_id=str(owner['id']))
         if outcome not in {'applied', 'skipped_applied'}:

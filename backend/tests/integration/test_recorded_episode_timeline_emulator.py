@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
+from google.api_core.exceptions import ServiceUnavailable
 from google.auth.credentials import AnonymousCredentials
 from google.cloud import firestore
 
@@ -631,3 +632,109 @@ def test_discarded_anchor_keeps_occupied_canonical_id_and_retained_notes(store):
     replay = attach('fresh', T0, T0 + timedelta(minutes=2))
     assert replay['id'] == fresh['id']
     assert episodes.get_episode(uid, repaired['id'], firestore_client=client) == repaired
+
+
+def test_unchanged_attach_skips_queries_and_membership_sweep(store, monkeypatch):
+    client, uid = store
+    root = client.collection('users').document(uid)
+    member = dict(id='same', source='omi', recorded_start=T0, recorded_end=T0 + timedelta(minutes=1))
+    root.collection('conversations').document('same').set(member)
+
+    def attach():
+        return episode_timeline.attach_recorded(
+            uid,
+            'same',
+            'omi',
+            T0,
+            member['recorded_end'],
+            choose=choose_recorded_episode,
+            new_episode={},
+            firestore_client=client,
+        )
+
+    first = attach()
+    before = root.collection('episodes').document(first['id']).get().to_dict()
+
+    def unexpected(*a, **kw):
+        pytest.fail('unchanged attach did repartition reads')
+
+    with monkeypatch.context() as m:
+        m.setattr(episode_timeline, 'recorded_candidates', unexpected)
+        m.setattr(episodes, 'read_memberships', unexpected)
+        assert attach()['state_version'] == first['state_version']
+    assert root.collection('episodes').document(first['id']).get().to_dict() == before
+    member['recorded_end'] += timedelta(minutes=1)
+    root.collection('conversations').document('same').update({'recorded_end': member['recorded_end']})
+    assert attach()['last_activity_at'] == member['recorded_end']
+    root.collection('conversations').document('same').update({'deleted': True})
+    with pytest.raises(episodes.EpisodeConflict, match='conversation_hidden'):
+        attach()
+
+
+def test_fixed_boundary_fallback_reuses_candidates_in_same_attempt(store, monkeypatch):
+    client, uid = store
+    root = client.collection('users').document(uid)
+    end = T0 + timedelta(minutes=2)
+    root.collection('episodes').document('fixed').set(
+        dict(
+            id='fixed',
+            status='closed',
+            close_reason='user',
+            started_at=T0,
+            last_activity_at=end,
+            recorded_end=end,
+            conversation_ids=[],
+            state_version=1,
+        )
+    )
+    calls = []
+    real = episode_timeline.recorded_candidates
+
+    def counted(*a, **kw):
+        calls.append(kw['transaction'])
+        return real(*a, **kw)
+
+    monkeypatch.setattr(episode_timeline, 'recorded_candidates', counted)
+    result = episode_timeline.attach_recorded(
+        uid,
+        'new',
+        'omi',
+        T0 + timedelta(seconds=10),
+        T0 + timedelta(seconds=30),
+        choose=choose_recorded_episode,
+        new_episode={},
+        firestore_client=client,
+    )
+    assert result['id'] == 'fixed' and result['conversation_ids'] == ['new']
+    assert len(calls) == 1
+
+
+def test_candidate_cache_is_discarded_on_transaction_retry(store, monkeypatch):
+    client, uid = store
+    reads, decisions = [], []
+    real = episode_timeline.recorded_candidates
+
+    def counted(*args, **kwargs):
+        reads.append(kwargs['transaction'])
+        return real(*args, **kwargs)
+
+    def transient_once(*args):
+        decisions.append(True)
+        if len(decisions) == 1:
+            raise ServiceUnavailable('synthetic failure after candidate read')
+        return choose_recorded_episode(*args)
+
+    monkeypatch.setattr(episode_timeline, 'recorded_candidates', counted)
+    result = episode_timeline.attach_recorded(
+        uid,
+        'new',
+        'omi',
+        T0,
+        T0 + timedelta(seconds=30),
+        choose=transient_once,
+        new_episode={},
+        firestore_client=client,
+    )
+    assert result['conversation_ids'] == ['new']
+    assert len(reads) == 2
+    assert reads[0] is not reads[1]

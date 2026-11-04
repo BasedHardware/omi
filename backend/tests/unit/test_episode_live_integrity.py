@@ -1111,3 +1111,85 @@ def test_meaningful_sync_append_is_admitted_after_old_model_discard(lane, monkey
     owner = episodes.get_episode_for_conversation('u', expanded['id'], firestore_client=store)
     assert owner['id'] == episodes.get_episode_for_conversation('u', 'pendant', firestore_client=store)['id']
     assert visible_episode('u', owner, firestore_client=store) is not None
+
+
+def test_unchanged_recorded_attach_has_no_repartition_reads_or_writes(lane, monkeypatch):
+    store, c, _ = lane
+    member = row('same', recorded_start=T0, recorded_end=T0 + timedelta(seconds=30))
+    store.rows[('users', 'u', 'conversations', 'same')] = member
+    service._attach_synced_once('u', 'same', member, c)
+    before = deepcopy(store.rows)
+
+    def unexpected(*a, **kw):
+        pytest.fail('unchanged attach entered repartition')
+
+    monkeypatch.setattr(episode_timeline, 'recorded_candidates', unexpected)
+    monkeypatch.setattr(episodes, 'read_memberships', unexpected)
+    assert service._attach_synced_once('u', 'same', member, c) == 'recorded'
+    assert store.rows == before
+
+
+@pytest.mark.parametrize(
+    'change', ['span', 'source', 'revision', 'proof', 'membership', 'new_member', 'deleted', 'discarded']
+)
+def test_recorded_attach_falls_through_on_changed_evidence(lane, monkeypatch, change):
+    store, c, _ = lane
+    member = row('same', recorded_start=T0, recorded_end=T0 + timedelta(seconds=30))
+    store.rows[('users', 'u', 'conversations', 'same')] = member
+    placed = service._attach_recorded('u', 'same', member, T0, T0 + timedelta(seconds=30), c)
+    owner_path = ('users', 'u', 'episodes', placed['id'])
+    if change == 'span':
+        member['recorded_end'] = T0 + timedelta(minutes=2)
+    elif change == 'source':
+        member['source'] = 'phone'
+    elif change == 'revision':
+        store.rows[owner_path]['state_version'] += 1
+    elif change == 'proof':
+        store.rows[owner_path].pop('recorded_partition')
+    elif change == 'membership':
+        store.rows[owner_path]['conversation_ids'].append('extra')
+    elif change == 'new_member':
+        member = {**member, 'id': 'new'}
+        store.rows[('users', 'u', 'conversations', 'new')] = member
+    else:
+        member[change] = True
+    calls = []
+    real = episode_timeline.recorded_candidates
+
+    def counted(*a, **kw):
+        calls.append(a)
+        return real(*a, **kw)
+
+    monkeypatch.setattr(episode_timeline, 'recorded_candidates', counted)
+    if change in {'deleted', 'discarded'}:
+        before = deepcopy(store.rows)
+        with pytest.raises(episodes.EpisodeConflict, match='conversation_hidden'):
+            service._attach_recorded('u', member['id'], member, T0, member['recorded_end'], c)
+        assert store.rows == before
+    else:
+        result = service._attach_recorded('u', member['id'], member, T0, member['recorded_end'], c)
+        assert member['id'] in result['conversation_ids']
+        if change == 'span':
+            assert result['last_activity_at'] == member['recorded_end']
+        if change == 'new_member':
+            assert set(result['conversation_ids']) == {'same', 'new'}
+    assert calls
+
+
+def test_unrelated_timeline_revision_does_not_invalidate_unchanged_owner(lane, monkeypatch):
+    store, c, _ = lane
+    member = row('same', recorded_start=T0, recorded_end=T0 + timedelta(seconds=30))
+    store.rows[('users', 'u', 'conversations', 'same')] = member
+    service._attach_synced_once('u', 'same', member, c)
+    other = row(
+        'other',
+        start=T0 + timedelta(days=1),
+        recorded_start=T0 + timedelta(days=1),
+        recorded_end=T0 + timedelta(days=1, seconds=30),
+    )
+    store.rows[('users', 'u', 'conversations', 'other')] = other
+    service._attach_synced_once('u', 'other', other, c)
+    monkeypatch.setattr(
+        episode_timeline, 'recorded_candidates', lambda *a, **kw: pytest.fail('unrelated window invalidated proof')
+    )
+    assert service._attach_synced_once('u', 'same', member, c) == 'recorded'

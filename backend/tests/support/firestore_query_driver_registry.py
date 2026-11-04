@@ -1064,7 +1064,10 @@ _add(
             'uid': UID,
             'episode': {'id': 'recorded-1', 'started_at': T0, 'last_activity_at': T1},
         },
-        neutrals={'rows': (None, 'preloaded rows reuse the recorded_candidates query shape')},
+        neutrals={
+            'rows': (None, 'preloaded rows reuse the recorded_candidates query shape'),
+            'fence_row': (None, 'preloaded timeline fence document; no query shape effect'),
+        },
     )
 )
 _add(
@@ -1101,7 +1104,12 @@ _add(
             'choose': lambda rows, start, end: None,
             'new_episode': {'id': 'recorded-1'},
         },
-        neutrals={'expected_episode_id': (None, 'membership fence; never changes the recorded-candidates query shape')},
+        neutrals={
+            'expected_episode_id': (None, 'membership fence; never changes the recorded-candidates query shape'),
+            'transaction': (None, 'reuse the enclosing transaction read phase; same query shape'),
+            'candidates': (None, 'attempt-local reuse of the registered recorded_candidates builder'),
+            'fence_row': (None, 'preloaded timeline fence document; no query shape effect'),
+        },
         patchers=(_stub('database.episodes.seal', {'id': 'recorded-1'}),),
     )
 )

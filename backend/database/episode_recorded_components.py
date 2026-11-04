@@ -15,6 +15,8 @@ from google.cloud import firestore
 from config.recorded_time_tolerances import CLOSE_GAP_SECONDS, MAX_EPISODE_SECONDS
 from database._client import run_transactional
 from database import episodes
+from utils.conversations.recorded_time import conversation_span
+from utils.conversations.fragment_visibility import is_relevance_discarded
 
 
 def _automatic(row):
@@ -140,21 +142,64 @@ def _state(template, window, previous, facts):
     return result
 
 
-def attach(uid, cid, source, start, end, *, candidates, template, choose, firestore_client, page_limit):
+def attach(
+    uid,
+    cid,
+    source,
+    start,
+    end,
+    *,
+    candidates,
+    template,
+    choose,
+    firestore_client,
+    page_limit,
+    transaction=None,
+    fence_row=None,
+):
     """One fenced transaction, or None when an established boundary owns intake."""
     client = firestore_client
     root = client.collection('users').document(uid)
     collection = root.collection('episodes')
     fence = root.collection('episode_links').document('recorded_timeline')
 
-    @firestore.transactional
     def commit(transaction):
-        fence_row = fence.get(transaction=transaction).to_dict() or {}
+        revision = fence_row if fence_row is not None else (fence.get(transaction=transaction).to_dict() or {})
         linked = root.collection('episode_links').document(cid).get(transaction=transaction).to_dict() or {}
         if linked.get('episode_id'):
             owner = collection.document(linked['episode_id']).get(transaction=transaction).to_dict() or {}
             if not _automatic(owner):
                 return None
+            # Proof is written only by a complete canonical repartition. A note,
+            # membership mutation invalidates it conservatively. The fence is
+            # still read: a concurrent topology writer must serialize with us.
+            # Unrelated windows need not invalidate this owner's proof.
+            proof = owner.get('recorded_partition') or {}
+            fact = (owner.get('recorded_members') or {}).get(cid)
+            if (
+                proof.get('state_version') == owner.get('state_version')
+                and proof.get('members') == sorted(owner.get('conversation_ids') or [])
+                and set(owner.get('recorded_members') or {}) == set(proof.get('members') or [])
+                and not owner.get('recorded_merged_into')
+                and not owner.get('duplicate_conversation_ids')
+                and fact == {'start': start, 'end': end, 'source': source}
+            ):
+                # Do not trust the caller's stale row across a delete/discard or
+                # another WAL append. This get also joins the transaction read set.
+                member = root.collection('conversations').document(cid).get(transaction=transaction).to_dict()
+                span = conversation_span(member) if member else None
+                if (
+                    span
+                    and span.recorded_start == start
+                    and span.recorded_end == end
+                    and member.get('episode_id') == linked['episode_id']
+                    and member.get('source') == source
+                    and not is_relevance_discarded(member)
+                    and not any(member.get(k) for k in ('deleted', 'sync_merged_into'))
+                ):
+                    full = episodes.unseal(uid, owner)
+                    return {**full, '_recorded_windows': [full]}
+
         facts = {cid: {'start': start, 'end': end, 'source': source}}
         previous = {}
         lo, hi = start, end
@@ -220,6 +265,11 @@ def attach(uid, cid, source, start, end, *, candidates, template, choose, firest
         result = [_state(template, window, list(previous.values()), facts) for window in windows]
         for row in result:
             row['state_version'] = max(row['state_version'], int(targets[row['id']].get('state_version') or 0) + 1)
+        for row in result:
+            row['recorded_partition'] = {
+                'state_version': row['state_version'],
+                'members': sorted(row['conversation_ids']),
+            }
         new_ids = {row['id'] for row in result}
         assignments = {member: [row['id'] for row in result if member in row['conversation_ids']] for member in members}
         if any(not ids for ids in assignments.values()):
@@ -248,8 +298,10 @@ def attach(uid, cid, source, start, end, *, candidates, template, choose, firest
             )
             if exists:
                 transaction.update(root.collection('conversations').document(member), {'episode_id': assigned[-1]})
-        transaction.set(fence, {'version': int(fence_row.get('version') or 0) + 1})
+        transaction.set(fence, {'version': int(revision.get('version') or 0) + 1})
         incoming = [row for row in result if cid in row['conversation_ids']]
         return {**incoming[-1], '_recorded_windows': incoming}
 
-    return run_transactional(client, commit, transient=True)
+    if transaction is not None:
+        return commit(transaction)
+    return run_transactional(client, firestore.transactional(commit), transient=True)

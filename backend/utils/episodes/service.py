@@ -82,7 +82,7 @@ from utils.episodes.moment import MomentInput
 from utils.episodes.moment_order import newest_moments, timeline_moments
 from utils.episodes.state import apply_update, clean_text, is_placeholder_heading, provisional_items, render_state
 from utils.episodes.visibility import visible_episode, hidden_conversation
-from utils.episodes.recorded_recovery import record_walk, record_windows, unconsumed_moments
+from utils.episodes.recorded_recovery import RecoveryReceipts, record_walk, record_windows, unconsumed_moments
 from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
@@ -811,28 +811,32 @@ def _record_moment_once(
         consumption_owner = episodes_db.get_episode_for_conversation(
             uid, moment.conversation_id, firestore_client=c.firestore_client
         )
-    consumed, receipts_exist = episode_receipts.get_consumed_ids(
-        uid,
-        moment.conversation_id,
-        # The finalization tail replays the whole stored transcript: only the
-        # archives hold ids old enough to matter there. Live batches are recent.
-        all_shards=moment.trigger == 'finalize' or recovered,
-        firestore_client=c.firestore_client,
-    )
+    receipt_state = moment.recovery_receipts if recovered else None
+    if receipt_state is not None:
+        consumed, receipts_exist, consumed_content = receipt_state.read(episode)
+    else:
+        consumed, receipts_exist = episode_receipts.get_consumed_ids(
+            uid,
+            moment.conversation_id,
+            # The finalization tail replays the whole stored transcript: only the
+            # archives hold ids old enough to matter there. Live batches are recent.
+            all_shards=moment.trigger == 'finalize' or recovered,
+            firestore_client=c.firestore_client,
+        )
+        consumed_content, _ = (
+            episode_receipts.get_consumed_ids(
+                uid,
+                recovery.receipt_namespace(moment.conversation_id),
+                all_shards=True,
+                firestore_client=c.firestore_client,
+            )
+            if recovered
+            else (set(), False)
+        )
     if not receipts_exist:
         # Pre-receipts episodes kept consumption in their document; adopt it into
         # the receipts on this write so the finalization tail still dedupes.
         consumed |= set(((consumption_owner or {}).get('applied_segment_ids') or {}).get(moment.conversation_id) or [])
-    consumed_content, _ = (
-        episode_receipts.get_consumed_ids(
-            uid,
-            recovery.receipt_namespace(moment.conversation_id),
-            all_shards=True,
-            firestore_client=c.firestore_client,
-        )
-        if recovered
-        else (set(), False)
-    )
     segments, selected_ids, selected_content = recovery.select_segments(
         recovery.uncovered_segments(moment, episode),
         consumed,
@@ -1091,7 +1095,7 @@ def _record_moment_once(
     if pending is not None:
         updates['pending_boundary'] = {k: v for k, v in _pending(base).items() if k != moment.conversation_id}
     if episode is None:
-        episodes_db.commit_moment(
+        stored = episodes_db.commit_moment(
             uid,
             expected_episode_id=None,
             expected_version=None,
@@ -1101,7 +1105,7 @@ def _record_moment_once(
             firestore_client=c.firestore_client,
         )
     elif closed is not None or member_episode_id:
-        episodes_db.update_episode(
+        stored = episodes_db.update_episode(
             uid,
             str(episode['id']),
             expected_version=int(episode.get('state_version') or 0),
@@ -1110,7 +1114,7 @@ def _record_moment_once(
             firestore_client=c.firestore_client,
         )
     else:
-        episodes_db.commit_moment(
+        stored = episodes_db.commit_moment(
             uid,
             expected_episode_id=str(episode['id']),
             expected_version=episode.get('state_version'),
@@ -1119,6 +1123,8 @@ def _record_moment_once(
             segment_receipts=segment_receipts,
             firestore_client=c.firestore_client,
         )
+    if receipt_state is not None:
+        receipt_state.committed(stored, segment_receipts)
     metrics.record_moment_update(
         trigger=moment.trigger,
         outcome='composer_owned' if compose_owns else 'applied',
@@ -1443,7 +1449,11 @@ def _record_recovered(uid: str, episode_id: str, conversation_id: str, row: Mapp
         windows = [owner] if owner else []
         return record_windows(uid, conversation_id, row, windows, c, record_moment, now=_now(c))
     walk = recovery.moments(conversation_id, row, now=_now(c), calendar_identity=_calendar_identity(row))
-    return record_walk(uid, episode_id, unconsumed_moments(uid, conversation_id, walk, c), c, record_moment)
+    owner = episodes_db.get_episode(uid, episode_id, firestore_client=c.firestore_client)
+    receipts = RecoveryReceipts(uid, conversation_id, c, owner)
+    return record_walk(
+        uid, episode_id, unconsumed_moments(uid, conversation_id, walk, c, receipts=receipts), c, record_moment
+    )
 
 
 def _attach_synced(
@@ -1470,7 +1480,11 @@ def _attach_synced(
                 if donor and absorbed_from in (donor.get('conversation_ids') or []):
                     _repoint_absorbed(uid, donor, absorbed_from, conversation_id, c)
             _repoint_sync_donors(uid, conversation_id, row, c)
-            owner = episodes_db.get_episode_for_conversation(uid, conversation_id, firestore_client=c.firestore_client)
+            owner = (
+                None
+                if recorded_episodes_enabled()
+                else episodes_db.get_episode_for_conversation(uid, conversation_id, firestore_client=c.firestore_client)
+            )
             outcome = (
                 _attach_synced_once(uid, conversation_id, row, c)
                 if recorded_episodes_enabled() or not owner
