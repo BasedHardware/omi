@@ -1056,6 +1056,7 @@ def sweep(
             break
     if cursor:
         enrichment_scan.finish(previous, last, exhausted)
+    enrichment_scan.observe(client, current)
     return counts
 
 

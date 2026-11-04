@@ -19,6 +19,7 @@ from utils.enrichment.admission import ConversationAbsorbed
 from config.server_batch import owned as server_batch_owned
 from config.server_batch import has_audio as server_batch_has_audio
 from config.episodes import episodes_enabled_for
+from config.episode_attach import noop_schedule_enabled
 from config.rollout_cohorts import warm_rollout_cohorts
 
 from database import conversations as conversations_db
@@ -57,6 +58,7 @@ from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.lifecycle_clocks import overlap_snapshot
 from utils.episodes.client_gate import client_seen as episode_client_seen
 from utils.episodes.finalize import close_now as close_episode_now
+from utils.episodes.finalize import skip_unchanged_schedule
 from utils.conversations.summary_delivery import finalization_pending
 from utils.executors import db_executor, lifecycle_executor, run_blocking
 from utils.metrics import OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL
@@ -153,6 +155,24 @@ async def _episode_after_finalization(
     if not row:
         return
     try:
+        if trigger == ProcessingTrigger.SYNC_UPDATE and episodes_enabled_for(uid) and noop_schedule_enabled():
+            try:
+                unchanged = await asyncio.wait_for(
+                    run_blocking(
+                        db_executor,
+                        skip_unchanged_schedule,
+                        uid,
+                        conversation_id,
+                        row,
+                        finalized=True,
+                        absorbed_from=absorbed_from,
+                    ),
+                    timeout=EPISODE_CLOSE_TIMEOUT_SECONDS,
+                )
+            except Exception:
+                unchanged = False  # A slow/unavailable memo must retain the full hook.
+            if unchanged:
+                return
         await asyncio.wait_for(
             run_blocking(
                 lifecycle_executor(uid, episode=True),

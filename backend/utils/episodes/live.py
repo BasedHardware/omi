@@ -462,7 +462,9 @@ async def on_realtime_segments(
                 row = dict(row, transcript_segments=list(segments), finished_at=recorded[1])
                 from utils.episodes.finalize import schedule_synced_intake_attach
 
-                schedule_synced_intake_attach(uid, conversation_id, row)
+                await executors.run_blocking(
+                    executors.db_executor, schedule_synced_intake_attach, uid, conversation_id, row
+                )
                 return
         spoken = any(str(s.get('text') or '').strip() for s in segments)
         if conversation_id and spoken:

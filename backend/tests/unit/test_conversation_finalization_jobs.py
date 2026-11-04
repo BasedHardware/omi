@@ -386,7 +386,31 @@ def test_byok_job_is_explicitly_blocked_without_persisting_a_key():
     assert intent['status'] == 'blocked_byok'
     persisted = transaction.sets[0][1]
     assert persisted['requires_byok'] is True
+    assert persisted['blocked_byok_at'] == _now()
     assert set(persisted).isdisjoint({'byok_keys', 'openai', 'anthropic', 'gemini', 'deepgram'})
+
+
+def test_byok_reclaim_stamps_state_entry_once_without_reset_on_observation():
+    now = _now()
+    ref = _Ref(
+        'synthetic-job',
+        {
+            'status': 'queued',
+            'requires_byok': True,
+            'created_at': now - timedelta(days=13),
+            'updated_at': now - timedelta(hours=1),
+            'dispatch_generation': 1,
+        },
+    )
+    tx = _Transaction()
+    intent = jobs._claim_finalization_replay_txn(tx, ref, timedelta(minutes=5), now)
+    assert intent['status'] == 'blocked_byok'
+    assert tx.updates[0][1]['blocked_byok_at'] == now
+    ref.data.update(tx.updates[0][1])
+    next_tx = _Transaction()
+    jobs._claim_finalization_replay_txn(next_tx, ref, timedelta(minutes=5), now + timedelta(days=1))
+    assert all('blocked_byok_at' not in update for _, update in next_tx.updates)
+    assert ref.data['blocked_byok_at'] == now
 
 
 def test_atomic_admission_rejects_terminal_snapshot_before_any_outbox_write():
