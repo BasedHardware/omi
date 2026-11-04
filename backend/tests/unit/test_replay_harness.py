@@ -182,6 +182,11 @@ def test_existing_emulator_ci_selects_and_runs_replay():
         assert 'backend/testing/replay_harness/**' in paths
         assert 'backend/tests/integration/test_replay_harness_firestore.py' in paths
         assert 'backend/utils/batch_pipeline/**' in paths
+        # Titling stage (#24610).
+        assert 'backend/utils/conversations/**' in paths
+        assert 'backend/services/conversation_finalization.py' in paths
+        assert 'backend/routers/conversation_finalization.py' in paths
+        assert 'backend/tests/integration/test_replay_harness_titling_firestore.py' in paths
     runner = (root / 'backend/scripts/run-emulator-proofs.sh').read_text()
     assert 'tests/integration/test_replay_harness_firestore.py' in runner
 
