@@ -777,6 +777,8 @@ class _NoDevice extends ChangeNotifier implements DeviceProvider {
   @override
   BtDevice? get pairedDevice => null;
   @override
+  BtDevice? get pairedCompanionDevice => null; // No second (Omi + OmiGlass) device here.
+  @override
   bool get isConnected => false;
   @override
   BtDevice? get connectedDevice => null;

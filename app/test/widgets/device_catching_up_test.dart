@@ -43,6 +43,8 @@ class _Device extends ChangeNotifier implements DeviceProvider {
   @override
   bool get havingNewFirmware => false;
   @override
+  BtDevice? get pairedCompanionDevice => null; // No second (Omi + OmiGlass) device here.
+  @override
   Future<void> getDeviceInfo() async {}
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);

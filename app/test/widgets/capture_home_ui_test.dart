@@ -208,6 +208,10 @@ class _Device extends ChangeNotifier implements DeviceProvider {
   int get batteryLevel => 0;
   @override
   bool get isCharging => false;
+  @override
+  BtDevice? get companionDevice => null;
+  @override
+  int get companionBatteryLevel => -1;
   void drop() {
     connected = false;
     notifyListeners();

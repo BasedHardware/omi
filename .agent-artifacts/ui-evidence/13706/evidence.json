@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-pair-second-device.png",
+      "platform": "mobile-ios",
+      "description": "Actual ConnectedDevice widget offers pairing a second device; isolated host fixture with simulated pendant state. Rendered in headless Flutter tests using iOS theme and bundled fonts, not on a phone or simulator.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-companion-connected.png",
+      "platform": "mobile-ios",
+      "description": "Actual ConnectedDevice widget shows the paired OmiGlass companion and simulated 64% battery; isolated host fixture. Rendered in headless Flutter tests using iOS theme and bundled fonts, not on a phone or simulator.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

@@ -43,6 +43,12 @@ class _Device extends ChangeNotifier implements DeviceProvider {
   @override
   bool get isCharging => false;
   @override
+  BtDevice? get companionDevice => null;
+  @override
+  int get companionBatteryLevel => -1;
+  @override
+  BtDevice? get pairedCompanionDevice => null; // No second (Omi + OmiGlass) device here.
+  @override
   bool get havingNewFirmware => false;
   @override
   String get latestStableFirmwareVersion => '';

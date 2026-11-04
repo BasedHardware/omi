@@ -235,5 +235,7 @@ class HeavyConnectedDevice extends ChangeNotifier implements DeviceProvider {
   @override
   Future<List<BleDisconnectEvent>> disconnectHistory() async => const [];
   @override
+  BtDevice? get pairedCompanionDevice => null; // No second (Omi + OmiGlass) device here.
+  @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

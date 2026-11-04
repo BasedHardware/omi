@@ -113,6 +113,7 @@ import 'package:omi/backend/schema/message_event.dart'
         SegmentsDeletedEvent,
         SttCapLiveHeldEvent;
 
+part 'capture_photo_streaming.dart';
 part 'capture_speaker_events.dart';
 part 'capture_transcript_snapshot.dart';
 part 'capture_uplink_policy.dart';
@@ -745,6 +746,29 @@ class CaptureController extends ChangeNotifier
   BtDevice? _recordingDevice;
   BtDevice? _sessionRecordingDevice;
 
+  /// Camera device paired next to the recording device (OmiGlass alongside an
+  /// Omi pendant). Its photos go into the same `/v4/listen` session as the
+  /// pendant audio, producing one multi-modal conversation. Null when the
+  /// recording device is the only device (an OmiGlass on its own still streams
+  /// its own photos through [photoDevice]).
+  BtDevice? _companionPhotoDevice;
+
+  /// Device whose camera stream is currently open, so teardown stops the right
+  /// camera even after roles change.
+  String? _photoStreamDeviceId;
+
+  /// Bumped when photo streaming stops or moves so in-flight chunk callbacks
+  /// cannot send to a superseded `/v4/listen` session.
+  int _photoStreamGeneration = 0;
+
+  BtDevice? get companionPhotoDevice => _companionPhotoDevice;
+
+  /// The device whose camera is streamed during the active device session.
+  BtDevice? get photoDevice => _companionPhotoDevice ?? _recordingDevice;
+
+  @visibleForTesting
+  String? get photoStreamDeviceIdForTesting => _photoStreamDeviceId;
+
   /// Monotonic fence for pendant identity changes: bumped synchronously on every
   /// recording-device notification so an in-flight socket/BLE open that awaited a
   /// codec or resolver result cannot install transport across a same-id ABA.
@@ -1360,6 +1384,9 @@ class CaptureController extends ChangeNotifier
     if (!phoneOwns) _rollCaptureSession(next?.id ?? 'none');
     _deviceIdentityRevision++;
     _recordingDevice = next;
+    // A device cannot hold both roles; when the camera device is promoted to
+    // audio (pendant went offline) it streams its own photos as recording device.
+    if (next != null && _companionPhotoDevice?.id == next.id) _companionPhotoDevice = null;
     _syncContinuityWatch();
     if (next == null && !phoneOwns) _endOfflineSession();
     notifyListeners();
@@ -1373,10 +1400,24 @@ class CaptureController extends ChangeNotifier
         !_capture.readModel.callActive) {
       _rollCaptureSession(device?.id ?? 'none');
     }
-    _recordingDevice = _recordingDevicePreservingNormalizedType(device);
+    final next = _recordingDevicePreservingNormalizedType(device);
+    _recordingDevice = next;
+    // A device cannot hold both roles; when the camera device is promoted to audio
+    // (pendant went offline) it streams its own photos as recording device. Clear the
+    // companion role synchronously so it is never double-booked until the coordinator round-trips.
+    if (next != null && _companionPhotoDevice?.id == next.id) _companionPhotoDevice = null;
     _syncContinuityWatch();
     notifyListeners();
     unawaited(_dispatchLogged(DeviceUpdated(device)));
+  }
+
+  /// Sets (or clears) the camera device paired next to the recording device.
+  ///
+  /// If a device session is active, the camera stream is moved right away: the
+  /// previous camera is stopped and the new one started. Otherwise the new
+  /// device is picked up by the next [streamDeviceRecording].
+  Future<void> updatePhotoDevice(BtDevice? device) async {
+    if (await _applyPhotoDevice(device)) notifyListeners();
   }
 
   Future _resetStateVariables() async {
@@ -2397,13 +2438,9 @@ class CaptureController extends ChangeNotifier
     await _ensureDeviceSocketConnection();
     await _initiateDeviceAudioStreaming();
 
-    // Additionally, stream photos if the device supports it
-    if (_recordingDevice != null) {
-      var connection = await _ensureDeviceConnection(_recordingDevice!.id);
-      if (connection != null && await connection.hasPhotoStreamingCharacteristic()) {
-        await _initiateDevicePhotoStreaming();
-      }
-    }
+    // Additionally, stream photos from the camera device (the companion
+    // OmiGlass, or the recording device itself when it has a camera).
+    await _initiateDevicePhotoStreaming();
 
     notifyListeners();
   }
@@ -2767,39 +2804,7 @@ class CaptureController extends ChangeNotifier
   }
 
   Future<void> _initiateDevicePhotoStreaming() async {
-    if (_recordingDevice == null) return;
-    final deviceId = _recordingDevice!.id;
-    var connection = await _ensureDeviceConnection(deviceId);
-    if (connection == null) return;
-
-    await connection.performCameraStartPhotoController();
-    _blePhotoStream = lifetime.takeSubscription(
-      _blePhotoStream,
-      await connection.performGetImageListener(
-        onImageReceived: (orientedImage) async {
-          final rotatedImageBytes = rotateImage(orientedImage);
-          final String tempId = 'temp_img_${DateTime.now().millisecondsSinceEpoch}';
-          final String base64Image = base64Encode(rotatedImageBytes);
-
-          // Add placeholder to UI for immediate feedback
-          photos.add(ConversationPhoto(id: tempId, base64: base64Image, createdAt: DateTime.now()));
-          photos = List.from(photos);
-          _segmentsPhotosVersion++;
-          notifyListeners();
-          await emitBase64ImageChunks(
-            base64Image,
-            id: tempId,
-            emit: (payload) async {
-              if (_socket?.state == SocketServiceState.connected &&
-                  !OnDeviceTranscriptionController.instance.shouldKeepAudioLocal) {
-                _socket?.send(payload);
-              }
-            },
-          );
-        },
-      ),
-    );
-    notifyListeners();
+    if (await _openDevicePhotoStream()) notifyListeners();
   }
 
   void clearTranscripts() {
@@ -2845,7 +2850,6 @@ class CaptureController extends ChangeNotifier
     _audioSubscriptionErrors = null;
     await _setIngressAuthorized(false);
     await _cancelUplinkAudio();
-    await _blePhotoStream?.cancel();
     await _bleButtonStream?.cancel();
     _stopMetricsTracking();
     if (disableNativeBackground) {
@@ -2854,12 +2858,7 @@ class CaptureController extends ChangeNotifier
     } else {
       await _preferences.saveBool('nativeBleForegroundReady', false);
     }
-    if (_recordingDevice != null) {
-      var connection = await _ensureDeviceConnection(_recordingDevice!.id);
-      if (connection != null && await connection.hasPhotoStreamingCharacteristic()) {
-        await connection.performCameraStopPhotoController();
-      }
-    }
+    await _stopDevicePhotoStreaming();
     notifyListeners();
   }
 

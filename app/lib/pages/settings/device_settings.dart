@@ -8,7 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
-import 'package:omi/gen/pigeon_communicator.g.dart';
+import 'package:omi/pages/capture/connect.dart';
 import 'package:omi/pages/conversations/auto_sync_page.dart';
 import 'package:omi/pages/conversations/on_the_way_page.dart';
 import 'package:omi/pages/settings/device/device_catching_up_card.dart';
@@ -360,20 +360,16 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     );
     if (!confirmed) return;
 
-    // Read the id before the stored device is cleared.
+    // Read the id before forget promotes a paired companion into the primary slot.
     final deviceId = provider.connectedDevice?.id ?? SharedPreferencesUtil().btDevice.id;
-    if (deviceId.isNotEmpty) provider.markDisconnectIntentional(deviceId);
-    await _clearStoredDevice();
-    // Fully tear down the connection, transport and native service.
     if (deviceId.isNotEmpty) {
-      await ServiceManager.instance().device.forgetDevice(deviceId);
-      try {
-        BleHostApi().unmanageDevice(deviceId);
-      } catch (_) {}
+      provider.markDisconnectIntentional(deviceId);
+      // Forget owns the saved slots: clearing the primary first would leave a paired companion
+      // unpromoted. It also tears down the connection, transport and native service.
+      await provider.forgetDevice(deviceId);
+    } else {
+      await _clearStoredDevice();
     }
-    provider.setIsConnected(false);
-    await provider.setConnectedDevice(null);
-    provider.updateConnectingStatus(false);
     PlatformManager.instance.analytics.disconnectFriendClicked();
     if (!mounted) return;
     OmiFeedback.confirm(context, l10n.deviceForgottenMessage);
@@ -656,6 +652,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
             _customizationGroup(paired ?? connected, provider)
           else
             const DeviceDisconnectedCard(),
+          const _SecondDeviceGroup(),
           gap,
           _deviceGroup(provider),
           gap,
@@ -892,5 +889,84 @@ class _PendingSyncChip extends StatelessWidget {
         style: OmiType.footnote.copyWith(color: OmiColors.warning, fontWeight: FontWeight.w500),
       ),
     );
+  }
+}
+
+/// Omi + OmiGlass can be connected together (audio from the pendant, photos
+/// from the glasses). Shows the paired second device with its status, or the
+/// action to pair one when the primary device is part of that family.
+///
+/// Its own widget, selecting only what it shows: the page watches every
+/// DeviceProvider notification, and this section must not rebuild or relayout
+/// with them.
+class _SecondDeviceGroup extends StatelessWidget {
+  const _SecondDeviceGroup();
+
+  @override
+  Widget build(BuildContext context) {
+    final (canPairSecond, companionId, isCompanionConnected, companionBattery) =
+        context.select<DeviceProvider, (bool, String?, bool, int)>((provider) {
+      // A second device pairs next to a remembered first one. A live link that was never
+      // paired (pairedDevice empty) has nothing to add a companion to.
+      final paired = provider.pairedDevice;
+      final companion = provider.pairedCompanionDevice;
+      return (
+        paired != null &&
+            paired.id.isNotEmpty &&
+            (paired.type == DeviceType.omi || paired.type == DeviceType.openglass),
+        companion?.id,
+        companion != null && provider.companionDevice?.id == companion.id,
+        companion == null ? -1 : provider.companionBatteryLevel,
+      );
+    });
+    final l10n = context.l10n;
+    final Widget group;
+    if (companionId == null) {
+      if (!canPairSecond) return const SizedBox.shrink();
+      group = OmiSettingsGroup(
+        key: const Key('second_device_section'),
+        header: l10n.secondDevice,
+        children: [
+          OmiSettingsRow(
+            key: const Key('pair_second_device_button'),
+            leading: const FaIcon(FontAwesomeIcons.plus),
+            title: l10n.pairSecondDevice,
+            subtitle: l10n.pairSecondDeviceDescription,
+            onTap: () => routeToPage(context, const ConnectDevicePage()),
+          ),
+        ],
+      );
+    } else {
+      final provider = context.read<DeviceProvider>();
+      final companion = provider.pairedCompanionDevice;
+      if (companion == null) return const SizedBox.shrink();
+      final statusLabel = isCompanionConnected
+          ? (companionBattery > 0 ? '${l10n.connected} · $companionBattery%' : l10n.connected)
+          : l10n.offline;
+      group = OmiSettingsGroup(
+        key: const Key('second_device_section'),
+        header: l10n.secondDevice,
+        children: [
+          OmiSettingsRow(
+            leading: SizedBox(
+              width: 24,
+              height: 24,
+              child: Image.asset(DeviceUtils.getDeviceImageFromBtDevice(companion), fit: BoxFit.contain),
+            ),
+            title: companion.name,
+            value: statusLabel,
+          ),
+          OmiSettingsRow(
+            key: const Key('forget_second_device_button'),
+            leading: const FaIcon(FontAwesomeIcons.linkSlash),
+            title: l10n.forgetSecondDevice,
+            isDestructive: true,
+            showChevron: false,
+            onTap: () => provider.forgetCompanionDevice(),
+          ),
+        ],
+      );
+    }
+    return Padding(padding: const EdgeInsets.only(top: OmiSpacing.xxl), child: group);
   }
 }
