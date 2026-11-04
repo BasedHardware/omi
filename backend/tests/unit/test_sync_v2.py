@@ -4205,7 +4205,9 @@ class TestTimeoutConfiguration:
 
     def test_anthropic_default_has_timeout(self):
         source = self._read_clients_source()
-        default_line = [l for l in source.split('\n') if '= anthropic.AsyncAnthropic' in l][0]
+        # The SDK import is deferred through utils.llm.clients._anthropic_module,
+        # so the default client's construction line goes through the materializer.
+        default_line = [l for l in source.split('\n') if '.AsyncAnthropic(timeout' in l][0]
         assert 'timeout=120' in default_line
         assert 'max_retries=1' in default_line
 
