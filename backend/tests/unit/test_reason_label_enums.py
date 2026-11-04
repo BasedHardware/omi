@@ -78,6 +78,7 @@ CLOSED_HELPERS = frozenset(
         'utils.batch_pipeline.vendor_route_metrics._vendor',  # VENDOR_SERVICES else 'unknown'
         'utils.batch_pipeline.vendor_route_metrics._late_outcome',  # LATE_RESULT_OUTCOMES else 'unknown'
         'utils.batch_pipeline.vendor_health._provider',  # VENDOR_SERVICES else 'unknown'
+        'utils.stt.live_metrics.bounded_shape_outcome',  # SHAPE_OUTCOMES else 'error'
     }
 )
 

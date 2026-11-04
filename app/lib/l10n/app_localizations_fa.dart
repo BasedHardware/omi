@@ -12509,43 +12509,10 @@ class AppLocalizationsFa extends AppLocalizations {
   String get reviewChangesSectionOther => 'تغییرات دیگر';
 
   @override
-  String reviewChangeConversationCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count گفتگو',
-      one: '۱ گفتگو',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String reviewChangePlaceCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count مورد',
-      one: '۱ مورد',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String reviewChangeShowAll(int count) {
-    return 'نمایش همه ($count)';
-  }
-
-  @override
   String get reviewChangeUndoAll => 'لغو همه';
 
   @override
-  String get reviewChangeSeeEvidence => 'مشاهده شواهد';
-
-  @override
   String get reviewChangeViewConversation => 'مشاهده گفتگو';
-
-  @override
-  String get reviewChangeViewTask => 'مشاهده کار';
 
   @override
   String reviewChangesUndoPartial(int failed, int total) {
@@ -12620,10 +12587,6 @@ class AppLocalizationsFa extends AppLocalizations {
   String get dreamReportTitle => 'گزارش Dream';
 
   @override
-  String get dreamReportShadowBanner =>
-      'حالت پیش‌نمایش: Dream نشان می‌دهد چه چیزی را تغییر می‌داد، اما هنوز چیزی در حساب شما تغییر نمی‌کند.';
-
-  @override
   String get dreamReportLiveBanner =>
       'Dream این تغییرات را خودش اعمال می‌کند. هر کدام را می‌توانید در تغییرات اخیر واگرد کنید.';
 
@@ -12669,11 +12632,6 @@ class AppLocalizationsFa extends AppLocalizations {
   String get dreamReportNothingFound => 'چیزی برای رفع نیست';
 
   @override
-  String dreamReportStats(int records, int tokens) {
-    return '$records مورد خوانده شد · $tokens توکن';
-  }
-
-  @override
   String get dreamReportWouldFix => 'اصلاح می‌کرد';
 
   @override
@@ -12689,27 +12647,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get dreamReportLearnedWords => 'واژه‌های یادگرفته‌شده';
 
   @override
-  String get dreamReportFeedback => 'به تیم Omi گزارش شد';
-
-  @override
   String get dreamReportDeletedItem => 'مورد حذف‌شده';
-
-  @override
-  String dreamReportPasses(int count, int limit) {
-    return '$count از $limit اجرا امروز';
-  }
-
-  @override
-  String dreamReportQueued(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count تغییر در انتظار',
-      one: '۱ تغییر در انتظار',
-      zero: 'تغییری در انتظار نیست',
-    );
-    return '$_temp0';
-  }
 
   @override
   String dreamReportRunsLeft(int count) {
@@ -12737,28 +12675,6 @@ class AppLocalizationsFa extends AppLocalizations {
       one: '۱ پیشنهاد',
     );
     return '$_temp0 · $_temp1';
-  }
-
-  @override
-  String dreamReportDropped(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count تغییر قدیمی‌تر نادیده گرفته شد',
-      one: '۱ تغییر قدیمی‌تر نادیده گرفته شد',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String dreamReportPrivacyHeld(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count گزارش به دلیل حریم خصوصی نگه داشته شد',
-      one: '۱ گزارش به دلیل حریم خصوصی نگه داشته شد',
-    );
-    return '$_temp0';
   }
 
   @override
@@ -13510,15 +13426,6 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
-  String get syncStepLabelDownload => 'Omi → گوشی';
-
-  @override
-  String get syncStepLabelUpload => 'آپلود';
-
-  @override
-  String get syncStepLabelTranscribe => 'رونویسی';
-
-  @override
   String get syncDetailsTitle => 'جزئیات همگام‌سازی';
 
   @override
@@ -13538,9 +13445,6 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get syncDetailsTranscribing => 'در حال رونویسی در Omi';
-
-  @override
-  String get syncDetailsForSupport => 'برای پشتیبانی';
 
   @override
   String get syncDetailsAudioFiles => 'فایل‌های صوتی';
@@ -14661,13 +14565,6 @@ class AppLocalizationsFa extends AppLocalizations {
   String get episodeNotesStartWithTranscript => 'یادداشت‌ها با رسیدن پی‌نوشت نهایی شروع می‌شوند.';
 
   @override
-  String get episodeOnDeviceNotesFootnote =>
-      'همان‌طور که حرف می‌زنی روی گوشی‌ات نوشته می‌شود. یادداشت‌های کامل همراه با پی‌نوشت نهایی می‌رسند.';
-
-  @override
-  String get episodeOnThisPhone => 'روی این گوشی';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'پی‌نوشت نهایی حدود $duration عقب است';
   }
@@ -14677,9 +14574,6 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get livePreviewNoEngineBody => 'حرف‌هایت یک تا دو دقیقه بعد از گفتن اینجا ظاهر می‌شود.';
-
-  @override
-  String get livePreviewNoEngineTitle => 'با امنیت ضبط می‌کند';
 
   @override
   String get livePreviewOnPhoneDivider => 'همین الان، روی این تلفن';
@@ -14692,11 +14586,6 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get deviceCatchUpWhenOnline => 'وقتی آنلاین باشد';
-
-  @override
-  String onTheWayCatchingUp(String duration) {
-    return '$duration درحال تکمیل';
-  }
 
   @override
   String get onTheWayUploadsByItself => 'خودش بارگذاری می‌کند. با رسیدن آن‌ها، گفتگوها تکمیل می‌شوند.';
@@ -14720,34 +14609,6 @@ class AppLocalizationsFa extends AppLocalizations {
   @override
   String get onTheWayFootnote =>
       'ضبط‌هایی که موفق نمی‌شوند، در پس‌زمینه دوباره تلاش می‌شوند. هر آنچه نتوانیم رونویسی کنیم، به‌طور خودکار به ما گزارش داده می‌شود.';
-
-  @override
-  String get onTheWayDetailsForSupport => 'جزئیات برای پشتیبانی';
-
-  @override
-  String homeNoiseFoldHidden(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count کلیپ کوتاه مخفی شده‌اند',
-      one: '۱ کلیپ کوتاه مخفی شده',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String get homeNoiseFoldShow => 'نمایش';
-
-  @override
-  String homeNoiseFoldHide(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'مخفی‌کردن $count کلیپ کوتاه',
-      one: 'مخفی‌کردن ۱ کلیپ کوتاه',
-    );
-    return '$_temp0';
-  }
 
   @override
   String deleteLocalRecordingsWarning(int count) {
@@ -14959,6 +14820,185 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'گویندگان و متن نهایی هنگام بارگذاری اینجا نمایش داده می‌شوند.';
+
+  @override
+  String get searchNoiseFilter => 'کلیپ‌های کوتاه';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count گفتگو',
+      one: '۱ گفتگو',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count مورد',
+      one: '۱ مورد',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'نمایش همه ($count)';
+  }
+
+  @override
+  String get reviewChangeSeeEvidence => 'مشاهده شواهد';
+
+  @override
+  String get reviewChangeViewTask => 'مشاهده کار';
+
+  @override
+  String get dreamReportShadowBanner =>
+      'حالت پیش‌نمایش: Dream نشان می‌دهد چه چیزی را تغییر می‌داد، اما هنوز چیزی در حساب شما تغییر نمی‌کند.';
+
+  @override
+  String dreamReportStats(int records, int tokens) {
+    return '$records مورد خوانده شد · $tokens توکن';
+  }
+
+  @override
+  String get dreamReportFeedback => 'به تیم Omi گزارش شد';
+
+  @override
+  String dreamReportPasses(int count, int limit) {
+    return '$count از $limit اجرا امروز';
+  }
+
+  @override
+  String dreamReportQueued(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count تغییر در انتظار',
+      one: '۱ تغییر در انتظار',
+      zero: 'تغییری در انتظار نیست',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportDropped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count تغییر قدیمی‌تر نادیده گرفته شد',
+      one: '۱ تغییر قدیمی‌تر نادیده گرفته شد',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportPrivacyHeld(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count گزارش به دلیل حریم خصوصی نگه داشته شد',
+      one: '۱ گزارش به دلیل حریم خصوصی نگه داشته شد',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncStepLabelDownload => 'Omi → گوشی';
+
+  @override
+  String get syncStepLabelUpload => 'آپلود';
+
+  @override
+  String get syncStepLabelTranscribe => 'رونویسی';
+
+  @override
+  String get syncDetailsForSupport => 'برای پشتیبانی';
+
+  @override
+  String get episodeOnDeviceNotesFootnote =>
+      'همان‌طور که حرف می‌زنی روی گوشی‌ات نوشته می‌شود. یادداشت‌های کامل همراه با پی‌نوشت نهایی می‌رسند.';
+
+  @override
+  String get episodeOnThisPhone => 'روی این گوشی';
+
+  @override
+  String get livePreviewNoEngineTitle => 'با امنیت ضبط می‌کند';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return '$duration درحال تکمیل';
+  }
+
+  @override
+  String get onTheWayDetailsForSupport => 'جزئیات برای پشتیبانی';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count کلیپ کوتاه مخفی شده‌اند',
+      one: '۱ کلیپ کوتاه مخفی شده',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => 'نمایش';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'مخفی‌کردن $count کلیپ کوتاه',
+      one: 'مخفی‌کردن ۱ کلیپ کوتاه',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get speakerWholeRecording => 'اعمال به کل ضبط';
+
+  @override
+  String get speakerSelectionChanged => 'گوینده تغییر کرده است. خط‌ها را دوباره انتخاب کنید.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'ضبط خیلی بزرگ است. خط‌های کمتری از یک گفتگو انتخاب کنید.',
+        'partial': 'بعضی خط‌ها ذخیره شدند. خط‌های باقی‌مانده را انتخاب و دوباره تلاش کنید.',
+        'other': 'بعضی خط‌ها ذخیره شدند. خط‌های باقی‌مانده را انتخاب و دوباره تلاش کنید.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerRecordingCoverage(String state, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'نام $count خط فقط در گفتگوهای موجود تغییر کرد.',
+      one: 'نام 1 خط فقط در گفتگوهای موجود تغییر کرد.',
+    );
+    String _temp1 = intl.Intl.selectLogic(
+      state,
+      {
+        'scope': 'خطوط دیگر این صدا (پوشش ضبط تأیید نشده)',
+        'other': '$_temp0',
+      },
+    );
+    return '$_temp1';
+  }
 
   @override
   String get episodeFinishingUp => 'در حال اتمام…';

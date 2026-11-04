@@ -12507,43 +12507,10 @@ class AppLocalizationsEt extends AppLocalizations {
   String get reviewChangesSectionOther => 'Muud muudatused';
 
   @override
-  String reviewChangeConversationCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count vestlust',
-      one: '1 vestlus',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String reviewChangePlaceCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count kohta',
-      one: '1 koht',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String reviewChangeShowAll(int count) {
-    return 'Näita kõiki ($count)';
-  }
-
-  @override
   String get reviewChangeUndoAll => 'Võta kõik tagasi';
 
   @override
-  String get reviewChangeSeeEvidence => 'Vaata tõendeid';
-
-  @override
   String get reviewChangeViewConversation => 'Vaata vestlust';
-
-  @override
-  String get reviewChangeViewTask => 'Vaata ülesannet';
 
   @override
   String reviewChangesUndoPartial(int failed, int total) {
@@ -12618,10 +12585,6 @@ class AppLocalizationsEt extends AppLocalizations {
   String get dreamReportTitle => 'Dreami aruanne';
 
   @override
-  String get dreamReportShadowBanner =>
-      'Eelvaate režiim: Dream näitab, mida see muudaks, kuid sinu kontol ei muutu veel midagi.';
-
-  @override
   String get dreamReportLiveBanner =>
       'Dream rakendab need muudatused ise. Võta need tagasi jaotises Hiljutised muudatused.';
 
@@ -12667,11 +12630,6 @@ class AppLocalizationsEt extends AppLocalizations {
   String get dreamReportNothingFound => 'Pole midagi parandada';
 
   @override
-  String dreamReportStats(int records, int tokens) {
-    return 'Loetud $records üksust · $tokens tokenit';
-  }
-
-  @override
   String get dreamReportWouldFix => 'Parandaks';
 
   @override
@@ -12687,27 +12645,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get dreamReportLearnedWords => 'Õpitud sõnad';
 
   @override
-  String get dreamReportFeedback => 'Teatatud Omi tiimile';
-
-  @override
   String get dreamReportDeletedItem => 'Kustutatud üksus';
-
-  @override
-  String dreamReportPasses(int count, int limit) {
-    return '$count/$limit käivitust täna';
-  }
-
-  @override
-  String dreamReportQueued(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count muudatust ootel',
-      one: '1 muudatus ootel',
-      zero: 'Ootel muudatusi pole',
-    );
-    return '$_temp0';
-  }
 
   @override
   String dreamReportRunsLeft(int count) {
@@ -12735,28 +12673,6 @@ class AppLocalizationsEt extends AppLocalizations {
       one: '1 soovitus',
     );
     return '$_temp0 · $_temp1';
-  }
-
-  @override
-  String dreamReportDropped(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count vanemat muudatust vahele jäetud',
-      one: '1 vanem muudatus vahele jäetud',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String dreamReportPrivacyHeld(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count aruannet hoiti privaatsuse tõttu tagasi',
-      one: '1 aruanne hoiti privaatsuse tõttu tagasi',
-    );
-    return '$_temp0';
   }
 
   @override
@@ -13508,15 +13424,6 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
-  String get syncStepLabelDownload => 'Omi → telefon';
-
-  @override
-  String get syncStepLabelUpload => 'Üleslaadimine';
-
-  @override
-  String get syncStepLabelTranscribe => 'Transkriptsioon';
-
-  @override
   String get syncDetailsTitle => 'Sünkroonimise üksikasjad';
 
   @override
@@ -13536,9 +13443,6 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get syncDetailsTranscribing => 'Omi transkribeerib';
-
-  @override
-  String get syncDetailsForSupport => 'Klienditoele';
 
   @override
   String get syncDetailsAudioFiles => 'Helifailid';
@@ -14659,13 +14563,6 @@ class AppLocalizationsEt extends AppLocalizations {
   String get episodeNotesStartWithTranscript => 'Märkmed algavad, kui saabub lõplik transkriptsioon.';
 
   @override
-  String get episodeOnDeviceNotesFootnote =>
-      'Koostatakse teie telefonis, samal ajal kui räägite. Täielikud märkmed saabuvad koos lõpliku transkriptsiooniga.';
-
-  @override
-  String get episodeOnThisPhone => 'Selles telefonis';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'Lõplik transkriptsioon jääb umbes $duration maha';
   }
@@ -14675,9 +14572,6 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get livePreviewNoEngineBody => 'Teie sõnad ilmuvad siia ühe kuni kahe minuti pärast.';
-
-  @override
-  String get livePreviewNoEngineTitle => 'Salvestab turvaliselt';
 
   @override
   String get livePreviewOnPhoneDivider => 'Just praegu, selles telefonis';
@@ -14690,11 +14584,6 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get deviceCatchUpWhenOnline => 'võrgus olles';
-
-  @override
-  String onTheWayCatchingUp(String duration) {
-    return 'Veel $duration töödelda';
-  }
 
   @override
   String get onTheWayUploadsByItself => 'Laadib ise üles. Vestlused täituvad, kui see kohale jõuab.';
@@ -14718,34 +14607,6 @@ class AppLocalizationsEt extends AppLocalizations {
   @override
   String get onTheWayFootnote =>
       'Salvestised, mis ei õnnestu, proovitakse taustal pidevalt uuesti. Kõik, mida me ei suuda transkribeerida, raporteeritakse meile automaatselt.';
-
-  @override
-  String get onTheWayDetailsForSupport => 'Üksikasjad toe jaoks';
-
-  @override
-  String homeNoiseFoldHidden(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count lühikest klippi on peidetud',
-      one: '1 lühike klipp on peidetud',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String get homeNoiseFoldShow => 'Kuva';
-
-  @override
-  String homeNoiseFoldHide(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Peida $count lühikest klippi',
-      one: 'Peida 1 lühike klipp',
-    );
-    return '$_temp0';
-  }
 
   @override
   String deleteLocalRecordingsWarning(int count) {
@@ -14957,6 +14818,185 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Kõnelejad ja lõplik transkriptsioon ilmuvad siia üleslaadimise ajal.';
+
+  @override
+  String get searchNoiseFilter => 'Lühiklipid';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count vestlust',
+      one: '1 vestlus',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count kohta',
+      one: '1 koht',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'Näita kõiki ($count)';
+  }
+
+  @override
+  String get reviewChangeSeeEvidence => 'Vaata tõendeid';
+
+  @override
+  String get reviewChangeViewTask => 'Vaata ülesannet';
+
+  @override
+  String get dreamReportShadowBanner =>
+      'Eelvaate režiim: Dream näitab, mida see muudaks, kuid sinu kontol ei muutu veel midagi.';
+
+  @override
+  String dreamReportStats(int records, int tokens) {
+    return 'Loetud $records üksust · $tokens tokenit';
+  }
+
+  @override
+  String get dreamReportFeedback => 'Teatatud Omi tiimile';
+
+  @override
+  String dreamReportPasses(int count, int limit) {
+    return '$count/$limit käivitust täna';
+  }
+
+  @override
+  String dreamReportQueued(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count muudatust ootel',
+      one: '1 muudatus ootel',
+      zero: 'Ootel muudatusi pole',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportDropped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count vanemat muudatust vahele jäetud',
+      one: '1 vanem muudatus vahele jäetud',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportPrivacyHeld(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count aruannet hoiti privaatsuse tõttu tagasi',
+      one: '1 aruanne hoiti privaatsuse tõttu tagasi',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncStepLabelDownload => 'Omi → telefon';
+
+  @override
+  String get syncStepLabelUpload => 'Üleslaadimine';
+
+  @override
+  String get syncStepLabelTranscribe => 'Transkriptsioon';
+
+  @override
+  String get syncDetailsForSupport => 'Klienditoele';
+
+  @override
+  String get episodeOnDeviceNotesFootnote =>
+      'Koostatakse teie telefonis, samal ajal kui räägite. Täielikud märkmed saabuvad koos lõpliku transkriptsiooniga.';
+
+  @override
+  String get episodeOnThisPhone => 'Selles telefonis';
+
+  @override
+  String get livePreviewNoEngineTitle => 'Salvestab turvaliselt';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return 'Veel $duration töödelda';
+  }
+
+  @override
+  String get onTheWayDetailsForSupport => 'Üksikasjad toe jaoks';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count lühikest klippi on peidetud',
+      one: '1 lühike klipp on peidetud',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => 'Kuva';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Peida $count lühikest klippi',
+      one: 'Peida 1 lühike klipp',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get speakerWholeRecording => 'Rakenda kogu salvestisele';
+
+  @override
+  String get speakerSelectionChanged => 'Kõneleja muutus. Vali read uuesti.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'Salvestis on liiga suur. Vali ühes vestluses vähem ridu.',
+        'partial': 'Mõned read salvestati. Vali ülejäänud ja proovi uuesti.',
+        'other': 'Mõned read salvestati. Vali ülejäänud ja proovi uuesti.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerRecordingCoverage(String state, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Nimetati ümber $count rida ainult saadaolevates vestlustes.',
+      one: 'Nimetati ümber 1 rida ainult saadaolevates vestlustes.',
+    );
+    String _temp1 = intl.Intl.selectLogic(
+      state,
+      {
+        'scope': 'Selle hääle muud read (salvestise ulatus kinnitamata)',
+        'other': '$_temp0',
+      },
+    );
+    return '$_temp1';
+  }
 
   @override
   String get episodeFinishingUp => 'Lõpetamine…';

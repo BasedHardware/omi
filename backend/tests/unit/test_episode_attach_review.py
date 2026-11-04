@@ -12,7 +12,7 @@ from database import episode_attach_memo, episode_timeline, episodes
 from tests.unit.test_episode_attach_cost import seed
 from tests.unit.test_episode_live_integrity import lane, row, T0, assert_timeline  # noqa: F401
 from utils.conversations.episode_attach_key import should_schedule
-from utils.episodes import finalize, service, sync_attach
+from utils.episodes import capture_groups, finalize, service, sync_attach
 
 
 @pytest.mark.parametrize('entry', ['intake', 'finalize'])
@@ -65,7 +65,7 @@ def test_durable_hook_retires_hidden_member_even_with_stale_supplied_row(lane, m
     # The durable caller retains its processing snapshot after the memo rejects
     # it. Exercise the full hook with that same stale row, without a fresh fetch.
     assert not finalize.skip_unchanged_schedule('u', 'same', visible, finalized=True)
-    monkeypatch.setattr(service.composer, 'after_finalized', lambda uid, cid, outcome, c: outcome)
+    monkeypatch.setattr(service.composer, 'after_finalized', lambda uid, cid, outcome, c, **_: outcome)
     assert (
         service.on_conversation_finalized('u', 'same', visible, trigger='sync_update', collaborators=c)
         == 'skipped_discarded'
@@ -77,7 +77,7 @@ def test_durable_hook_retires_hidden_member_even_with_stale_supplied_row(lane, m
 
 @pytest.mark.parametrize(
     'stage,reason',
-    [('_attach_recorded', 'conversation_hidden_or_repointed'), ('_repoint_sync_donors', 'conversation_hidden')],
+    [('attach_recorded', 'conversation_hidden_or_repointed'), ('_repoint_sync_donors', 'conversation_hidden')],
 )
 def test_only_current_member_admission_can_trigger_discard_cleanup(lane, monkeypatch, stage, reason):
     store, c, _ = lane
@@ -93,6 +93,55 @@ def test_only_current_member_admission_can_trigger_discard_cleanup(lane, monkeyp
     assert service._attach_synced('u', 'same', member, c) == 'conflict'
     assert failure.call_count == 3
     end.assert_not_called()
+
+
+def test_discard_during_recovery_retires_member_instead_of_reporting_placement(lane, monkeypatch):
+    store, c, _ = lane
+    member = seed(store)
+
+    def hidden(*args, **kwargs):
+        store.rows[('users', 'u', 'conversations', 'same')]['discarded'] = True
+        return 'skipped_discarded'
+
+    monkeypatch.setattr(service, '_record_recovered', hidden)
+    assert service._attach_synced('u', 'same', member, c) == 'skipped_discarded'
+    owner_id = store.rows[('users', 'u', 'episode_links', 'same')]['episode_id']
+    assert 'same' in episodes.get_episode('u', owner_id, firestore_client=store)['discarded_conversation_ids']
+
+
+def test_completion_stamp_failure_keeps_successful_recovery_and_unusable_memo(lane, monkeypatch):
+    store, c, _ = lane
+    member = seed(store)
+    fallback = Mock()
+    monkeypatch.setattr(episode_attach_memo, 'record_fallback', fallback)
+    monkeypatch.setattr(episode_attach_memo, 'run_transactional', Mock(side_effect=TimeoutError('stamp unavailable')))
+    assert service._attach_synced('u', 'same', member, c) == 'recorded'
+    assert not store.rows[('users', 'u', 'episode_links', 'same')].get('attach_completed')
+    assert fallback.call_count >= 1
+
+
+@pytest.mark.parametrize('change', ['none', 'link', 'reverse', 'owner_revision'])
+def test_duplicate_noop_requires_current_membership_proof(lane, change):
+    store, c, _ = lane
+    service._attach_synced('u', 'same', seed(store), c)
+    seed(store, 'copy')
+    owner = episodes.get_episode_for_conversation('u', 'same', firestore_client=store)
+    group = {'capture_group': {'members': [{'id': 'copy'}]}}
+    owner = capture_groups.join_duplicates('u', owner, 'same', group, firestore_client=store)
+    if change == 'link':
+        del store.rows[('users', 'u', 'episode_links', 'copy')]
+    elif change == 'reverse':
+        store.rows[('users', 'u', 'conversations', 'copy')].pop('episode_id')
+    elif change == 'owner_revision':
+        store.rows[('users', 'u', 'episodes', owner['id'])]['state_version'] += 1
+    if change == 'owner_revision':
+        with pytest.raises(episodes.EpisodeConflict):
+            capture_groups.join_duplicates('u', owner, 'same', group, firestore_client=store)
+        return
+    result = capture_groups.join_duplicates('u', owner, 'same', group, firestore_client=store)
+    assert result['state_version'] == owner['state_version'] + (0 if change == 'none' else 1)
+    assert store.rows[('users', 'u', 'episode_links', 'copy')]['episode_id'] == owner['id']
+    assert store.rows[('users', 'u', 'conversations', 'copy')]['episode_id'] == owner['id']
 
 
 @pytest.mark.parametrize('order', ['attach_first', 'composer_first'])
@@ -164,7 +213,7 @@ def test_umbrella_restores_candidate_queries_at_fixed_boundary(lane, monkeypatch
     query = Mock(wraps=episode_timeline.recorded_candidates)
     monkeypatch.setattr(episode_timeline, 'recorded_candidates', query)
     monkeypatch.setenv('EPISODE_ATTACH_OPTIMIZATIONS_ENABLED', str(enabled))
-    service._attach_recorded('u', 'same', member, T0, T0 + timedelta(seconds=30), c)
+    service.attach_recorded('u', 'same', member, T0, T0 + timedelta(seconds=30), c)
     # Canonical lookup, fixed-boundary lookup and window validation used to
     # issue separate queries. The umbrella restores all three reads.
     assert query.call_count == (1 if enabled else 3)

@@ -47,6 +47,7 @@ from utils.conversations.finalization_decision import (
 from utils.conversations.processing_trigger import is_recovery_trigger
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.terminal_relevance import stamp_terminal_decision
+from utils.llm.gateway_error_contract import is_byok_account_state_http_exception
 from utils.observability.fallback import record_fallback
 from utils.observability.transcription import record_sync_intake_outcome
 from utils.other.storage import delete_conversation_audio_files
@@ -371,7 +372,15 @@ def complete(uid: str, conversation_id: str) -> bool:
     )
 
 
-def close_oversized_in_progress_conversation(uid: str, conversation_id: str, *, quiet_for: timedelta) -> str:
+def close_oversized_in_progress_conversation(
+    uid: str,
+    conversation_id: str,
+    *,
+    quiet_for: timedelta | None = None,
+    firestore_client: Any = None,
+    recovery_fences: bool = False,
+    recovery_cutoff: datetime | None = None,
+) -> str:
     """Close a live-capture row that can never be finalized because it is at Firestore's 1 MiB ceiling.
 
     The only lifecycle edge from ``in_progress`` straight to ``completed``, and
@@ -381,7 +390,14 @@ def close_oversized_in_progress_conversation(uid: str, conversation_id: str, *, 
     kept as-is; the row becomes a visible conversation without a generated
     summary. Returns a bounded outcome token (``OversizedInProgressOutcome``).
     """
-    return oversized_terminal_db.complete_oversized_in_progress_conversation(uid, conversation_id, quiet_for=quiet_for)
+    return oversized_terminal_db.complete_oversized_in_progress_conversation(
+        uid,
+        conversation_id,
+        quiet_for=quiet_for,
+        firestore_client=firestore_client,
+        recovery_fences=recovery_fences,
+        recovery_cutoff=recovery_cutoff,
+    )
 
 
 def rollback_processing_admission(uid: str, conversation_id: str) -> bool:
@@ -473,21 +489,35 @@ def processing_admission_guard(uid: str, conversation_id: str, *, rollback_on_fa
     thread.start()
     try:
         yield
-    except Exception:
+    except Exception as error:
+        # The composition boundary already logged a typed BYOK account-state halt
+        # by its bounded class; a traceback here would re-emit the chained
+        # provider error body for account state only the user can fix.
+        log_failure = logger.warning if is_byok_account_state_http_exception(error) else logger.exception
         if rollback_on_failure:
             try:
                 rolled_back = rollback_processing_admission(uid, conversation_id)
-            except Exception:
-                logger.exception('processing admission rollback failed uid=%s conversation=%s', uid, conversation_id)
+            except Exception as rollback_error:
+                # Same bounded-class selection: while an account-state halt is
+                # being handled, an exception traceback here would format the
+                # rollback error's implicit __context__ chain back to the
+                # original HTTPException and its provider error body.
+                log_failure(
+                    'processing admission rollback failed uid=%s conversation=%s rollback_error=%s: %s',
+                    uid,
+                    conversation_id,
+                    type(rollback_error).__name__,
+                    rollback_error,
+                )
                 rolled_back = False
-            logger.exception(
+            log_failure(
                 'synchronous conversation processing failed uid=%s conversation=%s rolled_back=%s',
                 uid,
                 conversation_id,
                 rolled_back,
             )
         else:
-            logger.exception(
+            log_failure(
                 'synchronous conversation processing failed uid=%s conversation=%s (no rollback: producer owns recovery)',
                 uid,
                 conversation_id,

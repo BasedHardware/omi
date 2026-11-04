@@ -723,7 +723,8 @@ class Projector:
         A ``deadline`` (a ``time.monotonic`` instant) or ``max_pages`` chains
         full pages back to back — checked only between pages, so a pass
         overruns its deadline by at most one page — while neither bound keeps
-        the legacy single-page contract. ``units`` counts held documents
+        the legacy single-page contract. ``pages`` counts the pages fetched by
+        this call; ``units`` counts held documents
         examined; ``reads`` is what the caller should charge its read budget:
         one read per examined document plus, per attempted upload, 5 reads per
         sibling and 7 (the code-derived worst case of prepare_accounting plus
@@ -734,8 +735,7 @@ class Projector:
         interval. The upload dedupe spans the whole pass — across budget stops
         too — and resets only when a short page wraps the cursor.
         """
-        counts = {'partial': 0, 'waiting': 0, 'error': 0, 'units': 0, 'reads': 0, 'more': 0}
-        pages = 0
+        counts = {'partial': 0, 'waiting': 0, 'error': 0, 'units': 0, 'reads': 0, 'more': 0, 'pages': 0}
         while True:
             try:
                 page = held_candidates(self.store.client, self.store.store.namespace, limit, after_id=self.held_after)
@@ -752,7 +752,7 @@ class Projector:
             counts['units'] += len(page)
             counts['reads'] += len(page)
             counts['more'] = 1 if full else 0
-            pages += 1
+            counts['pages'] += 1
             for _, job in page:
                 try:
                     binding = normalized_binding(job['projection_binding'])
@@ -775,7 +775,7 @@ class Projector:
                 return counts
             if deadline is not None and time.monotonic() >= deadline:
                 return counts
-            if max_pages is not None and pages >= max_pages:
+            if max_pages is not None and counts['pages'] >= max_pages:
                 return counts
 
     def release_held_scan(self, limit: int | None = None) -> dict[str, int]:

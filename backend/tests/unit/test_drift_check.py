@@ -473,7 +473,7 @@ def test_staging_source_model_composes():
     model = dc.source_model('staging')
 
     assert model['backend-integration'].ops_env['SUMMARY_DEBT_REPAIR_ENABLED'] == 'true'
-    assert model['backend-sync-backfill'].scale['concurrency'] == 10
+    assert model['backend-sync-backfill'].scale['concurrency'] == 6
     # 2026-10-24 right-sizing: the overlay's warm override is gone, so the source
     # model declares every staging service cold and a cold live leader matches source.
     assert model['backend-integration'].scale['revision_min'] == 0

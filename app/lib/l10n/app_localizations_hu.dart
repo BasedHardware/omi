@@ -12562,43 +12562,10 @@ class AppLocalizationsHu extends AppLocalizations {
   String get reviewChangesSectionOther => 'Egyéb módosítások';
 
   @override
-  String reviewChangeConversationCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count beszélgetés',
-      one: '1 beszélgetés',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String reviewChangePlaceCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count helyen',
-      one: '1 helyen',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String reviewChangeShowAll(int count) {
-    return 'Mind a(z) $count megjelenítése';
-  }
-
-  @override
   String get reviewChangeUndoAll => 'Összes visszavonása';
 
   @override
-  String get reviewChangeSeeEvidence => 'Bizonyíték megtekintése';
-
-  @override
   String get reviewChangeViewConversation => 'Beszélgetés megtekintése';
-
-  @override
-  String get reviewChangeViewTask => 'Feladat megtekintése';
 
   @override
   String reviewChangesUndoPartial(int failed, int total) {
@@ -12673,10 +12640,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get dreamReportTitle => 'Dream-jelentés';
 
   @override
-  String get dreamReportShadowBanner =>
-      'Előnézeti mód: a Dream megmutatja, mit módosítana, de a fiókodban még semmi sem változik.';
-
-  @override
   String get dreamReportLiveBanner =>
       'A Dream ezeket a módosításokat magától alkalmazza. Bármelyiket visszavonhatod a Legutóbbi módosítások oldalon.';
 
@@ -12722,11 +12685,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get dreamReportNothingFound => 'Nincs javítanivaló';
 
   @override
-  String dreamReportStats(int records, int tokens) {
-    return '$records elem beolvasva · $tokens token';
-  }
-
-  @override
   String get dreamReportWouldFix => 'Javítana';
 
   @override
@@ -12742,27 +12700,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get dreamReportLearnedWords => 'Megtanult szavak';
 
   @override
-  String get dreamReportFeedback => 'Jelentve az Omi csapatnak';
-
-  @override
   String get dreamReportDeletedItem => 'Törölt elem';
-
-  @override
-  String dreamReportPasses(int count, int limit) {
-    return '$count/$limit futás ma';
-  }
-
-  @override
-  String dreamReportQueued(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count módosítás vár',
-      one: '1 módosítás vár',
-      zero: 'Nincs várakozó módosítás',
-    );
-    return '$_temp0';
-  }
 
   @override
   String dreamReportRunsLeft(int count) {
@@ -12790,28 +12728,6 @@ class AppLocalizationsHu extends AppLocalizations {
       one: '1 javaslat',
     );
     return '$_temp0 · $_temp1';
-  }
-
-  @override
-  String dreamReportDropped(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count régebbi módosítás kihagyva',
-      one: '1 régebbi módosítás kihagyva',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String dreamReportPrivacyHeld(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count jelentés visszatartva adatvédelmi okból',
-      one: '1 jelentés visszatartva adatvédelmi okból',
-    );
-    return '$_temp0';
   }
 
   @override
@@ -13566,15 +13482,6 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
-  String get syncStepLabelDownload => 'Omi → telefon';
-
-  @override
-  String get syncStepLabelUpload => 'Feltöltés';
-
-  @override
-  String get syncStepLabelTranscribe => 'Átirat';
-
-  @override
   String get syncDetailsTitle => 'Szinkronizálás részletei';
 
   @override
@@ -13594,9 +13501,6 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get syncDetailsTranscribing => 'Átírás az Omin';
-
-  @override
-  String get syncDetailsForSupport => 'Az ügyfélszolgálatnak';
 
   @override
   String get syncDetailsAudioFiles => 'Hangfájlok';
@@ -14724,13 +14628,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get episodeNotesStartWithTranscript => 'A jegyzetek a végleges átirat megérkezésekor indulnak.';
 
   @override
-  String get episodeOnDeviceNotesFootnote =>
-      'A telefonodon készülnek, miközben beszélsz. A teljes jegyzetek a végleges átirattal együtt érkeznek.';
-
-  @override
-  String get episodeOnThisPhone => 'Ezen a telefonon';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'A végleges átirat kb. $duration késésben van';
   }
@@ -14740,9 +14637,6 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get livePreviewNoEngineBody => 'A szavaid egy-két perccel azután jelennek meg itt, hogy kimondtad őket.';
-
-  @override
-  String get livePreviewNoEngineTitle => 'Biztonságosan rögzít';
 
   @override
   String get livePreviewOnPhoneDivider => 'Épp most, ezen a telefonon';
@@ -14755,11 +14649,6 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get deviceCatchUpWhenOnline => 'ha van internet';
-
-  @override
-  String onTheWayCatchingUp(String duration) {
-    return '$duration behozása folyamatban';
-  }
 
   @override
   String get onTheWayUploadsByItself => 'Önmagától feltöltődik. Ahogy megérkezik, úgy készülnek el a beszélgetések.';
@@ -14783,34 +14672,6 @@ class AppLocalizationsHu extends AppLocalizations {
   @override
   String get onTheWayFootnote =>
       'A sikertelen felvételek a háttérben újra és újra próbálkoznak. Amit nem tudunk átírni, arról automatikusan értesítést kapunk.';
-
-  @override
-  String get onTheWayDetailsForSupport => 'Részletek az ügyfélszolgálatnak';
-
-  @override
-  String homeNoiseFoldHidden(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count rövid felvétel elrejtve',
-      one: '1 rövid felvétel elrejtve',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String get homeNoiseFoldShow => 'Megjelenítés';
-
-  @override
-  String homeNoiseFoldHide(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count rövid felvétel elrejtése',
-      one: '1 rövid felvétel elrejtése',
-    );
-    return '$_temp0';
-  }
 
   @override
   String deleteLocalRecordingsWarning(int count) {
@@ -15023,6 +14884,185 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'A beszélők és a végleges átirat feltöltés közben itt jelennek meg.';
+
+  @override
+  String get searchNoiseFilter => 'Rövid klipek';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count beszélgetés',
+      one: '1 beszélgetés',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count helyen',
+      one: '1 helyen',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'Mind a(z) $count megjelenítése';
+  }
+
+  @override
+  String get reviewChangeSeeEvidence => 'Bizonyíték megtekintése';
+
+  @override
+  String get reviewChangeViewTask => 'Feladat megtekintése';
+
+  @override
+  String get dreamReportShadowBanner =>
+      'Előnézeti mód: a Dream megmutatja, mit módosítana, de a fiókodban még semmi sem változik.';
+
+  @override
+  String dreamReportStats(int records, int tokens) {
+    return '$records elem beolvasva · $tokens token';
+  }
+
+  @override
+  String get dreamReportFeedback => 'Jelentve az Omi csapatnak';
+
+  @override
+  String dreamReportPasses(int count, int limit) {
+    return '$count/$limit futás ma';
+  }
+
+  @override
+  String dreamReportQueued(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count módosítás vár',
+      one: '1 módosítás vár',
+      zero: 'Nincs várakozó módosítás',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportDropped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count régebbi módosítás kihagyva',
+      one: '1 régebbi módosítás kihagyva',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportPrivacyHeld(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count jelentés visszatartva adatvédelmi okból',
+      one: '1 jelentés visszatartva adatvédelmi okból',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncStepLabelDownload => 'Omi → telefon';
+
+  @override
+  String get syncStepLabelUpload => 'Feltöltés';
+
+  @override
+  String get syncStepLabelTranscribe => 'Átirat';
+
+  @override
+  String get syncDetailsForSupport => 'Az ügyfélszolgálatnak';
+
+  @override
+  String get episodeOnDeviceNotesFootnote =>
+      'A telefonodon készülnek, miközben beszélsz. A teljes jegyzetek a végleges átirattal együtt érkeznek.';
+
+  @override
+  String get episodeOnThisPhone => 'Ezen a telefonon';
+
+  @override
+  String get livePreviewNoEngineTitle => 'Biztonságosan rögzít';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return '$duration behozása folyamatban';
+  }
+
+  @override
+  String get onTheWayDetailsForSupport => 'Részletek az ügyfélszolgálatnak';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count rövid felvétel elrejtve',
+      one: '1 rövid felvétel elrejtve',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => 'Megjelenítés';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count rövid felvétel elrejtése',
+      one: '1 rövid felvétel elrejtése',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get speakerWholeRecording => 'Alkalmazás a teljes felvételre';
+
+  @override
+  String get speakerSelectionChanged => 'A beszélő megváltozott. Válaszd ki újra a sorokat.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'A felvétel túl nagy. Válasszon kevesebb sort egy beszélgetésből.',
+        'partial': 'Néhány sort mentettünk. Válassza ki a többit, és próbálja újra.',
+        'other': 'Néhány sort mentettünk. Válassza ki a többit, és próbálja újra.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerRecordingCoverage(String state, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count sor átnevezve csak az elérhető beszélgetésekben.',
+      one: '1 sor átnevezve csak az elérhető beszélgetésekben.',
+    );
+    String _temp1 = intl.Intl.selectLogic(
+      state,
+      {
+        'scope': 'A hang további sorai (a felvétel lefedettsége nem igazolt)',
+        'other': '$_temp0',
+      },
+    );
+    return '$_temp1';
+  }
 
   @override
   String get episodeFinishingUp => 'Befejezés…';

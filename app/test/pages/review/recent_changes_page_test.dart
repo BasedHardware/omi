@@ -75,7 +75,6 @@ Future<void> _pump(
   List<ReviewChange> changes, {
   ReviewChangeToggler? setUndone,
   void Function(BuildContext, String)? openConversation,
-  void Function(BuildContext)? openTasks,
 }) async {
   tester.view.physicalSize = const Size(900, 2400);
   tester.view.devicePixelRatio = 2;
@@ -92,51 +91,42 @@ Future<void> _pump(
           (id, {required undone}) async =>
               ApiSuccess(changes.firstWhere((c) => c.changeId == id).copyWith(undone: undone)),
       openConversation: openConversation ?? (_, __) {},
-      openTasks: openTasks ?? (_) {},
     ),
   ));
   await tester.pumpAndSettle();
 }
 
 void main() {
-  testWidgets('one term respelled across conversations is one row with counts and Undo all', (tester) async {
+  testWidgets('one term respelled across conversations is one row titled with Undo all', (tester) async {
     await _pump(tester, [
       _term('t1', 'Synthetic pilot sync', places: 3, day: 14),
       _term('t2', 'Synthetic budget call', places: 4, day: 12),
     ]);
-    expect(find.text('NAMES AND TERMS'), findsOneWidget);
-    expect(find.text('zen tricks'), findsOneWidget);
-    expect(find.text('Zentrix'), findsOneWidget);
-    expect(find.text('2 conversations · 7 places'), findsOneWidget);
-    expect(find.text('Show all 7'), findsOneWidget);
+    expect(find.text('Edit transcript'), findsOneWidget);
     expect(find.text('Undo all'), findsOneWidget);
-    expect(find.text('Matches your contact'), findsOneWidget);
-    // The span diff replaces the whole stored segments, and the title never repeats.
+    // Rows show the title only: no diff, no counts, no reasons, no evidence buttons.
+    expect(find.text('zen tricks'), findsNothing);
+    expect(find.text('Zentrix'), findsNothing);
+    expect(find.text('2 conversations · 7 places'), findsNothing);
+    expect(find.text('Show all 7'), findsNothing);
+    expect(find.text('Matches your contact'), findsNothing);
     expect(find.text('whole segment that must not be shown'), findsNothing);
-    expect(find.text('Edit transcript'), findsNothing);
   });
 
-  testWidgets('memory, task and legacy rows render before → after without ids or repeated reasons', (tester) async {
+  testWidgets('memory, task and legacy rows show their titles with Undo and never an id', (tester) async {
     await _pump(tester, [_memory, _task, _legacy]);
-    expect(find.text('MEMORIES'), findsOneWidget);
-    expect(find.text('Prefers tea in the morning'), findsOneWidget);
-    expect(find.text('Prefers coffee in the morning since moving'), findsOneWidget);
-    expect(find.textContaining('Synthetic breakfast chat'), findsOneWidget);
-    expect(find.text('Supersede memory'), findsNothing);
-    expect(find.text('See evidence'), findsWidgets);
-
-    expect(find.text('TASKS'), findsOneWidget);
-    expect(find.text('Email the invented vendor'), findsOneWidget);
-    expect(find.text('Send vendor the invented contract'), findsOneWidget);
-    expect(find.text('Send the invented vendor the contract'), findsOneWidget);
-    expect(find.text('View task'), findsWidgets);
-
-    // A legacy row with nothing to compare keeps its title once, never the UUID.
+    expect(find.text('Supersede memory'), findsOneWidget);
+    expect(find.text('Merge tasks'), findsOneWidget);
     expect(find.text('Closed an invented task'), findsOneWidget);
+    expect(find.text('Prefers coffee in the morning since moving'), findsNothing);
+    expect(find.text('View task'), findsNothing);
+    expect(find.text('See evidence'), findsNothing);
     expect(find.textContaining(_uuid), findsNothing);
+    expect(find.byKey(const ValueKey('recent_change_toggle_memory-1')), findsOneWidget);
   });
 
-  testWidgets('Show all opens each place in context with per-conversation Undo and View conversation', (tester) async {
+  testWidgets('tapping a row opens each place in context with per-conversation Undo and View conversation',
+      (tester) async {
     final opened = <String>[];
     final toggled = <String>[];
     final changes = [_term('t1', 'Synthetic pilot sync', places: 3), _term('t2', 'Synthetic budget call', day: 12)];
@@ -149,7 +139,7 @@ void main() {
         return ApiSuccess(changes.firstWhere((c) => c.changeId == id).copyWith(undone: undone));
       },
     );
-    await tester.tap(find.text('Show all 4'));
+    await tester.tap(find.text('Edit transcript'));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('recent_change_sheet')), findsOneWidget);
     expect(find.byKey(const Key('recent_change_occurrence')), findsNWidgets(2));

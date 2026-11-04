@@ -12506,43 +12506,10 @@ class AppLocalizationsSk extends AppLocalizations {
   String get reviewChangesSectionOther => 'Ďalšie zmeny';
 
   @override
-  String reviewChangeConversationCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Konverzácií: $count',
-      one: '1 konverzácia',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String reviewChangePlaceCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Miest: $count',
-      one: '1 miesto',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String reviewChangeShowAll(int count) {
-    return 'Zobraziť všetko ($count)';
-  }
-
-  @override
   String get reviewChangeUndoAll => 'Vrátiť všetko';
 
   @override
-  String get reviewChangeSeeEvidence => 'Zobraziť dôkazy';
-
-  @override
   String get reviewChangeViewConversation => 'Zobraziť konverzáciu';
-
-  @override
-  String get reviewChangeViewTask => 'Zobraziť úlohu';
 
   @override
   String reviewChangesUndoPartial(int failed, int total) {
@@ -12617,10 +12584,6 @@ class AppLocalizationsSk extends AppLocalizations {
   String get dreamReportTitle => 'Správa Dream';
 
   @override
-  String get dreamReportShadowBanner =>
-      'Režim ukážky: Dream ukazuje, čo by zmenil, ale vo vašom účte sa zatiaľ nič nemení.';
-
-  @override
   String get dreamReportLiveBanner =>
       'Dream tieto zmeny vykonáva sám. Ktorúkoľvek z nich môžete vrátiť v Nedávnych zmenách.';
 
@@ -12666,11 +12629,6 @@ class AppLocalizationsSk extends AppLocalizations {
   String get dreamReportNothingFound => 'Nie je čo opraviť';
 
   @override
-  String dreamReportStats(int records, int tokens) {
-    return 'Prečítaných položiek: $records · tokenov: $tokens';
-  }
-
-  @override
   String get dreamReportWouldFix => 'Opravil by';
 
   @override
@@ -12686,27 +12644,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get dreamReportLearnedWords => 'Naučené slová';
 
   @override
-  String get dreamReportFeedback => 'Nahlásené tímu Omi';
-
-  @override
   String get dreamReportDeletedItem => 'Odstránená položka';
-
-  @override
-  String dreamReportPasses(int count, int limit) {
-    return 'Dnes $count z $limit behov';
-  }
-
-  @override
-  String dreamReportQueued(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count zmien čaká',
-      one: '1 zmena čaká',
-      zero: 'Žiadne čakajúce zmeny',
-    );
-    return '$_temp0';
-  }
 
   @override
   String dreamReportRunsLeft(int count) {
@@ -12734,28 +12672,6 @@ class AppLocalizationsSk extends AppLocalizations {
       one: '1 návrh',
     );
     return '$_temp0 · $_temp1';
-  }
-
-  @override
-  String dreamReportDropped(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count starších zmien preskočených',
-      one: '1 staršia zmena preskočená',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String dreamReportPrivacyHeld(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count hlásení zadržaných z dôvodu súkromia',
-      one: '1 hlásenie zadržané z dôvodu súkromia',
-    );
-    return '$_temp0';
   }
 
   @override
@@ -13510,15 +13426,6 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
-  String get syncStepLabelDownload => 'Omi → telefón';
-
-  @override
-  String get syncStepLabelUpload => 'Nahrávanie';
-
-  @override
-  String get syncStepLabelTranscribe => 'Prepis';
-
-  @override
   String get syncDetailsTitle => 'Podrobnosti synchronizácie';
 
   @override
@@ -13538,9 +13445,6 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get syncDetailsTranscribing => 'Prepisuje sa v Omi';
-
-  @override
-  String get syncDetailsForSupport => 'Pre podporu';
 
   @override
   String get syncDetailsAudioFiles => 'Zvukové súbory';
@@ -14661,13 +14565,6 @@ class AppLocalizationsSk extends AppLocalizations {
   String get episodeNotesStartWithTranscript => 'Poznámky sa začnú, keď príde konečný prepis.';
 
   @override
-  String get episodeOnDeviceNotesFootnote =>
-      'Vytvárajú sa na tvojom telefóne, kým hovoríš. Kompletné poznámky prídu s konečným prepisom.';
-
-  @override
-  String get episodeOnThisPhone => 'V tomto telefóne';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'Konečný prepis mešká približne $duration';
   }
@@ -14677,9 +14574,6 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get livePreviewNoEngineBody => 'Tvoje slová sa tu zobrazia jednu až dve minúty po vyslovení.';
-
-  @override
-  String get livePreviewNoEngineTitle => 'Bezpečne nahráva';
 
   @override
   String get livePreviewOnPhoneDivider => 'Práve teraz, na tomto telefóne';
@@ -14692,11 +14586,6 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get deviceCatchUpWhenOnline => 'keď budete online';
-
-  @override
-  String onTheWayCatchingUp(String duration) {
-    return '$duration na ceste';
-  }
 
   @override
   String get onTheWayUploadsByItself => 'Nahráva sa samo. Konverzácie sa dopĺňajú, ako nahrávky prichádzajú.';
@@ -14720,34 +14609,6 @@ class AppLocalizationsSk extends AppLocalizations {
   @override
   String get onTheWayFootnote =>
       'Nahrávky, ktorých odosielanie zlyhá, sa budú na pozadí opakovať. Všetko, čo nedokážeme prepísať, sa nám automaticky nahlási.';
-
-  @override
-  String get onTheWayDetailsForSupport => 'Detaily pre podporu';
-
-  @override
-  String homeNoiseFoldHidden(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Skrytých krátkych nahrávok: $count',
-      one: '1 skrytá krátka nahrávka',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String get homeNoiseFoldShow => 'Zobraziť';
-
-  @override
-  String homeNoiseFoldHide(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Skryť $count krátkych nahrávok',
-      one: 'Skryť 1 krátku nahrávku',
-    );
-    return '$_temp0';
-  }
 
   @override
   String deleteLocalRecordingsWarning(int count) {
@@ -14958,6 +14819,185 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Rečníci a konečný prepis sa tu objavia počas nahrávania.';
+
+  @override
+  String get searchNoiseFilter => 'Krátke klipy';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Konverzácií: $count',
+      one: '1 konverzácia',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Miest: $count',
+      one: '1 miesto',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'Zobraziť všetko ($count)';
+  }
+
+  @override
+  String get reviewChangeSeeEvidence => 'Zobraziť dôkazy';
+
+  @override
+  String get reviewChangeViewTask => 'Zobraziť úlohu';
+
+  @override
+  String get dreamReportShadowBanner =>
+      'Režim ukážky: Dream ukazuje, čo by zmenil, ale vo vašom účte sa zatiaľ nič nemení.';
+
+  @override
+  String dreamReportStats(int records, int tokens) {
+    return 'Prečítaných položiek: $records · tokenov: $tokens';
+  }
+
+  @override
+  String get dreamReportFeedback => 'Nahlásené tímu Omi';
+
+  @override
+  String dreamReportPasses(int count, int limit) {
+    return 'Dnes $count z $limit behov';
+  }
+
+  @override
+  String dreamReportQueued(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count zmien čaká',
+      one: '1 zmena čaká',
+      zero: 'Žiadne čakajúce zmeny',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportDropped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count starších zmien preskočených',
+      one: '1 staršia zmena preskočená',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportPrivacyHeld(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count hlásení zadržaných z dôvodu súkromia',
+      one: '1 hlásenie zadržané z dôvodu súkromia',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncStepLabelDownload => 'Omi → telefón';
+
+  @override
+  String get syncStepLabelUpload => 'Nahrávanie';
+
+  @override
+  String get syncStepLabelTranscribe => 'Prepis';
+
+  @override
+  String get syncDetailsForSupport => 'Pre podporu';
+
+  @override
+  String get episodeOnDeviceNotesFootnote =>
+      'Vytvárajú sa na tvojom telefóne, kým hovoríš. Kompletné poznámky prídu s konečným prepisom.';
+
+  @override
+  String get episodeOnThisPhone => 'V tomto telefóne';
+
+  @override
+  String get livePreviewNoEngineTitle => 'Bezpečne nahráva';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return '$duration na ceste';
+  }
+
+  @override
+  String get onTheWayDetailsForSupport => 'Detaily pre podporu';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Skrytých krátkych nahrávok: $count',
+      one: '1 skrytá krátka nahrávka',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => 'Zobraziť';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Skryť $count krátkych nahrávok',
+      one: 'Skryť 1 krátku nahrávku',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get speakerWholeRecording => 'Použiť na celú nahrávku';
+
+  @override
+  String get speakerSelectionChanged => 'Hovoriaci sa zmenil. Vyberte riadky znova.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'Nahrávka je príliš veľká. Vyberte menej riadkov v jednej konverzácii.',
+        'partial': 'Niektoré riadky boli uložené. Vyberte zostávajúce a skúste to znova.',
+        'other': 'Niektoré riadky boli uložené. Vyberte zostávajúce a skúste to znova.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerRecordingCoverage(String state, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Premenovaných $count riadkov iba v dostupných konverzáciách.',
+      one: 'Premenovaných 1 riadkov iba v dostupných konverzáciách.',
+    );
+    String _temp1 = intl.Intl.selectLogic(
+      state,
+      {
+        'scope': 'Ďalšie riadky tohto hlasu (rozsah nahrávky nie je potvrdený)',
+        'other': '$_temp0',
+      },
+    );
+    return '$_temp1';
+  }
 
   @override
   String get episodeFinishingUp => 'Dokončuje sa…';

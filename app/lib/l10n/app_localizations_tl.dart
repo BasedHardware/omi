@@ -12614,43 +12614,10 @@ class AppLocalizationsTl extends AppLocalizations {
   String get reviewChangesSectionOther => 'Iba pang pagbabago';
 
   @override
-  String reviewChangeConversationCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count pag-uusap',
-      one: '1 pag-uusap',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String reviewChangePlaceCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count lugar',
-      one: '1 lugar',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String reviewChangeShowAll(int count) {
-    return 'Ipakita lahat ng $count';
-  }
-
-  @override
   String get reviewChangeUndoAll => 'I-undo lahat';
 
   @override
-  String get reviewChangeSeeEvidence => 'Tingnan ang ebidensya';
-
-  @override
   String get reviewChangeViewConversation => 'Tingnan ang pag-uusap';
-
-  @override
-  String get reviewChangeViewTask => 'Tingnan ang gawain';
 
   @override
   String reviewChangesUndoPartial(int failed, int total) {
@@ -12725,10 +12692,6 @@ class AppLocalizationsTl extends AppLocalizations {
   String get dreamReportTitle => 'Ulat ng Dream';
 
   @override
-  String get dreamReportShadowBanner =>
-      'Preview mode: ipinapakita ng Dream ang babaguhin nito, pero wala pang nagbabago sa account mo.';
-
-  @override
   String get dreamReportLiveBanner =>
       'Kusang ina-apply ng Dream ang mga pagbabagong ito. I-undo ang alinman sa Mga Kamakailang Pagbabago.';
 
@@ -12774,11 +12737,6 @@ class AppLocalizationsTl extends AppLocalizations {
   String get dreamReportNothingFound => 'Walang aayusin';
 
   @override
-  String dreamReportStats(int records, int tokens) {
-    return 'Nabasa ang $records item · $tokens token';
-  }
-
-  @override
   String get dreamReportWouldFix => 'Aayusin sana';
 
   @override
@@ -12794,27 +12752,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get dreamReportLearnedWords => 'Mga salitang natutunan';
 
   @override
-  String get dreamReportFeedback => 'Iniulat sa team ng Omi';
-
-  @override
   String get dreamReportDeletedItem => 'Naburang item';
-
-  @override
-  String dreamReportPasses(int count, int limit) {
-    return '$count sa $limit na pass ngayon';
-  }
-
-  @override
-  String dreamReportQueued(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count pagbabagong naghihintay',
-      one: '1 pagbabagong naghihintay',
-      zero: 'Walang pagbabagong naghihintay',
-    );
-    return '$_temp0';
-  }
 
   @override
   String dreamReportRunsLeft(int count) {
@@ -12842,28 +12780,6 @@ class AppLocalizationsTl extends AppLocalizations {
       one: '1 mungkahi',
     );
     return '$_temp0 · $_temp1';
-  }
-
-  @override
-  String dreamReportDropped(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count lumang pagbabago ang nilaktawan',
-      one: '1 lumang pagbabago ang nilaktawan',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String dreamReportPrivacyHeld(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count ulat ang pinigil para sa privacy',
-      one: '1 ulat ang pinigil para sa privacy',
-    );
-    return '$_temp0';
   }
 
   @override
@@ -13620,15 +13536,6 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
-  String get syncStepLabelDownload => 'Omi → phone';
-
-  @override
-  String get syncStepLabelUpload => 'Upload';
-
-  @override
-  String get syncStepLabelTranscribe => 'Transcribe';
-
-  @override
   String get syncDetailsTitle => 'Mga detalye ng sync';
 
   @override
@@ -13648,9 +13555,6 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get syncDetailsTranscribing => 'Tina-transcribe sa Omi';
-
-  @override
-  String get syncDetailsForSupport => 'Para sa support';
 
   @override
   String get syncDetailsAudioFiles => 'Mga audio file';
@@ -14782,13 +14686,6 @@ class AppLocalizationsTl extends AppLocalizations {
   String get episodeNotesStartWithTranscript => 'Nagsisimula ang tala kapag dumarating ang panghuling transcript.';
 
   @override
-  String get episodeOnDeviceNotesFootnote =>
-      'Nakasulat sa phone mo habang nagsasalita ka. Dumarating ang kumpletong tala kasama ng panghuling transcript.';
-
-  @override
-  String get episodeOnThisPhone => 'Sa phone na ito';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'Naiwan ng mga $duration ang panghuling transcript';
   }
@@ -14801,9 +14698,6 @@ class AppLocalizationsTl extends AppLocalizations {
       'Lalabas ang mga salita mo dito isa hanggang dalawang minuto pagkatapos mong sabihin.';
 
   @override
-  String get livePreviewNoEngineTitle => 'Ligtas na nagre-record';
-
-  @override
   String get livePreviewOnPhoneDivider => 'Ngayon lang, sa teleponong ito';
 
   @override
@@ -14814,11 +14708,6 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get deviceCatchUpWhenOnline => 'kapag online na';
-
-  @override
-  String onTheWayCatchingUp(String duration) {
-    return 'Humahabol pa ng $duration';
-  }
 
   @override
   String get onTheWayUploadsByItself => 'Mag-a-upload mag-isa. Nabubuo ang mga pag-uusap habang dumarating.';
@@ -14842,34 +14731,6 @@ class AppLocalizationsTl extends AppLocalizations {
   @override
   String get onTheWayFootnote =>
       'Ang mga recording na nabigo ay patuloy na susubukan ulit sa background. Awtomatikong maiuulat sa amin ang mga hindi namin matranscribe.';
-
-  @override
-  String get onTheWayDetailsForSupport => 'Mga detalye para sa support';
-
-  @override
-  String homeNoiseFoldHidden(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Nakatago ang $count maikling clip',
-      one: 'Nakatago ang 1 maikling clip',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String get homeNoiseFoldShow => 'Ipakita';
-
-  @override
-  String homeNoiseFoldHide(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Itago ang $count maikling clip',
-      one: 'Itago ang 1 maikling clip',
-    );
-    return '$_temp0';
-  }
 
   @override
   String deleteLocalRecordingsWarning(int count) {
@@ -15083,6 +14944,185 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Lalabas dito ang mga nagsasalita at huling transcript habang nag-a-upload.';
+
+  @override
+  String get searchNoiseFilter => 'Maiikling clip';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count pag-uusap',
+      one: '1 pag-uusap',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count lugar',
+      one: '1 lugar',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'Ipakita lahat ng $count';
+  }
+
+  @override
+  String get reviewChangeSeeEvidence => 'Tingnan ang ebidensya';
+
+  @override
+  String get reviewChangeViewTask => 'Tingnan ang gawain';
+
+  @override
+  String get dreamReportShadowBanner =>
+      'Preview mode: ipinapakita ng Dream ang babaguhin nito, pero wala pang nagbabago sa account mo.';
+
+  @override
+  String dreamReportStats(int records, int tokens) {
+    return 'Nabasa ang $records item · $tokens token';
+  }
+
+  @override
+  String get dreamReportFeedback => 'Iniulat sa team ng Omi';
+
+  @override
+  String dreamReportPasses(int count, int limit) {
+    return '$count sa $limit na pass ngayon';
+  }
+
+  @override
+  String dreamReportQueued(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count pagbabagong naghihintay',
+      one: '1 pagbabagong naghihintay',
+      zero: 'Walang pagbabagong naghihintay',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportDropped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count lumang pagbabago ang nilaktawan',
+      one: '1 lumang pagbabago ang nilaktawan',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportPrivacyHeld(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ulat ang pinigil para sa privacy',
+      one: '1 ulat ang pinigil para sa privacy',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncStepLabelDownload => 'Omi → phone';
+
+  @override
+  String get syncStepLabelUpload => 'Upload';
+
+  @override
+  String get syncStepLabelTranscribe => 'Transcribe';
+
+  @override
+  String get syncDetailsForSupport => 'Para sa support';
+
+  @override
+  String get episodeOnDeviceNotesFootnote =>
+      'Nakasulat sa phone mo habang nagsasalita ka. Dumarating ang kumpletong tala kasama ng panghuling transcript.';
+
+  @override
+  String get episodeOnThisPhone => 'Sa phone na ito';
+
+  @override
+  String get livePreviewNoEngineTitle => 'Ligtas na nagre-record';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return 'Humahabol pa ng $duration';
+  }
+
+  @override
+  String get onTheWayDetailsForSupport => 'Mga detalye para sa support';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Nakatago ang $count maikling clip',
+      one: 'Nakatago ang 1 maikling clip',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => 'Ipakita';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Itago ang $count maikling clip',
+      one: 'Itago ang 1 maikling clip',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get speakerWholeRecording => 'Ilapat sa buong recording';
+
+  @override
+  String get speakerSelectionChanged => 'Nagbago ang tagapagsalita. Piliin muli ang mga linya.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'Masyadong malaki ang recording. Pumili ng mas kaunting linya sa isang usapan.',
+        'partial': 'Na-save ang ilang linya. Piliin ang natitira at subukang muli.',
+        'other': 'Na-save ang ilang linya. Piliin ang natitira at subukang muli.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerRecordingCoverage(String state, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Pinalitan ang pangalan ng $count linya sa mga available na usapan lang.',
+      one: 'Pinalitan ang pangalan ng 1 linya sa mga available na usapan lang.',
+    );
+    String _temp1 = intl.Intl.selectLogic(
+      state,
+      {
+        'scope': 'Ibang linya ng boses na ito (hindi kumpirmado ang saklaw ng recording)',
+        'other': '$_temp0',
+      },
+    );
+    return '$_temp1';
+  }
 
   @override
   String get episodeFinishingUp => 'Tinatapos…';

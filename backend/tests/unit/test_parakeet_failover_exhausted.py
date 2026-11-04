@@ -5,6 +5,7 @@ import json
 
 import pytest
 from tests.unit.fixtures.replay_clock import virtual_clock  # noqa: F401
+from tests.unit.fixtures.live_stt_registry import enabled_live_targets
 
 import routers.listen.receiver as receiver_module
 from tests.unit.test_parakeet_window_live import Client, _flush_capture, _receiver_for_anchor_replay, runtime, window
@@ -21,6 +22,7 @@ from tests.unit.test_live_cost_router import MemoryRedis
 @pytest.fixture(autouse=True)
 def _stt_failover_recovery_on(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv('STT_FAILOVER_RECOVERY_ENABLED', 'true')
+    enabled_live_targets(monkeypatch)
 
 
 class Replacement:

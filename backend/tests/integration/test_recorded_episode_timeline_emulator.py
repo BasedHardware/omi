@@ -24,7 +24,10 @@ def store(monkeypatch):
         pytest.skip('loopback FIRESTORE_EMULATOR_HOST required; no cloud fallback')
     monkeypatch.setenv('ENCRYPTION_SECRET', 'recorded_time_emulator_synthetic_key_32_bytes')
     client = firestore.Client(project='demo-recorded-time', credentials=AnonymousCredentials())
-    return client, 'recorded-test-' + uuid4().hex
+    try:
+        yield client, 'recorded-test-' + uuid4().hex
+    finally:
+        client.close()
 
 
 def test_simultaneous_late_devices_converge_on_one_closed_episode(store):
@@ -52,6 +55,58 @@ def test_simultaneous_late_devices_converge_on_one_closed_episode(store):
     assert len(owner['conversation_ids']) == 8
     assert owner['started_at'] == T0
     assert owner['last_activity_at'] == owner['closed_at'] == T0 + timedelta(seconds=158)
+    assert episodes.get_current_episode(uid, firestore_client=client) is None
+
+
+@pytest.mark.parametrize('optimizations', ['true', 'false'])
+@pytest.mark.parametrize('fraction', [0, 0.0000007])
+def test_batch_close_deadline_and_partition_replay_share_one_transaction(store, monkeypatch, optimizations, fraction):
+    client, uid = store
+    monkeypatch.setenv('EPISODE_ATTACH_OPTIMIZATIONS_ENABLED', optimizations)
+    root = client.collection('users').document(uid)
+    member = root.collection('conversations').document('batch-close')
+    row = {
+        'source': 'desktop',
+        'record_lane_owner': 'batch_live_v1',
+        'server_batch_audio_start': T0.timestamp() + fraction,
+        'server_batch_audio_end': (T0 + timedelta(minutes=2)).timestamp() + fraction,
+        'server_batch_audio_closed': True,
+        'transcript_segments': [],
+        'status': 'completed',
+    }
+    member.set(row)
+
+    def close(pending_at):
+        return episode_timeline.attach_recorded(
+            uid,
+            'batch-close',
+            'desktop',
+            datetime.fromtimestamp(row['server_batch_audio_start'], timezone.utc),
+            datetime.fromtimestamp(row['server_batch_audio_end'], timezone.utc),
+            choose=choose_recorded_episode,
+            new_episode={},
+            firestore_client=client,
+            attach_row=member.get().to_dict(),
+            pending_at=pending_at,
+        )
+
+    first = close(T0)
+    owner = root.collection('episodes').document(first['id'])
+    links = root.collection('episode_links')
+    before = [
+        ref.get().to_dict()
+        for ref in (member, owner, links.document('batch-close'), links.document('recorded_timeline'))
+    ]
+    assert before[0]['episode_id'] == first['id']
+    assert before[0]['episode_transcription_pending_at'] == T0
+    assert before[0]['episode_transcription_deadline_at'] == T0 + timedelta(hours=2)
+    assert 'attach_revision' not in before[2], 'metadata close cannot claim transcript recovery'
+    assert close(T0 + timedelta(hours=1))['id'] == first['id']
+    after = [
+        ref.get().to_dict()
+        for ref in (member, owner, links.document('batch-close'), links.document('recorded_timeline'))
+    ]
+    assert after == before
     assert episodes.get_current_episode(uid, firestore_client=client) is None
 
 
@@ -849,7 +904,7 @@ def test_stale_durable_finalize_retires_currently_hidden_member(store, monkeypat
     monkeypatch.setenv('EPISODE_RECORDED_TIME_ENABLED', 'true')
     monkeypatch.setattr(service, 'episodes_enabled_for', lambda _: True)
     monkeypatch.setattr(service.client_gate, 'client_seen', lambda _: True)
-    monkeypatch.setattr(service.composer, 'after_finalized', lambda uid, cid, outcome, c: outcome)
+    monkeypatch.setattr(service.composer, 'after_finalized', lambda uid, cid, outcome, c, *, row=None: outcome)
     monkeypatch.setattr(episode_attach_memo, 'get_firestore_client', lambda: client)
     root = client.collection('users').document(uid)
     ref = root.collection('conversations').document('stale-finalize')

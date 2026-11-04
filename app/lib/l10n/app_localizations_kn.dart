@@ -12550,43 +12550,10 @@ class AppLocalizationsKn extends AppLocalizations {
   String get reviewChangesSectionOther => 'ಇತರ ಬದಲಾವಣೆಗಳು';
 
   @override
-  String reviewChangeConversationCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count ಸಂಭಾಷಣೆಗಳು',
-      one: '1 ಸಂಭಾಷಣೆ',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String reviewChangePlaceCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count ಸ್ಥಳಗಳು',
-      one: '1 ಸ್ಥಳ',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String reviewChangeShowAll(int count) {
-    return 'ಎಲ್ಲಾ $count ತೋರಿಸಿ';
-  }
-
-  @override
   String get reviewChangeUndoAll => 'ಎಲ್ಲವನ್ನೂ ರದ್ದುಮಾಡಿ';
 
   @override
-  String get reviewChangeSeeEvidence => 'ಸಾಕ್ಷ್ಯ ನೋಡಿ';
-
-  @override
   String get reviewChangeViewConversation => 'ಸಂಭಾಷಣೆ ನೋಡಿ';
-
-  @override
-  String get reviewChangeViewTask => 'ಕಾರ್ಯ ನೋಡಿ';
 
   @override
   String reviewChangesUndoPartial(int failed, int total) {
@@ -12661,10 +12628,6 @@ class AppLocalizationsKn extends AppLocalizations {
   String get dreamReportTitle => 'Dream ವರದಿ';
 
   @override
-  String get dreamReportShadowBanner =>
-      'ಪೂರ್ವವೀಕ್ಷಣೆ ಮೋಡ್: Dream ಏನನ್ನು ಬದಲಾಯಿಸುತ್ತಿತ್ತು ಎಂಬುದನ್ನು ತೋರಿಸುತ್ತದೆ, ಆದರೆ ನಿಮ್ಮ ಖಾತೆಯಲ್ಲಿ ಇನ್ನೂ ಏನೂ ಬದಲಾಗುವುದಿಲ್ಲ.';
-
-  @override
   String get dreamReportLiveBanner =>
       'Dream ಈ ಬದಲಾವಣೆಗಳನ್ನು ತಾನೇ ಅನ್ವಯಿಸುತ್ತದೆ. ಯಾವುದನ್ನಾದರೂ ಇತ್ತೀಚಿನ ಬದಲಾವಣೆಗಳು ನಲ್ಲಿ ರದ್ದುಮಾಡಿ.';
 
@@ -12710,11 +12673,6 @@ class AppLocalizationsKn extends AppLocalizations {
   String get dreamReportNothingFound => 'ಸರಿಪಡಿಸಲು ಏನೂ ಇಲ್ಲ';
 
   @override
-  String dreamReportStats(int records, int tokens) {
-    return '$records ಐಟಂಗಳನ್ನು ಓದಲಾಗಿದೆ · $tokens ಟೋಕನ್‌ಗಳು';
-  }
-
-  @override
   String get dreamReportWouldFix => 'ಸರಿಪಡಿಸುತ್ತಿತ್ತು';
 
   @override
@@ -12730,27 +12688,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String get dreamReportLearnedWords => 'ಕಲಿತ ಪದಗಳು';
 
   @override
-  String get dreamReportFeedback => 'Omi ತಂಡಕ್ಕೆ ವರದಿ ಮಾಡಲಾಗಿದೆ';
-
-  @override
   String get dreamReportDeletedItem => 'ಅಳಿಸಿದ ಐಟಂ';
-
-  @override
-  String dreamReportPasses(int count, int limit) {
-    return 'ಇಂದು $count/$limit ಪಾಸ್‌ಗಳು';
-  }
-
-  @override
-  String dreamReportQueued(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count ಬದಲಾವಣೆಗಳು ಕಾಯುತ್ತಿವೆ',
-      one: '1 ಬದಲಾವಣೆ ಕಾಯುತ್ತಿದೆ',
-      zero: 'ಕಾಯುತ್ತಿರುವ ಬದಲಾವಣೆಗಳಿಲ್ಲ',
-    );
-    return '$_temp0';
-  }
 
   @override
   String dreamReportRunsLeft(int count) {
@@ -12778,28 +12716,6 @@ class AppLocalizationsKn extends AppLocalizations {
       one: '1 ಸಲಹೆ',
     );
     return '$_temp0 · $_temp1';
-  }
-
-  @override
-  String dreamReportDropped(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count ಹಳೆಯ ಬದಲಾವಣೆಗಳನ್ನು ಬಿಟ್ಟುಬಿಡಲಾಗಿದೆ',
-      one: '1 ಹಳೆಯ ಬದಲಾವಣೆಯನ್ನು ಬಿಟ್ಟುಬಿಡಲಾಗಿದೆ',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String dreamReportPrivacyHeld(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'ಗೌಪ್ಯತೆಗಾಗಿ $count ವರದಿಗಳನ್ನು ತಡೆಹಿಡಿಯಲಾಗಿದೆ',
-      one: 'ಗೌಪ್ಯತೆಗಾಗಿ 1 ವರದಿಯನ್ನು ತಡೆಹಿಡಿಯಲಾಗಿದೆ',
-    );
-    return '$_temp0';
   }
 
   @override
@@ -13554,15 +13470,6 @@ class AppLocalizationsKn extends AppLocalizations {
   }
 
   @override
-  String get syncStepLabelDownload => 'Omi → ಫೋನ್';
-
-  @override
-  String get syncStepLabelUpload => 'ಅಪ್‌ಲೋಡ್';
-
-  @override
-  String get syncStepLabelTranscribe => 'ಲಿಪ್ಯಂತರ';
-
-  @override
   String get syncDetailsTitle => 'ಸಿಂಕ್ ವಿವರಗಳು';
 
   @override
@@ -13582,9 +13489,6 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get syncDetailsTranscribing => 'Omi ನಲ್ಲಿ ಲಿಪ್ಯಂತರವಾಗುತ್ತಿದೆ';
-
-  @override
-  String get syncDetailsForSupport => 'ಬೆಂಬಲಕ್ಕಾಗಿ';
 
   @override
   String get syncDetailsAudioFiles => 'ಆಡಿಯೊ ಫೈಲ್‌ಗಳು';
@@ -14714,13 +14618,6 @@ class AppLocalizationsKn extends AppLocalizations {
   String get episodeNotesStartWithTranscript => 'ಅಂತಿಮ ಪ್ರತಿಲಿಪಿ ಆಗಮಿಸಿದಾಗ ಟಿಪ್ಪಣಿಗಳು ಪ್ರಾರಂಭವಾಗುತ್ತವೆ.';
 
   @override
-  String get episodeOnDeviceNotesFootnote =>
-      'ನೀವು ಮಾತನಾಡುವಾಗ ನಿಮ್ಮ ಫೋನ್‌ನಲ್ಲೇ ರಚಿಸಲಾಗುತ್ತದೆ. ಪೂರ್ಣ ಟಿಪ್ಪಣಿಗಳು ಅಂತಿಮ ಪ್ರತಿಲಿಪಿಯೊಂದಿಗೆ ಬರುತ್ತವೆ.';
-
-  @override
-  String get episodeOnThisPhone => 'ಈ ಫೋನ್‌ನಲ್ಲಿ';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'ಅಂತಿಮ ಪ್ರತಿಲಿಪಿ ಸುಮಾರು $duration ಹಿಂದಿದೆ';
   }
@@ -14730,9 +14627,6 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get livePreviewNoEngineBody => 'ನೀವು ಹೇಳಿದ ಒಂದೆರಡು ನಿಮಿಷಗಳಲ್ಲಿ ನಿಮ್ಮ ಮಾತುಗಳು ಇಲ್ಲಿ ಕಾಣಿಸಿಕೊಳ್ಳುತ್ತವೆ.';
-
-  @override
-  String get livePreviewNoEngineTitle => 'ಸುರಕ್ಷಿತವಾಗಿ ರೆಕಾರ್ಡ್ ಆಗುತ್ತಿದೆ';
 
   @override
   String get livePreviewOnPhoneDivider => 'ಈಗಷ್ಟೇ, ಈ ಫೋನ್‌ನಲ್ಲಿ';
@@ -14745,11 +14639,6 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get deviceCatchUpWhenOnline => 'ಆನ್‌ಲೈನ್ ಆದಾಗ';
-
-  @override
-  String onTheWayCatchingUp(String duration) {
-    return '$duration ಪ್ರಕ್ರಿಯೆಯಲ್ಲಿದೆ';
-  }
 
   @override
   String get onTheWayUploadsByItself => 'ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಅಪ್‌ಲೋಡ್ ಆಗುತ್ತದೆ. ಬಂದ ತಕ್ಷಣ ಸಂವಾದಗಳು ಸೇರುತ್ತವೆ.';
@@ -14773,34 +14662,6 @@ class AppLocalizationsKn extends AppLocalizations {
   @override
   String get onTheWayFootnote =>
       'ವಿಫಲವಾದ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಹಿನ್ನೆಲೆಯಲ್ಲಿ ಮರುಪ್ರಯತ್ನಿಸುತ್ತಲೇ ಇರುತ್ತವೆ. ನಾವು ಟ್ರಾನ್ಸ್‌ಕ್ರೈಬ್ ಮಾಡಲಾಗದ ವಿಷಯಗಳು ಸ್ವಯಂಚಾಲಿತವಾಗಿ ನಮಗೆ ವರದಿಯಾಗುತ್ತವೆ.';
-
-  @override
-  String get onTheWayDetailsForSupport => 'ಬೆಂಬಲಕ್ಕಾಗಿ ವಿವರಗಳು';
-
-  @override
-  String homeNoiseFoldHidden(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count ಸಣ್ಣ ಕ್ಲಿಪ್‌ಗಳನ್ನು ಮರೆಮಾಡಲಾಗಿದೆ',
-      one: '1 ಸಣ್ಣ ಕ್ಲಿಪ್ ಮರೆಮಾಡಲಾಗಿದೆ',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String get homeNoiseFoldShow => 'ತೋರಿಸಿ';
-
-  @override
-  String homeNoiseFoldHide(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count ಸಣ್ಣ ಕ್ಲಿಪ್‌ಗಳನ್ನು ಮರೆಮಾಡಿ',
-      one: '1 ಸಣ್ಣ ಕ್ಲಿಪ್ ಮರೆಮಾಡಿ',
-    );
-    return '$_temp0';
-  }
 
   @override
   String deleteLocalRecordingsWarning(int count) {
@@ -15013,6 +14874,185 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'ಅಪ್‌ಲೋಡ್ ಆಗುತ್ತಿದ್ದಂತೆ ಮಾತನಾಡುವವರು ಮತ್ತು ಅಂತಿಮ ಪ್ರತಿಲೇಖನ ಇಲ್ಲಿ ಬರುತ್ತವೆ.';
+
+  @override
+  String get searchNoiseFilter => 'ಸಣ್ಣ ಕ್ಲಿಪ್‌ಗಳು';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ಸಂಭಾಷಣೆಗಳು',
+      one: '1 ಸಂಭಾಷಣೆ',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ಸ್ಥಳಗಳು',
+      one: '1 ಸ್ಥಳ',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'ಎಲ್ಲಾ $count ತೋರಿಸಿ';
+  }
+
+  @override
+  String get reviewChangeSeeEvidence => 'ಸಾಕ್ಷ್ಯ ನೋಡಿ';
+
+  @override
+  String get reviewChangeViewTask => 'ಕಾರ್ಯ ನೋಡಿ';
+
+  @override
+  String get dreamReportShadowBanner =>
+      'ಪೂರ್ವವೀಕ್ಷಣೆ ಮೋಡ್: Dream ಏನನ್ನು ಬದಲಾಯಿಸುತ್ತಿತ್ತು ಎಂಬುದನ್ನು ತೋರಿಸುತ್ತದೆ, ಆದರೆ ನಿಮ್ಮ ಖಾತೆಯಲ್ಲಿ ಇನ್ನೂ ಏನೂ ಬದಲಾಗುವುದಿಲ್ಲ.';
+
+  @override
+  String dreamReportStats(int records, int tokens) {
+    return '$records ಐಟಂಗಳನ್ನು ಓದಲಾಗಿದೆ · $tokens ಟೋಕನ್‌ಗಳು';
+  }
+
+  @override
+  String get dreamReportFeedback => 'Omi ತಂಡಕ್ಕೆ ವರದಿ ಮಾಡಲಾಗಿದೆ';
+
+  @override
+  String dreamReportPasses(int count, int limit) {
+    return 'ಇಂದು $count/$limit ಪಾಸ್‌ಗಳು';
+  }
+
+  @override
+  String dreamReportQueued(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ಬದಲಾವಣೆಗಳು ಕಾಯುತ್ತಿವೆ',
+      one: '1 ಬದಲಾವಣೆ ಕಾಯುತ್ತಿದೆ',
+      zero: 'ಕಾಯುತ್ತಿರುವ ಬದಲಾವಣೆಗಳಿಲ್ಲ',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportDropped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ಹಳೆಯ ಬದಲಾವಣೆಗಳನ್ನು ಬಿಟ್ಟುಬಿಡಲಾಗಿದೆ',
+      one: '1 ಹಳೆಯ ಬದಲಾವಣೆಯನ್ನು ಬಿಟ್ಟುಬಿಡಲಾಗಿದೆ',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportPrivacyHeld(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ಗೌಪ್ಯತೆಗಾಗಿ $count ವರದಿಗಳನ್ನು ತಡೆಹಿಡಿಯಲಾಗಿದೆ',
+      one: 'ಗೌಪ್ಯತೆಗಾಗಿ 1 ವರದಿಯನ್ನು ತಡೆಹಿಡಿಯಲಾಗಿದೆ',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncStepLabelDownload => 'Omi → ಫೋನ್';
+
+  @override
+  String get syncStepLabelUpload => 'ಅಪ್‌ಲೋಡ್';
+
+  @override
+  String get syncStepLabelTranscribe => 'ಲಿಪ್ಯಂತರ';
+
+  @override
+  String get syncDetailsForSupport => 'ಬೆಂಬಲಕ್ಕಾಗಿ';
+
+  @override
+  String get episodeOnDeviceNotesFootnote =>
+      'ನೀವು ಮಾತನಾಡುವಾಗ ನಿಮ್ಮ ಫೋನ್‌ನಲ್ಲೇ ರಚಿಸಲಾಗುತ್ತದೆ. ಪೂರ್ಣ ಟಿಪ್ಪಣಿಗಳು ಅಂತಿಮ ಪ್ರತಿಲಿಪಿಯೊಂದಿಗೆ ಬರುತ್ತವೆ.';
+
+  @override
+  String get episodeOnThisPhone => 'ಈ ಫೋನ್‌ನಲ್ಲಿ';
+
+  @override
+  String get livePreviewNoEngineTitle => 'ಸುರಕ್ಷಿತವಾಗಿ ರೆಕಾರ್ಡ್ ಆಗುತ್ತಿದೆ';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return '$duration ಪ್ರಕ್ರಿಯೆಯಲ್ಲಿದೆ';
+  }
+
+  @override
+  String get onTheWayDetailsForSupport => 'ಬೆಂಬಲಕ್ಕಾಗಿ ವಿವರಗಳು';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ಸಣ್ಣ ಕ್ಲಿಪ್‌ಗಳನ್ನು ಮರೆಮಾಡಲಾಗಿದೆ',
+      one: '1 ಸಣ್ಣ ಕ್ಲಿಪ್ ಮರೆಮಾಡಲಾಗಿದೆ',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => 'ತೋರಿಸಿ';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ಸಣ್ಣ ಕ್ಲಿಪ್‌ಗಳನ್ನು ಮರೆಮಾಡಿ',
+      one: '1 ಸಣ್ಣ ಕ್ಲಿಪ್ ಮರೆಮಾಡಿ',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get speakerWholeRecording => 'ಸಂಪೂರ್ಣ ರೆಕಾರ್ಡಿಂಗ್‌ಗೆ ಅನ್ವಯಿಸಿ';
+
+  @override
+  String get speakerSelectionChanged => 'ಮಾತನಾಡುವವರು ಬದಲಾಗಿದ್ದಾರೆ. ಸಾಲುಗಳನ್ನು ಮತ್ತೆ ಆಯ್ಕೆಮಾಡಿ.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'ರೆಕಾರ್ಡಿಂಗ್ ತುಂಬಾ ದೊಡ್ಡದಾಗಿದೆ. ಒಂದು ಸಂಭಾಷಣೆಯಲ್ಲಿ ಕಡಿಮೆ ಸಾಲುಗಳನ್ನು ಆಯ್ಕೆಮಾಡಿ.',
+        'partial': 'ಕೆಲವು ಸಾಲುಗಳನ್ನು ಉಳಿಸಲಾಗಿದೆ. ಉಳಿದ ಸಾಲುಗಳನ್ನು ಆಯ್ಕೆಮಾಡಿ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.',
+        'other': 'ಕೆಲವು ಸಾಲುಗಳನ್ನು ಉಳಿಸಲಾಗಿದೆ. ಉಳಿದ ಸಾಲುಗಳನ್ನು ಆಯ್ಕೆಮಾಡಿ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerRecordingCoverage(String state, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ಲಭ್ಯವಿರುವ ಸಂಭಾಷಣೆಗಳಲ್ಲಿ ಮಾತ್ರ $count ಸಾಲುಗಳ ಹೆಸರನ್ನು ಬದಲಿಸಲಾಗಿದೆ.',
+      one: 'ಲಭ್ಯವಿರುವ ಸಂಭಾಷಣೆಗಳಲ್ಲಿ ಮಾತ್ರ 1 ಸಾಲುಗಳ ಹೆಸರನ್ನು ಬದಲಿಸಲಾಗಿದೆ.',
+    );
+    String _temp1 = intl.Intl.selectLogic(
+      state,
+      {
+        'scope': 'ಈ ಧ್ವನಿಯ ಇತರ ಸಾಲುಗಳು (ರೆಕಾರ್ಡಿಂಗ್ ವ್ಯಾಪ್ತಿ ದೃಢಪಟ್ಟಿಲ್ಲ)',
+        'other': '$_temp0',
+      },
+    );
+    return '$_temp1';
+  }
 
   @override
   String get episodeFinishingUp => 'ಪೂರ್ಣಗೊಳಿಸಲಾಗುತ್ತಿದೆ…';
