@@ -74,8 +74,11 @@ cloud_run:
     # 2026-11-02 margin G1 dropped (cap 30 never applied): after #24264 removed the
     # short deferred re-polls, sync runs long jobs at concurrency p95 18-20 of 20 on
     # ~33 instances, so a lower cap would queue work rather than trim idle capacity.
+    # 2026-11-04 legacy-dark (David e53a35, rev 56 17:55Z): warm floor 5 -> 0. The long
+    # in-request legacy pipeline is gone and uploads arrive continuously, so the floor
+    # only bit when idle. Live service-level min applied 19:13Z by cl2-deploy. Rollback: 5.
     max_instances: 40
-    min_instances: 5
+    min_instances: 0
   backend-sync-backfill:
     env:
       SYNC_TASKS_QUEUE: sync-backfill-fresh
