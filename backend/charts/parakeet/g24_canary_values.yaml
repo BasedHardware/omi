@@ -1,6 +1,10 @@
 # Apply AFTER prod_omi_parakeet_values.yaml. No baseline capacity is changed.
 # Operator must override image.digest with the verified baseline serving digest.
 fullnameOverride: prod-omi-parakeet-g24
+# The canary is its own release: prod's operator-controlled fleet retirement
+# and maintenance zeroes the shared template's replicas; the canary stays live.
+fleetRetired: false
+maintenanceMode: false
 internalOnly: true
 replicaCount: 1
 image:

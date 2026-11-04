@@ -2790,13 +2790,21 @@ async def test_recovery_structure_exhaustion_stays_immediately_terminal(monkeypa
     monkeypatch.setattr(finalization_router, 'try_acquire_job_run_lock', lambda key: 'lock-token')
     monkeypatch.setattr(finalization_router, 'release_job_run_lock', lambda key, token: None)
     monkeypatch.setattr(finalization_router, 'should_skip_background_account_mutation', lambda uid: False)
+    monkeypatch.setattr(finalization_router, 'account_deletion_blocks_user_work', lambda _uid: False)
     monkeypatch.setattr(
         jobs_db,
         'claim_finalization_job',
         lambda *args, **kwargs: {'status': 'claimed', 'lease_epoch': 3, 'attempt_count': 4},
     )
     job_fetches = [
-        # The router's claim-time read; then the hub's journey and index-sync reads.
+        # The router's deletion-fence pre-claim read; the claim-time read; the
+        # hub's journey read (the index sync reuses that fetched job).
+        {
+            'uid': 'uid-1',
+            'conversation_id': 'conversation-1',
+            'processing_trigger': 'server_recovery',
+            'fanout_status': 'pending',
+        },
         {
             'uid': 'uid-1',
             'conversation_id': 'conversation-1',

@@ -21,7 +21,8 @@ import pytest
 import fakeredis.aioredis
 
 from config import live_stt_state
-from config.live_stt_registry import DEFAULT_TARGETS, assigned
+from config.live_stt_registry import assigned
+from tests.unit.fixtures.live_stt_registry import ENABLED_TARGETS as DEFAULT_TARGETS
 from tests.unit.test_live_cost_router import MemoryRedis, controls, seed_cost_interest  # noqa: F401 -- autouse fixture
 from utils.stt import live_health
 from utils.stt.live_cost_health import CAS, FAILOVER_SURGE_CENSOR_SECONDS

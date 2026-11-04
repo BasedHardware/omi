@@ -450,18 +450,27 @@ _ANTHROPIC_CREDIT_EXHAUSTED_BODY = {
 
 def _raise_byok_credit_exhaustion_halt() -> None:
     """Raise the exact chain ``_get_structured`` produces for a spent BYOK Anthropic account."""
-    request = httpx.Request('POST', 'https://api.anthropic.com/v1/messages')
-    response = httpx.Response(
-        400, request=request, headers={'request-id': 'req_unit'}, json=_ANTHROPIC_CREDIT_EXHAUSTED_BODY
-    )
+    from utils.byok import set_byok_uid, set_validated_byok_keys
+
+    # Direct-lane provider errors only classify on the user's validated key
+    # (the classifier contract), and a BYOK request always carries one.
+    set_validated_byok_keys({'anthropic': 'sk-ant-byok-unit'}, 'uid_byok_lifecycle')
     try:
-        raise anthropic.BadRequestError(
-            f'Error code: 400 - {_ANTHROPIC_CREDIT_EXHAUSTED_BODY}',
-            response=response,
-            body=_ANTHROPIC_CREDIT_EXHAUSTED_BODY,
+        request = httpx.Request('POST', 'https://api.anthropic.com/v1/messages')
+        response = httpx.Response(
+            400, request=request, headers={'request-id': 'req_unit'}, json=_ANTHROPIC_CREDIT_EXHAUSTED_BODY
         )
-    except anthropic.BadRequestError as error:
-        raise conversation_processing_http_exception(error) from error
+        try:
+            raise anthropic.BadRequestError(
+                f'Error code: 400 - {_ANTHROPIC_CREDIT_EXHAUSTED_BODY}',
+                response=response,
+                body=_ANTHROPIC_CREDIT_EXHAUSTED_BODY,
+            )
+        except anthropic.BadRequestError as error:
+            raise conversation_processing_http_exception(error) from error
+    finally:
+        set_validated_byok_keys({}, 'uid_byok_lifecycle')
+        set_byok_uid(None)
 
 
 def _quiet_heartbeat(monkeypatch) -> None:

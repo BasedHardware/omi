@@ -356,15 +356,24 @@ def _openrouter_credit_exhausted_error():
 
 def test_submit_with_context_logs_byok_quota_halt_without_traceback(caplog):
     """A spent BYOK provider account halts the task; that is not a background crash."""
+    from utils.byok import set_byok_uid, set_validated_byok_keys
 
-    def spent():
-        raise _openrouter_credit_exhausted_error()
+    # Direct-lane provider errors only classify on the user's validated key;
+    # submit_with_context propagates that BYOK context into the task.
+    set_validated_byok_keys({'openrouter': 'sk-or-byok-unit'}, 'uid_byok_executors')
+    try:
 
-    with caplog.at_level(logging.INFO, logger='utils.executors'):
-        future = submit_with_context(_test_executor, spent)
-        with pytest.raises(Exception, match='requires more credits'):
-            future.result(timeout=2)
-        time.sleep(0.05)
+        def spent():
+            raise _openrouter_credit_exhausted_error()
+
+        with caplog.at_level(logging.INFO, logger='utils.executors'):
+            future = submit_with_context(_test_executor, spent)
+            with pytest.raises(Exception, match='requires more credits'):
+                future.result(timeout=2)
+            time.sleep(0.05)
+    finally:
+        set_validated_byok_keys({}, 'uid_byok_executors')
+        set_byok_uid(None)
 
     assert any('halted reason=byok_quota' in record.message for record in caplog.records)
     assert not any(record.levelno >= logging.ERROR for record in caplog.records)
