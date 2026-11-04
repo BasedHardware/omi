@@ -772,7 +772,6 @@ def final_attempt_failed(
     )
     if not marked:
         return 'conflict'
-    _record_dead_letter(job_id, firestore_client=firestore_client)
     job: dict[str, Any] | None = None
     try:
         job = jobs_db.get_finalization_job(job_id, firestore_client=firestore_client)
@@ -780,6 +779,7 @@ def final_attempt_failed(
         # Dead-lettering is authoritative; a best-effort metric must never
         # change its terminal outcome.
         logger.exception('listen finalization terminal metric lookup failed job=%s', job_id)
+    _record_dead_letter(job_id, firestore_client=firestore_client, job=job)
     _emit_dead_letter_observability(
         job_id,
         job,
@@ -791,11 +791,16 @@ def final_attempt_failed(
     return 'dead_letter'
 
 
-def _record_dead_letter(job_id: str, *, firestore_client: Any = None) -> None:
-    """Post-commit effects shared by worker failures and exhausted replays."""
+def _record_dead_letter(job_id: str, *, firestore_client: Any = None, job: dict[str, Any] | None = None) -> None:
+    """Post-commit effects shared by worker failures and exhausted replays.
+
+    ``job`` carries a caller's lookup when one already ran, so a single fetch
+    serves the terminal metrics, the observability line and the index sync.
+    """
     LISTEN_FINALIZATION_DEAD_LETTER_TOTAL.inc()
     try:
-        job = jobs_db.get_finalization_job(job_id, firestore_client=firestore_client)
+        if job is None:
+            job = jobs_db.get_finalization_job(job_id, firestore_client=firestore_client)
         accepted_at = job.get('created_at') if job else None
         record_capture_finalization_terminal('failure', accepted_at)
         if job is not None:
