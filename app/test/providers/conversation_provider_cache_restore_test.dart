@@ -77,6 +77,25 @@ void main() {
     expect(provider.conversations.map((c) => c.id), ['older-storage-page', 'late-recording']);
   });
 
+  test('an older row discarded while a refresh waits cannot return from its starting snapshot', () async {
+    final start = DateTime.utc(2026, 10, 20);
+    final older = ServerConversation(
+        id: 'older',
+        createdAt: start.subtract(const Duration(days: 10)),
+        structured: Structured('Old cached row', 'Summary'));
+    final fresh = ServerConversation(id: 'fresh', createdAt: start, structured: Structured('Fresh page', 'Summary'));
+    final page = Completer<({List<ServerConversation> items, bool ok})>();
+    final provider = ConversationProvider(isSignedIn: () => true, conversationListFetcher: () => page.future)
+      ..conversations = [older];
+    addTearDown(provider.dispose);
+    final refreshing = provider.fetchConversations();
+    provider.upsertConversation(
+        ServerConversation(id: older.id, createdAt: older.createdAt, structured: older.structured, discarded: true));
+    page.complete((items: [fresh], ok: true));
+    expect(await refreshing, isTrue);
+    expect(provider.conversations.map((c) => c.id), ['fresh']);
+  });
+
   test('default provider restores a large stored cache through a completed worker', () async {
     await SharedPreferencesUtil().saveStringList(
         'cachedConversations', [for (var i = 0; i < 2000; i++) jsonEncode(_row('fixture-$i').toJson())]);

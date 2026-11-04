@@ -988,7 +988,7 @@ class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
         .map((conversation) => conversation.id)
         .toSet();
     final completedById = <String, ServerConversation>{
-      for (final conversation in _cachedRowsBeforePage(fetchedConversations, conversationsAtStart.values))
+      for (final conversation in _cachedRowsBeforePage(fetchedConversations, conversations))
         if (!currentlyProcessingIds.contains(conversation.id)) conversation.id: conversation,
       for (final conversation in fetchedConversations)
         if (conversation.status == ConversationStatus.completed && !currentlyProcessingIds.contains(conversation.id))
