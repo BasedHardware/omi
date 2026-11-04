@@ -9,7 +9,7 @@ from prometheus_client import CollectorRegistry, generate_latest
 
 from database import lifecycle_metrics_queries as queries
 from testing.hermetic_network import block_outbound_network
-from utils.lifecycle_metrics import PhaseMetrics
+from utils.lifecycle_metrics import COHORT_START, PhaseMetrics
 
 
 @pytest.fixture(autouse=True)
@@ -89,7 +89,7 @@ def entries(rows):
 
 
 def test_record_pending_cohort_excludes_legacy_and_retries_do_not_reset_clock():
-    now = 1_000_000
+    now = COHORT_START + 20_000
     client = Client(
         batch_pipeline_prod_jobs=entries(
             [
@@ -105,15 +105,35 @@ def test_record_pending_cohort_excludes_legacy_and_retries_do_not_reset_clock():
 
 
 def test_record_pending_full_page_and_capped_aggregate_are_explicitly_blind():
-    now = 1_000_000
+    now = COHORT_START + 20_000
     client = Client(
         batch_pipeline_prod_jobs=entries([{'state': 'record_pending', 'enqueued_at': now - 8000} for _ in range(6000)])
     )
     assert queries.record_pending(client, 'batch_pipeline_prod', now) == {'record_pending': (8000, 5001, True)}
 
 
+def test_initial_cohort_excludes_known_eight_hour_stock_from_both_age_pages():
+    now = COHORT_START + 10000
+    client = Client(
+        batch_pipeline_prod_jobs=entries(
+            [
+                {'state': 'record_pending', 'enqueued_at': now - 8 * 3600},
+                {'state': 'record_pending', 'enqueued_at': now - 7201},
+            ]
+        ),
+        sync_reprocess_outbox=entries(
+            [
+                {'summary_lane': 'fresh', 'first_pending_at': now - 8 * 3600, 'due_at': now},
+                {'summary_lane': 'fresh', 'first_pending_at': now - 3601, 'due_at': now},
+            ]
+        ),
+    )
+    assert queries.record_pending(client, 'batch_pipeline_prod', now)['record_pending'] == (7201, 2, False)
+    assert queries.enrichment(client, now)['fresh'] == (3601, 1, False)
+
+
 def test_enrichment_fresh_cohort_excludes_dormant_and_old_rows():
-    now = 1_000_000
+    now = COHORT_START + 20_000
     client = Client(
         sync_reprocess_outbox=entries(
             [

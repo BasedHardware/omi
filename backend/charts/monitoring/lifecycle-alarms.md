@@ -30,6 +30,12 @@ companions flag full pages or capped counts. Count saturation is conservative:
 it stays blind even where the oldest cohort row can still prove a breach.
 Agent rules use the existing silent receiver policy; page rules reach Telegram.
 
+Record-pending/enrichment page cohorts also require entry at or after
+2026-11-04 09:27Z (the lane's evidence cutoff). A rolling 24h window alone
+would include the known 8–24h incident stock and page immediately on import.
+The fixed cutoff excludes that stock during initial rollout; the rolling
+lookback bounds ongoing observations as the fleet ages.
+
 Known legacy stock (record_pending aged 8–72h, BYOK aged 13d, 2000+ dead letters)
 does not enter the new dwell pages. The existing dead-letter stock rule is
 included in the import gate and remains agent tier. Unstamped historical BYOK

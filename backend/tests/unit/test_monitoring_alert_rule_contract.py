@@ -2097,6 +2097,8 @@ def test_lifecycle_pages_use_new_cohorts_freshness_and_imported_blind_companions
             assert page['for'] == pending
             assert page['noDataState'] == 'OK'
             assert page['labels']['tier'] == 'page'
+            if prefix != 'omi_finalization_byok':
+                assert '2026-11-04T09:27Z' in page['annotations']['scope']
             assert not page['notification_settings']['mute_time_intervals']
             for suffix in ('', '-stale', '-blind'):
                 rule = rules[uid + suffix]

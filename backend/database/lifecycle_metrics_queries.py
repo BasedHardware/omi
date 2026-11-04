@@ -3,7 +3,7 @@
 from google.cloud.firestore_v1 import FieldFilter
 
 from database.firestore_query_types import FirestoreIndexField, FirestoreIndexRequirement
-from utils.lifecycle_metrics import PAGE_LIMIT, COHORT_SECONDS, cohort_age
+from utils.lifecycle_metrics import PAGE_LIMIT, COHORT_SECONDS, COHORT_START, cohort_age
 
 
 def _index(name, collection, *fields):
@@ -27,7 +27,11 @@ def _where(query, field, op, value):
 
 def record_pending(client, namespace, now):
     stock = _where(client.collection(f'{namespace}_jobs'), 'state', '==', 'record_pending')
-    query = _where(stock, 'enqueued_at', '>=', now - COHORT_SECONDS).order_by('enqueued_at').limit(PAGE_LIMIT)
+    query = (
+        _where(stock, 'enqueued_at', '>=', max(COHORT_START, now - COHORT_SECONDS))
+        .order_by('enqueued_at')
+        .limit(PAGE_LIMIT)
+    )
     rows = [doc.to_dict() for doc in query.stream(timeout=10, retry=None)]
     # The capped aggregate crosses the stock alert threshold without loading
     # thousands of job documents or scanning terminal history in the client.
@@ -82,7 +86,7 @@ def nojob(client, namespace):
 def enrichment(client, now):
     collection = client.collection('sync_reprocess_outbox')
     query = (
-        _where(collection, 'first_pending_at', '>=', now - COHORT_SECONDS)
+        _where(collection, 'first_pending_at', '>=', max(COHORT_START, now - COHORT_SECONDS))
         .order_by('first_pending_at')
         .limit(PAGE_LIMIT)
     )

@@ -3,12 +3,14 @@
 import logging
 import math
 import threading
-from datetime import datetime
+from datetime import datetime, timezone
 
 from prometheus_client import Gauge, REGISTRY
 
 PAGE_LIMIT = 1000
 COHORT_SECONDS = 86400
+# A rolling 24h window alone includes known 8-24h incident stock.
+COHORT_START = datetime(2026, 11, 4, 9, 27, tzinfo=timezone.utc).timestamp()
 
 
 def seconds(value):
