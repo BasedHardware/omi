@@ -7,6 +7,7 @@ exhausted tasks in bounded batches, including a crash between mark and enqueue.
 
 from __future__ import annotations
 from utils.observability.delivery import record_delivery
+from utils.observability.fallback import record_fallback
 
 import hashlib
 import math
@@ -27,6 +28,7 @@ from google.api_core.exceptions import AlreadyExists, FailedPrecondition, Invali
 from prometheus_client import Counter
 
 from utils.conversations import summary_delivery
+from config import enrichment as enrichment_config
 from config.summary_guarantee import (
     ADMITTED_OWNER,
     deadline_seconds,
@@ -226,8 +228,6 @@ def _conversation_finished_at(uid: str, conversation_id: str) -> object:
 
 
 def _recent_conversation(uid: str, conversation_id: str, now: float) -> bool:
-    from config import enrichment as enrichment_config
-
     if (
         enrichment_config.route() != 'enrichment_queue'
         or not os.getenv('ENRICHMENT_FRESH_TASKS_QUEUE', '').strip()
@@ -236,23 +236,26 @@ def _recent_conversation(uid: str, conversation_id: str, now: float) -> bool:
         return False
     try:
         return enrichment_config.recently_finished(_conversation_finished_at(uid, conversation_id), now=now)
-    except Exception as error:
+    except Exception:
         # Metadata failure keeps work on the established queue; no obligation is lost.
-        logger.warning('event=enrichment_priority_metadata outcome=unavailable exception_type=%s', type(error).__name__)
+        record_fallback(
+            component='sync_dispatch',
+            from_mode='enrichment_fresh',
+            to_mode='enrichment_queue',
+            reason='unavailable',
+            outcome='degraded',
+            log=logger,
+        )
         return False
 
 
 def _dispatch_binding(
     *, backfill: bool = False, effects_only: bool = False, recent: bool = False
 ) -> dict[str, str] | None:
-    from config import enrichment as enrichment_config
-
     if enrichment_config.route() == 'enrichment_queue':
         binding = enrichment_config.dispatch_binding(backfill=backfill, effects_only=effects_only, recent=recent)
         if valid_dispatch_binding(binding):
             return binding
-        from utils.observability.fallback import record_fallback
-
         record_fallback(
             component='sync_dispatch',
             from_mode='enrichment_queue',
@@ -915,8 +918,6 @@ def sweep(
             # Promote only idle user-facing work, retaining the handler/auth
             # identity. Rotate the token in this CAS so old deliveries are stale.
             # Effects and backfill keep their original binding and custody.
-            from config import enrichment as enrichment_config
-
             fresh_queue = os.getenv('ENRICHMENT_FRESH_TASKS_QUEUE', '').strip()
             if (
                 not injected
