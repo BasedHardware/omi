@@ -26,6 +26,8 @@ moving them is the A4 outbox + receipt-fence seam, not this PR.
 
 from __future__ import annotations
 
+from config.batch_pipeline import control_candidate_fanout
+
 import re
 import hashlib
 import random
@@ -35,12 +37,20 @@ from copy import deepcopy
 from typing import Any, Callable, Iterator, TypeVar
 
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, assert_batch_write_allowed
+from database.batch_pipeline_store import (
+    ADMISSIBLE_READY_SCAN_LIMIT,
+    OLDEST_POLICY_HOLD_SCAN_LIMIT,
+    is_admissible_ready,
+    is_policy_hold,
+    is_queue_dispositioned,
+)
 from database.firestore_transaction_retry import FirestoreContentionExhausted
 
 import database.jobstore.codec as codec
 from database.jobstore.connection import Pool
 
-# Same set as database.batch_pipeline_recovery.PROVIDER_STATES (not imported: that module pulls in Firestore).
+# Mirrors the recovery protocol's state names without binding to its enum.
+# Shared queue predicates above already load Firestore types, but create no client.
 PROVIDER_STATES = frozenset({'provider_pending', 'provider_running', 'vendor_held'})
 
 T = TypeVar('T')
@@ -263,21 +273,16 @@ class PostgresStore:
                 ).fetchone()
             return row[0]
         # The uncommitted-age proxy walks a bounded FIFO prefix past policy holds, as on Firestore.
-        from database.batch_pipeline_store import OLDEST_POLICY_HOLD_SCAN_LIMIT, is_policy_hold
-
         with self._read_conn() as conn:
             rows = conn.execute(
                 'SELECT enqueued_at, doc FROM jobs WHERE namespace = %s AND priority = %s AND merge_pending '
                 'ORDER BY enqueued_at, key COLLATE "C" LIMIT %s',
                 (self.namespace, priority, OLDEST_POLICY_HOLD_SCAN_LIMIT + 1),
             ).fetchall()
-        oldest_hold = None
         for enqueued_at, doc in rows[:OLDEST_POLICY_HOLD_SCAN_LIMIT]:
-            if not is_policy_hold(doc):
+            if not is_queue_dispositioned(doc) and not is_policy_hold(doc):
                 return enqueued_at
-            oldest_hold = enqueued_at if oldest_hold is None else oldest_hold
-        # Truncated by the sentinel row: fail toward the oldest hold's age, never a false fresh zero.
-        return oldest_hold if len(rows) > OLDEST_POLICY_HOLD_SCAN_LIMIT else None
+        return float('nan') if len(rows) > OLDEST_POLICY_HOLD_SCAN_LIMIT else None
 
     def ready_for_capacity(self, priority: int, now: float) -> int:
         """Due ready work awaiting a first or re-authorized attempt; held and decisionless rows never count."""
@@ -292,8 +297,6 @@ class PostgresStore:
 
     def oldest_admissible_ready(self, priority: int, now: float) -> float | None:
         """A bounded ready prefix walked past holds and deferred rows, as on Firestore."""
-        from database.batch_pipeline_store import ADMISSIBLE_READY_SCAN_LIMIT, is_admissible_ready
-
         with self._read_conn() as conn:
             rows = conn.execute(
                 "SELECT enqueued_at, doc FROM jobs WHERE namespace = %s AND priority = %s AND state = 'ready' "
@@ -355,12 +358,15 @@ class PostgresStore:
 
     def oldest_retry(self, priority: int) -> float | None:
         with self._read_conn() as conn:
-            row = conn.execute(
-                'SELECT min(retry_started_at) FROM jobs WHERE namespace = %s AND priority = %s '
-                'AND retry_started_at >= 0',
-                (self.namespace, priority),
-            ).fetchone()
-        return row[0]
+            rows = conn.execute(
+                'SELECT retry_started_at, doc FROM jobs WHERE namespace = %s AND priority = %s '
+                'AND retry_started_at >= 0 ORDER BY retry_started_at, key COLLATE "C" LIMIT %s',
+                (self.namespace, priority, OLDEST_POLICY_HOLD_SCAN_LIMIT + 1),
+            ).fetchall()
+        for started, doc in rows[:OLDEST_POLICY_HOLD_SCAN_LIMIT]:
+            if not is_queue_dispositioned(doc) and not is_policy_hold(doc):
+                return started
+        return float('nan') if len(rows) > OLDEST_POLICY_HOLD_SCAN_LIMIT else None
 
     def acquire_pull_claim(self, shard: str, token: str, now: float, ttl: float) -> bool:
         def acquire(tx):
@@ -372,6 +378,14 @@ class PostgresStore:
         return self.run(acquire)
 
     def control_candidate(self, priority: int, pool: str, now: float, *, worker_id: str = '', exclude=()) -> str | None:
+        return next(
+            (key for key in self.control_candidates(priority, pool, now, worker_id=worker_id) if key not in exclude),
+            None,
+        )
+
+    def control_candidates(
+        self, priority: int, pool: str, now: float, *, worker_id: str = '', fanout: int | None = None
+    ) -> list[str]:
         if priority not in (0, 1, 2) or pool not in {'batch', 'live'}:
             raise ValueError('bounded priority and pool required')
         p, at = f'p{priority}', f'p{priority}_{pool}_at'
@@ -379,12 +393,11 @@ class PostgresStore:
             rows = conn.execute(
                 f'SELECT key, {p}_service FROM control WHERE namespace = %s AND {p}_active AND {p}_service >= 0 '
                 f'AND {at} <= %s ORDER BY {p}_service, {at}, key COLLATE "C" LIMIT %s',
-                (self.namespace, now, 64 if worker_id else 1),
+                (self.namespace, now, control_candidate_fanout(fanout) if worker_id else 1),
             ).fetchall()
         if worker_id:
-            rows = [row for row in rows if row[0] not in exclude]
             rows.sort(key=lambda row: (row[1], hashlib.sha256(f'{worker_id}:{row[0]}'.encode()).digest()))
-        return rows[0][0] if rows else None
+        return [row[0] for row in rows]
 
     def quarantine_fenced(self, segment_id: str, now: float) -> bool:
         """Revoke a fenced detached lease/retry; same fence recheck and revoke-only write as Firestore."""

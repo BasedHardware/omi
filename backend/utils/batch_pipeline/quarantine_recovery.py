@@ -61,6 +61,7 @@ from utils.batch_pipeline.recovery_disposition import (
     inspect_audio,
     silence_payload,
     RecoveryFailure,
+    RecoveryProviderFailed,
     result_outcome,
     result_vad_evidence,
     MultilingualEmpty,
@@ -87,7 +88,7 @@ MAX_WAKE_PROBE_ERRORS = 3
 SECOND_PROVIDER = HELD_RECOVERY_SECOND_PROVIDER
 SECOND_PROVIDER_CALLS = Counter(
     'omi_batch_recovery_second_provider_total',
-    'Second multilingual recovery calls after a valid-empty Modulate response',
+    'Second multilingual recovery calls after an empty or failed Modulate response',
     ['provider', 'outcome'],
 )
 
@@ -221,6 +222,7 @@ class QuarantineRecovery:
             return payload
         if (
             outcome == 'empty'
+            and first_empty
             and bool(empty.spans)
             and policy.terminal_empty_disposition
             and terminal_empty_allowed(empty.spans)
@@ -390,7 +392,7 @@ class QuarantineRecovery:
                     reason='other',
                     outcome='degraded',
                 )
-            payload, empty, recognized_count = None, None, None
+            payload, empty, recognized_count, provider_failure = None, None, None, None
             try:
                 if inspection_failure is not None:
                     raise inspection_failure
@@ -430,6 +432,9 @@ class QuarantineRecovery:
             except BatchPrivacyBlocked:
                 raise
             except Exception as error:
+                if isinstance(error, RecoveryProviderFailed):
+                    provider_failure = error
+                    measured_vad = sum(span['end'] - span['start'] for span in error.spans)
                 recognized_count = error.word_count if isinstance(error, WordsWithoutVad) else None
                 failure = (
                     {'stage': error.stage, 'reason': error.reason}
@@ -474,21 +479,26 @@ class QuarantineRecovery:
                 )
             if (
                 failure
-                and language_guarded(job)
+                and multilingual
                 and empty is None
-                and inspected_spans is not None
                 and inspection_failure is None
+                and (language_guarded(job) or failure['reason'] == 'provider_failed')
+                and (inspected_spans is not None or provider_failure is not None)
             ):
-                record_recognizer(
-                    self.store,
-                    segment_id,
-                    token,
-                    'recovery',
-                    'modulate',
-                    'words' if recognized_count else 'error',
-                    recognized_count,
-                    measured_vad,
-                )
+                if provider_failure is not None:
+                    duration, inspected_spans = provider_failure.duration, provider_failure.spans
+                    measured_vad = sum(span['end'] - span['start'] for span in inspected_spans)
+                if language_guarded(job):
+                    record_recognizer(
+                        self.store,
+                        segment_id,
+                        token,
+                        'recovery',
+                        'modulate',
+                        'words' if recognized_count else 'error',
+                        recognized_count,
+                        measured_vad,
+                    )
                 empty = MultilingualEmpty(duration, inspected_spans, worker)
             # Outside the handler: neither metering nor a second provider may chain the first.
             if empty is not None:

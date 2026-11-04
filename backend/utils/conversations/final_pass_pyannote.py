@@ -18,18 +18,36 @@ from prometheus_client import Counter, Histogram
 from models.transcript_segment import TranscriptSegment
 from utils.conversations.final_pass_assignment import assign_words, name_centroids, skip_single_speaker
 
-OUTCOMES = Counter('omi_transcription_final_pass_total', 'Pyannote final-pass outcomes', ['outcome'])
-LATENCY = Histogram('omi_transcription_final_pass_latency_seconds', 'Pyannote final-pass latency')
-AGREEMENT = Histogram('omi_transcription_final_pass_agreement', 'Word-weighted speaker agreement with legacy')
+OUTCOMES = Counter('omi_transcription_final_pass_total', 'Pyannote final-pass outcomes', ['outcome', 'lane'])
+LATENCY = Histogram('omi_transcription_final_pass_latency_seconds', 'Pyannote final-pass latency', ['lane'])
+AGREEMENT = Histogram('omi_transcription_final_pass_agreement', 'Word-weighted speaker agreement with legacy', ['lane'])
+OWNER_DELTA = Histogram(
+    'omi_transcription_final_pass_owner_delta_ratio',
+    'Absolute word-time owner share change versus current resolver',
+    ['lane'],
+    buckets=(0, 0.01, 0.05, 0.1, 0.2, 0.5, 1),
+)
 
 
 def run_final_pass(
-    pcm, words, resolution, cache, *, deadline, conversation_id, segments=(), vectors=None, owner_reserved=False
+    pcm,
+    words,
+    resolution,
+    cache,
+    *,
+    deadline,
+    conversation_id,
+    segments=(),
+    vectors=None,
+    owner_reserved=False,
+    lane='legacy',
+    include_assignments=False,
+    diarizer_backend=None,
 ):
     began = time.monotonic()
     try:
         skipped = skip_single_speaker(resolution)
-        backend = LegacyAHC() if skipped else get_diarizer_backend()
+        backend = LegacyAHC() if skipped else (diarizer_backend or get_diarizer_backend())
         output = diarize_with_speech_compaction(
             pcm,
             backend,
@@ -107,10 +125,11 @@ def run_final_pass(
             ]
             or 0.0
         )
-        AGREEMENT.observe(agreement)
+        AGREEMENT.labels(lane=lane).observe(agreement)
         outcome = 'skipped_single' if skipped else 'diarized'
-        OUTCOMES.labels(outcome=outcome).inc()
+        OUTCOMES.labels(lane=lane, outcome=outcome).inc()
         return segments, {
+            **({'assignments': assigned} if include_assignments else {}),
             'outcome': outcome,
             'agreement': agreement,
             'word_count': total,
@@ -125,7 +144,7 @@ def run_final_pass(
         }
     except Exception as error:
         reason = 'timeout' if isinstance(error, (TimeoutError, httpx.TimeoutException)) else 'service'
-        OUTCOMES.labels(outcome='failed:' + reason).inc()
+        OUTCOMES.labels(lane=lane, outcome='failed:' + reason).inc()
         record_fallback(
             component='stt_selection',
             from_mode='whole_conversation_diarizer',
@@ -135,4 +154,4 @@ def run_final_pass(
         )
         return None, {'outcome': 'failed:' + reason}
     finally:
-        LATENCY.observe(time.monotonic() - began)
+        LATENCY.labels(lane=lane).observe(time.monotonic() - began)

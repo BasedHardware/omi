@@ -396,7 +396,7 @@ def test_unresolved_checkout_keeps_cache_effects_without_writing_the_plan(lane, 
     )
     assert run_lifecycle(lane) == {'status': 'success'}
     assert lane.current is None
-    assert [name for name, _ in lane.calls] == ['customer', 'credits', 'trial_cache']
+    assert [name for name, _ in lane.calls] == ['customer', 'credits']
     if enabled:
         assert receipt(db)['outcome'] == 'failed'
     else:
@@ -437,7 +437,7 @@ def test_unresolved_checkout_unlocks_only_an_open_paid_period(lane, monkeypatch,
     )
     assert run_lifecycle(lane) == {'status': 'success'}
     assert lane.current.model_dump_json() == before
-    expected = ['customer', 'credits', 'trial_cache']
+    expected = ['customer', 'credits']
     if unlocks:
         expected += ['conversations', 'memories', 'actions', 'fair_use']
     assert [name for name, _ in lane.calls] == expected

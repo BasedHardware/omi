@@ -1,9 +1,13 @@
 # Streaming GPU retirement
 
-Production ships `STT_GPU_FLEET_OFF=false` and the Parakeet guard unsuspended.
-The lead explicitly activates the switch on listen, pusher and all four Cloud Run
-roles after the cost and readiness gates below. The switch selects Soniox for managed live sessions, Modulate for prerecorded
-and PTT work, local ONNX for file VAD, and the existing vendor language probe.
+Production configuration declares `STT_GPU_FLEET_OFF=true`; merging the activation
+change authorizes rollout and must wait for the lead's G0-G3 cost and readiness gates.
+This source declaration is not evidence of serving state. The Parakeet guard stays
+unsuspended until the lead completes the caller rollout and drain below. The switch selects Modulate, then Soniox, for managed live sessions (Modulate is a vendor,
+not a fleet GPU, and the cheaper live vendor: rate card v2 $0.06 vs $0.12 per audio-hour; router
+estimates $0.055 vs $0.0754), Modulate for prerecorded and PTT work, local ONNX for file VAD, and the existing vendor language probe unless `HOSTED_LID_API_URL` supplies a
+separately qualified language-ID service. An unavailable dedicated LID service
+returns to the vendor probe, never the retired shared endpoint.
 It denies Parakeet in static selection, the cost router, default fallback,
 idle failback and direct prerecorded calls. Existing sessions drain during the
 normal rollout. Custom user-funded STT follows its existing path.
@@ -43,10 +47,11 @@ This temporary default-off stage protects against increased vendor spend:
 if batch trips to zero and full pre-flip streaming volume returns, retiring
 the GPUs increases the modeled bill. That is the fallback stress case. In the
 expected post-flip case, eligible live traffic goes to dedicated batch and
-only excluded residual managed streaming uses Soniox; qualify that residual
+only excluded residual managed streaming uses the vendors (Modulate first,
+Soniox as its failover); qualify that residual
 instead of pricing all former Parakeet live traffic as Soniox.
-The minimum economic test is that avoided allocated GPU cost plus removed
-Modulate live spend exceeds added Soniox and legacy Modulate spend, including
+The minimum economic test is that avoided allocated GPU cost exceeds added
+Modulate and Soniox live spend plus legacy Modulate spend, including
 idle nodes retained by pool minimums. A smaller warm floor also needs measured
 peak throughput and latency qualification; average audio-hours do not prove it.
 

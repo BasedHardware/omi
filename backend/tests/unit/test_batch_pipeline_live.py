@@ -28,9 +28,12 @@ async def test_drain_bounds_concurrency_and_passes_slow_partial(monkeypatch, cap
     from utils.batch_pipeline import live
 
     monkeypatch.setenv('RECORD_DRAIN_CONCURRENCY', '4')
+    # This fixture deliberately starts the blocking partial in the first group.
+    monkeypatch.setattr(live.random, 'shuffle', lambda segments: None)
     store = MemoryStore()
     for i in range(10):
         store.rows['jobs', str(i)] = {
+            'owner_id': f'synthetic-{i}',
             'state': 'record_pending',
             'available_at': 0,
             'partial_coordinator': i == 0,
@@ -68,6 +71,8 @@ async def test_drain_bounds_concurrency_and_passes_slow_partial(monkeypatch, cap
             assert not task.done()
             assert peak == 4
         finally:
+            slow.set()
+            full.set()
             release.set()
             await task
     events = [r.getMessage() for r in caplog.records if 'event=batch_drain_pass' in r.getMessage()]
@@ -77,18 +82,55 @@ async def test_drain_bounds_concurrency_and_passes_slow_partial(monkeypatch, cap
 
 
 @pytest.mark.asyncio
-async def test_drain_joins_workers_before_propagating_store_failure(monkeypatch):
+async def test_drain_shuffles_selected_page_before_admission(monkeypatch):
     from utils.batch_pipeline import live
 
+    monkeypatch.setenv('RECORD_DRAIN_BATCH', '3')
+    monkeypatch.setenv('RECORD_DRAIN_CONCURRENCY', '1')
+    monkeypatch.setattr(live.random, 'shuffle', lambda segments: segments.reverse())
     store = MemoryStore()
-    store.rows['jobs', 'bad'] = {'state': 'record_pending', 'available_at': 0}
-    store.rows['jobs', 'slow'] = {'state': 'record_pending', 'available_at': 0}
+    for segment in ('first', 'second', 'third'):
+        store.rows['jobs', segment] = {
+            'owner_id': f'synthetic-{segment}',
+            'segment_id': segment,
+            'state': 'record_pending',
+            'available_at': 0,
+        }
+    admitted = []
+
+    async def admit(store, pending):
+        admitted.append(pending['segment_id'])
+
+    monkeypatch.setattr(live, 'admit_recording', admit)
+    assert await live.drain_recordings(store)
+    assert admitted == ['third', 'second', 'first']
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('reverse', [False, True])
+async def test_drain_joins_workers_before_propagating_store_failure(monkeypatch, reverse):
+    from utils.batch_pipeline import live
+
+    monkeypatch.setenv('RECORD_DRAIN_CONCURRENCY', '2')
+    monkeypatch.setattr(live.random, 'shuffle', lambda segments: segments.reverse() if reverse else None)
+    store = MemoryStore()
+    store.rows['jobs', 'bad'] = {'owner_id': 'synthetic-bad', 'state': 'record_pending', 'available_at': 0}
+    store.rows['jobs', 'slow'] = {'owner_id': 'synthetic-slow', 'state': 'record_pending', 'available_at': 0}
     original_run = store.run
-    slow, release = asyncio.Event(), asyncio.Event()
+    slow, release, failed = asyncio.Event(), asyncio.Event(), asyncio.Event()
+    slow_workers = []
+
+    async def run_blocking(executor, fn, *args, **kwargs):
+        # Resolve fake DB calls without yielding to executor scheduling. The real
+        # drain workers still run concurrently and admission blocks on release.
+        return fn(*args, **kwargs)
+
+    monkeypatch.setattr(live, 'run_blocking', run_blocking)
 
     def run(body):
         result = original_run(body)
-        if result.get('broken'):
+        if isinstance(result, dict) and result.get('broken'):
+            failed.set()
             raise RuntimeError('synthetic store failure')
         return result
 
@@ -96,6 +138,7 @@ async def test_drain_joins_workers_before_propagating_store_failure(monkeypatch)
     monkeypatch.setattr(store, 'run', run)
 
     async def admit(store, pending):
+        slow_workers.append(asyncio.current_task())
         slow.set()
         await release.wait()
 
@@ -103,11 +146,15 @@ async def test_drain_joins_workers_before_propagating_store_failure(monkeypatch)
     task = asyncio.create_task(live.drain_recordings(store))
     try:
         await asyncio.wait_for(slow.wait(), timeout=1)
+        assert failed.is_set()
         assert not task.done()
     finally:
         release.set()
         with pytest.raises(RuntimeError, match='synthetic store failure'):
-            await task
+            await asyncio.wait_for(task, timeout=1)
+    assert len(slow_workers) == 1
+    assert slow_workers[0].done() and not slow_workers[0].cancelled()
+    assert store.rows['jobs', 'slow']['available_at'] > 0
 
 
 @pytest.mark.asyncio
@@ -168,7 +215,7 @@ async def test_record_drain_uses_configured_page_and_reports_full(monkeypatch, c
     monkeypatch.setenv('RECORD_DRAIN_BATCH', '2')
     store = MemoryStore()
     for i in range(count):
-        store.rows['jobs', str(i)] = {'state': 'record_pending', 'available_at': 0}
+        store.rows['jobs', str(i)] = {'owner_id': f'synthetic-{i}', 'state': 'record_pending', 'available_at': 0}
     calls = []
     original_due = store.due
 
@@ -194,6 +241,7 @@ async def test_record_drain_defers_only_still_pending_rows(monkeypatch, outcome,
 
     store = MemoryStore()
     store.rows['jobs', 'synthetic'] = {
+        'owner_id': 'synthetic',
         'state': 'record_pending',
         'available_at': 0,
         'partial_coordinator': partial_complete,
@@ -229,6 +277,7 @@ async def test_full_privacy_fenced_page_keeps_idle_wait_without_writing_fenced_r
     store = MemoryStore()
     for i in range(2):
         store.rows['jobs', str(i)] = {
+            'owner_id': f'synthetic-{i}',
             'segment_id': str(i),
             'state': 'record_pending',
             'available_at': 0,
@@ -521,6 +570,16 @@ async def test_native_admission_stages_references_and_drains_after_rollback(
     from utils.batch_pipeline import live
     from database.batch_pipeline_staging import artifact_id
 
+    unit_reads = []
+    original_run_blocking = live.run_blocking
+
+    async def run_blocking(executor, fn, *args, **kwargs):
+        if fn is next:
+            assert executor is live.storage_executor
+            unit_reads.append(1)
+        return await original_run_blocking(executor, fn, *args, **kwargs)
+
+    monkeypatch.setattr(live, 'run_blocking', run_blocking)
     store = MemoryStore()
     store.namespace = 'batch_pipeline_test_live'
     current = recording(record_audio_closed=True, finished_at=datetime.fromtimestamp(101, timezone.utc))
@@ -635,6 +694,7 @@ async def test_native_admission_stages_references_and_drains_after_rollback(
         assert ('content', 'synthetic/' + content) not in store.rows
         return
     result = await live.admit_recording(store, pending, now=1, provider_outbox_factory=lambda: outbox)
+    assert unit_reads
     assert result == {'outcome': 'batch', 'job_id': 'bp_' + content}
     job = store.rows['jobs', segment]
     assert job['state'] == ('provider_pending' if language == 'ca' else 'ready')

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -7,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/live_preview/live_preview_controller.dart';
+import 'package:omi/services/live_preview/live_preview_engine.dart';
 import 'package:omi/services/live_preview/live_preview_telemetry.dart';
 import 'package:omi/services/sockets/listen_client_state.dart';
 import 'package:omi/services/wals/mobile_batch_buffer.dart';
@@ -110,6 +112,59 @@ void main() {
     await lane.close();
     state.resetForTest();
     await directory.delete(recursive: true);
+  });
+
+  List<Map<String, dynamic>> unavailableEvents() => world.socket!.sentText
+      .map((text) => jsonDecode(text) as Map<String, dynamic>)
+      .where((event) => event['type'] == 'local_preview_engine_unavailable')
+      .toList();
+
+  test('no engine rescinds once, drops journal preview, and reconnect never declares again', () async {
+    engine.nextStart = const LivePreviewStart.none(LivePreviewReason.localeAssetMissing);
+    final live = preview();
+    await boot(livePreview: live);
+    world.socket!.emitServerMessage(_admitted);
+    await world.settle();
+    expect(unavailableEvents(), [
+      {'type': 'local_preview_engine_unavailable', 'reason': 'locale_asset_missing'}
+    ]);
+    expect(world.controller.localPreviewAdmitted, false);
+    expect(lane.localPreview, false);
+    expect(live.phase, LivePreviewPhase.inactive);
+    world.socket!.emitServerMessage(_admitted);
+    await world.settle();
+    expect(unavailableEvents(), hasLength(1));
+    expect(engine.startedLanguages, hasLength(1));
+    final first = world.socket!;
+    first.emitClose(1006);
+    await world.settle();
+    await world.elapse(const Duration(seconds: 16));
+    expect(world.socket, isNot(same(first)));
+    expect(world.localPreviewRequests.last, false);
+    world.socket!.emitServerMessage(_batchOnly);
+    await world.settle();
+    expect(unavailableEvents(), isEmpty);
+    expect(engine.startedLanguages, hasLength(1));
+  });
+
+  test('running engine sends no unavailable event; terminal retry failure sends engine_error once', () async {
+    engine.laterStarts.add(const LivePreviewStart(LivePreviewEngineKind.whisper, LivePreviewReason.ok));
+    await boot(livePreview: preview());
+    world.socket!.emitServerMessage(_admitted);
+    await world.settle();
+    expect(unavailableEvents(), isEmpty);
+    engine.fail(LivePreviewEngineKind.speechTranscriber);
+    await world.settle();
+    expect(unavailableEvents(), isEmpty, reason: 'one engine retry remains local');
+    engine.fail(LivePreviewEngineKind.whisper);
+    await world.settle();
+    expect(unavailableEvents(), [
+      {'type': 'local_preview_engine_unavailable', 'reason': 'engine_error'}
+    ]);
+    expect(world.controller.localPreviewAdmitted, false);
+    world.socket!.emitServerMessage(_admitted);
+    await world.settle();
+    expect(unavailableEvents(), hasLength(1));
   });
 
   test('admitted: visible and voice-command frames journal; refused frames still reach WAL and socket', () async {

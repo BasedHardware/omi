@@ -25,6 +25,10 @@ def test_severity_timing_and_actionable_annotations():
             # (test_every_alert_rule_declares_tier_owner_and_audience).
             if rule['labels'].get('tier') == 'agent':
                 assert settings.pop('mute_time_intervals') == ['omi-tier-silent'], rule['uid']
+            else:
+                # A page may explicitly clear an earlier agent mute. Any
+                # nonempty mute on a human rule still violates this contract.
+                assert settings.pop('mute_time_intervals', []) == [], rule['uid']
             assert settings == {
                 'receiver': 'Omi - Services Alerting (Telegram)',
                 'group_by': ['alertname'],

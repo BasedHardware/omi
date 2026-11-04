@@ -50,7 +50,7 @@ def clone(url, branch, dest, timeout):
     partial.rename(dest)
 
 
-def inside(cache):
+def inside(cache, safe_mode=False):
     if platform.system() != "Linux" or platform.machine() != "x86_64":
         raise RuntimeError("native_sim/native/64 needs Linux x86_64 in this runner")
     sim = Path(__file__).resolve().parent
@@ -72,7 +72,7 @@ def inside(cache):
         ZEPHYR_BASE=str(sdk / "zephyr"),
     )
     clone("https://github.com/nrfconnect/sdk-nrf", "v2.9.0", sdk / "nrf", 300)
-    checked(["git", "-C", sdk / "nrf", "diff", "--exit-code", "HEAD"], timeout=10)
+    checked(["git", "-C", sdk / "nrf", "diff", "--exit-code", "HEAD"], timeout=120)
     if subprocess.check_output(["git", "-C", sdk / "nrf", "rev-parse", "HEAD"], text=True).strip() != NCS_SHA:
         raise RuntimeError("NCS manifest is not the expected v2.9.0 revision")
     # Only the pinned NCS Zephyr tree is needed. No radio, bootloader, Nordic
@@ -80,30 +80,87 @@ def inside(cache):
     clone("https://github.com/nrfconnect/sdk-zephyr", "v3.7.99-ncs2", sdk / "zephyr", 600)
     if subprocess.check_output(["git", "-C", sdk / "zephyr", "rev-parse", "HEAD"], text=True).strip() != ZEPHYR_SHA:
         raise RuntimeError("unexpected Zephyr revision")
-    checked(["git", "-C", sdk / "zephyr", "diff", "--exit-code", "HEAD"], timeout=10)
-    build = cache / "build"
-    checked(["cmake", "-S", sim, "-B", build, "-GNinja",
-             "-DBOARD=native_sim/native/64", f"-DZEPHYR_MODULES={sdk / 'zephyr'}",
-             f"-DUSER_CACHE_DIR={cache / 'cache'}",
-             "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON"], timeout=180)
-    checked(["cmake", "--build", build, "--parallel", "4"], timeout=600)
-    log = cache / "boot.log"
-    with log.open("w") as output:
-        checked([build / "zephyr/zephyr.exe", "-stop_at=5"], cwd=cache,
-                stdout=output, stderr=subprocess.STDOUT, timeout=30)
-    text = log.read_text()
-    print(text, flush=True)
+    checked(["git", "-C", sdk / "zephyr", "diff", "--exit-code", "HEAD"], timeout=120)
+    def boot(name, overlay=None, expect_hang=False):
+        build = cache / ("build" if name == "boot" else "build-" + name)
+        command = ["cmake", "-S", sim, "-B", build, "-GNinja",
+                   "-DBOARD=native_sim/native/64", f"-DZEPHYR_MODULES={sdk / 'zephyr'}",
+                   f"-DUSER_CACHE_DIR={cache / 'cache'}",
+                   "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON"]
+        if overlay and "hang" in overlay:
+            command.extend(["-DOMI_DEVELOPMENT_BUILD=ON", "-DCMAKE_BUILD_TYPE=Debug"])
+        if overlay:
+            command.append(f"-DEXTRA_CONF_FILE={sim / overlay}")
+        checked(command, timeout=180)
+        checked(["cmake", "--build", build, "--parallel", "4"], timeout=600)
+        log = cache / (name + ".log")
+        # Fault boots use isolated flash so forcing SAFE cannot poison the
+        # persistence scenario (or suppress its first SAFE write).
+        runtime = cache / ("runtime-" + name) if "hang" in name else cache
+        runtime.mkdir(exist_ok=True)
+        with log.open("w") as output:
+            try:
+                checked([build / "zephyr/zephyr.exe", "-stop_at=5"], cwd=runtime,
+                        stdout=output, stderr=subprocess.STDOUT, timeout=3 if expect_hang else 30)
+            except subprocess.TimeoutExpired:
+                if not expect_hang:
+                    raise
+            else:
+                if expect_hang:
+                    raise RuntimeError(f"{name}: injected deferred init did not hang")
+        text = log.read_text()
+        print(text, flush=True)
+        if expect_hang:
+            if "FAULT_INJECT: driver init hang" not in text or ALIVE in text:
+                raise RuntimeError(f"{name}: hang was not inside the deferred device init")
+            return text
+        if ALIVE not in text:
+            raise RuntimeError(f"{name}: main loop did not yield/feed twice")
+        return text
+
+    text = boot("boot")
     report = observe(text)
     report.update(
         evidence_category="simulated_startup",
         real_main_loop_observed=ALIVE in text,
         stubbed=["watchdog", "battery", "SD", "storage", "BLE transport",
-                 "microphone", "codec", "LED", "SPI flash", "IMU"],
+                 "microphone", "codec", "LED", "SPI flash", "IMU", "SMP callback delivery"],
         ncs_revision=NCS_SHA, zephyr_revision=ZEPHYR_SHA,
     )
-    (cache / "observation.json").write_text(json.dumps(report, indent=2) + "\n")
     if report["state"] != "initialization_reported" or not report["real_main_loop_observed"]:
-        raise RuntimeError("startup milestones/errors/main loop check failed; see observation.json")
+        raise RuntimeError("startup milestones/errors/main loop check failed; see boot.log")
+    if safe_mode:
+        # The exact same deferred fault device hangs when initialized normally,
+        # but SAFE skips device_init entirely. Timeout owns/kills its process group;
+        # this is control-flow evidence, not emulated Nordic WDT enforcement.
+        boot("deferred-hang", "deferred-hang.conf", expect_hang=True)
+        deferred_safe = boot("safe-deferred-hang", "safe-deferred-hang.conf")
+        settings_safe = boot("safe-settings-hang", "safe-settings-hang.conf")
+        for name, log in (("safe-deferred-hang", deferred_safe), ("safe-settings-hang", settings_safe)):
+            if ("Safe mode initialized: BLE DFU only" not in log
+                    or "Safe mode feed loop started" not in log or "FAULT_INJECT:" in log):
+                raise RuntimeError(f"{name}: SAFE touched a forbidden startup path")
+        report["safe_mode_skips_deferred_and_settings_hangs"] = True
+        # Same cwd => same native flash backing file for every process.
+        forced = boot("safe-mode", "safe-mode.conf")
+        recovery = boot("dfu-finished", "dfu-finished.conf")
+        trial = boot("trial")
+        milestone = "Safe mode initialized: BLE DFU only"
+        for name, log in (("safe-mode", forced), ("dfu-finished", recovery)):
+            if milestone not in log or "Safe mode feed loop started" not in log:
+                raise RuntimeError(f"{name}: safe milestones missing")
+            if any(token in log for token in ("Initializing microphone", "Initializing codec", "SD init stub")):
+                raise RuntimeError(f"{name}: unsafe startup ran")
+        if "omi/bootstate=SAFE" not in forced:
+            raise RuntimeError("SAFE not persisted")
+        if "BOOTSTATE: active=1" not in recovery or "omi/bootstate=TRIAL" not in recovery:
+            raise RuntimeError("durable latch reload or completed-upload callback failed")
+        if "BOOTSTATE: active=0" not in trial or "omi/bootstate=GOOD" not in trial:
+            raise RuntimeError("DFU did not permit fresh healthy trial")
+        if observe(trial)["state"] != "initialization_reported":
+            raise RuntimeError("post-DFU normal milestones failed")
+        report["safe_mode_persistence_and_dfu_trial"] = True
+    (cache / "observation.json").write_text(json.dumps(report, indent=2) + "\n")
 
 
 def main():
@@ -112,6 +169,7 @@ def main():
                         help="dedicated scratch directory outside the checkout")
     parser.add_argument("--timeout", type=int, default=1800,
                         help="whole container deadline in seconds (default: 1800)")
+    parser.add_argument("--safe-mode", action="store_true", help="also test durable SAFE -> DFU TRIAL -> GOOD across processes")
     parser.add_argument("--inside", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args()
     if args.timeout <= 0:
@@ -119,7 +177,7 @@ def main():
     cache = args.cache.expanduser().resolve()
     if args.inside:
         cache.mkdir(parents=True, exist_ok=True)
-        inside(cache)
+        inside(cache, args.safe_mode)
         return
     repo = Path(__file__).resolve().parents[4]
     if cache == repo or repo in cache.parents:
@@ -133,7 +191,7 @@ def main():
                  "--mount", f"type=bind,src={repo},dst=/src,readonly",
                  "--mount", f"type=bind,src={cache},dst=/cache",
                  "-e", "PYTHONDONTWRITEBYTECODE=1", IMAGE,
-                 "python3", "/src/omi/firmware/omi/sim/run.py", "--inside", "--cache", "/cache"],
+                 "python3", "/src/omi/firmware/omi/sim/run.py", "--inside", "--cache", "/cache"] + (["--safe-mode"] if args.safe_mode else []),
                 timeout=args.timeout)
     finally:
         # A killed docker client alone would leave its container running.

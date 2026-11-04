@@ -77,7 +77,14 @@ SYNC_JOB_SEQUENCED_TASK_PAYLOAD_KEYS = SYNC_JOB_TASK_PAYLOAD_KEYS | {'sequencer_
 # ``redrive_mode`` rides only on operator-built redrive payloads and must survive
 # budget replacements and sequencer re-dispatch (utils/sync/minimal_redrive.py).
 SYNC_JOB_OPTIONAL_TASK_PAYLOAD_KEYS = frozenset(
-    {'capture_evidence_claims', 'budget_deferrals', 'redrive_mode', 'raw_capture_paths', 'worker_eligible'}
+    {
+        'capture_evidence_claims',
+        'capture_received_at',
+        'budget_deferrals',
+        'redrive_mode',
+        'raw_capture_paths',
+        'worker_eligible',
+    }
 )
 
 
