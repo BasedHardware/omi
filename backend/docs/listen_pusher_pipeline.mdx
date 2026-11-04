@@ -9098,3 +9098,14 @@ Rollback: set `LISTEN_STT_ESCAPE_BEST_RATE_PRIMARY_ENABLED`,
 `LISTEN_STT_SOLE_PRIMARY_HOLD_ENABLED`, or
 `LISTEN_STT_FAILOVER_SURGE_CENSOR_ENABLED` to `false` to restore that guard's
 previous behavior. No routing-state reset is required.
+
+# Shape-only Parakeet experiment
+
+An optional `PARAKEET_SHAPE_CANARY_FILE` projected ConfigMap selects up to 5%
+of managed windowed sessions for a separate internal g2-standard-4 service.
+The assignment survives replacement legs. Default/missing/stale/0% leases
+route baseline; an identity change drains the old assignment before its next
+POST without cancelling accepted work. Companion shape-arm metrics keep
+candidate first-text/POST observations separate from fleet measurements.
+The [g24 operator packet](runbooks/parakeet-g24-canary.md) owns the 15-minute
+watcher, strict matched-load acceptance, ramp and drain sequence.
