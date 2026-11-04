@@ -54,6 +54,46 @@ ServerConversation waiting(String id, int minute,
     );
 
 void main() {
+  test('deadline layout keeps membership and order while episode title and processing status update', () {
+    final a = conversation('a');
+    final b = conversation('b', hours: 1);
+    final c = conversation('c', hours: 2);
+    final cached = episode(members: [a, b], moments: [], closedAt: start);
+    final held = HomeEpisodeLayout([cached]);
+    final latest = Episode(
+      id: cached.id,
+      live: false,
+      startedAt: start.add(const Duration(hours: 3)),
+      lastActivityAt: start.add(const Duration(hours: 4)),
+      title: 'Composed title arrived',
+      members: [a, b, c],
+      conversationIds: [a.id, b.id, c.id],
+      moments: composedMoments,
+    );
+    final lateNewEpisode = Episode(
+      id: 'new',
+      live: false,
+      startedAt: start,
+      lastActivityAt: start,
+      conversationIds: [c.id],
+      members: [c],
+    );
+    List<HomeRow> rows(List<Episode> projection) => buildHomeRows([a, b, c], projection,
+        enabled: true, finishingTitle: 'Finishing up…', now: start.add(const Duration(minutes: 1)));
+    final before = rows(held.apply([cached]));
+    final after = rows(held.apply([latest, lateNewEpisode]));
+    expect(before.map((row) => row.conversation.id), ['c', 'episode:e']);
+    expect(after.map((row) => row.conversation.id), before.map((row) => row.conversation.id));
+    expect(after.map((row) => row.startedAt), before.map((row) => row.startedAt));
+    expect(before.last.isProcessing, isTrue);
+    expect(after.last.isProcessing, isFalse, reason: 'composition status updates in place');
+    expect(after.last.conversation.structured.title, 'Composed title arrived');
+    expect(after.last.episodeConversationIds, {'a', 'b'});
+    expect(after.last.episode!.members.map((member) => member.id), ['a', 'b']);
+    expect(held.apply([]).single, isNotNull, reason: 'an omitted episode cannot remove a painted row');
+    expect(latest.members.length, 3, reason: 'the provider snapshot is never mutated');
+  });
+
   test('queued empty captures form contiguous Processing runs with every member reachable', () {
     final a = waiting('a', 0), b = waiting('b', 2), old = waiting('old', -20);
     final rows =

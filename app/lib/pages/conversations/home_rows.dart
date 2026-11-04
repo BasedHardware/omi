@@ -17,6 +17,33 @@ class HomeRow {
   }
 }
 
+/// After an outage deadline, keep the grouping already painted until a refresh
+/// boundary. Content remains current; late membership cannot absorb visible rows
+/// or move an existing episode to another day. Source rows remain independently
+/// available, including members restored by the list acknowledgement adapter.
+class HomeEpisodeLayout {
+  HomeEpisodeLayout(List<Episode> episodes) : _episodes = List.unmodifiable(episodes);
+
+  final List<Episode> _episodes;
+
+  List<Episode> apply(List<Episode> latest) {
+    final byId = {for (final episode in latest) episode.id: episode};
+    return [
+      for (final previous in _episodes) _update(previous, byId[previous.id] ?? previous),
+    ];
+  }
+
+  Episode _update(Episode previous, Episode latest) {
+    final members = {for (final member in latest.members) member.id: member};
+    return latest.copyWith(
+      live: previous.live,
+      startedAt: previous.startedAt,
+      conversationIds: previous.conversationIds,
+      members: [for (final member in previous.members) members[member.id] ?? member],
+    );
+  }
+}
+
 List<HomeRow> buildHomeRows(List<ServerConversation> conversations, List<Episode> episodes,
     {required bool enabled,
     Set<String> liveConversationIds = const {},

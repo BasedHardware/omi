@@ -12,6 +12,7 @@ import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/episode.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/episode_provider.dart';
+import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
 import '../support/typed_conversation_screen.dart';
 
 class _ThrowingInitialConversations extends ConversationProvider {
@@ -354,6 +355,93 @@ void main() {
     expect(find.text('Recovered stable episode'), findsOneWidget);
     expect(tester.getTopLeft(find.text('Recovered stable episode')), position);
     expect(reads, 2);
+    await tester.pumpWidget(const SizedBox.shrink());
+    conversations.dispose();
+    episodes.dispose();
+  });
+
+  testWidgets('history retry after the deadline preserves rows until pull-to-refresh', (tester) async {
+    SharedPreferences.setMockInitialValues({'uid': 'fixture-home'});
+    await SharedPreferencesUtil.init();
+    final now = DateTime.now();
+    final a = ServerConversation(
+        id: 'late-a', createdAt: now, startedAt: now, structured: Structured('First fallback row', ''));
+    final b = ServerConversation(
+        id: 'late-b',
+        createdAt: now.subtract(const Duration(minutes: 1)),
+        startedAt: now.subtract(const Duration(minutes: 1)),
+        structured: Structured('Second fallback row', ''));
+    final other = ServerConversation(
+        id: 'other',
+        createdAt: now.subtract(const Duration(minutes: 2)),
+        startedAt: now.subtract(const Duration(minutes: 2)),
+        structured: Structured('Unrelated row', ''));
+    final conversations = ConversationProvider(
+        isSignedIn: () => true,
+        conversationListFetcher: () async => (items: [a, b, other], ok: true),
+        dailySummariesChecker: () async => false)
+      ..hiddenNoiseCountsFetcherOverride = (_, __) async => <DateTime, int>{};
+    final retry = Completer<ApiResult<EpisodePageRead>>();
+    var reads = 0;
+    final episodes = EpisodeProvider(
+      fetchLive: () async => const ApiSuccess(EpisodeRead(enabled: true)),
+      lookup: (_) async => const ApiSuccess(EpisodeRead(enabled: true)),
+      fetchPage: (_, __, {cursor}) async {
+        reads++;
+        if (reads == 1) return const ApiFailure(ApiProblem(ApiProblemKind.transport));
+        return retry.future;
+      },
+    );
+    await tester.pumpWidget(await buildTypedConversationScreen(conversations,
+        episodes: episodes, initializePreferences: false, requestInitialLoad: true));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(reads, 2);
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pump();
+    List<String> rowIds() => tester
+        .widgetList<ConversationListItem>(find.byType(ConversationListItem))
+        .map((row) => row.conversation.id)
+        .toList();
+    expect(rowIds(), ['late-a', 'late-b', 'other']);
+    final positions = [for (final id in rowIds()) tester.getTopLeft(find.byKey(ValueKey(id)))];
+    retry.complete(ApiSuccess(EpisodePageRead(enabled: true, episodes: [
+      Episode(
+        id: 'late-episode',
+        live: false,
+        startedAt: b.startedAt!,
+        lastActivityAt: now,
+        closedAt: now,
+        title: 'Late grouped episode',
+        conversationIds: [a.id, b.id],
+        members: [a, b],
+        moments: [
+          EpisodeMoment(
+              id: 'm', conversationId: a.id, startedAt: now, endedAt: now, points: const [EpisodePoint('Fixture')])
+        ],
+      )
+    ])));
+    await tester.pump();
+    await tester.pump();
+    expect(episodes.homeEpisodes.single.id, 'late-episode', reason: 'the retry really published its late result');
+    expect(rowIds(), ['late-a', 'late-b', 'other'], reason: 'late grouping must wait for a natural boundary');
+    expect([for (final id in rowIds()) tester.getTopLeft(find.byKey(ValueKey(id)))], positions);
+    expect(find.text('Late grouped episode'), findsNothing);
+    final updated = ServerConversation(
+        id: a.id, createdAt: a.createdAt, startedAt: a.startedAt, structured: Structured('Updated in place', ''));
+    conversations.updateConversationInSortedList(updated);
+    await tester.pump();
+    expect(find.text('Updated in place'), findsOneWidget, reason: 'only the grouping is held, not row content');
+    expect(rowIds(), ['late-a', 'late-b', 'other']);
+    // Use the actual pull-to-refresh callback, including both provider reads.
+    final refresh = tester.widget<RefreshIndicator>(find.byType(RefreshIndicator)).onRefresh();
+    await tester.pump();
+    await refresh;
+    await tester.pump();
+    expect(rowIds(), ['episode:late-episode', 'other']);
+    expect(find.text('Late grouped episode'), findsOneWidget);
+    expect(find.byKey(ValueKey(a.id)), findsNothing);
+    expect(find.byKey(ValueKey(b.id)), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
     conversations.dispose();
     episodes.dispose();

@@ -8,6 +8,7 @@ import 'package:omi/widgets/shimmer_with_timeout.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/held_audio/held_audio_views.dart';
 import 'package:omi/pages/on_device/on_device_queue_banner.dart';
@@ -328,6 +329,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
   bool _isBootstrapping = true;
   bool _initialOverlayPending = false;
   Completer<void>? _initialOverlayReady;
+  ({String owner, HomeEpisodeLayout layout})? _fallbackHomeLayout;
 
   @override
   bool get wantKeepAlive => true;
@@ -449,7 +451,16 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
         finish();
       } else {
         if (deadline == null) {
-          deadline = Timer(const Duration(seconds: 2), finish);
+          deadline = Timer(const Duration(seconds: 2), () {
+            if (ready.isCompleted || !mounted) return;
+            // A retry may still publish after this deadline. Pin only layout so
+            // that result cannot regroup rows the reader has already seen.
+            _fallbackHomeLayout = (
+              owner: SharedPreferencesUtil().uid,
+              layout: HomeEpisodeLayout(context.read<EpisodeProvider?>()?.homeEpisodes ?? const []),
+            );
+            finish();
+          });
           _deferred.add(deadline!);
         }
         if (retries > 0) {
@@ -688,9 +699,14 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
               unawaited(episodes!.refreshHome(from, to));
             }
           });
+          final latestEpisodes = episodes?.homeEpisodes ?? const [];
+          final heldLayout = _fallbackHomeLayout;
+          final paintEpisodes = heldLayout != null && heldLayout.owner == SharedPreferencesUtil().uid
+              ? heldLayout.layout.apply(latestEpisodes)
+              : latestEpisodes;
           final projected = buildHomeRows(
             [for (final list in conversationsByDate.values) ...list],
-            episodes?.homeEpisodes ?? const [],
+            paintEpisodes,
             enabled: episodesOn,
             groupAwaitingTranscript: true,
             processingTitle: context.l10n.wrappedProcessingDefault,
@@ -741,11 +757,23 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             HapticFeedback.mediumImpact();
             _lastLoadMoreRequestKey = null;
             unawaited(_pendingWork.refresh());
+            // Pull-to-refresh is an explicit layout boundary. Keep the held
+            // projection until both reads finish, so provider notifications
+            // during this refresh cannot expose half of the new grouping.
             episodes?.invalidateHome();
             if (context.read<EpisodeProvider?>() case final episodes?) unawaited(episodes.refreshLive());
+            final today = DateUtils.dateOnly(DateTime.now());
+            final from = convoProvider.groupedConversations.keys.fold<DateTime>(
+              today.subtract(const Duration(days: 7)),
+              (oldest, day) => day.isBefore(oldest) ? day : oldest,
+            );
+            final history = episodes == null
+                ? Future.value(true)
+                : episodes.refreshHome(from, today.add(const Duration(days: 1)), force: true);
             Provider.of<CaptureProvider>(context, listen: false).refreshInProgressConversations();
             await Future.wait([
               convoProvider.getInitialConversations(),
+              history,
               Provider.of<LocalRecordingsProvider>(context, listen: false).refresh(),
               if (_recapsKey.currentState != null) _recapsKey.currentState!.refresh(),
               // Review's entry hides when caught up; a pull is how a hidden one comes back.
@@ -753,6 +781,11 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                   when review.availability != ReviewAvailability.off)
                 review.load(),
             ]);
+            final historyReady = await history;
+            if (mounted && historyReady) {
+              if (_initialOverlayReady case final ready? when !ready.isCompleted) ready.complete();
+              setState(() => _fallbackHomeLayout = null);
+            }
           },
           color: OmiColors.onAccent,
           backgroundColor: OmiColors.accent,
