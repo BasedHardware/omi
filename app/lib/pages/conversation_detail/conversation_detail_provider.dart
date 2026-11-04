@@ -1,3 +1,9 @@
+// Provider powering conversation detail: transcript/summary/action-item state,
+// speaker edits, calendar linking, and on-device transcription wiring.
+//
+// Speaker edits are generation-fenced per conversation so a stale edit response
+// cannot overwrite a newer one, and summary regeneration deliberately waits for
+// Done (or leaving the page) instead of running per keystroke.
 import 'package:omi/services/on_device/on_device_transcription_controller.dart';
 import 'dart:async';
 

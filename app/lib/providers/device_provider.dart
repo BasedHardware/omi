@@ -1,3 +1,9 @@
+// Pendant/device connection state for the UI: pairing, connect/disconnect,
+// battery and charging alerts, and device-driven WAL sync scoping.
+//
+// Dart orchestrates intent and presentation only -- native BLE owns bonding
+// and radio retries, and the saved-reconnect policy allows one Dart attempt at
+// a time with bounded backoff (app/lib/services/devices/ARCHITECTURE.md).
 import 'dart:async';
 
 import 'package:omi/services/devices/charge_start_tracker.dart';
