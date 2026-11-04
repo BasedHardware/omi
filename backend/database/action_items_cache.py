@@ -57,6 +57,7 @@ logger = logging.getLogger(__name__)
 # misconfigured value cannot make the list arbitrarily stale.
 _TTL_MAX_SECONDS = 300
 _TTL_DEFAULT_SECONDS = 30
+_PAGE_LEVER_DEFAULT_TTL_SECONDS = 120
 
 # The version counter must outlive any response entry by a wide margin: if it
 # expired while a cached page was still live, the counter would restart at 1 and
@@ -84,7 +85,11 @@ def list_cache_ttl_seconds(uid: str = '') -> int:
     if ttl <= 0:
         return 0
     if uid and lever_enabled('action_items_page', uid):
-        override = os.getenv('ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS', str(ttl)).strip()
+        # Version-bumped on every write, so a longer TTL only lengthens reuse of an
+        # unchanged list. Lever action_items_ttl120 lifts the default to 120s, cutting the
+        # repeat-poll misses of the 30s base (cl2-infracost 2026-11-04).
+        default = max(ttl, _PAGE_LEVER_DEFAULT_TTL_SECONDS) if lever_enabled('action_items_ttl120', uid) else ttl
+        override = os.getenv('ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS', str(default)).strip()
         try:
             ttl = int(override)
         except ValueError:

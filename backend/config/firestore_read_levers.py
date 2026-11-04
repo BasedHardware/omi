@@ -52,6 +52,8 @@ KNOWN_LEVERS = frozenset(
         'sync_snapshot_resolve_cache',
         'conversation_list_cursor',  # conversations:_collect_visible_conversation_page
         'finjob_candidate_queries',  # conversation_finalization_jobs:{scan_in_progress,get_abandoned_byok,get_stale_processing}
+        'action_items_ttl120',  # action_items_cache: 120s default reuse under action_items_page
+        'held_audio_rows_cache',  # held_audio_summary:_load_rows, 60s Redis reuse keyed on the summary
     }
 )
 

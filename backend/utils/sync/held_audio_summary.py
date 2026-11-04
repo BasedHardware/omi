@@ -1,10 +1,14 @@
 """Held-audio totals for clients. The dispatch flag off reads nothing and adds no field."""
 
 from datetime import datetime, timezone
+from functools import lru_cache
+import hashlib
+import json
 from typing import Any
 
 from google.cloud import firestore
 
+from config.firestore_read_levers import lever_enabled
 from config.stt_cap_dispatch import any_execution_admission_enabled as enabled, execution_admission_enabled
 from models.users import HeldAudioRecording, HeldAudioSummary
 from utils.stt_cap_dispatch import funded_allowance
@@ -59,6 +63,51 @@ def _load_rows(uid: str) -> list[dict]:
     return loaded
 
 
+_ROWS_CACHE_SECONDS = 60
+_ROWS_CACHE_PREFIX = 'har'
+
+
+@lru_cache(maxsize=1)
+def _rows_redis():
+    from database import redis_db
+
+    return redis_db.create_bounded_redis_client(0.1)
+
+
+def _summary_fingerprint(summary: dict) -> str:
+    encoded = json.dumps(summary, sort_keys=True, default=str, separators=(',', ':'))
+    return hashlib.sha256(encoded.encode()).hexdigest()[:32]
+
+
+def _load_rows_cached(uid: str, summary: dict) -> list[dict]:
+    """Reuse the newest-holds page for 60s while the summary document is unchanged.
+
+    Lever ``held_audio_rows_cache`` (FIRESTORE_READ_LEVERS). The subscription
+    endpoint is polled every few seconds and re-ran this query each time. Every
+    hold mutation rewrites the summary in the same transaction, so a changed
+    summary is a new key; the 60s TTL bounds anything else (a hold aging past
+    its remaining seconds). Display-only: dispatch enforcement never reads this.
+    Redis is fail-open: any error reads Firestore.
+    """
+    if not lever_enabled('held_audio_rows_cache', uid):
+        return _load_rows(uid)
+    key = f'{_ROWS_CACHE_PREFIX}:{uid}:{_summary_fingerprint(summary)}'
+    try:
+        raw = _rows_redis().get(key)
+        if raw:
+            rows = json.loads(raw)
+            if isinstance(rows, list):
+                return rows
+    except Exception:
+        pass
+    rows = _load_rows(uid)
+    try:
+        _rows_redis().set(key, json.dumps(rows, separators=(',', ':')), ex=_ROWS_CACHE_SECONDS)
+    except Exception:
+        pass
+    return rows
+
+
 def _recordings(rows: list[dict]) -> list[HeldAudioRecording]:
     recordings = [
         HeldAudioRecording(id=row['id'], started_at=int(row['started_at']), seconds=int(row['seconds']))
@@ -100,7 +149,7 @@ def client_held_audio(
         count = summary.get('count') or 0
         count = int(count) if isinstance(count, int) and not isinstance(count, bool) and count > 0 else 0
         if rows is None and count > 0:
-            rows = _load_rows(uid)
+            rows = _load_rows_cached(uid, summary)
     recordings = _recordings(rows or [])
     if summary is None:
         total = sum(row.seconds for row in recordings)
