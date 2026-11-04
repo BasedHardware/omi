@@ -2,6 +2,21 @@ part of 'conversation_provider.dart';
 
 /// Home fetch projection keeps its held replacements and storage cursor in one boundary.
 extension _ConversationHomeFetch on ConversationProvider {
+  /// A newest-page refresh proves nothing about cached pages older than its boundary.
+  Iterable<ServerConversation> _cachedRowsBeforePage(
+      List<ServerConversation> page, Iterable<ServerConversation> cached) sync* {
+    if (page.isEmpty) return;
+    // GET /v1/conversations orders storage pages by created_at, not recorded start.
+    final boundary = page.map((c) => c.createdAt).reduce((a, b) => a.isBefore(b) ? a : b);
+    for (final row in _filterPendingDeletes(cached.toList())) {
+      if (row.status == ConversationStatus.completed &&
+          !row.createdAt.isAfter(boundary) &&
+          _matchesActiveConversationFilters(row)) {
+        yield row;
+      }
+    }
+  }
+
   Map<String, List<ServerConversation>> get _homeEpisodeAcknowledgements => !hasActiveSearch &&
           selectedFolderId == null &&
           !showStarredOnly &&

@@ -275,7 +275,7 @@ void main() {
       ..debugSetLive(null)
       ..debugSetHomeEpisodes([_episode(id: 'complete', live: false)]);
     addTearDown(provider.dispose);
-    await provider.refreshHome(_t0, _t0);
+    expect(await provider.refreshHome(_t0, _t0), isFalse);
     expect(provider.homeEpisodes.single.id, 'complete');
   });
 

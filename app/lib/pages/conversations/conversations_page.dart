@@ -327,6 +327,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
   String? _lastLoadMoreRequestKey;
   bool _isBootstrapping = true;
   bool _initialOverlayPending = false;
+  Completer<void>? _initialOverlayReady;
 
   @override
   bool get wantKeepAlive => true;
@@ -370,28 +371,33 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
         (oldest, day) => day.isBefore(oldest) ? day : oldest,
       );
       _initialOverlayPending = widget.requestInitialLoad && episodes != null;
-      Future<void> loadOverlay(DateTime from) =>
+      Future<bool> loadOverlay(DateTime from) =>
           episodes!.refreshHome(from, today.add(const Duration(days: 1)), bootstrap: true).onError((error, stack) {
             Logger.error('Initial Home overlay failed: $error');
+            return false;
           });
-      var overlay = _initialOverlayPending ? loadOverlay(initialFrom) : Future<void>.value();
+      var overlay = _initialOverlayPending ? loadOverlay(initialFrom) : Future.value(true);
+      var overlayFrom = initialFrom;
       try {
         if (widget.requestInitialLoad) {
           await conversationProvider.getInitialConversations(checkDailySummaries: false);
+          if (!mounted) return;
           _scheduleDeferred(conversationProvider.checkHasDailySummaries);
           // The first page may reach beyond seven days. Cover its actual range
           // under the same single deadline, rather than exposing older members.
           final days = conversationProvider.groupedConversations.keys;
           final oldest = days.isEmpty ? today : days.reduce((a, b) => a.isBefore(b) ? a : b);
           if (episodes != null && oldest.isBefore(initialFrom)) {
+            overlayFrom = oldest;
             overlay = loadOverlay(oldest);
           }
+          final settled = _settleInitialOverlay(overlay, () => loadOverlay(overlayFrom));
           unawaited(
-            overlay.whenComplete(() {
+            settled.whenComplete(() {
               if (mounted) setState(() => _initialOverlayPending = false);
             }),
           );
-          await overlay.timeout(const Duration(milliseconds: 500), onTimeout: () {});
+          await settled.timeout(const Duration(milliseconds: 500), onTimeout: () {});
         }
       } catch (error, stack) {
         Logger.error('Initial Home conversations failed: $error\n$stack');
@@ -422,6 +428,34 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
       }
     });
     _deferred.add(timer);
+  }
+
+  /// Retry failed history before publishing source rows; persistent failure keeps
+  /// the last cached projection after a short deadline. All timers leave with Home.
+  Future<void> _settleInitialOverlay(Future<bool> first, Future<bool> Function() retry) {
+    final ready = _initialOverlayReady = Completer<void>();
+    late final Timer deadline;
+    void finish() {
+      if (ready.isCompleted) return;
+      deadline.cancel();
+      _deferred.remove(deadline);
+      ready.complete();
+    }
+
+    deadline = Timer(const Duration(seconds: 2), finish);
+    _deferred.add(deadline);
+    Future<void> attempt(Future<bool> read, int retries) async {
+      final complete = await read;
+      if (ready.isCompleted || !mounted) return;
+      if (complete) {
+        finish();
+      } else if (retries > 0) {
+        _scheduleDeferred(() => attempt(retry(), retries - 1));
+      }
+    }
+
+    unawaited(attempt(first, 2));
+    return ready.future;
   }
 
   bool _requestMoreIfNeeded(ConversationProvider provider) {
@@ -488,6 +522,10 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
   void dispose() {
     _pendingWork.removeListener(_onPendingWorkChanged);
     _dayTimer?.cancel();
+    if (_initialOverlayReady != null && !_initialOverlayReady!.isCompleted) {
+      _initialOverlayReady!.complete();
+    }
+    _initialOverlayReady = null;
     for (final timer in _deferred) {
       timer.cancel();
     }

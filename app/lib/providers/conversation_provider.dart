@@ -979,16 +979,17 @@ class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
       ..clear()
       ..addAll(result.items.map((conversation) => conversation.id));
 
-    // A ConversationEvent can complete a row while the list/lifecycle awaits
-    // above. The stale page may omit that row, so preserve only completed rows
-    // that were added or replaced live during this fetch. Do not carry forward
-    // an unchanged pre-fetch row (the server page is authoritative for those),
-    // and never resurrect a row in the undo/delete window.
+    // The page replaces overlaps and covered rows; older cached pages remain
+    // reachable. A live completion while the list/lifecycle awaits can outdate
+    // this page, so changed completed rows win. Delete and processing fences
+    // apply to cached rows too.
     final currentlyProcessingIds = processingConversations
         .where((conversation) => _isActiveProcessingStatus(conversation.status))
         .map((conversation) => conversation.id)
         .toSet();
     final completedById = <String, ServerConversation>{
+      for (final conversation in _cachedRowsBeforePage(fetchedConversations, conversationsAtStart.values))
+        if (!currentlyProcessingIds.contains(conversation.id)) conversation.id: conversation,
       for (final conversation in fetchedConversations)
         if (conversation.status == ConversationStatus.completed && !currentlyProcessingIds.contains(conversation.id))
           conversation.id: conversation.keepingTranscriptOf(conversationsAtStart[conversation.id]),
@@ -1014,7 +1015,7 @@ class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
       }
       // A changed live object wins over a stale page object even when the
       // page contains the same ID with older status/content. Unchanged
-      // pre-fetch rows remain governed by the authoritative page.
+      // pre-fetch rows within its covered range remain governed by the page.
       if (!identical(conversationsAtStart[conversation.id], conversation)) {
         completedById[conversation.id] = conversation;
       }

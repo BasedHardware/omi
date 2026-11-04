@@ -43,7 +43,7 @@ class EpisodeProvider extends ChangeNotifier {
   DateTime? _homeTo;
   Timer? _homeHold;
   int _homeGeneration = 0;
-  Future<void>? _homeRead;
+  Future<bool>? _homeRead;
   String? _homeReadingKey;
 
   ConversationProvider? _homeConversations;
@@ -116,8 +116,8 @@ class EpisodeProvider extends ChangeNotifier {
     invalidateHome();
   }
 
-  /// Load all pages atomically so partially loaded membership never splits an episode on Home.
-  Future<void> refreshHome(DateTime from, DateTime to, {bool force = false, bool bootstrap = false}) {
+  /// Load all pages atomically. False means failure/incomplete membership, not a ready empty overlay.
+  Future<bool> refreshHome(DateTime from, DateTime to, {bool force = false, bool bootstrap = false}) {
     _ensureOwner();
     final key = '$_ownerUid|$from|$to|$bootstrap';
     if (!force && key == _homeReadingKey && _homeRead != null) return _homeRead!;
@@ -132,8 +132,8 @@ class EpisodeProvider extends ChangeNotifier {
     });
   }
 
-  Future<void> _readHome(DateTime from, DateTime to, {required bool force, required bool bootstrap}) async {
-    if (!_enabled && !bootstrap) return;
+  Future<bool> _readHome(DateTime from, DateTime to, {required bool force, required bool bootstrap}) async {
+    if (!_enabled && !bootstrap) return false;
     final key = '${from.toIso8601String()}|${to.toIso8601String()}';
     if (!force &&
         _homeReadAt != null &&
@@ -142,7 +142,7 @@ class EpisodeProvider extends ChangeNotifier {
         _homeTo != null &&
         !from.isBefore(_homeFrom!) &&
         !to.isAfter(_homeTo!)) {
-      return;
+      return true;
     }
     _homeKey = key;
     final generation = ++_homeGeneration;
@@ -156,7 +156,7 @@ class EpisodeProvider extends ChangeNotifier {
           generation != _homeGeneration ||
           uid != SharedPreferencesUtil().uid ||
           (!_enabled && !bootstrap)) {
-        return;
+        return false;
       }
       if (result case ApiSuccess(:final data)) {
         if (!data.enabled) {
@@ -164,17 +164,17 @@ class EpisodeProvider extends ChangeNotifier {
           _live = null;
           _homeEpisodes = const [];
           notifyListeners();
-          return;
+          return true;
         }
         _enabled = true;
         for (final episode in data.episodes) {
           collected[episode.id] = _ended.contains(episode.id) ? episode.copyWith(live: false) : episode;
         }
         cursor = data.nextCursor;
-        if (cursor != null && !cursors.add(cursor)) return;
+        if (cursor != null && !cursors.add(cursor)) return false;
       } else {
         _holdHome(from, to, key);
-        return;
+        return false;
       }
     } while (cursor != null);
     _homeEpisodes = collected.values.toList();
@@ -183,6 +183,7 @@ class EpisodeProvider extends ChangeNotifier {
     _homeReadAt = _clock();
     notifyListeners();
     _holdHome(from, to, key);
+    return true;
   }
 
   /// Nothing else rebuilds Home while a finished episode waits, so re-read until it settles.

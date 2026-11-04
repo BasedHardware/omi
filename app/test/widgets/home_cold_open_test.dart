@@ -290,4 +290,178 @@ void main() {
     conversations.dispose();
     episodes.dispose();
   });
+  testWidgets('episode-history failure then success never paints or reshuffles member rows', (tester) async {
+    SharedPreferences.setMockInitialValues({'uid': 'fixture-home'});
+    await SharedPreferencesUtil.init();
+    final now = DateTime.now();
+    final a = ServerConversation(
+        id: 'failure-a', createdAt: now, startedAt: now, structured: Structured('Fragment before retry A', ''));
+    final b = ServerConversation(
+        id: 'failure-b', createdAt: now, startedAt: now, structured: Structured('Fragment before retry B', ''));
+    final conversations = ConversationProvider(
+        isSignedIn: () => true,
+        conversationListFetcher: () async => (items: [a, b], ok: true),
+        dailySummariesChecker: () async => false)
+      ..hiddenNoiseCountsFetcherOverride = (_, __) async => <DateTime, int>{};
+    final retry = Completer<ApiResult<EpisodePageRead>>();
+    var reads = 0;
+    final episodes = EpisodeProvider(
+      fetchLive: () async => const ApiSuccess(EpisodeRead(enabled: true)),
+      lookup: (_) async => const ApiSuccess(EpisodeRead(enabled: true)),
+      fetchPage: (_, __, {cursor}) async {
+        reads++;
+        if (reads == 1) return const ApiFailure(ApiProblem(ApiProblemKind.transport));
+        return retry.future;
+      },
+    );
+    await tester.pumpWidget(await buildTypedConversationScreen(conversations,
+        episodes: episodes, initializePreferences: false, requestInitialLoad: true));
+    await tester.pump();
+    for (var i = 1; i <= 8; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.text(a.structured.title), findsNothing, reason: 'a failed read is not ready membership');
+      expect(find.text(b.structured.title), findsNothing);
+      if (i >= 6) expect(find.text('Finishing up…'), findsOneWidget);
+    }
+    expect(reads, 2, reason: 'retry once while keeping first paint joined');
+    retry.complete(ApiSuccess(EpisodePageRead(enabled: true, episodes: [
+      Episode(
+        id: 'recovered-episode',
+        live: false,
+        startedAt: now,
+        lastActivityAt: now,
+        closedAt: now,
+        title: 'Recovered stable episode',
+        conversationIds: [a.id, b.id],
+        members: [a, b],
+        moments: [
+          EpisodeMoment(
+              id: 'm', conversationId: a.id, startedAt: now, endedAt: now, points: const [EpisodePoint('Fixture')])
+        ],
+      )
+    ])));
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('Recovered stable episode'), findsOneWidget);
+    expect(find.text(a.structured.title), findsNothing);
+    expect(find.text(b.structured.title), findsNothing);
+    final position = tester.getTopLeft(find.text('Recovered stable episode'));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('Recovered stable episode'), findsOneWidget);
+    expect(tester.getTopLeft(find.text('Recovered stable episode')), position);
+    expect(reads, 2);
+    await tester.pumpWidget(const SizedBox.shrink());
+    conversations.dispose();
+    episodes.dispose();
+  });
+
+  testWidgets('selected day keeps its 00:30 member when the episode began at 23:00 yesterday', (tester) async {
+    SharedPreferences.setMockInitialValues({'uid': 'fixture-home'});
+    await SharedPreferencesUtil.init();
+    final day = DateUtils.dateOnly(DateTime.now().subtract(const Duration(days: 2)));
+    final previous = day.subtract(const Duration(hours: 1));
+    final afterMidnight = day.add(const Duration(minutes: 30));
+    final a = ServerConversation(
+        id: 'previous-day',
+        createdAt: previous,
+        startedAt: previous,
+        finishedAt: previous.add(const Duration(minutes: 10)),
+        structured: Structured('Previous-day member', ''));
+    final b = ServerConversation(
+        id: 'selected-day',
+        createdAt: afterMidnight,
+        startedAt: afterMidnight,
+        finishedAt: afterMidnight.add(const Duration(minutes: 10)),
+        structured: Structured('00:30 selected member', ''));
+    final conversations = ConversationProvider(isSignedIn: () => true)
+      ..conversations = [a, b]
+      ..selectedStartDate = day
+      ..selectedEndDate = day
+      ..groupedConversations = {
+        day: [b]
+      };
+    final episodes = EpisodeProvider(
+      fetchLive: () async => const ApiSuccess(EpisodeRead(enabled: true)),
+      lookup: (_) async => const ApiSuccess(EpisodeRead(enabled: true)),
+      fetchPage: (_, __, {cursor}) async => ApiSuccess(EpisodePageRead(enabled: true, episodes: [
+        Episode(
+          id: 'cross-midnight',
+          live: false,
+          startedAt: previous,
+          lastActivityAt: afterMidnight,
+          closedAt: afterMidnight,
+          title: 'Previous-day episode',
+          conversationIds: [a.id, b.id],
+          members: [a, b],
+          moments: [
+            EpisodeMoment(
+                id: 'm',
+                conversationId: a.id,
+                startedAt: previous,
+                endedAt: afterMidnight,
+                points: const [EpisodePoint('Fixture')])
+          ],
+        )
+      ])),
+    );
+    await episodes.refreshLive();
+    await episodes.refreshHome(previous, day.add(const Duration(days: 1)));
+    await tester.pumpWidget(
+        await buildTypedConversationScreen(conversations, episodes: episodes, initializePreferences: false));
+    await tester.pump();
+    expect(find.byKey(ValueKey(b.id)), findsOneWidget);
+    expect(find.text(b.structured.title), findsOneWidget);
+    expect(find.text(a.structured.title), findsNothing);
+    expect(find.text('Previous-day episode'), findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
+    conversations.dispose();
+    episodes.dispose();
+  });
+
+  for (final earlyMillis in [0, 300, 600]) {
+    testWidgets('failed history has a bounded hold and cancels timers, early dispose at $earlyMillis ms',
+        (tester) async {
+      SharedPreferences.setMockInitialValues({'uid': 'fixture-home'});
+      await SharedPreferencesUtil.init();
+      final now = DateTime.now();
+      final row = ServerConversation(
+          id: 'fallback',
+          createdAt: now,
+          startedAt: now,
+          structured: Structured('Reachable during persistent outage', 'Fixture overview'));
+      final conversations = ConversationProvider(
+          isSignedIn: () => true,
+          conversationListFetcher: () async => (items: [row], ok: true),
+          dailySummariesChecker: () async => false)
+        ..hiddenNoiseCountsFetcherOverride = (_, __) async => <DateTime, int>{};
+      var reads = 0;
+      final episodes = EpisodeProvider(
+        fetchLive: () async => const ApiSuccess(EpisodeRead(enabled: true)),
+        lookup: (_) async => const ApiSuccess(EpisodeRead(enabled: true)),
+        fetchPage: (_, __, {cursor}) async {
+          reads++;
+          return const ApiFailure(ApiProblem(ApiProblemKind.transport));
+        },
+      );
+      await tester.pumpWidget(await buildTypedConversationScreen(conversations,
+          episodes: episodes, initializePreferences: false, requestInitialLoad: true));
+      await tester.pump();
+      // Advance each retry separately; a large pump schedules the next delay from its end.
+      for (var i = 0; i < (earlyMillis == 300 ? 3 : 6); i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      expect(find.text('Finishing up…'), earlyMillis == 300 ? findsNothing : findsOneWidget);
+      expect(find.text(row.structured.title), findsNothing);
+      expect(reads, earlyMillis == 300 ? 2 : 3, reason: 'startup retries are bounded and leave with Home');
+      if (earlyMillis == 0) {
+        await tester.pump(const Duration(milliseconds: 1500));
+        await tester.pump();
+        expect(find.text('Finishing up…'), findsNothing);
+        expect(find.text(row.structured.title), findsOneWidget, reason: 'persistent failure cannot block Home forever');
+      }
+      await tester.pumpWidget(const SizedBox.shrink());
+      conversations.dispose();
+      episodes.dispose();
+    });
+  }
 }
