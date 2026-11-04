@@ -12,7 +12,7 @@ ladder, the failover drills and the guard interlocks. Numbers marked
 
 | Setting | Where | Owner | Rollback |
 | --- | --- | --- | --- |
-| GPU floor (HPA min and baseline) | `charts/batch-pipeline-worker/prod_omi_batch-pipeline-worker_values.yaml` `replicaCount` + `autoscaling.minReplicas` | lead, at a worker Helm roll | min 4 / max 12 with two worker processes per pod (2026-11-04); rollback to 6 is the lead's call; further reductions need a new lead decision |
+| GPU floor (HPA min and baseline) | `charts/batch-pipeline-worker/prod_omi_batch-pipeline-worker_values.yaml` `replicaCount` + `autoscaling.minReplicas` | lead, at a worker Helm roll | min 4 / max 8 with two worker processes per pod (2026-11-04); rollback to 6 / 12 is the lead's call; further reductions need a new lead decision |
 | L4 node pool minimum | GKE `batch-pipeline-pool` (operator-managed, not in this repo) | lead / op1 | previous minimum |
 | GPU floor share of routed units | route table `gpu_floor_percent`, cohort `batch-vendor-gpu-floor` | lead, runtime config (slice B) | 0 |
 | `provider-stt` queue size | `deploy/ops/prod.yaml` `cloud_tasks.provider-stt` | lead, config-train | previous size |
@@ -24,12 +24,17 @@ config-train change, never a code change.
 ## GPU floor
 
 **Current bounds (2026-11-04, cl2-gpueff, lead2 sign-off on the PR): baseline/min 4,
-max 12, `worker.processes` 2.** The former audited bounds were min 6 / max 12
+max 8, `worker.processes` 2.** The former audited bounds were min 6 / max 12
 with one process per pod (lead af6df5, 2026-11-03). The floor binds only off-peak
 (00-08Z); four two-process pods run eight pump processes, more claim lanes than
 six single-process pods. Helm's existing lookup preserves the live replica count
 on upgrades, and the HPA sheds to the floor at its own scale-down policy.
-Rollback: `replicaCount` and `autoscaling.minReplicas` back to 6 (values-only),
+The ceiling follows the claim path, not GPU count: in 48h of prod data, fleet
+flights/s held at 1.2-1.55 with a backlog at 10-16 single-process pods, so eight
+two-process pods (16 pumps) match twelve. Watch the fleet `worker_flight` count rate
+and completed audio after the roll; restore max 12 if either drops more than 10%
+with a growing ready backlog.
+Rollback: `replicaCount` and `autoscaling.minReplicas` back to 6, `maxReplicas` 12 (values-only),
 the lead's call. The earlier four-worker sizing below is historical, with one
 process per pod; it is not evidence for the current floor.
 Recheck Ready on-demand capacity before any later roll; do not scale down to
@@ -44,10 +49,10 @@ throughput before expansion; do not change the live bounds to clear a replay.
 
 Current operator checklist:
 
-1. Before a worker roll, confirm HPA min 4 / max 12 and at least 4 Ready on-demand
+1. Before a worker roll, confirm HPA min 4 / max 8 and at least 4 Ready on-demand
    L4 nodes. A later change needs a new lead decision and a fresh capacity read.
 2. Keep chart `replicaCount` and `autoscaling.minReplicas` at 4 together, with
-   `maxReplicas` 12. Let Helm preserve the live replica count; never force it to
+   `maxReplicas` 8. Let Helm preserve the live replica count; never force it to
    the baseline during an outage.
 3. Use the current chart's scale-in policy. The older sizing, prices,
    recommendations and scale-in procedures below are dated evidence only.
@@ -253,7 +258,7 @@ Follows vendorscope-ops section 5. Each step is one write to roll back.
 
 0. Preconditions: #24222 queues live; slices A–D merged dormant; F1, F2 and
    F3 adopted (above); staging drill table green; staging ladder receipt; current
-   floor 4 live with at least 4 Ready OD nodes, HPA max 12.
+   floor 4 live with at least 4 Ready OD nodes, HPA max 8.
 1. Shadow at the current batch percent: decisions counted, routing unchanged.
 2. 1% vendor routing with floor share on, plus the prod drill.
 3. 5% → 25% in lockstep with the batch and draining-cohort steps (vendor

@@ -247,7 +247,7 @@ def test_environment_values_render_worker_identity_and_gpu_pool(
             for doc in yaml.safe_load_all(result.stdout)
             if doc and doc['kind'] == 'HorizontalPodAutoscaler' and doc['metadata']['name'] == 'synthetic-worker'
         )
-        assert hpa['minReplicas'] == 4 and hpa['maxReplicas'] == 12
+        assert hpa['minReplicas'] == 4 and hpa['maxReplicas'] == 8
         assert 'omi.ai/required-companion-deployment' not in deployment['metadata'].get('annotations', {})
     else:
         assert len(deployments) == 1 and deployment['spec']['replicas'] == 1
@@ -419,9 +419,9 @@ def by_name(docs, kind):
     return {d['metadata']['name']: d for d in docs if d['kind'] == kind}
 
 
-def test_production_cutover_keeps_single_od_hpa_min4_max12():
+def test_production_cutover_keeps_single_od_hpa_min4_max8():
     # One HPA pinned to the on-demand pool, GPU floor 4 (two processes per
-    # pod) to ceiling 12; no -spot deployment.
+    # pod) to ceiling 8; no -spot deployment.
     # The floor is config: replicaCount and minReplicas move together.
     # The stockout borrower (below) is extra and never part of this floor.
     values = yaml.safe_load((CHART / 'prod_omi_batch-pipeline-worker_values.yaml').read_text())
@@ -431,7 +431,7 @@ def test_production_cutover_keeps_single_od_hpa_min4_max12():
     docs = [doc for doc in yaml.safe_load_all(result.stdout) if doc]
     hpas = by_name(docs, 'HorizontalPodAutoscaler')
     assert hpas['synthetic-worker']['spec']['minReplicas'] == 4
-    assert hpas['synthetic-worker']['spec']['maxReplicas'] == 12
+    assert hpas['synthetic-worker']['spec']['maxReplicas'] == 8
     assert not [name for name in hpas if name.endswith('-spot')]
     pod = by_name(docs, 'Deployment')['synthetic-worker']['spec']['template']['spec']
     assert pod['nodeSelector']['cloud.google.com/gke-nodepool'] == 'batch-pipeline-pool'
@@ -619,7 +619,7 @@ def test_production_worker_policy_binding_matches_accepted_identity():
     assert env['BATCH_PIPELINE_WORKER_AUDIENCE'] == config['worker']['audience']
     assert docs['Deployment']['spec']['replicas'] == 4  # Keep the HPA floor through Helm upgrades.
     hpa = docs['HorizontalPodAutoscaler']['spec']
-    assert hpa['minReplicas'] == 4 and hpa['maxReplicas'] == 12
+    assert hpa['minReplicas'] == 4 and hpa['maxReplicas'] == 8
 
 
 @pytest.mark.parametrize('enabled', [False, True])

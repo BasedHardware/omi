@@ -10,20 +10,23 @@ dataPlaneProject: based-hardware
 stage: prod
 namespace: batch_pipeline_prod
 secretName: prod-omi-backend-secrets
-# Floor 4 / ceiling 12 (cl2-gpueff 2026-11-04; supersedes lead af6df5's 6/12
+# Floor 4 / ceiling 8 (cl2-gpueff 2026-11-04; supersedes lead af6df5's 6/12
 # only with lead2's sign-off on the PR). replicaCount and
 # autoscaling.minReplicas are one floor setting; change both. The floor binds
 # only off-peak (00-08Z): daytime demand holds the HPA above it. With
 # worker.processes 2, four pods run eight pump processes, more claim lanes than
 # the former six single-process pods. Helm keeps the live replica count on
 # upgrade; the HPA sheds to the floor at its own scale-down policy.
-# Rollback: 6 in both places (values-only).
+# Ceiling: the fleet's flight rate is capped by the claim path, not GPUs (48h
+# prod: 1.2-1.55 flights/s at 10-16 pods with a backlog; GPU util ~16%), so
+# eight two-process pods (16 pumps) match twelve single-process pods.
+# Rollback: floor 6 in both places, maxReplicas 12 (values-only).
 # OD-first: all replicas pin to the on-demand pool; Spot stays opportunistic.
 replicaCount: 4
 autoscaling:
   enabled: true
   minReplicas: 4
-  maxReplicas: 12
+  maxReplicas: 8
   balancedPools:
     enabled: false
 # OD-first placement: the worker pins to the on-demand pool so the guaranteed
