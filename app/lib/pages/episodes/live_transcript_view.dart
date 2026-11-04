@@ -468,6 +468,15 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
       suggestion: suggestion,
       defaultApplyToSpeaker: true,
       wholeRecording: true,
+      onNotAPerson: () => provider.assignSpeakerToConversation(
+          speakerId,
+          '',
+          '',
+          [
+            for (final segment in provider.segments)
+              if (segment.speakerId == speakerId) segment.id,
+          ],
+          notAPerson: true),
       onSpeakerAssigned: (speakerId, personId, personName, segmentIds, applyToSpeaker) async {
         final identity = provider.speakerAssignmentIdentity;
         var reported = false;

@@ -3152,6 +3152,7 @@ sequenceDiagram
     Backend->>Firestore: Persist MANUAL decisions and generation atomically
     Backend-->>Client: Acknowledge saved assignment
     Client->>Backend: speaker_assigned notification with acknowledged segment_ids
+    Note over Client: assign_type: "not_a_person" (media exclusion) sends no person_id<br/>and must never queue a voice sample
     Backend->>Backend: Validate receipt and queue best-effort sample (opcode 105)
     Backend->>Pusher: Forward speaker sample request
 
@@ -3416,8 +3417,30 @@ cards. Their negative answers write `rejection: {kind, person_id}` on the receip
 `not_person` earns `AUTO_CORRECTED` once per conversation, `not_a_person`
 stores an ignored-voice marker (`ignored_voices`, newest 200) — and the voice is
 filtered from live matching, resolution, and prompt selection until a newer
-positive decision wins. A segment's `speaker_label_source` projects provenance:
+positive decision wins. The live capture sheet's media exclusion
+(`PATCH /v1/conversations/{id}/segments/assign-bulk` with
+`assign_type: "not_a_person"`) writes the same receipt decision and the same
+ignored-voice marker (fenced by the assignment generation), never queues a
+voice sample, and stays reversible: a later person/user assignment replaces it.
+Marker reconciliation is shared by every writer (`utils/ignored_voice_markers.py`):
+the live sheet, the reject route, and card answers all record and retire through
+the same helpers, retirement is fenced by the assignment generation (a delayed
+older clear cannot remove a newer decision's marker), and a post-commit marker
+persistence failure fails open with shared fallback telemetry
+(`omi_fallback_total{component="speaker_assignments"}`).
+A segment's `speaker_label_source` projects provenance:
 `manual`/`carried` under a winning decision, `auto` for match-only evidence.
+The `Conversation` payload carries `excluded_speakers`: the receipt's
+still-winning whole-voice `not_a_person` voices (`models/speaker_exclusion.py`,
+the same walker the marker helpers use). Clients reconcile live exclusions
+against it rather than against label projections: a range-only positive is
+`segment_only` and leaves the exclusion standing, while a selected-segment
+bulk assign retires it even though only its segments project a manual label —
+identical projections the receipt alone distinguishes. Absent (`null`) on
+conversations with no manual speaker decision — never otherwise: a receipt
+whose exclusions were all superseded projects an authoritative empty list so
+clients distinguish "no exclusions" from "server without the projection", and
+it is never part of the integration contract.
 
 The same transaction keeps each person's `label_evidence` tally
 (`models/person_confidence.py`, `utils/person_evidence.py`): hand labels, card confirms and picks,

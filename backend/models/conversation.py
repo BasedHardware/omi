@@ -32,6 +32,7 @@ from models.geolocation import Geolocation
 from models.note_claims import compact_claim_projection, current_note_claims
 from pydantic import field_serializer
 from models.other import Person
+from models.speaker_exclusion import receipt_excluded_speakers
 from models.structured import MeetingType, Structured
 from models.transcript_segment import legacy_conversation_segment_id, TranscriptSegment
 from utils.capture_evidence import ledger_bound_incomplete
@@ -547,6 +548,31 @@ class Conversation(BaseModel):
                 coverage = 'mapped'
             if coverage in ('unknown', 'incomplete', 'mapped'):
                 return {**data, 'capture_coverage': coverage}
+        return data
+
+    # Voices whose whole-voice `not_a_person` decision still wins the manual
+    # speaker receipt. Server-authored projection of the internal receipt (the
+    # receipt itself is never serialized): clients use it to reconcile live
+    # exclusions against receipt authority — a partial manual-positive
+    # projection cannot distinguish a range-only label (the exclusion stands)
+    # from a selected-segment superseder (the exclusion is retired), but the
+    # receipt can. Null on conversations without any manual speaker decision.
+    excluded_speakers: Optional[List[int]] = None
+
+    @model_validator(mode='before')
+    @classmethod
+    def _project_excluded_speakers(cls, data):
+        if isinstance(data, dict) and 'excluded_speakers' not in data:
+            receipt = data.get('manual_speaker_assignments')
+            if isinstance(receipt, Mapping):
+                # Emit the projection whenever a manual receipt exists, empty
+                # set included: a selected-segment superseder or cross-client
+                # restoration that removed the last not_a_person decision must
+                # read as an authoritative `[]`. Leaving it null would make
+                # clients treat the response as an old server without the
+                # projection and fall back to the lossy whole-cluster
+                # heuristic, so the exclusion could never retire locally.
+                return {**data, 'excluded_speakers': receipt_excluded_speakers(receipt)}
         return data
 
     # Absent on conversations processed before speakers were resolved: count no ids as people.
