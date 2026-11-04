@@ -864,8 +864,9 @@ autoscaling:
   enabled: true
   # retire100: planned live residual is ~31% excluded conversations plus
   # ~5-6% desktop. Qualify the floor against fresh batch-100 demand before
-  # applying; max 60 and all scale-out signals stay intact. Rollback: 30.
-  minReplicas: 20
+  # applying; max 60 and all scale-out signals stay intact. margin-20 floor: 12.
+  # CPU request stays at 1 (24h pod p95 reaches 1.09 cores). Rollback: minReplicas 20.
+  minReplicas: 12
   maxReplicas: 60
   behavior:
     scaleDown:

@@ -621,7 +621,8 @@ startupProbe:
 # This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
 autoscaling:
   enabled: true
-  minReplicas: 12
+  # margin-20 off-peak floor; no required pod anti-affinity/spread. Rollback: 12.
+  minReplicas: 8
   maxReplicas: 40
   behavior:
     scaleDown:
