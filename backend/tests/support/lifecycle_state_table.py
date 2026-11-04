@@ -407,6 +407,7 @@ FIELD_BUILDERS = {
         'summary_first_pending_at': ['merge_result', 'prepare'],
     },
     'utils/episodes/composer.py': {'composed_fingerprint': ['_compose', '_compose.finish']},
+    'utils/episodes/log/fold.py': {'recorded_merged_into': ['Fold.rows']},
     'utils/episodes/service.py': {
         'status': ['_close', '_reconcile', 'dismiss_item', 'new_episode', 'to_wire'],
         'wrap_up_requested_at': ['new_episode', 'wrap_up'],

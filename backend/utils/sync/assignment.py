@@ -5,8 +5,6 @@ Firestore retries the whole read/append/write operation on contention. There is
 no expiring lock that lets a late worker overwrite a newer transcript.
 """
 
-from database import episode_log
-
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import timedelta
@@ -234,12 +232,16 @@ def assign_in_transaction(
     live_lookup_complete: bool = False,
     live_lookup_incomplete_reason: str | None = None,
     discover_on_reroute: bool = False,
+    capture_episode_log: bool = True,
 ) -> tuple[dict, bool, list[dict]]:
     """Production transaction body; injected codecs preserve encryption in adapters.
 
     ``absorbed`` (optional, filled in place) receives the conversations this
     plan newly turns into redirect donors, unlike the cumulative
     ``sync_merged_from`` lineage.
+
+    ``capture_episode_log`` is false only for bounded, discard-only shadow plans;
+    serving transactions retain atomic member-policy invalidation.
 
     The user-level index document is read AND written by every intake, including
     the empty-index case. Concurrent jobs cannot both commit an absent target.
@@ -251,7 +253,9 @@ def assign_in_transaction(
     untouched: the chunk's new speech goes to another conversation instead.
     """
     # The SDK may retry this body after contention; only its winning plan may log success.
-    episode_capture = episode_log.prepare_member_change(transaction, user_ref)
+    from database import episode_log
+
+    episode_capture = episode_log.prepare_member_change(transaction, user_ref) if capture_episode_log else None
     finish_size_attempt(logger, committed=False)
     if absorbed is not None:
         absorbed.clear()

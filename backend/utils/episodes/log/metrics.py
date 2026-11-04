@@ -2,7 +2,7 @@
 
 from prometheus_client import Counter, Histogram, Gauge
 
-from utils.episodes.metrics import reuse_or_create
+from utils.episodes.metrics import reuse_or_create, _label
 from utils.episodes.log.codec import digest
 
 FIELDS = (
@@ -27,6 +27,9 @@ FIELDS = (
     'home_row',
 )
 CONTENT = ('title', 'bullets', 'lede', 'follow_ups', 'people', 'open_questions', 'provisional_items', 'moments')
+DRIFT_OUTCOMES = frozenset({'match', 'mismatch', 'missing_legacy', 'missing_view'})
+DRAIN_OUTCOMES = frozenset({'drained', 'error', 'lost_lease'})
+SWEEP_OUTCOMES = frozenset({'redriven', 'error'})
 DRIFT = reuse_or_create(
     Counter, 'omi_episode_view_drift_total', 'Legacy vs log projection digests.', ['field', 'outcome']
 )
@@ -57,14 +60,14 @@ OVERDUE = reuse_or_create(Counter, 'omi_episode_drain_deadline_total', 'Automati
 # Alert inputs exist at zero before the first failure instead of appearing only
 # with an inaugural nonzero sample, which increase() cannot compare to zero.
 for _field in FIELDS:
-    for _outcome in ('match', 'mismatch', 'missing_legacy', 'missing_view'):
-        DRIFT.labels(field=_field, outcome=_outcome)
+    for _outcome in DRIFT_OUTCOMES:
+        DRIFT.labels(field=_field, outcome=_label(_outcome, DRIFT_OUTCOMES))
 for _phase in ('queued', 'running', 'retrying'):
     OVERDUE.labels(phase=_phase)
-for _outcome in ('drained', 'error', 'lost_lease'):
-    DRAIN.labels(outcome=_outcome)
-for _outcome in ('redriven', 'error'):
-    SWEEP.labels(outcome=_outcome)
+for _outcome in DRAIN_OUTCOMES:
+    DRAIN.labels(outcome=_label(_outcome, DRAIN_OUTCOMES))
+for _outcome in SWEEP_OUTCOMES:
+    SWEEP.labels(outcome=_label(_outcome, SWEEP_OUTCOMES))
 
 
 def observe_state(state, phase, now):
@@ -117,5 +120,5 @@ def compare(legacy, view, *, reread=None):
         legacy = reread()
         outcomes = differences(legacy, view)
     for field, outcome in outcomes.items():
-        DRIFT.labels(field=field, outcome=outcome).inc()
+        DRIFT.labels(field=field, outcome=_label(outcome, DRIFT_OUTCOMES)).inc()
     return outcomes

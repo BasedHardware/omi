@@ -18,6 +18,12 @@ from database import conversations as conversations_db
 EXPIRED_MESSAGE = '400 The referenced transaction has expired or is no longer valid.'
 
 
+@pytest.fixture(autouse=True)
+def no_episode_log_owner(monkeypatch):
+    # The expiry fake deliberately models only one conversation document.
+    monkeypatch.setattr('database.episode_log.state', lambda *args, **kwargs: {})
+
+
 class _FakeSnapshot:
     def __init__(self, data: Dict[str, Any] | None):
         self._data = data

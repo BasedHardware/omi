@@ -16,6 +16,12 @@ from tests.unit.test_sync_donor_tombstone_visibility import _install_listing
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreTransaction
 
 
+@pytest.fixture(autouse=True)
+def no_episode_log_owner(monkeypatch):
+    # Legacy visibility fakes represent a conversation, not a logged owner.
+    monkeypatch.setattr('database.episode_log.state', lambda *args, **kwargs: {})
+
+
 class _MergeCapableTransaction(StrictFirestoreTransaction):
     """Adds the ``set(..., merge=True)`` branch the strict fixture omits."""
 

@@ -5,6 +5,7 @@ from unittest.mock import Mock
 import pytest
 from google.api_core.exceptions import InvalidArgument
 from database import conversations as db
+from database import episode_log as log_db
 from utils.conversations import summary_delivery as delivery
 from tests.unit.test_conversation_persistence_transaction_expiry import _FakeFirestoreClient, EXPIRED_MESSAGE
 from tests.unit.test_process_conversation_free_tier_branch import (
@@ -17,6 +18,8 @@ from tests.unit.test_process_conversation_free_tier_branch import (
 
 @pytest.fixture
 def writer(monkeypatch):
+    # The shared single-conversation expiry fake has no log owner document.
+    monkeypatch.setattr(log_db, 'state', lambda *args, **kwargs: {})
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
     old = {

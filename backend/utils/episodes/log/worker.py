@@ -16,6 +16,7 @@ from database import episode_log as store, episodes
 from database._client import get_firestore_client
 from utils import cloud_tasks
 from utils.episodes import home_read
+from utils.episodes.metrics import _label
 from utils.episodes.log import metrics
 from utils.episodes.log.codec import dumps, digest, loads
 from utils.episodes.log.fold import Fold
@@ -259,8 +260,8 @@ def drain(uid, *, firestore_client=None, now=None):
         store.retry(uid, claimed, firestore_client=client, now=fixed_now or datetime.now(timezone.utc))
         raise
     finally:
-        metrics.DRAIN.labels(outcome=outcome).inc()
-        metrics.SECONDS.labels(outcome=outcome).observe(time.monotonic() - started)
+        metrics.DRAIN.labels(outcome=_label(outcome, metrics.DRAIN_OUTCOMES)).inc()
+        metrics.SECONDS.labels(outcome=_label(outcome, metrics.DRAIN_OUTCOMES)).observe(time.monotonic() - started)
 
 
 def sweep(*, firestore_client=None, now=None):

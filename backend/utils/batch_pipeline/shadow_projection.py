@@ -90,6 +90,7 @@ def plan(item, payload, context, reader, *, decode, builder=None, assign=None):
                 decode=decode,
                 encode=deepcopy,
                 invalidate=lambda row: None,
+                capture_episode_log=False,  # Discard-only capability: no fact-log access or publication.
             )
             reads, writes = transaction.reads, transaction.writes
             # No part is committed or retained. A later part must plan against
