@@ -19,6 +19,7 @@ import httpx
 
 from config.batch_pipeline_providers import ProviderConfig
 from database import record_audio
+from database import conversation_finalization_jobs as finalization_jobs
 from database.audio_timeline import span_blob_metadata
 from database.batch_pipeline_store import FirestoreStore
 from diarizer.batch_pipeline import PipelineWorker
@@ -38,6 +39,7 @@ from utils.batch_pipeline.serving import Serving
 from utils.conversations.phase import derive_conversation_phase
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations import process_conversation as processing
+from utils.conversations import finalizer, lifecycle
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.other.storage import upload_audio_chunks_batch
 
@@ -258,6 +260,48 @@ class LifecycleSim:
             defer_memory_extraction=True,
             defer_derived_effects=True,
         )
+
+    async def finalize_before_results(self):
+        """Drive a real durable finalization lease before any batch work runs.
+
+        The caller seeds a server-batch capture. Only the registrar's store
+        dependency is bound to this capture's isolated namespace; its body,
+        finalization admission, ownership fences and completion stay real.
+        """
+        install_finalizer_leaves()
+        intent = finalization_jobs.create_or_get_finalization_intent(
+            self.uid,
+            self.cid,
+            requires_byok=False,
+            finalization_admission=lambda row: lifecycle._finalization_admission(row, self.cid),
+            firestore_client=self.stack.firestore,
+        )
+        assert intent['job_id'], 'fixture finalization admission refused'
+        generation = intent['dispatch_generation']
+        claim = finalization_jobs.claim_finalization_job(
+            intent['job_id'], generation, firestore_client=self.stack.firestore
+        )
+        assert claim['status'] == 'claimed', 'fixture finalization lease refused'
+        epoch = claim['lease_epoch']
+        registrar = live.register_recording
+
+        def register(uid, row):
+            return registrar(uid, row, store=self.store, server_flags=SERVER_FLAGS)
+
+        with patch.object(finalizer, 'register_recording', register):
+            disposition = await finalizer.finalize_persisted_conversation(
+                self.uid,
+                self.cid,
+                'en',
+                finalization_job_id=intent['job_id'],
+                dispatch_generation=generation,
+                lease_epoch=epoch,
+            )
+        if disposition is finalizer.ConversationFinalizationDisposition.completed:
+            assert finalization_jobs.mark_finalization_completed(
+                intent['job_id'], generation, epoch, firestore_client=self.stack.firestore
+            ), 'fixture finalization completion fence failed'
+        return finalization_jobs.get_finalization_job(intent['job_id'], firestore_client=self.stack.firestore)
 
     def kill_pusher(self):
         child = self.stack.children['pusher']

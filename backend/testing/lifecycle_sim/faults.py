@@ -1,6 +1,7 @@
 """Exact, single-use write-boundary faults for test entrypoints only."""
 
 from dataclasses import dataclass, field
+from _thread import LockType
 from threading import Lock
 
 
@@ -14,7 +15,7 @@ class BoundaryFault:
     uid: str
     conversation_id: str
     fired: bool = False
-    _lock: Lock = field(default_factory=Lock, repr=False)
+    _lock: LockType = field(default_factory=Lock, repr=False)
 
     def __post_init__(self):
         if self.boundary not in {'seal', 'register', 'admit'} or not self.uid or not self.conversation_id:

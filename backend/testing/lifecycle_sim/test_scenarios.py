@@ -11,6 +11,7 @@ import pytest
 from google.api_core.exceptions import Aborted
 
 from database import record_audio
+from database import conversation_finalization_jobs as finalization_jobs
 from testing.lifecycle_sim.faults import BoundaryFault, InjectedLifecycleFault
 from testing.lifecycle_sim.harness import LifecycleSim
 from testing.listen_pusher_stack.run import Stack, _wait_for_port
@@ -214,3 +215,59 @@ async def test_open_sessions_dead_producer_sealed_within_budget(lifecycle_sim, m
         sim.age(61)
     assert sim.row().get('record_audio_closed'), 'dead-producer capture missed seal budget'
     assert sim.phase in {ConversationPhase.TRANSCRIBED, ConversationPhase.COMPLETE, ConversationPhase.SETTLED}
+
+
+@pytest.mark.asyncio
+@pytest.mark.xfail(
+    strict=True,
+    raises=LifecycleInvariantError,
+    reason='waits on lifecycle finalization ordering fix, no PR yet (lead ruling a50c5b)',
+)
+@pytest.mark.parametrize('closed', [True, False], ids=['results-before-finalization', 'closed-before-completed'])
+async def test_server_batch_completion_ordering(lifecycle_sim, closed):
+    sim = lifecycle_sim
+    sim.seed(sessions={} if closed else {'synthetic-open-producer': True})
+    start = sim.row()['started_at'].timestamp()
+    sim.ref.update(
+        {
+            'status': 'in_progress',
+            'server_batch_only': True,
+            'server_batch_audio_start': start,
+            'server_batch_audio_end': start + 2,
+            'has_content': True,
+            'is_locked': False,
+            'uses_custom_stt': False,
+            'external_data': {},
+        }
+    )
+    if closed:
+        assert sim.seal() is None
+    else:
+        assert sim.seal() == 'producer_pending'
+    finalization = await sim.finalize_before_results()
+    assert sim.job(), 'finalizer did not persist the batch obligation'
+    assert not sim.row().get('transcript_segments'), 'fixture unexpectedly ran the batch worker'
+    if closed:
+        prematurely_completed = finalization['status'] == 'completed'
+        completed_job_id = sim.row()['finalization_job_id']
+        await sim.tick()
+        assert sim.row().get('transcript_segments'), 'fixture batch results did not commit'
+        row = sim.row()
+        latest = finalization_jobs.get_finalization_job(
+            row['finalization_job_id'], firestore_client=sim.stack.firestore
+        )
+        assert latest, 'fixture lost its durable finalization job'
+        rearmed = latest['status'] in {'queued', 'leased'} and (
+            row['finalization_job_id'] != completed_job_id
+            or latest['dispatch_generation'] > finalization['dispatch_generation']
+        )
+        invariant(
+            not prematurely_completed or rearmed,
+            'finalization completed with zero batch results and no re-armed generation',
+        )
+    else:
+        row = sim.row()
+        invariant(
+            row['status'] != 'completed' or (row.get('record_audio_closed') and not row.get('record_upload_sessions')),
+            'conversation completed while audio was open and its upload session remained pending',
+        )

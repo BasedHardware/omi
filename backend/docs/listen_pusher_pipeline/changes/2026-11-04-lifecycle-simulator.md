@@ -2,6 +2,8 @@
 
 WP-A adds emulator-backed lifecycle fixtures for sealed-record registration,
 record-pending admission, failed-upload retry and dead-producer sealing.
+Synthetic server-batch cases also exercise finalization/results and
+audio-close/completion ordering through real durable leases and transactions.
 The existing listen/pusher gauntlet runs the scenarios through its existing
 runner chain. Production entrypoints and lifecycle behavior are unchanged.
 
