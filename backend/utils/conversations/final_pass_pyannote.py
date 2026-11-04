@@ -129,7 +129,7 @@ def run_final_pass(
         outcome = 'skipped_single' if skipped else 'diarized'
         OUTCOMES.labels(lane=lane, outcome=outcome).inc()
         return segments, {
-            **({'assignments': assigned} if include_assignments else {}),
+            **({'assignments': assigned, 'centroids': output['centroids']} if include_assignments else {}),
             'outcome': outcome,
             'agreement': agreement,
             'word_count': total,

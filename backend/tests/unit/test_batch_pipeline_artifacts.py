@@ -106,6 +106,34 @@ def setup(level='enhanced'):
     return store, client, state
 
 
+def test_missing_audio_proof_is_generation_pinned_metadata_only():
+    store, client, _ = setup()
+    original = item()
+    uri = store.stage_audio(original, b'synthetic audio')
+    staged = replace(original, audio_uri=uri)
+    assert store.missing_audio_evidence(staged, now=100) is None
+    client.objects.clear()
+    proof = store.missing_audio_evidence(staged, now=101)
+    assert proof == {
+        'status': 404,
+        'generation': 1,
+        'uri_sha256': __import__('hashlib').sha256(uri.encode()).hexdigest(),
+        'verified_at': 101,
+    }
+    assert client.downloads == 0
+
+
+@pytest.mark.parametrize('failure', [PermissionError, TimeoutError, ValueError])
+def test_missing_audio_proof_never_treats_other_errors_as_absence(failure):
+    store, client, _ = setup()
+    original = item()
+    uri = store.stage_audio(original, b'synthetic audio')
+    client.blob = lambda *a, **kw: SimpleNamespace(reload=lambda **kwargs: (_ for _ in ()).throw(failure()))
+    with pytest.raises(failure):
+        store.missing_audio_evidence(replace(original, audio_uri=uri), now=100)
+    assert client.downloads == 0
+
+
 @pytest.mark.parametrize('level', ['standard', 'enhanced'])
 def test_audio_and_results_are_encrypted_generation_pinned_and_round_trip(level):
     store, client, state = setup(level)

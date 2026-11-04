@@ -79,6 +79,8 @@ _DEMAND_LISTEN_ONLY = frozenset(
         'STT_LIVE_DEMAND_MIN_DWELL_SECONDS',
     }
 )
+# Only the listen receive loop promotes unexpected local-preview audio.
+_PREVIEW_CUSTODY_LISTEN_ONLY = frozenset({'LISTEN_PREVIEW_BATCH_CUSTODY_ENABLED'})
 # Only listen WebSocket reconnects run the stale-page scanner. Pusher consumes
 # admitted jobs; this kill switch must not disable their finalization/retries.
 _RECONNECT_RECOVERY_LISTEN_ONLY = frozenset({'STALE_IN_PROGRESS_RECOVERY_ENABLED'})
@@ -227,6 +229,7 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     | _TRANSLATION_LISTEN_ONLY
     | _REVIEW_SURFACE_LISTEN_ONLY
     | _DEMAND_LISTEN_ONLY
+    | _PREVIEW_CUSTODY_LISTEN_ONLY
     | _RECONNECT_RECOVERY_LISTEN_ONLY
     | _BATCH_PIPELINE_LISTEN_ONLY,
     "prod": frozenset(
@@ -236,10 +239,13 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "MOBILE_STANDARD_BATCH_ENABLED",
             "MOBILE_STANDARD_BATCH_PERCENT",
             "MOBILE_STANDARD_BATCH_UIDS",
-            # Only listen reads the mobile server-batch-only cohort: server_batch.selected via
+            # Only listen reads the mobile/web server-batch-only cohorts: server_batch.selected via
             # request_eligible and via eligible <- create_in_progress_conversation, both called only
             # from routers/listen. Pusher's finalizer uses owned/has_audio and never admits capture.
             "SERVER_BATCH_ONLY_MOBILE_PERCENT",
+            # Same listen-only admission path for learned auto-language mobile/web captures.
+            "SERVER_BATCH_ONLY_AUTO_LANGUAGE_PERCENT",
+            "SERVER_BATCH_ONLY_WEB_PERCENT",
             # Only listen opens visibility-gated Modulate previews; pusher
             # retains raw custody/finalization and never evaluates this cohort.
             "SERVER_BATCH_ONLY_VISIBLE_RESTORE_PERCENT",
@@ -349,6 +355,7 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     | _TRANSLATION_LISTEN_ONLY
     | _REVIEW_SURFACE_LISTEN_ONLY
     | _DEMAND_LISTEN_ONLY
+    | _PREVIEW_CUSTODY_LISTEN_ONLY
     | _RECONNECT_RECOVERY_LISTEN_ONLY
     | (_BATCH_PIPELINE_LISTEN_ONLY - {'BATCH_PIPELINE_UID_ALLOWLIST'})
     | _FINALIZATION_REPLAY_LISTEN_ONLY,

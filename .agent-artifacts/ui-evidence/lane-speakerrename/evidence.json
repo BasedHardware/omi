@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-recording-rename-before.png",
+      "platform": "mobile-ios",
+      "description": "Base naming sheet with conversation-only segment list; synthetic fixture and real fonts.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-recording-rename-after.png",
+      "platform": "mobile-ios",
+      "description": "Production naming sheet defaults to the whole recording; same synthetic fixture and real fonts.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-recording-coverage-partial.png",
+      "platform": "mobile-ios",
+      "description": "Production speaker sheet uses unconfirmed-coverage wording for a legacy local rename; same synthetic fixture and real fonts as the before render.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-ios-coverage-feedback-before.png",
+      "platform": "mobile-ios",
+      "description": "Before: partial-success message claims this conversation only, even though legacy discovery can update several conversations.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "005-mobile-ios-coverage-feedback-after.png",
+      "platform": "mobile-ios",
+      "description": "After: partial-success message names only the available conversations, with no whole-recording claim. Same synthetic transcript and real fixture fonts.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "006-mobile-ios-spanish-transcript-before.png",
+      "platform": "mobile-ios",
+      "description": "Before: Spanish deferred transcript detail at 320pt and 200 percent text, production widgets and real fonts; synthetic held-audio fixture only. Heading and selection labels overflow the row.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "007-mobile-ios-spanish-transcript-after.png",
+      "platform": "mobile-ios",
+      "description": "After: Spanish deferred transcript detail at 320pt and 200 percent text, production widgets and real fonts; synthetic held-audio fixture only. Heading and selection labels wrap fully without hiding words.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

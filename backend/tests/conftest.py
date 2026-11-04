@@ -2,6 +2,7 @@
 
 from collections import defaultdict
 import os
+import subprocess
 import sys
 from pathlib import Path
 import time
@@ -383,3 +384,11 @@ def _parse_fast_unit_limit(raw_value, name, terminalreporter):
 def _duration_allowlisted(test_id, allowlist):
     test_file = test_id.split('::', 1)[0]
     return test_id in allowlist or test_file in allowlist
+
+
+@pytest.fixture
+def isolated_git_env(monkeypatch):
+    """Keep disposable Git repositories independent of a hook's caller."""
+    local_vars = subprocess.check_output(['git', 'rev-parse', '--local-env-vars'], text=True).split()
+    for name in [*local_vars, 'GIT_NAMESPACE']:
+        monkeypatch.delenv(name, raising=False)

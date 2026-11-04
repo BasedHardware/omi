@@ -337,7 +337,6 @@ async def test_actual_app_and_developer_webhook_payloads_are_public(monkeypatch,
     monkeypatch.setattr(webhooks, 'get_webhook_circuit_breaker', lambda _: cb)
     monkeypatch.setattr(webhooks, '_post_dev_webhook', post)
     await webhooks.conversation_created_webhook('owner', c)
-    monkeypatch.setattr(apps, 'is_trial_paywalled', lambda *a: False)
     monkeypatch.setenv('MENTOR_PIPELINE', 'off')
     raw_segments = [s.model_dump() for s in c.transcript_segments]
     raw_segments[0][storage.FIELD] = 'encrypted-internal-sidecar'

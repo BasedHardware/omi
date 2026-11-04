@@ -10,7 +10,8 @@ from collections.abc import Callable
 import contextvars
 import logging
 import signal
-from threading import Lock, current_thread, main_thread
+from threading import Condition, current_thread, main_thread
+from time import monotonic
 from typing import Any
 
 from prometheus_client import Counter, Gauge
@@ -86,11 +87,15 @@ async def drain_on_shutdown(drain: Callable[[], Any], *, timeout: float = 5.0) -
 
 
 class MutationRegistry:
-    def __init__(self, limit: int = 4096):
-        self._lock = Lock()
+    def __init__(self, limit: int = 4096, *, grace_seconds: float = 3.0):
+        self._lock = Condition()
         self._entries: dict[tuple, Callable[[], Any] | None] = {}
         self._draining = False
         self._limit = limit
+        # Cloud Run sends SIGKILL ten seconds after SIGTERM. The existing
+        # five-second outer wait leaves settlement and other cleanup margin.
+        self._grace_seconds = grace_seconds
+        self._deadline: float | None = None
 
     def reserve(self, identity: tuple) -> None:
         with self._lock:
@@ -107,6 +112,7 @@ class MutationRegistry:
             if self._draining and self._entries:
                 raise RuntimeError('Pinecone mutation shutdown has unresolved local tickets')
             self._draining = False
+            self._deadline = None
 
     def activate(self, identity: tuple, settle: Callable[[], Any]) -> bool:
         with self._lock:
@@ -118,9 +124,10 @@ class MutationRegistry:
             if identity in self._entries:
                 del self._entries[identity]
                 PENDING.dec()
+                self._lock.notify_all()
 
     def drain(self) -> int:
-        """Close admission and mark live tickets uncertain, never completed.
+        """Close admission, allow normal completion, then mark stragglers uncertain.
 
         Failed writes remain registered for a subsequent drain attempt. Already
         admitting transactions settle in their own thread before provider IO.
@@ -128,7 +135,19 @@ class MutationRegistry:
         """
         with self._lock:
             self._draining = True
+            if self._deadline is None:
+                self._deadline = monotonic() + self._grace_seconds
+            # Condition.wait releases the lock: provider threads can finish
+            # and discard their tickets throughout the grace. Reservations
+            # without a callback settle in activate's caller before provider IO.
+            while any(callback is not None for callback in self._entries.values()):
+                remaining = self._deadline - monotonic()
+                if remaining <= 0:
+                    break
+                self._lock.wait(remaining)
             callbacks = [callback for callback in self._entries.values() if callback is not None]
+        if callbacks:
+            logger.info('event=pinecone_mutation_drain outcome=grace_deadline attempted=%d', len(callbacks))
         settled = 0
         for callback in callbacks:
             try:

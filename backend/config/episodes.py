@@ -53,9 +53,12 @@ EPISODES_CLIENT_CHANNELS_ENV = 'EPISODES_CLIENT_CHANNELS'
 EPISODE_OUTPUT_LANGUAGE_PIN_ENV = 'EPISODE_OUTPUT_LANGUAGE_PIN'
 EPISODE_HARD_CAP_ACROSS_CONVERSATIONS_ENV = 'EPISODE_HARD_CAP_ACROSS_CONVERSATIONS'
 HOME_HIDE_BELOW_FLOOR_ROWS_ENV = 'HOME_HIDE_BELOW_FLOOR_ROWS'
+HOME_HIDE_EPISODE_MEMBERS_ENV = 'HOME_HIDE_EPISODE_MEMBERS'
+HOME_NEUTRAL_MINIMUM_TITLES_ENV = 'HOME_NEUTRAL_MINIMUM_TITLES'
 EPISODE_CARRY_ON_SESSION_END_ENV = 'EPISODE_CARRY_ON_SESSION_END'
 EPISODE_MOMENT_OUTPUT_VALIDATOR_ENV = 'EPISODE_MOMENT_OUTPUT_VALIDATOR'
 EPISODE_COMPOSER_ENV = 'EPISODE_COMPOSER'
+EPISODE_COMPOSE_SETTLE_ENABLED_ENV = 'EPISODE_COMPOSE_SETTLE_ENABLED'
 APP_CHANNEL_HEADER = 'X-Omi-App-Channel'
 APP_CHANNELS = frozenset({'beta', 'store'})
 _DEFAULT_CLIENT_CHANNELS = frozenset({'beta'})
@@ -112,6 +115,16 @@ def episode_hard_cap_across_conversations_enabled() -> bool:
     return modes_default_on(EPISODE_HARD_CAP_ACROSS_CONVERSATIONS_ENV)
 
 
+def home_hide_episode_members_enabled() -> bool:
+    """Hide only members covered by a client-held, extant episode projection."""
+    return modes_default_on(HOME_HIDE_EPISODE_MEMBERS_ENV)
+
+
+def home_neutral_minimum_titles_enabled() -> bool:
+    """Replace provisional transcript-echo Home titles without changing storage."""
+    return modes_default_on(HOME_NEUTRAL_MINIMUM_TITLES_ENV)
+
+
 def home_hide_below_floor_rows_enabled() -> bool:
     """Whether Home leaves out short captures under the notes floor."""
     return modes_default_on(HOME_HIDE_BELOW_FLOOR_ROWS_ENV)
@@ -133,6 +146,11 @@ def episode_composer_enabled() -> bool:
     Off keeps the live incremental notes as the final episode notes, as before.
     """
     return modes_default_on(EPISODE_COMPOSER_ENV)
+
+
+def episode_compose_settle_enabled() -> bool:
+    """Default-on cost control; off restores the original trigger and retry behavior."""
+    return modes_default_on(EPISODE_COMPOSE_SETTLE_ENABLED_ENV)
 
 
 def client_channel_admitted(raw: str | None) -> bool:
@@ -253,6 +271,8 @@ COMPOSER_READ_THROTTLE_SECONDS = 600
 COMPOSER_LOOKUP_SCHEDULES_PER_WINDOW = 4
 # One paid call per evidence across replicas: the claim outlives the model call (90 s x 2 attempts).
 COMPOSER_LEASE_SECONDS = 240
+COMPOSER_SETTLE_SECONDS = 10 * 60
+COMPOSER_MAX_SETTLE_SECONDS = 25 * 60
 # After a failed paid attempt the read-side net backs off 10, 20, 40 min, then stops until
 # the evidence changes (a member finalize still composes).
 COMPOSER_RETRY_MINUTES = 10
@@ -263,3 +283,7 @@ COMPOSER_MAX_PARAGRAPH_CHARS = 1200
 COMPOSER_MAX_POINTS = 6
 COMPOSER_MAX_DETAILS = 4
 COMPOSER_MAX_POINT_CHARS = 400
+
+# Extra reads caused by Home projection, independent of page/member counts.
+HOME_MEMBERSHIP_EPISODE_READ_LIMIT = 5
+HOME_IDLE_CLOSES_PER_READ = 2

@@ -1,6 +1,7 @@
 """Queue-age autoscaling export. Refresh from a supervised worker, never import IO."""
 
 import logging
+import math
 import threading
 
 from prometheus_client import CollectorRegistry, Gauge, Histogram, Counter, REGISTRY
@@ -15,10 +16,19 @@ from config.batch_timeliness import (
 from database.batch_pipeline_store import Store, FirestoreStore, PROJECTION_OBLIGATION_STATES, timeliness_sample
 from utils.batch_pipeline.contracts import Priority, WORK_OUTCOMES
 from utils.observability.reasons import AdmissionHoldReason, ReasonFamily, reason_label
+from utils.lifecycle_metrics import PhaseMetrics
 
 LABELS = {Priority.FRESH: 'fresh', Priority.RECENT: 'recent', Priority.DEEP: 'deep'}
 AGE_TARGETS = {Priority.FRESH: 30, Priority.RECENT: 300, Priority.DEEP: 3600}
 PARK_REASONS = frozenset({'privacy', 'pool_duration', 'pool_unit_kind', 'shared_live_policy'})
+
+
+def age_seconds(started: float | None, now: float) -> float:
+    # Preserve an explicitly incomplete bounded scan as NaN. max(0, NaN)
+    # would silently turn unknown debt into a healthy zero.
+    if started is None:
+        return 0
+    return max(0.0, now - started) if math.isfinite(started) else float('nan')
 
 
 class QueueMetrics:
@@ -84,6 +94,8 @@ class QueueMetrics:
             registry=registry,
         )
         self._timeliness_due = 0.0
+        self.record_pending = PhaseMetrics('omi_batch_record_pending', ['state'], registry=registry)
+        self.nojob = PhaseMetrics('omi_record_seal_nojob', ['kind'], registry=registry)
         self.oldest_age = Gauge(
             'omi_batch_pipeline_oldest_age_seconds',
             'Oldest admitted uncommitted item age',
@@ -233,17 +245,19 @@ class QueueMetrics:
                     'event=batch_capacity_sample outcome=unavailable exception_type=%s', type(error).__name__
                 )
         for priority, pending, ready, retry in samples:
-            self.oldest_age.labels(LABELS[priority], *self.scope).set(
-                max(0.0, now - pending) if pending is not None else 0
-            )
+            self.oldest_age.labels(LABELS[priority], *self.scope).set(age_seconds(pending, now))
             self.ready_age.labels(LABELS[priority], *self.scope).set(max(0.0, now - ready) if ready is not None else 0)
-            self.retry_age.labels(LABELS[priority], *self.scope).set(max(0.0, now - retry) if retry is not None else 0)
+            self.retry_age.labels(LABELS[priority], *self.scope).set(age_seconds(retry, now))
         self.refreshed_at.labels(*self.scope).set(now)
         if capacity:
             for priority, count in capacity:
                 self.ready_units.labels(LABELS[priority], *self.scope).set(count)
             self.capacity_refreshed_at.labels(*self.scope).set(now)
         if isinstance(store, FirestoreStore):
+            from database.lifecycle_metrics_queries import record_pending, nojob
+
+            self.record_pending.refresh(now, lambda: record_pending(store.client, store.namespace, now))
+            self.nojob.refresh(now, lambda: nojob(store.client, store.namespace))
             self.refresh_timeliness(store, now)
             self.refresh_projection(store, now)
 

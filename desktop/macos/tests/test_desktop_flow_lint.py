@@ -32,6 +32,40 @@ def load_lint():
 LINT = load_lint()
 
 
+class SparseCheckoutSkipTests(unittest.TestCase):
+    def test_flows_dir_cone_excluded_by_sparse_checkout(self) -> None:
+        # Cone-mode sparse checkouts keep out-of-cone paths in the index with
+        # the skip-worktree bit: the lint must skip (dense CI enforces), not
+        # fail. A plain deletion keeps its 'H ' tag and keeps failing.
+        import subprocess
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            flows = root / "desktop/macos/e2e/flows"
+            flows.mkdir(parents=True)
+            (flows / "core.yaml").write_text("actions: []\n", encoding="utf-8")
+
+            def git(*args: str) -> None:
+                subprocess.run(["git", "-C", str(root), *args], check=True, capture_output=True)
+
+            git("init", "-q", "-b", "main")
+            git("config", "user.email", "flow-lint@example.test")
+            git("config", "user.name", "Flow Lint Tests")
+            git("add", "-A")
+            git("commit", "-qm", "fixture")
+            git("sparse-checkout", "init", "--cone")
+            git("sparse-checkout", "set", "backend")
+            self.assertFalse(flows.is_dir())
+            self.assertTrue(LINT.sparse_excluded(flows))
+
+            # Same path, deleted by hand instead: not excluded.
+            git("sparse-checkout", "set", "desktop/macos/e2e")
+            self.assertTrue(flows.is_dir())
+            (flows / "core.yaml").unlink()
+            self.assertFalse(LINT.sparse_excluded(flows))
+
+
 class DesktopFlowLintRetiredStateTests(unittest.TestCase):
     def test_wait_on_selected_tab_index_is_rejected(self):
         errors = LINT.retired_state_field_errors(

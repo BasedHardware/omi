@@ -270,7 +270,6 @@ def _build_fakes() -> dict[str, ModuleType]:
     subjects.infer_subject_from_segments = lambda segments: (None, None)
 
     subscription = add("utils.subscription", AutoMockModule("utils.subscription"))
-    subscription.is_trial_paywalled = MagicMock(return_value=False)
     subscription.should_defer_desktop_processing = MagicMock(return_value=False)
     subscription.should_skip_omi_paid_postprocessing = MagicMock(return_value=False)
 
@@ -732,7 +731,7 @@ def test_deferred_fresh_creation_uses_the_explicit_processing_lifecycle_owner(mo
     deferred_conversation.dict.return_value = {'id': 'deferred-conversation', 'status': 'processing'}
     created = MagicMock(return_value=True)
     persisted = MagicMock()
-    monkeypatch.setattr(process_conversation, '_build_deferred_structured', lambda *args: MagicMock())
+    monkeypatch.setattr(process_conversation, 'build_deferred_structured', lambda *args: MagicMock())
     monkeypatch.setattr(process_conversation, '_get_conversation_obj', lambda *args, **kwargs: deferred_conversation)
     monkeypatch.setattr(process_conversation.lifecycle_service, 'create_processing_conversation', created)
     monkeypatch.setattr(process_conversation.lifecycle_service, 'persist_processed_conversation', persisted)
@@ -759,7 +758,7 @@ def test_deferred_desktop_filler_is_discarded_by_the_free_rules(monkeypatch):
     deferred_conversation.id = 'deferred-filler'
     deferred_conversation.dict.return_value = {'id': 'deferred-filler', 'status': 'processing'}
     created = MagicMock(return_value=True)
-    monkeypatch.setattr(process_conversation, '_build_deferred_structured', lambda *args: MagicMock())
+    monkeypatch.setattr(process_conversation, 'build_deferred_structured', lambda *args: MagicMock())
     monkeypatch.setattr(process_conversation, '_get_conversation_obj', lambda *args, **kwargs: deferred_conversation)
     monkeypatch.setattr(process_conversation, '_calendar_overlap_retains_conversation', lambda *args: False)
     monkeypatch.setattr(process_conversation.lifecycle_service, 'create_processing_conversation', created)

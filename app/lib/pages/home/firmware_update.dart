@@ -55,6 +55,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
           firmwareRevision: device.firmwareRevision,
           hardwareRevision: device.hardwareRevision,
           manufacturerName: device.manufacturerName,
+          serialNumber: device.serialNumber,
         );
         var result = await shouldUpdateFirmware(currentFirmware: widget.device!.firmwareRevision);
         if (mounted) {

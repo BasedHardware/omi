@@ -301,7 +301,9 @@ async def enrichment_response(payload: dict):
             from routers.enrichment import consume
             from utils.workers.consumer import http_response
 
-            return http_response(await run_blocking(postprocess_executor, consume, document_id, token))
+            return http_response(
+                await run_blocking(postprocess_executor, consume, document_id, token, time.monotonic())
+            )
         # Summaries must not queue behind long transcription jobs. Reuse the
         # conversation-processing bulkhead; the master flag restores the old pool.
         executor = postprocess_executor if summary_deadline_enabled() else sync_executor

@@ -351,3 +351,25 @@ def test_copying_replay_binding_to_pusher_is_rejected(gate: SimpleNamespace, cha
     path = chart_fixture / 'backend/charts/pusher/prod_omi_pusher_values.yaml'
     path.write_text(path.read_text().replace('env:\n', f'env:\n  - name: {name}\n    value: "probe"\n', 1))
     assert any(f'{name} is no longer listen-only' in error for error in gate.validate_preflight(chart_fixture))
+
+
+@pytest.mark.parametrize('env', ('dev', 'prod'))
+def test_preview_custody_rollback_is_listen_only(gate: SimpleNamespace, chart_fixture: Path, env: str) -> None:
+    values = chart_fixture / f'backend/charts/backend-listen/{env}_omi_backend_listen_values.yaml'
+    replace_once(
+        values,
+        '  - name: LISTEN_PREVIEW_BATCH_CUSTODY_ENABLED\n    value: "true"\n',
+        '  - name: LISTEN_PREVIEW_BATCH_CUSTODY_ENABLED\n    value: "false"\n',
+    )
+    assert gate.validate_preflight(chart_fixture) == []
+
+
+def test_web_batch_cohort_is_listen_admission_only(gate: SimpleNamespace, monkeypatch) -> None:
+    assert gate.validate_preflight(REPO_ROOT) == []
+    # Removing the reviewed listen-only classification must reject the chart binding.
+    monkeypatch.setitem(
+        gate.LISTEN_ONLY_ALLOWED,
+        'prod',
+        gate.LISTEN_ONLY_ALLOWED['prod'] - {'SERVER_BATCH_ONLY_WEB_PERCENT'},
+    )
+    assert any('SERVER_BATCH_ONLY_WEB_PERCENT' in error for error in gate.validate_preflight(REPO_ROOT))

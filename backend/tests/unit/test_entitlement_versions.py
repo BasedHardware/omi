@@ -37,6 +37,9 @@ def test_all_main_legacy_price_entitlements_are_byte_identical_except_approved_r
     # Keep the historical fixture intact and allow only that exact display rename;
     # every other definition field and runtime entitlement remains byte-pinned.
     for snapshot in expected.values():
+        # Removed internal trial eligibility was never a served entitlement.
+        for desktop in snapshot['desktop_cases']:
+            desktop.pop('paywall_eligible')
         definition = snapshot['definition']
         if definition['id'] == 'unlimited_v2':
             assert definition['display_name'] == 'Unlimited'

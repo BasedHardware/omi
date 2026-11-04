@@ -1,3 +1,10 @@
+// SharedPreferencesUtil: the app's persisted settings surface plus the auth
+// token store bridge (tokens in flutter_secure_storage, expiry in prefs).
+//
+// Nearly every service reads settings from here -- capture alone reads dozens
+// -- so initialization order matters, and the one-time
+// migrateAuthTokenFromPrefs() must run during init so existing sessions keep
+// their token after upgrade.
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io' show Platform;

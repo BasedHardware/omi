@@ -57,6 +57,7 @@ from utils.stt.vendor_guard import (
     record_breaker_quota_error,
     record_breaker_success,
     record_vendor_burn,
+    record_vendor_payload,
 )
 
 _DG_TIMEOUT = httpx.Timeout(connect=10.0, read=120.0, write=30.0, pool=10.0)
@@ -652,7 +653,7 @@ def modulate_prerecorded_from_bytes(
     return_language: bool = False,
     language: Optional[str] = None,
 ) -> Union[List[Dict[str, Any]], Tuple[List[Dict[str, Any]], str]]:
-    logger.info(f'modulate_prerecorded_from_bytes bytes_len={len(audio_bytes)} {sample_rate} {diarize} {attempts}')
+    logger.debug(f'modulate_prerecorded_from_bytes bytes_len={len(audio_bytes)} {sample_rate} {diarize} {attempts}')
 
     require_provider_environment(PrerecordedSTTService.MODULATE)
     api_key = os.environ['MODULATE_API_KEY']
@@ -674,12 +675,20 @@ def modulate_prerecorded_from_bytes(
     try:
         url = 'https://modulate-developer-apis.com/api/velma-2-stt-batch'
         headers = {'X-API-Key': api_key}
-        files = {'upload_file': ('audio.wav', BytesIO(audio_bytes), 'audio/wav')}
+        is_flac = audio_bytes.startswith(b'fLaC')
+        files = {
+            'upload_file': (
+                'audio.flac' if is_flac else 'audio.wav',
+                BytesIO(audio_bytes),
+                'audio/flac' if is_flac else 'audio/wav',
+            )
+        }
         data = {'speaker_diarization': str(diarize).lower()}
 
         with httpx.Client(timeout=_verification_timeout(300)) as client:
             burn_seconds = _wav_duration_seconds(audio_bytes)
             posted = True
+            record_vendor_payload('modulate', 'stt', len(audio_bytes))
             response = client.post(url, headers=headers, files=files, data=data)
         try:
             response.raise_for_status()
@@ -969,7 +978,7 @@ def parakeet_prerecorded_from_bytes(
             return_language=return_language,
             language=language,
         )
-    logger.info(
+    logger.debug(
         f'parakeet_prerecorded_from_bytes bytes_len={len(audio_bytes)} {sample_rate} {diarize} {attempts} encoding={encoding}'
     )
 
@@ -993,11 +1002,13 @@ def parakeet_prerecorded_from_bytes(
 
         with httpx.Client(timeout=_verification_timeout(_PARAKEET_TIMEOUT)) as client:
             with observe_parakeet_request('v2' if use_v2 else 'v1'):
+                record_vendor_payload('parakeet', 'v2' if use_v2 else 'v1', len(audio_bytes))
                 response = observe_sync_call('parakeet', client.post, url, files=files, data=data if data else None)
             if response.status_code == 404 and use_v2:
                 url = api_url.rstrip('/') + '/v1/transcribe'
                 client.timeout = _verification_timeout(_PARAKEET_TIMEOUT)
                 with observe_parakeet_request('v1'):
+                    record_vendor_payload('parakeet', 'v1', len(audio_bytes))
                     response = observe_sync_call(
                         'parakeet', client.post, url, files={'file': ('audio.wav', BytesIO(audio_bytes), 'audio/wav')}
                     )

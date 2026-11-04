@@ -1,3 +1,9 @@
+// The floating/notch control bar window: NSPanel lifecycle, screen attachment,
+// animation, and the window-level behaviors the bar's views rely on.
+//
+// The window is presentation chrome over FloatingControlBarState -- it must not
+// own chat state or a second transcript, because every surface is a viewport
+// over the one shared ChatProvider (FloatingControlBar/ARCHITECTURE.md).
 import Cocoa
 import Combine
 @preconcurrency import ObjectiveC

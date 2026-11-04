@@ -37,8 +37,16 @@ from database.batch_pipeline_privacy import (
 )
 
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+from database.batch_pipeline_store import (
+    ADMISSIBLE_READY_SCAN_LIMIT,
+    OLDEST_POLICY_HOLD_SCAN_LIMIT,
+    is_admissible_ready,
+    is_policy_hold,
+    is_queue_dispositioned,
+)
 
-# Same set as database.batch_pipeline_recovery.PROVIDER_STATES (not imported: keep the model import-light).
+# Mirrors the recovery protocol's state names without binding to its enum.
+# The shared queue predicate import creates no Firestore client.
 PROVIDER_STATES = frozenset({'provider_pending', 'provider_running', 'vendor_held'})
 
 T = TypeVar('T')
@@ -218,19 +226,15 @@ class SimStore:
             ]
             return min(values) if values else None
         # Mirrors database.batch_pipeline_store.oldest: a bounded FIFO prefix walked past policy holds.
-        from database.batch_pipeline_store import OLDEST_POLICY_HOLD_SCAN_LIMIT, is_policy_hold
-
         rows = sorted(
             (row['enqueued_at'], key, row)
             for (table, key), row in self.rows.items()
             if table == 'jobs' and row.get('priority') == priority and row.get('merge_pending')
         )
-        oldest_hold = None
         for enqueued_at, _, row in rows[:OLDEST_POLICY_HOLD_SCAN_LIMIT]:
-            if not is_policy_hold(row):
+            if not is_queue_dispositioned(row) and not is_policy_hold(row):
                 return enqueued_at
-            oldest_hold = enqueued_at if oldest_hold is None else oldest_hold
-        return oldest_hold if len(rows) > OLDEST_POLICY_HOLD_SCAN_LIMIT else None
+        return float('nan') if len(rows) > OLDEST_POLICY_HOLD_SCAN_LIMIT else None
 
     def ready_for_capacity(self, priority: int, now: float) -> int:
         """Mirrors database.batch_pipeline_store.ready_for_capacity."""
@@ -245,8 +249,6 @@ class SimStore:
 
     def oldest_admissible_ready(self, priority: int, now: float) -> float | None:
         """Mirrors database.batch_pipeline_store.oldest_admissible_ready."""
-        from database.batch_pipeline_store import ADMISSIBLE_READY_SCAN_LIMIT, is_admissible_ready
-
         rows = sorted(
             (row['enqueued_at'], segment_id, row)
             for segment_id in self._by_state.get('ready', ())
@@ -258,12 +260,15 @@ class SimStore:
         return None
 
     def oldest_retry(self, priority: int) -> float | None:
-        values = [
-            row['retry_started_at']
-            for (table, _), row in self.rows.items()
+        rows = sorted(
+            (row['retry_started_at'], key, row)
+            for (table, key), row in self.rows.items()
             if table == 'jobs' and row.get('priority') == priority and 'retry_started_at' in row
-        ]
-        return min(values) if values else None
+        )
+        for started, _, row in rows[:OLDEST_POLICY_HOLD_SCAN_LIMIT]:
+            if not is_queue_dispositioned(row) and not is_policy_hold(row):
+                return started
+        return float('nan') if len(rows) > OLDEST_POLICY_HOLD_SCAN_LIMIT else None
 
     def acquire_pull_claim(self, shard: str, token: str, now: float, ttl: float) -> bool:
         if self.rows.get(('pull_claims', shard), {}).get('expires_at', 0) > now:

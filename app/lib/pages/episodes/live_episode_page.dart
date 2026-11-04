@@ -530,18 +530,7 @@ class _SoFarCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Title and tag share a line, and stack at large text sizes rather than overflow.
-          _CardHeader(
-            title: l10n.episodeSoFar,
-            // The tag names where the bullets came from, so it shows only with bullets.
-            trailing: preview != null && !serverNotes
-                ? ListenableBuilder(
-                    listenable: preview!.notes,
-                    builder: (context, _) =>
-                        preview!.notes.bullets.isEmpty ? const SizedBox.shrink() : _OnThisPhoneTag(),
-                  )
-                : null,
-          ),
+          Text(l10n.episodeSoFar, style: OmiType.headline),
           if (notesUnavailable) ...[
             const SizedBox(height: OmiSpacing.xs),
             Text(
@@ -584,11 +573,6 @@ class _SoFarCard extends StatelessWidget {
                   children: [
                     const SizedBox(height: OmiSpacing.sm),
                     EpisodeBullets(notes.bullets.take(maxBullets).toList()),
-                    const SizedBox(height: OmiSpacing.xxs),
-                    Text(
-                      l10n.episodeOnDeviceNotesFootnote,
-                      style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
-                    ),
                   ],
                 );
               },
@@ -598,45 +582,6 @@ class _SoFarCard extends StatelessWidget {
             Text(l10n.episodeNotesSoon, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
           ],
         ],
-      ),
-    );
-  }
-}
-
-/// size leaves no room for both on one line.
-class _CardHeader extends StatelessWidget {
-  const _CardHeader({required this.title, this.trailing});
-
-  final String title;
-  final Widget? trailing;
-
-  @override
-  Widget build(BuildContext context) {
-    final heading = Text(title, style: OmiType.headline);
-    if (trailing == null) return heading;
-    return SizedBox(
-      width: double.infinity,
-      child: Wrap(
-        alignment: WrapAlignment.spaceBetween,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        spacing: OmiSpacing.xs,
-        children: [heading, trailing!],
-      ),
-    );
-  }
-}
-
-/// The small provenance tag on on-device notes: they were drafted on this phone.
-class _OnThisPhoneTag extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      key: const Key('episode_on_this_phone_tag'),
-      padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xs, vertical: 3),
-      decoration: BoxDecoration(color: OmiColors.surface0, borderRadius: OmiRadius.pillAll),
-      child: Text(
-        context.l10n.episodeOnThisPhone,
-        style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
       ),
     );
   }

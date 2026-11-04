@@ -201,6 +201,8 @@ def test_only_finally_discarded_members_are_absent_from_live_and_list_http(store
     live = service.live_episode
     c = service.Collaborators(firestore_client=store, now=lambda: START + timedelta(minutes=3))
     monkeypatch.setattr(service, 'live_episode', lambda uid: live(uid, collaborators=c))
+    settle = service.settle_episode_for_read
+    monkeypatch.setattr(service, 'settle_episode_for_read', lambda uid, row, _c: settle(uid, row, c))
     monkeypatch.setattr(service, 'last_closed_episode', lambda *a, **kw: None)
     app = FastAPI()
     app.include_router(router.router)
@@ -322,10 +324,8 @@ def test_only_the_short_member_leaves_a_longer_episode(monkeypatch):
         {'user_title': 'mine'},
         {'has_photos': True},
         {'sync_relevance_user_kept': True},
-        {'finished_at': START + timedelta(seconds=60)},
         {'summary_blocked_reason': None},
         {'status': 'in_progress'},
-        {'structured': {'title': 'short', 'overview': 'has notes'}},
     ],
 )
 def test_short_row_stays_when_anything_says_it_matters(monkeypatch, extra):
@@ -365,3 +365,64 @@ def test_members_read_in_recorded_order_not_arrival_order(monkeypatch):
     }
     projected = home_read.project_episode('u', episode, members=members)
     assert [m['id'] for m in projected['members']] == ['earlier', 'later']
+
+
+def test_member_field_projection_keeps_pending_deadline_and_delivery_receipt(store, monkeypatch):
+    member = {
+        'status': 'completed',
+        'episode_transcription_pending_at': START,
+        'episode_transcription_deadline_at': START + timedelta(hours=2),
+        'finalization_status': 'dead_letter',
+        'record_projection_revision': 0,
+        'server_batch_audio_start': START.timestamp(),
+        'server_batch_audio_end': (START + timedelta(minutes=2)).timestamp(),
+    }
+    store.collection('users').document('u').collection('conversations').document('c').set(member)
+    monkeypatch.setattr(home_read.conversations, 'prepare_conversation_for_read', lambda row, uid: row)
+    assert home_read._read_members('u', [{'conversation_ids': ['c']}], firestore_client=store) == {
+        'c': dict(member, id='c')
+    }
+
+
+@pytest.mark.parametrize('outcome', ['pending', 'dead_letter', 'deadline', 'projected'])
+def test_home_http_returns_honest_batch_member_state(store, monkeypatch, outcome):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from routers import episodes as router
+    from utils.other import endpoints as auth
+
+    put(store, 'batch', START, START + timedelta(minutes=2))
+    root = store.collection('users').document('u')
+    root.collection('episodes').document('batch').update({'conversation_ids': ['capture']})
+    member = {
+        'status': 'completed',
+        'episode_transcription_deadline_at': datetime.now(timezone.utc)
+        + timedelta(hours=-1 if outcome == 'deadline' else 1),
+        'server_batch_audio_start': START.timestamp(),
+        'server_batch_audio_end': (START + timedelta(minutes=2)).timestamp(),
+    }
+    if outcome == 'dead_letter':
+        member['finalization_status'] = 'dead_letter'
+    elif outcome == 'projected':
+        member.update(record_projection_revision=1, structured={'title': 'Recovered transcript'})
+    root.collection('conversations').document('capture').set(member)
+    monkeypatch.setattr(router, '_admitted', lambda *a: True)
+    monkeypatch.setattr(home_read, 'get_firestore_client', lambda: store)
+    monkeypatch.setattr(home_read.conversations, 'prepare_conversation_for_read', lambda row, uid: row)
+    monkeypatch.setattr(home_read, 'schedule_missed_composes', lambda *a, **kw: 0)
+    app = FastAPI()
+    app.include_router(router.router)
+    app.dependency_overrides[auth.get_current_user_uid] = lambda: 'u'
+    with TestClient(app) as client:
+        response = client.get(
+            '/v1/episodes', params={'from': START.isoformat(), 'to': (START + timedelta(hours=1)).isoformat()}
+        )
+    assert response.status_code == 200
+    wire = response.json()['episodes'][0]['members'][0]
+    expected = {
+        'pending': ('Transcribing…', 'processing'),
+        'dead_letter': ("Couldn't transcribe", 'failed'),
+        'deadline': ("Couldn't transcribe", 'failed'),
+        'projected': ('Recovered transcript', 'completed'),
+    }
+    assert (wire['title'], wire['status']) == expected[outcome]

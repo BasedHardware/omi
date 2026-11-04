@@ -53,6 +53,7 @@ west build -b "$BOARD" "$FW/omi" --sysbuild -d build --pristine always \
   -- -DBOARD_ROOT="$FW"
 
 # Fail loud if any expected artifact is missing (silent-drop prevention).
+test -s build/omi/zephyr/zephyr.elf
 test -s build/dfu_application.zip
 test -s build/merged.hex
 test -s build/merged_CPUNET.hex

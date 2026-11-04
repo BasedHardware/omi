@@ -11,15 +11,23 @@ from hashlib import sha256
 from functools import wraps
 import json
 import logging
+from threading import Lock
+from time import sleep
 from typing import Any, Mapping, Sequence, cast
 from uuid import uuid4
 
+from google.api_core.exceptions import Aborted, DeadlineExceeded, Unauthenticated, ServiceUnavailable
+
 from database import _client as firestore_clients
 from database.account_deletion_policy import account_deletion_marker_blocks_access
+from database.firestore_transaction_retry import equal_jitter_delay
 from database.pinecone_mutation_lifecycle import MutationRegistry, UNCERTAIN
 
 logger = logging.getLogger(__name__)
 _mutations = MutationRegistry()
+# Fixed stripes bound memory without keeping an unbounded owner registry. Only
+# route transactions hold a stripe; provider IO must never hold one.
+_mutation_locks = tuple(Lock() for _ in range(256))
 
 
 def start_mutations() -> None:
@@ -27,7 +35,7 @@ def start_mutations() -> None:
 
 
 def drain_mutations() -> int:
-    """Shutdown-only: stop admission and preserve live mutations as uncertain."""
+    """Shutdown-only: close admission, wait briefly, preserve stragglers as uncertain."""
     return _mutations.drain()
 
 
@@ -118,6 +126,27 @@ def _transactional(function: Any) -> Any:
 
 def _document(client: Any, key: PartitionKey) -> Any:
     return client.collection(COLLECTION).document(key.document_id)
+
+
+def _mutation_transaction(client: Any, key: PartitionKey, function: Any, *args: Any, finish: bool = False) -> Any:
+    lock = _mutation_locks[int(key.document_id[:8], 16) % len(_mutation_locks)]
+    for attempt in range(3):
+        try:
+            with lock:
+                return function(client.transaction(), _document(client, key), key, *args)
+        except Exception as error:
+            # Firestore's transactional wrapper raises ValueError FROM Aborted
+            # after exhausting its internal attempts. Do not retry arbitrary
+            # validation errors or ambiguous admission transport failures.
+            aborted = isinstance(error, Aborted) or (
+                isinstance(error, ValueError) and isinstance(error.__cause__, Aborted)
+            )
+            transient_finish = finish and isinstance(error, (Unauthenticated, ServiceUnavailable, DeadlineExceeded))
+            if attempt == 2 or not (aborted or transient_finish):
+                raise
+            # A fresh transaction follows a confirmed abort. Finish is also
+            # idempotent after a lost commit response; provider IO is not repeated.
+            sleep(equal_jitter_delay(attempt + 1))
 
 
 def _read(ref: Any, key: PartitionKey, transaction: Any | None = None) -> dict[str, Any]:
@@ -276,10 +305,10 @@ def begin_mutation(
     except RuntimeError as error:
         raise PartitionBusy(str(error)) from error
     try:
-        ticket = _begin_mutation(
-            client.transaction(),
-            _document(client, key),
+        ticket = _mutation_transaction(
+            client,
             key,
+            _begin_mutation,
             token,
             ids,
             full_owner,
@@ -356,10 +385,11 @@ def finish_mutation(
         raise ValueError('write_lsn must be a nonnegative integer')
     client = _client(firestore_client)
     try:
-        route = _finish_mutation(client.transaction(), _document(client, key), key, ticket, write_lsn)
+        route = _mutation_transaction(client, key, _finish_mutation, ticket, write_lsn, finish=True)
     except BaseException:
         # Preserve the original failure, including process interruption. A retry
         # must not silently orphan the old admission under a fresh token.
+        logger.warning('event=pinecone_mutation_finish outcome=settlement_failed')
         try:
             mark_mutation_uncertain(key, ticket, firestore_client=client)
         except BaseException:

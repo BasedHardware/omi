@@ -331,7 +331,15 @@ def test_discovery_pages_past_closed_rows_and_preserves_oldest_order():
             return self
 
         def select(self, fields):
-            assert fields == ('finished_at', 'record_audio_closed', 'record_audio_partial')
+            assert fields == (
+                'finished_at',
+                'record_audio_closed',
+                'record_audio_partial',
+                'record_upload_revision',
+                'deleted',
+                'discarded',
+                'private_cloud_sync_enabled',
+            )
             return self
 
         def limit(self, _):
@@ -350,7 +358,12 @@ def test_discovery_pages_past_closed_rows_and_preserves_oldest_order():
                         to_dict=lambda: {'finished_at': finish, 'record_audio_closed': True},
                     )
                 ] * 128
-            return [SimpleNamespace(reference=SimpleNamespace(path='oldest'), to_dict=lambda: {'finished_at': finish})]
+            return [
+                SimpleNamespace(
+                    reference=SimpleNamespace(path='oldest'),
+                    to_dict=lambda: {'finished_at': finish, 'private_cloud_sync_enabled': True},
+                )
+            ]
 
     query = Query()
     rows, saturated, cursor = cluster.discover(
@@ -859,3 +872,55 @@ def test_non_tail_child_cannot_emit_gap():
     )
     assert report['tail_gap_buckets'] == {}
     assert 'tail_gap_bucket' not in progress[0]
+
+
+def _partial_mark(revision, finish):
+    return {
+        'version': 1,
+        'reason': sorted(cluster.partial_config.REASONS)[0],
+        'upload_revision': revision,
+        'finished_at': finish,
+    }
+
+
+@pytest.mark.parametrize(
+    'extra,selected',
+    [
+        ({}, True),  # open, sync on: still a repair candidate
+        ({'deleted': True}, False),
+        ({'discarded': True}, False),
+        ({'private_cloud_sync_enabled': False}, False),
+        ({'record_audio_closed': True, 'record_audio_partial': 'MARK', 'record_upload_revision': 3}, False),
+        # A new upload revision invalidates the barrier and must be revisited.
+        ({'record_audio_closed': False, 'record_audio_partial': 'MARK', 'record_upload_revision': 4}, True),
+    ],
+)
+def test_discovery_skips_rows_repair_can_only_refuse(extra, selected):
+    finish = datetime.fromtimestamp(100, timezone.utc)
+    data = {'finished_at': finish, 'private_cloud_sync_enabled': True, **extra}
+    if data.get('record_audio_partial') == 'MARK':
+        data['record_audio_partial'] = _partial_mark(3, finish)
+
+    class Query:
+        def where(self, **kw):
+            return self
+
+        def order_by(self, field):
+            return self
+
+        def select(self, fields):
+            return self
+
+        def limit(self, _):
+            return self
+
+        def start_after(self, cursor):
+            return self
+
+        def stream(self, **kw):
+            return [SimpleNamespace(reference=SimpleNamespace(path='row'), to_dict=lambda: dict(data))]
+
+    rows, _, _ = cluster.discover(
+        SimpleNamespace(collection_group=lambda _: Query(), document=lambda path: path), budget=SweepBudget(60)
+    )
+    assert bool(rows) is selected

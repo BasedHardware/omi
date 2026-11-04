@@ -165,6 +165,20 @@ def repair_one(store, storage, artifacts, path, *, flags, inventory, budget, mod
     return disposition if disposition in DISPOSITIONS else 'unknown'
 
 
+def settled(data):
+    """Rows a repair attempt can only refuse until their state changes.
+
+    A valid partial barrier is repair's `already_partial`; a deleted, discarded
+    or sync-disabled row is `privacy_refused`. Both used to take a worker slot
+    on every pass (207 of 208 attempts in prod 2026-11-04), so the cursor
+    crawled while recent stuck captures waited. Any change to the mark, upload
+    revision or privacy fields makes the row eligible again on the next pass.
+    """
+    if data.get('deleted') or data.get('discarded') or data.get('private_cloud_sync_enabled') is False:
+        return True
+    return bool(data.get('record_audio_partial')) and partial_config.partial_barrier(data)
+
+
 def discover(
     client, *, budget, after=None, max_rows=MAX_ROWS, max_scan=MAX_SCAN, advance_rows=MAX_ROWS, selected_cursors=None
 ):
@@ -191,7 +205,17 @@ def discover(
             .where(filter=FieldFilter('finished_at', '<=', horizon))
             .order_by('finished_at')
             .order_by('__name__')
-            .select(('finished_at', 'record_audio_closed', 'record_audio_partial'))
+            .select(
+                (
+                    'finished_at',
+                    'record_audio_closed',
+                    'record_audio_partial',
+                    'record_upload_revision',
+                    'deleted',
+                    'discarded',
+                    'private_cloud_sync_enabled',
+                )
+            )
             .limit(min(128, max_scan - scanned))
         )
         if cursor is not None:
@@ -212,6 +236,7 @@ def discover(
                 (not data.get('record_audio_closed') or data.get('record_audio_partial'))
                 and isinstance(finished, datetime)
                 and finished.tzinfo is not None
+                and not settled(data)
             ):
                 rows.append((doc.reference.path, max(0, int(time.time() - finished.timestamp()))))
                 if selected_cursors is not None:

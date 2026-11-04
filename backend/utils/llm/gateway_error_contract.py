@@ -56,6 +56,14 @@ _INVALID_KEY_MARKERS = (
 # ``openrouter_credits`` is quota (never retried into success), the rest are the
 # account's own rate limits.
 _OPENROUTER_RATE_LIMIT_SOURCES = frozenset({'requester_rates', 'free-tier_rates', 'provider_rates'})
+# Google AI Studio's stable wording for depleted prepaid credits on the Gemini
+# OpenAI-compatible endpoint (2026-10: Google moved this account state from 429
+# to a plain 402, and the wording is the only classifier — no machine-readable
+# metadata like OpenRouter's ``limit_source``).
+_GEMINI_PREPAYMENT_DEPLETED_MARKER = 'prepayment credits are depleted'
+_BYOK_ACCOUNT_STATE_FAILURE_CLASSES = frozenset(
+    {BYOK_RATE_LIMIT_FAILURE_CLASS, BYOK_QUOTA_FAILURE_CLASS, BYOK_INVALID_KEY_FAILURE_CLASS}
+)
 GENERIC_CONVERSATION_PROCESSING_ERROR_DETAIL = 'Error processing conversation, please try again later'
 
 logger = logging.getLogger(__name__)
@@ -199,6 +207,14 @@ def classify_byok_provider_failure(error: BaseException) -> ByokProviderFailure 
             if any(marker in _lowered_error_text(error) for marker in _OPENROUTER_CREDIT_EXHAUSTED_MARKERS):
                 return ByokProviderFailure(BYOK_QUOTA_FAILURE_CLASS, 'openrouter')
             return None
+        if status_code == 402 and _byok_key_in_use('gemini'):
+            # Gemini's OpenAI-compatible endpoint has no machine-readable
+            # metadata for the depleted-prepayment state; the wording is the
+            # only classifier (2026-10: the account state moved from 429 to a
+            # plain 402).
+            if _GEMINI_PREPAYMENT_DEPLETED_MARKER in _lowered_error_text(error):
+                return ByokProviderFailure(BYOK_QUOTA_FAILURE_CLASS, 'gemini')
+            return None
         if status_code == 429:
             text = _lowered_error_text(error)
             if _byok_key_in_use('openai') and any(marker in text for marker in _OPENAI_QUOTA_EXHAUSTED_MARKERS):
@@ -231,7 +247,9 @@ def is_byok_quota_error(error: BaseException) -> bool:
     failure class (HTTP 429, in ``_THROTTLED_FAILURE_CLASSES``), while direct
     Anthropic BYOK raises the SDK's ``BadRequestError`` for an exhausted
     prepaid balance or usage limit and direct OpenRouter/OpenAI BYOK answers
-    402/429 when the account's credits cannot cover the request. All are
+    402/429 when the account's credits cannot cover the request, and direct
+    Gemini BYOK (AI Studio's OpenAI-compatible endpoint) answers 402 when the
+    account's prepayment credits are depleted. All are
     account state only the user can fix on their own key; every other request
     shape keeps the generic response.
     """
@@ -274,6 +292,24 @@ def _log_byok_provider_failure(failure: ByokProviderFailure, route: str) -> None
         failure.provider,
         route,
     )
+
+
+def is_byok_account_state_http_exception(error: BaseException) -> bool:
+    """Return whether ``error`` is the typed BYOK account-state response that
+    ``conversation_processing_http_exception`` raises for a rate-limited or
+    spent provider account, or a rejected provider key.
+
+    Lifecycle owners wrapping the composition boundary use it to log the halt
+    by its bounded class: the boundary already logged it, and a traceback there
+    would re-emit the chained provider error body for account state only the
+    user can fix.
+    """
+    if not isinstance(error, HTTPException) or error.status_code != 429:
+        return False
+    detail = error.detail
+    if not isinstance(detail, Mapping):
+        return False
+    return _string_value(detail.get('code')) in _BYOK_ACCOUNT_STATE_FAILURE_CLASSES
 
 
 def conversation_processing_http_exception(

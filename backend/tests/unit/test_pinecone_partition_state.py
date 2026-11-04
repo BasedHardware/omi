@@ -1,21 +1,26 @@
 """Routing transitions under strict Firestore read-before-write semantics."""
 
 from dataclasses import replace
+from multiprocessing import get_context
 import os
-from threading import Barrier
+from threading import Barrier, Event
 from concurrent.futures import ThreadPoolExecutor
+from time import monotonic
 from urllib.parse import urlparse
 from uuid import uuid4
+
+from google.api_core.exceptions import Aborted, DeadlineExceeded, Unauthenticated, ServiceUnavailable
 
 import pytest
 
 from database import pinecone_partition_state as state
+from database.pinecone_partition_index import OwnerIndex
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreTransaction
 
 
 @pytest.fixture
 def db(monkeypatch):
-    monkeypatch.setattr(state, '_mutations', state.MutationRegistry())
+    monkeypatch.setattr(state, '_mutations', state.MutationRegistry(grace_seconds=0))
     client = StrictFirestore()
 
     # Narrow delete extension, proved by the real-emulator completion test below.
@@ -43,6 +48,183 @@ def db(monkeypatch):
 @pytest.fixture
 def key():
     return state.PartitionKey('test-index', 'ns2', 'test-owner')
+
+
+def test_acknowledged_call_finishes_during_shutdown_grace(db, key, monkeypatch):
+    registry = state.MutationRegistry(grace_seconds=1)
+    monkeypatch.setattr(state, '_mutations', registry)
+    ticket = state.begin_mutation(key, affected_ids=['vector-a'], firestore_client=db)
+    draining = Event()
+    wait = registry._lock.wait
+
+    def entered_grace(timeout):
+        draining.set()
+        return wait(timeout)
+
+    monkeypatch.setattr(registry._lock, 'wait', entered_grace)
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        drain = executor.submit(state.drain_mutations)
+        assert draining.wait(2)
+        with pytest.raises(state.PartitionBusy, match='draining'):
+            state.begin_mutation(key, affected_ids=['vector-b'], firestore_client=db)
+        state.finish_mutation(key, ticket, write_lsn=42, firestore_client=db)
+        assert drain.result(timeout=2) == 0
+    route = state.get_route(key, firestore_client=db)
+    assert (route.pending_count, route.uncertain_count, route.latest_write_lsn) == (0, 0, 42)
+
+
+def test_provider_call_past_grace_stays_uncertain_even_after_late_ack(db, key, monkeypatch):
+    monkeypatch.setattr(state, '_mutations', state.MutationRegistry(grace_seconds=0.01))
+    ticket = state.begin_mutation(key, affected_ids=['vector-a'], firestore_client=db)
+    assert state.drain_mutations() == 1
+    route = state.finish_mutation(key, ticket, write_lsn=42, firestore_client=db)
+    assert (route.pending_count, route.uncertain_count, route.latest_write_lsn) == (0, 1, 0)
+    with pytest.raises(state.PartitionBusy):
+        state.begin_migration(key, 'migration', firestore_client=db)
+
+
+@pytest.mark.parametrize('error_type', [Unauthenticated, ServiceUnavailable, DeadlineExceeded, Aborted])
+@pytest.mark.parametrize('committed', [False, True])
+def test_transient_finish_retries_idempotently_without_uncertainty(db, key, monkeypatch, error_type, committed):
+    ticket = state.begin_mutation(key, affected_ids=['vector-a'], firestore_client=db)
+    finish = state._finish_mutation
+    calls = []
+
+    def transient(*args):
+        calls.append(args)
+        if len(calls) == 1:
+            if committed:
+                finish(*args)
+            raise error_type('synthetic transient')
+        return finish(*args)
+
+    monkeypatch.setattr(state, '_finish_mutation', transient)
+    monkeypatch.setattr(state, 'sleep', lambda _: None)
+    route = state.finish_mutation(key, ticket, write_lsn=42, firestore_client=db)
+    assert len(calls) == 2
+    assert (route.pending_count, route.uncertain_count, route.latest_write_lsn) == (0, 0, 42)
+    assert state.drain_mutations() == 0
+
+
+def test_persistent_transient_finish_falls_back_after_three_attempts(db, key, monkeypatch):
+    ticket = state.begin_mutation(key, affected_ids=['vector-a'], firestore_client=db)
+    calls = []
+
+    def unavailable(*args):
+        calls.append(args)
+        raise ServiceUnavailable('synthetic unavailable')
+
+    monkeypatch.setattr(state, '_finish_mutation', unavailable)
+    monkeypatch.setattr(state, 'sleep', lambda _: None)
+    with pytest.raises(ServiceUnavailable):
+        state.finish_mutation(key, ticket, write_lsn=42, firestore_client=db)
+    assert len(calls) == 3
+    route = state.get_route(key, firestore_client=db)
+    assert (route.pending_count, route.uncertain_count, route.latest_write_lsn) == (0, 1, 0)
+
+
+def exhausted_contention():
+    try:
+        raise Aborted('synthetic contention')
+    except Aborted as error:
+        try:
+            raise ValueError('Failed to commit transaction in 5 attempts') from error
+        except ValueError as wrapped:
+            return wrapped
+
+
+@pytest.mark.parametrize('phase', ['begin', 'finish'])
+@pytest.mark.parametrize('exhausted', [False, True])
+def test_wrapped_contention_is_bounded_and_never_repeats_provider(db, key, monkeypatch, phase, exhausted):
+    name = '_begin_mutation' if phase == 'begin' else '_finish_mutation'
+    original = getattr(state, name)
+    attempts, sleeps, provider_calls = [], [], []
+
+    def contend(*args):
+        attempts.append(args[0])
+        if exhausted or len(attempts) < 3:
+            raise exhausted_contention()
+        return original(*args)
+
+    class Provider:
+        def fetch(self, **kwargs):
+            return {'vectors': {}}
+
+        def delete(self, **kwargs):
+            provider_calls.append(kwargs['namespace'])
+            return {}, 200, {'x-pinecone-request-lsn': '42'}
+
+    monkeypatch.setattr(state, name, contend)
+    monkeypatch.setattr(state, 'sleep', sleeps.append)
+    scoped = OwnerIndex(Provider(), key.uid, index_name=key.index_name, firestore_client=db)
+    if exhausted:
+        with pytest.raises(ValueError, match='5 attempts'):
+            scoped.delete(namespace=key.family, ids=['vector-a', 'vector-b'])
+    else:
+        scoped.delete(namespace=key.family, ids=['vector-a', 'vector-b'])
+    assert len(attempts) == 3
+    assert len({id(transaction) for transaction in attempts}) == 3
+    assert len(sleeps) == 2
+    assert 0.1 <= sleeps[0] <= 0.2 and 0.2 <= sleeps[1] <= 0.4
+    assert provider_calls == ([] if exhausted and phase == 'begin' else [key.family, key.partition_namespace])
+    route = state.get_route(key, firestore_client=db)
+    assert (route.pending_count, route.uncertain_count) == (0, int(exhausted and phase == 'finish'))
+    assert state.drain_mutations() == 0
+
+
+@pytest.mark.parametrize('error', [ValueError('invalid scope'), DeadlineExceeded('unknown admission outcome')])
+def test_admission_does_not_retry_non_abort_errors(db, key, monkeypatch, error):
+    attempts = []
+
+    def fail(*args):
+        attempts.append(args)
+        raise error
+
+    monkeypatch.setattr(state, '_begin_mutation', fail)
+    with pytest.raises(type(error)):
+        state.begin_mutation(key, affected_ids=['vector-a'], firestore_client=db)
+    assert len(attempts) == 1
+    assert state.drain_mutations() == 0
+
+
+def test_finish_lost_ack_then_wrapped_contention_keeps_acknowledged_lsn(db, key, monkeypatch):
+    ticket = state.begin_mutation(key, affected_ids=['vector-a'], firestore_client=db)
+    finish = state._finish_mutation
+    attempts = []
+
+    def transient(*args):
+        attempts.append(args)
+        if len(attempts) == 1:
+            finish(*args)
+            raise DeadlineExceeded('synthetic lost commit acknowledgement')
+        if len(attempts) == 2:
+            raise exhausted_contention()
+        return finish(*args)
+
+    monkeypatch.setattr(state, '_finish_mutation', transient)
+    monkeypatch.setattr(state, 'sleep', lambda _: None)
+    route = state.finish_mutation(key, ticket, write_lsn=42, firestore_client=db)
+    assert len(attempts) == 3
+    assert (route.pending_count, route.uncertain_count, route.latest_write_lsn) == (0, 0, 42)
+    assert state.drain_mutations() == 0
+
+
+def test_failed_finish_and_uncertain_fallback_remain_visible_to_drain(db, key, monkeypatch):
+    ticket = state.begin_mutation(key, affected_ids=['vector-a'], firestore_client=db)
+    mark = state._mark_mutation_uncertain
+
+    def unavailable(*args):
+        raise ServiceUnavailable('synthetic unavailable')
+
+    monkeypatch.setattr(state, '_finish_mutation', unavailable)
+    monkeypatch.setattr(state, '_mark_mutation_uncertain', unavailable)
+    monkeypatch.setattr(state, 'sleep', lambda _: None)
+    with pytest.raises(ServiceUnavailable):
+        state.finish_mutation(key, ticket, write_lsn=42, firestore_client=db)
+    assert state.get_route(key, firestore_client=db).pending_count == 1
+    monkeypatch.setattr(state, '_mark_mutation_uncertain', mark)
+    assert state.drain_mutations() == 1
+    assert state.get_route(key, firestore_client=db).uncertain_count == 1
 
 
 def test_admission_racing_shutdown_settles_before_provider_can_receive_ticket(db, key, monkeypatch):
@@ -583,6 +765,133 @@ def test_completed_normal_mutations_do_not_accumulate_journal_rows(db, key):
     assert operation.get().exists
     state.finish_mutation(key, ticket, write_lsn=10, firestore_client=db)
     assert not operation.get().exists
+
+
+@pytest.mark.integration
+def test_real_firestore_cross_process_same_owner_deletes_settle():
+    """Independent serving locks: only Firestore + bounded abort retries coordinate."""
+    host = os.getenv('FIRESTORE_EMULATOR_HOST', '')
+    if not host:
+        pytest.skip('set FIRESTORE_EMULATOR_HOST for cross-process delete proof')
+    if urlparse(f'//{host}').hostname not in {'127.0.0.1', 'localhost', '::1'}:
+        pytest.fail('contention proof requires a loopback emulator')
+    from google.auth.credentials import AnonymousCredentials
+    from google.cloud import firestore
+
+    owner = 'synthetic-' + uuid4().hex
+    context = get_context('spawn')
+    start, results = context.Barrier(12), context.Queue()
+    children = [context.Process(target=_delete_in_independent_process, args=(owner, start, results)) for _ in range(3)]
+    deadline = monotonic() + 240
+    try:
+        for child in children:
+            child.start()
+        for child in children:
+            child.join(max(0, deadline - monotonic()))
+            assert not child.is_alive() and child.exitcode == 0
+        assert [results.get(timeout=5) for _ in children] == [8, 8, 8]
+        client = firestore.Client(project='demo-pinecone-cross-instance', credentials=AnonymousCredentials())
+        try:
+            key = state.PartitionKey('synthetic-index', 'ns4', owner)
+            route = state.get_route(key, firestore_client=client)
+            assert (route.pending_count, route.uncertain_count, route.latest_write_lsn) == (0, 0, 42)
+            ref = client.collection(state.COLLECTION).document(key.document_id)
+            assert not list(ref.collection('operations').stream())
+        finally:
+            client.close()
+    finally:
+        for child in children:
+            if child.is_alive():
+                child.terminate()
+            if child.pid is not None:
+                child.join(timeout=10)
+                if child.is_alive():
+                    child.kill()
+                    child.join(timeout=5)
+        results.close()
+        results.join_thread()
+
+
+def _delete_in_independent_process(owner, start, results):
+    from google.auth.credentials import AnonymousCredentials
+    from google.cloud import firestore
+
+    client = firestore.Client(project='demo-pinecone-cross-instance', credentials=AnonymousCredentials())
+    key = state.PartitionKey('synthetic-index', 'ns4', owner)
+    calls = []
+
+    class Provider:
+        def fetch(self, **kwargs):
+            return {'vectors': {}}
+
+        def delete(self, **kwargs):
+            calls.append((kwargs['namespace'], tuple(kwargs['ids'])))
+            return {}, 200, {'x-pinecone-request-lsn': '42'}
+
+    def delete(number):
+        start.wait(timeout=60)
+        scoped = OwnerIndex(Provider(), owner, index_name=key.index_name, firestore_client=client)
+        scoped.delete(namespace=key.family, ids=[f'synthetic-{os.getpid()}-{number}'])
+
+    try:
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            futures = [executor.submit(delete, number) for number in range(4)]
+            for future in futures:
+                future.result(timeout=120)
+        assert len(set(calls)) == len(calls) == 8
+        assert state.drain_mutations() == 0
+        results.put(len(calls))
+    finally:
+        client.close()
+
+
+@pytest.mark.integration
+def test_real_firestore_concurrent_same_owner_deletes_settle(monkeypatch):
+    """Real SDK transactions; provider barrier proves IO is outside the stripe."""
+    host = os.getenv('FIRESTORE_EMULATOR_HOST', '')
+    if not host:
+        pytest.skip('set FIRESTORE_EMULATOR_HOST for concurrent delete proof')
+    if urlparse(f'//{host}').hostname not in {'127.0.0.1', 'localhost', '::1'}:
+        pytest.fail('contention proof requires a loopback emulator')
+    from google.auth.credentials import AnonymousCredentials
+    from google.cloud import firestore
+
+    monkeypatch.setattr(state, '_mutations', state.MutationRegistry(grace_seconds=0))
+    client = firestore.Client(project='demo-pinecone-partition-state', credentials=AnonymousCredentials())
+    key = state.PartitionKey('test-index', 'ns4', uuid4().hex)
+    count = 24
+    start, provider = Barrier(count), Barrier(count)
+    calls = []
+
+    class Provider:
+        def fetch(self, **kwargs):
+            return {'vectors': {}}
+
+        def delete(self, **kwargs):
+            if kwargs['namespace'] == key.family:
+                provider.wait(timeout=60)
+            calls.append((kwargs['namespace'], tuple(kwargs['ids'])))
+            return {}, 200, {'x-pinecone-request-lsn': '42'}
+
+    def delete(number):
+        start.wait(timeout=30)
+        scoped = OwnerIndex(Provider(), key.uid, index_name=key.index_name, firestore_client=client)
+        scoped.delete(namespace=key.family, ids=[f'synthetic-vector-{number}'])
+
+    try:
+        with ThreadPoolExecutor(max_workers=count) as executor:
+            futures = [executor.submit(delete, number) for number in range(count)]
+            for future in futures:
+                future.result(timeout=90)
+        route = state.get_route(key, firestore_client=client)
+        assert (route.pending_count, route.uncertain_count, route.latest_write_lsn) == (0, 0, 42)
+        assert len(calls) == 2 * count
+        assert len(set(calls)) == 2 * count
+        ref = client.collection(state.COLLECTION).document(key.document_id)
+        assert not list(ref.collection('operations').stream())
+        assert state.drain_mutations() == 0
+    finally:
+        client.close()
 
 
 @pytest.mark.integration

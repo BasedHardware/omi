@@ -1,3 +1,10 @@
+// The phone's single audio-custody ledger (wals.json + .bin files) and its
+// upload drain: every captured byte the server has not confirmed lives here,
+// and every upload path funnels through this ledger's gate.
+//
+// One ledger and one uploader is the contract that makes crash, retry and
+// account-change safe -- producers hand finished files to addExternalWal and
+// never upload, poll or delete audio on their own (CUSTODY.md).
 import 'package:omi/services/capture/local_stt_custody.dart';
 import 'dart:async';
 import 'native_custody_diagnostics.dart';
@@ -386,6 +393,14 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
   @visibleForTesting
   List<Wal> get testRetiredWals => _retiredWals;
+
+  /// Test seam: a future that completes when every WAL buffer operation
+  /// already enqueued (seals, drains, flushes, index saves) has finished.
+  /// Lets tests await fire-and-forget paths such as the lifecycle-pause seal
+  /// deterministically, without wall-clock sleeps and without performing the
+  /// work themselves.
+  @visibleForTesting
+  Future<void> get testWalIoQuiescent => _bufferQueue;
 
   @override
   void cancelSync() {

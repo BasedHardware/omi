@@ -1,6 +1,5 @@
 """Fenced, duration-fair pull scheduling over durable transactional documents."""
 
-from dataclasses import asdict
 import hashlib
 import math
 import logging
@@ -242,7 +241,7 @@ class Scheduler:
             raise ValueError('shadow jobs may only use idle offers')
         previous = tx.get('jobs', item.segment_id)
         # Live jobs are never shadow; keep their documents free of the field.
-        immutable = {key: value for key, value in asdict(item).items() if key != 'shadow'}
+        immutable = {key: value for key, value in item.to_dict().items() if key != 'shadow'}
         immutable['priority'] = int(item.priority)
         if previous.get('state') == 'record_pending' and (
             previous.get('owner_id') != item.owner_id
@@ -673,12 +672,12 @@ class Scheduler:
         def commit(tx):
             job = tx.get('jobs', result.segment_id)
             if job.get('state') in {'result_ready', 'committed'}:
-                return job.get('result') == asdict(result) and job.get('token') == token, False, 0
+                return result.matches_persisted(job.get('result')) and job.get('token') == token, False, 0
             if not owns_lease(job, token, now):
                 return False, False, 0
             if job.get('requires_compute_admission') and job.get('compute_admission_token') != token:
                 return False, False, 0
-            job.update(state='result_ready', result=asdict(result), ready_at=now)
+            job.update(state='result_ready', result=result.to_dict(), ready_at=now)
             job.pop('retry_started_at', None)
             job.pop('admission_refusals', None)
             tx.put('jobs', result.segment_id, job)
@@ -891,6 +890,29 @@ class Scheduler:
                     recovered += 1
                     observe_recovery(outcome, self.metrics)
         return recovered
+
+    @staticmethod
+    def restore_audio_in_transaction(tx: Transaction, job: dict, now: float) -> None:
+        """Requeue one CAS-verified missing-input repair under its original identity.
+
+        The artifact-missing store owns the content/privacy/staging checks. No
+        paid recovery intent or sibling receipt is reset by this queue mutation.
+        """
+        marker = job.get('artifact_disposition') or {}
+        if (
+            job.get('state') != 'quarantined'
+            or job.get('recovery_state') != 'failed_held'
+            or marker.get('state') != 'restored'
+            or job.get('result')
+            or job.get('merge_pending') is not False
+            or job.get('token')
+            or job.get('lease_until', 0) > now
+        ):
+            raise ValueError('verified missing-input repair required')
+        control = read_control(tx, scheduler_control_key(job['owner_key']))
+        job.update(state='ready', available_at=now, merge_pending=True, token='', lease_until=0.0)
+        _append(tx, control, job)
+        tx.put('jobs', job['segment_id'], job)
 
     @staticmethod
     def redrive_in_transaction(tx: Transaction, job: dict, now: float) -> bool:

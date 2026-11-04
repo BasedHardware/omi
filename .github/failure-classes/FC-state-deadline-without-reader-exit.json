@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-state-deadline-without-reader-exit",
+  "violated_contract": "An automatically entered nonterminal state must have a deadline written at entry and an automatic exit consumed by its readers. A downward ladder must reach its base state. Fair-use throttle_until was written but never read, leaving throttle absorbing after restrict expiry.",
+  "canonical_prevention": "Persist stage entry and expiry together, normalize expired states at authoritative read boundaries, fail safe on missing or malformed deadlines, and verify the complete downward ladder with a fake clock, alongside bounded dwell and transition telemetry. Conditional writes must preserve concurrent escalations and deadline renewals.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_fair_use_decay.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/fair_use.py",
+    "backend/database/fair_use.py"
+  ],
+  "status": "open"
+}

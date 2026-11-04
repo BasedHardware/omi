@@ -179,8 +179,8 @@ class OmiButton extends StatefulWidget {
   /// Legacy label style. Its colour is ignored; the foreground colour always wins.
   final TextStyle? labelStyle;
 
-  /// Lines before the label ellipsizes. Storefront prices use 2 so a backend CTA can wrap.
-  final int maxLines;
+  /// Lines before the label ellipsizes; null wraps the full label without truncation.
+  final int? maxLines;
 
   /// Reports [error] the same way a thrown [onPressed] future is reported.
   ///
@@ -266,7 +266,7 @@ class _OmiButtonState extends State<OmiButton> {
       widget.label,
       style: textStyle,
       maxLines: widget.maxLines,
-      overflow: TextOverflow.ellipsis,
+      overflow: widget.maxLines == null ? TextOverflow.visible : TextOverflow.ellipsis,
       textAlign: TextAlign.center,
     );
     if (widget.leading != null || widget.icon != null) {
