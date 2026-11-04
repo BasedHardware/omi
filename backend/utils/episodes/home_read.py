@@ -263,6 +263,7 @@ def project_episode(
     *,
     members: dict[str, dict[str, Any]] | None = None,
     list_row: bool = False,
+    observe_members: bool = True,
 ) -> dict[str, Any] | None:
     if episode is None:
         return None
@@ -301,7 +302,7 @@ def project_episode(
                 'status': row.get('status') or 'completed',
             }
         )
-    if list_row:
+    if list_row and observe_members:
         episode_metrics.record_home_members(shown=len(retained), hidden=hidden)
     if not retained:
         return None

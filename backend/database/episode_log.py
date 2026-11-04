@@ -110,7 +110,7 @@ def mutation(capture, *, before=(), after=(), span=None, links=None, receipts=No
     def domain(rows):
         return [{key: value for key, value in row.items() if key not in volatile} for row in rows]
 
-    if capture is not None and (domain(before) != domain(after) or receipts):
+    if capture is not None and (domain(before) != domain(after) or receipts or links or span):
         capture.stage(
             [
                 {

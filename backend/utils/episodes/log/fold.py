@@ -114,7 +114,7 @@ class Fold:
             self._seed(payload['row'], replace=payload.get('replace', False))
         elif kind == 'member':
             self.members[event['cid']] = deepcopy(payload)
-        elif kind in {'member_refresh', 'backfill_complete'}:
+        elif kind in {'member_refresh', 'home_refresh', 'backfill_complete'}:
             pass  # The worker refreshes authoritative member policy before publishing.
         elif kind == 'receipts':
             cid = event['cid']

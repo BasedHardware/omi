@@ -31,8 +31,8 @@ def test_episode_log_observability_survives_collector_filters(profile):
             names.update(re.findall(r'\bomi_episode_\w+', alert['expr']))
     for name in sorted(names):
         for rule in rules:
-            if rule['sourceLabels'] != ['__name__']:
+            if rule['sourceLabels'][0] != '__name__':
                 continue
-            matches = re.fullmatch(rule['regex'], name) is not None
+            matches = re.fullmatch(rule['regex'].split(';')[0], name) is not None
             assert not (rule['action'] == 'keep' and not matches), (profile, name)
             assert not (rule['action'] == 'drop' and matches), (profile, name)

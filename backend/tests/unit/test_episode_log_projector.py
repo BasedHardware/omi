@@ -3,7 +3,7 @@
 Every scenario drives BOTH:
   - the oracle: episode_timeline.attach_recorded over StrictFirestore (today's
     production code, exactly how backend/tests/unit/test_recorded_span.py drives it), and
-  - the projector: replay of FactLog facts through scratch_proto.projector.
+  - the projector: replay of FactLog facts through utils.episodes.log.projector.
 and compares placement (window bounds/ids), membership and windows. Divergences
 fail loudly with the normalized diff.
 """
@@ -337,3 +337,27 @@ def test_s13_double_replay_is_identical():
     first = replay(UID, log.facts(UID))
     second = replay(UID, log.facts(UID))
     assert normalize(first) == normalize(second)
+
+
+def test_growing_repeat_span_reaches_fixed_fence_like_legacy():
+    run_scenario(
+        'growth-fence',
+        [('span', 'f', 2900, 2935), ('discard', 'f'), ('span', 'a', 4800, 4860), ('span', 'a', 4100, 4860)],
+    )
+
+
+def test_discard_after_repoint_does_not_duplicate_the_window():
+    run_scenario('repoint-discard', [('span', 'a', 0, 60), ('repoint', 'a', 'b'), ('discard', 'b')])
+
+
+def test_fixed_extension_stamps_end_and_rejects_zero_progress():
+    from utils.episodes.log.projector import ProjectedEpisode
+
+    row = ProjectedEpisode(id='e', started_at=S(0), last_activity_at=S(60), close_reason='gap', fixed=False)
+    assert row.extend('c', S(30), S(200), 'omi', [S(100)]) == 'attached'
+    assert row.close_reason == 'boundary' and row.fixed and row.recorded_end == S(100)
+    assert row.extend('tail', S(100), S(120), 'omi', []) == 'no_progress'
+    assert 'tail' not in row.conversation_ids
+    capped = ProjectedEpisode(id='cap', started_at=S(0), last_activity_at=S(60), close_reason='gap', fixed=False)
+    assert capped.extend('long', S(30), S(15000), 'omi', []) == 'attached'
+    assert capped.recorded_end == S(14400) and capped.close_reason == 'hard_cap' and not capped.fixed

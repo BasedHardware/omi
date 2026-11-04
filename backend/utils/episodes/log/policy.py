@@ -5,11 +5,14 @@ legacy policy path until the sweeper refreshes that member after the deadline.
 """
 
 import inspect
+import logging
 from functools import partial, wraps
 from uuid import uuid4
 
 from config import episode_log as config
 from database import episode_log as store
+
+logger = logging.getLogger(__name__)
 
 
 def home_policy_write(*, firestore_client):
@@ -43,6 +46,11 @@ def _decorate(fn, *, client_factory):
         finally:
             # Even a failed write refreshes current policy before releasing the
             # fence. If this fails the durable barrier keeps reads on legacy.
-            store.policy_barrier(uid, cid, token, entering=False, firestore_client=client)
+            try:
+                store.policy_barrier(uid, cid, token, entering=False, firestore_client=client)
+            except Exception as error:
+                logger.warning(
+                    'event=episode_home_policy_release outcome=sweep_recovery exception_type=%s', type(error).__name__
+                )
 
     return wrapped

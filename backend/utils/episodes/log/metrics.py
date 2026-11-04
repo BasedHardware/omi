@@ -37,6 +37,7 @@ SWEEP_OBSERVED = reuse_or_create(
     Gauge, 'omi_episode_drain_sweep_observed_at_seconds', 'Last successful bounded sweep.', []
 )
 DRAIN = reuse_or_create(Counter, 'omi_episode_drain_total', 'Drain attempts by bounded outcome.', ['outcome'])
+SWEEP = reuse_or_create(Counter, 'omi_episode_drain_sweep_total', 'Bounded sweep outcomes.', ['outcome'])
 SECONDS = reuse_or_create(
     Histogram,
     'omi_episode_drain_seconds',
@@ -52,6 +53,18 @@ DWELL = reuse_or_create(
     buckets=(1, 30, 60, 180, 300, 600, 900, 1500, 1800, 3600),
 )
 OVERDUE = reuse_or_create(Counter, 'omi_episode_drain_deadline_total', 'Automatic phase deadline breaches.', ['phase'])
+
+# Alert inputs exist at zero before the first failure instead of appearing only
+# with an inaugural nonzero sample, which increase() cannot compare to zero.
+for _field in FIELDS:
+    for _outcome in ('match', 'mismatch', 'missing_legacy', 'missing_view'):
+        DRIFT.labels(field=_field, outcome=_outcome)
+for _phase in ('queued', 'running', 'retrying'):
+    OVERDUE.labels(phase=_phase)
+for _outcome in ('drained', 'error', 'lost_lease'):
+    DRAIN.labels(outcome=_outcome)
+for _outcome in ('redriven', 'error'):
+    SWEEP.labels(outcome=_outcome)
 
 
 def observe_state(state, phase, now):
@@ -91,6 +104,8 @@ def comparable(row):
 
 def differences(legacy, view):
     left, right = comparable(legacy), comparable(view)
+    if left is None and right is None:
+        return {field: 'match' for field in FIELDS}
     if left is None or right is None:
         return {field: 'missing_legacy' if left is None else 'missing_view' for field in FIELDS}
     return {field: 'match' if digest(left[field]) == digest(right[field]) else 'mismatch' for field in FIELDS}

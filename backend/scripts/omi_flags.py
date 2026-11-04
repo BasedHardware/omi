@@ -11,7 +11,7 @@
 
 Target: ``--project``/``--database`` or ``OMI_FLAGS_FIRESTORE_PROJECT``/``OMI_FLAGS_FIRESTORE_DATABASE``.
 Writes need the flag project's writer identity (``prod-operator`` tier for prod).
-Only ``kind: posthog`` registry keys can be written; registry ``surfaces`` are
+Only ``kind: posthog`` or ``kind: firestore`` registry keys can be written; registry ``surfaces`` are
 copied onto the rule. ``experiment`` rows stay on PostHog. ``--mirror-posthog``
 also patches the matching PostHog row (single unconditioned group only) so
 released clients that still read PostHog agree. Runbook:
@@ -58,13 +58,13 @@ def load_registry(path: Path = REGISTRY_PATH) -> dict[str, dict[str, Any]]:
         if getattr(yaml, '__with_libyaml__', False)
         else yaml.safe_load(source)
     )
-    return {row['key']: row for row in data.get('flags', []) if row.get('kind') == 'posthog'}
+    return {row['key']: row for row in data.get('flags', []) if row.get('kind') in {'posthog', 'firestore'}}
 
 
 def registry_entry(registry: dict[str, dict[str, Any]], key: str) -> dict[str, Any]:
     entry = registry.get(key)
     if entry is None:
-        raise FlagCliError(f'{key}: not a kind: posthog flag in config/feature-flags.yaml')
+        raise FlagCliError(f'{key}: not a remote flag (posthog or firestore) in config/feature-flags.yaml')
     if entry.get('lifecycle') == 'experiment':
         raise FlagCliError(f'{key}: experiments stay on PostHog until they conclude')
     return entry
@@ -186,6 +186,8 @@ def _print(value: Any) -> None:
 
 def cmd_set(args: argparse.Namespace) -> None:
     entry = registry_entry(load_registry(), args.key)
+    if args.mirror_posthog and entry.get('kind') == 'firestore':
+        raise FlagCliError('Firestore-only flags cannot be mirrored to PostHog')
     client = _client(args)
     _, docs = store.read_all(client)
     current = docs.get(args.key)
@@ -241,7 +243,7 @@ def cmd_import(args: argparse.Namespace) -> None:
     _, docs = store.read_all(client)
     planned = []
     for key in keys:
-        if key not in registry or key not in rows:
+        if key not in registry or key not in rows or registry[key].get('kind') == 'firestore':
             print(f'skip {key}: needs a registry kind: posthog row and a PostHog row')
             continue
         if key in docs:

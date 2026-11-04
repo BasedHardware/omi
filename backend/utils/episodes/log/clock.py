@@ -2,7 +2,7 @@
 
 from datetime import timedelta
 
-from config.episodes import CLOSE_GAP_SECONDS
+from config.episodes import CLOSE_GAP_SECONDS, COMPOSER_MAX_SETTLE_SECONDS
 from utils.conversations.fragment_visibility import (
     SETTLING_MAX_HOLD_SECONDS,
     is_completed_below_floor,
@@ -30,6 +30,9 @@ def home_clock(rows, members, previous, refreshed, now):
     for row in active:
         last = utc(row.get('last_activity_at'))
         cids = row.get('conversation_ids') or []
+        pending = utc(row.get('compose_pending_since'))
+        if row.get('status') == 'closed' and pending is not None and cids:
+            candidates.append((pending + timedelta(seconds=COMPOSER_MAX_SETTLE_SECONDS), min(cids)))
         if row.get('status') == 'live' and last is not None and cids:
             candidates.append((last + timedelta(seconds=CLOSE_GAP_SECONDS), min(cids)))
     deadline, cid = min(candidates) if candidates else (None, None)

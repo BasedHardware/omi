@@ -81,6 +81,17 @@ def list_window(uid, start, end, *, limit=50, cursor=None, firestore_client=None
     wires = []
     for row in rows:
         if row.get('home_policy_version') != policy_version() or row.get('home_payload') is None:
+            from utils.episodes.log import worker
+
+            key = digest(
+                {
+                    'home_refresh': row['id'],
+                    'policy': policy_version(),
+                    'prior': row.get('home_policy_version'),
+                    'payload': row.get('home_payload'),
+                }
+            )
+            worker.note_home_refresh(uid, row['id'], key, firestore_client=firestore_client)
             raise ValueError('episode_home_policy_changed')
         if row.get('home_payload'):
             wire = loads(decrypt(row['home_payload'], uid))

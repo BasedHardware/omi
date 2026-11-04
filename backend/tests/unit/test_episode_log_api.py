@@ -114,3 +114,38 @@ def test_home_clock_preserves_live_close_and_settling_expiry(monkeypatch):
     clock = home_clock(rows, {'c': member}, clock['members'], {'c'}, NOW + timedelta(hours=2))
     assert clock['deadline_at'] == NOW + timedelta(hours=3) and clock['cid'] == 'd'
     assert 'c' not in clock['members']
+
+
+def test_conditional_home_accepts_rfc_weak_list_and_star_validators(monkeypatch):
+    http, query = setup(monkeypatch)
+    params = {'from': NOW.isoformat(), 'to': NOW.isoformat()}
+    etag = http.get('/v1/episodes', params=params).headers['etag']
+    for validator in ('W/' + etag, '"unrelated", W/' + etag, '*'):
+        query.reset_mock()
+        assert http.get('/v1/episodes', params=params, headers={'If-None-Match': validator}).status_code == 304
+        query.assert_not_called()
+
+
+def test_cached_home_read_keeps_batch_one_compose_recovery(monkeypatch):
+    http, query = setup(monkeypatch)
+    row, wire = {'id': 'e', 'compose_dirty': True}, {
+        'id': 'e',
+        'status': 'closed',
+        'started_at': NOW,
+        'last_activity_at': NOW,
+    }
+    query.return_value = ([row], [wire], None)
+    repair = Mock()
+    monkeypatch.setattr(api.home_read, 'schedule_missed_composes', repair)
+    params = {'from': NOW.isoformat(), 'to': NOW.isoformat()}
+    assert http.get('/v1/episodes', params=params).status_code == 200
+    repair.assert_called_once_with('test', [row], [wire])
+
+
+def test_pending_compose_caps_conditional_cache_age_after_restart():
+    from config.episodes import COMPOSER_MAX_SETTLE_SECONDS
+
+    row = {'id': 'e', 'status': 'closed', 'conversation_ids': ['c'], 'compose_pending_since': NOW}
+    clock = home_clock({'e': row}, {}, {}, set(), NOW)
+    assert clock['deadline_at'] == NOW + timedelta(seconds=COMPOSER_MAX_SETTLE_SECONDS)
+    assert clock['cid'] == 'c'

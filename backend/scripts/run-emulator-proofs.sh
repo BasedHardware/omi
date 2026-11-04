@@ -121,6 +121,12 @@ run_proof "pending deletion and restore conformance (sim + emulator required)" \
   env OMI_REQUIRE_STORE_BACKENDS="${OMI_REQUIRE_STORE_BACKENDS:-sim,emulator}" \
   "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_pending_deletion_conformance.py
 
+# Episode batch 2: atomic fact capture, killed-worker recovery, epoch fencing
+# and the fixed-window BatchGet seam. Synthetic users; loopback fixture only.
+run_proof "episode log atomic capture and leased recovery" \
+  env EPISODES_ENABLED=on EPISODES_PERCENT=100 \
+  "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_episode_log_emulator.py
+
 if (( ${#failures[@]} )); then
   echo
   echo "Emulator proofs failed: ${#failures[@]}"

@@ -198,3 +198,15 @@ def test_parent_navigation_preserves_owner_store_and_read_ordering():
     assert database.rows[('users', 'user-1', 'processing_attention_items', 'item')] == {'active': True}
     with pytest.raises(ReadAfterWriteError):
         sibling.get(transaction=transaction)
+
+
+def test_whole_document_batch_get_keeps_read_and_store_guards():
+    database = StrictFirestore({('records', 'one'): {'id': 'one', 'value': 3}})
+    transaction = database.transaction()
+    rows = database.get_all([database.document('records/one')], transaction=transaction)
+    assert rows[0].id == 'one' and rows[0].to_dict() == {'id': 'one', 'value': 3}
+    with pytest.raises(ForeignTransactionError):
+        database.get_all([StrictFirestore().document('records/one')], transaction=transaction)
+    transaction.update(database.document('records/one'), {'value': 4})
+    with pytest.raises(ReadAfterWriteError):
+        database.get_all([database.document('records/one')], transaction=transaction)

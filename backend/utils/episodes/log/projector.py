@@ -134,7 +134,7 @@ class ProjectedEpisode:
             following = [s for s in all_starts if s > lo and s != self.started_at]
             if following:
                 window_end = min(window_end, min(following))
-        if window_end < start:
+        if window_end < start or (window_end == start and end > start):
             return 'no_progress'
         if cid not in self.conversation_ids:
             self.conversation_ids.append(cid)
@@ -144,8 +144,10 @@ class ProjectedEpisode:
         self.recorded_members[cid] = _envelope_merge(self.recorded_members.get(cid), start, end, source)
         if window_end < end and self.close_reason in {'gap', 'idle'}:
             self.close_reason = 'hard_cap' if window_end == lo + timedelta(seconds=MAX_EPISODE_SECONDS) else 'boundary'
-        if self.close_reason in {'gap', 'idle'}:
+        if self.status != 'live':
             self.recorded_end = self.last_activity_at
+        if self.close_reason == 'boundary':
+            self.fixed = True
         self.apply_retained_bounds_if_changed()
         return 'attached'
 
@@ -229,7 +231,7 @@ class Projector:
         return [e.row() for e in [*self.episodes, *self.windows]]
 
     def _fences(self) -> list[ProjectedEpisode]:
-        return [e for e in self.episodes if e.fixed]
+        return [e for e in [*self.episodes, *self.windows] if e.fixed]
 
     def _settle_id(self, window: dict, carried: set[str]) -> None:
         """episode_recorded_components.attach displaced-id rule: never reuse an
@@ -248,7 +250,10 @@ class Projector:
 
     # -------------------------------------------------------------- partition
     def _recompute(self) -> None:
-        overridden = {cid for ep in self.episodes if not ep.fixed for cid in ep.conversation_ids}
+        frozen = [ep for ep in self.windows if ep.fixed]
+        self.windows = [ep for ep in self.windows if not ep.fixed]
+        self.episodes.extend(ep for ep in frozen if ep not in self.episodes)
+        overridden = {cid for ep in self.episodes for cid in ep.conversation_ids}
         free = {cid: dict(f) for cid, f in self.spans.items() if cid not in overridden}
         previous_ids = {e.id for e in [*self.windows, *self.episodes]}
         previous = {r['id']: r for r in (self._previous_rows or [])}
@@ -293,7 +298,7 @@ class Projector:
         fences = self._fences()
         fence_rows = [e.row() for e in fences]
         blocked = choose_recorded_episode(fence_rows, start, end) or choose_recorded_episode(fence_rows, start, start)
-        touched = {cid: {'start': start, 'end': end, 'source': source}, **self.spans}
+        touched = {**self.spans, cid: _envelope_merge(self.spans.get(cid), start, end, source)}
         _, envelope = _group_envelope(touched, cid)
         fence_connected = any(
             _connected(envelope['start'], envelope['end'], e.started_at, e.last_activity_at) for e in fences
@@ -397,7 +402,7 @@ class Projector:
         if owner is None:
             self.events.append(f'discard {cid}: dangling (no-op)')
             return
-        owner.discarded_conversation_ids = [*owner.discarded_conversation_ids, cid]
+        owner.discarded_conversation_ids = list(dict.fromkeys([*owner.discarded_conversation_ids, cid]))
         owner.apply_retained_bounds_if_changed()
         if not owner.fixed:
             owner.fixed = True
@@ -405,7 +410,8 @@ class Projector:
                 self.windows.remove(owner)
                 for c in owner.conversation_ids:
                     self.spans.pop(c, None)
-            self.episodes.append(owner)
+            if owner not in self.episodes:
+                self.episodes.append(owner)
             self._previous_rows = self._view_rows()
             self._recompute()
         self.events.append(

@@ -80,3 +80,41 @@ def test_bounded_fact_page_has_contiguous_arrival_order_and_dedupes(db):
         uid, {'state': store.state(uid, firestore_client=client)}, firestore_client=client
     )
     assert [event['cid'] for event in events] == ['z', 'a', 'm'] and cursor == 3
+
+
+def test_fixed_window_fact_capture_uses_real_transactional_batch_get(db):
+    from database import episodes, episode_timeline
+    from utils.episodes.timeline import choose_recorded_episode
+    from utils.episodes.log.fold import Fold
+
+    client, uid = db
+    root = store.root(client, uid)
+    fixed = {
+        'id': 'fixed',
+        'status': 'closed',
+        'close_reason': 'user',
+        'started_at': NOW,
+        'last_activity_at': NOW + timedelta(minutes=10),
+        'recorded_end': NOW + timedelta(minutes=10),
+        'closed_at': NOW + timedelta(minutes=10),
+        'conversation_ids': [],
+        'state_version': 1,
+    }
+    root.collection('episodes').document('fixed').set(episodes.seal(uid, fixed))
+    result = episode_timeline.attach_recorded(
+        uid,
+        'c',
+        'omi',
+        NOW + timedelta(minutes=1),
+        NOW + timedelta(minutes=2),
+        choose=choose_recorded_episode,
+        new_episode={},
+        firestore_client=client,
+    )
+    state = store.state(uid, firestore_client=client)
+    facts, cursor = store.read_batch(uid, {'state': state}, firestore_client=client)
+    fold = Fold(uid)
+    for fact in facts:
+        fold.apply(fact)
+    assert cursor == state['next_seq'] and result['id'] == 'fixed'
+    assert fold.rows()['fixed']['conversation_ids'] == result['conversation_ids'] == ['c']

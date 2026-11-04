@@ -1822,13 +1822,15 @@ async def sweep_sync_backfill_sequencer(_retry_count: int = Depends(verify_cloud
 
     try:
         episode_outcomes = await run_blocking(db_executor, episode_worker.sweep)
-        outcomes['episode_redriven'] = episode_outcomes.get('redriven', 0)
-        outcomes['episode_errors'] = episode_outcomes.get('error', 0)
+        if not episode_outcomes.get('disabled'):
+            outcomes['episode_redriven'] = episode_outcomes.get('redriven', 0)
+            outcomes['episode_errors'] = episode_outcomes.get('error', 0)
     except Exception as error:
         logger.error('event=episode_log_sweep outcome=error exception_type=%s', type(error).__name__)
+        episode_worker.metrics.SWEEP.labels(outcome='error').inc()
         outcomes['episode_errors'] = 1
     return JSONResponse(
-        status_code=500 if outcomes.get('error') or outcomes.get('episode_errors') else 200,
+        status_code=500 if outcomes.get('error') else 200,
         content={'outcomes': outcomes},
     )
 

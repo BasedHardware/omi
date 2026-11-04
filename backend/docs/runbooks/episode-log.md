@@ -98,6 +98,11 @@ owner to install with the existing metrics scrape.
   An absent rule uses the numeric env percentage, still default 0. An inactive
   remote rule rolls reads back within the flag refresh window (up to 60 seconds).
 
+Rollback order: set reads to zero (or the remote rule inactive) before disabling
+`EPISODES_LOG_ENABLED`. After any capture gap, keep reads inactive until an
+approved fresh baseline has drained and been compared. A previous backfill
+marker does not cover writes made while capture was off.
+
 A selected user also needs `backfill_complete`, a caught-up cursor, Home rows,
 and no policy barrier. No incomplete user can flip. Direct reads follow view
 redirects and view navigation/membership links; live polling preserves the
@@ -112,12 +117,17 @@ UID, window, limit, cursor and server policy. Responses are private/no-cache;
 there is no cross-user/CDN cache. New clients can adopt this in the next app train.
 Existing clients continue receiving compatible full responses.
 
-Cached Home policy expires at the earliest live idle-close or temporary settling
-deadline. An expired owner cannot answer 304: it appends one deduplicated, urgent
+Cached Home policy expires at the earliest live idle-close, temporary settling,
+or batch-1 pending-compose maximum-settle deadline. A cached 200 preserves the
+existing bounded foreground composition repair for dirty rows; an old pending
+compose cannot stay behind 304 forever after a process restart. The composer
+retains its fingerprint/lease authority; the drain only writes dirty intent. An expired owner cannot answer 304: it appends one deduplicated, urgent
 member-refresh fact and serves the existing legacy policy while the worker drains.
 Quiet closes still occur through the legacy read lifecycle, never in the shadow
 worker. Settling clocks are bounded to 128 per user; overflow uses the existing
-capacity retry/alert and legacy fallback. Permanent below-floor verdicts never expire.
+capacity retry/alert and legacy fallback for the entire user, including other
+view updates. Do not truncate clocks: that could admit stale visibility policy.
+Partitioned checkpoints/clocks require a separately qualified capacity extension. Permanent below-floor verdicts never expire.
 
 All visibility, below-floor suppression, neutral titles and member filtering stay
 server-side. #24541's client layout contract is unchanged: pin after two seconds,
@@ -186,20 +196,13 @@ Never compare randomized ciphertext bytes. Watch composer and moment receipts
 for a recomposition/double-consumption wave, task dispatch failures, and Home 200/
 304 wire canaries in admitted and legacy cohorts. Roll reads back before repair.
 
-Cost forecast from the supplied 2026-11-04 aggregate study: the conservative dual-write here budgets roughly
-$5–12/day in extra fact/dirty writes at the current trigger rate, plus the bounded wake/sweep overhead (study allowance $0–2/day).
-Allow another $1–2/day for control-document reads and scan rotation: roughly
-$6–16/day in shadow operation overhead, to be verified against billed operations.
-Retained append-log storage and index growth are additional and unmeasured;
-measure encrypted bytes per fact and retained/index bytes before claiming an
-all-in daily total.
-Home rows and conditional requests target $6–10/day of read savings after the
-cohort/app ramp. The design's broader **$30–40/day incremental batch-2 saving**
-includes retiring eager legacy consolidation, which this dual-write PR does not
-claim to have realized. Full redesign target $95–130/day is a forecast for the
-study's cohort, with composer uncertainty and rollout growth. Re-measure reads,
-writes, tasks and retained storage normalized by admitted sync volume; include vendor composer
-usage in the total. No new paid work is introduced by the drain.
+The dated [cost assumptions and validation record](../evidence/2026-11-04-episode-log.md)
+owns the forecast and its limitations. In particular, each tracked member edit
+adds two fenced transactions (four writes and three owner reads), and independent
+drift comparison reads authoritative members again in one batch. Include these
+operations, retained log/index storage and vendor usage when measuring the ramp.
+The drain itself introduces no paid model call. Legacy consolidation remains
+active, so the wider architecture savings are not realized by shadow migration.
 
 ## Documented follow-up only
 

@@ -39,6 +39,12 @@ spec:
           annotations:
             summary: "Episode drain is retrying after a fold or storage failure"
             description: "Check capacity limits and the bounded-drain runbook. Legacy remains the fallback."
+        - alert: OmiEpisodeLogSweepErrors
+          expr: sum(increase(omi_episode_drain_sweep_total{outcome="error"}[10m])) > 0
+          labels: {severity: warning}
+          annotations:
+            summary: "Episode shadow sweep could not redrive work"
+            description: "Inspect task dispatch and the episode log runbook. Sync sequencer status is independent."
         - alert: OmiEpisodeLogSweepStale
           expr: time() - max(omi_episode_drain_sweep_observed_at_seconds) > 300 or absent(omi_episode_drain_sweep_observed_at_seconds)
           for: 5m

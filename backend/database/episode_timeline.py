@@ -112,18 +112,21 @@ def _attach_recorded_window(
         )
         log_fixed = []
         if log_capture is not None:
-            for row in rows:
+            refs = [
+                root.collection('episodes').document(row['id'])
+                for row in rows
                 if not (
                     row.get('recorded_members') is not None
                     and not row.get('discarded_conversation_ids')
                     and row.get('status') == 'closed'
                     and row.get('close_reason') in {'gap', 'idle', 'hard_cap'}
-                ):
-                    full = episodes.unseal(
-                        uid, root.collection('episodes').document(row['id']).get(transaction=transaction).to_dict()
-                    )
-                    if full:
-                        log_fixed.append(full)
+                )
+            ]
+            for snapshot in client.get_all(refs, transaction=transaction) if refs else ():
+                raw = snapshot.to_dict()
+                full = episodes.unseal(uid, dict(raw, id=snapshot.id) if raw is not None else None)
+                if full:
+                    log_fixed.append(full)
         selected = choose(rows, started, started)
         # A conversation belongs to the episode it started in, even past a cap.
         owner_id = member_row.get('episode_id')

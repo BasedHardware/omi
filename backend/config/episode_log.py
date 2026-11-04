@@ -4,6 +4,7 @@ import os
 
 from config.episodes import episodes_enabled_for
 from config.jev_decisions import uid_bucket
+from config.refactor_modes import default_on
 
 DEBOUNCE_SECONDS = 180
 MAX_AGE_SECONDS = 1500
@@ -13,10 +14,6 @@ SWEEP_SIZE = 32
 SWEEP_REDRIVE_SECONDS = 120
 RETRY_SECONDS = 30
 WAKE_BUCKET_SECONDS = 30
-
-
-def default_on(name: str) -> bool:
-    return os.getenv(name, 'on').strip().lower() in {'', '1', 'on', 'true', 'yes'}
 
 
 def enabled(uid: str) -> bool:

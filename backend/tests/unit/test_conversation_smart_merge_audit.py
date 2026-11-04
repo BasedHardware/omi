@@ -598,5 +598,10 @@ def test_episode_log_switch_off_preserves_the_original_absorb_reads(world, recor
     monkeypatch.setenv('EPISODES_LOG_ENABLED', 'off')
     assert _merge(world) is True
     absorb = _absorb_transaction(world.store)
-    assert ('users', UID, 'episode_log_state', 'owner') not in [path for txn, path in reads if txn is absorb]
+    assert [path for txn, path in reads if txn is absorb] == [
+        ('users', UID, 'conversations', 'p'),
+        ('users', UID, 'conversations', 'n'),
+        MARKER,
+        GATE,
+    ]
     assert recorded.audit == ['written']

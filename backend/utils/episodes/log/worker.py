@@ -85,9 +85,24 @@ def note_home_clock(uid, state, *, firestore_client=None, now=None):
         logger.warning('event=episode_home_clock outcome=sweep_recovery exception_type=%s', type(error).__name__)
 
 
+def note_home_refresh(uid, eid, key, *, firestore_client=None):
+    try:
+        deadline = store.append(
+            uid,
+            key,
+            [{'kind': 'home_refresh', 'payload': {'eid': eid}}],
+            firestore_client=firestore_client,
+            urgent=True,
+        )
+        if deadline is not None:
+            wake(uid, deadline)
+    except Exception as error:
+        logger.warning('event=episode_home_refresh outcome=sweep_recovery exception_type=%s', type(error).__name__)
+
+
 def _legacy(uid, eid, client):
     raw = client.collection('users').document(uid).collection('episodes').document(eid).get().to_dict()
-    return episodes.unseal(uid, raw)
+    return episodes.unseal(uid, dict(raw, id=eid) if raw is not None else None)
 
 
 def _comparison_token(state):
@@ -101,27 +116,34 @@ def compare_rows(uid, rows, homes, client, *, cursor=None):
     if token is None or (cursor is not None and token[0] != cursor):
         metrics.COMPARE_SKIPPED.labels(reason='pending').inc()
         return
-    comparisons = []
-    for eid, row in rows.items():
+    views = {eid: dict(row, home_row=homes.get(eid)) if row is not None else None for eid, row in rows.items()}
 
-        def read():
-            legacy = _legacy(uid, eid, client)
-            if legacy is not None and config.home_enabled() and not legacy.get('recorded_merged_into'):
-                legacy['home_row'] = home_read.project_episode(uid, legacy, list_row=True)
-            return legacy
+    def read(eids):
+        legacy = {eid: _legacy(uid, eid, client) for eid in eids}
+        active = [row for row in legacy.values() if row is not None and not row.get('recorded_merged_into')]
+        members = (
+            home_read.read_members(uid, active, firestore_client=client) if active and config.home_enabled() else {}
+        )
+        for row in active:
+            if config.home_enabled():
+                row['home_row'] = home_read.project_episode(
+                    uid, row, members=members, list_row=True, observe_members=False
+                )
+        return legacy
 
-        legacy = read()
-        view = dict(row, home_row=homes.get(eid)) if row is not None else None
-        if any(value != 'match' for value in metrics.differences(legacy, view).values()):
-            legacy = read()
-        comparisons.append((legacy, view))
-    # Legacy mutations append in the same transaction. Bracket every source
-    # read with one watermark: ordinary queue lag is never projection drift.
+    legacy = read(rows)
+    mismatches = [
+        eid for eid in rows if any(value != 'match' for value in metrics.differences(legacy[eid], views[eid]).values())
+    ]
+    if mismatches:
+        legacy.update(read(mismatches))
+    # Fresh legacy member reads, batched once per comparison pass, retain the
+    # independence needed to detect missing hooks without double-counting Home telemetry.
     if _comparison_token(store.state(uid, firestore_client=client)) != token:
         metrics.COMPARE_SKIPPED.labels(reason='inflight').inc()
         return
-    for legacy, view in comparisons:
-        metrics.compare(legacy, view)
+    for eid in rows:
+        metrics.compare(legacy[eid], views[eid])
 
 
 def drain(uid, *, firestore_client=None, now=None):
@@ -149,6 +171,7 @@ def drain(uid, *, firestore_client=None, now=None):
         old_links = dict(fold.links)
         events, cursor = store.read_batch(uid, claimed, firestore_client=client)
         changed_members = {event['cid'] for event in events if event['kind'] in {'member', 'member_refresh'}}
+        refresh_views = {event['payload']['eid'] for event in events if event['kind'] == 'home_refresh'}
         for event in events:
             fold.apply(event)
         rows = fold.rows()
@@ -156,6 +179,7 @@ def drain(uid, *, firestore_client=None, now=None):
             eid: row
             for eid, row in rows.items()
             if row != before.get(eid)
+            or eid in refresh_views
             or changed_members.intersection(row.get('conversation_ids') or [])
             or (config.home_enabled() and not claimed['state'].get('home_rows_ready'))
         }
@@ -186,6 +210,7 @@ def drain(uid, *, firestore_client=None, now=None):
                 and not row.get('recorded_merged_into')
                 and (
                     not row.get('composed_fingerprint')
+                    or row.get('compose_pending_since')
                     or row.get('summary_needs_regeneration')
                     or changed_members.intersection(row.get('conversation_ids') or [])
                     or any(
@@ -219,7 +244,10 @@ def drain(uid, *, firestore_client=None, now=None):
         except Exception as error:
             logger.warning('event=episode_view_compare outcome=error exception_type=%s', type(error).__name__)
         if result.get('scan_at'):
-            wake(uid, result['scan_at'])
+            try:
+                wake(uid, result['scan_at'])
+            except Exception as error:
+                logger.warning('event=episode_log_wake outcome=sweep_recovery exception_type=%s', type(error).__name__)
         return outcome
     except store.LostLease:
         outcome = 'lost_lease'
@@ -235,10 +263,10 @@ def drain(uid, *, firestore_client=None, now=None):
 
 def sweep(*, firestore_client=None, now=None):
     now = now or datetime.now(timezone.utc)
-    client = firestore_client if firestore_client is not None else get_firestore_client()
     if not config.default_on('EPISODES_LOG_ENABLED'):
         metrics.SWEEP_OBSERVED.set(time.time())  # A deliberate kill is not a stale scheduler.
         return {'disabled': 1}
+    client = firestore_client if firestore_client is not None else get_firestore_client()
     outcomes = {'scanned': 0, 'redriven': 0, 'error': 0}
     for uid, state in store.due_owners(now, firestore_client=client):
         outcomes['scanned'] += 1
@@ -250,8 +278,10 @@ def sweep(*, firestore_client=None, now=None):
             store.recover_policy_barriers(uid, firestore_client=client, now=now)
             wake(uid, now)
             outcomes['redriven'] += 1
+            metrics.SWEEP.labels(outcome='redriven').inc()
         except Exception as error:
             outcomes['error'] += 1
+            metrics.SWEEP.labels(outcome='error').inc()
             logger.warning('event=episode_log_sweep outcome=error exception_type=%s', type(error).__name__)
     metrics.SWEEP_OBSERVED.set(time.time())
     return outcomes

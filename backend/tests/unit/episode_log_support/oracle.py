@@ -48,7 +48,7 @@ class Oracle:
             lo = started - timedelta(seconds=MAX_EPISODE_SECONDS + CLOSE_GAP_SECONDS)
             hi = finished + timedelta(seconds=CLOSE_GAP_SECONDS)
             rows = [
-                dict(v, id=k[-1])
+                dict({f: v[f] for f in episode_timeline.FIELDS if f in v}, id=k[-1])
                 for k, v in sorted(store.rows.items())
                 if k[:2] == ('users', uid)
                 and k[2] == 'episodes'

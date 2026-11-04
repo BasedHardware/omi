@@ -9109,3 +9109,29 @@ paid recompose; discard, visible notes drift and explicit regeneration remain
 repair triggers. Summaries and speaker labels remain prompt inputs, and the full
 fingerprint still owns leases and composed-state validation. See the
 [change note](listen_pusher_pipeline/changes/2026-11-04-episode-compose-settle.md).
+
+
+### Episode log shadow contract
+
+`EPISODES_LOG_ENABLED` and `EPISODES_HOME_ROWS_ENABLED` default on unless
+explicitly off (`0`, `false`, `off`, `no`). Unknown values retain on and warn.
+Capture and shadow views live under `users/{uid}`; legacy writers keep serving.
+The drain never invokes paid composition or writes the legacy namespaces.
+
+`EPISODES_LOG_READ_PERCENT` defaults to zero. Its Firestore rule is authoritative;
+the numeric env percentage is the absent-rule fallback. The existing Omi flag
+CLI supports this Firestore-only key, with rollout percentages and inactive
+rollback, without a deploy or a PostHog mirror. Reads also require a completed
+baseline, a caught-up cursor and clear member-policy barriers. Roll reads to zero
+before disabling capture; a capture gap requires a fresh approved baseline before
+reads resume. Home rows contain only server-filtered, sealed wire data.
+
+Debounce is three minutes, the batch cap is 64 facts and the maximum pending age
+is 25 minutes. Owner/epoch publication uses a ten-minute lease, retry debt a
+30-second deadline, and the existing two-minute sweep redrives missed wakes.
+Queued/running/retrying dwell and deadline metrics feed the episode-log alerts.
+Post-drain comparisons and 1% read sampling compare canonical field digests with
+no user labels; collectors retain the drain/view families. Home ETags are private
+and scoped to the authenticated user, exact page/window and policy. Expired or
+invalid rows request urgent deduplicated refresh debt and serve legacy policy.
+See the [runbook](runbooks/episode-log.md) for read admission and the ramp.

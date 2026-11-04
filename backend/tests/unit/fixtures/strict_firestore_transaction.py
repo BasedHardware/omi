@@ -62,7 +62,7 @@ def _assert_storable(value: Any, *, in_array: bool = False) -> None:
 
 _SUPPORTED_OPERATIONS = (
     'document get/create, transaction-bound document get, transaction create/set/update/delete, bounded equality id queries, '
-    'projected client folder-membership BatchGet'
+    'whole-document and projected client folder-membership BatchGet'
 )
 
 
@@ -71,6 +71,7 @@ class StrictFirestoreSnapshot:
         self._data = deepcopy(data)
         self.exists = data is not None
         self.reference: Any = None
+        self.id: str | None = None
 
     def to_dict(self) -> dict[str, Any] | None:
         return deepcopy(self._data)
@@ -418,16 +419,17 @@ class StrictFirestore:
         self,
         references: list[StrictFirestoreDocument],
         *,
-        field_paths: list[str],
+        field_paths: list[str] | None = None,
         transaction: StrictFirestoreTransaction,
     ) -> list[StrictFirestoreSnapshot]:
-        if field_paths != ['folder_id']:
-            raise UnsupportedFirestoreOperationError('only folder membership BatchGet is supported')
+        if field_paths not in (None, ['folder_id']):
+            raise UnsupportedFirestoreOperationError('only whole-document and folder membership BatchGet are supported')
         snapshots = []
         for reference in reversed(references):
             if reference._database is not self:
                 raise ForeignTransactionError('BatchGet and document reference must belong to the same store')
             snapshot = reference.get(transaction=transaction, field_paths=field_paths)
             snapshot.reference = reference
+            snapshot.id = reference.id
             snapshots.append(snapshot)
         return snapshots

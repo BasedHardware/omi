@@ -28,6 +28,7 @@ from models.recording_speakers import (
 
 from fastapi import BackgroundTasks, APIRouter, Depends, Header, HTTPException, Query, Response
 from utils.episodes.log import reads as log_reads, worker as log_worker
+from database.action_items_cache import if_none_match_matches
 
 from config.episodes import APP_CHANNEL_HEADER, app_channel, client_channel_admitted, episodes_enabled_for
 from utils.episodes import home_read
@@ -83,7 +84,7 @@ def list_episodes(
             'Cache-Control': 'private, no-cache',
             'Vary': 'Authorization, X-Omi-App-Channel',
         }
-        if if_none_match == headers['ETag'] or home_version == token:
+        if if_none_match_matches(if_none_match, headers['ETag']) or home_version == token:
             return Response(status_code=304, headers=headers)
         try:
             rows, wires, next_cursor = log_reads.list_window(uid, start, end, limit=limit, cursor=cursor)
@@ -92,6 +93,8 @@ def list_episodes(
                 raise HTTPException(status_code=422, detail=str(error)) from error
         else:
             response.headers.update(headers)
+            if any(row.get('compose_dirty') for row in rows):
+                home_read.schedule_missed_composes(uid, rows, wires)
             log_worker.sample_read(uid, rows)
             return {'enabled': True, 'episodes': wires, 'next_cursor': next_cursor, 'home_version': token}
     try:
