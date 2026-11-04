@@ -6945,8 +6945,8 @@
       "threshold": "max((sum without(kind) (omi_finalization_pair_new_mismatch)) and (time() - omi_finalization_pair_observed_at_seconds < 2100)) > 25 for 30m",
       "evidence_date": "2026-11-04",
       "intended_final_threshold": ">25 for 30m; review after one week of source observations.",
-      "evaluated_bad": "Synthetic: a fresh observation exceeds 259200 continuously for 1h.",
-      "evaluated_good": "Synthetic: only pre-cohort legacy rows are late, or the observed value is within its budget."
+      "evaluated_bad": "Synthetic: the evaluated expression stays above 25 continuously for 30m.",
+      "evaluated_good": "Synthetic: the evaluated expression is at or below 25, so this alert does not fire."
     },
     "labels": {
       "severity": "critical",
@@ -7102,8 +7102,8 @@
       "threshold": "max(sum without(kind) (omi_finalization_pair_mismatch)) > 25 for 30m",
       "evidence_date": "2026-11-04",
       "intended_final_threshold": ">25 for 30m; review after one week of source observations.",
-      "evaluated_bad": "Synthetic: a fresh observation exceeds 259200 continuously for 1h.",
-      "evaluated_good": "Synthetic: only pre-cohort legacy rows are late, or the observed value is within its budget."
+      "evaluated_bad": "Synthetic: the evaluated expression stays above 25 continuously for 30m.",
+      "evaluated_good": "Synthetic: the evaluated expression is at or below 25, so this alert does not fire."
     },
     "labels": {
       "severity": "warning",
@@ -7261,8 +7261,8 @@
       "threshold": "(time() - min(max by(leg) (omi_finalization_pair_observed_at_seconds))) or vector(1e9) > 2100 for 5m",
       "evidence_date": "2026-11-04",
       "intended_final_threshold": ">2100 for 5m; review after one week of source observations.",
-      "evaluated_bad": "Synthetic: a fresh observation exceeds 259200 continuously for 1h.",
-      "evaluated_good": "Synthetic: only pre-cohort legacy rows are late, or the observed value is within its budget."
+      "evaluated_bad": "Synthetic: the evaluated expression stays above 2100 continuously for 5m.",
+      "evaluated_good": "Synthetic: the evaluated expression is at or below 2100, so this alert does not fire."
     },
     "labels": {
       "severity": "warning",
@@ -7420,8 +7420,8 @@
       "threshold": "max(omi_finalization_pair_scan_truncated and (time() - omi_finalization_pair_observed_at_seconds < 2100)) or vector(1) > 0 for 30m",
       "evidence_date": "2026-11-04",
       "intended_final_threshold": ">0 for 30m; review after one week of source observations.",
-      "evaluated_bad": "Synthetic: a fresh observation exceeds 259200 continuously for 1h.",
-      "evaluated_good": "Synthetic: only pre-cohort legacy rows are late, or the observed value is within its budget."
+      "evaluated_bad": "Synthetic: the evaluated expression stays above 0 continuously for 30m.",
+      "evaluated_good": "Synthetic: the evaluated expression is at or below 0, so this alert does not fire."
     },
     "labels": {
       "severity": "warning",
@@ -7573,14 +7573,14 @@
       "summary": "Enrichment repair-fence stock exceeds 100",
       "user_impact": "A recording may wait without a transcript or summary; this observation does not change custody.",
       "scope": "Active sync_reprocess_outbox obligations with summary_repair=true and due_at>=0, capped COUNT101. This is repair-fence stock, not retry attempts or a retry cap. No numeric retry cap exists in the source; owner uicleanup tracks that debt (ruling4256d5).",
-      "verification": "Check observation freshness, scan incompleteness and consecutive page samples. The pair gauge measures one bounded page, not the fleet mismatch total.",
+      "verification": "Check the repair-stock observation timestamp first. COUNT capped at 101 proves stock above 100, not the total or retry attempts; compare consecutive observations.",
       "safe_next_action": "Assign the observed state pair or repair-fence debt to its owning lifecycle lane. Confirm the exact generation before any repair. Never replay or delete rows automatically from this alert.",
       "runbook": "backend/charts/monitoring/lifecycle-alarms.md",
       "threshold": "max(omi_enrichment_summary_repair_count) > 100 for 1h",
       "evidence_date": "2026-11-04",
       "intended_final_threshold": ">100 for 1h; review after one week of source observations.",
-      "evaluated_bad": "Synthetic: a fresh observation exceeds 259200 continuously for 1h.",
-      "evaluated_good": "Synthetic: only pre-cohort legacy rows are late, or the observed value is within its budget."
+      "evaluated_bad": "Synthetic: the evaluated expression stays above 100 continuously for 1h.",
+      "evaluated_good": "Synthetic: the evaluated expression is at or below 100, so this alert does not fire."
     },
     "labels": {
       "severity": "warning",
@@ -7732,14 +7732,14 @@
       "summary": "Enrichment repair stock observer stale",
       "user_impact": "A recording may wait without a transcript or summary; this observation does not change custody.",
       "scope": "Active sync_reprocess_outbox obligations with summary_repair=true and due_at>=0, capped COUNT101. This is repair-fence stock, not retry attempts or a retry cap. No numeric retry cap exists in the source; owner uicleanup tracks that debt (ruling4256d5).",
-      "verification": "Check observation freshness, scan incompleteness and consecutive page samples. The pair gauge measures one bounded page, not the fleet mismatch total.",
+      "verification": "Check the repair-stock observation timestamp first. COUNT capped at 101 proves stock above 100, not the total or retry attempts; compare consecutive observations.",
       "safe_next_action": "Assign the observed state pair or repair-fence debt to its owning lifecycle lane. Confirm the exact generation before any repair. Never replay or delete rows automatically from this alert.",
       "runbook": "backend/charts/monitoring/lifecycle-alarms.md",
       "threshold": "(time() - max(omi_enrichment_summary_repair_observed_at_seconds)) or vector(1e9) > 1200 for 5m",
       "evidence_date": "2026-11-04",
       "intended_final_threshold": ">1200 for 5m; review after one week of source observations.",
-      "evaluated_bad": "Synthetic: a fresh observation exceeds 259200 continuously for 1h.",
-      "evaluated_good": "Synthetic: only pre-cohort legacy rows are late, or the observed value is within its budget."
+      "evaluated_bad": "Synthetic: the evaluated expression stays above 1200 continuously for 5m.",
+      "evaluated_good": "Synthetic: the evaluated expression is at or below 1200, so this alert does not fire."
     },
     "labels": {
       "severity": "warning",
