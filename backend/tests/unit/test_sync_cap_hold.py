@@ -22,7 +22,8 @@ def initialized_summary(monkeypatch):
 @pytest.mark.parametrize('enforce', [False, True])
 @pytest.mark.parametrize('ladder', [False, True])
 @pytest.mark.parametrize('queued', [False, True], ids=['sync-v1', 'sync-v2-worker'])
-def test_exhaustion_holds_before_url_or_provider_dispatch(tmp_path, monkeypatch, enforce, queued, ladder):
+@pytest.mark.parametrize('clock_offset', [0.0, -1000000000.0])
+def test_exhaustion_holds_before_url_or_provider_dispatch(tmp_path, monkeypatch, enforce, queued, ladder, clock_offset):
     path = tmp_path / '1792152000.wav'
     with wave.open(str(path), 'wb') as output:
         output.setparams((1, 2, 16000, 0, 'NONE', 'not compressed'))
@@ -52,6 +53,7 @@ def test_exhaustion_holds_before_url_or_provider_dispatch(tmp_path, monkeypatch,
             errors,
             is_locked=True,
             job_id='queued-job' if queued else None,
+            early_capture_offset=clock_offset,
         )
         is False
     )
@@ -59,6 +61,7 @@ def test_exhaustion_holds_before_url_or_provider_dispatch(tmp_path, monkeypatch,
     if enforce or ladder:
         hold.assert_called_once()
         assert hold.call_args.args[2]['timestamp'] == 1792152000
+        assert hold.call_args.args[2].get('early_capture_offset', 0.0) == clock_offset
         url.assert_not_called()
         stt.assert_not_called()
     else:
@@ -149,6 +152,39 @@ async def test_full_capture_hold_precedes_vad_and_has_default_off_parity(tmp_pat
     else:
         hold.assert_not_called()
         cap_hold.funded_allowance.assert_not_called()
+
+
+async def test_full_capture_hold_keeps_each_raw_identity_and_normalized_clock(tmp_path, monkeypatch):
+    from models.conversation_enums import ConversationSource
+    from utils.sync.capture_clock import early_capture_clock_offsets
+
+    paths = [str(tmp_path / '788918400.wav'), str(tmp_path / '1685577600.wav')]
+    offsets = early_capture_clock_offsets(
+        [(paths[0], 788918400.0, 2.0), (paths[1], 1685577600.0, 1.0)], now=1800000000.0
+    )
+    monkeypatch.setattr(cap_hold, 'enabled', lambda *_a: True)
+    monkeypatch.setattr(
+        cap_hold,
+        'funded_allowance',
+        lambda *_a, **_k: SimpleNamespace(managed=False, reason='plan_allowance_exhausted'),
+    )
+    hold = AsyncMock()
+    monkeypatch.setattr(cap_hold, '_hold_capture', hold)
+    assert await cap_hold.hold_capture_if_exhausted(
+        'synthetic', paths, ConversationSource.omi, early_capture_offsets=offsets
+    )
+    metadata = [call.args[2] for call in hold.call_args_list]
+    assert [item['timestamp'] for item in metadata] == [788918400, 1685577600]
+    assert [item['file_name'] for item in metadata] == ['788918400.wav', '1685577600.wav']
+    assert [item['timestamp'] - item['early_capture_offset'] for item in metadata] == [1799999997, 1799999999]
+    assert [cap_hold.hold_started_at(item) for item in metadata] == [1799999997, 1799999999]
+    for path, item in zip(paths, metadata):
+        from pathlib import Path
+
+        Path(path).write_bytes(b'opaque-source-bytes')
+        assert cap_hold.capture_identity(path, item) == cap_hold.capture_identity(
+            path, {**item, 'early_capture_offset': item['early_capture_offset'] + 60}
+        )
 
 
 def test_hold_manifest_fences_concurrent_recovery_and_stale_release(monkeypatch):
@@ -491,7 +527,7 @@ def test_default_offline_gate_holds_outside_all_legacy_scopes(tmp_path, monkeypa
 
     monkeypatch.setattr(policy, '_cohort_resolver', lambda: '')
     test_exhaustion_holds_before_url_or_provider_dispatch(
-        tmp_path, monkeypatch, enforce=not kill, queued=queued, ladder=False
+        tmp_path, monkeypatch, enforce=not kill, queued=queued, ladder=False, clock_offset=0.0
     )
 
 

@@ -22,22 +22,47 @@ VARIANTS = {
     ),
     'exhaustion': ('provider_exhaustion_window', {'overrides': {'flags': PASS_DISPATCH}}),
     'exhaustion_dispatch_loop': ('provider_exhaustion_window', {}),
+    'exhaustion_poll2': (
+        'provider_exhaustion_window',
+        {
+            'overrides': {
+                'flags': {
+                    **PASS_DISPATCH,
+                    'BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS': '2',
+                }
+            }
+        },
+    ),
     # Diagnostic counterfactual only; the exhaustion baseline uses shipping defaults.
     'exhaustion_former_rate': (
         'provider_exhaustion_window',
         {'overrides': {'flags': {**PASS_DISPATCH, 'BATCH_PIPELINE_RECOVERY_DISPATCH_BATCH_SIZE': '1'}}},
     ),
     'stale': ('stale_finalize_targets', {}),
+    'stale_poll2': (
+        'stale_finalize_targets',
+        {'overrides': {'flags': {'BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS': '2'}}},
+    ),
     'stale_rollback': (
         'stale_finalize_targets',
         {'overrides': {'flags': {'BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED': 'false'}}},
     ),
+    # Isolate fenced heads, without the separate held-provider input.
     # Strict merge order (head wait off) isolates what the purge alone prevents.
     'stale_no_purge': (
         'stale_finalize_targets',
-        {'overrides': {'purge_on_fence': False, 'flags': {'BATCH_PIPELINE_MERGE_HEAD_WAIT_SECONDS': 'off'}}},
+        {
+            'overrides': {
+                'purge_on_fence': False,
+                'unrecoverable_near_silence': False,
+                'flags': {'BATCH_PIPELINE_MERGE_HEAD_WAIT_SECONDS': 'off'},
+            }
+        },
     ),
-    'stale_no_purge_head_wait': ('stale_finalize_targets', {'overrides': {'purge_on_fence': False}}),
+    'stale_no_purge_head_wait': (
+        'stale_finalize_targets',
+        {'overrides': {'purge_on_fence': False, 'unrecoverable_near_silence': False}},
+    ),
     'privacy': ('privacy_blocked_users', {}),
     'summary_shared': ('summary_behind_transcription', {}),
     'summary_isolated': ('summary_behind_transcription', {'summary_pool': 'isolated'}),
@@ -111,6 +136,19 @@ def test_recovery_dispatch_loop_shortens_the_quarantine_tail_without_extra_paid_
     assert loop['unrecovered_quarantines'] == loop['sim']['recovery_states'].get('failed_held', 0)
 
 
+@pytest.mark.parametrize('name', ['exhaustion', 'stale'])
+def test_known_unrecoverable_input_is_scored_under_either_polling_cadence(samples, name):
+    for key in (name, name + '_poll2'):
+        sample = samples[key]
+        assert sample['verdict'] == 'GATE_FAIL unrecovered_quarantine'
+        assert sample['unrecovered_quarantines'] == sample['sim']['recovery_states']['failed_held'] == 1
+        if name == 'exhaustion':
+            assert 0 < sample['quarantine_projection_p95_seconds'] < 300
+        else:
+            assert sample['sim']['uploads'] == 72
+            assert sample['sim']['upload_status'].get('pending', 0) == 0
+
+
 def test_stale_finalize_targets_are_neither_failures_nor_paid(samples):
     sample = samples['stale']
     sim = sample['sim']
@@ -124,6 +162,8 @@ def test_stale_finalize_targets_are_neither_failures_nor_paid(samples):
     assert sim['counters']['duplicate_uploads_deduplicated'] > 0
     assert sim['max_paid_calls_per_segment'] <= 1
     assert sample['errors'] == 0
+    assert sim['uploads'] == samples['stale_rollback']['sim']['uploads'] == 72
+    assert sim['upload_status'].get('pending', 0) == 0
 
 
 def test_without_the_purge_a_fenced_head_blocks_the_owners_ordered_merge(samples):

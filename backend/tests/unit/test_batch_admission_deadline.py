@@ -129,3 +129,74 @@ async def test_failed_call_leaves_only_its_own_leases_unevaluated(monkeypatch):
             assert 'compute_admission_token' not in job and 'compute_decision' not in job
         else:
             assert job['state'] == 'committed'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('parallel', [True, False])
+async def test_independent_admission_calls_overlap_only_with_switch_on(monkeypatch, parallel):
+    import threading
+    from utils.batch_pipeline.contracts import LeasedWork
+
+    monkeypatch.setenv('BATCH_ADMISSION_PARALLEL_CALLS', str(parallel).lower())
+    rendezvous = threading.Barrier(2) if parallel else None
+    active, peak, lock = 0, 0, threading.Lock()
+    calls = []
+
+    def authorize(leases):
+        nonlocal active, peak
+        with lock:
+            active += 1
+            peak = max(peak, active)
+            calls.append([v.item.segment_id for v in leases])
+        try:
+            if rendezvous:
+                rendezvous.wait(timeout=3)
+            return {'allowed': [v.item.segment_id for v in leases]}
+        finally:
+            with lock:
+                active -= 1
+
+    pump = Pump(Scheduler(MemoryStore()), Worker(), authorize_compute=authorize)
+    leases = [LeasedWork(item(str(n), owner=str(n)), 'token', 0, 0) for n in range(8)]
+    result = await pump._authorize_flight(leases)
+    assert sorted(result['allowed']) == [str(n) for n in range(8)]
+    assert peak == (2 if parallel else 1)
+    assert all(len(call) <= 4 for call in calls)
+    assert not pump._admission_locks
+
+
+@pytest.mark.asyncio
+async def test_owner_groups_never_overlap_across_calls_or_flights(monkeypatch):
+    import asyncio
+    import threading
+    from utils.batch_pipeline.contracts import LeasedWork
+
+    monkeypatch.setenv('BATCH_ADMISSION_PARALLEL_CALLS', 'true')
+    active, lock, violations, calls = set(), threading.Lock(), [], []
+    first_started, release = threading.Event(), threading.Event()
+
+    def authorize(leases):
+        owners = {v.item.owner_id for v in leases}
+        with lock:
+            violations.extend(active & owners)
+            active.update(owners)
+            calls.append([v.item.segment_id for v in leases])
+            first_started.set()
+        assert release.wait(3)
+        with lock:
+            active.difference_update(owners)
+        return {'allowed': [v.item.segment_id for v in leases]}
+
+    pump = Pump(Scheduler(MemoryStore()), Worker(), authorize_compute=authorize)
+    leases = [LeasedWork(item(str(n), owner='same'), 'token', 0, 0) for n in range(9)]
+    first = asyncio.create_task(pump._authorize_flight(leases))
+    while not first_started.is_set():
+        await asyncio.sleep(0)
+    second = asyncio.create_task(pump._authorize_flight(leases))
+    await asyncio.sleep(0.02)
+    assert len(calls) == 1
+    release.set()
+    results = await asyncio.gather(first, second)
+    assert all(len(result['allowed']) == 9 for result in results)
+    assert not violations and not pump._admission_locks
+    assert all(len(call) <= 4 for call in calls)

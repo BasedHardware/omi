@@ -100,7 +100,7 @@ def test_updated_filter_runs_before_the_old_200_row_scan(monkeypatch):
     read = MagicMock(return_value=(rows, 237))
     monkeypatch.setattr(memories, 'read_filtered_mcp_memories', read)
     result = memories.memories_page_core(OWNER, limit=20, updated_after=NOW, cursor_kind='test')
-    assert result['memories'] == rows
+    assert result['memories'] == [{**rows[0], 'source_at': None, 'extracted_at': None}]
     assert not result['has_more'] and not result['scan_truncated']
     assert result['scanned_count'] == 237 and result['matched_count'] == 1
     assert read.call_args.kwargs['filters']['updated_after'] == NOW
@@ -168,13 +168,16 @@ def test_batch_honors_twenty_ids_under_large_unicode_payload(monkeypatch):
         'get_mcp_conversations_by_id',
         lambda *a, **k: [card(cid, '漢' * 24000) for cid in ids],
     )
-    result = conversations.get_conversations_by_ids(OWNER, {'conversation_ids': ids})
-    assert [item['id'] for item in result['conversations']] == ids
-    assert result['omitted_ids'] == []
+    result = conversations.get_conversations_by_ids(
+        OWNER, {'conversation_ids': ids, 'max_chars': 4000, 'fields': ['transcript_segments', 'structured.title']}
+    )
+    assert 0 < len(result['conversations']) < len(ids)
+    assert result['omitted_ids'] == ids[len(result['conversations']) :]
     assert result['truncated'] is True
     assert tool_response_serialized_chars(result) <= MCP_CONVERSATION_BATCH_RESPONSE_MAX_CHARS
     for item in result['conversations']:
-        assert item['structured'] == item['conversation']['structured']
+        assert 'structured' not in item
+        assert len(item['conversation']['transcript_segments'][0]['text']) == 4000
 
 
 def test_batch_pathological_metadata_accounts_for_omissions_and_resumes(monkeypatch):
@@ -278,7 +281,9 @@ def test_group_by_reads_whole_window_not_two_hundred_row_page(monkeypatch):
         OWNER, {'start_date': '2026-10-22', 'end_date': '2026-10-22', 'group_by': 'day', 'limit': 200}
     )
     assert result['buckets'][0]['count'] == 500
-    assert result['coverage']['complete_window'] is True
+    assert result['coverage']['complete_window'] is False
+    assert result['coverage']['query_complete'] is True
+    assert result['coverage']['capture_completeness'] == 'unknown'
     assert 'next_cursor' not in result
 
 
@@ -585,7 +590,8 @@ def test_screen_grouping_ignores_even_stale_cursors_with_note(monkeypatch, group
     resumed = other.get_screen_activity(OWNER, {'group_by': group_by, 'cursor': 'old-or-invalid-cursor'})
     assert resumed['buckets'] == first['buckets']
     assert sum(row['count'] for row in resumed['buckets']) == 501
-    assert 'cursor ignored' in resumed['note'] and resumed['coverage']['complete_window']
+    assert 'cursor ignored' in resumed['note'] and resumed['coverage']['query_complete']
+    assert resumed['coverage']['complete_window'] is False
     assert 'next_cursor' not in resumed
 
 
@@ -614,3 +620,82 @@ def test_duplicate_ids_and_omissions_always_advance_cursor(monkeypatch):
         assert cursor not in tokens
         tokens.add(cursor)
     assert seen == ['a', 'b', 'c', 'd'] and cursor is None
+
+
+def test_screen_device_bounds_do_not_claim_sync_watermarks(monkeypatch):
+    rows = [
+        {'timestamp': '2026-10-22 01:00:00.000', 'clientDeviceId': 'device-a'},
+        {'timestamp': '2026-10-22 05:00:00.000', 'clientDeviceId': 'device-b'},
+        {'timestamp': '2026-10-22 13:00:00.000', 'clientDeviceId': 'device-a'},
+    ]
+    monkeypatch.setattr(other.screen_activity_db, 'get_screen_activity', lambda *a, **k: rows)
+    coverage = other.get_screen_activity(OWNER, {'group_by': 'hour'})['coverage']
+    assert coverage['query_complete'] is True
+    assert coverage['complete_window'] is False
+    assert coverage['devices'] == [
+        {
+            'device_id': 'device-a',
+            'first_observed_at': rows[0]['timestamp'],
+            'last_observed_at': rows[2]['timestamp'],
+            'synced_through': None,
+        },
+        {
+            'device_id': 'device-b',
+            'first_observed_at': rows[1]['timestamp'],
+            'last_observed_at': rows[1]['timestamp'],
+            'synced_through': None,
+        },
+    ]
+
+
+def test_summary_snapshot_exposes_cutoff_and_unknown_visible_total():
+    result = summary_read_payload({'created_at': NOW, 'stats': {'memories_created': 7}, 'read_contract_version': 2})
+    assert result['covers_until'] == NOW
+    assert result['stats']['stored_memories_created'] == 7
+    assert result['stats']['fetchable_memories_created'] is None
+
+
+def test_dotted_card_projection_and_aliases():
+    from utils.mcp_server.helpers import select_card_fields
+
+    value = {'id': 'synthetic', 'structured': {'title': 'Plan', 'overview': 'Details'}, 'discarded': False}
+    assert select_card_fields(value, ['structured.title', 'discarded']) == {
+        'id': 'synthetic',
+        'structured': {'title': 'Plan'},
+        'discarded': False,
+    }
+    assert select_card_fields(value, ['title'])['structured'] == {'title': 'Plan'}
+
+
+def test_shared_mcp_memory_list_projects_source_time(monkeypatch):
+    row = {
+        'id': 'synthetic-memory',
+        'content': 'A durable synthetic fact',
+        'created_at': NOW,
+        'evidence': [{'captured_at': (NOW - timedelta(days=5)).isoformat(), 'created_at': NOW.isoformat()}],
+    }
+    monkeypatch.setattr(memories, 'read_filtered_mcp_memories', lambda *a, **k: ([row], 1))
+    result = memories.memories_page_core(OWNER, limit=10, updated_after=NOW, cursor_kind='get_memories')
+    assert result['memories'][0]['source_at'] == row['evidence'][0]['captured_at']
+    assert result['memories'][0]['extracted_at'] is None
+
+
+def test_device_observation_bounds_compare_instants_across_dst_offsets():
+    rows = [
+        {'timestamp': '2026-11-01T01:50:00-04:00', 'clientDeviceId': 'synthetic'},
+        {'timestamp': '2026-11-01T01:10:00-05:00', 'clientDeviceId': 'synthetic'},
+    ]
+    coverage = other.screen_activity_db.observed_device_coverage(list(reversed(rows)))[0]
+    assert coverage['first_observed_at'] == rows[0]['timestamp']
+    assert coverage['last_observed_at'] == rows[1]['timestamp']
+    assert coverage['synced_through'] is None
+
+
+def test_non_generated_summary_has_no_generation_coverage_claim():
+    for status in ('failed', 'no_recordings', 'pending'):
+        result = summary_read_payload({'status': status, 'created_at': NOW})
+        assert result['generated_at'] is None
+        assert result['covers_until'] is None
+        assert result['coverage_basis'] == 'unavailable; no generated summary'
+    stored = summary_read_payload({'status': 'failed', 'coverage_basis': 'explicit producer basis'})
+    assert stored['coverage_basis'] == 'explicit producer basis'

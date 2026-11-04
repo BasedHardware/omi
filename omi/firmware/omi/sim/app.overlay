@@ -1,5 +1,9 @@
 /* No host HCI device, even if Bluetooth is accidentally enabled later. */
 / {
+    safe_mode_fault: safe-mode-fault {
+        compatible = "omi,safe-mode-fault";
+        zephyr,deferred-init;
+    };
     chosen {
         /delete-property/ zephyr,bt-hci;
     };

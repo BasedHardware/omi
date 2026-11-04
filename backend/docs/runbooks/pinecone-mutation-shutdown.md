@@ -4,11 +4,17 @@ Every admitted mutation is tracked in the serving process, including migration
 copy tickets. On SIGTERM a chained server signal handler schedules settlement
 immediately, before Uvicorn waits for active requests. The handler does no IO
 and does not lock the registry. The lifespan shutdown retries the drain.
-Shutdown closes local admission and marks live tickets `uncertain`.
+Shutdown closes local admission, allows up to three seconds for provider calls
+to finish and settle normally, then marks only remaining live tickets `uncertain`.
+Repeated drains share the first deadline rather than restarting the grace.
 An admission racing shutdown settles before returning to its provider caller.
 Provider interruption (`KeyboardInterrupt`/`SystemExit`) also settles uncertainty
-before re-raising. A failed finish write attempts uncertain settlement using the
-original ticket; it never retries the provider or allocates a replacement token.
+before re-raising. Finish writes retry transient Firestore `Unauthenticated`,
+`Unavailable` (`ServiceUnavailable`), `DeadlineExceeded` and `Aborted` errors up
+to three attempts on fresh transactions, with 50 ms then 100 ms pauses. The
+idempotent transaction tolerates a committed write whose response was lost.
+An unrecovered finish failure attempts uncertain settlement using the original
+ticket; it never retries the provider or allocates a replacement token.
 Failed uncertain writes retain the durable pending marker and local registration
 so another drain attempt can retry settlement.
 
@@ -40,8 +46,11 @@ It offloads synchronous Firestore settlement to a lazy dedicated worker with one
 queued retry slot, independent of the shared DB and default asyncio executors.
 Queued settlement survives a bounded-wait timeout or caller cancellation. The lifespan waits
 at most five seconds, leaving time for audio/client cleanup; settlement may
-continue in its worker during the remaining platform grace. It does not wait
-for provider calls to finish. Firestore RPC latency and platform
+continue in its worker during the remaining platform grace. The three-second
+provider grace leaves two seconds within that wait for settlement and seven
+seconds before Cloud Run's [ten-second SIGTERM deadline](https://docs.cloud.google.com/run/docs/container-contract#instance-shutdown).
+The server's longer Uvicorn timeout does not extend the platform deadline.
+Firestore RPC latency and platform
 shutdown grace still bound what can persist. SIGKILL, OOM, a blocked event loop
 that never reaches lifespan shutdown, or exhaustion of platform grace can leave
 pending records. Admission commit acknowledgement loss also remains a gap:
@@ -58,6 +67,11 @@ of arbitrary process death.
   settlement (including idempotent calls), not unresolved journal cardinality.
 * `omi_pinecone_mutation_drain_errors_total`: failed drain settlement calls.
 * `event=pinecone_mutation_drain`: aggregate attempted and settled counts only.
+  `outcome=grace_deadline` counts drain passes with tickets still live at the
+  deadline; `attempted` is the number of candidates, including races with finish.
+* `event=pinecone_mutation_finish outcome=settlement_failed`: a finish could not
+  settle after its eligible retries and is attempting uncertain settlement.
+  `outcome=uncertain_settlement_failed` means that fallback also failed.
 
 No labels contain an owner, route, vector, operation ID or error payload.
 Global pending/uncertain backlog still requires a counts-only journal census.
@@ -68,4 +82,4 @@ This change does not modify existing stuck operations. Do not bulk-finish them:
 finish asserts acknowledgement. Recovery needs a separately authorized operator
 decision and receipts tied to the original scope and provider requests under
 `reconcile_mutation`; operation age, counts, or an unrelated probe do not prove
-settlement. No retry, re-drive, reconcile or deletion is performed at shutdown.
+settlement. No provider retry, re-drive, reconcile or deletion is performed at shutdown.
