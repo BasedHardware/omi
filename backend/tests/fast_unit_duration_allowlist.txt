@@ -561,3 +561,8 @@ tests/unit/test_batch_pipeline_pull_multi_lease.py::test_long_heads_never_push_o
 # live-preview values (#24517). Measured 1.04s CPU on CI main run 41736493180 (2026-11-03);
 # ~1.1s twice on #24516 before that. Assertions unchanged and hermetic.
 tests/unit/test_listen_finalization_cloud_tasks.py::test_prod_listen_has_replay_binding_without_enabling_live_admission
+# Real-gateway-client construction proof under file isolation: the test imports the
+# full provider chain once to assert the production client carries the foreground
+# timeout. Measured at the 1.00s CPU threshold on CI shard 5/8 (PR #24592 review,
+# 2026-11-04). Assertions unchanged and hermetic.
+tests/unit/test_chat_metadata_foreground_deadline.py::test_real_gateway_client_construction_carries_the_foreground_timeout

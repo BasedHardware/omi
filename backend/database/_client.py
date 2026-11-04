@@ -9,14 +9,16 @@ import os
 from google.api_core.exceptions import (
     Aborted,
     DeadlineExceeded,
-    InternalServerError,
     InvalidArgument,
-    RetryError,
+    ResourceExhausted,
     ServiceUnavailable,
 )
-
-from google.api_core.exceptions import Aborted, DeadlineExceeded, InvalidArgument, ResourceExhausted, ServiceUnavailable
 from google.cloud import firestore
+
+# The availability classifier is pure (no I/O) but lives in the utils tree
+# (the async-blockers scanner treats ``database.*`` imports as blocking calls),
+# re-exported explicitly for every existing ``database._client`` importer.
+from utils.firestore_transient_types import is_transient_availability_error as is_transient_availability_error
 
 from database.people_generation import bump_people_generation
 from database.document_ids import document_id_from_seed
@@ -384,19 +386,6 @@ def is_expired_transaction_error(error: BaseException) -> bool:
     the dead id, so the read-path ``Aborted`` has to be recognized here.
     """
     return isinstance(error, (InvalidArgument, Aborted)) and _EXPIRED_TRANSACTION_MARKER in str(error).lower()
-
-
-# Google availability codes whose answer changes on a redial: the data plane is
-# momentarily unable or too slow to answer this attempt (503 unavailable, 504
-# deadline, 500 internal). Conversation_scan's query retry and mcp_auth_read's
-# read retry both replay exactly this set; the same evidence is a bounded
-# transient for the recording-session writers — nothing was written, and the
-# operation's natural cadence (the next minute's lease renewal, the next
-# reconnect's open, the next lifecycle event) is the retry.
-# The availability classifier is pure (no I/O) but lives in the utils tree
-# so the async-blockers scanner treats it as scanner-clean; re-exported for
-# every existing ``database._client`` importer.
-from utils.firestore_transient_types import is_transient_availability_error
 
 
 _DOCUMENT_SIZE_LIMIT_MARKER = "exceeds the maximum allowed size"

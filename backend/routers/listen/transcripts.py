@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
 import math
 import time
@@ -10,7 +11,7 @@ import uuid
 from utils.speakers.context import name_only_allowed
 from collections import deque
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Sequence, Tuple, cast
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Sequence, Tuple, cast
 
 from fastapi.websockets import WebSocketDisconnect
 
@@ -106,6 +107,23 @@ LEGACY_VALUE_ERROR_ROLLOVER_FAILURES = 5
 LEGACY_PERSIST_BATCH_ATTEMPT_BUDGET = 3
 
 
+def _resolve_rollover_escape(conversations: Any) -> Callable[[], Awaitable[None]] | None:
+    """The host's typed rollover escape for an over-limit conversation, or ``None``.
+
+    ``rollover_after_transcript_decode_failure`` is a coroutine function on the
+    production controller. Binding only coroutine functions keeps the call site
+    awaiting a real awaitable: a mistyped attribute (a plain callable, a
+    non-callable, or an absent attr) previously passed the ``callable()`` check
+    and burned the oversized-rollover probe on ``TypeError: object ... can't be
+    used in 'await' expression`` — swallowed by the probe's error arm — instead
+    of taking the proven plain-rollover fallback below.
+    """
+    escape = getattr(conversations, 'rollover_after_transcript_decode_failure', None)
+    if inspect.iscoroutinefunction(escape):
+        return escape
+    return None
+
+
 def _is_deterministic_persist_defect(error: BaseException) -> bool:
     """True when a legacy persist failure cannot change on a retry of the same batch.
 
@@ -139,7 +157,6 @@ def _is_deterministic_persist_defect(error: BaseException) -> bool:
         # contention, and a fresh transaction can indeed succeed.
         return not str(error).lower().startswith('failed to commit transaction')
     return False
-
 
 
 def _legacy_persist_reason(error: Exception) -> str:
@@ -1507,10 +1524,8 @@ class TranscriptProcessor:
                     ):
                         self._oversized_rollover_probe_at = time.monotonic() + OVERSIZED_ROLLOVER_PROBE_SECONDS
                         try:
-                            escape = getattr(
-                                self.host.conversations, 'rollover_after_transcript_decode_failure', None
-                            )
-                            if callable(escape):
+                            escape = _resolve_rollover_escape(self.host.conversations)
+                            if escape is not None:
                                 await escape()
                             else:
                                 await self.host.conversations.create_new_in_progress_conversation(rollover=True)

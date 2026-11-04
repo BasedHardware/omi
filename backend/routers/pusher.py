@@ -14,7 +14,6 @@ from config.audio_outbox import enabled as audio_outbox_enabled
 from utils.pusher_audio_projection import PusherAudioProjection, projection_owner_gone
 from utils.pusher_record_barrier import PusherRecordBarrier
 from utils.pusher_receive_metrics import SocketObservation, observe_work
-from utils.cloud_tasks import is_audio_merge_dispatch_enabled
 from utils.pusher_record_finish import ProjectionQueueWaitTimeout, RecordProjectionQueue, retain_closed_record_drain
 
 from fastapi import APIRouter
@@ -25,7 +24,6 @@ from google.api_core.exceptions import InvalidArgument
 
 from database.privacy_check_metrics import with_session_census
 from database import users as users_db
-from database._client import get_firestore_client
 from utils.firestore_transient_types import is_transient_availability_error
 from database.legal_holds import DestructiveOperationInProgress
 from utils.conversations.speaker_identity_retry import schedule_completed_identity_retries
@@ -72,7 +70,6 @@ from utils.webhooks import (
 )
 from utils.other.storage import (
     AudioChunkContentConflict,
-    maybe_invalidate_conversation_playback,
     upload_audio_chunks_batch,
 )
 from utils.other.audio_outbox import AudioReceipt, AudioProjection, commit_pcm_window, read_pcm

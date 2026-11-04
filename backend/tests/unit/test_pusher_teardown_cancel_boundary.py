@@ -554,7 +554,6 @@ class TestWindDownDataPreservation:
         monkeypatch.setattr(pusher, 'PUSHER_DRAIN_WIND_DOWN_SECONDS', 0.5)
         # Same stub set as the deleted-conversation sync harness: admission
         # reads and storage seams all fixture-backed, nothing real touched.
-        monkeypatch.setattr(pusher, 'is_audio_merge_dispatch_enabled', lambda: False)
         monkeypatch.setattr(pusher, 'schedule_person_voice_learning_retry', lambda *args, **kwargs: None)
         monkeypatch.setattr(
             pusher_audio_projection.conversations_db, 'create_audio_files_from_chunks', lambda uid, conversation_id: []
@@ -631,7 +630,6 @@ class TestWindDownDataPreservation:
         monkeypatch.setenv('AUDIO_DURABLE_OUTBOX_ENABLED', 'false')
         monkeypatch.setattr(pusher, 'PUSHER_DRAIN_WIND_DOWN_SECONDS', 0.5)
         monkeypatch.setattr(pusher, 'run_blocking', self._passthrough_blocking())
-        monkeypatch.setattr(pusher, 'is_audio_merge_dispatch_enabled', lambda: False)
         monkeypatch.setattr(pusher, 'schedule_person_voice_learning_retry', lambda *args, **kwargs: None)
         monkeypatch.setattr(
             pusher_audio_projection.conversations_db, 'create_audio_files_from_chunks', lambda uid, conversation_id: []
@@ -740,7 +738,6 @@ class TestWindDownDataPreservation:
         monkeypatch.setenv('AUDIO_DURABLE_OUTBOX_ENABLED', 'false')
         monkeypatch.setattr(pusher, 'PUSHER_DRAIN_WIND_DOWN_SECONDS', 0.5)
         monkeypatch.setattr(pusher, 'run_blocking', self._passthrough_blocking())
-        monkeypatch.setattr(pusher, 'is_audio_merge_dispatch_enabled', lambda: False)
         monkeypatch.setattr(pusher, 'schedule_person_voice_learning_retry', lambda *args, **kwargs: None)
         monkeypatch.setattr(
             pusher_audio_projection.conversations_db, 'create_audio_files_from_chunks', lambda uid, conversation_id: []
