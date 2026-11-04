@@ -1,16 +1,16 @@
 """Replay real privacy readers/writers against isolated durable authority and time."""
 
 from collections import Counter
-from concurrent.futures import ThreadPoolExecutor
 from contextlib import AsyncExitStack, ExitStack
-from contextvars import copy_context
 import os
 import json
 import threading
 from unittest.mock import patch
 
 from testing.replay_harness.report import StageResult, record_exception
-from testing.replay_harness.privacy_report import OFFSETS, summary, observe_probe, observe_expiry
+from testing.replay_harness.privacy_report import OFFSETS, summary, observe_probe, observe_expiry, observe_transition
+from testing.replay_harness.privacy_faults import FSR_FAMILIES, not_applicable_reason, fault_applied
+from testing.replay_harness.stages.privacy_overlap import overlapping_writes
 from testing.replay_harness.stages.privacy_scenarios import scenario, validate_rows
 
 LEVERS = (
@@ -32,6 +32,8 @@ class FaultRedis:
         self.redis, self.fault = redis, fault
         self.active = False
         self.calls = Counter()
+        self.injected = Counter()
+        self.successful = Counter()
         self.begins = 0
         self.condition = threading.Condition()
         self.release = threading.Event()
@@ -47,8 +49,11 @@ class FaultRedis:
                 or (self.fault == 'drop_invalidation' and operation in ('begin', 'end'))
                 or (self.fault == 'begin_loss' and operation == 'begin')
             ):
+                self.injected[operation] += 1
                 raise ConnectionError('synthetic Redis fault')
         result = self.redis.eval(script, *args)
+        if self.active:
+            self.successful[operation] += 1
         if self.active and self.fault in ('concurrent', 'reader_during_writer') and operation == 'begin':
             with self.condition:
                 self.begins += 1
@@ -108,26 +113,23 @@ def clock_and_cache(environment, fault, events, *, ttl_override_s=None):
 
     stack.enter_context(patch.object(cache, '_event', event))
     stack.enter_context(patch.object(metrics, 'memo_result', memo))
+    from database.batch_pipeline_privacy import BatchPrivacyMemo
+
+    original_get = BatchPrivacyMemo.get
+
+    def snapshot_get(memo, reference):
+        previous = memo.snapshots.get(reference.path)
+        result = original_get(memo, reference)
+        if previous is not None:
+            if result is not previous:
+                raise AssertionError('transaction snapshot memo did not reuse its snapshot')
+            events[('batch_snapshot', 'memo_hit')] += 1
+        else:
+            events[('batch_snapshot', 'memo_miss')] += 1
+        return result
+
+    stack.enter_context(patch.object(BatchPrivacyMemo, 'get', snapshot_get))
     return stack, redis
-
-
-def overlapping_writes(redis, write, read, *, writers, fenced):
-    """Hold real BEGIN fences open while the reader probes, then join all writers."""
-    observations = []
-    with ThreadPoolExecutor(max_workers=writers) as pool:
-        futures = [pool.submit(copy_context().run, write) for _ in range(writers)]
-        try:
-            if fenced:
-                with redis.condition:
-                    if not redis.condition.wait_for(lambda: redis.begins >= writers, timeout=15):
-                        raise TimeoutError('privacy writers did not reach BEGIN')
-            observations.append(read())
-        finally:
-            redis.release.set()
-        # Propagate every writer failure; a failed write is never a passing sample.
-        for future in futures:
-            future.result(timeout=30)
-    return observations
 
 
 class PrivacyCacheDriver:
@@ -141,22 +143,45 @@ class PrivacyCacheDriver:
 
         rows = validate_rows(case.corpus)  # Reject unknown labels before infrastructure.
         bound = case.manifest.stages['privacy_cache'].get('bound_s', 60.0)
-        details = summary(bound, self.ttl_override_s)
-        for row in rows:
+        minimum = case.manifest.stages['privacy_cache'].get('min_verified_transitions', 1000)
+        details = summary(bound, self.ttl_override_s, minimum)
+        for index, row in enumerate(rows):
             details['attempted_transitions'] += 1
+            record = {
+                **row,
+                'index': index,
+                'fault_applicable': not not_applicable_reason(row['family'], row['fault']),
+                'fault_applied': False,
+                'completed': False,
+                'probe_errors': 0,
+                'evidence': {},
+            }
+            details['transition_results'].append(record)
             try:
-                await with_session_census('listen')(self.transition)(row, details)
+                await with_session_census('listen')(self.transition)(row, details, record)
                 details['completed_transitions'] += 1
+                record['completed'] = True
             except Exception as error:
                 details['errors'].append({**row, **record_exception(error, 'privacy_cache')})
-        reason = (
-            'privacy_cache:staleness_bound_exceeded'
-            if details['mismatches']
-            else 'privacy_cache:transition_errors' if details['errors'] else None
+            observe_transition(details, record)
+        details['qualification_met'] = (
+            details['verified_transitions'] >= 1000
+            and not details['mismatches']
+            and not details['errors']
+            and not details['unverified_transitions']
         )
+        reason = None
+        if details['mismatches']:
+            reason = 'privacy_cache:staleness_bound_exceeded'
+        elif details['errors']:
+            reason = 'privacy_cache:transition_errors'
+        elif details['unverified_transitions']:
+            reason = 'privacy_cache:unverified_fault'
+        elif details['verified_transitions'] < minimum:
+            reason = 'privacy_cache:insufficient_verified_transitions'
         return StageResult('privacy_cache', 'stopped' if reason else 'pass', reason=reason, details=details)
 
-    async def transition(self, row, details):
+    async def transition(self, row, details, record):
         from database import fsr_read_cache as cache
         from database.batch_privacy_attempt import batch_privacy_attempt
         from testing.replay_harness.env import replay_environment
@@ -196,16 +221,25 @@ class PrivacyCacheDriver:
                         environment.redis.pexpiretime(key)
                         for key in environment.redis.scan_iter(match='fsr:s4:v2:*:data:*')
                     ]
+                    evidence = record['evidence']
+                    if row['family'] == 'batch_privacy' and not events[('batch_snapshot', 'memo_hit')]:
+                        raise AssertionError('batch transaction snapshot memo reuse was not exercised')
+                    if row['fault'] == 'request_memo' and record['fault_applicable']:
+                        holder = cache._request.get()
+                        evidence['request_memo_warmed'] = any(key[0] == uid for key in holder.values)
+                        evidence['request_memo_hit'] = bool(events[('request_read_dedupe', 'hit')])
                     redis.active = True
                     overlap = []
                     if row['fault'] in ('concurrent', 'reader_during_writer'):
-                        overlap = overlapping_writes(
+                        overlap, overlap_evidence = overlapping_writes(
                             redis,
+                            environment.store.client,
                             write,
                             read,
                             writers=2 if row['fault'] == 'concurrent' else 1,
-                            fenced=row['family'] in ('deletion_marker', 'tombstone', 'legal_hold', 'subscription'),
+                            fenced=row['family'] in FSR_FAMILIES,
                         )
+                        evidence.update(overlap_evidence)
                     else:
                         write()
                     after = truth()
@@ -216,10 +250,11 @@ class PrivacyCacheDriver:
                     if any(value != before and value != after for value in overlap):
                         raise AssertionError('overlapping reader returned neither durable state')
                     details['overlap_probes'] += len(overlap)
-                    if row['fault'] == 'request_memo':
+                    if row['fault'] == 'request_memo' and record['fault_applicable']:
                         holder = cache._request.get()
                         if any(key[0] == uid for key in holder.values):
                             raise AssertionError('writer retained request memo')
+                        evidence['request_memo_cleared'] = True
                     # Faults persist through all probes, including Redis-down.
                     # Only virtual cache clocks move; Firestore stays authoritative.
                     start = environment.clock.time()
@@ -241,10 +276,14 @@ class PrivacyCacheDriver:
                             cell = details['by_family_fault_offset'][family][row['fault']][str(float(offset))]
                             cell['probes'] += 1
                             cell['errors'] += 1
+                            record['probe_errors'] += 1
                             details['probes'] += 1
                             details['errors'].append(
                                 {**row, 'offset_s': offset, **record_exception(error, 'privacy_cache')}
                             )
+                    evidence['injected'] = dict(redis.injected)
+                    evidence['successful'] = dict(redis.successful)
+                    record['fault_applied'] = record['fault_applicable'] and fault_applied(row['fault'], evidence)
                     for operation, count in redis.calls.items():
                         label = f'{row["fault"]}:{operation}'
                         details['redis_fault_calls'][label] = details['redis_fault_calls'].get(label, 0) + count

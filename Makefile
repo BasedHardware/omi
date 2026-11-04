@@ -82,7 +82,7 @@ replay-harness:
 # Large synthetic privacy qualification stays on the caller's heavy lane.
 replay-privacy-full:
 	@test -n "$(OUTPUT)" || (echo 'Required: OUTPUT'; exit 2)
-	cd backend && .venv/bin/python -m testing.replay_harness.gen_privacy_timeline --transitions 1000 --output "$(abspath $(OUTPUT))/privacy-transitions-full"
+	cd backend && .venv/bin/python -m testing.replay_harness.gen_privacy_timeline --transitions 1400 --output "$(abspath $(OUTPUT))/privacy-transitions-full"
 	$(MAKE) replay-harness CASES="$(abspath $(OUTPUT))/privacy-transitions-full" OUTPUT="$(abspath $(OUTPUT))/report"
 
 # Fixed adapter against immutable product refs; caller owns the emulator session.

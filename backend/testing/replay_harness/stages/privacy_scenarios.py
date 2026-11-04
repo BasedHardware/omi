@@ -164,14 +164,29 @@ def scenario(row, environment):
         def read():
             @firestore.transactional
             def check(transaction):
-                return bpp.assert_batch_write_allowed(
-                    client, transaction, uid, memo=bpp.BatchPrivacyMemo(client, transaction)
-                )
+                memo = bpp.BatchPrivacyMemo(client, transaction)
 
-            try:
-                return {'generation': check(client.transaction()), 'decision': 'allow'}
-            except bpp.BatchPrivacyBlocked as error:
-                return {'decision': error.reason.value}
+                def guard(ids):
+                    try:
+                        return {
+                            'generation': bpp.assert_batch_write_allowed(
+                                client, transaction, uid, conversation_ids=ids, memo=memo
+                            ),
+                            'decision': 'allow',
+                        }
+                    except bpp.BatchPrivacyBlocked as error:
+                        return {'decision': error.reason.value}
+
+                first = guard(())
+                # Distinct generation-memo keys force both authority walks on
+                # cold attempts. ONE transaction snapshot memo must reuse the
+                # shared marker/user snapshots, including blocked decisions.
+                second = guard((cid,))
+                if second != first:
+                    raise AssertionError('same-transaction batch guards disagree')
+                return first
+
+            return check(client.transaction())
 
         write = (
             (lambda: bpp.finish_privacy_purge(client, uid, 1))

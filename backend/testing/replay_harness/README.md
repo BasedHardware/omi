@@ -72,7 +72,7 @@ Capture at detection time: a fix that lands first erases the failing input.
 
 ## Privacy cache replay
 
-`privacy_cache` is a schema-v1 boundary that compares real cached readers with
+`privacy_cache` qualifies **cache staleness only**. It is a schema-v1 boundary that compares real cached readers with
 `fresh_reads()` authority on the loopback Firestore emulator. Each transition
 owns a fresh replay environment, fakeredis and virtual cache clock. The stage
 forces privacy levers on only inside that environment; shadow is off so it
@@ -96,8 +96,39 @@ to `60.0`: an old decision at **offset >= bound_s** is a mismatch. For example:
 {"stages": {"privacy_cache": {"expect": "pass", "bound_s": 60.0}}}
 ```
 
-The report records `bound_s` and `bound_comparison`. The standard probes always
-run; a nonstandard bound also adds an exact-bound probe. TTL experiments never
+The report records `bound_s` and `bound_comparison`. Qualification requires
+**at least 1,000 verified faulted transitions**, zero mismatches, zero errors and
+no unverified applicable faults. `min_verified_transitions` defaults to `1000`;
+the committed smoke explicitly sets it to `0` and cannot establish qualification.
+A short run may pass its smoke expectation while `qualification_met` is false.
+The full generator emits 1,400 rows to exceed the verified minimum after excluding
+baseline controls. An insufficient count stops with
+`privacy_cache:insufficient_verified_transitions`; a fault with no observed
+application stops with `privacy_cache:unverified_fault`.
+
+`transition_results` records each row's applicability, actual application,
+completion, verification status and bounded evidence. Redis injection counters
+prove calls were refused; BEGIN loss also requires a successful END. Request memo
+cases require a warmed entry, a real memo hit and writer-driven clearing.
+Overlap cases require every writer to reach real FSR BEGIN, or (for batch and
+uncached protection) a nonempty Firestore SDK Commit, before the overlapping read.
+The Commit barrier delegates to the saved real method, retaining the product
+privacy-token fence and emulator RPC. All concurrent attempts join before any
+recovery. An SDK transaction that exhausted `Aborted` retries gets one additional
+real-writer call after contention ends; `writer_outcomes` and `writer_retry_count`
+record it. The retry is never an extra gate sample, and unrecovered or unrelated
+errors still fail the stage.
+
+`fault_coverage` counts verified faults, baseline controls, N/A rows and unverified
+rows separately per family/fault. `none` is always a baseline, never a gate sample.
+Ten unsupported cells are N/A: all three Redis faults for batch/protection, and
+request memo crossing for tombstone/hold/batch/protection. Their real readers do
+not use those mechanisms. The generator excludes these combinations; a manually
+supplied N/A row can still run baseline probes but never contributes to the gate.
+The Markdown table marks unsupported cells N/A and prints verified/completed
+counts for supported cells.
+
+The standard probes always run; a nonstandard bound also adds an exact-bound probe. TTL experiments never
 change this rule. `by_family_fault_offset` includes explicit zero cells for every
 family/fault/offset, with `probes`, `stale`, `mismatches` and `errors`. Earlier
 stale decisions count separately from bounded mismatches. A companion
@@ -123,12 +154,16 @@ reads have no Redis TTL). Redis/fakeredis retain a key in its expiry millisecond
 so **zero margin is not safe** for the strict comparator. The exact-bound probe
 remains authoritative; this field does not turn a failing boundary into a pass.
 
-The fixed-seed generator covers every kind and every family/fault pair in its
+The fixed-seed generator covers every kind and every applicable family/fault pair in its
 120-transition smoke prefix. Faults include persistent Redis outage, both
 invalidations lost with Redis reads available, BEGIN-token loss, overlapping
 writers/readers, a reader held inside the real BEGIN fence, and a request memo
 spanning the real writer. Cache publication/memo events verify eligible warm
-paths actually exercise the optimization. Emulator mutation tests set
+paths actually exercise the optimization. Batch reads call the real guard twice
+inside one transaction with one shared `BatchPrivacyMemo`; distinct source sets
+force cold generation-memo misses and shared marker/user snapshot reuse. The
+`batch_snapshot:memo_hit` observation asserts snapshot object reuse separately
+from `batch:memo_hit` generation-decision reuse. Emulator mutation tests set
 120s TTLs and lose invalidations: both BYOK directions and deletion-marker creation
 must record the +60/+61 mismatches and finish all probes. Default-TTL controls
 preserve the observed closed-boundary behavior, and 55s controls must qualify.
@@ -145,7 +180,7 @@ export PATH=/opt/homebrew/opt/openjdk@21/bin:$PATH
 ```
 
 `make replay-harness` defaults to the committed smoke; explicit `CASES` still
-selects other fixtures. `make replay-privacy-full` generates 1,000 transitions
+selects other fixtures. `make replay-privacy-full` generates 1,400 transitions
 under `OUTPUT`, then writes reports under `OUTPUT/report`; reports stay out of
 Git. For an exact 55s experiment across deletion-marker, tombstone, legal-hold
 and subscription Redis entries, pass `PRIVACY_TTL_OVERRIDE_S=55` to either Make
@@ -156,6 +191,17 @@ records `ttl_override_s`. It does not alter product configuration or the
 manifest bound. Generate variants from `backend/` with
 `.venv/bin/python -m testing.replay_harness.gen_privacy_timeline --output <dir>`
 (`--seed`, `--transitions`, `--mix` JSON family weights and `--faults` comma list).
+CI's existing `backend/scripts/run-emulator-proofs.sh` invokes the privacy
+integration file, including the committed 120-transition smoke and catch proofs.
+The full corpus remains outside fast unit tests and that CI command.
+
+The report's `scope` is `cache_staleness_only`. Its explicit
+`wall_clock_decisions_not_simulated` limits are legal-hold gate age and BYOK
+heartbeat age: their wall clocks do not advance with the Redis/cache clock. Hold
+age is seeded before the transition; BYOK scenarios read `get_byok_state.active`
+and do not exercise the heartbeat-age decision in `is_byok_active`. Cache replay
+does not qualify those time-derived decisions.
+
 This is synthetic emulator qualification only. Recorded Tier-S timelines and
 the required two-hour production shadow are separate work packages.
 

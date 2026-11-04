@@ -94,7 +94,10 @@ JSON_SCHEMA = {
                         **_STAGE_SCHEMA['properties'],
                         'expect_stop_stage': {'const': stage},
                         **(
-                            {'bound_s': {'type': 'number', 'exclusiveMinimum': 0, 'maximum': 86400}}
+                            {
+                                'bound_s': {'type': 'number', 'exclusiveMinimum': 0, 'maximum': 86400},
+                                'min_verified_transitions': {'type': 'integer', 'enum': [0, 1000], 'default': 1000},
+                            }
                             if stage == 'privacy_cache'
                             else {}
                         ),
@@ -177,6 +180,11 @@ def validate_manifest(value: Any) -> Manifest:
     for stage, expectation in stages.items():
         if not isinstance(expectation, dict):
             raise ValueError('stage expectation must be an object')
+        if stage == 'privacy_cache' and 'min_verified_transitions' in expectation:
+            minimum = expectation['min_verified_transitions']
+            if type(minimum) is not int or minimum not in (0, 1000):
+                raise ValueError('privacy min_verified_transitions must be 0 (smoke) or 1000 (qualification)')
+            expectation = {key: value for key, value in expectation.items() if key != 'min_verified_transitions'}
         if stage == 'privacy_cache' and 'bound_s' in expectation:
             bound = expectation['bound_s']
             if type(bound) not in (int, float) or not math.isfinite(bound) or not 0 < bound <= 86400:

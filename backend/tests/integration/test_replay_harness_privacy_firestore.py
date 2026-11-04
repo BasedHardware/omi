@@ -55,6 +55,13 @@ def test_privacy_smoke_via_registered_runner(tmp_path, ttl_override_s):
     assert details['cache_events']['tombstone_negative_cache:publish'] > 0
     assert details['cache_events']['legal_hold_fence_cache:publish'] > 0
     assert details['cache_events']['batch:memo_hit'] > 0
+    assert details['cache_events']['batch_snapshot:memo_hit'] > 0
+    assert details['verified_transitions'] > 0 and details['verified_baselines'] > 0
+    assert details['not_applicable_transitions'] == details['unverified_transitions'] == 0
+    assert sum(not cell['applicable'] for fam in details['fault_coverage'].values() for cell in fam.values()) == 10
+    assert details['scope'] == 'cache_staleness_only'
+    assert set(details['wall_clock_decisions_not_simulated']) == {'legal_hold_gate_age', 'byok_heartbeat_age'}
+    assert all(r['fault_applied'] for r in details['transition_results'] if r['fault'] != 'none')
     assert details['cache_events']['external:memo_hit'] > 0
     assert details['cache_events']['request_read_dedupe:hit'] > 0
     assert details['overlap_probes'] > 0
@@ -142,3 +149,72 @@ def test_manifest_bound_is_independent_from_ttl():
     assert result.details['bound_s'] == 50 and result.details['bound_margin_s'] == -5
     assert result.details['probes'] == 7
     assert result.details['by_family_fault_offset']['subscription']['drop_invalidation']['50.0']['mismatches'] == 1
+
+
+@pytest.mark.parametrize('family,kind', [('batch_privacy', 'advance'), ('data_protection', 'enhanced_to_e2ee')])
+@pytest.mark.parametrize('fault,writers', [('concurrent', 2), ('reader_during_writer', 1)])
+def test_unfenced_overlap_reaches_real_commit(family, kind, fault, writers):
+    from testing.replay_harness.stages.privacy_cache import PrivacyCacheDriver
+
+    result = asyncio.run(PrivacyCacheDriver().run(single_case(kind, fault=fault, family=family)))
+    assert not result.details['errors'], result.details
+    assert result.status == 'pass', result
+    record = result.details['transition_results'][0]
+    assert record['verification'] == 'verified' and record['fault_applied']
+    assert record['evidence']['synchronization_seam'] == 'firestore_commit'
+    assert record['evidence']['synchronized_writers'] == writers
+    assert result.details['verified_transitions'] == 1
+
+
+def test_batch_snapshot_memo_reuses_same_transaction_snapshots():
+    from testing.replay_harness.stages.privacy_cache import PrivacyCacheDriver
+
+    result = asyncio.run(PrivacyCacheDriver().run(single_case('advance', fault='none', family='batch_privacy')))
+    assert result.status == 'pass', result
+    assert result.details['cache_events']['batch_snapshot:memo_hit'] > 0
+    assert result.details['verified_transitions'] == 0  # A baseline is never a fault sample.
+    assert result.details['verified_baselines'] == 1
+
+
+@pytest.mark.parametrize(
+    'family,kind,fault',
+    [
+        ('batch_privacy', 'advance', 'redis_down'),
+        ('data_protection', 'enhanced_to_e2ee', 'begin_loss'),
+        ('tombstone', 'create', 'request_memo'),
+    ],
+)
+def test_unsupported_faults_are_not_gate_samples(family, kind, fault):
+    from testing.replay_harness.stages.privacy_cache import PrivacyCacheDriver
+
+    result = asyncio.run(PrivacyCacheDriver().run(single_case(kind, fault=fault, family=family)))
+    assert result.status == 'pass', result
+    assert result.details['verified_transitions'] == 0
+    record = result.details['transition_results'][0]
+    assert record['verification'] == 'not_applicable' and not record['fault_applied']
+
+
+def test_missing_snapshot_reuse_stops_instead_of_claiming_coverage(monkeypatch):
+    from database import batch_pipeline_privacy as bpp
+    from database import privacy_check_metrics as metrics
+    from testing.replay_harness.stages.privacy_cache import PrivacyCacheDriver
+
+    monkeypatch.setattr(
+        bpp.BatchPrivacyMemo,
+        'get',
+        lambda memo, ref: metrics.read_snapshot('batch', ref, transaction=memo.transaction, memo_read=True),
+    )
+    result = asyncio.run(PrivacyCacheDriver().run(single_case('advance', fault='none', family='batch_privacy')))
+    assert result.reason == 'privacy_cache:transition_errors'
+    assert result.details['verified_baselines'] == result.details['verified_transitions'] == 0
+
+
+def test_unapplied_redis_fault_stops_instead_of_counting_a_sample(monkeypatch):
+    from testing.replay_harness.stages.privacy_cache import PrivacyCacheDriver, FaultRedis
+
+    monkeypatch.setattr(FaultRedis, 'eval', lambda self, script, *args: self.redis.eval(script, *args))
+    result = asyncio.run(PrivacyCacheDriver().run(single_case('byok_enable', fault='redis_down')))
+    assert result.reason == 'privacy_cache:unverified_fault'
+    assert result.details['verified_transitions'] == 0
+    assert result.details['probes'] == 6 and result.details['mismatches'] == 0
+    assert not result.details['transition_results'][0]['fault_applied']

@@ -6,11 +6,12 @@
   "created": "2026-11-05T00:00:00Z",
   "prod_evidence": {},
   "seed_blob_sha256": [
-    "77a42a67ef5f3d8b1f5c934ae8c2c9c179a73b7f314691d2039a801084c3d277"
+    "84394645255c057b516e08541c2833ba516236edc1ee3ad0f3a7f661301faf85"
   ],
   "stages": {
     "privacy_cache": {
-      "expect": "pass"
+      "expect": "pass",
+      "min_verified_transitions": 0
     }
   },
   "notes": "Fixed-seed synthetic privacy transitions; no production frequency or live-shadow evidence."
