@@ -76,19 +76,21 @@ def item_report(manifest, stages: list[StageResult]) -> dict:
             expectation_met &= result.status == 'stopped' and any(
                 re.search(expectation['expect_reason'], r) is not None for r in reasons
             )
-    return {
+    result = {
         'item': manifest.id,
         'tier': manifest.tier,
         'scrub': manifest.scrub,
-        'notes': manifest.notes,
         'stages': [asdict(s) for s in stages],
         'furthest_stage': stages[-1].stage if stages else None,
         'stop_reason': stopped.reason if stopped else None,
         'duration_ms': round(sum(s.duration_ms for s in stages), 3),
         'verdict': 'FAIL' if stopped else 'PASS',
-        'expectation_met': bool(expectation_met),
-        'expectation_verdict': 'PASS' if expectation_met else 'FAIL',
+        'expectation_met': bool(expectation_met) if manifest.stages else None,
+        'expectation_verdict': ('PASS' if expectation_met else 'FAIL') if manifest.stages else 'NOT_SET',
     }
+    if manifest.tier == 'S':
+        result['notes'] = manifest.notes
+    return result
 
 
 def table(items: list[dict]) -> str:
