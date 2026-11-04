@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:url_launcher_platform_interface/url_launcher_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/http/api/referrals.dart';
@@ -69,6 +68,18 @@ void main() {
       'future_field': true
     };
     expect(ReferralCampaign.fromJson(json).claimableMonths, 2);
+    for (final field in [
+      'qualified_purchases',
+      'claimed_months',
+      'claimable_months',
+      'milestone_progress',
+      'earned_months'
+    ]) {
+      for (final malformed in ['2', 2.0, null]) {
+        expect(() => ReferralCampaign.fromJson({...json, field: malformed}), throwsFormatException);
+      }
+    }
+
     for (final bad in [
       legacyLink,
       link.replaceFirst('omi.me', 'evil.example'),
@@ -254,10 +265,15 @@ void main() {
   }, skip: !mobileReferralCampaignEnabled);
 
   testWidgets('async disabled campaign keeps browser fallback across three resumes', (tester) async {
-    final launcher = _ReferralBrowser();
-    final previous = UrlLauncherPlatform.instance;
-    UrlLauncherPlatform.instance = launcher;
-    addTearDown(() => UrlLauncherPlatform.instance = previous);
+    var launches = 0;
+    const browserChannel = MethodChannel('plugins.flutter.io/url_launcher');
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(browserChannel, (call) async {
+      expect(call.method, 'launch');
+      expect((call.arguments as Map)['url'], 'https://affiliate.omi.me/');
+      launches++;
+      return true;
+    });
+    addTearDown(() => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(browserChannel, null));
     var loads = 0;
     await tester.pumpWidget(host(ReferralPage(
         accountChanges: const Stream.empty(),
@@ -277,14 +293,14 @@ void main() {
               });
             }))));
     await tester.pumpAndSettle();
-    expect(launcher.launches, 1);
+    expect(launches, 1);
     for (var i = 0; i < 3; i++) {
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 150));
       await tester.pumpAndSettle();
-      expect(launcher.launches, 1);
+      expect(launches, 1);
       expect(loads, 1);
       for (final key in ['referral-share', 'referral-copy', 'referral-claim']) {
         expect(find.byKey(Key(key)), findsNothing);
@@ -292,7 +308,7 @@ void main() {
     }
     await tester.tap(find.byKey(const Key('referral-open-browser')));
     await tester.pumpAndSettle();
-    expect(launcher.launches, 2);
+    expect(launches, 2);
   }, skip: !mobileReferralCampaignEnabled);
 
   testWidgets('default gate never creates a referral session', (tester) async {
@@ -452,17 +468,5 @@ final class _ReferralGateway implements AuthTokenGateway {
   @override
   Future<void> signOut() async {
     user = null;
-  }
-}
-
-final class _ReferralBrowser extends UrlLauncherPlatform {
-  int launches = 0;
-  @override
-  get linkDelegate => null;
-  @override
-  Future<bool> launchUrl(String url, LaunchOptions options) async {
-    expect(url, 'https://affiliate.omi.me/');
-    launches++;
-    return true;
   }
 }

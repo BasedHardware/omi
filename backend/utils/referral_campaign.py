@@ -23,8 +23,12 @@ from urllib.parse import urlencode
 from utils.referrals import ReferralCodeError, referral_environment
 from utils.referral_grant_clock import requeue_for_paid_period
 
-CAMPAIGN_ID = 'omi_pocket_match_v1'
-GRANT_FIELD = 'referral_campaign_grant'
+from config.referral_campaign import (
+    CAMPAIGN_ID as CAMPAIGN_ID,
+    GRANT_FIELD as GRANT_FIELD,
+    campaign_enabled as campaign_enabled,
+)
+
 UID_PATTERN = re.compile(r'^[A-Za-z0-9:_-]{1,128}$')
 
 
@@ -57,10 +61,6 @@ class CampaignPolicy:
     @property
     def digest(self) -> str:
         return hashlib.sha256(json.dumps(asdict(self), sort_keys=True).encode()).hexdigest()
-
-
-def campaign_enabled() -> bool:
-    return os.getenv('OMI_REFERRAL_CAMPAIGN_ENABLED', 'false').lower() == 'true'
 
 
 def current_policy() -> CampaignPolicy:

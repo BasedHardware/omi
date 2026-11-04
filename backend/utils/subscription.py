@@ -1312,7 +1312,7 @@ def can_user_make_payment(uid: str, target_price_id: Optional[str] = None) -> Tu
     Returns:
         tuple: (can_pay: bool, reason: str)
     """
-    from utils.referral_campaign import campaign_enabled
+    from config.referral_campaign import campaign_enabled
 
     subscription = (
         users_db.get_user_valid_subscription(uid, provision=False, include_promotions=False)

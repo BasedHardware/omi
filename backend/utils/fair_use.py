@@ -339,7 +339,7 @@ def fair_use_caps_for_plan(plan: Optional[PlanType | str] = None) -> tuple[int, 
 def fair_use_caps_for_user(uid: str) -> tuple[int, int, int]:
     """Return the existing plan's fair-use caps without creating a subscription."""
     try:
-        from utils.referral_campaign import campaign_enabled
+        from config.referral_campaign import campaign_enabled
 
         subscription = (
             users_db.get_user_valid_subscription(uid, provision=False)

@@ -114,8 +114,8 @@ class CampaignSnapshotResponse(BaseModel):
     enabled: bool
     referral_url: str | None = None
     qualified_purchases: int
-    milestone_progress: int
-    earned_months: int
+    milestone_progress: int | None = None
+    earned_months: int | None = None
     claimed_months: int
     claimable_months: int
     reward_status: str

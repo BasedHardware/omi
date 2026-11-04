@@ -6276,6 +6276,116 @@
         "title": "CalendarOnboardingStatusResponse",
         "type": "object"
       },
+      "CampaignAttributionResponse": {
+        "properties": {
+          "campaign_id": {
+            "title": "Campaign Id",
+            "type": "string"
+          },
+          "checkout_url": {
+            "title": "Checkout Url",
+            "type": "string"
+          },
+          "discount_percent": {
+            "title": "Discount Percent",
+            "type": "integer"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "campaign_id",
+          "state",
+          "checkout_url",
+          "discount_percent"
+        ],
+        "title": "CampaignAttributionResponse",
+        "type": "object"
+      },
+      "CampaignSnapshotResponse": {
+        "properties": {
+          "campaign_id": {
+            "title": "Campaign Id",
+            "type": "string"
+          },
+          "claimable_months": {
+            "title": "Claimable Months",
+            "type": "integer"
+          },
+          "claimed_months": {
+            "title": "Claimed Months",
+            "type": "integer"
+          },
+          "earned_months": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Earned Months"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "milestone_progress": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Milestone Progress"
+          },
+          "qualified_purchases": {
+            "title": "Qualified Purchases",
+            "type": "integer"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "referral_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Referral Url"
+          },
+          "reward_status": {
+            "title": "Reward Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "campaign_id",
+          "enabled",
+          "qualified_purchases",
+          "claimed_months",
+          "claimable_months",
+          "reward_status"
+        ],
+        "title": "CampaignSnapshotResponse",
+        "type": "object"
+      },
       "CancelSubscriptionRequest": {
         "properties": {
           "reason": {
@@ -85781,6 +85891,166 @@
         "summary": "Tts Synthesize",
         "tags": [
           "tts"
+        ]
+      }
+    },
+    "/v2/users/me/referral/campaign": {
+      "get": {
+        "operationId": "get_campaign_v2_users_me_referral_campaign_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CampaignSnapshotResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Campaign",
+        "tags": [
+          "referrals"
+        ]
+      }
+    },
+    "/v2/users/me/referral/campaign/attribution": {
+      "post": {
+        "operationId": "attribute_campaign_v2_users_me_referral_campaign_attribution_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReferralClaimRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CampaignAttributionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Attribute Campaign",
+        "tags": [
+          "referrals"
+        ]
+      }
+    },
+    "/v2/users/me/referral/campaign/claim": {
+      "post": {
+        "operationId": "claim_campaign_v2_users_me_referral_campaign_claim_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CampaignSnapshotResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Claim Campaign",
+        "tags": [
+          "referrals"
         ]
       }
     },

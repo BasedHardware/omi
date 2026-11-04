@@ -1604,7 +1604,7 @@ def update_user_subscription(uid: str, subscription_data: dict):
     user_ref = db.collection('users').document(uid)
     invalidate_subscription(uid)
     try:
-        from utils.referral_campaign import campaign_enabled
+        from config.referral_campaign import campaign_enabled
 
         if campaign_enabled():
             from database.referral_campaign import write_commercial_subscription

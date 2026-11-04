@@ -126,7 +126,7 @@ def user_snapshot(uid, client, fields=None):
             key = (uid, ('user_snapshot', plane_id(client)))
             if key not in holder.values:
                 _event('request_read_dedupe', 'snapshot_miss')
-                from utils.referral_campaign import GRANT_FIELD, campaign_enabled
+                from config.referral_campaign import GRANT_FIELD, campaign_enabled
 
                 projection = ['subscription', 'byok', 'stripe_customer_id']
                 if campaign_enabled():

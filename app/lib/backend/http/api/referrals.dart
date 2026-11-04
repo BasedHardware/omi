@@ -4,6 +4,7 @@ import 'package:omi/services/auth/auth_token_result.dart';
 
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/backend/schema/gen/referrals_wire.g.dart' as wire;
 
 const mobileReferralCampaignEnabled = bool.fromEnvironment('OMI_MOBILE_REFERRAL_CAMPAIGN', defaultValue: false);
 
@@ -17,7 +18,9 @@ Future<String> getReferralLink({required AuthSessionSnapshot session}) async {
   );
   final materialized = await http.Response.fromStream(response);
   if (materialized.statusCode != 200) throw StateError('Referral link unavailable');
-  final value = (jsonDecode(materialized.body) as Map<String, dynamic>)['referral_url'];
+  final value = wire.GeneratedReferralLinkResponse.fromJson(
+    jsonDecode(materialized.body) as Map<String, dynamic>,
+  ).referralUrl;
   return validateReferralLink(value);
 }
 
@@ -37,6 +40,20 @@ String validateReferralLink(Object? value) {
   return value as String;
 }
 
+Map<String, dynamic> _strictCampaignNumbers(Map<String, dynamic> json) {
+  const integerFields = {
+    'qualified_purchases',
+    'milestone_progress',
+    'earned_months',
+    'claimed_months',
+    'claimable_months'
+  };
+  if (json.entries.any((entry) => integerFields.contains(entry.key) && entry.value is! int)) {
+    throw const FormatException('Invalid campaign numbers');
+  }
+  return json;
+}
+
 class ReferralCampaign {
   const ReferralCampaign(
       {required this.enabled,
@@ -53,24 +70,30 @@ class ReferralCampaign {
   final String rewardStatus;
 
   factory ReferralCampaign.fromJson(Map<String, dynamic> json) {
-    final enabled = json['enabled'];
-    final purchases = json['qualified_purchases'];
-    final claimed = json['claimed_months'];
-    final claimable = json['claimable_months'];
-    final status = json['reward_status'];
-    if (json['campaign_id'] != 'omi_pocket_match_v1' ||
-        enabled is! bool ||
-        purchases is! int ||
+    _strictCampaignNumbers(json);
+    return ReferralCampaign.fromGenerated(
+      wire.GeneratedCampaignSnapshotResponse.fromJson(json),
+      hasMilestoneProgress: json.containsKey('milestone_progress'),
+      hasEarnedMonths: json.containsKey('earned_months'),
+    );
+  }
+
+  factory ReferralCampaign.fromGenerated(wire.GeneratedCampaignSnapshotResponse value,
+      {bool hasMilestoneProgress = true, bool hasEarnedMonths = true}) {
+    final enabled = value.enabled;
+    final purchases = value.qualifiedPurchases;
+    final claimed = value.claimedMonths;
+    final claimable = value.claimableMonths;
+    final status = value.rewardStatus;
+    if (value.campaignId != 'omi_pocket_match_v1' ||
         purchases < 0 ||
         purchases > 5 ||
-        claimed is! int ||
         !{0, 2, 5}.contains(claimed) ||
-        claimable is! int ||
         !{0, 2, 3, 5}.contains(claimable) ||
         !{'disabled', 'ready', 'pending_paid_subscription', 'active'}.contains(status)) {
       throw const FormatException('Invalid campaign');
     }
-    final progress = json.containsKey('milestone_progress') ? json['milestone_progress'] : purchases;
+    final progress = hasMilestoneProgress ? value.milestoneProgress : purchases;
     if (progress is! int || progress < purchases || progress > 5) {
       throw const FormatException('Invalid campaign milestone');
     }
@@ -80,26 +103,26 @@ class ReferralCampaign {
             ? 2
             : 0;
     final expectedEarned = claimed > unlocked ? claimed : unlocked;
-    final earned = json.containsKey('earned_months') ? json['earned_months'] : expectedEarned;
+    final earned = hasEarnedMonths ? value.earnedMonths : expectedEarned;
     if (earned is! int || !{0, 2, 5}.contains(earned) || earned != expectedEarned) {
       throw const FormatException('Invalid campaign earnings');
     }
     final expectedClaimable = enabled ? earned - claimed : 0;
-    final hasMilestoneFields = json.containsKey('milestone_progress') || json.containsKey('earned_months');
+    final hasMilestoneFields = hasMilestoneProgress || hasEarnedMonths;
     if (claimable > expectedClaimable ||
         (hasMilestoneFields && claimable != expectedClaimable) ||
-        (!enabled && json['referral_url'] != null)) {
+        (!enabled && value.referralUrl != null)) {
       throw const FormatException('Invalid campaign progress');
     }
     return ReferralCampaign(
         enabled: enabled,
-        referralUrl: enabled ? validateCampaignReferralLink(json['referral_url']) : null,
+        referralUrl: enabled ? validateCampaignReferralLink(value.referralUrl) : null,
         qualifiedPurchases: purchases,
         milestoneProgress: progress,
         earnedMonths: earned,
         claimedMonths: claimed,
         claimableMonths: claimable,
-        rewardStatus: status as String);
+        rewardStatus: status);
   }
 }
 
@@ -113,7 +136,9 @@ String validateCampaignReferralLink(Object? value) {
       uri.hasQuery ||
       uri.hasFragment ||
       !RegExp(r'^/r/ref2\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{43}$').hasMatch(uri.path) ||
-      uri.toString() != value) throw const FormatException('Invalid campaign URL');
+      uri.toString() != value) {
+    throw const FormatException('Invalid campaign URL');
+  }
   return value as String;
 }
 
@@ -127,5 +152,8 @@ Future<ReferralCampaign> getReferralCampaign({required AuthSessionSnapshot sessi
   );
   final body = await http.Response.fromStream(response);
   if (body.statusCode != 200) throw StateError('Referral campaign unavailable');
-  return ReferralCampaign.fromJson(jsonDecode(body.body) as Map<String, dynamic>);
+  final json = _strictCampaignNumbers(jsonDecode(body.body) as Map<String, dynamic>);
+  final value = wire.GeneratedCampaignSnapshotResponse.fromJson(json);
+  return ReferralCampaign.fromGenerated(value,
+      hasMilestoneProgress: json.containsKey('milestone_progress'), hasEarnedMonths: json.containsKey('earned_months'));
 }

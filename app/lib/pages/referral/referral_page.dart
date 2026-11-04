@@ -146,7 +146,9 @@ class _ReferralPageState extends State<ReferralPage> with WidgetsBindingObserver
         session == null ||
         session.claim == null ||
         _campaign?.enabled != true ||
-        (_campaign?.claimableMonths ?? 0) == 0) return;
+        (_campaign?.claimableMonths ?? 0) == 0) {
+      return;
+    }
     if (!session.isCurrent()) {
       await _load();
       return;
