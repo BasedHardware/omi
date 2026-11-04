@@ -1139,6 +1139,18 @@ _add(
         ),
     )
 )
+_add(
+    DriverEntry(
+        'database.recording_speakers.scope_conversation_ids',
+        base={'uid': UID, 'scopes': frozenset({'stream:1'})},
+    )
+)
+_add(
+    DriverEntry(
+        'database.recording_speakers.legacy_recording_conversation_ids',
+        base={'uid': UID, 'origin_id': 'origin-1'},
+    )
+)
 _add(DriverEntry('database.conversations.get_conversation_ids', base={'uid': UID}))
 _add(DriverEntry('database.conversations.get_conversation_photos', base={'uid': UID, 'conversation_id': 'conv-1'}))
 _add(
