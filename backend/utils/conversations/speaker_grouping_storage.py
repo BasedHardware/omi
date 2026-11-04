@@ -403,7 +403,6 @@ def reveal_segments(segments: list[Any], uid: str) -> None:
             segment['provider_speaker'] = dict(members[segment['id']])
 
 
-
 def _primary_fault(counts: dict[str, int]) -> str:
     """The fault shape that headlines the aggregated event.
 
