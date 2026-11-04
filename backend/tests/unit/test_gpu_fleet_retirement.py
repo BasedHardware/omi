@@ -36,8 +36,9 @@ def test_switch_preserves_existing_routing_until_deployed(monkeypatch):
 def test_retirement_preserves_batch_vendors_and_never_reactivates_gpu_defaults(retired):
     from config.policy.listen import service_models
 
-    assert service_models(['parakeet-window', 'modulate-velma-2']) == ['soniox']
-    assert default_models_for_surface(STTServingSurface.STREAMING) == ('soniox',)
+    assert service_models(['parakeet-window', 'modulate-velma-2']) == ['modulate-velma-2', 'soniox']
+    assert default_models_for_surface(STTServingSurface.STREAMING) == ('modulate-velma-2', 'soniox')
+    assert provider_is_enabled('modulate', STTServingSurface.STREAMING)
     assert default_models_for_surface(STTServingSurface.PRERECORDED) == ('modulate-velma-2',)
     assert default_models_for_surface(STTServingSurface.PTT) == ('modulate-velma-2',)
     assert provider_is_enabled('soniox', STTServingSurface.HELD_RECOVERY)
@@ -49,10 +50,13 @@ def test_cost_router_and_explicit_registry_cannot_escape_retirement(retired):
     from config.live_stt_registry import Target
     from utils.stt.live_router import permission_reason
 
-    for family, target_id in [('parakeet', 'parakeet-window'), ('modulate', 'modulate-velma-2')]:
-        target = Target(target_id, family, 0)
-        assert not target.capable('en')
-        assert permission_reason(target, None, 'en', engine_models={'parakeet': target_id}) == 'capability'
+    parakeet = Target('parakeet-window', 'parakeet', 0)
+    assert not parakeet.capable('en')
+    assert permission_reason(parakeet, None, 'en', engine_models={'parakeet': 'parakeet-window'}) == 'capability'
+    # Modulate is a vendor, not a fleet GPU: live residual stays on it instead of Soniox.
+    modulate = Target('modulate-velma-2', 'modulate', 0)
+    assert modulate.capable('en')
+    assert permission_reason(modulate, None, 'en') != 'capability'
     assert Target('soniox', 'soniox', 0).capable('ja')
 
 
@@ -89,8 +93,10 @@ def test_static_selection_and_preferred_gpu_cannot_bypass_retirement(retired, mo
     selected = streaming.get_stt_service_for_language(
         language, preferred_service='parakeet', window_uid='synthetic-owner', prefer_window=True
     )
-    assert selected[0] == streaming.STTService.soniox
-    assert streaming.get_stt_service_for_language(language, exclude=frozenset({'soniox'}))[0] is None
+    assert selected[0] == streaming.STTService.modulate
+    assert selected[0] != streaming.STTService.parakeet
+    fallback = streaming.get_stt_service_for_language(language, exclude=frozenset({'soniox', 'modulate'}))
+    assert fallback[0] is None
 
 
 def test_direct_prerecorded_call_preserves_audio_and_language_contract(retired, monkeypatch):
@@ -144,7 +150,7 @@ def resources(chart, *extra):
     return [item for item in yaml.load_all(result, Loader=yaml.CSafeLoader) if item]
 
 
-@pytest.mark.parametrize('chart', ['parakeet', 'vad', 'diarizer'])
+@pytest.mark.parametrize('chart', ['vad', 'diarizer'])
 def test_maintenance_zero_preserves_every_object_and_model(chart):
     baseline = resources(chart)
     stopped = resources(chart, '--set', 'maintenanceMode=true')
@@ -159,9 +165,9 @@ def test_maintenance_zero_preserves_every_object_and_model(chart):
     assert hpa['spec']['minReplicas'] > 0
 
 
-def test_parakeet_guard_requires_explicit_suspension_and_batch_keeps_own_replicas():
+def test_parakeet_guard_is_retired_and_batch_keeps_own_replicas():
     baseline = resources('incluster-guards')
-    assert next(o for o in baseline if o['kind'] == 'CronJob')['spec']['suspend'] is False
+    assert next(o for o in baseline if o['kind'] == 'CronJob')['spec']['suspend'] is True
     guards = resources('incluster-guards', '--set', 'parakeetSuspended=true')
     cron = next(o for o in guards if o['kind'] == 'CronJob' and o['metadata']['name'] == 'prod-omi-incluster-guards')
     assert cron['spec']['suspend'] is True
@@ -185,6 +191,67 @@ def test_parakeet_guard_requires_explicit_suspension_and_batch_keeps_own_replica
     batch = [o for o in yaml.load_all(result, Loader=yaml.CSafeLoader) if o]
     assert 'replicas' not in next(o for o in batch if o['kind'] == 'Deployment')['spec']
     assert next(o for o in batch if o['kind'] == 'HorizontalPodAutoscaler')['spec']['minReplicas'] == 1
+
+
+@pytest.mark.parametrize(
+    'extra', [(), ('--set', 'autoscaling.enabled=true,maintenanceMode=false,replicaCount=12,ja.enabled=true')]
+)
+@pytest.mark.parametrize('chart', ['parakeet'])
+def test_prod_streaming_retirement_wins_over_warm_replica_and_autoscaler_settings(extra, chart):
+    objects = resources(chart, *extra)
+    deployments = [o for o in objects if o['kind'] == 'Deployment']
+    assert deployments and all(o['spec']['replicas'] == 0 for o in deployments)
+    assert not any(o['kind'] == 'HorizontalPodAutoscaler' for o in objects)
+    assert not any(o['kind'] == 'Ingress' for o in objects)
+
+
+def test_retired_guard_cannot_write_hpa_or_render_a_floor_even_with_stale_schedule():
+    objects = resources('incluster-guards', '--set', 'floorSchedule.enabled=true')
+    role = next(o for o in objects if o['kind'] == 'Role')
+    hpa_rule = next(r for r in role['rules'] if r['resources'] == ['horizontalpodautoscalers'])
+    assert hpa_rule['verbs'] == ['get']
+    script = next(o for o in objects if o['kind'] == 'ConfigMap' and o['metadata']['name'].endswith('-script'))
+    assert 'floors.json' not in script['data']
+
+
+@pytest.mark.parametrize('chart', ['parakeet'])
+def test_bare_chart_defaults_cannot_restore_gpu_capacity(chart):
+    output = subprocess.check_output(
+        [
+            'helm',
+            'template',
+            'prod-omi-' + chart,
+            str(ROOT / 'backend/charts' / chart),
+            '--set',
+            'image.tag=test,autoscaling.enabled=true,replicaCount=12,ingress.enabled=true,ja.enabled=true',
+        ],
+        text=True,
+    )
+    objects = [o for o in yaml.safe_load_all(output) if o]
+    assert all(o['spec']['replicas'] == 0 for o in objects if o['kind'] == 'Deployment')
+    assert not any(o['kind'] in ('HorizontalPodAutoscaler', 'Ingress') for o in objects)
+
+
+def test_cpu_language_id_release_remains_independent_and_scalable():
+    path = ROOT / 'backend/charts/parakeet'
+    output = subprocess.check_output(
+        [
+            'helm',
+            'template',
+            'prod-omi-parakeet-lid',
+            str(path),
+            '-f',
+            str(path / 'prod_omi_parakeet_lid_values.yaml'),
+            '--set-string',
+            'image.tag=test',
+        ],
+        text=True,
+    )
+    objects = [o for o in yaml.safe_load_all(output) if o]
+    deployment = next(o for o in objects if o['kind'] == 'Deployment')
+    assert 'replicas' not in deployment['spec']
+    assert 'nvidia.com/gpu' not in deployment['spec']['template']['spec']['containers'][0]['resources']['requests']
+    assert next(o for o in objects if o['kind'] == 'HorizontalPodAutoscaler')['spec']['minReplicas'] == 4
 
 
 def test_retirement_is_declared_on_every_prod_routing_runtime_only():
@@ -282,7 +349,25 @@ def test_production_callers_cannot_resolve_retired_endpoints(source, monkeypatch
     # Poison both paths to prove the switch wins over those bindings too.
     monkeypatch.setenv('HOSTED_VAD_API_URL', 'http://retired.invalid/v1/vad')
     monkeypatch.setenv('HOSTED_PARAKEET_JA_API_URL', 'http://retired.invalid')
-    monkeypatch.setattr(language_gate.httpx, 'Client', lambda **kw: pytest.fail('retired LID dialed'))
+    dedicated_lid = str(env.get('HOSTED_LID_API_URL') or '').strip().rstrip('/')
+
+    class DedicatedLidOnly:
+        # Only the separately qualified CPU LID service may be dialed; never the shared pool.
+        def __init__(self, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def post(self, url, **kw):
+            if not dedicated_lid or not url.startswith(dedicated_lid + '/'):
+                pytest.fail('retired LID dialed')
+            return language_gate.httpx.Response(503)
+
+    monkeypatch.setattr(language_gate.httpx, 'Client', DedicatedLidOnly)
     monkeypatch.setattr(vad.requests, 'post', lambda *a, **kw: pytest.fail('retired VAD dialed'))
     monkeypatch.setattr(vad, '_run_file_vad', lambda path: [{'start': 0, 'end': 1}])
     monkeypatch.setattr(pre_recorded, 'modulate_prerecorded_from_bytes', lambda *a, **kw: ['vendor words'])
@@ -291,7 +376,7 @@ def test_production_callers_cannot_resolve_retired_endpoints(source, monkeypatch
         selected = streaming_module.get_stt_service_for_language(
             language, preferred_service='parakeet', window_uid='synthetic-owner', prefer_window=True
         )
-        assert selected[0] == streaming_module.STTService.soniox
+        assert selected[0] == streaming_module.STTService.modulate
         assert pre_recorded.get_prerecorded_service(language)[0] == 'modulate'
         assert (
             streaming_module.get_stt_service_for_language(language, surface=STTServingSurface.PTT)[0]

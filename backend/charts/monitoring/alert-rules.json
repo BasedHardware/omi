@@ -12358,6 +12358,778 @@
     "record": null
   },
   {
+    "uid": "omi-finalization-byok-dwell-info",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Resilience",
+    "title": "Finalization - BYOK blocked over 3 days",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(listen_finalization_oldest_blocked_byok_age_seconds)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  259200
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-11-03T00:00:00Z",
+    "noDataState": "NoData",
+    "execErrState": "KeepLast",
+    "for": "15m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "omi-core-features",
+      "__panelId__": "31",
+      "summary": "Oldest blocked_byok job is more than 3 days old",
+      "threshold": "max(listen_finalization_oldest_blocked_byok_age_seconds) > 259200",
+      "user_impact": "BYOK conversations are waiting for valid request-scoped keys and have no summary.",
+      "scope": "Authoritative finalization jobs across every generation; periodic COUNT aggregations and indexed oldest-job ages.",
+      "verification": "Confirm finalization summary freshness and the bounded job summary; inspect failure codes without copying transcripts or keys.",
+      "safe_next_action": "Triage blocked jobs and arrange a user reconnect with valid BYOK keys before the 14-day bound; never substitute Omi credentials.",
+      "runbook": "backend/docs/listen_finalization_jobs.mdx"
+    },
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "speech-processing",
+      "alert_identity": "omi-finalization-byok-dwell-info",
+      "component": "speech-processing",
+      "impact": "user-experience",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-finalization-byok-dwell-page",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Resilience",
+    "title": "Finalization - BYOK blocked over 7 days",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(listen_finalization_oldest_blocked_byok_age_seconds)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  604800
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-11-03T00:00:00Z",
+    "noDataState": "NoData",
+    "execErrState": "KeepLast",
+    "for": "15m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "omi-core-features",
+      "__panelId__": "31",
+      "summary": "Oldest blocked_byok job is more than 7 days old",
+      "threshold": "max(listen_finalization_oldest_blocked_byok_age_seconds) > 604800",
+      "user_impact": "BYOK conversations are approaching automatic abandonment without a summary.",
+      "scope": "Authoritative finalization jobs across every generation; periodic COUNT aggregations and indexed oldest-job ages.",
+      "verification": "Confirm finalization summary freshness and the bounded job summary; inspect failure codes without copying transcripts or keys.",
+      "safe_next_action": "The first deploy will page on the existing 13-day backlog. On-call should do nothing beyond confirming automatic conversion at 14 days; do not manually replay jobs or change the bound.",
+      "runbook": "backend/docs/listen_finalization_jobs.mdx"
+    },
+    "labels": {
+      "severity": "critical",
+      "instatus_component": "speech-processing",
+      "alert_identity": "omi-finalization-byok-dwell-page",
+      "component": "speech-processing",
+      "impact": "user-experience",
+      "tier": "page",
+      "audience": "human",
+      "owner": "two-lane-lead"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-finalization-dead-letter-stock",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Resilience",
+    "title": "Finalization - dead-letter stock above 1000",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(listen_finalization_jobs{status=\"dead_letter\"})",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  1000
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-11-03T00:00:00Z",
+    "noDataState": "NoData",
+    "execErrState": "KeepLast",
+    "for": "15m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "omi-core-features",
+      "__panelId__": "31",
+      "summary": "Dead-letter finalization stock exceeds 1000 jobs",
+      "threshold": "max(listen_finalization_jobs{status=\"dead_letter\"}) > 1000",
+      "user_impact": "Terminal conversations retain recordings but may lack summaries or finalization effects.",
+      "scope": "Authoritative finalization jobs across every generation; periodic COUNT aggregations and indexed oldest-job ages.",
+      "verification": "Confirm finalization summary freshness and the bounded job summary; inspect failure codes without copying transcripts or keys.",
+      "safe_next_action": "Assign two-lane-lead triage; classify failure codes and record a disposition for affected jobs; arrange approved explicit reprocess or fenced replay only after fixing the cause.",
+      "runbook": "backend/docs/listen_finalization_jobs.mdx"
+    },
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "speech-processing",
+      "alert_identity": "omi-finalization-dead-letter-stock",
+      "component": "speech-processing",
+      "impact": "user-experience",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-finalization-dead-letter-age",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Resilience",
+    "title": "Finalization - oldest dead letter over 7 days",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(listen_finalization_oldest_dead_letter_age_seconds)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  604800
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-11-03T00:00:00Z",
+    "noDataState": "NoData",
+    "execErrState": "KeepLast",
+    "for": "15m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "omi-core-features",
+      "__panelId__": "31",
+      "summary": "Oldest dead-letter finalization job has spent more than 7 days in dead_letter",
+      "threshold": "max(listen_finalization_oldest_dead_letter_age_seconds) > 604800 (since terminal_at)",
+      "user_impact": "Terminal captures can remain without structured results indefinitely.",
+      "scope": "Authoritative finalization jobs across every generation; periodic COUNT aggregations and indexed oldest-job ages.",
+      "verification": "Confirm finalization summary freshness and the bounded job summary; inspect failure codes without copying transcripts or keys.",
+      "safe_next_action": "Assign two-lane-lead triage to the oldest jobs; record disposition and follow the terminal recovery procedure for approved reprocess or fenced replay.",
+      "runbook": "backend/docs/listen_finalization_jobs.mdx"
+    },
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "speech-processing",
+      "alert_identity": "omi-finalization-dead-letter-age",
+      "component": "speech-processing",
+      "impact": "user-experience",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-finalization-byok-abandoned",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Resilience",
+    "title": "Finalization - BYOK abandonment in last day",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(listen_finalization_byok_session_abandoned_last_24h)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-11-03T00:00:00Z",
+    "noDataState": "NoData",
+    "execErrState": "KeepLast",
+    "for": "0s",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "omi-core-features",
+      "__panelId__": "31",
+      "summary": "At least one BYOK finalization job was abandoned in the last day",
+      "threshold": "document-derived last-24h count > 0",
+      "user_impact": "The 14-day abandonment bound closed a job without producing its summary.",
+      "scope": "Authoritative finalization jobs across every generation; periodic COUNT aggregations and indexed oldest-job ages.",
+      "verification": "Confirm summary freshness and the count of committed dead_letter jobs with last_failure_code=byok_session_abandoned and terminal_at in the last 24 hours.",
+      "safe_next_action": "Review byok_session_abandoned jobs and count affected conversations; arrange explicit reprocessing with valid user keys and record disposition under two-lane-lead.",
+      "runbook": "backend/docs/listen_finalization_jobs.mdx"
+    },
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "speech-processing",
+      "alert_identity": "omi-finalization-byok-abandoned",
+      "component": "speech-processing",
+      "impact": "user-experience",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
+  },
+  {
     "id": 85,
     "uid": "omi-cr-start-fail",
     "orgID": 1,
@@ -23863,11 +24635,11 @@
     }
   },
   {
-    "uid": "omi-batch-unit-unpublished-2h",
+    "uid": "omi-batch-queue-safety-blind",
     "orgID": 1,
     "folderUID": "betdycdziadc0e",
-    "ruleGroup": "Batch timeliness",
-    "title": "Batch audio unit still unpublished 2h after admission",
+    "ruleGroup": "Batch queue safety",
+    "title": "Batch queue safety measurement incomplete or stale",
     "condition": "E",
     "data": [
       {
@@ -23883,31 +24655,11 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(omi_batch_timeliness_new_oldest_age_seconds{leg=~\"uncommitted|quarantined|assignment_held|projection\"})",
+          "expr": "((max(time() - omi_batch_pipeline_metrics_refreshed_at_seconds{namespace=\"prod-omi-backend\"}) >= bool 120) or vector(1)) + (count(omi_batch_pipeline_oldest_age_seconds{namespace=\"prod-omi-backend\"} != omi_batch_pipeline_oldest_age_seconds{namespace=\"prod-omi-backend\"}) or vector(0)) + (count(omi_batch_pipeline_retry_age_seconds{namespace=\"prod-omi-backend\"} != omi_batch_pipeline_retry_age_seconds{namespace=\"prod-omi-backend\"}) or vector(0))",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
           "refId": "A"
-        }
-      },
-      {
-        "refId": "B",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 900,
-          "to": 0
-        },
-        "datasourceUid": "prometheus",
-        "model": {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "time() - max(omi_batch_timeliness_observed_at_seconds)",
-          "instant": true,
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "B"
         }
       },
       {
@@ -23923,7 +24675,7 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "$A > 7200 && $B < 900",
+          "expression": "$A > 0",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
           "refId": "D",
@@ -23973,22 +24725,213 @@
         }
       }
     ],
-    "updated": "2026-11-02T00:00:00Z",
+    "updated": "2026-11-03T00:00:00Z",
+    "noDataState": "Alerting",
+    "execErrState": "KeepLast",
+    "for": "5m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
+      "summary": "Batch queue safety cannot measure every queue/retry priority, or its sample has been stale for two minutes.",
+      "user_impact": "Late batch transcripts may go unnoticed while a bounded scan is saturated or the worker sample is unavailable.",
+      "scope": "Production queue freshness and oldest/retry NaN samples. A saturated exempt prefix is incomplete, never proven late work or a healthy empty queue.",
+      "verification": "Inspect batch_safety metrics_blind and queue sample freshness; count the unmeasured priority with ro-prod metadata aggregates.",
+      "safe_next_action": "Classify the saturated prefix and real overdue work; retain all held audio and custody. Do not delete rows, reset paid intents, or waive allowance to silence the alarm.",
+      "runbook": "backend/docs/runbooks/batch-queue-safety.md",
+      "threshold": "$A > 0 for 5m; stale means at least 120s",
+      "evaluated_bad": "Synthetic: one oldest or retry NaN priority alongside a finite zero, or no successful queue sample for two minutes.",
+      "evaluated_good": "Synthetic: all priority age samples are finite and the queue sample is fresh."
+    },
+    "labels": {
+      "alert_identity": "omi-batch-queue-safety-blind",
+      "component": "batch-pipeline",
+      "impact": "product",
+      "severity": "critical",
+      "instatus_component": "speech-processing",
+      "tier": "page",
+      "audience": "human",
+      "owner": "two-lane-lead"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h",
+      "mute_time_intervals": []
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-batch-unit-unpublished-2h",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Batch timeliness",
+    "title": "Batch audio unit still unpublished after 2h",
+    "condition": "E",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(omi_batch_timeliness_new_oldest_age_seconds{leg=~\"uncommitted|quarantined|assignment_held|projection\"} >= 0) or vector(0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(time() - max(omi_batch_timeliness_observed_at_seconds)) or vector(1e9)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(omi_batch_pipeline_oldest_age_seconds{namespace=\"prod-omi-backend\"} >= 0) or vector(0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C"
+        }
+      },
+      {
+        "refId": "F",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(time() - omi_batch_pipeline_metrics_refreshed_at_seconds{namespace=\"prod-omi-backend\"}) or vector(1e9)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "F"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "($A > 7200 && $B < 900) || ($C > 7200 && $F < 120)",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "D",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "E",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "E"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "D",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "E",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-11-03T00:00:00Z",
     "noDataState": "OK",
     "execErrState": "KeepLast",
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
       "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
-      "summary": "A batch audio unit admitted after the timeliness epoch has not reached its owner within 2 hours (target: most audio within 30 minutes).",
+      "summary": "A batch unit is still unpublished after two hours (target: most audio within 30 minutes).",
       "user_impact": "An owner is missing the transcript for some recorded audio. Failed-held and quarantined units are the class that lost 165 segments on 2026-11-01.",
-      "scope": "omi_batch_timeliness_new_oldest_age_seconds from the batch worker queue sample, legs uncommitted (policy holds skipped), quarantined (held, prepared, running, failed_held), assignment_held (committed, projection receipt quarantined) and projection. quarantine_held_rows and backlog counts are visible but never alarm. Alert-only: no rollback or ramp guard reads it.",
+      "scope": "One lateness page: new-cohort uncommitted, quarantined, assignment-held and projection legs, plus all-epoch active compute commitments. Each source requires its own fresh sample; deliberate policy holds and dispositioned queue states remain excluded from the compute proxy.",
       "verification": "Read omi_batch_timeliness_new_over_sla_units and the leg label to find the class, then count that class with the batch custody census (counts only, ro-prod).",
       "safe_next_action": "Redrive or settle the unit through the batch recovery runbook. Never delete staged audio. Set BATCH_TIMELINESS_ALARM_ENABLED=false only to silence a broken sample, never a real breach.",
-      "runbook": "backend/charts/monitoring/critical-failures.md",
-      "threshold": "Age >7200s with a sample newer than 900s for 5m. 2026-11-03 retained history: minimum 97211s, sample age maximum 312s. Target is contractual; normal history predates the metric and is unavailable.",
-      "evaluated_bad": "Synthetic: a quarantined failed_held unit admitted after the epoch, 3h old.",
-      "evaluated_good": "Synthetic: only units admitted before the epoch are late, or every new unit published within 2h."
+      "runbook": "backend/charts/monitoring/batch-projection/README.md",
+      "threshold": "($A > 7200 && $B < 900) || ($C > 7200 && $F < 120) for 5m",
+      "evaluated_bad": "Synthetic: a new quarantined unit age 3h with a fresh timeliness sample, or an all-epoch compute commitment age 7201s with a fresh queue sample.",
+      "evaluated_good": "Synthetic: neither fresh source measures a unit older than 7200s; unmeasured queue priorities are covered separately by the blind page."
     },
     "labels": {
       "alert_identity": "omi-batch-unit-unpublished-2h",
@@ -24008,7 +24951,8 @@
       ],
       "group_wait": "30s",
       "group_interval": "5m",
-      "repeat_interval": "4h"
+      "repeat_interval": "4h",
+      "mute_time_intervals": []
     },
     "record": null
   },
@@ -24103,7 +25047,7 @@
         }
       }
     ],
-    "updated": "2026-11-02T00:00:00Z",
+    "updated": "2026-11-03T00:00:00Z",
     "noDataState": "Alerting",
     "execErrState": "KeepLast",
     "for": "5m",
@@ -24236,7 +25180,7 @@
         }
       }
     ],
-    "updated": "2026-11-02T00:00:00Z",
+    "updated": "2026-11-03T00:00:00Z",
     "noDataState": "OK",
     "execErrState": "KeepLast",
     "for": "30m",

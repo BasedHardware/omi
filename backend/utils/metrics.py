@@ -689,8 +689,22 @@ LISTEN_FINALIZATION_OLDEST_NONTERMINAL_AGE_SECONDS = Gauge(
 
 LISTEN_FINALIZATION_OLDEST_BLOCKED_BYOK_AGE_SECONDS = Gauge(
     'listen_finalization_oldest_blocked_byok_age_seconds',
-    'Global age of the oldest listen finalization job waiting for user BYOK credentials; '
-    'replicated per process, aggregate with max() not sum(); informational only',
+    'Global age since created_at of the oldest BYOK-blocked job; no blocked-status entry timestamp is recorded; '
+    'replicated per process, aggregate with max() not sum()',
+    registry=None,
+)
+
+LISTEN_FINALIZATION_OLDEST_DEAD_LETTER_AGE_SECONDS = Gauge(
+    'listen_finalization_oldest_dead_letter_age_seconds',
+    'Global time in dead_letter for the oldest terminal_at timestamp; '
+    'replicated per process, aggregate with max() not sum()',
+    registry=None,
+)
+
+LISTEN_FINALIZATION_BYOK_SESSION_ABANDONED_LAST_24H = Gauge(
+    'listen_finalization_byok_session_abandoned_last_24h',
+    'Global COUNT of dead_letter jobs with byok_session_abandoned and terminal_at in the last 24 hours; '
+    'derived from committed job documents, aggregate with max() not sum()',
     registry=None,
 )
 
@@ -713,6 +727,8 @@ def register_listen_finalization_summary_metrics() -> None:
         for metric in (
             LISTEN_FINALIZATION_OLDEST_NONTERMINAL_AGE_SECONDS,
             LISTEN_FINALIZATION_OLDEST_BLOCKED_BYOK_AGE_SECONDS,
+            LISTEN_FINALIZATION_OLDEST_DEAD_LETTER_AGE_SECONDS,
+            LISTEN_FINALIZATION_BYOK_SESSION_ABANDONED_LAST_24H,
             LISTEN_FINALIZATION_SUMMARY_LAST_SUCCESS_TIMESTAMP_SECONDS,
         ):
             REGISTRY.register(metric)
@@ -778,8 +794,8 @@ for _disposition in CANDIDATE_INTEGRATION_SWEEP_DISPOSITIONS:
 LISTEN_FINALIZATION_JOB_STATUS = Gauge(
     'listen_finalization_jobs',
     'Global durable listen finalization job count by non-success status; replicated '
-    'per process, aggregate with max() not sum(). dead_letter is cumulative and only '
-    'ever rises: it is an all-time terminal total, not a backlog',
+    'per process, aggregate with max() not sum(). dead_letter is terminal stock '
+    'across every generation from a status COUNT; other statuses use projection shards',
     ['status'],
 )
 
@@ -821,6 +837,11 @@ LISTEN_FINALIZATION_STALE_PROCESSING_RECONCILIATIONS_TOTAL = Counter(
 # series, distinguishing no stranded rows from a missing scrape target.
 for _outcome in ('completed', 'migrated', 'skipped', 'error'):
     LISTEN_FINALIZATION_STALE_PROCESSING_RECONCILIATIONS_TOTAL.labels(outcome=_outcome)
+
+LISTEN_FINALIZATION_BYOK_SESSION_ABANDONED_TOTAL = Counter(
+    'listen_finalization_byok_session_abandoned_total',
+    'Best-effort post-commit BYOK abandonment signal; use the document-derived last_24h gauge for alerting',
+)
 
 LISTEN_FINALIZATION_BYOK_ABANDONMENTS_TOTAL = Counter(
     'listen_finalization_byok_abandonments_total',

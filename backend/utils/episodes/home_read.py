@@ -13,6 +13,7 @@ from utils.conversations import phase_shadow
 
 from config.episodes import (
     home_hide_below_floor_rows_enabled,
+    HOME_IDLE_CLOSES_PER_READ,
     COMPOSER_LOOKUP_SCHEDULES_PER_WINDOW,
     COMPOSER_MAX_SCHEDULED_PER_READ,
     COMPOSER_READ_THROTTLE_SECONDS,
@@ -21,11 +22,11 @@ from config.episodes import (
 from database import conversations, episodes
 from database._client import get_firestore_client
 from utils.episodes.timeline import ownership_end
-from utils.episodes.policy import utc
+from utils.episodes.policy import utc, idle_close_due
 from models.episode import EpisodeCloseReason
 from utils.episodes import metrics as episode_metrics
 from utils.episodes import service
-from utils.conversations.fragment_visibility import SETTLING_FIELDS, is_relevance_discarded, is_user_curated
+from utils.conversations.fragment_visibility import SETTLING_FIELDS, is_relevance_discarded, is_completed_below_floor
 
 logger = logging.getLogger(__name__)
 
@@ -89,7 +90,6 @@ def wire_episode(episode: dict[str, Any] | None) -> dict[str, Any] | None:
     return {**wire, 'emoji': episode.get('emoji') or '', 'members': []}
 
 
-BELOW_FLOOR_ROW_MAX_SECONDS = 60
 MEMBER_FIELDS = [
     'structured',
     'user_title',
@@ -103,12 +103,12 @@ MEMBER_FIELDS = [
     'finished_at',
     'created_at',
     'status',
+    'finalization_status',
     'sync_relevance_user_kept',
     'has_photos',
     'photos',
     'starred',
     'folder_user_set',
-    'summary_blocked_reason',
     *SETTLING_FIELDS,
 ]
 
@@ -126,18 +126,29 @@ def _read_members(uid: str, rows: list[dict[str, Any]], *, firestore_client: Any
         refs = [root.document(cid) for cid in ids[offset : offset + episodes.MEMBERSHIP_BATCH_LIMIT]]
         for snapshot in client.get_all(refs, field_paths=MEMBER_FIELDS):
             if snapshot.exists:
-                row = conversations.prepare_conversation_for_read(snapshot.to_dict(), uid)
-                if row is not None:
-                    members[snapshot.id] = row
-    return members
+                members[snapshot.id] = dict(snapshot.to_dict() or {}, id=snapshot.id)
+    return {
+        cid: row
+        for cid, raw in members.items()
+        if (row := conversations.prepare_conversation_for_read(raw, uid)) is not None
+    }
 
 
 def project_episodes(uid: str, rows: list[dict[str, Any]], *, firestore_client: Any = None) -> list[dict[str, Any]]:
+    client = firestore_client if firestore_client is not None else conversations.db
+    c = service.Collaborators(firestore_client=client)
+    # Close only a fixed number; remaining live rows retain their members.
+    due = [row['id'] for row in rows if idle_close_due(row, datetime.now(timezone.utc))][:HOME_IDLE_CLOSES_PER_READ]
+    settled = [service.settle_episode_for_read(uid, row, c) if row['id'] in due else row for row in rows]
+    just_closed = {
+        new['id'] for old, new in zip(rows, settled) if old.get('status') == 'live' and new.get('status') == 'closed'
+    }
+    rows = settled
     members = _read_members(uid, rows, firestore_client=firestore_client) if rows else {}
     wires = [wire for row in rows if (wire := project_episode(uid, row, members=members, list_row=True)) is not None]
     contained = _contained_ids(rows, wires)
     wires = [wire for wire in wires if wire['id'] not in contained]
-    schedule_missed_composes(uid, [row for row in rows if row.get('id') not in contained], wires)
+    schedule_missed_composes(uid, [row for row in rows if row.get('id') not in contained | just_closed], wires)
     return wires
 
 
@@ -234,22 +245,13 @@ def schedule_missed_composes(uid: str, rows: list[dict[str, Any]], wires: list[d
 
 
 def _too_short_for_a_home_row(row: dict[str, Any]) -> bool:
-    """A closed capture under the notes floor, too brief and too empty to be worth a row.
+    """A settled below-floor verdict stays off Home, regardless of age or duration.
 
     List only: search, a direct link and Show discarded still reach it, and nothing is stored.
     """
     if not home_hide_below_floor_rows_enabled():
         return False
-    decision = row.get('relevance_decision')
-    floor_decision = isinstance(decision, dict) and decision.get('reason') == 'content_below_floor'
-    if row.get('summary_blocked_reason') != 'content_below_floor' and not floor_decision:
-        return False
-    if is_user_curated(row) or (row.get('status') or 'completed') != 'completed':
-        return False
-    if ((row.get('structured') or {}).get('overview') or '').strip():
-        return False
-    started, finished = row.get('started_at'), row.get('finished_at')
-    return bool(started and finished and (finished - started).total_seconds() < BELOW_FLOOR_ROW_MAX_SECONDS)
+    return is_completed_below_floor(row)
 
 
 def project_episode(
@@ -268,17 +270,23 @@ def project_episode(
         row = by_id.get(cid)
         if row is None:
             continue
-        visible = not (
-            not conversations.is_visible_conversation(row) or is_relevance_discarded(row) or row.get('sync_merged_into')
-        )
-        if not visible:
-            phase_shadow.observe('episode_member', row, False, episode=episode)
-            continue
         if list_row and _too_short_for_a_home_row(row):
             phase_shadow.observe('episode_member', row, False, episode=episode)
             hidden += 1
             continue
+        if (
+            not conversations.is_visible_conversation(row, include_discarded=not list_row)
+            or row.get('dream_duplicate_of')
+            or conversations.bridge_pending.hidden(row)
+            or is_relevance_discarded(row)
+            or row.get('sync_merged_into')
+        ):
+            phase_shadow.observe('episode_member', row, False, episode=episode)
+            continue
         phase_shadow.observe('episode_member', row, True, episode=episode)
+        from utils.conversations.home_titles import neutralize_minimum_title
+
+        row = neutralize_minimum_title(row)
         structured: dict[str, Any] = row.get('structured') or {}
         retained.append(
             {

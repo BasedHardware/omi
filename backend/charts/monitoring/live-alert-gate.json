@@ -52,6 +52,7 @@
     "omi-enrichment-queue-depth-page",
     "omi-stt-vendor-benched-page",
     "omi-incluster-guard-unsafe-page",
-    "omi-modulate-credit-page"
+    "omi-modulate-credit-page",
+    "omi-batch-queue-safety-blind"
   ]
 }

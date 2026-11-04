@@ -215,7 +215,9 @@ def _duration(segment: TranscriptSegment) -> float:
     return max(0.0, float(segment.end) - float(segment.start))
 
 
-def load_voiceprints_for_resolution(uid: str, *, allow_audio_repair: bool = True) -> Dict[str, np.ndarray]:
+def load_voiceprints_for_resolution(
+    uid: str, *, allow_audio_repair: bool = True, require_complete: bool = False
+) -> Dict[str, np.ndarray]:
     prints: Dict[str, np.ndarray] = {}
     try:
         owner = load_owner_embedding(uid, users=users_db, allow_audio_repair=allow_audio_repair)
@@ -223,12 +225,16 @@ def load_voiceprints_for_resolution(uid: str, *, allow_audio_repair: bool = True
             prints[OWNER_IDENTITY] = owner.reshape(-1)
     except Exception as error:
         logger.warning('event=speaker_resolution_owner_profile outcome=failed exception_type=%s', type(error).__name__)
+        if require_complete:
+            raise
     # Owner recognition is plan-independent: an entitlement read failure fails
     # closed for person prints only, never for the owner's own voiceprint.
     try:
         named_allowed = named_speaker_prompts_allowed(uid)
     except Exception as error:
         logger.warning('event=speaker_resolution_entitlement outcome=failed exception_type=%s', type(error).__name__)
+        if require_complete:
+            raise
         return prints
     if not named_allowed:
         return prints
@@ -242,6 +248,8 @@ def load_voiceprints_for_resolution(uid: str, *, allow_audio_repair: bool = True
         logger.warning(
             'event=speaker_resolution_person_profiles outcome=failed exception_type=%s', type(error).__name__
         )
+        if require_complete:
+            raise
         return prints
     for person in people or []:
         embedding = validated_embedding(

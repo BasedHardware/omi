@@ -37,11 +37,21 @@ overlay:
         category: rollout
     static_address_name: prod-omi-self-hosted-llm-ip-address
   gke:
+    parakeet-lid:
+      env:
+        PARAKEET_DEVICE: {value: cpu, category: runtime}
+        PARAKEET_LID_ONLY: {value: 'true', category: runtime}
+        PARAKEET_LID_MODEL: {value: whisper-base, category: runtime}
+      values_file: backend/charts/parakeet/prod_omi_parakeet_lid_values.yaml
     backend-listen:
       env:
         # Graduation of the David-approved on-demand playback (DEC-BTR-004): build playback
         # artifacts on open/play/download only. Kill switch: set false.
         STT_GPU_FLEET_OFF: {value: 'true', category: ops_kill}
+        # Fleet-off live residual goes to batch, not Soniox (David 11-03). The listen chart pins
+        # SERVER_BATCH_ONLY_AUTO_LANGUAGE_PERCENT at the serving 100. Rollback: UNSUPPORTED '' and HINTABLE 100.
+        SERVER_BATCH_UNSUPPORTED_LANGUAGES: {value: 'af,ar,az,be,bn,bs,ca,cy,eu,fa,gl,gu,he,hi,id,kk,kn,ko,mk,ml,mr,ms,no,pa,sq,sr,sw,ta,te,th,tl,tr,ur,vi,zh', category: ops_kill}
+        STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT: {value: '0', category: rollout}
         PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
         # Replay uses the existing singleton loop; live admission stays inline.
         LISTEN_FINALIZATION_REPLAY_ENABLED:
@@ -122,6 +132,7 @@ overlay:
           value: '3'
         STT_SERVICE_MODELS:
           value: parakeet-window,modulate-velma-2,soniox
+        HOSTED_LID_API_URL: {value: '', category: service_discovery}  # held empty until prod-omi-parakeet-lid passes acceptance (cpu-language-id.md step 4)
         HOSTED_PARAKEET_API_URL:
           value: http://parakeet.omi.me
         HOSTED_SPEAKER_EMBEDDING_API_URL:
@@ -257,6 +268,7 @@ overlay:
           category: rollout
     pusher:
       env:
+        HOSTED_LID_API_URL: {value: '', category: service_discovery}  # held empty until prod-omi-parakeet-lid passes acceptance (cpu-language-id.md step 4)
         # Graduation of the David-approved on-demand playback (DEC-BTR-004): build playback
         # artifacts on open/play/download only. Kill switch: set false.
         STT_GPU_FLEET_OFF: {value: 'true', category: ops_kill}
@@ -537,7 +549,7 @@ overlay:
           # for re-enable (#23739 precedent). base/GKE/jobs/desktop/dev stay 0/v1. Full literal also
           # carries people=5, memory=0, privacy=0 (finjob=5).
           # Lead train: listen -> pusher -> Cloud Run; do not enable additional monthly readers here.
-          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":5,"usage_month_cache":0,"usage_month_total":0}', category: rollout}
+          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":5,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":5,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":5,"usage_month_cache":0,"usage_month_total":0}', category: rollout}
           FSR_USAGE_MONTH_TOTAL_EPOCH: {value: c2fs_20261026_r1, category: rollout}
           # Batch ladder 2026-10-29 (lead ruling 12:15Z): pin shadow 25 so a Cloud Run deploy
           # cannot reset the hand-applied ladder state again (11:13Z deploy reset incident);
@@ -576,6 +588,7 @@ overlay:
             value: 'true'
           BUCKET_AUDIO_DERIVED:
             value: omi-audio-derived-uc1
+          HOSTED_LID_API_URL: {value: '', category: service_discovery}  # held empty until prod-omi-parakeet-lid passes acceptance (cpu-language-id.md step 4)
           HOSTED_PARAKEET_API_URL:
             value: http://parakeet.omi.me
           HOSTED_SPEAKER_EMBEDDING_API_URL:
@@ -897,7 +910,7 @@ overlay:
           # Restore monthly usage reads only for compute admission on backend-sync (admitscope 2026-11-01).
           # Writers maintain totals and cache invalidation while reader levers are off.
           # Preserve the existing epoch and every other service/lever (#24194 guard).
-          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":5,"usage_month_cache":100,"usage_month_total":100}', category: rollout}
+          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":5,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":5,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":5,"usage_month_cache":100,"usage_month_total":100}', category: rollout}
           FSR_USAGE_MONTH_TOTAL_EPOCH: {value: c2fs_20261026_r1, category: rollout}
           # Batch ladder 2026-10-29 (lead ruling 12:15Z): pin shadow 25 so a Cloud Run deploy
           # cannot reset the hand-applied ladder state again (11:13Z deploy reset incident);
@@ -941,6 +954,7 @@ overlay:
           SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM:
             value: 'false'
             category: rollout
+          HOSTED_LID_API_URL: {value: '', category: service_discovery}  # held empty until prod-omi-parakeet-lid passes acceptance (cpu-language-id.md step 4)
           HOSTED_PARAKEET_API_URL:
             value: http://parakeet.omi.me
           HOSTED_SPEAKER_EMBEDDING_API_URL:
@@ -1285,7 +1299,7 @@ overlay:
           # for re-enable (#23739 precedent). base/GKE/jobs/desktop/dev stay 0/v1. Full literal also
           # carries people=5, memory=0, privacy=0 (finjob=5).
           # Lead train: listen -> pusher -> Cloud Run; do not enable additional monthly readers here.
-          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":5,"usage_month_cache":0,"usage_month_total":0}', category: rollout}
+          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":5,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":5,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":5,"usage_month_cache":0,"usage_month_total":0}', category: rollout}
           FSR_USAGE_MONTH_TOTAL_EPOCH: {value: c2fs_20261026_r1, category: rollout}
           # Batch ladder 2026-10-29 (lead ruling 12:15Z): pin shadow 25 so a Cloud Run deploy
           # cannot reset the hand-applied ladder state again (11:13Z deploy reset incident);
@@ -1321,6 +1335,7 @@ overlay:
           SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM:
             value: 'false'
             category: rollout
+          HOSTED_LID_API_URL: {value: '', category: service_discovery}  # held empty until prod-omi-parakeet-lid passes acceptance (cpu-language-id.md step 4)
           HOSTED_PARAKEET_API_URL:
             value: http://parakeet.omi.me
           HOSTED_SPEAKER_EMBEDDING_API_URL:
@@ -1645,7 +1660,7 @@ overlay:
           # for re-enable (#23739 precedent). base/GKE/jobs/desktop/dev stay 0/v1. Full literal also
           # carries people=5, memory=0, privacy=0 (finjob=5).
           # Lead train: listen -> pusher -> Cloud Run; do not enable additional monthly readers here.
-          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":5,"usage_month_cache":0,"usage_month_total":0}', category: rollout}
+          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":5,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":5,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":5,"usage_month_cache":0,"usage_month_total":0}', category: rollout}
           FSR_USAGE_MONTH_TOTAL_EPOCH: {value: c2fs_20261026_r1, category: rollout}
           # Batch ladder 2026-10-29 (lead ruling 12:15Z): pin shadow 25 so a Cloud Run deploy
           # cannot reset the hand-applied ladder state again (11:13Z deploy reset incident);
@@ -1705,6 +1720,7 @@ overlay:
             value: 'true'
           BUCKET_AUDIO_DERIVED:
             value: omi-audio-derived-uc1
+          HOSTED_LID_API_URL: {value: '', category: service_discovery}  # held empty until prod-omi-parakeet-lid passes acceptance (cpu-language-id.md step 4)
           HOSTED_PARAKEET_API_URL:
             value: http://parakeet.omi.me
           HOSTED_SPEAKER_EMBEDDING_API_URL:

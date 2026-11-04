@@ -1,5 +1,7 @@
 # Apply only AFTER every caller serves STT_GPU_FLEET_OFF=true and traffic drains.
-# Keeps all chart objects, routes and autoscaler; no pool or storage changes.
+# Retains routes and model configuration, removes the streaming autoscaler.
+fleetRetired: true
+replicaCount: 0
 maintenanceMode: true
-autoscaling:
-  minReplicas: 1
+ingress:
+  enabled: false

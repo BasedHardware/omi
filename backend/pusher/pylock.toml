@@ -109,7 +109,6 @@ wheels = [{ url = "https://files.pythonhosted.org/packages/1c/d5/c84e1a17bf61d4d
 [[packages]]
 name = "cffi"
 version = "2.0.0"
-marker = "platform_python_implementation != 'PyPy'"
 sdist = { url = "https://files.pythonhosted.org/packages/eb/56/b1ba7935a17738ae8453301356628e8147c79dbb825bcbc73dc7401f9846/cffi-2.0.0.tar.gz", upload-time = 2025-09-08T23:24:04Z, size = 523588, hashes = { sha256 = "44d1b5909021139fe36001ae048dbdde8214afa20200eda0f64c068cac5d5529" } }
 wheels = [{ url = "https://files.pythonhosted.org/packages/d7/91/500d892b2bf36529a75b77958edfcd5ad8e2ce4064ce2ecfeab2125d72d1/cffi-2.0.0-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", upload-time = 2025-09-08T23:22:35Z, size = 215574, hashes = { sha256 = "8941aaadaf67246224cee8c3803777eed332a19d909b47e29c9842ef1e79ac26" } }]
 
@@ -668,7 +667,7 @@ wheels = [{ url = "https://files.pythonhosted.org/packages/b1/ec/1fb891d8a266071
 [[packages]]
 name = "pycparser"
 version = "2.22"
-marker = "implementation_name != 'PyPy' and platform_python_implementation != 'PyPy'"
+marker = "implementation_name != 'PyPy'"
 sdist = { url = "https://files.pythonhosted.org/packages/1d/b2/31537cf4b1ca988837256c910a668b553fceb8f069bedc4b1c826024b52c/pycparser-2.22.tar.gz", upload-time = 2024-03-30T13:22:22Z, size = 172736, hashes = { sha256 = "491c8be9c040f5390f5bf44a5b07752bd07f56edf992381b05c701439eec10f6" } }
 wheels = [{ url = "https://files.pythonhosted.org/packages/13/a3/a812df4e2dd5696d1f351d58b8fe16a405b234ad2886a0dab9183fb78109/pycparser-2.22-py3-none-any.whl", upload-time = 2024-03-30T13:22:20Z, size = 117552, hashes = { sha256 = "c3702b6d3dd8c7abc1afa565d7e63d53a1d0bd86cdc24edd75470f4de499cfcc" } }]
 
@@ -828,6 +827,15 @@ name = "sniffio"
 version = "1.3.1"
 sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", upload-time = 2024-02-25T23:20:04Z, size = 20372, hashes = { sha256 = "f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc" } }
 wheels = [{ url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", upload-time = 2024-02-25T23:20:01Z, size = 10235, hashes = { sha256 = "2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2" } }]
+
+[[packages]]
+name = "soundfile"
+version = "0.12.1"
+sdist = { url = "https://files.pythonhosted.org/packages/6f/96/5ff33900998bad58d5381fd1acfcdac11cbea4f08fc72ac1dc25ffb13f6a/soundfile-0.12.1.tar.gz", upload-time = 2023-02-15T15:37:32Z, size = 43184, hashes = { sha256 = "e8e1017b2cf1dda767aef19d2fd9ee5ebe07e050d430f77a0a7c66ba08b8cdae" } }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/04/bc/cd845c2dbb4d257c744cd58a5bcdd9f6d235ca317e7e22e49564ec88dcd9/soundfile-0.12.1-py2.py3-none-any.whl", upload-time = 2023-02-15T15:37:16Z, size = 24030, hashes = { sha256 = "828a79c2e75abab5359f780c81dccd4953c45a2c4cd4f05ba3e233ddf984b882" } },
+    { url = "https://files.pythonhosted.org/packages/ad/bd/0602167a213d9184fc688b1086dc6d374b7ae8c33eccf169f9b50ce6568c/soundfile-0.12.1-py2.py3-none-manylinux_2_17_x86_64.whl", upload-time = 2023-03-24T08:21:58Z, size = 1257765, hashes = { sha256 = "2dc3685bed7187c072a46ab4ffddd38cef7de9ae5eb05c03df2ad569cf4dacbc" } },
+]
 
 [[packages]]
 name = "sqlalchemy"

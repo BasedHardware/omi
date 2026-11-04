@@ -61,7 +61,10 @@ def test_batch_alarm_requires_freshness_and_keeps_the_two_hour_contract():
     evaluate = BACKTEST['evaluate']
 
     def hit(age, sample_age):
-        return evaluate(alarm, {'A': {(): [age]}, 'B': {(): [sample_age]}})[()]
+        # The merged rule also pages on the all-epoch compute commitment (C/F
+        # disjunct, owned by the backtest matrix); hold it quiet here so these
+        # assertions keep testing the new-cohort delivery legs.
+        return evaluate(alarm, {'A': {(): [age]}, 'B': {(): [sample_age]}, 'C': {(): [0]}, 'F': {(): [0]}})[()]
 
     assert hit(7201, 30) == 1
     assert hit(7200, 30) == 0

@@ -1,5 +1,10 @@
 # Batch projection and timeliness alarms
 
+The all-epoch compute-queue alarm and bounded-scan blindness page are in
+`../alerts/batch-queue-safety.json`; see
+`../../../docs/runbooks/batch-queue-safety.md`. They are independent of the
+epoch-scoped delivery rules below. They do not waive held recovery or custody.
+
 `alerts.yaml` holds the projection-obligation PrometheusRule. Prod runs no Alertmanager, so that file is a record,
 not a live route. Live alerts are Grafana-managed rules in `../alerts/*.json`.
 
@@ -53,20 +58,27 @@ The metric is alert-only. No scheduler, ramp, hard-3 rollback trigger or gate re
 
 ### Apply (lead)
 
-The active rules live in `../alerts/batch-timeliness.json`, are included in the
-combined export, and are admitted by `../live-alert-gate.json`. Their metric
-families are declared in the inventory; the older captured snapshot is unchanged.
+The producer is now present in prod and the measured metric inventory includes its series. The three rules
+live in `../alerts/batch-timeliness.json`, in the combined export and the existing `live-alert-gate.json` import
+set. Gate changes trigger the existing metrics-egress workflow; no workflow change is needed. A committed
+definition is not evidence that production Grafana has imported it.
 
-1. Deploy a batch worker image that contains the sampler.
+1. Deploy the batch worker image and queue-age guard chart containing this fix **before** importing any
+   queue-safety pages. Keep the audited worker min 6 / max 12 bounds.
 2. Confirm in Prometheus that `max(omi_batch_timeliness_observed_at_seconds) > 0` and that
    `omi_batch_timeliness_samples_total{outcome="ok"}` increases.
-3. Dispatch the existing metrics-egress workflow explicitly for production at
-   the merged SHA. The gated importer installs and verifies all three rules.
-   A main push targets development by default.
-4. Complete the delivery qualification in [critical-failures.md](../critical-failures.md).
+3. Run the monitoring contracts. Dispatch the existing metrics-egress workflow for production at the reviewed
+   main SHA, or use the documented Grafana provisioning path (`--apply --backup-file <new-file>`).
+4. Read back every gated UID, its definition, unpaused state and receiver; distinguish import proof from actual
+   notification-delivery proof.
+5. Complete the delivery qualification in [critical-failures.md](../critical-failures.md) for the new
+   critical-failure pages admitted alongside these rules.
 
-The two-hour unpublished-unit alarm is page tier and routes to the existing
-human Telegram receiver. The stale and blind companions remain muted agent tier.
+`omi-batch-unit-unpublished-2h` is page tier with human audience and no agent mute interval: it uses the existing
+Telegram receiver. The stale and truncated-scan diagnostics remain agent tier. The independent queue-safety blind
+rule is page tier. The single lateness rule combines the new-cohort delivery legs with all-epoch active
+compute commitments. Each source has its own freshness gate; no separate queue lateness UID duplicates it.
+No contact point, secret or notification-policy tree is changed.
 
 Rollback an incorrect definition with a forward revert and the same import;
 keep real timeliness breaches tracked while reverting. The index step: merge

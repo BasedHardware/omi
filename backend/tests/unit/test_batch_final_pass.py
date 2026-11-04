@@ -33,6 +33,7 @@ from utils.conversations import final_pass_batch as batch, final_pass_pyannote a
 UID = 'synthetic-batch-owner'
 CAPTURE = 1000.0
 REAL_RESERVE_BUDGET = batch._reserve_budget
+REAL_LOAD_PRINTS = stage.load_voiceprints_for_resolution
 
 
 def wav(pcm):
@@ -595,3 +596,83 @@ def test_staged_read_budget_can_exceed_playback_64_mib_limit(lane, monkeypatch):
     monkeypatch.setattr(lane.artifacts, 'fetch_audio', fetch)
     assert all(s.is_user for s in resolve(lane))
     assert len(lane.gpu) == 1
+
+
+@pytest.mark.parametrize('failure', ['diarizer', 'revoked', 'apply'])
+def test_failed_pass_never_publishes_recurring_profile(lane, monkeypatch, failure):
+    writes = []
+    monkeypatch.setattr(batch.recurring_voices, 'checkpoint', lambda *a, **kw: ('synthetic',))
+    monkeypatch.setattr(batch.recurring_voices, 'learn', lambda *a, **kw: writes.append(kw))
+    if failure == 'diarizer':
+
+        def fail(*a, **kw):
+            raise RuntimeError('synthetic failure')
+
+        monkeypatch.setattr(final, 'diarize_with_speech_compaction', fail)
+    elif failure == 'revoked':
+        original = batch.load_reference
+
+        def revoked(*a, **kw):
+            return None if lane.gpu else original(*a, **kw)
+
+        monkeypatch.setattr(batch, 'load_reference', revoked)
+    else:
+
+        def fail(*a, **kw):
+            raise RuntimeError('synthetic apply failure')
+
+        # Call the real adapter with the documented apply seam.
+        batch.run_batch_final_pass(
+            UID, lane.conversation, {}, load_prints=lambda *a, **kw: {'user': [1.0, 0.0]}, apply=fail
+        )
+        assert not writes
+        return
+    resolve(lane)
+    assert not writes
+
+
+def test_successful_pass_projects_recurring_identity_only_after_learning(lane, monkeypatch):
+    writes, mix = [], []
+    monkeypatch.setattr(batch.recurring_voices, 'checkpoint', lambda *a, **kw: ('synthetic',))
+    monkeypatch.setattr(batch, 'emit_product_event', lambda **kw: mix.append(kw))
+
+    def learn(uid, conversation, centroids, prints, expected, **kwargs):
+        writes.append((uid, centroids, expected))
+        assert len(lane.gpu) == 1 and len(lane.reads) >= 4
+        assert centroids == {'voice': {'embedding': [1.0, 0.0], 'evidence_seconds': 12}}
+        return {'voice': {'recurring_voice_id': 'private-recurring'}}
+
+    monkeypatch.setattr(batch.recurring_voices, 'learn', learn)
+    segments = resolve(lane)
+    assert writes and all(s.recurring_voice_id == 'private-recurring' for s in segments)
+    assert all(s.person_id is None and not s.is_user for s in segments)
+    assert mix[0]['event'] == 'Batch Speaker Identity Mix'
+    assert mix[0]['properties']['recurring'] > 0 and mix[0]['properties']['person'] == 0
+
+
+@pytest.mark.parametrize('failure', ['owner', 'entitlement', 'people'])
+def test_recurring_pass_refuses_an_incomplete_person_roster(lane, monkeypatch, failure):
+    writes = []
+    monkeypatch.setattr(batch.recurring_voices, 'checkpoint', lambda *a, **kw: ('synthetic',))
+    monkeypatch.setattr(batch.recurring_voices, 'learn', lambda *a, **kw: writes.append(True) or {})
+    monkeypatch.setattr(stage, 'load_owner_embedding', lambda *a, **kw: np.array([[1.0, 0.0]]))
+    monkeypatch.setattr(stage, 'named_speaker_prompts_allowed', lambda *_: True)
+    monkeypatch.setattr(stage.users_db, 'get_people', lambda *_: [])
+
+    def unavailable(*a, **kw):
+        raise RuntimeError('synthetic roster read failure')
+
+    if failure == 'owner':
+        monkeypatch.setattr(stage, 'load_owner_embedding', unavailable)
+    elif failure == 'entitlement':
+        monkeypatch.setattr(stage, 'named_speaker_prompts_allowed', unavailable)
+    else:
+        monkeypatch.setattr(stage.users_db, 'get_people', unavailable)
+    with pytest.raises(RuntimeError, match='synthetic roster read failure'):
+        REAL_LOAD_PRINTS(UID, allow_audio_repair=False, require_complete=True)
+    legacy = REAL_LOAD_PRINTS(UID, allow_audio_repair=False)
+    assert ('user' in legacy) == (failure != 'owner')
+    before = lane.conversation.model_dump()
+    batch.run_batch_final_pass(UID, lane.conversation, {}, load_prints=REAL_LOAD_PRINTS, apply=lambda *a, **kw: None)
+    assert not writes and not lane.gpu
+    assert lane.conversation.model_dump() == before

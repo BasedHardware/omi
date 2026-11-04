@@ -261,6 +261,248 @@ def test_ambiguous_started_intent_is_held_after_bounded_dwell(setup):
     stt.assert_not_called()
 
 
+def running_words(setup):
+    from database.batch_pipeline_recognizer_receipts import record_recognizer
+
+    client, store, binding, _, _, recovery = setup
+    prepared = recovery.protocol.prepare('bad', binding.owner_id, 0)
+    token = prepared['recovery']['token']
+    assert recovery.protocol.start('bad', token, 0)
+    assert record_recognizer(store, 'bad', token, 'recovery', 'modulate', 'words', 3, 1.0)
+    return token
+
+
+def test_missing_words_result_requeues_once_then_recovers_via_normal_task(setup, monkeypatch):
+    from utils.batch_pipeline import quarantine_recovery as module
+
+    client, _, binding, artifacts, stt, recovery = setup
+    old_token = running_words(setup)
+    original = deepcopy(row(client)['recovery'])
+    recovery.clock = lambda: 900
+    assert recovery.dispatch('bad', binding.owner_id) == 'held'
+    assert row(client)['recovery'] == original
+    recovery.clock = lambda: 901
+    assert recovery.dispatch('bad', binding.owner_id) == 'held'
+    marker = row(client)['recovery']
+    assert row(client)['recovery_state'] == 'prepared'
+    assert marker['token'] != old_token and marker['missing_result_retries'] == 1
+    assert marker['missing_result_history'] == [{key: original[key] for key in ('token', 'started_at', 'recognizers')}]
+    assert row(client)['audio_uri'] == 'gs://synthetic/audio'
+    assert not recovery.protocol.settle('bad', old_token, 902, 'gs://synthetic/late')
+    # A concurrent stale scanner cannot mint another replacement.
+    assert recovery.protocol.retry_missing_result('bad', old_token, 902) == 'held'
+    artifacts.fetch_audio.assert_not_called()
+    stt.assert_not_called()
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE', 'https://synthetic.run.app')
+    monkeypatch.setenv('SYNC_TASKS_QUEUE', 'sync-jobs')
+    enqueue = Mock()
+    monkeypatch.setattr(module, 'enqueue_named_task', enqueue)
+    assert recovery.dispatch('bad', binding.owner_id) == 'queued'
+    assert marker['token'] in enqueue.call_args.args[2]
+    stt.assert_not_called()
+    assert recovery.recover('bad', binding.owner_id) == 'recovered'
+    assert row(client)['recovery_state'] == 'recovered'
+    stt.assert_called_once()
+
+
+def test_repeated_persist_failure_spends_only_one_replacement_call(setup):
+    from database.batch_pipeline_recognizer_receipts import record_recognizer
+
+    client, store, binding, artifacts, stt, recovery = setup
+
+    def words(*args):
+        token = row(client)['recovery']['token']
+        assert record_recognizer(store, 'bad', token, 'recovery', 'modulate', 'words', 3, 1.0)
+        return {'synthetic': True}
+
+    stt.side_effect = words
+    artifacts.persist_recovery_result.side_effect = OSError('synthetic storage outage')
+    assert recovery.recover('bad', binding.owner_id) == 'result_held'
+    recovery.clock = lambda: 1001
+    assert recovery.recover('bad', binding.owner_id) == 'held'
+    assert row(client)['recovery_state'] == 'prepared'
+    assert recovery.recover('bad', binding.owner_id) == 'result_held'
+    recovery.clock = lambda: 1902
+    assert recovery.recover('bad', binding.owner_id) == 'held'
+    assert row(client)['recovery_state'] == 'failed_held'
+    assert recovery.recover('bad', binding.owner_id) == 'held'
+    assert stt.call_count == artifacts.persist_recovery_result.call_count == 2
+
+
+@pytest.mark.parametrize('arrival', ['before_delivery', 'during_download'])
+def test_replacement_adopts_late_old_upload_without_recognizing_again(setup, arrival):
+    client, _, binding, artifacts, stt, recovery = setup
+    old = running_words(setup)
+    recovery.clock = lambda: 901
+    assert recovery.recover('bad', binding.owner_id) == 'held'
+    replacement = row(client)['recovery']['token']
+    available = [arrival == 'before_delivery']
+    artifacts.find_recovery_result.side_effect = lambda item, token: (
+        'gs://synthetic/late-old-result' if token == old and available[0] else None
+    )
+    if arrival == 'during_download':
+
+        def download(item):
+            available[0] = True
+            return b'synthetic'
+
+        artifacts.fetch_audio.side_effect = download
+    assert recovery.recover('bad', binding.owner_id) == 'reconciled'
+    assert row(client)['recovery_state'] == 'recovered'
+    assert row(client)['recovery']['token'] == replacement
+    assert row(client)['result']['result_uri'] == 'gs://synthetic/late-old-result'
+    stt.assert_not_called()
+    artifacts.persist_recovery_result.assert_not_called()
+    if arrival == 'before_delivery':
+        artifacts.fetch_audio.assert_not_called()
+
+
+@pytest.mark.parametrize('change', ['wrong_history', 'already_started'])
+def test_previous_result_adoption_is_fenced_against_replacement_start(setup, change):
+    client, _, binding, _, _, recovery = setup
+    old = running_words(setup)
+    recovery.clock = lambda: 901
+    assert recovery.recover('bad', binding.owner_id) == 'held'
+    token = row(client)['recovery']['token']
+    if change == 'already_started':
+        assert recovery.protocol.start('bad', token, 902)
+    else:
+        old = 'foreign-history-token'
+    assert not recovery.protocol.settle('bad', token, 903, 'gs://synthetic/late', previous_token=old)
+    assert 'result' not in row(client)
+
+
+def test_requeued_words_rechecks_funding_before_replacement_call(setup, monkeypatch):
+    from utils.batch_pipeline import quarantine_recovery as module
+
+    client, _, binding, artifacts, stt, recovery = setup
+    running_words(setup)
+    recovery.clock = lambda: 901
+    assert recovery.recover('bad', binding.owner_id) == 'held'
+    monkeypatch.setattr(module, 'sync_allowed', Mock(return_value=False))
+    assert recovery.recover('bad', binding.owner_id) == 'held'
+    assert row(client)['recovery_state'] == 'prepared'
+    stt.assert_not_called()
+    artifacts.fetch_audio.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    'receipt',
+    [
+        None,
+        {},
+        {'outcome': 'empty', 'word_count': 0},
+        {'outcome': 'words', 'word_count': 0},
+        {'outcome': 'words', 'word_count': True},
+    ],
+)
+def test_unusable_words_evidence_keeps_original_dwell_bound(setup, receipt):
+    client, _, binding, _, stt, recovery = setup
+    token = running_words(setup)
+    row(client)['recovery']['recognizers'] = (
+        {'modulate': {'provider': 'modulate', **receipt}} if receipt is not None else {}
+    )
+    recovery.clock = lambda: 901
+    assert recovery.recover('bad', binding.owner_id) == 'held'
+    assert row(client)['recovery_state'] == 'failed_held'
+    assert row(client)['recovery']['token'] == token
+    assert row(client)['recovery']['failure'] == {'stage': 'provider', 'reason': 'abandoned_running'}
+    stt.assert_not_called()
+
+
+@pytest.mark.parametrize('result', ['object', 'row'])
+def test_words_with_existing_result_never_requeues(setup, result):
+    client, _, binding, artifacts, stt, recovery = setup
+    token = running_words(setup)
+    recovery.clock = lambda: 901
+    if result == 'object':
+        artifacts.find_recovery_result.return_value = 'gs://synthetic/recovered'
+        assert recovery.recover('bad', binding.owner_id) == 'reconciled'
+    else:
+        row(client)['result'] = {'result_uri': 'gs://synthetic/existing'}
+        assert recovery.protocol.retry_missing_result('bad', token, 901) == 'held'
+    assert row(client)['recovery']['token'] == token
+    assert 'missing_result_retries' not in row(client)['recovery']
+    stt.assert_not_called()
+
+
+@pytest.mark.parametrize('bound', ['spent', 'operator', 'malformed'])
+def test_words_retry_bound_retains_custody_and_does_not_claim_abandonment(setup, bound, caplog):
+    client, _, binding, artifacts, stt, recovery = setup
+    token = running_words(setup)
+    row(client)['recovery'].update(
+        {'missing_result_retries': 1}
+        if bound == 'spent'
+        else {'paid_state': 'attempted'} if bound == 'operator' else {'missing_result_retries': True}
+    )
+    recovery.clock = lambda: 901
+    with caplog.at_level(logging.WARNING):
+        assert recovery.recover('bad', binding.owner_id) == 'held'
+    assert row(client)['recovery_state'] == 'failed_held'
+    assert row(client)['recovery']['failure'] == {'stage': 'payload_validation', 'reason': 'operation_failed'}
+    assert row(client)['recovery']['token'] == token
+    assert row(client)['recovery']['recognizers']['modulate']['outcome'] == 'words'
+    assert row(client)['audio_uri'] == 'gs://synthetic/audio'
+    assert 'outcome=exhausted' in caplog.text
+    artifacts.fetch_audio.assert_not_called()
+    stt.assert_not_called()
+
+
+@pytest.mark.parametrize('change', ['token', 'lease', 'result', 'privacy', 'owner'])
+def test_words_retry_rechecks_fences(setup, change):
+    from database.batch_pipeline_privacy import BatchPrivacyBlocked
+
+    client, _, binding, _, stt, recovery = setup
+    token = running_words(setup)
+    if change == 'token':
+        row(client)['recovery']['token'] = 'replacement'
+    elif change == 'lease':
+        row(client)['lease_until'] = 1000
+    elif change == 'result':
+        client.rows[('batch_pipeline_prod_results', 'bad')] = {'result': 'synthetic'}
+    elif change == 'privacy':
+        client.rows[('account_deletions', binding.owner_id)] = {'wipe_status': 'pending'}
+    else:
+        client.rows[('users', binding.owner_id, 'sync_content_ledger', binding.content_id)]['job_id'] = 'foreign'
+    if change in {'privacy', 'owner'}:
+        with pytest.raises((BatchPrivacyBlocked, ProjectionBlocked)):
+            recovery.protocol.retry_missing_result('bad', token, 901)
+    else:
+        assert recovery.protocol.retry_missing_result('bad', token, 901) == 'held'
+    assert row(client)['recovery_state'] == 'running'
+    stt.assert_not_called()
+
+
+def test_late_words_receipt_blocks_stale_abandonment(setup):
+    client, _, _, _, _, recovery = setup
+    token = running_words(setup)
+    assert not recovery.protocol.settle('bad', token, 901, failure={'stage': 'provider', 'reason': 'abandoned_running'})
+    assert row(client)['recovery_state'] == 'running'
+
+
+@pytest.mark.parametrize('fault', ['persist', 'settle', 'refused'])
+def test_result_held_logs_stage_and_type_without_private_exception(setup, monkeypatch, caplog, fault):
+    _, _, binding, artifacts, _, recovery = setup
+    private = 'PRIVATE_TRANSCRIPT_AUDIO_SENTINEL'
+    if fault == 'persist':
+        artifacts.persist_recovery_result.side_effect = OSError(private)
+    elif fault == 'settle':
+        monkeypatch.setattr(recovery.protocol, 'settle', Mock(side_effect=TimeoutError(private)))
+    else:
+        monkeypatch.setattr(recovery.protocol, 'settle', Mock(return_value=False))
+    with caplog.at_level(logging.WARNING):
+        assert recovery.recover('bad', binding.owner_id) == 'result_held'
+    assert f'route=quarantine stage={"persist" if fault == "persist" else "settle"}' in caplog.text
+    assert (
+        f'exception_type={"OSError" if fault == "persist" else "TimeoutError" if fault == "settle" else "none"}'
+        in caplog.text
+    )
+    if fault == 'refused':
+        assert 'reason=refused' in caplog.text
+    assert private not in caplog.text
+    assert all(record.exc_info is None for record in caplog.records)
+
+
 def test_crash_after_assignment_replays_receipt_and_meters_once(setup):
     client, store, binding, _, stt, recovery = setup
     assert recovery.recover('bad', binding.owner_id) == 'recovered'
