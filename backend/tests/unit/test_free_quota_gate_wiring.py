@@ -292,19 +292,11 @@ class TestOmniRelayGate:
         ), patch.object(relay, '_verify_ws_auth', return_value='u1'), patch.object(
             relay, 'extract_byok_from_websocket', return_value={}
         ), patch.object(
-            relay, 'is_trial_paywalled', return_value=False
-        ), patch.object(
-            # Explicit: the module-level AutoMock of database.users does not reach
-            # `relay.users_db` when routers.omni_relay was already imported by
-            # another test file in this process, and the real one reads Firestore.
-            relay.users_db,
-            'is_byok_active',
-            return_value=False,
+            relay.users_db, 'is_byok_active', return_value=False
         ), patch.object(
             relay, 'get_chat_quota_snapshot', return_value={'plan': PlanType.basic, 'allowed': False}
         ) as snapshot:
             asyncio.run(relay.omni_relay(ws))
-            relay.is_trial_paywalled.assert_called_once_with('u1', 'desktop', required_byok_provider='gemini')
             snapshot.assert_called_once_with('u1', 'desktop')
             ws.close.assert_awaited_once_with(code=1008, reason='quota_exceeded')
             ws.accept.assert_not_awaited()
@@ -322,8 +314,6 @@ class TestOmniRelayGate:
         ), patch.object(
             relay, 'validate_byok_websocket_keys', return_value=({'gemini': 'sk-user'}, None)
         ), patch.object(
-            relay, 'is_trial_paywalled', return_value=False
-        ), patch.object(
             relay.users_db, 'is_byok_active', return_value=True
         ), patch.object(
             relay, '_upstream', return_value=(None, 'forced-exit')
@@ -331,7 +321,6 @@ class TestOmniRelayGate:
             relay, 'get_chat_quota_snapshot'
         ) as snapshot:
             asyncio.run(relay.omni_relay(ws))
-            relay.is_trial_paywalled.assert_called_once_with('u1', 'desktop', required_byok_provider='gemini')
             snapshot.assert_not_called()
             ws.close.assert_awaited_once()
             assert ws.close.await_args.kwargs.get('code') == 1011
@@ -351,14 +340,11 @@ class TestOmniRelayGate:
         ), patch.object(
             relay, 'validate_byok_websocket_keys', return_value=({'deepgram': 'dg-user'}, None)
         ), patch.object(
-            relay, 'is_trial_paywalled', return_value=False
-        ), patch.object(
             relay.users_db, 'is_byok_active', return_value=True
         ), patch.object(
             relay, 'get_chat_quota_snapshot', return_value={'plan': PlanType.basic, 'allowed': False}
         ) as snapshot:
             asyncio.run(relay.omni_relay(ws))
-            relay.is_trial_paywalled.assert_called_once_with('u1', 'desktop', required_byok_provider='gemini')
             snapshot.assert_called_once_with('u1', 'desktop')
             ws.close.assert_awaited_once_with(code=1008, reason='quota_exceeded')
 
@@ -371,8 +357,6 @@ class TestOmniRelayGate:
             relay, 'run_blocking', _passthrough_run_blocking
         ), patch.object(relay, '_verify_ws_auth', return_value='u1'), patch.object(
             relay, 'extract_byok_from_websocket', return_value={}
-        ), patch.object(
-            relay, 'is_trial_paywalled', return_value=False
         ), patch.object(
             relay.users_db, 'is_byok_active', return_value=False
         ), patch.object(

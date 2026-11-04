@@ -27,7 +27,7 @@ from tests.unit.test_wal_audio_coverage_pipeline import (
 
 
 async def _run(module, tmp_path):
-    await module._run_full_pipeline_background_async(
+    await module.run_full_pipeline_background_async(
         'job-coverage',
         'uid',
         [f'/tmp/{BIN_NAME}'],

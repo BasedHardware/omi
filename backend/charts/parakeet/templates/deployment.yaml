@@ -8,7 +8,10 @@ spec:
   {{- with .Values.progressDeadlineSeconds }}
   progressDeadlineSeconds: {{ . }}
   {{- end }}
-  {{- if not .Values.autoscaling.enabled }}
+  {{- if or .Values.fleetRetired .Values.maintenanceMode }}
+  # Retirement removes the HPA; explicit maintenance alone retains its positive minimum.
+  replicas: 0
+  {{- else if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
   {{- end }}
   selector:

@@ -737,3 +737,20 @@ def test_candidates_include_just_reclaimed_job_without_resetting_abandonment_age
     sweep = jobs.get_abandoned_byok_job_candidates(abandoned_after=_ABANDONED_AFTER, firestore_client=client)
     assert [row['job_id'] for row in sweep['candidates']] == ['reclaimed']
     assert sweep['candidates'][0]['last_activity_at'] == _STRANDED_AT
+
+
+def test_conversion_counter_counts_only_committed_abandonments(monkeypatch):
+    _advance, abandon = _install(monkeypatch, [_candidate(str(i)) for i in range(4)])
+    abandon.side_effect = [
+        {'status': 'abandoned', 'conversation_outcome': 'closed'},
+        {'status': 'abandoned', 'conversation_outcome': 'none'},
+        {'status': 'fenced', 'conversation_outcome': 'none'},
+        RuntimeError('firestore unavailable'),
+    ]
+    counter = service.LISTEN_FINALIZATION_BYOK_SESSION_ABANDONED_TOTAL
+    before = counter._value.get()
+
+    result = service.reconcile_abandoned_byok_finalization_jobs()
+
+    assert result == {'abandoned': 2, 'conversations_closed': 1, 'skipped': 1, 'error': 1}
+    assert counter._value.get() - before == 2

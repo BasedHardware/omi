@@ -251,5 +251,5 @@ def test_batch_storage_pressure_removes_earlier_local_files_but_not_staged_objec
 
     monkeypatch.setattr(pipeline, 'download_syncing_temporal_file', download)
     with pytest.raises(limits.BackfillStoragePressure):
-        pipeline._download_staged_files([str(first), str(second)], bounded_backfill=True)
+        pipeline.download_staged_files([str(first), str(second)], bounded_backfill=True)
     assert not first.exists()

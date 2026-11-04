@@ -176,7 +176,9 @@ The canonical provider/surface matrix and default model order live in
 `backend/config/stt_provider_policy.py`. The deployment validator requires
 `STT_SERVICE_MODELS` and `STT_PRERECORDED_MODEL` to match that code-owned
 policy; an environment edit cannot re-enable a retired provider. The normal serving
-defaults are `modulate-velma-2,soniox,parakeet`. Deepgram is retired
+defaults are `modulate-velma-2,soniox`. The plain Parakeet slot is restored only
+with `STT_STREAMING_PARAKEET_SLOT_ENABLED=true`; `parakeet-window` is separate.
+Deepgram is retired
 (2026-08-27, no contract): it is absent from the provider policy, a `dg-*` slot
 in `STT_SERVICE_MODELS` logs a startup error and is skipped at selection, and
 the pre-recorded Deepgram client raises. Do not route to Deepgram or add keys.

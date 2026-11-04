@@ -1,5 +1,5 @@
 {
-  "description": "Glance board for user-facing feature health, grounded only in metric families that exist in production Prometheus. Top screen: how many outcomes meet 99%, each outcome with its hourly trend, then what is stuck and who stayed. Drill-down rows ship collapsed so the first paint stays inside the 30s monitor proxy budget; expand a row to load its graphs. Thresholds: green at 99%, red under 95%; daily recaps keep 98%/90%. Sync histograms reach Conversation shape only after backend-sync joins the Cloud Run exporter; that row uses Cloud Logging of omi_sync_intake meanwhile.",
+  "description": "Glance board for user-facing feature health. A 99% color is used only where the denominator is something that should have worked for the user and success means they got it. Pendant sockets, finalization-job success, blended gateway requests, and cloud push-to-talk are shown without that bar: those numbers are not 'the user got the result'. Drill-down rows ship collapsed so the first paint stays inside the 30s monitor proxy budget. Daily recaps are generation in the last 3 hours, not delivery, and ignore the time picker. Sync histograms reach Conversation shape only after backend-sync joins the Cloud Run exporter; that row uses Cloud Logging of omi_sync_intake meanwhile.",
   "graphTooltip": 1,
   "links": [
     {
@@ -26,7 +26,7 @@
       },
       "id": 1,
       "panels": [],
-      "title": "Feature health — did the user get an outcome?",
+      "title": "Feature health — user result where we can measure it",
       "type": "row"
     },
     {
@@ -34,7 +34,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Share of accepted pendant listen sockets that delivered at least one valid audio frame, over the selected range. This counts sockets, not users or recordings: a reconnect that never streams counts the same as a user who lost audio, so it sits well below the 99% bar even when capture is healthy, and it cannot separate those two cases. First-audio observations / accepted sessions over the selected range. Audio arrival health, not transcript production; window boundaries can differ. Offline pendant capture arrives through the WAL/sync path, which never enters the finalization journey and whose service is not scraped by Prometheus, so this row covers live listen sessions only.",
+      "description": "Not a user outcome. Share of accepted pendant listen sockets that delivered at least one audio byte. The rest closed before any audio (reconnects). Same rate on iOS and Android. Do not chase 99% here. A user who was not sending audio did not fail to get a recording.",
       "fieldConfig": {
         "defaults": {
           "max": 100,
@@ -46,18 +46,6 @@
               {
                 "color": "text",
                 "value": null
-              },
-              {
-                "color": "red",
-                "value": 0
-              },
-              {
-                "color": "orange",
-                "value": 95
-              },
-              {
-                "color": "green",
-                "value": 99
               }
             ]
           },
@@ -95,7 +83,7 @@
           "instant": true
         }
       ],
-      "title": "Pendant sockets with audio",
+      "title": "Pendant sockets that sent audio",
       "type": "stat"
     },
     {
@@ -130,18 +118,6 @@
               {
                 "color": "text",
                 "value": null
-              },
-              {
-                "color": "red",
-                "value": 0
-              },
-              {
-                "color": "orange",
-                "value": 95
-              },
-              {
-                "color": "green",
-                "value": 99
               }
             ]
           },
@@ -171,7 +147,7 @@
           "expr": "(100 * (sum(increase(omi_listen_audio_outcome_total{transcription_source=\"omi\",outcome=\"first_audio\"}[$__interval])) or 0 * sum(increase(omi_listen_accepted_total{transcription_source=\"omi\"}[$__interval]))) / sum(increase(omi_listen_accepted_total{transcription_source=\"omi\"}[$__interval]))) >= 0",
           "refId": "A",
           "range": true,
-          "legendFormat": "Pendant sockets with audio"
+          "legendFormat": "Pendant sockets that sent audio"
         }
       ],
       "title": "",
@@ -190,7 +166,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Share of settled attempts that succeeded, over the dashboard's selected time range. Denominator is success+failure only: 'cancelled' is user-initiated and 'stale' means the outcome was never recorded, so neither belongs in a success rate. Deliberately has no clamp on the denominator: with no traffic this reads 'no traffic' rather than a red 0%, because absence and total failure are different states.",
+      "description": "Share of sockets that had audio and were not closed by a projection-queue wait or an application error. This is the live session dying while the user was capturing. It is not proof the recording was lost: an unacknowledged tail is closed 1011 on purpose so the client can replay it. Control-only sockets (no audio frames) are excluded. Empty means no audio-bearing closes.",
       "fieldConfig": {
         "defaults": {
           "max": 100,
@@ -246,12 +222,12 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "100 * (sum(rate(omi_journey_terminal_total{journey=\"pusher_session\",outcome=\"success\"}[$__range])) or 0 * sum(rate(omi_journey_terminal_total{journey=\"pusher_session\",outcome=~\"success|failure\"}[$__range]))) / sum(rate(omi_journey_terminal_total{journey=\"pusher_session\",outcome=~\"success|failure\"}[$__range]))",
+          "expr": "100 * (sum(increase(pusher_socket_closed_total{frames_seen=\"audio\",reason!~\"queue_wait_timeout|application_error\"}[$__range])) or 0 * sum(increase(pusher_socket_closed_total{frames_seen=\"audio\"}[$__range]))) / sum(increase(pusher_socket_closed_total{frames_seen=\"audio\"}[$__range]))",
           "instant": true,
           "refId": "A"
         }
       ],
-      "title": "Live session",
+      "title": "Live audio session kept",
       "type": "stat"
     },
     {
@@ -324,10 +300,10 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "(100 * (sum(increase(omi_journey_terminal_total{journey=\"pusher_session\",outcome=\"success\"}[$__interval])) or 0 * sum(increase(omi_journey_terminal_total{journey=\"pusher_session\",outcome=~\"success|failure\"}[$__interval]))) / sum(increase(omi_journey_terminal_total{journey=\"pusher_session\",outcome=~\"success|failure\"}[$__interval]))) >= 0",
+          "expr": "(100 * (sum(increase(pusher_socket_closed_total{frames_seen=\"audio\",reason!~\"queue_wait_timeout|application_error\"}[$__interval])) or 0 * sum(increase(pusher_socket_closed_total{frames_seen=\"audio\"}[$__interval]))) / sum(increase(pusher_socket_closed_total{frames_seen=\"audio\"}[$__interval]))) >= 0",
           "refId": "A",
           "range": true,
-          "legendFormat": "Live session"
+          "legendFormat": "Live audio session kept"
         }
       ],
       "title": "",
@@ -346,7 +322,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Success / (success + failure) over the selected range. Excludes cancelled and stale terminal events; stale includes deliberate discard, account-cutover and newer-lifecycle fences. This is not the success share of all captures. Read the Capture stale (3h) tile for the count and share for excluded events; those do not establish missing conversations. With no settled traffic the percentage is absent rather than a fabricated 0%.",
+      "description": "Not 'the user got the recording'. Success / (success + failure) of the finalization job. A failure dead-letters the job and still writes the conversation completed and visible; the summary may be missing and marked retryable. Do not add the dead-letter gauge to this rate: the same event increments both. Stale is fences and discards, not a lost recording. Pusher-metrics is the live job; cloud-run-application-metrics is sync. A seconds-scale median with a tens-of-minutes tail is a tail delay, not the typical case.",
       "fieldConfig": {
         "defaults": {
           "max": 100,
@@ -358,18 +334,6 @@
               {
                 "color": "text",
                 "value": null
-              },
-              {
-                "color": "red",
-                "value": 0
-              },
-              {
-                "color": "orange",
-                "value": 95
-              },
-              {
-                "color": "green",
-                "value": 99
               }
             ]
           },
@@ -407,7 +371,7 @@
           "refId": "A"
         }
       ],
-      "title": "Voice capture",
+      "title": "Finalization job succeeded",
       "type": "stat"
     },
     {
@@ -442,18 +406,6 @@
               {
                 "color": "text",
                 "value": null
-              },
-              {
-                "color": "red",
-                "value": 0
-              },
-              {
-                "color": "orange",
-                "value": 95
-              },
-              {
-                "color": "green",
-                "value": 99
               }
             ]
           },
@@ -483,7 +435,7 @@
           "expr": "(100 * (sum(increase(omi_journey_terminal_total{journey=\"capture_finalization\",outcome=\"success\"}[$__interval])) or 0 * sum(increase(omi_journey_terminal_total{journey=\"capture_finalization\",outcome=~\"success|failure\"}[$__interval]))) / sum(increase(omi_journey_terminal_total{journey=\"capture_finalization\",outcome=~\"success|failure\"}[$__interval]))) >= 0",
           "refId": "A",
           "range": true,
-          "legendFormat": "Voice capture"
+          "legendFormat": "Finalization job succeeded"
         }
       ],
       "title": "",
@@ -502,7 +454,7 @@
         "type": "stackdriver",
         "uid": "beuxmaq8oxhq8e"
       },
-      "description": "Share of current-day recap generations that succeeded in the last 3 hours: generated / (generated + failed). Failed excludes DailySummaryDeliveryError (the recap was generated; only the push failed) and includes per-user budget timeouts. Red under 90%. Reads 'no recaps due' when nobody needed a recap, which is different from every recap failing. The 2026-10-10 gateway outage read 0% here. Source: Cloud Logging metrics from notifications-job (daily_summary_generated / daily_summary_user_failed log lines) read through the Cloud Monitoring datasource, so this does not depend on the job's Prometheus sidecar.",
+      "description": "Not what the user received, and not the dashboard time range. Generated / (generated + failed) in the last 3 hours. Failed excludes DailySummaryDeliveryError: the recap was generated and the push did not land. A phone that never registered a token cannot be delivered to. Green at 98%, red under 90%. Reads 'no recaps due' when nobody needed a recap.",
       "fieldConfig": {
         "defaults": {
           "min": 0,
@@ -572,7 +524,7 @@
         }
       ],
       "timeFrom": "1h",
-      "title": "Daily recaps (3h)",
+      "title": "Recap generation (last 3h)",
       "type": "stat"
     },
     {
@@ -656,7 +608,7 @@
             "projectName": "based-hardware"
           },
           "range": true,
-          "legendFormat": "Daily recaps (3h)"
+          "legendFormat": "Recap generation (last 3h)"
         }
       ],
       "title": "",
@@ -674,7 +626,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Share of settled attempts that succeeded, over the dashboard's selected time range. Denominator is success+failure only: 'cancelled' is user-initiated and 'stale' means the outcome was never recorded, so neither belongs in a success rate. Deliberately has no clamp on the denominator: with no traffic this reads 'no traffic' rather than a red 0%, because absence and total failure are different states.",
+      "description": "User outcome: the server chat_response journey produced an answer. Success / (success + failure). This is not desktop or mobile chat transport. HTTP 4xx on desktop chat (upstream_rejected) is a rejected request, not a missed answer, and is not in this rate. First token on the gateway is a separate latency panel. No settled traffic reads 'no traffic', not 0%.",
       "fieldConfig": {
         "defaults": {
           "max": 100,
@@ -735,7 +687,7 @@
           "refId": "A"
         }
       ],
-      "title": "Chat",
+      "title": "Chat answer",
       "type": "stat"
     },
     {
@@ -811,7 +763,7 @@
           "expr": "(100 * (sum(increase(omi_journey_terminal_total{journey=\"chat_response\",outcome=\"success\"}[$__interval])) or 0 * sum(increase(omi_journey_terminal_total{journey=\"chat_response\",outcome=~\"success|failure\"}[$__interval]))) / sum(increase(omi_journey_terminal_total{journey=\"chat_response\",outcome=~\"success|failure\"}[$__interval]))) >= 0",
           "refId": "A",
           "range": true,
-          "legendFormat": "Chat"
+          "legendFormat": "Chat answer"
         }
       ],
       "title": "",
@@ -830,30 +782,18 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "All gateway requests over the dashboard's selected time range.",
+      "description": "Not a user outcome. All llm-gateway-metrics requests, volume-weighted. Embeddings and the chat model hide a bad model; read Gateway requests by model before calling this healthy. Restricted to job=llm-gateway-metrics so a heavy unfiltered query cannot time out and render as no traffic. A failed or empty query reads 'not measured', which is not zero traffic.",
       "fieldConfig": {
         "defaults": {
           "max": 100,
           "min": 0,
-          "noValue": "no traffic",
+          "noValue": "not measured",
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
                 "color": "text",
                 "value": null
-              },
-              {
-                "color": "red",
-                "value": 0
-              },
-              {
-                "color": "orange",
-                "value": 95
-              },
-              {
-                "color": "green",
-                "value": 99
               }
             ]
           },
@@ -886,12 +826,12 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "100 * (sum(rate(llm_gateway_requests_total{outcome=\"success\"}[$__range])) or 0 * sum(rate(llm_gateway_requests_total[$__range]))) / sum(rate(llm_gateway_requests_total[$__range]))",
+          "expr": "100 * (sum(rate(llm_gateway_requests_total{job=\"llm-gateway-metrics\",outcome=\"success\"}[$__range])) or 0 * sum(rate(llm_gateway_requests_total{job=\"llm-gateway-metrics\"}[$__range]))) / sum(rate(llm_gateway_requests_total{job=\"llm-gateway-metrics\"}[$__range]))",
           "instant": true,
           "refId": "A"
         }
       ],
-      "title": "AI gateway",
+      "title": "Gateway requests",
       "type": "stat"
     },
     {
@@ -926,18 +866,6 @@
               {
                 "color": "text",
                 "value": null
-              },
-              {
-                "color": "red",
-                "value": 0
-              },
-              {
-                "color": "orange",
-                "value": 95
-              },
-              {
-                "color": "green",
-                "value": 99
               }
             ]
           },
@@ -964,10 +892,10 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "(100 * (sum(increase(llm_gateway_requests_total{outcome=\"success\"}[$__interval])) or 0 * sum(increase(llm_gateway_requests_total[$__interval]))) / sum(increase(llm_gateway_requests_total[$__interval]))) >= 0",
+          "expr": "(100 * (sum(increase(llm_gateway_requests_total{job=\"llm-gateway-metrics\",outcome=\"success\"}[$__interval])) or 0 * sum(increase(llm_gateway_requests_total{job=\"llm-gateway-metrics\"}[$__interval]))) / sum(increase(llm_gateway_requests_total{job=\"llm-gateway-metrics\"}[$__interval]))) >= 0",
           "refId": "A",
           "range": true,
-          "legendFormat": "AI gateway"
+          "legendFormat": "Gateway requests"
         }
       ],
       "title": "",
@@ -986,7 +914,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Share of settled desktop PTT transport attempts that succeeded, over the selected range. Denominator is success+failure only, matching the journey stats above: 'cancelled' is user-initiated, 'degraded' reached the user via a fallback (shown in the outcomes panel), and 'unknown' recorded no verdict. Transport health only: this journey observes the PTT voice WebSocket (accepted on admission, success on nonempty transcript with a nonempty finalized answer). The on-device realtime-hub lane does not traverse this endpoint yet, and answer *quality* is not measured here — judged sweeps remain the only task-success signal.",
+      "description": "Not proof that push-to-talk works or is down. Settled cloud realtime_voice attempts only. The on-device realtime-hub lane does not hit this endpoint. Cancelled attempts are excluded. No settled success or failure reads 'no traffic', which means unobserved, not a product outage.",
       "fieldConfig": {
         "defaults": {
           "max": 100,
@@ -998,18 +926,6 @@
               {
                 "color": "text",
                 "value": null
-              },
-              {
-                "color": "red",
-                "value": 0
-              },
-              {
-                "color": "orange",
-                "value": 95
-              },
-              {
-                "color": "green",
-                "value": 99
               }
             ]
           },
@@ -1047,7 +963,7 @@
           "instant": true
         }
       ],
-      "title": "Push-to-talk",
+      "title": "Cloud PTT transport",
       "type": "stat"
     },
     {
@@ -1082,18 +998,6 @@
               {
                 "color": "text",
                 "value": null
-              },
-              {
-                "color": "red",
-                "value": 0
-              },
-              {
-                "color": "orange",
-                "value": 95
-              },
-              {
-                "color": "green",
-                "value": 99
               }
             ]
           },
@@ -1123,7 +1027,7 @@
           "expr": "(100 * (sum(increase(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"realtime_voice\",outcome=\"success\"}[$__interval])) or 0 * sum(increase(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"realtime_voice\",outcome=~\"success|failure\"}[$__interval]))) / sum(increase(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"realtime_voice\",outcome=~\"success|failure\"}[$__interval]))) >= 0",
           "refId": "A",
           "range": true,
-          "legendFormat": "Push-to-talk"
+          "legendFormat": "Cloud PTT transport"
         }
       ],
       "title": "",
@@ -1142,7 +1046,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Successful summary vector writes divided by successes plus errors; skipped rows are excluded. No traffic produces no percentage.",
+      "description": "Not 'the user found the conversation'. Successful summary-vector writes divided by successes plus errors. Skips (too short, stale, no structured summary, discarded) are excluded on purpose and are not failed searches. No attempted writes reads 'no traffic'.",
       "fieldConfig": {
         "defaults": {
           "max": 100,
@@ -1200,7 +1104,7 @@
           "range": false
         }
       ],
-      "title": "Search index",
+      "title": "Index write succeeded",
       "type": "stat"
     },
     {
@@ -1272,7 +1176,7 @@
           "refId": "A",
           "expr": "(100 * (sum(increase(omi_conversation_summary_vector_upserts_total{outcome=\"success\"}[$__interval])) or 0 * sum(increase(omi_conversation_summary_vector_upserts_total{outcome=~\"success|error\"}[$__interval]))) / sum(increase(omi_conversation_summary_vector_upserts_total{outcome=~\"success|error\"}[$__interval]))) >= 0",
           "range": true,
-          "legendFormat": "Search index"
+          "legendFormat": "Index write succeeded"
         }
       ],
       "title": "",
@@ -3870,6 +3774,116 @@
             }
           ],
           "title": "Rejections by class",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "description": "Failed requests per second by lane, largest ten. A lane that fails on low traffic barely shows here, so read this with the error rate panel. Reads a recording rule, so it lags about 5 minutes.",
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 12,
+                "lineWidth": 1,
+                "showPoints": "never",
+                "stacking": {
+                  "group": "A",
+                  "mode": "normal"
+                }
+              },
+              "unit": "ops"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 51
+          },
+          "id": 91,
+          "interval": "5m",
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "topk(10, sum by (lane_id) (lane_outcome:llm_gateway_requests:rate5m_offset5m{outcome=\"error\"}) > 0)",
+              "legendFormat": "{{lane_id}}",
+              "refId": "A"
+            }
+          ],
+          "title": "Gateway errors by lane",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "description": "Share of each lane's requests that failed, for lanes above about 1 request a minute, highest ten. Reads a recording rule, so it lags about 5 minutes.",
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 12,
+                "lineWidth": 1,
+                "showPoints": "never",
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                }
+              },
+              "unit": "percent"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 51
+          },
+          "id": 92,
+          "interval": "5m",
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "topk(10, 100 * sum by (lane_id) (lane_outcome:llm_gateway_requests:rate5m_offset5m{outcome=\"error\"}) / (sum by (lane_id) (lane_outcome:llm_gateway_requests:rate5m_offset5m) > 0.0167) > 0)",
+              "legendFormat": "{{lane_id}}",
+              "refId": "A"
+            }
+          ],
+          "title": "Gateway error rate by lane",
           "type": "timeseries"
         }
       ],

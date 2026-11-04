@@ -2,6 +2,7 @@
 
 import datetime
 import sys
+import types
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -121,6 +122,64 @@ def test_document_writes_counted_by_op_and_caller(client, transport):
     assert _by_caller('users/conversations', 'set', caller) == by_caller + 1
     # The probe observes and never skips: five Commit RPCs still ran.
     assert len(transport.requests) == 5
+
+
+def test_transaction_retry_helper_is_not_the_caller(client, transport, monkeypatch):
+    from google.cloud.firestore_v1.types import BeginTransactionResponse
+
+    from database.firestore_transaction_retry import run_with_transaction_contention_retry
+
+    monkeypatch.setattr(
+        FirestoreClient,
+        'begin_transaction',
+        lambda self, request=None, **kw: BeginTransactionResponse(transaction=b'tx'),
+    )
+    caller = f'{__name__}:test_transaction_retry_helper_is_not_the_caller'
+    before = _by_caller('users/memories', 'set', caller)
+    ref = client.collection('users').document('u1').collection('memories').document('m1')
+
+    @firestore.transactional
+    def operation(transaction):
+        transaction.set(ref, {'x': 1})
+
+    run_with_transaction_contention_retry(client.transaction, operation, operation_name='probe_test')
+    assert _by_caller('users/memories', 'set', caller) == before + 1
+
+
+def test_privacy_token_wrapper_preserves_writer_attribution(client, transport, monkeypatch):
+    from database.batch_privacy_write_fence import _wrap_commit
+
+    monkeypatch.setattr(FirestoreClient, 'commit', _wrap_commit(FirestoreClient.commit))
+    caller = f'{__name__}:test_privacy_token_wrapper_preserves_writer_attribution'
+    before = _by_caller('users/conversations', 'set', caller)
+    ref = client.collection('users').document('u1').collection('conversations').document('c1')
+
+    ref.set({'deleted': True})
+
+    assert _by_caller('users/conversations', 'set', caller) == before + 1
+    assert len(transport.requests) == 1
+    # The attribution check exercises a real augmented Commit, including its token.
+    assert len(transport.requests[0].writes) == 2
+
+
+def test_generic_write_helper_names_its_caller(client, transport):
+    # A helper registered as (module, function) plumbing is skipped like a plumbing module.
+    def _cas(ref):
+        ref.set({'x': 1})
+
+    # Same code, but its frame reports the helper's module as __name__.
+    helper = types.FunctionType(_cas.__code__, {'__name__': 'utils.enrichment.outbox'}, '_cas')
+
+    def _mutate(cas, ref):
+        cas(ref)
+
+    # The outbox adapter's _mutate sits in front of the CAS helper; both are skipped.
+    adapter = types.FunctionType(_mutate.__code__, {'__name__': 'database.outbox_firestore'}, '_mutate')
+    caller = f'{__name__}:test_generic_write_helper_names_its_caller'
+    before = _by_caller('users/memories', 'set', caller)
+    helper(client.collection('users').document('u1').collection('memories').document('m1'))
+    adapter(helper, client.collection('users').document('u1').collection('memories').document('m2'))
+    assert _by_caller('users/memories', 'set', caller) == before + 2
 
 
 def test_batch_counts_each_write_and_failed_commit_counts_nothing(client, transport):
@@ -249,3 +308,40 @@ def test_caller_cap_folds_new_labels_to_other(monkeypatch):
     assert probe._bound_caller('database.new_module:new_writer') == 'other'
     assert probe.FIRESTORE_WRITE_CALLER_LABEL_OVERFLOW._value.get() == overflow + 1
     assert probe._bound_caller('not a label') == 'other'
+
+
+@pytest.mark.parametrize('method', ['commit', 'batch_write'])
+def test_batch_privacy_fence_preserves_writer_attribution(client, transport, monkeypatch, method):
+    from database import batch_privacy_write_fence as fence
+
+    monkeypatch.setattr(FirestoreClient, 'commit', fence._wrap_commit(FirestoreClient.commit))
+    monkeypatch.setattr(FirestoreClient, 'batch_write', fence._wrap_bulk(FirestoreClient.batch_write))
+    caller = f'{__name__}:test_batch_privacy_fence_preserves_writer_attribution'
+    source_before = _by_caller('users/conversations', 'set', caller)
+    token_before = _by_caller('batch_pipeline_privacy', 'merge', caller)
+    if method == 'commit':
+        client.document('users/u1/conversations/c1').set({'record_lane_owner': 'batch_live_v1'})
+    else:
+        client._firestore_api.batch_write(
+            request={
+                'database': client._database_string,
+                'writes': [Write(update=Document(name=f'{ROOT}/users/u1/conversations/c1'))],
+            }
+        )
+    assert _by_caller('users/conversations', 'set', caller) == source_before + 1
+    assert _by_caller('batch_pipeline_privacy', 'merge', caller) == token_before + 1
+    assert len(transport.requests) == 1
+    assert len(transport.requests[0].writes) == 2
+
+
+@pytest.mark.parametrize(
+    'parts,expected',
+    [
+        (('users', 'u' * 28, 'deleted_conversations', 'private-conversation'), 'users/deleted_conversations'),
+        (('batch_pipeline_privacy', 'private-owner-token'), 'batch_pipeline_privacy'),
+        (('legal_holds', 'u' * 28), 'legal_holds'),
+        (('legal_hold_deletion_gates', 'u' * 28), 'legal_hold_deletion_gates'),
+    ],
+)
+def test_privacy_authority_labels_drop_document_identifiers(parts, expected):
+    assert probe.collection_pattern(parts) == expected

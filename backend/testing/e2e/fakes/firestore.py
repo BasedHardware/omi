@@ -333,6 +333,16 @@ def read_action_items(uid: str) -> list:
     return [d.to_dict() for d in docs]
 
 
+def clear_partition_routes():
+    """Reset all hermetic routing authorities, including orphan operation documents."""
+    db = get_mock_firestore()
+    collection = 'pinecone_partition_routes'
+    # Deleting only parent snapshots preserves operation descendants in Firestore.
+    # Reset the fake's data and existence indexes together, including missing parents.
+    db._data.pop(collection, None)
+    db._written_docs.difference_update({path for path in db._written_docs if path[0] == collection})
+
+
 def clear_user_data(uid: str):
     """Remove all data for a user from fake Firestore."""
     db = get_mock_firestore()

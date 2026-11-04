@@ -3,7 +3,15 @@
 from __future__ import annotations
 
 import json
+import os
+import subprocess
+import sys
 from pathlib import Path
+
+import pytest
+import yaml
+
+from testing.listen_pusher_stack import run as stack_runner
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 
@@ -11,6 +19,15 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 # output until the job ceiling. The hermetic gauntlets must keep Acquire
 # retries/timeouts on both update and install, plus a step-level timeout.
 _BOUNDED_APT_GET = 'sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=10 -o Acquire::https::Timeout=10'
+
+
+@pytest.mark.parametrize('value', ['0', '301', 'nan', 'inf'])
+def test_startup_budget_rejects_unbounded_or_invalid_values(monkeypatch, capsys, value):
+    monkeypatch.setattr(sys, 'argv', ['listen-pusher-stack', '--startup-timeout', value])
+    with pytest.raises(SystemExit) as error:
+        stack_runner.main()
+    assert error.value.code == 2
+    assert '--startup-timeout must be between 20 and 300 seconds' in capsys.readouterr().err
 
 
 def test_listen_pusher_stack_gauntlet_has_a_deterministic_hermetic_ci_job() -> None:
@@ -23,7 +40,7 @@ def test_listen_pusher_stack_gauntlet_has_a_deterministic_hermetic_ci_job() -> N
         0
     ]
 
-    assert 'timeout-minutes: 20' in job
+    assert 'timeout-minutes: 25' in job
     assert 'uses: actions/setup-python@v6' in job
     assert 'uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84' in job
     assert 'uv venv .venv' in job
@@ -126,7 +143,8 @@ def test_backend_hermetic_gate_is_always_reported_and_fails_closed() -> None:
     assert 'PR_BASE_REF: origin/${{ github.base_ref }}' in scope
     assert 'github.event.merge_group.base_sha' in scope
     assert 'timeout-minutes: 10' in scope
-    assert 'fetch-depth: 0' in scope
+    assert 'fetch-depth: 0' not in scope
+    assert 'git fetch --unshallow --filter=blob:none --no-tags' in scope
     assert 'filter: blob:none' in scope
     assert 'git diff --name-only "$base_sha"...HEAD' in scope
     assert "^(backend/|package\\.json$|package-lock\\.json$|\\.github/workflows/backend-hermetic-e2e\\.yml$)" in scope
@@ -134,7 +152,9 @@ def test_backend_hermetic_gate_is_always_reported_and_fails_closed() -> None:
     # #10945: fail closed on unresolvable scope base or a failed (partial-clone)
     # history fetch. The scope job must FAIL rather than silently emit
     # applies=false, which would skip the hermetic backend gate entirely.
-    run_block = scope.split('run: |', 1)[1]
+    run_block = scope.split('      - name: Decide whether hermetic backend coverage applies', 1)[1].split('run: |', 1)[
+        1
+    ]
     assert 'set -euo pipefail' in run_block
     assert 'if [[ -z "$base_sha" ]] || ! git cat-file -e "${base_sha}^{commit}"; then' in run_block
     assert 'Cannot resolve hermetic backend scope base' in run_block
@@ -222,3 +242,61 @@ def test_listen_pusher_stack_free_ports_are_strictly_distinct_and_bindable() -> 
     finally:
         for s in sockets:
             s.close()
+
+
+@pytest.mark.skipif(os.name == 'nt', reason='Unix shell scope-fetch integration fixture')
+@pytest.mark.parametrize('event', ['pull_request', 'push', 'merge_group'])
+@pytest.mark.parametrize('changed_path, applies', [('backend/probe.py', 'true'), ('docs/probe.md', 'false')])
+def test_targeted_scope_fetch_preserves_shallow_checkout_diff(tmp_path, event, changed_path, applies):
+    """Execute the workflow shell against a depth-one merge, without network."""
+
+    def git(cwd, *args):
+        return subprocess.check_output(['git', '-C', str(cwd), *args], text=True).strip()
+
+    source = tmp_path / 'source'
+    source.mkdir()
+    git(source, 'init', '-b', 'main')
+    identity = ('-c', 'user.name=Scope Test', '-c', 'user.email=scope@example.invalid')
+    git(source, *identity, 'commit', '--allow-empty', '-m', 'base')
+    base = git(source, 'rev-parse', 'HEAD')
+    git(source, 'checkout', '-b', 'pr-merge')
+    changed = source / changed_path
+    changed.parent.mkdir()
+    changed.write_text('probe\n')
+    git(source, 'add', '.')
+    git(source, *identity, 'commit', '-m', 'change')
+    # Model a PR merge ref whose first parent is main, as actions/checkout sees it.
+    git(source, 'checkout', '-b', 'merge', base)
+    git(source, *identity, 'merge', '--no-ff', 'pr-merge', '-m', 'merge')
+    checkout = tmp_path / 'checkout'
+    subprocess.run(
+        ['git', 'clone', '--no-local', '--depth=1', '--branch=merge', str(source), str(checkout)], check=True
+    )
+    assert git(checkout, 'rev-parse', '--is-shallow-repository') == 'true'
+    expected = git(source, 'diff', '--name-only', f'{base}...HEAD')
+    workflow = yaml.safe_load((_REPO_ROOT / '.github/workflows/backend-hermetic-e2e.yml').read_text())
+    steps = workflow['jobs']['scope']['steps']
+    fetch = next(step['run'] for step in steps if step['name'] == 'Fetch hermetic scope base history')
+    scope = next(step['run'] for step in steps if step.get('id') == 'scope')
+    output = tmp_path / 'output'
+    environment = os.environ | {
+        'EVENT_NAME': event,
+        'PR_BASE_REF': 'main',
+        'PUSH_BEFORE': base,
+        'MERGE_GROUP_BASE_SHA': base,
+        'FULL_CI': 'true',
+        'GITHUB_OUTPUT': str(output),
+    }
+    subprocess.run(['bash', '-e', '-c', fetch], cwd=checkout, env=environment, check=True, timeout=15)
+    result = subprocess.run(
+        ['bash', '-e', '-c', scope],
+        cwd=checkout,
+        env=environment | {'PR_BASE_REF': 'origin/main'},
+        text=True,
+        capture_output=True,
+        check=True,
+        timeout=15,
+    )
+    assert result.stdout.strip() == expected
+    assert f'applies={applies}' in output.read_text().splitlines()
+    assert not git(checkout, 'for-each-ref', '--format=%(refname)', 'refs/remotes/origin/pr-merge')

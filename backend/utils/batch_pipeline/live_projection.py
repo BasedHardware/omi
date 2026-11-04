@@ -4,6 +4,7 @@ from copy import deepcopy
 import math
 
 from utils.conversations.final_pass_remap import remap_final_record
+from utils.conversations.fragment_visibility import is_automatic_discard
 from utils.manual_speaker_assignments import (
     apply_manual_assignments,
     manual_assignment_decision,
@@ -20,7 +21,7 @@ def replace_record(current: dict, incoming: dict, span: dict) -> tuple[dict, lis
         raise SyncAssignmentConflict('record route owner changed', subtype=Reason.RECORD_ROUTE_OWNER_CHANGED)
     if current.get('deleted'):
         raise SyncAssignmentConflict('record target retired', subtype=Reason.RECORD_TARGET_RETIRED)
-    if current.get('discarded'):
+    if current.get('discarded') and not is_automatic_discard(current):
         # Recoverable: the user can restore a discarded record without a status change.
         raise SyncAssignmentConflict('record target discarded', subtype=Reason.RECORD_TARGET_DISCARDED)
     if current.get('status') != 'completed':
@@ -129,6 +130,12 @@ def replace_record(current: dict, incoming: dict, span: dict) -> tuple[dict, lis
         has_content=bool(segments),
         sync_live_target=True,
     )
+    if new and is_automatic_discard(current):
+        # The pipeline judged the provisional text, often empty before batch
+        # lands; enrichment reassesses the record with this text, as sync intake
+        # does for appended speech. A no-op pass keeps the verdict.
+        result['discarded'] = False
+        result['relevance_decision'] = None
     finish = incoming.get('finished_at')
     if finish is not None and (result.get('finished_at') is None or finish > result['finished_at']):
         result['finished_at'] = finish

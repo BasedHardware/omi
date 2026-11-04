@@ -1,0 +1,171 @@
+{
+  "_source": "Calibrated 2026-11-01 by the marginmeter prototype (margin-cal.json, billing days 2026-10-29 weekday and 2026-10-31 weekend). Ported as configured constants; re-derive when list prices or the calibration change.",
+  "asOf": "2026-11-01",
+  "crVcpuS": 1.8360657e-05,
+  "crGibS": 1.9840588e-06,
+  "crSpecs": {
+    "acceptinvitation": {
+      "vcpu": 1.0,
+      "gib": 0.25
+    },
+    "apps-js": {
+      "vcpu": 1.0,
+      "gib": 0.5
+    },
+    "backend": {
+      "vcpu": 2.0,
+      "gib": 8.0
+    },
+    "backend-integration": {
+      "vcpu": 2.0,
+      "gib": 2.0
+    },
+    "backend-sync": {
+      "vcpu": 2.0,
+      "gib": 6.0
+    },
+    "backend-sync-backfill": {
+      "vcpu": 2.0,
+      "gib": 4.0
+    },
+    "cleanupexpiredinvitations": {
+      "vcpu": 1.0,
+      "gib": 0.25
+    },
+    "declineinvitation": {
+      "vcpu": 1.0,
+      "gib": 0.25
+    },
+    "desktop-backend": {
+      "vcpu": 1.0,
+      "gib": 1.0
+    },
+    "distributor-dashboard": {
+      "vcpu": 1.0,
+      "gib": 0.5
+    },
+    "ext-firestore-typesense-conversations-indexonwrite": {
+      "vcpu": 0.1666,
+      "gib": 0.25
+    },
+    "frontend": {
+      "vcpu": 1.0,
+      "gib": 4.0
+    },
+    "getorgactionitems": {
+      "vcpu": 1.0,
+      "gib": 0.25
+    },
+    "getorgconversations": {
+      "vcpu": 1.0,
+      "gib": 0.25
+    },
+    "inviteuser": {
+      "vcpu": 1.0,
+      "gib": 0.25
+    },
+    "manageuser": {
+      "vcpu": 1.0,
+      "gib": 0.25
+    },
+    "modifyactionitem": {
+      "vcpu": 1.0,
+      "gib": 0.25
+    },
+    "omi": {
+      "vcpu": 1.0,
+      "gib": 0.5
+    },
+    "omi-admin-dashboard": {
+      "vcpu": 1.0,
+      "gib": 2.0
+    },
+    "omi-affiliate-dashboard": {
+      "vcpu": 1.0,
+      "gib": 0.5
+    },
+    "omi-carrier-service": {
+      "vcpu": 1.0,
+      "gib": 0.5
+    },
+    "omi-enterprise": {
+      "vcpu": 1.0,
+      "gib": 2.0
+    },
+    "omi-enterprise-backend": {
+      "vcpu": 1.0,
+      "gib": 0.5
+    },
+    "omi-grafana": {
+      "vcpu": 1.0,
+      "gib": 1.0
+    },
+    "omi-jp-subscribe": {
+      "vcpu": 1.0,
+      "gib": 0.5
+    },
+    "omi-web": {
+      "vcpu": 1.0,
+      "gib": 0.5
+    },
+    "omi-web-app": {
+      "vcpu": 1.0,
+      "gib": 0.5
+    },
+    "plugins": {
+      "vcpu": 1.0,
+      "gib": 1.0
+    },
+    "searchorgconversations": {
+      "vcpu": 1.0,
+      "gib": 0.25
+    }
+  },
+  "crDefaultSpec": {
+    "vcpu": 1.0,
+    "gib": 0.5
+  },
+  "fsReadReq": 8.40218e-07,
+  "fsWriteReq": 1.891969e-06,
+  "fsReadMethods": [
+    "BatchGetDocuments",
+    "GetDocument",
+    "ListCollectionIds",
+    "ListDocuments",
+    "RunAggregationQuery",
+    "RunQuery"
+  ],
+  "fsWriteMethods": [
+    "Commit",
+    "CreateDocument",
+    "DeleteDocument",
+    "UpdateDocument"
+  ],
+  "gcsA": 9e-06,
+  "gcsB": 3.6e-07,
+  "gcsAMethods": [
+    "ListObjects",
+    "WriteObject",
+    "ComposeObject",
+    "CloneObject",
+    "CreateBucket",
+    "ListBuckets",
+    "CreateObject",
+    "CopyObject"
+  ],
+  "logPerByte": 4e-10,
+  "gkePoolsDay": {
+    "weekday": 394.706047,
+    "weekend": 343.85159699999997
+  },
+  "carryDay": {
+    "weekday": 639.88,
+    "weekend": 467.28
+  },
+  "vertexReservedDay": 290.32,
+  "vertexPaygoDay": 21.16,
+  "crRequestBilled": [
+    "backend-sync-backfill"
+  ],
+  "_crBillingNote": "crRequestBilled: services the backend runbook (sync-cloudrun-rightsizing.md) names as request-based CPU billing. Their request metrics are not metered here, so they are priced at the instance-rate estimate and flagged estimated. Services not in crSpecs are estimated too."
+}

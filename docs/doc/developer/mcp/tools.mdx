@@ -20,7 +20,7 @@ backend/utils/mcp_server/registry.py. Edit the script or the registry, not this 
 | `edit_memory` | Edit a memory's content. | `memories.write` |
 | `get_conversations` | First choice for recency questions such as today, yesterday, or last week: pass start_date and end_date. Returns small conversation cards only. Deep-read only a few relevant ids with get_conversation_by_id. | `conversations.read` |
 | `get_conversation_by_id` | Deep-read one conversation card and a bounded transcript. Use only for a few ids selected from get_conversations or search_conversations; the response reports truncated=true when clipped. Transcript offsets are nonnegative: text before the conversation origin is clamped at zero; a zero-duration interval is unplaced text, not a playback window. | `conversations.read` |
-| `get_conversations_by_ids` | Deep-read up to 20 conversations in one call — the preferred follow-up after get_conversations or search_conversations returns several relevant ids. Each item returns the same bounded card and transcript as get_conversation_by_id with its own truncated flag; ids that resolve to nothing are listed in not_found. When the response budget is hit, later items are listed in omitted_ids/next_ids with next_cursor. Budgets shrink evenly before omissions. Items also expose the flat list card alongside the released nested conversation. | `conversations.read` |
+| `get_conversations_by_ids` | Deep-read up to 20 conversations in one call — the preferred follow-up after get_conversations or search_conversations returns several relevant ids. Each item returns the same bounded card and transcript as get_conversation_by_id with its own truncated flag; ids that resolve to nothing are listed in not_found. When the response budget is hit, later items are listed in omitted_ids/next_ids with next_cursor. Per-item limits are never reduced to fit a batch. Each successful item has id and one nested conversation; locked items return id and an error. The serialized response cap is 120000 characters; use include_participants=false for lean reads. | `conversations.read` |
 | `search_memories` | Semantic search across durable facts known about the user. This is not for recent conversations; use search_conversations with start_date and end_date for a topic inside a time window. | `memories.read` |
 | `search_conversations` | Search for a topic inside the user's conversations, preferably with start_date and end_date. Returns small cards plus short match snippets; deep-read only a few relevant ids with get_conversation_by_id. Empty results do not establish absence: use date-window listing for unindexed content. | `conversations.read` |
 | `search_x_posts` | Semantic search across the user's imported X (Twitter) posts — their actual tweets and bookmarks, not just extracted memories. Returns posts ranked by relevance to the query. | `memories.read` |
@@ -218,12 +218,16 @@ in the first two sections below; the additional tools are hosted-server tools.
     | `conversation_ids` | array | Yes | 1–20 conversation IDs (duplicates fetched once) |
     | `max_segments` | number | No | Max transcript segments per conversation (same bounds as `get_conversation_by_id`) |
     | `max_chars` | number | No | Max transcript characters per conversation (same bounds) |
+    | `include_participants` | boolean | No | Include roster metadata (default true); false retains speaker keys on segments |
+    | `cursor` | string | No | Continue with the same IDs and filters |
 
     **Returns:** `{ "conversations": [...], "not_found": [...], "truncated": false }`. Each item carries the same bounded card and transcript as
     `get_conversation_by_id` with its own `truncated` flag; ids that resolve to
     nothing are listed in `not_found`. When the response budget is hit, later
-    items are omitted and top-level `truncated` is `true`. Retry them with
-    smaller `max_segments`/`max_chars`.
+    items appear in `omitted_ids`/`next_ids` with `next_cursor`, and top-level
+    `truncated` is `true`. Each item has `id` and one nested `conversation`.
+    Continue with the cursor; per-item transcript limits are preserved. A single
+    detail above the serialized cap returns an error with smaller-request guidance.
   </Accordion>
 </AccordionGroup>
 

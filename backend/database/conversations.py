@@ -1,6 +1,9 @@
+from utils.conversations import phase_shadow
+
 from database import conversation_visibility_counts, processing_backlog, speaker_auto_enroll, capture_group_notes
 from database import conversation_recorded_time
 from utils.conversations import summary_delivery, lifecycle_clocks
+from utils.observability.delivery import summary_terminal_outcome
 from utils.sync import processing_hold, bridge_pending
 from config.refactor_modes import serving_for, shadow_or_serve
 import copy
@@ -20,7 +23,8 @@ from google.api_core.exceptions import AlreadyExists, Conflict, FailedPreconditi
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 import utils.other.hume as hume
-from models.audio_file import AudioFile, ChunkSpan
+from models.audio_file import AudioFile
+from database.audio_file_projection import finalize_audio_file_group as _finalize_audio_file_group
 from models.note_claims import claim_references_segment
 from models.client_processing import PROJECTION_FAMILY_FIELDS
 from models.conversation_enums import ConversationStatus, PostProcessingModel, PostProcessingStatus
@@ -31,6 +35,7 @@ from utils import encryption
 from utils.conversation_page_cursor import BookmarkDict, decode_cursor, encode_cursor, query_scope
 from config.firestore_read_levers import lever_enabled
 from utils.conversations.fragment_visibility import is_completed_rule_discard, is_user_curated
+from utils.conversations.fragment_visibility import SETTLING_FIELDS, is_settling_fragment
 from utils.conversations.transcript_hash import (
     canonicalize_transcript_segments_for_storage,
     transcript_sha256_for_binding,
@@ -49,6 +54,7 @@ from utils.manual_speaker_assignments import (
     normalize_rejection,
     remap_absorbed_receipt,
 )
+from utils.conversations.home_titles import apply_user_title, project_home
 from database.mcp_read_queries import MCP_CONVERSATION_CARD_FIELD_PATHS, MCP_CONVERSATION_TRANSCRIPT_FIELD_PATHS
 from database.quiet_check_retirement import restore_quiet_check_in_transaction, stop_quiet_check_for_conversation
 from ._client import db, delete_collection_recursive, get_firestore_client, run_transactional
@@ -90,7 +96,7 @@ from config.transcription_final_pass import authoritative_for
 import config.speaker_match_scores as match_scores
 import config.owner_recognition_diagnostics as owner_diagnostics
 import utils.firestore_document_size as document_size
-from utils.other.playback_identity import source_fingerprint, retain_aliases
+from utils.other.playback_identity import retain_aliases
 from utils.other.storage import list_audio_chunks
 from utils.observability.fallback import record_fallback
 from config.translation import resolve_ondemand_config
@@ -126,7 +132,7 @@ def get_conversation_ids(uid: str) -> List[str]:
 # *********************************
 
 
-def _decrypt_conversation_data(conversation_data: Dict[str, Any], uid: str) -> Dict[str, Any]:
+def _decrypt_conversation_data(conversation_data: Dict[str, Any], uid: str, *, firestore_client=None) -> Dict[str, Any]:
     data = copy.deepcopy(conversation_data)
     _reveal_match_scores_for_read(data, uid)
 
@@ -142,6 +148,9 @@ def _decrypt_conversation_data(conversation_data: Dict[str, Any], uid: str) -> D
             require_decryption=True,
         )
         _reveal_manual_speaker_assignments_for_read(data, uid)
+        from database.recurring_voice_privacy import filter_segments
+
+        filter_segments(uid, data['transcript_segments'], firestore_client=firestore_client)
         return data
 
     if isinstance(data['transcript_segments'], str):
@@ -172,6 +181,9 @@ def _decrypt_conversation_data(conversation_data: Dict[str, Any], uid: str) -> D
         from utils.conversations.speaker_grouping_storage import reveal_segments
 
         reveal_segments(segments, uid)
+        from database.recurring_voice_privacy import filter_segments
+
+        filter_segments(uid, segments, firestore_client=firestore_client)
     _reveal_manual_speaker_assignments_for_read(data, uid)
     return data
 
@@ -435,12 +447,12 @@ def _decode_transcript_segments_strict(
 ) -> List[Any]:
     from utils.conversations.speaker_grouping_storage import reveal_segments
 
-    segments = _decode_transcript_segments_blob(uid, raw_segments, compressed, require_decryption=require_decryption)
+    segments = decode_transcript_segments_blob(uid, raw_segments, compressed, require_decryption=require_decryption)
     reveal_segments(segments, uid)
     return segments
 
 
-def _decode_transcript_segments_blob(
+def decode_transcript_segments_blob(
     uid: str, raw_segments: Any, compressed: bool, *, require_decryption: bool = False
 ) -> List[Any]:
     """Decode a stored ``transcript_segments`` blob, raising when it cannot be read.
@@ -660,23 +672,15 @@ def prepare_conversation_for_read(
     _reveal_user_corrections_for_read(data, uid)
     if is_completed_rule_discard(data):
         data['discarded'] = True
-    # User titles are durable overrides. Conversation processing owns the
-    # generated title, but must never erase an explicit user edit.
-    user_title = effective_user_title(data.get('user_title'))
-    if user_title is not None:
-        structured = data.get('structured')
-        if not isinstance(structured, dict):
-            structured = {}
-            data['structured'] = structured
-        structured['title'] = user_title
+    apply_user_title(data, effective_user_title(data.get('user_title')))
     level = data.get('data_protection_level')
 
     if level == 'enhanced':
-        from utils.agent_capabilities.transcripts import project
-
-        return project(
+        return project_home(
             uid,
-            conversation_recorded_time.hydrate(_decrypt_conversation_data(data, uid)),
+            conversation_recorded_time.hydrate(
+                _decrypt_conversation_data(data, uid, firestore_client=firestore_client)
+            ),
             firestore_client=firestore_client,
             read_budget=read_budget,
         )
@@ -695,11 +699,13 @@ def prepare_conversation_for_read(
         from utils.conversations.speaker_grouping_storage import reveal_segments
 
         reveal_segments(segments, uid)
+        from database.recurring_voice_privacy import filter_segments
+
+        filter_segments(uid, segments, firestore_client=firestore_client)
     _reveal_manual_speaker_assignments_for_read(data, uid)
     _reveal_match_scores_for_read(data, uid)
-    from utils.agent_capabilities.transcripts import project
 
-    return project(
+    return project_home(
         uid, conversation_recorded_time.hydrate(data), firestore_client=firestore_client, read_budget=read_budget
     )
 
@@ -872,6 +878,7 @@ def is_soft_deleted(conversation: Optional[Mapping[str, Any]]) -> bool:
     return bool(conversation) and bool(conversation.get('deleted'))
 
 
+@phase_shadow.compare('home_visibility')
 def is_visible_conversation(conversation: Optional[Mapping[str, Any]], *, include_discarded: bool = False) -> bool:
     """Whether a stored conversation may be put in front of a user or downstream job."""
     if not conversation or is_soft_deleted(conversation):
@@ -882,6 +889,7 @@ def is_visible_conversation(conversation: Optional[Mapping[str, Any]], *, includ
         if (
             conversation.get('dream_duplicate_of')
             or bridge_pending.hidden(conversation)
+            or is_settling_fragment(conversation)
             or conversation.get('discarded')
             or is_completed_rule_discard(conversation)
         ):
@@ -1107,6 +1115,8 @@ def _drop_summary_memo(uid: str) -> None:
 @prepare_for_write(data_arg_name='conversation_data', prepare_func=_prepare_conversation_for_write)
 @after_write('conversations')
 def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
+    from database.recurring_voice_privacy import filter_processing_write
+
     # `updated_at` is Firestore document metadata exposed by reads, never an
     # application-owned field to replay into a later write.
     conversation_data.pop('updated_at', None)
@@ -1118,12 +1128,14 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_data['id'])
     summary_receipt = None
+    delivery_outcome = None
     summary_changed = False
 
     @firestore.transactional
     def _write_processing_result(transaction):
-        nonlocal summary_receipt, summary_changed
+        nonlocal summary_receipt, summary_changed, delivery_outcome
         summary_receipt = None
+        delivery_outcome = None
         summary_changed = False
         write_data = copy.deepcopy(conversation_data)
         write_data.pop('record_audio_partial', None)
@@ -1184,9 +1196,11 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
                 write_data.setdefault('structured', {})['overview'] = existing['user_overview']
 
             _reapply_current_manual_assignments(uid, write_data, existing)
+            filter_processing_write(transaction, user_ref, write_data)
             guard_match_score_size(write_data, existing, getattr(conversation_ref, 'path', None))
 
             summary_receipt = summary_delivery.merge_result(existing, write_data, uid)
+            delivery_outcome = summary_terminal_outcome(existing, write_data)
             summary_changed = processing_backlog.stage_transition(
                 transaction, uid, conversation_data['id'], existing, write_data, firestore_client=db
             )
@@ -1194,8 +1208,10 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
             return
 
         write_data.setdefault('has_photos', False)
+        filter_processing_write(transaction, user_ref, write_data)
 
         summary_receipt = summary_delivery.creation_result(write_data, uid)
+        delivery_outcome = summary_terminal_outcome({}, write_data)
         summary_changed = processing_backlog.stage_transition(
             transaction, uid, conversation_data['id'], {}, write_data, firestore_client=db
         )
@@ -1203,10 +1219,7 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
 
     run_transactional(db, _write_processing_result)
     stop_quiet_check_for_conversation(uid, conversation_data['id'], firestore_client=db)
-    if summary_changed:
-        _drop_summary_memo(uid)
-
-    summary_delivery.emit(summary_receipt)
+    summary_delivery.emit_result(uid, summary_changed, summary_receipt, delivery_outcome, _drop_summary_memo)
     invalidate_people_stats_cache(uid)
     _sync_conversation_search_index(uid, conversation_data['id'])
 
@@ -1237,6 +1250,8 @@ def persist_processing_result_with_lifecycle(
     existing row onto ``completed``. It must not raise; the persist outcome is
     independent of observers.
     """
+    from database.recurring_voice_privacy import filter_processing_write
+
     conversation_data.pop('updated_at', None)
     if 'audio_base64_url' in conversation_data:
         del conversation_data['audio_base64_url']
@@ -1249,14 +1264,16 @@ def persist_processing_result_with_lifecycle(
     stale_sync_revision = False
     first_completed = False
     summary_receipt = None
+    delivery_outcome = None
     summary_changed = False
     notes_refresh_state_write = None
 
     @firestore.transactional
     def _persist(transaction) -> bool:
-        nonlocal stale_sync_revision, first_completed, summary_receipt, summary_changed, notes_refresh_state_write
+        nonlocal stale_sync_revision, first_completed, summary_receipt, summary_changed, notes_refresh_state_write, delivery_outcome
         summary_changed = False
         summary_receipt = None
+        delivery_outcome = None
         stale_sync_revision = False
         first_completed = False
         notes_refresh_state_write = None
@@ -1409,9 +1426,11 @@ def persist_processing_result_with_lifecycle(
             write_data.setdefault('structured', {})['overview'] = existing['user_overview']
 
         _reapply_current_manual_assignments(uid, write_data, existing)
+        filter_processing_write(transaction, user_ref, write_data)
         guard_match_score_size(write_data, existing, getattr(conversation_ref, 'path', None))
 
         summary_receipt = summary_delivery.merge_result(existing, write_data, uid)
+        delivery_outcome = summary_terminal_outcome(existing, write_data)
         summary_changed = processing_backlog.stage_transition(
             transaction, uid, conversation_data['id'], existing, write_data, firestore_client=db
         )
@@ -1429,11 +1448,7 @@ def persist_processing_result_with_lifecycle(
 
     persisted = run_transactional(db, _persist)
     stop_quiet_check_for_conversation(uid, conversation_data['id'], firestore_client=db)
-    if summary_changed:
-        _drop_summary_memo(uid)
-    if persisted:
-
-        summary_delivery.emit(summary_receipt)
+    summary_delivery.emit_result(uid, summary_changed, summary_receipt, delivery_outcome, _drop_summary_memo, persisted)
     if persisted:
         invalidate_people_stats_cache(uid)
     if persisted or stale_sync_revision:
@@ -1470,13 +1485,12 @@ def create_conversation_if_absent_with_lifecycle(uid: str, conversation_data: di
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_data['id'])
 
     summary_receipt = summary_delivery.creation_result(conversation_data, uid)
+    delivery_outcome = summary_terminal_outcome({}, conversation_data)
     created, summary_changed = conversation_recorded_time.create_if_absent(uid, conversation_data, firestore_client=db)
     if not created:
         _sync_conversation_search_index(uid, conversation_data['id'])
         return False
-    if summary_changed:
-        _drop_summary_memo(uid)
-    summary_delivery.emit(summary_receipt)
+    summary_delivery.emit_result(uid, summary_changed, summary_receipt, delivery_outcome, _drop_summary_memo)
     invalidate_people_stats_cache(uid)
     _sync_conversation_search_index(uid, conversation_data['id'])
     return True
@@ -1954,6 +1968,9 @@ def get_conversations_without_photos(
                 'sync_relevance_user_kept',
                 'has_photos',
                 'folder_user_set',
+                'episode_id',
+                'finalization_status',
+                *SETTLING_FIELDS,
             }
         )
         conversations_ref = conversations_ref.select(sorted(fields))
@@ -1990,7 +2007,7 @@ def get_conversations_without_photos(
     # Sort
     conversations_ref = conversations_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
 
-    return _collect_visible_conversation_page(
+    rows = _collect_visible_conversation_page(
         conversations_ref,
         limit=limit,
         offset=offset,
@@ -2009,6 +2026,8 @@ def get_conversations_without_photos(
             starred=starred,
         ),
     )
+
+    return rows
 
 
 @prepare_for_read(decrypt_func=prepare_conversation_for_read)
@@ -2085,9 +2104,22 @@ def mark_playback_deferred(uid: str, conversation_id: str, epoch: str) -> bool:
     return True
 
 
+class AudioFilesChanged(RuntimeError):
+    """A concurrent projection writer invalidated the pusher's cached inventory."""
+
+
+def audio_files_revision(files: list[dict]) -> list[tuple]:
+    return [(af.get('id'), af.get('source_fingerprint')) for af in files]
+
+
 @after_write('conversations')
 def update_conversation(
-    uid: str, conversation_id: str, update_data: dict, *, record_owner_out: dict | None = None
+    uid: str,
+    conversation_id: str,
+    update_data: dict,
+    *,
+    record_owner_out: dict | None = None,
+    expected_audio_files: list[dict] | None = None,
 ) -> bool:
     """Apply ``update_data`` to a conversation.
 
@@ -2106,6 +2138,11 @@ def update_conversation(
     if not doc_snapshot.exists:
         return False
 
+    if expected_audio_files is not None and audio_files_revision(
+        doc_snapshot.to_dict().get('audio_files') or []
+    ) != audio_files_revision(expected_audio_files):
+        raise AudioFilesChanged('audio projection changed')
+
     if record_owner_out is not None:
         owner = doc_snapshot.to_dict().get('record_lane_owner')
         if owner in {'batch_live_v1', 'batch_sync_v1'}:
@@ -2119,7 +2156,17 @@ def update_conversation(
     prepared_data = _prepare_conversation_for_write(update_data, uid, doc_level)
     guard_match_score_size(prepared_data, doc_snapshot.to_dict(), getattr(doc_ref, 'path', None))
     try:
-        doc_ref.update(prepared_data)
+        if expected_audio_files is None:
+            doc_ref.update(prepared_data)
+        else:
+            # Also fence a writer arriving after the read, including label edits.
+            doc_ref.update(
+                prepared_data, option=get_firestore_client().write_option(last_update_time=doc_snapshot.update_time)
+            )
+    except FailedPrecondition as exc:
+        if expected_audio_files is not None:
+            raise AudioFilesChanged('audio projection changed during update') from exc
+        raise
     except NotFound:
         # The conversation was deleted between the existence read above and
         # this commit. The contract of this function is to report a gone owner
@@ -2206,6 +2253,8 @@ def try_claim_conversation_memory_analytics(uid: str, conversation_id: str, fire
 def create_audio_files_from_chunks(
     uid: str,
     conversation_id: str,
+    *,
+    listed_chunks: Optional[List[dict]] = None,
 ) -> List[AudioFile]:
     """
     Create audio file records by merging chunks from a conversation.
@@ -2219,7 +2268,7 @@ def create_audio_files_from_chunks(
         List of AudioFile objects
     """
     # Get all chunks for this conversation
-    chunks = list_audio_chunks(uid, conversation_id, source_identity=True)
+    chunks = list_audio_chunks(uid, conversation_id, source_identity=True) if listed_chunks is None else listed_chunks
     if not chunks:
         return []
 
@@ -2232,100 +2281,6 @@ def create_audio_files_from_chunks(
             audio_files.append(audio_file)
 
     return audio_files
-
-
-def _finalize_audio_file_group(
-    uid: str, conversation_id: str, chunk_group: List[dict], existing_files: List[AudioFile]
-) -> Optional[AudioFile]:
-    """
-    Create an AudioFile record that references chunks (no merging).
-
-    Args:
-        uid: User ID
-        conversation_id: Conversation ID
-        chunk_group: List of chunk dicts to reference
-        existing_files: List of existing audio files
-
-    Returns:
-        AudioFile object or None if failed
-    """
-    if not chunk_group:
-        return None
-
-    # Generate file ID
-    source_hash = source_fingerprint(chunk_group)
-    file_id = (
-        str(uuid.uuid5(uuid.NAMESPACE_OID, f'{uid}/{conversation_id}/{source_hash}'))
-        if source_hash
-        else str(uuid.uuid4())
-    )
-
-    # Extract timestamps
-    timestamps = [chunk['timestamp'] for chunk in chunk_group]
-
-    # v2 groups carry validated contiguous coverage spans from blob metadata;
-    # duration is the authoritative span extent, never an encoded-size guess.
-    spans: List[Tuple[float, float]] = []
-    playback_starts: List[float] = []
-    for chunk in chunk_group:
-        span = chunk.get('span')
-        if not isinstance(span, dict):
-            spans = []
-            break
-        try:
-            start = float(span['start'])
-            samples = float(span['samples'])
-            rate = float(span['sample_rate'])
-        except (KeyError, TypeError, ValueError):
-            spans = []
-            break
-        if samples <= 0 or rate <= 0:
-            spans = []
-            break
-        spans.append((start, start + samples / rate))
-        playback_start = span.get('playback_start')
-        if isinstance(playback_start, (int, float)):
-            playback_starts.append(float(playback_start))
-
-    if spans:
-        started_at = datetime.fromtimestamp(spans[0][0], tz=timezone.utc)
-        duration = spans[-1][1] - spans[0][0]
-        return AudioFile(
-            id=file_id,
-            source_fingerprint=source_hash,
-            uid=uid,
-            conversation_id=conversation_id,
-            chunk_timestamps=timestamps,
-            provider='gcp',
-            started_at=started_at,
-            duration=duration,
-            chunk_spans=[ChunkSpan(start=round(start, 3), end=round(end, 3)) for start, end in spans],
-            # The normalized wall basis holds only when every chunk in the
-            # group carries its persisted playback start; one legacy chunk
-            # leaves the part on the raw capture clock.
-            playback_start=(min(playback_starts) if len(playback_starts) == len(spans) else None),
-        )
-
-    # Calculate started_at and duration from timestamps and blob sizes
-    started_at = datetime.fromtimestamp(chunk_group[0]['timestamp'], tz=timezone.utc)
-    last_chunk_start = datetime.fromtimestamp(chunk_group[-1]['timestamp'], tz=timezone.utc)
-    # Estimate last chunk duration from blob size (PCM16 mono at 16kHz = 32000 bytes/sec).
-    # Approximate for opus-encoded blobs; conversation_audio.captured_duration (from
-    # decoded PCM) is the display source of truth.
-    last_chunk_size = chunk_group[-1].get('size') or 0
-    last_chunk_duration = last_chunk_size / 32000.0 if last_chunk_size > 0 else 5.0
-    duration = (last_chunk_start - started_at).total_seconds() + last_chunk_duration
-
-    return AudioFile(
-        id=file_id,
-        source_fingerprint=source_hash,
-        uid=uid,
-        conversation_id=conversation_id,
-        chunk_timestamps=timestamps,
-        provider='gcp',
-        started_at=started_at,
-        duration=duration,
-    )
 
 
 @after_write('conversations')
@@ -3541,7 +3496,7 @@ def assign_conversation_speaker(
             current.pop(field, None)
         return current, resolved, removed, relabeled
 
-    result = run_assignment_transaction(client, assign)
+    result = run_assignment_transaction(client, assign, uid=uid)
     invalidate_people_stats_cache(uid)
     current, resolved, _, before = result
     if any(s.get('speaker_grouping_shadow') for s in current.get('transcript_segments') or []):
@@ -3571,6 +3526,9 @@ def assign_conversation_speaker(
         _reveal_match_scores_for_read(current, uid)
     except Exception:
         _drop_match_scores(current, 'malformed_doc')
+    from database.recurring_voice_privacy import filter_segments
+
+    filter_segments(uid, current.get('transcript_segments') or [], firestore_client=client)
     return result
 
 

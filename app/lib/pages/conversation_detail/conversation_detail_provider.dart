@@ -13,7 +13,6 @@ import 'package:omi/backend/http/api/conversations.dart'
 import 'package:omi/backend/http/api/conversations.dart' as conv_api
     show unlinkCalendarEvent, autoLinkCalendarEvent, linkCalendarEvent;
 import 'package:omi/backend/http/api/speaker_labels.dart';
-import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
@@ -1393,7 +1392,8 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   String? get preferredSummarizationAppId => _preferredSummarizationAppId;
 
   Future<bool> setPreferredSummarizationApp(String appId) async {
-    if (!await setPreferredSummarizationAppServer(appId)) return false;
+    if (!await preferredSummaryAppWrite(appId)) return false;
+    rememberDefaultSummaryTemplateAppId(appId);
     _preferredSummarizationAppId = appId;
     SharedPreferencesUtil().preferredSummarizationAppId = appId;
     notifyListeners();

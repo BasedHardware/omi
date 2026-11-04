@@ -15,12 +15,29 @@ gateway:
 # Replace the inherited embedding affinity entirely. Both label and taint
 # isolate batch capacity from existing embedding and other GPU workloads.
 affinity: null
-# No cloud.google.com/gke-nodepool pin: diarizer-batch-pool and its Spot
-# sibling share the service/env labels and omi.ai taints, so the autoscaler
-# can place replicas on Spot first while the on-demand pool stays the fallback.
+# No cloud.google.com/gke-nodepool pin: every diarizer-batch pool carries the
+# service/env labels and omi.ai taint, so a pool can be replaced by label
+# (2026-11-01: n1-standard-8 diarizer-batch-pool -> n1-standard-4
+# diarizer-batch-pool-v2) and both pools serve while the old one drains.
 nodeSelector:
   service: diarizer-batch
   env: prod
+# Fit the smallest pool, n1-standard-4 + T4: measured allocatable 3.92 CPU /
+# 11.96Gi, of which DaemonSets request 0.51 CPU / 1.04Gi, leaving 3.41 / 10.9Gi.
+# The inherited 12Gi memory limit exceeds that; 10Gi keeps a runaway pod an
+# in-container OOM instead of node memory pressure. Worst pod over 7d: 1.96Gi.
+resources:
+  limits:
+    memory: 10Gi
+# Surge instead of the live diarizer's maxSurge 0: at the one-pod floor,
+# maxUnavailable 1 takes the batch route to zero pods for a GPU node scale-up
+# plus model load on every rollout or pool move. Surge costs one extra T4 node
+# for the length of the rollout.
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 0
+    maxSurge: 1
 tolerations:
   - key: omi.ai/diarizer-batch
     operator: Equal
@@ -45,7 +62,20 @@ autoscaling:
   minReplicas: 1
   maxReplicas: 18
   requestLatencyP99: null
-  queueDepthAverageValue: 1
+  # 2026-11-01 (marginfleet): raised 1 -> 2. Target 1 provisioned one T4 node
+  # per queued item while the 7d queue was p50=0, max=4, fleet avg 0.53 and the
+  # fleet idled at ~3 T4 nodes (n1-standard-8 + T4 ~= $0.65/h each) with most
+  # pods at zero GPU engine activity. Target 2 lets each pod absorb one queued
+  # item behind its serial inference before scale-out; burst latency cost is
+  # one inference (~minutes) on a batch-path service whose consumers
+  # (first-summary p95 121s) tolerate it.
+  # The target MUST stay below the AdmissionQueue capacity (3,
+  # backend/diarizer/admission.py): the gauge reports 0..3, so at target 3 a
+  # saturated pod reads exactly at target and the HPA never scales out while
+  # CapacityExceeded (429s) rejects further uploads. At target 2, saturation
+  # reads 1.5x target and always triggers scale-out (0s stabilization,
+  # +3 pods/60s, max 18); scale-down keeps the 900s window.
+  queueDepthAverageValue: 2
   behavior:
     scaleUp:
       stabilizationWindowSeconds: 0
