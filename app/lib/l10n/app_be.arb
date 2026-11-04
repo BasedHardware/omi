@@ -5787,7 +5787,7 @@
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
-    "tasksEmptyStateMessage": "Пачніце размову, каб стварыць задачу.",
+    "tasksEmptyStateMessage": "Справы з вашых размоў з'явяцца тут.",
     "@tasksEmptyStateMessage": {
         "description": "Empty state message shown when there are no tasks, with instruction to tap + button"
     },
@@ -11948,5 +11948,13 @@
     "episodeCoversUpTo": "Ахоплівае да {time} · поўныя нататкі пасля завяршэння",
     "liveTranscribedUpTo": "Транскрыбавана да {time}",
     "liveAudioSaved": "Захавана {duration}",
-    "liveAudioSavedDetail": "Удзельнікі і канчатковая транскрыпцыя з'явяцца тут падчас загрузкі."
+    "liveAudioSavedDetail": "Удзельнікі і канчатковая транскрыпцыя з'явяцца тут падчас загрузкі.",
+    "voiceProfileCardDismissed": "Профіль голасу заўсёды можна наладзіць у Наладах.",
+    "homeNewRecordingButton": "Новы запіс",
+    "chatWelcomeMessage": "Прывітанне, я Omi. Пытайцеся пра ўсё, пра што вы размаўлялі: што хтосьці сказаў, што вы паабяцалі, ці як прайшоў ваш дзень. Я таксама магу дадаваць задачы і запамінаць рэчы за вас.",
+    "onboardingStarterTaskAsk": "Спытайце Omi пра свой дзень",
+    "onboardingStarterTaskRecord": "Запішыце размову з Omi",
+    "onboardingStarterTaskCheck": "Адзначце гэтую задачу, каб завяршыць яе",
+    "capturePendantDisconnectedShort": "Omi перападключыцца сам",
+    "capturePendantDisconnectedDetail": "Кулон страціў сувязь з гэтым тэлефонам. Omi перападключыцца сам, калі кулон уключаны і побач. Усё, што запісана да гэтага, захавана."
 }

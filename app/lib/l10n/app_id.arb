@@ -1506,7 +1506,7 @@
     "durationSeconds": "Durasi: {seconds} detik",
     "additionalSpeechSampleRemoved": "Sampel suara tambahan dihapus",
     "consentDataMessage": "Dengan melanjutkan, percakapan, rekaman, dan informasi pribadi Anda akan disimpan dengan aman di server kami. Rekaman audio dan transkrip Anda diproses oleh layanan AI pihak ketiga (termasuk Deepgram untuk transkripsi dan OpenAI untuk analisis) untuk memberikan Anda wawasan berbasis AI dan mengaktifkan semua fitur aplikasi.",
-    "tasksEmptyStateMessage": "Mulai percakapan untuk membuat tugas.",
+    "tasksEmptyStateMessage": "Tugas dari percakapan Anda akan muncul di sini.",
     "clearChatAction": "Hapus obrolan",
     "enableApps": "Aktifkan aplikasi",
     "omiAppName": "Omi",
@@ -4557,5 +4557,13 @@
     "episodeCoversUpTo": "Mencakup hingga {time} · catatan lengkap saat selesai",
     "liveTranscribedUpTo": "Ditranskripsi hingga {time}",
     "liveAudioSaved": "{duration} tersimpan",
-    "liveAudioSavedDetail": "Pembicara dan transkrip akhir akan muncul di sini saat diunggah."
+    "liveAudioSavedDetail": "Pembicara dan transkrip akhir akan muncul di sini saat diunggah.",
+    "voiceProfileCardDismissed": "Anda dapat mengatur Profil Suara kapan saja di Pengaturan.",
+    "homeNewRecordingButton": "Rekaman Baru",
+    "chatWelcomeMessage": "Hai, aku Omi. Tanyakan apa saja tentang hal yang kamu bicarakan: apa yang dikatakan seseorang, apa yang kamu janjikan, atau ringkasan harimu. Aku juga bisa menambahkan tugas dan mengingat hal-hal untukmu.",
+    "onboardingStarterTaskAsk": "Tanyakan harimu kepada Omi",
+    "onboardingStarterTaskRecord": "Rekam percakapan dengan Omi",
+    "onboardingStarterTaskCheck": "Centang tugas ini untuk menyelesaikannya",
+    "capturePendantDisconnectedShort": "Omi akan menyambung kembali sendiri",
+    "capturePendantDisconnectedDetail": "Liontin kehilangan koneksi dengan ponsel ini. Omi akan menyambung kembali sendiri saat liontin menyala dan berada di dekat Anda. Semua yang direkam sebelumnya aman."
 }

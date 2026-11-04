@@ -39,8 +39,9 @@ class OmiLoadingState extends StatelessWidget {
 /// when the action is how the page gets its first row ("New Memory").
 ///
 /// The glyph is either a Material [icon] or any [glyph] widget — for example
-/// `FaIcon(FontAwesomeIcons.key)` when the screen's other controls use FontAwesome. Exactly one of
-/// the two is given; either way it is drawn 40pt in [OmiColors.textTertiary].
+/// `FaIcon(FontAwesomeIcons.key)` when the screen's other controls use FontAwesome. At most one of
+/// the two is given; either way it is drawn 40pt in [OmiColors.textTertiary]. With neither, the
+/// state is text only (Home and Tasks before anything is in them).
 class OmiEmptyState extends StatelessWidget {
   const OmiEmptyState({
     super.key,
@@ -51,7 +52,7 @@ class OmiEmptyState extends StatelessWidget {
     this.message,
     this.messageLayoutReference,
     this.action,
-  }) : assert((icon == null) != (glyph == null), 'Give OmiEmptyState exactly one of icon or glyph');
+  }) : assert(icon == null || glyph == null, 'Give OmiEmptyState at most one of icon or glyph');
 
   final IconData? icon;
 
@@ -73,7 +74,7 @@ class OmiEmptyState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return _StateLayout(
-      glyph: glyph ?? Icon(icon),
+      glyph: glyph ?? (icon == null ? null : Icon(icon)),
       title: title,
       titleLayoutReference: titleLayoutReference,
       message: message,
@@ -117,14 +118,9 @@ class OmiErrorState extends StatelessWidget {
 
 class _StateLayout extends StatelessWidget {
   const _StateLayout(
-      {required this.glyph,
-      this.title,
-      this.titleLayoutReference,
-      this.message,
-      this.messageLayoutReference,
-      this.action});
+      {this.glyph, this.title, this.titleLayoutReference, this.message, this.messageLayoutReference, this.action});
 
-  final Widget glyph;
+  final Widget? glyph;
   final String? title;
   final String? titleLayoutReference;
   final String? message;
@@ -140,14 +136,15 @@ class _StateLayout extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            ExcludeSemantics(
-              child: IconTheme.merge(
-                data: IconThemeData(size: 40, color: OmiColors.textTertiary),
-                child: glyph,
+            if (glyph != null)
+              ExcludeSemantics(
+                child: IconTheme.merge(
+                  data: IconThemeData(size: 40, color: OmiColors.textTertiary),
+                  child: glyph!,
+                ),
               ),
-            ),
             if (title != null) ...[
-              const SizedBox(height: OmiSpacing.md),
+              if (glyph != null) const SizedBox(height: OmiSpacing.md),
               Semantics(
                 header: true,
                 child: titleLayoutReference == null

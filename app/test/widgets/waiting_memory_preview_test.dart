@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'package:omi/services/experiments/home_redesign.dart';
 import 'package:provider/provider.dart';
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/memories/widgets/memory_item.dart';
 import 'package:omi/pages/memories/widgets/memory_edit_sheet.dart';
-import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/ui.dart';
@@ -24,6 +25,10 @@ class _Routes extends NavigatorObserver {
 }
 
 void main() {
+  // These cover the redesigned Home (home-redesign test arm).
+  setUp(() => HomeRedesign.setForTesting(true));
+  tearDown(HomeRedesign.resetForTesting);
+
   testWidgets('short waiting memory fits its status and action at 200% text', (tester) async {
     final provider = MemoriesProvider();
     final usage = UsageProvider();
@@ -53,7 +58,7 @@ void main() {
       ),
     ));
     expect(find.text('Pending'), findsOneWidget);
-    expect(find.text('View Usage'), findsOneWidget);
+    expect(find.text('Upgrade'), findsOneWidget);
     expect(find.byIcon(Icons.lock_outline), findsNothing);
     expect(find.bySemanticsLabel('OK'), findsNothing);
     final preview = tester.getRect(find.byType(OmiLockedPreview));
@@ -110,21 +115,18 @@ void main() {
         expect(editCalls, 0);
         expect(routes.pushed, hasLength(2));
         if (visible) {
-          final destination =
-              (routes.pushed.last as MaterialPageRoute).builder(tester.element(find.byType(MemoryItem)));
-          expect(destination, isA<UsagePage>());
-          expect((destination as UsagePage).showUpgradeDialog, isFalse);
+          // The paywall (or its plans-sheet fallback) opens over the list.
+          expect(routes.pushed.last, isA<OmiSheetRoute>());
           expect(find.byType(MemoryEditSheet), findsNothing);
           expect(find.byType(SelectableText), findsNothing);
           expect(find.bySemanticsLabel('Private held memory'), findsNothing);
-          // Do not build the network-backed usage page.
+          // Do not build the network-backed plans sheet.
           await tester.pumpWidget(const SizedBox.shrink());
         } else {
           await tester.pumpAndSettle();
           expect(tester.widget<MemoryEditSheet>(find.byType(MemoryEditSheet)).readOnly, isTrue);
           expect(find.widgetWithText(SelectableText, 'Private held memory'), findsOneWidget);
           expect(find.byKey(const ValueKey('memory_edit_field')), findsNothing);
-          expect(find.byType(UsagePage), findsNothing);
           expect(tester.takeException(), isNull);
         }
       });

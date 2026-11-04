@@ -1,6 +1,8 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'package:omi/services/experiments/home_redesign.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/conversations/widgets/empty_conversations.dart';
 import 'package:omi/pages/conversations/widgets/offline_sync_storage_sheet.dart';
@@ -14,6 +16,10 @@ double contrast(Color foreground, Color background) {
 }
 
 void main() {
+  // These cover the redesigned Home (home-redesign test arm).
+  setUp(() => HomeRedesign.setForTesting(true));
+  tearDown(HomeRedesign.resetForTesting);
+
   for (final brightness in Brightness.values) {
     testWidgets('Offline Sync storage labels are readable in $brightness', (tester) async {
       final previous = OmiColors.active;
@@ -125,7 +131,7 @@ void main() {
       final title = find.text('No conversations yet');
       expect(title.hitTestable(), findsOneWidget);
       expect(contrast(tester.widget<Text>(title).style!.color!, OmiColors.surface0), greaterThanOrEqualTo(4.5));
-      expect(find.byIcon(Icons.forum_rounded), findsOneWidget);
+      expect(find.byIcon(Icons.forum_rounded), findsNothing);
     });
   }
   testWidgets('nonzero counts retain category and clear-all callbacks', (tester) async {

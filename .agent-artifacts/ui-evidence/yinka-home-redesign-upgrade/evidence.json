@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "images": [
+    {"file": "001-mobile-ios-home-idle-new-recording.png", "platform": "mobile-ios", "description": "Redesigned Home (home-redesign test): no card above the list; Ask Omi beside the + New Recording pill", "captured_by": "agent", "source": "manual"},
+    {"file": "002-mobile-ios-home-pill-listening.png", "platform": "mobile-ios", "description": "Recording with the phone: the pill says Listening with a red dot and Stop; still no card above the list", "captured_by": "agent", "source": "manual"},
+    {"file": "003-mobile-ios-home-pill-paused.png", "platform": "mobile-ios", "description": "Paused: grey dot and the pill's one control is Resume", "captured_by": "agent", "source": "manual"},
+    {"file": "004-mobile-ios-home-pill-sheet.png", "platform": "mobile-ios", "description": "Tapping a paused pill opens the details sheet: Resume, Live Transcript, Stop Recording", "captured_by": "agent", "source": "manual"},
+    {"file": "005-mobile-ios-home-tasks-dot.png", "platform": "mobile-ios", "description": "Home after onboarding: the first conversation and a dot on Tasks (captured on the #21445 branch; locked row shown in its older look)", "captured_by": "agent", "source": "manual"},
+    {"file": "006-mobile-ios-chat-welcome.png", "platform": "mobile-ios", "description": "Omi's first chat message in an empty chat", "captured_by": "agent", "source": "manual"},
+    {"file": "007-mobile-ios-upgrade-in-place.png", "platform": "mobile-ios", "description": "An upgrade entry point opening the paywall experiment's arm in place (Outline arm forced)", "captured_by": "agent", "source": "manual"}
+  ]
+}

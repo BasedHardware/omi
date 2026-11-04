@@ -16,6 +16,10 @@ New designs join as new arms; the split is set in PostHog, never in code.
 **Unit.** A free reader who is shown a paywall. Exposure = `$feature_flag_called` with
 `$feature_flag = paywall-variant`, emitted once per arm per app process by `PaywallRouter` at the
 moment a variant (or control) paywall opens. Paid readers and App Review builds never enter.
+At the end-of-onboarding placement control shows nothing but is exposed at the same moment
+(`PaywallRouter.exposeControl`), so both arms enter at the same point. `onboarding_paywall` must
+therefore have the same value in every arm's payload, control included; a mismatch skews the
+comparison.
 
 **Primary metric.** `Upgrade Succeeded` per exposed reader (funnel, 7-day window).
 

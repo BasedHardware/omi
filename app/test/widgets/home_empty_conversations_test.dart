@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'package:omi/services/experiments/home_redesign.dart';
 import 'package:http/http.dart' as http;
 import 'package:omi/backend/http/api_presentation.dart';
 import 'package:omi/backend/http/conversation_api_contract.dart';
@@ -10,8 +12,12 @@ import 'package:omi/ui/ui.dart';
 import '../support/typed_conversation_screen.dart';
 
 void main() {
+  // These cover the redesigned Home (home-redesign test arm).
+  setUp(() => HomeRedesign.setForTesting(true));
+  tearDown(HomeRedesign.resetForTesting);
+
   for (final brightness in Brightness.values) {
-    testWidgets('Home keeps its empty icon, title and layout after loading in $brightness', (tester) async {
+    testWidgets('Home keeps its text-only empty title and layout after loading in $brightness', (tester) async {
       final semantics = tester.ensureSemantics();
       final previousPalette = OmiColors.active;
       OmiColors.active = OmiColors.forBrightness(brightness);
@@ -44,7 +50,7 @@ void main() {
       final icon = find.byIcon(Icons.forum_rounded);
       expect(title, findsOneWidget);
       expect(hint, findsNothing);
-      expect(icon, findsOneWidget);
+      expect(icon, findsNothing);
       expect(find.text(l10n.tasksEmptyStateMessage), findsNothing);
       expect(find.bySemanticsLabel(l10n.tasksEmptyStateMessage), findsNothing);
       expect(find.bySemanticsLabel(l10n.noConversationsHeroMessage), findsNothing);
@@ -57,10 +63,9 @@ void main() {
       expect(find.byKey(const ValueKey('omi.conversations.empty')), findsOneWidget);
       expect(title, findsOneWidget);
       expect(hint, findsNothing);
-      expect(icon, findsOneWidget);
+      expect(icon, findsNothing);
       expect(tester.getRect(title), initialTitleRect);
       expect(tester.widget<Text>(title).style!.color, OmiColors.textPrimary);
-      expect(IconTheme.of(tester.element(icon)).color, OmiColors.textTertiary);
 
       // A later outage must still show an error, and retry must restore the full hero.
       status = 503;
@@ -73,7 +78,7 @@ void main() {
       await tester.tap(find.text(l10n.retry));
       await tester.pump();
       expect(provider.apiViewState.phase, ApiViewPhase.empty);
-      expect(icon, findsOneWidget);
+      expect(icon, findsNothing);
       expect(hint, findsNothing);
       expect(tester.getRect(title), initialTitleRect);
 

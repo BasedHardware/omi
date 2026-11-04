@@ -5787,7 +5787,7 @@
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
-    "tasksEmptyStateMessage": "Začnite pogovor, da ustvarite nalogo.",
+    "tasksEmptyStateMessage": "Opravila iz vaših pogovorov se bodo prikazala tukaj.",
     "@tasksEmptyStateMessage": {
         "description": "Empty state message shown when there are no tasks, with instruction to tap + button"
     },
@@ -11948,5 +11948,13 @@
     "episodeCoversUpTo": "Do {time} · popolni zapiski ob koncu",
     "liveTranscribedUpTo": "Prepisano do {time}",
     "liveAudioSaved": "Shranjeno {duration}",
-    "liveAudioSavedDetail": "Govorci in končni prepis se bodo tukaj prikazali med nalaganjem."
+    "liveAudioSavedDetail": "Govorci in končni prepis se bodo tukaj prikazali med nalaganjem.",
+    "voiceProfileCardDismissed": "Glasovni profil lahko kadar koli nastavite v Nastavitvah.",
+    "homeNewRecordingButton": "Novo snemanje",
+    "chatWelcomeMessage": "Živjo, sem Omi. Vprašaj me karkoli o tem, o čemer si govoril: kaj je kdo rekel, kaj si obljubil ali povzetek tvojega dne. Lahko tudi dodajam opravila in si zapomnim stvari namesto tebe.",
+    "onboardingStarterTaskAsk": "Vprašaj Omi o svojem dnevu",
+    "onboardingStarterTaskRecord": "Posnemi pogovor z Omi",
+    "onboardingStarterTaskCheck": "Odkljukaj to opravilo, da ga končaš",
+    "capturePendantDisconnectedShort": "Omi se bo sam znova povezal",
+    "capturePendantDisconnectedDetail": "Obesek je izgubil povezavo s tem telefonom. Omi se bo sam znova povezal, ko bo obesek vklopljen in v bližini. Vse, kar je bilo posneto prej, je varno."
 }
