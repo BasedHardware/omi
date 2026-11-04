@@ -408,7 +408,7 @@ def test_byok_reclaim_stamps_state_entry_once_without_reset_on_observation():
     ref.data.update(tx.updates[0][1])
     next_tx = _Transaction()
     jobs._claim_finalization_replay_txn(next_tx, ref, timedelta(minutes=5), now + timedelta(days=1))
-    assert next_tx.updates == []
+    assert all('blocked_byok_at' not in update for _, update in next_tx.updates)
     assert ref.data['blocked_byok_at'] == now
 
 

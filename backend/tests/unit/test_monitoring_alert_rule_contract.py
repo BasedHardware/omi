@@ -5,6 +5,8 @@ import re
 from pathlib import Path
 
 import yaml
+from prometheus_client import CollectorRegistry
+from utils.lifecycle_metrics import PhaseMetrics
 
 REPO = Path(__file__).resolve().parents[3]
 MONITORING = REPO / "backend/charts/monitoring"
@@ -1379,7 +1381,14 @@ def _declared_backend_metric_names() -> set[str]:
         text = str(path)
         if "/tests/" in text or "/testing/" in text or "/.venv/" in text:
             continue
-        names |= set(_METRIC_DECLARATION.findall(path.read_text(encoding="utf-8", errors="ignore")))
+        source = path.read_text(encoding="utf-8", errors="ignore")
+        names |= set(_METRIC_DECLARATION.findall(source))
+        # Resolve the bounded lifecycle helper's literal prefixes through its
+        # real collector, rather than allowlisting names no producer emits.
+        for prefix in re.findall(r"PhaseMetrics\(\s*['\"]([a-zA-Z0-9_:]+)['\"]", source):
+            registry = CollectorRegistry()
+            PhaseMetrics(prefix, ['state'], registry=registry)
+            names.update(metric.name for metric in registry.collect())
         if path == REPO / 'backend/utils/executors.py':
             # This helper constructs/reuses registered Gauge objects with fixed names.
             names |= set(re.findall(r"_gauge\(\s*['\"]([a-zA-Z0-9_:]+)['\"]", path.read_text(encoding='utf-8')))
