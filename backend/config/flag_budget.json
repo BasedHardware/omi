@@ -24,7 +24,7 @@
   },
   "seed_review_by": "2026-11-15",
   "budget": 169,
-  "count": 242,
+  "count": 243,
   "names": {
     "PARAKEET_SHAPE_CANARY_FILE": {"owner": "two-lane lead", "review_by": "2026-12-04"},
     "PARAKEET_LID_MODEL": {"owner": "planscost", "review_by": "2026-11-30"},
@@ -64,7 +64,9 @@
     "CONVERSATION_MERGE_BEFORE_PROCESSING": {"owner": "rollout-meetings / occasion architecture", "review_by": "2026-11-28", "registry": "config/feature-flags.yaml"},
     "BATCH_SHARD_SPREAD_ENABLED": {"owner": "batch record lane / rollout lead", "review_by": "2026-11-28"},
     "BATCH_PULL_MULTI_LEASE_ENABLED": {"owner": "pulleff / batch rollout lead", "review_by": "2026-11-29"},
+    "BATCH_PULL_BUSY_BORROW_ENABLED": {"owner": "cl2-gpueff / batch rollout lead", "review_by": "2026-12-04"},
     "SYNC_PROCESSING_HOLD_ENABLED": {"owner": "rollout-meetings / occasion architecture", "review_by": "2026-11-28"},
+    "SYNC_OPUS_RAW_FRAME_WRITES": {"owner": "synceff / backend-sync efficiency", "review_by": "2026-12-04"},
     "BATCH_ADMISSION_LANGUAGE_EXCLUSION_ENABLED": {"owner": "langexcl / batch rollout lead", "review_by": "2026-11-15"},
     "BATCH_ADMISSION_LANGUAGE_SAMPLE_ENABLED": {"owner": "intakefallback / batch rollout lead", "review_by": "2026-11-29"},
     "BATCH_PIPELINE_API_URL": {"seeded": "2026-10-25"},
