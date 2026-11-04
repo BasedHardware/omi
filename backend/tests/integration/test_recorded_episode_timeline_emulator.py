@@ -24,7 +24,10 @@ def store(monkeypatch):
         pytest.skip('loopback FIRESTORE_EMULATOR_HOST required; no cloud fallback')
     monkeypatch.setenv('ENCRYPTION_SECRET', 'recorded_time_emulator_synthetic_key_32_bytes')
     client = firestore.Client(project='demo-recorded-time', credentials=AnonymousCredentials())
-    return client, 'recorded-test-' + uuid4().hex
+    try:
+        yield client, 'recorded-test-' + uuid4().hex
+    finally:
+        client.close()
 
 
 def test_simultaneous_late_devices_converge_on_one_closed_episode(store):
