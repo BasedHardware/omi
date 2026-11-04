@@ -5,15 +5,22 @@ from pathlib import Path
 import time
 
 from testing.replay_harness.manifest import STAGES, load_case
+from testing.replay_harness.decryption import load_decryption, opaque_firestore, product_decryption, quiet_product
 from testing.replay_harness.report import StageResult, item_report, record_exception
 from testing.replay_harness.stages.base import NotImplementedStage
 
 
-async def run_cases(directories: list[Path], *, privacy_ttl_override_s=None) -> list[dict]:
+async def run_cases(
+    directories: list[Path], *, privacy_ttl_override_s=None, secret_file=None, uid_file=None, consent_file=None
+) -> list[dict]:
     # Validate all inputs before constructing any infrastructure.
     cases = [load_case(directory) for directory in directories]
     if len({case.manifest.id for case in cases}) != len(cases):
         raise ValueError('duplicate case id would overwrite an item report')
+    credentials = load_decryption(secret_file=secret_file, uid_file=uid_file, consent_file=consent_file)
+    if credentials:
+        for case in cases:
+            credentials.validate(case)
     from testing.replay_harness.env import replay_environment
     from testing.replay_harness.stages.admission import AdmissionDriver
     from testing.replay_harness.stages.capture_upload import CaptureUploadDriver
@@ -25,7 +32,11 @@ async def run_cases(directories: list[Path], *, privacy_ttl_override_s=None) -> 
     items = []
     for case in cases:
         results = []
+        enabled = credentials is not None and case.manifest.tier == 'C'
         with ExitStack() as stack:
+            if enabled:
+                stack.enter_context(quiet_product())
+                stack.enter_context(opaque_firestore())
             environment = None
             for name in STAGES:
                 if name not in (case.manifest.stages or {'capture_upload': {}, 'titling': {}}):
@@ -44,6 +55,8 @@ async def run_cases(directories: list[Path], *, privacy_ttl_override_s=None) -> 
                     environment = None
                 elif environment is None:
                     environment = stack.enter_context(replay_environment())
+                    if enabled:
+                        stack.enter_context(product_decryption(case, environment, credentials))
                 started = time.perf_counter()
                 try:
                     result = await driver.run(case, environment)
@@ -53,5 +66,5 @@ async def run_cases(directories: list[Path], *, privacy_ttl_override_s=None) -> 
                 results.append(result)
                 if result.status != 'pass':
                     break
-        items.append(item_report(case.manifest, results))
+        items.append(item_report(case.manifest, results, decryption='on' if enabled else 'off'))
     return items

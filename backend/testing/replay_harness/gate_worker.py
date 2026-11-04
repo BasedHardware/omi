@@ -24,7 +24,7 @@ def configure_imports(backend):
     sys.path.insert(0, str(backend))
 
 
-async def replay(request):
+async def replay(request, **options):
     from testing.replay_harness.runner import run_cases
     from testing.replay_harness.gate_resources import CURRENT_SCOPE
 
@@ -34,7 +34,7 @@ async def replay(request):
         for scope in case['scopes']:
             token = CURRENT_SCOPE.set(scope)
             try:
-                item = (await run_cases([Path(case['path'])]))[0]
+                item = (await run_cases([Path(case['path'])], **options))[0]
             finally:
                 CURRENT_SCOPE.reset(token)
             # The runner's stage reports are sanitized. Its metadata fields are
@@ -42,19 +42,27 @@ async def replay(request):
             outcomes.append(
                 {
                     key: item[key]
-                    for key in ('stages', 'furthest_stage', 'stop_reason', 'duration_ms', 'verdict', 'expectation_met')
+                    for key in (
+                        'stages',
+                        'furthest_stage',
+                        'stop_reason',
+                        'duration_ms',
+                        'verdict',
+                        'expectation_met',
+                        'decryption',
+                    )
                 }
             )
         results.append(outcomes)
     return results
 
 
-async def cooperative_replay(request):
+async def cooperative_replay(request, **options):
     loop = asyncio.get_running_loop()
     task = asyncio.current_task()
     loop.add_signal_handler(signal.SIGTERM, task.cancel)
     try:
-        return await replay(request)
+        return await replay(request, **options)
     finally:
         loop.remove_signal_handler(signal.SIGTERM)
 
@@ -63,9 +71,14 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--backend', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
+    # Fixed adapter arguments are available before snapshot product imports.
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+    from testing.replay_harness.decryption import add_arguments, file_options
+
+    add_arguments(parser)
     args = parser.parse_args()
     configure_imports(args.backend)
-    results = asyncio.run(cooperative_replay(json.load(sys.stdin)))
+    results = asyncio.run(cooperative_replay(json.load(sys.stdin), **file_options(args)))
     from testing.replay_harness.gate_resources import private_write
 
     private_write(args.output, json.dumps(results).encode())
