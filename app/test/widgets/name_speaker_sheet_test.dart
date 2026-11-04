@@ -305,6 +305,39 @@ void main() {
     await tester.pumpAndSettle();
   });
 
+  testWidgets('whole recording sheet selects only the exact scoped voice', (tester) async {
+    final selected = <List<String>>[];
+    final a = _seg('a')..speakerIdScope = 's1';
+    final b = _seg('b')..speakerIdScope = 's2';
+    final other = _seg('other')
+      ..speaker = 'SPEAKER_2'
+      ..speakerId = 2
+      ..speakerIdScope = 's1';
+    await tester.pumpWidget(ChangeNotifierProvider(
+        create: (_) => PeopleProvider(),
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(
+            body: NameSpeakerBottomSheet(
+                speakerId: 0,
+                segmentId: 'a',
+                segments: [a, b, other],
+                defaultApplyToSpeaker: true,
+                wholeRecording: true,
+                onSpeakerAssigned: (_, __, ___, ids, whole) async {
+                  selected.add(ids);
+                  return true;
+                }),
+          ),
+        )));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byType(OmiButton));
+    await tester.tap(find.byType(OmiButton));
+    await tester.pumpAndSettle();
+    expect(selected.single, ['a']);
+  });
+
   testWidgets('live default tags a single in-progress bubble as speaker-wide including later speech', (tester) async {
     final segments = [
       TranscriptSegment(

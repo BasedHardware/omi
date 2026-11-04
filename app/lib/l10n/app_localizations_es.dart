@@ -15011,5 +15011,42 @@ class AppLocalizationsEs extends AppLocalizations {
   String get liveAudioSavedDetail => 'Los hablantes y la transcripción final aparecerán aquí a medida que se suba.';
 
   @override
+  String get speakerWholeRecording => 'Aplicar a toda la grabación';
+
+  @override
+  String get speakerSelectionChanged => 'El hablante cambió. Selecciona las líneas de nuevo.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'La grabación es demasiado grande. Selecciona menos líneas de una conversación.',
+        'partial': 'Se guardaron algunas líneas. Selecciona las restantes e inténtalo de nuevo.',
+        'other': 'Se guardaron algunas líneas. Selecciona las restantes e inténtalo de nuevo.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerRecordingCoverage(String state, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Se renombraron $count líneas solo en las conversaciones disponibles.',
+      one: 'Se renombraron 1 líneas solo en las conversaciones disponibles.',
+    );
+    String _temp1 = intl.Intl.selectLogic(
+      state,
+      {
+        'scope': 'Otras líneas de esta voz (cobertura de la grabación sin confirmar)',
+        'other': '$_temp0',
+      },
+    );
+    return '$_temp1';
+  }
+
+  @override
   String get episodeFinishingUp => 'Terminando…';
 }
