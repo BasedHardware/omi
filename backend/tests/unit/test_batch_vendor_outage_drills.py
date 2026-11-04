@@ -374,6 +374,12 @@ def english_routes(world, start, end):
     }
 
 
+def overflow_spend_seconds():
+    from utils.batch_pipeline import vendor_route_metrics as metrics
+
+    return metrics.OVERFLOW_AUDIO.labels(route='modulate')._value.get()
+
+
 def overflow_decisions():
     from utils.batch_pipeline import vendor_route_metrics as metrics
 
@@ -387,9 +393,14 @@ def test_gpu_unavailability_fires_overflow_to_modulate_and_releases_when_capacit
     gate, new English units go back to GPU. Nothing is lost; the gauge and counter record it."""
     from utils.batch_pipeline import vendor_route_metrics as metrics
 
-    before = overflow_decisions()
+    before, spent_before = overflow_decisions(), overflow_spend_seconds()
     world = overflow_world(monkeypatch)
     assert_invariants(world.run(3 * 3600))
+    # The spend alert's counter: billed Modulate audio of the overflowed (GPU-capable) English
+    # units only; Japanese units start on Modulate by capability and never count.
+    overflowed = [u for u in world.units.values() if u.language == 'en' and u.route == 'modulate']
+    assert overflowed
+    assert overflow_spend_seconds() - spent_before == pytest.approx(sum(u.duration for u in overflowed))
     assert english_routes(world, 0.0, ENTER) == {'gpu'}  # below the enter age nothing spills
     assert 'modulate' in english_routes(world, ENTER + 60.0, 1800.0)  # saturated: overflow fires
     assert english_routes(world, 3000.0, 4200.0) == {'gpu'}  # drained: back on GPU
@@ -401,7 +412,9 @@ def test_gpu_unavailability_fires_overflow_to_modulate_and_releases_when_capacit
 
 def test_overflow_kill_switch_keeps_every_capable_unit_on_gpu_through_the_outage(monkeypatch):
     before = overflow_decisions()
+    spent_before = overflow_spend_seconds()
     world = overflow_world(monkeypatch, enabled=False)
     assert_invariants(world.run(3 * 3600))
     assert english_routes(world, 0.0, 4200.0) == {'gpu'}
     assert overflow_decisions() == before
+    assert overflow_spend_seconds() == spent_before  # Japanese Modulate traffic is not overflow spend

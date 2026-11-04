@@ -1,9 +1,9 @@
 """The checked-in prod route table en-overflow-1104 (lead2 863cd6, David 49b7e4: English-only overflow).
 
 GPU first everywhere Parakeet serves; fresh English overflows to Modulate past the GPU SLO; other
-GPU-capable languages stay on GPU; languages Parakeet cannot serve start on Modulate. No daily caps
-(a cap trip would also mark Modulate unhealthy for gpu_unsupported languages) and no Soniox (not
-admitted on prerecorded today, so route_capable never selects it). Runs the real parser and the real
+GPU-capable languages stay on GPU; languages Parakeet cannot serve start on Modulate. Modulate carries a
+runaway-only daily cap (3000 audio-h) and its $0.06 list price; no Soniox (not admitted on prerecorded
+today, so route_capable never selects it). Runs the real parser and the real
 selection over the file the runtime overlay serves as BATCH_VENDOR_ROUTE_TABLE. Hermetic.
 """
 
@@ -66,10 +66,16 @@ def test_the_file_is_the_standing_english_overflow_table(table):
     assert [option.route for option in table.row_for(OTHER_SUPPORTED).options] == ['gpu']
 
 
-def test_no_route_carries_a_daily_cap(table):
-    # A Modulate cap trip would make the route unhealthy for gpu_unsupported languages too; spend is
-    # governed by the metered episode cap instead (lead2 863cd6).
-    assert all(route.daily_audio_hours_cap is None for route in table.routes.values())
+def test_modulate_spend_is_bounded_per_day_and_priced_at_list(table):
+    # lead2 2026-11-04 (Luna P1 on #24637): a runaway-only bound. gpu_unsupported needs ~900
+    # audio-h/day, so 3000 leaves ~2100 audio-h/day of overflow before anything holds (~$180/day
+    # worst case). A trip holds units with their audio; it never drops them. $ is table-driven at
+    # the $0.06/audio-h list rate; the $50/day overflow-spend alert is the episode bound.
+    modulate = table.routes['modulate']
+    assert modulate.daily_audio_hours_cap == 3000.0
+    assert modulate.price_usd_per_audio_hour == 0.06
+    assert modulate.monthly_budget_usd is None
+    assert table.routes['gpu'].daily_audio_hours_cap is None
 
 
 @pytest.mark.parametrize('language', LANGUAGES)

@@ -12,8 +12,8 @@
       "speaker_turns": "discard"
     },
     "modulate": {
-      "price_usd_per_audio_hour": null,
-      "daily_audio_hours_cap": null,
+      "price_usd_per_audio_hour": 0.06,
+      "daily_audio_hours_cap": 3000.0,
       "monthly_budget_usd": null,
       "failover_only": false,
       "speaker_turns": "discard"

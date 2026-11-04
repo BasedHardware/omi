@@ -899,6 +899,9 @@ class ProviderSttStage:
                 vendor_metrics.late_result(plan.service, 'ignored')
                 return UnitOutcome('done', 'superseded')
             vendor_metrics.attempt(plan.service, outcome, 0.0 if outcome in contracts.UNBILLED_OUTCOMES else audio)
+            vendor_metrics.overflow_attempt(
+                route, plan.service, 0.0 if outcome in contracts.UNBILLED_OUTCOMES else audio
+            )
             if plan.failure is None:
                 self._record_attempt(plan.service, outcome, latency)
             if settled == 'failover':
@@ -931,6 +934,7 @@ class ProviderSttStage:
             return UnitOutcome('retry', 'dependency_warming', provider_reason=route.provider_reason)
         if settled:
             vendor_metrics.attempt(plan.service, outcome, 0.0 if silence else duration)
+            vendor_metrics.overflow_attempt(route, plan.service, 0.0 if silence else duration)
             if not silence:
                 self._record_attempt(plan.service, outcome, latency)
         else:
