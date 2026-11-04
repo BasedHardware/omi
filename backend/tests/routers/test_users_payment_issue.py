@@ -93,7 +93,6 @@ def _client(
     monkeypatch.setattr(
         users_router, 'resolve_transcription_allowance', subscription_module.resolve_transcription_allowance
     )
-    monkeypatch.setattr(subscription_module, 'is_trial_paywalled', lambda *args, **kwargs: False)
     monkeypatch.setattr(subscription_module, 'get_byok_key', lambda provider: None)
     monkeypatch.setenv('MARKETPLACE_APP_REVIEWERS', '')
     app = FastAPI()
