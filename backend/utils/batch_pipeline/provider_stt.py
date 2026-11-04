@@ -899,6 +899,9 @@ class ProviderSttStage:
                 vendor_metrics.late_result(plan.service, 'ignored')
                 return UnitOutcome('done', 'superseded')
             vendor_metrics.attempt(plan.service, outcome, 0.0 if outcome in contracts.UNBILLED_OUTCOMES else audio)
+            vendor_metrics.overflow_attempt(
+                route, plan.service, 0.0 if outcome in contracts.UNBILLED_OUTCOMES else audio
+            )
             if plan.failure is None:
                 self._record_attempt(plan.service, outcome, latency)
             if settled == 'failover':
@@ -931,6 +934,7 @@ class ProviderSttStage:
             return UnitOutcome('retry', 'dependency_warming', provider_reason=route.provider_reason)
         if settled:
             vendor_metrics.attempt(plan.service, outcome, 0.0 if silence else duration)
+            vendor_metrics.overflow_attempt(route, plan.service, 0.0 if silence else duration)
             if not silence:
                 self._record_attempt(plan.service, outcome, latency)
         else:
@@ -1054,6 +1058,8 @@ class ProviderSttStage:
             )
             if settled:
                 vendor_metrics.late_result(intent['service'], 'reconciled')
+                # A billed result saved before a failed settle is still overflow spend.
+                vendor_metrics.overflow_attempt(route, intent['service'], 0.0 if silence else item.duration_seconds)
             return UnitOutcome('done', 'processed' if settled else 'superseded')
         if self.clock() - intent['started_at'] > ABANDON_SECONDS:
             failure = {'stage': 'provider', 'reason': 'abandoned_running'}
@@ -1069,6 +1075,7 @@ class ProviderSttStage:
             if not settled:
                 return UnitOutcome('done', 'superseded')
             vendor_metrics.attempt(intent['service'], VendorAttemptOutcome.ABANDONED, item.duration_seconds)
+            vendor_metrics.overflow_attempt(route, intent['service'], item.duration_seconds)
             self._record_attempt(intent['service'], VendorAttemptOutcome.ABANDONED, None)
             if settled == 'failover':
                 self._log('failover', 'abandoned_running')
