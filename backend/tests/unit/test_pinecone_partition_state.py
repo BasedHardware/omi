@@ -1,9 +1,11 @@
 """Routing transitions under strict Firestore read-before-write semantics."""
 
 from dataclasses import replace
+from multiprocessing import get_context
 import os
 from threading import Barrier, Event
 from concurrent.futures import ThreadPoolExecutor
+from time import monotonic
 from urllib.parse import urlparse
 from uuid import uuid4
 
@@ -763,6 +765,84 @@ def test_completed_normal_mutations_do_not_accumulate_journal_rows(db, key):
     assert operation.get().exists
     state.finish_mutation(key, ticket, write_lsn=10, firestore_client=db)
     assert not operation.get().exists
+
+
+@pytest.mark.integration
+def test_real_firestore_cross_process_same_owner_deletes_settle():
+    """Independent serving locks: only Firestore + bounded abort retries coordinate."""
+    host = os.getenv('FIRESTORE_EMULATOR_HOST', '')
+    if not host:
+        pytest.skip('set FIRESTORE_EMULATOR_HOST for cross-process delete proof')
+    if urlparse(f'//{host}').hostname not in {'127.0.0.1', 'localhost', '::1'}:
+        pytest.fail('contention proof requires a loopback emulator')
+    from google.auth.credentials import AnonymousCredentials
+    from google.cloud import firestore
+
+    owner = 'synthetic-' + uuid4().hex
+    context = get_context('spawn')
+    start, results = context.Barrier(12), context.Queue()
+    children = [context.Process(target=_delete_in_independent_process, args=(owner, start, results)) for _ in range(3)]
+    deadline = monotonic() + 240
+    try:
+        for child in children:
+            child.start()
+        for child in children:
+            child.join(max(0, deadline - monotonic()))
+            assert not child.is_alive() and child.exitcode == 0
+        assert [results.get(timeout=5) for _ in children] == [8, 8, 8]
+        client = firestore.Client(project='demo-pinecone-cross-instance', credentials=AnonymousCredentials())
+        try:
+            key = state.PartitionKey('synthetic-index', 'ns4', owner)
+            route = state.get_route(key, firestore_client=client)
+            assert (route.pending_count, route.uncertain_count, route.latest_write_lsn) == (0, 0, 42)
+            ref = client.collection(state.COLLECTION).document(key.document_id)
+            assert not list(ref.collection('operations').stream())
+        finally:
+            client.close()
+    finally:
+        for child in children:
+            if child.is_alive():
+                child.terminate()
+            if child.pid is not None:
+                child.join(timeout=10)
+                if child.is_alive():
+                    child.kill()
+                    child.join(timeout=5)
+        results.close()
+        results.join_thread()
+
+
+def _delete_in_independent_process(owner, start, results):
+    from google.auth.credentials import AnonymousCredentials
+    from google.cloud import firestore
+
+    client = firestore.Client(project='demo-pinecone-cross-instance', credentials=AnonymousCredentials())
+    key = state.PartitionKey('synthetic-index', 'ns4', owner)
+    calls = []
+
+    class Provider:
+        def fetch(self, **kwargs):
+            return {'vectors': {}}
+
+        def delete(self, **kwargs):
+            calls.append((kwargs['namespace'], tuple(kwargs['ids'])))
+            return {}, 200, {'x-pinecone-request-lsn': '42'}
+
+    def delete(number):
+        start.wait(timeout=60)
+        scoped = OwnerIndex(Provider(), owner, index_name=key.index_name, firestore_client=client)
+        scoped.delete(namespace=key.family, ids=[f'synthetic-{os.getpid()}-{number}'])
+
+    try:
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            futures = [executor.submit(delete, number) for number in range(4)]
+            for future in futures:
+                future.result(timeout=120)
+        assert len(set(calls)) == len(calls) == 8
+        assert state.drain_mutations() == 0
+        results.put(len(calls))
+    finally:
+        client.close()
 
 
 @pytest.mark.integration
