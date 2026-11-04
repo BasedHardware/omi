@@ -85,7 +85,10 @@ class Client:
 
 
 def entries(rows):
-    return [(f'synthetic/{i}', row) for i, row in enumerate(rows)]
+    return [
+        (f'synthetic/{i}', {**({'dormant': False} if 'first_pending_at' in row else {}), **row})
+        for i, row in enumerate(rows)
+    ]
 
 
 def test_record_pending_cohort_excludes_legacy_and_retries_do_not_reset_clock():
@@ -130,6 +133,14 @@ def test_initial_cohort_excludes_known_eight_hour_stock_from_both_age_pages():
     )
     assert queries.record_pending(client, 'batch_pipeline_prod', now)['record_pending'] == (7201, 2, False)
     assert queries.enrichment(client, now)['fresh'] == (3601, 1, False)
+
+
+def test_completed_receipts_cannot_fill_enrichment_active_page():
+    now = COHORT_START + 10000
+    receipts = [{'first_pending_at': now - 8000, 'due_at': None, 'dormant': True} for _ in range(1000)]
+    active = {'first_pending_at': now - 4000, 'due_at': now, 'summary_lane': 'fresh'}
+    client = Client(sync_reprocess_outbox=entries([*receipts, active]))
+    assert queries.enrichment(client, now)['fresh'] == (4000, 1, False)
 
 
 def test_enrichment_fresh_cohort_excludes_dormant_and_old_rows():

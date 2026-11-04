@@ -5,6 +5,24 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
+          "fieldPath": "dormant",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "first_pending_at",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "sync_reprocess_outbox",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
           "fieldPath": "summary_lane",
           "order": "ASCENDING"
         },

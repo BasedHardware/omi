@@ -16,6 +16,7 @@ def _index(name, collection, *fields):
 
 
 INDEX_REQUIREMENTS = (
+    _index('enrichment_active_cohort', 'sync_reprocess_outbox', 'dormant', 'first_pending_at'),
     _index('enrichment_lane_stock', 'sync_reprocess_outbox', 'summary_lane', 'due_at'),
     _index('finalization_byok_entry_cohort', 'conversation_finalization_jobs', 'status', 'blocked_byok_at'),
 )
@@ -86,7 +87,12 @@ def nojob(client, namespace):
 def enrichment(client, now):
     collection = client.collection('sync_reprocess_outbox')
     query = (
-        _where(collection, 'first_pending_at', '>=', max(COHORT_START, now - COHORT_SECONDS))
+        _where(
+            _where(collection, 'dormant', '==', False),
+            'first_pending_at',
+            '>=',
+            max(COHORT_START, now - COHORT_SECONDS),
+        )
         .order_by('first_pending_at')
         .limit(PAGE_LIMIT)
     )
