@@ -283,10 +283,100 @@ def test_control_candidate_picks_lowest_service_then_availability(h):
     assert h.store.control_candidate(1, 'batch', 60.0) == 'low'  # 'later' ties on service; availability breaks it
     assert h.store.control_candidate(0, 'batch', 10.0) is None
     assert h.store.control_candidate(1, 'live', 10.0) == 'later'  # live availability and service tie: key breaks it
+    assert h.store.control_candidates(1, 'batch', 10.0, worker_id='worker') == ['low', 'high']
+    assert h.store.control_candidates(1, 'batch', 10.0, worker_id='worker', fanout=1) == ['low']
+    assert h.store.control_candidates(1, 'batch', 10.0, worker_id='worker', fanout=64) == ['low', 'high']
+
+    choices = h.store.control_candidates(1, 'batch', 60.0, worker_id='worker')
+    assert set(choices[:2]) == {'low', 'later'} and choices[-1] == 'high'
+    assert h.store.control_candidate(1, 'batch', 60.0, worker_id='worker', exclude=choices[:2]) == 'high'
     with pytest.raises(ValueError):
         h.store.control_candidate(3, 'batch', 1.0)
     with pytest.raises(ValueError):
         h.store.control_candidate(1, 'gpu', 1.0)
+
+
+@pytest.mark.parametrize('fanout', [1, 16, 64])
+def test_control_candidates_limit_query_order_before_worker_affinity(h, fanout):
+    import hashlib
+
+    rows = [
+        (
+            'control',
+            f'shard-{n:02}',
+            {'p1_active': True, 'p1_service': n // 10, 'p1_batch_available_at': float(29 - n)},
+        )
+        for n in range(30)
+    ]
+    put_all(h, rows)
+    # Firestore/SQL first limit by service, availability, then document key.
+    # Affinity only reorders equal-service rows inside that query prefix.
+    prefix = sorted(rows, key=lambda row: (row[2]['p1_service'], row[2]['p1_batch_available_at'], row[1]))[:fanout]
+    expected = sorted(
+        prefix, key=lambda row: (row[2]['p1_service'], hashlib.sha256(f'worker:{row[1]}'.encode()).digest())
+    )
+    assert h.store.control_candidates(1, 'batch', 30, worker_id='worker', fanout=fanout) == [row[1] for row in expected]
+
+
+def test_scheduler_refills_saturated_candidates_without_stranding_the_seventeenth_shard(h, monkeypatch):
+    from config.batch_pipeline import scheduler_control_key
+    from utils.batch_pipeline.contracts import Priority, WorkItem
+    from utils.batch_pipeline.scheduler import Scheduler, owner_key
+
+    monkeypatch.setenv('BATCH_CONTROL_CANDIDATE_FANOUT', '16')
+    monkeypatch.setenv('BATCH_SHARD_SPREAD_ENABLED', 'true')
+    owners = {}
+    for n in range(10000):
+        uid = h.uid(f'refill-{n}')
+        owners.setdefault(scheduler_control_key(owner_key(uid)), uid)
+        if len(owners) == 17:
+            break
+    assert len(owners) == 17
+    queue = Scheduler(h.store, worker_id='worker')
+    for shard, uid in owners.items():
+        h.customer.add_user(uid)
+        assert queue.enqueue(WorkItem(shard, uid, 1, 'sim://audio', 30, Priority.FRESH), 1)
+    prefix = h.store.control_candidates(0, 'batch', 2, worker_id='worker')
+    assert len(prefix) == 16
+    for shard in prefix:
+        assert h.store.acquire_pull_claim(shard, 'busy', 2, 30)
+
+    leases = queue.pull(2)
+
+    assert [lease.item.segment_id for lease in leases] == list(set(owners) - set(prefix))
+    assert all(h.store.run(lambda tx, shard=shard: tx.get('jobs', shard))['state'] == 'ready' for shard in prefix)
+
+
+def test_purging_adjacent_jobs_rereads_repaired_links_before_next_admission(h):
+    from utils.batch_pipeline.contracts import Priority, WorkItem
+    from utils.batch_pipeline.scheduler import Scheduler
+
+    # Postgres mirrors the authoritative Firestore privacy purge; it has no
+    # standalone conversation-purge operation in this protocol.
+    need(h, 'postgres')
+    uid = h.uid('o')
+    h.customer.add_conversation(uid, 'gone')
+    queue = Scheduler(h.store)
+    # Purge walks IDs lexically: tail first, then the predecessor whose next
+    # pointer it repaired. A stale row snapshot would restore the deleted tail.
+    for segment in ('z-head', 'a-tail'):
+        assert queue.enqueue(WorkItem(segment, uid, 1, 'sim://audio', 30, Priority.FRESH, conversation_id='gone'), 1)
+    h.customer.delete_conversation(uid, 'gone')
+    if h.name == 'sim':
+        h.store.purge(uid, 'gone')
+    else:
+        from database.batch_pipeline_purge import purge_batch_owner
+
+        purge_batch_owner(
+            uid,
+            firestore_client=h.store.client,
+            namespaces=(h.namespace,),
+            conversation_id='gone',
+            delete_uri=lambda owner, uri: None,
+        )
+
+    assert queue.enqueue(WorkItem('survivor', uid, 2, 'sim://audio', 30, Priority.FRESH), 2)
+    assert [lease.item.segment_id for lease in queue.pull(3)] == ['survivor']
 
 
 def test_service_frontier_is_the_maximum_virtual_time_or_zero(h):

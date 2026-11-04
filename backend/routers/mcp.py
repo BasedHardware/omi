@@ -361,6 +361,8 @@ def get_user_profile(uid: str = Depends(get_uid_with_mcp_memories_read)):
 
 
 class CleanerMemory(BaseModel):
+    source_at: Optional[datetime] = None
+    extracted_at: Optional[datetime] = None
     id: str
     content: str
     category: MemoryCategory

@@ -15,7 +15,7 @@ from config.stt_provider_policy import (
 )
 from utils.batch_pipeline import vendor_route_contracts as c
 from utils.batch_pipeline import vendor_route_metrics as m
-from utils.batch_pipeline.provider_stt import PARAKEET_MODEL, resolve_route
+from utils.batch_pipeline.provider_stt_admission import PARAKEET_MODEL, resolve_route
 from utils.observability.reasons import (
     VendorAttemptOutcome as Outcome,
     VendorHealthReason,

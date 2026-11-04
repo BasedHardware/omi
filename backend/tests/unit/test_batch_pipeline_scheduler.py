@@ -106,17 +106,28 @@ class MemoryStore:
             return True
 
     def control_candidate(self, priority, pool, now, *, worker_id='', exclude=()):
+        return next(
+            (key for key in self.control_candidates(priority, pool, now, worker_id=worker_id) if key not in exclude),
+            None,
+        )
+
+    def control_candidates(self, priority, pool, now, *, worker_id='', fanout=None):
+        import hashlib
+        from config.batch_pipeline import control_candidate_fanout
         from utils.batch_pipeline.control import field
 
         candidates = [
             (v[field(priority, 'service')], v[field(priority, pool + '_available_at')], key)
             for (table, key), v in self.rows.items()
             if table == 'control'
-            and key not in exclude
             and v.get(field(priority, 'active'))
             and v[field(priority, pool + '_available_at')] <= now
         ]
-        return min(candidates)[2] if candidates else None
+        candidates.sort()
+        candidates = candidates[: control_candidate_fanout(fanout) if worker_id else 1]
+        if worker_id:
+            candidates.sort(key=lambda row: (row[0], hashlib.sha256(f'{worker_id}:{row[2]}'.encode()).digest()))
+        return [row[2] for row in candidates]
 
     def oldest_retry(self, priority):
         values = [
@@ -255,6 +266,30 @@ def test_lease_expiry_backoff_and_stale_result_fencing():
     assert queue.complete(WorkResult('a', 'gs://results/a'), second.token, 187)
     assert queue.complete(WorkResult('a', 'gs://results/a'), second.token, 999)
     assert not queue.complete(WorkResult('a', 'gs://results/changed'), second.token, 999)
+
+
+def test_result_receipt_persists_and_optional_receipt_is_rolling_idempotent():
+    from utils.batch_pipeline.language_receipt import observation
+
+    store = MemoryStore()
+    queue = Scheduler(store)
+    queue.enqueue(item('receipt'), 0)
+    lease = queue.pull(0)[0]
+    receipt = observation('en', 'parakeet', [{'word': 'hello'}])
+    with_receipt = WorkResult('receipt', 'gs://results/receipt', language_receipt=receipt)
+    assert queue.complete(with_receipt, lease.token, 1)
+    assert store.rows['jobs', 'receipt']['result']['language_receipt'] == receipt
+    assert queue.complete(with_receipt, lease.token, 2)
+    changed = observation('en', 'parakeet', [{'word': 'Привет'}])
+    assert not queue.complete(WorkResult('receipt', 'gs://results/receipt', language_receipt=changed), lease.token, 3)
+
+    queue.enqueue(item('legacy'), 4)
+    legacy_lease = queue.pull(4)[0]
+    without_receipt = WorkResult('legacy', 'gs://results/legacy')
+    assert queue.complete(without_receipt, legacy_lease.token, 5)
+    assert 'language_receipt' not in store.rows['jobs', 'legacy']['result']
+    replay_with_receipt = WorkResult('legacy', 'gs://results/legacy', language_receipt=receipt)
+    assert queue.complete(replay_with_receipt, legacy_lease.token, 6)
 
 
 def test_admission_deferred_re_lease_records_relet_true_first_lease_false():

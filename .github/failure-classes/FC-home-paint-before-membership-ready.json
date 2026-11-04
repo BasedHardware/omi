@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "id": "FC-home-paint-before-membership-ready",
+  "violated_contract": "Home must join its source list and episode membership before publishing conversation rows. Independent provider arrivals exposed raw members, transcript-echo placeholder titles and one timestamp row per queued capture.",
+  "canonical_prevention": "The initial Home join runs providers concurrently, waits at most 500 ms after conversations for a neutral finishing state, then paints the merged projection. Shared Home rows use localized neutral placeholders, preserve every queued capture in contiguous runs and acknowledge only restorable full source snapshots under composed episode rows. Filters retain exact matches. Successful newest-page refreshes replace overlaps while preserving older cached storage pages. A failed episode read keeps the initial join pending through bounded retries; date-filtered cross-midnight members retain their exact source row. After the retry deadline paints cached rows, episode membership and sort anchors stay pinned until a successful pull-to-refresh, app resume from background, Home tab re-entry or a fresh Home mount. Titles and live/ended or processing status update in place. New recordings can add episodes when their full IDs and member metadata do not intersect painted standalone rows; admitted episode layouts are retained across later membership updates.",
+  "canonical_prevention_artifact": [
+    "app/test/widgets/home_cold_open_test.dart",
+    "app/test/unit/home_rows_test.dart",
+    "app/test/providers/conversation_home_typed_fetch_test.dart",
+    "app/test/unit/episode_provider_test.dart",
+    "app/test/providers/conversation_provider_cache_restore_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/pages/conversations/",
+    "app/lib/providers/episode_provider.dart",
+    "app/lib/providers/conversation_home_fetch.dart",
+    "app/lib/backend/http/api/conversation_home_list.dart"
+  ],
+  "status": "open"
+}

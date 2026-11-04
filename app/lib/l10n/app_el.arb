@@ -4522,5 +4522,6 @@
     "episodeCoversUpTo": "Καλύπτει έως τις {time} · πλήρεις σημειώσεις στο τέλος",
     "liveTranscribedUpTo": "Απομαγνητοφώνηση έως τις {time}",
     "liveAudioSaved": "Αποθηκεύτηκαν {duration}",
-    "liveAudioSavedDetail": "Οι ομιλητές και η τελική απομαγνητοφώνηση θα εμφανιστούν εδώ κατά τη μεταφόρτωση."
+    "liveAudioSavedDetail": "Οι ομιλητές και η τελική απομαγνητοφώνηση θα εμφανιστούν εδώ κατά τη μεταφόρτωση.",
+    "episodeFinishingUp": "Ολοκλήρωση…"
 }

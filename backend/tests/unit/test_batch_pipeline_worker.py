@@ -17,8 +17,8 @@ from config import stt_cap_dispatch as cap_policy
 from config.batch_pipeline import worker_silence_disposition_enabled
 from config.batch_pipeline_providers import ProviderConfig, provider_config
 from diarizer import batch_pipeline, batch_pipeline_models
+from utils.batch_pipeline.word_validation import BatchValidationError, ValidationReason
 from diarizer.batch_pipeline import (
-    BatchValidationError,
     PipelineWorker,
     LiveWords,
     Window,
@@ -99,11 +99,20 @@ def setup_worker(**kwargs):
 
 def test_cross_user_chain_decode_once_sort_restore_and_persist():
     worker, words, saved, decoded, diarized, failures = setup_worker()
-    results = worker.process_batch([item('long', 4), item('short', 2)])
+    results = worker.process_batch(
+        [
+            replace(item('long', 4), language_receipt_enabled=True),
+            replace(item('short', 2), language_receipt_enabled=True),
+        ]
+    )
     assert words.calls == [[2, 4]]
     assert decoded == ['long', 'short']
     assert len(diarized) == 2
     assert {r.segment_id for r in results} == {'long', 'short'}
+    assert all(r.language_receipt['language'] == 'en' for r in results)
+    assert all(r.language_receipt['route'] == 'parakeet' for r in results)
+    assert all(r.language_receipt['word_count'] == 1 for r in results)
+    assert all(r.language_receipt['letters'] == 5 and r.language_receipt['incompatible_letters'] == 0 for r in results)
     assert saved['short']['words'][0]['word'] == 'hello'
     assert not failures
 
@@ -127,7 +136,7 @@ def test_route_precedes_vad_failure_without_claiming_asr(monkeypatch, caplog, la
         routes = [r.message for r in caplog.records if 'event=batch_language_route' in r.message]
         assert len(routes) == 1 and f'route={route}' in routes[0]
         if failure == 'vad_call':
-            raise BatchValidationError(batch_pipeline.ValidationReason.VAD_BOUNDS)
+            raise BatchValidationError(ValidationReason.VAD_BOUNDS)
         return [(3, 4)]  # speech_windows rejects bounds on a two-second buffer.
 
     worker, words, saved, *_ = setup_worker(language_of=lambda _: language, vad=vad)
@@ -155,7 +164,7 @@ def test_route_precedes_packed_segmentation_and_vad_failure(caplog):
         return ['features']
 
     def vad(samples, features):
-        raise BatchValidationError(batch_pipeline.ValidationReason.VAD_BOUNDS)
+        raise BatchValidationError(ValidationReason.VAD_BOUNDS)
 
     flight = SimpleNamespace(segment=segment, vad_spans=vad)
     worker, words, saved, *_ = setup_worker(flight_models=flight)
@@ -1081,7 +1090,7 @@ async def test_worker_strict_silence_commits_or_preserves_quarantine(monkeypatch
     await pump.run_once()
     provider.transcribe_batch.assert_called_once()
     retry.assert_called_once()
-    assert strict.call_count == 1 + int(enabled)  # one record-only shadow inspection
+    assert strict.call_count == 2  # decode shadow plus disposition or sampled EMPTY_ASR observation
     if enabled and not speech:
         assert store.rows['jobs', 'a']['state'] == 'committed'
         assert store.rows['results', 'a']['result']['outcome'] == 'silence'

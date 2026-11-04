@@ -118,7 +118,9 @@ def test_fixture_reproduces_the_pinned_pool():
     # window pins the fleet near its ceiling, which is what the live pool did
     # once the chain metric was served.
     series = _load()
-    config = dict(_config(), ready_target=16, chain_target=0.5, down_stab=1800)
+    # Pin the historical bounds too: today's lower ceiling cannot reproduce
+    # the original near-16 pin, and this witness must keep detecting that bug.
+    config = dict(_config(), ready_target=16, chain_target=0.5, down_stab=1800, min_replicas=4, max_replicas=16)
     trace = _replay(series, _metrics(config, 'chain_2m_both_scrape_jobs'), config)
     assert len(trace) >= 180
     assert sum(trace[-60:]) / 60 >= 14
@@ -131,9 +133,9 @@ def test_chart_and_adapter_return_to_the_floor_without_queueing():
     trace = _replay(series, _metrics(config, chain_column), config)
     mean = sum(trace) / len(trace)
     # Measured at 25%: GPU work averages ~1.1 chain s/s, about two workers at
-    # target. The fleet should sit at or just above the floor of 4.
-    assert mean <= 5.5, (chain_column, mean)
-    assert max(trace) <= 7, (chain_column, max(trace))
+    # target. Keep the same headroom bound relative to the configured floor.
+    assert mean <= config['min_replicas'] + 1.5, (chain_column, mean)
+    assert max(trace) <= config['min_replicas'] + 3, (chain_column, max(trace))
     # Timeliness: per-worker 5m chain demand stays below the hot line in every
     # minute, so a smaller fleet never queues flights behind each other.
     hot = [
@@ -149,9 +151,9 @@ def test_fleet_held_at_the_live_size_sheds_to_the_floor():
     config = _config()
     series = _load()
     trace = _replay(series, _metrics(config, _served_chain_column()), config, start=12)
-    assert next(i for i, replicas in enumerate(trace) if replicas <= 5) <= 60
+    assert next(i for i, replicas in enumerate(trace) if replicas <= config['min_replicas'] + 1) <= 60
     assert config['min_replicas'] in trace
-    assert trace[-1] <= 6
+    assert trace[-1] <= config['min_replicas'] + 2
 
 
 def _step_load(ready_target, chain_window, config, minutes=90, step_at=10, base=1.1, high=5.8):
@@ -160,7 +162,8 @@ def _step_load(ready_target, chain_window, config, minutes=90, step_at=10, base=
     Ready units accrue from unserved chain demand; the chain signal is the
     trailing mean of served work over the adapter's rate window.
     """
-    current, serving, backlog, served = 4, [4] * PROVISION_MINUTES, 0.0, []
+    floor = config['min_replicas']
+    current, serving, backlog, served = floor, [floor] * PROVISION_MINUTES, 0.0, []
     worst, caught = 0.0, None
     for minute in range(minutes):
         demand = high if minute >= step_at else base
@@ -182,12 +185,26 @@ def _step_load(ready_target, chain_window, config, minutes=90, step_at=10, base=
     return worst, caught
 
 
-def test_sustained_load_step_is_absorbed_about_as_fast_as_before():
+def test_historical_retune_absorbs_the_step_about_as_fast_as_before():
     # A smoothed chain rate answers a sustained step late; the ready backlog,
     # which only builds when capacity is short, is the fast path.
-    config = _config()
+    # Isolate the original signal retune from the later live floor/ceiling.
+    config = dict(_config(), min_replicas=4, max_replicas=16)
     window = int(re.search(r'(\d+)m$', _served_chain_column().replace('_per_pod', '')).group(1))
     worst, caught = _step_load(config['ready_target'], window, config)
     before_worst, before_caught = _step_load(16, 2, dict(config, chain_target=0.5))
     assert worst <= before_worst + 1, (worst, before_worst)
     assert caught is not None and caught <= before_caught + 2, (caught, before_caught)
+
+
+def test_current_bounds_absorb_the_measured_step_within_thirty_minutes():
+    config = _config()
+    window = int(re.search(r'(\d+)m$', _served_chain_column().replace('_per_pod', '')).group(1))
+    worst, caught = _step_load(config['ready_target'], window, config)
+    before_worst, _ = _step_load(16, 2, dict(config, chain_target=0.5))
+    # The audited 6/12 bounds take 12m to catch this step versus 6m for the
+    # burst-sensitive signals. Preserve the queue-wait comparison and verify
+    # the current bounds against the 30m target, not the historical 4/16 claim.
+    # This synthetic capacity model is not proof of deployed delivery latency.
+    assert worst <= before_worst + 1, (worst, before_worst)
+    assert caught is not None and caught <= 30, caught

@@ -7,6 +7,7 @@ exhausted tasks in bounded batches, including a crash between mark and enqueue.
 
 from __future__ import annotations
 from utils.observability.delivery import record_delivery
+from utils.observability.fallback import record_fallback
 
 import hashlib
 import math
@@ -27,6 +28,7 @@ from google.api_core.exceptions import AlreadyExists, FailedPrecondition, Invali
 from prometheus_client import Counter
 
 from utils.conversations import summary_delivery
+from config import enrichment as enrichment_config
 from config.summary_guarantee import (
     ADMITTED_OWNER,
     deadline_seconds,
@@ -214,15 +216,46 @@ def valid_effects_binding(row: dict[str, Any]) -> bool:
         return False
 
 
-def _dispatch_binding() -> dict[str, str] | None:
-    from config import enrichment as enrichment_config
+def _conversation_finished_at(uid: str, conversation_id: str) -> object:
+    """Read scheduling metadata only; a late obligation is not a fresh conversation."""
+    snapshot = (
+        get_firestore_client()
+        .document(f'users/{uid}/conversations/{conversation_id}')
+        .get(field_paths=['finished_at', 'created_at'], timeout=2, retry=None)
+    )
+    data = snapshot.to_dict() or {}
+    return data.get('finished_at') if data.get('finished_at') is not None else data.get('created_at')
 
+
+def _recent_conversation(uid: str, conversation_id: str, now: float) -> bool:
+    if (
+        enrichment_config.route() != 'enrichment_queue'
+        or not enrichment_config.fresh_queue()
+        or enrichment_config.fresh_max_age_seconds() == 0
+    ):
+        return False
+    try:
+        return enrichment_config.recently_finished(_conversation_finished_at(uid, conversation_id), now=now)
+    except Exception:
+        # Metadata failure keeps work on the established queue; no obligation is lost.
+        record_fallback(
+            component='sync_dispatch',
+            from_mode='enrichment_fresh',
+            to_mode='enrichment_queue',
+            reason='unavailable',
+            outcome='degraded',
+            log=logger,
+        )
+        return False
+
+
+def _dispatch_binding(
+    *, backfill: bool = False, effects_only: bool = False, recent: bool = False
+) -> dict[str, str] | None:
     if enrichment_config.route() == 'enrichment_queue':
-        binding = enrichment_config.dispatch_binding()
+        binding = enrichment_config.dispatch_binding(backfill=backfill, effects_only=effects_only, recent=recent)
         if valid_dispatch_binding(binding):
             return binding
-        from utils.observability.fallback import record_fallback
-
         record_fallback(
             component='sync_dispatch',
             from_mode='enrichment_queue',
@@ -383,9 +416,10 @@ def mark_update(
     open one that predates snapshots; ``stamps`` collects ``(source, policy_id)`` for telemetry after commit.
     """
     candidate: FirstSummaryPolicy | None = None
+    recent: bool | None = None
 
     def update(old: Row | None) -> tuple[Row, tuple[Row, bool]]:
-        nonlocal candidate
+        nonlocal candidate, recent
         if stamps is not None:
             stamps.clear()  # A CAS or transaction retry re-runs this operation.
         if old and old.get('summary_blocked_reason') == EMPTY_BLOCKED_REASON:
@@ -455,15 +489,19 @@ def mark_update(
             )
 
         row.setdefault('summary_lane', 'batch' if batch else summary_delivery.lane({}))
+        backfill = row['summary_lane'] == 'backfill' and not first_summary_pending(row)
+        if (old is None or old.get('dormant')) and not backfill and not effects_only and recent is None:
+            recent = _recent_conversation(uid, conversation_id, current)
         if old is None:
             row.update(
                 task_token=uuid.uuid4().hex,
                 task_due_at=row['due_at'],
                 lease_until=0,
-                dispatch=(new_dispatch() if new_dispatch else None) or _dispatch_binding(),
+                dispatch=(new_dispatch() if new_dispatch else None)
+                or _dispatch_binding(backfill=backfill, effects_only=effects_only, recent=bool(recent)),
             )
         elif old.get('dormant'):
-            row['dispatch'] = _dispatch_binding()
+            row['dispatch'] = _dispatch_binding(backfill=backfill, effects_only=effects_only, recent=bool(recent))
         elif not valid_dispatch_binding(row.get('dispatch')):
             row['dispatch'] = None
         wake = old is None
@@ -813,7 +851,7 @@ def sweep(
 
     ``client``/``wake`` bind the pass to an injected store and task creator (the outbox conformance suite);
     an injected creator stands in for the queue binding and the named-task probe. ``cursor=False`` (the
-    contract (b) outbox, invariant 8) scans from the oldest due row instead of resuming the shared
+    optional oldest-first scan) scans from the oldest due row instead of resuming the shared
     ``sync_reprocess_scan`` checkpoint. An expired lease is fenced and re-woken under a new token, and
     ``wake_check_after`` throttles a row only once its wake was created.
     """
@@ -827,7 +865,6 @@ def sweep(
     if not owns_runtime():
         return counts
 
-    binding = _dispatch_binding()
     limit = max(1, min(100, limit))
     bound = client
     client = bound or get_firestore_client()
@@ -869,11 +906,45 @@ def sweep(
         if monotonic() - check_started >= 10:
             break
         last = snapshot
+        recent: bool | None = None
 
         def repair(old: Row | None) -> tuple[Row | None, tuple[str, Row | None]]:
+            nonlocal recent
             if old is None or old.get('dormant') or old.get('lease_until', 0) > current:
                 return old, ('skipped', None)
             row = dict(old)
+            promoted = False
+            # A valid old wake can wait hours behind historical enrichment.
+            # Promote only idle user-facing work, retaining the handler/auth
+            # identity. Rotate the token in this CAS so old deliveries are stale.
+            # Effects and backfill keep their original binding and custody.
+            fresh_queue = enrichment_config.fresh_queue()
+            if (
+                not injected
+                and fresh_queue
+                and enrichment_config.route() == 'enrichment_queue'
+                and not row.get('effects_only')
+                and (row.get('summary_lane') != 'backfill' or first_summary_pending(row))
+                and valid_dispatch_binding(row.get('dispatch'))
+                and row['dispatch']['queue'] == enrichment_config.primary_queue()
+            ):
+                if recent is None:
+                    recent = _recent_conversation(row['uid'], row['conversation_id'], current)
+                desired = _dispatch_binding(recent=recent)
+                previous = row['dispatch']
+                if (
+                    desired is not None
+                    and previous['queue'] == enrichment_config.primary_queue()
+                    and desired['queue'] != previous['queue']
+                    and all(desired[field] == previous[field] for field in ('handler', 'audience', 'invoker_sa'))
+                ):
+                    row.update(
+                        dispatch=desired,
+                        task_token=uuid.uuid4().hex,
+                        task_due_at=current,
+                        wake_check_after=0,
+                    )
+                    promoted = True
             release_hold = (
                 not processing_hold.enabled_for(row)
                 and row.get('sync_hold')
@@ -890,6 +961,15 @@ def sweep(
             if not expired and row.get('wake_check_after', 0) > current:
                 return old, ('skipped', None)
             if not injected and not valid_effects_binding(row):
+                binding = _dispatch_binding(
+                    backfill=row.get('summary_lane') == 'backfill' and not first_summary_pending(row),
+                    effects_only=bool(row.get('effects_only')),
+                    recent=(
+                        not row.get('effects_only')
+                        and (row.get('summary_lane') != 'backfill' or first_summary_pending(row))
+                        and _recent_conversation(row['uid'], row['conversation_id'], current)
+                    ),
+                )
                 if binding is None:
                     return old, ('unbound', None)
                 # Claim and fence the repaired binding in the same CAS. Any old
@@ -901,7 +981,7 @@ def sweep(
                 row.pop('summary_seen_by', None)
 
             row['wake_check_after'] = current + WAKE_CHECK_SECONDS
-            if not expired and not injected and first_summary_pending(row):
+            if not expired and not injected and not promoted and first_summary_pending(row):
                 # Probe outside CAS, then recheck the exact name under CAS below.
                 return row, ('check', row)
             if row['task_due_at'] + REPAIR_SECONDS <= current:
@@ -1007,6 +1087,7 @@ def mark_effects(uid: str, conversation_id: str, language: str, *, immediate: bo
         conversation_id=conversation_id,
         language=language,
         effects_only=True,
+        summary_lane=summary_delivery.lane({}),
         deferred_reason=None,
         immediate=immediate,
         task_token=uuid.uuid4().hex,
@@ -1026,7 +1107,7 @@ def mark_effects(uid: str, conversation_id: str, language: str, *, immediate: bo
 
 
 def _effects_binding() -> dict[str, str]:
-    binding = _dispatch_binding()
+    binding = _dispatch_binding(backfill=summary_delivery.lane({}) == 'backfill', effects_only=True)
     if binding is not None:
         return binding
     # Listen/pusher already have the durable finalization queue, identity and

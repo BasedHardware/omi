@@ -8,7 +8,7 @@ from prometheus_client import Counter
 
 from config import record_partial as config
 from config.record_audio import require_record_audio_barrier
-from database.batch_pipeline_intake import admit
+from utils.batch_pipeline.record_provider import admit_record_units
 from database.batch_pipeline_policy import load_job_policy
 from database.record_partial import update_run, continuation_refusal
 from utils.batch_pipeline.contracts import Priority, ProjectionBinding, WorkItem
@@ -16,7 +16,7 @@ from utils.batch_pipeline.record_partial_audio import digest, inventory_digest, 
 from utils.batch_pipeline.scheduler import owner_key
 from utils.batch_pipeline.source_audio import MAGIC, batch_timing_store
 from utils.batch_pipeline.record_language import prove_manifest
-from utils.executors import db_executor, storage_executor, sync_executor, run_blocking
+from utils.executors import db_executor, storage_executor, run_blocking
 from utils.other.storage import list_audio_chunks
 from utils.observability.reasons import ReasonFamily, reason_label
 
@@ -147,7 +147,7 @@ async def prepare_run(store, pending, current, barrier, client, artifacts, units
         finally:
             iterator.close()
 
-    units, _ = await run_blocking(sync_executor, collect)
+    units, _ = await run_blocking(storage_executor, collect)
     plan = {'version': 1, 'fingerprint': fingerprint, 'units': units, 'prior_coverage': coverage}
     uri = await run_blocking(storage_executor, artifacts.stage_record_plan, seed, plan)
     generation = int((previous or {}).get('generation', 0)) + 1
@@ -178,7 +178,7 @@ async def prepare_run(store, pending, current, barrier, client, artifacts, units
     return run if changed else None
 
 
-async def drain_partial(store, pending, current, client, artifacts, units_reader, *, now):
+async def drain_partial(store, pending, current, client, artifacts, units_reader, *, now, provider_outbox_factory=None):
     if not config.enabled() or not pending.get('partial_coordinator'):
         raise ValueError('partial record barrier disabled')
     run = pending.get('partial_run')
@@ -245,11 +245,25 @@ async def drain_partial(store, pending, current, client, artifacts, units_reader
         )
         event('completed' if changed else 'state_changed', late=run['generation'] > 1)
         return {'outcome': 'partial'}
-    await admit_page(store, pending, current, barrier, artifacts, plan, run, units, content, now)
+    await admit_page(
+        store,
+        pending,
+        current,
+        barrier,
+        artifacts,
+        plan,
+        run,
+        units,
+        content,
+        now,
+        provider_outbox_factory=provider_outbox_factory,
+    )
     return {'outcome': 'partial'}
 
 
-async def admit_page(store, pending, current, barrier, artifacts, plan, run, units, content, now):
+async def admit_page(
+    store, pending, current, barrier, artifacts, plan, run, units, content, now, *, provider_outbox_factory=None
+):
     uid, cid = pending['owner_id'], pending['conversation_id']
     _, policy = await run_blocking(db_executor, load_job_policy, store, pending['segment_id'])
     if policy is None or policy.provider_reason == 'byok':
@@ -259,6 +273,15 @@ async def admit_page(store, pending, current, barrier, artifacts, plan, run, uni
     if refusal:
         event(refusal, late=run['generation'] > 1)
         return
+    row = pending['record_snapshot']
+    from utils.batch_pipeline.language_receipt import auto_language_cohort
+
+    receipt_enabled = auto_language_cohort(
+        server_batch_only=row.get('server_batch_only') is True,
+        client_platform=row.get('client_platform'),
+        native_record=True,
+        language=row.get('language'),
+    )
     items = [
         WorkItem(
             digest([content, i]),
@@ -270,10 +293,10 @@ async def admit_page(store, pending, current, barrier, artifacts, plan, run, uni
             conversation_id=cid,
             privacy_generation=pending['privacy_generation'],
             requires_compute_admission=True,
+            language_receipt_enabled=True if receipt_enabled else None,
         )
         for i, (start, duration, _) in enumerate(units)
     ]
-    row = pending['record_snapshot']
     protection = await run_blocking(db_executor, artifacts.authorize, seed_for(pending))
     binding = ProjectionBinding(
         uid,
@@ -292,7 +315,9 @@ async def admit_page(store, pending, current, barrier, artifacts, plan, run, uni
         native_record=True,
         partial_record=True,
     )
-    staged = []
+    from utils.batch_pipeline.language_receipt import admission as language_admission_receipt
+
+    staged, language_receipts = [], {}
     for item, (_, _, refs) in zip(items, units):
         context = {
             'owner_id': uid,
@@ -318,6 +343,8 @@ async def admit_page(store, pending, current, barrier, artifacts, plan, run, uni
         }
         if row.get('server_batch_only') is True:
             manifest = await prove_manifest(store, artifacts, item, manifest)
+        if item.language_receipt_enabled:
+            language_receipts[item.segment_id] = language_admission_receipt(manifest['context'])
         uri = await run_blocking(
             storage_executor,
             artifacts.stage_audio,
@@ -339,17 +366,19 @@ async def admit_page(store, pending, current, barrier, artifacts, plan, run, uni
         'record_partial_generation': run['generation'],
         'record_partial_page': run['page'],
         'record_partial_content': content,
+        **({'language_receipts': language_receipts} if language_receipts else {}),
         **({'server_batch_only': True} if row.get('server_batch_only') is True else {}),
     }
     await run_blocking(
         db_executor,
-        admit,
+        admit_record_units,
         store,
         staged,
         binding,
         now,
         namespace=store.namespace,
         policy=policy,
+        provider_outbox_factory=provider_outbox_factory,
         require_artifacts=True,
         record_barrier=barrier,
         intake=intake,

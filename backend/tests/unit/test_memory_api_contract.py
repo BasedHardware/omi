@@ -113,3 +113,28 @@ def test_released_belief_write_fields_are_accepted_but_ignored():
     assert not hasattr(memory, "half_life_days")
     assert "belief_class" not in memory_write_payload(memory, MemoryApiExposure.CANONICAL)
     assert "half_life_days" not in memory_write_payload(memory, MemoryApiExposure.CANONICAL)
+
+
+def test_backfill_source_and_extraction_times_are_distinct_from_storage_time():
+    captured = datetime(2026, 7, 1, tzinfo=timezone.utc)
+    extracted = datetime(2026, 7, 5, tzinfo=timezone.utc)
+    value = {
+        **_memory().model_dump(),
+        'evidence': [{'captured_at': captured, 'created_at': captured, 'extracted_at': extracted}],
+    }
+    payload = memory_api_payload(value, MemoryApiExposure.CANONICAL)
+    assert payload['source_at'] == captured
+    assert payload['extracted_at'] == extracted
+    assert payload['created_at'] == _memory().created_at
+    unknown = memory_api_payload(_memory(), MemoryApiExposure.CANONICAL)
+    assert unknown['source_at'] is None and unknown['extracted_at'] is None
+
+
+def test_adapted_evidence_creation_is_not_claimed_as_extraction_time():
+    value = {
+        **_memory().model_dump(),
+        'evidence': [{'captured_at': _memory().created_at, 'created_at': _memory().created_at}],
+    }
+    payload = memory_api_payload(value, MemoryApiExposure.CANONICAL)
+    assert payload['source_at'] == _memory().created_at
+    assert payload['extracted_at'] is None

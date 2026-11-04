@@ -11948,5 +11948,6 @@
     "episodeCoversUpTo": "{time} पर्यंत · संपल्यावर पूर्ण नोट्स",
     "liveTranscribedUpTo": "{time} पर्यंत ट्रान्सक्राइब झाले",
     "liveAudioSaved": "{duration} जतन केले",
-    "liveAudioSavedDetail": "अपलोड होताना वक्ते आणि अंतिम ट्रान्सक्रिप्ट येथे दिसतील."
+    "liveAudioSavedDetail": "अपलोड होताना वक्ते आणि अंतिम ट्रान्सक्रिप्ट येथे दिसतील.",
+    "episodeFinishingUp": "पूर्ण करत आहे…"
 }

@@ -54,12 +54,8 @@ from utils.batch_pipeline import pump as pump_module
 from utils.batch_pipeline import quarantine_recovery as recovery_module
 from utils.batch_pipeline import serving as serving_module
 from utils.batch_pipeline.contracts import PoolCapacity, ProjectionBinding, WorkItem
-from utils.batch_pipeline.provider_stt import (
-    ProviderSttStage,
-    VendorCallFailure,
-    provider_enqueue,
-    resolve_route,
-)
+from utils.batch_pipeline.provider_stt import ProviderSttStage, VendorCallFailure
+from utils.batch_pipeline.provider_stt_admission import provider_enqueue, resolve_route
 from utils.batch_pipeline.pump import Pump
 from utils.batch_pipeline.recovery_disposition import MultilingualEmpty, RecoveryFailure
 from utils.batch_pipeline.quarantine_recovery import QuarantineRecovery
@@ -75,6 +71,7 @@ from testing.pipeline_sim.store import CustomerData, SimStore
 from testing.pipeline_sim.stt import (
     EMPTY,
     ERROR,
+    NEAR_SILENCE,
     SILENCE,
     SPEECH,
     TIMEOUT,
@@ -89,6 +86,7 @@ from testing.pipeline_sim.stt import (
     vad_spans,
 )
 from testing.pipeline_sim.workload import (
+    NORMAL,
     PRIVACY_AT_ADMISSION,
     PRIVACY_MIDFLIGHT,
     TARGET_DELETED,
@@ -166,6 +164,7 @@ class SimConfig:
     task_hop_seconds: float = 2.0
     recovery_duplicate_delivery_rate: float = 0.0
     worker_rpc_duplicate_rate: float = 0.0  # duplicate complete/fail delivery from a lease-holding worker
+    unrecoverable_near_silence: bool = False  # fixed negative input for recovery scheduling comparisons
     projection_seconds: float = 1.0
     projection_cursor_blocks: bool = True
     backfill_speech_seconds_per_day: float = BACKFILL_SPEECH_SECONDS_PER_UID_DAY
@@ -316,13 +315,17 @@ class SimWorker:
 
     async def _plan(self, item) -> None:
         sim = self.sim
-        kind = sim.truth[item.segment_id]['kind']
+        truth = sim.truth[item.segment_id]
+        kind = truth['kind']
+        forced = EMPTY if truth.get('unrecoverable') else None
         first, retry = None, None
         if kind != SILENCE:
-            first = await sim.stt.request(kind, item.duration_seconds, purpose='batch')
+            first = await sim.stt.request(kind, item.duration_seconds, purpose='batch', forced_outcome=forced)
             samples = self._decode(item)
             if first == EMPTY and padded_retry_fits(samples, self.config.max_padded_seconds):
-                retry = await sim.stt.request(kind, padded_retry_seconds(samples), purpose='padded_retry')
+                retry = await sim.stt.request(
+                    kind, padded_retry_seconds(samples), purpose='padded_retry', forced_outcome=forced
+                )
         self.planned.plan[item.segment_id] = {'first': first, 'retry': retry}
         sim.counters[f'asr_{first or "skipped_silence"}'] += 1
 
@@ -407,6 +410,24 @@ class Simulation:
                     sid,
                     {'kind': segment.kind, 'duration': segment.duration, 'owner': upload.owner, 'upload': upload},
                 )
+        if self.config.unrecoverable_near_silence:
+            # A late capture leaves one known held unit after healthy traffic
+            # establishes the denominator. Random latency/outcome draws cannot
+            # guarantee identical provider inputs across scheduling variants.
+            held = next(
+                (
+                    truth
+                    for truth in reversed(list(self.truth.values()))
+                    if truth['kind'] == NEAR_SILENCE
+                    and truth['upload'].owner_kind == NORMAL
+                    and truth['upload'].target is None
+                    and truth['upload'].duplicate_of is None
+                ),
+                None,
+            )
+            if held is None:
+                raise ValueError('unrecoverable fixture requires an unfenced near-silence capture')
+            held['unrecoverable'] = True
 
     @staticmethod
     def _segment_id(upload: UploadSpec, index: int) -> str:
@@ -860,9 +881,12 @@ class Simulation:
                 f'{record.spec.owner}/{record.spec.content_id}',
                 lambda row: row.update(status='completed', updated_at=now),
             )
-            # Production ProjectionStore re-copies its siblings to the A2 shadow after commit (no-op otherwise).
+            # Production ProjectionStore re-copies its siblings AND the owner row (projection_watermark) to the
+            # A2 shadow after commit (ProjectionStore._mirror; no-op outside shadow mode).
+            owners = {('owners', self.store.rows[('results', s)]['owner_key']) for s in record.segment_ids}
             mirror_refresh(
-                getattr(self.store, 'namespace', ''), [(t, s) for s in record.segment_ids for t in ('jobs', 'results')]
+                getattr(self.store, 'namespace', ''),
+                [*((t, s) for s in record.segment_ids for t in ('jobs', 'results')), *sorted(owners)],
             )
             record.projected_at = now
             if record.has_words:
@@ -1070,6 +1094,8 @@ class Simulation:
                         record.fenced_at = self.clock.now
 
     def _drained(self) -> bool:
+        if len(self.records) != len(self.workload.uploads):
+            return False
         if self.clock.elapsed() < max((u.at for u in self.workload.uploads), default=0.0):
             return False
         for record in self.records:
@@ -1111,6 +1137,11 @@ class Simulation:
         next_poll = self.clock.now + self.config.gate_poll_seconds
         while self.clock.now < deadline:
             await asyncio.sleep(min(60.0, deadline - self.clock.now))
+            for task in tasks:
+                if task.done() and not task.cancelled():
+                    error = task.exception()
+                    if error is not None:
+                        raise error
             if self.clock.now >= next_poll:
                 next_poll += self.config.gate_poll_seconds
                 sample = score(self._result(self.clock.now), final=False)

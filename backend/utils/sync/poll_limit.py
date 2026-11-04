@@ -39,7 +39,10 @@ def with_poll_hint(status: dict, *, surface_open: bool = False) -> dict:
     """
     # Custody holds do not benefit from foreground polling or the generic
     # backoff rollback. Five minutes also matches held-partial reconciliation.
-    if status.get('status') == 'processing' and status.get('reason_code') == 'batch_unit_held':
+    if status.get('status') == 'processing' and status.get('reason_code') in {
+        'batch_unit_held',
+        'batch_artifact_missing',
+    }:
         return {**status, 'poll_after_ms': 300000}
     if not poll_backoff():
         return status
