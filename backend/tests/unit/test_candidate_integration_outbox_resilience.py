@@ -10,7 +10,6 @@ from database.candidate_integration_outbox import (
     complete_candidate_integration_dispatch,
     dead_letter_malformed_candidate_integration,
     list_candidate_integration_dispatches,
-    list_candidate_integration_sweep_rows,
     note_candidate_integration_provider_attempt,
     redrive_candidate_integration_dead_letter,
     refresh_candidate_integration_lease,
