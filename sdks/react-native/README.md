@@ -15,6 +15,15 @@ A React Native SDK for connecting to and interacting with Omi devices via Blueto
   </Card>
 </CardGroup>
 
+## Features
+
+- Scan for nearby Omi devices
+- Connect to Omi devices
+- Get device audio codec information
+- Stream audio data from the device
+- Monitor battery levels
+- Handle connection state changes
+- Real-time audio transcription using Deepgram
 
 ## Installation
 
@@ -67,8 +76,59 @@ cd ios && pod install
   </Tab>
 </Tabs>
 
+## Development Setup
 
-## Quick Start
+<Steps>
+  <Step title="Clone and Install">
+    ```bash
+    git clone https://github.com/BasedHardware/omi.git
+    cd sdks/react-native
+    npm install
+    ```
+  </Step>
+  <Step title="Set Up Example App">
+    ```bash
+    cd example
+    npm install
+    ```
+  </Step>
+  <Step title="Install iOS Pods">
+    ```bash
+    cd ios
+    pod install
+    ```
+
+    <Note>
+    Do not skip this step. Without it, the build fails with native module errors.
+    </Note>
+  </Step>
+  <Step title="Run the App">
+    <Tabs>
+      <Tab title="iOS">
+        ```bash
+        cd example/ios
+        open OmiSDKExample.xcworkspace
+        ```
+
+        <Warning>
+        Open the `.xcworkspace` file, NOT the `.xcodeproj` file.
+        </Warning>
+
+        Select your target device and build. Bluetooth doesn't work in simulators. Use a physical device.
+      </Tab>
+      <Tab title="Android">
+        ```bash
+        cd example
+        npm run android
+        ```
+
+        Make sure USB debugging is enabled on your connected Android device.
+      </Tab>
+    </Tabs>
+  </Step>
+</Steps>
+
+## Quick start
 
 ```javascript
 import { OmiConnection, DeviceConnectionState, BleAudioCodec } from '@omiai/omi-react-native';
@@ -112,6 +172,52 @@ async function connectToDevice(deviceId) {
 }
 ```
 
+## API Reference
+
+### OmiConnection Methods
+
+| Method | Description | Returns |
+|--------|-------------|---------|
+| `scanForDevices(onDeviceFound, timeoutMs)` | Scan for nearby Omi devices | Function to stop scanning |
+| `connect(deviceId, onConnectionStateChanged)` | Connect to an Omi device | `Promise<boolean>` |
+| `disconnect()` | Disconnect from current device | `Promise<void>` |
+| `isConnected()` | Check connection status | `boolean` |
+| `getAudioCodec()` | Get device audio codec | `Promise<BleAudioCodec>` |
+| `startAudioBytesListener(callback)` | Start receiving audio bytes | `Promise<Subscription>` |
+| `stopAudioBytesListener(subscription)` | Stop receiving audio bytes | `Promise<void>` |
+| `getBatteryLevel()` | Get battery percentage | `Promise<number>` |
+
+### Types
+
+<Tabs>
+  <Tab title="OmiDevice">
+    ```typescript
+    interface OmiDevice {
+      id: string;
+      name: string;
+      rssi: number;
+    }
+    ```
+  </Tab>
+  <Tab title="DeviceConnectionState">
+    ```typescript
+    enum DeviceConnectionState {
+      CONNECTED = 'connected',
+      DISCONNECTED = 'disconnected'
+    }
+    ```
+  </Tab>
+  <Tab title="BleAudioCodec">
+    ```typescript
+    enum BleAudioCodec {
+      PCM16 = 'pcm16',
+      PCM8 = 'pcm8',
+      OPUS = 'opus',
+      UNKNOWN = 'unknown'
+    }
+    ```
+  </Tab>
+</Tabs>
 
 ## Stopping Deepgram transcription
 
@@ -138,7 +244,7 @@ or setting it to `0` closes immediately. Failed terminal sends also close immedi
     - Ensure Bluetooth is enabled on your device
     - Check that you have the necessary permissions
     - Make sure the Omi device is powered on and in range
-    - Bluetooth scanning doesn't work in iOS simulators - use a physical device
+    - Bluetooth scanning doesn't work in iOS simulators. Use a physical device
   </Accordion>
   <Accordion title="Connection fails" icon="plug">
     - Try restarting the Omi device
@@ -159,6 +265,9 @@ or setting it to `0` closes immediately. Failed terminal sends also close immedi
   </Accordion>
 </AccordionGroup>
 
+## License
+
+MIT License
 
 ## Related
 
