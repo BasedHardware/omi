@@ -27,17 +27,22 @@ def single_case(kind, fault='drop_invalidation', family='subscription'):
     )
 
 
-def test_privacy_smoke_via_registered_runner(tmp_path):
+@pytest.mark.parametrize('ttl_override_s', [None, 55])
+def test_privacy_smoke_via_registered_runner(tmp_path, ttl_override_s):
     from testing.replay_harness.runner import run_cases
     from testing.replay_harness.report import write_report
 
     previous = dict(os.environ)
-    items = asyncio.run(run_cases([FIXTURE]))
+    items = asyncio.run(run_cases([FIXTURE], privacy_ttl_override_s=ttl_override_s))
     write_report(items, tmp_path)
-    assert items[0]['expectation_met'], items
+    assert items[0]['expectation_met'] == (ttl_override_s == 55), json.dumps(items)
     details = items[0]['stages'][0]['details']
     assert details['transitions'] == 120 and details['probes'] == 720
-    assert details['mismatches'] == 0
+    assert details['mismatches'] == 0 if ttl_override_s == 55 else details['mismatches'] > 0
+    assert details['completed_transitions'] == details['attempted_transitions'] == 120
+    assert not details['errors'], json.dumps(details['errors'])
+    assert details['bound_s'] == 60 and details['ttl_override_s'] == ttl_override_s
+    assert details['bound_margin_s'] == (5 if ttl_override_s == 55 else 0)
     assert set(details['max_observed_staleness_seconds']) == {
         'deletion_marker',
         'tombstone',
@@ -59,23 +64,17 @@ def test_privacy_smoke_via_registered_runner(tmp_path):
 
 
 @pytest.mark.parametrize('kind', ['byok_enable', 'byok_disable'])
-def test_stage_catches_stale_decisions_in_both_directions(monkeypatch, kind):
-    from database import fsr_read_cache as cache
+def test_stage_catches_stale_decisions_in_both_directions(kind):
     from testing.replay_harness.stages.privacy_cache import PrivacyCacheDriver
 
-    original = cache.ttl
-    # Mutation deliberately breaks the hard cap AND loses both invalidations.
-    # Negative-only privacy hints cannot stale-deny; BYOK caches both bools and
-    # proves this stage detects both allow->deny and deny->allow regressions.
-    monkeypatch.setattr(
-        cache, 'ttl', lambda name, default: 120 if name == 'FSR_SUBSCRIPTION_TTL_SECONDS' else original(name, default)
-    )
-    result = asyncio.run(PrivacyCacheDriver().run(single_case(kind)))
+    result = asyncio.run(PrivacyCacheDriver(ttl_override_s=120).run(single_case(kind)))
     assert result.status == 'stopped', result
     assert result.reason == 'privacy_cache:staleness_bound_exceeded', result
-    assert result.details['family'] == 'subscription' and result.details['kind'] == kind
-    assert result.details['offset_seconds'] == 60 and result.details['mismatches'] == 1
-    assert result.details['probes'] == 4
+    cells = result.details['by_family_fault_offset']['subscription']['drop_invalidation']
+    assert cells['60.0']['mismatches'] == cells['61.0']['mismatches'] == 1
+    assert cells['300.0']['mismatches'] == 0
+    assert result.details['mismatches'] == 2 and result.details['bound_margin_s'] == -60
+    assert result.details['probes'] == 6
     serialized = json.dumps(result.details)
     assert 'synthetic-privacy' not in serialized and 'synthetic-gate-token' not in serialized
 
@@ -85,10 +84,11 @@ def test_exact_sixty_second_boundary_without_invalidations(kind):
     from testing.replay_harness.stages.privacy_cache import PrivacyCacheDriver
 
     result = asyncio.run(PrivacyCacheDriver().run(single_case(kind)))
-    assert result.status == 'pass', result
+    assert result.status == 'stopped', result
     assert result.details['early_mismatches'] == 3
-    assert result.details['max_observed_staleness_seconds']['subscription'] == 59
-    assert result.details['probes'] == 6 and result.details['mismatches'] == 0
+    assert result.details['max_observed_staleness_seconds']['subscription'] == 60
+    assert result.details['probes'] == 6 and result.details['mismatches'] == 1
+    assert result.details['bound_margin_s'] == 0
 
 
 def test_stage_catches_stale_deletion_marker(monkeypatch):
@@ -103,7 +103,8 @@ def test_stage_catches_stale_deletion_marker(monkeypatch):
     )
     result = asyncio.run(PrivacyCacheDriver().run(single_case('wipe_intent', family='deletion_marker')))
     assert result.reason == 'privacy_cache:staleness_bound_exceeded', result
-    assert result.details['family'] == 'deletion_marker' and result.details['offset_seconds'] == 60
+    assert result.details['by_family_fault_offset']['deletion_marker']['drop_invalidation']['60.0']['mismatches'] == 1
+    assert result.details['mismatches'] == 2 and result.details['probes'] == 6
 
 
 def test_fake_clock_controls_redis_expiry_and_lua_time():
@@ -129,3 +130,15 @@ def test_fake_clock_controls_redis_expiry_and_lua_time():
             assert env.redis.get('clock-proof') is None
             assert env.redis.eval("return redis.call('TIME')", 0)[0] == str(int(env.clock.time()))
             assert cache.time.monotonic() == env.clock.time()
+
+
+def test_manifest_bound_is_independent_from_ttl():
+    from testing.replay_harness.stages.privacy_cache import PrivacyCacheDriver
+
+    case = single_case('byok_enable')
+    case = replace(case, manifest=replace(case.manifest, stages={'privacy_cache': {'expect': 'pass', 'bound_s': 50}}))
+    result = asyncio.run(PrivacyCacheDriver(ttl_override_s=55).run(case))
+    assert result.reason == 'privacy_cache:staleness_bound_exceeded'
+    assert result.details['bound_s'] == 50 and result.details['bound_margin_s'] == -5
+    assert result.details['probes'] == 7
+    assert result.details['by_family_fault_offset']['subscription']['drop_invalidation']['50.0']['mismatches'] == 1

@@ -145,7 +145,7 @@ def replay_environment():
         import fakeredis
         from testing.pipeline_sim.clock import VirtualClock
         from utils.other.local_storage import LocalBlob, LocalBucket, LocalStorageClient
-        from utils.other import storage as product_storage
+        from utils.other import storage as product_storage, local_storage
         from database import redis_db
 
         scratch = Path('/Volumes/Ephemeral/scratch')
@@ -178,6 +178,7 @@ def replay_environment():
         fake_redis = fakeredis.FakeRedis(decode_responses=True)
         stack.callback(fake_redis.close)
         stack.enter_context(patch.object(product_storage, '_get_storage_client', lambda: local))
+        stack.enter_context(patch.object(local_storage, 'create_storage_client', lambda: local))
         # Override the import-time bucket constant if a test process previously
         # imported storage under different ambient defaults.
         stack.enter_context(patch.object(product_storage, 'private_cloud_sync_bucket', 'replay-chunks'))

@@ -9,7 +9,7 @@ from testing.replay_harness.report import StageResult, item_report, record_excep
 from testing.replay_harness.stages.base import NotImplementedStage
 
 
-async def run_cases(directories: list[Path]) -> list[dict]:
+async def run_cases(directories: list[Path], *, privacy_ttl_override_s=None) -> list[dict]:
     # Validate all inputs before constructing any infrastructure.
     cases = [load_case(directory) for directory in directories]
     if len({case.manifest.id for case in cases}) != len(cases):
@@ -35,7 +35,7 @@ async def run_cases(directories: list[Path]) -> list[dict]:
                     'capture_upload': CaptureUploadDriver,
                     'titling': TitlingDriver,
                     'episodes': EpisodesDriver,
-                    'privacy_cache': PrivacyCacheDriver,
+                    'privacy_cache': lambda: PrivacyCacheDriver(ttl_override_s=privacy_ttl_override_s),
                 }.get(name, lambda: NotImplementedStage(name))()
                 # Privacy timelines own one isolated emulator/Redis context per
                 # transition. Close any preceding pipeline environment first.

@@ -83,11 +83,27 @@ since its memo is independent of the Redis/request bypass. Candidate reads retai
 a real privacy session across the transition; authority reads temporarily leave
 that session so its separate memo cannot mask a mismatch.
 
-Any unequal decision at or after +60s stops with
-`privacy_cache:staleness_bound_exceeded`; details include only the family, kind,
-fault and offset, never identifiers. Earlier differences are recorded separately.
-The report counts completed transitions, scheduled probes, overlap probes and
-bounded mismatches, and gives the largest sampled stale offset per family.
+Every transition and every scheduled probe runs, including after a mismatch.
+The stage ends `stopped` with `privacy_cache:staleness_bound_exceeded` if any
+unequal decision occurs at or after the bound. Unexpected transition/probe
+errors are sanitized, accumulated and also prevent a pass. Reports contain no
+user, conversation or writer-token identifiers.
+
+The optional schema-v1 manifest parameter `stages.privacy_cache.bound_s` defaults
+to `60.0`: an old decision at **offset >= bound_s** is a mismatch. For example:
+
+```json
+{"stages": {"privacy_cache": {"expect": "pass", "bound_s": 60.0}}}
+```
+
+The report records `bound_s` and `bound_comparison`. The standard probes always
+run; a nonstandard bound also adds an exact-bound probe. TTL experiments never
+change this rule. `by_family_fault_offset` includes explicit zero cells for every
+family/fault/offset, with `probes`, `stale`, `mismatches` and `errors`. Earlier
+stale decisions count separately from bounded mismatches. A companion
+`<case>-privacy.md` table prints +59/+60/+61/+300 cells as stale/mismatches/probes.
+The report counts attempted, applied and completed transitions, probes and overlap
+probes, and gives the largest sampled stale offset per family.
 A reported zero means no probe observed stale state; it does not measure latency
 between probes. Idempotent tombstone retries count as transitions too.
 
@@ -99,14 +115,23 @@ account deletion and destructive gates; the separate uncached legal-hold reader
 checks hold placement. Data-protection writers remain unfenced and uncached;
 this replay does not authorize adding a cache to them.
 
+`bound_margin_s` is the smallest observed difference between the bound deadline
+and a warmed key's actual Redis `PEXPIRETIME` boundary, rather than its configured
+TTL. `bound_margin_s_by_family` and `expiry_samples_by_family` show its coverage;
+no Redis expiry observation is `null` (batch attempt memos and uncached protection
+reads have no Redis TTL). Redis/fakeredis retain a key in its expiry millisecond,
+so **zero margin is not safe** for the strict comparator. The exact-bound probe
+remains authoritative; this field does not turn a failing boundary into a pass.
+
 The fixed-seed generator covers every kind and every family/fault pair in its
 120-transition smoke prefix. Faults include persistent Redis outage, both
 invalidations lost with Redis reads available, BEGIN-token loss, overlapping
 writers/readers, a reader held inside the real BEGIN fence, and a request memo
 spanning the real writer. Cache publication/memo events verify eligible warm
-paths actually exercise the optimization. Two emulator mutation tests raise
-the subscription TTL to 120s and lose invalidations: both BYOK directions must
-stop at +60s. Boundary controls with the real TTL must pass exactly at +60s.
+paths actually exercise the optimization. Emulator mutation tests set
+120s TTLs and lose invalidations: both BYOK directions and deletion-marker creation
+must record the +60/+61 mismatches and finish all probes. Default-TTL controls
+preserve the observed closed-boundary behavior, and 55s controls must qualify.
 
 ```bash
 unset GOOGLE_APPLICATION_CREDENTIALS CLOUDSDK_CONFIG CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE
@@ -122,7 +147,13 @@ export PATH=/opt/homebrew/opt/openjdk@21/bin:$PATH
 `make replay-harness` defaults to the committed smoke; explicit `CASES` still
 selects other fixtures. `make replay-privacy-full` generates 1,000 transitions
 under `OUTPUT`, then writes reports under `OUTPUT/report`; reports stay out of
-Git. Generate variants from `backend/` with
+Git. For an exact 55s experiment across deletion-marker, tombstone, legal-hold
+and subscription Redis entries, pass `PRIVACY_TTL_OVERRIDE_S=55` to either Make
+target (CLI: `--privacy-ttl-override-s 55`). This test-side monkeypatch changes
+both the TTL helper and cached-read duration, including the imported aliases in
+`users`; the real readers, writers and cache logic still execute. The report
+records `ttl_override_s`. It does not alter product configuration or the
+manifest bound. Generate variants from `backend/` with
 `.venv/bin/python -m testing.replay_harness.gen_privacy_timeline --output <dir>`
 (`--seed`, `--transitions`, `--mix` JSON family weights and `--faults` comma list).
 This is synthetic emulator qualification only. Recorded Tier-S timelines and

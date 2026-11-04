@@ -12,6 +12,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime
 import hashlib
 import json
+import math
 from pathlib import Path
 import re
 from typing import Any
@@ -68,7 +69,15 @@ JSON_SCHEMA = {
             'properties': {
                 stage: {
                     **_STAGE_SCHEMA,
-                    'properties': {**_STAGE_SCHEMA['properties'], 'expect_stop_stage': {'const': stage}},
+                    'properties': {
+                        **_STAGE_SCHEMA['properties'],
+                        'expect_stop_stage': {'const': stage},
+                        **(
+                            {'bound_s': {'type': 'number', 'exclusiveMinimum': 0, 'maximum': 86400}}
+                            if stage == 'privacy_cache'
+                            else {}
+                        ),
+                    },
                 }
                 for stage in IMPLEMENTED_STAGES
             },
@@ -85,7 +94,7 @@ class Manifest:
     seed_blob_sha256: list[str]
     created: str
     prod_evidence: dict[str, Any]
-    stages: dict[str, dict[str, str]]
+    stages: dict[str, dict[str, Any]]
     schema_version: int = SCHEMA_VERSION
     expect: str | None = None
     notes: str | None = None
@@ -138,6 +147,11 @@ def validate_manifest(value: Any) -> Manifest:
     for stage, expectation in stages.items():
         if not isinstance(expectation, dict):
             raise ValueError('stage expectation must be an object')
+        if stage == 'privacy_cache' and 'bound_s' in expectation:
+            bound = expectation['bound_s']
+            if type(bound) not in (int, float) or not math.isfinite(bound) or not 0 < bound <= 86400:
+                raise ValueError('privacy bound_s must be finite and in (0, 86400]')
+            expectation = {key: value for key, value in expectation.items() if key != 'bound_s'}
         if expectation == {'expect': 'pass'}:
             continue
         if set(expectation) != {'expect_stop_stage', 'expect_reason'} or expectation['expect_stop_stage'] != stage:

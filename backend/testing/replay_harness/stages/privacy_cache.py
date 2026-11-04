@@ -10,9 +10,9 @@ import threading
 from unittest.mock import patch
 
 from testing.replay_harness.report import StageResult, record_exception
+from testing.replay_harness.privacy_report import OFFSETS, summary, observe_probe, observe_expiry
 from testing.replay_harness.stages.privacy_scenarios import scenario, validate_rows
 
-OFFSETS = (0, 1, 59, 60, 61, 300)
 LEVERS = (
     'deletion_marker_cache',
     'tombstone_negative_cache',
@@ -58,7 +58,7 @@ class FaultRedis:
         return result
 
 
-def clock_and_cache(environment, fault, events):
+def clock_and_cache(environment, fault, events, *, ttl_override_s=None):
     from database import fsr_read_cache as cache
     from database import privacy_check_metrics as metrics
     import fakeredis._basefakesocket as sockets
@@ -74,6 +74,27 @@ def clock_and_cache(environment, fault, events):
     for module in (cache, sockets, commands, server):
         stack.enter_context(patch.object(module, 'time', clock))
     stack.enter_context(patch.dict(os.environ, {'FIRESTORE_READ_LEVERS': json.dumps(dict.fromkeys(LEVERS, 100))}))
+    if ttl_override_s is not None:
+        from database import users
+
+        families = {'deletion_marker_cache', 'tombstone_negative_cache', 'legal_hold_fence_cache', 'subscription_cache'}
+        env_names = {cache._CACHE_TTLS[family][0] for family in families}
+        original_ttl, original_read = cache.ttl, cache.cached_read
+
+        def ttl(name, default):
+            return ttl_override_s if name in env_names else original_ttl(name, default)
+
+        def cached_read(family, *args, **kwargs):
+            if family in families:
+                kwargs['seconds'] = ttl_override_s
+            return original_read(family, *args, **kwargs)
+
+        stack.enter_context(patch.object(cache, 'ttl', ttl))
+        stack.enter_context(patch.object(cache, 'cached_read', cached_read))
+        # users imports these helpers by value. Patch that actual call site as
+        # well, irrespective of module import order in a long replay process.
+        stack.enter_context(patch.object(users, 'ttl', ttl))
+        stack.enter_context(patch.object(users, 'cached_read', cached_read))
     # Observe real cache behavior; never replace a decision or writer.
     original_event, original_memo = cache._event, metrics.memo_result
 
@@ -109,37 +130,31 @@ def overlapping_writes(redis, write, read, *, writers, fenced):
     return observations
 
 
-def summary():
-    return {
-        'transitions': 0,
-        'probes': 0,
-        'mismatches': 0,
-        'early_mismatches': 0,
-        'overlap_probes': 0,
-        'max_observed_staleness_seconds': {},
-        'families': {},
-        'faults': {},
-        'cache_events': {},
-        'redis_fault_calls': {},
-    }
-
-
 class PrivacyCacheDriver:
+    def __init__(self, *, ttl_override_s=None):
+        if ttl_override_s is not None and (type(ttl_override_s) is not int or not 1 <= ttl_override_s <= 86400):
+            raise ValueError('test TTL override must be an integer in [1, 86400]')
+        self.ttl_override_s = ttl_override_s
+
     async def run(self, case, environment=None):
         from database.privacy_check_metrics import with_session_census
 
         rows = validate_rows(case.corpus)  # Reject unknown labels before infrastructure.
-        details = summary()
+        bound = case.manifest.stages['privacy_cache'].get('bound_s', 60.0)
+        details = summary(bound, self.ttl_override_s)
         for row in rows:
+            details['attempted_transitions'] += 1
             try:
-                result = await with_session_census('listen')(self.transition)(row, details)
+                await with_session_census('listen')(self.transition)(row, details)
+                details['completed_transitions'] += 1
             except Exception as error:
-                return StageResult(
-                    'privacy_cache', 'stopped', details={**details, **row}, **record_exception(error, 'privacy_cache')
-                )
-            if result is not None:
-                return result
-        return StageResult('privacy_cache', 'pass', details=details)
+                details['errors'].append({**row, **record_exception(error, 'privacy_cache')})
+        reason = (
+            'privacy_cache:staleness_bound_exceeded'
+            if details['mismatches']
+            else 'privacy_cache:transition_errors' if details['errors'] else None
+        )
+        return StageResult('privacy_cache', 'stopped' if reason else 'pass', reason=reason, details=details)
 
     async def transition(self, row, details):
         from database import fsr_read_cache as cache
@@ -148,7 +163,7 @@ class PrivacyCacheDriver:
 
         events = Counter()
         with replay_environment() as environment:
-            patches, redis = clock_and_cache(environment, row['fault'], events)
+            patches, redis = clock_and_cache(environment, row['fault'], events, ttl_override_s=self.ttl_override_s)
             with patches, batch_privacy_attempt():
                 uid, read, write, truth = scenario(row, environment)
                 async with AsyncExitStack() as request_stack:
@@ -177,6 +192,10 @@ class PrivacyCacheDriver:
                     )
                     if eligible and not events[warm_event]:
                         raise AssertionError('privacy cache baseline was not exercised')
+                    expiries = [
+                        environment.redis.pexpiretime(key)
+                        for key in environment.redis.scan_iter(match='fsr:s4:v2:*:data:*')
+                    ]
                     redis.active = True
                     overlap = []
                     if row['fault'] in ('concurrent', 'reader_during_writer'):
@@ -208,26 +227,24 @@ class PrivacyCacheDriver:
                     family = row['family']
                     details['families'][family] = details['families'].get(family, 0) + 1
                     details['faults'][row['fault']] = details['faults'].get(row['fault'], 0) + 1
-                    details['max_observed_staleness_seconds'].setdefault(family, 0)
-                    for offset in OFFSETS:
+                    for expiry_ms in expiries:
+                        if expiry_ms >= 0:
+                            observe_expiry(details, family, start, expiry_ms)
+                    for offset in sorted(set((*OFFSETS, details['bound_s']))):
                         environment.clock.advance(start + offset - environment.clock.time())
-                        observed, expected = read(), truth()
-                        details['probes'] += 1
-                        if expected != after:
-                            raise AssertionError('authority changed outside replayed writer')
-                        if observed != expected:
-                            details['max_observed_staleness_seconds'][family] = max(
-                                details['max_observed_staleness_seconds'][family], offset
+                        try:
+                            observed, expected = read(), truth()
+                            if expected != after:
+                                raise AssertionError('authority changed outside replayed writer')
+                            observe_probe(details, row, offset, observed, expected, before)
+                        except Exception as error:
+                            cell = details['by_family_fault_offset'][family][row['fault']][str(float(offset))]
+                            cell['probes'] += 1
+                            cell['errors'] += 1
+                            details['probes'] += 1
+                            details['errors'].append(
+                                {**row, 'offset_s': offset, **record_exception(error, 'privacy_cache')}
                             )
-                            if offset >= 60:
-                                details['mismatches'] += 1
-                                return StageResult(
-                                    'privacy_cache',
-                                    'stopped',
-                                    reason='privacy_cache:staleness_bound_exceeded',
-                                    details={**details, **row, 'offset_seconds': offset},
-                                )
-                            details['early_mismatches'] += 1
                     for operation, count in redis.calls.items():
                         label = f'{row["fault"]}:{operation}'
                         details['redis_fault_calls'][label] = details['redis_fault_calls'].get(label, 0) + count

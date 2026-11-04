@@ -77,7 +77,7 @@ CASES ?= backend/testing/replay_harness/fixtures/privacy-transitions-smoke
 .PHONY: replay-harness replay-privacy-full
 replay-harness:
 	@test -n "$(CASES)" -a -n "$(OUTPUT)" || (echo 'Required: CASES OUTPUT'; exit 2)
-	cd backend && .venv/bin/python -m testing.replay_harness run $(foreach case,$(CASES),--case "$(abspath $(case))") --output "$(abspath $(OUTPUT))"
+	cd backend && .venv/bin/python -m testing.replay_harness run $(foreach case,$(CASES),--case "$(abspath $(case))") --output "$(abspath $(OUTPUT))" $(if $(PRIVACY_TTL_OVERRIDE_S),--privacy-ttl-override-s $(PRIVACY_TTL_OVERRIDE_S))
 
 # Large synthetic privacy qualification stays on the caller's heavy lane.
 replay-privacy-full:
