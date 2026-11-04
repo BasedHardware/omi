@@ -84,6 +84,17 @@ def test_sync_schedule_gate_precedes_episode_executor_and_compose(monkeypatch, g
     assert calls[0][0] is check
 
 
+@pytest.mark.parametrize('switch', ['EPISODE_ATTACH_NOOP_SCHEDULE_ENABLED', 'EPISODE_ATTACH_OPTIMIZATIONS_ENABLED'])
+def test_sync_finalizer_kill_switch_runs_hook_even_with_completed_proof(monkeypatch, switch):
+    monkeypatch.setenv(switch, 'off')
+    calls, seen = [], []
+    monkeypatch.setattr(finalizer, 'skip_unchanged_schedule', lambda *a, **kw: True)
+    monkeypatch.setattr(finalizer, 'run_blocking', _run_blocking_recorder(calls))
+    monkeypatch.setattr(finalizer, 'record_episode_finalized', lambda *a, **kw: seen.append(a))
+    asyncio.run(finalizer._episode_after_finalization('u', 'c1', {'id': 'c1'}, ProcessingTrigger.SYNC_UPDATE))
+    assert len(seen) == 1
+
+
 def test_absorb_hook_follows_the_donor_to_its_survivor(monkeypatch):
     calls = []
     seen = []
