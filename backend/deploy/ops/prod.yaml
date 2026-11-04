@@ -157,6 +157,13 @@ cloud_tasks:
     max_attempts: -1
     min_backoff: 10s
     max_backoff: 300s
+  enrichment-fresh:
+    # Only recently finished conversations enter this reserved queue.
+    max_concurrent_dispatches: 5
+    max_dispatches_per_second: 2
+    max_attempts: -1
+    min_backoff: 10s
+    max_backoff: 300s
   provider-stt:
     # Plan C8: provider-STT wakes for BYOK and non-Parakeet units, served by backend-integration. Idle while
     # legacy_sync=on (the provider route needs draining/dark); it must exist before draining

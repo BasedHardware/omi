@@ -1,7 +1,12 @@
 # Fresh enrichment priority
 
 `ENRICHMENT_FRESH_TASKS_QUEUE` reserves dispatch slots for new user-facing
-enrichment and pending first summaries. It uses the existing enrichment handler,
+enrichment and pending first summaries whose conversation finished within
+`ENRICHMENT_FRESH_PROMOTE_MAX_AGE_MIN` (default30 minutes;0 disables new priority
+admission). Use `finished_at`, falling back to `created_at` only when absent.
+Unknown, invalid, future or unavailable metadata stays on the established queue.
+A newly created obligation for an old conversation does not become fresh.
+It uses the existing enrichment handler,
 audience and invoker. Background backfill and lazy derived effects retain their
 queues, including when the backfill queue is not configured.
 
@@ -12,10 +17,14 @@ handler. Start at 5 concurrent deliveries and 2 dispatches/s. This isolates queu
 scheduling; it does not establish spare backend executor or LLM capacity. Check
 handler 5xx, 409 delivery-budget cuts, executor wait, LLM request latency/errors
 and title age before raising the cap. The new queue must exist before activation;
-no deployment workflow creates it implicitly.
+`backend/deploy/ops/prod.yaml` reconciles these limits through config-train.
+Staging intentionally maps both enrichment queues to `staging-enrichment`;
+it does not claim an isolated priority capacity lane.
 
-The normal bounded sweep promotes due unleased user-facing rows bound to the old
-enrichment queue. Its CAS retains the handler/auth identity and changes queue and
+The normal bounded sweep promotes only due unleased user-facing rows bound to
+the old enrichment queue whose conversation is within that same freshness window.
+Older backlog retains its queue and continues draining at its existing capacity.
+Its CAS retains the handler/auth identity and changes queue and
 task token together. An old delivery becomes stale; a lost replacement enqueue
 is recovered by the existing sweep. Active leases, background backfill, custom
 bindings and lazy effects are not migrated. The old queue is not purged: it

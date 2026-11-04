@@ -123,6 +123,8 @@ cloud_run:
     sync-backfill-fresh: staging-sync-backfill-fresh
     batch-quarantine-recovery: staging-batch-quarantine-recovery
     enrichment: staging-enrichment
+    # Staging intentionally shares its existing enrichment capacity.
+    enrichment-fresh: staging-enrichment
     provider-stt: staging-provider-stt
     conversation-finalization: staging-conversation-finalization
     audio-merge: staging-audio-merge

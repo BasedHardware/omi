@@ -9,11 +9,13 @@ New backfill obligations without a pending first summary use the existing
 ``SYNC_BACKFILL_TASKS_QUEUE`` when configured, retaining the enrichment handler
 and identity. ``ENRICHMENT_BACKFILL_ROUTING_ENABLED=false`` disables that split
 for new obligations. ``ENRICHMENT_FRESH_TASKS_QUEUE`` reserves dispatch slots for
-user-facing work, including pending first summaries. The sweep can promote
-unleased fresh rows from the old enrichment queue under a new fenced token.
+user-facing work, including pending first summaries, only within the bounded
+conversation freshness window. Old work keeps draining on its existing queue.
 """
 
 import os
+import math
+from datetime import datetime, timezone
 from typing import Literal
 
 EnrichmentRoute = Literal['sync_handler', 'enrichment_queue']
@@ -24,13 +26,37 @@ def route() -> EnrichmentRoute:
     return 'enrichment_queue' if value == 'enrichment_queue' else 'sync_handler'
 
 
-def dispatch_binding(*, backfill: bool = False, effects_only: bool = False) -> dict[str, str]:
+def fresh_max_age_seconds() -> float:
+    try:
+        minutes = float(os.getenv('ENRICHMENT_FRESH_PROMOTE_MAX_AGE_MIN', '30'))
+        seconds = minutes * 60
+        return seconds if math.isfinite(seconds) and seconds >= 0 else 1800
+    except ValueError:
+        return 1800
+
+
+def recently_finished(value: object, *, now: float) -> bool:
+    """Unknown/future metadata cannot consume the reserved queue; zero disables priority."""
+    try:
+        if isinstance(value, str):
+            value = datetime.fromisoformat(value.replace('Z', '+00:00'))
+        if isinstance(value, datetime):
+            value = (value if value.tzinfo else value.replace(tzinfo=timezone.utc)).timestamp()
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+            return False
+        window = fresh_max_age_seconds()
+        return window > 0 and 0 <= now - value <= window
+    except (ValueError, OverflowError):
+        return False
+
+
+def dispatch_binding(*, backfill: bool = False, effects_only: bool = False, recent: bool = False) -> dict[str, str]:
     # Share the worker/auth binding; the outbox owns fenced promotion of
     # existing unleased user-facing obligations.
     queue = os.getenv('ENRICHMENT_TASKS_QUEUE', '').strip()
     if backfill and os.getenv('ENRICHMENT_BACKFILL_ROUTING_ENABLED', 'true').strip().lower() != 'false':
         queue = os.getenv('SYNC_BACKFILL_TASKS_QUEUE', '').strip() or queue
-    if not backfill and not effects_only:
+    if recent and not backfill and not effects_only:
         queue = os.getenv('ENRICHMENT_FRESH_TASKS_QUEUE', '').strip() or queue
     handler = os.getenv('ENRICHMENT_TASKS_HANDLER_URL', '').strip()
     return {
