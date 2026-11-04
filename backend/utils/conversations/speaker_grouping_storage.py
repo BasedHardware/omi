@@ -306,6 +306,7 @@ def reveal_segments(segments: list[Any], uid: str) -> None:
     total = 0
     decoded_bytes = 0
     failures: list[tuple[str, int]] = []
+    value_index = 0
     timing_units: dict[str, Any] = {}
     timing_bytes = 0
     timing_encoded_bytes = 0
@@ -318,17 +319,34 @@ def reveal_segments(segments: list[Any], uid: str) -> None:
         if encrypted is None:
             continue
         try:
-            total += len(encrypted)
-            if index >= MAX_SEGMENTS or total > MAX_ENCODED_BYTES or not isinstance(encrypted, str):
+            # Writer-fault gates run BEFORE decryption, keyed on admitted
+            # value rows: an envelope beyond the encoded bound and a
+            # segment beyond the envelope's slot cap classify as
+            # 'capacity'/'oversized' even when their content is garbage
+            # (event-storm contract), while timing markers — detected
+            # only after decrypt — neither consume nor trip these caps
+            # (review-regression contract: a timing-only conversation
+            # can exceed the value-segment caps legitimately).
+            if not isinstance(encrypted, str) or len(encrypted) > MAX_ENCODED_BYTES:
                 raise ValueError('capacity')
             plaintext = encryption.decrypt(encrypted, uid)
-            decoded_bytes += len(plaintext.encode())
-            if plaintext == encrypted or decoded_bytes > MAX_BYTES:
+            if plaintext == encrypted:
+                # Non-codec content (garbage 'decrypts' to itself). Beyond
+                # the envelope's slot cap the operative fault is the cap —
+                # the admit path enforces the same cap, so this row was
+                # never a legitimate value segment (the candidate's index
+                # contract). Below the cap it is an authentication fault.
+                if index >= MAX_SEGMENTS:
+                    raise ValueError('capacity') from None
                 raise ValueError('authentication')
             record = json.loads(plaintext)
             if record['id'] != segment.get('id'):
                 raise ValueError('binding')
             if 'timing_unit' in record:
+                # Main's timing exemption: decodable timing markers are
+                # bounded by their own MAX_TIMING_* budgets and are the one
+                # legitimate over-cap population; they neither consume nor
+                # trip the value-segment caps.
                 marker = _timing_unit(record)
                 size = len(plaintext.encode())
                 if (
@@ -343,8 +361,22 @@ def reveal_segments(segments: list[Any], uid: str) -> None:
                 timing_bytes += size
                 timing_encoded_bytes += len(encrypted)
                 continue
+            # A decodable VALUE row beyond the envelope's slot cap is the
+            # cap fault, not a fault of its content (the candidate's index
+            # contract; binding above already identified misattributed
+            # sidecars by their id).
+            if index >= MAX_SEGMENTS:
+                raise ValueError('capacity')
+            # Value rows: the candidate's exact accounting order.
+            total += len(encrypted)
+            decoded_bytes += len(plaintext.encode())
+            if total > MAX_ENCODED_BYTES:
+                raise ValueError('capacity')
+            if decoded_bytes > MAX_BYTES:
+                raise ValueError('authentication')
             if not isinstance(record.get('values'), dict):
                 raise ValueError('binding')
+            value_index += 1
             values = record['values']
             expires = values.get('speaker_grouping_shadow_expires_at', 0)
             if not isinstance(expires, (int, float)) or not now < expires <= now + PREDICTION_TTL_SECONDS:
