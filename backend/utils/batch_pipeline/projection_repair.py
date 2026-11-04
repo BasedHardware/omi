@@ -7,6 +7,7 @@ import json
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
 from database.batch_pipeline_policy import UnpinnedPolicyRefused
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
+from database.batch_pipeline_projection_privacy import checkpoint
 from utils.batch_pipeline.scheduler import owner_key
 
 OPERATION = 'batch-projection-repair-v1'
@@ -34,7 +35,15 @@ def plan_owner(store, owner_id: str, *, max_units: int = 1000, lookback_units: i
             return None
         if row.get('owner_key') != key or row.get('segment_id') != sid:
             raise ProjectionBlocked('owner repair result scope mismatch')
-        snapshots.append((sid, row.get('result'), row.get('committed_at')))
+        snapshots.append(
+            (
+                sid,
+                row.get('result'),
+                row.get('committed_at'),
+                row.get('projection_privacy_refusal'),
+                row.get('projection_privacy_checkpoint'),
+            )
+        )
         rows[sid] = row
         return row
 
@@ -69,7 +78,13 @@ def plan_owner(store, owner_id: str, *, max_units: int = 1000, lookback_units: i
         previous = sid
     forward_truncated = len(after) == max_units and store.projection_successor(key, previous) is not None
     ordered = list(reversed(before)) + after
-    units = [sid for sid in ordered if rows[sid].get('projection_state') in ACTIVE]
+    units = [
+        sid
+        for sid in ordered
+        if rows[sid].get('projection_state') in ACTIVE
+        or checkpoint(rows[sid])
+        and rows[sid].get('projection_privacy_refusal')
+    ]
     unpinned = 0
     for sid in units:
         job = store.client.collection(f'{store.namespace}_jobs').document(sid).get().to_dict() or {}

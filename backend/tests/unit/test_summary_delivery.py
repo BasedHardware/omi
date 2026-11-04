@@ -40,7 +40,8 @@ def debt():
     return row
 
 
-def test_dark_defaults_and_no_shape_change(monkeypatch):
+def test_dark_defaults_and_no_shape_change_when_merge_is_disabled(monkeypatch):
+    monkeypatch.setenv('CONVERSATION_MERGE_BEFORE_PROCESSING', 'false')
     monkeypatch.delenv('FIRST_SUMMARY_DEADLINE_ENABLED', raising=False)
     row = minimum()
     before = deepcopy(row)
@@ -51,7 +52,8 @@ def test_dark_defaults_and_no_shape_change(monkeypatch):
     assert 'title_provenance' not in result.model_dump()
 
 
-def test_server_title_provenance_is_stamped_only_for_cohort_owners(monkeypatch):
+def test_first_summary_provenance_is_cohort_scoped_when_merge_is_disabled(monkeypatch):
+    monkeypatch.setenv('CONVERSATION_MERGE_BEFORE_PROCESSING', 'false')
     """PFS-F1: the gate being on somewhere must not stamp every owner's minimum."""
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '0')

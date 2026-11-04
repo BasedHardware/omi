@@ -78,3 +78,27 @@ def test_epoch3_registration_rejects_foreign_or_unsupported_intent(setup, monkey
     with pytest.raises(BatchPrivacyBlocked, match='result_lease_lost'):
         register_batch_artifact(store, binding.owner_id, 'bad', f'gs://synthetic/results/bad/{token}.enc', 'results', 0)
     assert not [key for key in client.rows if key[0] == 'batch_pipeline_prod_artifacts']
+
+
+@pytest.mark.parametrize('multilingual', [True, False])
+@pytest.mark.parametrize('cohort', ['soniox_empty', 'soniox_words', 'both_empty'])
+def test_running_words_repair_registers_only_its_eligible_result(
+    setup, monkeypatch, legacy_dependencies, multilingual, cohort
+):
+    from tests.unit.test_batch_language_recovery import settled_words_without_vad
+
+    client, store, binding, _, _, _, old = settled_words_without_vad(
+        setup, monkeypatch, legacy_dependencies, multilingual=multilingual, soniox_words=cohort == 'soniox_words'
+    )
+    protocol = SpeechRedriveStore(store, server_flags=SERVING_ENV)
+    token = protocol.prepare('bad', binding.owner_id, 'repair-plan', old, 100, repair=True)['speech_redrive']['token']
+    assert protocol.start('bad', token, 'repair-plan', 101)
+    assert (row(client)['speech_redrive']['paid_epoch'], row(client)['speech_redrive']['provider']) == (4, 'modulate')
+    uri = f'gs://synthetic/results/bad/{token}.enc'
+    if cohort == 'both_empty':
+        row(client)['recovery']['recognizers']['modulate'].update(outcome='empty', word_count=0)
+        with pytest.raises(BatchPrivacyBlocked, match='result_lease_lost'):
+            register_batch_artifact(store, binding.owner_id, 'bad', uri, 'results', 0)
+        return
+    register_batch_artifact(store, binding.owner_id, 'bad', uri, 'results', 0)
+    assert [v['uri'] for k, v in client.rows.items() if k[0] == 'batch_pipeline_prod_artifacts'] == [uri]

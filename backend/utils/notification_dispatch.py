@@ -13,6 +13,7 @@ import logging
 from typing import Any, Awaitable, Callable, Mapping, Optional
 
 from models.notification_message import NotificationMessage
+from database.account_deletion_marker import account_deletion_blocks_user_work
 
 logger = logging.getLogger(__name__)
 
@@ -153,11 +154,40 @@ class NotificationDispatcher:
         sync_delivery: SyncDelivery = _default_sync_delivery,
         async_delivery: AsyncDelivery = _default_async_delivery,
         clock: Clock = _utc_now,
+        deletion_blocks: Optional[Callable[[str], bool]] = None,
     ) -> None:
         self._reserve = reserve
         self._sync_delivery = sync_delivery
         self._async_delivery = async_delivery
         self._clock = clock
+        self._deletion_blocks = deletion_blocks or account_deletion_blocks_user_work
+
+    def _deletion_outcome(self, intent: NotificationIntent) -> Optional[NotificationDispatchOutcome]:
+        if self._deletion_blocks is None:
+            return None
+        try:
+            blocked = self._deletion_blocks(intent.user_id)
+        except Exception as error:
+            logger.error(
+                'notification suppressed uid=%s reason=deletion_authority_unavailable exception_type=%s',
+                intent.user_id,
+                type(error).__name__,
+            )
+            return NotificationDispatchOutcome(
+                NotificationDispatchStatus.SUPPRESSED,
+                reason='deletion_authority_unavailable',
+            )
+        if blocked:
+            logger.info(
+                'notification suppressed uid=%s kind=%s reason=account_pending_deletion',
+                intent.user_id,
+                intent.kind.value,
+            )
+            return NotificationDispatchOutcome(
+                NotificationDispatchStatus.SUPPRESSED,
+                reason='account_pending_deletion',
+            )
+        return None
 
     def _apply_policy(self, intent: NotificationIntent) -> Optional[NotificationDispatchOutcome]:
         if intent.policy == NotificationPolicy.DIRECT:
@@ -195,6 +225,9 @@ class NotificationDispatcher:
         )
 
     def dispatch(self, intent: NotificationIntent) -> NotificationDispatchOutcome:
+        deletion_outcome = self._deletion_outcome(intent)
+        if deletion_outcome is not None:
+            return deletion_outcome
         policy_outcome = self._apply_policy(intent)
         if policy_outcome and policy_outcome.status == NotificationDispatchStatus.SUPPRESSED:
             return policy_outcome
@@ -227,6 +260,9 @@ class NotificationDispatcher:
         )
 
     async def dispatch_async(self, intent: NotificationIntent) -> NotificationDispatchOutcome:
+        deletion_outcome = self._deletion_outcome(intent)
+        if deletion_outcome is not None:
+            return deletion_outcome
         policy_outcome = self._apply_policy(intent)
         if policy_outcome and policy_outcome.status == NotificationDispatchStatus.SUPPRESSED:
             return policy_outcome
@@ -259,7 +295,7 @@ class NotificationDispatcher:
         )
 
 
-_dispatcher = NotificationDispatcher()
+_dispatcher = NotificationDispatcher(deletion_blocks=account_deletion_blocks_user_work)
 
 
 def dispatch_notification(intent: NotificationIntent) -> NotificationDispatchOutcome:
@@ -314,7 +350,10 @@ def dispatch_action_item_reminder(
             'deleted': deleted,
         },
     )
-    return NotificationDispatcher(sync_delivery=_action_item_reminder_delivery).dispatch(intent)
+    return NotificationDispatcher(
+        sync_delivery=_action_item_reminder_delivery,
+        deletion_blocks=account_deletion_blocks_user_work,
+    ).dispatch(intent)
 
 
 def _merge_completed_delivery(user_id: str, title: str, body: str, data: Optional[dict[str, Any]]) -> Optional[int]:
@@ -337,4 +376,7 @@ def dispatch_merge_completed(
         kind=NotificationKind.CONVERSATION_MERGE,
         data={'merged_conversation_id': merged_conversation_id, 'removed_conversation_ids': removed_conversation_ids},
     )
-    return NotificationDispatcher(sync_delivery=_merge_completed_delivery).dispatch(intent)
+    return NotificationDispatcher(
+        sync_delivery=_merge_completed_delivery,
+        deletion_blocks=account_deletion_blocks_user_work,
+    ).dispatch(intent)

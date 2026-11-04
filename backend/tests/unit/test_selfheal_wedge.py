@@ -11,10 +11,17 @@ from __future__ import annotations
 import json
 from datetime import datetime, timedelta, timezone
 
+import pytest
+
 from services import capture_wedge as wedge
 
 NOW = datetime(2026, 7, 20, 12, 0, 0, tzinfo=timezone.utc)
 WINDOW_START = NOW - timedelta(minutes=10)
+
+
+@pytest.fixture(autouse=True)
+def _allow_test_users_through_deletion_fence(monkeypatch):
+    monkeypatch.setattr(wedge, 'account_deletion_blocks_user_work', lambda _uid: False)
 
 
 def _iso(value: datetime) -> str:
@@ -214,6 +221,42 @@ def test_detect_mode_emits_candidate_and_first_seen_only(capsys, monkeypatch):
     out = capsys.readouterr().out
     assert 'selfheal_wedge_candidate' in out
     assert 'selfheal_wedge_first_seen' in out
+
+
+def test_pending_deletion_user_is_not_claimed_or_nudged(monkeypatch):
+    state = _claims(monkeypatch)
+    monkeypatch.setattr(wedge, 'account_deletion_blocks_user_work', lambda _uid: True)
+    reader = _reader_dispatch(zero_entries=_wedge_entries())
+
+    result = wedge.run_capture_wedge_check(
+        mode='nudge',
+        now=NOW,
+        project_id='proj-1',
+        entries_reader=reader,
+    )
+
+    assert result['candidates'] == 0
+    assert state['first_seen'] == []
+    assert state['nudge'] == []
+    assert state['pushes'] == []
+
+
+def test_deletion_fence_authority_error_fails_closed(monkeypatch):
+    _claims(monkeypatch)
+
+    def unavailable(_uid):
+        raise RuntimeError('authority unavailable')
+
+    monkeypatch.setattr(wedge, 'account_deletion_blocks_user_work', unavailable)
+    result = wedge.run_capture_wedge_check(
+        mode='nudge',
+        now=NOW,
+        project_id='proj-1',
+        entries_reader=_reader_dispatch(zero_entries=_wedge_entries()),
+    )
+
+    assert result['candidates'] == 0
+    assert result['errors'] == 1
 
 
 def test_positive_evidence_suppresses_candidate(monkeypatch):

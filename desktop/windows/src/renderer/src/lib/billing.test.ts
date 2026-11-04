@@ -48,6 +48,12 @@ type TestSubscription = Omit<Subscription, 'plan'> & { plan?: string }
 // test never touch it, so a bare stub is enough to let the module import.
 vi.mock('./apiClient', () => ({ omiApi: { get: vi.fn(), post: vi.fn() } }))
 
+const OMI_PRO: SubscriptionPlan = {
+  id: 'unlimited_v2',
+  title: 'Omi Pro',
+  prices: [{ id: 'price_omi_pro_m', title: 'Monthly', price_string: '$29.99/mo' }]
+}
+
 const CATALOG: SubscriptionPlan[] = [
   {
     id: 'unlimited',
@@ -93,15 +99,15 @@ describe('resolvePlanTitle', () => {
   it('remaps unlimited to Operator when the price belongs to the Operator catalog plan', () => {
     expect(
       resolvePlanTitle(sub({ plan: 'unlimited', current_price_id: 'price_op_y' }), CATALOG)
-    ).toBe('Pro')
+    ).toBe('Operator')
   })
   it('maps operator to Operator and architect to Architect', () => {
-    expect(resolvePlanTitle(sub({ plan: 'operator' }), CATALOG)).toBe('Pro')
+    expect(resolvePlanTitle(sub({ plan: 'operator' }), CATALOG)).toBe('Operator')
     expect(resolvePlanTitle(sub({ plan: 'architect' }), CATALOG)).toBe('Architect')
   })
   it.each([
     ['plus', 'Plus'],
-    ['unlimited_v2', 'Unlimited'],
+    ['unlimited_v2', 'Omi Pro'],
     ['pro', 'Architect']
   ] as const)('handles the known wire plan %s', (wirePlan, title) => {
     expect(resolvePlanTitle(sub({ plan: wirePlan }), undefined)).toBe(title)
@@ -202,7 +208,7 @@ describe('resolvePlanTitle — catalog-first with the live Windows catalog', () 
   it('filters the subscriber’s own plan out of the grid even when titles differ from enum names', () => {
     const s = sub({ plan: 'unlimited', current_price_id: 'price_u_m' })
     expect(isCurrentCatalogPlan(LIVE_CATALOG[0], s, LIVE_CATALOG)).toBe(true)
-    expect(orderedCatalog(s, LIVE_CATALOG).map((p) => p.title)).toEqual(['Omi Pro'])
+    expect(orderedCatalog(s, [...LIVE_CATALOG, OMI_PRO]).map((p) => p.id)).toEqual(['unlimited_v2'])
   })
 })
 
@@ -249,7 +255,7 @@ describe('currentPlanSubtitle', () => {
         sub({ plan: 'operator', status: 'active', current_price_id: 'price_op_m' }),
         CATALOG
       )
-    ).toBe('Pro Monthly • $49/mo')
+    ).toBe('Operator Monthly • $49/mo')
   })
   it('uses the price owner id despite a stale legacy title', () => {
     const catalog = CATALOG.map((p) => ({
@@ -288,7 +294,7 @@ describe('currentPlanPeriodText', () => {
         cancel_at_period_end: true
       })
     )
-    expect(t).toMatch(/^Your Pro plan ends /)
+    expect(t).toMatch(/^Your Operator plan ends /)
     expect(t).toContain('2026')
   })
   it('is empty for a free plan', () => {
@@ -373,23 +379,28 @@ describe('quotaResetText', () => {
 })
 
 describe('plan catalog helpers', () => {
-  it('orders Neo → Operator → Architect and filters the current plan by price', () => {
-    const s = sub({ plan: 'unlimited', current_price_id: 'price_neo_m' })
-    expect(orderedCatalog(s, CATALOG).map((p) => p.title)).toEqual(['Operator', 'Architect'])
+  it('offers only Omi Pro, first, and never a retired tier', () => {
+    const plans = [...CATALOG, { id: 'plus', title: 'Plus' }, OMI_PRO]
+    expect(orderedCatalog(sub({ plan: 'basic' }), plans).map((p) => p.id)).toEqual(['unlimited_v2'])
   })
-  it('filters the Operator plan for an Operator-as-unlimited subscriber', () => {
+  it('keeps a retired subscriber on their own plan and offers them Omi Pro', () => {
     const s = sub({ plan: 'unlimited', current_price_id: 'price_op_m' })
     expect(isCurrentCatalogPlan(CATALOG[1], s, CATALOG)).toBe(true)
-    expect(orderedCatalog(s, CATALOG).map((p) => p.title)).toEqual(['Neo', 'Architect'])
+    expect(orderedCatalog(s, [...CATALOG, OMI_PRO]).map((p) => p.id)).toEqual(['unlimited_v2'])
+  })
+  it('drops the Omi Pro card for an Omi Pro subscriber', () => {
+    const s = sub({ plan: 'unlimited_v2', current_price_id: 'price_omi_pro_m' })
+    expect(orderedCatalog(s, [OMI_PRO])).toEqual([])
   })
   it('uppercases the eyebrow and falls back per plan id', () => {
-    expect(planEyebrow({ id: 'operator', title: 'X' })).toBe('MOST POPULAR')
-    expect(planEyebrow({ id: 'operator', title: 'X', eyebrow: 'featured' })).toBe('FEATURED')
+    expect(planEyebrow({ id: 'unlimited_v2', title: 'X' })).toBe('7-DAY FREE TRIAL')
+    expect(planEyebrow({ id: 'unlimited_v2', title: 'X', eyebrow: 'featured' })).toBe('FEATURED')
+    expect(planEyebrow({ id: 'operator', title: 'X' })).toBe('PLAN')
   })
   it('falls back subtitle/description/features by plan id and caps features at 4', () => {
-    const p: SubscriptionPlan = { id: 'architect', title: 'Architect' }
-    expect(planSubtitle(p)).toContain('Power-user')
-    expect(planDescription(p)).toContain('vibe coding')
+    const p: SubscriptionPlan = { id: 'unlimited_v2', title: 'Omi Pro' }
+    expect(planSubtitle(p)).toBeTruthy()
+    expect(planDescription(p)).toContain('desktop')
     expect(planFeatures(p)).toHaveLength(4)
     expect(planFeatures({ id: 'x', title: 'X', features: ['a', 'b', 'c', 'd', 'e'] })).toEqual([
       'a',
@@ -397,15 +408,6 @@ describe('plan catalog helpers', () => {
       'c',
       'd'
     ])
-  })
-  it('keeps the Neo (unlimited) fallback subtitle and description question counts in sync', () => {
-    // Regression: subtitle said 200 questions/month while description said 100 for the
-    // same plan id, so a user could see either number depending which card region they read.
-    const p: SubscriptionPlan = { id: 'unlimited', title: 'Neo' }
-    const subtitleCount = planSubtitle(p).match(/\d+/)?.[0]
-    const descriptionCount = planDescription(p).match(/\d+/)?.[0]
-    expect(descriptionCount).toBe(subtitleCount)
-    expect(descriptionCount).toBe('200')
   })
   it('sorts prices month-first and reads the starting price', () => {
     expect(sortedPrices(CATALOG[1]).map((p) => p.title)).toEqual(['Monthly', 'Annual'])
@@ -579,7 +581,7 @@ describe('startCheckout', () => {
     )
     expect(res.kind).toBe('reactivated')
     if (res.kind === 'reactivated') {
-      expect(res.message).toMatch(/^Your Pro plan will renew on /)
+      expect(res.message).toMatch(/^Your Operator plan will renew on /)
       expect(res.message).toContain('2026')
     }
     expect(deps.openCheckout).not.toHaveBeenCalled()
@@ -667,16 +669,15 @@ describe('detectLegacyCatalog', () => {
     expect(detectLegacyCatalog(undefined)).toEqual({ legacy: false, reasons: [] })
   })
 
-  it('flags the legacy-adapted catalog with both mechanical signals', () => {
+  it('flags the legacy-adapted catalog by its renamed plans', () => {
     const { legacy, reasons } = detectLegacyCatalog(LEGACY_CATALOG)
     expect(legacy).toBe(true)
-    expect(reasons.some((r) => r.includes('operator'))).toBe(true)
     expect(reasons.some((r) => r.includes('Omi Pro') && r.includes('Unlimited Plan'))).toBe(true)
   })
 
-  it('flags a legacy title even if an operator plan is somehow present', () => {
-    const mixed: SubscriptionPlan[] = [{ id: 'operator', title: 'Omi Pro', prices: [] }]
-    expect(detectLegacyCatalog(mixed).legacy).toBe(true)
+  it('treats the Omi-Pro-only catalog (no Operator) as the expected shape', () => {
+    expect(detectLegacyCatalog([OMI_PRO])).toEqual({ legacy: false, reasons: [] })
+    expect(detectLegacyCatalog([OMI_PRO, CATALOG[1]])).toEqual({ legacy: false, reasons: [] })
   })
 })
 
@@ -687,6 +688,7 @@ describe('reportLegacyCatalog', () => {
   it('does not fire the canary for the correct catalog', () => {
     const err = vi.spyOn(console, 'error').mockImplementation(() => {})
     expect(reportLegacyCatalog(CATALOG)).toBe(false)
+    expect(reportLegacyCatalog([OMI_PRO])).toBe(false)
     expect(err).not.toHaveBeenCalled()
   })
 

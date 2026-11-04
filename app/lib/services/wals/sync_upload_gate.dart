@@ -491,7 +491,7 @@ class RecordingUploadTelemetry {
     // rate limit is still `rate_limited`.
     if (error is SyncRateLimitedException) return 'rate_limited';
     if (error is TimeoutException) return 'timeout';
-    if (error is SocketException) return 'network';
+    if (isTransientNetworkError(error)) return 'network';
     if (error is SyncUploadHttpException) {
       if (error.statusCode == 401 || error.statusCode == 403) return 'authentication';
       if (error.statusCode >= 500) return 'server';

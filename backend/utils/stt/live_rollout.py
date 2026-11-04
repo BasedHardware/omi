@@ -5,6 +5,7 @@ from typing import TypedDict
 
 from config.policy.listen import window_allocation as window_allocation
 
+from config.parakeet_ja import ja_window_allocated
 from config.stt_provider_policy import STTServingSurface, normalized_stt_language, parakeet_supports_language
 
 
@@ -12,8 +13,15 @@ def configured_chain_enabled() -> bool:
     return True
 
 
-def window_language_supported(requested: str | None, resolved: str) -> bool:
-    language = normalized_stt_language(requested if resolved == 'multi' else resolved)
+def window_language(requested: str | None, resolved: str) -> str:
+    return normalized_stt_language(requested if resolved == 'multi' else resolved)
+
+
+def window_language_supported(requested: str | None, resolved: str, uid: str | None = None) -> bool:
+    language = window_language(requested, resolved)
+    if language == 'ja':
+        # Japanese has its own model deployment and owner ramp (config/parakeet_ja.py).
+        return ja_window_allocated(uid)
     return language not in ('', 'multi', 'auto') and parakeet_supports_language(STTServingSurface.PRERECORDED, language)
 
 

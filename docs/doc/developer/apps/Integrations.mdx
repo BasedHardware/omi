@@ -1,24 +1,24 @@
 ---
-title: "Integration Apps"
+title: "Integration apps"
 icon: "link"
 description: "Build webhook-based apps that connect Omi to external services. Process memories, real-time transcripts, raw audio, or daily summaries."
 ---
 
-## What Are Integration Apps?
+## What are integration apps?
 
 Integration apps allow Omi to interact with external services by sending data to your webhook endpoints. Unlike prompt-based apps, these require you to host a server.
 
 <CardGroup cols={2}>
-  <Card title="Memory Triggers" icon="bell">
+  <Card title="Memory triggers" icon="bell">
     Run code when a memory is created
   </Card>
-  <Card title="Real-Time Transcript" icon="bolt">
+  <Card title="Real-time transcript" icon="bolt">
     Process live transcripts as they happen
   </Card>
-  <Card title="Audio Streaming" icon="microphone">
+  <Card title="Audio streaming" icon="microphone">
     Receive raw audio bytes for custom processing
   </Card>
-  <Card title="Day Summary" icon="calendar-day">
+  <Card title="Day summary" icon="calendar-day">
     Receive a daily recap of a user's conversations
   </Card>
 </CardGroup>
@@ -46,23 +46,7 @@ flowchart LR
     P --> E
 ```
 
----
-
-## Memory Creation Triggers
-
-### Authenticated backup integrations
-
-The pCloud backup service under development uses an opt-in authenticated plugin
-transport. Its setup links come from the authenticated Omi app-details response;
-a bare `uid` URL is not a login credential. Account-management forms require a
-verified session and CSRF token. Conversation deliveries are signed and admitted
-to durable jobs before acknowledgment; `202` means queued, not uploaded.
-
-Transcripts and saved audio require independent explicit consent. Backup status
-and retry are shared between mobile and desktop. Saved audio is read by canonical
-conversation identity, not reconstructed from unrelated raw-audio callbacks.
-See the [pCloud service setup and release checklist](https://github.com/BasedHardware/omi/tree/main/plugins/omi-pcloud-app).
-This does not change the existing unsigned protocol for unregistered integrations.
+## Memory creation triggers
 
 ### Conversation delivery
 
@@ -75,7 +59,7 @@ These apps are activated when Omi creates a new memory, allowing you to process 
 </Note>
 
 <AccordionGroup>
-  <Accordion title="How It Works" icon="gear">
+  <Accordion title="How it works" icon="gear">
     1. User completes a conversation
     2. Omi processes and creates a memory
     3. Your webhook receives the complete memory object
@@ -83,14 +67,14 @@ These apps are activated when Omi creates a new memory, allowing you to process 
 
     The webhook receives the full conversation data including transcript, structured summary, action items, and metadata.
   </Accordion>
-  <Accordion title="Example Use Cases" icon="lightbulb">
+  <Accordion title="Example use cases" icon="lightbulb">
     - **Slack Integration**: Post conversation summaries to team channels
     - **CRM Updates**: Log customer interactions automatically
     - **Project Management**: Create tasks in Notion, Asana, or Jira
     - **Knowledge Base**: Build a searchable archive of conversations
     - **Analytics**: Track conversation patterns and insights
   </Accordion>
-  <Accordion title="Video Tutorial" icon="video">
+  <Accordion title="Video tutorial" icon="video">
     <iframe
       width="560"
       height="315"
@@ -117,7 +101,7 @@ These apps are activated when Omi creates a new memory, allowing you to process 
   </Accordion>
 </AccordionGroup>
 
-### Webhook Payload
+### Webhook payload
 
 Your endpoint receives a POST request with the memory object:
 
@@ -161,12 +145,24 @@ Your endpoint receives a POST request with the memory object:
 ```
 
 <Tip>
-Check out the [Notion CRM Example](https://github.com/BasedHardware/Omi/blob/main/plugins/oauth/conversation_created.py) for a complete implementation.
+Check out the [Notion CRM example](https://github.com/BasedHardware/Omi/blob/main/plugins/oauth/conversation_created.py) for a complete implementation.
 </Tip>
 
----
+### Authenticated backup integrations
 
-## Real-Time Transcript Processors
+The pCloud backup service under development uses an opt-in authenticated plugin
+transport. Its setup links come from the authenticated Omi app-details response;
+a bare `uid` URL is not a login credential. Account-management forms require a
+verified session and CSRF token. Conversation deliveries are signed and admitted
+to durable jobs before acknowledgment; `202` means queued, not uploaded.
+
+Transcripts and saved audio require independent explicit consent. Backup status
+and retry are shared between mobile and desktop. Saved audio is read by canonical
+conversation identity, not reconstructed from unrelated raw-audio callbacks.
+See the [pCloud service setup and release checklist](https://github.com/BasedHardware/omi/tree/main/plugins/omi-pcloud-app).
+This does not change the existing unsigned protocol for unregistered integrations.
+
+## Real-time transcript processors
 
 Process conversation transcripts as they occur, enabling real-time analysis and actions.
 
@@ -177,7 +173,7 @@ Process conversation transcripts as they occur, enabling real-time analysis and 
 </Note>
 
 <AccordionGroup>
-  <Accordion title="How It Works" icon="gear">
+  <Accordion title="How it works" icon="gear">
     1. User starts speaking
     2. Omi transcribes in real-time
     3. Your webhook receives transcript segments as they're created
@@ -185,14 +181,14 @@ Process conversation transcripts as they occur, enabling real-time analysis and 
 
     Segments arrive in multiple calls as the conversation unfolds, allowing for live reactions.
   </Accordion>
-  <Accordion title="Example Use Cases" icon="lightbulb">
+  <Accordion title="Example use cases" icon="lightbulb">
     - **Live Coaching**: Provide real-time feedback during presentations
     - **Fact-Checking**: Verify claims as they're made
     - **Smart Home**: Trigger actions based on spoken commands
     - **Sentiment Analysis**: Monitor emotional tone in real-time
     - **Translation**: Live translation of conversations
   </Accordion>
-  <Accordion title="Video Tutorial" icon="video">
+  <Accordion title="Video tutorial" icon="video">
     <iframe
       width="560"
       height="315"
@@ -206,7 +202,7 @@ Process conversation transcripts as they occur, enabling real-time analysis and 
   </Accordion>
 </AccordionGroup>
 
-### Webhook Payload
+### Webhook payload
 
 Your endpoint receives transcript segments with session context:
 
@@ -233,7 +229,7 @@ Your endpoint receives transcript segments with session context:
 ]
 ```
 
-### Implementation Tips
+### Implementation tips
 
 <Warning>
 Real-time processors require careful design to avoid performance issues.
@@ -243,20 +239,18 @@ Real-time processors require careful design to avoid performance issues.
   <Card title="Use session_id" icon="key">
     Track context across multiple calls using the session_id parameter
   </Card>
-  <Card title="Avoid Redundancy" icon="copy">
+  <Card title="Avoid redundancy" icon="copy">
     Implement logic to prevent processing the same segments twice
   </Card>
-  <Card title="Accumulate Context" icon="layer-group">
+  <Card title="Accumulate context" icon="layer-group">
     Build complete conversation context by storing segments
   </Card>
-  <Card title="Handle Errors" icon="triangle-exclamation">
+  <Card title="Handle errors" icon="triangle-exclamation">
     Fail gracefully - don't block transcription with slow processing
   </Card>
 </CardGroup>
 
----
-
-## Real-Time Audio Bytes
+## Real-time audio bytes
 
 Stream raw audio bytes from Omi directly to your endpoint for custom audio processing.
 
@@ -266,7 +260,7 @@ Stream raw audio bytes from Omi directly to your endpoint for custom audio proce
 </Note>
 
 <AccordionGroup>
-  <Accordion title="How It Works" icon="gear">
+  <Accordion title="How it works" icon="gear">
     1. User speaks into Omi device
     2. Raw PCM audio is streamed to your endpoint
     3. Your server processes the audio bytes directly
@@ -274,7 +268,7 @@ Stream raw audio bytes from Omi directly to your endpoint for custom audio proce
 
     Unlike transcript processors, you receive the actual audio data, not text.
   </Accordion>
-  <Accordion title="Example Use Cases" icon="lightbulb">
+  <Accordion title="Example use cases" icon="lightbulb">
     - **Custom ASR**: Use your own speech recognition models
     - **Voice Activity Detection**: Implement custom VAD logic
     - **Audio Features**: Extract spectrograms, embeddings, or other features
@@ -283,7 +277,7 @@ Stream raw audio bytes from Omi directly to your endpoint for custom audio proce
   </Accordion>
 </AccordionGroup>
 
-### Technical Details
+### Technical details
 
 | Setting | Value |
 |---------|-------|
@@ -303,7 +297,7 @@ Body contains raw PCM16 audio bytes.
 To produce a playable WAV file, prepend a WAV header and concatenate the received chunks.
 </Note>
 
-### Configuring Delivery Frequency
+### Configuring delivery frequency
 
 You can control how often audio is sent via the Omi app Developer Settings:
 
@@ -317,14 +311,12 @@ For example: `https://your-endpoint.com/audio,5` sends audio every 5 seconds.
 For a complete implementation, see the [Audio Streaming Guide](/doc/developer/apps/AudioStreaming).
 </Info>
 
----
-
-## Day Summary
+## Day summary
 
 Receive a structured daily recap of a user's conversations, delivered at most once per day at the user's configured notification hour. The webhook only fires on days where the user actually had recorded, transcribed conversations — see *Delivery conditions* below.
 
 <AccordionGroup>
-  <Accordion title="How It Works" icon="gear">
+  <Accordion title="How it works" icon="gear">
     1. An hourly cron job runs at minute 0 of every UTC hour
     2. For each user whose local time matches their configured notification hour, Omi generates a comprehensive daily summary using an LLM
     3. Your webhook receives the summary
@@ -342,7 +334,7 @@ Receive a structured daily recap of a user's conversations, delivered at most on
 
     Treat days without a webhook delivery as "no recap available" rather than a failure — receivers should not assume the webhook fires every day.
   </Accordion>
-  <Accordion title="Example Use Cases" icon="lightbulb">
+  <Accordion title="Example use cases" icon="lightbulb">
     - **Personal CRM**: Log daily conversation highlights to a notes app or database
     - **Team Digest**: Post a Slack summary of a user's day every evening
     - **Journaling**: Auto-populate a daily journal with structured reflections
@@ -351,7 +343,7 @@ Receive a structured daily recap of a user's conversations, delivered at most on
   </Accordion>
 </AccordionGroup>
 
-### Webhook Payload
+### Webhook payload
 
 Your endpoint receives a POST request with the daily summary:
 
@@ -460,19 +452,17 @@ The `summary_json` object has this shape (also reflects what `summary` represent
 The top-level `created_at` is the webhook send timestamp in UTC, with an explicit `+00:00` offset (e.g. `2024-01-15T22:00:00.123456+00:00`). The `created_at` *inside* `summary_json` (and inside the legacy `summary` string) is the timestamp when the summary object was built by the LLM pipeline; it is also UTC but emitted as a naive ISO 8601 string with no offset suffix. The two will be very close in time but are technically distinct timestamps.
 </Info>
 
----
-
-## Creating an Integration App
+## Creating an integration app
 
 <Steps>
-  <Step title="Choose Your Trigger Type" icon="toggle-on">
+  <Step title="Choose your trigger type" icon="toggle-on">
     Decide which integration type(s) you need:
     - **Memory Trigger**: Process completed conversations
     - **Real-Time Transcript**: React to live speech
     - **Audio Bytes**: Process raw audio
     - **Day Summary**: Receive a daily recap of conversations
   </Step>
-  <Step title="Set Up Your Endpoint" icon="server">
+  <Step title="Set up your endpoint" icon="server">
     Create a webhook endpoint that can receive POST requests. For testing, use [webhook.site](https://webhook.site) or [webhook-test.com](https://webhook-test.com/).
 
     Your endpoint should:
@@ -481,7 +471,7 @@ The top-level `created_at` is the webhook send timestamp in UTC, with an explici
     - Read `uid` from query parameters
     - Return 200 OK quickly
   </Step>
-  <Step title="Implement Your Logic" icon="code">
+  <Step title="Implement your logic" icon="code">
     Process the incoming data and integrate with external services.
 
     **Example (Python/FastAPI):**
@@ -498,17 +488,15 @@ The top-level `created_at` is the webhook send timestamp in UTC, with an explici
         return {"status": "ok"}
     ```
   </Step>
-  <Step title="Test Your Integration" icon="flask">
-    Use Developer Mode to test without creating new memories (see testing section below)
+  <Step title="Test your integration" icon="flask">
+    Use developer mode to test without creating new memories (see testing section below)
   </Step>
-  <Step title="Submit Your App" icon="rocket">
+  <Step title="Submit your app" icon="rocket">
     Publish through the Omi mobile app
   </Step>
 </Steps>
 
----
-
-## Testing Your Integration
+## Testing your integration
 
 ### Locally, with no device
 
@@ -549,19 +537,19 @@ receipt.
 ### End to end, from the app
 
 <Steps>
-  <Step title="Enable Developer Mode" icon="code">
+  <Step title="Enable developer mode" icon="code">
     Open Omi app → Settings → Enable Developer Mode → Developer Settings
   </Step>
-  <Step title="Set Webhook URL" icon="link">
+  <Step title="Set webhook URL" icon="link">
     - **Memory Triggers**: Enter URL in "Memory Creation Webhook"
     - **Real-Time**: Enter URL in "Real-Time Transcript Webhook"
     - **Audio Bytes**: Enter URL (optionally with `,seconds` suffix) in "Audio Bytes Webhook"
     - **Day Summary**: Enter URL in "Day Summary Webhook"
   </Step>
-  <Step title="Test Memory Triggers" icon="bell">
+  <Step title="Test memory triggers" icon="bell">
     Go to any memory → Tap 3-dot menu → Developer Tools → Trigger webhook with existing data
   </Step>
-  <Step title="Test Real-Time" icon="bolt">
+  <Step title="Test real-time" icon="bolt">
     Start speaking - your endpoint receives updates immediately
   </Step>
 </Steps>
@@ -574,9 +562,7 @@ The Day Summary webhook only fires on the scheduled cron path. The in-app "Gener
 Use [webhook.site](https://webhook.site) to see exactly what data Omi sends before writing any code.
 </Tip>
 
----
-
-## App Submission Fields
+## App submission fields
 
 When submitting your integration app:
 
@@ -587,16 +573,16 @@ When submitting your integration app:
 | **Auth URL** | No | URL for user authentication (uid appended automatically) |
 | **Setup Instructions** | No | Text or link explaining how to configure your app |
 
-### Setup Instructions Best Practices
+### Setup instructions best practices
 
 <CardGroup cols={2}>
-  <Card title="Step-by-Step Guide" icon="list-ol">
+  <Card title="Step-by-step guide" icon="list-ol">
     Clear numbered instructions for configuration
   </Card>
   <Card title="Screenshots" icon="image">
     Visual aids for complex setup steps
   </Card>
-  <Card title="Authentication Flow" icon="key">
+  <Card title="Authentication flow" icon="key">
     If required, explain how to connect accounts
   </Card>
   <Card title="Troubleshooting" icon="screwdriver-wrench">
@@ -608,33 +594,31 @@ When submitting your integration app:
 When users open your setup links, Omi automatically appends a `uid` query parameter. Use this to associate credentials with specific users.
 </Info>
 
----
-
-## Related Documentation
+## Related documentation
 
 <CardGroup cols={2}>
-  <Card title="Developer API" icon="code" href="/doc/developer/api">
+  <Card title="Developer API" icon="code" href="/doc/developer/api/overview">
     Access your own personal Omi data programmatically
   </Card>
-  <Card title="Data Import APIs" icon="file-import" href="/doc/developer/apps/Import">
+  <Card title="Data import APIs" icon="file-import" href="/doc/developer/apps/Import">
     Create conversations and memories via REST API
   </Card>
-  <Card title="Audio Streaming Guide" icon="microphone" href="/doc/developer/apps/AudioStreaming">
+  <Card title="Audio streaming guide" icon="microphone" href="/doc/developer/apps/AudioStreaming">
     Detailed guide for processing raw audio bytes
   </Card>
-  <Card title="Chat Tools" icon="wrench" href="/doc/developer/apps/ChatTools">
+  <Card title="Chat tools" icon="wrench" href="/doc/developer/apps/ChatTools">
     Add custom tools users can invoke in chat
   </Card>
-  <Card title="OAuth Setup" icon="key" href="/doc/developer/apps/Oauth">
+  <Card title="OAuth setup" icon="key" href="/doc/developer/apps/Oauth">
     Add authentication flows to your apps
   </Card>
   <Card title="Notifications" icon="bell" href="/doc/developer/apps/Notifications">
     Send push notifications from your app
   </Card>
-  <Card title="Prompt-Based Apps" icon="wand-magic-sparkles" href="/doc/developer/apps/PromptBased">
+  <Card title="Prompt-based apps" icon="wand-magic-sparkles" href="/doc/developer/apps/PromptBased">
     Create apps without hosting a server
   </Card>
-  <Card title="Apps Introduction" icon="puzzle-piece" href="/doc/developer/apps/Introduction">
+  <Card title="Apps introduction" icon="puzzle-piece" href="/doc/developer/apps/Introduction">
     Overview of all app types
   </Card>
 </CardGroup>

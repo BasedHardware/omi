@@ -58,6 +58,8 @@ cloud_run:
     OMI_ENV_STAGE: prod
     GOOGLE_CLOUD_PROJECT: based-hardware-dev
     OMI_CUSTOMER_DATA_PROJECT: based-hardware-dev
+    # Keep staging off the prod flag store; dev has no omi-flags database, and dual still serves PostHog.
+    OMI_FLAGS_FIRESTORE_PROJECT: based-hardware-dev
     FIRESTORE_DATABASE_ID: staging
     FIREBASE_AUTH_PROJECT_ID: based-hardware-dev
     SYNC_TASKS_PROJECT: based-hardware-dev
@@ -69,6 +71,9 @@ cloud_run:
     # utils/other/storage.py defaults this to the PROD private-cloud-sync bucket when unset (P13b,
     # 2026-10-21 bridge 403); the fence now requires it in staging.
     BUCKET_PRIVATE_CLOUD_SYNC: based-hardware-dev-staging-sync
+    # The prod overlay sets this as-captured bucket and storage reads it first; empty keeps staging
+    # on its own sync bucket (2026-11-03 sync split window: 403 reading the prod bucket).
+    BUCKET_AUDIO_DERIVED: ''
     # Code defaults point at production (api.omi.me, mail.omi.me); the fence requires these in staging.
     # Staging has no RESEND_API_KEY, so email is no-send; the senders only keep the default out.
     MCP_AUTHORIZATION_SERVER_URL: '{run_url:backend}'
@@ -89,6 +94,10 @@ cloud_run:
     ENRICHMENT_TASKS_QUEUE: staging-enrichment
     ENRICHMENT_TASKS_HANDLER_URL: '{run_url:backend-sync}/v2/enrichment/run'
     ENRICHMENT_TASKS_OIDC_AUDIENCE: '{run_url:backend-sync}/v2/enrichment/run'
+    # Plan C8 provider-STT wakes: prod's handler is backend-integration; staging's own twin serves them here
+    # (the queue name maps through queue_map).
+    PROVIDER_STT_TASKS_HANDLER_URL: '{run_url:backend-integration}'
+    PROVIDER_STT_TASKS_OIDC_AUDIENCE: '{run_url:backend-integration}'
     FIREBASE_SIGNER_SERVICE_ACCOUNT: staging-runtime@based-hardware-dev.iam.gserviceaccount.com
     # Vendor spend caps (staging uses dev's test keys).
     SONIOX_MONTHLY_CEILING_USD: '50'
@@ -176,6 +185,7 @@ overlay:
         env:
           ACCOUNT_DELETION_DISPATCH_MODE: {category: rollout, value: cloud_tasks}
           HOSTED_PARAKEET_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}
+          HOSTED_LID_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}
           HOSTED_DIARIZATION_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}
           HOSTED_SPEAKER_EMBEDDING_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}
       backend-sync:
@@ -183,6 +193,7 @@ overlay:
           SYNC_DISPATCH_MODE: {category: rollout, value: cloud_tasks}
           ACCOUNT_DELETION_DISPATCH_MODE: {category: rollout, value: cloud_tasks}
           HOSTED_PARAKEET_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}
+          HOSTED_LID_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}
           HOSTED_DIARIZATION_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}
           HOSTED_SPEAKER_EMBEDDING_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}
       backend-sync-backfill:
@@ -190,10 +201,12 @@ overlay:
           SYNC_DISPATCH_MODE: {category: rollout, value: cloud_tasks}
           ACCOUNT_DELETION_DISPATCH_MODE: {category: rollout, value: cloud_tasks}
           HOSTED_PARAKEET_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}
+          HOSTED_LID_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}
           HOSTED_DIARIZATION_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}
           HOSTED_SPEAKER_EMBEDDING_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}
       backend-integration:
         env:
           ACCOUNT_DELETION_DISPATCH_MODE: {category: rollout, value: cloud_tasks}
           HOSTED_PARAKEET_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}
+          HOSTED_LID_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}
           HOSTED_SPEAKER_EMBEDDING_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}

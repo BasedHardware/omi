@@ -128,3 +128,43 @@ def test_secondary_writer_stores_are_the_shadow_seam(module_name, function):
     ]
     parents = {child: node for node in ast.walk(tree) for child in ast.iter_child_nodes(node)}
     assert len(calls) == 1 and getattr(parents[calls[0]].func, 'id', None) == 'shadow_from_env'
+
+
+# -- A5: privacy erasure of the Postgres copy ---------------------------------------------------------------
+def test_purge_hook_is_a_no_op_without_shadow_mode(monkeypatch):
+    monkeypatch.setattr(dual_store, 'purge_owner', lambda *a: pytest.fail('must not reach the job store'))
+    assert hook.purge_owner('batch_pipeline_dev', 'synthetic-uid') == 0
+
+
+def test_purge_hook_skips_the_refused_prod_namespace(monkeypatch):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    _shadow_settings(monkeypatch)
+    monkeypatch.setattr(dual_store, 'shadow_from_env', lambda _p: pytest.fail('prod is refused before any store'))
+    assert hook.purge_owner('batch_pipeline_prod', 'synthetic-uid') == 0
+
+
+def test_purge_hook_reconciles_through_the_shadow_store_and_raises_its_failures(monkeypatch):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    _shadow_settings(monkeypatch)
+    calls = []
+
+    class Shadowed(DualStore):
+        def __init__(self):
+            pass
+
+        def purge_owner_now(self, owner_id):
+            calls.append(owner_id)
+            raise RuntimeError('postgres unavailable')
+
+    monkeypatch.setitem(dual_store._SHADOWED, 'batch_pipeline_dev', Shadowed())
+    with pytest.raises(RuntimeError):
+        hook.purge_owner('batch_pipeline_dev', 'synthetic-uid')
+    assert calls == ['synthetic-uid']
+
+
+def test_batch_purge_erases_the_postgres_copy_before_finishing_privacy_purge():
+    """The A5 call sits inside the per-namespace loop, ahead of finish_privacy_purge."""
+    from database import batch_pipeline_purge
+
+    source = inspect.getsource(batch_pipeline_purge.purge_batch_owner)
+    assert 0 < source.index('purge_jobstore_owner(namespace, uid)') < source.index('finish_privacy_purge(')

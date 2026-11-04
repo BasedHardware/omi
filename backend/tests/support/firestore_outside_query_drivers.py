@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib
 import os
 import unittest.mock
+from hashlib import sha256
 from types import SimpleNamespace
 
 from tests.support.firestore_query_drivers import (
@@ -65,6 +66,15 @@ def _driver(
     if function in DRIVERS:
         raise ValueError(function)
     DRIVERS[function] = entry
+
+
+_driver(
+    'utils.batch_pipeline.record_seal_nojob.discover',
+    domains={'after': [None, f'users/{UID}/conversations/record']},
+    neutrals={'limit': (128, 'bounds the operator discovery page only')},
+    profile='operational-record-seal-nojob-backfill',
+    serving=False,
+)
 
 
 def _feedback_rows(client, combo, trial):
@@ -493,4 +503,47 @@ _driver(
     base={'job_id': 'legacy-job', 'uid': UID, 'job': None},
     patchers=(_completed_status_enabled,),
     profile='expired-legacy-handle',
+)
+
+
+_driver(
+    'utils.episodes.home_read.list_episode_window',
+    base={'uid': UID, 'start': T0},
+    domains={'end': (T0, T1)},
+    neutrals={'limit': LIMIT, 'cursor': (None, 'snapshot continuation changes the position only')},
+    profile='request-episode-home',
+)
+
+
+def _enrichment_redrive_rows(client, combo, trial):
+    cid = 'redrive-conversation'
+    key = sha256(f'{UID}\0{cid}'.encode()).hexdigest()
+    client.documents[f'sync_reprocess_outbox/{key}'] = {
+        'uid': UID,
+        'conversation_id': cid,
+        'due_at': 700,
+        'lease_until': 0,
+        'dispatch': {
+            'queue': 'enrichment',
+            'handler': 'https://worker.invalid/v2/enrichment/run',
+            'audience': 'https://worker.invalid/v2/enrichment/run',
+            'invoker_sa': 'synthetic@example.invalid',
+        },
+    }
+    client.documents[f'users/{UID}/conversations/{cid}'] = {
+        'status': 'completed',
+        'sync_processing_hold': {'held': True, 'pending_since': 100},
+    }
+    # All three membership probes execute before the empty-job refusal; no
+    # paid work, privacy mutation or queue enqueue belongs to this shape driver.
+
+
+_driver(
+    'utils.enrichment.redrive.prepare',
+    base={'document_id': sha256(f'{UID}\0redrive-conversation'.encode()).hexdigest(), 'run_id': 'shape-redrive'},
+    domains={'apply': [False, True]},
+    neutrals={'now': (10000.0, 'hold-age/range operand only; same membership queries')},
+    setup=_enrichment_redrive_rows,
+    profile='operational-stalled-enrichment-redrive',
+    serving=False,
 )

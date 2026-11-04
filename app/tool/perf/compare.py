@@ -31,6 +31,8 @@ def compare(before, after):
         raise ValueError('physical and virtual evidence cannot be compared')
     result = {'before': before['identity'], 'after': after['identity'],
               'current_variance_pass': after.get('variance_pass'), 'scenarios': {}}
+    # A window added after the reference has nothing to compare against; list it, never invent one.
+    result['new_scenarios'] = sorted(set(after['scenarios']) - set(before['scenarios']))
     for name, old in before['scenarios'].items():
         new = after['scenarios'][name]
         values = {}

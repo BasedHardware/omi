@@ -1,0 +1,4 @@
+{
+  "change": "Omi can recover a saved pendant connection after Bluetooth setup stalls",
+  "platforms": ["android"]
+}

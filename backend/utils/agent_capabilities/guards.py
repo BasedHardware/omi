@@ -205,8 +205,8 @@ def feedback_rejection(feedback, *, full=False):
         or NON_FAILURE.search(' '.join(tokens(feedback.reproduction)))
     ):
         return 'not_a_failure'
-    text = ' '.join((feedback.component, feedback.failure_class, feedback.reproduction))
-    if not full and LANGUAGE.search(' '.join(tokens(text))):
+    # Category enums are fixed vocabulary; only the free-text reproduction can carry a language claim.
+    if not full and LANGUAGE.search(' '.join(tokens(feedback.reproduction))):
         return 'language_not_defect'
     if RECORD_REF.search(feedback.reproduction):
         return 'ref_leak'

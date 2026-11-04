@@ -104,6 +104,8 @@ class _Client extends Fake implements HttpClient {
   @override
   Duration idleTimeout = Duration.zero;
   @override
+  Duration? connectionTimeout;
+  @override
   Future<HttpClientRequest> openUrl(String method, Uri url) async {
     requests.add(url.path);
     return _Request(body);
@@ -392,7 +394,7 @@ void main() {
         home: OnTheWayPage(pendingWork: PendingWorkStore()),
       ),
     ));
-    expect(find.textContaining('on the way'), findsOneWidget);
+    expect(find.textContaining('catching up'), findsOneWidget);
     final l = AppLocalizations.of(tester.element(find.byType(OnTheWayPage)));
 
     await tester.runAsync(() => coordinator.wake(WakeTrigger.startup));

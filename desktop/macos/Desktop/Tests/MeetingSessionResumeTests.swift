@@ -51,6 +51,153 @@ final class MeetingSessionResumeTests: XCTestCase {
     return now
   }
 
+  private func meetShot(_ code: String = "aaa-bbbb-ccc", audio: Bool = true) -> CallAudioSnapshot {
+    CallAudioSnapshot(
+      processes: [.init(bundleID: "com.google.Chrome.helper", pid: 2, isRunningInput: audio, isRunningOutput: audio)],
+      defaultInputDeviceID: 1,
+      browserWindows: [.init(bundleID: "com.google.Chrome", title: "Meet - \(code) - Google Chrome")])
+  }
+
+  private func confirmMeet(_ detector: MeetingDetector, events: Set<String> = []) {
+    detector.applySnapshot(meetShot(), calendarEventIDs: events)
+    now += 10
+    detector.applySnapshot(meetShot(), calendarEventIDs: events)
+    XCTAssertTrue(detector.isMeetingConfirmed)
+    XCTAssertEqual(role, .meeting)
+  }
+
+  func testSameMeetResumesAfterIncident568SecondGapWithoutFinalizing() {
+    let detector = detector()
+    confirmMeet(detector)
+    let offEdge = loseEvidence(detector)
+    // Drive ordinary negative polls too: the old four-minute expiry must not fire.
+    for _ in 0..<142 {
+      now += 4
+      detector.applyDetected(false)
+    }
+    XCTAssertEqual(now.timeIntervalSince(offEdge), 568)
+    XCTAssertTrue(detector.isMeetingConfirmed)
+    XCTAssertEqual(detector.resumeOffAt, offEdge)
+    detector.applySnapshot(meetShot())
+    XCTAssertTrue(detector.isMeetingActive)
+    XCTAssertNil(detector.resumeOffAt)
+    XCTAssertNil(detector.lastMeetingEndedAt)
+    XCTAssertFalse(detector.hasPendingCallChange)
+    XCTAssertEqual(transitions.map(\.nextRole), [.meeting])
+    XCTAssertEqual(captureEdges, [true, false, true])
+  }
+
+  func testSameMeetResumesAtInclusive15MinuteBound() {
+    let detector = detector()
+    confirmMeet(detector)
+    _ = loseEvidence(detector)
+    now += MeetingDetectionTiming.meetingCodeResumeWindow
+    detector.applyDetected(false)
+    XCTAssertTrue(detector.isMeetingConfirmed)
+    detector.applySnapshot(meetShot())
+    XCTAssertTrue(detector.isMeetingConfirmed)
+    XCTAssertNil(detector.resumeOffAt)
+    XCTAssertEqual(transitions.map(\.nextRole), [.meeting])
+  }
+
+  func testChromeTabTitleChangeOrHiddenWindowResumesSameMeetWhileBrowserAudioContinues() {
+    let detector = detector()
+    confirmMeet(detector)
+    for windows: [CallAudioBrowserWindow] in [
+      [.init(bundleID: "com.google.Chrome", title: "A different tab - Google Chrome")], [],
+    ] {
+      var hiddenMeet = meetShot()
+      hiddenMeet.browserWindows = windows
+      detector.applySnapshot(hiddenMeet)
+      now += 8
+      detector.applySnapshot(hiddenMeet)
+      XCTAssertFalse(detector.isMeetingActive, "audio alone with readable non-call titles closes capture")
+      now += 568
+      detector.applySnapshot(hiddenMeet)
+      XCTAssertTrue(detector.isMeetingConfirmed)
+      detector.applySnapshot(meetShot())
+      XCTAssertTrue(detector.isMeetingActive)
+      XCTAssertNil(detector.resumeOffAt)
+      XCTAssertEqual(transitions.map(\.nextRole), [.meeting])
+    }
+  }
+
+  func testSameMeetBeyondBoundFinalizesAtOriginalOffEdgeAndStartsNewConversation() {
+    let detector = detector()
+    confirmMeet(detector)
+    let offEdge = loseEvidence(detector)
+    now += MeetingDetectionTiming.meetingCodeResumeWindow + 1
+    detector.applySnapshot(meetShot())
+    XCTAssertFalse(detector.isMeetingConfirmed)
+    XCTAssertEqual(detector.lastMeetingEndedAt, offEdge)
+    now += 10
+    detector.applySnapshot(meetShot())
+    XCTAssertEqual(transitions.map(\.nextRole), [.meeting, .ambient, .meeting])
+  }
+
+  func testAbandonedMeetExpiresOnceWithoutAnotherPositiveProbe() {
+    let detector = detector()
+    confirmMeet(detector)
+    let offEdge = loseEvidence(detector)
+    now += MeetingDetectionTiming.meetingCodeResumeWindow + 1
+    detector.applyDetected(false)
+    detector.applyDetected(false)
+    XCTAssertFalse(detector.isMeetingConfirmed)
+    XCTAssertEqual(detector.lastMeetingEndedAt, offEdge)
+    XCTAssertEqual(transitions.map(\.finalizationReason), [.meetingStarted, .meetingEnded])
+  }
+
+  func testDifferentMeetCodeDoesNotResumeEvenWithSameCalendarEvent() {
+    let detector = detector()
+    confirmMeet(detector, events: ["same-calendar-event"])
+    let offEdge = loseEvidence(detector)
+    now += 60
+    detector.applySnapshot(meetShot("abc-defg-hij"), calendarEventIDs: ["same-calendar-event"])
+    XCTAssertFalse(detector.isMeetingConfirmed)
+    XCTAssertEqual(detector.lastMeetingEndedAt, offEdge)
+    now += 10
+    detector.applySnapshot(meetShot("abc-defg-hij"), calendarEventIDs: ["same-calendar-event"])
+    XCTAssertEqual(transitions.map(\.nextRole), [.meeting, .ambient, .meeting])
+  }
+
+  func testCalendarMatchAloneCannotUseExtendedMeetResume() {
+    let detector = detector()
+    confirmMeet(detector, events: ["same-calendar-event"])
+    _ = loseEvidence(detector)
+    now += 568
+    detector.applySnapshot(shot("com.microsoft.teams2"), calendarEventIDs: ["same-calendar-event"])
+    XCTAssertFalse(detector.isMeetingConfirmed)
+    XCTAssertEqual(role, .ambient)
+  }
+
+  func testNativeIdentityMatchCannotUseExtendedMeetResumeWithoutTheCode() {
+    let detector = detector()
+    let ids: Set<String> = ["meet:aaa-bbbb-ccc", "app:com.microsoft.teams2#1"]
+    detector.applyDetected(true, callIDs: ids)
+    now += 10
+    detector.applyDetected(true, callIDs: ids)
+    _ = loseEvidence(detector)
+    now += 568
+    detector.applyDetected(true, callIDs: ["app:com.microsoft.teams2#1"])
+    XCTAssertFalse(detector.isMeetingConfirmed)
+    XCTAssertEqual(role, .ambient)
+  }
+
+  func testVisibleMeetWithNoBrowserAudioStillClosesCaptureAndRetainsConversation() {
+    let detector = detector()
+    confirmMeet(detector)
+    detector.applySnapshot(meetShot(audio: false))
+    now += 8
+    detector.applySnapshot(meetShot(audio: false))
+    XCTAssertFalse(detector.isMeetingActive)
+    now += 568
+    detector.applySnapshot(meetShot(audio: false))
+    XCTAssertFalse(detector.isMeetingActive, "the continuity hold must not capture without call evidence")
+    detector.applySnapshot(meetShot())
+    XCTAssertNil(detector.resumeOffAt)
+    XCTAssertEqual(transitions.map(\.nextRole), [.meeting])
+  }
+
   func testConfirmedDiscordResumesAfter150SecondsWithoutAnAmbientSessionOrNewMeetingStart() {
     let detector = detector()
     confirm(detector)

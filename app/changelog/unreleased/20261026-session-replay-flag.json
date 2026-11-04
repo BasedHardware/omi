@@ -1,0 +1,4 @@
+{
+  "kind": "none",
+  "reason": "Unmasked PostHog session replay ships behind the default-off mobile-session-replay flag; nothing changes for users until it is enabled."
+}

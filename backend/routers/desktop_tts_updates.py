@@ -4,6 +4,7 @@ from utils.generated_compute import require_generated_compute, generated_compute
 from datetime import datetime, timezone
 from html import escape
 import hmac
+import logging
 import os
 import httpx
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
@@ -16,8 +17,8 @@ from database.voice_preferences import get_assistant_voice
 from database.serving_query_reads import list_desktop_release_snapshots
 from utils.byok import get_byok_key
 from utils.executors import critical_executor, db_executor, run_blocking
+from utils.log_sanitizer import sanitize
 from utils.other.endpoints import get_current_user_uid
-from utils.subscription import is_desktop_trial_paywalled
 from utils.tts import (
     TtsConfigurationError,
     TtsRequestLog,
@@ -27,6 +28,8 @@ from utils.tts import (
     get_tts_provider,
     open_gemini_mp3_stream,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -215,15 +218,6 @@ async def tts_synthesize(request: TtsSynthesizeRequest, uid: str = Depends(get_c
     elif not _is_valid_voice_name(voice_id):
         raise HTTPException(status_code=400, detail="voice_id is not supported")
     legacy_openai = provider == 'legacy'
-    if await run_blocking(
-        db_executor,
-        is_desktop_trial_paywalled,
-        uid,
-        "desktop",
-        required_byok_provider="openai" if legacy_openai else None,
-        byok_exempt=legacy_openai,
-    ):
-        raise HTTPException(status_code=403, detail="A paid subscription is required")
     if generated_compute_configured():
         await run_blocking(
             db_executor,
@@ -349,7 +343,9 @@ async def promote_release(request: PromoteReleaseRequest, x_release_secret: str 
     try:
         old_channel, new_channel = await run_blocking(db_executor, _promote_release, request.doc_id)
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=f"Failed to promote: {exc}") from exc
+        # CWE-209: keep datastore/manifest internals server-side.
+        logger.error("Failed to promote release: %s", sanitize(str(exc)), exc_info=True)
+        raise HTTPException(status_code=400, detail="Failed to promote release") from exc
     except Exception as exc:
         raise HTTPException(status_code=400, detail="Failed to promote release") from exc
     return {

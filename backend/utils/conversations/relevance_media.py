@@ -2,15 +2,48 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from config.refactor_modes import serving_for, shadow_or_serve, shadow_sampled
-from utils.capture.media import MAX_SCREEN_ROWS, screen_time
-from utils.conversations.relevance_content import FLAG, ContentDecision, classify_content, owner_speech_seconds, value
+from utils.capture.media import MAX_SCREEN_ROWS, media_playback_signals, screen_time
+from utils.conversations.relevance_content import (
+    FLAG,
+    OWNER_FLOOR_SECONDS,
+    ContentDecision,
+    classify_content,
+    owner_speech_seconds,
+    value,
+)
 from utils.conversations.relevance_media_metrics import observe
+from utils.observability.fallback import record_fallback
 
 # Shadow reads evidence, screen rows and boundary state per finalize; a uid sample is enough to measure.
 SHADOW_SAMPLE_PERCENT = 5.0
+logger = logging.getLogger(__name__)
+
+
+def _observe_reason(uid: str, reason: str) -> None:
+    logger.info('event=media_classification reason=%s serving=%s', reason, str(serving_for(FLAG, uid)).lower())
+
+
+def _observe_owner_media(uid, decision, screen_rows, start, end) -> None:
+    if (
+        decision.reason != 'speech_content'
+        or decision.owner_seconds is None
+        or decision.owner_seconds <= OWNER_FLOOR_SECONDS
+    ):
+        return
+    try:
+        if media_playback_signals(screen_rows, started_at=start, finished_at=end):
+            # Observe after the protection decision; never weaken likely owner.
+            _observe_reason(uid, 'owner_media_overlap')
+    except Exception:
+        # Malformed observational input cannot change the protected decision.
+        observe('classification', 'error')
+        record_fallback(
+            component='other', from_mode='media_noise_evidence', to_mode='legacy', reason='other', outcome='degraded'
+        )
 
 
 def _speaker_evidence(uid: str, conversation_id: str):
@@ -50,19 +83,27 @@ def classify_for_processing(uid: str, conversation: Any, *, user_kept: bool = Fa
         # A previous classification is not proof about a later transcript revision.
         # In particular, missing evidence on restore must not retain an exclusion.
         conversation.content_kind = None
-    if user_kept or value(conversation, 'photos') or value(conversation, 'user_title'):
+    if (
+        user_kept
+        or value(conversation, 'has_photos')
+        or value(conversation, 'photos')
+        or value(conversation, 'user_title')
+    ):
         if serving_for(FLAG, uid):
             conversation.content_kind = 'conversation'
         observe('classification', 'agree')
+        _observe_reason(uid, 'protected')
         return None
     start, end = screen_time(value(conversation, 'started_at')), screen_time(value(conversation, 'finished_at'))
     if start is None or end is None or end <= start:
+        _observe_reason(uid, 'unknown_window')
         return None
     try:
         evidence = _speaker_evidence(uid, value(conversation, 'id', '') or '')
         segments = value(conversation, 'transcript_segments', ()) or ()
         if owner_speech_seconds(evidence, segments) is None:
             observe('classification', 'agree')
+            _observe_reason(uid, 'unknown_owner')
             return None
         boundaries = _boundaries(uid)
         # The existing calendar/screen context can prove an attended call even
@@ -75,24 +116,30 @@ def classify_for_processing(uid: str, conversation: Any, *, user_kept: bool = Fa
             signal = context_signal(context.model_dump() if hasattr(context, 'model_dump') else context)
             if signal is not None:
                 boundaries.append(signal)
+        screen_rows = _screen_rows(uid, start, end)
         decision = classify_content(
             segments,
             started_at=start,
             finished_at=end,
             evidence=evidence,
-            screen_rows=_screen_rows(uid, start, end),
+            screen_rows=screen_rows,
             boundaries=boundaries,
-            protected=bool(user_kept or value(conversation, 'photos') or value(conversation, 'user_title')),
+            protected=bool(
+                user_kept
+                or value(conversation, 'has_photos')
+                or value(conversation, 'photos')
+                or value(conversation, 'user_title')
+            ),
         )
     except Exception:
-        from utils.observability.fallback import record_fallback
-
         observe('classification', 'error')
         record_fallback(
             component='other', from_mode='media_noise_evidence', to_mode='legacy', reason='other', outcome='degraded'
         )
         return None
     observe(decision.content_kind, 'agree' if decision.content_kind == 'conversation' else 'disagree')
+    _observe_reason(uid, decision.reason)
+    _observe_owner_media(uid, decision, screen_rows, start, end)
     if serving_for(FLAG, uid):
         conversation.content_kind = decision.content_kind
         if decision.signals:

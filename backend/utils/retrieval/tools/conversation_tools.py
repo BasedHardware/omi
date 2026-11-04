@@ -33,6 +33,8 @@ from utils.metrics import OMI_CHAT_SEARCH_TOOL_OUTCOMES_TOTAL
 from utils.observability.fallback import record_fallback
 from utils.retrieval.chat_scope import apply_chat_scope_dates, chat_scope_from_config
 from utils.retrieval.turn_refs import register_record_ref
+from utils.retrieval.tool_services.transcript_search import search_saved_transcripts_text
+from utils.retrieval.transcript_recall import begin_transcript_recall
 import logging
 from utils.model_text import (
     DisplayClock,
@@ -534,6 +536,8 @@ def search_conversations_tool(
     max_transcript_segments: int = 0,
     include_transcript: bool = True,
     include_timestamps: bool = False,
+    transcript_query: Optional[str] = None,
+    transcript_cursor: Optional[str] = None,
     config: RunnableConfig = None,  # type: ignore[reportAssignmentType]  # langchain injects at runtime; None default for direct calls
 ) -> str:
     """
@@ -541,6 +545,12 @@ def search_conversations_tool(
 
     Natural-language queries search titles/summaries and indexed transcript chunks - USE THIS FOR EVENTS/INCIDENTS.
     Canonical UUIDs and h.omi.me conversation links resolve to one exact conversation.
+
+    When asked to search transcripts or verify an exact spoken detail, set transcript_query to a few literal
+    words (e.g. "invoice", not "what was the invoice amount?"). This reads actual saved transcripts directly,
+    including unindexed old and new recordings, without relying on semantic search. Continue with the returned
+    transcript_cursor and unchanged query/dates until you find evidence or reach the end. A page with no match
+    is not a complete search. Never guess a detail after pushback; cite the returned verbatim source.
 
     This tool combines exact keyword matching on conversation titles/summaries (best for proper names
     like people or places) with AI embeddings that find semantically similar conversations even if
@@ -586,6 +596,8 @@ def search_conversations_tool(
         max_transcript_segments: Limit transcript segments (default: 0=none, suggest 20-50 for normal use, max: 1000)
         include_transcript: Include full transcript (default: True)
         include_timestamps: Add timestamps to transcript segments (default: False)
+        transcript_query: Literal words/phrase to search in saved transcripts directly, at most 200 characters.
+        transcript_cursor: Opaque continuation from direct transcript search; omit for a new query/date scope.
     Returns:
         Formatted string with matching conversations, including transcripts, summaries, action items, events, and
         metadata.
@@ -667,6 +679,39 @@ def search_conversations_tool(
     scoped_id = (scope or {}).get("conversation_id") if scope else None
     if scoped_id and exact_conversation_id and exact_conversation_id != str(scoped_id):
         return f"Error: Chat is scoped to conversation {scoped_id}; " f"cannot load a different conversation reference."
+
+    if transcript_cursor is not None and transcript_query is None:
+        return 'Error: transcript_cursor requires the original transcript_query.'
+    if transcript_query is not None:
+        if not include_transcript:
+            return 'Error: direct transcript search requires include_transcript=true.'
+        recall_evidence = begin_transcript_recall(configurable)
+
+        def cite_transcript(conversation):
+            with _collected_conversations_lock:
+                collected = configurable.setdefault('conversations_collected', [])
+                for index, card in enumerate(collected, start=1):
+                    if card.get('id') == conversation.id:
+                        number = index
+                        break
+                else:
+                    collected.append(conversation_to_citation_card(conversation))
+                    number = len(collected)
+                register_record_ref(configurable, 'conversations', conversation.id)
+                recall_evidence.found = True
+            return f'[{number}]'
+
+        return search_saved_transcripts_text(
+            str(uid),
+            transcript_query,
+            start_date=start_dt,
+            end_date=end_dt,
+            limit=limit,
+            cursor=transcript_cursor,
+            conversation_id=str(scoped_id or exact_conversation_id) if (scoped_id or exact_conversation_id) else None,
+            clock=display_clock,
+            citation_for=cite_transcript,
+        )
 
     conversations_data: List[Dict[str, Any]] = []
     withheld_locked = 0

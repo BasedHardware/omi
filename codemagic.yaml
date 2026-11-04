@@ -299,13 +299,36 @@ workflows:
             echo "App Store version lookup failed; refusing to guess a release version." >&2
             exit 1
           fi
-          if ! PLAY_RAW=$(google-play get-latest-build-number --package-name "$PACKAGE_NAME" --tracks internal 2>/dev/null); then
+          # google-play bundles list needs codemagic-cli-tools >= 0.57.0 and
+          # the build image's preinstalled CLI is unknown: upgrade in place
+          # only when the subcommand is missing, so a newer image CLI that
+          # other steps depend on is never downgraded.
+          if ! google-play bundles list --help >/dev/null 2>&1; then
+            echo "google-play bundles list unavailable; upgrading codemagic-cli-tools to >=0.57.0" >&2
+            if ! pip3 install --upgrade 'codemagic-cli-tools>=0.57.0,<1'; then
+              echo "codemagic-cli-tools upgrade failed; refusing to guess a release version." >&2
+              exit 1
+            fi
+            if ! google-play bundles list --help >/dev/null 2>&1; then
+              echo "google-play bundles list unavailable after upgrading codemagic-cli-tools; refusing to guess a release version." >&2
+              exit 1
+            fi
+          fi
+          # No --tracks: the highest build number across every Play track.
+          if ! PLAY_RAW=$(google-play get-latest-build-number --package-name "$PACKAGE_NAME" 2>/dev/null); then
             echo "Play version lookup failed; refusing to guess a release version." >&2
+            exit 1
+          fi
+          # A rejected release leaves its uploaded bundle on no track, where
+          # the track lookup above cannot see it, but its version code is
+          # burned forever; the bundle list covers every uploaded code.
+          if ! PLAY_BUNDLES_RAW=$(google-play bundles list --package-name "$PACKAGE_NAME" --json 2>/dev/null); then
+            echo "Play bundle list lookup failed; refusing to guess a release version." >&2
             exit 1
           fi
           STORE_INPUT="$(mktemp)"
           trap 'rm -f "$STORE_INPUT"' EXIT
-          export TF_RAW AS_RAW PLAY_RAW
+          export TF_RAW AS_RAW PLAY_RAW PLAY_BUNDLES_RAW
           python3 - "$STORE_INPUT" <<'PY'
           import json
           import os
@@ -316,6 +339,7 @@ workflows:
               "testflight": {"stdout": os.environ["TF_RAW"], "exit_code": 0},
               "app_store": {"stdout": os.environ["AS_RAW"], "exit_code": 0},
               "play": {"stdout": os.environ["PLAY_RAW"], "exit_code": 0},
+              "play_bundles": {"stdout": os.environ["PLAY_BUNDLES_RAW"], "exit_code": 0},
           }), encoding="utf-8")
           PY
           PUBSPEC_VERSION="$(grep '^version:' pubspec.yaml | sed 's/version: //' | tr -d ' ')"
@@ -363,9 +387,11 @@ workflows:
         credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
         track: "internal"
         submit_as_draft: false
-        # Play rejects automated edits.commit for this app ("set the query
-        # parameter changesNotSentForReview to true"); held changes are sent
-        # from Play Console -> Publishing overview -> Send for review.
+        # Codemagic android-internal-auto builds on 2026-10-28 at 03:18Z,
+        # 05:55Z and 06:24Z uploaded bundles but failed at Publishing:
+        # "Changes cannot be sent for review automatically. Please set the
+        # query parameter changesNotSentForReview to true." Hold for the
+        # required Play Console Send changes for review press.
         changes_not_sent_for_review: true
 
   # ============================================
@@ -942,8 +968,9 @@ workflows:
         # These built-in values bind the release to its tag and Codemagic run.
         release_name: "$CM_TAG [$CM_BUILD_ID]"
         submit_as_draft: false
-        # Same Play constraint as the internal auto track: automated commits
-        # must hold changes for the Console's Send for review step.
+        # Keep tag releases held too: on 2026-10-28 Play said "Changes cannot
+        # be sent for review automatically" and required
+        # changesNotSentForReview=true. Submit these changes from Play Console.
         changes_not_sent_for_review: true
       scripts:
         - name: Promote the exact internal build to alpha

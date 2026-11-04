@@ -113,6 +113,7 @@ final class QuickActionsIconPatcher: NSObject {
   private var deviceToolsChannel: FlutterMethodChannel?
   private var chatVideoSampler: ChatVideoSampler?
   private var livePreviewPlugin: LivePreviewPlugin?
+  private var livePreviewNotesPlugin: LivePreviewNotesPlugin?
   private let deviceToolsService = DeviceToolsService()
   private var phoneMicController: PhoneMicController?
   private var notificationTitleOnKill: String?
@@ -460,6 +461,8 @@ final class QuickActionsIconPatcher: NSObject {
     _ = OnDeviceOverflowPlugin(messenger: messenger)
     // On-device live preview for local-preview listen sessions (display only).
     livePreviewPlugin = LivePreviewPlugin(messenger: messenger)
+    // On-device live notes for those sessions (Apple Foundation Models, display only).
+    livePreviewNotesPlugin = LivePreviewNotesPlugin(messenger: messenger)
     let speechChannel = FlutterMethodChannel(name: "com.omi.ios/speech", binaryMessenger: messenger)
     let speechHandler = SpeechRecognitionHandler()
     speechChannel.setMethodCallHandler { (call, result) in

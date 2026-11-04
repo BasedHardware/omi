@@ -41,10 +41,18 @@ const _conversationsDefine = String.fromEnvironment('PERF_SIM_CONVERSATIONS');
 const _walsDefine = String.fromEnvironment('PERF_SIM_WALS');
 const _walFilesDefine = String.fromEnvironment('PERF_SIM_WAL_FILES');
 const _detailSegmentsDefine = String.fromEnvironment('PERF_SIM_DETAIL_SEGMENTS');
+const _syncedWalsDefine = String.fromEnvironment('PERF_SIM_SYNCED_WALS');
 
 final heavyConversationCount = _knob('PERF_SIM_CONVERSATIONS', _conversationsDefine, 2000, min: 1, max: 5000);
 final heavyWalCount = _knob('PERF_SIM_WALS', _walsDefine, 6500, min: 0, max: 20000);
 final heavyWalFileCount = _knob('PERF_SIM_WAL_FILES', _walFilesDefine, 6500, min: 0, max: 20000);
+
+/// Already-synced records on top of the pending backlog, the shape of a long-lived phone (one
+/// field index: 71,536 records, 66,222 synced). Default 0 keeps the standard heavy dataset.
+final heavySyncedWalCount = _knob('PERF_SIM_SYNCED_WALS', _syncedWalsDefine, 0, min: 0, max: 80000);
+
+/// Every record the WAL index holds: the pending backlog plus synced history.
+int get heavyIndexWalCount => heavyWalCount + heavySyncedWalCount;
 final heavyDetailSegments = _knob('PERF_SIM_DETAIL_SEGMENTS', _detailSegmentsDefine, 120, min: 1, max: 2000);
 
 const heavyFixtureUid = 'omi-perf-heavy-fixture-uid';
@@ -178,6 +186,24 @@ Future<int> seedHeavyWals() async {
     }
     wals.add(wal);
   }
+  for (var i = 0; i < heavySyncedWalCount; i++) {
+    // Older than the backlog, uploaded and transcribed long ago; their audio is gone. syncedAt 0 is
+    // the legacy stamp the synced-copy retention sweep never removes, which is how a long-lived
+    // phone keeps tens of thousands of synced records; a dated stamp would be swept at startup.
+    final timerStart =
+        heavySeedDate.subtract(Duration(minutes: 20 * (heavyWalCount + i))).millisecondsSinceEpoch ~/ 1000;
+    wals.add(Wal(
+      timerStart: timerStart,
+      codec: BleAudioCodec.opus,
+      seconds: 10,
+      status: WalStatus.synced,
+      storage: WalStorage.disk,
+      device: 'phone',
+      deviceModel: 'Perf fixture',
+      ownerUid: heavyFixtureUid,
+      syncedAt: 0,
+    ));
+  }
   for (final entry in files.entries) {
     await File('${documents.path}/${entry.key}').writeAsBytes(entry.value);
   }
@@ -186,8 +212,8 @@ Future<int> seedHeavyWals() async {
     throw StateError('heavy fixture: WAL index save failed');
   }
   final loaded = await WalFileManager.loadWals();
-  if (loaded.length != heavyWalCount) {
-    throw StateError('heavy fixture: expected $heavyWalCount WALs, loaded ${loaded.length}');
+  if (loaded.length != heavyIndexWalCount) {
+    throw StateError('heavy fixture: expected $heavyIndexWalCount WALs, loaded ${loaded.length}');
   }
   return files.length;
 }

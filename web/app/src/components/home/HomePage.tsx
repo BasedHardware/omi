@@ -124,9 +124,9 @@ export function HomePage() {
     document.title = 'Omi - Your AI Companion';
   }, []);
 
-  const handleSend = async (text: string, files: MessageFile[]) => {
+  const handleSend = async (text: string, files: MessageFile[]): Promise<boolean> => {
     setExchangeStart((current) => current ?? messages.length);
-    await sendMessage(
+    return sendMessage(
       text,
       files.map((file) => file.id),
       undefined,

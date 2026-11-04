@@ -100,7 +100,9 @@ def _assert_cas_matches(
         )
 
 
-def get_account_cutover_record(uid: str, *, firestore_client: Any = None) -> AccountCutoverRecord:
+def get_account_cutover_record(
+    uid: str, *, firestore_client: Any = None, transaction: Any = None
+) -> AccountCutoverRecord:
     """Return the persisted cutover record, or an implicit legacy default.
 
     Missing documents remain legacy-compatible. Existing but malformed documents
@@ -108,7 +110,8 @@ def get_account_cutover_record(uid: str, *, firestore_client: Any = None) -> Acc
     legacy and reopen product traffic. Embedded ``uid`` must match the path uid.
     """
 
-    snapshot = _control_ref(uid, firestore_client=firestore_client).get()
+    ref = _control_ref(uid, firestore_client=firestore_client)
+    snapshot = ref.get(transaction=transaction) if transaction is not None else ref.get()
     if getattr(snapshot, 'exists', False) is not True:
         return default_legacy_record(uid)
     return _parse_bound_record(uid, snapshot)

@@ -26,6 +26,7 @@ which ramp against their own percent (`AUDIO_ARCHIVE_STOP_PCM_PERCENT`,
 | `AUDIO_ARCHIVE_STOP_PCM_ENABLED` + `AUDIO_ARCHIVE_STOP_PCM_PERCENT` (default off/0) | Requires READ; ramps against its own percent (not `AUDIO_ARCHIVE_PERCENT`, which COALESCE pins at 100). Skip a PCM batch only after committed raw verifies complete coverage and the live capture-PCM SHA matches (or raw decode matches every byte). Missing raw, checksum, rate, span, or decode mismatch retains today's write. |
 | `AUDIO_ARCHIVE_SYNC_ENABLED` | v1/v2 SD/offline uploads archive original file bytes before decode/acceptance; lossy backend Opus chunks become derived renditions. Existing mobile-batch archival remains mandatory. |
 | `AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED` + `AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT` (default off/0) | Route merged/playback caches, sync renditions and new intake staging to `BUCKET_AUDIO_DERIVED`. Canonical raw stays multi-region. Ramps against its own percent (not `AUDIO_ARCHIVE_PERCENT`, which COALESCE pins at 100, or the enable flag would be an instant 100% cutover). |
+| `AUDIO_ARCHIVE_REGIONAL_CHUNKS_PERCENT` (default 0; pusher only; also needs `AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED`) | Route new pusher PCM chunk batches (`chunks/…batch.*`) to `BUCKET_AUDIO_DERIVED`. These are renditions of the canonical raw-live packs, which stay multi-region. Readers list and resolve both buckets; the merge copies inside the chunk's own bucket, deletes sweep both, and the v2 collision check covers both. Before admitting anyone: the derived bucket has no lifecycle `Delete` rule and has soft delete, and the batch worker has `audioDerivedBucket` set with read IAM on that bucket. Otherwise retained-audio references to it are refused. Roll back the percent to 0 and keep `BUCKET_AUDIO_DERIVED` configured. |
 | `AUDIO_ARCHIVE_COALESCE_ENABLED` | Share concurrent identical file rebuild results, including failures; released admission permits retry. Existing fingerprint-named Cloud Tasks and distributed conversation leases still cover cross-instance rebuilds. |
 | `AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED` | Route admitted merge tasks to `AUDIO_MERGE_WORKER_URL` (full `/v2/audio-merge-jobs/run` URL). Non-admitted tasks retain `AUDIO_MERGE_HANDLER_URL`. |
 
@@ -96,12 +97,14 @@ the trial size from that already-built same-SHA image, routes at most 5% to it
 and waits ≥12h. Only after qualification/full promotion change the prod
 fallback here (or set GitHub environment variable `BACKEND_SYNC_MEMORY`)
 for future deployments; the backend-stack action validates
-`4Gi|6Gi|8Gi`. Since the 2026-10-24 costcut, the manual workflow's fallback is `6Gi`
+`4Gi|5Gi|6Gi|8Gi`. Since the 2026-10-24 costcut, the manual workflow's fallback is `6Gi`
 for prod and `8Gi` for development, and the dev-only deploys (auto-dev) keep the action's
 `8Gi` default. The deployment remains through the existing release admission and
 GitHub Actions workflow. Rollback: redeploy the admitted image at the prior size.
 Watch memory peak, OOMs, queue age and retry rate; 4.9 GiB is an observed sample
-peak, not qualification for the largest batch.
+peak, not qualification for the largest batch. At 6Gi the 1-min per-instance max was
+4.74 GiB on 2026-10-25 and at most 3.96 GiB from 10-27 to 11-02, so a 5Gi trial
+qualifies only after a weekday peak stays at or under 3.5 GiB.
 
 ## Cost model and receipt
 

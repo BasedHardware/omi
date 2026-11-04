@@ -37,6 +37,7 @@ import sys
 from pathlib import Path
 
 import pytest
+import yaml
 
 if __package__ in (None, ''):
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -45,18 +46,33 @@ from config.policy.guard import env_reads
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 BUDGET_PATH = BACKEND_DIR / 'config' / 'flag_budget.json'
+FEATURE_FLAGS_PATH = BACKEND_DIR.parent / 'config' / 'feature-flags.yaml'
 SEED_BUDGET = 170  # 2026-10-25 seed; lower it when the surface shrinks, never raise it.
+HELPER_KILL_SWITCHES = {
+    'CONVERSATION_OCCASION_RELEVANCE_ENABLED',
+    'LATE_AUDIO_SYNC_INTAKE_ENABLED',
+    'EPISODE_RECORDED_TIME_ENABLED',
+    'EPISODE_LIVE_TIMER_START_ENABLED',
+    'CONVERSATION_MERGE_BEFORE_PROCESSING',
+    'EPISODE_CARRY_ON_SESSION_END',
+    'EPISODE_HARD_CAP_ACROSS_CONVERSATIONS',
+    'EPISODE_MOMENT_OUTPUT_VALIDATOR',
+    'HOME_HIDE_BELOW_FLOOR_ROWS',
+}
 
 SCOPE = (
     'utils/batch_pipeline/**/*.py',
     'diarizer/batch_pipeline*.py',
     'config/batch_pipeline*.py',
+    'config/batch_language_recovery.py',
     'utils/sync/**/*.py',
     'utils/stt/**/*.py',
+    'parakeet/language_gate.py',
     'config/policy/**/*.py',
     'config/prerecorded_*.py',
     'config/live_stt_*.py',
     'config/transcription_final_pass.py',
+    'utils/pusher_audio_projection.py',
 )
 
 
@@ -95,7 +111,7 @@ def problems(read: dict[str, list[str]], data: dict, today: datetime.date) -> li
     names: dict[str, dict] = data['names']
     retired: dict[str, dict] = data.get('retired', {})
     out = unlisted(read, names)
-    for name in sorted(set(names) - set(read)):
+    for name in sorted(name for name in set(names) - set(read) if not names[name].get('registry')):
         out.append(
             f'{name} is no longer read in scope: move it to "retired" as {{"on": "YYYY-MM-DD", "replaced_by": null}} '
             f'and lower "budget", or name its replacement, in the same change'
@@ -163,6 +179,38 @@ def test_budget_file_declares_scope_and_count():
     assert tuple(data['scope']) == SCOPE
     assert data['count'] == len(data['names'])
     assert isinstance(data['retired'], dict)
+
+
+def test_helper_kill_switch_budget_entries_match_the_default_on_registry():
+    data = _load()
+    names = data['names']
+    helper_names = {name for name, entry in names.items() if entry.get('registry')}
+    assert helper_names == HELPER_KILL_SWITCHES | {'SERVER_BATCH_UNSUPPORTED_LANGUAGES'}
+
+    # Keep this inventory check inside the fast-unit CPU budget; the C safe
+    # loader has the same safe semantics and parses the full registry faster.
+    registry = yaml.load(
+        FEATURE_FLAGS_PATH.read_text(encoding='utf-8'), Loader=getattr(yaml, 'CSafeLoader', yaml.SafeLoader)
+    )
+    flags = {flag['key']: flag for flag in registry['flags']}
+    unsupported = names['SERVER_BATCH_UNSUPPORTED_LANGUAGES']
+    assert unsupported['owner'] == 'planscost'
+    assert unsupported['review_by'] == '2026-11-30'
+    assert flags['SERVER_BATCH_UNSUPPORTED_LANGUAGES']['lifecycle'] == 'ops_kill'
+    assert flags['SERVER_BATCH_UNSUPPORTED_LANGUAGES']['owner'] == 'planscost'
+    assert 'SERVER_BATCH_UNSUPPORTED_LANGUAGES' in set(env_reads((BACKEND_DIR / 'config/server_batch.py').read_text()))
+    for name in sorted(HELPER_KILL_SWITCHES):
+        entry = names[name]
+        flag = flags[name]
+        assert entry['registry'] == 'config/feature-flags.yaml'
+        assert entry['owner'] == 'rollout-meetings / occasion architecture'
+        assert flag['owner'] == 'dazheng'
+        assert entry['review_by'] == '2026-11-28'
+        assert flag['kind'] == 'env'
+        assert flag['lifecycle'] == 'ops_kill'
+        assert 'backend' in flag['surfaces']
+        assert flag['fail'] == 'open'
+        assert flag['summary'].startswith('Default on;')
 
 
 def _data(retired=None, **names):

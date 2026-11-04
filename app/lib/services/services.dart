@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_sound/flutter_sound.dart';
 
+import 'package:omi/backend/http/http_pool_manager.dart';
 import 'package:omi/services/connectivity_service.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/mic/mic_arbiter.dart';
@@ -77,6 +78,8 @@ class ServiceManager {
     }
     _instance = ServiceManager._create();
     await ConnectivityService().init();
+    // Pooled sockets opened on the previous network fail once reused there.
+    ConnectivityService().onNetworkChange.listen((_) => HttpPoolManager.instance.resetConnections());
   }
 
   Future<void> start() async {

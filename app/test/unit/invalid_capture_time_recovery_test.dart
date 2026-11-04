@@ -1,3 +1,5 @@
+import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/backend/http/api/sync_upload_refusal.dart';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
@@ -5,7 +7,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
@@ -96,6 +97,7 @@ void main() {
   late List<List<String>> uploadAttempts;
   late Set<String> refuseNames;
   Object? refuseWith;
+  late DateTime testClock;
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
@@ -113,8 +115,10 @@ void main() {
     uploadAttempts = [];
     refuseNames = {};
     refuseWith = null;
+    testClock = DateTime.now();
     sync = LocalWalSyncImpl(
       _MockListener(),
+      now: () => testClock,
       uploadGate: SyncUploadGate(
         limiter: SyncRateLimiter.instance,
         uploader: (files,
@@ -151,14 +155,14 @@ void main() {
 
   Future<File> writeAudio(Wal wal) async {
     final file = File('${tempDir.path}/${wal.filePath}');
-    await file.writeAsBytes([0xAA, 0xBB]);
+    await file.writeAsBytes([1, 0, 0, 0, 0xAA]);
     return file;
   }
 
-  test('a one-second fragment is never deleted: it stays as an attention row', () async {
+  test('a one-second fragment is retained quietly for automatic recovery', () async {
     // One second of audio — the splice wreckage a corrupted-marker split
     // produced by the thousand. Deleting it quietly lost audio the user never
-    // consented to lose, so it stays a row the user decides about.
+    // consented to lose, so it stays retained for recovery without asking the user to repair it.
     final wal = _wal(timerStart: 2051222400, seconds: 1); // claimed 2035
     final file = await writeAudio(wal);
     sync.testWals = [wal];
@@ -175,7 +179,7 @@ void main() {
         [
           [wal.filePath!]
         ],
-        reason: 'a refused row is never re-offered automatically');
+        reason: 'the first refusal does not immediately repeat');
     final reloaded = await WalFileManager.loadWals();
     expect(reloaded.single.uploadRejectionReason, WalUploadRejection.invalidCaptureTime,
         reason: 'the reason survives a restart');
@@ -251,7 +255,7 @@ void main() {
     expect(uploadAttempts, hasLength(3), reason: 'the batch, then each member once on its own');
   });
 
-  test('a manual retry resends the refused file unchanged', () async {
+  test('a daily retry resends the refused file unchanged after a server fix', () async {
     final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
     final wal = _wal(timerStart: now - 600, seconds: 60);
     final file = await writeAudio(wal);
@@ -263,6 +267,9 @@ void main() {
     // The server's clock window widens (server PR #23746): the same bytes now pass.
     refuseNames.clear();
     await sync.syncWal(wal: wal);
+    expect(uploadAttempts, hasLength(1), reason: 'a manual gesture does not bypass the daily clock');
+    testClock = testClock.add(const Duration(days: 1));
+    await sync.syncAll();
 
     expect(
         uploadAttempts,
@@ -289,23 +296,19 @@ void main() {
     expect(uploadAttempts, hasLength(1), reason: 'no time repair happens for a non-time refusal');
   });
 
-  test('a 400 is invalid capture time by bounded code or by the deployed detail line', () {
-    http.Response body(String payload) => http.Response(payload, 400);
-
-    // The not-yet-deployed server (PR #23746) names the refusal with a code.
-    expect(
-        isInvalidCaptureTimeResponse(body('{"detail": "invalid timestamp", "code": "invalid_capture_time"}')), isTrue);
-    // The currently deployed server names it only in the detail, with no code.
-    expect(isInvalidCaptureTimeResponse(body('{"detail": "Invalid sync file format: invalid timestamp"}')), isTrue);
-    // Any other 400 stays a generic refusal.
-    expect(isInvalidCaptureTimeResponse(body('{"detail": "Invalid sync file format"}')), isFalse);
-    expect(isInvalidCaptureTimeResponse(body('{"detail": "audio malformed"}')), isFalse);
-    expect(isInvalidCaptureTimeResponse(body('not json')), isFalse);
-
-    expect(syncUploadErrorCode(body('{"detail": "invalid timestamp", "code": "invalid_capture_time"}')),
-        'invalid_capture_time');
-    expect(syncUploadErrorCode(body('{"detail": "invalid timestamp"}')), isNull);
-    expect(syncUploadErrorReason(body('{"message": "too many files"}')), 'too many files');
-    expect(syncUploadErrorReason(body('not json')), isNull);
+  test('refusal bodies decode explicitly and preserve code versus legacy detail', () {
+    SyncUploadRefusalBody body(String payload) =>
+        (decodeSyncUploadRefusal(http.Response(payload, 400)) as ApiSuccess<SyncUploadRefusalBody>).data;
+    expect(body('{"detail":"invalid timestamp","code":"invalid_capture_time"}').invalidCaptureTime, isTrue);
+    expect(body('{"detail":"Invalid sync file format: invalid timestamp"}').invalidCaptureTime, isTrue);
+    expect(body('{"detail":"Invalid sync file format"}').invalidCaptureTime, isFalse);
+    expect(body('{"detail":"audio malformed"}').reasonCode, 'server_refused');
+    expect(body('{"detail":"invalid timestamp"}').code, isNull);
+    expect(body('{"message":"too many files"}').detail, 'too many files');
+    for (final payload in ['not json', '[]', 'null']) {
+      final result = decodeSyncUploadRefusal(http.Response(payload, 400));
+      expect(result, isA<ApiFailure<SyncUploadRefusalBody>>());
+      expect((result as ApiFailure).problem.kind, ApiProblemKind.decode);
+    }
   });
 }

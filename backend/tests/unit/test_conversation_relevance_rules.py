@@ -121,3 +121,44 @@ def test_cjk_only_tiebreak_never_discards_unknown_content(text):
     from utils.conversations.relevance_rules import deterministic_tiebreak
 
     assert deterministic_tiebreak([text]) == 'keep'
+
+
+def test_katakana_laughter_and_acknowledgement_are_filler():
+    assert deterministic_relevance(['ハハハハ'], None) == ('discard', 'filler_only')
+    assert deterministic_relevance(['ハイ'], None) == ('discard', 'filler_only')
+    assert deterministic_relevance(['ハノイ'], None) == (None, 'non_latin_content')
+    assert deterministic_relevance(['アイ'], None) == (None, 'non_latin_content')
+
+
+@pytest.mark.parametrize(
+    'texts',
+    [
+        ['Thank you for watching.'] * 3,
+        ['Terima kasih telah menonton!'] * 4,
+        ['Thanks for watching.', 'Thank you for watching.', 'Thanks for watching!'],
+    ],
+)
+def test_repeated_exact_asr_outros_are_noise(texts):
+    assert deterministic_relevance(texts, 18000) == ('discard', 'repeated_asr_outro')
+
+
+@pytest.mark.parametrize(
+    'texts',
+    [
+        ['Thank you for watching.'],
+        ['Thank you for watching.'] * 3 + ['Remind me to call the clinic tomorrow.'],
+        ['I said thank you for watching during the recording.'] * 3,
+        ['Terima kasih telah menonton.'] * 3 + ['Besok kita rapat di kantor.'],
+    ],
+)
+def test_outro_rule_preserves_real_or_uncertain_speech(texts):
+    verdict, reason = deterministic_relevance(texts, None)
+    assert verdict in (None, 'keep')
+    assert reason != 'repeated_asr_outro'
+
+
+@pytest.mark.parametrize('opening,closing', [('"', '"'), ("'", "'"), ('`', '`'), ('“', '”'), ('「', '」')])
+def test_quoted_outros_are_not_hard_discarded(opening, closing):
+    verdict, reason = deterministic_relevance([opening + 'Thanks for watching.' + closing] * 3, None)
+    assert verdict in (None, 'keep')
+    assert reason != 'repeated_asr_outro'

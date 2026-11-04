@@ -16,6 +16,7 @@ from typing import Any, Callable
 from config import required_memory_intake as policy
 from database._client import get_firestore_client
 from database import dream_scheduler, required_intake_cursors
+from database.account_deletion_marker import account_deletion_blocks_user_work
 from database.memory_collections import MemoryCollections
 from database.required_intake_fence import source_scope, assert_account_active, RequiredIntakeSourceChanged
 from models.memory_apply import MemoryControlState
@@ -294,6 +295,8 @@ async def retry_owner(uid, *, db_client=None, now=None):
     if not policy.enabled():
         return 0
     client = db_client if db_client is not None else await run_blocking(db_executor, get_firestore_client)
+    if await run_blocking(db_executor, account_deletion_blocks_user_work, uid):
+        return 0
     current = now or datetime.now(timezone.utc)
     before, cursor, generation = await run_blocking(
         db_executor, required_intake_cursors.load, uid, 'retry', db_client=client
@@ -369,6 +372,9 @@ async def retry_due_owners(owners, *, complete_owner=None):
             if not policy.enabled():
                 return
             try:
+                if await run_blocking(db_executor, account_deletion_blocks_user_work, uid):
+                    completed.add(index)
+                    continue
                 await retry_owner(uid)
                 if complete_owner is not None and policy.enabled():
                     client = await run_blocking(db_executor, get_firestore_client)

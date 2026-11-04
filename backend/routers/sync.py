@@ -2,6 +2,7 @@ from database import sync_redrive
 from database.sync_snapshot_resolve_cache import sync_snapshot_resolve_job
 from database.legal_holds import DestructiveOperationInProgress
 from utils.sync import minimal_redrive, redrive_policy, playback_build
+from utils.other.playback_identity import PlaybackSourceChanged
 from utils.capture.coverage_endpoint import router as coverage_router
 from utils.observability.sync_phases import sync_attempt, set_sync_metrics_lane
 import asyncio
@@ -26,10 +27,18 @@ from config.policy import resolve_batch_policy
 from config.policy.ramp import audio_span
 from database.batch_ramp import ramp_admission_policy
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
+from database.batch_privacy_attempt import with_batch_privacy_attempt
+from database.account_deletion_marker import account_deletion_blocks_user_work
 from utils.batch_pipeline.intake import (
     accept_upload as accept_batch_upload,
     get_durable_job_status,
+    repair_upload_owner_matches,
     privacy_blocked_response,
+)
+from utils.batch_pipeline.intake_outcome import (
+    IntakeRouteEvidence,
+    legacy_landing_outcome,
+    record_upload_outcome,
 )
 from models.sync_job_status import (
     SyncJobStartResponse,
@@ -149,6 +158,7 @@ from utils.sync.repeat_work_metrics import (
     PLAYBACK_WRITES,
     PLAYBACK_BUILD_SECONDS,
     PLAYBACK_BUILDS,
+    record_demand_playback_outcome,
     record_playback_ready,
 )
 from utils.product_metrics import record_product_event, sanitize_app_build
@@ -173,8 +183,8 @@ from utils.sync.files import (
 from utils.sync.pipeline import (
     _OrderedTurnstile,
     _cleanup_files,
-    _delete_staged_blobs_async,
-    _download_staged_files,
+    delete_staged_blobs_async,
+    download_staged_files,
     _finalize_sync_job_failure,
     finalize_sync_job_failure_now,
     finalize_sync_job_superseded,
@@ -184,18 +194,21 @@ from utils.sync.pipeline import (
     _reprocess_merged_conversations,
     _RESPONSE_FENCED_CONVERSATION_IDS,
     _retrieve_file_paths_v2,
-    _run_full_pipeline_background_async,
+    run_full_pipeline_background_async,
     _stage_files_to_gcs,
     build_person_embeddings_cache,
     process_segment,
     retrieve_vad_segments,
     SyncConversationPersistenceFenced,
 )
+from utils.sync.empty_upload import EmptySyncUpload, prepare_sync_uploads, nonempty_manifest_claims
+from utils.sync.job_retry_policy import terminal_repeat_failure_kwargs
 from utils.sync.capture_clock import (
     INVALID_CAPTURE_TIME_CODE,
     INVALID_CAPTURE_TIME_DETAIL,
     SyncCaptureTimeRejected,
     capture_clock_offset,
+    is_early_capture_time,
 )
 from utils.stt.outcomes import TranscriptionOutcome, sync_failure_from_exception
 from utils.speaker_learning_jobs import schedule_person_voice_learning_retries
@@ -558,467 +571,17 @@ def download_audio_file_endpoint(
 
 # response_model omitted: deprecated v1 endpoint with mixed dict + JSONResponse returns;
 # the v2 typed equivalent (SyncJobStatusResponse) covers the contract.
-@router.post("/v1/sync-local-files", deprecated=True)
-@max_part_size(SYNC_AUDIO_MAX_PART_SIZE)
-async def sync_local_files(
-    request: Request,
-    response: Response,
-    files: List[UploadFile] = File(...),
-    uid: str = Depends(auth.get_current_user_uid),
-    conversation_id: str = Query(
-        None, description="Target conversation ID to attach audio to (auto-sync from live capture)"
-    ),
-):
-    if await run_blocking(db_executor, get_sync_ledger_fence_mode) is SyncLedgerFenceMode.STANDBY:
-        return JSONResponse(
-            status_code=503,
-            headers={**_V1_DEPRECATION_HEADERS, 'Retry-After': '60'},
-            content={
-                'code': 'sync_ledger_fence_cutover',
-                'detail': 'Sync is briefly pausing safely; local audio was not consumed',
-            },
-        )
-    logger.warning(
-        f'sync: deprecated v1 sync-local-files called uid={uid} files={len(files)} '
-        f'user_agent={request.headers.get("user-agent", "")}'
+@router.post("/v1/sync-local-files", deprecated=True, status_code=410)
+def sync_local_files(uid: str = Depends(auth.get_current_user_uid)):
+    """Retired by legacy-retire C6; v2 is the successor and the client retains local audio."""
+    return JSONResponse(
+        status_code=410,
+        headers=_V1_DEPRECATION_HEADERS,
+        content={
+            'code': 'sync_v1_retired',
+            'detail': 'Use /v2/sync-local-files; local audio was not consumed',
+        },
     )
-    response.headers.update(_V1_DEPRECATION_HEADERS)
-    client_device_context = resolve_client_device_from_request(request)
-    filenames = [f.filename or '' for f in files]
-    has_server_capture_proof = False
-    lane_decision = classify_sync_lane(
-        filenames,
-        client_device_id=client_device_context.client_device_id if has_server_capture_proof else None,
-    )
-    logger.info(
-        'sync_lane_admission uid=%s device_hash=%s platform=%s app_version=%s lane=%s trust=%s age_seconds=%s reason=%s',
-        uid,
-        client_device_context.device_hash,
-        client_device_context.platform,
-        client_device_context.app_version,
-        lane_decision.lane.value,
-        lane_decision.trust.value,
-        lane_decision.maximum_age_seconds,
-        lane_decision.reason,
-    )
-    if lane_decision.lane == SyncLane.BACKFILL and os.getenv('SYNC_BACKFILL_ENABLED', 'true').lower() != 'true':
-        return JSONResponse(
-            status_code=503,
-            headers={
-                **_V1_DEPRECATION_HEADERS,
-                'Retry-After': '3600',
-                'X-Omi-Rate-Limit-Reason': 'backfill_capacity',
-            },
-            content={
-                'code': 'backfill_capacity',
-                'detail': 'Historical recovery is paused; local audio was not consumed',
-            },
-        )
-    if lane_decision.lane == SyncLane.BACKFILL:
-        # The deprecated inline endpoint has no isolated worker boundary.
-        # Historical audio must use v2 so it can never consume fresh capacity.
-        return JSONResponse(
-            status_code=503,
-            headers={
-                **_V1_DEPRECATION_HEADERS,
-                'Retry-After': '30',
-                'X-Omi-Rate-Limit-Reason': 'backfill_capacity',
-            },
-            content={
-                'code': 'backfill_capacity',
-                'detail': 'Historical recovery requires the v2 isolated worker; local audio was not consumed',
-            },
-        )
-    if not lane_decision.automatic_recovery_allowed:
-        return JSONResponse(
-            status_code=422,
-            headers=_V1_DEPRECATION_HEADERS,
-            content={
-                'code': 'backfill_lookback_exceeded',
-                'detail': 'Recording is older than the automatic recovery window; local audio was not consumed',
-            },
-        )
-
-    # Pre-check gates (#5854)
-    hard_restricted, retry_after = await run_blocking(critical_executor, get_hard_restriction_status, uid)
-    if lane_decision.lane == SyncLane.FRESH and hard_restricted:
-        return await _fair_use_restriction_response(
-            uid=uid,
-            retry_after=retry_after,
-            client_platform=client_device_context.platform,
-            device_hash=client_device_context.device_hash,
-            app_version=client_device_context.app_version,
-            request_id=request.headers.get('x-request-id'),
-            cloud_trace_context=request.headers.get('x-cloud-trace-context'),
-            base_headers=_V1_DEPRECATION_HEADERS,
-        )
-
-    # Hard anti-abuse daily-audio ceiling (all plans): reject fresh sync once the user is
-    # already over the rolling-24h total. Set high enough that no legitimate user hits it;
-    # it exists to stop bulk-sync dumps. Backfill has its own separate pacing.
-    if lane_decision.lane == SyncLane.FRESH and await run_blocking(db_executor, is_daily_audio_ceiling_exceeded, uid):
-        logger.info(f'sync: daily audio ceiling reached uid={uid}')
-        return await _fair_use_restriction_response(
-            uid=uid,
-            retry_after=retry_after_until_next_utc_day(),
-            client_platform=client_device_context.platform,
-            device_hash=client_device_context.device_hash,
-            app_version=client_device_context.app_version,
-            request_id=request.headers.get('x-request-id'),
-            cloud_trace_context=request.headers.get('x-cloud-trace-context'),
-            base_headers=_V1_DEPRECATION_HEADERS,
-        )
-
-    # Legacy exhaustion retains the installed-client path below.
-
-    # A lookup failure must not durably lock: unlike gating the live listen socket, nothing
-    # routinely re-checks is_locked later, so a transient blip would paywall it forever (#15232).
-    has_credits = await run_blocking(critical_executor, has_transcription_credits, uid)
-    should_lock = False
-    if not has_credits:
-        allowance = await run_blocking(critical_executor, resolve_transcription_allowance, uid)
-        should_lock = (
-            allowance.reason not in TRANSCRIPTION_ALLOWANCE_TRANSIENT_REASONS
-            and allowance.reason != 'usage_budget_exhausted'
-        )
-
-    # Detect source from filenames
-    source = detect_source_from_filenames([f.filename for f in files])
-
-    paths = []
-    wav_paths = []
-    segmented_paths = set()
-    backfill_slot_token: Optional[str] = None
-    if lane_decision.lane == SyncLane.BACKFILL:
-        backfill_slot_token = f'v1-{_uuid.uuid4()}'
-        try:
-            if not await run_blocking(db_executor, try_acquire_backfill_slot, uid, backfill_slot_token):
-                return JSONResponse(
-                    status_code=429,
-                    headers={
-                        **_V1_DEPRECATION_HEADERS,
-                        'Retry-After': '30',
-                        'X-Omi-Rate-Limit-Reason': 'backfill_paced',
-                    },
-                    content={'code': 'backfill_paced', 'detail': 'Another historical recovery job is in flight'},
-                )
-        except Exception:
-            return JSONResponse(
-                status_code=503,
-                headers={
-                    **_V1_DEPRECATION_HEADERS,
-                    'Retry-After': '30',
-                    'X-Omi-Rate-Limit-Reason': 'backfill_capacity',
-                },
-                content={'code': 'backfill_capacity', 'detail': 'Historical recovery is temporarily unavailable'},
-            )
-
-    try:
-        try:
-            paths = await run_blocking(sync_executor, retrieve_file_paths, files, uid)
-            archive_paths = await run_blocking(
-                sync_executor,
-                archive_mobile_batch_raw_files,
-                uid,
-                paths,
-                {
-                    'app_version': client_device_context.app_version,
-                    'firmware': request.headers.get('x-omi-firmware-version'),
-                    'device_model': request.headers.get('x-omi-device-model'),
-                },
-            )
-            await _offer_shadow_upload(
-                uid=uid,
-                content_id=None,
-                paths=paths,
-                lane=lane_decision.lane.value,
-                age=lane_decision.maximum_age_seconds,
-                conversation_id=conversation_id,
-                source=source.value,
-                device_id=client_device_context.client_device_id,
-                byok=has_byok_keys(),
-                policy=resolve_batch_policy(uid),
-                should_lock=should_lock,
-            )
-            wav_paths = await run_blocking(sync_executor, decode_files_to_wav, paths)
-        except HTTPException as e:
-            raise HTTPException(status_code=e.status_code, detail=e.detail, headers=_V1_DEPRECATION_HEADERS)
-
-        cap_held = False
-        cap_admission: dict = {}
-        if cap_dispatch_enabled(uid, 'sync'):
-            cap_held = await hold_capture_if_exhausted(
-                uid,
-                wav_paths,
-                source,
-                admission=cap_admission,
-                target_conversation_id=conversation_id,
-                client_device_id=client_device_context.client_device_id,
-                client_platform=client_device_context.platform,
-            )
-        if cap_held:
-            return JSONResponse(
-                status_code=200,
-                headers=_V1_DEPRECATION_HEADERS,
-                content={
-                    'new_memories': [],
-                    'updated_memories': [],
-                    'credits_exhausted': cap_admission.get('reason')
-                    in {'plan_allowance_exhausted', 'usage_budget_exhausted'},
-                    'held_audio': True,
-                    'held_files': len(wav_paths),
-                },
-            )
-        vad_errors = []
-        vad_segment_lock = threading.Lock()
-
-        def _run_vad(path):
-            retrieve_vad_segments(path, segmented_paths, vad_errors, segment_source_lock=vad_segment_lock)
-
-        await asyncio.gather(*[run_blocking(sync_executor, _run_vad, path) for path in wav_paths])
-
-        # Clean up original wav files after VAD segmentation (segments are now in segmented_paths)
-        await run_blocking(sync_executor, _cleanup_files, wav_paths)
-        wav_paths = []  # Clear to avoid double cleanup in finally
-
-        # Check for VAD errors - if any failed, abort to prevent data loss
-        if vad_errors:
-            error_detail = f"VAD processing failed for {len(vad_errors)} file(s): {'; '.join(vad_errors[:3])}"
-            if len(vad_errors) > 3:
-                error_detail += f" (and {len(vad_errors) - 3} more)"
-            raise HTTPException(status_code=500, detail=error_detail, headers=_V1_DEPRECATION_HEADERS)
-
-        # Fair-use speech tracking from raw VAD segments (#5854)
-        # Compute duration from raw segments BEFORE merging (silence gaps not counted)
-        total_speech_seconds = sum(get_wav_duration(p) for p in segmented_paths)
-        total_speech_ms = int(total_speech_seconds * 1000)
-        logger.info(
-            f'sync_local_files len(segmented_paths) {len(segmented_paths)} speech_seconds={int(total_speech_seconds)}'
-        )
-
-        if lane_decision.lane == SyncLane.BACKFILL:
-            reservation = await run_blocking(
-                db_executor,
-                reserve_backfill_speech,
-                uid,
-                backfill_slot_token or f'v1-{_uuid.uuid4()}',
-                total_speech_ms,
-            )
-            if not reservation.allowed:
-                return JSONResponse(
-                    status_code=429,
-                    headers={
-                        **_V1_DEPRECATION_HEADERS,
-                        'Retry-After': str(reservation.retry_after or retry_after_next_utc_day()),
-                        'X-Omi-Rate-Limit-Reason': reservation.reason or 'backfill_paced',
-                    },
-                    content={
-                        'code': reservation.reason or 'backfill_paced',
-                        'detail': 'Historical recovery is paced; local audio should be retained',
-                    },
-                )
-
-        if FAIR_USE_ENABLED and total_speech_ms > 0:
-            meter_source = 'sync_backfill' if lane_decision.lane == SyncLane.BACKFILL else 'sync_fresh'
-            await run_blocking(db_executor, record_speech_ms, uid, total_speech_ms, source=meter_source)
-            if lane_decision.lane == SyncLane.FRESH:
-                fair_use_sub = await run_blocking(db_executor, users_db.get_existing_user_subscription, uid)
-                fair_use_plan = fair_use_sub.plan if fair_use_sub else None
-                speech_totals = await run_blocking(db_executor, get_rolling_speech_ms, uid)
-                triggered_caps = check_soft_caps(uid, speech_totals=speech_totals, plan=fair_use_plan)
-                if triggered_caps:
-                    logger.info(f'sync: soft caps triggered for {uid}: {triggered_caps}')
-                    start_background_task(
-                        trigger_classifier_if_needed(uid, triggered_caps), name=f'sync_fair_use_classifier:{uid}'
-                    )
-
-        is_locked = should_lock
-
-        response = {'updated_memories': set(), 'new_memories': set()}
-        segment_errors = []
-        segment_lock = threading.Lock()
-        total_segments = len(segmented_paths)
-
-        # DG budget gate: throttle cloud STT for restrict-stage users (#6083)
-        # Check budget first; only record usage after successful processing.
-        dg_budget_blocked = False
-        fair_use_restrict_dg = False
-        if FAIR_USE_ENABLED and lane_decision.lane == SyncLane.FRESH:
-            try:
-                fair_use_stage = await run_blocking(db_executor, get_enforcement_stage, uid)
-                if fair_use_stage == 'restrict' and FAIR_USE_RESTRICT_DAILY_DG_MS > 0:
-                    fair_use_restrict_dg = True
-                    dg_budget_blocked = await run_blocking(db_executor, is_dg_budget_exhausted, uid)
-            except Exception as e:
-                logger.error(f'sync: DG budget check error for {uid}: {e}')
-
-        if dg_budget_blocked:
-            logger.info(f'sync: DG budget exhausted, skipping {total_segments} segments uid={uid}')
-            await run_blocking(sync_executor, _cleanup_files, list(segmented_paths))
-            return await _fair_use_restriction_response(
-                uid=uid,
-                retry_after=retry_after_until_next_utc_day(),
-                client_platform=client_device_context.platform,
-                device_hash=client_device_context.device_hash,
-                app_version=client_device_context.app_version,
-                request_id=request.headers.get('x-request-id'),
-                cloud_trace_context=request.headers.get('x-cloud-trace-context'),
-                base_headers=_V1_DEPRECATION_HEADERS,
-                extra_content={
-                    'new_memories': [],
-                    'updated_memories': [],
-                    'credits_exhausted': should_lock,
-                    'dg_budget_exhausted': True,
-                    'skipped_segments': total_segments,
-                },
-            )
-
-        # Fetch user transcription preferences once before spawning threads
-        transcription_prefs = await run_blocking(db_executor, users_db.get_user_transcription_preferences, uid)
-        private_cloud_sync_enabled = bool(
-            await run_blocking(db_executor, users_db.get_user_private_cloud_sync_enabled, uid)
-        )
-        data_protection_level = (
-            await run_blocking(db_executor, users_db.get_data_protection_level, uid)
-            if private_cloud_sync_enabled
-            else None
-        )
-
-        # Build speaker embeddings cache once for all segments (voice + text identification)
-        try:
-            person_embeddings_cache = await run_blocking(db_executor, build_person_embeddings_cache, uid)
-            if person_embeddings_cache:
-                logger.info(f'sync: loaded {len(person_embeddings_cache)} person embeddings for speaker ID uid={uid}')
-        except Exception as e:
-            logger.warning(f'sync: failed to load person embeddings, skipping speaker ID uid={uid}: {e}')
-            person_embeddings_cache = {}
-
-        # Chronological order + turnstile: STT runs in parallel, but conversation
-        # assignment is serialized oldest-first so adjacent chunks merge instead of
-        # racing into separate conversations (#6551, #5747).
-        ordered_paths = sorted(segmented_paths, key=get_timestamp_from_path)
-        assignment_turnstile = _OrderedTurnstile(ordered_paths)
-        await asyncio.gather(
-            *[
-                run_blocking(
-                    sync_executor,
-                    process_segment,
-                    path,
-                    uid,
-                    response,
-                    segment_lock,
-                    segment_errors,
-                    source,
-                    is_locked,
-                    transcription_prefs,
-                    person_embeddings_cache,
-                    conversation_id,
-                    assignment_turnstile,
-                    private_cloud_sync_enabled=private_cloud_sync_enabled,
-                    data_protection_level=data_protection_level,
-                    client_device_id=client_device_context.client_device_id,
-                    client_platform=client_device_context.platform,
-                )
-                for path in ordered_paths
-            ]
-        )
-
-        cap_holds = response.get('_cap_holds', {}) if cap_dispatch_enabled(uid, 'sync') else {}
-        cap_held_seconds = sum(item['seconds'] for item in cap_holds.values())
-
-        await run_blocking(sync_executor, _reprocess_merged_conversations, uid, response)
-        if private_cloud_sync_enabled:
-            await run_blocking(sync_executor, _finalize_sync_audio_files, uid, response)
-        schedule_person_voice_learning_retries(uid, response, _RESPONSE_FENCED_CONVERSATION_IDS)
-
-        # Record DG usage after successful processing (not before, to avoid charging on retries)
-        if fair_use_restrict_dg:
-            try:
-                dg_ms = int(total_speech_seconds * 1000)
-                if cap_holds:
-                    dg_ms = int(max(0, total_speech_seconds - cap_held_seconds) * 1000)
-                if dg_ms > 0:
-                    await run_blocking(db_executor, record_dg_usage_ms, uid, dg_ms)
-            except Exception as e:
-                logger.error(f'sync: DG usage record error for {uid}: {e}')
-
-        if archive_paths:
-            await run_blocking(
-                storage_executor,
-                link_archive_captures,
-                uid,
-                archive_paths,
-                sorted(set(response['new_memories']) | set(response['updated_memories'])),
-            )
-
-        # Build JSON-serializable response
-        result = {
-            'new_memories': sorted(response['new_memories']),
-            'updated_memories': sorted(response['updated_memories']),
-        }
-        if cap_holds:
-            result.update(
-                held_audio=True,
-                credits_exhausted=any(item.get('reason') == 'plan_allowance_exhausted' for item in cap_holds.values()),
-                held_segments=len(cap_holds),
-            )
-
-        failed_segments = len(segment_errors)
-        successful_segments = total_segments - failed_segments
-        if cap_holds:
-            successful_segments -= len(cap_holds)
-
-        if failed_segments > 0:
-            result['failed_segments'] = failed_segments
-            result['total_segments'] = total_segments
-            result['errors'] = segment_errors[:10]  # Cap error details to avoid huge responses
-            logger.error(
-                f'sync_local_files partial failure uid={uid} '
-                f'success={successful_segments}/{total_segments} errors={segment_errors[:3]}'
-            )
-
-        if total_segments > 0 and successful_segments == 0:
-            # All segments failed — return 500 (consistent with VAD error behavior)
-            if not cap_holds:
-                raise HTTPException(
-                    status_code=500,
-                    detail=f"All {total_segments} segment(s) failed processing: {'; '.join(segment_errors[:3])}",
-                    headers=_V1_DEPRECATION_HEADERS,
-                )
-
-        # Record subscription usage only when at least one segment succeeded
-        try:
-            usage_seconds = int(total_speech_seconds)
-            if cap_holds:
-                usage_seconds = int(max(0, total_speech_seconds - cap_held_seconds)) if successful_segments > 0 else 0
-            if usage_seconds > 0:
-                await run_blocking(
-                    db_executor, record_usage, uid, transcription_seconds=usage_seconds, speech_seconds=usage_seconds
-                )
-        except Exception as e:
-            logger.error(f'sync: usage record error for {uid}: {e}')
-
-        if failed_segments > 0:
-            # Partial failure — return 207 Multi-Status so old clients retry the batch
-            return JSONResponse(
-                status_code=207,
-                headers=_V1_DEPRECATION_HEADERS,
-                content=result,
-            )
-
-        return result
-    finally:
-        # Clean up any remaining temporary files
-        await run_blocking(
-            sync_executor, _cleanup_files, paths
-        )  # .bin files (in case decode_files_to_wav didn't finish)
-        await run_blocking(sync_executor, _cleanup_files, wav_paths)  # Original wav files (if VAD didn't complete)
-        await run_blocking(sync_executor, _cleanup_files, segmented_paths)  # Segmented wav files after processing
-        if backfill_slot_token:
-            try:
-                await run_blocking(db_executor, release_backfill_slot, uid, backfill_slot_token)
-            except Exception as e:
-                logger.warning('sync: failed to release v1 backfill slot uid=%s error=%s', uid, type(e).__name__)
 
 
 @router.post(  # v2 async sync-local-files
@@ -1044,6 +607,7 @@ async def sync_local_files_v2(
     ),
     audio_start_seconds: Optional[float] = Query(None),
     audio_end_seconds: Optional[float] = Query(None),
+    repair_job_id: Optional[str] = Query(None, description='Original batch job for an exact custody repair bundle'),
     x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
     x_device_id_hash: Optional[str] = Header(None, alias='X-Device-Id-Hash'),
     x_app_version: Optional[str] = Header(None, alias='X-App-Version'),
@@ -1060,6 +624,23 @@ async def sync_local_files_v2(
     immediately, then runs the full pipeline (decode → VAD → STT → LLM) as
     an async background task. The app polls GET /v2/sync-local-files/{job_id}.
     """
+    # Empty/torn-header clips contain no audio frames. Acknowledge them before
+    # clock/age admission; a bogus date on zero audio has nothing to recover.
+    upload_filenames = [f.filename or '' for f in files]
+    repair_identity = repair_job_id if isinstance(repair_job_id, str) else None
+    capture_received_at = time.time()
+    try:
+        files = await run_blocking(sync_executor, prepare_sync_uploads, files, uid)
+    except EmptySyncUpload:
+        if repair_identity is not None:
+            return JSONResponse(
+                status_code=409,
+                content={
+                    'code': 'sync_repair_bundle_changed',
+                    'detail': 'The original complete upload is required; retain local audio',
+                },
+            )
+        return JSONResponse(status_code=200, content={'new_memories': [], 'updated_memories': []})
     if isinstance(recording_session_id, str):
         recording_session_id = recording_session_id.strip() or None
     else:
@@ -1096,8 +677,9 @@ async def sync_local_files_v2(
         uid,
         client_device_context.client_device_id,
         conversation_id,
-        filenames,
+        upload_filenames,
     )
+    manifest_claims = nonempty_manifest_claims(manifest_claims, filenames)
     record_snapshot = {}
     has_server_capture_proof = manifest_claims is not None and await run_blocking(
         db_executor,
@@ -1111,7 +693,7 @@ async def sync_local_files_v2(
     # Off the event loop, a cold process gives its first ramp read a bounded wait, so a
     # fresh instance cannot admit legacy work on the 'on' default after the ramp went
     # draining/dark (M3 review; batch intake reads the mode the same way).
-    legacy_mode = await run_blocking(db_executor, legacy_dark.current_mode)
+    legacy_mode = await run_blocking(db_executor, legacy_dark.current_mode, uid)
     legacy_allowed = legacy_dark.legacy_admission_allowed(legacy_mode)
     legacy_mode_read_at = time.monotonic()
     lane_decision = classify_sync_lane(
@@ -1169,7 +751,7 @@ async def sync_local_files_v2(
                 'detail': 'Historical recovery is paused; local audio was not consumed',
             },
         )
-    if not lane_decision.automatic_recovery_allowed:
+    if not lane_decision.automatic_recovery_allowed and repair_identity is None:
         return JSONResponse(
             status_code=422,
             content={
@@ -1233,6 +815,7 @@ async def sync_local_files_v2(
         try:
             paths = await run_blocking(sync_executor, _retrieve_file_paths_v2, files, uid, job_id)
         except SyncCaptureTimeRejected:
+            logger.info('sync_upload_refused uid=%s status=400 reason=invalid_capture_time', uid)
             # Typed 400 for implausible capture times (beyond the shared
             # future-skew tolerance or before 2024). Released clients only see
             # the status + detail; new clients can act on the code.
@@ -1241,6 +824,9 @@ async def sync_local_files_v2(
                 content={'code': INVALID_CAPTURE_TIME_CODE, 'detail': INVALID_CAPTURE_TIME_DETAIL},
             )
 
+        early_capture_received_at = (
+            capture_received_at if any(is_early_capture_time(get_timestamp_from_path(path)) for path in paths) else None
+        )
         # One server-clock offset per request shifts the client's
         # recording-session audio bounds onto the server clock before any
         # temporal comparison (recording-session binding compares them against
@@ -1260,13 +846,19 @@ async def sync_local_files_v2(
                 except (IndexError, ValueError):
                     continue  # Admission above rejects unparseable names with the typed 400.
             if admitted_file_starts:
-                admitted_end = max(admitted_file_starts) + SESSION_CLAIM_TRAILING_SLACK_SECONDS
-                audio_start_seconds = float(audio_start_seconds)
-                audio_end_seconds = min(float(audio_end_seconds), admitted_end)
-                session_clock_offset = capture_clock_offset(max(admitted_file_starts))
-                if session_clock_offset > 0:
-                    audio_start_seconds -= session_clock_offset
-                    audio_end_seconds -= session_clock_offset
+                if any(is_early_capture_time(value) for value in admitted_file_starts):
+                    # Reset clocks prove no server-clock interval. Do not use
+                    # a possibly years-wide client claim for session lookup;
+                    # explicit targets and source-frame evidence stay intact.
+                    audio_start_seconds = audio_end_seconds = None
+                else:
+                    admitted_end = max(admitted_file_starts) + SESSION_CLAIM_TRAILING_SLACK_SECONDS
+                    audio_start_seconds = float(audio_start_seconds)
+                    audio_end_seconds = min(float(audio_end_seconds), admitted_end)
+                    session_clock_offset = capture_clock_offset(max(admitted_file_starts))
+                    if session_clock_offset > 0:
+                        audio_start_seconds -= session_clock_offset
+                        audio_end_seconds -= session_clock_offset
 
         if manifest_claims is not None and not await run_blocking(
             sync_executor, manifest_claims_match_paths, manifest_claims, paths
@@ -1280,6 +872,18 @@ async def sync_local_files_v2(
                     'code': 'capture_manifest_mismatch',
                     'detail': 'Fresh capture manifest did not match the uploaded audio',
                 },
+            )
+
+        content_id = await run_blocking(sync_executor, compute_sync_content_id, uid, paths)
+        if repair_identity is not None and not await run_blocking(
+            db_executor, repair_upload_owner_matches, uid, content_id, repair_identity
+        ):
+            # Already accepted bytes may outlive the new-upload lookback. Only
+            # the exact original owner may cross that boundary; a changed or
+            # foreign bundle cannot write an archive or enter fresh admission.
+            return JSONResponse(
+                status_code=409,
+                content={'code': 'sync_repair_bundle_changed', 'detail': 'Retain the original complete local upload'},
             )
 
         # Keep original bytes before any 202, content-cache hit, decode or VAD.
@@ -1298,9 +902,8 @@ async def sync_local_files_v2(
             },
         )
 
-        content_id = await run_blocking(sync_executor, compute_sync_content_id, uid, paths)
-
         candidate_policy = resolve_batch_policy(uid)
+        intake_evidence = IntakeRouteEvidence()
         batch_policy = await run_blocking(
             db_executor,
             ramp_admission_policy,
@@ -1311,22 +914,29 @@ async def sync_local_files_v2(
             incoming_audio_seconds=audio_span(
                 {'audio_start_seconds': audio_start_seconds, 'audio_end_seconds': audio_end_seconds}
             ),
+            evidence=intake_evidence,
         )
-        record_response = await registered_record_response(
-            uid=uid,
-            conversation_id=conversation_id if isinstance(conversation_id, str) else None,
-            content_id=content_id,
-            paths=paths,
-            source=source.value,
-            client_device_id=client_device_context.client_device_id,
-            byok_enabled=byok_enabled,
-            recording_session_id=recording_session_id,
-            policy=batch_policy,
-            loaded_conversation=record_snapshot if record_snapshot.get('record_lane_owner') else None,
-            # A legacy_final_pass_v1 owner is re-homed to batch once legacy is
-            # draining/dark (final_pass_rehome); the route answers BATCH then.
-            legacy_mode=legacy_mode,
-        )
+        if repair_identity is not None:
+            # Exact repair ownership is checked by batch admission before it
+            # can accept. Never let a changed repair bundle take a fresh or
+            # synchronous record route, even outside today's admission cohort.
+            record_response = RecordUploadRoute.BATCH
+        else:
+            record_response = await registered_record_response(
+                uid=uid,
+                conversation_id=conversation_id if isinstance(conversation_id, str) else None,
+                content_id=content_id,
+                paths=paths,
+                source=source.value,
+                client_device_id=client_device_context.client_device_id,
+                byok_enabled=byok_enabled,
+                recording_session_id=recording_session_id,
+                policy=batch_policy,
+                loaded_conversation=record_snapshot if record_snapshot.get('record_lane_owner') else None,
+                # A legacy_final_pass_v1 owner is re-homed once legacy is dark.
+                legacy_mode=legacy_mode,
+                evidence=intake_evidence,
+            )
         if isinstance(record_response, JSONResponse):
             return record_response
 
@@ -1347,6 +957,7 @@ async def sync_local_files_v2(
                 uid=uid,
                 job_id=job_id,
                 content_id=content_id,
+                repair_job_id=repair_identity,
                 paths=paths,
                 lane=lane_decision.lane.value,
                 recording_age_seconds=lane_decision.maximum_age_seconds,
@@ -1357,6 +968,11 @@ async def sync_local_files_v2(
                 client_platform=client_device_context.platform,
                 byok_enabled=byok_enabled,
                 intake_context={
+                    **(
+                        {'capture_received_at': early_capture_received_at}
+                        if early_capture_received_at is not None
+                        else {}
+                    ),
                     'recording_session_id': recording_session_id,
                     'audio_start_seconds': (
                         audio_start_seconds if isinstance(audio_start_seconds, (int, float)) else None
@@ -1369,8 +985,14 @@ async def sync_local_files_v2(
                 },
                 record_router=registered_record_response,
                 policy=batch_policy,
+                evidence=intake_evidence,
             )
             if batch_response is not None:
+                # Count only a fresh admission this request (a re-ACK of prior
+                # custody, a fence/unavailable response, or a rehomed final-pass
+                # owner is a follow-on, not a batch landing).
+                if intake_evidence.batch_accepted and not intake_evidence.final_pass_owner_followed:
+                    record_upload_outcome('batch')
                 return batch_response
             sequencer_registration_started = False
 
@@ -1378,7 +1000,7 @@ async def sync_local_files_v2(
             # A legacy job is created only on a young mode read: a request that read 'on'
             # and then stalled (a long batch decode, a slow fallback) must not carry it past
             # a draining re-home of the same conversation (final_pass_rehome's flip grace).
-            legacy_mode = await run_blocking(db_executor, legacy_dark.current_mode)
+            legacy_mode = await run_blocking(db_executor, legacy_dark.current_mode, uid)
             legacy_allowed = legacy_dark.legacy_admission_allowed(legacy_mode)
 
         if not legacy_allowed:
@@ -1409,6 +1031,12 @@ async def sync_local_files_v2(
         else:
             admission_reason = legacy_dark.LegacyAdmissionReason.BATCH_NOT_ENABLED
         legacy_dark.record_legacy_admission(admission_reason, legacy_mode)
+        legacy_outcome = legacy_landing_outcome(intake_evidence, candidate_batch_enabled=candidate_policy.batch_enabled)
+        if legacy_outcome is not None:
+            # Fresh routing decisions only: an upload following a durable owner
+            # (legacy record owner, prior content receipt, final-pass owner) has
+            # no fresh decision and stays outside the closed outcome set.
+            record_upload_outcome(legacy_outcome)
 
         # Create Redis job — total_segments=0 until VAD completes in background
         await run_blocking(
@@ -1582,7 +1210,7 @@ async def sync_local_files_v2(
                 # Staging failed before any task was submitted, so it is safe
                 # to remove partial blobs, terminalize, and free the claim for
                 # a client WAL retry.
-                await _delete_staged_blobs_async(owned_paths)
+                await delete_staged_blobs_async(owned_paths)
                 await run_blocking(sync_executor, _cleanup_files, owned_paths)
                 await _finalize_sync_job_failure(
                     job_id=job_id,
@@ -1635,6 +1263,7 @@ async def sync_local_files_v2(
                 'client_device_id': client_device_context.client_device_id,
                 'client_platform': client_device_context.platform,
                 'enqueued_at': time.time(),
+                **({'capture_received_at': early_capture_received_at} if early_capture_received_at is not None else {}),
                 'lane': lane_decision.lane.value,
                 'capture_time_trust': lane_decision.trust.value,
                 'recording_age_seconds': lane_decision.maximum_age_seconds,
@@ -1675,7 +1304,7 @@ async def sync_local_files_v2(
                         registered = bool(observed_job and observed_job.get('status') in TERMINAL_STATUSES)
                     if not registered:
                         sequencer_registration_started = False
-                        await _delete_staged_blobs_async(owned_paths)
+                        await delete_staged_blobs_async(owned_paths)
                         await run_blocking(sync_executor, _cleanup_files, owned_paths)
                         await _finalize_sync_job_failure(
                             job_id=job_id,
@@ -1864,7 +1493,7 @@ async def sync_local_files_v2(
                     # Async coordinator: runs on event loop, offloads blocking work to pools.
                     # No thread pool slot held for the full pipeline duration (fixes #7361).
                     start_background_task(
-                        _run_full_pipeline_background_async(
+                        run_full_pipeline_background_async(
                             job_id,
                             uid,
                             owned_paths,
@@ -1886,6 +1515,7 @@ async def sync_local_files_v2(
                             recording_session_id=recording_session_id,
                             audio_start_seconds=audio_start_seconds,
                             audio_end_seconds=audio_end_seconds,
+                            capture_received_at=early_capture_received_at,
                         ),
                         name=f'sync_pipeline:{job_id}',
                     )
@@ -1903,7 +1533,11 @@ async def sync_local_files_v2(
                 'lane': lane_decision.lane.value,
             },
         )
-    except HTTPException:
+    except HTTPException as error:
+        if error.status_code == 400:
+            reason = error.detail.get('code', 'server_refused') if isinstance(error.detail, dict) else 'server_refused'
+            logger.info('sync_upload_refused uid=%s status=400 reason=%s', uid, reason)
+            return JSONResponse(status_code=400, content={'code': reason, 'detail': 'Invalid sync file format'})
         if backfill_slot_acquired:
             try:
                 await run_blocking(db_executor, release_backfill_slot, uid, job_id)
@@ -1930,23 +1564,13 @@ async def sync_local_files_v2(
         _cleanup_files(paths)
 
 
-def _terminal_repeat_failure_kwargs(job: dict) -> dict[str, str]:
-    """Carry a terminal job's strike through racing poll/task claim cleanup."""
-    if job.get('status') not in {'failed', 'partial_failure'}:
-        return {}
-    if job.get('status') == 'failed' and job.get('reason_code') == 'sync_invalid_audio':
-        return {'failure_key': 'invalid_audio'}
-    result = job.get('result')
-    if isinstance(result, dict) and result.get('repeat_failure_key') == 'persistent_persistence':
-        return {
-            'failure_key': 'persistent_persistence',
-            'failure_fingerprint': result.get('repeat_failure_fingerprint'),
-        }
-    return {}
-
-
 @router.get("/v2/sync-local-files/{job_id}", response_model=SyncJobStatusResponse, response_model_exclude_none=True)
-def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_uid), surface_open: bool = False):
+def get_sync_job_status(
+    job_id: str,
+    uid: str = Depends(auth.get_current_user_uid),
+    surface_open: bool = False,
+    x_omi_custody_repair_protocol: Optional[str] = Header(None, alias='X-Omi-Custody-Repair-Protocol'),
+):
     """Poll for the status of an async sync job."""
     OMI_SYNC_JOB_POLL_REQUESTS_TOTAL.inc()
     if not admit_sync_job_poll(uid):
@@ -1957,7 +1581,11 @@ def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_ui
             headers={'Retry-After': str(SYNC_POLL_WINDOW_SECONDS)},
         )
     try:
-        durable = get_durable_job_status(job_id, uid)
+        durable = (
+            get_durable_job_status(job_id, uid, artifact_retry=True)
+            if x_omi_custody_repair_protocol == '1'
+            else get_durable_job_status(job_id, uid)
+        )
     except BatchPrivacyBlocked:
         return privacy_blocked_response()
     if durable is not None:
@@ -2064,7 +1692,7 @@ def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_ui
         # the ledger stale window and looks permanently stuck to the client.
         try:
             release_sync_content_claim_after_job_retired(
-                uid, job['content_id'], job_id, **_terminal_repeat_failure_kwargs(job)
+                uid, job['content_id'], job_id, **terminal_repeat_failure_kwargs(job)
             )
         except Exception as error:
             logger.error('event=sync_terminal_cleanup outcome=retrying exception_type=%s', type(error).__name__)
@@ -2199,7 +1827,7 @@ async def wake_sync_backfill_uid(request: Request, _retry_count: int = Depends(v
     uid = payload.get('uid') if isinstance(payload, dict) else None
     if not isinstance(uid, str) or not uid:
         return JSONResponse(status_code=400, content={'status': 'invalid_uid'})
-    if not legacy_dark.sequencer_dispatch_allowed():
+    if not legacy_dark.sequencer_dispatch_allowed(uid=uid):
         return legacy_dark.sequencer_dark_response()
     try:
         dispatched = await run_blocking(db_executor, uid_sequencer.kick, uid)
@@ -2250,14 +1878,14 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
         return _budget_deferral_fallback('preamble_timeout', 'degraded')
     except Exception:
         return await _run_sync_job_body(request, task_retry_count, entry_state)
-    if isinstance(payload, dict) and isinstance(payload.get('uid'), str):
-        try:
-            async with asyncio.timeout_at(route_deadline):
-                await warm_rollout_cohorts(payload['uid'])
-        except TimeoutError:
-            logger.warning('event=sync_transcription_job outcome=handler_preamble_expired phase=cohort_warm')
-            return _budget_deferral_fallback('preamble_timeout', 'degraded')
     if isinstance(payload, dict) and payload.get('kind') == 'sync_reprocess':
+        if isinstance(payload.get('uid'), str):
+            try:
+                async with asyncio.timeout_at(route_deadline):
+                    await warm_rollout_cohorts(payload['uid'])
+            except TimeoutError:
+                logger.warning('event=sync_transcription_job outcome=handler_preamble_expired phase=cohort_warm')
+                return _budget_deferral_fallback('preamble_timeout', 'degraded')
         return await enrichment_response(payload)
     if minimal_redrive.parse_mode(payload) and not minimal_redrive.enabled():
         # Kill switch, before the sequencer lease and any lock, download or paid
@@ -2275,7 +1903,7 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
             and payload.get('lane') == SyncLane.BACKFILL.value
             and uid_sequencer.production_stage()
             and uid_sequencer.enabled()
-            and not legacy_dark.sequencer_registration_allowed()
+            and not legacy_dark.sequencer_registration_allowed(uid=payload.get('uid'))
             and isinstance(payload.get('uid'), str)
             and isinstance(payload.get('job_id'), str)
         ):
@@ -2295,7 +1923,7 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
             except TimeoutError:
                 logger.warning('event=sync_transcription_job outcome=handler_preamble_expired phase=dark_owner_probe')
                 return _budget_deferral_fallback('preamble_timeout', 'degraded')
-            if registered and legacy_dark.sequencer_dispatch_allowed():
+            if registered and legacy_dark.sequencer_dispatch_allowed(uid=payload.get('uid')):
                 # The draining sweep dispatches this job; acking keeps it the only dispatcher.
                 legacy_dark.record_dark_ack(legacy_dark.LegacyDarkReason.SEQUENCER_OWNS_JOB)
                 return JSONResponse(status_code=200, content={'status': 'sequenced_legacy_job'})
@@ -2310,7 +1938,7 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
             and payload.get('lane') == SyncLane.BACKFILL.value
             and uid_sequencer.production_stage()
             and uid_sequencer.enabled()
-            and legacy_dark.sequencer_registration_allowed()
+            and legacy_dark.sequencer_registration_allowed(uid=payload.get('uid'))
             and isinstance(payload.get('uid'), str)
             and isinstance(payload.get('job_id'), str)
         ):
@@ -2405,18 +2033,18 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
         return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'invalid_sequencer_identity'})
     # One absolute budget deadline for the whole sequenced request (entry_state,
     # captured and enforced at route entry): the fence read, payload parsing,
-    # begin_job, and the prior-job read below each run inside a timeout_at
+    # begin_job (including its prior-job snapshot) each run inside a timeout_at
     # against that deadline, so a stall in any of them ends the request through
     # the queue-owned 409 instead of carrying it past the Cloud Tasks dispatch
     # deadline or the middleware cap this change exists to stay under.
     sequenced_attempt_state: dict = entry_state
     try:
         async with asyncio.timeout_at(route_deadline):
-            began = await run_blocking(db_executor, sync_backfill_sequencer.begin_job, uid, job_id, epoch)
+            claim = await run_blocking(db_executor, sync_backfill_sequencer.begin_job, uid, job_id, epoch)
     except TimeoutError:
         logger.warning('event=sync_transcription_job outcome=handler_preamble_expired phase=begin_job')
         return _budget_deferral_fallback('preamble_timeout', 'degraded')
-    if not began:
+    if claim is None:
         logger.info('event=sync_uid_sequencer action=delivery outcome=stale_epoch')
         return JSONResponse(status_code=200, content={'status': 'stale_sequencer_epoch'})
     stop = asyncio.Event()
@@ -2425,12 +2053,7 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
         name=f'sync:uid-lease:{job_id}',
     )
     try:
-        try:
-            async with asyncio.timeout_at(route_deadline):
-                prior_job = await run_blocking(db_executor, get_sync_job, job_id)
-        except TimeoutError:
-            logger.warning('event=sync_transcription_job outcome=handler_preamble_expired phase=prior_read')
-            return _budget_deferral_fallback('preamble_timeout', 'degraded')
+        prior_job = claim['job']
         prior_attempt = prior_job.get('attempt', 0) if isinstance(prior_job, dict) else 0
         effective_retry_count = max(task_retry_count, prior_attempt if isinstance(prior_attempt, int) else 0)
         # One state dict carries the post-budget deadline from the deferral
@@ -3022,7 +2645,7 @@ async def _defer_sync_job_after_handler_budget_expiry(
 async def _release_expired_attempt_run_lock(
     attempt_state: dict, *, deadline: Optional[float] = None, strict: bool = False
 ) -> bool:
-    """Release a budget-expired attempt's run lock once its job is terminal.
+    """Release an expired run lock after terminalization or a read-only preamble.
 
     A terminal Redis transition is the pipeline's proven result: the
     redelivery's terminal branch only retries exact-job cleanup and never
@@ -3032,16 +2655,15 @@ async def _release_expired_attempt_run_lock(
     optional deadline bounds the release to the remaining response headroom;
     expiry skips it, again leaving the lock to its TTL.
 
-    ``strict=True`` demands a confirmed release: the caller returns 500 so
-    the queue redelivers into the terminal branch's retry-only cleanup, and
-    an unconfirmed release must not stand behind that obligation. With the
-    lock surviving to its TTL, every short-backoff queue retry would deflect
-    off the still-held 30-minute lock as a 409 — spending the task's whole
-    attempt contract without one cleanup retry landing; a direct backfill
-    job's per-UID slot would then stay held for its ~2-day TTL because no
-    later terminal poll releases it. Those callers fall back to the
-    preserved-lock deferral instead, which acks and schedules one
-    replacement past the lock's TTL.
+    Cohort warming has no in-flight pipeline/storage mutation. A confirmed
+    release also lets that preamble timeout retain its queue-owned 409.
+
+    ``strict=True`` demands confirmed release before a queue retry: terminal
+    cleanup returns 500 and cohort-read expiry returns 409. If the lock stays
+    held until TTL, short-backoff retries burn the whole attempt contract
+    without reaching work or cleanup; a direct backfill slot can then stick
+    until its own TTL. Unconfirmed releases keep the preserved-lock deferral,
+    which acks and schedules one replacement past the lock's TTL.
     """
     job_id = attempt_state.get('job_id')
     lock_token = attempt_state.get('lock_token')
@@ -3110,6 +2732,19 @@ async def _run_sync_job_body(request: Request, task_retry_count: int, attempt_st
             async with budget:
                 return await _run_sync_job_attempt(request, task_retry_count, state)
     except TimeoutError:
+        if state.pop('cohort_warm_pending', False):
+            # Warming moved behind the no-op checks, but a read timeout must
+            # still return the original 409 before any paid work. Release
+            # only our confirmed token; uncertainty keeps the existing
+            # preserved-lock continuation, never retries against a held lock.
+            logger.warning('event=sync_transcription_job outcome=handler_preamble_expired phase=cohort_warm')
+            cleanup_started = time.monotonic()
+            release_deadline = cleanup_started + SYNC_JOB_POST_ATTEMPT_CLEANUP_TIMEOUT_SECONDS
+            continuation_deadline = cleanup_started + SYNC_JOB_BUDGET_REPLACEMENT_ENQUEUE_TIMEOUT_SECONDS
+            state['post_budget_deadline'] = release_deadline
+            if await _release_expired_attempt_run_lock(state, deadline=release_deadline, strict=True):
+                return _budget_deferral_fallback('preamble_timeout', 'degraded')
+            return await _defer_sync_job_after_handler_budget_expiry(request, state, deadline=continuation_deadline)
         if not budget.expired():
             raise
         if not state.get('run_lock_reached'):
@@ -3184,6 +2819,7 @@ async def _run_sync_job_body(request: Request, task_retry_count: int, attempt_st
 
 
 @sync_attempt
+@with_batch_privacy_attempt
 async def _run_sync_job_attempt(request: Request, task_retry_count: int, attempt_state: dict):
     """Cloud Tasks handler: runs one sync job inside the request.
 
@@ -3206,6 +2842,10 @@ async def _run_sync_job_attempt(request: Request, task_retry_count: int, attempt
         payload = await request.json()
         job_id = payload['job_id']
         uid = payload['uid']
+        if await run_blocking(db_executor, account_deletion_blocks_user_work, uid):
+            # Keep the original task and staged capture available for restore or
+            # the final wipe. Acknowledging here would permanently drop it.
+            return JSONResponse(status_code=503, content={'status': 'account_pending_deletion'})
         blob_paths = list(payload['raw_blob_paths'])
         source = ConversationSource(payload.get('source') or 'omi')
         should_lock = bool(payload.get('should_lock', False))
@@ -3313,7 +2953,7 @@ async def _run_sync_job_attempt(request: Request, task_retry_count: int, attempt
             # Job TTL (24h) expired before dispatch — staged blobs are gone or
             # about to be (1-day lifecycle); the app re-uploads on 404.
             logger.warning(f'sync job {job_id}: job expired before dispatch, dropping task')
-            await _delete_staged_blobs_async(blob_paths)
+            await delete_staged_blobs_async(blob_paths)
             if sync_lane == SyncLane.BACKFILL.value:
                 await run_blocking(db_executor, release_backfill_slot, uid, job_id)
             if content_id and ledger_fence_active:
@@ -3345,7 +2985,7 @@ async def _run_sync_job_attempt(request: Request, task_retry_count: int, attempt
                     failure_code=job.get('reason_code') or 'unknown',
                 )
             else:
-                await _delete_staged_blobs_async(blob_paths, uid=uid, content_id=content_id, job_id=job_id)
+                await delete_staged_blobs_async(blob_paths, uid=uid, content_id=content_id, job_id=job_id)
             if job.get('lane') == SyncLane.BACKFILL.value:
                 await run_blocking(db_executor, release_backfill_slot, uid, job_id)
             if content_id and job['status'] in ('failed', 'partial_failure'):
@@ -3353,7 +2993,7 @@ async def _run_sync_job_attempt(request: Request, task_retry_count: int, attempt
                     release_sync_content_claim_after_job_retired if ledger_fence_active else release_sync_content_claim
                 )
                 await run_blocking(
-                    db_executor, release_claim, uid, content_id, job_id, **_terminal_repeat_failure_kwargs(job)
+                    db_executor, release_claim, uid, content_id, job_id, **terminal_repeat_failure_kwargs(job)
                 )
             if ledger_fence_active:
                 await run_blocking(db_executor, delete_sync_job_run_lock_epoch, job_id)
@@ -3379,10 +3019,22 @@ async def _run_sync_job_attempt(request: Request, task_retry_count: int, attempt
                 run_lock_token=lock_token,
             )
         if converged is not None:
-            await _delete_staged_blobs_async(blob_paths, uid=uid, content_id=content_id, job_id=job_id)
+            await delete_staged_blobs_async(blob_paths, uid=uid, content_id=content_id, job_id=job_id)
             if sync_lane == SyncLane.BACKFILL.value:
                 await run_blocking(db_executor, release_backfill_slot, uid, job_id)
             return JSONResponse(status_code=200, content={'status': 'done', 'reconciled': True})
+
+        # Membership is only needed for actual work. Epoch, migration, lock,
+        # expired-job, terminal and reconciled deliveries keep their existing
+        # acknowledgement/cleanup paths without a cohort-store round trip.
+        attempt_state['cohort_warm_pending'] = True
+        try:
+            await warm_rollout_cohorts(uid)
+        except TimeoutError:
+            # Let the wrapper confirm release before it returns the 409.
+            release_lock = False
+            raise
+        attempt_state.pop('cohort_warm_pending', None)
 
         if await run_blocking(db_executor, should_skip_background_account_mutation, uid):
             await _finalize_sync_job_failure(
@@ -3396,7 +3048,7 @@ async def _run_sync_job_attempt(request: Request, task_retry_count: int, attempt
                 lane=sync_lane,
                 run_lock_token=lock_token if ledger_fence_active else None,
             )
-            await _delete_staged_blobs_async(blob_paths)
+            await delete_staged_blobs_async(blob_paths)
             if sync_lane == SyncLane.BACKFILL.value:
                 await run_blocking(db_executor, release_backfill_slot, uid, job_id)
             if content_id:
@@ -3421,9 +3073,9 @@ async def _run_sync_job_attempt(request: Request, task_retry_count: int, attempt
                 name='sync:owner-prefetch',
             )
         if sync_lane == SyncLane.BACKFILL.value:
-            staged = await run_blocking(storage_executor, _download_staged_files, blob_paths, bounded_backfill=True)
+            staged = await run_blocking(storage_executor, download_staged_files, blob_paths, bounded_backfill=True)
         else:
-            staged = await run_blocking(storage_executor, _download_staged_files, blob_paths)
+            staged = await run_blocking(storage_executor, download_staged_files, blob_paths)
         if not staged:
             # Blobs deleted by the bucket's 1-day lifecycle (deep queue backlog).
             await _finalize_sync_job_failure(
@@ -3437,7 +3089,7 @@ async def _run_sync_job_attempt(request: Request, task_retry_count: int, attempt
                 lane=sync_lane,
                 run_lock_token=lock_token if ledger_fence_active else None,
             )
-            await _delete_staged_blobs_async(blob_paths)
+            await delete_staged_blobs_async(blob_paths)
             if sync_lane == SyncLane.BACKFILL.value:
                 await run_blocking(db_executor, release_backfill_slot, uid, job_id)
             return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'staged_audio_expired'})
@@ -3451,7 +3103,7 @@ async def _run_sync_job_attempt(request: Request, task_retry_count: int, attempt
             # attempt; on expiry the coordinator is cancelled like a lease loss
             # and the wrapper preserves the run lock for the redelivery.
             with historical_scan_memo_scope(uid), people_scan_attempt():
-                await _run_full_pipeline_background_async(
+                await run_full_pipeline_background_async(
                     job_id,
                     uid,
                     blob_paths,
@@ -3473,6 +3125,7 @@ async def _run_sync_job_attempt(request: Request, task_retry_count: int, attempt
                     recording_session_id=recording_session_id,
                     audio_start_seconds=audio_start_seconds,
                     audio_end_seconds=audio_end_seconds,
+                    capture_received_at=payload.get('capture_received_at'),
                     **({'redrive_mode': redrive_mode} if redrive_mode else {}),
                 )
         except BackfillStoragePressure:
@@ -3493,7 +3146,7 @@ async def _run_sync_job_attempt(request: Request, task_retry_count: int, attempt
                     release_sync_content_claim_after_job_retired if ledger_fence_active else release_sync_content_claim
                 )
                 await run_blocking(db_executor, release_claim, uid, content_id, job_id)
-            await _delete_staged_blobs_async(blob_paths)
+            await delete_staged_blobs_async(blob_paths)
             logger.info('event=sync_transcription_job outcome=superseded lane=%s', sync_lane)
             return JSONResponse(status_code=200, content={'status': 'superseded'})
         except SyncJobRunLeaseLost as error:
@@ -3550,7 +3203,7 @@ async def _run_sync_job_attempt(request: Request, task_retry_count: int, attempt
                     return JSONResponse(status_code=409, content={'status': 'locked'})
                 if converged is not None:
                     logger.info('event=sync_transcription_job outcome=reconciled_after_pipeline_exception')
-                    await _delete_staged_blobs_async(blob_paths, uid=uid, content_id=content_id, job_id=job_id)
+                    await delete_staged_blobs_async(blob_paths, uid=uid, content_id=content_id, job_id=job_id)
                     if sync_lane == SyncLane.BACKFILL.value:
                         await run_blocking(db_executor, release_backfill_slot, uid, job_id)
                     return JSONResponse(status_code=200, content={'status': 'done', 'reconciled': True})
@@ -3577,7 +3230,7 @@ async def _run_sync_job_attempt(request: Request, task_retry_count: int, attempt
                     run_lock_token=lock_token if ledger_fence_active else None,
                     **stamped_failure_kwargs(e),  # internal cause, not upstream_error
                 )
-                await _delete_staged_blobs_async(blob_paths)
+                await delete_staged_blobs_async(blob_paths)
                 if sync_lane == SyncLane.BACKFILL.value:
                     await run_blocking(db_executor, release_backfill_slot, uid, job_id)
                 return JSONResponse(status_code=200, content={'status': 'failed_final'})
@@ -3630,7 +3283,7 @@ async def _run_sync_job_attempt(request: Request, task_retry_count: int, attempt
 
         # A terminal failure is not proof that staging has a surviving copy.
         # Cleanup verifies the completed ledger's byte-bound archive receipt.
-        await _delete_staged_blobs_async(blob_paths, uid=uid, content_id=content_id, job_id=job_id)
+        await delete_staged_blobs_async(blob_paths, uid=uid, content_id=content_id, job_id=job_id)
         if sync_lane == SyncLane.BACKFILL.value:
             await run_blocking(db_executor, release_backfill_slot, uid, job_id)
         return JSONResponse(status_code=200, content={'status': 'done'})
@@ -3700,6 +3353,41 @@ async def _run_sync_job_attempt(request: Request, task_retry_count: int, attempt
 AUDIO_MERGE_DESTRUCTIVE_DEFERRALS_MAX = 6
 
 
+async def _refuse_changed_playback_source(payload: dict, *, fingerprint: str | None = None):
+    """A replaced source cannot be repaired by retrying its old immutable key."""
+    from database.legal_holds import DestructiveOperationInProgress
+
+    try:
+        if fingerprint is None:
+            await run_blocking(
+                storage_executor,
+                mark_playback_unavailable,
+                payload['uid'],
+                payload['conversation_id'],
+                payload['audio_file_id'],
+                'source_changed',
+            )
+        else:
+            await run_blocking(
+                storage_executor,
+                mark_conversation_playback_unavailable,
+                payload['uid'],
+                payload['conversation_id'],
+                fingerprint,
+                'source_changed',
+            )
+    except DestructiveOperationInProgress:
+        deferred = await _defer_merge_for_destructive_operation(payload)
+        if deferred is not None:
+            return deferred
+        return JSONResponse(status_code=503, content={'status': 'retry'})
+    PLAYBACK_WRITES.labels('skipped').inc()
+    logger.warning(
+        'audio_merge: refused reason=source_manifest_changed kind=%s', 'file' if fingerprint is None else 'conversation'
+    )
+    return JSONResponse(status_code=200, content={'status': 'unavailable', 'reason': 'source_manifest_changed'})
+
+
 async def _defer_merge_for_destructive_operation(payload: dict):
     """Return a 200 'deferred' response after re-enqueueing, or None to keep the
     caller's existing retry and final-attempt handling (deferrals exhausted, or
@@ -3723,6 +3411,24 @@ async def _defer_merge_for_destructive_operation(payload: dict):
 # codes (200/409/500) drive the queue protocol, not a typed client-facing body.
 @router.post("/v2/audio-merge-jobs/run", include_in_schema=False)
 async def run_audio_merge_job(request: Request, task_retry_count: int = Depends(verify_audio_merge_cloud_tasks_oidc)):
+    try:
+        response = await _handle_audio_merge_job(request, task_retry_count)
+    except Exception:
+        await _record_demand_playback_outcome(request, None)
+        raise
+    await _record_demand_playback_outcome(request, response)
+    return response
+
+
+async def _record_demand_playback_outcome(request: Request, response) -> None:
+    try:
+        payload = await request.json()
+    except Exception:
+        return
+    record_demand_playback_outcome(payload, None if response is None else response.body)
+
+
+async def _handle_audio_merge_job(request: Request, task_retry_count: int):
     from database.legal_holds import (
         DestructiveOperationInProgress,
     )  # deferred: sync.py imported with database stubbed in test isolation
@@ -3745,6 +3451,11 @@ async def run_audio_merge_job(request: Request, task_retry_count: int = Depends(
     except Exception as e:
         logger.error(f'audio_merge handler: invalid payload, dropping task: {e}')
         return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'invalid_payload'})
+
+    task_uid = payload.get('uid')
+    if isinstance(task_uid, str) and await run_blocking(db_executor, account_deletion_blocks_user_work, task_uid):
+        # Cloud Tasks retains the task; a restore can resume processing.
+        return JSONResponse(status_code=503, content={'status': 'account_pending_deletion'})
 
     # The v2 conversation-merge dispatch runs OUTSIDE the payload-parse guard so its
     # transient GCS/Firestore failures (during the doc read, artifact upload, or doc
@@ -3813,6 +3524,8 @@ async def run_audio_merge_job(request: Request, task_retry_count: int = Depends(
                         else {}
                     ),
                 )
+        except PlaybackSourceChanged:
+            return await _refuse_changed_playback_source(payload)
         except FileNotFoundError:
             logger.warning(f'audio_merge: chunks missing conv={conversation_id} file={audio_file_id}, dropping')
             # Persist the verdict or /urls reports pending forever and clients
@@ -3900,7 +3613,6 @@ async def run_audio_merge_job(request: Request, task_retry_count: int = Depends(
             )
             return JSONResponse(status_code=500, content={'status': 'retry'})
         if playback_on_demand():
-            PLAYBACK_BUILDS.labels('file', 'built').inc()
             record_playback_ready(payload, 'file')
         logger.debug(f'audio_merge: built artifact conv={conversation_id} file={audio_file_id} size={len(mp3_data)}')
         return JSONResponse(status_code=200, content={'status': 'done'})
@@ -3931,6 +3643,8 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
     lock_key = f'audio:{conversation_id}:conversation'
     lock_token = await run_blocking(db_executor, try_acquire_job_run_lock, lock_key)
     if not lock_token:
+        if await run_blocking(db_executor, playback_build.superseded_while_locked, payload):
+            return JSONResponse(status_code=200, content={'status': 'superseded'})
         return JSONResponse(status_code=409, content={'status': 'locked'})
 
     try:
@@ -3943,14 +3657,7 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
         if not conversation.get('audio_files'):
             return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'no_audio_files'})
         audio_files = conversation['audio_files']
-        if demand:
-            fingerprint = compute_audio_files_fingerprint(
-                audio_files,
-                origin=conversation.get('started_at') or conversation.get('created_at'),
-                source_identity=True,
-            )
-        else:
-            fingerprint = compute_audio_files_fingerprint(audio_files)
+        fingerprint = sync_playback.conversation_merge_fingerprint(conversation, demand=demand)
         if payload_fingerprint and payload_fingerprint != fingerprint:
             PLAYBACK_WRITES.labels('skipped').inc()
             return JSONResponse(status_code=200, content={'status': 'superseded'})
@@ -4006,6 +3713,8 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
                     artifact_fingerprint,
                     strict_sources=demand,
                 )
+        except PlaybackSourceChanged:
+            return await _refuse_changed_playback_source(payload, fingerprint=fingerprint)
         except FileNotFoundError:
             logger.warning(f'audio_merge: conversation chunks missing conv={conversation_id}, dropping')
             try:

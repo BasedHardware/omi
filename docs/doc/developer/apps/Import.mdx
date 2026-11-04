@@ -1,5 +1,5 @@
 ---
-title: "Data Import APIs"
+title: "Data import APIs"
 icon: "file-import"
 description: "Programmatically create and read conversations and memories in users' Omi accounts using the Integration Import APIs."
 ---
@@ -7,23 +7,21 @@ description: "Programmatically create and read conversations and memories in use
 Omi's Data Import APIs allow your app to programmatically interact with user data in the Omi ecosystem. Unlike triggers (which respond to events), these APIs let your app proactively create or read data.
 
 <CardGroup cols={2}>
-  <Card title="Create Conversation" icon="message-plus">
+  <Card title="Create conversation" icon="message-plus">
     Add new conversations to a user's account from external sources
   </Card>
-  <Card title="Create Memories" icon="brain">
+  <Card title="Create memories" icon="brain">
     Add facts and knowledge to the user's memory bank
   </Card>
-  <Card title="Read Conversations" icon="messages">
+  <Card title="Read conversations" icon="messages">
     Access and retrieve a user's conversation history
   </Card>
-  <Card title="Read Memories" icon="lightbulb">
+  <Card title="Read memories" icon="lightbulb">
     Access facts stored in the user's knowledge base
   </Card>
 </CardGroup>
 
----
-
-## Quick Reference
+## Quick reference
 
 | Capability | Method | Endpoint |
 |------------|--------|----------|
@@ -34,31 +32,27 @@ Omi's Data Import APIs allow your app to programmatically interact with user dat
 
 **Base URL:** `https://api.omi.me`
 
----
-
 ## Prerequisites
 
 <Steps>
-  <Step title="Understand Omi App Basics">
+  <Step title="Understand Omi app basics">
     Familiarize yourself with [Omi app development](/doc/developer/apps/Introduction) and [integration apps](/doc/developer/apps/Integrations)
   </Step>
-  <Step title="Create Your App">
+  <Step title="Create your app">
     In the Omi mobile app:
     1. Go to **Apps** → **Create App**
     2. Under **App Capabilities**, select **External Integration**
     3. Select **Imports** and choose the specific capabilities your app needs
   </Step>
-  <Step title="Generate API Keys">
+  <Step title="Generate API keys">
     Go to your app's management page, find the **API Keys** section, and click **Create Key**
 
-    <Warning>Copy and store your API key securely - you won't be able to see it again!</Warning>
+    <Warning>Copy and store your API key securely. You won't be able to see it again.</Warning>
   </Step>
-  <Step title="User Enables Your App">
+  <Step title="User enables your app">
     The user must explicitly enable your app in their Omi account before you can access their data
   </Step>
 </Steps>
-
----
 
 ## Authentication
 
@@ -70,9 +64,7 @@ Authorization: Bearer sk_your_api_key_here
 
 <Note>The API key must belong to the app specified in the URL path (`app_id`).</Note>
 
----
-
-## Create Conversation API
+## Create conversation API
 
 Create new conversations in a user's Omi account from external sources like phone calls, emails, or messages.
 
@@ -82,7 +74,7 @@ Create new conversations in a user's Omi account from external sources like phon
 POST https://api.omi.me/v2/integrations/{app_id}/user/conversations?uid={user_id}
 ```
 
-### Request Body
+### Request body
 
 ```json
 {
@@ -99,7 +91,7 @@ POST https://api.omi.me/v2/integrations/{app_id}/user/conversations?uid={user_id
 }
 ```
 
-### Field Reference
+### Field reference
 
 | Field | Required | Default | Description |
 |-------|----------|---------|-------------|
@@ -121,7 +113,7 @@ POST https://api.omi.me/v2/integrations/{app_id}/user/conversations?uid={user_id
 The conversation is created asynchronously in the user's account.
 
 <AccordionGroup>
-  <Accordion title="Example: Phone Call Transcript" icon="phone">
+  <Accordion title="Example: phone call transcript" icon="phone">
     ```python
     import requests
     from datetime import datetime, timezone
@@ -139,7 +131,7 @@ The conversation is created asynchronously in the user's account.
     )
     ```
   </Accordion>
-  <Accordion title="Example: Text Messages" icon="comment-sms">
+  <Accordion title="Example: text messages" icon="comment-sms">
     ```python
     response = requests.post(
         f"https://api.omi.me/v2/integrations/{APP_ID}/user/conversations?uid={USER_ID}",
@@ -152,7 +144,7 @@ The conversation is created asynchronously in the user's account.
     )
     ```
   </Accordion>
-  <Accordion title="Example: Email" icon="envelope">
+  <Accordion title="Example: email" icon="envelope">
     ```python
     response = requests.post(
         f"https://api.omi.me/v2/integrations/{APP_ID}/user/conversations?uid={USER_ID}",
@@ -165,7 +157,7 @@ The conversation is created asynchronously in the user's account.
     )
     ```
   </Accordion>
-  <Accordion title="Example: Social Post with Location" icon="location-dot">
+  <Accordion title="Example: social post with location" icon="location-dot">
     ```python
     response = requests.post(
         f"https://api.omi.me/v2/integrations/{APP_ID}/user/conversations?uid={USER_ID}",
@@ -181,9 +173,7 @@ The conversation is created asynchronously in the user's account.
   </Accordion>
 </AccordionGroup>
 
----
-
-## Create Memories API
+## Create memories API
 
 Add facts and knowledge to a user's memory bank. You can either provide raw text (Omi will extract memories automatically) or provide explicit memory objects.
 
@@ -193,10 +183,10 @@ Add facts and knowledge to a user's memory bank. You can either provide raw text
 POST https://api.omi.me/v2/integrations/{app_id}/user/memories?uid={user_id}
 ```
 
-### Request Options
+### Request options
 
 <Tabs>
-  <Tab title="Extract from Text">
+  <Tab title="Extract from text">
     Provide raw text and let Omi automatically extract relevant memories:
 
     ```json
@@ -215,7 +205,7 @@ POST https://api.omi.me/v2/integrations/{app_id}/user/memories?uid={user_id}
 
     *Either `text` or `memories` is required
   </Tab>
-  <Tab title="Explicit Memories">
+  <Tab title="Explicit memories">
     Provide structured memory objects directly:
 
     ```json
@@ -255,7 +245,7 @@ POST https://api.omi.me/v2/integrations/{app_id}/user/memories?uid={user_id}
 Memories are extracted/saved asynchronously in the user's account.
 
 <AccordionGroup>
-  <Accordion title="Example: Extract from Email" icon="envelope">
+  <Accordion title="Example: extract from email" icon="envelope">
     ```python
     response = requests.post(
         f"https://api.omi.me/v2/integrations/{APP_ID}/user/memories?uid={USER_ID}",
@@ -268,7 +258,7 @@ Memories are extracted/saved asynchronously in the user's account.
     )
     ```
   </Accordion>
-  <Accordion title="Example: Explicit User Preferences" icon="sliders">
+  <Accordion title="Example: explicit user preferences" icon="sliders">
     ```python
     response = requests.post(
         f"https://api.omi.me/v2/integrations/{APP_ID}/user/memories?uid={USER_ID}",
@@ -284,9 +274,7 @@ Memories are extracted/saved asynchronously in the user's account.
   </Accordion>
 </AccordionGroup>
 
----
-
-## Read Conversations API
+## Read conversations API
 
 Retrieve conversations from a user's Omi account.
 
@@ -296,7 +284,7 @@ Retrieve conversations from a user's Omi account.
 GET https://api.omi.me/v2/integrations/{app_id}/conversations?uid={user_id}
 ```
 
-### Query Parameters
+### Query parameters
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
@@ -329,7 +317,7 @@ GET https://api.omi.me/v2/integrations/{app_id}/conversations?uid={user_id}
 }
 ```
 
-<Accordion title="Example: Paginated Retrieval" icon="list">
+<Accordion title="Example: paginated retrieval" icon="list">
 ```python
 response = requests.get(
     f"https://api.omi.me/v2/integrations/{APP_ID}/conversations?uid={USER_ID}",
@@ -343,9 +331,7 @@ for conv in conversations:
 ```
 </Accordion>
 
----
-
-## Read Memories API
+## Read memories API
 
 Retrieve memories (facts) from a user's knowledge base.
 
@@ -355,7 +341,7 @@ Retrieve memories (facts) from a user's knowledge base.
 GET https://api.omi.me/v2/integrations/{app_id}/memories?uid={user_id}
 ```
 
-### Query Parameters
+### Query parameters
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
@@ -377,7 +363,7 @@ GET https://api.omi.me/v2/integrations/{app_id}/memories?uid={user_id}
 }
 ```
 
-<Accordion title="Example: Retrieve All Memories" icon="brain">
+<Accordion title="Example: retrieve all memories" icon="brain">
 ```python
 response = requests.get(
     f"https://api.omi.me/v2/integrations/{APP_ID}/memories?uid={USER_ID}",
@@ -391,9 +377,7 @@ for memory in memories:
 ```
 </Accordion>
 
----
-
-## Error Handling
+## Error handling
 
 All endpoints return consistent error codes:
 
@@ -410,65 +394,59 @@ All endpoints return consistent error codes:
 Implement exponential backoff when you receive a 429 error. Start with a 1-second delay and double it on each retry.
 </Tip>
 
----
-
-## Best Practices
+## Best practices
 
 <CardGroup cols={2}>
-  <Card title="Get User Consent" icon="user-check">
+  <Card title="Get user consent" icon="user-check">
     Always ensure you have explicit user consent before creating conversations or memories on their behalf
   </Card>
-  <Card title="Secure API Keys" icon="key">
-    Store API keys securely using environment variables or secret management systems - never hardcode them
+  <Card title="Secure API keys" icon="key">
+    Store API keys securely in environment variables or a secret manager. Never hardcode them.
   </Card>
-  <Card title="Handle Errors Gracefully" icon="shield-check">
+  <Card title="Handle errors gracefully" icon="shield-check">
     Implement robust error handling with retries and logging for production reliability
   </Card>
-  <Card title="Quality Over Quantity" icon="star">
-    Only create meaningful content that provides genuine value to users - avoid spam
+  <Card title="Quality over quantity" icon="star">
+    Only create meaningful content that provides genuine value to users. Avoid spam.
   </Card>
 </CardGroup>
 
----
-
-## Example Use Cases
+## Example use cases
 
 <AccordionGroup>
-  <Accordion title="Journal Creator" icon="book">
+  <Accordion title="Journal creator" icon="book">
     Automatically create conversation entries from a journaling app, syncing daily reflections to Omi
   </Accordion>
-  <Accordion title="Meeting Summarizer" icon="calendar">
+  <Accordion title="Meeting summarizer" icon="calendar">
     Create structured conversation summaries after calendar meetings end, including action items
   </Accordion>
-  <Accordion title="Health Tracker" icon="heart-pulse">
+  <Accordion title="Health tracker" icon="heart-pulse">
     Generate conversations with health insights from fitness tracker data
   </Accordion>
-  <Accordion title="Knowledge Base Builder" icon="graduation-cap">
+  <Accordion title="Knowledge base builder" icon="graduation-cap">
     Extract memories from educational content or research materials to build a personal knowledge base
   </Accordion>
-  <Accordion title="Contact Manager" icon="address-book">
+  <Accordion title="Contact manager" icon="address-book">
     Extract and store contact details as memories from emails and messages
   </Accordion>
-  <Accordion title="Analytics Dashboard" icon="chart-line">
+  <Accordion title="Analytics dashboard" icon="chart-line">
     Read conversations and memories to generate insights and visualizations about user patterns
   </Accordion>
 </AccordionGroup>
 
----
-
-## Testing & Troubleshooting
+## Testing and troubleshooting
 
 <Steps>
-  <Step title="Use Development Keys">
+  <Step title="Use development keys">
     Create a separate API key for testing to avoid affecting production data
   </Step>
-  <Step title="Mark Test Content">
+  <Step title="Mark test content">
     Clearly mark test conversations (e.g., prefix with "[TEST]") so they're easy to identify and clean up
   </Step>
-  <Step title="Verify in the Omi App">
+  <Step title="Verify in the Omi app">
     After creating content, open the Omi app to verify it appears correctly
   </Step>
-  <Step title="Check Structured Data">
+  <Step title="Check structured data">
     For conversations, verify that title, overview, and action items are extracted correctly
   </Step>
 </Steps>
@@ -482,27 +460,23 @@ Implement exponential backoff when you receive a 429 error. Start with a 1-secon
 | Empty response | Check that you're providing `text` or `memories` (for memory creation) |
 | Rate limiting | Implement exponential backoff starting at 1 second |
 
----
-
 ## Capabilities
 
 The Import API supports creating and updating conversations, memories, and action items. See the [API Reference](/api-reference/introduction) for the full endpoint list.
 
----
-
 ## Related
 
 <CardGroup cols={2}>
-  <Card title="Developer API" icon="code" href="/doc/developer/api">
+  <Card title="Developer API" icon="code" href="/doc/developer/api/overview">
     Access your own personal Omi data programmatically
   </Card>
-  <Card title="Integration Apps" icon="plug" href="/doc/developer/apps/Integrations">
+  <Card title="Integration apps" icon="plug" href="/doc/developer/apps/Integrations">
     Learn about building integration apps with triggers
   </Card>
-  <Card title="Submit Your App" icon="paper-plane" href="/doc/developer/apps/Submitting">
+  <Card title="Submit your app" icon="paper-plane" href="/doc/developer/apps/Submitting">
     Guidelines for submitting your app to the Omi store
   </Card>
-  <Card title="Chat Tools" icon="wrench" href="/doc/developer/apps/ChatTools">
+  <Card title="Chat tools" icon="wrench" href="/doc/developer/apps/ChatTools">
     Add custom tools to Omi's AI chat
   </Card>
 </CardGroup>

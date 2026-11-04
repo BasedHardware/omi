@@ -8,6 +8,9 @@
    "duration_seconds": 4.86,
    "final_job": {
     "attempt": 1,
+    "compute_decision": {
+     "outcome": "unattempted"
+    },
     "conversation_id": "conv-1",
     "duration_seconds": 4.86,
     "failure": "worker_failed",
@@ -27,7 +30,15 @@
       "stage": "response_validation"
      },
      "privacy_generation": 0,
-     "provider": "modulate"
+     "provider": "modulate",
+     "recognizers": {
+      "soniox": {
+       "outcome": "refused",
+       "provider": "soniox",
+       "vad_speech_seconds": 1.0,
+       "word_count": null
+      }
+     }
     },
     "recovery_state": "failed_held",
     "recovery_wake": {
@@ -75,6 +86,9 @@
    "duration_seconds": 6.33,
    "final_job": {
     "attempt": 1,
+    "compute_decision": {
+     "outcome": "unattempted"
+    },
     "conversation_id": "conv-2",
     "duration_seconds": 6.33,
     "fresh_capture": false,
@@ -130,6 +144,9 @@
    "final_job": {
     "attempt": 1,
     "client_status": "completed",
+    "compute_decision": {
+     "outcome": "unattempted"
+    },
     "conversation_id": "conv-3",
     "duration_seconds": 8.0,
     "failure": "worker_failed",
@@ -194,8 +211,8 @@
    },
    "job_transitions": [
     "<1s ready",
-    "<1s leased",
-    "<5s quarantined recovery:held",
+    "<5s leased",
+    "<30s quarantined recovery:held",
     "<30s quarantined recovery:prepared",
     "<30s quarantined recovery:running",
     "<30s result_ready recovery:recovered",
@@ -226,6 +243,9 @@
    "final_job": {
     "attempt": 1,
     "client_status": "completed",
+    "compute_decision": {
+     "outcome": "unattempted"
+    },
     "conversation_id": "conv-4",
     "duration_seconds": 11.4,
     "fresh_capture": false,
@@ -261,9 +281,9 @@
    },
    "job_transitions": [
     "<1s ready",
-    "<1s leased",
-    "<5s result_ready",
-    "<5s committed",
+    "<5s leased",
+    "<30s result_ready",
+    "<30s committed",
     "<30s committed client:completed"
    ],
    "owner": "owner-2",
@@ -277,7 +297,7 @@
     "words_provider": "parakeet"
    },
    "result_transitions": [
-    "<5s pending outcome:success",
+    "<30s pending outcome:success",
     "<30s completed outcome:success"
    ]
   },
@@ -287,6 +307,9 @@
    "final_job": {
     "attempt": 1,
     "client_status": "completed",
+    "compute_decision": {
+     "outcome": "unattempted"
+    },
     "conversation_id": "conv-5",
     "duration_seconds": 11.3,
     "failure": "worker_failed",
@@ -351,7 +374,7 @@
    },
    "job_transitions": [
     "<1s ready",
-    "<5s leased",
+    "<1s leased",
     "<30s quarantined recovery:held",
     "<30s quarantined recovery:prepared",
     "<30s quarantined recovery:running",
@@ -383,6 +406,9 @@
    "final_job": {
     "attempt": 1,
     "client_status": "completed",
+    "compute_decision": {
+     "outcome": "unattempted"
+    },
     "conversation_id": "conv-6",
     "duration_seconds": 9.74,
     "fresh_capture": false,
@@ -418,7 +444,7 @@
    },
    "job_transitions": [
     "<1s ready",
-    "<5s leased",
+    "<1s leased",
     "<30s result_ready",
     "<30s committed",
     "<30s committed client:completed"
@@ -444,6 +470,9 @@
    "final_job": {
     "attempt": 1,
     "client_status": "completed",
+    "compute_decision": {
+     "outcome": "unattempted"
+    },
     "conversation_id": "conv-7",
     "duration_seconds": 525.29,
     "fresh_capture": true,
@@ -479,7 +508,7 @@
    },
    "job_transitions": [
     "<1s ready",
-    "<5s leased",
+    "<1s leased",
     "<30s result_ready",
     "<30s committed",
     "<30s committed client:completed"

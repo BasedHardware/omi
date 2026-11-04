@@ -68,7 +68,6 @@ def boundary(monkeypatch):
             HTTPException=HTTPException,
             RELEASE_PROBE_UID='omi-release-probe',
             ladder_v1=SimpleNamespace(enforce_chat_budget=Mock(return_value=False)),
-            is_trial_paywalled=Mock(return_value=False),
             request_has_byok_provider=lambda provider: byok.get_byok_key(provider),
             _request_has_llm_byok_key=lambda: any(
                 byok.get_byok_key(p) for p in ('openai', 'openrouter', 'gemini', 'anthropic')
@@ -122,19 +121,15 @@ def test_stt_only_cap_is_http_402_before_trial_byok_overage_or_stream(boundary, 
     assert response.json()['detail']['error'] == 'usage_budget_exhausted'
     assert response.json()['detail']['trigger'] == 'usage_budget'
     assert effects == []
-    boundary.namespace['is_trial_paywalled'].assert_not_called()
     boundary.namespace['get_chat_quota_snapshot'].assert_not_called()
     boundary.namespace['plan_uses_overage'].assert_not_called()
     boundary.funded.processing_allowed.assert_called_once_with('user')
 
 
-@pytest.mark.parametrize(
-    'allowed,overage,trial', [(True, False, False), (False, False, False), (False, True, False), (False, False, True)]
-)
-def test_both_off_fastapi_bytes_and_side_effects_match_original_quota(boundary, allowed, overage, trial):
+@pytest.mark.parametrize('allowed,overage', [(True, False), (False, False), (False, True)])
+def test_both_off_fastapi_bytes_and_side_effects_match_original_quota(boundary, allowed, overage):
     boundary.snapshot['allowed'] = allowed
     boundary.namespace['plan_uses_overage'].return_value = overage
-    boundary.namespace['is_trial_paywalled'].return_value = trial
     original = _load_function('utils/subscription.py', 'enforce_chat_quota', dict(boundary.namespace), original=True)
     old_client, old_effects = _response_client(original)
     client, effects = _response_client(boundary.quota)

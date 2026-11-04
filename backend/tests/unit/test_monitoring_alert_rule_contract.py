@@ -94,6 +94,49 @@ def _all_rule_exports() -> dict[str, dict[str, dict]]:
     }
 
 
+def test_batch_queue_safety_has_a_two_hour_page_and_a_separate_incomplete_scan_page():
+    for export_name, rules in _all_rule_exports().items():
+        assert 'omi-batch-queue-uncommitted-2h' not in rules
+        late = rules['omi-batch-unit-unpublished-2h']
+        nodes = {node['refId']: node for node in late['data']}
+        assert nodes['D']['model']['expression'] == '($A > 7200 && $B < 900) || ($C > 7200 && $F < 120)', export_name
+        selector = '{namespace="prod-omi-backend"}'
+        assert nodes['A']['model']['expr'] == (
+            'max(omi_batch_timeliness_new_oldest_age_seconds'
+            '{leg=~"uncommitted|quarantined|assignment_held|projection"} >= 0) or vector(0)'
+        )
+        assert nodes['B']['model']['expr'] == '(time() - max(omi_batch_timeliness_observed_at_seconds)) or vector(1e9)'
+        assert nodes['C']['model']['expr'] == f'max(omi_batch_pipeline_oldest_age_seconds{selector} >= 0) or vector(0)'
+        assert (
+            nodes['F']['model']['expr']
+            == f'max(time() - omi_batch_pipeline_metrics_refreshed_at_seconds{selector}) or vector(1e9)'
+        )
+        blind = rules['omi-batch-queue-safety-blind']
+        expr = blind['data'][0]['model']['expr']
+        assert expr == (
+            f'((max(time() - omi_batch_pipeline_metrics_refreshed_at_seconds{selector}) >= bool 120) or vector(1))'
+            f' + (count(omi_batch_pipeline_oldest_age_seconds{selector} != omi_batch_pipeline_oldest_age_seconds{selector}) or vector(0))'
+            f' + (count(omi_batch_pipeline_retry_age_seconds{selector} != omi_batch_pipeline_retry_age_seconds{selector}) or vector(0))'
+        )
+        for rule in (late, blind):
+            assert rule['for'] == '5m'
+            assert rule['labels']['tier'] == 'page'
+            assert rule['labels']['audience'] == 'human'
+            assert rule['notification_settings']['receiver'] == 'Omi - Services Alerting (Telegram)'
+            assert not rule['notification_settings']['mute_time_intervals']
+
+
+def test_pusher_db_saturation_sums_task_kinds_and_tracks_configured_capacity():
+    for export_name, rules in _all_rule_exports().items():
+        rule = rules['omi-pusher-db-executor-saturated']
+        assert rule['for'] == '10m', export_name
+        assert rule['data'][0]['model']['expr'] == (
+            'sum without (task) (omi_executor_task_active{job="pusher-metrics",executor="db"}) '
+            '/ omi_executor_max_workers{job="pusher-metrics",executor="db"}'
+        ), export_name
+        assert rule['data'][2]['model']['conditions'][0]['evaluator'] == {'params': [0.99], 'type': 'gt'}
+
+
 COUNTER_FN_ON_GAUGE_DEBT = {
     # Pre-existing rules that apply rate() to a stackdriver_ GAUGE. The exporter
     # publishes Cloud Monitoring DELTA metrics as gauges whose value is the count
@@ -1337,6 +1380,9 @@ def _declared_backend_metric_names() -> set[str]:
         if "/tests/" in text or "/testing/" in text or "/.venv/" in text:
             continue
         names |= set(_METRIC_DECLARATION.findall(path.read_text(encoding="utf-8", errors="ignore")))
+        if path == REPO / 'backend/utils/executors.py':
+            # This helper constructs/reuses registered Gauge objects with fixed names.
+            names |= set(re.findall(r"_gauge\(\s*['\"]([a-zA-Z0-9_:]+)['\"]", path.read_text(encoding='utf-8')))
     return names
 
 
@@ -1945,3 +1991,85 @@ def test_sync_failure_reason_and_firestore_commit_exhaustion_alerts():
         assert "Commit" in filters and "RESOURCE_EXHAUSTED" in filters, export_name
         assert fs["data"][2]["model"]["expression"] == "$B > 10", export_name
         assert fs["for"] == "5m", export_name
+
+
+def test_backfill_queue_wait_warning_uses_dispatched_histogram_and_sustained_p95():
+    for rules in _all_rule_exports().values():
+        rule = rules['omi-sync-backfill-queue-wait-high']
+        assert rule['data'][0]['datasourceUid'] == 'gmp-cloud-run'
+        assert rule['data'][0]['model']['expr'] == (
+            'histogram_quantile(0.95, sum by (le) (rate(omi_sync_queue_wait_seconds_bucket{'
+            'project_id="based-hardware",cluster="__run__",job="omi-cloud-run-application-metrics",'
+            'namespace=~"backend-sync|backend-sync-backfill",lane="backfill"}[30m])))'
+        )
+        assert rule['data'][1]['model']['expression'] == '$A > 1800'
+        assert rule['for'] == '30m' and rule['labels']['severity'] == 'warning'
+        assert rule['noDataState'] == 'OK' and not rule['isPaused']
+        assert rule['labels']['owner'] == 'planscost'
+        assert rule['notification_settings'] == {
+            'receiver': 'Omi - Services Alerting (Telegram)',
+            'group_by': ['alertname'],
+            'group_wait': '5m',
+            'group_interval': '1h',
+            'repeat_interval': '24h',
+            'mute_time_intervals': ['omi-tier-silent'],
+        }
+
+
+def test_finalization_latched_states_have_dwell_stock_and_daily_loss_alerts():
+    specs = {
+        'omi-finalization-byok-dwell-info': (
+            'max(listen_finalization_oldest_blocked_byok_age_seconds)',
+            259200,
+            'agent',
+            '15m',
+        ),
+        'omi-finalization-byok-dwell-page': (
+            'max(listen_finalization_oldest_blocked_byok_age_seconds)',
+            604800,
+            'page',
+            '15m',
+        ),
+        'omi-finalization-dead-letter-stock': (
+            'max(listen_finalization_jobs{status="dead_letter"})',
+            1000,
+            'agent',
+            '15m',
+        ),
+        'omi-finalization-dead-letter-age': (
+            'max(listen_finalization_oldest_dead_letter_age_seconds)',
+            604800,
+            'agent',
+            '15m',
+        ),
+        'omi-finalization-byok-abandoned': (
+            'max(listen_finalization_byok_session_abandoned_last_24h)',
+            0,
+            'agent',
+            '0s',
+        ),
+    }
+    for export_name, rules in _all_rule_exports().items():
+        for uid, (expr, threshold, tier, pending) in specs.items():
+            rule = rules[uid]
+            assert rule['data'][0]['model']['expr'] == expr, (export_name, uid)
+            assert rule['data'][0]['datasourceUid'] == 'prometheus'
+            assert rule['data'][2]['model']['conditions'][0]['evaluator'] == {'params': [threshold], 'type': 'gt'}
+            assert rule['for'] == pending
+            assert rule['noDataState'] == 'NoData'
+            assert rule['execErrState'] == 'KeepLast'
+            assert not rule['isPaused']
+            assert rule['labels'] == {
+                'severity': 'critical' if tier == 'page' else 'warning',
+                'instatus_component': 'speech-processing',
+                'alert_identity': uid,
+                'component': 'speech-processing',
+                'impact': 'user-experience',
+                'tier': tier,
+                'audience': 'human' if tier == 'page' else 'agent',
+                'owner': 'two-lane-lead',
+            }
+            assert rule['annotations']['runbook'] == 'backend/docs/listen_finalization_jobs.mdx'
+            assert rule['annotations']['safe_next_action']
+            assert rule['notification_settings']['receiver'] == 'Omi - Services Alerting (Telegram)'
+            assert ('mute_time_intervals' in rule['notification_settings']) == (tier != 'page')

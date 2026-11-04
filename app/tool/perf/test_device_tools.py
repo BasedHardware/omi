@@ -126,5 +126,17 @@ class DeviceToolsTests(unittest.TestCase):
             runner.stop(process)
 
 
+
+class IosTransportTest(unittest.TestCase):
+    LISTING = json.dumps({'result': {'devices': [
+        {'hardwareProperties': {'udid': 'PHONE-USB'}, 'connectionProperties': {'transportType': 'wired'}},
+        {'hardwareProperties': {'udid': 'PHONE-WIFI'}, 'connectionProperties': {'transportType': 'localNetwork'}},
+    ]}})
+
+    def test_reports_transport_per_device(self):
+        self.assertEqual(runner.ios_transport('PHONE-USB', self.LISTING), 'wired')
+        self.assertEqual(runner.ios_transport('PHONE-WIFI', self.LISTING), 'localNetwork')
+        self.assertIsNone(runner.ios_transport('MISSING', self.LISTING))
+
 if __name__ == '__main__':
     unittest.main()

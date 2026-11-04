@@ -30,11 +30,13 @@ import 'package:omi/pages/settings/device/device_page_header.dart';
 import 'package:omi/pages/settings/device_diagnostics.dart';
 import 'package:omi/pages/settings/transcription_settings_page.dart';
 import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/devices/connectors/rayban_meta_connection.dart';
 import 'package:omi/services/services.dart';
+import 'package:omi/services/sync_health_watchdog.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/device.dart';
@@ -91,6 +93,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   bool _isFindingDevice = false;
 
   bool _autoSyncOfflineRecordings = SharedPreferencesUtil().autoSyncOfflineRecordings;
+  bool _syncAlertsEnabled = SharedPreferencesUtil().syncAlertsEnabled;
   bool _omiButtonActionsEnabled = SharedPreferencesUtil().omiButtonActionsEnabled;
 
   Future<String>? _rayBanMetaCameraStatusFuture;
@@ -551,6 +554,25 @@ class _DeviceSettingsState extends State<DeviceSettings> {
               SharedPreferencesUtil().autoSyncOfflineRecordings = value;
             },
           ),
+        // Pendant stall alerts (#15501): the kill switch for the watchdog's
+        // out-of-app notification. On by default — silent multi-day loss is
+        // the failure it exists for. While stalled, the subtitle says so.
+        if (paired?.type == DeviceType.omi || paired?.type == DeviceType.friendPendant)
+          OmiSettingsRow.toggle(
+            key: const Key('sync_health_alerts_toggle'),
+            leading: const FaIcon(FontAwesomeIcons.bell),
+            title: l10n.syncHealthAlerts,
+            subtitle: provider.isSyncStalled
+                ? l10n.activityAttentionSyncStalledSubtitle(
+                    provider.syncHealth?.timeSinceLastSync?.inHours ?? SyncHealthWatchdog.stallThreshold.inHours,
+                  )
+                : l10n.syncHealthAlertsDescription,
+            value: _syncAlertsEnabled,
+            onChanged: (value) {
+              setState(() => _syncAlertsEnabled = value);
+              SharedPreferencesUtil().syncAlertsEnabled = value;
+            },
+          ),
         // Native diagnostics persist per device, so a disconnected pendant can still send its
         // disconnect history and BLE log to support, which is when they matter most.
         if (diagnosticsId != null)
@@ -668,14 +690,14 @@ extension _DeviceLiveSections on _DeviceSettingsState {
   Widget _liveSections({required bool connected, required int batteryLevel, required bool isCharging}) {
     const gap = SizedBox(height: OmiSpacing.xxl);
     return Builder(builder: (context) {
-      // One WAL pass per sync notification, shared by Stats and Right now.
+      // One WAL pass per sync notification, shared by the stat row's tiles.
       // Capture/episode updates subscribe below this builder and never rescan it;
       // deviceCatchUpLocal memoizes on the WAL list identity, so a progress-only
       // notify reuses the last snapshot instead of rescanning, and the server
       // flag and status line select on their own.
       final l10n = context.l10n;
-      final local =
-          context.select<SyncProvider?, DeviceCatchUpLocal>((s) => deviceCatchUpLocal(s?.allWals ?? const []));
+      final local = context.select<SyncProvider?, DeviceCatchUpLocal>(
+          (s) => deviceCatchUpLocal(s?.pendingWorkWals ?? const [], alreadyCollapsed: true));
       final serverProcessing = context.select<SyncProvider?, bool>((s) => s?.syncState.isProcessing ?? false);
       // The status line reads sync state only; whether server jobs exist comes
       // from the memoized snapshot, so a progress tick never rescans the inventory.
@@ -691,25 +713,36 @@ extension _DeviceLiveSections on _DeviceSettingsState {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (connected) ...[
-            Builder(
-                builder: (context) => DeviceStatsRow(
-                      batteryLevel: batteryLevel,
-                      isCharging: isCharging,
-                      heardTodaySeconds: _heardTodaySeconds(context),
-                      onDeviceSeconds: local.onDeviceSeconds,
-                      phoneQueueSeconds: local.onPhoneSeconds,
-                    )),
-            gap,
-          ],
+          // Catching up lives in the stat row, so the row stays while audio is still on its
+          // way even with the device disconnected.
           ListenableBuilder(
             listenable: _pendingWork,
             builder: (context, _) {
-              final rightNow =
-                  _rightNow(context, local: local, serverProcessing: serverProcessing, syncStatus: syncStatus);
-              return rightNow.hasContent ? Column(children: [rightNow, gap]) : const SizedBox.shrink();
+              final catchUp =
+                  _catchUp(context, local: local, serverProcessing: serverProcessing, syncStatus: syncStatus);
+              if (!connected && catchUp == null) return const SizedBox.shrink();
+              final online = context.select<ConnectivityProvider?, bool>((c) => c?.isConnected ?? true);
+              return Column(children: [
+                Builder(
+                    builder: (context) => DeviceStatsRow(
+                          batteryLevel: connected ? batteryLevel : 0,
+                          isCharging: isCharging,
+                          heardTodaySeconds: _heardTodaySeconds(context),
+                          onDeviceSeconds: local.onDeviceSeconds,
+                          phoneQueueSeconds: local.onPhoneSeconds,
+                          catchUpSeconds: catchUp?.seconds,
+                          // Uploads need only a connection; that is the one thing it can wait on.
+                          catchUpCaption: online ? l10n.deviceCatchUpOnItsWay : l10n.deviceCatchUpWhenOnline,
+                          onOpenCatchUp: () => routeToPage(context, OnTheWayPage(pendingWork: _pendingWork)),
+                        )),
+                gap,
+              ]);
             },
           ),
+          Builder(builder: (context) {
+            final rightNow = _rightNow(context);
+            return rightNow.hasContent ? Column(children: [rightNow, gap]) : const SizedBox.shrink();
+          }),
         ],
       );
     });
@@ -756,9 +789,24 @@ extension _DeviceLiveSections on _DeviceSettingsState {
     return elapsed.inSeconds <= 0 ? null : now.subtract(elapsed);
   }
 
-  DeviceRightNowGroup _rightNow(BuildContext context,
+  /// Everything still on its way to becoming conversations, from the shared WAL snapshot plus
+  /// server work; null when nothing is.
+  DeviceCatchUpSummary? _catchUp(BuildContext context,
       {required DeviceCatchUpLocal local, required bool serverProcessing, required String syncStatus}) {
     final conversations = context.watch<ConversationProvider?>();
+    return DeviceCatchUpSummary.from(
+      local: local,
+      serverProcessing: serverProcessing,
+      // Local or phone-run work reads On the Way's own stage; server work the
+      // phone did not start has no local stage to report.
+      status: local.hasPending || serverProcessing ? syncStatus : context.l10n.processing,
+      pending: _pendingWork.pending,
+      conversations: conversations?.conversations ?? const [],
+      processing: conversations?.processingConversations ?? const [],
+    );
+  }
+
+  DeviceRightNowGroup _rightNow(BuildContext context) {
     final capture = context.read<CaptureProvider?>();
     // Only the visible source, its running length and its audio health depend on
     // capture, not its transcript text, socket state, or BLE/network rate samples.
@@ -811,17 +859,6 @@ extension _DeviceLiveSections on _DeviceSettingsState {
       onOpenLive: capture == null
           ? null
           : () => routeToPage(context, LiveEpisodePage(topConversationId: capture.topConversationId)),
-      catchingUp: DeviceCatchUpSummary.from(
-        local: local,
-        serverProcessing: serverProcessing,
-        // Local or phone-run work reads On the Way's own stage; server work the
-        // phone did not start has no local stage to report.
-        status: local.hasPending || serverProcessing ? syncStatus : l10n.processing,
-        pending: _pendingWork.pending,
-        conversations: conversations?.conversations ?? const [],
-        processing: conversations?.processingConversations ?? const [],
-      ),
-      onOpenCatchingUp: () => routeToPage(context, OnTheWayPage(pendingWork: _pendingWork)),
     );
   }
 

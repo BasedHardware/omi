@@ -59,7 +59,6 @@ def checkout(monkeypatch):
     monkeypatch.setattr(payment.users_db, 'update_user_subscription', state.writes)
     monkeypatch.setattr(payment.users_db, 'set_stripe_customer_id', state.customer_writes)
     monkeypatch.setattr(payment, 'set_credits_invalidation_signal', MagicMock())
-    monkeypatch.setattr(payment, 'clear_trial_paywall_cache', MagicMock())
     state.retrieve = MagicMock(
         side_effect=lambda subscription_id: stripe.Subscription.construct_from(state.payload, 'sk_test_not_real')
     )
@@ -69,6 +68,7 @@ def checkout(monkeypatch):
     monkeypatch.setattr(payment.stripe.Subscription, 'retrieve', state.retrieve)
     monkeypatch.setattr(payment.stripe.Subscription, 'modify', state.modify)
     monkeypatch.setattr(payment.stripe.Subscription, 'list', state.list_subscriptions)
+    monkeypatch.setattr(payment.stripe.Price, 'retrieve', MagicMock(return_value=SimpleNamespace(currency='usd')))
     monkeypatch.setattr(payment.stripe.checkout.Session, 'create', state.create)
     monkeypatch.setattr(payment.stripe_utils, 'base_url', 'https://omi.test/')
     app = FastAPI()
@@ -124,6 +124,7 @@ def test_terminal_subscription_permits_a_new_checkout(checkout, status):
 def test_new_buyer_without_a_stored_subscription_id_keeps_checkout(checkout):
     checkout.stored = Subscription(plan=PlanType.basic, status=SubscriptionStatus.active)
     assert request_checkout(checkout).status_code == 200
+    assert checkout.create.call_args.kwargs['currency'] == 'usd'
     checkout.create.assert_called_once()
     checkout.retrieve.assert_not_called()
 

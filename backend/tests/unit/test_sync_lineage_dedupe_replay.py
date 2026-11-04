@@ -215,6 +215,8 @@ def load_dependencies():
 
 @pytest.fixture(autouse=True)
 def default_flags(monkeypatch):
+    # These legacy intake/eager-processing cases are independent of durable hold scheduling.
+    monkeypatch.setenv('SYNC_PROCESSING_HOLD_ENABLED', 'false')
     monkeypatch.delenv(SYNC_LINEAGE_LIVE_DEDUPE_ENV, raising=False)
     monkeypatch.setenv(sync_lineage.SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST_ENV, '')
 
@@ -480,7 +482,8 @@ def test_receipt_only_upload_appends_and_consolidates_an_overlapping_donor():
     assert assigned['id'] == LIVE_ID and '_sync_lineage_repeat_only' not in assigned
     donor = store.rows[('users', 'u', 'conversations', 'DONOR-1')]
     assert donor['sync_merged_into'] == LIVE_ID and donor['deleted'] is True
-    assert sorted(texts_of(store, LIVE_ID)) == sorted(LIVE + texts)
+    # Novel donor words survive even when their timing collides with live.
+    assert sorted(texts_of(store, LIVE_ID)) == sorted(LIVE + texts + texts_of(store, 'DONOR-1'))
 
 
 def test_receipt_only_append_past_an_oversized_donor_rolls_over_safely(monkeypatch, caplog):
@@ -490,10 +493,11 @@ def test_receipt_only_append_past_an_oversized_donor_rolls_over_safely(monkeypat
     prove(chunk, row)
     store = seeded_store_with_donor([row])
     donor_stored = store.rows[('users', 'u', 'conversations', 'DONOR-1')]
-    donor_stored['structured'] = {'title': '', 'overview': 'x' * 8192}
+    donor_stored['structured'] = {'title': '', 'overview': 'x' * 16000}
     donor_before = deepcopy(donor_stored)
-    live_size = estimate_firestore_document_bytes(store.rows[('users', 'u', 'conversations', LIVE_ID)], None)
-    monkeypatch.setattr(assignment, 'SYNC_CONVERSATION_BYTE_BUDGET', live_size + 64)
+    # Both existing rows are full; a fresh receipt-bearing input still fits.
+    store.rows[('users', 'u', 'conversations', LIVE_ID)]['structured'] = {'overview': 'x' * 16000}
+    monkeypatch.setattr(assignment, 'SYNC_CONVERSATION_BYTE_BUDGET', 12000)
     with caplog.at_level(logging.WARNING):
         assigned, created, survivors = intake(store, chunk, target_id=LIVE_ID)
     assert created is True and [s['text'] for s in survivors] == texts
@@ -652,6 +656,7 @@ def test_receipt_only_repeat_intake_writes_and_enrolls_enrichment(pipeline_modul
 
 
 def test_receipt_only_append_preserves_existing_enrichment_debt(pipeline_module, monkeypatch):
+    monkeypatch.setenv('SYNC_PROCESSING_HOLD_ENABLED', 'false')
     pipeline = pipeline_module
     store = seeded_store([live_row(capture_evidence=live_evidence())])
     texts = [reworded(text) for text in LIVE]
@@ -788,7 +793,8 @@ def test_receipt_only_append_with_a_donor_finishes_and_reprocesses(pipeline_modu
     finish.assert_called_once()
     donor = store.rows[('users', 'u', 'conversations', 'DONOR-1')]
     assert donor['sync_merged_into'] == LIVE_ID and donor['deleted'] is True
-    assert sorted(texts_of(store, LIVE_ID)) == sorted(LIVE + texts)
+    # Novel donor words survive even when their timing collides with live.
+    assert sorted(texts_of(store, LIVE_ID)) == sorted(LIVE + texts + texts_of(store, 'DONOR-1'))
     reprocess = MagicMock()
     monkeypatch.setattr(pipeline, '_reprocess_conversation_after_update', reprocess)
     pipeline._reprocess_merged_conversations('u', response)

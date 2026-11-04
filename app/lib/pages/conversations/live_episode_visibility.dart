@@ -3,8 +3,7 @@ import 'package:omi/backend/schema/pending_work.dart';
 /// A live episode replaces its member conversations on Home: live splits, short
 /// fragments, parallel and offline-sync captures, finished rows and highlights
 /// all fold under the one live row, reachable inside the live episode page
-/// (Moments, members). When the episode closes, the members return as ordinary
-/// rows beside it — nothing here hides them then.
+/// (Moments, members). Closed episode projection lives in `buildHomeRows`.
 Set<String> hiddenLiveConversations(Set<String> episodeIds) => episodeIds;
 
 /// Conversations offline sync is still adding audio to, with how much: the server's pending sync
@@ -18,4 +17,11 @@ Map<String, int> fillingSeconds(List<PendingWorkItem> pending) {
     filling.update(item.conversationIds.single, (v) => v + seconds, ifAbsent: () => seconds);
   }
   return filling;
+}
+
+/// What a Home row is still adding: an episode's row adds up its members' sync jobs.
+int? homeRowFilling(Map<String, int> filling, String rowId, Set<String>? episodeConversationIds) {
+  if (episodeConversationIds == null) return filling[rowId];
+  final total = episodeConversationIds.fold<int>(0, (sum, id) => sum + (filling[id] ?? 0));
+  return total > 0 ? total : null;
 }

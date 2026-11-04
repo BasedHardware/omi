@@ -359,6 +359,9 @@ def test_canonical_capture_preserves_prior_state_when_the_extractor_never_return
 
 def test_canonical_capture_survives_an_external_text_extractor_failure(monkeypatch):
     """External-integration intake has the same extractor-failure boundary."""
+    # This asserts the eager extraction seam; the dedupe-on external path
+    # (prompt-memories resolution + l1 fingerprint) is covered separately.
+    monkeypatch.setenv('CONVERSATION_LLM_INPUT_DEDUPE_ENABLED', 'false')
     pc = _load_process_conversation()
     from models.conversation import Conversation
     from models.conversation_enums import CategoryEnum, ConversationSource
@@ -808,6 +811,7 @@ def test_canonical_voice_payload_preserves_owner_lineage_and_capture_provenance(
                 speaker_id=0,
                 speaker_id_scope="conv-owner-lineage:0",
                 is_user=True,
+                speaker_match_source="conversation_voice",
                 start=0.0,
                 end=4.0,
             ),
@@ -847,6 +851,7 @@ def test_owner_source_attribution_never_uses_subject_fallback_without_owner_quot
             speaker_id=0,
             speaker_id_scope="conv-owner-fallback:0",
             is_user=True,
+            speaker_match_source="conversation_voice",
             start=0.0,
             end=1.0,
         ),
@@ -1064,7 +1069,7 @@ def test_canonical_dense_capture_is_bounded_before_atomic_replacement(monkeypatc
     ]
 
 
-def test_canonical_capture_deduplicates_per_subject_and_assigns_subject_scoped_ids(monkeypatch):
+def test_canonical_capture_deduplicates_unknown_subjects_without_using_quote_authors(monkeypatch):
     pc = _load_process_conversation()
     from models.conversation import Conversation
     from models.conversation_enums import CategoryEnum, ConversationSource
@@ -1146,6 +1151,8 @@ def test_canonical_capture_deduplicates_per_subject_and_assigns_subject_scoped_i
     )
 
     payloads = mock_service.replace_conversation_memories.call_args.args[2]
-    assert result.count == 2
-    assert [payload["subject_entity_id"] for payload in payloads] == ["person:alice", "person:bob"]
-    assert len({payload["id"] for payload in payloads}) == 2
+    assert result.count == 1
+    assert len(payloads) == 1
+    assert payloads[0]["subject_entity_id"] is None
+    assert payloads[0]["subject_attribution"] == "unknown"
+    assert payloads[0]["subject_kind"] == "unknown"

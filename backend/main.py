@@ -185,6 +185,16 @@ from database.firestore_tier_context import FirestoreTierMiddleware
 app.add_middleware(FirestoreTierMiddleware)
 app.add_middleware(SyncUploadMetricsMiddleware)
 app.add_middleware(ExternalListMetricsMiddleware)
+
+# Compress buffered JSON responses for clients that send Accept-Encoding: gzip
+# (browsers, web admin, OkHttp); streaming endpoints are exempt so token/audio
+# chunk boundaries and first-byte latency survive. Registered before the
+# DesktopProxyDeadlineMiddleware so that one stays outermost (pinned by
+# test_desktop_proxy_lifetime.py).
+from utils.other.response_gzip import GatedGZipMiddleware
+
+app.add_middleware(GatedGZipMiddleware)
+
 app.add_middleware(DesktopProxyDeadlineMiddleware)
 
 
@@ -216,7 +226,11 @@ install_drain_signal_marker()
 @app.on_event("startup")  # type: ignore[reportDeprecated]  # FastAPI on_event still functional; lifespan migration would change app wiring
 async def startup_event():
     from utils.messaging.adapters.runtime import start_adapters
+    from database.pinecone_partition_state import start_mutations, drain_mutations
+    from database.pinecone_mutation_lifecycle import install_shutdown_drain
 
+    start_mutations()
+    app.state.pinecone_restore_signal = install_shutdown_drain(drain_mutations)
     app.state.messaging_runtime = await start_adapters(messaging.register_adapter)
     start_metrics_sidecar_server()
     start_background_task(refresh_stt_cap_cohort_forever(), name='stt_cap_cohort_refresh')
@@ -474,6 +488,14 @@ async def shutdown_event():
     import logging
 
     from utils.executors import db_executor, run_blocking
+    from database.pinecone_partition_state import drain_mutations
+    from database.pinecone_mutation_lifecycle import drain_on_shutdown
+
+    # Run before other bounded drains consume the platform shutdown grace.
+    # Do not queue behind the same DB workers whose provider calls are draining.
+    await drain_on_shutdown(drain_mutations)
+    if restore_signal := getattr(app.state, 'pinecone_restore_signal', None):
+        restore_signal()
 
     runtime = getattr(app.state, 'messaging_runtime', None)
     if runtime:

@@ -206,6 +206,15 @@ void main() {
         PaywallOffer.fromCatalog(catalog, cancelAtPeriodEnd: true, currentPriceId: 'missing'),
         isNull,
       );
+      // A current price without a plan id never guesses a (retired) tier.
+      expect(
+        PaywallOffer.fromCatalog({
+          'plans': [
+            {'id': 'p_m', 'interval': 'month', 'unit_amount': 1999},
+          ],
+        }, cancelAtPeriodEnd: true, currentPriceId: 'p_m'),
+        isNull,
+      );
     });
 
     test('prefers the Unlimited tier and derives the yearly saving from its own prices', () {
@@ -234,16 +243,17 @@ void main() {
       expect(offer.yearlySavingPercent, 25);
     });
 
-    test('a single-tier legacy catalog and an empty catalog', () {
-      final legacy = PaywallOffer.fromCatalog({
-        'plans': [
-          {'id': 'p_m', 'interval': 'month', 'unit_amount': 1999},
-          {'id': 'p_y', 'interval': 'year', 'unit_amount': 19999},
-        ],
-      })!;
-      expect(legacy.tierId, 'unlimited');
-      expect(legacy.monthly!.currency, 'usd');
-      expect(legacy.yearlySavingPercent, 17);
+    test('never falls back to a retired tier, and an empty catalog', () {
+      // Omi Pro is the only plan sold: a catalog of retired tiers (or untagged prices) offers nothing.
+      expect(
+          PaywallOffer.fromCatalog({
+            'plans': [
+              {'id': 'p_m', 'interval': 'month', 'unit_amount': 1999},
+              {'id': 'neo_m', 'plan_id': 'unlimited', 'interval': 'month', 'unit_amount': 1999},
+              {'id': 'arch_m', 'plan_id': 'architect', 'interval': 'month', 'unit_amount': 39999},
+            ],
+          }),
+          isNull);
       expect(PaywallOffer.fromCatalog(null), isNull);
       expect(PaywallOffer.fromCatalog({'plans': []}), isNull);
       expect(

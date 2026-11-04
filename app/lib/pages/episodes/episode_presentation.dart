@@ -1,5 +1,3 @@
-import 'package:flutter/material.dart';
-
 import 'package:omi/backend/schema/episode.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
@@ -126,21 +124,17 @@ abstract final class EpisodePresentation {
       provider.liveCaptureSource != null &&
       LiveCaptureCard.canPause(provider.recordingDevice, source: provider.liveCaptureSource);
 
+  /// How far the running notes reach, "Covers up to 9:28 AM · full notes when it wraps up".
+  /// Notes with no moment behind them yet say when they last changed instead.
+  static String coversLabel(Episode episode, DateTime now, AppLocalizations l10n, OmiDateFormat dates) {
+    if (episode.moments.isEmpty) return updatedLabel(episode, now, l10n);
+    final end = episode.moments.map((m) => m.endedAt).reduce((a, b) => a.isAfter(b) ? a : b);
+    return l10n.episodeCoversUpTo(dates.time(end));
+  }
+
   static String updatedLabel(Episode episode, DateTime now, AppLocalizations l10n) {
     final updated = episode.stateUpdatedAt;
     final minutes = updated == null ? 0 : now.difference(updated).inMinutes;
     return minutes < 1 ? l10n.episodeUpdatedJustNow : l10n.episodeUpdatedMinutesAgo(minutes);
   }
-
-  /// The live tile: a green, pulsing dot on a soft green square; grey when not listening.
-  static Widget liveTile({required bool listening, double size = 40}) => Container(
-        width: size,
-        height: size,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: listening ? OmiColors.successSurface : OmiColors.surface2,
-          borderRadius: OmiRadius.mdAll,
-        ),
-        child: OmiLiveDot(live: listening),
-      );
 }

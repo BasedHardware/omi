@@ -7,21 +7,48 @@ rows bound to either handler drain (contract (b) invariant 7). Responses follow 
 an unexpected exception.
 """
 
+import asyncio
 import logging
 import os
 import re
+import threading
 import time
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 
 from utils.executors import postprocess_executor, run_blocking
+from utils.observability.reasons import RetryReason
 from utils.workers.consumer import http_response, run_push
+from utils.workers.retry import retry_response
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
 _KINDS = {'enrichment', 'sync_reprocess'}
+# TimeoutMiddleware cuts an attempt at HTTP_POST_TIMEOUT (600s), so the request log records a bare 504
+# while this thread may still be working. Retries and slow deliveries log their real end and timing.
+SLOW_DELIVERY_SECONDS = 120.0
+# TimeoutMiddleware cuts this path at HTTP_POST_TIMEOUT (600s) with a bare 504 while the worker thread keeps
+# its heartbeated lease, so a slow delivery held a queue slot for the full 600s. Answer a 409 retry at the
+# budget instead; the worker still settles its own lease, and the queue retry or sweep claims after it.
+DELIVERY_BUDGET_SECONDS = 300.0
+
+
+def _delivery_budget() -> float:
+    try:
+        return float(os.getenv('ENRICHMENT_DELIVERY_BUDGET_SECONDS', DELIVERY_BUDGET_SECONDS))
+    except ValueError:
+        return DELIVERY_BUDGET_SECONDS
+
+
+def _drain(work: asyncio.Future) -> None:
+    # The abandoned delivery's own settlement already ran; only retrieve its outcome so it is not lost silently.
+    if not work.cancelled() and work.exception() is not None:
+        logger.warning(
+            'event=enrichment_delivery outcome=error phase=after_budget exception_type=%s',
+            type(work.exception()).__name__,
+        )
 
 
 def _audience() -> str:
@@ -48,12 +75,37 @@ def _task(payload: object) -> tuple[str, str] | None:
     return key, token
 
 
-def consume(key: str, token: str):
-    """One push delivery through the enrichment consumer; shared with the legacy sync-jobs handler."""
+def consume(key: str, token: str, accepted: float | None = None, abandoned: threading.Event | None = None):
+    """One push delivery through the enrichment consumer; shared with the legacy sync-jobs handler.
+
+    ``accepted`` is the handler's ``time.monotonic()`` before the executor hop. Only a retry or a slow
+    delivery logs its executor wait and run time (no ids). ``abandoned`` is set once the route answered its
+    budget 409. That retry met this delivery's lease and was consumed as BUSY, so a RETRY here re-arms the
+    row under a fresh wake instead of stranding it.
+    """
+    from database.outbox import Outcome
     from database.outbox_firestore import ENRICHMENT_OUTBOX
     from utils.enrichment.consumer import EnrichmentConsumer
 
-    return run_push(EnrichmentConsumer(ENRICHMENT_OUTBOX), ENRICHMENT_OUTBOX, key, token, now=time.time())
+    started = time.monotonic()
+    accepted = started if accepted is None else accepted
+    outcome, reason = 'error', 'unexpected'
+    try:
+        result = run_push(EnrichmentConsumer(ENRICHMENT_OUTBOX), ENRICHMENT_OUTBOX, key, token, now=time.time())
+        outcome, reason = result.outcome.value, result.reason.value
+        if abandoned is not None and abandoned.is_set() and result.outcome is Outcome.RETRY:
+            ENRICHMENT_OUTBOX.rearm_released(key, token, now=time.time())
+        return result
+    finally:
+        finished = time.monotonic()
+        if outcome == Outcome.RETRY.value or finished - accepted >= SLOW_DELIVERY_SECONDS:
+            logger.info(
+                'event=enrichment_delivery outcome=%s reason=%s wait_s=%.1f run_s=%.1f',
+                outcome,
+                reason,
+                started - accepted,
+                finished - started,
+            )
 
 
 @router.post('/v2/enrichment/run', include_in_schema=False)
@@ -69,7 +121,18 @@ async def run_enrichment_task(request: Request, _retry_count: int = Depends(veri
 
     if not outbox.owns_runtime():
         return JSONResponse(status_code=200, content={'status': 'foreign_runtime'})
-    result = await run_blocking(postprocess_executor, consume, *task)
+    budget = _delivery_budget()
+    if budget <= 0:  # Kill switch: 0 restores the middleware-only cut.
+        return http_response(await run_blocking(postprocess_executor, consume, *task, time.monotonic()))
+    abandoned = threading.Event()
+    work = asyncio.ensure_future(run_blocking(postprocess_executor, consume, *task, time.monotonic(), abandoned))
+    try:
+        result = await asyncio.wait_for(asyncio.shield(work), timeout=budget)
+    except asyncio.TimeoutError:
+        abandoned.set()
+        work.add_done_callback(_drain)
+        logger.warning('event=enrichment_delivery outcome=retry reason=delivery_budget budget_s=%.0f', budget)
+        return retry_response(RetryReason.DEPENDENCY_WARMING)
     return http_response(result)
 
 

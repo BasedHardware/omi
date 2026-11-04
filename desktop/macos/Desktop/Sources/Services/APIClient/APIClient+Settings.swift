@@ -412,10 +412,10 @@ enum SubscriptionPlanType: Codable, Equatable, RawRepresentable {
   case basic  // display "Free"
   case plus
   case unlimited  // legacy — display "Neo"
-  case unlimitedV2
-  case architect  // display "Architect" ($400/mo, cost_usd quota)
+  case unlimitedV2  // display "Omi Pro" — the only plan sold
+  case architect  // retired — display "Architect" ($400/mo, cost_usd quota)
   case pro  // backward compat: old Firestore docs may still say "pro"
-  case `operator`  // display "Pro"
+  case `operator`  // retired — display "Operator"
   case unknown(String)
 
   init(rawValue: String) {
@@ -460,9 +460,9 @@ enum SubscriptionPlanType: Codable, Equatable, RawRepresentable {
     case .basic: return "Free"
     case .plus: return "Plus"
     case .unlimited: return "Neo"
-    case .unlimitedV2: return "Unlimited"
+    case .unlimitedV2: return "Omi Pro"
     case .architect, .pro: return "Architect"
-    case .operator: return "Pro"
+    case .operator: return "Operator"
     case .unknown: return "Plan unavailable"
     }
   }
@@ -477,11 +477,12 @@ enum SubscriptionPlanType: Codable, Equatable, RawRepresentable {
 }
 
 /// Title compatibility for catalogs that predate explicit plan IDs.
-/// Bare Pro is Operator; the retired Omi Pro title still identifies Architect.
+/// Omi Pro is `unlimited_v2`; bare Pro is the retired Operator plan.
 enum SubscriptionPlanNames {
   static func planId(from title: String) -> String? {
     let normalized = title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-    if normalized.contains("architect") || normalized.contains("omi pro") { return "architect" }
+    if normalized.contains("omi pro") { return "unlimited_v2" }
+    if normalized.contains("architect") { return "architect" }
     if normalized.contains("operator") || normalized == "pro" || normalized.hasPrefix("pro ") {
       return "operator"
     }
@@ -672,6 +673,8 @@ struct UpgradeSubscriptionResponse: Codable {
 
 struct AvailablePlanPriceOption: Codable, Identifiable {
   let id: String
+  /// Backend plan id; older backends omit it and the title is parsed instead.
+  var planId: String? = nil
   let title: String
   let priceString: String
   let description: String?
@@ -684,6 +687,7 @@ struct AvailablePlanPriceOption: Codable, Identifiable {
     case priceString = "price_string"
     case unitAmount = "unit_amount"
     case isActive = "is_active"
+    case planId = "plan_id"
   }
 }
 

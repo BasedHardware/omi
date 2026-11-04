@@ -1,10 +1,10 @@
 ---
-title: "Assembly & BOM"
+title: "Assembly and BOM"
 icon: "hammer"
 description: "Bill of Materials and assembly reference for building the Omi from components."
 ---
 
-## Bill of Materials
+## Bill of materials
 
 The BOM contains 88 components across the mainboard, charger board, FPC, and mechanical assembly.
 
@@ -12,7 +12,7 @@ The BOM contains 88 components across the mainboard, charger board, FPC, and mec
 - [CSV format](https://github.com/BasedHardware/omi/blob/main/omi/hardware/consumer/bom/omi-bom.csv)
 - [XLSX format](https://github.com/BasedHardware/omi/blob/main/omi/hardware/consumer/bom/omi-bom.xlsx)
 
-### Key Components
+### Key components
 
 | Component | MPN | Manufacturer | Qty |
 |-----------|-----|--------------|-----|
@@ -37,26 +37,24 @@ The BOM contains 88 components across the mainboard, charger board, FPC, and mec
 | Pogo Pins (charger) | CA62-PG308 | JINLANTIAN | 2 |
 | Tactile Button | TS-1001S | JINBEILI | 1 |
 
-### Passive Components
+### Passive components
 
 The mainboard uses 0201-size passives (resistors, capacitors) primarily from YAGEO and Murata. See the full BOM CSV for complete listings including designators.
 
 <Tip>
-**Sourcing tip for indie makers:** Order passives (0201 resistors/capacitors) from LCSC — they have the best prices and ship from China alongside your JLCPCB boards. For active ICs, Mouser/DigiKey have more reliable stock.
+**Sourcing tip for indie makers:** Order passives (0201 resistors/capacitors) from LCSC. They have the best prices and ship from China alongside your JLCPCB boards. For active ICs, Mouser/DigiKey have more reliable stock.
 </Tip>
 
----
+## Assembly reference
 
-## Assembly Reference
+### Exploded view
 
-### Exploded View
-
-<Frame caption="Complete Omi Consumer — all components identified">
+<Frame caption="Complete Omi Consumer: all components identified">
   <img src="https://raw.githubusercontent.com/BasedHardware/omi/main/omi/hardware/consumer/assembly/photos/materials-labelled-exploded-view.jpg" />
 </Frame>
 
 The device consists of these main assemblies:
-1. **Front aluminium cover** (CNC machined)
+1. **Front aluminum cover** (CNC machined)
 2. **LED light guide** (SLA/translucent)
 3. **Main frame** (SLA/translucent PC+ABS)
 4. **PCB mainboard** with microphones, SoC, flash
@@ -64,39 +62,39 @@ The device consists of these main assemblies:
 6. **Battery** (150mAh LiPo)
 7. **Vibration motor**
 8. **Silicone pad**
-9. **Back aluminium cover** (CNC machined)
+9. **Back aluminum cover** (CNC machined)
 
-### Build Guide
+### Build guide
 
 <Tabs>
-  <Tab title="Core Assembly" icon="screwdriver-wrench">
+  <Tab title="Core assembly" icon="screwdriver-wrench">
     <Steps>
-      <Step title="Prepare workspace">
+      <Step title="Prepare the workspace">
         <Frame caption="All components laid out before assembly">
           <img src="https://raw.githubusercontent.com/BasedHardware/omi/main/omi/hardware/consumer/assembly/photos/components-disassembled.jpg" />
         </Frame>
 
         Lay out all components on an anti-static mat. You'll need: tweezers, Phillips screwdriver (PH000), UV lamp, multimeter, and S300 adhesive.
       </Step>
-      <Step title="Install PCB into frame">
+      <Step title="Install the PCB into the frame">
         Place the mainboard PCB into the SLA frame on the mounting posts. Board should sit flat with no rocking. Connect the FPC cable to the board-to-board connector.
 
-        <Warning>The FPC connector is fragile — lift the latch before inserting, then press down firmly to lock. Do not force it.</Warning>
+        <Warning>The FPC connector is fragile. Lift the latch before inserting, then press down firmly to lock. Do not force it.</Warning>
       </Step>
-      <Step title="Connect battery and motor">
+      <Step title="Connect the battery and motor">
         Plug in the 150mAh LiPo battery. Route the cable to avoid pinching. Attach the vibration motor with double-sided tape.
 
         <Warning>**Battery polarity is critical.** Reversed polarity will destroy the BQ25101 charger IC and may cause thermal runaway. Verify polarity with a multimeter before connecting.</Warning>
       </Step>
-      <Step title="Install magnets and silicone pad">
+      <Step title="Install magnets and the silicone pad">
         Apply UV adhesive to magnet seats. Insert 4x N52 magnets (D3×H3mm). Cure with UV lamp for 30 seconds each.
 
         <Warning>Test magnet polarity against the charger dock BEFORE gluing. Mark each magnet with a Sharpie. Once cured, they cannot be removed.</Warning>
 
         Place the silicone pad over the battery/motor assembly.
       </Step>
-      <Step title="Close enclosure">
-        Attach aluminium covers (Case A front, Case B back). Secure with 3x Phillips screws (CM1.2×5). Apply S300 glue around the seam.
+      <Step title="Close the enclosure">
+        Attach aluminum covers (Case A front, Case B back). Secure with 3x Phillips screws (CM1.2×5). Apply S300 glue around the seam.
 
         <Check>Before sealing: test charging contact continuity, verify BLE advertising, confirm both mics record audio.</Check>
 
@@ -104,7 +102,7 @@ The device consists of these main assemblies:
       </Step>
     </Steps>
   </Tab>
-  <Tab title="Packaging & QA" icon="box">
+  <Tab title="Packaging and QA" icon="box">
     <Steps>
       <Step title="Final device QA">
         Power on the device and run through the verification checklist:
@@ -126,15 +124,15 @@ The device consists of these main assemblies:
   </Tab>
 </Tabs>
 
-### Reference Photos
+### Reference photos
 
 Assembly photos are in [`assembly/photos/`](https://github.com/BasedHardware/omi/tree/main/omi/hardware/consumer/assembly/photos):
-- [`materials-labelled-exploded-view.jpg`](https://github.com/BasedHardware/omi/blob/main/omi/hardware/consumer/assembly/photos/materials-labelled-exploded-view.jpg) — All components identified
-- [`materials-labelled.jpg`](https://github.com/BasedHardware/omi/blob/main/omi/hardware/consumer/assembly/photos/materials-labelled.jpg) — Materials and finish callouts
-- [`components-disassembled.jpg`](https://github.com/BasedHardware/omi/blob/main/omi/hardware/consumer/assembly/photos/components-disassembled.jpg) — Individual components laid out
-- [`outer-aluminium-covers.jpg`](https://github.com/BasedHardware/omi/blob/main/omi/hardware/consumer/assembly/photos/outer-aluminium-covers.jpg) — CNC aluminium cover detail
+- [`materials-labelled-exploded-view.jpg`](https://github.com/BasedHardware/omi/blob/main/omi/hardware/consumer/assembly/photos/materials-labelled-exploded-view.jpg): all components identified
+- [`materials-labelled.jpg`](https://github.com/BasedHardware/omi/blob/main/omi/hardware/consumer/assembly/photos/materials-labelled.jpg): materials and finish callouts
+- [`components-disassembled.jpg`](https://github.com/BasedHardware/omi/blob/main/omi/hardware/consumer/assembly/photos/components-disassembled.jpg): individual components laid out
+- [`outer-aluminium-covers.jpg`](https://github.com/BasedHardware/omi/blob/main/omi/hardware/consumer/assembly/photos/outer-aluminium-covers.jpg): CNC aluminum cover detail
 
-### Additional Mechanical Parts
+### Additional mechanical parts
 
 | Part | Specification | Qty |
 |------|---------------|-----|
@@ -149,9 +147,7 @@ Assembly photos are in [`assembly/photos/`](https://github.com/BasedHardware/omi
 | Necklace rope | 2.5mm, L650mm | 1 |
 | Protection cover | 28.7x35.5x11mm (molded) | 1 |
 
----
-
-## File Integrity
+## File integrity
 
 All design files include SHA-256 checksums for verification against the original source files.
 
@@ -160,6 +156,6 @@ cd omi/hardware/consumer
 sha256sum -c checksums.sha256
 ```
 
-<Card title="View Checksums" icon="fingerprint" href="https://github.com/BasedHardware/omi/blob/main/omi/hardware/consumer/checksums.sha256">
+<Card title="View checksums" icon="fingerprint" href="https://github.com/BasedHardware/omi/blob/main/omi/hardware/consumer/checksums.sha256">
   SHA-256 checksums for all 58 design files (ZIP, STEP, PDF, BOM, images)
 </Card>

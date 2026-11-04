@@ -117,6 +117,7 @@ MONITORING_CONTRACT_SOURCES = (
     'backend/charts/vad/',
     'backend/charts/diarizer/',
     'backend/charts/nllb-translation/',
+    'backend/charts/batch-pipeline-worker/',
     'backend/scripts/alert_backtest.py',
     'backend/charts/monitoring/metric-inventory.prod.json',
     'backend/charts/monitoring/expected-targets.prod.yaml',
@@ -176,9 +177,11 @@ BATCH_STAGE_ENV_RATCHET_PREFIXES = (
 # prefixes cover its SCOPE.
 FLAG_BUDGET_TESTS = ('tests/unit/test_flag_budget.py',)
 FLAG_BUDGET_PREFIXES = (
+    'backend/utils/pusher_audio_projection.py',
     'backend/utils/batch_pipeline/',
     'backend/diarizer/batch_pipeline',
     'backend/config/batch_pipeline',
+    'backend/config/batch_language_recovery.py',
     'backend/utils/sync/',
     'backend/utils/stt/',
     'backend/config/policy/',
@@ -186,6 +189,7 @@ FLAG_BUDGET_PREFIXES = (
     'backend/config/live_stt_',
     'backend/config/transcription_final_pass.py',
     'backend/config/flag_budget.json',
+    'backend/parakeet/language_gate.py',
 )
 
 
@@ -367,6 +371,7 @@ AREA_TESTS = (
         (),
         (
             'tests/unit/test_monitoring_*.py',
+            'tests/unit/test_batch_pipeline_chart.py',
             'tests/unit/test_journey_observability.py',
             'tests/unit/test_verify_pusher_live_alert_route.py',
         ),
