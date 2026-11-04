@@ -40,7 +40,13 @@ from config.batch_language_recovery import (
 )
 from database.batch_pipeline_recognizer_receipts import record_recognizer
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
-from database.batch_pipeline_quarantine_recovery import RecoveryStore, recovery_candidates, cancel_fenced_recovery
+from database.batch_pipeline_quarantine_recovery import (
+    RecoveryStore,
+    recovery_candidates,
+    cancel_fenced_recovery,
+    has_words_receipt,
+    MISSING_RESULT_DWELL_SECONDS,
+)
 from utils.batch_pipeline.contracts import (
     WorkItem,
     held_vad_census,
@@ -71,6 +77,7 @@ from utils.batch_pipeline.recovery_disposition import (
     TWO_PROVIDER_EMPTY_EVIDENCE,
     SECOND_CHANCE_EMPTY_EVIDENCE,
     independent_silence_payload,
+    log_result_held,
 )
 
 from utils.cloud_tasks import enqueue_named_task, named_task_exists
@@ -297,9 +304,15 @@ class QuarantineRecovery:
                         )
                         else 'held'
                     )
-                # Bound the scan dwell without allowing takeover. A very late
-                # provider reply is rejected after this terminal transition.
-                if self.clock() - job['recovery']['started_at'] > 900:
+                # Receipts contain counts, not the transcript. Requeue once
+                # under a new token; the normal task path rechecks funding and
+                # privacy before another call. Never run STT in this scan.
+                if self.clock() - job['recovery']['started_at'] > MISSING_RESULT_DWELL_SECONDS:
+                    if has_words_receipt(job['recovery']):
+                        retry = self.protocol.retry_missing_result(segment_id, token, self.clock())
+                        logger.warning('event=batch_recovery_missing_result outcome=%s', retry)
+                        return 'held'
+                    # No usable receipt: retain the existing bounded dwell.
                     failure = {'stage': 'provider', 'reason': 'abandoned_running'}
                     if self.protocol.settle(segment_id, token, self.clock(), failure=failure):
                         log_failure(failure)
@@ -537,9 +550,11 @@ class QuarantineRecovery:
                 return 'held'
             # Storage/commit failures leave running intact: the deterministic
             # encrypted object can be reconciled without repeating STT.
+            stage = 'persist'
             try:
                 outcome = result_outcome(payload)
                 uri = self.artifacts.persist_recovery_result(item, payload, token)
+                stage = 'settle'
                 changed = self.protocol.settle(
                     segment_id,
                     token,
@@ -549,6 +564,8 @@ class QuarantineRecovery:
                     measured_held_vad_speech_seconds=result_vad_evidence(payload),
                     independent_silence=payload.get('words_provider') == 'independent_empty_strict_vad',
                 )
+                if not changed:
+                    log_result_held('quarantine', 'settle', reason='refused')
                 if changed and outcome == 'no_recoverable_speech':
                     log_terminal_empty()
                 if changed and outcome == 'silence':
@@ -562,7 +579,8 @@ class QuarantineRecovery:
                 return 'recovered' if changed else 'result_held'
             except BatchPrivacyBlocked:
                 raise
-            except Exception:
+            except Exception as error:
+                log_result_held('quarantine', stage, exception_type=type(error).__name__)
                 return 'result_held'
         except BatchPrivacyBlocked:
             cancel_fenced_recovery(self.store, segment_id)

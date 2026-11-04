@@ -19,6 +19,26 @@ from utils.batch_pipeline.correctness_metrics import record as record_correctnes
 from utils.batch_pipeline.contracts import WorkResult, held_vad_census, held_silence_allowed, held_result_allowed
 from utils.batch_pipeline.scheduler import owner_key
 
+# A receipt proves words existed, but deliberately contains no transcript.
+# Permit one replacement recognition only after the original intent's dwell.
+MISSING_RESULT_DWELL_SECONDS = 900
+MAX_MISSING_RESULT_RETRIES = 1
+
+
+def has_words_receipt(marker):
+    receipts = marker.get('recognizers') or {}
+    if not isinstance(receipts, dict):
+        return False
+    return any(
+        isinstance(receipt, dict)
+        and receipt.get('provider') == provider
+        and receipt.get('outcome') == 'words'
+        and type(receipt.get('word_count')) is int
+        and receipt['word_count'] > 0
+        for provider, receipt in receipts.items()
+        if provider in {'modulate', 'soniox'}
+    )
+
 
 class RecoveryStore:
     # Serving workers resolve an unpinned part from their own env; operator
@@ -269,6 +289,56 @@ class RecoveryStore:
 
         return self.store.run(commit)
 
+    def retry_missing_result(self, segment_id, token, now):
+        """Requeue a words-without-object intent once; fence every old writer.
+
+        Called only after an authorized artifact lookup found no result. This
+        transaction rechecks custody, privacy, ownership, dwell and the receipt.
+        It never calls a provider or reopens an explicit operator paid attempt.
+        """
+        next_token = uuid4().hex
+
+        def commit(tx):
+            job, _ = self.checked(tx, segment_id)
+            existing = tx.get('results', segment_id)
+            marker = job.get('recovery') or {}
+            if (
+                job.get('state') != 'quarantined'
+                or job.get('quarantine_reason') != 'worker_failed'
+                or job.get('recovery_state') != 'running'
+                or marker.get('token') != token
+                or now - marker.get('started_at', now) <= MISSING_RESULT_DWELL_SECONDS
+                or not has_words_receipt(marker)
+                or job.get('result')
+                or existing
+                or job.get('token')
+                or job.get('lease_until', 0) > now
+                or job.get('merge_pending') is not False
+                or job.get('speech_redrive')
+                or job.get('silence_disposition')
+                or job.get('terminal_disposition')
+            ):
+                return 'held'
+            retries = marker.get('missing_result_retries', 0)
+            if type(retries) is not int or not 0 <= retries < MAX_MISSING_RESULT_RETRIES or marker.get('paid_state'):
+                # Preserve custody and the words evidence, but stop spending.
+                # This is a local result failure, not an abandoned recognizer.
+                marker.update(settled_at=now, failure={'stage': 'payload_validation', 'reason': 'operation_failed'})
+                job['recovery_state'] = 'failed_held'
+                tx.put('jobs', segment_id, job)
+                return 'exhausted'
+            marker['missing_result_history'] = [
+                {key: marker[key] for key in ('token', 'started_at', 'recognizers') if key in marker}
+            ]
+            marker.update(token=next_token, prepared_at=now, missing_result_retries=retries + 1)
+            for key in ('started_at', 'settled_at', 'failure', 'recognizers', 'provider', 'no_vendor_call'):
+                marker.pop(key, None)
+            job['recovery_state'] = 'prepared'
+            tx.put('jobs', segment_id, job)
+            return 'requeued'
+
+        return self.store.run(commit)
+
     def hold_duration_limit(self, segment_id, token, now, *, audio_uri, audio_seconds):
         """Retain an impossible independent recovery without starting a paid intent."""
         if not math.isfinite(audio_seconds) or not MAX_AUDIO_SECONDS < audio_seconds <= 7200:
@@ -447,6 +517,10 @@ class RecoveryStore:
                 or job.get('result')
                 or existing
             ):
+                return False, 0
+            # A receipt may arrive after the caller's artifact/read snapshot.
+            # Never let a stale abandon decision erase newly recorded words.
+            if failure == {'stage': 'provider', 'reason': 'abandoned_running'} and has_words_receipt(job['recovery']):
                 return False, 0
             census = held_vad_census(job, measured_held_vad_speech_seconds)
             if result_uri and not held_result_allowed(
