@@ -227,7 +227,11 @@ def test_batch_warm_fallback_rolls_with_primary_image_in_the_same_release(digest
             assert all(template['metadata']['labels'].get(k) == v for k, v in selector.items())
         embedding = object_for(render('prod', 'diarizer'), 'Deployment')['spec']['template']
         assert not all(embedding['metadata']['labels'].get(k) == v for k, v in selector.items())
-    assert object_for(burst, 'HorizontalPodAutoscaler')['spec']['maxReplicas'] + warm_deploy['spec']['replicas'] == 18
+    # Main's decided burst ceiling is 18 primary; the folded warm fallback is
+    # additive, so the steady release totals 19. The bootstrap drain stage
+    # still runs 17 + 1 under its own 18 combined guard (see the bootstrap
+    # values overlay), refusing an 18-primary roll while the warm exists.
+    assert object_for(burst, 'HorizontalPodAutoscaler')['spec']['maxReplicas'] + warm_deploy['spec']['replicas'] == 19
 
 
 def test_batch_bootstrap_keeps_old_service_selectors_until_warm_floor_is_ready():
