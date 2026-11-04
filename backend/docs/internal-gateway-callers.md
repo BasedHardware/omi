@@ -12,10 +12,15 @@ deploying these caller values.
 
 The dev shared Gateway (VIP `172.16.48.49`) was deleted on 2026-11-02. Dev
 caller bindings were therefore restored to the rollback endpoints below:
-embeddings `http://diarizer.omiapi.com:80` on every speaker-ID host (Parakeet's
-chart fallback uses its in-cluster ClusterIP service DNS), VAD
-`http://vad.omiapi.com:80/v1/vad`, NLLB `http://nllb.omiapi.com`. Prod is
-unchanged on `172.16.160.20`. The dev `diarizer`/`vad`/`nllb` legacy Ingress
+embeddings `http://diarizer.omiapi.com:80` on every listen/pusher/Cloud Run
+speaker-ID host, VAD `http://vad.omiapi.com:80/v1/vad`, NLLB
+`http://nllb.omiapi.com`. Prod is unchanged on `172.16.160.20`. Parakeet's
+chart fallback is NOT repointed: the audio-fleet contract
+(`test_audio_fleet_helm`) freezes the parakeet chart against main, so its dev
+fallback still binds the dead VIP (`http://172.16.48.49/diarizer`) until the
+audio-fleet owner lands the separately qualified switch (its rollback value is
+`http://dev-omi-diarizer.dev-omi-backend.svc.cluster.local:8080`). The dev
+`diarizer`/`vad`/`nllb` legacy Ingress
 rules, services and DNS records are the live rollback path and must not be
 removed while these bindings point at them; `nllb.omiapi.com` had no public A
 record on 2026-11-05, so confirm it resolves from Cloud Run/GKE before relying

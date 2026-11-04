@@ -8,12 +8,19 @@ bindings to the documented rollback endpoints and changes no prod value:
 - `HOSTED_SPEAKER_EMBEDDING_API_URL` → `http://diarizer.omiapi.com:80` on
   backend-listen, pusher, Cloud Run backend/backend-sync/backend-sync-backfill/
   backend-integration (`runtime_env/dev.overlay.yaml` plus the listen/pusher
-  chart literals); Parakeet's chart fallback returns to
-  `http://dev-omi-diarizer.dev-omi-backend.svc.cluster.local:8080`.
+  chart literals).
 - `HOSTED_VAD_API_URL` → `http://vad.omiapi.com:80/v1/vad` (backend-listen
   chart only).
 - `HOSTED_TRANSLATION_API_URL` → `http://nllb.omiapi.com` (dev backend-listen
   overlay plus chart literal).
+
+Parakeet's chart fallback is intentionally NOT repointed: the audio-fleet
+contract (`test_audio_fleet_helm`) freezes the parakeet chart against main, so
+its dev fallback still binds the dead VIP (`http://172.16.48.49/diarizer`).
+Repointing it to
+`http://dev-omi-diarizer.dev-omi-backend.svc.cluster.local:8080` is a follow-up
+for the audio-fleet owner's separately qualified change; the dev parakeet
+deployment is 0/0, so nothing in dev executes that binding today.
 
 Clients append `/v2/embedding` and `/v1/vad` exactly as before; only the
 prefix route disappears because the legacy Ingresses serve native paths.

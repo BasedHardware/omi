@@ -6302,8 +6302,10 @@ NLLB, VAD and every speaker-embedding host (including Parakeet fallback) use
 the environment-specific shared Gateway paths in prod (`172.16.160.20`). The
 dev Gateway VIP `172.16.48.49` was deleted on 2026-11-02, so dev callers use
 the legacy Ingress endpoints: embeddings `http://diarizer.omiapi.com:80`,
-VAD `http://vad.omiapi.com:80/v1/vad`, NLLB `http://nllb.omiapi.com`, with
-Parakeet's chart fallback on its ClusterIP service DNS. Parakeet STT retains
+VAD `http://vad.omiapi.com:80/v1/vad`, NLLB `http://nllb.omiapi.com`. The
+parakeet chart is frozen against main by the audio-fleet contract, so its dev
+fallback still binds the dead VIP until the audio-fleet owner lands the
+separately qualified switch. Parakeet STT retains
 its legacy hostname. Qualify Gateway programming and caller reachability
 before deploying.
 

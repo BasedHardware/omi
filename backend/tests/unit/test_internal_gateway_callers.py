@@ -3,9 +3,12 @@
 Cloud Run cannot resolve Kubernetes DNS, so its services keep the internal-ALB routes
 (per-GB inbound). GKE workloads in the same cluster as the target services use the
 ClusterIP service DNS and pay nothing per GB. Prod routes in-cluster traffic off the
-ALBs. The dev shared gateway VIP (172.16.48.49) was deleted 2026-11-02, so every dev
-binding uses the documented rollback Ingress endpoints
-(backend/docs/internal-gateway-callers.md); prod keeps the gateway routes.
+ALBs. The dev shared gateway VIP (172.16.48.49) was deleted 2026-11-02, so the dev
+listen/pusher/Cloud Run bindings use the documented rollback Ingress endpoints
+(backend/docs/internal-gateway-callers.md); prod keeps the gateway routes. The
+parakeet chart is frozen against main by the audio-fleet contract
+(test_audio_fleet_helm), so its dev fallback still binds the dead gateway VIP
+until the audio-fleet owner lands the separately qualified switch.
 """
 
 from pathlib import Path
@@ -23,8 +26,10 @@ IN_CLUSTER_PUSHER = 'http://prod-omi-pusher.prod-omi-backend.svc.cluster.local:8
 DEV_LEGACY_EMBEDDING = 'http://diarizer.omiapi.com:80'
 DEV_LEGACY_TRANSLATION = 'http://nllb.omiapi.com'
 DEV_LEGACY_VAD = 'http://vad.omiapi.com:80/v1/vad'
-# Parakeet is in-cluster, so its chart fallback returns to the ClusterIP service DNS.
-DEV_PARAKEET_FALLBACK_EMBEDDING = 'http://dev-omi-diarizer.dev-omi-backend.svc.cluster.local:8080'
+# The parakeet chart may not drift from main (audio-fleet contract), so its dev
+# fallback still binds the deleted gateway VIP; moving it is the audio-fleet
+# owner's separately qualified change.
+DEV_FROZEN_PARAKEET_EMBEDDING = 'http://172.16.48.49/diarizer'
 
 PROD_GATEWAY_IP = '172.16.160.20'
 
@@ -48,7 +53,7 @@ def test_gateway_caller_bindings_cover_all_speaker_id_hosts(env):
     gke_translation = None if in_cluster else DEV_LEGACY_TRANSLATION
     gke_vad = IN_CLUSTER_VAD if in_cluster else DEV_LEGACY_VAD
     cloud_run_embedding = f'http://{PROD_GATEWAY_IP}/diarizer' if in_cluster else DEV_LEGACY_EMBEDDING
-    parakeet_embedding = f'http://{PROD_GATEWAY_IP}/diarizer' if in_cluster else DEV_PARAKEET_FALLBACK_EMBEDDING
+    parakeet_embedding = f'http://{PROD_GATEWAY_IP}/diarizer' if in_cluster else DEV_FROZEN_PARAKEET_EMBEDDING
     domain = 'omi.me' if in_cluster else 'omiapi.com'
     for source in (manifest, overlay):
         for host in ('backend-listen', 'pusher'):
@@ -63,8 +68,10 @@ def test_gateway_caller_bindings_cover_all_speaker_id_hosts(env):
         assert listen['HOSTED_PARAKEET_API_URL']['value'] == f'http://parakeet.{domain}'
     for chart in ('backend-listen', 'pusher'):
         assert _chart(chart, env)['HOSTED_SPEAKER_EMBEDDING_API_URL'] == gke_embedding
-    # Parakeet's helm gate allows only two dark flags and the language path to
-    # drift from main; prod stays on the gateway, dev fell back to ClusterIP DNS.
+    # Parakeet's helm contract freezes its template against main (only the two
+    # dark flags and the language gate may drift), so both environments keep
+    # the gateway binding; dev's points at the deleted VIP until the
+    # audio-fleet owner lands the separately qualified switch.
     assert _chart('parakeet', env)['HOSTED_SPEAKER_EMBEDDING_API_URL'] == parakeet_embedding
     listen_chart = _chart('backend-listen', env)
     assert listen_chart.get('HOSTED_TRANSLATION_API_URL') == gke_translation
