@@ -336,6 +336,42 @@ void main() {
     return '${number.toString().padLeft(3, '0')}-mobile-ios-${light ? slug : '$slug-dark'}.png';
   }
 
+  for (final after in [false, true]) {
+    testWidgets('noengine fallback ${after ? 'after' : 'before'} fixture', (tester) async {
+      android = false;
+      final (preview, _) = await tester.runAsync(() => previewIn(_State.noEngine)) ?? (null, null);
+      // Same phone after its one-way refusal: the local surface is inactive
+      // and the existing server transcript is delivered by visible restore.
+      if (after) preview!.revoke();
+      final capture = after ? _Capture(preview: preview, admitted: false) : captureFor(_State.noEngine, preview);
+      if (after) {
+        capture.segments = [
+          TranscriptSegment(
+            id: 'synthetic-cloud-preview',
+            text: 'Let’s meet on Thursday and review the plan together.',
+            speaker: 'SPEAKER_0',
+            isUser: true,
+            personId: null,
+            start: 0,
+            end: 4,
+            translations: [],
+          ),
+        ];
+      }
+      addTearDown(capture.dispose);
+      final episodes = episodesWith(episodeWith(title: ''));
+      addTearDown(episodes.dispose);
+      await shoot(tester, '${after ? '002' : '001'}-mobile-ios-noengine-${after ? 'after' : 'before'}.png',
+          light: true,
+          home: const LiveEpisodePage(initialTab: LiveEpisodeTab.transcript),
+          capture: capture,
+          episodes: episodes);
+      expect(find.text(en.livePreviewNoEngineTitle), after ? findsNothing : findsOneWidget);
+      expect(find.textContaining('Let’s meet on Thursday'), after ? findsOneWidget : findsNothing);
+      expect(find.text('Live on this phone'), findsNothing);
+    });
+  }
+
   testWidgets('hybrid 1000-line live episode stays lazy and preview ticks leave final rows alone', (tester) async {
     final (preview, engine) = await tester.runAsync(() => previewIn(_State.listening)) ?? (null, null);
     final capture = captureFor(_State.hybrid, preview);

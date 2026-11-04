@@ -3672,6 +3672,7 @@ class TestV2EndpointExecution:
         sys.modules['models.sync_contract'].SYNC_LOCAL_FILES_V2_RESPONSES = {}
 
         # Mock auth to return test uid
+        sys.modules['utils.sync.files'].get_timestamp_from_path = MagicMock(return_value=1760000000.0)
         sys.modules['utils.other.endpoints'].get_current_user_uid = MagicMock(return_value='test-uid')
 
         return saved_modules, mock_sync_jobs, mock_fair_use

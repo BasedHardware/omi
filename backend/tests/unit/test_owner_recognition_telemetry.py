@@ -639,7 +639,6 @@ def _stub_sync_enrichment(monkeypatch, store):
 
     monkeypatch.setattr(module.conversations_db, 'update_conversation', _update)
     monkeypatch.setattr(module.users_db, 'get_user_speaker_embedding', lambda _uid: [0.2, 0.3])
-    monkeypatch.setattr(module, 'is_trial_paywalled', lambda *args, **kwargs: False)
 
 
 def test_sync_intake_then_first_enrichment_counts_once(monkeypatch):
@@ -736,7 +735,6 @@ def _desktop_projection() -> ClientProcessing:
 
 def _stub_desktop_terminal(monkeypatch):
     module = process_conversation_mod
-    monkeypatch.setattr(module, 'is_trial_paywalled', lambda *args, **kwargs: False)
     monkeypatch.setattr(module, 'link_duplicate_captures', lambda *args, **kwargs: None)
     monkeypatch.setattr(module.lifecycle_service, 'create_completed_conversation', lambda *args, **kwargs: True)
     monkeypatch.setattr(module.lifecycle_service, 'persist_processed_conversation', lambda *args, **kwargs: True)

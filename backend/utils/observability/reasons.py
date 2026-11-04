@@ -230,13 +230,15 @@ class SyncCaptureTimeReason(StrEnum):
 
     Owner: `utils/sync/capture_clock.py`. `accepted_future_skew` is a real
     capture whose phone clock runs ahead of the server within tolerance;
-    `rejected_future`/`rejected_early` are implausible stamps (bogus device
-    clock marker, pre-2024 fragment) that stay refused.
+    `accepted_early_clamped` is a reset-clock stamp normalized to receipt time.
+    `rejected_early` remains available when its kill switch is off;
+    malformed stamps and beyond-tolerance future clocks stay refused.
     """
 
     UNKNOWN = 'unknown'
     ACCEPTED = 'accepted'
     ACCEPTED_FUTURE_SKEW = 'accepted_future_skew'
+    ACCEPTED_EARLY_CLAMPED = 'accepted_early_clamped'
     REJECTED_FUTURE = 'rejected_future'
     REJECTED_EARLY = 'rejected_early'
     REJECTED_MALFORMED = 'rejected_malformed'
@@ -493,6 +495,21 @@ class LiveSttReason(StrEnum):
     QUOTA = 'quota'
     TEXT = 'text'
     NO_TEXT = 'no_text'
+
+
+class LocalPreviewEngineUnavailableReason(StrEnum):
+    """LivePreviewReason failure wire values; unknown client input folds to OTHER."""
+
+    UNKNOWN = 'unknown'
+    OS_TOO_OLD = 'os_too_old'
+    OS_ENGINE_UNAVAILABLE = 'os_engine_unavailable'
+    LOCALE_UNSUPPORTED = 'locale_unsupported'
+    LOCALE_ASSET_MISSING = 'locale_asset_missing'
+    SPEECH_PERMISSION_DENIED = 'speech_permission_denied'
+    BUNDLED_NOT_INSTALLED = 'bundled_not_installed'
+    BUNDLED_NOT_BUILT = 'bundled_not_built'
+    ENGINE_ERROR = 'engine_error'
+    OTHER = 'other'
 
 
 class LocalPreviewOutcome(StrEnum):

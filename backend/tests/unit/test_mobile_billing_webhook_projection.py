@@ -52,7 +52,6 @@ def webhook(monkeypatch):
     monkeypatch.setattr(payment.users_db, 'update_user_subscription', write)
     monkeypatch.setattr(payment, 'find_active_paid_subscription_for_user', lambda uid: state['replacement'])
     monkeypatch.setattr(payment, 'set_credits_invalidation_signal', lambda uid: None)
-    monkeypatch.setattr(payment, 'clear_trial_paywall_cache', lambda uid: None)
     monkeypatch.setattr(payment, 'clear_fair_use_on_upgrade', lambda uid: None)
     monkeypatch.setattr(payment.conversations_db, 'unlock_all_conversations', lambda uid: None)
     monkeypatch.setattr(payment.memories_db, 'unlock_all_memories', lambda uid: None)

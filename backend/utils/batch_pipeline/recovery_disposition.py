@@ -232,6 +232,14 @@ class MultilingualEmpty(RecoveryFailure):
         self.worker_speech = worker_speech
 
 
+class RecoveryProviderFailed(RecoveryFailure):
+    """Provider failure with validated audio/VAD context for guarded failover."""
+
+    def __init__(self, duration, spans, worker_speech=None):
+        super().__init__('provider', 'provider_failed')
+        self.duration, self.spans, self.worker_speech = duration, spans, worker_speech
+
+
 class WordsWithoutVad(RecoveryFailure):
     """Recognized words contradict zero VAD; retain both facts instead of silence."""
 

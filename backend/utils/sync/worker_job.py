@@ -221,7 +221,8 @@ async def execute(lease: dict, client: ControlClient) -> bool:
                 audio_end_seconds=payload.get('audio_end_seconds'),
                 raw_capture_paths=payload.get('raw_capture_paths'),
                 capture_evidence_claims=payload.get('capture_evidence_claims'),
-                **({'redrive_mode': redrive_mode} if redrive_mode else {}),
+                capture_received_at=payload.get('capture_received_at'),
+                redrive_mode=redrive_mode or None,
             )
         job = await run_blocking(db_executor, sync_jobs.get_sync_job, job_id)
         if not job or job['status'] not in sync_jobs.TERMINAL_STATUSES:

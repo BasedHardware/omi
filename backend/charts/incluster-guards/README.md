@@ -191,10 +191,19 @@ night hours from becoming a rollback solely because quantiles are undefined. Thr
 trip after the full arming window. A fresh usable reading resets the counter.
 Prometheus warnings and incomplete/old query results count as blind. The v2
 counter also gets an explicit freshness check beyond the original script.
+The v2 duration series can be fresh with no completed observations while v1
+is busy. Its NaN p95 remains blind under the existing policy: zero completed
+requests cannot distinguish an idle v2 endpoint from requests stuck in flight.
+No idle exception or v1-for-v2 latency substitution is applied. Three blind
+readings can therefore restore the rollback cap after the arming window.
 
-The only serving write is P77 `step_fast.build(old, 12, rollback=True)`:
-JSON Patch tests the **entire observed `/spec`**, sets minReplicas=12, and restores
-the Value=3 latency metric. Metric/cap/downscale drift assertions are retained.
+The serving rollback retains P77's atomic whole-spec test and latency metric:
+JSON Patch tests the **entire observed `/spec`**, sets minReplicas=12, restores
+maxReplicas=12 when capped lower, and restores the Value=3 latency metric.
+Integer live caps from 1 through the chart's rollback cap (12) are accepted;
+caps outside that range and all other metric/downscale drift still fail the Job.
+Ordinary floor scheduling preserves the live cap and refuses a target above it;
+only a safety rollback restores the cap to 12.
 Scale-up must match either the legacy +1 pod/60s policy with zero stabilization,
 or P77r's exact zero-stabilization, selectPolicy Max, +4 pods/15s policy.
 Concurrent changes fail the test, with no retry against a newly read
@@ -238,8 +247,21 @@ A fresh `omi_batch_pipeline_oldest_age_seconds > 1800` emits **TRIP**,
 measures from enqueue, skipping durable allowance policy holds
 (`compute_decision` outcome=held reason=allowance_exhausted; 131 such holds
 kept this proxy tripped permanently on 2026-10-25) within a bounded 500-row
-FIFO prefix; a prefix filled entirely by holds fails toward tripping on the
-oldest hold's age rather than a fresh zero. It still includes legitimate deep
+FIFO prefix. Dispositioned queue states (`dead`, `quarantined`, `committed`,
+`privacy_blocked`) are excluded; completed terminal markers on `result_ready`
+still owe a commit. A full exempt prefix with a sentinel reports NaN and
+**BLIND**, rather than inventing a late commitment from a policy hold. A
+separate NaN count for both oldest and retry clocks prevents another finite
+priority from masking blindness. A fresh, finite over-30-minute age in another
+priority remains TRIP with `metrics_blind=true`; only stale evidence suppresses
+that known breach.
+The page-tier Grafana rules in `../monitoring/alerts/batch-queue-safety.json`
+cover a fresh commitment older than two hours and sustained queue blindness
+(120s stale plus 5m pending, matching the observer's freshness bound).
+The single delivery-lateness rule combines both sources with independent
+freshness gates, avoiding a duplicate queue lateness page;
+the lead must import them. See the [runbook](../../docs/runbooks/batch-queue-safety.md).
+It still includes legitimate deep
 queues; it cannot identify new
 jobs or prove a projection wedge. Retry age is
 logged, not another rollback condition. Usable readings without that trip are

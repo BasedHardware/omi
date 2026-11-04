@@ -168,11 +168,7 @@ from utils.observability.finalization import FinalizationFailureReason, record_f
 from utils.product_telemetry import emit_product_event
 from utils.release_probe import is_release_probe_uid
 from utils.task_intelligence.workstream_association import associate_canonical_evidence
-from utils.subscription import (
-    is_trial_paywalled,
-    should_defer_desktop_processing,
-    should_skip_omi_paid_postprocessing,
-)
+from utils.subscription import should_defer_desktop_processing, should_skip_omi_paid_postprocessing
 from utils.free_tier_processing_policy import client_summaries_at_cap_enabled
 
 # The injected ``decision_for`` closure and its funding-owner resolution live in
@@ -401,13 +397,7 @@ def _get_structured(
         task_intelligence_capture = _proposes_task_candidates(conversation)
         tz: Optional[str] = notification_db.get_user_time_zone(uid)
         tz_str: str = tz or ''
-        user_language = (
-            resolve_output_language(uid, language_code)
-            if serving_for('NOTES_PACKET_V2_MODE', uid)
-            else normalize_language(users_db.get_user_language_preference(uid))
-            or normalize_language(language_code)
-            or 'en'
-        )
+        user_language = resolve_output_language(uid, language_code, getattr(conversation, 'transcript_segments', None))
         summary_app_selected = selected_summary_app(uid, summary_app_selected, redis_db.get_user_preferred_app)
         minimum = quiet_minimum(
             uid,
@@ -796,7 +786,11 @@ def trigger_conversation_apps(
     if is_server_minimum(conversation) and not (app_id or first_party_only):
         return True
     if serving_for('NOTES_PACKET_V2_MODE', uid):
-        language_code = resolve_output_language(uid, normalize_language(conversation.language) or language_code)
+        language_code = resolve_output_language(
+            uid,
+            normalize_language(conversation.language) or language_code,
+            getattr(conversation, 'transcript_segments', None),
+        )
     else:
         # The legacy branch never resolved: a 'multi' capture tag reached app prompts verbatim.
         language_code = normalize_language(conversation.language) or normalize_language(language_code) or 'en'
@@ -2709,38 +2703,6 @@ def process_conversation(
     probe_uid = is_release_probe_uid(uid)
     if probe_uid:
         logger.info('release probe: desktop post-processing exemption active uid=%s', uid)
-    # Trial paywall: skip ALL post-processing (summaries, memories, action
-    # items, embeddings, app integrations) for paywalled desktop users.
-    # Without this, any segments that did get through before the trial gate
-    # (e.g. buffered transcripts, retroactive `/v1/conversations` create) still
-    # trigger expensive LLM + Pinecone work.
-    #
-    # `conversation.source` carries the originating client (desktop / omi / etc).
-    # Non-desktop sources flow through untouched — paywall is desktop-only.
-    if (
-        hasattr(conversation, 'source')
-        and conversation.source == ConversationSource.desktop
-        and not probe_uid
-        and is_trial_paywalled(uid, 'macos')
-    ):
-        logger.info(
-            "trial paywall: skipping post-processing for uid=%s conv=%s source=desktop",
-            uid,
-            getattr(conversation, 'id', '?'),
-        )
-        # Return the conversation as-is with no LLM work performed. If it has
-        # a status field, mark it processed so the client doesn't show a stuck
-        # "processing" state forever.
-        if isinstance(conversation, Conversation):
-            try:
-                conversation.status = ConversationStatus.completed
-            except Exception:
-                pass
-        report_persistence(False)
-        return cast(Conversation, conversation)
-
-    # Denied/unchosen backlog work returned above. Successful explicit enrichment
-    # also clears no-effects markers left by the retired terminal policy.
     clear_stale_terminal_marker = backlog_authorized or force_process or is_reprocess
     # Lazy desktop processing (freemium cost cut): desktop users without a desktop-entitled
     # paid plan (basic / Neo) get ONLY the raw transcript on capture. The expensive LLM

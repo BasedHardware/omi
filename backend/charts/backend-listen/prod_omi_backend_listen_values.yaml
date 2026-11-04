@@ -576,7 +576,7 @@ env:
   - name: GCP_LOCATION
     value: "us-central1"
   - name: HOSTED_LID_API_URL
-    value: "http://172.16.160.20/lid"
+    value: ""
   - name: HOSTED_PARAKEET_API_URL
     value: "http://parakeet.omi.me"
   - name: SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED

@@ -396,7 +396,6 @@ def test_ladder_quotas_do_not_use_legacy_chat_cap_or_overage(monkeypatch):
     from utils import subscription as sub, overage
     from models.users import Subscription, PlanType
 
-    monkeypatch.setattr(sub, 'is_trial_paywalled', lambda *a, **k: False)
     monkeypatch.setattr(
         sub.users_db, 'get_user_valid_subscription', lambda *a, **k: Subscription(plan=PlanType.operator)
     )
@@ -678,7 +677,6 @@ def test_historical_mixed_coverage_admits_on_snapshot(monkeypatch, key, dispatch
     snapshot = {'budget_percent': 0, 'used_units': 0, 'budget_units': 100, 'completeness': {key: 1}}
     monkeypatch.setattr(ladder, 'usage_snapshot', lambda *a, **k: snapshot)
     monkeypatch.setattr(subscription, 'is_marketplace_reviewer', lambda _: False)
-    monkeypatch.setattr(subscription, 'is_trial_paywalled', lambda *a, **k: False)
     monkeypatch.setattr(
         subscription.users_db, 'get_user_valid_subscription', lambda *a, **k: SimpleNamespace(plan='plus')
     )
