@@ -7,8 +7,9 @@ metric. The ordinary floor schedule still preserves the operator's cap and
 refuses targets above it.
 
 The v2 duration histogram can remain fresh with zero requests while traffic
-uses v1. The guard now measures v2's own 15-minute request count and tolerates
-NaN p95 only with a fresh zero count. Missing/stale telemetry and nonfinite
+uses v1. The guard now measures v2's own 15-minute request counter (including
+early errors not recorded by the duration histogram) and tolerates NaN p95
+only with a fresh zero count. Missing/stale telemetry and nonfinite
 p95 with v2 traffic remain blind; three consecutive blind readings still
 trigger rollback once armed. V1 and v2 latency thresholds are not substituted.
 

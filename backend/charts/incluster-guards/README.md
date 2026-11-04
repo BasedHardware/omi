@@ -191,7 +191,8 @@ night hours from becoming a rollback solely because quantiles are undefined. Thr
 trip after the full arming window. A fresh usable reading resets the counter.
 Prometheus warnings and incomplete/old query results count as blind. The v2
 counter also gets an explicit freshness check beyond the original script.
-V2 has its own 15-minute request count: a fresh zero count permits its NaN
+V2 has its own 15-minute request count, including errors returned before the
+duration histogram records an observation: a fresh zero count permits its NaN
 p95 even while listen is busy on v1. A missing query result, stale counter,
 or nonfinite p95 with nonzero v2 traffic remains blind. The guard does not
 substitute v1 latency for v2 latency; the endpoints measure different work.

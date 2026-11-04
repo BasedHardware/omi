@@ -370,7 +370,9 @@ def test_missing_nonfinite_never_clean(key, bad):
     assert guard.evaluate(v)['blind']
 
 
-@pytest.mark.parametrize('key', ['first_stale', 'post_stale', 'admission_stale', 'dcgm_stale', 'v2_stale'])
+@pytest.mark.parametrize(
+    'key', ['first_stale', 'post_stale', 'admission_stale', 'dcgm_stale', 'v2_stale', 'v2_requests_stale']
+)
 @pytest.mark.parametrize('age', [119.99, 120, 120.01])
 def test_staleness(key, age):
     assert bool(guard.evaluate(dict(values(), **{key: age}))['blind']) == (age > 120)
@@ -1220,9 +1222,13 @@ def test_fresh_quiet_nan_arithmetic_is_low_sample_not_three_blind_trips():
 
 def test_v2_queries_use_the_same_endpoint_and_window_for_count_quantile_and_freshness():
     expressions = guard.queries('prod-omi-backend')
-    for key in ('v2_count', 'v2_p95', 'v2_stale'):
+    for key in ('v2_count', 'v2_p95', 'v2_stale', 'v2_requests_stale'):
         assert '{namespace="prod-omi-backend",exported_endpoint="v2_transcribe"}' in expressions[key]
-    assert expressions['v2_count'].startswith('sum(increase(parakeet_request_duration_seconds_count')
+    # v2 returns some errors before recording duration; zero histogram count
+    # alone must not classify those requests as idle. Count every status.
+    assert expressions['v2_count'].startswith('sum(increase(parakeet_requests_total')
+    assert expressions['v2_requests_stale'].startswith('max(time()-timestamp(parakeet_requests_total')
+    assert 'status=' not in expressions['v2_count']
     assert '[15m]' in expressions['v2_count']
     assert '[15m]' in expressions['v2_p95']
 
@@ -1250,6 +1256,9 @@ def test_fresh_idle_v2_with_busy_listen_does_not_accumulate_blind_runs():
         {'v2_stale': None},
         {'v2_stale': 121},
         {'v2_stale': -1},
+        {'v2_requests_stale': None},
+        {'v2_requests_stale': 121},
+        {'v2_requests_stale': -1},
         {'v2_p95': None},
         {'v2_p95': float('inf')},
     ],
