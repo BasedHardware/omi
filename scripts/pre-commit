@@ -268,11 +268,18 @@ fi
 STAGED_C_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(c|cpp|cc|cxx|h|hpp)$' | grep -E '^(omi/|omiGlass/)')
 
 if [ -n "$STAGED_C_FILES" ]; then
-  echo "Formatting staged C/C++ files in firmware..."
-  if ! command -v clang-format >/dev/null 2>&1; then
-    echo "clang-format is not installed. Please install it first" >&2
+  # CI's Formatting check runs the ubuntu runner's clang-format 18. clang-format
+  # 19+ lays out compound literals and regroups includes differently, so -i under
+  # any other major mints a shape CI rejects; refuse rather than rewrite.
+  CLANG_FORMAT_MAJOR=""
+  if command -v clang-format >/dev/null 2>&1; then
+    CLANG_FORMAT_MAJOR=$(clang-format --version 2>/dev/null | sed -n 's/.*version \([0-9][0-9]*\).*/\1/p' | head -1)
+  fi
+  if [ "$CLANG_FORMAT_MAJOR" != "18" ]; then
+    echo "clang-format toolchain mismatch: CI's Formatting check uses clang-format 18, found ${CLANG_FORMAT_MAJOR:-no clang-format} on PATH; refusing to reformat firmware C into a shape CI rejects. Install clang-format 18 (e.g. 'pip install clang-format==18.1.8') and retry." >&2
     exit 1
   fi
+  echo "Formatting staged C/C++ files in firmware..."
   echo "$STAGED_C_FILES" | xargs clang-format -i
   echo "$STAGED_C_FILES" | xargs git add
 fi
