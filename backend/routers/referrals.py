@@ -17,6 +17,7 @@ from utils.referrals import (
     referrer_uid_from_code,
 )
 from utils.integration_telemetry import emit_posthog_event
+from config.referral_campaign import campaign_preview_uid
 from database import referral_campaign as campaign_db
 from utils.referral_campaign import (
     campaign_enabled,
@@ -156,19 +157,25 @@ def _campaign_error(error):
 def get_campaign(uid: str = Depends(auth.get_current_user_uid_readonly)):
     adapter = TrustedCheckoutAdapter()
     enabled = campaign_enabled() and adapter.ready
-    if not enabled:
+    preview = not enabled and campaign_preview_uid(uid)
+    if not enabled and not preview:
         return campaign_snapshot(
             {}, enabled=False, reason='campaign_disabled' if not campaign_enabled() else 'checkout_activation_required'
         )
     try:
-        return campaign_snapshot(campaign_db.read_campaign(uid), enabled=True, referral_url=campaign_link(uid))
+        return campaign_snapshot(
+            campaign_db.read_campaign(uid, preview=preview),
+            enabled=True,
+            referral_url=campaign_link(uid),
+            reason='preview' if preview else None,
+        )
     except ReferralCodeError as error:
         raise HTTPException(status_code=503, detail='checkout_activation_required') from error
 
 
 @router.post('/v2/users/me/referral/campaign/claim', response_model=CampaignSnapshotResponse)
 def claim_campaign(uid: str = Depends(auth.get_current_user_uid_readonly)):
-    # Disabled claim is a stable disabled snapshot and never a write.
+    # Disabled or team-preview claim returns the read-only snapshot and never writes.
     if not campaign_enabled() or not TrustedCheckoutAdapter().ready:
         return get_campaign(uid)
     try:

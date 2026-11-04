@@ -99,9 +99,9 @@ def _user(client, transaction, uid):
     return user_ref, user
 
 
-def read_campaign(uid: str, *, client=None, policy=None) -> dict:
-    # Disabled requests never instantiate a Firestore client or provision a user.
-    if not campaign_enabled():
+def read_campaign(uid: str, *, client=None, policy=None, preview: bool = False) -> dict:
+    # Disabled requests never instantiate a Firestore client or provision a user; team preview only reads.
+    if not campaign_enabled() and not preview:
         return {}
     client = _client(client)
     policy = policy or current_policy()
