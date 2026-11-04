@@ -79,13 +79,6 @@ overlay:
         BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED:
           value: 'true'
           category: rollout
-        # Allowance-exhausted batch units park 2 h between re-checks instead of
-        # 30 min (David 065da8, 2026-11-04, interim pending the upgrade-latency
-        # ruling): ~3.1/s of leases were exhausted-owner re-claims. Kill switch:
-        # '60' restores the short cycle; removing the line restores 1800.
-        BATCH_ALLOWANCE_HOLD_RETRY_SECONDS:
-          value: '7200'
-          category: ops_kill
         BATCH_PIPELINE_API_URL:
           value: https://backend-sync-hhibjajaja-uc.a.run.app
         BUCKET_BATCH_PIPELINE:
@@ -895,6 +888,11 @@ overlay:
             secret: DREAM_AGENT_FEEDBACK_SALT
             version: latest
         env:
+          # Allowance-exhausted batch units park 2 h between admission re-checks instead of 30 min
+          # (David 065da8, 2026-11-04; interim pending the upgrade-latency ruling). Authorize-compute
+          # reads it per decision. Kill switch: '60' restores the short cycle; removing the line
+          # restores the 1800 s default.
+          BATCH_ALLOWANCE_HOLD_RETRY_SECONDS: {value: '7200', category: ops_kill}
           # Plan C3 prod activation: new sr- obligations bind to /v2/enrichment/run on the enrichment queue,
           # served by backend-integration. Rows keep the binding they were created with, so the kill switch
           # ENRICHMENT_ROUTE=sync_handler never strands work (the old /v2/sync-jobs/run binding stays accepted).
@@ -1292,6 +1290,11 @@ overlay:
         - SYNC_REPROCESS_COALESCE_ENABLED
         - REPEAT_WORK_REVISION_ENABLED
         env:
+          # Allowance-exhausted batch units park 2 h between admission re-checks instead of 30 min
+          # (David 065da8, 2026-11-04; interim pending the upgrade-latency ruling). Authorize-compute
+          # reads it per decision. Kill switch: '60' restores the short cycle; removing the line
+          # restores the 1800 s default.
+          BATCH_ALLOWANCE_HOLD_RETRY_SECONDS: {value: '7200', category: ops_kill}
           # Plan C3 prod activation: new sr- obligations bind to /v2/enrichment/run on the enrichment queue,
           # served by backend-integration. Rows keep the binding they were created with, so the kill switch
           # ENRICHMENT_ROUTE=sync_handler never strands work (the old /v2/sync-jobs/run binding stays accepted).
@@ -1650,6 +1653,11 @@ overlay:
         - CONVERSATION_LLM_INPUT_DEDUPE_ENABLED
         - REPEAT_WORK_REVISION_ENABLED
         env:
+          # Allowance-exhausted batch units park 2 h between admission re-checks instead of 30 min
+          # (David 065da8, 2026-11-04; interim pending the upgrade-latency ruling). Authorize-compute
+          # reads it per decision. Kill switch: '60' restores the short cycle; removing the line
+          # restores the 1800 s default.
+          BATCH_ALLOWANCE_HOLD_RETRY_SECONDS: {value: '7200', category: ops_kill}
           # Plan C3 prod activation: new sr- obligations bind to /v2/enrichment/run on the enrichment queue,
           # served by backend-integration. Rows keep the binding they were created with, so the kill switch
           # ENRICHMENT_ROUTE=sync_handler never strands work (the old /v2/sync-jobs/run binding stays accepted).
