@@ -32,6 +32,7 @@ from database.account_deletion_marker import account_deletion_blocks_user_work
 from utils.batch_pipeline.intake import (
     accept_upload as accept_batch_upload,
     get_durable_job_status,
+    repair_upload_owner_matches,
     privacy_blocked_response,
 )
 from utils.batch_pipeline.intake_outcome import (
@@ -606,6 +607,7 @@ async def sync_local_files_v2(
     ),
     audio_start_seconds: Optional[float] = Query(None),
     audio_end_seconds: Optional[float] = Query(None),
+    repair_job_id: Optional[str] = Query(None, description='Original batch job for an exact custody repair bundle'),
     x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
     x_device_id_hash: Optional[str] = Header(None, alias='X-Device-Id-Hash'),
     x_app_version: Optional[str] = Header(None, alias='X-App-Version'),
@@ -625,10 +627,19 @@ async def sync_local_files_v2(
     # Empty/torn-header clips contain no audio frames. Acknowledge them before
     # clock/age admission; a bogus date on zero audio has nothing to recover.
     upload_filenames = [f.filename or '' for f in files]
+    repair_identity = repair_job_id if isinstance(repair_job_id, str) else None
     capture_received_at = time.time()
     try:
         files = await run_blocking(sync_executor, prepare_sync_uploads, files, uid)
     except EmptySyncUpload:
+        if repair_identity is not None:
+            return JSONResponse(
+                status_code=409,
+                content={
+                    'code': 'sync_repair_bundle_changed',
+                    'detail': 'The original complete upload is required; retain local audio',
+                },
+            )
         return JSONResponse(status_code=200, content={'new_memories': [], 'updated_memories': []})
     if isinstance(recording_session_id, str):
         recording_session_id = recording_session_id.strip() or None
@@ -740,7 +751,7 @@ async def sync_local_files_v2(
                 'detail': 'Historical recovery is paused; local audio was not consumed',
             },
         )
-    if not lane_decision.automatic_recovery_allowed:
+    if not lane_decision.automatic_recovery_allowed and repair_identity is None:
         return JSONResponse(
             status_code=422,
             content={
@@ -863,6 +874,18 @@ async def sync_local_files_v2(
                 },
             )
 
+        content_id = await run_blocking(sync_executor, compute_sync_content_id, uid, paths)
+        if repair_identity is not None and not await run_blocking(
+            db_executor, repair_upload_owner_matches, uid, content_id, repair_identity
+        ):
+            # Already accepted bytes may outlive the new-upload lookback. Only
+            # the exact original owner may cross that boundary; a changed or
+            # foreign bundle cannot write an archive or enter fresh admission.
+            return JSONResponse(
+                status_code=409,
+                content={'code': 'sync_repair_bundle_changed', 'detail': 'Retain the original complete local upload'},
+            )
+
         # Keep original bytes before any 202, content-cache hit, decode or VAD.
         # An archive failure leaves the client responsible for retrying its WAL.
         archive_paths = await run_blocking(
@@ -879,8 +902,6 @@ async def sync_local_files_v2(
             },
         )
 
-        content_id = await run_blocking(sync_executor, compute_sync_content_id, uid, paths)
-
         candidate_policy = resolve_batch_policy(uid)
         intake_evidence = IntakeRouteEvidence()
         batch_policy = await run_blocking(
@@ -895,22 +916,27 @@ async def sync_local_files_v2(
             ),
             evidence=intake_evidence,
         )
-        record_response = await registered_record_response(
-            uid=uid,
-            conversation_id=conversation_id if isinstance(conversation_id, str) else None,
-            content_id=content_id,
-            paths=paths,
-            source=source.value,
-            client_device_id=client_device_context.client_device_id,
-            byok_enabled=byok_enabled,
-            recording_session_id=recording_session_id,
-            policy=batch_policy,
-            loaded_conversation=record_snapshot if record_snapshot.get('record_lane_owner') else None,
-            # A legacy_final_pass_v1 owner is re-homed to batch once legacy is
-            # draining/dark (final_pass_rehome); the route answers BATCH then.
-            legacy_mode=legacy_mode,
-            evidence=intake_evidence,
-        )
+        if repair_identity is not None:
+            # Exact repair ownership is checked by batch admission before it
+            # can accept. Never let a changed repair bundle take a fresh or
+            # synchronous record route, even outside today's admission cohort.
+            record_response = RecordUploadRoute.BATCH
+        else:
+            record_response = await registered_record_response(
+                uid=uid,
+                conversation_id=conversation_id if isinstance(conversation_id, str) else None,
+                content_id=content_id,
+                paths=paths,
+                source=source.value,
+                client_device_id=client_device_context.client_device_id,
+                byok_enabled=byok_enabled,
+                recording_session_id=recording_session_id,
+                policy=batch_policy,
+                loaded_conversation=record_snapshot if record_snapshot.get('record_lane_owner') else None,
+                # A legacy_final_pass_v1 owner is re-homed once legacy is dark.
+                legacy_mode=legacy_mode,
+                evidence=intake_evidence,
+            )
         if isinstance(record_response, JSONResponse):
             return record_response
 
@@ -931,6 +957,7 @@ async def sync_local_files_v2(
                 uid=uid,
                 job_id=job_id,
                 content_id=content_id,
+                repair_job_id=repair_identity,
                 paths=paths,
                 lane=lane_decision.lane.value,
                 recording_age_seconds=lane_decision.maximum_age_seconds,
@@ -1538,7 +1565,12 @@ async def sync_local_files_v2(
 
 
 @router.get("/v2/sync-local-files/{job_id}", response_model=SyncJobStatusResponse, response_model_exclude_none=True)
-def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_uid), surface_open: bool = False):
+def get_sync_job_status(
+    job_id: str,
+    uid: str = Depends(auth.get_current_user_uid),
+    surface_open: bool = False,
+    x_omi_custody_repair_protocol: Optional[str] = Header(None, alias='X-Omi-Custody-Repair-Protocol'),
+):
     """Poll for the status of an async sync job."""
     OMI_SYNC_JOB_POLL_REQUESTS_TOTAL.inc()
     if not admit_sync_job_poll(uid):
@@ -1549,7 +1581,11 @@ def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_ui
             headers={'Retry-After': str(SYNC_POLL_WINDOW_SECONDS)},
         )
     try:
-        durable = get_durable_job_status(job_id, uid)
+        durable = (
+            get_durable_job_status(job_id, uid, artifact_retry=True)
+            if x_omi_custody_repair_protocol == '1'
+            else get_durable_job_status(job_id, uid)
+        )
     except BatchPrivacyBlocked:
         return privacy_blocked_response()
     if durable is not None:

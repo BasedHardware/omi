@@ -61,6 +61,10 @@ T = TypeVar('T')
 BUDGET_S = 0.2
 QUEUE_LIMIT = 1000
 MIRRORED_TABLES = frozenset({'jobs', 'queues', 'owners', 'control', 'results', 'gpus', 'intakes', 'artifacts'})
+# The original-capture lineage a missing-input repair restages with (geolocation, capture claims) stays
+# Firestore-only: the mirror does not follow the intake receipt TTL (Luna #24366 r3), and a repair that
+# finds no record holds rather than guessing.
+UNMIRRORED_FIELDS = frozenset({'repair_lineage'})
 _OFF = {'0', 'false', 'off', 'no'}
 _QUERY_CANCELED = '57014'
 
@@ -136,7 +140,15 @@ def shadow_writes_enabled() -> bool:
     return os.getenv('JOBSTORE_SHADOW_WRITES', '').strip().lower() not in _OFF
 
 
+def mirrored(doc: dict) -> dict:
+    """``doc`` without the fields that stay Firestore-only (``UNMIRRORED_FIELDS``)."""
+    return {name: value for name, value in doc.items() if name not in UNMIRRORED_FIELDS} if doc else doc
+
+
 def compare(primary_doc: dict, shadow_doc: dict) -> ShadowParityOutcome:
+    # Only the primary side: a shadow copy that still holds an unmirrored field must read as stale, so backfill
+    # recopies it without the field (Luna #24366 r4).
+    primary_doc = mirrored(primary_doc)
     if not primary_doc and not shadow_doc:
         return ShadowParityOutcome.MATCH
     if not shadow_doc:
@@ -383,7 +395,7 @@ class DualStore:
         phase[0] = 'postgres_write'
         for (table, key), doc in docs.items():
             if doc:
-                self.shadow.write_doc(conn, table, key, doc)
+                self.shadow.write_doc(conn, table, key, mirrored(doc))
             else:
                 self.shadow.delete_doc(conn, table, key)
 
