@@ -245,6 +245,12 @@ def test_native_desktop_custody_or_exact_live_rollback(
 def test_auto_mobile_preserves_original_custody_and_exclusions(
     client, test_uid, monkeypatch, remote, platform, auto_percent, learned, language
 ):
+    # The auto/multi-language variants need the harness's multi-language live
+    # vendor (Modulate), which the default registry withdraws (ramp 0); run
+    # them on the explicit enabled-targets registry like the listen E2E.
+    from tests.unit.fixtures.live_stt_registry import enabled_live_targets
+
+    enabled_live_targets(monkeypatch)
     test_native_desktop_custody_or_exact_live_rollback(
         client,
         test_uid,
