@@ -8,6 +8,8 @@ Typed telemetry API follow-up: `8b9a9487e65409183999220df5b924465e970b1c`,
 qualified at **2026-11-04 18:54:04 UTC** with **68 focused tests** and the canonical
 full backend typecheck (**zero errors**). It exposes the existing bounded-label
 behavior through a typed public entry point; emitted label values are unchanged.
+Expanded acceptance source: `1711c10017bd0582450cc1259bf1b201405449f3`,
+qualified at **2026-11-04 20:13:43 UTC**: the complete selected command exited green.
 [PR #24607](https://github.com/BasedHardware/omi/pull/24607) owns current head,
 review and CI state. This is a dated qualification/forecast record, not a live
 cost meter or a deployment receipt. Re-measure before any production ramp.
@@ -94,16 +96,15 @@ by retaining legacy consolidation during shadow dual-write.
 No production account data was read or written. No GCP tier was used. All emulator
 owners and HTTP requests were synthetic. Nothing was merged or deployed by this lane.
 
-- Episode/merge/sync/flag acceptance: **2,804 distinct tests passed**, 76 test-bearing
-  files from 79 checked-in selected paths (three support modules have no tests).
-  The expanded selection adds Typesense, capture-group, batch shadow, summary,
-  restored-fragment, import-isolation, reason-label and lifecycle-writer boundaries.
-  The full run had 2,801 passes and one inherited evaluator-inventory omission;
-  after declaring those diagnostic payloads, all **678 lifecycle guard cases**
-  passed. The final lock-order change then passed **876 focused tests**, including
-  the two new canonical/fallback lock-order cases. Counts exclude duplicate reruns.
-  This is file-granular qualification with targeted reruns, not a claim that the
-  original full-run command exited green. Current-head CI is owned by the PR.
+- Episode/merge/sync/flag acceptance: **2,905 tests passed** in one complete green
+  run, 80 test-bearing files from 83 checked-in selected paths (three support
+  modules have no tests). This includes the corrected explicit ownership contract
+  for partial legacy stores, all nine payload index exemptions, legacy title/audio/
+  summary mutations, tracked-owner coverage, and the projector/worker/API suite.
+  Earlier qualification found one inherited evaluator-inventory omission and then
+  four CI files absent from the prior selection; those declarations and fixtures
+  are corrected and included in this full run. No production behavior was disabled
+  to make the legacy fixtures pass. Current-head CI remains owned by the PR.
 - Scoped deletion/visibility follow-up: **51 passed** before the full acceptance
   rerun, including accepted/malformed deletion, restored access and publication
   fenced after lease claim.
