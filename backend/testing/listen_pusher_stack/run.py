@@ -36,6 +36,7 @@ from google.cloud.firestore_v1 import FieldFilter
 from websockets.exceptions import ConnectionClosed
 
 from testing.listen_pusher_stack.recorded_clock import age_conversation
+from testing.lifecycle_sim.faults import validate_fault_selector
 from testing.listen_pusher_stack.cloud_tasks import FINALIZATION_HANDLER_PATH, LOCAL_TASK_TOKEN_ENV, TASK_EVENTS_FILE
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -182,12 +183,7 @@ class Stack:
         if recording_session_mode not in {'shadow', 'dual_write', 'enforce'}:
             raise ValueError(f'unsupported recording session mode: {recording_session_mode}')
         if recording_lifecycle_fault is not None:
-            if set(recording_lifecycle_fault) != RECORDING_LIFECYCLE_FAULT_KEYS:
-                raise ValueError(
-                    f'recording lifecycle fault must contain exactly {sorted(RECORDING_LIFECYCLE_FAULT_KEYS)}'
-                )
-            if not all(recording_lifecycle_fault[key] for key in RECORDING_LIFECYCLE_FAULT_KEYS):
-                raise ValueError('recording lifecycle fault values must be non-empty')
+            validate_fault_selector(recording_lifecycle_fault)
         self.state_dir = state_dir
         self.state_dir.mkdir(parents=True, exist_ok=True)
         self.finalization_mode = finalization_mode
@@ -1413,6 +1409,13 @@ async def _shutdown_window_retries_through_cloud_tasks(stack: Stack) -> None:
 
 
 async def _terminal_cloud_tasks_failure_dead_letters(stack: Stack) -> None:
+    """#20114's two-phase exhaustion contract: one delayed requeue, then dead-letter.
+
+    The first budget exhaustion of a requeueable job ACKs with a delayed
+    requeue and parks the row (reset budget, one recorded requeue, no early
+    task); only the requeued life's exhaustion terminalizes through the
+    dead-letter path with its observability emit.
+    """
     uid = 'stack-cloud-dead-letter'
     conversation_id = str(uuid.uuid4())
     task = await _cloud_task_for_clean_desktop_close(stack, uid, conversation_id)
@@ -1422,9 +1425,65 @@ async def _terminal_cloud_tasks_failure_dead_letters(stack: Stack) -> None:
     first = await stack.deliver_finalization_task(task, retry_count=0)
     if first != (500, {'status': 'retry'}):
         raise StackFailure(f'first terminal-path delivery did not request a retry: {first}')
-    final = await stack.deliver_finalization_task(task, retry_count=1)
+    granted = await stack.deliver_finalization_task(task, retry_count=1)
+    if granted != (200, {'status': 'delayed_requeue'}):
+        raise StackFailure(f'first exhaustion did not grant its single delayed requeue: {granted}')
+
+    # The grant parks the row without enqueueing: the manual-replay reset set is
+    # applied, the one requeue is recorded, and the park outlives its grant.
+    parked = _one_job(stack, uid, conversation_id)
+    budget_requeued_at = parked.get('budget_requeued_at')
+    reconcile_after_at = parked.get('reconcile_after_at')
+    if (
+        parked.get('status') != 'queued'
+        or parked.get('attempt_count') != 0
+        or parked.get('worker_claim_count') != 0
+        or parked.get('task_retry_count') != 0
+        or parked.get('budget_requeue_count') != 1
+        or not isinstance(budget_requeued_at, datetime)
+        or not isinstance(reconcile_after_at, datetime)
+        or reconcile_after_at <= budget_requeued_at
+    ):
+        raise StackFailure(f'first exhaustion did not park a reset delayed-requeue row: {parked}')
+    if len(stack.finalization_tasks) != 1:
+        raise StackFailure('delayed requeue enqueued a task before its park elapsed')
+    parked_status = await stack.finalization_status(uid, conversation_id)
+    if (
+        parked_status.get('status') != 'queued'
+        or parked_status.get('terminal')
+        or not parked_status.get('retryable')
+        or parked_status.get('attempt_count') != 0
+        or parked_status.get('task_retry_count') != 0
+    ):
+        raise StackFailure(f'client finalization status did not expose the parked requeue state: {parked_status}')
+
+    # Model the park elapsing: age both the park timestamp and the dispatch
+    # freshness guard the replay claim checks, then let the startup reconciler
+    # drain mint and enqueue the requeued generation exactly as in production.
+    aged = datetime.now(timezone.utc) - timedelta(seconds=3600)
+    stack.firestore.collection('conversation_finalization_jobs').document(job['id']).update(
+        {'reconcile_after_at': aged, 'dispatch_requested_at': aged}
+    )
+    stack.restart_backend()
+    requeued_task = stack.wait_for_finalization_task(count=2, timeout=30.0)
+    requeued_job = _one_job(stack, uid, conversation_id)
+    if (
+        requeued_job.get('status') != 'queued'
+        or requeued_job.get('dispatch_generation') != job.get('dispatch_generation') + 1
+        or requeued_job.get('attempt_count') != 0
+        or requeued_job.get('budget_requeue_count') != 1
+    ):
+        raise StackFailure(f'reconciler did not dispatch exactly one requeued generation: {requeued_job}')
+    _assert_opaque_task(requeued_task, requeued_job, stack)
+
+    # The requeued life fails again; its exhaustion is refused another grant
+    # ('already_requeued') and terminalizes through the dead-letter path.
+    retried = await stack.deliver_finalization_task(requeued_task, retry_count=0)
+    if retried != (500, {'status': 'retry'}):
+        raise StackFailure(f'requeued first delivery did not request a retry: {retried}')
+    final = await stack.deliver_finalization_task(requeued_task, retry_count=1)
     if final != (200, {'status': 'dead_letter'}):
-        raise StackFailure(f'final delivery did not dead-letter the exhausted job: {final}')
+        raise StackFailure(f'second exhaustion did not dead-letter the requeued job: {final}')
 
     dead_letter = _one_job(stack, uid, conversation_id)
     conversation = stack.conversation(uid, conversation_id)
@@ -1433,8 +1492,9 @@ async def _terminal_cloud_tasks_failure_dead_letters(stack: Stack) -> None:
         or dead_letter.get('terminal_outcome') != 'failure'
         or dead_letter.get('attempt_count') != 2
         or dead_letter.get('task_retry_count') != 2
+        or dead_letter.get('budget_requeue_count') != 1
     ):
-        raise StackFailure('exhausted worker delivery did not record its terminal durable state')
+        raise StackFailure('exhausted requeued delivery did not record its terminal durable state')
     if not conversation or {
         'status': conversation.get('status'),
         'discarded': conversation.get('discarded'),
@@ -1445,13 +1505,27 @@ async def _terminal_cloud_tasks_failure_dead_letters(stack: Stack) -> None:
     if projection.get('status') != 'dead_letter' or not projection.get('terminal') or projection.get('retryable'):
         raise StackFailure('client finalization status did not expose the dead-letter terminal state')
 
-    redelivery = await stack.deliver_finalization_task(task, retry_count=2)
-    if redelivery != (200, {'status': 'dropped', 'reason': 'dead_letter'}):
-        raise StackFailure(f'dead-letter redelivery was not safely fenced: {redelivery}')
-    if len(_provider_events(stack, conversation_id, 'process', 'controlled_failure')) != 2:
-        raise StackFailure('dead-letter path did not consume exactly the configured attempt budget')
-    if len(stack.finalization_tasks) != 1:
+    # Both exhausted generations are fenced on redelivery.
+    for exhausted_task in (task, requeued_task):
+        redelivery = await stack.deliver_finalization_task(exhausted_task, retry_count=2)
+        if redelivery != (200, {'status': 'dropped', 'reason': 'dead_letter'}):
+            raise StackFailure(f'dead-letter redelivery was not safely fenced: {redelivery}')
+    if len(_provider_events(stack, conversation_id, 'process', 'controlled_failure')) != 4:
+        raise StackFailure('two-phase terminal path did not consume exactly both attempt budgets')
+    if len(stack.finalization_tasks) != 2:
         raise StackFailure('dead-letter path created a new finalization generation')
+
+    worker_log = stack.children['finalization-worker'].log_path.read_text(encoding='utf-8')
+    grant_lines = [line for line in worker_log.splitlines() if 'one delayed requeue scheduled' in line]
+    if len(grant_lines) != 1:
+        raise StackFailure('first exhaustion did not emit its single delayed-requeue schedule line')
+    terminal_lines = [
+        line for line in worker_log.splitlines() if 'listen finalization dead_letter terminal=True' in line
+    ]
+    if len(terminal_lines) != 1 or any(
+        fragment not in terminal_lines[0] for fragment in ('budget_requeues=1', 'attempt_count=2', 'source=worker')
+    ):
+        raise StackFailure(f'dead-letter observability line was not emitted exactly once: {terminal_lines}')
 
 
 async def _integration_retry_preserves_processed_conversation(stack: Stack) -> None:
@@ -1863,7 +1937,7 @@ def main() -> int:
         _run_stack_scenario(
             state_dir / 'cloud-dead-letter',
             finalization_mode='cloud_tasks',
-            finalizer_failures={'process': 2},
+            finalizer_failures={'process': 4},
             scenario=_terminal_cloud_tasks_failure_dead_letters,
         )
         _run_stack_scenario(
