@@ -495,14 +495,6 @@ def lead_title_with_people(title: str, people: Sequence[str]) -> tuple[str, bool
     return led, True
 
 
-def _name_in_transcript(name: str, transcript_body: str) -> bool:
-    """Case-insensitive whole-name (word-boundary) match against the transcript body."""
-    name = name.strip()
-    if not name or not transcript_body:
-        return False
-    return re.search(r'(?<!\w)' + re.escape(name) + r'(?!\w)', transcript_body, re.IGNORECASE) is not None
-
-
 def attach_notes_identity_context(
     structured: Structured, roster: Optional[MeetingRoster], frame_count: int, background_body: str
 ) -> None:
