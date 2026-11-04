@@ -32,6 +32,11 @@ class SharedPreferencesUtil {
   final _deviceChanges = StreamController<void>.broadcast(sync: true);
   Stream<void> get deviceChanges => _deviceChanges.stream;
 
+  // Provider catalog snapshots are valid until persistence or account identity
+  // changes. Track raw writes too, rather than only the typed appsList setter.
+  static int _appsListRevision = 0;
+  int get appsListRevision => _appsListRevision;
+
   /// In-memory cache so [authToken] stays a sync getter (call sites are sync).
   static String _authTokenCache = '';
 
@@ -93,6 +98,7 @@ class SharedPreferencesUtil {
     _cachedConversationsGeneration++;
     _preferences = await SharedPreferences.getInstance();
     if (!PhysicalQualification.enabled) await PreferenceQuarantine.restoreThenPrune(_preferences!);
+    _appsListRevision++;
     if (!PhysicalQualification.enabled) await _quarantineBootSettings();
     await _migrateAppearanceDefault();
     _mirrorNativeAuthToken = mirrorNativeAuthToken ?? Platform.isAndroid;
@@ -1617,6 +1623,8 @@ class SharedPreferencesUtil {
     final write = _preferences?.setString(key, value);
     if (changed) _deviceChanges.add(null);
     return await write ?? false;
+    if (key == 'uid') _appsListRevision++;
+    return await _preferences?.setString(key, value) ?? false;
   }
 
   Future<bool> saveInt(String key, int value) async => await _preferences?.setInt(key, value) ?? false;
@@ -1625,10 +1633,15 @@ class SharedPreferencesUtil {
 
   Future<bool> saveDouble(String key, double value) async => await _preferences?.setDouble(key, value) ?? false;
 
-  Future<bool> saveStringList(String key, List<String> value) async =>
-      await _preferences?.setStringList(key, value) ?? false;
+  Future<bool> saveStringList(String key, List<String> value) async {
+    if (key == 'appsList') _appsListRevision++;
+    return await _preferences?.setStringList(key, value) ?? false;
+  }
 
-  Future<bool> remove(String key) async => await _preferences?.remove(key) ?? false;
+  Future<bool> remove(String key) async {
+    if (key == 'appsList' || key == 'uid') _appsListRevision++;
+    return await _preferences?.remove(key) ?? false;
+  }
 
   Future<bool> clear() async {
     _conversationCacheReadSession++;
@@ -1636,6 +1649,7 @@ class SharedPreferencesUtil {
     _cachedConversationsGeneration++;
     _authTokenCache = '';
     await _deleteSecureAuthToken();
+    _appsListRevision++;
     return await _preferences?.clear() ?? false;
   }
 }
