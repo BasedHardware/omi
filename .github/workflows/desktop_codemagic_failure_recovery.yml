@@ -2,7 +2,7 @@ name: Desktop Release Recovery Required
 
 # Manual dispatch only (David, 2026-11-04). A check_run trigger fired this workflow
 # for every check completion on every commit (~100 runs per main SHA), which buried
-# real runs in head_sha lookups. Dispatch with the failed Codemagic build ID.
+# real runs in head_sha lookups. Dispatch from main with the failed Codemagic build ID.
 on:
   workflow_dispatch:
     inputs:
@@ -37,8 +37,8 @@ jobs:
         github.event.check_run.conclusion == 'failure' &&
         github.event.check_run.app.slug == 'codemagic-ci-cd' &&
         startsWith(github.event.check_run.details_url, 'https://codemagic.io/app/66c95e6ec76853c447b8bcbb/build/')))
-    # Dispatch executes the main copy, so the release environment (main-only
-    # branch policy) always resolves.
+    # Dispatch from main: the release environment's branch policy is main-only, so a
+    # dispatch from any other ref is refused at the environment.
     environment: release
     runs-on: ubuntu-latest
     timeout-minutes: 10

@@ -146,6 +146,12 @@ def latest_auto_release_run_url(repository: str) -> str:
     return f"(no {AUTO_RELEASE_WORKFLOW} runs found)"
 
 
+def codemagic_build_id(details_url: str | None) -> str | None:
+    """Return the build ID from a Codemagic build URL (``.../build/<id>``), or None."""
+    match = re.search(r"/build/([0-9a-f]{24})(?:[/?#]|$)", details_url or "")
+    return match.group(1) if match else None
+
+
 def diagnose_promotion_lag(repository: str, tag: str, tag_sha: str) -> str:
     status, conclusion, html_url, error = planner.github_check_status(repository, tag_sha, CODEMAGIC_CHECK_NAME)
     check_url = html_url or f"(no {CODEMAGIC_CHECK_NAME} URL)"
@@ -158,9 +164,14 @@ def diagnose_promotion_lag(repository: str, tag: str, tag_sha: str) -> str:
             f"(.github/workflows/{AUTO_RELEASE_WORKFLOW})."
         )
     if status == "completed" and conclusion == "failure":
+        # The recovery workflow runs on dispatch only and needs the failed build ID,
+        # the last path segment of the Codemagic build URL.
+        build_id = codemagic_build_id(html_url)
+        build_arg = f"build_id={build_id}" if build_id else "build_id=<the build ID at the end of that Codemagic URL>"
         return (
             f"{CODEMAGIC_CHECK_NAME} failed on {tag}: {check_url}. "
-            f"Re-run that Codemagic build or dispatch \"Desktop Release Recovery Required\"."
+            f"Re-run that Codemagic build or dispatch \"Desktop Release Recovery Required\" "
+            f"(.github/workflows/desktop_codemagic_failure_recovery.yml, from main) with {build_arg}."
         )
     if status == "completed" and conclusion == "success":
         return (

@@ -71,6 +71,14 @@ class FreshnessTests(unittest.TestCase):
         self.assertIn("Promotion lag", joined)
         self.assertIn("Desktop Release Recovery Required", joined)
         self.assertIn("https://example.test/codemagic", joined)
+        # The recovery workflow is dispatch-only, so the hint must say which build_id to pass.
+        self.assertIn("build_id=<the build ID at the end of that Codemagic URL>", joined)
+
+    def test_codemagic_build_id_reads_the_build_url(self) -> None:
+        url = "https://codemagic.io/app/66c95e6ec76853c447b8bcbb/build/6a774ecc151b6c9b80558c06?open-step=x"
+        self.assertEqual(freshness.codemagic_build_id(url), "6a774ecc151b6c9b80558c06")
+        self.assertIsNone(freshness.codemagic_build_id("https://example.test/codemagic"))
+        self.assertIsNone(freshness.codemagic_build_id(None))
 
     def test_promotion_lag_success_points_at_recover_beta(self) -> None:
         with (
