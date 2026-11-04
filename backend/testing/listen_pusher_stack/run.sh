@@ -71,6 +71,6 @@ if [[ "$lifecycle_only" == true ]]; then
   exit 0
 fi
 
-runner_command="PYTHONPATH=backend backend/.venv/bin/python -m testing.listen_pusher_stack.run${runner_args} && PYTHONPATH=backend backend/.venv/bin/python -m pytest backend/tests/unit/test_stale_processing_emulator_concurrency.py -v && PYTHONPATH=backend backend/.venv/bin/python -m testing.lifecycle_sim.run${lifecycle_args}"
+runner_command="PYTHONPATH=backend backend/.venv/bin/python -m testing.listen_pusher_stack.run${runner_args} && PYTHONPATH=backend backend/.venv/bin/python -m pytest backend/tests/unit/test_stale_processing_emulator_concurrency.py -v && PYTHONPATH=backend backend/.venv/bin/python -m testing.lifecycle_sim.run${lifecycle_args} --extra-test-module testing/lifecycle_properties/test_properties.py"
 npx --no-install firebase emulators:exec --only firestore --project demo-omi-listen-stack --config "$emulator_config" \
   "$runner_command"
