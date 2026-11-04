@@ -1400,6 +1400,7 @@ def _mark_finalization_dead_letter_txn(
     projection_collection: Any | None = None,
     failure_code: str = 'final_attempt_failed',
     time_zone_for_uid: Callable[[str], str | None] | None = None,
+    outcome_box: dict[str, bool] | None = None,
 ) -> bool:
     snapshot = job_ref.get(transaction=transaction)
     if not getattr(snapshot, 'exists', False):
@@ -1421,6 +1422,7 @@ def _mark_finalization_dead_letter_txn(
         projection_collection,
         failure_code,
         time_zone_for_uid,
+        outcome_box,
     )
 
 
@@ -1434,6 +1436,7 @@ def _dead_letter_finalization_job(
     projection_collection: Any | None,
     failure_code: str,
     time_zone_for_uid: Callable[[str], str | None] | None,
+    outcome_box: dict[str, bool] | None = None,
 ) -> bool:
     """Shared terminal write; caller must transactionally fence lease or stale replay."""
     conversation_ref = None
@@ -1469,6 +1472,10 @@ def _dead_letter_finalization_job(
         conversation_updates = dead_letter_conversation_updates(
             uid, conversation, conversation_ref, transaction, failure_code, time_zone_for_uid
         )
+        if outcome_box is not None:
+            # Assigned, not appended: a transaction retry overwrites the same box,
+            # and the caller increments only after the transaction commits once.
+            outcome_box['visible_without_summary'] = conversation_updates.get('summary_retryable') is True
     if conversation_updates is not None and isinstance(uid, str) and isinstance(conversation, Mapping):
         from database.processing_attention import create_in_transaction
 
@@ -1511,6 +1518,7 @@ def mark_finalization_dead_letter(
     client = _client(firestore_client)
     transaction = client.transaction()
     transactional = firestore.transactional(_mark_finalization_dead_letter_txn)
+    outcome_box: dict[str, bool] = {}
     closed = transactional(
         transaction,
         _job_ref(client, job_id),
@@ -1522,9 +1530,14 @@ def mark_finalization_dead_letter(
         client.collection(FINALIZATION_PROJECTION_COLLECTION),
         failure_code,
         lambda uid: user_time_zone(client, uid),
+        outcome_box,
     )
     if closed:
         stop_quiet_checks_for_job(job_id, firestore_client=client)
+        if outcome_box.get('visible_without_summary'):
+            from utils.metrics import LISTEN_FINALIZATION_VISIBLE_WITHOUT_SUMMARY_TOTAL
+
+            LISTEN_FINALIZATION_VISIBLE_WITHOUT_SUMMARY_TOTAL.inc()
     return closed
 
 

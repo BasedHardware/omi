@@ -827,6 +827,11 @@ LISTEN_FINALIZATION_DEAD_LETTER_TOTAL = Counter(
     'Listen finalization jobs terminalized after their final Cloud Tasks attempt',
 )
 
+LISTEN_FINALIZATION_VISIBLE_WITHOUT_SUMMARY_TOTAL = Counter(
+    'listen_finalization_visible_without_summary_total',
+    'Dead-lettered listen jobs whose conversation stayed visible and can still receive a summary',
+)
+
 LISTEN_FINALIZATION_STALE_PROCESSING_RECONCILIATIONS_TOTAL = Counter(
     'listen_finalization_stale_processing_reconciliations_total',
     'Stale bare-processing conversation reconciliation outcomes by the crash-orphan sweep',
