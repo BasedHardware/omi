@@ -305,3 +305,10 @@ pnpm-workspace.yaml
 
 .github/firestore-workflow
 .github/firestore-source
+
+# Track this admission change's UI proof even with shared agent-artifact excludes.
+!.agent-artifacts/
+.agent-artifacts/*
+!.agent-artifacts/ui-evidence/
+.agent-artifacts/ui-evidence/*
+!.agent-artifacts/ui-evidence/lane-web-batch/

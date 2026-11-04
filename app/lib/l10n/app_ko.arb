@@ -4522,5 +4522,6 @@
     "episodeCoversUpTo": "{time}까지 · 끝나면 전체 메모 제공",
     "liveTranscribedUpTo": "{time}까지 변환됨",
     "liveAudioSaved": "{duration} 저장됨",
-    "liveAudioSavedDetail": "업로드되는 대로 화자와 최종 대화 내용이 여기에 표시됩니다."
+    "liveAudioSavedDetail": "업로드되는 대로 화자와 최종 대화 내용이 여기에 표시됩니다.",
+    "episodeFinishingUp": "마무리 중…"
 }

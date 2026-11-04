@@ -1,6 +1,5 @@
 """Per-unit handoff; ordinary worker tokens and upload ownership never transfer."""
 
-from dataclasses import asdict
 import math
 from typing import Any
 from uuid import uuid4
@@ -558,7 +557,7 @@ class RecoveryStore:
             else:
                 owner = tx.get('owners', owner_key(job['owner_id']))
                 job.update(
-                    result=asdict(WorkResult(segment_id, result_uri, outcome)),
+                    result=WorkResult(segment_id, result_uri, outcome).to_dict(),
                     state='result_ready',
                     ready_at=now,
                     merge_pending=True,
@@ -729,7 +728,7 @@ class SilenceDispositionStore(RecoveryStore):
             ):
                 return False
             if marker.get('state') == 'completed':
-                return job.get('result') == asdict(WorkResult(segment_id, result_uri, 'silence'))
+                return WorkResult(segment_id, result_uri, 'silence').matches_persisted(job.get('result'))
             if (
                 job.get('state') != 'quarantined'
                 or job.get('recovery_state') != 'failed_held'
@@ -756,7 +755,7 @@ class SilenceDispositionStore(RecoveryStore):
                 ready_at=now,
                 merge_pending=True,
                 recovery_state='recovered',
-                result=asdict(WorkResult(segment_id, result_uri, 'silence')),
+                result=WorkResult(segment_id, result_uri, 'silence').to_dict(),
             )
             tx.put('owners', owner_key(job['owner_id']), owner)
             tx.put('jobs', segment_id, job)
