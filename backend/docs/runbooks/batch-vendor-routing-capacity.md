@@ -299,26 +299,43 @@ failover). Overflow is part of vendor routing: owners must be in the
 vendor-routing cohort with legacy `draining` or `dark`, and every interlock
 above applies.
 
-Table to serve: `backend/deploy/batch-pipeline/vendor_route_table.prod.json`
-(lead ruling 7cb3fb: GPU-first, Modulate overflow, spill to legacy, no queue).
-- `selection: ordered`, rows `gpu_unsupported: [modulate, soniox]` and
-  `*: [gpu, modulate, soniox]`. Soniox is `failover_only`.
-- Modulate `daily_audio_hours_cap` 3,000 (a durable daily budget, about 2x the
-  expected 100% batch load). Soniox cap 1,000: it covers a mean full
-  Modulate outage day of unsupported-language STT (about 900 audio-h/day)
-  for about $100 at list. On a peak day, units past the cap hold with their
-  audio and redrive when Modulate returns.
-- `gpu_floor_percent` 0: ordered GPU-first already keeps every Parakeet unit
-  on the floor.
-- Overflow throughput is capped by `provider-stt`'s 10 dispatches/s.
+Modulate overflow is a supported failover path for GPU stockouts and outages
+(David 065da8, 2026-11-04), not an emergency step.
 
-`tests/unit/test_batch_vendor_route_table_prod.py` runs the real selection
-over the file. Healthy and unsaturated, it routes every language exactly as
-`resolve_route` does, including blank, `multi` and unknown. A saturated ring
-overflows fresh Parakeet units to Modulate, never to Soniox. A Modulate outage
-fails unsupported languages over to Soniox, else holds them.
+Standing table: `backend/deploy/batch-pipeline/vendor_route_table.prod.json`,
+`en-overflow-1104` (lead2 863cd6; David 49b7e4: English-only overflow).
+- `selection: ordered`, rows `en: [gpu, modulate]`, `gpu_supported: [gpu]`,
+  `gpu_unsupported: [modulate]`, `*: [gpu]`. Fresh English overflows to
+  Modulate once the ring is saturated. Other GPU-capable languages stay on
+  GPU. Languages Parakeet cannot serve start on Modulate (unchanged).
+- No Soniox: it is not admitted on prerecorded today, so `route_capable` never
+  selects it. A Modulate outage holds unsupported languages with their audio
+  until Modulate returns. Revisit when slice D lands.
+- No daily caps: a cap trip would also mark Modulate unhealthy for
+  `gpu_unsupported` languages. Spend is governed by the metered episode cap.
+  Dashboards price Modulate at the $0.06/audio-h list rate.
+- `gpu_floor_percent` 0. Overflow throughput is capped by `provider-stt`'s
+  10 dispatches/s.
+- Triggers (defaults): saturated when the oldest admissible fresh unit is
+  `BATCH_VENDOR_OVERFLOW_ENTER_SECONDS` (1200 s) old with at least
+  `BATCH_VENDOR_OVERFLOW_MIN_READY_UNITS` (300) waiting; released below half of
+  each. Only fresh units overflow, at admission. The existing recent/deep
+  backlog is never routed to a vendor.
 
-Set the same compact JSON on backend-sync, backend-sync-backfill and
+**Served durably** from the prod runtime overlay as `BATCH_VENDOR_ROUTE_TABLE`
+on backend-sync, backend-sync-backfill and backend-integration, so every
+backend train re-applies it. `tests/unit/test_batch_vendor_route_table_prod.py`
+pins the overlay value to the file's compact JSON and runs the real selection
+over it. Healthy and unsaturated, it routes every language exactly as
+`resolve_route` does, including blank, `multi` and unknown.
+`tests/unit/test_batch_vendor_outage_drills.py` drives the real sampler: with
+zero GPU workers, English overflows once the fresh backlog passes the enter
+age, returns to GPU after capacity drains it, and the kill switch keeps
+everything on GPU. Arming is the cohort percent through the runtime ramp
+(`batch-vendor-routing`), never env.
+
+Break-glass only (the overlay is the source; a hand-set value is replaced at the
+next train): set the same compact JSON on backend-sync, backend-sync-backfill and
 backend-integration. A comma-free delimiter is needed because the JSON
 contains commas:
 
@@ -343,11 +360,11 @@ so the services never stay split between two tables without notice.
 
 Once served, Soniox failover is live for vendor-routed units even at routing
 percent 0, because the stage reads the served table. Overflow needs the cohort
-too: arm with env `BATCH_VENDOR_ROUTING_PERCENT` (clamped to the batch
-percent). Do not seed `batch-vendor-routing` in `_ramp` while the actuator's
-`ramp_set` predates nested names. Rollback: `--remove-env-vars
-BATCH_VENDOR_ROUTE_TABLE` serves the builtin table (today's routing). Make it
-durable in the runtime overlay before the next deploy, or the deploy removes it.
+too. Arm it through the runtime ramp `batch-vendor-routing` (`ramp_set`, lead2
+2026-11-04: 0, then 25, then 100); `BATCH_VENDOR_ROUTING_PERCENT` env is only the
+fallback when no ramp row exists (clamped to the batch percent). Rollback: `--remove-env-vars
+BATCH_VENDOR_ROUTE_TABLE` serves the builtin table (today's routing); the
+durable rollback is removing the overlay line in a backend train.
 
 Watch: `omi_batch_pipeline_vendor_gpu_overflow_active`,
 `omi_batch_pipeline_vendor_gpu_backlog_age_seconds`,
