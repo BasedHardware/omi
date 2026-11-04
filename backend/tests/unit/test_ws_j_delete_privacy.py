@@ -214,7 +214,7 @@ class _DocRef:
         self._db = db
         self.path = path
 
-    def get(self, transaction=None):
+    def get(self, transaction=None, **_kwargs):
         if self.path not in self._db.docs:
             return _Snapshot(None, exists=False, doc_id=self.path.rsplit("/", 1)[-1], reference=self)
         return _Snapshot(
