@@ -118,6 +118,29 @@ def test_switch_off_no_io(monkeypatch):
     assert not client.method_calls
 
 
+@pytest.mark.parametrize('recorded', [False, True])
+def test_switch_off_legacy_activity_never_prepares_log_content(client, monkeypatch, recorded):
+    monkeypatch.setenv('EPISODES_LOG_ENABLED', 'off')
+    monkeypatch.setattr(episodes, 'recorded_episodes_enabled', lambda: recorded)
+    monkeypatch.setattr(episodes.episode_timeline, 'check_window', lambda *args: None)
+    unseal = Mock(side_effect=AssertionError('disabled log decrypted content'))
+    monkeypatch.setattr(episodes, 'unseal', unseal)
+    path = ('users', UID, 'episodes', 'e')
+    client.rows[path] = {
+        'id': 'e',
+        'status': 'live',
+        'started_at': NOW,
+        'last_activity_at': NOW,
+        'conversation_ids': ['c'],
+        'content': 'synthetic-unreadable-content',
+    }
+    at = NOW + timedelta(seconds=10)
+    assert episodes.record_activity(UID, 'e', 'c', at, firestore_client=client) == at
+    assert client.rows[path]['last_activity_at'] == at
+    assert not any(key[2] in {'episode_facts', 'episode_log_state'} for key in client.rows)
+    unseal.assert_not_called()
+
+
 def test_drift_bounded_and_reread_handles_inflight_writer():
     expected = {'id': 'e', 'status': 'closed', 'title': 'kept'}
     assert set(metrics.compare({'status': 'live'}, expected, reread=lambda: expected).values()) == {'match'}
