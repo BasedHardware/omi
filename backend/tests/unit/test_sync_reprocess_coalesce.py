@@ -18,6 +18,9 @@ def state(monkeypatch):
     from utils.enrichment import scan as enrichment_scan
 
     rows, tasks = {}, []
+    # Relative epoch clocks exercise coalescing independently of wall-clock
+    # history. The age-gate behavior suite explicitly enables its 72h policy.
+    monkeypatch.setenv('ENRICHMENT_MAX_AGE_HOURS', '0')
 
     def mutate(key, operation):
         new, result = operation(deepcopy(rows.get(key)))
