@@ -292,7 +292,8 @@ def test_unlinked_row_keeps_the_legacy_description_mirror(mirror):
     )
 
     assert sorted(mirror.marked) == [("task-a", True), ("task-b", True)]
-    assert mirror.fetched == []
+    # Main's mirror sync re-reads each persisted row after marking.
+    assert sorted(mirror.fetched) == ["task-a", "task-b"]
 
 
 def test_linked_task_outside_the_conversation_list_is_fetched_directly(mirror):
@@ -302,5 +303,7 @@ def test_linked_task_outside_the_conversation_list_is_fetched_directly(mirror):
         [True],
     )
 
-    assert mirror.fetched == ["task-orphan"]
+    # Two fetches: the linked row is not in the conversation list (direct
+    # fetch) and the reminder sync re-reads it after marking.
+    assert mirror.fetched == ["task-orphan", "task-orphan"]
     assert mirror.marked == [("task-orphan", True)]
