@@ -1,0 +1,7 @@
+{
+  "admission": {
+    "rows": 100,
+    "drainers": 32,
+    "durable": true
+  }
+}
