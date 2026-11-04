@@ -369,6 +369,70 @@ def test_backfill_effects_use_existing_queue(split_binding):
     assert reprocess._effects_binding()['queue'] == 'sync-backfill-fresh'
 
 
+@pytest.mark.parametrize('lane', ['fresh', 'live', 'batch', 'integration'])
+def test_new_user_facing_work_has_reserved_dispatch_slots(split_binding, monkeypatch, lane):
+    monkeypatch.setenv('ENRICHMENT_FRESH_TASKS_QUEUE', 'enrichment-fresh')
+    monkeypatch.setattr(reprocess.summary_delivery, 'lane', lambda _: lane)
+    reprocess.mark('u', 'c', 'en', now=0)
+    assert split_binding[0][KEY]['dispatch']['queue'] == 'enrichment-fresh'
+
+
+def test_backfill_fallback_cannot_enter_fresh_queue(split_binding, monkeypatch):
+    monkeypatch.setenv('ENRICHMENT_FRESH_TASKS_QUEUE', 'enrichment-fresh')
+    monkeypatch.delenv('SYNC_BACKFILL_TASKS_QUEUE')
+    reprocess.mark('u', 'c', 'en', now=0)
+    assert split_binding[0][KEY]['dispatch']['queue'] == 'enrichment'
+
+
+def test_fresh_lazy_effects_cannot_enter_fresh_queue(split_binding, monkeypatch):
+    monkeypatch.setenv('ENRICHMENT_FRESH_TASKS_QUEUE', 'enrichment-fresh')
+    monkeypatch.setattr(reprocess.summary_delivery, 'lane', lambda _: 'fresh')
+    assert reprocess._effects_binding()['queue'] == 'enrichment'
+    reprocess.mark('u', 'c', 'en', now=0, effects_only=True)
+    assert split_binding[0][reprocess.key('u', 'c\0effects')]['dispatch']['queue'] == 'enrichment'
+
+
+@pytest.mark.parametrize('pending', [False, True])
+def test_backfill_first_summary_gets_priority_only_while_pending(split_binding, monkeypatch, pending):
+    monkeypatch.setenv('ENRICHMENT_FRESH_TASKS_QUEUE', 'enrichment-fresh')
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', str(pending).lower())
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
+    reprocess.mark('u', 'c', 'en', now=0, snapshot_summary=True)
+    assert split_binding[0][KEY]['dispatch']['queue'] == ('enrichment-fresh' if pending else 'sync-backfill-fresh')
+
+
+def test_sweep_promotes_waiting_fresh_work_and_fences_old_delivery(split_binding, sweep_query, monkeypatch):
+    monkeypatch.setattr(reprocess.summary_delivery, 'lane', lambda _: 'batch')
+    reprocess.mark('u', 'c', 'en', now=0)
+    old_token = split_binding[0][KEY]['task_token']
+    monkeypatch.setenv('ENRICHMENT_FRESH_TASKS_QUEUE', 'enrichment-fresh')
+    assert reprocess.sweep(now=10_000) == {'repaired': 1, 'error': 0}
+    row = split_binding[0][KEY]
+    assert row['dispatch']['queue'] == 'enrichment-fresh'
+    assert row['task_token'] != old_token
+    process = Mock()
+    assert reprocess.run(KEY, old_token, process, now=10_000) == 'stale'
+    process.assert_not_called()
+
+
+@pytest.mark.parametrize('fence', ['lease', 'effects', 'backfill', 'identity'])
+def test_priority_sweep_preserves_custody_and_background_work(split_binding, sweep_query, monkeypatch, fence):
+    monkeypatch.setattr(reprocess.summary_delivery, 'lane', lambda _: 'batch')
+    reprocess.mark('u', 'c', 'en', now=0)
+    row = split_binding[0][KEY]
+    if fence == 'lease':
+        row['lease_until'] = 20_000
+    elif fence == 'effects':
+        row['effects_only'] = True
+    elif fence == 'backfill':
+        row['summary_lane'] = 'backfill'
+    else:
+        row['dispatch']['handler'] = row['dispatch']['audience'] = 'https://other.invalid/v2/enrichment/run'
+    monkeypatch.setenv('ENRICHMENT_FRESH_TASKS_QUEUE', 'enrichment-fresh')
+    reprocess.sweep(now=10_000)
+    assert split_binding[0][KEY]['dispatch']['queue'] == 'enrichment'
+
+
 def test_backfill_route_reaches_named_task_creation(split_binding, monkeypatch):
     from utils import cloud_tasks
     from utils.conversations import demand_processing

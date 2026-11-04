@@ -214,11 +214,11 @@ def valid_effects_binding(row: dict[str, Any]) -> bool:
         return False
 
 
-def _dispatch_binding(*, backfill: bool = False) -> dict[str, str] | None:
+def _dispatch_binding(*, backfill: bool = False, effects_only: bool = False) -> dict[str, str] | None:
     from config import enrichment as enrichment_config
 
     if enrichment_config.route() == 'enrichment_queue':
-        binding = enrichment_config.dispatch_binding(backfill=backfill)
+        binding = enrichment_config.dispatch_binding(backfill=backfill, effects_only=effects_only)
         if valid_dispatch_binding(binding):
             return binding
         from utils.observability.fallback import record_fallback
@@ -461,10 +461,11 @@ def mark_update(
                 task_token=uuid.uuid4().hex,
                 task_due_at=row['due_at'],
                 lease_until=0,
-                dispatch=(new_dispatch() if new_dispatch else None) or _dispatch_binding(backfill=backfill),
+                dispatch=(new_dispatch() if new_dispatch else None)
+                or _dispatch_binding(backfill=backfill, effects_only=effects_only),
             )
         elif old.get('dormant'):
-            row['dispatch'] = _dispatch_binding(backfill=backfill)
+            row['dispatch'] = _dispatch_binding(backfill=backfill, effects_only=effects_only)
         elif not valid_dispatch_binding(row.get('dispatch')):
             row['dispatch'] = None
         wake = old is None
@@ -874,6 +875,37 @@ def sweep(
             if old is None or old.get('dormant') or old.get('lease_until', 0) > current:
                 return old, ('skipped', None)
             row = dict(old)
+            promoted = False
+            # A valid old wake can wait hours behind historical enrichment.
+            # Promote only idle user-facing work, retaining the handler/auth
+            # identity. Rotate the token in this CAS so old deliveries are stale.
+            # Effects and backfill keep their original binding and custody.
+            from config import enrichment as enrichment_config
+
+            fresh_queue = os.getenv('ENRICHMENT_FRESH_TASKS_QUEUE', '').strip()
+            if (
+                not injected
+                and fresh_queue
+                and enrichment_config.route() == 'enrichment_queue'
+                and not row.get('effects_only')
+                and (row.get('summary_lane') != 'backfill' or first_summary_pending(row))
+                and valid_dispatch_binding(row.get('dispatch'))
+            ):
+                desired = _dispatch_binding()
+                previous = row['dispatch']
+                if (
+                    desired is not None
+                    and previous['queue'] == os.getenv('ENRICHMENT_TASKS_QUEUE', '').strip()
+                    and desired['queue'] != previous['queue']
+                    and all(desired[field] == previous[field] for field in ('handler', 'audience', 'invoker_sa'))
+                ):
+                    row.update(
+                        dispatch=desired,
+                        task_token=uuid.uuid4().hex,
+                        task_due_at=current,
+                        wake_check_after=0,
+                    )
+                    promoted = True
             release_hold = (
                 not processing_hold.enabled_for(row)
                 and row.get('sync_hold')
@@ -891,7 +923,8 @@ def sweep(
                 return old, ('skipped', None)
             if not injected and not valid_effects_binding(row):
                 binding = _dispatch_binding(
-                    backfill=row.get('summary_lane') == 'backfill' and not first_summary_pending(row)
+                    backfill=row.get('summary_lane') == 'backfill' and not first_summary_pending(row),
+                    effects_only=bool(row.get('effects_only')),
                 )
                 if binding is None:
                     return old, ('unbound', None)
@@ -904,7 +937,7 @@ def sweep(
                 row.pop('summary_seen_by', None)
 
             row['wake_check_after'] = current + WAKE_CHECK_SECONDS
-            if not expired and not injected and first_summary_pending(row):
+            if not expired and not injected and not promoted and first_summary_pending(row):
                 # Probe outside CAS, then recheck the exact name under CAS below.
                 return row, ('check', row)
             if row['task_due_at'] + REPAIR_SECONDS <= current:
@@ -1030,7 +1063,7 @@ def mark_effects(uid: str, conversation_id: str, language: str, *, immediate: bo
 
 
 def _effects_binding() -> dict[str, str]:
-    binding = _dispatch_binding(backfill=summary_delivery.lane({}) == 'backfill')
+    binding = _dispatch_binding(backfill=summary_delivery.lane({}) == 'backfill', effects_only=True)
     if binding is not None:
         return binding
     # Listen/pusher already have the durable finalization queue, identity and
