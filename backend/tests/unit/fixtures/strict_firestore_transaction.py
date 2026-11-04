@@ -100,7 +100,10 @@ class StrictFirestoreDocument:
         *,
         field_paths: list[str] | None = None,
         timeout: float | None = None,
+        retry: Any = None,
     ) -> StrictFirestoreSnapshot:
+        # Callers on bounded-read boundaries (canonical apply control) pass
+        # ``retry=None`` to disable the SDK's own retry deadline; model the kwarg.
         if timeout is not None:
             assert 0 < timeout <= 3
         if transaction is not None:

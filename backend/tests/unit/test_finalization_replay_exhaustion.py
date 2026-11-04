@@ -88,6 +88,15 @@ def test_stale_replay_terminalizes_only_exhausted_budget(store, status, attempts
         'finalization_status': 'dead_letter',
         'structured': {'title': 'Synthetic transcript.', 'overview': ''},
         'summary_retryable': True,
+        # The discard-detection audit stamps an explicit policy keep on the
+        # dead-letter terminal; the verdict itself stays keep.
+        'relevance_decision': {
+            'verdict': 'keep',
+            'decided_by': 'policy',
+            'reason': 'dead_letter_default',
+            'trigger': 'dead_letter',
+            'rules_version': 4,
+        },
     }
     jobs.stop_quiet_checks_for_job.assert_called_once()
     # It cannot mint another Cloud Task or write another attention item.
