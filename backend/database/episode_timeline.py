@@ -267,12 +267,17 @@ def attach_recorded(
         cached = []
 
         def candidates(uid, lo, hi, **kwargs):
-            for a, b, rows in cached:
-                if a <= lo and hi <= b:
-                    return rows
+            # Preserve the canonical expansion read sequence. Only the fallback
+            # strategy reuses these rows after canonical attachment declines.
             rows = recorded_candidates(uid, lo, hi, **kwargs)
             cached.append((lo, hi, rows))
             return rows
+
+        def reuse_candidates(uid, lo, hi, **kwargs):
+            for a, b, rows in cached:
+                if a <= lo and hi <= b:
+                    return rows
+            return candidates(uid, lo, hi, **kwargs)
 
         canonical = episode_recorded_components.attach(
             uid,
@@ -300,7 +305,7 @@ def attach_recorded(
             new_episode=new_episode,
             firestore_client=client,
             transaction=transaction,
-            candidates=candidates,
+            candidates=reuse_candidates,
             fence_row=revision,
         )
         result.pop('_window_end')
