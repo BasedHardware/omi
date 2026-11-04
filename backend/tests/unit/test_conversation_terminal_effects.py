@@ -7,6 +7,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from database import conversation_finalization_jobs as jobs
+from database import conversation_processing_recovery as processing_recovery
 from database import conversation_terminal_effects as effects
 from database import oversized_conversation_terminal as oversized
 
@@ -35,13 +36,17 @@ def test_real_terminal_entrypoints_refresh_only_after_success(monkeypatch, path,
         if not commits:
             raise RuntimeError('commit failed')
         state['committed'] = True
+        if getattr(_args[0], '__name__', '') == '_abandon_byok_finalization_job_txn':
+            return {'status': 'abandoned'}
         return True
 
-    monkeypatch.setattr(jobs.firestore, 'transactional', lambda _fn: run_transaction)
+    monkeypatch.setattr(jobs.firestore, 'transactional', lambda _fn: lambda *_a, **_k: run_transaction(_fn, *_a, **_k))
     operations = {
         'dead_letter': partial(jobs.mark_finalization_dead_letter, 'j', 1, 1, 5),
-        'orphan': partial(jobs.complete_orphan_conversation, 'u', 'c', expected_admitted_at=now),
-        'unstampable': partial(jobs.complete_unstampable_orphan_conversation, 'u', 'c', stale_after=timedelta(days=1)),
+        'orphan': partial(processing_recovery.complete_orphan_conversation, 'u', 'c', expected_admitted_at=now),
+        'unstampable': partial(
+            processing_recovery.complete_unstampable_orphan_conversation, 'u', 'c', stale_after=timedelta(days=1)
+        ),
         'byok': partial(
             jobs.abandon_byok_finalization_job,
             'j',
@@ -55,7 +60,7 @@ def test_real_terminal_entrypoints_refresh_only_after_success(monkeypatch, path,
         ),
     }
     if commits:
-        assert operations[path](firestore_client=client) is True
+        assert operations[path](firestore_client=client)
         assert calls == [('cache', 'u'), ('index', 'u', 'c')]
     else:
         with pytest.raises(RuntimeError, match='commit failed'):

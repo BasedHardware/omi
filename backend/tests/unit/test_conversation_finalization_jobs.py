@@ -9,6 +9,7 @@ from types import SimpleNamespace
 
 from google.api_core.exceptions import Aborted
 
+from utils.conversations.relevance_rules import RULES_VERSION
 from database import conversation_finalization_jobs as jobs
 from database import conversation_terminal_title as terminal_title
 from database import firestore_transaction_retry
@@ -995,7 +996,7 @@ def test_final_attempt_atomically_closes_its_bound_processing_conversation():
                     'decided_by': 'policy',
                     'reason': 'dead_letter_default',
                     'trigger': 'dead_letter',
-                    'rules_version': 1,
+                    'rules_version': RULES_VERSION,
                 },
             },
         ),
@@ -1803,7 +1804,7 @@ def test_complete_orphan_gives_an_untitled_row_its_deterministic_title():
                     'decided_by': 'policy',
                     'reason': 'orphan_terminal_default',
                     'trigger': 'orphan_terminal',
-                    'rules_version': 1,
+                    'rules_version': RULES_VERSION,
                 },
             },
         )

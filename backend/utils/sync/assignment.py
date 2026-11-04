@@ -922,7 +922,12 @@ def assign_in_transaction(
             result['relevance_decision'] = sync_intake_decision(rule)
         elif superseded_intake_discard(result, bool(survivors or transfers)):
             result['relevance_decision'] = None
-        stamp_terminal_decision(result, path='sync_intake')
+        elif created and not result.get('relevance_decision'):
+            # A new row never leaves intake without an explicit decision, but
+            # merged rows keep whatever the retention/promotion machinery
+            # decided for them: a transport replay retains its assessed
+            # verdict, and a promotion deliberately clears the receipt.
+            stamp_terminal_decision(result, path='sync_intake')
         result['is_locked'] = bool(incoming.get('is_locked'))
         result['private_cloud_sync_enabled'] = any(
             row.get('private_cloud_sync_enabled') for row in [incoming, *records]

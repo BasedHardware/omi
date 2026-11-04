@@ -25,6 +25,7 @@ DECISION_TRIGGERS = TERMINAL_PATHS | frozenset(
         'user_reprocess',
         'merge',
         'smart_merge',
+        'capture_group',
         'server_recovery',
         'silent_backfill',
         'backfill',

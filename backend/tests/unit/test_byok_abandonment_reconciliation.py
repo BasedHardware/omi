@@ -32,6 +32,7 @@ from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock
 
+from utils.conversations.relevance_rules import RULES_VERSION
 from database import conversation_finalization_jobs as jobs
 from database import conversation_terminal_title as terminal_title
 from services import conversation_finalization as service
@@ -370,7 +371,7 @@ def test_stranded_job_and_its_processing_conversation_reach_one_atomic_terminal(
                 'decided_by': 'policy',
                 'reason': 'byok_abandoned_default',
                 'trigger': 'byok_abandoned',
-                'rules_version': 1,
+                'rules_version': RULES_VERSION,
             },
         },
     )

@@ -1425,6 +1425,7 @@ def _mark_finalization_dead_letter_txn(
         projection_collection,
         failure_code,
         time_zone_for_uid,
+        calendar_probe,
     )
 
 
@@ -1438,6 +1439,7 @@ def _dead_letter_finalization_job(
     projection_collection: Any | None,
     failure_code: str,
     time_zone_for_uid: Callable[[str], str | None] | None,
+    calendar_probe: Callable[[Mapping[str, Any]], bool | None] | None = None,
 ) -> bool:
     """Shared terminal write; caller must transactionally fence lease or stale replay."""
     conversation_ref = None

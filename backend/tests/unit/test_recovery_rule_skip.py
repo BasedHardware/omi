@@ -246,7 +246,7 @@ def test_external_text_paths_record_explicit_policy(isolated_processing_module, 
     decisions = []
     notes = Structured(title='Integration note')
     with (
-        patch.object(pc, 'rich_notes_inputs', return_value=(None, None, False, [])),
+        patch.object(pc, 'rich_notes_inputs', return_value=(None, None, False, [], 0)),
         patch.object(pc, 'build_conversation_prompt_prefix', return_value='prefix'),
         patch.object(pc, 'conversation_known_spellings', return_value=[]),
         patch.object(pc, '_fetch_dedup_candidates_for_query', return_value=[]),

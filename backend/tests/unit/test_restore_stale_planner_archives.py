@@ -74,7 +74,7 @@ class _Document:
         self.db = db
         self.path = path
 
-    def get(self, transaction=None):
+    def get(self, transaction=None, **kwargs):
         if self.path not in self.db.docs:
             return _Snapshot(None, exists=False, doc_id=self.path.rsplit("/", 1)[-1], reference=self)
         return _Snapshot(self.db.docs[self.path], doc_id=self.path.rsplit("/", 1)[-1], reference=self)
@@ -454,7 +454,9 @@ def test_dry_run_excludes_accounts_under_destructive_gate():
         "kind": "explicit_memory_deletion",
         "token": "tok",
         "state": "running",
-        "started_at": NOW - timedelta(minutes=5),
+        # The fence judges liveness against the real clock; anchor the gate to
+        # it so the fixture stays inside the 6-hour stale window on any run day.
+        "started_at": datetime.now(timezone.utc) - timedelta(minutes=5),
         "finished_at": None,
     }
 
