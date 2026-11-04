@@ -14,6 +14,10 @@ cost meter or a deployment receipt. Re-measure before any production ramp.
 
 ## Forecast inputs and assumptions
 
+Forecast revised at **2026-11-04 19:31:24 UTC** to respect the 64-fact drain limit.
+The earlier 50,000-drain scenario could not sustain its own fact volume; this
+revision uses 100,000 drains without changing the runtime or the budget envelope.
+
 The supplied planscost `arch-data.md` snapshot is dated 2026-11-04 and describes
 aggregates from 2026-11-03/04, with its fleet write comparison from 2026-11-02.
 It reports 71.1 million episode-family reads corresponding to $38 and 37.7
@@ -35,33 +39,38 @@ The following workload is a **budget scenario**, not an observed daily volume:
 | New input/dirty facts, I | 1.0 million |
 | Committed legacy decision facts, D | 1.4 million |
 | Tracked member edits, E | 1.0 million |
-| Successful drain batches, P | 50,000 |
+| Successful drain batches, P | 100,000 |
 | Changed views and links per drain | 5 each |
 | Members per changed view | 5 |
 | Checkpoint payload parts per drain | 1 |
 
 The decision scenario uses the supplied study's rough 380,000 full attachments
 and one million update CAS operations as a conservative envelope. The remaining
-inputs are explicit assumptions. The model intentionally charges independent
-comparison reads instead of assuming they are free or reusing stale policy data.
+inputs are explicit assumptions. At 4.4 million facts/day, the 64-fact cap
+requires at least 68,750 successful drains/day; this scenario averages 44 facts
+per drain, so its assumed drain volume can keep up. The model intentionally
+charges independent comparison reads instead of assuming they are free or reusing stale policy data.
 
 - Fact and owner writes: `2I + 2D + 4E = 8.8 million/day`. Each policy edit fences
   reads before the existing write and releases with refresh debt afterward: two
   transactions, four writes and three owner reads, in addition to the original
   writer. This is intentional correctness overhead, including shadow users.
-- Claim/publication/checkpoint/view/link writes: `14P = 0.7 million/day`, plus an
-  assumed 50,000 scan-rotation writes. Total approximately **9.55 million writes**.
+- Claim/publication/checkpoint/view/link writes: `14P = 1.4 million/day`, plus an
+  assumed 100,000 scan-rotation writes. Total approximately **10.30 million writes**.
 - Input dedupe/owner reads, legacy capture reads, policy fences, sequenced fact
   reads, independent legacy comparison rows, two member projection passes and
-  bounded control reads: approximately **14.05 million reads/day** before account fences.
-  Uncached deletion-authority reads add an estimated `I + 2E + 5P = 3.25 million`;
-  total approximately **17.30 million reads/day** in this scenario.
+  bounded control reads:
+  `2I + D + 3E + (I + D + 2E) + 65P = 17.30 million reads/day` before account fences.
+  The per-drain allowance is 50 member reads (two projection passes), five legacy
+  rows and ten bounded control reads; it is a budget assumption, not a measured trace.
+  Uncached deletion-authority reads add an estimated `I + 2E + 5P = 3.50 million`;
+  total approximately **20.80 million reads/day** in this scenario.
 - The supplied worker de-risk allowance is **$0–2/day** for task/wake/compute
   overhead. Neither task volume nor CPU has been measured after deployment.
 
-This gives approximately **$23–27/day of additional shadow operations**. A rough
-30% workload sensitivity gives a budgeting envelope of **$15–40/day**, before
-retained storage/index growth, ingestion/logging charges, transaction retries,
+This gives approximately **$26–30/day of additional shadow operations**. A rough
+30% workload sensitivity remains inside the rounded **$15–40/day** budgeting
+envelope, before retained storage/index growth, ingestion/logging charges, transaction retries,
 backfill, additional checkpoint parts, and any workload outside these assumptions.
 This supersedes the earlier draft allowance, which omitted policy-barrier and
 independent member-comparison amplification. It is not an all-in daily quote.
