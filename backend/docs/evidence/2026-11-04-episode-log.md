@@ -10,6 +10,11 @@ full backend typecheck (**zero errors**). It exposes the existing bounded-label
 behavior through a typed public entry point; emitted label values are unchanged.
 Expanded acceptance source: `1711c10017bd0582450cc1259bf1b201405449f3`,
 qualified at **2026-11-04 20:13:43 UTC**: the complete selected command exited green.
+Current-main integration: `fc02a9b9b7640126e7ef0625dac9d3c185bf0097`, based on
+`26585edc50db6a67f0553d2c7dbae6cbd6584f04`, qualified at **2026-11-04 21:10:04 UTC**.
+Two complete green unit commands passed **5,115 cases** across 128 test-bearing
+files (131 selected paths, including three support modules); full backend typecheck
+has zero errors. The collector conflict retains both privacy and episode families.
 [PR #24607](https://github.com/BasedHardware/omi/pull/24607) owns current head,
 review and CI state. This is a dated qualification/forecast record, not a live
 cost meter or a deployment receipt. Re-measure before any production ramp.
@@ -105,6 +110,12 @@ owners and HTTP requests were synthetic. Nothing was merged or deployed by this 
   four CI files absent from the prior selection; those declarations and fixtures
   are corrected and included in this full run. No production behavior was disabled
   to make the legacy fixtures pass. Current-head CI remains owned by the PR.
+- Current-main refresh: **2,952 passed** for the checked-in acceptance scope plus
+  privacy TTL/cache and flag-budget tests, then **2,163 passed** across 46 disjoint
+  incoming-main unit files. Both commands exited green; counts exclude reruns.
+  The extra files are the changed `backend/tests/unit/test_*.py` paths in
+  `cb8cf29ab9a97a5a9007eea03752c431610a3a15..fc02a9b9b7640126e7ef0625dac9d3c185bf0097`,
+  excluding the acceptance selection and the two explicitly added compatibility files.
 - Scoped deletion/visibility follow-up: **51 passed** before the full acceptance
   rerun, including accepted/malformed deletion, restored access and publication
   fenced after lease claim.
@@ -124,6 +135,16 @@ owners and HTTP requests were synthetic. Nothing was merged or deployed by this 
   attachment now reuse one owner-first capture, checked by deterministic unit
   tests. Because the disabled control also failed, the passing refresh is not
   proof that log capture alone caused those timeouts or a production retry-rate forecast.
+- Current-main emulator diagnostic: initial enabled run **32 passed, one failed**:
+  `test_simultaneous_late_devices_converge_on_one_closed_episode` exhausted its
+  existing transaction lock retries. A full disabled control passed **33/33**;
+  one declared enabled repeat passed **33/33** on identical source. All five new
+  episode-log atomic/lease proofs passed in all three runs. Both successful runs
+  shut down the emulator. No retry budget or concurrency was changed. The initial
+  failure remains an unresolved contention signal: these samples neither establish
+  equal on/off failure rates nor prove that log capture cannot amplify contention.
+  Inspect legacy transaction retry/exhaustion and serving latency during the train;
+  disable capture if it regresses. Do not erase this failure with the passing repeat.
 - Earlier guarded publication on `0af0ee8128bee662a17f351e054979419b5fc2f1` passed
   local PR preflight, type checking with zero errors, selected backend tests,
   API/generated contracts, web tests and a Swift debug compile. Current-head
