@@ -19,6 +19,9 @@ from utils.sync.vad_segments import MAX_VAD_SEGMENT_SECONDS
 
 import asyncio
 import contextlib
+from config.episode_attach import noop_schedule_enabled
+from utils.conversations.episode_attach_key import should_schedule, process_snapshot
+from utils.sync.repeat_work_metrics import record_feature
 import hashlib
 import io
 import logging
@@ -1189,6 +1192,8 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
 
     # Convert to Conversation object
     conversation = deserialize_conversation(conversation_data)
+    # Use the same model defaults on both sides; retain fields the wire model omits.
+    episode_before = process_snapshot(conversation_data, conversation)
     if language == _LINEAGE_RETRY_LANGUAGE:
         language = conversation.language or 'en'
 
@@ -1273,7 +1278,10 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
     # Episodes: the WAL row joins the live episode covering it, so Home folds it under the
     # live row instead of a second capture's fragment. Off this lane, fail-open; a later
     # WAL append re-runs it and is a no-op once joined.
-    schedule_after_finalization(uid, conversation_id, ProcessingTrigger.SYNC_UPDATE)
+    schedule_episode = not noop_schedule_enabled() or should_schedule(episode_before, processed_conversation)
+    record_feature(uid, processed_conversation, 'episode_attach', 'scheduled' if schedule_episode else 'unchanged')
+    if schedule_episode:
+        schedule_after_finalization(uid, conversation_id, ProcessingTrigger.SYNC_UPDATE)
 
     logger.info(f'Successfully reprocessed conversation {conversation_id}')
     return sync_done(processed_conversation)

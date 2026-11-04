@@ -289,16 +289,17 @@ def attach(
         for member, (exists, old) in members.items():
             assigned = assignments[member]
             retained = [eid for eid in old.get('episode_ids') or [] if eid not in previous and eid not in new_ids]
-            transaction.set(
-                root.collection('episode_links').document(member),
-                {
-                    'episode_id': assigned[-1],
-                    'episode_ids': list(dict.fromkeys([*retained, *assigned])),
-                    'updated_at': template.get('created_at'),
-                },
+            episodes.write_membership(
+                transaction,
+                client,
+                uid,
+                member,
+                assigned[-1],
+                list(dict.fromkeys([*retained, *assigned])),
+                exists,
+                old,
+                template.get('created_at'),
             )
-            if exists:
-                transaction.update(root.collection('conversations').document(member), {'episode_id': assigned[-1]})
         transaction.set(fence, {'version': int(revision.get('version') or 0) + 1})
         incoming = [row for row in result if cid in row['conversation_ids']]
         return {**incoming[-1], '_recorded_windows': incoming}

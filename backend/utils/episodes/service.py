@@ -38,7 +38,6 @@ Entry points (all synchronous, fail-open, run on a worker thread by callers):
 from __future__ import annotations
 
 import logging
-import random
 import threading
 import time
 from dataclasses import dataclass, field
@@ -46,6 +45,9 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Mapping, Optional, Sequence
 from uuid import uuid4
 from config.recorded_time import recorded_episodes_enabled, live_timer_start_enabled
+from config.episode_attach import owner_reuse_enabled, walk_context_enabled
+from utils.episodes import sync_attach
+from utils.episodes.visibility import hidden_member
 from utils.conversations.recorded_time import conversation_span, is_late, at_offset as _wall
 from utils.conversations.fragment_visibility import is_relevance_discarded
 from utils.sync.repeat_work_metrics import conversation_scope
@@ -675,6 +677,8 @@ def record_moment(
         try:
             outcome = _record_moment_once(uid, moment, c, member_episode_id=member_episode_id)
         except episodes_db.EpisodeConflict:
+            if moment.recovery_receipts is not None:
+                moment.recovery_receipts.invalidate()
             outcome = 'conflict'
             continue
         except Exception as error:
@@ -778,13 +782,22 @@ def _record_moment_once(
     uid: str, moment: MomentInput, c: Collaborators, *, member_episode_id: Optional[str] = None
 ) -> str:
     now = _now(c)
-    if hidden_conversation(uid, moment.conversation_id, firestore_client=c.firestore_client):
+    walk = moment.recovery_receipts if walk_context_enabled() and moment.trigger == 'sync_recovery' else None
+    if (
+        hidden_member(dict(walk.row))
+        if walk is not None and walk.row is not None
+        else hidden_conversation(uid, moment.conversation_id, firestore_client=c.firestore_client)
+    ):
         return 'skipped_discarded'
     recovered = moment.trigger == 'sync_recovery'
     episode = (
-        episodes_db.get_episode(uid, member_episode_id, firestore_client=c.firestore_client)
-        if member_episode_id
-        else episodes_db.get_current_episode(uid, firestore_client=c.firestore_client)
+        walk.owner
+        if walk is not None and walk.owner is not None and walk.owner.get('id') == member_episode_id
+        else (
+            episodes_db.get_episode(uid, member_episode_id, firestore_client=c.firestore_client)
+            if member_episode_id
+            else episodes_db.get_current_episode(uid, firestore_client=c.firestore_client)
+        )
     )
     if episode and moment.conversation_id in (episode.get('duplicate_conversation_ids') or []):
         return 'skipped_applied'
@@ -1094,6 +1107,7 @@ def _record_moment_once(
             updates=updates,
             segment_receipts=segment_receipts,
             firestore_client=c.firestore_client,
+            **({'recovery_conversation_id': moment.conversation_id} if walk is not None else {}),
         )
     else:
         stored = episodes_db.commit_moment(
@@ -1420,14 +1434,21 @@ def _attach_recorded(uid, conversation_id, row, started, finished, c) -> dict[st
         choose=choose_recorded_episode,
         new_episode=template,
         firestore_client=c.firestore_client,
+        attach_row=row,
     )
     placed.pop('_recorded_windows', None)
     return placed
 
 
-def _record_recovered(uid: str, episode_id: str, conversation_id: str, row: Mapping[str, Any], c: Collaborators) -> str:
+def _record_recovered(
+    uid: str, episode_id: str, conversation_id: str, row: Mapping[str, Any], c: Collaborators, *, owner=None
+) -> str:
     if recorded_episodes_enabled():
-        owner = episodes_db.get_episode(uid, episode_id, firestore_client=c.firestore_client)
+        owner = (
+            owner
+            if owner is not None and owner_reuse_enabled()
+            else episodes_db.get_episode(uid, episode_id, firestore_client=c.firestore_client)
+        )
         windows = [owner] if owner else []
         return record_windows(uid, conversation_id, row, windows, c, record_moment, now=_now(c))
     walk = recovery.moments(conversation_id, row, now=_now(c), calendar_identity=_calendar_identity(row))
@@ -1441,56 +1462,19 @@ def _record_recovered(uid: str, episode_id: str, conversation_id: str, row: Mapp
 def _attach_synced(
     uid: str, conversation_id: str, row: Mapping[str, Any], c: Collaborators, *, absorbed_from: Optional[str] = None
 ) -> str:
-    if is_relevance_discarded(row) or hidden_conversation(uid, conversation_id, firestore_client=c.firestore_client):
-        _end_discarded(uid, conversation_id, row, SYNC_UPDATE, c)
-        return 'skipped_discarded'
-    if canonical := episode_groups.canonical_row(uid, conversation_id, row, firestore_client=c.firestore_client):
-        primary = str(canonical.get('id') or episode_groups.primary_id(row))
-        owner = episodes_db.get_episode_for_conversation(uid, primary, firestore_client=c.firestore_client)
-        if owner and primary in (owner.get('recovered_conversation_ids') or []):
-            episode_groups.join_duplicates(uid, owner, primary, canonical, firestore_client=c.firestore_client)
-            return 'attached'
-        return _attach_synced(uid, primary, canonical, c)
-    # Re-read both membership and the boundary on every lost CAS. A last WAL
-    # append cannot rely on another append arriving to repair a lost attachment.
-    for attempt in range(3):
-        try:
-            if absorbed_from:
-                donor = episodes_db.get_episode_for_conversation(
-                    uid, absorbed_from, firestore_client=c.firestore_client
-                )
-                if donor and absorbed_from in (donor.get('conversation_ids') or []):
-                    _repoint_absorbed(uid, donor, absorbed_from, conversation_id, c)
-            _repoint_sync_donors(uid, conversation_id, row, c)
-            owner = (
-                None
-                if recorded_episodes_enabled()
-                else episodes_db.get_episode_for_conversation(uid, conversation_id, firestore_client=c.firestore_client)
-            )
-            outcome = (
-                _attach_synced_once(uid, conversation_id, row, c)
-                if recorded_episodes_enabled() or not owner
-                else 'attached'
-            )
-            owner = episodes_db.get_episode_for_conversation(uid, conversation_id, firestore_client=c.firestore_client)
-            if owner is not None:
-                if conversation_id not in (owner.get('recovered_conversation_ids') or []):
-                    recovered_ids = [*(owner.get('recovered_conversation_ids') or []), conversation_id]
-                    episodes_db.update_episode(
-                        uid,
-                        str(owner['id']),
-                        expected_version=int(owner.get('state_version') or 0),
-                        updates={'recovered_conversation_ids': list(dict.fromkeys(recovered_ids))},
-                        firestore_client=c.firestore_client,
-                    )
-                episode_groups.join_duplicates(uid, owner, conversation_id, row, firestore_client=c.firestore_client)
-                _record_recovered(uid, str(owner['id']), conversation_id, row, c)
-            return outcome
-        except episodes_db.EpisodeConflict:
-            if attempt == 2:
-                return 'conflict'
-            time.sleep(random.uniform(0.01, 0.05) * (attempt + 1))
-    return 'conflict'
+    return sync_attach.attach(
+        uid,
+        conversation_id,
+        row,
+        c,
+        absorbed_from=absorbed_from,
+        attach_once=_attach_synced_once,
+        attach_recorded=_attach_recorded,
+        repoint_absorbed=_repoint_absorbed,
+        repoint_donors=_repoint_sync_donors,
+        end_discarded=_end_discarded,
+        record_recovered=_record_recovered,
+    )
 
 
 def attach_synced_intake(
@@ -1522,7 +1506,11 @@ def attach_synced_intake(
             # Only isolated final verdicts skip intake; occasion-aware sync intake
             # defers fragment discards, so their content joins before finalization.
             return 'skipped_discarded'
-        owner = episodes_db.get_episode_for_conversation(uid, conversation_id, firestore_client=c.firestore_client)
+        owner = (
+            None
+            if recorded_episodes_enabled() and owner_reuse_enabled()
+            else episodes_db.get_episode_for_conversation(uid, conversation_id, firestore_client=c.firestore_client)
+        )
         if owner is not None and not policy.is_live(owner):
             _attach_synced(uid, conversation_id, row, c)
             return 'no_episode'

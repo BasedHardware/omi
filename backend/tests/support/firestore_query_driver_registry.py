@@ -1080,6 +1080,7 @@ _add(
 _add(
     DriverEntry(
         'database.episode_timeline.attach_recorded',
+        neutrals={'attach_row': (None, 'optional semantic memo; no candidate query effect')},
         base={
             'uid': UID,
             'conversation_id': 'recorded-1',

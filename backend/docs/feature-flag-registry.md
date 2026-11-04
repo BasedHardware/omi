@@ -512,6 +512,13 @@ and an explicit empty literal renders as `''`.
 | `DREAM_TELEMETRY_V2_ENABLED` | Default-on structured dream_pass/dream_sweep JSON records (counts, durations, uuid run/sweep ids, allowlisted labels); 0/false/off/no stops them, leaving the legacy text lines | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `ENRICHMENT_BACKFILL_ROUTING_ENABLED` | Default on; new non-first-summary backfill enrichment uses the existing backfill queue while retaining enrichment handler and identity | backend | env | open | — | — | — | — | keep | keep | — | two-lane lead |
 | `EPISODES_ENABLED` | Default on unless set to a non-on value; live episodes overlay (per-moment gpt-5-nano update, provisional items, /v1/episodes capability). Off reports enabled=false and apps keep today's per-conversation UI | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
+| `EPISODE_ATTACH_CONTENT_GATE_ENABLED` | Default on; skip only verified completed semantic attach inputs | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
+| `EPISODE_ATTACH_DUPLICATES_DEDUPE_ENABLED` | Default on; omit duplicate-group CAS when its membership set is already present | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
+| `EPISODE_ATTACH_MEMBERSHIP_DEDUPE_ENABLED` | Default on; omit value-identical episode link and reverse membership writes | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
+| `EPISODE_ATTACH_NOOP_SCHEDULE_ENABLED` | Default on; skip episode scheduling after unchanged sync reprocessing | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
+| `EPISODE_ATTACH_OWNER_REUSE_ENABLED` | Default on; reuse the placed owner and omit unused recorded owner reads | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
+| `EPISODE_ATTACH_ROW_VISIBILITY_ENABLED` | Default on; use the supplied row for the attach visibility precheck | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
+| `EPISODE_ATTACH_WALK_CONTEXT_ENABLED` | Default on; reuse walk owner and visibility with transactional validation | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `EPISODE_CARRY_ON_SESSION_END` | Default on; wait one moment-pause window after a pusher session ends, then flush its carried transcript if no reconnect arrives | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `EPISODE_COMPOSER` | Default on unless set off; a closed episode whose members all finished processing gets one gpt-6-luna summary over member summaries plus the full transcript (title, notes, chapters) | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `EPISODE_HARD_CAP_ACROSS_CONVERSATIONS` | Default on; enforce the strict episode-wide hard cap during attachment and moment rotation, carrying the running summary and unresolved items to the successor | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
@@ -1095,6 +1102,13 @@ their code default (`fail` tells you which way a missing value resolves).
 - `EPISODES_ENABLED` — Default on unless set to a non-on value; live episodes overlay (per-moment gpt-5-nano update, provisional items, /v1/episodes capability). Off reports enabled=false and apps keep today's per-conversation UI (fail: open)
 - `EPISODES_PERCENT` — Default 100; stable salted uid bucket admitted to episodes when EPISODES_ENABLED is on. Admission alone spends nothing: listen and the finalizer also need a client that called /v1/episodes within 14 days (Redis episodes:client_seen:{uid}). Invalid values admit only the allowlist (fail: closed)
 - `EPISODES_UID_ALLOWLIST` — Comma-separated uids always admitted to episodes while EPISODES_ENABLED is on; empty admits nobody extra (fail: closed)
+- `EPISODE_ATTACH_CONTENT_GATE_ENABLED` — Default on; skip only verified completed semantic attach inputs (fail: open)
+- `EPISODE_ATTACH_DUPLICATES_DEDUPE_ENABLED` — Default on; omit duplicate-group CAS when its membership set is already present (fail: open)
+- `EPISODE_ATTACH_MEMBERSHIP_DEDUPE_ENABLED` — Default on; omit value-identical episode link and reverse membership writes (fail: open)
+- `EPISODE_ATTACH_NOOP_SCHEDULE_ENABLED` — Default on; skip episode scheduling after unchanged sync reprocessing (fail: open)
+- `EPISODE_ATTACH_OWNER_REUSE_ENABLED` — Default on; reuse the placed owner and omit unused recorded owner reads (fail: open)
+- `EPISODE_ATTACH_ROW_VISIBILITY_ENABLED` — Default on; use the supplied row for the attach visibility precheck (fail: open)
+- `EPISODE_ATTACH_WALK_CONTEXT_ENABLED` — Default on; reuse walk owner and visibility with transactional validation (fail: open)
 - `EPISODE_BOUNDARIES_MODE` — Hard meeting evidence for episodes and occasion conversations; off|shadow|serve, default shadow (fail: closed)
 - `EPISODE_BOUNDARIES_MODE_SERVE_PERCENT` — Serve cohort percentage in shadow mode, default 0 (fail: closed)
 - `EPISODE_BOUNDARIES_MODE_SERVE_UID_SHA256S` — Serve cohort account digests in shadow mode, default empty; never raw account identifiers (fail: closed)

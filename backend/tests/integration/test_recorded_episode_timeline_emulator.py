@@ -738,3 +738,71 @@ def test_candidate_cache_is_discarded_on_transaction_retry(store, monkeypatch):
     assert result['conversation_ids'] == ['new']
     assert len(reads) == 2
     assert reads[0] is not reads[1]
+
+
+def test_completed_attach_memo_real_transactions_and_stale_input(store, monkeypatch):
+    """The link stamp, recovery completion and gate use the real SDK/commit path."""
+    from database import episode_attach_memo
+    from utils.episodes import service
+
+    client, uid = store
+    root = client.collection('users').document(uid)
+    member = dict(
+        id='memo',
+        source='omi',
+        started_at=T0,
+        finished_at=T0 + timedelta(minutes=1),
+        recorded_start=T0,
+        recorded_end=T0 + timedelta(minutes=1),
+        transcript_segments=[],
+    )
+    ref = root.collection('conversations').document('memo')
+    ref.set(member)
+    c = service.Collaborators(firestore_client=client, now=lambda: T0 + timedelta(hours=1))
+    assert service._attach_synced(uid, 'memo', member, c) == 'recorded'
+    link = root.collection('episode_links').document('memo').get().to_dict()
+    assert link['attach_revision'] == link['attach_completed']
+
+    def unexpected(*a, **kw):
+        pytest.fail('memo hit entered the episode stack')
+
+    original = episode_timeline.recorded_candidates
+    monkeypatch.setattr(episode_timeline, 'recorded_candidates', unexpected)
+    assert service._attach_synced(uid, 'memo', member, c) == 'attached_unchanged'
+    # Atomic validation of the current row refuses stale caller snapshots.
+    ref.update({'deleted': True})
+    assert not episode_attach_memo.matches(uid, 'memo', member, firestore_client=client)
+    ref.update({'deleted': False})
+    # A disabled memo takes the original recorded attach path.
+    monkeypatch.setenv('EPISODE_ATTACH_CONTENT_GATE_ENABLED', 'false')
+    monkeypatch.setattr(episode_timeline, 'recorded_candidates', original)
+    assert service._attach_synced(uid, 'memo', member, c) == 'recorded'
+
+
+def test_memo_is_not_completed_when_content_changes_during_recovery(store, monkeypatch):
+    from database import episode_attach_memo
+    from utils.episodes import service
+
+    client, uid = store
+    root = client.collection('users').document(uid)
+    member = dict(
+        id='race',
+        source='omi',
+        started_at=T0,
+        finished_at=T0 + timedelta(minutes=1),
+        recorded_start=T0,
+        recorded_end=T0 + timedelta(minutes=1),
+        transcript_segments=[],
+    )
+    ref = root.collection('conversations').document('race')
+    ref.set(member)
+    c = service.Collaborators(firestore_client=client, now=lambda: T0 + timedelta(hours=1))
+
+    def changed(*a, **kw):
+        ref.update({'transcript_segments': [{'id': 'new', 'text': 'changed', 'start': 0, 'end': 30}]})
+        return 'skipped_applied'
+
+    monkeypatch.setattr(service, '_record_recovered', changed)
+    assert service._attach_synced(uid, 'race', member, c) == 'recorded'
+    assert root.collection('episode_links').document('race').get().to_dict()['attach_completed'] is None
+    assert not episode_attach_memo.matches(uid, 'race', member, firestore_client=client)

@@ -29,6 +29,7 @@ from typing import Any, Mapping, Optional, Sequence
 
 from google.cloud import firestore
 from config.recorded_time import recorded_episodes_enabled
+from config.episode_attach import membership_dedupe_enabled
 from config.episodes import (
     MAX_EPISODE_SECONDS,
     episode_hard_cap_across_conversations_enabled,
@@ -417,6 +418,12 @@ def _drop_legacy_receipts(merged: dict[str, Any], segment_receipts: Optional[Map
         merged.pop('applied_segment_ids', None)
 
 
+class MembershipLink(dict):
+    """Link data plus the reverse field read in the same transaction."""
+
+    conversation_episode_id: Any = None
+
+
 def read_memberships(transaction, client, uid, conversation_ids, *, admit_conversation_id=None):
     ids = [cid for cid in dict.fromkeys(conversation_ids) if cid and cid not in {CURRENT, LAST_CLOSED}]
     if len(ids) > MEMBERSHIP_BATCH_LIMIT:
@@ -430,10 +437,9 @@ def read_memberships(transaction, client, uid, conversation_ids, *, admit_conver
             is_relevance_discarded(row) or row.get('deleted') or row.get('sync_merged_into')
         ):
             raise EpisodeConflict('conversation_hidden')
-        members[cid] = (
-            snapshot.exists,
-            _links(client, uid).document(cid).get(transaction=transaction).to_dict() or {},
-        )
+        previous = MembershipLink(_links(client, uid).document(cid).get(transaction=transaction).to_dict() or {})
+        previous.conversation_episode_id = row.get('episode_id')
+        members[cid] = (snapshot.exists, previous)
     return members
 
 
@@ -454,14 +460,20 @@ def write_memberships(transaction, client, uid, episode_id, members, arrival_at)
                 ]
             )
         )
+        write_membership(transaction, client, uid, cid, episode_id, ids, exists, previous, arrival_at)
+
+
+def write_membership(transaction, client, uid, cid, episode_id, ids, exists, previous, arrival_at):
+    dedupe = membership_dedupe_enabled()
+    if not dedupe or previous.get('episode_id') != episode_id or previous.get('episode_ids') != ids:
         transaction.set(
             _links(client, uid).document(cid), {'episode_id': episode_id, 'episode_ids': ids, 'updated_at': arrival_at}
         )
-        if exists:
-            transaction.update(
-                client.collection('users').document(uid).collection('conversations').document(cid),
-                {'episode_id': episode_id},
-            )
+    if exists and (not dedupe or getattr(previous, 'conversation_episode_id', object()) != episode_id):
+        transaction.update(
+            client.collection('users').document(uid).collection('conversations').document(cid),
+            {'episode_id': episode_id},
+        )
 
 
 @firestore.transactional
@@ -769,6 +781,7 @@ def _update(
     updates: Mapping[str, Any],
     link_conversation_ids: Sequence[str],
     segment_receipts: Optional[Mapping[str, Sequence[str]]] = None,
+    recovery_conversation_id: Optional[str] = None,
 ) -> dict[str, Any]:
     timeline_enabled = recorded_episodes_enabled()
     timeline_row = None
@@ -778,6 +791,23 @@ def _update(
     snapshot = ref.get(transaction=transaction)
     raw = snapshot.to_dict() if snapshot.exists else None
     receipts_raw = _read_receipts(transaction, client, uid, segment_receipts)
+    if recovery_conversation_id:
+        current = (
+            client.collection('users')
+            .document(uid)
+            .collection('conversations')
+            .document(recovery_conversation_id)
+            .get(transaction=transaction)
+            .to_dict()
+            or {}
+        )
+        if (
+            is_relevance_discarded(current)
+            or current.get('deleted')
+            or current.get('sync_merged_into')
+            or (current.get('episode_id') is not None and current.get('episode_id') != episode_id)
+        ):
+            raise EpisodeConflict('conversation_hidden_or_repointed')
     if not raw or raw.get('state_version') != expected_version:
         raise EpisodeConflict('state_version_changed')
     merged = _merge_state(unseal(uid, raw) or {}, updates)
@@ -810,6 +840,7 @@ def update_episode(
     link_conversation_ids: Sequence[str] = (),
     segment_receipts: Optional[Mapping[str, Sequence[str]]] = None,
     firestore_client: Any = None,
+    recovery_conversation_id: Optional[str] = None,
 ) -> dict[str, Any]:
     """CAS update of any episode (open or closed). Raises ``EpisodeConflict`` on a lost race.
 
@@ -827,5 +858,6 @@ def update_episode(
         dict(updates),
         list(link_conversation_ids),
         dict(segment_receipts or {}) or None,
+        recovery_conversation_id,
         transient=True,
     )

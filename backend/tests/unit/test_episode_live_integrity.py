@@ -529,7 +529,7 @@ def test_paired_desktop_pendant_group_recovers_once_without_duplicate_moments(la
     monkeypatch.setattr(
         service,
         '_record_recovered',
-        lambda uid, eid, cid, row, collab: (recovered.append(cid), recover(uid, eid, cid, row, collab))[1],
+        lambda uid, eid, cid, row, collab, **kw: (recovered.append(cid), recover(uid, eid, cid, row, collab, **kw))[1],
     )
     finalized = service.on_conversation_finalized
     monkeypatch.setattr(
@@ -1104,7 +1104,7 @@ def test_meaningful_sync_append_is_admitted_after_old_model_discard(lane, monkey
         ),
     )
     monkeypatch.setattr(service.client_gate, 'client_seen_cached', lambda uid: True)
-    monkeypatch.setattr(service, '_record_recovered', lambda *a: 'skipped_applied')
+    monkeypatch.setattr(service, '_record_recovered', lambda *a, **kw: 'skipped_applied')
     c.now = lambda: T0 + timedelta(minutes=3)
     assert not is_relevance_discarded(expanded)
     assert service.attach_synced_intake('u', expanded['id'], expanded, collaborators=c) == 'recorded'

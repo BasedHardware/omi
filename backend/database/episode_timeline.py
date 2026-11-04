@@ -9,7 +9,10 @@ from google.cloud.firestore_v1 import FieldFilter
 
 from config.episodes import MAX_EPISODE_SECONDS, CLOSE_GAP_SECONDS
 from database._client import get_firestore_client, run_transactional
-from database import episodes
+from database import episodes, episode_attach_memo
+from utils.conversations.episode_attach_key import content_key, memo_eligible
+from config.episode_attach import content_gate_enabled
+from utils.conversations.recorded_time import conversation_span
 
 PAGE_LIMIT = 128
 FIELDS = (
@@ -246,6 +249,7 @@ def attach_recorded(
     choose: Callable,
     new_episode: dict[str, Any],
     firestore_client: Any = None,
+    attach_row: Any = None,
 ) -> dict[str, Any]:
     """Place a capture once. Its owner never changes when the capture spans a cap.
 
@@ -264,6 +268,18 @@ def attach_recorded(
         # only inside this callback: Firestore retries must issue fresh queries.
         fence = client.collection('users').document(uid).collection('episode_links').document('recorded_timeline')
         revision = fence.get(transaction=transaction).to_dict() or {}
+        key = content_key(attach_row) if content_gate_enabled() and attach_row and memo_eligible(attach_row) else None
+        span = conversation_span(attach_row) if key else None
+        if key and (
+            span is None
+            or (span.recorded_start, span.recorded_end) != (started, finished)
+            or getattr(attach_row.get('source'), 'value', attach_row.get('source')) != source
+        ):
+            key = None
+        if key:
+            current = client.collection('users').document(uid).collection('conversations').document(conversation_id)
+            if episode_attach_memo.current_key(uid, current.get(transaction=transaction).to_dict()) != key:
+                key = None
         cached = []
 
         def candidates(uid, lo, hi, **kwargs):
@@ -294,6 +310,7 @@ def attach_recorded(
             fence_row=revision,
         )
         if canonical is not None:
+            episode_attach_memo.stamp(transaction, client, uid, conversation_id, key, canonical['id'])
             return canonical
         result = _attach_recorded_window(
             uid,
@@ -309,6 +326,7 @@ def attach_recorded(
             fence_row=revision,
         )
         result.pop('_window_end')
+        episode_attach_memo.stamp(transaction, client, uid, conversation_id, key, result['id'])
         return {**result, '_recorded_windows': [result]}
 
     return run_transactional(client, attach, transient=True)

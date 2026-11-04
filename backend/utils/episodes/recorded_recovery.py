@@ -4,6 +4,7 @@ from dataclasses import replace
 from typing import Any, Callable, Iterable, Iterator, Mapping, Sequence
 
 from database import episode_receipts
+from config.episode_attach import walk_context_enabled
 from utils.episodes import policy, recovery
 from utils.episodes.moment import MomentInput
 
@@ -21,11 +22,20 @@ class RecoveryReceipts:
         self.episode_id = (owner or {}).get('id')
         self.version = (owner or {}).get('state_version')
         self.loaded = False
+        self.owner = owner
+        self.row: Any = None
+
+    def invalidate(self):
+        self.owner = None
+        self.row = None
+        self.loaded = False
 
     def read(self, owner=None):
         if owner is not None and (owner.get('id'), owner.get('state_version')) != (self.episode_id, self.version):
             self.loaded = False
             self.episode_id, self.version = owner.get('id'), owner.get('state_version')
+        if owner is not None:
+            self.owner = owner
         if not self.loaded:
             self.legacy, self.exists = episode_receipts.get_consumed_ids(
                 self.uid, self.conversation_id, all_shards=True, firestore_client=self.client
@@ -42,6 +52,7 @@ class RecoveryReceipts:
         return set(self.legacy), self.exists, set(self.content)
 
     def committed(self, owner, receipts):
+        self.owner = owner
         self.episode_id, self.version = owner['id'], owner['state_version']
         self.legacy.update(receipts.get(self.conversation_id) or [])
         self.content.update(receipts.get(recovery.receipt_namespace(self.conversation_id)) or [])
@@ -129,6 +140,8 @@ def record_windows(
     outcome = 'skipped_applied'
     walk = recovery.moments(conversation_id, row, now=now, calendar_identity=row.get('calendar_identity'))
     receipts = RecoveryReceipts(uid, conversation_id, collaborators, owner) if collaborators is not None else None
+    if receipts is not None and walk_context_enabled():
+        receipts.row = row
     for moment in unconsumed_moments(uid, conversation_id, walk, collaborators, receipts=receipts):
         moment = replace(moment, ended_at=min(moment.ended_at, owner['last_activity_at']))
         outcome = record_moment(uid, moment, collaborators, member_episode_id=str(owner['id']))
