@@ -17,7 +17,11 @@ enum OnboardingVariant {
 
   /// Pocket's order: sign-up paywall with a 30-day upsell, permissions, pairing that starts by
   /// itself, the device walkthrough, then the remaining native steps.
-  pocket('pocket');
+  pocket('pocket'),
+
+  /// The native steps with Connect your Omi first, right after sign-up; an Omi paired there skips
+  /// the phone voice intro.
+  connectFirst('connect_first');
 
   const OnboardingVariant(this.wireName);
 
@@ -39,6 +43,7 @@ class OnboardingArm {
   static const control = OnboardingArm(OnboardingVariant.control);
   static const yinka = OnboardingArm(OnboardingVariant.yinka);
   static const pocket = OnboardingArm(OnboardingVariant.pocket);
+  static const connectFirst = OnboardingArm(OnboardingVariant.connectFirst);
 
   final OnboardingVariant variant;
 
@@ -58,7 +63,8 @@ class OnboardingArm {
 }
 
 /// Gate for which first-run onboarding a reader gets after sign-in and consent: the native steps
-/// (control), Reid's web page (`reid`) or Yinka's native flow (`yinka`).
+/// (control), Reid's web page (`reid`), Yinka's native flow (`yinka`), Pocket's order (`pocket`) or
+/// the native steps with Connect your Omi first (`connect_first`).
 ///
 /// Evaluated on the client from the PostHog multivariate flag `onboarding-variant`; the `reid`
 /// payload names the page: `{"url": "https://…"}`. Fail-closed: no analytics identity, a slow read,
@@ -67,7 +73,7 @@ abstract final class OnboardingVariantGate {
   /// PostHog flag key (project 302298). Registered in `config/feature-flags.yaml`.
   static const enabledFlag = 'onboarding-variant';
 
-  /// Debug-build override: `--dart-define=OMI_ONBOARDING_VARIANT=reid|yinka|pocket`
+  /// Debug-build override: `--dart-define=OMI_ONBOARDING_VARIANT=reid|yinka|pocket|connect_first`
   /// (`reid` also needs `OMI_ONBOARDING_WEBVIEW_URL=https://…`).
   static const _debugVariant = String.fromEnvironment('OMI_ONBOARDING_VARIANT');
   static const _debugUrl = String.fromEnvironment('OMI_ONBOARDING_WEBVIEW_URL');
@@ -77,6 +83,7 @@ abstract final class OnboardingVariantGate {
     return switch (OnboardingVariant.fromWire(_debugVariant)) {
       OnboardingVariant.yinka => OnboardingArm.yinka,
       OnboardingVariant.pocket => OnboardingArm.pocket,
+      OnboardingVariant.connectFirst => OnboardingArm.connectFirst,
       OnboardingVariant.reid => parse(variant: 'reid', payload: {'url': _debugUrl}),
       _ => null,
     };
@@ -90,6 +97,8 @@ abstract final class OnboardingVariantGate {
         return OnboardingArm.yinka;
       case OnboardingVariant.pocket:
         return OnboardingArm.pocket;
+      case OnboardingVariant.connectFirst:
+        return OnboardingArm.connectFirst;
       case OnboardingVariant.reid:
         Object? value = payload;
         if (value is String) {

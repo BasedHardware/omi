@@ -16,7 +16,8 @@ import 'first_capture_layout.dart';
 /// The last onboarding step puts the device first: pair an Omi (the one main action), get one if
 /// the reader has none (the store, in-app), or skip and go straight to Home without waiting.
 /// Keeps completion at persisted index 9; pairing never marks onboarding complete until it
-/// succeeds or the reader explicitly skips.
+/// succeeds or the reader explicitly skips. The connect_first arm shows it first instead, where
+/// [onComplete] moves on to the next step.
 class OnboardingCompleteScreen extends StatefulWidget {
   const OnboardingCompleteScreen({
     super.key,
