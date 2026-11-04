@@ -141,7 +141,6 @@ def _is_deterministic_persist_defect(error: BaseException) -> bool:
     return False
 
 
-
 def _legacy_persist_reason(error: Exception) -> str:
     # Only audited, fixed prefixes may reach logs. SDK/validation/codec errors
     # can include document paths or user content even before their first colon.
@@ -1507,9 +1506,7 @@ class TranscriptProcessor:
                     ):
                         self._oversized_rollover_probe_at = time.monotonic() + OVERSIZED_ROLLOVER_PROBE_SECONDS
                         try:
-                            escape = getattr(
-                                self.host.conversations, 'rollover_after_transcript_decode_failure', None
-                            )
+                            escape = getattr(self.host.conversations, 'rollover_after_transcript_decode_failure', None)
                             if callable(escape):
                                 await escape()
                             else:

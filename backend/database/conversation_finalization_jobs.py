@@ -1499,6 +1499,7 @@ def mark_finalization_retryable(
     count_attempt: bool = True,
 ) -> bool:
     client = _client(firestore_client)
+
     def run_once(transaction: Any) -> Any:
         return run_transactional(
             client,
@@ -1640,6 +1641,7 @@ def mark_finalization_dead_letter(
     firestore_client: Any = None,
 ) -> bool:
     client = _client(firestore_client)
+
     def run_once(transaction: Any) -> Any:
         return run_transactional(
             client,
@@ -1794,6 +1796,7 @@ def record_meeting_receipt(
     firestore_client: Any = None,
 ) -> dict[str, Any]:
     client = _client(firestore_client)
+
     def run_once(transaction: Any) -> Any:
         return run_transactional(
             client,
@@ -2203,6 +2206,7 @@ def claim_finalization_replay(
     max_attempts: int | None = None,
 ) -> FinalizationIntent:
     client = _client(firestore_client)
+
     def run_once(transaction: Any) -> Any:
         return run_transactional(
             client,
@@ -2730,6 +2734,7 @@ def advance_in_progress_content_sweep_cursor(
 ) -> bool:
     """Atomically advance the self-heal sweep cursor; ``False`` on a CAS loss."""
     client = _client(firestore_client)
+
     def run_once(transaction: Any) -> Any:
         return run_transactional(
             client,
@@ -3151,6 +3156,7 @@ def _recover_deferred_processing_failure_txn(transaction: Any, conversation_ref:
 def recover_deferred_processing_failure(uid: str, conversation_id: str, *, firestore_client: Any = None) -> bool:
     """Atomically re-arm deferred enrichment without exposing a stuck processing row."""
     client = _client(firestore_client)
+
     def run_once(transaction: Any) -> Any:
         return run_transactional(
             client,
@@ -3435,6 +3441,7 @@ def abandon_byok_finalization_job(
     """Close one unownable BYOK job through its generation/ownership fence."""
     client = _client(firestore_client)
     now = _now()
+
     def run_once(transaction: Any) -> Any:
         return run_transactional(
             client,
