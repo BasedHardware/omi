@@ -14,7 +14,6 @@ import json
 import logging
 import os
 import random
-import re
 import time
 
 from utils.conversations import phase_shadow
@@ -49,16 +48,48 @@ from config.server_batch import owned as server_batch_owned, has_audio as server
 logger = logging.getLogger(__name__)
 OWNER = 'batch_live_v1'
 UPLOAD_GRACE_SECONDS = 0
-# Admission refusals are literal lowercase phrases; anything else (which could
-# carry a value) is reported only as `other`.
-_STATIC_REASON = re.compile(r'[a-z][a-z /_-]{0,79}')
+# Literal admission refusals worth counting; any other text could carry a value
+# and is reported only as `other`.
+_RETRY_REASONS = frozenset(
+    {
+        'audio staging reservation missing or reclaimed',
+        'capture upload barrier changed during staging',
+        'capture upload/finalization barrier not closed',
+        'complete ordered sibling set must match immutable projection binding',
+        'conflicting retained audio overlap',
+        'existing segment cannot change its immutable intake binding',
+        'invalid encrypted audio frame',
+        'invalid retained audio size',
+        'native provider outbox factory required',
+        'partial continuation changed',
+        'partial continuation ownership changed',
+        'partial page unavailable',
+        'partial record barrier disabled',
+        'pending recording owner cannot change',
+        'record owner is immutable',
+        'record protocol cutover barrier closed',
+        'registered record target unavailable',
+        'retained audio reference is outside admitted source',
+        'retained audio source exceeds size budget',
+        'retained capture checksum mismatch',
+        'retained capture finish missing',
+        'retained capture not durable yet',
+        'retained capture reference budget exceeded',
+        'retained capture tail not durable yet',
+        'retained capture unit budget exceeded',
+        'retained source has no aligned audio',
+        'truncated encrypted audio length',
+        'unit has no capture end',
+        'work identity must match projection binding',
+    }
+)
 
 
 def _retry_reason(error: BaseException) -> str:
     if not isinstance(error, ValueError):
         return '-'
     text = str(error)
-    return text.replace(' ', '_') if _STATIC_REASON.fullmatch(text) else 'other'
+    return text.replace(' ', '_').replace('/', '_') if text in _RETRY_REASONS else 'other'
 
 
 def reserve_recording(uid: str, conversation: dict) -> str | None:
@@ -422,6 +453,7 @@ async def drain_recordings(store, *, provider_outbox_factory=None) -> bool:
     busy_owners = set()
 
     async def drain_one(segment):
+        nonlocal privacy_blocked
         pending = await run_blocking(db_executor, store.run, lambda tx: tx.get('jobs', segment))
         if pending.get('state') != 'record_pending':
             return
@@ -430,7 +462,13 @@ async def drain_recordings(store, *, provider_outbox_factory=None) -> bool:
             return
         busy_owners.add(owner)
         try:
-            lease = await run_blocking(db_executor, store.run, lambda tx: claim(tx, segment))
+            try:
+                lease = await run_blocking(db_executor, store.run, lambda tx: claim(tx, segment))
+            except BatchPrivacyBlocked:
+                # The claim write meets the same privacy fence as admission;
+                # erasure owns the row and this worker moves on.
+                privacy_blocked = True
+                return
             if lease is None:
                 return
             await admit_and_defer(segment, pending, lease)

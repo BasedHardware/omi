@@ -362,6 +362,7 @@ async def test_drain_skips_a_row_leased_by_another_replica(monkeypatch):
     [
         (ValueError('retained capture tail not durable yet'), 'reason=retained_capture_tail_not_durable_yet'),
         (ValueError("invalid literal for int() with base 10: 'synthetic-private'"), 'reason=other'),
+        (ValueError('synthetic private account name'), 'reason=other'),
         (RuntimeError('synthetic-private'), 'reason=-'),
     ],
 )
@@ -378,7 +379,7 @@ async def test_retry_log_names_only_static_value_error_reasons(monkeypatch, capl
     with caplog.at_level('WARNING', logger=live.__name__):
         await live.drain_recordings(store)
     assert reason in caplog.text
-    assert 'synthetic-private' not in caplog.text
+    assert 'synthetic-private' not in caplog.text and 'account_name' not in caplog.text
 
 
 @pytest.fixture(autouse=True)
@@ -861,3 +862,41 @@ def test_ambiguous_annotated_sentence_preserves_text_and_abstains_instead_of_gue
     assert segment['id'] == 'old' and segment['text'] == 'Synthetic speech.'
     assert segment['speaker_match_source'] == 'batch_abstention' and not segment['is_user']
     assert segment['translations'] == old['transcript_segments'][0]['translations']
+
+
+@pytest.mark.asyncio
+async def test_privacy_fenced_claim_does_not_stop_the_worker(monkeypatch):
+    from utils.batch_pipeline import live
+    from database.batch_pipeline_privacy import BatchPrivacyBlocked
+
+    monkeypatch.setenv('RECORD_DRAIN_CONCURRENCY', '1')
+    monkeypatch.setenv('RECORD_DRAIN_BATCH', '2')
+    monkeypatch.setattr(live.random, 'shuffle', lambda segments: segments.sort())
+    store = MemoryStore()
+    for segment in ('a-fenced', 'b-ok'):
+        store.rows['jobs', segment] = {
+            'owner_id': f'synthetic-{segment}',
+            'segment_id': segment,
+            'state': 'record_pending',
+            'available_at': 0,
+        }
+    original_run = store.run
+    calls = []
+
+    def run(body):
+        calls.append(1)
+        if len(calls) == 2:  # the fenced row's claim transaction
+            raise BatchPrivacyBlocked('synthetic privacy fence')
+        return original_run(body)
+
+    admitted = []
+
+    async def admission(store, pending):
+        admitted.append(pending['segment_id'])
+        store.rows['jobs', pending['segment_id']]['state'] = 'ready'
+
+    monkeypatch.setattr(store, 'run', run)
+    monkeypatch.setattr(live, 'admit_recording', admission)
+    assert await live.drain_recordings(store) is False
+    assert admitted == ['b-ok']
+    assert store.rows['jobs', 'a-fenced']['available_at'] == 0
