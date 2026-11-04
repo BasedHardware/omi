@@ -21,7 +21,9 @@ EXPIRED_MESSAGE = '400 The referenced transaction has expired or is no longer va
 @pytest.fixture(autouse=True)
 def no_episode_log_owner(monkeypatch):
     # The expiry fake deliberately models only one conversation document.
-    monkeypatch.setattr('database.episode_log.state', lambda *args, **kwargs: {})
+    from tests.support.episode_log_owners import without_episode_log_owner
+
+    without_episode_log_owner(monkeypatch)
 
 
 class _FakeSnapshot:

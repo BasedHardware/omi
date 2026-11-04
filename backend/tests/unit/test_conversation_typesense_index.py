@@ -130,7 +130,9 @@ class _Snapshot:
 def no_episode_log_owner(monkeypatch):
     # These legacy single-document fakes have no episode-log owner. Do not
     # mistake their catch-all MagicMock for an existing owner/deletion marker.
-    monkeypatch.setattr('database.episode_log.state', lambda *args, **kwargs: {})
+    from tests.support.episode_log_owners import without_episode_log_owner
+
+    without_episode_log_owner(monkeypatch)
 
 
 @pytest.fixture

@@ -66,6 +66,9 @@ def test_expected_exemptions_are_the_manifest_empty_index_overrides():
     assert field_reconciler.expected_field_exemptions(manifest) == (
         field_reconciler.FieldExemption('conversations', 'live_transcript_replay_receipt'),
         field_reconciler.FieldExemption('conversations', 'owner_recognition_diagnostics'),
+        field_reconciler.FieldExemption('episode_facts', 'payload'),
+        field_reconciler.FieldExemption('episode_log_checkpoint', 'payload'),
+        field_reconciler.FieldExemption('episode_views', 'home_payload'),
         field_reconciler.FieldExemption('screen_activity', 'ocrText'),
         field_reconciler.FieldExemption('screen_activity', 'windowTitle'),
         field_reconciler.FieldExemption('sync_backfill_pending', 'payload'),
@@ -160,6 +163,7 @@ def test_apply_disables_only_missing_declared_fields_and_verifies_convergence(mo
         'live_transcript_replay_receipt',
         'owner_recognition_diagnostics',
         'windowTitle',
+        'home_payload',
         'payload',
         'active_payload',
     }
@@ -168,6 +172,9 @@ def test_apply_disables_only_missing_declared_fields_and_verifies_convergence(mo
     assert runner.disabled == {
         ('conversations', 'live_transcript_replay_receipt'),
         ('conversations', 'owner_recognition_diagnostics'),
+        ('episode_facts', 'payload'),
+        ('episode_log_checkpoint', 'payload'),
+        ('episode_views', 'home_payload'),
         ('screen_activity', 'ocrText'),
         ('screen_activity', 'windowTitle'),
         ('sync_backfill_pending', 'payload'),
@@ -202,7 +209,7 @@ def test_slow_field_does_not_block_remaining_submissions(capsys):
     runner = FakeRunner(slow={FIRST})
     _apply(runner)
     assert FIRST in runner.pending
-    assert len(runner.disabled) == 5
+    assert len(runner.disabled) == 8
     assert 'conversations.live_transcript_replay_receipt: submitted' in capsys.readouterr().out
 
 
@@ -211,7 +218,7 @@ def test_pending_field_is_skipped_on_repeated_apply(capsys):
     _apply(runner)
     _apply(runner)
     updates = [c for c in runner.commands if c[4] == 'update']
-    assert len(updates) == 5
+    assert len(updates) == 8
     assert all(c[5] != FIRST[1] for c in updates)
     assert 'conversations.live_transcript_replay_receipt: in-flight' in capsys.readouterr().out
 
@@ -220,7 +227,7 @@ def test_real_submit_error_fails_but_other_fields_are_attempted():
     runner = FakeRunner(failures={FIRST})
     with pytest.raises(RuntimeError, match='Firestore field exemption failed for conversations.live_transcript'):
         _apply(runner)
-    assert len(runner.disabled) == 5
+    assert len(runner.disabled) == 8
 
 
 def test_submission_race_is_accepted_only_with_confirmed_pending_operation(capsys):
@@ -233,7 +240,7 @@ def test_mixed_final_state_reports_disabled_submitted_and_in_flight(capsys):
     runner = FakeRunner(disabled={('screen_activity', 'ocrText')}, pending={FIRST}, slow={SECOND})
     _apply(runner)
     output = capsys.readouterr().out.splitlines()
-    assert len(output) == 6
+    assert len(output) == 9
     assert 'screen_activity.ocrText: disabled' in output
     assert 'conversations.live_transcript_replay_receipt: in-flight' in output
     assert 'conversations.owner_recognition_diagnostics: submitted' in output
@@ -310,4 +317,4 @@ def test_post_submit_verification_rechecks_eventual_state(visible_after, final_s
     assert waits == [2] * visible_after
     expected_status = 'submitted' if final_state == 'pending' else 'disabled'
     assert f'conversations.live_transcript_replay_receipt: {expected_status}' in capsys.readouterr().out
-    assert len([command for command in runner.commands if command[4] == 'update']) == 6
+    assert len([command for command in runner.commands if command[4] == 'update']) == 9

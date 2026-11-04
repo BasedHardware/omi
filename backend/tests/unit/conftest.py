@@ -329,3 +329,11 @@ def empty_rollout_cohorts(monkeypatch):
     monkeypatch.setattr(cohorts, '_members_resolver', members)
     monkeypatch.setattr(cohorts, '_load_resolver', lambda _uid: None)
     monkeypatch.setattr(cohorts, '_warm_resolver', warm)
+
+
+@pytest.fixture
+def untracked_episode_log(monkeypatch):
+    """Opt in only for partial legacy stores with no episode-log owner namespace."""
+    from tests.support.episode_log_owners import without_episode_log_owner
+
+    without_episode_log_owner(monkeypatch)

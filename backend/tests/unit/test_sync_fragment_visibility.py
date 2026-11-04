@@ -19,7 +19,9 @@ from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, St
 @pytest.fixture(autouse=True)
 def no_episode_log_owner(monkeypatch):
     # Legacy visibility fakes represent a conversation, not a logged owner.
-    monkeypatch.setattr('database.episode_log.state', lambda *args, **kwargs: {})
+    from tests.support.episode_log_owners import without_episode_log_owner
+
+    without_episode_log_owner(monkeypatch)
 
 
 class _MergeCapableTransaction(StrictFirestoreTransaction):

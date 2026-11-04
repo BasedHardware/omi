@@ -390,7 +390,7 @@ def test_processing_transaction_reloads_user_fields_when_firestore_retries(monke
     assert retried_write['folder_id'] == 'user-folder'
 
 
-def test_title_mutation_records_a_durable_override(monkeypatch):
+def test_title_mutation_records_a_durable_override(monkeypatch, untracked_episode_log):
     ref = _ConversationRef(_Snapshot({'id': 'conversation-1'}))
     monkeypatch.setattr(conversations_db, 'db', _Firestore(ref))
 

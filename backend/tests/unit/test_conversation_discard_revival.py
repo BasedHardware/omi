@@ -56,7 +56,9 @@ class _Transaction:
 
 def _persist(monkeypatch, existing, *, smart_merge_refresh=None):
     # This single-document fake has no episode-log owner namespace.
-    monkeypatch.setattr('database.episode_log.state', lambda *args, **kwargs: {})
+    from tests.support.episode_log_owners import without_episode_log_owner
+
+    without_episode_log_owner(monkeypatch)
     ref = _Ref(_Snapshot(existing))
 
     fake_db = MagicMock()

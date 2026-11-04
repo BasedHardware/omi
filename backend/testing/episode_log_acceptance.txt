@@ -8,6 +8,7 @@ tests/unit/test_batch_pipeline_shadow_projection.py
 tests/unit/test_capture_groups.py
 tests/unit/test_conversation_discard_revival.py
 tests/unit/test_conversation_persistence_transaction_expiry.py
+tests/unit/test_conversation_revision_contract.py
 tests/unit/test_conversation_smart_merge.py
 tests/unit/test_conversation_smart_merge_audit.py
 tests/unit/test_conversation_smart_merge_audit_sdk.py
@@ -22,6 +23,7 @@ tests/unit/test_conversation_smart_merge_policy.py
 tests/unit/test_conversation_smart_merge_state.py
 tests/unit/test_conversation_smart_merge_wallclock.py
 tests/unit/test_conversation_smart_merge_wallclock_policy.py
+tests/unit/test_conversation_summary_mutation.py
 tests/unit/test_conversation_typesense_index.py
 tests/unit/test_episode_attach_cost.py
 tests/unit/test_episode_attach_review.py
@@ -65,7 +67,9 @@ tests/unit/test_homesettle.py
 tests/unit/test_lifecycle_state_table_writers.py
 tests/unit/test_monitoring_telemetry_contract.py
 tests/unit/test_omi_flags.py
+tests/unit/test_pusher_audio_projection.py
 tests/unit/test_reason_label_enums.py
+tests/unit/test_reconcile_firestore_field_exemptions.py
 tests/unit/test_recorded_span.py
 tests/unit/test_route_policy_inventory.py
 tests/unit/test_route_policy_preflight.py
