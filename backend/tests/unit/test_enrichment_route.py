@@ -191,11 +191,27 @@ def test_unexpected_errors_stay_5xx_and_keep_the_lease(rows, client, monkeypatch
     assert rows[0][KEY]['lease_until'] > 0  # the sweep re-wakes after expiry
 
 
+def _expire_budget_once_running(monkeypatch, running: threading.Event) -> None:
+    """The route's budget wait expires as soon as the callback is running: no real-clock budget to race."""
+    import asyncio
+
+    async def expired(work, timeout):
+        assert timeout == route.DELIVERY_BUDGET_SECONDS  # the production budget, not a shrunk one
+        assert await asyncio.get_running_loop().run_in_executor(None, running.wait, 10)  # expire only mid-callback
+        raise asyncio.TimeoutError
+
+    monkeypatch.delenv('ENRICHMENT_DELIVERY_BUDGET_SECONDS', raising=False)
+    fake = SimpleNamespace(**{name: getattr(asyncio, name) for name in ('ensure_future', 'shield', 'Future')})
+    fake.wait_for, fake.TimeoutError = expired, asyncio.TimeoutError
+    monkeypatch.setattr(route, 'asyncio', fake)
+
+
 def test_a_delivery_past_its_budget_frees_the_slot_with_a_409_and_still_settles(rows, client, monkeypatch):
-    monkeypatch.setenv('ENRICHMENT_DELIVERY_BUDGET_SECONDS', '0.2')
-    release = threading.Event()
+    running, release = threading.Event(), threading.Event()
+    _expire_budget_once_running(monkeypatch, running)
 
     def slow(*_):
+        running.set()
         assert release.wait(10)
 
     monkeypatch.setattr(consumer_module.EnrichmentConsumer, '_callback', lambda self: slow)
@@ -214,10 +230,11 @@ def test_a_delivery_past_its_budget_frees_the_slot_with_a_409_and_still_settles(
 def test_a_retry_after_the_budget_rearms_under_a_fresh_wake(rows, client, monkeypatch):
     from fastapi import HTTPException
 
-    monkeypatch.setenv('ENRICHMENT_DELIVERY_BUDGET_SECONDS', '0.2')
-    release = threading.Event()
+    running, release = threading.Event(), threading.Event()
+    _expire_budget_once_running(monkeypatch, running)
 
     def slow_then_warming(*_):
+        running.set()
         assert release.wait(10)
         raise HTTPException(status_code=503, detail='synthetic')
 
