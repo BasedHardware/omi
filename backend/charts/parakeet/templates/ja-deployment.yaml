@@ -16,7 +16,7 @@ metadata:
     app.kubernetes.io/instance: {{ .Release.Name }}
     app.kubernetes.io/managed-by: {{ .Release.Service }}
 spec:
-  replicas: {{ .Values.ja.replicaCount }}
+  replicas: {{ ternary 0 .Values.ja.replicaCount .Values.fleetRetired }}
   selector:
     matchLabels:
       app.kubernetes.io/name: {{ include "parakeet.name" . }}-ja
