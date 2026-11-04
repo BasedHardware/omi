@@ -1136,7 +1136,7 @@ def test_recorded_attach_falls_through_on_changed_evidence(lane, monkeypatch, ch
     store, c, _ = lane
     member = row('same', recorded_start=T0, recorded_end=T0 + timedelta(seconds=30))
     store.rows[('users', 'u', 'conversations', 'same')] = member
-    placed = service._attach_recorded('u', 'same', member, T0, T0 + timedelta(seconds=30), c)
+    placed = service.attach_recorded('u', 'same', member, T0, T0 + timedelta(seconds=30), c)
     owner_path = ('users', 'u', 'episodes', placed['id'])
     if change == 'span':
         member['recorded_end'] = T0 + timedelta(minutes=2)
@@ -1164,10 +1164,10 @@ def test_recorded_attach_falls_through_on_changed_evidence(lane, monkeypatch, ch
     if change in {'deleted', 'discarded'}:
         before = deepcopy(store.rows)
         with pytest.raises(episodes.EpisodeConflict, match='conversation_hidden'):
-            service._attach_recorded('u', member['id'], member, T0, member['recorded_end'], c)
+            service.attach_recorded('u', member['id'], member, T0, member['recorded_end'], c)
         assert store.rows == before
     else:
-        result = service._attach_recorded('u', member['id'], member, T0, member['recorded_end'], c)
+        result = service.attach_recorded('u', member['id'], member, T0, member['recorded_end'], c)
         assert member['id'] in result['conversation_ids']
         if change == 'span':
             assert result['last_activity_at'] == member['recorded_end']

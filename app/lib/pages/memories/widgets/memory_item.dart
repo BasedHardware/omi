@@ -54,7 +54,7 @@ class MemoryItem extends StatelessWidget {
           showMemoryQuickEditSheet(context, memory, provider, readOnly: true);
           return;
         }
-        routeToPage(context, const UsagePage());
+        routeToPage(context, const UsagePage(showUpgradeDialog: true, paywallSource: 'locked_memory'));
         return;
       }
       if (editable) {
@@ -175,8 +175,7 @@ class MemoryItem extends StatelessWidget {
         ),
         child: memory.isLocked
             ? OmiLockedPreview(
-                status: context.l10n.statusPending,
-                label: context.watch<UsageProvider>().showSubscriptionUI ? context.l10n.viewUsage : context.l10n.saved,
+                label: context.watch<UsageProvider>().showSubscriptionUI ? context.l10n.upgrade : context.l10n.saved,
                 onPressed: openMemory,
                 child: rowContent,
               )

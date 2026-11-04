@@ -77,7 +77,7 @@ def test_durable_hook_retires_hidden_member_even_with_stale_supplied_row(lane, m
 
 @pytest.mark.parametrize(
     'stage,reason',
-    [('_attach_recorded', 'conversation_hidden_or_repointed'), ('_repoint_sync_donors', 'conversation_hidden')],
+    [('attach_recorded', 'conversation_hidden_or_repointed'), ('_repoint_sync_donors', 'conversation_hidden')],
 )
 def test_only_current_member_admission_can_trigger_discard_cleanup(lane, monkeypatch, stage, reason):
     store, c, _ = lane
@@ -213,7 +213,7 @@ def test_umbrella_restores_candidate_queries_at_fixed_boundary(lane, monkeypatch
     query = Mock(wraps=episode_timeline.recorded_candidates)
     monkeypatch.setattr(episode_timeline, 'recorded_candidates', query)
     monkeypatch.setenv('EPISODE_ATTACH_OPTIMIZATIONS_ENABLED', str(enabled))
-    service._attach_recorded('u', 'same', member, T0, T0 + timedelta(seconds=30), c)
+    service.attach_recorded('u', 'same', member, T0, T0 + timedelta(seconds=30), c)
     # Canonical lookup, fixed-boundary lookup and window validation used to
     # issue separate queries. The umbrella restores all three reads.
     assert query.call_count == (1 if enabled else 3)

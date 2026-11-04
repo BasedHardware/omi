@@ -173,3 +173,14 @@ def test_read_flip_live_row_still_uses_canonical_member_visibility(monkeypatch):
     monkeypatch.setattr(api.service, 'live_episode', lambda uid: None)
     response = http.get('/v1/episodes/live')
     assert response.status_code == 200 and response.json() == {'enabled': True, 'episode': None}
+
+
+def test_batch_transcription_deadline_expires_cache_and_late_receipt_clears_clock():
+    row = {'id': 'e', 'status': 'closed', 'conversation_ids': ['c']}
+    deadline = NOW + timedelta(hours=2)
+    member = {'episode_transcription_deadline_at': deadline, 'status': 'processing'}
+    clock = home_clock({'e': row}, {'c': member}, {}, {'c'}, NOW)
+    assert clock['deadline_at'] == deadline and clock['cid'] == 'c'
+    assert home_clock({'e': row}, {'c': member}, clock['members'], {'c'}, deadline)['deadline_at'] is None
+    member['record_projection_revision'] = 1
+    assert home_clock({'e': row}, {'c': member}, clock['members'], {'c'}, NOW)['deadline_at'] is None

@@ -109,17 +109,21 @@ async def process_conversation_task(
         terminal = _finalization_attempt_decision(attempt_count, reason=failure_code).terminal
         try:
             if terminal:
-                marked_dead_letter = await run_blocking(
+                disposition = await run_blocking(
                     db_executor,
                     final_attempt_failed,
                     job_id,
                     generation,
                     lease_epoch,
                     this_try,
+                    failure_code=failure_code,
                 )
-                if not marked_dead_letter:
+                if disposition == 'requeued':
+                    # The durable job is parked for its one delayed requeue;
+                    # the live session must not keep re-requesting finalization.
+                    await send_result({'conversation_id': conversation_id, 'error': 'job_queued', 'terminal': False})
                     return False
-                return True
+                return disposition == 'dead_letter'
             await run_blocking(
                 db_executor,
                 finalization_jobs_db.mark_finalization_retryable,
@@ -242,7 +246,7 @@ async def process_conversation_task(
         record_conversation_finalization_client_terminal('success', claim, client_kind=client_kind)
         await send_result({'conversation_id': conversation_id, 'success': True})
     except ConversationFinalizationError as error:
-        terminal = await record_failure('processing_failed')
+        terminal = await record_failure(error.code)
         byok_class = byok_failure_class_of(error)
         # Severity follows the fault origin, mirroring the session-side
         # reclassification of the will-retry branch (listen_pusher_session,

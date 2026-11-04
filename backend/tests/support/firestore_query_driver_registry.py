@@ -1084,7 +1084,10 @@ _add(
 _add(
     DriverEntry(
         'database.episode_timeline.attach_recorded',
-        neutrals={'attach_row': (None, 'optional semantic memo; no candidate query effect')},
+        neutrals={
+            'attach_row': (None, 'optional semantic memo; no candidate query effect'),
+            'pending_at': (T0, 'membership deadline metadata only; no query filter or ordering effect'),
+        },
         base={
             'uid': UID,
             'conversation_id': 'recorded-1',
@@ -1114,6 +1117,7 @@ _add(
             'transaction': (None, 'reuse the enclosing transaction read phase; same query shape'),
             'candidates': (None, 'attempt-local reuse of the registered recorded_candidates builder'),
             'fence_row': (None, 'preloaded timeline fence document; no query shape effect'),
+            'pending_at': (T0, 'membership deadline metadata only; no query filter or ordering effect'),
         },
         patchers=(_stub('database.episodes.seal', {'id': 'recorded-1'}),),
     )

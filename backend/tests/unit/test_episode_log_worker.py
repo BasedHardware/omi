@@ -481,3 +481,53 @@ def test_bounded_sweep_rotates_disabled_and_failed_users_without_changing_deadli
         assert state['scan_at'] == NOW + timedelta(minutes=2)
         assert state['drain_at'] == state['queued_deadline_at'] == NOW
         assert not store.redrive_scan(uid, dict(state, next_seq=0), firestore_client=client, now=NOW)
+
+
+def test_expired_policy_clock_is_not_counted_as_projection_drift(client, monkeypatch):
+    path = ('users', UID, 'episode_log_state', 'owner')
+    client.rows[path] = {
+        'cursor': 1,
+        'next_seq': 1,
+        'home_valid_until': datetime.now(timezone.utc) - timedelta(seconds=1),
+    }
+    legacy = Mock()
+    monkeypatch.setattr(worker, '_legacy', legacy)
+    worker.compare_rows(UID, {'e': {'id': 'e'}}, {}, client, cursor=1)
+    legacy.assert_not_called()
+
+
+def test_pending_metadata_only_close_dirties_shadow_once(client, monkeypatch):
+    from database import episode_timeline
+    from utils.episodes.timeline import choose_recorded_episode
+
+    monkeypatch.setenv('EPISODE_ATTACH_READ_OPTIMIZATIONS_ENABLED', 'on')
+    with Oracle(UID) as oracle:
+        oracle.attach('c', NOW, NOW + timedelta(minutes=2))
+        path = ('users', UID, 'conversations', 'c')
+        oracle.store.rows[path].update(
+            source='omi',
+            server_batch_audio_closed=True,
+            server_batch_audio_start=NOW.timestamp(),
+            server_batch_audio_end=(NOW + timedelta(minutes=2)).timestamp(),
+        )
+        before = store.state(UID, firestore_client=oracle.store)['next_seq']
+
+        def close():
+            return episode_timeline.attach_recorded(
+                UID,
+                'c',
+                'omi',
+                NOW,
+                NOW + timedelta(minutes=2),
+                choose=choose_recorded_episode,
+                new_episode={},
+                firestore_client=oracle.store,
+                pending_at=NOW,
+            )
+
+        close()
+        assert store.state(UID, firestore_client=oracle.store)['next_seq'] == before + 1
+        deadline = oracle.store.rows[path]['episode_transcription_deadline_at']
+        close()
+        assert store.state(UID, firestore_client=oracle.store)['next_seq'] == before + 1
+        assert oracle.store.rows[path]['episode_transcription_deadline_at'] == deadline

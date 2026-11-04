@@ -24,6 +24,17 @@ def home_clock(rows, members, previous, refreshed, now):
             and is_settling_fragment(member, now=now.timestamp())
         ):
             clocks[cid] = finished + timedelta(seconds=SETTLING_MAX_HOLD_SECONDS)
+        deadline = utc(member.get('episode_transcription_deadline_at'))
+        if (
+            cid in ids
+            and deadline is not None
+            and deadline > now
+            and not member.get('record_projection_revision')
+            and member.get('finalization_status') != 'dead_letter'
+            and member.get('status') != 'failed'
+            and not member.get('record_upload_failed')
+        ):
+            clocks[cid] = min(clocks.get(cid, deadline), deadline)
     if len(clocks) > 128:
         raise ValueError('episode_home_clock_capacity')
     candidates = [(at, cid) for cid, at in clocks.items()]

@@ -13,6 +13,7 @@ from urllib.parse import urlsplit
 
 import pytest
 
+from tests.unit.fixtures.live_stt_registry import enabled_live_targets
 from fakes.firestore import get_mock_firestore
 from fakes.listen_pusher_wire import (
     PUSHER_PROCESS_CONVERSATION,
@@ -205,6 +206,7 @@ def test_listen_pusher_wire_contract_unavailable_explicit_parakeet_routes_to_mod
     client, test_uid, monkeypatch, fake_firestore, listen_url, slot_enabled
 ):
     """Unsupported or retired Parakeet falls through to a serving vendor, including a stale plain-only list."""
+    enabled_live_targets(monkeypatch)
 
     async def pusher_success(_peer, _frame, _websocket):
         return None

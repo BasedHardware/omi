@@ -122,7 +122,7 @@ there is no cross-user/CDN cache. New clients can adopt this in the next app tra
 Existing clients continue receiving compatible full responses.
 
 Cached Home policy expires at the earliest live idle-close, temporary settling,
-or batch-1 pending-compose maximum-settle deadline. A cached 200 preserves the
+batch transcription deadline or batch-1 pending-compose maximum-settle deadline. A cached 200 preserves the
 existing bounded foreground composition repair for dirty rows; an old pending
 compose cannot stay behind 304 forever after a process restart. The composer
 retains its fingerprint/lease authority; the drain only writes dirty intent. An expired owner cannot answer 304: it appends one deduplicated, urgent
@@ -166,9 +166,10 @@ This branch includes merged read/write trims #24577 and attach/gate #24582.
 The shared digest normalizes the capture ID at memo verification as well as fact
 append, including raw documents without a stored ID. Cached fence reads, completed
 memo hits, conditional membership writes and invalidation remain intact.
-Composer #24579 is also included. Batch close #24544 was still open at
-integration; land or rebase it ahead of this PR on the same train without
-duplicating append hooks.
+Composer #24579 and batch close #24544 are also included. Metadata-only batch
+close stamps enqueue atomic member-refresh facts, including a proof-hit whose
+episode shape does not change. Home caches expire at the transcription deadline
+and late projection receipts restore the normal cached metadata.
 The phase shadow already on main remains active.
 
 After the authorized backend train, inspect each traffic-serving revision's

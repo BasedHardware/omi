@@ -108,6 +108,8 @@ def _legacy(uid, eid, client):
 def _comparison_token(state):
     if not state or state.get('cursor') != state.get('next_seq') or state.get('policy_barriers'):
         return None
+    if state.get('home_valid_until') and state['home_valid_until'] <= datetime.now(timezone.utc):
+        return None
     return state.get('cursor'), state.get('home_version'), state.get('epoch')
 
 
@@ -295,6 +297,10 @@ def sample_read(uid, rows, *, firestore_client=None):
     try:
         client = firestore_client if firestore_client is not None else get_firestore_client()
         state = store.state(uid, firestore_client=client)
+        if state.get('home_valid_until') and state['home_valid_until'] <= datetime.now(timezone.utc):
+            note_home_clock(uid, state, firestore_client=client)
+            metrics.COMPARE_SKIPPED.labels(reason='policy_clock').inc()
+            return
         token = _comparison_token(state)
         if not state.get('backfill_complete') or token is None:
             metrics.COMPARE_SKIPPED.labels(reason='unready_sample').inc()

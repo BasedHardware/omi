@@ -6,6 +6,12 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
+Prerecorded Modulate STT/LID and Parakeet v1/v2 POST boundaries count attempted
+audio payload bytes in `omi_prerecorded_vendor_payload_bytes_total` with fixed
+provider/endpoint labels. Retries count each attempt; breaker refusals count none.
+No audio, URL, user or job identity enters the metric. The two routine STT
+`*_prerecorded_from_bytes bytes_len` breadcrumbs are DEBUG; errors and existing
+outcome metrics remain unchanged. See [sync egress attribution](./runbooks/sync-egress-attribution.md).
 ## Fair-use decay switch
 
 `FAIR_USE_THROTTLE_DECAY_ENABLED` defaults on. `false`, `off`, or `0` restores
@@ -318,7 +324,27 @@ Pusher opcode 101 still commits PCM through
 The lifecycle loop uses accepted local audio activity while capture continues,
 then flushes original custody before finalization. The raw-only finalizer writes
 an idempotent `record_pending` job before completing the capture and its no-effects
-fanout receipt. Batch waits for `record_audio_closed`, verifies source generations,
+fanout receipt. At the archive-close barrier, eligible batch captures attach to
+their episode by committed audio bounds before finalization is queued. This uses
+the shared fenced recorded-time transaction, without a client-seen or paid-call
+gate. Existing `EPISODES_ENABLED`/cohort admission and
+`EPISODE_RECORDED_TIME_ENABLED` switches gate attachment. The scoped ship-on
+`EPISODE_BATCH_CLOSE_ATTACH_ENABLED` switch (default true; false/off/0/no disables)
+restores attach-after-transcription while preserving every other episode path.
+Membership atomically stamps `episode_transcription_pending_at` and
+`episode_transcription_deadline_at` (entry plus the batch timeliness 2h SLA;
+normal target 30m), once only. Home projects untranscribed members as
+`status=processing`, title “Transcribing…”, with committed audio bounds. A
+finalization dead letter, failed status/upload, or elapsed deadline projects
+`status=failed`, title “Couldn't transcribe”. A durable `record_projection_revision`
+restores normal metadata even after expiry. This is a read projection, never a
+cancellation or deletion of retained audio or retry work. The unlabeled
+`omi_episode_batch_pending_overdue_reads_total` counter records overdue member
+observations; an info rule sits beside batch timeliness rules in the pending
+monitoring catalog (no alert provisioning in this PR). Failure emits shared
+`record_fallback` telemetry (`outcome=degraded`) and leaves finalization as the
+repair path.
+Batch waits for `record_audio_closed`, verifies source generations,
 and derives work-unit bounds from persisted sample spans. It inherits the named
 language and retains ordinary privacy, compute/funding and language guardrails.
 Live transcription usage and live-transcript success metrics exclude intentional
@@ -1191,8 +1217,13 @@ existing privacy-safe 5xx / BYOK 429 contract.
 
 The STT provider is selected at session start via `STT_SERVICE_MODELS` env var
 (e.g., `modulate-velma-2,parakeet`). The first provider whose deployed model
-supports the requested mode wins: Parakeet's live RNNT model is English-only,
-so multilingual sessions and non-English single-language sessions use Modulate.
+supports the requested mode and passes the live registry permissions wins.
+The default registry retains `modulate-velma-2` with `ramp_percent=0`, so it
+cannot enter static, cost-routed, escape, or router-error live chains. This
+withdraws the live cost trial; prerecorded transcription and batch language
+identification retain their independent Modulate configuration and endpoints.
+An explicit `STT_ROUTING_TARGETS_JSON` registry overrides these defaults.
+Parakeet's live RNNT model is English-only.
 Listen startup loads transcription preferences once and uses its
 multi-language setting to request Modulate auto-detection, avoiding a second
 user-preference read on WebSocket startup. The separately deployed Parakeet
@@ -6034,6 +6065,9 @@ cannot use ClusterIP DNS. Production batch runs on the dedicated tainted T4
 Prometheus queue scrape and adapter rule before ramping. Exact install/metric/cohort gates: `scripts/diarization_eval/batch_install.md`. See `scripts/diarization_eval/capacity.md`
 for routing and the opt-in release overlay; verify caller reachability before
 cohort enablement.
+The lead-owned [Spot T4 apply packet](runbooks/diarizer-batch-spot.md) adds a
+warm on-demand Deployment in the same batch release and shared Ready endpoints; its fleet
+apply and preemption qualification remain separate from a chart merge.
 Rollback: disable authoritative/sync flags first, set mode to `legacy`, then restore
 previous backend and diarizer image digests if needed. No stored-history reversal
 is automatic. Shared scorer instructions: `scripts/diarization_eval/README.md`.
@@ -8145,6 +8179,33 @@ conversation identity does not suppress the old row's obligation. Desktop
 clean-close and multichannel processing keep their existing paths. Their
 existing job bindings also fence any quiet check of the same row.
 
+An at-ceiling row is the one admission that can never commit: the finalization
+binding grows the document, so a document at Firestore's 1 MiB limit fails
+every redelivery identically (the `grpc_helpers.py` `InvalidArgument` 400
+group). When that admission fails with the row's own document-size rejection,
+the worker closes the row through the lifecycle owner's oversized in-progress
+terminal (`close_oversized_in_progress_conversation` with
+`recovery_fences=True`) instead of redelivering the 400 forever. That close is
+a separate transaction which re-asserts the admission fences — the row is still
+`in_progress` with no durable job, untouched since the check's own recovery
+cutoff, its recording-session lease is no longer live, no account-deletion
+marker blocks access, and its estimated size is still within the terminal
+headroom of the ceiling. It returns the same bounded outcome tokens as the
+live-listen sweep's oversized close plus `recording_active` and
+`account_deleting`. Only `closed` counts the degraded terminal
+(`omi_fallback_total{component="pusher",from_mode="quiet_finalization_admission",to_mode="unstampable_terminal"}`).
+`closed` and `missing` stop the due index — the admission can never commit, so
+a further wake is pure redelivery debt; every refusal outcome leaves the check
+armed, because an active writer, a row that shrank below the ceiling or a new
+durable owner each change what the next replay must do. The refusals resolve
+without operator action: a live lease expires, and a deletion finishes and
+removes the marker. The closed row is the same kept-content terminal as the
+live-listen path: a visible conversation with its transcript and no generated
+summary, memories or action items. A size rejection naming a different
+document cannot be fixed by closing this row, so that check retires as held
+(`last_failure_code=document_size_limit`, the row untouched) rather than
+answering 5xx into an endless redelivery.
+
 Only opaque job ID and dispatch generation enter Cloud Tasks. Session setup
 stamps only a boolean BYOK requirement; credential-free recovery creates a
 blocked BYOK job, never substitutes platform credentials. Each check
@@ -9096,6 +9157,60 @@ loss. [Details and verification](listen_pusher_pipeline/changes/2026-11-03-recov
 all read-side phase derivation and observation. This telemetry switch never selects
 reader behavior or performs storage IO. Existing verdicts remain authoritative,
 including when shadow computation fails. [Projection rules and measurement limits](listen_pusher_pipeline/changes/2026-11-03-phase-shadow.md).
+
+### Live STT escape and bench cascades
+
+When every available target is below stage 100, the cost router's escape
+excludes stage-0 targets while a stage-5+ target exists. Its lead is the
+lowest observed failure-rate candidate with at least 30 admitted outcomes;
+without a proven candidate, existing stage ordering applies. Ties retain the
+existing lead. Modulate's 25→100 promotion is held while Soniox is stage ≥5
+and no other eligible target is full share. Eligibility uses the serving user's
+language, config-ramp cohort, configured capacity signal and known account
+quarantines. The guard follows
+provider families, including custom registry IDs. The selector also projects
+Modulate's effective stage to at most 25 for that request, even when another
+language or cohort previously promoted its persisted global state to 100.
+Escape-vote admission uses the same projection, so Soniox's served outcomes
+still count outside its re-entry cohort. Raw health counters and generations
+are preserved; `omi_stt_cost_routing_decisions_total{reason=sole_primary_guard}`
+counts projections. Both CAS scopes check the actual serving language.
+These default-on guards have independent
+kill switches in `config/live_stt_resilience.py`.
+
+A cost-gate bench atomically records a 90-minute source deadline in a separate
+identity-scoped Redis key. Snapshot refresh shares it with cold pods even after
+the source begins recovery. Failed shared writes also read persisted deadlines
+before transitioning, so a stale snapshot cannot miss a new bench.
+The same target-state CAS compares every source deadline used for that vote;
+a changed deadline rejects the write without side effects and re-probes on
+each bounded retry. A source bench cannot slip between the read and commit.
+During that window, failures on other targets keep
+their denominator, failure rate, CUSUM and sustained breadth, but are excluded
+from the eight-failure burst count. A fixed-width `!` marker in recent failure
+fingerprints preserves the existing GateState wire schema; older pods count
+marked failures conservatively. Sustained thresholds, trial rejection and
+overflow-outage detection are unchanged. The 90-minute bound covers the Oct 28
+19:43→21:04Z pulse (81 minutes) and Oct 20 13:10→14:20Z pulse (70 minutes).
+The Oct 20 13:44Z sustained CUSUM bench remains valid; escape ordering protects
+the subsequent trial. `omi_stt_cost_routing_ignored_deaths_total` with
+`boundary=failover_surge` counts only exclusion from burst evidence.
+
+Rollback: set `LISTEN_STT_ESCAPE_BEST_RATE_PRIMARY_ENABLED`,
+`LISTEN_STT_SOLE_PRIMARY_HOLD_ENABLED`, or
+`LISTEN_STT_FAILOVER_SURGE_CENSOR_ENABLED` to `false` to restore that guard's
+previous behavior. No routing-state reset is required.
+
+# Shape-only Parakeet experiment
+
+An optional `PARAKEET_SHAPE_CANARY_FILE` projected ConfigMap selects up to 5%
+of managed windowed sessions for a separate internal g2-standard-4 service.
+The assignment survives replacement legs. Default/missing/stale/0% leases
+route baseline; an identity change drains the old assignment before its next
+POST without cancelling accepted work. Companion shape-arm metrics keep
+candidate first-text/POST observations separate from fleet measurements.
+The [g24 operator packet](runbooks/parakeet-g24-canary.md) owns the 15-minute
+watcher, strict matched-load acceptance, ramp and drain sequence.
 
 
 ### Closed episode compose cost control

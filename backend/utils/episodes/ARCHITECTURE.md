@@ -540,6 +540,33 @@ invalidates an older automatic model/Jev/deterministic discard. Transport replay
 and content still needing fragment review retain the assessment; user decisions remain authoritative.
 The final-discard predicate continues to ignore the intake hint itself.
 
+Batch audio close attaches membership before queued transcription/finalization.
+`routers.listen.batch_close` preserves the archive barrier and reuses its existing
+conversation reread. `utils.episodes.batch_close` checks ownership, privacy,
+retention and episode/recorded-time admission, then calls `service.attach_recorded`
+with committed audio bounds. Live and sync attachment use that same primitive;
+neither the current pointer nor processing time selects a batch capture's owner.
+This metadata-only attachment is an explicit exception to the client-seen rule
+above: ownership must exist before transcription, even when an older client has
+not acknowledged episodes. It retains episode and recorded-time admission,
+adds no model work, and does not change paid-work gates. An attachment error
+emits shared `record_fallback` degraded telemetry before finalization repairs it.
+
+The scoped `EPISODE_BATCH_CLOSE_ATTACH_ENABLED` kill switch defaults on. Off
+restores attach-after-transcription without changing live/sync attachment.
+The membership transaction stamps a pending start and a fixed 2h transcription
+deadline on the conversation, using `config.batch_timeliness.SLA_SECONDS` (normal
+target: 30m). Close replay does not renew the deadline or bump the canonical
+recorded component's state version or timeline fence. Home reads use the durable
+`record_projection_revision` delivery receipt: until it exists they show
+“Transcribing…” / processing, then “Couldn't transcribe” / failed on terminal
+failure or deadline expiry. A late projection restores normal metadata. Audio
+bounds still supply a finish time if finalization failed before writing one.
+The unlabeled overdue-read counter counts observations, not unique members.
+Its info alert is staged beside the existing batch timeliness rules; idle
+members remain covered by queue timeliness monitoring. No production alert
+or runtime configuration is changed here.
+
 ## Episode fact log and shadow views
 
 The batch-2 log and owner live below `users/{uid}` and publish separate sealed

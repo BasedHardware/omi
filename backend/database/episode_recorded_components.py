@@ -15,7 +15,7 @@ from google.cloud import firestore
 from config.episode_attach import optimizations_enabled
 from config.recorded_time_tolerances import CLOSE_GAP_SECONDS, MAX_EPISODE_SECONDS
 from database._client import run_transactional
-from database import episodes, episode_log
+from database import episodes, episode_log, episode_batch_pending
 from utils.conversations.recorded_time import conversation_span
 from utils.conversations.fragment_visibility import is_relevance_discarded
 
@@ -157,6 +157,7 @@ def attach(
     page_limit,
     transaction=None,
     fence_row=None,
+    pending_at=None,
 ):
     """One fenced transaction, or None when an established boundary owns intake."""
     client = firestore_client
@@ -167,6 +168,7 @@ def attach(
     def commit(transaction):
         revision = fence_row if fence_row is not None else (fence.get(transaction=transaction).to_dict() or {})
         linked = root.collection('episode_links').document(cid).get(transaction=transaction).to_dict() or {}
+        pending_patch = episode_batch_pending.read_patch(transaction, client, uid, cid, pending_at)
         if linked.get('episode_id'):
             owner = collection.document(linked['episode_id']).get(transaction=transaction).to_dict() or {}
             if not _automatic(owner):
@@ -180,7 +182,7 @@ def attach(
             proof = owner.get('recorded_partition') or {}
             fact = (owner.get('recorded_members') or {}).get(cid)
             if (
-                optimizations_enabled()
+                (optimizations_enabled() or pending_at is not None)
                 and proof.get('state_version') == owner.get('state_version')
                 and proof.get('members') == sorted(owner.get('conversation_ids') or [])
                 and set(owner.get('recorded_members') or {}) == set(proof.get('members') or [])
@@ -191,11 +193,16 @@ def attach(
                 # Do not trust the caller's stale row across a delete/discard or
                 # another WAL append. This get also joins the transaction read set.
                 member = root.collection('conversations').document(cid).get(transaction=transaction).to_dict()
-                span = conversation_span(member) if member else None
+                span = conversation_span(member) if member and pending_at is None else None
+                # Before transcription, committed archive bounds are the only
+                # audio clock. Legacy started_at/finished_at can be arrival time.
+                same_span = (
+                    episode_batch_pending.matches_closed_audio(member, start, end)
+                    if pending_at is not None
+                    else span is not None and span.recorded_start == start and span.recorded_end == end
+                )
                 if (
-                    span
-                    and span.recorded_start == start
-                    and span.recorded_end == end
+                    same_span
                     and member.get('episode_id') == linked['episode_id']
                     and member.get('source') == source
                     and not is_relevance_discarded(member)
@@ -203,6 +210,10 @@ def attach(
                 ):
                     full = episodes.unseal(uid, owner)
                     if full is not None:
+                        if pending_patch:
+                            capture = episode_log.prepare(transaction, client, uid)
+                            transaction.update(root.collection('conversations').document(cid), pending_patch)
+                            episode_log.member_changed(capture, [cid])
                         return {**full, '_recorded_windows': [full]}
 
         facts = {cid: {'start': start, 'end': end, 'source': source}}
@@ -270,7 +281,9 @@ def attach(
         result = [_state(template, window, list(previous.values()), facts) for window in windows]
         for row in result:
             row['state_version'] = max(row['state_version'], int(targets[row['id']].get('state_version') or 0) + 1)
-        if optimizations_enabled():
+        # Audio-close replay idempotency is independent of sync read optimizations.
+        # Both paths require a current canonical-partition proof before skipping.
+        if optimizations_enabled() or pending_at is not None:
             for row in result:
                 row['recorded_partition'] = {
                     'state_version': row['state_version'],
@@ -306,6 +319,8 @@ def attach(
                 old,
                 template.get('created_at'),
             )
+        if pending_patch:
+            transaction.update(root.collection('conversations').document(cid), pending_patch)
         transaction.set(fence, {'version': int(revision.get('version') or 0) + 1})
         redirects = [
             {

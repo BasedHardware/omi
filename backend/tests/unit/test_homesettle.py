@@ -329,7 +329,7 @@ def test_idle_list_read_uses_the_winner_of_a_concurrent_close_or_activity_update
     monkeypatch.setattr(home_read.episodes, 'get_home_episode_snapshots', lambda *a, **kw: {'e': latest})
     monkeypatch.setattr(
         home_read,
-        '_read_members',
+        'read_members',
         lambda *a, **kw: {'a': floor(summary_blocked_reason=None), 'b': floor(summary_blocked_reason=None)},
     )
     checked = []
@@ -451,7 +451,7 @@ def test_episode_page_limits_idle_close_work_without_hiding_unsettled_members(mo
     rows = [episode(id=f'e{i}', status='live', conversation_ids=[f'c{i}']) for i in range(50)]
     settle = Mock(side_effect=lambda uid, row, c: dict(row, status='closed'))
     monkeypatch.setattr(service, 'settle_episode_for_read', settle)
-    monkeypatch.setattr(home_read, '_read_members', lambda *a, **kw: {})
+    monkeypatch.setattr(home_read, 'read_members', lambda *a, **kw: {})
     monkeypatch.setattr(
         home_read,
         'project_episode',
@@ -504,3 +504,34 @@ def test_date_filtered_members_stay_reachable_even_with_a_held_header(monkeypatc
     assert home_membership.held_for(request) == ''  # Also restores ordinary cache/version decisions.
     assert home_membership.project_list('u', rows, request, response, filtered=False) == rows
     assert response.headers == {}
+
+
+@pytest.mark.parametrize(
+    'deadline_hours, status, title',
+    [(1, 'processing', 'Transcribing…'), (-1, 'failed', "Couldn't transcribe")],
+)
+def test_batch_placeholders_coexist_with_neutral_titles_and_floor_holding(deadline_hours, status, title):
+    neutral = floor(
+        summary_blocked_reason=None,
+        started_at=NOW - timedelta(hours=4),
+        finished_at=NOW - timedelta(hours=4) + timedelta(seconds=30),
+        structured={'title': 'Thank you.', 'title_provenance': 'server_minimum'},
+    )
+    pending = dict(neutral, id='pending', episode_transcription_deadline_at=NOW + timedelta(hours=deadline_hours))
+    members = {
+        'a': neutral,
+        'pending': pending,
+        'floor': floor(id='floor', episode_transcription_deadline_at=NOW - timedelta(hours=1)),
+    }
+    before = deepcopy(members)
+    wire = home_read.project_episode(
+        'u',
+        episode(conversation_ids=list(members)),
+        members=members,
+        list_row=True,
+    )
+    by_id = {member['id']: member for member in wire['members']}
+    assert by_id['a']['title'].startswith('Recording · ')
+    assert (by_id['pending']['title'], by_id['pending']['status']) == (title, status)
+    assert 'floor' not in by_id
+    assert members == before

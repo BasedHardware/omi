@@ -19,6 +19,8 @@ tests/unit/test_conversation_smart_merge_wallclock.py
 tests/unit/test_conversation_smart_merge_wallclock_policy.py
 tests/unit/test_episode_attach_cost.py
 tests/unit/test_episode_attach_review.py
+tests/unit/test_episode_batch_audio_close.py
+tests/unit/test_episode_batch_pending_alert.py
 tests/unit/test_episode_boundary_evidence.py
 tests/unit/test_episode_claim_read_validation.py
 tests/unit/test_episode_closed_skip.py
@@ -53,6 +55,7 @@ tests/unit/test_episodes_policy_state.py
 tests/unit/test_episodes_router.py
 tests/unit/test_episodes_service.py
 tests/unit/test_firestore_field_indexes.py
+tests/unit/test_homesettle.py
 tests/unit/test_monitoring_telemetry_contract.py
 tests/unit/test_omi_flags.py
 tests/unit/test_recorded_span.py
