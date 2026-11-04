@@ -13,7 +13,7 @@ from config.batch_conversation_speakers import (
     sync_off_enabled,
 )
 from utils.conversations.speaker_clips import MAX_CLIP_SECONDS, SAMPLE_RATE, verified_clip as _verified_clip
-from utils.conversations.speaker_sync_store import in_sync_store, sync_store_placements
+from utils.conversations.speaker_sync_store import in_store, single_store_placements
 from utils.conversations.speaker_window_cohort import per_window_evidence
 from utils.speakers import processing as speaker_evidence
 
@@ -215,7 +215,9 @@ def _duration(segment: TranscriptSegment) -> float:
     return max(0.0, float(segment.end) - float(segment.start))
 
 
-def load_voiceprints_for_resolution(uid: str, *, allow_audio_repair: bool = True) -> Dict[str, np.ndarray]:
+def load_voiceprints_for_resolution(
+    uid: str, *, allow_audio_repair: bool = True, require_complete: bool = False
+) -> Dict[str, np.ndarray]:
     prints: Dict[str, np.ndarray] = {}
     try:
         owner = load_owner_embedding(uid, users=users_db, allow_audio_repair=allow_audio_repair)
@@ -223,12 +225,16 @@ def load_voiceprints_for_resolution(uid: str, *, allow_audio_repair: bool = True
             prints[OWNER_IDENTITY] = owner.reshape(-1)
     except Exception as error:
         logger.warning('event=speaker_resolution_owner_profile outcome=failed exception_type=%s', type(error).__name__)
+        if require_complete:
+            raise
     # Owner recognition is plan-independent: an entitlement read failure fails
     # closed for person prints only, never for the owner's own voiceprint.
     try:
         named_allowed = named_speaker_prompts_allowed(uid)
     except Exception as error:
         logger.warning('event=speaker_resolution_entitlement outcome=failed exception_type=%s', type(error).__name__)
+        if require_complete:
+            raise
         return prints
     if not named_allowed:
         return prints
@@ -242,6 +248,8 @@ def load_voiceprints_for_resolution(uid: str, *, allow_audio_repair: bool = True
         logger.warning(
             'event=speaker_resolution_person_profiles outcome=failed exception_type=%s', type(error).__name__
         )
+        if require_complete:
+            raise
         return prints
     for person in people or []:
         embedding = validated_embedding(
@@ -311,9 +319,9 @@ def _embed_missing(
     embedded = 0
     failures = 0
 
-    def store_only(segment: TranscriptSegment) -> bool:
+    def store_of(segment: TranscriptSegment) -> Optional[str]:
         placement = placements.get(segment.id) if placements and segment.id is not None else None
-        return placement is not None and placement.store is not None
+        return placement.store if placement else None
 
     def wanted(start: float, next_start: Optional[float]) -> bool:
         index = bisect.bisect_left(midpoints, start)
@@ -348,7 +356,7 @@ def _embed_missing(
             last = bisect.bisect_left(midpoints, chunk_end)
             for segment in pending[first:last]:
                 # Chunks here mix stores; these assemble from their own store below.
-                if store_only(segment):
+                if store_of(segment):
                     continue
                 abs_start, abs_end = window_of(segment)
                 begin, end = max(abs_start, chunk_start), min(abs_end, chunk_end)
@@ -378,9 +386,7 @@ def _embed_missing(
                 if time.monotonic() > deadline:
                     return
                 windows: List[Tuple[float, float]] = []
-                clip, reason = _verified_clip(
-                    session, *window_of(segment), windows=windows, sync_store_only=store_only(segment)
-                )
+                clip, reason = _verified_clip(session, *window_of(segment), windows=windows, store=store_of(segment))
                 if clip is None:
                     diagnostics.clip_skips += 1
                     if reason == 'clip_too_short':
@@ -547,7 +553,7 @@ def _verified_read_session(
         extents = []
         refusal = None
         for chunk in chunks:
-            if placement and placement.store and not in_sync_store(chunk):
+            if placement and placement.store and not in_store(chunk, placement.store):
                 continue
             start, upper_end = bounds_by_path[chunk['path']]
             # Unknown Opus durations are deliberately unbounded: never assume
@@ -958,6 +964,18 @@ def resolve_speakers_for_processing(
         elif receipt_read:
             receipt_applied = True  # A successful read confirmed there is no manual receipt.
         speaker_evidence.finish(evidence_token, uid, conversation, receipt if receipt_read else None)
+        # The whole pass is the last automatic authority, after the evidence
+        # projection, and must have a successfully read manual receipt.
+        if receipt_read and resolution_enabled() and budget_seconds is None:
+            from utils.conversations.final_pass_batch import run_batch_final_pass
+
+            run_batch_final_pass(
+                uid,
+                conversation,
+                receipt,
+                load_prints=load_voiceprints_for_resolution,
+                apply=apply_speaker_resolution,
+            )
     return receipt_applied
 
 
@@ -1232,7 +1250,7 @@ def _resolve(
             placements[segment.id] = place_segment(segment, mapping, index)
         if mapping.get('started_at') is not None:
             placements.update(
-                sync_store_placements(
+                single_store_placements(
                     uid,
                     conversation.id,
                     segments,

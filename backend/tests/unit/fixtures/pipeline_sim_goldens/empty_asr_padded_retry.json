@@ -211,8 +211,8 @@
    },
    "job_transitions": [
     "<1s ready",
-    "<1s leased",
-    "<5s quarantined recovery:held",
+    "<5s leased",
+    "<30s quarantined recovery:held",
     "<30s quarantined recovery:prepared",
     "<30s quarantined recovery:running",
     "<30s result_ready recovery:recovered",
@@ -281,9 +281,9 @@
    },
    "job_transitions": [
     "<1s ready",
-    "<1s leased",
-    "<5s result_ready",
-    "<5s committed",
+    "<5s leased",
+    "<30s result_ready",
+    "<30s committed",
     "<30s committed client:completed"
    ],
    "owner": "owner-2",
@@ -297,7 +297,7 @@
     "words_provider": "parakeet"
    },
    "result_transitions": [
-    "<5s pending outcome:success",
+    "<30s pending outcome:success",
     "<30s completed outcome:success"
    ]
   },
@@ -374,7 +374,7 @@
    },
    "job_transitions": [
     "<1s ready",
-    "<5s leased",
+    "<1s leased",
     "<30s quarantined recovery:held",
     "<30s quarantined recovery:prepared",
     "<30s quarantined recovery:running",
@@ -444,7 +444,7 @@
    },
    "job_transitions": [
     "<1s ready",
-    "<5s leased",
+    "<1s leased",
     "<30s result_ready",
     "<30s committed",
     "<30s committed client:completed"
@@ -508,7 +508,7 @@
    },
    "job_transitions": [
     "<1s ready",
-    "<5s leased",
+    "<1s leased",
     "<30s result_ready",
     "<30s committed",
     "<30s committed client:completed"

@@ -57,6 +57,15 @@ BATCH_PIPELINE_CHAIN_RULE: dict[str, Any] = {
     ),
 }
 API_SERVICES = {'v1beta1.custom.metrics.k8s.io', 'v1beta1.external.metrics.k8s.io'}
+RECORD_SEAL_RULE: dict[str, Any] = {
+    'seriesQuery': 'omi_record_seal_backlog{namespace!="",worker_release!=""}',
+    'resources': {'overrides': {'namespace': {'resource': 'namespace'}}},
+    'name': {'matches': '^omi_record_seal_backlog$', 'as': 'omi_record_seal_backlog'},
+    'metricsQuery': 'max by (namespace, worker_release) (\n'
+    '  omi_record_seal_backlog{<<.LabelMatchers>>}\n'
+    '  and on (namespace, worker_release, pod)\n'
+    '  (time() - omi_record_seal_refreshed_at_seconds < 60)\n)',
+}
 PARAKEET_QUEUE_RULES = [
     {
         'seriesQuery': f'parakeet_batch_lane_oldest_pending_seconds{{namespace!="",pod!="",lane="{lane}"}}',
@@ -81,6 +90,11 @@ def normalized_config(config):
 
 def expected_config(live):
     expected = copy.deepcopy(live)
+    seals = [rule for rule in expected['externalRules'] if rule['name']['as'] == RECORD_SEAL_RULE['name']['as']]
+    if seals and seals != [RECORD_SEAL_RULE]:
+        raise ValueError('Unexpected live record seal rule: reconcile and review first')
+    if not seals:
+        expected['externalRules'].append(copy.deepcopy(RECORD_SEAL_RULE))
     rule = next(
         rule
         for rule in expected['externalRules']

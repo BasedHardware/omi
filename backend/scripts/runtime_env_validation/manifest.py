@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
+from urllib.parse import urlsplit
 
 if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -341,6 +342,23 @@ def _validate_prerecorded_stt_contract(env: str, env_config: ConfigDict) -> list
         )
 
     for scope, env_map, secrets_map in surfaces:
+        lid_url = _manifest_literal_env_value(env_map, 'HOSTED_LID_API_URL')
+        if lid_url and lid_url.strip():
+            try:
+                parsed = urlsplit(lid_url)
+                valid = (
+                    parsed.scheme in {'http', 'https'}
+                    and bool(parsed.hostname)
+                    and not parsed.username
+                    and not parsed.password
+                    and not parsed.query
+                    and not parsed.fragment
+                    and not ('/cloud_run/' in scope and '.svc.cluster.local' in lid_url)
+                )
+            except ValueError:
+                valid = False
+            if not valid:
+                errors.append(ValidationError(scope, 'HOSTED_LID_API_URL must be a reachable HTTP(S) base URL'))
         # This audience identifies the CPU recovery host, not general STT/GPU
         # workers. Default-on independent recovery needs the same pure contract
         # checked by the runtime before it claims its sole paid attempt.

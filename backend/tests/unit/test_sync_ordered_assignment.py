@@ -159,7 +159,7 @@ class TestCallersUseOrderedAssignment:
 
     def test_v2_sorts_segments_and_passes_turnstile(self):
         body = _async_function_body(_read_pipeline_source(), 'run_full_pipeline_background_async')
-        assert 'sorted(segmented_paths, key=get_timestamp_from_path)' in body
+        assert 'early_segment_times.get(path, get_timestamp_from_path(path))' in body
         assert '_OrderedTurnstile(' in body
         assert 'assignment_turnstile,' in body, 'v2 must pass the turnstile to process_segment'
 

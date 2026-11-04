@@ -27,6 +27,7 @@ except ImportError:
 
 from config.batch_pipeline_providers import provider_config
 from config.batch_pipeline_empty_asr import safety_net_enabled
+from utils.batch_pipeline.word_validation import validate_words
 from diarizer.batch_pipeline import (
     PipelineWorker,
     SAMPLE_RATE,
@@ -34,7 +35,6 @@ from diarizer.batch_pipeline import (
     crop_model_vad_spans,
     padded_retry_fits,
     padded_retry_seconds,
-    validate_words,
 )
 from diarizer.batch_pipeline_context import capture_stream
 from diarizer.batch_pipeline_flight import (

@@ -47,6 +47,24 @@ void main() {
   });
   tearDown(() => preview.dispose());
 
+  test('engine refusal sends control once before held frames and resets only at capture end', () {
+    final order = <Object>[];
+    void flush(HeldPendantFrame frame) => order.add(frame.payload.single);
+    void rescind() => admission.refuseEngineForCapture(sendControl: () => order.add('control'), send: flush);
+    admission.socketPublished(declared: true, send: flush);
+    admission.routePendant(frame(1), socketDeclared: true, send: flush);
+    admission.routePendant(frame(2), socketDeclared: true, send: flush);
+    rescind();
+    rescind();
+    expect(order, ['control', 1, 2]);
+    admission.revoke();
+    admission.socketPublished(declared: false, send: flush);
+    expect(admission.engineUnavailableForCapture, true);
+    expect(admission.verdict(granted: true, socketDeclared: true, send: flush), false);
+    admission.end();
+    expect(admission.engineUnavailableForCapture, false);
+  });
+
   test('a socket that did not declare local preview streams every frame at once', () {
     admission.socketPublished(declared: false, send: send);
     route(1, declared: false);

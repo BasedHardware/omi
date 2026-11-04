@@ -681,7 +681,6 @@ def _stub_router_deps():
     sys.modules['utils.voice_duration_limiter'] = limiter_stub
     subscription_stub = sys.modules.setdefault('utils.subscription', MagicMock())
     subscription_stub.enforce_chat_quota = MagicMock()
-    subscription_stub.is_trial_paywalled = MagicMock(return_value=False)
     # Ensure redis_db.check_rate_limit returns (True, 99, 0)
     rdb = sys.modules.get('database.redis_db')
     if rdb:

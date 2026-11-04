@@ -26,6 +26,8 @@ from typing import Any, Callable, Mapping, Optional, Sequence, Union
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
+from utils.conversations import phase_shadow
+
 from config.episodes import (
     COMPOSER_FEATURE,
     COMPOSER_LEASE_SECONDS,
@@ -714,6 +716,7 @@ def _compose(uid: str, episode_id: str, c: Any, *, force: bool, service: Any) ->
     return 'composed'
 
 
+@phase_shadow.compare('episode_composer')
 def needs_compose(episode: Optional[Mapping[str, Any]], *, visible_member_ids: Optional[Sequence[str]] = None) -> bool:
     """Cheap read-side check; the fingerprint decides for real inside ``compose``.
 

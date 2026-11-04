@@ -1379,6 +1379,11 @@ once the operator stays running; verify `up` converges upward before chasing ind
 library. `--lint` runs offline in the existing local/CI checks manifest and the
 monitoring unit suite. Regenerate the committed metric-name snapshot with:
 
+The snapshot covers in-cluster Prometheus. `datasource_metrics` records separately
+observed families for another datasource, with its observation time and evidence.
+Those names admit rules only for that datasource; refreshing the local snapshot
+preserves them. A GMP-only histogram must not be presented as a local series.
+
 ```bash
 source ~/.local/bin/gcp-agent-env.sh ro-prod
 python3 backend/scripts/alert_backtest.py \

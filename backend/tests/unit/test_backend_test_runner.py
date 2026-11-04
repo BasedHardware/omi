@@ -57,6 +57,46 @@ def test_runner_blocks_unused_langsmith_plugin_but_keeps_asyncio(tmp_path, file_
     assert "1 passed" in result.stdout
 
 
+@pytest.mark.parametrize("file_isolation", ["0", "1"])
+def test_explicit_file_list_honors_hermetic_e2e_paths(tmp_path, file_isolation):
+    selected_tests = tmp_path / "selected-tests.txt"
+    selected_tests.write_text(
+        "tests/unit/test_example.py\ntesting/e2e/test_listen_pusher_wire_contract.py\n", encoding="utf-8", newline="\n"
+    )
+    captured_arguments = tmp_path / "pytest-arguments.txt"
+    fake_python = tmp_path / "fake-python"
+    _write_executable(
+        fake_python,
+        "#!/usr/bin/env bash\n"
+        "if [[ \"$1\" == \"-m\" && \"$2\" == \"pytest\" ]]; then\n"
+        "  printf '%s\\n' \"$@\" >> \"$CAPTURED_ARGUMENTS\"\n"
+        "fi\n"
+        "exit 0\n",
+    )
+    result = subprocess.run(
+        bash_command(TEST_RUNNER, cwd=BACKEND_DIR),
+        cwd=BACKEND_DIR,
+        env=os.environ
+        | {
+            "PYTHON": bash_path(fake_python, cwd=BACKEND_DIR),
+            "BACKEND_UNIT_TEST_FILE_LIST": bash_path(selected_tests, cwd=BACKEND_DIR),
+            "BACKEND_PYTEST_FILE_ISOLATION": file_isolation,
+            "BACKEND_PYTEST_PARALLEL_SESSION": "0",
+            "BACKEND_PYTEST_XDIST": "0",
+            "BACKEND_PYTEST_WORKERS": "1",
+            "CAPTURED_ARGUMENTS": bash_path(captured_arguments, cwd=BACKEND_DIR),
+        },
+        text=True,
+        capture_output=True,
+        check=False,
+        timeout=30,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    arguments = captured_arguments.read_text().splitlines()
+    assert arguments.count("tests/unit/test_example.py") == 1
+    assert arguments.count("testing/e2e/test_listen_pusher_wire_contract.py") == 1
+
+
 def test_file_isolation_failure_prints_exact_rerun_guidance(tmp_path):
     selected_tests = tmp_path / "selected-tests.txt"
     selected_tests.write_text("tests/unit/test_example_failure.py\n", encoding="utf-8", newline="\n")
@@ -268,11 +308,17 @@ def test_file_isolation_reaps_worker_that_dies_before_status(tmp_path):
         "esac\n",
     )
 
+    # Remove the timeout intermediary only for this worker-death probe so
+    # $PPID remains the scheduler's worker subshell on every host. Timeout
+    # enforcement itself is exercised by the file-budget probes below.
+    _write_executable(tmp_path / "timeout", '#!/usr/bin/env bash\nshift 3\nexec "$@"\n')
+
     result = subprocess.run(
         bash_command(TEST_RUNNER, cwd=BACKEND_DIR),
         cwd=BACKEND_DIR,
         env=os.environ
         | {
+            "PATH": str(tmp_path) + os.pathsep + os.environ["PATH"],
             "PYTHON": bash_path(fake_python, cwd=BACKEND_DIR),
             "BACKEND_UNIT_TEST_FILE_LIST": bash_path(selected_tests, cwd=BACKEND_DIR),
             "BACKEND_PYTEST_WORKERS": "1",
@@ -536,3 +582,107 @@ def test_shipped_allowlist_entries_are_partitioned_into_per_file_isolation(tmp_p
     assert len(isolated) == 1
     assert "--dist=loadfile" not in isolated[0]
     assert "tests/unit/test_clean_a.py" not in isolated[0]
+
+
+@pytest.mark.skipif(os.name == 'nt', reason='Unix timeout and Bash 3 fallback probes')
+@pytest.mark.parametrize('with_timeout', [True, False])
+def test_file_budget_bounds_hang_and_preserves_no_timeout_fallback(tmp_path, with_timeout):
+    import shutil
+
+    if with_timeout and shutil.which('timeout') is None:
+        pytest.skip('GNU timeout is unavailable')
+    selected = tmp_path / 'selected.txt'
+    selected.write_text('tests/unit/test_hanging_probe.py\ntests/unit/test_after_probe.py\n')
+    fake_python = tmp_path / 'fake-python'
+    _write_executable(
+        fake_python,
+        '#!/usr/bin/env bash\n'
+        'if [[ "${!#}" == tests/unit/test_hanging_probe.py ]]; then\n'
+        '  exec sleep 2\n'
+        'fi\n'
+        'echo after-probe-ran\n',
+    )
+    environment = os.environ | {
+        'PYTHON': str(fake_python),
+        'BACKEND_UNIT_TEST_FILE_LIST': str(selected),
+        'BACKEND_PYTEST_WORKERS': '1',
+        'BACKEND_PYTEST_FILE_ISOLATION': '1',
+        'BACKEND_PYTEST_PARALLEL_SESSION': '0',
+        'BACKEND_UNIT_FILE_BUDGET_SECONDS': '0.1',
+    }
+    if not with_timeout:
+        # Hide only the optional timeout lookup; preserve the caller's PATH.
+        startup = tmp_path / 'no-timeout.sh'
+        startup.write_text(
+            'command() {\n'
+            '  if [[ "$1" == -v && "$2" == timeout ]]; then return 1; fi\n'
+            '  builtin command "$@"\n'
+            '}\n'
+        )
+        environment['BASH_ENV'] = str(startup)
+    result = subprocess.run(
+        ['/bin/bash', str(TEST_RUNNER)],
+        cwd=BACKEND_DIR,
+        env=environment,
+        text=True,
+        capture_output=True,
+        timeout=10,
+    )
+    assert result.returncode == (1 if with_timeout else 0), result.stdout + result.stderr
+    assert 'after-probe-ran' in result.stdout
+    if with_timeout:
+        assert 'Backend unit file timed out::tests/unit/test_hanging_probe.py exceeded 0.1s' in result.stdout
+        assert 'tests/unit/test_hanging_probe.py (status 124)' in result.stdout
+    else:
+        assert 'timed out' not in result.stdout
+
+
+@pytest.mark.skipif(os.name == 'nt', reason='Unix TERM cancellation probe')
+def test_term_trap_names_files_in_flight(tmp_path):
+    import signal
+    import time
+
+    selected = tmp_path / 'selected.txt'
+    selected.write_text('tests/unit/test_inflight_probe.py\n')
+    started = tmp_path / 'started'
+    release = tmp_path / 'release'
+    fake_python = tmp_path / 'fake-python'
+    _write_executable(
+        fake_python,
+        '#!/usr/bin/env bash\n'
+        'touch "$PROBE_STARTED"\n'
+        'for ((i=0; i<100; i++)); do\n'
+        '  [[ -f "$PROBE_RELEASE" ]] && exit 0\n'
+        '  sleep 0.02\n'
+        'done\n'
+        'exit 1\n',
+    )
+    with subprocess.Popen(
+        bash_command(TEST_RUNNER, cwd=BACKEND_DIR),
+        cwd=BACKEND_DIR,
+        env=os.environ
+        | {
+            'PYTHON': str(fake_python),
+            'BACKEND_UNIT_TEST_FILE_LIST': str(selected),
+            'BACKEND_PYTEST_WORKERS': '1',
+            'BACKEND_PYTEST_FILE_ISOLATION': '1',
+            'BACKEND_PYTEST_PARALLEL_SESSION': '0',
+            'PROBE_STARTED': str(started),
+            'PROBE_RELEASE': str(release),
+        },
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    ) as process:
+        try:
+            deadline = time.monotonic() + 5
+            while not started.exists():
+                assert process.poll() is None
+                assert time.monotonic() < deadline, 'worker never started'
+                time.sleep(0.01)
+            process.send_signal(signal.SIGTERM)
+        finally:
+            release.touch()
+        stdout, stderr = process.communicate(timeout=10)
+    assert process.returncode == 0, stdout + stderr
+    assert 'backend unit: cancelled with files in flight: tests/unit/test_inflight_probe.py' in stderr
