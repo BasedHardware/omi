@@ -4523,5 +4523,9 @@
     "liveTranscribedUpTo": "Přepsáno do {time}",
     "liveAudioSaved": "Uloženo {duration}",
     "liveAudioSavedDetail": "Mluvčí a konečný přepis se zde objeví během nahrávání.",
+    "speakerWholeRecording": "Použít na celou nahrávku",
+    "speakerSelectionChanged": "Mluvčí se změnil. Vyberte řádky znovu.",
+    "speakerRenameIssue": "{reason, select, limit{Nahrávka je příliš velká. Vyberte méně řádků v jedné konverzaci.} partial{Některé řádky byly uloženy. Vyberte zbývající a zkuste to znovu.} other{Některé řádky byly uloženy. Vyberte zbývající a zkuste to znovu.}}",
+    "speakerRecordingCoverage": "{state, select, scope{Další řádky tohoto hlasu (rozsah nahrávky není potvrzen)} other{{count, plural, =1{Přejmenováno 1 řádků pouze v dostupných konverzacích.} other{Přejmenováno {count} řádků pouze v dostupných konverzacích.}}}}",
     "episodeFinishingUp": "Dokončování…"
 }

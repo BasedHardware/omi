@@ -14949,5 +14949,42 @@ class AppLocalizationsHi extends AppLocalizations {
   String get liveAudioSavedDetail => 'अपलोड के साथ वक्ता और अंतिम ट्रांसक्रिप्ट यहाँ दिखेंगे।';
 
   @override
+  String get speakerWholeRecording => 'पूरी रिकॉर्डिंग पर लागू करें';
+
+  @override
+  String get speakerSelectionChanged => 'वक्ता बदल गया है। पंक्तियाँ फिर से चुनें।';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'रिकॉर्डिंग बहुत बड़ी है। एक बातचीत में कम पंक्तियाँ चुनें।',
+        'partial': 'कुछ पंक्तियाँ सहेजी गईं। बाकी पंक्तियाँ चुनकर फिर कोशिश करें।',
+        'other': 'कुछ पंक्तियाँ सहेजी गईं। बाकी पंक्तियाँ चुनकर फिर कोशिश करें।',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerRecordingCoverage(String state, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'केवल उपलब्ध बातचीत में $count पंक्तियों का नाम बदला गया।',
+      one: 'केवल उपलब्ध बातचीत में 1 पंक्तियों का नाम बदला गया।',
+    );
+    String _temp1 = intl.Intl.selectLogic(
+      state,
+      {
+        'scope': 'इस आवाज़ की अन्य पंक्तियाँ (रिकॉर्डिंग का दायरा अपुष्ट)',
+        'other': '$_temp0',
+      },
+    );
+    return '$_temp1';
+  }
+
+  @override
   String get episodeFinishingUp => 'पूरा किया जा रहा है…';
 }

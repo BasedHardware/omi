@@ -14734,5 +14734,42 @@ class AppLocalizationsZh extends AppLocalizations {
   String get liveAudioSavedDetail => '上传时，说话人和最终转录内容会显示在这里。';
 
   @override
+  String get speakerWholeRecording => '应用到整段录音';
+
+  @override
+  String get speakerSelectionChanged => '说话人已更改。请重新选择这些行。';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': '录音太大。请在一个对话中选择更少的行。',
+        'partial': '部分行已保存。请选择其余行并重试。',
+        'other': '部分行已保存。请选择其余行并重试。',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerRecordingCoverage(String state, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '仅重命名了可用对话中的 $count 行。',
+      one: '仅重命名了可用对话中的 1 行。',
+    );
+    String _temp1 = intl.Intl.selectLogic(
+      state,
+      {
+        'scope': '此声音的其他行（录音覆盖范围未确认）',
+        'other': '$_temp0',
+      },
+    );
+    return '$_temp1';
+  }
+
+  @override
   String get episodeFinishingUp => '即将完成…';
 }

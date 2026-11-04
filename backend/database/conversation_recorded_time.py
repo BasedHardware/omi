@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 
 from google.cloud import firestore
 
+from config.recording_speakers import with_creation_scope_index
 from database._client import run_transactional
 from utils.conversations.recorded_time import SPAN_FIELDS, span_fields, write_span
 
@@ -29,7 +30,7 @@ def create_if_absent(uid, payload, *, firestore_client):
     def create(transaction):
         if ref.get(transaction=transaction).exists:
             return False, False
-        data = dict(payload)
+        data = with_creation_scope_index(payload)
         adopt_membership(transaction, root, data)
         changed = False
         if data.get('processing_deferred'):

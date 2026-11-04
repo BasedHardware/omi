@@ -15005,5 +15005,42 @@ class AppLocalizationsNl extends AppLocalizations {
   String get liveAudioSavedDetail => 'Sprekers en het definitieve transcript verschijnen hier tijdens het uploaden.';
 
   @override
+  String get speakerWholeRecording => 'Toepassen op de hele opname';
+
+  @override
+  String get speakerSelectionChanged => 'De spreker is gewijzigd. Selecteer de regels opnieuw.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'De opname is te groot. Selecteer minder regels in één gesprek.',
+        'partial': 'Sommige regels zijn opgeslagen. Selecteer de overige en probeer het opnieuw.',
+        'other': 'Sommige regels zijn opgeslagen. Selecteer de overige en probeer het opnieuw.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerRecordingCoverage(String state, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count regels alleen in de beschikbare gesprekken hernoemd.',
+      one: '1 regels alleen in de beschikbare gesprekken hernoemd.',
+    );
+    String _temp1 = intl.Intl.selectLogic(
+      state,
+      {
+        'scope': 'Andere regels van deze stem (bereik van opname onbevestigd)',
+        'other': '$_temp0',
+      },
+    );
+    return '$_temp1';
+  }
+
+  @override
   String get episodeFinishingUp => 'Afronden…';
 }
