@@ -229,6 +229,10 @@ class FirestoreEnrichmentOutbox:
 
         if self._blocked(row_id):
             return Outcome.DISCARDED
+        from utils.enrichment.age_gate import park_if_expired
+
+        if park_if_expired(row_id, wake_token, now=now, client=self._bound_client):
+            return Outcome.STALE
         if not admit(row_id, now=now, token=wake_token):
             return Outcome.DEFERRED  # Demand processing owns this row's next wake.
         outbox = _outbox()
