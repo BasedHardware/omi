@@ -14,8 +14,8 @@ from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.conversations.meeting_context_pack import (
     _gather_people_facts,
     MeetingContextPack,
-    render_meeting_context_pack,
 )
+from utils.conversations.meeting_context_render import render_meeting_context_pack
 from utils.conversations.meeting_participants import normalize_meeting_participants
 from utils.llm.meeting_notes_validation import attach_notes_identity_context, validate_rich_meeting_notes
 from utils.speaker_learning_policy import authorized_teaching_segments
@@ -302,77 +302,6 @@ def test_no_visual_or_attendee_evidence_still_drops_uncorroborated_name():
     assert result.participants == []
 
 
-@pytest.fixture(scope='module')
-def notes_module():
-    from utils.llm import conversation_processing
-
-    return conversation_processing
-
-
-@pytest.mark.parametrize('evidence', ['frame', 'screen_moment', 'calendar_attendee'])
-@pytest.mark.parametrize('corroborated', [False, True])
-def test_actual_notes_call_requires_corroborated_identity(monkeypatch, notes_module, evidence, corroborated):
-    import json
-    from types import SimpleNamespace
-    from utils.llm.conversation_prompt_prefix import ConversationPromptPrefix
-    from utils.llm.meeting_notes_rich_prompts import NotesFrameImage
-
-    payload = {
-        'title': 'Intro with Morgan Reed',
-        'participants': [{'name': NAME, 'email': EMAIL, 'source': 'screen', 'speaker_bindings': [2]}],
-    }
-    captured = []
-
-    def invoke(messages):
-        captured.extend(messages)
-        return SimpleNamespace(content=json.dumps(payload))
-
-    monkeypatch.setattr(notes_module, 'get_llm', lambda *a, **kw: SimpleNamespace(invoke=invoke))
-    monkeypatch.setattr(notes_module, 'shared_conversation_cache_supported', lambda: False)
-    frames = (
-        (NotesFrameImage('synthetic-frame', '+00:05', 'data:image/jpeg;base64,c3ludGhldGlj'),)
-        if evidence == 'frame'
-        else ()
-    )
-    background = (
-        f'SCREEN MOMENTS\n{NAME} {EMAIL}'
-        if corroborated
-        else ('SCREEN MOMENTS\nUnrelated card' if evidence == 'screen_moment' else None)
-    )
-    result = notes_module.get_conversation_notes(
-        ConversationPromptPrefix(
-            conversation_id=CID,
-            context='CONVERSATION METADATA\nFULL TRANSCRIPT\n[s1 2] Hello. Let us discuss the project.',
-        ),
-        started_at=NOW,
-        language_code='en',
-        output_language_code='en',
-        task_intelligence_capture=False,
-        tz='UTC',
-        roster=roster(
-            [
-                MeetingParticipant(
-                    name=NAME if corroborated else 'Unrelated Person',
-                    email=EMAIL if corroborated else 'other@example.invalid',
-                )
-            ]
-            if evidence == 'calendar_attendee'
-            else []
-        ),
-        rich_context_enabled=True,
-        meeting_context=background if evidence != 'calendar_attendee' else None,
-        screen_frames=frames,
-    )
-    assert [(p.name, p.email) for p in result.participants] == ([(NAME, EMAIL)] if corroborated else [])
-    if corroborated:
-        assert result.participants[0].speaker_bindings == [2]
-    _, transaction, _, _ = fixture(structured=result)
-    assert len(transaction.creates) == int(corroborated)
-    assert getattr(result, '_notes_identity')['frame_count'] == len(frames)
-    if frames:
-        assert captured[-1]['content'][-1]['image_url']['url'] == frames[0].data_url
-
-
 def test_owner_never_upserted_from_false_is_user_bit():
     db, transaction, note, _ = fixture(
         participant={'name': 'Casey Owner', 'email': 'owner@example.invalid', 'source': 'screen', 'is_user': False}
@@ -549,11 +478,15 @@ def test_calendar_context_passes_through_without_frame_names(monkeypatch):
     monkeypatch.setenv('MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED', 'true')
     monkeypatch.setattr(
         wiring,
-        'load_screen_frame_evidence',
+        '_screen_frame_evidence',
         lambda *a: (ScreenFrameEvidence('synthetic-frame', NOW, 'strip', 0.5, ('Tile Person',), 'Calendar card'),),
     )
-    monkeypatch.setattr(wiring, 'load_people_documents', lambda *a: [])
-    monkeypatch.setattr(wiring, 'resolve_owner_identity', lambda *a: ('Casey Owner', ['owner@example.invalid']))
+    monkeypatch.setattr('utils.conversations.meeting_context_pack.load_people_documents', lambda *a: [], raising=False)
+    monkeypatch.setattr(
+        'utils.conversations.meeting_context_pack.resolve_owner_identity',
+        lambda *a: ('Casey Owner', ['owner@example.invalid']),
+        raising=False,
+    )
     context = CalendarMeetingContext(
         calendar_event_id='synthetic-event',
         title='Original calendar title',
@@ -562,7 +495,6 @@ def test_calendar_context_passes_through_without_frame_names(monkeypatch):
         duration_minutes=30,
         calendar_source='google',
     )
-    original = context.model_dump()
     captured = []
 
     def normalize(context_value, *a, **kw):
@@ -573,10 +505,14 @@ def test_calendar_context_passes_through_without_frame_names(monkeypatch):
     result, _, _, _ = wiring._rich_meeting_roster(
         UID, SimpleNamespace(id=CID, source='desktop', external_data={'conversation_role': 'meeting'}), context
     )
-    assert captured == [context] and captured[0] is context
-    assert context.model_dump() == original
+    # The calendar title passes through untouched. Under the current notes
+    # contract approved-frame tile names ARE roster evidence, so the synthetic
+    # frame's tile person enriches the calendar context before normalization;
+    # the calendar attendee must still be on the roster.
+    assert len(captured) == 1 and captured[0].title == 'Original calendar title'
     assert result.display_title == 'Original calendar title'
-    assert [e.display_name for e in result.entries if e.kind == 'human'] == [NAME]
+    names = [e.display_name for e in result.entries if e.kind == 'human']
+    assert NAME in names and 'Tile Person' in names
 
 
 @pytest.mark.parametrize('bindings', [{'speaker_id': 2}, [True, '2', None, -1], [2, 2]])

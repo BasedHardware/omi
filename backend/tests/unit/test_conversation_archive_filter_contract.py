@@ -247,6 +247,11 @@ def conversations_db():
         # filtering never calls it; keep the contract isolated from its graph.
         "utils.person_evidence": AutoMockModule("utils.person_evidence"),
         "utils.owner_voice_evidence": AutoMockModule("utils.owner_voice_evidence"),
+        "utils.speaker_learning_policy": AutoMockModule("utils.speaker_learning_policy"),
+        # The stub-fed database.person_aliases copy imports this at module load;
+        # a fresh registration of its prometheus Counters collides with the
+        # real module's registration across fixture setups.
+        "utils.observability.people_scans": AutoMockModule("utils.observability.people_scans"),
         "utils.observability.speaker_identification": AutoMockModule("utils.observability.speaker_identification"),
         "utils.observability.speaker_learning_jobs": AutoMockModule("utils.observability.speaker_learning_jobs"),
         "utils.observability.fallback": AutoMockModule("utils.observability.fallback"),

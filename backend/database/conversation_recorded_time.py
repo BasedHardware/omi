@@ -31,13 +31,16 @@ def create_if_absent(uid, payload, *, firestore_client, stage_identity=None):
         if ref.get(transaction=transaction).exists:
             return False, False
         data = with_creation_scope_index(payload)
+        # Adopt first: it only reads, and the identity staging below writes, so
+        # keeping every read ahead of the first write keeps the transaction
+        # order-valid.
+        adopt_membership(transaction, root, data)
         if stage_identity is not None:
             # Screen/calendar evidence may name people before the conversation
             # row exists; stage those provisional identifiers in the same
             # transaction so the people write and the conversation create
             # commit together or not at all.
             stage_identity(transaction, data)
-        adopt_membership(transaction, root, data)
         changed = False
         if data.get('processing_deferred'):
             changed = processing_backlog.stage_transition(

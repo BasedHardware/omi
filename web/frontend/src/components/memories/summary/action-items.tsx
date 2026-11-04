@@ -31,32 +31,36 @@ export default function ActionItems({ items, knownIDs = [] }: ActionsItemsProps)
                 {item.completed ? 'Completed' : 'Not completed'}
               </span>
               <div className="sn-action-body">
-                <p className="sn-action-text">
-                  {presentableNoteText(item.description, knownIDs)}
-                </p>
-                <div className="sn-action-meta">
-                  {owner && (
-                    <span className="sn-owner">
-                      <span
-                        className={`sn-avatar sn-avatar-${avatarToneIndex(owner)}`}
-                        aria-hidden="true"
-                      >
-                        {participantInitials(owner)}
+                <p className="sn-action-text">{item.description}</p>
+                {hasMeta && (
+                  <div className="sn-action-meta">
+                    {ownerKnown && (
+                      <span className="sn-owner">
+                        <span
+                          className={`sn-avatar sn-avatar-${avatarToneIndex(owner)}`}
+                          aria-hidden="true"
+                        >
+                          {participantInitials(owner)}
+                        </span>
+                        {owner}
                       </span>
-                      Owner: {owner}
-                    </span>
-                  )}
-                  {context && (
-                    <span className="sn-context">
-                      {presentableNoteText(context, knownIDs)}
-                    </span>
-                  )}
-                  {due ? (
-                    <time dateTime={due.iso}>Due {due.label}</time>
-                  ) : (
-                    <span>Due Unknown</span>
-                  )}
-                </div>
+                    )}
+                    {due && (
+                      <time
+                        dateTime={due.iso}
+                        aria-label={
+                          due.certainty === 'tentative'
+                            ? `Tentatively due ${due.label}`
+                            : undefined
+                        }
+                      >
+                        Due {due.certainty === 'tentative' ? '~' : ''}
+                        {due.label}
+                      </time>
+                    )}
+                  </div>
+                )}
+                {context && <p className="sn-context">{context}</p>}
               </div>
             </li>
           );
