@@ -72,10 +72,18 @@ batch-replay:
 	backend/.venv/bin/python -I backend/testing/batch_replay/gate.py --ref "$(REF)" --base "$(BASE)" --corpus "$(CORPUS)" --output "$(OUTPUT)"
 
 # Local stage replay; expected incident stops are successful reproductions.
-.PHONY: replay-harness
+CASES ?= backend/testing/replay_harness/fixtures/privacy-transitions-smoke
+
+.PHONY: replay-harness replay-privacy-full
 replay-harness:
 	@test -n "$(CASES)" -a -n "$(OUTPUT)" || (echo 'Required: CASES OUTPUT'; exit 2)
-	cd backend && .venv/bin/python -m testing.replay_harness run $(foreach case,$(CASES),--case "$(abspath $(case))") --output "$(abspath $(OUTPUT))"
+	cd backend && .venv/bin/python -m testing.replay_harness run $(foreach case,$(CASES),--case "$(abspath $(case))") --output "$(abspath $(OUTPUT))" $(if $(PRIVACY_TTL_OVERRIDE_S),--privacy-ttl-override-s $(PRIVACY_TTL_OVERRIDE_S))
+
+# Large synthetic privacy qualification stays on the caller's heavy lane.
+replay-privacy-full:
+	@test -n "$(OUTPUT)" || (echo 'Required: OUTPUT'; exit 2)
+	cd backend && .venv/bin/python -m testing.replay_harness.gen_privacy_timeline --transitions 1400 --output "$(abspath $(OUTPUT))/privacy-transitions-full"
+	$(MAKE) replay-harness CASES="$(abspath $(OUTPUT))/privacy-transitions-full" OUTPUT="$(abspath $(OUTPUT))/report"
 
 # Fixed adapter against immutable product refs; caller owns the emulator session.
 .PHONY: replay-gate
