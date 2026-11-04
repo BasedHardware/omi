@@ -2,7 +2,7 @@
 
 from prometheus_client import Counter, Histogram, Gauge
 
-from utils.episodes.metrics import reuse_or_create, _label
+from utils.episodes.metrics import reuse_or_create, bounded_label
 from utils.episodes.log.codec import digest
 
 FIELDS = (
@@ -61,13 +61,13 @@ OVERDUE = reuse_or_create(Counter, 'omi_episode_drain_deadline_total', 'Automati
 # with an inaugural nonzero sample, which increase() cannot compare to zero.
 for _field in FIELDS:
     for _outcome in DRIFT_OUTCOMES:
-        DRIFT.labels(field=_field, outcome=_label(_outcome, DRIFT_OUTCOMES))
+        DRIFT.labels(field=_field, outcome=bounded_label(_outcome, DRIFT_OUTCOMES))
 for _phase in ('queued', 'running', 'retrying'):
     OVERDUE.labels(phase=_phase)
 for _outcome in DRAIN_OUTCOMES:
-    DRAIN.labels(outcome=_label(_outcome, DRAIN_OUTCOMES))
+    DRAIN.labels(outcome=bounded_label(_outcome, DRAIN_OUTCOMES))
 for _outcome in SWEEP_OUTCOMES:
-    SWEEP.labels(outcome=_label(_outcome, SWEEP_OUTCOMES))
+    SWEEP.labels(outcome=bounded_label(_outcome, SWEEP_OUTCOMES))
 
 
 def observe_state(state, phase, now):
@@ -120,5 +120,5 @@ def compare(legacy, view, *, reread=None):
         legacy = reread()
         outcomes = differences(legacy, view)
     for field, outcome in outcomes.items():
-        DRIFT.labels(field=field, outcome=_label(outcome, DRIFT_OUTCOMES)).inc()
+        DRIFT.labels(field=field, outcome=bounded_label(outcome, DRIFT_OUTCOMES)).inc()
     return outcomes
