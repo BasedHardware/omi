@@ -25,7 +25,13 @@ ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 ROOT_CANON="$(cd "$ROOT" && pwd -P)"
 # The fixture creates and selects its own bare Git directory below. Do not let
 # a hook's partial linked-worktree environment leak into that reproduction.
-unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES
+# Do not pass a caller's repository selection to nested fixture Git commands.
+# GIT_NAMESPACE is repository-scoped but absent from Git's local-env-vars list.
+GIT_LOCAL_ENV_VARS="$(git rev-parse --local-env-vars)"
+for git_env_var in $GIT_LOCAL_ENV_VARS GIT_NAMESPACE; do
+  unset "$git_env_var"
+done
+unset GIT_LOCAL_ENV_VARS git_env_var
 TMPDIR="$(mktemp -d "${TMPDIR:-/tmp}/omi-pre-push-wt.XXXXXX")"
 trap 'rm -rf "$TMPDIR"' EXIT
 
