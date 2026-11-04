@@ -1311,6 +1311,7 @@ class ListenReceiver(ReplayFilterMixin):
         self.host.server_batch_only = server_batch_suppresses_live(self.host)
         self.host.server_batch_initialized = True
         if self.host.server_batch_only:
+            admit_local_preview(self.host)
             self.cloud_live_suppressed = True
             attach_visible_restore(self)
             if not getattr(self, '_server_batch_logged', False):
