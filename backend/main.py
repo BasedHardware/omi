@@ -156,6 +156,7 @@ methods_timeout = {
 
 # Keep the in-request Cloud Tasks pipeline cap below its 1800s lock TTL so no lock expires under live work.
 paths_timeout = {
+    "/v2/episode-drain/run": 120,  # Bounded no-model drain; safely below its 600s lease.
     "/v2/cap-hold-recovery/sweep": 1710,  # Await bounded redrive under Scheduler's 1740s deadline.
     "/v2/batch-pipeline/recover-quarantine": 1500,  # Await paid STT and durable settlement within the task request.
     "/v2/sync-jobs/run": os.environ.get('HTTP_SYNC_JOBS_RUN_TIMEOUT', 1500),

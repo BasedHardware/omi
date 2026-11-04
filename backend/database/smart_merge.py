@@ -27,6 +27,7 @@ from google.api_core.exceptions import FailedPrecondition
 
 from database import conversations as conversations_db
 from database import smart_merge_audit as audit_db
+from database import episode_log
 from database.quiet_check_retirement import stop_quiet_check_for_conversation
 from database._client import get_firestore_client, run_transactional
 from database.firestore_index_registry import (
@@ -356,6 +357,7 @@ def absorb_conversation(
     def absorb_attempt(transaction, *, audit_unavailable: bool = False) -> AbsorbResult:
         nonlocal size_bucket
         size_bucket = None
+        episode_capture = episode_log.prepare_member_change(transaction, client.collection('users').document(uid))
         survivor_raw = survivor_ref.get(transaction=transaction).to_dict()
         donor_raw = donor_ref.get(transaction=transaction).to_dict()
         if not donor_raw:
@@ -506,6 +508,7 @@ def absorb_conversation(
         size_bucket = projected_size_bucket(projected_bytes)
         if projected_bytes > CONVERSATION_ABSORPTION_BYTE_CAP:
             return AbsorbResult('rejected', 'size_cap_stop', projected_size_bucket=size_bucket)
+        episode_log.member_changed(episode_capture, [survivor_id, donor_id, *ancestor_updates])
         transaction.update(survivor_ref, payload)
         transaction.update(donor_ref, donor_update)
         for ancestor_id, patch in ancestor_updates.items():

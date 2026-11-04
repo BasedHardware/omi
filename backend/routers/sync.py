@@ -1818,7 +1818,19 @@ async def sweep_sync_backfill_sequencer(_retry_count: int = Depends(verify_cloud
             outcomes['summary_debt_scanned'] = summary['scanned']
             outcomes['summary_debt_admitted'] = summary['admitted']
             outcomes['summary_debt_errors'] = summary['errors']
-    return JSONResponse(status_code=500 if outcomes.get('error') else 200, content={'outcomes': outcomes})
+    from utils.episodes.log import worker as episode_worker
+
+    try:
+        episode_outcomes = await run_blocking(db_executor, episode_worker.sweep)
+        outcomes['episode_redriven'] = episode_outcomes.get('redriven', 0)
+        outcomes['episode_errors'] = episode_outcomes.get('error', 0)
+    except Exception as error:
+        logger.error('event=episode_log_sweep outcome=error exception_type=%s', type(error).__name__)
+        outcomes['episode_errors'] = 1
+    return JSONResponse(
+        status_code=500 if outcomes.get('error') or outcomes.get('episode_errors') else 200,
+        content={'outcomes': outcomes},
+    )
 
 
 @router.post('/v2/sync-backfill-sequencer/wake', include_in_schema=False)

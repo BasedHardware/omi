@@ -19,7 +19,8 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response
+from utils.episodes.log import reads as log_reads, worker as log_worker
 
 from config.episodes import APP_CHANNEL_HEADER, app_channel, client_channel_admitted, episodes_enabled_for
 from utils.episodes import home_read
@@ -50,23 +51,48 @@ def _admitted(uid: str, channel: Optional[str]) -> bool:
     return True
 
 
-@router.get('/v1/episodes', response_model=EpisodeListResponse)
+@router.get('/v1/episodes', response_model=EpisodeListResponse, responses={304: {'description': 'Home unchanged'}})
 def list_episodes(
+    response: Response,
     start: datetime = Query(..., alias='from'),
     end: datetime = Query(..., alias='to'),
     limit: int = Query(50, ge=1, le=100),
     cursor: Optional[str] = Query(None, max_length=200, pattern=r'^[A-Za-z0-9_-]+$'),
     uid: str = Depends(auth.get_current_user_uid),
     channel: Optional[str] = Header(None, alias=APP_CHANNEL_HEADER),
+    if_none_match: Optional[str] = Header(None, alias='If-None-Match'),
+    home_version: Optional[str] = Query(None, max_length=128),
 ):
     if not _admitted(uid, channel):
         return {'enabled': False}
     if start.tzinfo is None or end.tzinfo is None or start > end:
         raise HTTPException(status_code=422, detail='Expected an ordered, timezone-aware window')
+    state = log_reads.ready(uid)
+    if state is not None:
+        token = log_reads.version(uid, state, start, end, limit, cursor)
+        headers = {
+            'ETag': f'"{token}"',
+            'X-Omi-Home-Version': str(state['home_version']),
+            'Cache-Control': 'private, no-cache',
+            'Vary': 'Authorization, X-Omi-App-Channel',
+        }
+        if if_none_match == headers['ETag'] or home_version == token:
+            return Response(status_code=304, headers=headers)
+        try:
+            rows, wires, next_cursor = log_reads.list_window(uid, start, end, limit=limit, cursor=cursor)
+        except ValueError as error:
+            if str(error) != 'episode_home_policy_changed':
+                raise HTTPException(status_code=422, detail=str(error)) from error
+        else:
+            if response is not None:
+                response.headers.update(headers)
+            log_worker.sample_read(uid, rows)
+            return {'enabled': True, 'episodes': wires, 'next_cursor': next_cursor, 'home_version': token}
     try:
         rows, next_cursor = home_read.list_episode_window(uid, start, end, limit=limit, cursor=cursor)
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
+    log_worker.sample_read(uid, rows)
     return {
         'enabled': True,
         'episodes': home_read.project_episodes(uid, rows),
@@ -81,14 +107,19 @@ def get_live_episode(
 ):
     if not _admitted(uid, channel):
         return {'enabled': False, 'episode': None}
-    episode = service.live_episode(uid)
+    # Preserve the live lifecycle's idle-close/conflict handling before choosing a read view.
+    legacy_episode = service.live_episode(uid)
+    use_log = log_reads.ready(uid) is not None
+    episode = log_reads.linked(uid, 'current') if use_log else legacy_episode
     response = {
         'enabled': True,
         'episode': home_read.wire_episode(episode),
     }
     # Without a live episode this response is the recovery-navigation answer, so the
     # recap is read fresh; alongside a live episode it comes from the poll cache.
-    closed = service.last_closed_episode(uid, fresh=episode is None)
+    closed = (
+        log_reads.linked(uid, 'last_closed') if use_log else service.last_closed_episode(uid, fresh=episode is None)
+    )
     if closed is not None:
         response['last_closed_episode'] = home_read.wire_episode(closed)
     return response
@@ -104,7 +135,14 @@ def get_episode_for_conversation(
         return {'enabled': False, 'episode': None}
     return {
         'enabled': True,
-        'episode': home_read.project_lookup(uid, service.episode_for_conversation(uid, conversation_id)),
+        'episode': home_read.project_lookup(
+            uid,
+            (
+                log_reads.linked(uid, conversation_id)
+                if log_reads.ready(uid) is not None
+                else service.episode_for_conversation(uid, conversation_id)
+            ),
+        ),
     }
 
 
@@ -120,7 +158,9 @@ def get_episode(
     channel: Optional[str] = Header(None, alias=APP_CHANNEL_HEADER),
 ):
     _require(uid, channel)
-    episode = service.episode_by_id(uid, episode_id)
+    episode = (
+        log_reads.by_id(uid, episode_id) if log_reads.ready(uid) is not None else service.episode_by_id(uid, episode_id)
+    )
     if episode is None:
         raise HTTPException(status_code=404, detail='Episode not found')
     projected = home_read.project_episode(uid, episode)

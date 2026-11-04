@@ -5006,6 +5006,29 @@
       ]
     },
     {
+      "collectionGroup": "episode_log_state",
+      "fieldPath": "scan_at",
+      "ttl": false,
+      "indexes": [
+        {
+          "queryScope": "COLLECTION",
+          "order": "ASCENDING"
+        },
+        {
+          "queryScope": "COLLECTION",
+          "order": "DESCENDING"
+        },
+        {
+          "queryScope": "COLLECTION",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "queryScope": "COLLECTION_GROUP",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "processing_backlog",
       "fieldPath": "state",
       "ttl": false,
@@ -5495,6 +5518,24 @@
           "order": "ASCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "episode_facts",
+      "fieldPath": "payload",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "episode_log_checkpoint",
+      "fieldPath": "payload",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "episode_views",
+      "fieldPath": "home_payload",
+      "ttl": false,
+      "indexes": []
     },
     {
       "collectionGroup": "sync_backfill_pending",

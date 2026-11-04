@@ -39,6 +39,7 @@ def list_episode_window(
     limit: int = 50,
     cursor: str | None = None,
     firestore_client: Any = None,
+    namespace: str = 'episodes',
 ) -> tuple[list[dict[str, Any]], str | None]:
     """Bounded Firestore page; use the canonical half-open ownership predicate.
 
@@ -47,7 +48,9 @@ def list_episode_window(
     Snapshot cursors include Firestore's implicit document-ID tie breaker.
     """
     client = firestore_client if firestore_client is not None else get_firestore_client()
-    root = client.collection('users').document(uid).collection('episodes')
+    if namespace not in {'episodes', 'episode_views'}:
+        raise ValueError('Invalid episode namespace')
+    root = client.collection('users').document(uid).collection(namespace)
     query = (
         root.where(filter=FieldFilter('started_at', '>=', start - timedelta(seconds=MAX_EPISODE_SECONDS)))
         .where(filter=FieldFilter('started_at', '<=' if start == end else '<', end))

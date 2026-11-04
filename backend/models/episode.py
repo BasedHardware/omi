@@ -113,5 +113,6 @@ class EpisodeWrapUpRequest(BaseModel):
 
 class EpisodeListResponse(BaseModel):
     enabled: bool
+    home_version: Optional[str] = None
     episodes: list[Episode] = Field(default_factory=list)
     next_cursor: Optional[str] = None
