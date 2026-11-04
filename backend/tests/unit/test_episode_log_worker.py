@@ -574,3 +574,18 @@ def test_successful_wake_does_not_emit_degraded_metric(monkeypatch):
     before = counter._value.get()
     worker.wake(UID, NOW)
     assert counter._value.get() == before
+
+
+@pytest.mark.parametrize('fraction', [0, 0.000001, 0.5, 29.999999, 30])
+def test_stable_wake_bucket_never_precedes_its_fractional_deadline(monkeypatch, fraction):
+    monkeypatch.setattr(worker.time, 'time', lambda: NOW.timestamp())
+    enqueue = Mock()
+    monkeypatch.setattr(worker.cloud_tasks, 'enqueue_episode_uid_wake', enqueue)
+    deadline = NOW + timedelta(minutes=3, seconds=fraction)
+    worker.wake(UID, deadline)
+    worker.wake(UID, deadline)
+    first, second = enqueue.call_args_list
+    assert first == second
+    bucket = first.args[2]
+    assert deadline.timestamp() <= bucket < deadline.timestamp() + 30
+    assert bucket % 30 == 0

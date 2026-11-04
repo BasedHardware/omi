@@ -7,6 +7,7 @@ scheduler tick redrives missed wakes, expired owners and retry deadlines.
 import hashlib
 import os
 import logging
+import math
 import random
 import time
 from datetime import datetime, timezone
@@ -29,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 def wake(uid, deadline):
     # Ceiling to the same stable future bucket in every producing service.
-    seconds = int(deadline.timestamp())
+    seconds = math.ceil(deadline.timestamp())
     bucket = max(
         ((seconds + config.WAKE_BUCKET_SECONDS - 1) // config.WAKE_BUCKET_SECONDS) * config.WAKE_BUCKET_SECONDS,
         (int(time.time()) // config.WAKE_BUCKET_SECONDS + 1) * config.WAKE_BUCKET_SECONDS,
