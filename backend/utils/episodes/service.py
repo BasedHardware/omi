@@ -73,6 +73,7 @@ from database import users as users_db
 from database.auth import get_user_name
 from utils.episodes import moment_render, boundary_runtime
 from utils.episodes import output_language as episode_language
+from utils.llm.output_language import dominant_segment_language, languages_match
 from utils.episodes import client_gate, composer, incremental, metrics, policy, recovery
 from utils.episodes import capture_groups as episode_groups
 from utils.episodes.capture_groups import calendar_identity as _calendar_identity
@@ -82,6 +83,7 @@ from utils.episodes.moment_order import newest_moments, timeline_moments
 from utils.episodes.state import apply_update, clean_text, is_placeholder_heading, provisional_items, render_state
 from utils.episodes.visibility import visible_episode, hidden_conversation
 from utils.episodes.recorded_recovery import record_walk, record_windows, unconsumed_moments
+from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +92,11 @@ logger = logging.getLogger(__name__)
 _LAST_CLOSED_CACHE_MAX = 10_000
 _last_closed_cache: dict[str, tuple[Optional[dict[str, Any]], float]] = {}
 _last_closed_lock = threading.Lock()
+# An unchanged conflicted close must not retry its transaction on every Home poll.
+# Process-local and short-lived: other replicas and timeline changes can still settle it.
+_CLOSE_CONFLICT_RETRY_SECONDS = 60
+_close_conflicts: dict[str, tuple[tuple[Any, ...], float]] = {}
+_close_conflicts_lock = threading.Lock()
 _OUTPUT_LANGUAGE_CACHE_SECONDS = 4 * 60 * 60
 _OUTPUT_LANGUAGE_CACHE_MAX = 20_000
 _output_language_cache: dict[tuple[str, str, str, str, int], tuple[str, float]] = {}
@@ -158,20 +165,6 @@ def _owner_name(uid: str, c: Collaborators) -> str:
         return 'You'
 
 
-def _conversation_language(uid: str, conversation_id: str, c: Collaborators) -> Optional[str]:
-    """The conversation's dominant language tag, for moments the stream did not carry one."""
-    if not conversation_id:
-        return ''
-    try:
-        row = conversations_db.get_conversation_raw_snapshot(
-            uid, conversation_id, field_paths=['language'], firestore_client=c.firestore_client
-        )
-        return str((row or {}).get('language') or '')
-    except Exception as error:
-        logger.warning('event=episode_moment conversation_language_failed exception_type=%s', type(error).__name__)
-        return None
-
-
 def _language_cache_get(key: tuple[str, str, str, str, int]) -> Optional[str]:
     now = time.monotonic()
     with _output_language_cache_lock:
@@ -208,11 +201,11 @@ def _episode_language_inputs(
     conversation_key = ('conversation', uid, session_id, moment.conversation_id, client_key)
     conversation_language = _language_cache_get(conversation_key)
     if conversation_language is None:
-        stored = _conversation_language(uid, moment.conversation_id, c)
+        stored = episode_language.conversation_language(uid, moment.conversation_id, c.firestore_client)
         authority = stored if stored is not None and stored.strip() else (moment.language or '')
         conversation_language = episode_language.normalize_language(authority)
         if not conversation_language:
-            conversation_language = episode_language.dominant_segment_language(moment.segments)
+            conversation_language = dominant_segment_language(moment.segments)
         _language_cache_set(conversation_key, conversation_language)
 
     preference_key = ('preference', uid, session_id, '', client_key)
@@ -337,22 +330,16 @@ def _close(
     carried_items: Optional[list[dict[str, Any]]] = None,
     preserve_for_reconciliation: bool = False,
     extra_fields: Optional[Mapping[str, Any]] = None,
-) -> bool:
-    """Close once; resolve any provisional item still open as dropped (never a task).
+) -> Optional[dict[str, Any]]:
+    """Close once, returning committed state; None when the compare-and-swap loses.
 
-    ``detach`` removes a conversation that joined provisionally and turned out to
-    start the next occasion; its link is rewritten by the episode it opens.
-    ``closing`` is the conversation whose end closes the episode: its items stay
-    provisional until its processing reconciles them, and it never reopens this
-    episode or opens another (``_closed_owner``).
-    ``preserve_for_reconciliation`` leaves other members' items provisional on
-    this closed episode so their own finalizers can still reconcile them.
+    ``detach`` rewrites a provisional member's link into its successor.
+    ``closing`` keeps that member's items for finalization without reopening.
+    ``preserve_for_reconciliation`` keeps other members' provisional items.
     """
     expected_activity_at = policy.utc(episode.get('last_activity_at')) if reason == 'idle' else None
-    # A WAL member may have gained speech since its last incremental update (or
-    # the provider was down at attach). Merge only unapplied member snapshots
-    # into these notes before closing. Explicit targeting avoids idle-close
-    # recursion and prevents a late member from opening/joining another episode.
+    # Fold unapplied WAL speech into these notes before close, explicitly
+    # targeting this episode to avoid recursion or reassignment.
     for cid in episode.get('recovered_conversation_ids') or []:
         if cid == detach:
             continue
@@ -414,7 +401,7 @@ def _close(
         metrics.record_episode_closed(reason)
         metrics.record_provisional_outcomes({'dropped': dropped})
         composer.schedule(uid, str(episode['id']), collaborators=c)  # Members still processing reschedule it.
-    return closed is not None
+    return closed
 
 
 def _pending(episode: Optional[Mapping[str, Any]]) -> dict[str, dict[str, Any]]:
@@ -431,6 +418,21 @@ def _idle_closed_at(episode: Mapping[str, Any], now: datetime) -> datetime:
     if recorded_episodes_enabled() and episode_hard_cap_across_conversations_enabled() and start is not None:
         end = min(end, start + timedelta(seconds=MAX_EPISODE_SECONDS))
     return min(now, end)
+
+
+def settle_episode_for_read(uid: str, episode: dict[str, Any], c: Collaborators) -> dict[str, Any]:
+    """Reuse a successful close; one exact read only when another writer won."""
+    now = _now(c)
+    if policy.idle_close_due(episode, now):
+        closed = _close(uid, episode, 'idle', c, now=now)
+        return (
+            closed
+            or episodes_db.get_home_episode_snapshots(
+                uid, [str(episode['id'])], firestore_client=c.firestore_client
+            ).get(str(episode['id']))
+            or episode
+        )
+    return episode
 
 
 def _close_stale_current(
@@ -948,9 +950,11 @@ def _record_moment_once(
     if episode_output_language_pinned():
         session_id = str(base.get('primary_conversation_id') or moment.conversation_id)
         conversation_language, preference = _episode_language_inputs(uid, session_id, moment, c)
-        output_language = episode_language.resolve_episode_language(uid, conversation_language, preference=preference)
+        output_language = episode_language.resolve_episode_language(
+            uid, conversation_language, preference=preference, segments=moment.segments
+        )
         prior = episode_language.state_language(base, hint_language=conversation_language)
-        if prior and not episode_language.languages_match(prior, output_language):
+        if prior and not languages_match(prior, output_language):
             repair = episode_language.repair_instruction(prior, output_language)
     try:
         result = (composer.notes_free if compose_owns else incremental.run_incremental_update)(
@@ -960,7 +964,9 @@ def _record_moment_once(
             known_item_ids=known_ids,
             now=now,
             tz_name=_tz(uid, c),
-            invoke=episode_language.resolved_invoke(uid, output_language or conversation_language, c.invoke),
+            invoke=episode_language.resolved_invoke(
+                uid, conversation_language, c.invoke, output_language=output_language
+            ),
             conversation_language=conversation_language,
             output_language=output_language or None,
             repair_instruction=repair,
@@ -1080,9 +1086,7 @@ def _record_moment_once(
         # A prompt instruction does not prove the model followed it. Only stamp
         # observed state text; otherwise the next update detects and repairs it.
         updates['output_language'] = (
-            output_language
-            if compose_owns or episode_language.languages_match(detected_output_language, output_language)
-            else None
+            output_language if compose_owns or languages_match(detected_output_language, output_language) else None
         )
     if pending is not None:
         updates['pending_boundary'] = {k: v for k, v in _pending(base).items() if k != moment.conversation_id}
@@ -1808,7 +1812,31 @@ def live_episode(uid: str, *, collaborators: Optional[Collaborators] = None) -> 
     c = collaborators or Collaborators()
     episode = episodes_db.get_current_episode(uid, firestore_client=c.firestore_client)
     now = _now(c)
-    episode = _close_stale_current(uid, episode, c, now)
+    fingerprint = (
+        (episode or {}).get('id'),
+        (episode or {}).get('state_version'),
+        (episode or {}).get('last_activity_at'),
+    )
+    with _close_conflicts_lock:
+        cached = _close_conflicts.get(uid)
+        deferred = cached is not None and cached[0] == fingerprint and time.monotonic() < cached[1]
+        if cached is not None and not deferred:
+            _close_conflicts.pop(uid, None)
+    if not deferred:
+        try:
+            episode = _close_stale_current(uid, episode, c, now)
+        except episodes_db.EpisodeConflict as error:
+            # Closing is lazy maintenance, not a prerequisite for reading. Never
+            # guess a new ownership boundary or retry a deterministic overlap here.
+            reason = metrics.record_close_conflict(str(error))
+            logger.warning('event=episode_close_conflict reason=%s', reason)
+            record_fallback(
+                component='other', from_mode='episode_close', to_mode='live_view', reason='other', outcome='degraded'
+            )
+            with _close_conflicts_lock:
+                if len(_close_conflicts) >= _LAST_CLOSED_CACHE_MAX:
+                    _close_conflicts.clear()
+                _close_conflicts[uid] = (fingerprint, time.monotonic() + _CLOSE_CONFLICT_RETRY_SECONDS)
     return visible_episode(uid, episode, firestore_client=c.firestore_client) if policy.is_live(episode) else None
 
 
@@ -1856,6 +1884,8 @@ def last_closed_episode(
 def reset_for_tests() -> None:
     with _last_closed_lock:
         _last_closed_cache.clear()
+    with _close_conflicts_lock:
+        _close_conflicts.clear()
     with _output_language_cache_lock:
         _output_language_cache.clear()
 

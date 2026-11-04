@@ -66,6 +66,13 @@ scrape_jobs:
     coverage_alert: null
     coverage_status: declared
 
+  - name: record-seal-worker-metrics
+    mechanism: additionalScrapeConfigs
+    auth: null
+    namespace: prod-omi-backend
+    coverage_alert: null
+    coverage_status: declared
+
   - name: backend-listen-metrics
     mechanism: additionalScrapeConfigs
     auth: metrics-scrape-token

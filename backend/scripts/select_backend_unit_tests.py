@@ -181,6 +181,7 @@ FLAG_BUDGET_PREFIXES = (
     'backend/utils/batch_pipeline/',
     'backend/diarizer/batch_pipeline',
     'backend/config/batch_pipeline',
+    'backend/config/batch_language_recovery.py',
     'backend/utils/sync/',
     'backend/utils/stt/',
     'backend/config/policy/',
@@ -188,6 +189,7 @@ FLAG_BUDGET_PREFIXES = (
     'backend/config/live_stt_',
     'backend/config/transcription_final_pass.py',
     'backend/config/flag_budget.json',
+    'backend/parakeet/language_gate.py',
 )
 
 

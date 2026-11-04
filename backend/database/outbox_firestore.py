@@ -424,15 +424,36 @@ class FirestoreEnrichmentOutbox:
             self._rearmed(rearmed)
         return released
 
+    def rearm_released(self, row_id: str, wake_token: str, *, now: float) -> bool:
+        """Re-arm a released row whose queue retry was already answered, under a fresh token, and wake it.
+
+        The enrichment route answers a 409 at its delivery budget while the worker still holds the lease, so
+        that retry is consumed as BUSY. A worker that then releases (RETRY) has no live task left; without this
+        its row waits for the sweep's repair threshold.
+        """
+
+        def rotate(old):
+            if old is None or old.get('dormant') or old.get('task_token') != wake_token:
+                return old, None
+            if old.get('owner') or old.get('lease_until', 0) > now:
+                return old, None  # A newer claim owns it, so its own settlement wakes it.
+            row = {**old, 'task_token': uuid.uuid4().hex, 'task_due_at': old['due_at']}
+            return row, row
+
+        rearmed = self._mutate(row_id, rotate)
+        if rearmed is not None:
+            self._rearmed(rearmed)
+        return rearmed is not None
+
     def sweep(self, *, now: float, limit: int = 100) -> SweepCounts:
-        # Invariant 8: no shared scan cursor; every pass starts at the oldest due row.
+        # Share legacy's bounded inspection progress; per-row CAS still owns custody.
         counts = _outbox().sweep(
             now=now,
             limit=limit,
             discard=self._blocked,
             client=self._bound_client,
             wake=None if self._create_wake is None else self._wake,
-            cursor=False,
+            cursor=True,
         )
         return SweepCounts(
             rewoken=counts['repaired'],

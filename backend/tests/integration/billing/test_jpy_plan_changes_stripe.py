@@ -97,7 +97,6 @@ def flow(monkeypatch, sandbox_prices):
     monkeypatch.setattr(payment.users_db, 'update_user_subscription', lambda uid, data: writes.append(data))
     for owner, name in [
         (payment, 'set_credits_invalidation_signal'),
-        (payment, 'clear_trial_paywall_cache'),
         (payment, 'clear_fair_use_on_upgrade'),
         (payment.conversations_db, 'unlock_all_conversations'),
         (payment.memories_db, 'unlock_all_memories'),

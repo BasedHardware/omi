@@ -117,7 +117,6 @@ def install_canonical_write_runtime_stubs() -> list[str]:
 
     subscription_mod = types.ModuleType("utils.subscription")
     subscription_mod.get_default_basic_subscription = MagicMock()
-    subscription_mod.is_trial_paywalled = lambda uid: False
     subscription_mod.should_defer_desktop_processing = lambda uid: False
     subscription_mod.request_has_llm_byok_key = lambda: False
     subscription_mod.should_skip_omi_paid_postprocessing = lambda uid, uses_custom_stt=False, source=None: False
@@ -282,7 +281,6 @@ def install_ws_i_heavy_import_stubs() -> list[str]:
 
     subscription_mod = types.ModuleType("utils.subscription")
     subscription_mod.get_default_basic_subscription = MagicMock()
-    subscription_mod.is_trial_paywalled = lambda uid: False
     subscription_mod.should_defer_desktop_processing = lambda uid: False
     subscription_mod.request_has_llm_byok_key = lambda: False
     subscription_mod.should_skip_omi_paid_postprocessing = lambda uid, uses_custom_stt=False, source=None: False

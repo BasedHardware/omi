@@ -19,6 +19,8 @@ believes. Nothing leaves the process: no keys, no network, no cloud credentials.
 
 from __future__ import annotations
 
+from utils.batch_pipeline import provider_stt_admission
+
 import asyncio
 from collections import Counter
 from dataclasses import dataclass, field, replace
@@ -39,7 +41,8 @@ from utils.batch_pipeline import vendor_health as health_module
 from utils.batch_pipeline import vendor_route_metrics as vendor_metrics
 from utils.batch_pipeline.contracts import Priority, ProjectionBinding, WorkItem, WorkResult
 from utils.batch_pipeline.merge import OrderedMerge
-from utils.batch_pipeline.provider_stt import PENDING, RUNNING, ProviderSttStage, UnitOutcome
+from utils.batch_pipeline.provider_stt import RUNNING, ProviderSttStage, UnitOutcome
+from utils.batch_pipeline.provider_stt_admission import PENDING
 from utils.batch_pipeline.scheduler import Scheduler
 from utils.batch_pipeline.vendor_route_contracts import VENDOR_HELD
 
@@ -394,7 +397,7 @@ class DrillWorld:
         )
         binding = ProjectionBinding(owner_id, f'job-{content_id}', content_id, (segment_id,), language=language)
         self.artifacts.audio[segment_id] = b'drill-audio'
-        enqueue = provider_stt.provider_enqueue(route, _Outbox(), {}) if provider else None
+        enqueue = provider_stt_admission.provider_enqueue(route, _Outbox(), {}) if provider else None
         try:
             outcome = batch_pipeline_intake.admit(
                 self.store, [item], binding, now, namespace=self.store.namespace, enqueue=enqueue, policy=policy

@@ -674,7 +674,14 @@ def modulate_prerecorded_from_bytes(
     try:
         url = 'https://modulate-developer-apis.com/api/velma-2-stt-batch'
         headers = {'X-API-Key': api_key}
-        files = {'upload_file': ('audio.wav', BytesIO(audio_bytes), 'audio/wav')}
+        is_flac = audio_bytes.startswith(b'fLaC')
+        files = {
+            'upload_file': (
+                'audio.flac' if is_flac else 'audio.wav',
+                BytesIO(audio_bytes),
+                'audio/flac' if is_flac else 'audio/wav',
+            )
+        }
         data = {'speaker_diarization': str(diarize).lower()}
 
         with httpx.Client(timeout=_verification_timeout(300)) as client:

@@ -13,29 +13,33 @@ import hashlib
 import json
 import logging
 import os
+import random
 import time
+
+from utils.conversations import phase_shadow
 
 from config.policy import resolve_batch_policy
 from config.audio_archive import derived_audio_bucket
 from config.record_audio import require_record_audio_barrier, record_identity
 from config.record_partial import UNIT_SECONDS, UNIT_REFERENCES, INVENTORY_POLL_SECONDS
+from config.record_drain import record_drain_batch, record_drain_concurrency
 from database.batch_pipeline_policy import load_job_policy
 from database.batch_ramp import ramp_admission_policy
 from config.batch_pipeline import Priority, RecordOwnerContention, record_capture_eligible
 from database.conversations import claim_record_lane_owner
-from database.batch_pipeline_intake import admit
+from utils.batch_pipeline.record_provider import admit_record_units
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_store import FirestoreStore
 from database.batch_pipeline_shadow_hook import shadow_from_env
 from utils.batch_pipeline.artifact_policy import create_artifact_store
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem
 from utils.batch_pipeline.scheduler import owner_key
-from utils.batch_pipeline.source_audio import MAGIC, MAX_REFERENCES, read_reference
+from utils.batch_pipeline.source_audio import MAGIC, MAX_REFERENCES, read_reference, batch_timing_store
 from utils.batch_pipeline.record_barrier import validate_record_tail
 from utils.batch_pipeline.record_language import prove_manifest
 from utils.batch_pipeline.record_partial import drain_partial, record_failure as record_partial_failure
 from config.record_seal_rules import overlap_trim_enabled
-from utils.executors import db_executor, storage_executor, sync_executor, run_blocking
+from utils.executors import db_executor, storage_executor, run_blocking
 from utils.other.local_storage import create_storage_client
 from utils.other.storage import list_audio_chunks, private_cloud_sync_bucket
 from utils.sync.stage import current_stage
@@ -44,8 +48,6 @@ from config.server_batch import owned as server_batch_owned, has_audio as server
 logger = logging.getLogger(__name__)
 OWNER = 'batch_live_v1'
 UPLOAD_GRACE_SECONDS = 0
-# Leave headroom in the shared sync (16), DB (32) and storage (128) pools.
-RECORD_DRAIN_CONCURRENCY = 4
 
 
 def reserve_recording(uid: str, conversation: dict) -> str | None:
@@ -231,7 +233,7 @@ def retained_record_units(
         yield start, end - start, references
 
 
-async def admit_recording(store, pending, *, now=None):
+async def admit_recording(store, pending, *, now=None, provider_outbox_factory=None):
     from config.batch_pipeline import require_record_protocol_ready
 
     require_record_protocol_ready()
@@ -252,12 +254,26 @@ async def admit_recording(store, pending, *, now=None):
         )
 
     current = await run_blocking(db_executor, read_current)
-    record_barrier = require_record_audio_barrier(current)
+    try:
+        record_barrier = require_record_audio_barrier(current)
+    except ValueError:
+        phase_shadow.observe('batch_admission', current, False, now=now)
+        raise
+    phase_shadow.observe('batch_admission', current, True, now=now)
     client = await run_blocking(storage_executor, create_storage_client)
     bucket = os.getenv('BUCKET_BATCH_PIPELINE', '').strip()
     artifacts = create_artifact_store(store, client, bucket, os.getenv('ENCRYPTION_SECRET', '').encode())
     if current.get('record_audio_partial'):
-        return await drain_partial(store, pending, current, client, artifacts, retained_record_units, now=now)
+        return await drain_partial(
+            store,
+            pending,
+            current,
+            client,
+            artifacts,
+            retained_record_units,
+            now=now,
+            provider_outbox_factory=provider_outbox_factory,
+        )
     # A failed raw-archive listing raises (drain retries in 60 s) rather than
     # admitting a recording whose later packs are silently missing.
     chunks = await run_blocking(
@@ -279,7 +295,9 @@ async def admit_recording(store, pending, *, now=None):
     iterator = retained_record_units(uid, conversation_id, chunks, client, artifacts.key_for_owner(uid))
     units = []
     try:
-        while unit := await run_blocking(sync_executor, next, iterator, None):
+        # Advancing the generator downloads retained objects. Keep that leaf
+        # I/O off the smaller sync pool used by serving and sync coordinators.
+        while unit := await run_blocking(storage_executor, next, iterator, None):
             units.append(unit)
             if len(units) > 128:
                 raise ValueError('retained capture unit budget exceeded')
@@ -351,16 +369,17 @@ async def admit_recording(store, pending, *, now=None):
         uri = await run_blocking(
             storage_executor, artifacts.stage_audio, item, MAGIC + json.dumps(manifest, separators=(',', ':')).encode()
         )
-        staged.append(replace(item, audio_uri=uri))
+        staged.append(replace(item, audio_uri=uri, timing_store=batch_timing_store(refs)))
     return await run_blocking(
         db_executor,
-        admit,
+        admit_record_units,
         store,
         staged,
         binding,
         now,
         namespace=store.namespace,
         policy=policy,
+        provider_outbox_factory=provider_outbox_factory,
         require_artifacts=True,
         record_barrier=record_barrier,
         intake={
@@ -378,34 +397,63 @@ async def admit_recording(store, pending, *, now=None):
     )
 
 
-async def drain_recordings(store):
+async def drain_recordings(store, *, provider_outbox_factory=None) -> bool:
+    """Drain one bounded pass; return whether a full page warrants another."""
     started = time.monotonic()
+    batch_size = record_drain_batch()
+    concurrency = record_drain_concurrency()
     segments, partial_count = [], 0
+    privacy_blocked = False
+    # Every admission rewrites the owner's scheduler row, so two local workers
+    # admitting one owner only exhaust each other's contention retries. Leave
+    # the busy owner's other rows due for the next pass instead.
+    busy_owners = set()
 
     async def drain_one(segment):
-        nonlocal partial_count
         pending = await run_blocking(db_executor, store.run, lambda tx: tx.get('jobs', segment))
         if pending.get('state') != 'record_pending':
             return
-        partial_count += bool(pending.get('partial_coordinator'))
+        owner = pending.get('owner_id')
+        if owner in busy_owners:
+            return
+        busy_owners.add(owner)
         try:
-            await admit_recording(store, pending)
-            if not pending.get('partial_coordinator'):
-                return
+            await admit_and_defer(segment, pending)
+        finally:
+            busy_owners.discard(owner)
+
+    async def admit_and_defer(segment, pending):
+        nonlocal partial_count, privacy_blocked
+        partial_count += bool(pending.get('partial_coordinator'))
+        failed = False
+        try:
+            if provider_outbox_factory is None:
+                await admit_recording(store, pending)
+            else:
+                await admit_recording(store, pending, provider_outbox_factory=provider_outbox_factory)
         except BatchPrivacyBlocked as error:
             # Privacy cleanup owns erasure; an admission retry cannot bypass it.
+            # These rows remain due, so a full page must keep the idle wait.
+            privacy_blocked = True
             if pending.get('partial_coordinator'):
                 record_partial_failure(error, privacy=True, run=pending.get('partial_run'))
             return
         except Exception as error:
+            failed = True
             if pending.get('partial_coordinator'):
                 record_partial_failure(error, run=pending.get('partial_run'))
             logger.warning('event=batch_live_admission outcome=retry exception_type=%s', type(error).__name__)
 
         def defer(tx):
+            # Admission can return without moving the obligation (for example
+            # a partial capture waiting on inventory). Re-read after admission
+            # so a no-op cannot monopolize every immediately repeated pass,
+            # and never overwrite a concurrently admitted row.
             latest = tx.get('jobs', segment)
             if latest.get('state') == 'record_pending':
-                delay = INVENTORY_POLL_SECONDS if (latest.get('partial_run') or {}).get('complete') else 60
+                delay = 60
+                if not failed and (latest.get('partial_run') or {}).get('complete'):
+                    delay = INVENTORY_POLL_SECONDS
                 latest['available_at'] = max(latest.get('available_at', 0), time.time() + delay)
                 tx.put('jobs', segment, latest)
 
@@ -417,17 +465,21 @@ async def drain_recordings(store):
             await drain_one(segment)
 
     try:
-        segments = await run_blocking(db_executor, store.due, 'record_pending', time.time(), 10)
+        segments = await run_blocking(db_executor, store.due, 'record_pending', time.time(), batch_size)
+        # Every replica selects the same oldest page; a per-replica order keeps
+        # replicas from admitting the same rows at once and exhausting contention.
+        random.shuffle(segments)
         remaining = iter(segments)
         # Join every worker even on failure; a retry must not overlap unfinished
         # work from this pass. Across replicas the existing intake/partial CAS
         # still decides admission; selection itself never claims or expires rows.
         results = await asyncio.gather(
-            *(worker() for _ in range(min(RECORD_DRAIN_CONCURRENCY, len(segments)))), return_exceptions=True
+            *(worker() for _ in range(min(concurrency, len(segments)))), return_exceptions=True
         )
         for result in results:
             if isinstance(result, BaseException):
                 raise result
+        return len(segments) == batch_size and not privacy_blocked
     finally:
         logger.info(
             'event=batch_drain_pass row_count=%s partial_count=%s seconds=%.3f',
