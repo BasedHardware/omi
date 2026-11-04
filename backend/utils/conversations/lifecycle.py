@@ -46,7 +46,8 @@ from database.firestore_transaction_retry import (
     FirestoreContentionExhausted,
     is_transaction_contention,
 )
-from database._client import is_expired_transaction_error, is_transient_availability_error
+from database._client import is_expired_transaction_error
+from utils.firestore_transient_types import is_transient_availability_error
 from models.conversation_enums import ConversationStatus
 from utils.cloud_tasks import (
     enqueue_listen_finalization_job,
