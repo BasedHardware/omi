@@ -447,8 +447,6 @@ env:
         key: GROQ_API_KEY
   # In-cluster callers reach these services by ClusterIP DNS; the internal-ALB
   # routes stay for Cloud Run callers only (billed per GB inbound).
-  - name: HOSTED_VAD_API_URL
-    value: "http://prod-omi-vad.prod-omi-backend.svc.cluster.local:8080/v1/vad"
   - name: HOSTED_SPEAKER_EMBEDDING_API_URL
     value: "http://prod-omi-diarizer.prod-omi-backend.svc.cluster.local:8080"
   - name: PINECONE_API_KEY

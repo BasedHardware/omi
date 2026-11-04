@@ -409,8 +409,6 @@ env:
     value: "speech-profiles-dev"
   - name: BUCKET_TEMPORAL_SYNC_LOCAL
     value: "syncing-local-development"
-  - name: HOSTED_VAD_API_URL
-    value: "http://172.16.48.49/vad/v1/vad"
   - name: HOSTED_SPEAKER_EMBEDDING_API_URL
     value: "http://172.16.48.49/diarizer"
   - name: HOSTED_TRANSLATION_API_URL
