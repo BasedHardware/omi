@@ -228,8 +228,8 @@ def workload_only(spec):
 
 
 def build_rollback(old):
-    """Exact step_fast.build(old, 12, rollback=True) patch and drift assertions."""
-    assert old['maxReplicas'] == 12, 'Unexpected cap'
+    """Restore rollback capacity, including an operator-capped workload HPA."""
+    assert type(old['maxReplicas']) is int and 1 <= old['maxReplicas'] <= ROLLBACK_REPLICAS, 'Unexpected cap'
     metrics = old['metrics']
     names = [m.get('pods', m.get('external', {})).get('metric', {}).get('name') for m in metrics]
     assert set(names) <= {
@@ -262,6 +262,13 @@ def build_rollback(old):
     restored.append(copy.deepcopy(LATENCY))
     return [
         {'op': 'test', 'path': '/spec', 'value': copy.deepcopy(old)},
+        # Restore the cap in the same atomic patch as the floor, or Kubernetes
+        # rejects minReplicas=12 under an operator's maxReplicas=4/6 cap.
+        *(
+            [{'op': 'replace', 'path': '/spec/maxReplicas', 'value': ROLLBACK_REPLICAS}]
+            if old['maxReplicas'] < ROLLBACK_REPLICAS
+            else []
+        ),
         {'op': 'replace', 'path': '/spec/minReplicas', 'value': ROLLBACK_REPLICAS},
         {'op': 'replace', 'path': '/spec/metrics', 'value': restored},
     ]
