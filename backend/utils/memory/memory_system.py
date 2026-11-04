@@ -34,8 +34,9 @@ MEMORY_SYSTEM_FIELD = "memory_system"
 # database/mcp_auth_read.py): this boundary owns the three-attempt budget, so
 # the SDK's own retry is disabled per attempt and a sustained outage surfaces
 # here as a typed exception within seconds instead of blocking a worker for
-# minutes per outer attempt.
-CANONICAL_APPLY_READ_TIMEOUT_SECONDS = float(os.getenv("CANONICAL_APPLY_READ_TIMEOUT_SECONDS", "5"))
+# minutes per outer attempt. The default stays within the repo's bounded-read
+# modeling (a per-attempt read may not exceed 3 seconds).
+CANONICAL_APPLY_READ_TIMEOUT_SECONDS = float(os.getenv("CANONICAL_APPLY_READ_TIMEOUT_SECONDS", "3"))
 
 CANONICAL_MEMORY_MAINTENANCE_REGISTRY_COLLECTION = "canonical_memory_maintenance_registry"
 CANONICAL_MEMORY_MAINTENANCE_CURSOR_PATH = "canonical_memory_maintenance_control/cursor"

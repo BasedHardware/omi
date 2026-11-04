@@ -160,7 +160,6 @@ FIELD_BUILDERS = {
             '_no_finalization_intent',
             '_reacquire_deferred_processing_txn',
             '_record_meeting_receipt_txn',
-            '_recover_deferred_processing_failure_txn',
             '_resume_blocked_byok_job_txn',
             'get_finalization_job_summary',
             'recover_stranded_byok_jobs',
@@ -181,7 +180,11 @@ FIELD_BUILDERS = {
     },
     'database/conversation_terminal_title.py': {
         'finalization_status': ['dead_letter_conversation_updates'],
-        'status': ['dead_letter_conversation_updates'],
+        'status': [
+            'dead_letter_conversation_updates',
+            'fit_document_limit',
+            'recover_deferred_processing_failure_txn',
+        ],
     },
     'database/conversations.py': {
         'record_audio_partial': [
@@ -580,8 +583,8 @@ STATES = (
             ('finalization_status', 'status'),
             exit=FINALIZER,
             metric='listen_finalization_oldest_blocked_byok_age_seconds',
-            alert=Alert('omi-finalization-byok-dwell-page', 'page'),
-            note='14-day abandonment is computed from activity, not a deadline stamped at entry; #24533 supplies alerts',
+            alert=Alert('omi-finalization-byok-dwell-info', 'agent'),
+            note='14-day abandonment is computed from activity, not a deadline stamped at entry; #24595 moved the page to fresh-cohort dwell and demoted the historical stock alert to agent tier',
         ),
         row(
             'finalization',

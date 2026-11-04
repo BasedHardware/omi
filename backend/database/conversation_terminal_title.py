@@ -32,6 +32,7 @@ from database.conversation_terminal_effects import stage_terminal_visibility_ref
 from utils.conversations.deterministic_minimum import deterministic_minimum_title
 from utils.firestore_document_size import FIRESTORE_MAX_DOCUMENT_BYTES, estimate_firestore_document_bytes
 from utils.conversations.recovery import structured_has_protected_content
+from utils.conversations.relevance_rules import RULES_VERSION
 from utils.conversations.terminal_relevance import terminal_decision, valid_decision, stamp_terminal_decision
 from utils.conversations.terminal_calendar import calendar_retains
 from utils.metrics import record_conversation_relevance
@@ -120,12 +121,32 @@ def kept_row_terminal_update(
     *,
     path: str = 'orphan_terminal',
     transaction: Any = None,
+    assess_empty_transcript: bool = True,
 ) -> dict[str, Any]:
     """``base_update`` plus the deterministic title when the document can hold it.
 
-    Shared by BYOK abandonment and orphan recovery.
+    Shared by BYOK abandonment and orphan recovery. Callers recovering rows
+    whose audio never reached the transcriber (the crash-window orphan sweeps)
+    pass ``assess_empty_transcript=False``: an absent transcript is not
+    evidence the user said nothing, so the path's policy keep applies instead
+    of the deterministic rules.
     """
     texts, _decoded = transcript_texts(uid, conversation)
+    if not texts and not assess_empty_transcript:
+        # Crash-window rows never reached the transcriber: an absent
+        # transcript is not evidence the user said nothing, so the path's
+        # policy keep is staged as a prior verdict and the deterministic
+        # rules never run on absent input.
+        conversation = {
+            **conversation,
+            'relevance_decision': {
+                'verdict': 'keep',
+                'decided_by': 'policy',
+                'reason': f'{path}_default',
+                'trigger': path,
+                'rules_version': RULES_VERSION,
+            },
+        }
     extras = _title_update(uid, conversation, texts, time_zone_for_uid)
     base_update = with_terminal_relevance(
         uid, conversation, base_update, texts, _decoded, path, conversation_ref, transaction

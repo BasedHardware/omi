@@ -102,6 +102,7 @@ def _complete_unstampable_orphan_conversation_txn(
         None,
         path='oversized_terminal',
         transaction=transaction,
+        assess_empty_transcript=False,
     )
     transaction.update(conversation_ref, terminal)
     return True
@@ -167,7 +168,13 @@ def _complete_orphan_conversation_txn(
     uid = uid or uid_from_conversation_path(str(getattr(conversation_ref, 'path', '') or ''))
     terminal: dict[str, Any] = {'status': 'completed'}
     terminal = kept_row_terminal_update(
-        uid or '', data, conversation_ref, terminal, time_zone_for_uid, transaction=transaction
+        uid or '',
+        data,
+        conversation_ref,
+        terminal,
+        time_zone_for_uid,
+        transaction=transaction,
+        assess_empty_transcript=False,
     )
     transaction.update(conversation_ref, terminal)
     return True
