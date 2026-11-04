@@ -61,6 +61,7 @@ _OPENROUTER_RATE_LIMIT_SOURCES = frozenset({'requester_rates', 'free-tier_rates'
 # to a plain 402, and the wording is the only classifier — no machine-readable
 # metadata like OpenRouter's ``limit_source``).
 _GEMINI_PREPAYMENT_DEPLETED_MARKER = 'prepayment credits are depleted'
+_BYOK_ACCOUNT_STATE_FAILURE_CLASSES = frozenset({BYOK_RATE_LIMIT_FAILURE_CLASS, BYOK_QUOTA_FAILURE_CLASS})
 GENERIC_CONVERSATION_PROCESSING_ERROR_DETAIL = 'Error processing conversation, please try again later'
 
 logger = logging.getLogger(__name__)
@@ -289,6 +290,24 @@ def _log_byok_provider_failure(failure: ByokProviderFailure, route: str) -> None
         failure.provider,
         route,
     )
+
+
+def is_byok_account_state_http_exception(error: BaseException) -> bool:
+    """Return whether ``error`` is the typed BYOK account-state response that
+    ``conversation_processing_http_exception`` raises for a rate-limited or
+    spent provider account.
+
+    Lifecycle owners wrapping the composition boundary use it to log the halt
+    by its bounded class: the boundary already logged it, and a traceback there
+    would re-emit the chained provider error body for account state only the
+    user can fix.
+    """
+    if not isinstance(error, HTTPException) or error.status_code != 429:
+        return False
+    detail = error.detail
+    if not isinstance(detail, Mapping):
+        return False
+    return _string_value(detail.get('code')) in _BYOK_ACCOUNT_STATE_FAILURE_CLASSES
 
 
 def conversation_processing_http_exception(
