@@ -731,3 +731,34 @@ def test_structure_and_access_admit_both_read_guarded_identities(tmp_path, monke
         args = ['--tier', 'S', '--output', str(tmp_path / 'output')]
     assert capture.main(args) == 0
     assert 'capture requires explicit' not in capsys.readouterr().out
+
+
+class NullOutboxOwnerDB(OwnerDB):
+    def __init__(self, outbox):
+        super().__init__()
+        self.outbox = outbox
+
+    def read(self, paths):
+        docs = super().read(paths)
+        path = 'sync_reprocess_outbox/' + hashlib.sha256(f'{UID}\0{CID}'.encode()).hexdigest()
+        if path in docs:
+            docs[path] = self.outbox
+        return docs
+
+
+def test_outbox_with_null_uid_is_owned_by_its_derived_document_id(tmp_path):
+    db = NullOutboxOwnerDB({'uid': None, 'conversation_id': CID})
+    result = capture.capture_owner(db, OwnerStorage(), tmp_path, digest, UID, [CID], BUCKETS)
+    assert result['items'][0]['status'] == 'complete'
+
+
+@pytest.mark.parametrize(
+    'outbox', [{'uid': 'someone-else', 'conversation_id': CID}, {'uid': None, 'conversation_id': 'other'}]
+)
+def test_outbox_with_conflicting_identity_is_refused(tmp_path, outbox):
+    result = capture.capture_owner(NullOutboxOwnerDB(outbox), OwnerStorage(), tmp_path, digest, UID, [CID], BUCKETS)
+    assert result['items'][0] == {
+        'item': 'owner-' + digest(CID),
+        'status': 'refused',
+        'exception_type': 'CaptureRefused',
+    }

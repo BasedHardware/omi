@@ -439,7 +439,13 @@ def capture_owner_item(db, storage, output, digest, uid, cid, buckets):
     outbox_path = 'sync_reprocess_outbox/' + outbox_id
     outbox = db.read([outbox_path]).get(outbox_path)
     if outbox:
-        owner_row(outbox, uid, owner_field='uid')
+        # The document id is sha256(uid, cid), so the path already binds the row
+        # to this owner. Production rows can carry uid=null; only a conflicting
+        # non-null uid or conversation id is a mismatch.
+        if outbox.get('uid') is not None:
+            owner_row(outbox, uid, owner_field='uid')
+        if outbox.get('conversation_id') not in (None, cid):
+            raise CaptureRefused('related document owner mismatch')
     inventory, listed = [], set()
     for bucket_key in ('BUCKET_PRIVATE_CLOUD_SYNC', 'BUCKET_AUDIO_DERIVED'):
         bucket = buckets[bucket_key]
