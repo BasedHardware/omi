@@ -4,13 +4,16 @@
  */
 import {
   MAX_MONO_BYTES_PER_TRANSMISSION,
+  MAX_STREAMING_MONO_BYTES_PER_TRANSMISSION,
   PACKET_SIZE,
+  firmwareSupportsStreaming,
   lengthHeader,
   looksLikeMp3,
   makeTonePcm,
   padForFirmware,
   planTransmissions,
   playPcm16Mono8k,
+  splitSpeechChunks,
   ulawToPcm16,
   type SpeakerIo,
 } from './omiSpeaker';
@@ -199,5 +202,98 @@ describe('playPcm16Mono8k', () => {
 
   it('rejects a mid-byte sample boundary', async () => {
     await expect(playPcm16Mono8k(new Uint8Array(401), { io: fakeIo() })).rejects.toThrow(/int16/);
+  });
+});
+
+describe('firmwareSupportsStreaming', () => {
+  it('accepts the scheduler from the release that ships it', () => {
+    expect(firmwareSupportsStreaming('2.0.11')).toBe(true);
+    expect(firmwareSupportsStreaming('2.1.0')).toBe(true);
+    expect(firmwareSupportsStreaming('3.0.0')).toBe(true);
+    // lab builds of the PR firmware are tagged 2.0.9x and sort above 2.0.11
+    expect(firmwareSupportsStreaming('2.0.95')).toBe(true);
+  });
+
+  it('rejects burst-only firmware, comparing numbers not characters', () => {
+    expect(firmwareSupportsStreaming('2.0.10')).toBe(false);
+    expect(firmwareSupportsStreaming('2.0.9')).toBe(false); // lexically > '2.0.11'
+    expect(firmwareSupportsStreaming('1.9.9')).toBe(false);
+  });
+
+  it('rejects unreadable revisions', () => {
+    expect(firmwareSupportsStreaming(null)).toBe(false);
+    expect(firmwareSupportsStreaming(undefined)).toBe(false);
+    expect(firmwareSupportsStreaming('')).toBe(false);
+    expect(firmwareSupportsStreaming('Seeed Studio XIAO')).toBe(false);
+  });
+});
+
+describe('planTransmissions custom cap', () => {
+  it('slices at the raised streaming cap, padding only where speak() demands it', () => {
+    const cap = MAX_STREAMING_MONO_BYTES_PER_TRANSMISSION;
+    const sends = planTransmissions(new Uint8Array(cap + 10), cap);
+    expect(sends.length).toBe(2);
+    expect(sends[0]!.length).toBe(cap + 8); // cap % 400 == 0 -> stall escape padding
+    expect(sends[1]!.length).toBe(10); // ambiguous-free tail stays bare
+  });
+
+  it('defaults to the release-firmware clip', () => {
+    const sends = planTransmissions(new Uint8Array(MAX_MONO_BYTES_PER_TRANSMISSION + 10));
+    expect(sends.length).toBe(2);
+    expect(sends[0]!.length).toBe(MAX_MONO_BYTES_PER_TRANSMISSION + 8);
+  });
+});
+
+describe('splitSpeechChunks', () => {
+  const cap = MAX_STREAMING_MONO_BYTES_PER_TRANSMISSION;
+
+  it('leaves text that fits one stream alone', () => {
+    expect(splitSpeechChunks('hello there friend', cap)).toEqual(['hello there friend']);
+  });
+
+  it('cuts overflowing replies without losing words', () => {
+    const text =
+      'The first sentence is quite long and keeps going for a while. ' +
+      'The second one is just as long and continues to ramble onward.';
+    const chunks = splitSpeechChunks(text, cap);
+    expect(chunks.length).toBeGreaterThan(1);
+    expect(chunks.join(' ').split(/\s+/).length).toBe(text.split(/\s+/).length);
+  });
+
+  it('prefers comma clauses over cutting sentences apart', () => {
+    const text = 'alpha beta gamma delta, epsilon zeta eta theta, iota kappa lambda mu';
+    const chunks = splitSpeechChunks(text, cap);
+    expect(chunks).toEqual([
+      'alpha beta gamma delta,',
+      'epsilon zeta eta theta,',
+      'iota kappa lambda mu',
+    ]);
+  });
+
+  it('keeps every chunk inside the stream word budget', () => {
+    const text = Array.from({ length: 40 }, (_, i) => `word${i}`).join(' ');
+    const budget = Math.floor(cap / 5600); // measured bytes-per-word of this TTS path
+    for (const chunk of splitSpeechChunks(text, cap)) {
+      expect(chunk.split(/\s+/).filter(Boolean).length).toBeLessThanOrEqual(budget);
+    }
+  });
+});
+
+describe('playPcm16Mono8k streaming cap', () => {
+  it('sends one continuous stream per chunk below the raised cap', async () => {
+    const io = fakeIo();
+    await playPcm16Mono8k(new Uint8Array(29_000), {
+      io,
+      maxMonoBytesPerTransmission: MAX_STREAMING_MONO_BYTES_PER_TRANSMISSION,
+    });
+    expect(io.writes.filter((w) => w.length === 4).length).toBe(1);
+    const body = io.writes.filter((w) => w.length !== 4).reduce((a, w) => a + w.length, 0);
+    expect(body).toBe(29_000);
+  });
+
+  it('still respects the default clip cap when no cap is passed', async () => {
+    const io = fakeIo();
+    await playPcm16Mono8k(new Uint8Array(29_000), { io });
+    expect(io.writes.filter((w) => w.length === 4).length).toBe(7); // ceil(29000/4800)
   });
 });

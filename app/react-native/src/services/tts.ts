@@ -1,5 +1,14 @@
 import { createAudioPlayer, type AudioPlayer } from 'expo-audio';
-import { looksLikeMp3, playPcm16Mono8k, ulawToPcm16 } from './omiSpeaker';
+import { omiBle } from './omiBle';
+import {
+  MAX_MONO_BYTES_PER_TRANSMISSION,
+  MAX_STREAMING_MONO_BYTES_PER_TRANSMISSION,
+  firmwareSupportsStreaming,
+  looksLikeMp3,
+  playPcm16Mono8k,
+  splitSpeechChunks,
+  ulawToPcm16,
+} from './omiSpeaker';
 
 /**
  * Speech playback for agent replies, on two outputs:
@@ -32,6 +41,32 @@ const DEFAULT_MODEL = 'eleven_turbo_v2_5';
 const OUTPUT_FORMAT = 'mp3_44100_128';
 /** 8 kHz mu-law: the device's native rate, decoded client-side, no resampling. */
 const DEVICE_OUTPUT_FORMAT = 'ulaw_8000';
+
+/** Cached per-stream byte cap, keyed by nothing but refreshed once a minute. */
+let streamingCapCache: { at: number; maxMonoBytes: number } | null = null;
+const STREAMING_CAP_TTL_MS = 60_000;
+
+/**
+ * The connected device's per-stream window: 6 blocks on streaming firmware
+ * (>= 2.0.11), one 300 ms clip otherwise. Falls back to the conservative cap
+ * whenever the revision cannot be read -- if the device is unreachable,
+ * playback will fail loudly anyway.
+ */
+async function deviceMaxMonoBytes(): Promise<number> {
+  const now = Date.now();
+  if (streamingCapCache && now - streamingCapCache.at < STREAMING_CAP_TTL_MS) {
+    return streamingCapCache.maxMonoBytes;
+  }
+  let maxMonoBytes = MAX_MONO_BYTES_PER_TRANSMISSION;
+  try {
+    const { firmware } = await omiBle.readIdentity();
+    if (firmwareSupportsStreaming(firmware)) maxMonoBytes = MAX_STREAMING_MONO_BYTES_PER_TRANSMISSION;
+  } catch {
+    // Not connected / unreadable: keep the conservative cap.
+  }
+  streamingCapCache = { at: now, maxMonoBytes };
+  return maxMonoBytes;
+}
 
 class Tts {
   private player: AudioPlayer | null = null;
@@ -88,15 +123,24 @@ class Tts {
     const trimmed = text.trim();
     if (!trimmed) return false;
     try {
-      const bytes = await synthesize(trimmed, opts, DEVICE_OUTPUT_FORMAT);
-      if (!bytes || bytes.length === 0) return false;
-      if (looksLikeMp3(bytes)) {
-        // A backend that ignores output_format hands us MP3 whatever we asked
-        // for; mu-law-decoding that is a buzz, not speech. Refuse visibly.
-        console.warn('[tts] backend returned MP3, not ulaw_8000; device playback needs PCM');
-        return false;
+      const maxMonoBytes = await deviceMaxMonoBytes();
+      // Streaming firmware: one synthesis per clause-sized chunk, each chunk a
+      // continuous stream; long replies break where a breath would. Release
+      // firmware: single synthesis, and playPcm16Mono8k's PCM splitter slices
+      // it into the one-clip transmissions that firmware was built for.
+      const chunks =
+        maxMonoBytes > MAX_MONO_BYTES_PER_TRANSMISSION ? splitSpeechChunks(trimmed, maxMonoBytes) : [trimmed];
+      for (const chunk of chunks) {
+        const bytes = await synthesize(chunk, opts, DEVICE_OUTPUT_FORMAT);
+        if (!bytes || bytes.length === 0) return false;
+        if (looksLikeMp3(bytes)) {
+          // A backend that ignores output_format hands us MP3 whatever we asked
+          // for; mu-law-decoding that is a buzz, not speech. Refuse visibly.
+          console.warn('[tts] backend returned MP3, not ulaw_8000; device playback needs PCM');
+          return false;
+        }
+        await playPcm16Mono8k(ulawToPcm16(bytes), { maxMonoBytesPerTransmission: maxMonoBytes });
       }
-      await playPcm16Mono8k(ulawToPcm16(bytes));
       return true;
     } catch (e) {
       console.warn('[tts] device playback failed:', e);

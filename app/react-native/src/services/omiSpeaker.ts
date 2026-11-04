@@ -10,12 +10,12 @@
  *     padded to avoid it.
  *  2. Firmware accounts in units of exactly 400 bytes regardless of the actual
  *     packet length, so every packet but the last must be exactly PACKET_SIZE.
- *  3. Pre-2.0.11 firmware buffered one clip into a 10,000-byte stereo block,
- *     duplicating mono into both channels: ~5,000 mono bytes per transmission
- *     max, and the last chunk's write response only returned after a 4 s
- *     device-side sleep. 2.0.11+ streams every packet straight into the I2S
- *     queue with no sleep. Transmission caps and silence padding here are
- *     chosen so the SAME client is correct on both firmware generations.
+ *  3. Release firmware through 2.0.10 buffers one clip into a 10,000-byte
+ *     stereo block (= 5,000 mono bytes) per transmission and stalls 4 s after
+ *     the last chunk. Streaming firmware (>= 2.0.11, see
+ *     MAX_STREAMING_MONO_BYTES_PER_TRANSMISSION) accepts up to 7 blocks in one
+ *     continuous stream. Transmission caps and silence padding here are chosen
+ *     so the SAME client is correct on both firmware generations.
  *  4. Every write earns exactly one pump notify (the handler notifies before
  *     processing), which is the "send next" signal.
  *
@@ -27,11 +27,33 @@ import { omiBle } from './omiBle';
 export const PACKET_SIZE = 400;
 export const SPEAKER_SAMPLE_RATE = 8000;
 /**
- * 4,800 mono bytes = 300 ms. The padding rule below can add up to 8 bytes;
- * 4,808 still fits the pre-2.0.11 5,000-byte ceiling, which is what keeps this
- * client safe on the old firmware too.
+ * 4,800 mono bytes = 300 ms. Release firmware through 2.0.13 buffers one clip
+ * per 5,000-byte mono transmission; 4,800 + the worst-case 8 bytes of padding
+ * stays under that ceiling, which is what keeps this client correct there too.
  */
 export const MAX_MONO_BYTES_PER_TRANSMISSION = 4800;
+/**
+ * Streaming firmware (the PR that queues all blocks before a single I2S
+ * START, first released as 2.0.11; the 2.0.9x lab builds sort above it
+ * numerically): the driver's TX queue is CONFIG_I2S_NRFX_TX_BLOCK_COUNT=8
+ * slots of 5,000 mono bytes, and 7 blocks (~2.2 s) were verified continuous
+ * on a live board. We cap at 6 blocks for headroom; longer text is split at
+ * clause boundaries (`splitSpeechChunks`) so the per-stream stop/start lands
+ * where a breath would be anyway.
+ */
+export const MAX_STREAMING_MONO_BYTES_PER_TRANSMISSION = 30000;
+
+/** First firmware revision whose scheduler takes multi-block streams. */
+const MIN_STREAMING_FW: readonly [number, number, number] = [2, 0, 11];
+
+/** True when `firmware` (a "x.y.z" DIS string) queues blocks before START. */
+export function firmwareSupportsStreaming(firmware: string | null | undefined): boolean {
+  const m = firmware?.match(/^(\d+)\.(\d+)\.(\d+)/);
+  if (!m) return false;
+  const [major, minor, patch] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const [a, b, c] = MIN_STREAMING_FW;
+  return major > a || (major === a && (minor > b || (minor === b && patch >= c)));
+}
 
 /**
  * Pad a transmission with silence so its length is not ambiguous to speak().
@@ -48,13 +70,75 @@ export function padForFirmware(pcm: Uint8Array): Uint8Array {
   return out;
 }
 
-/** Split PCM into protocol-safe transmissions (each <= the old firmware's buffer). */
-export function planTransmissions(pcm: Uint8Array): Uint8Array[] {
+/** Split PCM into protocol-safe transmissions (each <= the per-stream byte cap). */
+export function planTransmissions(
+  pcm: Uint8Array,
+  maxMonoBytes: number = MAX_MONO_BYTES_PER_TRANSMISSION
+): Uint8Array[] {
   const sends: Uint8Array[] = [];
-  for (let o = 0; o < pcm.length; o += MAX_MONO_BYTES_PER_TRANSMISSION) {
-    sends.push(padForFirmware(pcm.slice(o, o + MAX_MONO_BYTES_PER_TRANSMISSION)));
+  for (let o = 0; o < pcm.length; o += maxMonoBytes) {
+    sends.push(padForFirmware(pcm.slice(o, o + maxMonoBytes)));
   }
   return sends;
+}
+
+/**
+ * Rough mono-PCM bytes per spoken word on this TTS pipeline, measured from the
+ * device: "I can talk all day now" (6 words) streamed as 33,600 bytes.
+ */
+const ESTIMATED_BYTES_PER_WORD = 5600;
+
+/**
+ * Split reply text into chunks estimated to fit ONE continuous stream, cutting
+ * at sentence boundaries first and comma-level clauses second. On streaming
+ * firmware each chunk plays gap-free and the chunk boundary is a natural
+ * pause; verified on-device as intelligible where a mid-word split is not.
+ * Returns [text] unchanged when it already fits or has no word to cut.
+ */
+export function splitSpeechChunks(
+  text: string,
+  maxMonoBytes: number = MAX_STREAMING_MONO_BYTES_PER_TRANSMISSION
+): string[] {
+  const maxWords = Math.max(1, Math.floor(maxMonoBytes / ESTIMATED_BYTES_PER_WORD));
+  const keep = (re: RegExp, src: string): string[] =>
+    (src.match(re) ?? []).map((p) => p.trim()).filter((p) => p.length > 0);
+
+  // Sentence > clause > word granularity, each level only for what the level
+  // above still cannot fit.
+  const units: string[] = [];
+  for (const sentence of keep(/[^.!?\n]+[.!?\n]*/g, text)) {
+    if (wordCount(sentence) <= maxWords) {
+      units.push(sentence);
+      continue;
+    }
+    for (const clause of keep(/[^,;:\-]+[,;:\-]*/g, sentence)) {
+      if (wordCount(clause) <= maxWords) {
+        units.push(clause);
+        continue;
+      }
+      const words = clause.split(/\s+/).filter((w) => w.length > 0);
+      for (let o = 0; o < words.length; o += maxWords) {
+        units.push(words.slice(o, o + maxWords).join(' '));
+      }
+    }
+  }
+
+  // Greedily pack units while the estimate stays under one stream.
+  const chunks: string[] = [];
+  let current: string[] = [];
+  for (const unit of units) {
+    if (current.length && wordCount(current.join(' ')) + wordCount(unit) > maxWords) {
+      chunks.push(current.join(' ').trim());
+      current = [];
+    }
+    current.push(unit);
+  }
+  if (current.length) chunks.push(current.join(' ').trim());
+  return chunks.length ? chunks : [text.trim()];
+}
+
+function wordCount(s: string): number {
+  return s.split(/\s+/).filter((w) => w.length > 0).length;
 }
 
 export function lengthHeader(totalMonoBytes: number): Uint8Array {
@@ -87,6 +171,8 @@ export interface PlayOptions {
   io?: SpeakerIo;
   /** Max wait for a pump notify before declaring the stream stalled. */
   pumpTimeoutMs?: number;
+  /** Per-stream byte cap; defaults to the release-firmware-safe 4,800. */
+  maxMonoBytesPerTransmission?: number;
   onTransmission?: (sending: number, of: number) => void;
 }
 
@@ -102,7 +188,7 @@ export async function playPcm16Mono8k(pcm: Uint8Array, opts: PlayOptions = {}): 
     );
   }
 
-  const sends = planTransmissions(pcm);
+  const sends = planTransmissions(pcm, opts.maxMonoBytesPerTransmission);
   for (const [i, send] of sends.entries()) {
     opts.onTransmission?.(i + 1, sends.length);
     await playOneTransmission(send, io, opts.pumpTimeoutMs ?? 15_000);
