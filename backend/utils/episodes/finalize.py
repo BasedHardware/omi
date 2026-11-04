@@ -22,6 +22,7 @@ import logging
 from typing import Any, Mapping
 
 from config.episodes import episodes_enabled_for
+from config.episode_attach import noop_schedule_enabled
 from config.recorded_time import recorded_episodes_enabled
 from utils.conversations.fragment_visibility import is_relevance_discarded
 from utils.conversations.processing_trigger import ProcessingTrigger
@@ -58,7 +59,7 @@ def attach_synced_at_intake(uid: str, conversation_id: str, row: Mapping[str, An
 
 
 def skip_unchanged_schedule(uid, conversation_id, row, *, finalized=False, absorbed_from=None):
-    """Before executor submission; fresh input flags always override memo proof."""
+    """Before submission; validate current visibility even with a just-read row."""
     if (
         not recorded_episodes_enabled()
         or not isinstance(row, Mapping)
@@ -72,7 +73,7 @@ def skip_unchanged_schedule(uid, conversation_id, row, *, finalized=False, absor
     # Keep the database/episode import chain deferred for router imports.
     from database import episode_attach_memo
 
-    return episode_attach_memo.matches(uid, conversation_id, row, finalized=finalized, validate_current=False)
+    return episode_attach_memo.matches(uid, conversation_id, row, finalized=finalized)
 
 
 def schedule_synced_intake_attach(uid: str, conversation_id: str, row: Mapping[str, Any] | None) -> None:
@@ -125,20 +126,30 @@ def schedule_group_attachments(uid: str, conversation_ids: list[str]) -> None:
         logger.warning('event=episode_group_attach outcome=error exception_type=%s', type(error).__name__)
 
 
-def schedule_after_finalization(uid: str, conversation_id: str, trigger: ProcessingTrigger, *, row=None) -> None:
-    """Run on the episode pool; saturation queues admission with bounded producer backpressure."""
+def schedule_after_finalization(
+    uid: str, conversation_id: str, trigger: ProcessingTrigger, *, row=None, inputs_changed=False
+) -> bool:
+    """Return scheduling intent; only completed current proof may suppress a sync hook.
+
+    A processor's before snapshot already contains the persisted append. Equal
+    inputs in that pass do not prove that this append has ever finalized.
+    """
     if not episodes_enabled_for(uid):
-        return
+        return False
     try:
-        if trigger == ProcessingTrigger.SYNC_UPDATE and skip_unchanged_schedule(
-            uid, conversation_id, row, finalized=True
+        if (
+            trigger == ProcessingTrigger.SYNC_UPDATE
+            and noop_schedule_enabled()
+            and not inputs_changed
+            and skip_unchanged_schedule(uid, conversation_id, row, finalized=True)
         ):
-            return
+            return False
         submit_with_context(lifecycle_executor(uid, episode=True), _after_finalization, uid, conversation_id, trigger)
     except ExecutorSaturatedError:
         _queue_retry(uid, _after_finalization, uid, conversation_id, trigger)
     except Exception as error:
         logger.warning('event=episode_finalize outcome=error exception_type=%s', type(error).__name__)
+    return True
 
 
 def _queue_retry(uid: str, hook, *args) -> None:

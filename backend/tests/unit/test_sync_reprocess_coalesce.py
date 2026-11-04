@@ -1264,7 +1264,9 @@ def test_later_summary_keeps_legacy_callback_validation_and_completion(state, mo
         assert rows[key]['lease_until'] == 1920
 
 
-@pytest.mark.parametrize('change', ['none', 'timestamps', 'text', 'span', 'visibility', 'missing_owner', 'off'])
+@pytest.mark.parametrize(
+    'change', ['none', 'timestamps', 'text', 'span', 'visibility', 'missing_owner', 'off', 'finalize_owed']
+)
 def test_episode_schedule_only_for_changed_reprocess_or_unattached(pipeline, monkeypatch, change):
     from datetime import datetime, timedelta, timezone
     from copy import deepcopy
@@ -1296,8 +1298,16 @@ def test_episode_schedule_only_for_changed_reprocess_or_unattached(pipeline, mon
     monkeypatch.setattr(pipeline, 'is_silent_redrive', lambda *_: False)
     monkeypatch.setattr(pipeline, 'record_feature', lambda *a: None)
     monkeypatch.setenv('EPISODE_ATTACH_NOOP_SCHEDULE_ENABLED', 'false' if change == 'off' else 'true')
+    from utils.episodes import finalize
+
+    monkeypatch.setattr(finalize, 'episodes_enabled_for', lambda _: True)
+    monkeypatch.setattr(finalize, 'lifecycle_executor', lambda *a, **kw: object())
+    # An equal processing pass may skip only with completed current finalize proof.
+    proof = Mock(return_value=change in {'none', 'timestamps'})
+    monkeypatch.setattr(finalize, 'skip_unchanged_schedule', proof)
     schedule = Mock()
-    monkeypatch.setattr(pipeline, 'schedule_after_finalization', schedule)
+    monkeypatch.setattr(finalize, 'submit_with_context', schedule)
+    monkeypatch.setattr(pipeline, 'schedule_after_finalization', finalize.schedule_after_finalization)
 
     def process(**kw):
         # Deliberately mutate the exact object passed by the caller.

@@ -24,7 +24,7 @@ def current_key(uid, row):
         return None
 
 
-def matches(uid, cid, row, *, firestore_client=None, finalized=False, validate_current=True):
+def matches(uid, cid, row, *, firestore_client=None, finalized=False):
     key = content_key(row) if content_gate_enabled() and memo_eligible(row) else None
     if key is None:
         return False
@@ -43,10 +43,6 @@ def matches(uid, cid, row, *, firestore_client=None, finalized=False, validate_c
             return False
         if finalized and link.get('attach_finalized') != key:
             return False
-        if not validate_current:
-            # Scheduling callers hold the just-committed/read row. No additional
-            # conversation read is needed to derive or validate its key.
-            return row.get('episode_id') == link['episode_id']
         current = root.collection('conversations').document(cid).get(transaction=transaction).to_dict() or {}
         return current.get('episode_id') == link['episode_id'] and current_key(uid, current) == key
 

@@ -209,7 +209,9 @@ def test_an_unreadable_receipt_still_walks(composer_on, monkeypatch):
     assert list(service.unconsumed_moments(UID, 'c1', moments, _collaborators(FakeModel(), now=T0))) == moments
 
 
-def test_recovery_reads_each_receipt_namespace_once_for_all_batches(monkeypatch):
+@pytest.mark.parametrize('enabled', [True, False])
+def test_recovery_receipt_cache_rollback(monkeypatch, enabled):
+    monkeypatch.setenv('EPISODE_ATTACH_OPTIMIZATIONS_ENABLED', str(enabled))
     monkeypatch.setenv(config.EPISODE_COMPOSER_ENV, 'off')
     store = StrictFirestore()
     model = FakeModel({'title': 'Lunch', 'bullets': ['A']}, *[{'bullets': ['A', str(i)]} for i in range(12)])
@@ -225,7 +227,8 @@ def test_recovery_reads_each_receipt_namespace_once_for_all_batches(monkeypatch)
     c = _collaborators(model, now=T0 + timedelta(minutes=2), store=store)
     assert service._record_recovered(UID, live['id'], 'c1', _replay_row(), c) == 'applied'
     assert len(model.calls) > 3
-    assert calls == ['c1', 'content-v1:c1']
+    batches = len(list(service.recovery.moments('c1', _replay_row(), now=c.now(), calendar_identity=None)))
+    assert calls == ['c1', 'content-v1:c1'] * (1 if enabled else batches)
 
 
 def test_recovery_refreshes_receipts_after_another_writer_wins_cas(monkeypatch):

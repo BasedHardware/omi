@@ -12,6 +12,7 @@ from uuid import NAMESPACE_URL, uuid5
 
 from google.cloud import firestore
 
+from config.episode_attach import optimizations_enabled
 from config.recorded_time_tolerances import CLOSE_GAP_SECONDS, MAX_EPISODE_SECONDS
 from database._client import run_transactional
 from database import episodes
@@ -177,7 +178,8 @@ def attach(
             proof = owner.get('recorded_partition') or {}
             fact = (owner.get('recorded_members') or {}).get(cid)
             if (
-                proof.get('state_version') == owner.get('state_version')
+                optimizations_enabled()
+                and proof.get('state_version') == owner.get('state_version')
                 and proof.get('members') == sorted(owner.get('conversation_ids') or [])
                 and set(owner.get('recorded_members') or {}) == set(proof.get('members') or [])
                 and not owner.get('recorded_merged_into')
@@ -266,11 +268,12 @@ def attach(
         result = [_state(template, window, list(previous.values()), facts) for window in windows]
         for row in result:
             row['state_version'] = max(row['state_version'], int(targets[row['id']].get('state_version') or 0) + 1)
-        for row in result:
-            row['recorded_partition'] = {
-                'state_version': row['state_version'],
-                'members': sorted(row['conversation_ids']),
-            }
+        if optimizations_enabled():
+            for row in result:
+                row['recorded_partition'] = {
+                    'state_version': row['state_version'],
+                    'members': sorted(row['conversation_ids']),
+                }
         new_ids = {row['id'] for row in result}
         assignments = {member: [row['id'] for row in result if member in row['conversation_ids']] for member in members}
         if any(not ids for ids in assignments.values()):

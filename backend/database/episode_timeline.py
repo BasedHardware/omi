@@ -11,7 +11,7 @@ from config.episodes import MAX_EPISODE_SECONDS, CLOSE_GAP_SECONDS
 from database._client import get_firestore_client, run_transactional
 from database import episodes, episode_attach_memo
 from utils.conversations.episode_attach_key import content_key, memo_eligible
-from config.episode_attach import content_gate_enabled
+from config.episode_attach import content_gate_enabled, optimizations_enabled
 from utils.conversations.recorded_time import conversation_span
 
 PAGE_LIMIT = 128
@@ -61,6 +61,8 @@ def recorded_end(episode):
 
 def check_window(transaction, client, uid, episode, *, rows=None, fence_row=None):
     """Serialize live writes with recorded attachment; reject overlapping windows."""
+    if not optimizations_enabled():
+        rows, fence_row = None, None
     lo, hi = episode.get('started_at'), recorded_end(episode)
     if not isinstance(lo, datetime) or not isinstance(hi, datetime):
         return
@@ -286,11 +288,12 @@ def attach_recorded(
             # Preserve the canonical expansion read sequence. Only the fallback
             # strategy reuses these rows after canonical attachment declines.
             rows = recorded_candidates(uid, lo, hi, **kwargs)
-            cached.append((lo, hi, rows))
+            if optimizations_enabled():
+                cached.append((lo, hi, rows))
             return rows
 
         def reuse_candidates(uid, lo, hi, **kwargs):
-            for a, b, rows in cached:
+            for a, b, rows in cached if optimizations_enabled() else []:
                 if a <= lo and hi <= b:
                     return rows
             return candidates(uid, lo, hi, **kwargs)

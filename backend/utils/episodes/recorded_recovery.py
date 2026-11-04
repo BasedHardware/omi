@@ -4,7 +4,7 @@ from dataclasses import replace
 from typing import Any, Callable, Iterable, Iterator, Mapping, Sequence
 
 from database import episode_receipts
-from config.episode_attach import walk_context_enabled
+from config.episode_attach import walk_context_enabled, optimizations_enabled
 from utils.episodes import policy, recovery
 from utils.episodes.moment import MomentInput
 
@@ -63,7 +63,7 @@ class RecoveryReceipts:
 def read_receipts(uid, moment, c, episode, consumption_owner):
     """Read both namespaces once, preserving legacy adoption and revision checks."""
     recovered = moment.trigger == 'sync_recovery'
-    receipt_state = moment.recovery_receipts if recovered else None
+    receipt_state = moment.recovery_receipts if recovered and optimizations_enabled() else None
     if receipt_state is not None:
         consumed, receipts_exist, consumed_content = receipt_state.read(episode)
     else:
@@ -97,6 +97,9 @@ def unconsumed_moments(
 ) -> Iterator[MomentInput]:
     """Read the receipts once for the whole walk: a long capture replays hundreds of finished batches,
     and each would otherwise re-read the episode and every receipt shard just to skip itself."""
+    if not optimizations_enabled():
+        yield from moments
+        return
     try:
         receipts = receipts or RecoveryReceipts(uid, conversation_id, collaborators)
         legacy, _, content = receipts.read()

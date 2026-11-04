@@ -516,6 +516,7 @@ and an explicit empty literal renders as `''`.
 | `EPISODE_ATTACH_DUPLICATES_DEDUPE_ENABLED` | Default on; omit duplicate-group CAS when its membership set is already present | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `EPISODE_ATTACH_MEMBERSHIP_DEDUPE_ENABLED` | Default on; omit value-identical episode link and reverse membership writes | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `EPISODE_ATTACH_NOOP_SCHEDULE_ENABLED` | Default on; skip episode scheduling after unchanged sync reprocessing | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
+| `EPISODE_ATTACH_OPTIMIZATIONS_ENABLED` | Default on; umbrella rollback for both rounds of episode attach read and write reductions | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `EPISODE_ATTACH_OWNER_REUSE_ENABLED` | Default on; reuse the placed owner and omit unused recorded owner reads | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `EPISODE_ATTACH_ROW_VISIBILITY_ENABLED` | Default on; use the supplied row for the attach visibility precheck | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `EPISODE_ATTACH_WALK_CONTEXT_ENABLED` | Default on; reuse walk owner and visibility with transactional validation | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
@@ -1106,6 +1107,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `EPISODE_ATTACH_DUPLICATES_DEDUPE_ENABLED` — Default on; omit duplicate-group CAS when its membership set is already present (fail: open)
 - `EPISODE_ATTACH_MEMBERSHIP_DEDUPE_ENABLED` — Default on; omit value-identical episode link and reverse membership writes (fail: open)
 - `EPISODE_ATTACH_NOOP_SCHEDULE_ENABLED` — Default on; skip episode scheduling after unchanged sync reprocessing (fail: open)
+- `EPISODE_ATTACH_OPTIMIZATIONS_ENABLED` — Default on; umbrella rollback for both rounds of episode attach read and write reductions (fail: open)
 - `EPISODE_ATTACH_OWNER_REUSE_ENABLED` — Default on; reuse the placed owner and omit unused recorded owner reads (fail: open)
 - `EPISODE_ATTACH_ROW_VISIBILITY_ENABLED` — Default on; use the supplied row for the attach visibility precheck (fail: open)
 - `EPISODE_ATTACH_WALK_CONTEXT_ENABLED` — Default on; reuse walk owner and visibility with transactional validation (fail: open)

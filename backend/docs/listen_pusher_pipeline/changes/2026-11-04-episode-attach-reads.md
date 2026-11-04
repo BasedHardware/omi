@@ -46,8 +46,10 @@ content growth and reverse-link changes. Topology-changing link writes replace
 proof atomically so a later restore cannot reuse the pre-discard stamp. Unchanged membership writes retain it.
 
 The content gate also runs before submitting intake and finalize work to the
-episode executor. It reads one membership link using the fresh in-hand row,
-without an additional conversation or episode read. A separate `attach_finalized`
+episode executor. It reads the membership link and current conversation in one transaction. Even
+a just-read visible snapshot can race a discard or deletion before this gate;
+missing, hidden, changed or repointed current rows always retain the full hook.
+A scheduling hit adds one current-conversation read and no episode reads. A separate `attach_finalized`
 marker preserves the first finalization/compose signal after intake recovery;
 only later identical finalizations skip the whole hook, including compose.
 Missing proof, absorbed donors, ancestry or uncertain inputs retain the full
@@ -56,6 +58,16 @@ path. The durable finalizer bounds its memo lookup and falls through on failure.
 Reprocess scheduling compares snapshots before and after processing, with the
 same wire-model defaults and a deep copy before possible in-place mutation.
 Transcript, span or visibility changes and missing owners still schedule.
+An equal processing pass can still owe the first finalize: its before snapshot
+already includes the persisted WAL append. Both enrichment callers always
+reach the shared scheduler; equality suppresses work only with a completed
+current `attach_finalized` stamp. A changed snapshot forces scheduling.
+Member structured summaries also participate in the scheduling digest until
+#24579's `config.episodes.episode_compose_settle_enabled` capability is present
+and on. If absent or off, title, overview and action-item changes still reach
+the current composer fingerprint. With settling on, summary-only changes are
+excluded as #24579 intends. The capability is resolved per call, so either PR
+can land first and runtime rollback restores the summary trigger.
 `omi_repeat_work_features_total{feature="episode_attach"}` reports `scheduled`
 and `unchanged` through the existing repeat-work metric control.
 
@@ -79,6 +91,7 @@ optimization's prior path. They are read at the call boundary:
 
 | Kill switch | Effect when off |
 | --- | --- |
+| `EPISODE_ATTACH_OPTIMIZATIONS_ENABLED` | Disable all seven controls below, recorded-partition proof reuse, candidate/fence read reuse, and receipt prefilter/caching; run every recovery batch with fresh receipts |
 | `EPISODE_ATTACH_CONTENT_GATE_ENABLED` | Submit every content-gated hook; re-enter attach/recovery; ignore memo stamps |
 | `EPISODE_ATTACH_NOOP_SCHEDULE_ENABLED` | Schedule every completed sync reprocess |
 | `EPISODE_ATTACH_OWNER_REUSE_ENABLED` | Read the owner after placement and again for recovery; retain intake's prior owner check |
@@ -87,15 +100,23 @@ optimization's prior path. They are read at the call boundary:
 | `EPISODE_ATTACH_WALK_CONTEXT_ENABLED` | Read owner and visibility for each recovery moment |
 | `EPISODE_ATTACH_DUPLICATES_DEDUPE_ENABLED` | Repeat the duplicate-group CAS |
 
-Fence pass-through was already included in Round 1. No new query shapes,
+The umbrella also disables Round 1's fence pass-through and stops stamping new
+recorded-partition proof. Existing proof is ignored while off. Canonical and
+fixed-boundary attachment still share a transaction: this structural refactor
+keeps their reads under the same timeline fence and has no suppressing gate,
+cache or omitted operation after rollback. Splitting it back into independent
+transactions would weaken serialization without restoring any additional work. No new query shapes,
 indexes, public payloads, close boundaries or navigation pointers change.
 PR #24544's close-time `pending_transcription` attachment is complementary:
 retain its `pending_at` argument alongside this change's `attach_row`, and retain
 its public helper rename when combining the two on the same release train.
 
-Combined estimate, avoiding additive overlap: **40–60M reads and 4–6M writes
-saved/day** (about **$28–42/day net** at the handoff's prices). Round 2 adds an
-estimated **10–15M fewer reads/day** beyond Round 1 (about **$4–8/day net**).
+Upper-bound planning estimate, avoiding additive overlap: **39–59M reads and 4–6M writes
+saved/day** (about **$27–41/day net** at the handoff's prices). Round 2 adds an
+estimated **9–14M fewer reads/day** beyond Round 1 (about **$3–7/day net**).
+This reserves another 1M reads/day for the mandatory current-row scheduling
+validation; actual overhead equals successful scheduling memo hits/day and is
+unmeasured. Revise the forecast against the caller counters after deployment.
 Conservatively reserving up to 1M daily writes for first-finalize markers reduces
 the earlier combined write-saving forecast by 1M; Round 2 alone may add
 **0–0.7M writes/day**. Memo validation/completion costs are included. Scheduling also avoids redundant

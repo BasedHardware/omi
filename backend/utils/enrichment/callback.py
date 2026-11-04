@@ -9,7 +9,6 @@ direct path until pipeline.py is unfrozen (#21932/#20662) or deleted (C11);
 from __future__ import annotations
 
 from utils.conversations.episode_attach_key import process_snapshot, should_schedule
-from config.episode_attach import noop_schedule_enabled
 from utils.sync.repeat_work_metrics import record_feature
 from utils.observability.delivery import observe_sync_failures, sync_result, sync_refreshed, sync_defer, sync_done
 
@@ -279,15 +278,14 @@ def enrich_conversation(uid: str, conversation_id: str, language: str):
     # Episodes: the WAL row joins the live episode covering it, so Home folds it under the
     # live row instead of a second capture's fragment. Off this lane, fail-open; a later
     # WAL append re-runs it and is a no-op once joined.
-    schedule_episode = not noop_schedule_enabled() or should_schedule(episode_before, processed_conversation)
+    schedule_episode = schedule_after_finalization(
+        uid,
+        conversation_id,
+        ProcessingTrigger.SYNC_UPDATE,
+        row=process_snapshot(conversation_data, processed_conversation),
+        inputs_changed=should_schedule(episode_before, processed_conversation),
+    )
     record_feature(uid, processed_conversation, 'episode_attach', 'scheduled' if schedule_episode else 'unchanged')
-    if schedule_episode:
-        schedule_after_finalization(
-            uid,
-            conversation_id,
-            ProcessingTrigger.SYNC_UPDATE,
-            row=process_snapshot(conversation_data, processed_conversation),
-        )
 
     logger.info('event=sync_reprocess_callback outcome=success')
     return sync_done(processed_conversation)

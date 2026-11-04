@@ -177,6 +177,7 @@ def test_duplicate_noop_switch(lane, monkeypatch, enabled):
 @pytest.mark.parametrize(
     'name',
     [
+        'optimizations',
         'content_gate',
         'noop_schedule',
         'owner_reuse',
@@ -383,7 +384,7 @@ def test_restore_cannot_reuse_the_pre_discard_completed_memo(lane, monkeypatch, 
     assert not episode_attach_memo.matches('u', 'same', visible, firestore_client=store)
 
 
-def test_scheduling_hit_only_reads_the_link_and_never_submits(lane, monkeypatch):
+def test_scheduling_hit_validates_current_conversation_and_never_submits(lane, monkeypatch):
     from utils.episodes import finalize
 
     store, c, _ = lane
@@ -404,4 +405,4 @@ def test_scheduling_hit_only_reads_the_link_and_never_submits(lane, monkeypatch)
     monkeypatch.setattr(StrictFirestoreTransaction, 'update', unexpected)
     monkeypatch.setattr(finalize, 'submit_with_context', unexpected)
     finalize.schedule_after_finalization('u', 'same', finalize.ProcessingTrigger.SYNC_UPDATE, row=fresh)
-    assert [p[2:] for p in reads] == [('episode_links', 'same')]
+    assert [p[2:] for p in reads] == [('episode_links', 'same'), ('conversations', 'same')]
