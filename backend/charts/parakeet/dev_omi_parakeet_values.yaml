@@ -118,7 +118,7 @@ env:
   - name: PARAKEET_CUDA_GRAPHS
     value: "false"
   - name: HOSTED_SPEAKER_EMBEDDING_API_URL
-    value: "http://172.16.48.49/diarizer"
+    value: "http://dev-omi-diarizer.dev-omi-backend.svc.cluster.local:8080"
 
 resources:
   # We usually recommend not to specify default resources and to leave this as a conscious

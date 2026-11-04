@@ -246,7 +246,7 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "GOOGLE_CLOUD_PROJECT": "based-hardware-dev",
         "HOSTED_LID_API_URL": "",
         "HOSTED_PARAKEET_API_URL": "http://parakeet.omiapi.com",
-        "HOSTED_SPEAKER_EMBEDDING_API_URL": "http://172.16.48.49/diarizer",
+        "HOSTED_SPEAKER_EMBEDDING_API_URL": "http://diarizer.omiapi.com:80",
         "LLM_GATEWAY_ACCOUNTING_ENABLED": "true",
         "LIVE_CAPTURE_WINDOW_RETENTION": "false",
         "LIVE_CAPTURE_WINDOW_STRICT_PROJECTION": "false",

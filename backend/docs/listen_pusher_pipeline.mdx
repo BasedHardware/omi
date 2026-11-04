@@ -6299,9 +6299,13 @@ data. Index prerequisites, cohort controls and limitations are in the
 ### Shared Gateway caller routes
 
 NLLB, VAD and every speaker-embedding host (including Parakeet fallback) use
-the environment-specific shared Gateway paths. Parakeet STT retains its legacy
-hostname. Dev uses `172.16.48.49`; prod uses `172.16.160.20`. Qualify Gateway
-programming and caller reachability before deploying.
+the environment-specific shared Gateway paths in prod (`172.16.160.20`). The
+dev Gateway VIP `172.16.48.49` was deleted on 2026-11-02, so dev callers use
+the legacy Ingress endpoints: embeddings `http://diarizer.omiapi.com:80`,
+VAD `http://vad.omiapi.com:80/v1/vad`, NLLB `http://nllb.omiapi.com`, with
+Parakeet's chart fallback on its ClusterIP service DNS. Parakeet STT retains
+its legacy hostname. Qualify Gateway programming and caller reachability
+before deploying.
 
 Caller deploy order, route requirements and independent rollback are documented
 in [the Gateway caller runbook](internal-gateway-callers.md).
