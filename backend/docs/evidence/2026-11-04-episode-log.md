@@ -2,7 +2,8 @@
 
 Recorded at **2026-11-04 16:14:06 UTC**. Owner: planscost.
 Repository: `BasedHardware/omi`, lane `lane/epbatch2`.
-Qualified source: `ebb371f920a8836324383a854f62f4eac1799c94`.
+Qualification refreshed at **2026-11-04 17:24:03 UTC**.
+Qualified source: `7a8c6fda8fe50b66789c7549fcd442f24e0e53e0`.
 [PR #24607](https://github.com/BasedHardware/omi/pull/24607) owns current head,
 review and CI state. This is a dated qualification/forecast record, not a live
 cost meter or a deployment receipt. Re-measure before any production ramp.
@@ -80,11 +81,16 @@ by retaining legacy consolidation during shadow dual-write.
 No production account data was read or written. No GCP tier was used. All emulator
 owners and HTTP requests were synthetic. Nothing was merged or deployed by this lane.
 
-- Episode/merge/sync/flag acceptance: **1,787 tests passed**, 64 test-bearing files
-  from 67 checked-in selected paths (three support modules have no tests), on the
-  qualified source above. It includes the final visibility and deletion fences,
-  remote ramp/rollback, disabled-sweep behavior, cached-compose recovery and
-  merged #24544 batch-close/deadline integration.
+- Episode/merge/sync/flag acceptance: **2,804 distinct tests passed**, 76 test-bearing
+  files from 79 checked-in selected paths (three support modules have no tests).
+  The expanded selection adds Typesense, capture-group, batch shadow, summary,
+  restored-fragment, import-isolation, reason-label and lifecycle-writer boundaries.
+  The full run had 2,801 passes and one inherited evaluator-inventory omission;
+  after declaring those diagnostic payloads, all **678 lifecycle guard cases**
+  passed. The final lock-order change then passed **876 focused tests**, including
+  the two new canonical/fallback lock-order cases. Counts exclude duplicate reruns.
+  This is file-granular qualification with targeted reruns, not a claim that the
+  original full-run command exited green. Current-head CI is owned by the PR.
 - Scoped deletion/visibility follow-up: **51 passed** before the full acceptance
   rerun, including accepted/malformed deletion, restored access and publication
   fenced after lease claim.
@@ -96,7 +102,14 @@ owners and HTTP requests were synthetic. Nothing was merged or deployed by this 
   competing claims, stale publication, bounded contiguous facts and transactional
   whole-document BatchGet through a fixed episode window, and deletion accepted
   after a claim but before publication. Batch-close replay, pending-deadline
-  stamping and concurrent recorded placement also pass. The emulator shut down.
+  stamping and concurrent recorded placement also pass on the qualified source.
+  The final refresh used Firebase CLI 15.30.1 / Firestore emulator 1.22.0; all
+  33 tests passed and the emulator shut down. An earlier refresh and a logging-off
+  control both hit transaction lock timeouts in the mixed live/recorded race.
+  The source had opposing owner/timeline read order; canonical and fallback
+  attachment now reuse one owner-first capture, checked by deterministic unit
+  tests. Because the disabled control also failed, the passing refresh is not
+  proof that log capture alone caused those timeouts or a production retry-rate forecast.
 - Earlier guarded publication on `0af0ee8128bee662a17f351e054979419b5fc2f1` passed
   local PR preflight, type checking with zero errors, selected backend tests,
   API/generated contracts, web tests and a Swift debug compile. Current-head
@@ -129,6 +142,12 @@ backfill completion check the existing durable deletion authority on their own
 Firestore plane. Publication reads that authority in its transaction, so accepted
 deletion fences an already-running worker against recreating erased views. No
 deletion routine is added. Atomic legacy capture remains joined to its producer.
+
+Bounded discard-only batch projection explicitly opts out of episode capture;
+serving assignment imports the storage seam only when executing its transaction.
+Metric outcomes use the existing reviewed closed-vocabulary helper. Legacy
+single-document fakes explicitly model absence of a log owner, and enabled
+policy/search hook ordering has its own regression.
 
 The reviewed fixes cover repeat-span growth, fixed-boundary clipping and retained
 ends, duplicate discard projection, uncertain X→Y→X inputs, link-only mutation
