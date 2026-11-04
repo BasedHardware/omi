@@ -32,6 +32,14 @@ full Electron unit suite **5,548 passed / 33 existing conditional skips**, compl
 node/web typecheck and targeted ESLint/Prettier passed. Commands ran from
 `desktop/windows/` through `omi-heavy`: `npx --yes pnpm@10 test --maxWorkers=2`,
 `npx --yes pnpm@10 typecheck`, and single-file lint/format checks.
+Fractional wake-deadline follow-up: `eb3fd560811d4e23639072e576e87e3ab25cf1ae`, qualified at
+**2026-11-04 22:19:44 UTC** with **208 focused backend cases**. Integer truncation could
+schedule a deadline at `00:03:00.500` into the `00:03:00` bucket, causing an early
+`not_due` exit and sweep-only recovery. The new boundary proof failed for 1 us
+and 500 ms offsets before the fix. Ceiling the deadline before bucket rounding
+passes all five boundary/dedupe cases without changing the debounce, age cap,
+retry budget or concurrency. The final focused scope also rechecks fallback
+telemetry, cached compose containment, Home policy, composer and label contracts.
 [PR #24607](https://github.com/BasedHardware/omi/pull/24607) owns current head,
 review and CI state. This is a dated qualification/forecast record, not a live
 cost meter or a deployment receipt. Re-measure before any production ramp.
