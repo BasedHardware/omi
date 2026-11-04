@@ -56,10 +56,8 @@ export BLIS_NUM_THREADS="${BLIS_NUM_THREADS:-1}"
 # LangSmith's pytest integration is for live evaluation/upload, which this
 # hermetic suite does not use. Local startup measurements saved ~0.17s per
 # process before collection; file isolation pays this cost hundreds of times.
-# Only the diarizer loopback test needs pytest-httpserver. It imports the
-# upstream fixtures locally, so the other file-isolated processes avoid the
-# HTTP server/Werkzeug import chain. Keep asyncio and xdist active.
-pytest_args=(-p no:langsmith_plugin -p no:pytest_httpserver -v)
+# Keep the other plugins active.
+pytest_args=(-p no:langsmith_plugin -v)
 
 marker_expr="${BACKEND_PYTEST_MARK_EXPR:-not integration and not slow}"
 if [[ -n "$marker_expr" ]]; then
