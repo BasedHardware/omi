@@ -366,7 +366,7 @@ void main() {
           home: const LiveEpisodePage(initialTab: LiveEpisodeTab.transcript),
           capture: capture,
           episodes: episodes);
-      expect(find.text(en.livePreviewNoEngineTitle), after ? findsNothing : findsOneWidget);
+      expect(find.text(en.livePreviewNoEngineBody), after ? findsNothing : findsOneWidget);
       expect(find.textContaining('Let’s meet on Thursday'), after ? findsOneWidget : findsNothing);
       expect(find.text('Live on this phone'), findsNothing);
     });
