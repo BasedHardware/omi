@@ -1404,6 +1404,7 @@ def test_sync_scrape_retains_exporter_and_direct_sentinel_consumers():
     # fleet_gate/david_gate use logs, durable state and native request_count.
     for name in (
         'omi_listen_server_batch_suppression_total',
+        'omi_listen_preview_batch_custody_total',
         'omi_batch_pipeline_events_total',
         'omi_batch_pipeline_oldest_age_seconds',
         'omi_batch_ramp_heavy_owner_excluded_total',
@@ -1486,6 +1487,9 @@ def test_sync_scrape_retains_exporter_and_direct_sentinel_consumers():
     assert shared['spec']['endpoints'][0]['interval'] == '30s'
     assert shared['spec']['endpoints'][0]['metricRelabeling'][0]['regex'] == (
         'omi_.*|omi_listen_server_batch_suppression_total|conversation_llm_input_dedupe_.*'
+    )
+    assert re.fullmatch(
+        shared['spec']['endpoints'][0]['metricRelabeling'][0]['regex'], 'omi_listen_preview_batch_custody_total'
     )
 
 

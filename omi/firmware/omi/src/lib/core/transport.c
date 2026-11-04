@@ -23,6 +23,7 @@
 #include "accel.h"
 #include "button.h"
 #include "config.h"
+#include "diagnostics.h"
 #include "features.h"
 #include "haptic.h"
 #include "mic.h"
@@ -50,6 +51,12 @@ extern bool is_connected;
 extern bool is_charging;
 #endif
 static atomic_t pusher_stop_flag;
+static bool advertising_started;
+
+bool transport_advertising_started(void)
+{
+    return advertising_started;
+}
 
 struct bt_conn *current_connection = NULL;
 uint16_t current_mtu = 0;
@@ -291,6 +298,30 @@ static struct bt_gatt_attr time_sync_service_attr[] = {
 };
 
 static struct bt_gatt_service time_sync_service = BT_GATT_SERVICE(time_sync_service_attr);
+
+/* Appended after the existing dynamic services on normal boots. */
+static struct bt_uuid_128 diagnostics_service_uuid =
+    BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10040, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
+static struct bt_uuid_128 diagnostics_characteristic_uuid =
+    BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10041, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
+
+static ssize_t
+diagnostics_read(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset)
+{
+    uint8_t snapshot[OMI_DIAGNOSTICS_SIZE];
+    diagnostics_snapshot(snapshot);
+    return bt_gatt_attr_read(conn, attr, buf, len, offset, snapshot, sizeof(snapshot));
+}
+static struct bt_gatt_attr diagnostics_attrs[] = {
+    BT_GATT_PRIMARY_SERVICE(&diagnostics_service_uuid),
+    BT_GATT_CHARACTERISTIC(&diagnostics_characteristic_uuid.uuid,
+                           BT_GATT_CHRC_READ,
+                           BT_GATT_PERM_READ,
+                           diagnostics_read,
+                           NULL,
+                           NULL),
+};
+static struct bt_gatt_service diagnostics_service = BT_GATT_SERVICE(diagnostics_attrs);
 
 // Advertisement data
 static const struct bt_data bt_ad[] = {
@@ -941,10 +972,13 @@ static void log_local_ble_addresses(void)
 static int ensure_local_ble_identity(void)
 {
 #if defined(CONFIG_BT_SETTINGS)
-    int err = settings_load();
-    if (err && err != -ENOENT) {
-        LOG_ERR("Failed to load BT settings (err %d)", err);
-        return err;
+    /* Recovery uses unencrypted SMP; do not enter a broken settings/bond path. */
+    if (!safe_mode_active()) {
+        int err = settings_load();
+        if (err && err != -ENOENT) {
+            LOG_ERR("Failed to load BT settings (err %d)", err);
+            return err;
+        }
     }
 #endif
 
@@ -1304,6 +1338,40 @@ int transport_off()
     return 0;
 }
 
+int transport_start_safe(void)
+{
+    int err;
+#ifdef CONFIG_OMI_ENABLE_RFSW_CTRL
+    err = gpio_pin_configure_dt(&rfsw_en, GPIO_OUTPUT_ACTIVE | NRF_GPIO_DRIVE_S0H1);
+    if (err) {
+        return err;
+    }
+#endif
+    /* No application connection callbacks: they touch SD/audio and start work.
+     * SMP and DIS register themselves; leave external NOR and SPI3 awake.
+     */
+    err = bt_enable(NULL);
+    if (err) {
+        return err;
+    }
+    err = ensure_local_ble_identity();
+    if (err) {
+        return err;
+    }
+    log_local_ble_addresses();
+    err = bt_gatt_service_register(&diagnostics_service);
+    if (err) {
+        return err;
+    }
+    err = bt_le_adv_start(BT_LE_ADV_PARAM(BT_LE_ADV_OPT_CONNECTABLE, 1600, 3200, NULL),
+                          bt_ad,
+                          ARRAY_SIZE(bt_ad),
+                          bt_sd,
+                          ARRAY_SIZE(bt_sd));
+    advertising_started = !err;
+    return err;
+}
+
 // periodic advertising
 int transport_start()
 {
@@ -1397,11 +1465,13 @@ int transport_start()
     memset(storage_temp_data, 0, OPUS_PADDED_LENGTH * 4);
     bt_gatt_service_register(&storage_service);
 #endif
+    bt_gatt_service_register(&diagnostics_service);
     err = bt_le_adv_start(BT_LE_ADV_CONN, bt_ad, ARRAY_SIZE(bt_ad), bt_sd, ARRAY_SIZE(bt_sd));
     if (err) {
         LOG_ERR("Transport advertising failed to start (err %d), continuing without BLE", err);
         // Non-fatal: continue with pusher and ring buffer so offline recording works
     } else {
+        advertising_started = true;
         LOG_INF("Advertising successfully started");
     }
 

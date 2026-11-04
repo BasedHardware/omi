@@ -20,6 +20,7 @@ from database.monthly_usage_totals import queue_increment
 from database.batch_pipeline_store import FirestoreStore
 from database.batch_pipeline_privacy import assert_batch_write_allowed, BatchPrivacyBlocked, BatchPrivacyReason
 from database.batch_pipeline_projection_privacy import HOLD_REASONS
+from database.batch_pipeline_artifact_missing import artifact_missing, REASON_CODE as ARTIFACT_MISSING_REASON
 from database.sync_ledger import (
     BATCH_PARTIAL_STATUS,
     batch_projection_ledger_owner_matches,
@@ -499,6 +500,8 @@ class ProjectionStore:
             for sibling in binding.segment_ids:
                 job = self.ref('jobs', sibling).get(transaction=transaction).to_dict() or {}
                 entry = self.ref('results', sibling).get(transaction=transaction).to_dict() or {}
+                if artifact_missing(job):
+                    return None, False, 0
                 if entry.get('projection_state') == 'erased':
                     if entry.get('owner_key') != owner_key(binding.owner_id) or entry.get('segment_id') != sibling:
                         raise ProjectionBlocked('erased sibling owner mismatch')
@@ -705,7 +708,7 @@ class ProjectionStore:
             ):
                 raise ProjectionBlocked('content ledger owner lost')
             receipts, seconds, held = [], 0.0, 0
-            erased_count = terminal_empty_count = 0
+            erased_count = terminal_empty_count = missing_count = 0
             for sibling in binding.segment_ids:
                 job = self.ref('jobs', sibling).get(transaction=transaction).to_dict() or {}
                 entry = self.ref('results', sibling).get(transaction=transaction).to_dict() or {}
@@ -719,6 +722,7 @@ class ProjectionStore:
                     raise ProjectionBlocked('sibling binding mismatch')
                 if not entry and held_without_recovery(job):
                     held += 1
+                    missing_count += artifact_missing(job)
                     continue
                 if entry and assignment_held_without_recovery(job, entry):
                     held += 1
@@ -751,6 +755,9 @@ class ProjectionStore:
                 'errors': [],
                 'outcome': 'partial',
             }
+            if missing_count:
+                # This publishes siblings while keeping the upload unacknowledged.
+                result['reason_code'] = ARTIFACT_MISSING_REASON
             if terminal_empty_count:
                 result['no_recoverable_speech_segments'] = terminal_empty_count
             superseded_count = sum(receipt.get('disposition') == 'superseded' for receipt in receipts)

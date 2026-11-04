@@ -1,11 +1,15 @@
 # Independent in-cluster seal repair
 
+The CronJob is retained **suspended by default** for rollback. The continuous CPU
+path and evening overlap procedure are in
+[`record-seal-workers.md`](../../docs/runbooks/record-seal-workers.md).
+
 Owner: two-lane lead. Deploy only through the approved worker release train.
 The host-side repair loop remains an operator fallback. This job reuses the
 worker image, KSA/GSA and encryption-secret reference. It runs on CPU nodes,
 independently of the unchanged 240-second sweeper. No GPU is allocated.
 
-Default on, eight disposable row processes, 270 seconds per row (configurable
+When unsuspended: eight disposable row processes, 270 seconds per row (configurable
 1–270), 1500 seconds per cycle, 1680-second Kubernetes Job ceiling, every five
 minutes with `concurrencyPolicy: Forbid`. Rows that exhaust a budget are counted
 and skipped; all other rows continue. A timed-out transaction might have

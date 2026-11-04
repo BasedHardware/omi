@@ -35,6 +35,25 @@ by itself prove transaction atomicity. Re-audit before `--write`, then run the
 strict writer unit tests and loopback emulator contract. A changed writer
 without a generation bump invalidates the inventory test.
 
+## Recurring-voice scope audit 2026-11-04
+
+`recurring_voices.checkpoint`, `learn` and `learn.commit` read the People
+generation and current person prints; they only write recurring profiles, the
+owner's profile index and conversation evidence metadata. They do not mutate
+People and need no generation increment. A People mutation during inference
+changes the generation and refuses recurring publication.
+
+`speaker_assignment_effects.persist_assignment_effects` still increments the
+generation alongside every People update in the same transaction. Its new
+recurring-profile writes run after all reads and do not replace that increment.
+`speaker_auto_enroll.publish` and its `commit` likewise retain the atomic People
+update plus generation increment; recurring binding shares that transaction.
+`speaker_auto_enroll.update_privacy`, `retract_conversation`, `revoke_person`
+and their transaction bodies keep one increment for each People mutation;
+their new account-deletion fences and recurring cleanup add no unfenced writer.
+The inventory pins the reviewed bodies, with strict transaction tests and
+loopback binding/publication proofs that assert the generation increments.
+
 ## Measure before enabling
 
 `people_scan_dedupe` remains **0**. The closed-label counter

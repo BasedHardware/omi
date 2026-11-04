@@ -14,6 +14,20 @@ resources:
 rules:
   default: false
   external:
+    - seriesQuery: 'omi_record_seal_backlog{namespace!="",worker_release!=""}'
+      resources:
+        overrides:
+          namespace: {resource: namespace}
+      name:
+        matches: '^omi_record_seal_backlog$'
+        as: omi_record_seal_backlog
+      # Replicated global debt: deduplicate slots, require complete fresh samples.
+      metricsQuery: >-
+        max by (namespace, worker_release) (
+          omi_record_seal_backlog{<<.LabelMatchers>>}
+          and on (namespace, worker_release, pod)
+          (time() - omi_record_seal_refreshed_at_seconds < 60)
+        )
     - name:
         as: "backend_listen_active_ws_connections_per_pod"
       # Unlabeled main pods remain eligible; coordinator canaries use track=canary.

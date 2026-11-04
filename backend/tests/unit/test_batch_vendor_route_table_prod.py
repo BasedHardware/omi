@@ -11,7 +11,7 @@ import pytest
 
 from utils.batch_pipeline import route_selection as rs
 from utils.batch_pipeline import vendor_route_contracts as c
-from utils.batch_pipeline.provider_stt import resolve_route
+from utils.batch_pipeline.provider_stt_admission import resolve_route
 from utils.observability.reasons import VendorHealthReason, VendorRouteReason as Reason
 
 TABLE_PATH = Path(__file__).resolve().parents[2] / 'deploy' / 'batch-pipeline' / 'vendor_route_table.prod.json'
@@ -86,8 +86,10 @@ def test_overflow_never_starts_on_soniox_and_waits_on_the_ring_when_modulate_is_
     assert (decision.selected, decision.reason) == ('gpu', Reason.ORDERED)
 
 
-def test_languages_parakeet_cannot_serve_start_on_modulate(table):
-    decision = _decide(table, UNSUPPORTED)
+@pytest.mark.parametrize('language', [UNSUPPORTED, 'ca', 'gl', 'eu', 'cy', 'af', 'sq', 'bs', 'sw'])
+def test_languages_parakeet_cannot_serve_start_on_modulate(table, language):
+    assert table.row_for(language).language_class == c.GPU_UNSUPPORTED_CLASS
+    decision = _decide(table, language)
     assert decision.selected == 'modulate'
     assert decision.route.stt_route == 'provider'
     assert decision.reason in {Reason.SOLE_CAPABLE, Reason.ORDERED}
