@@ -467,6 +467,16 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused) {
+      _detailProvider.confirmSpeakerLabelingSession(conversationId: widget.conversation.id);
+    } else if (state == AppLifecycleState.resumed) {
+      // The list refresh on resume does not carry the transcript; re-read what is on screen.
+      unawaited(_detailProvider.refreshConversation());
+    }
+  }
+
+  @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     final summaryShownAt = _summaryShownAt;

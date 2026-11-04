@@ -452,7 +452,6 @@ class CaptureController extends ChangeNotifier
         _wedgeMonitorOverride = captureWedgeMonitor,
         _calendarGapMonitor = calendarGapMonitor,
         _preferences = preferences ?? SharedPreferencesUtil() {
-    _boundExternalProjection = (outOfCredits, topConversationId);
     var retainedOnPhone = OnDeviceTranscriptionController.instance.shouldKeepAudioLocal;
     void onOverflowChanged() {
       final next = OnDeviceTranscriptionController.instance.shouldKeepAudioLocal;
@@ -736,25 +735,18 @@ class CaptureController extends ChangeNotifier
     _phoneMic.probeStallAfterForeground();
   }
 
-  /// Adapters read mutable providers: compare with previously published
-  /// values so re-binding an equal projection stays quiet.
-  late (bool, String?) _boundExternalProjection;
-
   /// Called from the proxy provider on every upstream notify (conversations,
   /// chat, people, usage). Only an actual change of the backing actions is a
   /// capture state change; re-notifying here would rebuild every capture
   /// listener, and DeviceProvider after it, on each chat token or list refresh.
-  // omi-perf-allow: proxy-hook-notify -- quiet vs notify is the mutable projection comparison below, not adapter identity; mutated adapters must re-notify
+  /// Called from the proxy provider on every upstream notify (conversations,
+  /// chat, people, usage). Only an actual change of the backing actions is a
+  /// capture state change; re-notifying here would rebuild every capture
+  /// listener, and DeviceProvider after it, on each chat token or list refresh.
   void updateExternalActions(CaptureExternalActions? actions) {
     final next = actions ?? const NoopCaptureExternalActions();
-    // The adapters read mutable providers live, so a mutated instance can
-    // change its published projection while staying the same object: the
-    // projection comparison below is what decides quiet-vs-notify, for both
-    // re-binding and mutation.
-    if (next != externalActions) externalActions = next;
-    final projection = (outOfCredits, topConversationId);
-    if (projection == _boundExternalProjection) return;
-    _boundExternalProjection = projection;
+    if (next == externalActions) return;
+    externalActions = next;
     notifyListeners();
   }
 

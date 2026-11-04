@@ -339,7 +339,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     if (identical(captureProvider, provider) && identical(localRecordingsProvider, recordingsProvider)) return;
     captureProvider = provider;
     localRecordingsProvider = recordingsProvider;
-    // Action targets only: device read models do not derive from these dependencies.
+    notifyListeners();
   }
 
   Future<void> setConnectedDevice(BtDevice? device) async {
