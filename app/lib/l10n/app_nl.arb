@@ -4522,5 +4522,8 @@
     "episodeCoversUpTo": "Tot {time} · volledige notities aan het eind",
     "liveTranscribedUpTo": "Getranscribeerd tot {time}",
     "liveAudioSaved": "{duration} opgeslagen",
-    "liveAudioSavedDetail": "Sprekers en het definitieve transcript verschijnen hier tijdens het uploaden."
+    "liveAudioSavedDetail": "Sprekers en het definitieve transcript verschijnen hier tijdens het uploaden.",
+    "referralGiftTitle": "Geef een vriend een maand Omi Pro",
+    "referralWebSteps": "1. Deel je persoonlijke link.\n2. Je vriend meldt zich op het web aan via je link.\n3. Nieuwe accounts die in aanmerking komen krijgen 30 dagen Omi Pro.",
+    "referralAffiliate": "Partnerprogramma"
 }

@@ -14979,4 +14979,14 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Pembicara dan transkrip akhir akan muncul di sini saat diunggah.';
+
+  @override
+  String get referralGiftTitle => 'Beri teman sebulan Omi Pro';
+
+  @override
+  String get referralWebSteps =>
+      '1. Bagikan tautan pribadi Anda.\n2. Teman mendaftar di web melalui tautan Anda.\n3. Akun baru yang memenuhi syarat mendapat 30 hari Omi Pro.';
+
+  @override
+  String get referralAffiliate => 'Program afiliasi';
 }

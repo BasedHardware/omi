@@ -4557,5 +4557,8 @@
     "episodeCoversUpTo": "{time} saatine kadar · bitince tam notlar",
     "liveTranscribedUpTo": "{time} saatine kadar yazıya döküldü",
     "liveAudioSaved": "{duration} kaydedildi",
-    "liveAudioSavedDetail": "Konuşmacılar ve son döküm, yükleme sırasında burada görünür."
+    "liveAudioSavedDetail": "Konuşmacılar ve son döküm, yükleme sırasında burada görünür.",
+    "referralGiftTitle": "Arkadaşına bir aylık Omi Pro hediye et",
+    "referralWebSteps": "1. Kişisel bağlantını paylaş.\n2. Arkadaşın bağlantın üzerinden webde kaydolur.\n3. Uygun yeni hesaplar 30 günlük Omi Pro alır.",
+    "referralAffiliate": "Satış ortaklığı programı"
 }

@@ -15027,4 +15027,14 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Vorbitorii și transcrierea finală vor apărea aici pe măsură ce se încarcă.';
+
+  @override
+  String get referralGiftTitle => 'Oferă unui prieten o lună de Omi Pro';
+
+  @override
+  String get referralWebSteps =>
+      '1. Distribuie linkul personal.\n2. Prietenul se înscrie pe web prin linkul tău.\n3. Conturile noi eligibile primesc 30 de zile de Omi Pro.';
+
+  @override
+  String get referralAffiliate => 'Program de afiliere';
 }

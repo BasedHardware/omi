@@ -4522,5 +4522,8 @@
     "episodeCoversUpTo": "يغطي حتى {time} · الملاحظات الكاملة عند الانتهاء",
     "liveTranscribedUpTo": "تم النسخ حتى {time}",
     "liveAudioSaved": "تم حفظ {duration}",
-    "liveAudioSavedDetail": "ستظهر هنا أسماء المتحدثين والنص النهائي أثناء الرفع."
+    "liveAudioSavedDetail": "ستظهر هنا أسماء المتحدثين والنص النهائي أثناء الرفع.",
+    "referralGiftTitle": "امنح صديقًا شهرًا من Omi Pro",
+    "referralWebSteps": "1. شارك رابطك الشخصي.\n2. يسجل صديقك عبر الويب من خلال رابطك.\n3. تحصل الحسابات الجديدة المؤهلة على 30 يومًا من Omi Pro.",
+    "referralAffiliate": "برنامج التسويق بالعمولة"
 }

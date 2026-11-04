@@ -149,6 +149,99 @@ void main() {
     expect(gateway.signOutCalls, 0);
   });
 
+  for (final status in [401, 403]) {
+    test('late $status after referral timeout and account switch cannot affect new owner', () async {
+      final gateway = _Gateway(user: const AuthUserSnapshot(uid: 'user-a'));
+      final service = AuthService.forTesting(tokenGateway: gateway, refreshDelay: (_) async {});
+      final snapshot = service.captureSessionSnapshot()!;
+      gateway.results = [RefreshedAuthToken(token: 'token-a', expirationTime: DateTime.now())];
+      final sent = Completer<void>();
+      final reply = Completer<http.StreamedResponse>();
+      var sends = 0;
+      final pending = makeRawApiCall(
+        url: 'https://unit-test.invalid/v1/users/me/referral',
+        method: 'GET',
+        sessionSnapshot: snapshot,
+        authService: service,
+        sendStreaming: (_) {
+          sends++;
+          sent.complete();
+          return reply.future;
+        },
+      );
+      await sent.future;
+      await expectLater(pending.timeout(const Duration(milliseconds: 1)), throwsA(isA<TimeoutException>()));
+      gateway.user = const AuthUserSnapshot(uid: 'user-b');
+      service.handleAuthUserChanged('user-b');
+      final refreshes = gateway.refreshCalls;
+      reply.complete(http.StreamedResponse(
+          Stream.value(utf8.encode('{"detail":{"code":"account_deletion_in_progress","status":"pending"}}')), status));
+      final response = await pending;
+      expect(response.statusCode, 401);
+      expect(sends, 1);
+      expect(gateway.refreshCalls, refreshes);
+      expect(gateway.signOutCalls, 0);
+      expect(service.captureSessionSnapshot()!.ownerUid, 'user-b');
+    });
+  }
+
+  test('deletion 403 body arriving after switch does not expire the new account', () async {
+    final gateway = _Gateway(user: const AuthUserSnapshot(uid: 'user-a'));
+    final service = AuthService.forTesting(tokenGateway: gateway, refreshDelay: (_) async {});
+    final snapshot = service.captureSessionSnapshot()!;
+    gateway.results = [RefreshedAuthToken(token: 'token-a', expirationTime: DateTime.now())];
+    final body = StreamController<List<int>>();
+    final reading = Completer<void>();
+    final response = makeRawApiCall(
+      url: 'https://unit-test.invalid/v1/users/me/referral',
+      method: 'GET',
+      sessionSnapshot: snapshot,
+      authService: service,
+      sendStreaming: (_) async => http.StreamedResponse(body.stream, 403),
+    );
+    body.onListen = () => reading.complete();
+    await reading.future;
+    gateway.user = const AuthUserSnapshot(uid: 'user-b');
+    service.handleAuthUserChanged('user-b');
+    body.add(utf8.encode('{"detail":{"code":"account_deletion_in_progress","status":"pending"}}'));
+    await body.close();
+    expect((await response).statusCode, 401);
+    expect(gateway.signOutCalls, 0);
+  });
+
+  for (final status in [401, 403]) {
+    test('$status expiration admitted for A cannot sign out B during Siri await', () async {
+      final gateway = _Gateway(user: const AuthUserSnapshot(uid: 'user-a'));
+      final entered = Completer<void>();
+      final release = Completer<void>();
+      final service = AuthService.forTesting(
+        tokenGateway: gateway,
+        refreshDelay: (_) async {},
+        prepareSiriSignOut: () {
+          entered.complete();
+          return release.future;
+        },
+      );
+      final snapshot = service.captureSessionSnapshot()!;
+      gateway.results = [RefreshedAuthToken(token: 'token-a', expirationTime: DateTime.now()), null];
+      final pending = makeRawApiCall(
+        url: 'https://unit-test.invalid/v1/users/me/referral',
+        method: 'GET',
+        sessionSnapshot: snapshot,
+        authService: service,
+        sendStreaming: (_) async => http.StreamedResponse(
+            Stream.value(utf8.encode('{"detail":{"code":"account_deletion_in_progress","status":"pending"}}')), status),
+      );
+      await entered.future;
+      gateway.user = const AuthUserSnapshot(uid: 'user-b');
+      service.markAuthenticatedUser('user-b');
+      release.complete();
+      await pending;
+      expect(gateway.signOutCalls, 0);
+      expect(service.captureSessionSnapshot()!.ownerUid, 'user-b');
+    });
+  }
+
   group('exportUserDataToFile session binding', () {
     late Directory tempDir;
     late String filePath;

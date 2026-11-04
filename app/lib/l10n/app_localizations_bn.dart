@@ -14959,4 +14959,14 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'আপলোড হওয়ার সাথে সাথে বক্তা ও চূড়ান্ত ট্রান্সক্রিপ্ট এখানে আসবে।';
+
+  @override
+  String get referralGiftTitle => 'বন্ধুকে এক মাস Omi Pro দিন';
+
+  @override
+  String get referralWebSteps =>
+      '1. আপনার ব্যক্তিগত লিঙ্ক শেয়ার করুন।\n2. আপনার বন্ধু সেই লিঙ্ক দিয়ে ওয়েবে নিবন্ধন করেন।\n3. যোগ্য নতুন অ্যাকাউন্ট 30 দিনের Omi Pro পায়।';
+
+  @override
+  String get referralAffiliate => 'অ্যাফিলিয়েট প্রোগ্রাম';
 }

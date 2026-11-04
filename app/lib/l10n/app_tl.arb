@@ -11948,5 +11948,8 @@
     "episodeCoversUpTo": "Hanggang {time} · buong tala kapag natapos",
     "liveTranscribedUpTo": "Na-transcribe hanggang {time}",
     "liveAudioSaved": "{duration} na-save",
-    "liveAudioSavedDetail": "Lalabas dito ang mga nagsasalita at huling transcript habang nag-a-upload."
+    "liveAudioSavedDetail": "Lalabas dito ang mga nagsasalita at huling transcript habang nag-a-upload.",
+    "referralGiftTitle": "Bigyan ang kaibigan ng isang buwang Omi Pro",
+    "referralWebSteps": "1. Ibahagi ang personal mong link.\n2. Mag-sign up ang kaibigan sa web gamit ang link mo.\n3. Makakakuha ang mga kwalipikadong bagong account ng 30 araw ng Omi Pro.",
+    "referralAffiliate": "Affiliate program"
 }

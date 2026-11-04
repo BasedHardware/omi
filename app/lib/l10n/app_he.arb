@@ -11948,5 +11948,8 @@
     "episodeCoversUpTo": "מכסה עד {time} · הערות מלאות בסיום",
     "liveTranscribedUpTo": "תומלל עד {time}",
     "liveAudioSaved": "{duration} נשמרו",
-    "liveAudioSavedDetail": "הדוברים והתמליל הסופי יופיעו כאן במהלך ההעלאה."
+    "liveAudioSavedDetail": "הדוברים והתמליל הסופי יופיעו כאן במהלך ההעלאה.",
+    "referralGiftTitle": "תנו לחבר חודש של Omi Pro",
+    "referralWebSteps": "1. שתפו את הקישור האישי שלכם.\n2. החבר נרשם באתר דרך הקישור שלכם.\n3. חשבונות חדשים זכאים מקבלים 30 ימים של Omi Pro.",
+    "referralAffiliate": "תוכנית שותפים"
 }

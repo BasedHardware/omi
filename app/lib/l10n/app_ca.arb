@@ -4522,5 +4522,8 @@
     "episodeCoversUpTo": "Cobreix fins a les {time} · notes completes en acabar",
     "liveTranscribedUpTo": "Transcrit fins a les {time}",
     "liveAudioSaved": "{duration} desats",
-    "liveAudioSavedDetail": "Els interlocutors i la transcripció final apareixeran aquí a mesura que es pugi."
+    "liveAudioSavedDetail": "Els interlocutors i la transcripció final apareixeran aquí a mesura que es pugi.",
+    "referralGiftTitle": "Regala un mes d'Omi Pro a un amic",
+    "referralWebSteps": "1. Comparteix el teu enllaç personal.\n2. El teu amic es registra al web a través del teu enllaç.\n3. Els comptes nous que compleixin els requisits reben 30 dies d'Omi Pro.",
+    "referralAffiliate": "Programa d'afiliats"
 }

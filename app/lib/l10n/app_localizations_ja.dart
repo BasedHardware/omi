@@ -14751,4 +14751,13 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'アップロードが進むと、話者と最終的な文字起こしがここに表示されます。';
+
+  @override
+  String get referralGiftTitle => '友達にOmi Proを1か月プレゼント';
+
+  @override
+  String get referralWebSteps => '1. あなた専用のリンクを共有します。\n2. 友達がそのリンクからウェブで登録します。\n3. 条件を満たす新規アカウントはOmi Proを30日間利用できます。';
+
+  @override
+  String get referralAffiliate => 'アフィリエイトプログラム';
 }

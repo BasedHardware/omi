@@ -11948,5 +11948,8 @@
     "episodeCoversUpTo": "{time} تک · ختم ہونے پر مکمل نوٹس",
     "liveTranscribedUpTo": "{time} تک ٹرانسکرائب ہوا",
     "liveAudioSaved": "{duration} محفوظ",
-    "liveAudioSavedDetail": "اپ لوڈ کے ساتھ مقررین اور حتمی ٹرانسکرپٹ یہاں آئیں گے۔"
+    "liveAudioSavedDetail": "اپ لوڈ کے ساتھ مقررین اور حتمی ٹرانسکرپٹ یہاں آئیں گے۔",
+    "referralGiftTitle": "دوست کو ایک ماہ کا Omi Pro دیں",
+    "referralWebSteps": "1. اپنا ذاتی لنک شیئر کریں۔\n2. آپ کا دوست آپ کے لنک سے ویب پر سائن اپ کرتا ہے۔\n3. اہل نئے اکاؤنٹس کو 30 دن کا Omi Pro ملتا ہے۔",
+    "referralAffiliate": "افیلیئیٹ پروگرام"
 }

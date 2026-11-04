@@ -15015,4 +15015,14 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Говорителите и окончателната транскрипция ще се появят тук при качването.';
+
+  @override
+  String get referralGiftTitle => 'Подарете на приятел месец Omi Pro';
+
+  @override
+  String get referralWebSteps =>
+      '1. Споделете личния си линк.\n2. Приятелят ви се регистрира в уебсайта чрез линка.\n3. Новите отговарящи на условията акаунти получават 30 дни Omi Pro.';
+
+  @override
+  String get referralAffiliate => 'Партньорска програма';
 }

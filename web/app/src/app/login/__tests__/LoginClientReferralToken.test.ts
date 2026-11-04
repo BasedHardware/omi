@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 // signed in. The real claimReferralTrial runs; only the token and fetch are faked.
 
 let query = '';
-let authUser: { uid: string } | null = null;
+let authUser: { uid: string; getIdToken: typeof harness.getIdToken } | null = null;
 const harness = vi.hoisted(() => ({
   getIdToken: vi.fn(),
   navigate: vi.fn(),
@@ -36,7 +36,12 @@ vi.mock('@/components/auth/AuthProvider', () => ({
 }));
 vi.mock('@/lib/firebase', () => ({
   isFirebaseAuthConfigured: false,
-  getIdToken: harness.getIdToken,
+  auth: {
+    get currentUser() {
+      return authUser;
+    },
+  },
+  onAuthStateChange: () => () => {},
 }));
 vi.mock('@/lib/referrals', async () => ({
   ...(await vi.importActual<typeof import('@/lib/referrals')>('@/lib/referrals')),
@@ -53,7 +58,7 @@ const fetchMock = vi.fn();
 describe('LoginClient referral with a temporary token failure', () => {
   beforeEach(() => {
     query = 'referral=ref1.test.code&environment=prod';
-    authUser = { uid: 'synthetic-user' };
+    authUser = { uid: 'synthetic-user', getIdToken: harness.getIdToken };
     harness.getIdToken.mockReset();
     harness.navigate.mockReset();
     fetchMock.mockReset();
@@ -94,7 +99,7 @@ describe('LoginClient referral with a temporary token failure', () => {
     fireEvent.click(await view.findByRole('button', { name: 'Try again' }));
     await waitFor(() => expect(harness.getIdToken).toHaveBeenCalledTimes(2));
 
-    authUser = { uid: 'synthetic-next-user' };
+    authUser = { uid: 'synthetic-next-user', getIdToken: harness.getIdToken };
     view.rerender(createElement(LoginClient));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     releaseOld('token-old-account');

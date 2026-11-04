@@ -11948,5 +11948,8 @@
     "episodeCoversUpTo": "تا {time} · یادداشت‌های کامل در پایان",
     "liveTranscribedUpTo": "رونویسی تا {time}",
     "liveAudioSaved": "{duration} ذخیره شد",
-    "liveAudioSavedDetail": "گویندگان و متن نهایی هنگام بارگذاری اینجا نمایش داده می‌شوند."
+    "liveAudioSavedDetail": "گویندگان و متن نهایی هنگام بارگذاری اینجا نمایش داده می‌شوند.",
+    "referralGiftTitle": "یک ماه Omi Pro به دوستتان هدیه دهید",
+    "referralWebSteps": "1. پیوند شخصی خود را به اشتراک بگذارید.\n2. دوستتان از طریق پیوند شما در وب ثبت‌نام می‌کند.\n3. حساب‌های جدید واجد شرایط 30 روز Omi Pro دریافت می‌کنند.",
+    "referralAffiliate": "برنامه همکاری در فروش"
 }

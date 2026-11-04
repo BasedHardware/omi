@@ -11948,5 +11948,8 @@
     "episodeCoversUpTo": "Do {time} · popolni zapiski ob koncu",
     "liveTranscribedUpTo": "Prepisano do {time}",
     "liveAudioSaved": "Shranjeno {duration}",
-    "liveAudioSavedDetail": "Govorci in končni prepis se bodo tukaj prikazali med nalaganjem."
+    "liveAudioSavedDetail": "Govorci in končni prepis se bodo tukaj prikazali med nalaganjem.",
+    "referralGiftTitle": "Podarite prijatelju mesec Omi Pro",
+    "referralWebSteps": "1. Delite svojo osebno povezavo.\n2. Prijatelj se registrira na spletu prek vaše povezave.\n3. Novi upravičeni računi prejmejo 30 dni Omi Pro.",
+    "referralAffiliate": "Partnerski program"
 }

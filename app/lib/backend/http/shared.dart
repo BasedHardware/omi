@@ -355,6 +355,10 @@ Future<http.StreamedResponse> makeRawApiCall({
     }
     var request = _buildStreamingRequest(url, builtHeaders, body, method, abortTrigger);
     var response = await send(request);
+    if (sessionSnapshot != null && !service.isSessionSnapshotCurrent(sessionSnapshot)) {
+      await _drainStreamedResponse(response);
+      return _authUnavailableStreamedResponse();
+    }
     if (requireAuthCheck && response.statusCode == 401) {
       response = await refreshAndReplayAfter401(
         firstResponse: response,
@@ -389,6 +393,9 @@ Future<http.StreamedResponse> makeRawApiCall({
       // The fence is in the body; read it once and hand the caller an
       // equivalent response.
       final materialized = await _materializeErrorResponse(response);
+      if (sessionSnapshot != null && !service.isSessionSnapshotCurrent(sessionSnapshot)) {
+        return _authUnavailableStreamedResponse();
+      }
       await _expireSessionIfAccountDeleted(materialized.statusCode, materialized.body, authService: service);
       return http.StreamedResponse(
         Stream<List<int>>.value(materialized.bodyBytes),
@@ -401,7 +408,9 @@ Future<http.StreamedResponse> makeRawApiCall({
     }
     return response;
   } on AuthTokenUnavailableException catch (e) {
-    await _handleAuthUnavailable(e, expireTerminalSession: signOutOn401);
+    if (sessionSnapshot == null || service.isSessionSnapshotCurrent(sessionSnapshot)) {
+      await _handleAuthUnavailable(e, expireTerminalSession: signOutOn401);
+    }
     Logger.debug('Authenticated raw request blocked before send: ${e.result.runtimeType}');
     return _authUnavailableStreamedResponse();
   }

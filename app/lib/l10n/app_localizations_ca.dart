@@ -15039,4 +15039,14 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Els interlocutors i la transcripció final apareixeran aquí a mesura que es pugi.';
+
+  @override
+  String get referralGiftTitle => 'Regala un mes d\'Omi Pro a un amic';
+
+  @override
+  String get referralWebSteps =>
+      '1. Comparteix el teu enllaç personal.\n2. El teu amic es registra al web a través del teu enllaç.\n3. Els comptes nous que compleixin els requisits reben 30 dies d\'Omi Pro.';
+
+  @override
+  String get referralAffiliate => 'Programa d\'afiliats';
 }

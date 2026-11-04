@@ -4522,5 +4522,8 @@
     "episodeCoversUpTo": "Katab kuni {time} · täielikud märkmed lõpus",
     "liveTranscribedUpTo": "Transkribeeritud kuni {time}",
     "liveAudioSaved": "{duration} salvestatud",
-    "liveAudioSavedDetail": "Kõnelejad ja lõplik transkriptsioon ilmuvad siia üleslaadimise ajal."
+    "liveAudioSavedDetail": "Kõnelejad ja lõplik transkriptsioon ilmuvad siia üleslaadimise ajal.",
+    "referralGiftTitle": "Kingi sõbrale kuu Omi Prod",
+    "referralWebSteps": "1. Jaga oma isiklikku linki.\n2. Sõber registreerub veebis sinu lingi kaudu.\n3. Sobivad uued kontod saavad 30 päeva Omi Prod.",
+    "referralAffiliate": "Partnerprogramm"
 }

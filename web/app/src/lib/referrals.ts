@@ -1,10 +1,26 @@
-import { getIdToken } from './firebase';
+import type { User } from 'firebase/auth';
+import { auth, onAuthStateChange } from './firebase';
 
 export type ReferralEnvironment = 'dev' | 'prod';
 
 export interface ReferralClaimResult {
   claimed: boolean;
   trial_days: number;
+}
+
+export type ReferralMobilePlatform = 'ios' | 'android';
+
+export function referralMobilePlatform(userAgent: string): ReferralMobilePlatform | null {
+  if (/android/i.test(userAgent)) return 'android';
+  if (/iPhone|iPad|iPod/i.test(userAgent)) return 'ios';
+  return null;
+}
+
+export function referralDownloadURL(platform: ReferralMobilePlatform | null): string {
+  if (platform === 'ios') return 'https://apps.apple.com/app/id6502156163';
+  if (platform === 'android')
+    return 'https://play.google.com/store/apps/details?id=com.friend.ios';
+  return 'https://macos.omi.me';
 }
 
 export function navigateToDesktopDownload(): void {
@@ -26,18 +42,34 @@ export class ReferralClaimError extends Error {
 export async function claimReferralTrial(
   code: string,
   environment: ReferralEnvironment,
-  options: { deadlineMs?: number; isCurrent?: () => boolean } = {},
+  options: {
+    user: Pick<User, 'uid' | 'getIdToken'>;
+    deadlineMs?: number;
+    isCurrent?: () => boolean;
+  },
 ): Promise<ReferralClaimResult> {
   const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
-  const current = () => !controller.signal.aborted && (options.isCurrent?.() ?? true);
+  const owner = options.user;
+  let invalidated = false;
+  const unsubscribe = onAuthStateChange((user) => {
+    if (user !== owner) invalidated = true;
+  });
+  const current = () =>
+    !invalidated &&
+    auth?.currentUser === owner &&
+    !controller.signal.aborted &&
+    (options.isCurrent?.() ?? true);
   const operation = async (): Promise<ReferralClaimResult> => {
     if (!current()) throw new ReferralClaimError('Referral attempt cancelled', false);
-    const token = await getIdToken();
+    let token: string | null;
+    try {
+      token = await owner.getIdToken();
+    } catch {
+      throw new ReferralClaimError('Sign-in token unavailable', true);
+    }
     if (!current()) throw new ReferralClaimError('Referral attempt cancelled', false);
-    // Claims only start for a signed-in account, and getIdToken also returns null when
-    // Firebase cannot read the token right now. Keep that ambiguous failure manually
-    // retryable; the caller's account fence still applies to every retry.
+    // Token failures may be retried only under this captured auth session.
     if (!token) throw new ReferralClaimError('Sign-in token unavailable', true);
     const response = await fetch('/api/referrals/claim', {
       method: 'POST',
@@ -60,6 +92,7 @@ export async function claimReferralTrial(
     ) {
       throw new ReferralClaimError('Invalid referral response', true);
     }
+    if (!current()) throw new ReferralClaimError('Referral attempt cancelled', false);
     return result as ReferralClaimResult;
   };
   const timeout = new Promise<never>((_, reject) => {
@@ -71,6 +104,7 @@ export async function claimReferralTrial(
   try {
     return await Promise.race([operation(), timeout]);
   } finally {
+    unsubscribe();
     if (timer !== undefined) clearTimeout(timer);
   }
 }

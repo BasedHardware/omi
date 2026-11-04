@@ -4522,5 +4522,8 @@
     "episodeCoversUpTo": "Pokrývá do {time} · úplné poznámky po dokončení",
     "liveTranscribedUpTo": "Přepsáno do {time}",
     "liveAudioSaved": "Uloženo {duration}",
-    "liveAudioSavedDetail": "Mluvčí a konečný přepis se zde objeví během nahrávání."
+    "liveAudioSavedDetail": "Mluvčí a konečný přepis se zde objeví během nahrávání.",
+    "referralGiftTitle": "Darujte příteli měsíc Omi Pro",
+    "referralWebSteps": "1. Sdílejte svůj osobní odkaz.\n2. Přítel se zaregistruje na webu přes váš odkaz.\n3. Nové způsobilé účty získají 30 dní Omi Pro.",
+    "referralAffiliate": "Partnerský program"
 }

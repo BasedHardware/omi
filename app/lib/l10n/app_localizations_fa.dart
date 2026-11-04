@@ -14959,4 +14959,14 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'گویندگان و متن نهایی هنگام بارگذاری اینجا نمایش داده می‌شوند.';
+
+  @override
+  String get referralGiftTitle => 'یک ماه Omi Pro به دوستتان هدیه دهید';
+
+  @override
+  String get referralWebSteps =>
+      '1. پیوند شخصی خود را به اشتراک بگذارید.\n2. دوستتان از طریق پیوند شما در وب ثبت‌نام می‌کند.\n3. حساب‌های جدید واجد شرایط 30 روز Omi Pro دریافت می‌کنند.';
+
+  @override
+  String get referralAffiliate => 'برنامه همکاری در فروش';
 }

@@ -14757,4 +14757,13 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => '업로드되는 대로 화자와 최종 대화 내용이 여기에 표시됩니다.';
+
+  @override
+  String get referralGiftTitle => '친구에게 Omi Pro 한 달을 선물하세요';
+
+  @override
+  String get referralWebSteps => '1. 개인 링크를 공유하세요.\n2. 친구가 해당 링크를 통해 웹에서 가입합니다.\n3. 자격을 충족하는 새 계정은 Omi Pro 30일을 받습니다.';
+
+  @override
+  String get referralAffiliate => '제휴 프로그램';
 }

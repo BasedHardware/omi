@@ -4522,5 +4522,8 @@
     "episodeCoversUpTo": "Iki {time} · pilnos pastabos pabaigoje",
     "liveTranscribedUpTo": "Transkribuota iki {time}",
     "liveAudioSaved": "Išsaugota {duration}",
-    "liveAudioSavedDetail": "Kalbėtojai ir galutinė transkripcija atsiras čia įkeliant."
+    "liveAudioSavedDetail": "Kalbėtojai ir galutinė transkripcija atsiras čia įkeliant.",
+    "referralGiftTitle": "Padovanokite draugui mėnesį „Omi Pro“",
+    "referralWebSteps": "1. Pasidalykite asmenine nuoroda.\n2. Draugas užsiregistruoja internete per jūsų nuorodą.\n3. Reikalavimus atitinkančios naujos paskyros gauna 30 dienų „Omi Pro“.",
+    "referralAffiliate": "Partnerių programa"
 }

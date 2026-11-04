@@ -4522,5 +4522,8 @@
     "episodeCoversUpTo": "Đến {time} · ghi chú đầy đủ khi kết thúc",
     "liveTranscribedUpTo": "Đã chép đến {time}",
     "liveAudioSaved": "Đã lưu {duration}",
-    "liveAudioSavedDetail": "Người nói và bản chép cuối cùng sẽ xuất hiện ở đây khi tải lên."
+    "liveAudioSavedDetail": "Người nói và bản chép cuối cùng sẽ xuất hiện ở đây khi tải lên.",
+    "referralGiftTitle": "Tặng bạn bè một tháng Omi Pro",
+    "referralWebSteps": "1. Chia sẻ liên kết cá nhân của bạn.\n2. Bạn bè đăng ký trên web qua liên kết của bạn.\n3. Tài khoản mới đủ điều kiện nhận 30 ngày Omi Pro.",
+    "referralAffiliate": "Chương trình tiếp thị liên kết"
 }

@@ -14972,4 +14972,14 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'अपलोड होताना वक्ते आणि अंतिम ट्रान्सक्रिप्ट येथे दिसतील.';
+
+  @override
+  String get referralGiftTitle => 'मित्राला एक महिन्याचे Omi Pro द्या';
+
+  @override
+  String get referralWebSteps =>
+      '1. तुमची वैयक्तिक लिंक शेअर करा.\n2. तुमचा मित्र तुमच्या लिंकद्वारे वेबवर नोंदणी करतो.\n3. पात्र नवीन खात्यांना 30 दिवसांचे Omi Pro मिळते.';
+
+  @override
+  String get referralAffiliate => 'अ‍ॅफिलिएट कार्यक्रम';
 }

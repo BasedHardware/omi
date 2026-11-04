@@ -15009,4 +15009,14 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Los hablantes y la transcripción final aparecerán aquí a medida que se suba.';
+
+  @override
+  String get referralGiftTitle => 'Regala a un amigo un mes de Omi Pro';
+
+  @override
+  String get referralWebSteps =>
+      '1. Comparte tu enlace personal.\n2. Tu amigo se registra en la web a través de tu enlace.\n3. Las cuentas nuevas que cumplan los requisitos reciben 30 días de Omi Pro.';
+
+  @override
+  String get referralAffiliate => 'Programa de afiliados';
 }

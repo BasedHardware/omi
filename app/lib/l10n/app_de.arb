@@ -4522,5 +4522,8 @@
     "episodeCoversUpTo": "Bis {time} · vollständige Notizen zum Schluss",
     "liveTranscribedUpTo": "Transkribiert bis {time}",
     "liveAudioSaved": "{duration} gespeichert",
-    "liveAudioSavedDetail": "Sprecher und endgültiges Transkript erscheinen hier beim Hochladen."
+    "liveAudioSavedDetail": "Sprecher und endgültiges Transkript erscheinen hier beim Hochladen.",
+    "referralGiftTitle": "Schenke einem Freund einen Monat Omi Pro",
+    "referralWebSteps": "1. Teile deinen persönlichen Link.\n2. Dein Freund registriert sich im Web über deinen Link.\n3. Berechtigte neue Konten erhalten 30 Tage Omi Pro.",
+    "referralAffiliate": "Partnerprogramm"
 }

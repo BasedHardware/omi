@@ -4522,5 +4522,8 @@
     "episodeCoversUpTo": "Kattaa klo {time} asti · täydet muistiinpanot lopuksi",
     "liveTranscribedUpTo": "Litteroitu klo {time} asti",
     "liveAudioSaved": "{duration} tallennettu",
-    "liveAudioSavedDetail": "Puhujat ja lopullinen litterointi tulevat tähän latauksen edetessä."
+    "liveAudioSavedDetail": "Puhujat ja lopullinen litterointi tulevat tähän latauksen edetessä.",
+    "referralGiftTitle": "Anna ystävälle kuukausi Omi Prota",
+    "referralWebSteps": "1. Jaa henkilökohtainen linkkisi.\n2. Ystäväsi rekisteröityy verkossa linkkisi kautta.\n3. Ehdot täyttävät uudet tilit saavat 30 päivää Omi Prota.",
+    "referralAffiliate": "Kumppaniohjelma"
 }

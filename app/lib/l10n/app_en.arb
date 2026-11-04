@@ -18296,5 +18296,8 @@
     "liveAudioSavedDetail": "Speakers and the final transcript fill in here as it uploads.",
     "@liveAudioSavedDetail": {
         "description": "Under the saved-audio card's heading."
-    }
+    },
+    "referralGiftTitle": "Give a friend a month of Omi Pro",
+    "referralWebSteps": "1. Share your personal link.\n2. Your friend signs up on the web through your link.\n3. Eligible new accounts get 30 days of Omi Pro.",
+    "referralAffiliate": "Affiliate program"
 }

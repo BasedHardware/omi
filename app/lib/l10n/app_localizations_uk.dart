@@ -14995,4 +14995,14 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Учасники й остаточна транскрипція з\'являться тут під час завантаження.';
+
+  @override
+  String get referralGiftTitle => 'Подаруйте другу місяць Omi Pro';
+
+  @override
+  String get referralWebSteps =>
+      '1. Поділіться особистим посиланням.\n2. Друг реєструється в інтернеті через ваше посилання.\n3. Нові облікові записи, що відповідають умовам, отримують 30 днів Omi Pro.';
+
+  @override
+  String get referralAffiliate => 'Партнерська програма';
 }

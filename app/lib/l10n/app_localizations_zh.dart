@@ -14732,4 +14732,13 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => '上传时，说话人和最终转录内容会显示在这里。';
+
+  @override
+  String get referralGiftTitle => '送朋友一个月 Omi Pro';
+
+  @override
+  String get referralWebSteps => '1. 分享你的专属链接。\n2. 朋友通过你的链接在网页上注册。\n3. 符合条件的新账户可获得 30 天 Omi Pro。';
+
+  @override
+  String get referralAffiliate => '推广合作计划';
 }

@@ -15027,4 +15027,14 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'అప్‌లోడ్ అవుతున్నప్పుడు వక్తలు, తుది ట్రాన్స్‌క్రిప్ట్ ఇక్కడ కనిపిస్తాయి.';
+
+  @override
+  String get referralGiftTitle => 'స్నేహితుడికి ఒక నెల Omi Pro ఇవ్వండి';
+
+  @override
+  String get referralWebSteps =>
+      '1. మీ వ్యక్తిగత లింక్ పంచుకోండి.\n2. మీ స్నేహితుడు మీ లింక్ ద్వారా వెబ్‌లో నమోదు చేస్తారు.\n3. అర్హత గల కొత్త ఖాతాలకు 30 రోజుల Omi Pro లభిస్తుంది.';
+
+  @override
+  String get referralAffiliate => 'అఫిలియేట్ ప్రోగ్రామ్';
 }

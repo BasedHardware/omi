@@ -4618,5 +4618,8 @@
     "episodeCoversUpTo": "{time}-ig · teljes jegyzetek a végén",
     "liveTranscribedUpTo": "Átírva eddig: {time}",
     "liveAudioSaved": "{duration} mentve",
-    "liveAudioSavedDetail": "A beszélők és a végleges átirat feltöltés közben itt jelennek meg."
+    "liveAudioSavedDetail": "A beszélők és a végleges átirat feltöltés közben itt jelennek meg.",
+    "referralGiftTitle": "Ajándékozz egy hónap Omi Prót egy barátodnak",
+    "referralWebSteps": "1. Oszd meg személyes linkedet.\n2. Barátod a linkeden keresztül regisztrál a weben.\n3. A jogosult új fiókok 30 nap Omi Prót kapnak.",
+    "referralAffiliate": "Partnerprogram"
 }

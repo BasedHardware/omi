@@ -4522,5 +4522,8 @@
     "episodeCoversUpTo": "Dekker frem til {time} · fullstendige notater til slutt",
     "liveTranscribedUpTo": "Transkribert frem til {time}",
     "liveAudioSaved": "{duration} lagret",
-    "liveAudioSavedDetail": "Talere og den endelige transkripsjonen dukker opp her under opplasting."
+    "liveAudioSavedDetail": "Talere og den endelige transkripsjonen dukker opp her under opplasting.",
+    "referralGiftTitle": "Gi en venn en måned med Omi Pro",
+    "referralWebSteps": "1. Del din personlige lenke.\n2. Vennen registrerer seg på nettet via lenken din.\n3. Nye kontoer som oppfyller kravene får 30 dager med Omi Pro.",
+    "referralAffiliate": "Partnerprogram"
 }

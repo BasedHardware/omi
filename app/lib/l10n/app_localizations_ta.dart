@@ -15067,4 +15067,14 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'பதிவேற்றத்தின் போது பேசுபவர்களும் இறுதி படியெடுப்பும் இங்கே வரும்.';
+
+  @override
+  String get referralGiftTitle => 'நண்பருக்கு ஒரு மாத Omi Pro வழங்குங்கள்';
+
+  @override
+  String get referralWebSteps =>
+      '1. உங்கள் தனிப்பட்ட இணைப்பைப் பகிருங்கள்.\n2. உங்கள் நண்பர் உங்கள் இணைப்பு வழியாக இணையத்தில் பதிவு செய்கிறார்.\n3. தகுதியான புதிய கணக்குகளுக்கு 30 நாட்கள் Omi Pro கிடைக்கும்.';
+
+  @override
+  String get referralAffiliate => 'இணைப்பு சந்தைப்படுத்தல் திட்டம்';
 }

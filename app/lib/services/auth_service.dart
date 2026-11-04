@@ -180,6 +180,7 @@ class AuthService {
   final StreamController<int> _sessionGenerationController = StreamController<int>.broadcast(sync: true);
   Future<AuthTokenResult>? _refreshInFlight;
   Future<void>? _expireSessionInFlight;
+  Object? _expirationOwner;
   bool _sessionExpired = false;
   int _sessionGeneration = 0;
   String? _refreshUserUid;
@@ -587,18 +588,25 @@ class AuthService {
     final inFlight = _expireSessionInFlight;
     if (_sessionExpired) return inFlight ?? Future<void>.value();
 
+    final ownerUid = _tokenGateway.currentUser?.uid;
+    final owner = Object();
+    _expirationOwner = owner;
     _sessionExpired = true;
     _invalidateRefreshes();
+    final generation = _sessionGeneration;
     _clearCachedIdentityAndAuth();
     _sessionExpiredController.add(event);
-    final expiration = _runSessionExpiration();
+    final expiration = _runSessionExpiration(ownerUid, generation, owner);
     _expireSessionInFlight = expiration;
     return expiration;
   }
 
-  Future<void> _runSessionExpiration() async {
+  Future<void> _runSessionExpiration(String? ownerUid, int generation, Object owner) async {
     await _prepareSiriBestEffort();
     try {
+      if (_sessionGeneration != generation ||
+          _tokenGateway.currentUser?.uid != ownerUid ||
+          !identical(_expirationOwner, owner)) return;
       await _tokenGateway.signOut();
     } catch (e) {
       // Local session state is already terminal and cleared. A platform sign-
@@ -606,7 +614,10 @@ class AuthService {
       // stale authenticated shell.
       Logger.debug('expireSession: Firebase sign-out failed: ${e.runtimeType}');
     } finally {
-      _expireSessionInFlight = null;
+      if (identical(_expirationOwner, owner)) {
+        _expireSessionInFlight = null;
+        _expirationOwner = null;
+      }
     }
   }
 

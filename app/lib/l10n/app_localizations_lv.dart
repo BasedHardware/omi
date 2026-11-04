@@ -14998,4 +14998,14 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Runātāji un galīgā transkripcija šeit parādīsies augšupielādes laikā.';
+
+  @override
+  String get referralGiftTitle => 'Uzdāviniet draugam mēnesi Omi Pro';
+
+  @override
+  String get referralWebSteps =>
+      '1. Kopīgojiet savu personīgo saiti.\n2. Draugs reģistrējas tīmeklī, izmantojot jūsu saiti.\n3. Atbilstoši jauni konti saņem 30 dienas Omi Pro.';
+
+  @override
+  String get referralAffiliate => 'Partneru programma';
 }

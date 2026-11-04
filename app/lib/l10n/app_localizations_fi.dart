@@ -14968,4 +14968,14 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Puhujat ja lopullinen litterointi tulevat tähän latauksen edetessä.';
+
+  @override
+  String get referralGiftTitle => 'Anna ystävälle kuukausi Omi Prota';
+
+  @override
+  String get referralWebSteps =>
+      '1. Jaa henkilökohtainen linkkisi.\n2. Ystäväsi rekisteröityy verkossa linkkisi kautta.\n3. Ehdot täyttävät uudet tilit saavat 30 päivää Omi Prota.';
+
+  @override
+  String get referralAffiliate => 'Kumppaniohjelma';
 }

@@ -15023,4 +15023,14 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'A beszélők és a végleges átirat feltöltés közben itt jelennek meg.';
+
+  @override
+  String get referralGiftTitle => 'Ajándékozz egy hónap Omi Prót egy barátodnak';
+
+  @override
+  String get referralWebSteps =>
+      '1. Oszd meg személyes linkedet.\n2. Barátod a linkeden keresztül regisztrál a weben.\n3. A jogosult új fiókok 30 nap Omi Prót kapnak.';
+
+  @override
+  String get referralAffiliate => 'Partnerprogram';
 }

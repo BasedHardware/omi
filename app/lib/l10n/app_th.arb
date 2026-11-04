@@ -4522,5 +4522,8 @@
     "episodeCoversUpTo": "ครอบคลุมถึง {time} · บันทึกฉบับเต็มเมื่อจบ",
     "liveTranscribedUpTo": "ถอดความถึง {time}",
     "liveAudioSaved": "บันทึกแล้ว {duration}",
-    "liveAudioSavedDetail": "ผู้พูดและบทถอดความฉบับสุดท้ายจะปรากฏที่นี่ระหว่างอัปโหลด"
+    "liveAudioSavedDetail": "ผู้พูดและบทถอดความฉบับสุดท้ายจะปรากฏที่นี่ระหว่างอัปโหลด",
+    "referralGiftTitle": "มอบ Omi Pro หนึ่งเดือนให้เพื่อน",
+    "referralWebSteps": "1. แชร์ลิงก์ส่วนตัวของคุณ\n2. เพื่อนสมัครบนเว็บผ่านลิงก์ของคุณ\n3. บัญชีใหม่ที่มีสิทธิ์จะได้รับ Omi Pro 30 วัน",
+    "referralAffiliate": "โปรแกรมพันธมิตร"
 }

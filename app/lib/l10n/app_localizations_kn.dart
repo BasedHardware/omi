@@ -15013,4 +15013,14 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'ಅಪ್‌ಲೋಡ್ ಆಗುತ್ತಿದ್ದಂತೆ ಮಾತನಾಡುವವರು ಮತ್ತು ಅಂತಿಮ ಪ್ರತಿಲೇಖನ ಇಲ್ಲಿ ಬರುತ್ತವೆ.';
+
+  @override
+  String get referralGiftTitle => 'ಸ್ನೇಹಿತರಿಗೆ ಒಂದು ತಿಂಗಳ Omi Pro ನೀಡಿ';
+
+  @override
+  String get referralWebSteps =>
+      '1. ನಿಮ್ಮ ವೈಯಕ್ತಿಕ ಲಿಂಕ್ ಹಂಚಿಕೊಳ್ಳಿ.\n2. ನಿಮ್ಮ ಸ್ನೇಹಿತರು ನಿಮ್ಮ ಲಿಂಕ್ ಮೂಲಕ ವೆಬ್‌ನಲ್ಲಿ ನೋಂದಾಯಿಸುತ್ತಾರೆ.\n3. ಅರ್ಹ ಹೊಸ ಖಾತೆಗಳಿಗೆ 30 ದಿನಗಳ Omi Pro ಸಿಗುತ್ತದೆ.';
+
+  @override
+  String get referralAffiliate => 'ಅಫಿಲಿಯೇಟ್ ಕಾರ್ಯಕ್ರಮ';
 }

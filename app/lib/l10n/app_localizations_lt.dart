@@ -14986,4 +14986,14 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Kalbėtojai ir galutinė transkripcija atsiras čia įkeliant.';
+
+  @override
+  String get referralGiftTitle => 'Padovanokite draugui mėnesį „Omi Pro“';
+
+  @override
+  String get referralWebSteps =>
+      '1. Pasidalykite asmenine nuoroda.\n2. Draugas užsiregistruoja internete per jūsų nuorodą.\n3. Reikalavimus atitinkančios naujos paskyros gauna 30 dienų „Omi Pro“.';
+
+  @override
+  String get referralAffiliate => 'Partnerių programa';
 }

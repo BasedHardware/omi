@@ -14891,4 +14891,14 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'ผู้พูดและบทถอดความฉบับสุดท้ายจะปรากฏที่นี่ระหว่างอัปโหลด';
+
+  @override
+  String get referralGiftTitle => 'มอบ Omi Pro หนึ่งเดือนให้เพื่อน';
+
+  @override
+  String get referralWebSteps =>
+      '1. แชร์ลิงก์ส่วนตัวของคุณ\n2. เพื่อนสมัครบนเว็บผ่านลิงก์ของคุณ\n3. บัญชีใหม่ที่มีสิทธิ์จะได้รับ Omi Pro 30 วัน';
+
+  @override
+  String get referralAffiliate => 'โปรแกรมพันธมิตร';
 }

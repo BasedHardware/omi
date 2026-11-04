@@ -14962,4 +14962,14 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Mluvčí a konečný přepis se zde objeví během nahrávání.';
+
+  @override
+  String get referralGiftTitle => 'Darujte příteli měsíc Omi Pro';
+
+  @override
+  String get referralWebSteps =>
+      '1. Sdílejte svůj osobní odkaz.\n2. Přítel se zaregistruje na webu přes váš odkaz.\n3. Nové způsobilé účty získají 30 dní Omi Pro.';
+
+  @override
+  String get referralAffiliate => 'Partnerský program';
 }

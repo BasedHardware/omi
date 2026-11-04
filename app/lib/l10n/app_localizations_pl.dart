@@ -15007,4 +15007,14 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Rozmówcy i końcowa transkrypcja pojawią się tutaj podczas przesyłania.';
+
+  @override
+  String get referralGiftTitle => 'Podaruj znajomemu miesiąc Omi Pro';
+
+  @override
+  String get referralWebSteps =>
+      '1. Udostępnij swój osobisty link.\n2. Znajomy rejestruje się w internecie przez Twój link.\n3. Nowe konta spełniające warunki otrzymują 30 dni Omi Pro.';
+
+  @override
+  String get referralAffiliate => 'Program partnerski';
 }

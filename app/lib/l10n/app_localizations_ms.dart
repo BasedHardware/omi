@@ -15001,4 +15001,14 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Penutur dan transkrip akhir akan muncul di sini semasa dimuat naik.';
+
+  @override
+  String get referralGiftTitle => 'Hadiahkan rakan sebulan Omi Pro';
+
+  @override
+  String get referralWebSteps =>
+      '1. Kongsi pautan peribadi anda.\n2. Rakan mendaftar di web melalui pautan anda.\n3. Akaun baharu yang layak mendapat 30 hari Omi Pro.';
+
+  @override
+  String get referralAffiliate => 'Program ahli gabungan';
 }

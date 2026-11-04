@@ -4522,5 +4522,8 @@
     "episodeCoversUpTo": "Cubre hasta las {time} · notas completas al terminar",
     "liveTranscribedUpTo": "Transcrito hasta las {time}",
     "liveAudioSaved": "{duration} guardados",
-    "liveAudioSavedDetail": "Los hablantes y la transcripción final aparecerán aquí a medida que se suba."
+    "liveAudioSavedDetail": "Los hablantes y la transcripción final aparecerán aquí a medida que se suba.",
+    "referralGiftTitle": "Regala a un amigo un mes de Omi Pro",
+    "referralWebSteps": "1. Comparte tu enlace personal.\n2. Tu amigo se registra en la web a través de tu enlace.\n3. Las cuentas nuevas que cumplan los requisitos reciben 30 días de Omi Pro.",
+    "referralAffiliate": "Programa de afiliados"
 }

@@ -4522,5 +4522,8 @@
     "episodeCoversUpTo": "涵盖至 {time} · 结束后提供完整笔记",
     "liveTranscribedUpTo": "已转录至 {time}",
     "liveAudioSaved": "已保存 {duration}",
-    "liveAudioSavedDetail": "上传时，说话人和最终转录内容会显示在这里。"
+    "liveAudioSavedDetail": "上传时，说话人和最终转录内容会显示在这里。",
+    "referralGiftTitle": "送朋友一个月 Omi Pro",
+    "referralWebSteps": "1. 分享你的专属链接。\n2. 朋友通过你的链接在网页上注册。\n3. 符合条件的新账户可获得 30 天 Omi Pro。",
+    "referralAffiliate": "推广合作计划"
 }

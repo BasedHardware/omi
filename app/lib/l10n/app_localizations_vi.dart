@@ -14966,4 +14966,14 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Người nói và bản chép cuối cùng sẽ xuất hiện ở đây khi tải lên.';
+
+  @override
+  String get referralGiftTitle => 'Tặng bạn bè một tháng Omi Pro';
+
+  @override
+  String get referralWebSteps =>
+      '1. Chia sẻ liên kết cá nhân của bạn.\n2. Bạn bè đăng ký trên web qua liên kết của bạn.\n3. Tài khoản mới đủ điều kiện nhận 30 ngày Omi Pro.';
+
+  @override
+  String get referralAffiliate => 'Chương trình tiếp thị liên kết';
 }
