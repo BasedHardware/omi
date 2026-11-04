@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -379,283 +377,32 @@ void main() {
 
   for (final state in ['capped', 'waiting_choice', 'processing', 'none']) {
     for (final surface in ['a', 'b', 'c']) {
-      testWidgets('$surface follows server $state even on phone', (tester) async {
+      testWidgets('$surface hides processing card for $state and retains neighbors', (tester) async {
+        var toggleCalls = 0;
         final value = backlog(state);
         final controller = phone(enabled: true);
         final Widget child = switch (surface) {
           'a' => HeldAudioHomeSection(controller: controller, gate: true, summary: summary(), backlog: value),
           'b' => HeldAudioLiveBanner(controller: controller, gate: true, recordedSeconds: 60, backlog: value),
-          _ => HeldAudioUsageSection(controller: controller, gate: true, backlog: value, paid: true),
+          _ => HeldAudioUsageSection(
+              controller: controller, gate: true, backlog: value, paid: true, onSaveLiveHours: (_) => toggleCalls++),
         };
         await pump(tester, child);
-        expect(find.byKey(Key('processing_backlog_$surface')), state == 'none' ? findsNothing : findsOneWidget);
-        expect(find.byKey(Key('processing_backlog_process_$surface')),
-            state == 'waiting_choice' ? findsOneWidget : findsNothing);
-        expect(find.textContaining('resets'), findsNothing);
-        if (state == 'waiting_choice') {
-          expect(find.text('2h waiting · Process now uses about 13% of this month'), findsOneWidget);
+        expect(find.byKey(Key('processing_backlog_$surface')), findsNothing);
+        expect(find.textContaining('Process now uses about'), findsNothing);
+        expect(find.text('Process waiting recordings'), findsNothing);
+        expect(find.byKey(Key('processing_backlog_upgrade_$surface')), findsNothing);
+        if (surface == 'a' && state != 'none') {
+          expect(find.byKey(const Key('held_audio_row_newer')), findsOneWidget);
+          expect(find.byKey(const Key('held_audio_row_older')), findsOneWidget);
         }
-        if (state != 'none') expect(find.byKey(Key('processing_backlog_upgrade_$surface')), findsOneWidget);
+        if (surface == 'c' && state != 'none') {
+          expect(find.byKey(const Key('held_audio_usage_toggle')), findsOneWidget);
+          await tester.tap(find.byType(Switch));
+          await tester.pump();
+          expect(toggleCalls, 1);
+        }
       });
     }
   }
-
-  testWidgets('waiting length adds held and deferred audio without converting processing estimate', (tester) async {
-    await pump(
-        tester,
-        ProcessingBacklogView(
-            backlog: const ProcessingBacklog(
-                state: 'waiting_choice',
-                heldAudioSeconds: 3600,
-                deferredSeconds: 1800,
-                estimatedHours: 8,
-                estimatedPercent: 12.5),
-            surface: 'a',
-            onUpgrade: () {},
-            onProcess: () async => true));
-    expect(find.text('1h 30m waiting · Process now uses about 13% of this month'), findsOneWidget);
-    await tester.tap(find.byKey(const Key('processing_backlog_process_a')));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 400));
-    expect(find.textContaining("About 8 hours of processing"), findsOneWidget);
-    await tester.tap(find.text('Not now').last);
-    await tester.pumpAndSettle();
-  });
-
-  testWidgets('deferred-only waiting length is actual seconds even with a large estimate', (tester) async {
-    await pump(
-        tester,
-        ProcessingBacklogView(
-            backlog: const ProcessingBacklog(
-                state: 'waiting_choice', deferredSeconds: 900, estimatedHours: 8, estimatedPercent: 12.5),
-            surface: 'a',
-            onUpgrade: () {}));
-    expect(find.text('15m waiting · Process now uses about 13% of this month'), findsOneWidget);
-  });
-
-  for (final cancelFromDialog in [false, true]) {
-    testWidgets('cancel choice resets uncertain identity via ${cancelFromDialog ? 'dialog' : 'Not Now'}',
-        (tester) async {
-      final keys = <String>[];
-      final usage = UsageProvider(processBacklogRequest: ({required idempotencyKey}) async {
-        keys.add(idempotencyKey);
-        return null;
-      });
-      addTearDown(usage.dispose);
-      final value = backlog('waiting_choice');
-      usage.debugSetSubscription(UserSubscriptionResponse(
-          subscription: Subscription(plan: PlanType.plus, status: SubscriptionStatus.active),
-          transcriptionSecondsUsed: 0,
-          transcriptionSecondsLimit: 3600,
-          wordsTranscribedUsed: 0,
-          wordsTranscribedLimit: 0,
-          insightsGainedUsed: 0,
-          insightsGainedLimit: 0,
-          processingBacklog: value));
-      expect(await usage.processBacklog(), false); // Seed an uncertain prior action.
-      await pump(
-          tester,
-          ChangeNotifierProvider<UsageProvider>.value(
-              value: usage, child: ProcessingBacklogView(backlog: value, surface: 'a', onUpgrade: () {})));
-      if (cancelFromDialog) {
-        await tester.tap(find.byKey(const Key('processing_backlog_process_a')));
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 400));
-        await tester.tap(find.text('Not now').last);
-      } else {
-        await tester.tap(find.byKey(const Key('processing_backlog_not_now_a')));
-      }
-      await tester.pumpAndSettle();
-      expect(keys, hasLength(1), reason: 'cancelling must not send a processing request');
-      expect(await usage.processBacklog(), false);
-      expect(keys.last, isNot(keys.first));
-    });
-  }
-
-  testWidgets('Settings backlog and phone toggle align with a clear gap', (tester) async {
-    await pump(
-        tester,
-        Padding(
-            padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
-            child: HeldAudioUsageSection(
-                controller: phone(), gate: true, backlog: backlog('waiting_choice'), paid: true)));
-    final card = tester.getRect(find.byKey(const Key('processing_backlog_c')));
-    final toggle = tester.getRect(find.byKey(const Key('held_audio_usage_toggle')));
-    expect(card.left, toggle.left);
-    expect(card.right, toggle.right);
-    expect(toggle.top - card.bottom, greaterThanOrEqualTo(OmiSpacing.sm));
-  });
-
-  testWidgets('Not now never invokes processing and Settings still offers the choice', (tester) async {
-    var calls = 0;
-    Future<bool> process() async {
-      calls++;
-      return true;
-    }
-
-    final value = backlog('waiting_choice');
-    await pump(
-        tester,
-        Column(children: [
-          ProcessingBacklogView(backlog: value, surface: 'a', onUpgrade: () {}, onProcess: process),
-          ProcessingBacklogView(backlog: value, surface: 'c', onUpgrade: () {}, onProcess: process),
-        ]));
-    await tester.tap(find.byKey(const Key('processing_backlog_not_now_a')));
-    await tester.pump();
-    expect(calls, 0);
-    expect(find.byKey(const Key('processing_backlog_process_a')), findsNothing);
-    expect(find.byKey(const Key('processing_backlog_process_c')), findsOneWidget);
-  });
-
-  testWidgets('processing confirms server hours and percent with newest-first warning', (tester) async {
-    var calls = 0;
-    await pump(
-        tester,
-        ProcessingBacklogView(
-            backlog: backlog('waiting_choice', exceeds: true),
-            surface: 'a',
-            onUpgrade: () {},
-            onProcess: () async {
-              calls++;
-              return true;
-            }));
-    await tester.tap(find.byKey(const Key('processing_backlog_process_a')));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 400));
-    expect(calls, 0);
-    expect(find.textContaining("About 2.5 hours of processing · 13% of this month's allowance."), findsOneWidget);
-    expect(find.textContaining("We'll process the newest recordings first"), findsOneWidget);
-    await tester.tap(find.text('Process waiting recordings').last);
-    await tester.pumpAndSettle();
-    expect(calls, 1);
-  });
-
-  testWidgets('declining confirmation leaves everything waiting', (tester) async {
-    var calls = 0;
-    await pump(
-        tester,
-        ProcessingBacklogView(
-            backlog: backlog('waiting_choice'),
-            surface: 'a',
-            onUpgrade: () {},
-            onProcess: () async {
-              calls++;
-              return true;
-            }));
-    await tester.tap(find.byKey(const Key('processing_backlog_process_a')));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 400));
-    expect(find.textContaining("We'll process the newest recordings first"), findsNothing);
-    await tester.tap(find.text('Not now').last);
-    await tester.pumpAndSettle();
-    expect(calls, 0);
-    expect(find.byKey(const Key('processing_backlog_process_a')), findsOneWidget);
-  });
-
-  test('percent rounds half up to a whole number', () {
-    expect(processingWholePercent(12.5), 13);
-    expect(processingWholePercent(12.4), 12);
-    expect(processingWholePercent(13), 13);
-    expect(processingWholePercent(0), 0);
-    expect(processingWholePercent(double.nan), 0);
-  });
-
-  testWidgets('primary button does not spin behind the confirm dialog', (tester) async {
-    final gate = Completer<bool>();
-    addTearDown(() {
-      if (!gate.isCompleted) gate.complete(true);
-    });
-    await pump(
-        tester,
-        ProcessingBacklogView(
-            backlog: backlog('waiting_choice'), surface: 'a', onUpgrade: () {}, onProcess: () => gate.future));
-    await tester.tap(find.byKey(const Key('processing_backlog_process_a')));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 400));
-    expect(find.byType(CircularProgressIndicator), findsNothing);
-    expect(find.text('Process waiting recordings'), findsWidgets);
-    await tester.tap(find.text('Process waiting recordings').last);
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 50));
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
-    gate.complete(true);
-    await tester.pumpAndSettle();
-    expect(find.byType(CircularProgressIndicator), findsNothing);
-  });
-
-  testWidgets('processing failure is reported without spinning behind the dialog', (tester) async {
-    final reported = <FlutterErrorDetails>[];
-    final previous = FlutterError.onError;
-    FlutterError.onError = (details) {
-      reported.add(details);
-      previous?.call(details);
-    };
-    addTearDown(() => FlutterError.onError = previous);
-
-    final gate = Completer<void>();
-    addTearDown(() {
-      if (!gate.isCompleted) gate.complete();
-    });
-    var calls = 0;
-    await pump(
-        tester,
-        ProcessingBacklogView(
-            backlog: backlog('waiting_choice'),
-            surface: 'a',
-            onUpgrade: () {},
-            onProcess: () async {
-              calls++;
-              await gate.future;
-              throw StateError('process failed');
-            }));
-    await tester.tap(find.byKey(const Key('processing_backlog_process_a')));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 400));
-    expect(find.byType(CircularProgressIndicator), findsNothing);
-    expect(reported, isEmpty);
-
-    await tester.tap(find.text('Process waiting recordings').last);
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 50));
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
-    gate.complete();
-    await tester.pump();
-    expect(tester.takeException(), isA<StateError>());
-    expect(reported, hasLength(1));
-    expect(reported.single.library, 'omi ui');
-    expect(reported.single.exception, isA<StateError>());
-    expect(reported.single.context.toString(), contains('Process waiting recordings'));
-    await tester.pumpAndSettle();
-    expect(find.byType(CircularProgressIndicator), findsNothing);
-    expect(find.byKey(const Key('processing_backlog_process_a')), findsOneWidget);
-    expect(calls, 1);
-
-    await tester.tap(find.byKey(const Key('processing_backlog_process_a')));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 400));
-    expect(find.byType(CircularProgressIndicator), findsNothing);
-    expect(find.textContaining('About 2.5 hours of processing'), findsOneWidget);
-    await tester.tap(find.text('Not now').last);
-    await tester.pumpAndSettle();
-    expect(calls, 1);
-    expect(reported, hasLength(1));
-  });
-
-  testWidgets('unknown allowance pauses without claiming the monthly budget is exhausted', (tester) async {
-    await pump(
-        tester,
-        ProcessingBacklogView(
-          backlog: const ProcessingBacklog(state: 'capped', budgetExhausted: false),
-          surface: 'a',
-          onUpgrade: () {},
-        ));
-    expect(find.text('Waiting for processing'), findsOneWidget);
-    expect(find.textContaining("You've reached this month's limit"), findsNothing);
-    expect(find.byKey(const Key('processing_backlog_process_a')), findsNothing);
-  });
-
-  testWidgets('explicit gate off hides the additive snapshot', (tester) async {
-    await pump(tester, HeldAudioHomeSection(controller: phone(), gate: false, backlog: backlog('capped')));
-    expect(find.byType(ProcessingBacklogView), findsNothing);
-  });
 }

@@ -612,37 +612,9 @@ void main() {
                 fontFallback: language == 'ja' ? const ['SF Pro Display', 'Hiragino Sans'] : const ['SF Pro Display'],
                 home: Scaffold(body: ListView(children: [content])));
             expect(find.textContaining('resets'), findsNothing);
-            expect(find.byKey(Key('processing_backlog_$surface')), state == 'none' ? findsNothing : findsOneWidget);
+            expect(find.byKey(Key('processing_backlog_$surface')), findsNothing);
           });
         }
-      }
-      for (final exceeds in const [false, true]) {
-        testWidgets('held audio v5 confirm $exceeds $language $light', (tester) async {
-          await shoot(tester, 'held-audio-confirm-$exceeds-$language-${light ? 'light' : 'dark'}.png',
-              light: light,
-              locale: Locale(language),
-              fontFallback: language == 'ja' ? const ['SF Pro Display', 'Hiragino Sans'] : const ['SF Pro Display'],
-              home: Scaffold(
-                  body: ListView(children: [
-                ProcessingBacklogView(
-                  backlog: ProcessingBacklog(
-                      state: 'waiting_choice',
-                      heldAudioSeconds: 7200,
-                      deferredSeconds: 1800,
-                      estimatedHours: 2.5,
-                      estimatedPercent: 12.5,
-                      exceedsRemaining: exceeds),
-                  surface: 'a',
-                  onUpgrade: () {},
-                  onProcess: () async => true,
-                )
-              ])), afterPump: (tester) async {
-            // OmiButton holds its Future until the dialog closes: do not await the action Future here.
-            await tester.tap(find.byKey(const Key('processing_backlog_process_a')));
-            await tester.pump();
-            await tester.pump(const Duration(milliseconds: 500));
-          });
-        });
       }
       for (final surface in const ['list', 'detail']) {
         testWidgets('held audio v5 deferred transcript $surface $language $light', (tester) async {
