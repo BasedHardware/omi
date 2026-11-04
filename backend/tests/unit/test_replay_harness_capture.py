@@ -392,7 +392,10 @@ BUCKETS = {'BUCKET_BATCH_PIPELINE': 'batch', 'BUCKET_PRIVATE_CLOUD_SYNC': 'chunk
 
 def test_owner_case_is_replayable_private_tokenized_and_byte_exact(tmp_path, capsys, caplog):
     db, storage = OwnerDB(), OwnerStorage()
-    assert capture.capture_owner(db, storage, tmp_path, digest, UID, [CID], BUCKETS) == {'cases': 1}
+    assert capture.capture_owner(db, storage, tmp_path, digest, UID, [CID], BUCKETS) == {
+        'cases': 1,
+        'items': [{'item': 'owner-' + digest(CID), 'status': 'complete', 'exception_type': None}],
+    }
     case = tmp_path / ('owner-' + digest(CID))
     manifest = json.loads((case / 'manifest.json').read_text())
     corpus = json.loads((case / 'corpus.json').read_text())
@@ -402,9 +405,11 @@ def test_owner_case_is_replayable_private_tokenized_and_byte_exact(tmp_path, cap
     assert manifest['prod_evidence']['finalization_status'] == 'queued'
     assert manifest['prod_evidence']['has_title'] == 0
     assert all(
-        type(value) is int or value in {'processing', 'queued', 'missing'}
-        for value in manifest['prod_evidence'].values()
+        type(value) is int or value in {'processing', 'queued', 'missing', 'complete'}
+        for key, value in manifest['prod_evidence'].items()
+        if key != 'missing_input'
     )
+    assert manifest['prod_evidence']['missing_input'] == []
     assert set(corpus['jobs']) == set(corpus['results']) == {'unit'}
     assert corpus['jobs']['unit']['owner_id'] == corpus['owner_token']
     assert corpus['conversation'][corpus['owner_token']] == corpus['owner_token']
@@ -442,8 +447,11 @@ def test_owner_capture_refuses_cross_user_links_before_download(tmp_path, kind):
         db.artifact['uri'] = db.uri.replace(db.owner_hash, 'another-owner')
     else:
         db.artifact['uri'] = db.uri.replace('/unit/', '/other-unit/')
-    with pytest.raises(CaptureRefused):
-        capture.capture_owner(db, storage, tmp_path, digest, UID, [CID], BUCKETS)
+    summary = capture.capture_owner(db, storage, tmp_path, digest, UID, [CID], BUCKETS)
+    assert summary['items'] == [
+        {'item': 'owner-' + digest(CID), 'status': 'refused', 'exception_type': 'CaptureRefused'}
+    ]
+    assert not (tmp_path / ('owner-' + digest(CID))).exists()
     assert not any(call[0] == 'ciphertext' for call in storage.calls)
 
 
@@ -456,6 +464,8 @@ def test_missing_ciphertext_is_explicit_evidence_not_synthetic_success(tmp_path)
     corpus = json.loads((case / 'corpus.json').read_text())
     assert manifest['prod_evidence']['missing_blobs'] == 1
     assert manifest['prod_evidence']['ciphertext_blobs'] == 0
+    assert manifest['prod_evidence']['capture_status'] == 'partial'
+    assert manifest['prod_evidence']['missing_input'] == ['BUCKET_BATCH_PIPELINE']
     assert corpus['blob_refs'][0]['status'] == 'missing'
     assert not list((case / 'blobs').iterdir())
 
@@ -516,13 +526,14 @@ def test_firestore_wire_bytes_preserve_type_without_decrypting():
     ) == {'segments': {'_firestore_bytes_base64': 'AP8='}, 'nested': {'words': ['opaque']}}
 
 
+@pytest.mark.parametrize('identity', ['ro-prod', 'prod-operator'])
 @pytest.mark.parametrize('fail', [False, True])
-def test_cli_owner_success_and_failure_never_log_uid(tmp_path, monkeypatch, capsys, fail):
+def test_cli_owner_success_and_failure_never_log_uid(tmp_path, monkeypatch, capsys, fail, identity):
     import google.auth
     from google.auth.transport import requests
     from contextlib import nullcontext
 
-    monkeypatch.setenv('GCP_AGENT_TIER', 'ro-prod')
+    monkeypatch.setenv('GCP_AGENT_TIER', identity)
     monkeypatch.setattr(google.auth, 'default', lambda **kwargs: (object(), 'synthetic-project'))
     monkeypatch.setattr(requests, 'AuthorizedSession', lambda credentials: nullcontext(object()))
     monkeypatch.setattr(capture, 'bucket_config', lambda: BUCKETS)
@@ -551,6 +562,172 @@ def test_cli_owner_success_and_failure_never_log_uid(tmp_path, monkeypatch, caps
     assert capture.main(args) == int(fail)
     logs = capsys.readouterr()
     assert UID not in logs.out + logs.err
-    assert json.loads(logs.out)['capture'] == ('failed' if fail else 'complete')
+    summary = json.loads(logs.out)
+    assert summary['capture'] == ('partial' if fail else 'complete')
+    assert summary['items'][0]['status'] == ('partial' if fail else 'complete')
+    assert summary['items'][0]['exception_type'] == ('RuntimeError' if fail else None)
     assert stat.S_IMODE(output.stat().st_mode) == 0o700
     assert stat.S_IMODE((output / 'salt').stat().st_mode) == 0o600
+
+
+@pytest.mark.parametrize(
+    ('method', 'url', 'allowed'),
+    [
+        ('POST', capture.FIRESTORE_ROOT + ':runQuery', True),
+        ('POST', capture.FIRESTORE_ROOT + ':batchGet', True),
+        ('GET', capture.STORAGE_ROOT + '/b/bucket/o', True),
+        ('GET', capture.FIRESTORE_ROOT + '/collection/doc', False),
+        ('POST', capture.FIRESTORE_ROOT + ':commit', False),
+        ('POST', capture.FIRESTORE_ROOT + ':batchWrite', False),
+        ('POST', capture.STORAGE_ROOT + '/b/bucket/o', False),
+        ('PUT', capture.STORAGE_ROOT + '/b/bucket/o/name', False),
+        ('PATCH', capture.STORAGE_ROOT + '/b/bucket/o/name', False),
+        ('DELETE', capture.STORAGE_ROOT + '/b/bucket/o/name', False),
+        ('GET', 'https://unapproved.invalid/', False),
+    ],
+)
+def test_prod_operator_keeps_the_exact_read_only_transport(monkeypatch, method, url, allowed):
+    monkeypatch.setenv('GCP_AGENT_TIER', 'prod-operator')
+    session = Session([response([])])
+    transport = capture.ReadOnlyTransport(session)
+    if allowed:
+        transport.request(method, url)
+        assert len(session.calls) == 1
+    else:
+        with pytest.raises(capture.ReadOnlyViolation):
+            transport.request(method, url)
+        assert session.calls == []
+
+
+def test_derived_inventory_works_with_list_only_without_get_or_permission_probe(tmp_path):
+    class ListOnlyDerived(OwnerStorage):
+        def permissions(self, bucket):
+            pytest.fail('capture must not require a permissions probe before listing')
+
+        def inventory(self, bucket, prefix):
+            # A real transport with only a listing response: any extra metadata
+            # or object GET would exhaust the fake session and fail this item.
+            session = Session([response({'items': [{'name': prefix + 'chunk', 'generation': '4', 'size': '12'}]})])
+            rows = capture.ReadOnlyStorage(capture.ReadOnlyTransport(session)).inventory(bucket, prefix)
+            assert session.calls[0][1].endswith('/b/' + bucket + '/o')
+            assert len(session.calls) == 1
+            return rows
+
+        def ciphertext(self, bucket, name, generation):
+            assert bucket == BUCKETS['BUCKET_BATCH_PIPELINE']
+            return super().ciphertext(bucket, name, generation)
+
+    summary = capture.capture_owner(OwnerDB(), ListOnlyDerived(), tmp_path, digest, UID, [CID], BUCKETS)
+    assert summary['items'][0]['status'] == 'complete'
+    corpus = json.loads((tmp_path / ('owner-' + digest(CID)) / 'corpus.json').read_text())
+    assert {row['bucket'] for row in corpus['chunk_inventory']} == {'chunks', 'derived'}
+
+
+def test_needed_derived_blob_is_missing_input_without_any_object_get(tmp_path):
+    db, storage = OwnerDB(), OwnerStorage()
+    db.artifact['uri'] = db.uri.replace('gs://batch/', 'gs://derived/')
+    summary = capture.capture_owner(db, storage, tmp_path, digest, UID, [CID], BUCKETS)
+    assert summary['items'][0]['status'] == 'partial'
+    assert summary['items'][0]['exception_type'] == 'StorageReadDenied'
+    assert all(call[1] != 'derived' for call in storage.calls if call[0] == 'ciphertext')
+    case = tmp_path / ('owner-' + digest(CID))
+    manifest = json.loads((case / 'manifest.json').read_text())
+    assert manifest['prod_evidence']['missing_input'] == ['BUCKET_AUDIO_DERIVED']
+    assert manifest['prod_evidence']['ciphertext_blobs'] == 1
+    assert manifest['prod_evidence']['missing_blobs'] == 1
+
+
+def test_denied_blob_records_bucket_only_and_keeps_other_blobs_and_items(tmp_path, capsys, caplog):
+    class TwoArtifacts(OwnerDB):
+        def query(self, collection, **kwargs):
+            if collection.endswith('_artifacts'):
+                return {
+                    'denied': self.artifact,
+                    'readable': {**self.artifact, 'uri': self.uri.replace('key.enc', 'other.enc')},
+                }
+            return super().query(collection, **kwargs)
+
+    class DeniedOnce(OwnerStorage):
+        def ciphertext(self, bucket, name, generation):
+            if name.endswith('/key.enc'):
+                # Exercise the real 403 classification, with an exception
+                # message containing private data that must never be printed.
+                transport = capture.ReadOnlyTransport(Session([response(status=403)]))
+                transport.request('GET', capture.STORAGE_ROOT + '/b/' + bucket + '/o/' + name)
+                pytest.fail('403 must raise')
+            return self.ciphertext_bytes, generation or '124'
+
+    selected = [CID, 'second-conversation']
+    summary = capture.capture_owner(TwoArtifacts(), DeniedOnce(), tmp_path, digest, UID, selected, BUCKETS)
+    assert [item['status'] for item in summary['items']] == ['partial', 'partial']
+    assert [item['exception_type'] for item in summary['items']] == ['StorageReadDenied', 'StorageReadDenied']
+    for cid in selected:
+        case = tmp_path / ('owner-' + digest(cid))
+        manifest = json.loads((case / 'manifest.json').read_text())
+        evidence = manifest['prod_evidence']
+        assert evidence['missing_input'] == ['BUCKET_BATCH_PIPELINE']
+        assert evidence['capture_status'] == 'partial'
+        assert evidence['ciphertext_blobs'] == evidence['missing_blobs'] == 1
+        assert 'key.enc' not in json.dumps(manifest) and UID not in json.dumps(manifest)
+        blobs = list((case / 'blobs').iterdir())
+        assert len(blobs) == 1 and blobs[0].read_bytes() == OwnerStorage.ciphertext_bytes
+    assert UID not in json.dumps(summary) + capsys.readouterr().out + caplog.text
+
+
+@pytest.mark.parametrize(
+    ('error_class', 'status'),
+    [(RuntimeError, 'partial'), (CaptureRefused, 'refused'), (capture.ReadOnlyViolation, 'refused')],
+)
+def test_failed_item_does_not_abort_later_complete_item(tmp_path, error_class, status):
+    class FailingFirst(OwnerDB):
+        def read(self, paths):
+            if any(path.endswith('/failed-conversation') for path in paths):
+                raise error_class('private error ' + UID + ' gs://private/object')
+            return super().read(paths)
+
+    summary = capture.capture_owner(
+        FailingFirst(), OwnerStorage(), tmp_path, digest, UID, ['failed-conversation', CID], BUCKETS
+    )
+    assert summary['items'] == [
+        {'item': 'owner-' + digest('failed-conversation'), 'status': status, 'exception_type': error_class.__name__},
+        {'item': 'owner-' + digest(CID), 'status': 'complete', 'exception_type': None},
+    ]
+    assert UID not in json.dumps(summary) and 'gs://' not in json.dumps(summary)
+    if status == 'partial':
+        case = tmp_path / ('owner-' + digest('failed-conversation'))
+        manifest = json.loads((case / 'manifest.json').read_text())
+        assert manifest['prod_evidence']['capture_status'] == 'partial'
+        assert 'private error' not in (case / 'corpus.json').read_text()
+    assert (tmp_path / ('owner-' + digest(CID)) / 'manifest.json').exists()
+
+
+def test_missing_input_manifest_accepts_only_bucket_keys():
+    for value in (
+        ['gs://bucket/private-object'],
+        [UID],
+        ['BUCKET_AUDIO_DERIVED', 'BUCKET_AUDIO_DERIVED'],
+        [{'bucket': 'BUCKET_AUDIO_DERIVED', 'object': 'secret'}],
+    ):
+        with pytest.raises(ValueError):
+            manifest_stub('case', 'C', {'missing_input': value}, [])
+
+
+@pytest.mark.parametrize('identity', ['ro-prod', 'prod-operator'])
+@pytest.mark.parametrize('mode', ['S', 'check-access'])
+def test_structure_and_access_admit_both_read_guarded_identities(tmp_path, monkeypatch, capsys, identity, mode):
+    import google.auth
+    from google.auth.transport import requests
+    from contextlib import nullcontext
+
+    monkeypatch.setenv('GCP_AGENT_TIER', identity)
+    monkeypatch.setattr(google.auth, 'default', lambda **kwargs: (object(), 'synthetic-project'))
+    monkeypatch.setattr(requests, 'AuthorizedSession', lambda credentials: nullcontext(object()))
+    monkeypatch.setattr(capture, 'bucket_config', lambda: BUCKETS)
+    if mode == 'check-access':
+        monkeypatch.setattr(capture.ReadOnlyStorage, 'permissions', lambda self, bucket: set())
+        args = ['--check-access']
+    else:
+        monkeypatch.setattr(capture.ReadOnlyFirestore, 'query', lambda self, *args, **kwargs: {})
+        args = ['--tier', 'S', '--output', str(tmp_path / 'output')]
+    assert capture.main(args) == 0
+    assert 'capture requires explicit' not in capsys.readouterr().out

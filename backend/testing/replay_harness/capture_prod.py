@@ -1,6 +1,7 @@
 """Read-only production replay seeds. No decryption, service imports or secret loading.
 
-Operator: source gcp-agent-env.sh ro-prod, then run from backend:
+Operator: source gcp-agent-env.sh ro-prod (or prod-operator for artifact get),
+then run from backend. The transport remains read-only with either identity:
   .venv/bin/python -m testing.replay_harness.capture_prod --check-access
   .venv/bin/python -m testing.replay_harness.capture_prod --tier S --output <new-dir>
   .venv/bin/python -m testing.replay_harness.capture_prod --tier C --uid-file <0600> \
@@ -59,6 +60,10 @@ class CaptureReadError(RuntimeError):
     pass
 
 
+class StorageReadDenied(CaptureReadError):
+    pass
+
+
 class ReadOnlyTransport:
     """Capability wrapper: even accidental request/SDK-style writes fail locally.
 
@@ -82,6 +87,8 @@ class ReadOnlyTransport:
         response = self._session.request(method, url, timeout=120, allow_redirects=False, **kwargs)
         if response.status_code == 404:
             return None
+        if storage_read and response.status_code == 403:
+            raise StorageReadDenied('storage read denied')
         if response.status_code != 200:
             raise CaptureReadError('production read failed')
         return response
@@ -367,174 +374,245 @@ def owner_row(row, uid, *, owner_field='owner_id'):
         raise CaptureRefused('related document owner mismatch')
 
 
-def capture_owner(db, storage, output, digest, uid, selected, buckets):
+def capture_owner_item(db, storage, output, digest, uid, cid, buckets):
     owner_hash = hashlib.sha256(uid.encode()).hexdigest()
     token = 'owner-' + digest(uid)
-    for cid in selected:
-        conversation_path = f'users/{uid}/conversations/{cid}'
-        conversation = db.read([conversation_path]).get(conversation_path)
-        jobs = {}
-        for field in ('conversation_id', 'projection_binding.target_conversation_id'):
-            jobs.update(db.query(PREFIX + 'jobs', filters=[eq('owner_id', uid), eq(field, cid)]))
-        stored_segments = (conversation or {}).get('transcript_segments')
-        # Current production stores compressed/encrypted transcript blobs.
-        # Never decode them here; job/binding queries still discover units.
-        inline_segments = stored_segments if isinstance(stored_segments, list) else []
-        scopes = {
-            (segment.get('provider_speaker') or {}).get('scope') or segment.get('speaker_id_scope', '')
-            for segment in inline_segments
-            if isinstance(segment, dict)
-        }
-        units = {
-            document_id(scope.removeprefix('final:batch:'))
-            for scope in scopes
-            if isinstance(scope, str)
-            and scope.startswith('final:batch:')
-            and not scope.startswith('final:batch:conversation:')
-        }
-        units.update(jobs)
-        # A missing job must not hide its still-retained artifact receipt when
-        # transcript scopes are encrypted. Keep this query conversation-scoped.
-        selected_artifacts = db.query(
-            PREFIX + 'artifacts',
-            filters=[
-                eq('owner_id', uid),
-                {
-                    'fieldFilter': {
-                        'field': {'fieldPath': 'conversation_ids'},
-                        'op': 'ARRAY_CONTAINS',
-                        'value': {'stringValue': cid},
-                    }
-                },
-            ],
-        )
-        for row in selected_artifacts.values():
-            owner_row(row, uid)
-            units.add(document_id(row.get('segment_id')))
-        if len(units) > MAX_ROWS:
-            raise CaptureRefused('selected conversation unit limit exceeded')
-        paths = [PREFIX + table + '/' + unit for table in ('jobs', 'results') for unit in sorted(units)]
-        docs = db.read(paths)
-        jobs.update({unit: docs[PREFIX + 'jobs/' + unit] for unit in units if PREFIX + 'jobs/' + unit in docs})
-        for row in jobs.values():
-            owner_row(row, uid)
-        results = {unit: docs[PREFIX + 'results/' + unit] for unit in units if PREFIX + 'results/' + unit in docs}
-        for row in results.values():
-            if row.get('owner_key') != owner_hash:
-                raise CaptureRefused('result owner mismatch')
-        artifacts = dict(selected_artifacts)
-        for unit in sorted(units):
-            artifacts.update(db.query(PREFIX + 'artifacts', filters=[eq('owner_id', uid), eq('segment_id', unit)]))
-        finalization = db.query('conversation_finalization_jobs', filters=[eq('uid', uid), eq('conversation_id', cid)])
-        for row in finalization.values():
-            owner_row(row, uid, owner_field='uid')
-        outbox_id = hashlib.sha256(f'{uid}\0{cid}'.encode()).hexdigest()
-        outbox_path = 'sync_reprocess_outbox/' + outbox_id
-        outbox = db.read([outbox_path]).get(outbox_path)
-        if outbox:
-            owner_row(outbox, uid, owner_field='uid')
-        inventory = []
-        for bucket in sorted({buckets['BUCKET_PRIVATE_CLOUD_SYNC'], buckets['BUCKET_AUDIO_DERIVED']} - {''}):
+    missing_input, errors = set(), []
+    conversation_path = f'users/{uid}/conversations/{cid}'
+    conversation = db.read([conversation_path]).get(conversation_path)
+    jobs = {}
+    for field in ('conversation_id', 'projection_binding.target_conversation_id'):
+        jobs.update(db.query(PREFIX + 'jobs', filters=[eq('owner_id', uid), eq(field, cid)]))
+    stored_segments = (conversation or {}).get('transcript_segments')
+    # Current production stores compressed/encrypted transcript blobs.
+    # Never decode them here; job/binding queries still discover units.
+    inline_segments = stored_segments if isinstance(stored_segments, list) else []
+    scopes = {
+        (segment.get('provider_speaker') or {}).get('scope') or segment.get('speaker_id_scope', '')
+        for segment in inline_segments
+        if isinstance(segment, dict)
+    }
+    units = {
+        document_id(scope.removeprefix('final:batch:'))
+        for scope in scopes
+        if isinstance(scope, str)
+        and scope.startswith('final:batch:')
+        and not scope.startswith('final:batch:conversation:')
+    }
+    units.update(jobs)
+    # A missing job must not hide its still-retained artifact receipt when
+    # transcript scopes are encrypted. Keep this query conversation-scoped.
+    selected_artifacts = db.query(
+        PREFIX + 'artifacts',
+        filters=[
+            eq('owner_id', uid),
+            {
+                'fieldFilter': {
+                    'field': {'fieldPath': 'conversation_ids'},
+                    'op': 'ARRAY_CONTAINS',
+                    'value': {'stringValue': cid},
+                }
+            },
+        ],
+    )
+    for row in selected_artifacts.values():
+        owner_row(row, uid)
+        units.add(document_id(row.get('segment_id')))
+    if len(units) > MAX_ROWS:
+        raise CaptureRefused('selected conversation unit limit exceeded')
+    paths = [PREFIX + table + '/' + unit for table in ('jobs', 'results') for unit in sorted(units)]
+    docs = db.read(paths)
+    jobs.update({unit: docs[PREFIX + 'jobs/' + unit] for unit in units if PREFIX + 'jobs/' + unit in docs})
+    for row in jobs.values():
+        owner_row(row, uid)
+    results = {unit: docs[PREFIX + 'results/' + unit] for unit in units if PREFIX + 'results/' + unit in docs}
+    for row in results.values():
+        if row.get('owner_key') != owner_hash:
+            raise CaptureRefused('result owner mismatch')
+    artifacts = dict(selected_artifacts)
+    for unit in sorted(units):
+        artifacts.update(db.query(PREFIX + 'artifacts', filters=[eq('owner_id', uid), eq('segment_id', unit)]))
+    finalization = db.query('conversation_finalization_jobs', filters=[eq('uid', uid), eq('conversation_id', cid)])
+    for row in finalization.values():
+        owner_row(row, uid, owner_field='uid')
+    outbox_id = hashlib.sha256(f'{uid}\0{cid}'.encode()).hexdigest()
+    outbox_path = 'sync_reprocess_outbox/' + outbox_id
+    outbox = db.read([outbox_path]).get(outbox_path)
+    if outbox:
+        owner_row(outbox, uid, owner_field='uid')
+    inventory, listed = [], set()
+    for bucket_key in ('BUCKET_PRIVATE_CLOUD_SYNC', 'BUCKET_AUDIO_DERIVED'):
+        bucket = buckets[bucket_key]
+        if not bucket or bucket in listed:
+            continue
+        listed.add(bucket)
+        # Listing contains the full inventory seed. In particular, the derived
+        # bucket needs no metadata/media GET or testIamPermissions precondition.
+        try:
             inventory.extend(storage.inventory(bucket, f'chunks/{uid}/{cid}/'))
-        # Prefer exact generations referenced by the paid job/result. Metadata
-        # registration precedes upload and commonly has an unversioned URI.
-        references = [(unit, row.get('audio_uri')) for unit, row in jobs.items()]
-        references += [(unit, (row.get('result') or {}).get('result_uri')) for unit, row in results.items()]
-        versions = {}
-        for _, uri in references:
-            if isinstance(uri, str) and '#' in uri:
-                base, generation = uri.rsplit('#', 1)
-                versions.setdefault(base, set()).add(generation)
-        # Preserve missing metadata as missing: do not fabricate artifact rows.
-        # Still capture owner-bound ciphertext referenced by a job/result, so a
-        # unit_unavailable case includes the bytes even if its receipt vanished.
-        requests = []
-        for key, row in artifacts.items():
-            owner_row(row, uid)
-            if row.get('segment_id') not in units:
-                raise CaptureRefused('artifact escaped selected units')
-            requests.append((key, row.get('uri', ''), row['segment_id']))
-        known = {uri.split('#', 1)[0] for _, uri, _ in requests}
-        for unit, uri in references:
-            if isinstance(uri, str) and uri.startswith('gs://') and uri.split('#', 1)[0] not in known:
-                requests.append((None, uri, unit))
-                known.add(uri.split('#', 1)[0])
-        blobs, blob_refs, missing, total_bytes = [], [], 0, 0
-        saved = set()
-        for key, uri, unit in requests:
-            parsed = urlsplit(uri)
-            name = parsed.path.lstrip('/')
-            prefix = f'batch-pipeline/batch_pipeline_prod/owners/{owner_hash}/'
-            object_parts = name.removeprefix(prefix).split('/')
-            if (
-                parsed.scheme != 'gs'
-                or parsed.netloc != buckets['BUCKET_BATCH_PIPELINE']
-                or parsed.query
-                or not name.startswith(prefix)
-                or not name.endswith('.enc')
-                or len(object_parts) != 3
-                or object_parts[1] != unit
-                or object_parts[0] not in {'audio', 'result', 'results', 'voice_evidence'}
-                or any(part in {'.', '..'} for part in name.split('/'))
-            ):
-                raise CaptureRefused('artifact escaped owner storage')
-            base = uri.split('#', 1)[0]
-            generations = versions.get(base) or {parsed.fragment or None}
-            for generation in sorted(generations, key=str):
+        except CaptureReadError as error:
+            missing_input.add(bucket_key)
+            errors.append(type(error).__name__)
+    # Prefer exact generations referenced by the paid job/result. Metadata
+    # registration precedes upload and commonly has an unversioned URI.
+    references = [(unit, row.get('audio_uri')) for unit, row in jobs.items()]
+    references += [(unit, (row.get('result') or {}).get('result_uri')) for unit, row in results.items()]
+    versions = {}
+    for _, uri in references:
+        if isinstance(uri, str) and '#' in uri:
+            base, generation = uri.rsplit('#', 1)
+            versions.setdefault(base, set()).add(generation)
+    # Preserve missing metadata as missing: do not fabricate artifact rows.
+    # Still capture owner-bound ciphertext referenced by a job/result, so a
+    # unit_unavailable case includes the bytes even if its receipt vanished.
+    requests = []
+    for key, row in artifacts.items():
+        owner_row(row, uid)
+        if row.get('segment_id') not in units:
+            raise CaptureRefused('artifact escaped selected units')
+        requests.append((key, row.get('uri', ''), row['segment_id']))
+    known = {uri.split('#', 1)[0] for _, uri, _ in requests}
+    for unit, uri in references:
+        if isinstance(uri, str) and uri.startswith('gs://') and uri.split('#', 1)[0] not in known:
+            requests.append((None, uri, unit))
+            known.add(uri.split('#', 1)[0])
+    blobs, blob_refs, missing, total_bytes = [], [], 0, 0
+    saved = set()
+    for key, uri, unit in requests:
+        parsed = urlsplit(uri)
+        name = parsed.path.lstrip('/')
+        prefix = f'batch-pipeline/batch_pipeline_prod/owners/{owner_hash}/'
+        object_parts = name.removeprefix(prefix).split('/')
+        bucket_key = next(
+            (
+                key
+                for key in ('BUCKET_BATCH_PIPELINE', 'BUCKET_PRIVATE_CLOUD_SYNC', 'BUCKET_AUDIO_DERIVED')
+                if buckets[key] and buckets[key] == parsed.netloc
+            ),
+            None,
+        )
+        if (
+            parsed.scheme != 'gs'
+            or bucket_key is None
+            or parsed.query
+            or not name.startswith(prefix)
+            or not name.endswith('.enc')
+            or len(object_parts) != 3
+            or object_parts[1] != unit
+            or object_parts[0] not in {'audio', 'result', 'results', 'voice_evidence'}
+            or any(part in {'.', '..'} for part in name.split('/'))
+        ):
+            raise CaptureRefused('artifact escaped owner storage')
+        base = uri.split('#', 1)[0]
+        generations = versions.get(base) or {parsed.fragment or None}
+        for generation in sorted(generations, key=str):
+            try:
+                if bucket_key == 'BUCKET_AUDIO_DERIVED':
+                    # This bucket is inventory-only for both admitted tiers.
+                    # Never try a metadata or media GET, even with operator ADC.
+                    raise StorageReadDenied('derived bucket is list-only')
                 captured = storage.ciphertext(parsed.netloc, name, generation)
-                if captured is None:
-                    missing += 1
-                    blob_refs.append({'artifact_id': key, 'uri': uri, 'status': 'missing'})
-                    continue
-                body, actual_generation = captured
-                local = 'blobs/' + digest(uri.split('#', 1)[0] + ':' + actual_generation) + '.enc'
-                if local not in saved:
-                    total_bytes += len(body)
-                    if total_bytes > 1024 * 1024 * 1024:
-                        raise CaptureRefused('case ciphertext byte limit exceeded')
-                    blobs.append((local, body))
-                    saved.add(local)
-                blob_refs.append(
-                    {'artifact_id': key, 'uri': base + '#' + actual_generation, 'path': local, 'status': 'captured'}
-                )
-        corpus = {
-            'schema': 1,
-            'source': 'firestore-owner-ciphertext',
-            'owner_token': token,
-            'referenced_units': sorted(units),
-            'conversation_id': cid,
-            'conversation': conversation,
-            'jobs': jobs,
-            'results': results,
-            'artifacts': artifacts,
-            'finalization_jobs': finalization,
-            'enrichment_outbox': outbox,
-            'chunk_inventory': inventory,
-            'blob_refs': blob_refs,
-        }
-        evidence = {
-            'jobs': len(jobs),
-            'results': len(results),
-            'artifacts': len(artifacts),
-            'chunks': len(inventory),
-            'ciphertext_blobs': len(blobs),
-            'missing_blobs': missing,
-            'finalization_jobs': len(finalization),
-            'outbox_rows': int(outbox is not None),
-            'has_title': int(bool(((conversation or {}).get('structured') or {}).get('title'))),
-            'has_structured': int(bool((conversation or {}).get('structured'))),
-            'audio_closed': int((conversation or {}).get('record_audio_closed') is True),
-            'conversation_status': enum_fact('conversation_status', (conversation or {}).get('status')),
-            'finalization_status': enum_fact(
-                'finalization_status',
-                finalization.get((conversation or {}).get('finalization_job_id'), {}).get('status'),
-            ),
-            'speaker_status': enum_fact(
-                'speaker_status', ((conversation or {}).get('speaker_resolution') or {}).get('status')
-            ),
-        }
-        write_case(output, 'owner-' + digest(cid), 'C', without_uid(corpus, uid, token), evidence, blobs)
-    return {'cases': len(selected)}
+            except CaptureReadError as error:
+                captured = None
+                errors.append(type(error).__name__)
+            if captured is None:
+                missing += 1
+                missing_input.add(bucket_key)
+                if not errors:
+                    errors.append('FileNotFoundError')
+                blob_refs.append({'artifact_id': key, 'uri': uri, 'status': 'missing'})
+                continue
+            body, actual_generation = captured
+            local = 'blobs/' + digest(uri.split('#', 1)[0] + ':' + actual_generation) + '.enc'
+            if local not in saved:
+                total_bytes += len(body)
+                if total_bytes > 1024 * 1024 * 1024:
+                    raise CaptureRefused('case ciphertext byte limit exceeded')
+                blobs.append((local, body))
+                saved.add(local)
+            blob_refs.append(
+                {'artifact_id': key, 'uri': base + '#' + actual_generation, 'path': local, 'status': 'captured'}
+            )
+    corpus = {
+        'schema': 1,
+        'source': 'firestore-owner-ciphertext',
+        'owner_token': token,
+        'referenced_units': sorted(units),
+        'conversation_id': cid,
+        'conversation': conversation,
+        'jobs': jobs,
+        'results': results,
+        'artifacts': artifacts,
+        'finalization_jobs': finalization,
+        'enrichment_outbox': outbox,
+        'chunk_inventory': inventory,
+        'blob_refs': blob_refs,
+    }
+    evidence = {
+        'capture_status': 'partial' if missing_input else 'complete',
+        'missing_input': sorted(missing_input),
+        'jobs': len(jobs),
+        'results': len(results),
+        'artifacts': len(artifacts),
+        'chunks': len(inventory),
+        'ciphertext_blobs': len(blobs),
+        'missing_blobs': missing,
+        'finalization_jobs': len(finalization),
+        'outbox_rows': int(outbox is not None),
+        'has_title': int(bool(((conversation or {}).get('structured') or {}).get('title'))),
+        'has_structured': int(bool((conversation or {}).get('structured'))),
+        'audio_closed': int((conversation or {}).get('record_audio_closed') is True),
+        'conversation_status': enum_fact('conversation_status', (conversation or {}).get('status')),
+        'finalization_status': enum_fact(
+            'finalization_status',
+            finalization.get((conversation or {}).get('finalization_job_id'), {}).get('status'),
+        ),
+        'speaker_status': enum_fact(
+            'speaker_status', ((conversation or {}).get('speaker_resolution') or {}).get('status')
+        ),
+    }
+    write_case(output, 'owner-' + digest(cid), 'C', without_uid(corpus, uid, token), evidence, blobs)
+    return {
+        'item': 'owner-' + digest(cid),
+        'status': 'partial' if missing_input else 'complete',
+        'exception_type': errors[0] if errors else None,
+    }
+
+
+def capture_owner(db, storage, output, digest, uid, selected, buckets):
+    """An item failure never skips later consented conversations."""
+    items = []
+    for cid in selected:
+        case_id = 'owner-' + digest(cid)
+        try:
+            item = capture_owner_item(db, storage, output, digest, uid, cid, buckets)
+        except (CaptureRefused, ReadOnlyViolation) as error:
+            item = {'item': case_id, 'status': 'refused', 'exception_type': type(error).__name__}
+        except Exception as error:
+            item = {'item': case_id, 'status': 'partial', 'exception_type': type(error).__name__}
+            # Preserve a seed stub for interrupted reads, never an unsafe row or
+            # an exception message. Do not overwrite any partially written case.
+            if not (output / case_id).exists():
+                try:
+                    stub = {
+                        'schema': 1,
+                        'source': 'firestore-owner-ciphertext',
+                        'owner_token': 'owner-' + digest(uid),
+                        'conversation_id': cid,
+                    }
+                    write_case(
+                        output,
+                        case_id,
+                        'C',
+                        without_uid(stub, uid, 'owner-' + digest(uid)),
+                        {'capture_status': 'partial'},
+                    )
+                except Exception as write_error:
+                    item['exception_type'] = type(write_error).__name__
+                    if isinstance(write_error, (CaptureRefused, ReadOnlyViolation)):
+                        item['status'] = 'refused'
+        items.append(item)
+    return {'cases': len(selected), 'items': items}
 
 
 def main(argv=None):
@@ -549,11 +627,11 @@ def main(argv=None):
     args = parser.parse_args(argv)
     try:
         if (
-            os.environ.get('GCP_AGENT_TIER') != 'ro-prod'
+            os.environ.get('GCP_AGENT_TIER') not in {'ro-prod', 'prod-operator'}
             or os.environ.get('FIRESTORE_EMULATOR_HOST')
             or os.environ.get('STORAGE_EMULATOR_HOST')
         ):
-            raise CaptureRefused('capture requires explicit ro-prod and no emulators')
+            raise CaptureRefused('capture requires explicit ro-prod or prod-operator and no emulators')
         if not 1 <= args.limit <= MAX_ROWS:
             raise CaptureRefused('capture limit must be between one and 2000')
         uid, selected = None, None
@@ -591,8 +669,13 @@ def main(argv=None):
                 if args.tier == 'S'
                 else capture_owner(db, storage, args.output, digest, uid, selected, buckets)
             )
-            print(json.dumps({'capture': 'complete', 'tier': args.tier, **summary}, sort_keys=True))
-        return 0
+            complete = all(item['status'] == 'complete' for item in summary.get('items', []))
+            print(
+                json.dumps(
+                    {'capture': 'complete' if complete else 'partial', 'tier': args.tier, **summary}, sort_keys=True
+                )
+            )
+        return 0 if complete else 1
     except Exception as error:
         # Never serialize messages, tracebacks, paths, IDs, SDK URLs or response bodies.
         print(json.dumps({'capture': 'failed', 'exception_type': type(error).__name__}))

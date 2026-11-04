@@ -15,6 +15,7 @@ import re
 
 VERSION = 1
 EVIDENCE_ENUMS = {
+    'capture_status': {'complete', 'partial', 'refused'},
     'conversation_status': {'in_progress', 'processing', 'completed', 'failed', 'deleted', 'other', 'missing'},
     'finalization_status': {'queued', 'leased', 'completed', 'dead_letter', 'blocked_byok', 'other', 'missing'},
     'speaker_status': {
@@ -27,6 +28,7 @@ EVIDENCE_ENUMS = {
         'missing',
     },
 }
+BUCKET_KEYS = frozenset({'BUCKET_BATCH_PIPELINE', 'BUCKET_PRIVATE_CLOUD_SYNC', 'BUCKET_AUDIO_DERIVED'})
 EVIDENCE_COUNTS = frozenset(
     {
         'rows',
@@ -64,7 +66,14 @@ def manifest_stub(case_id, tier, evidence, blobs):
     if not re.fullmatch(r'[a-z0-9-]{1,100}', case_id) or tier not in {'S', 'C'}:
         raise ValueError('invalid capture manifest identity')
     for key, value in evidence.items():
-        if key in EVIDENCE_COUNTS:
+        if key == 'missing_input':
+            if (
+                not isinstance(value, list)
+                or any(not isinstance(bucket, str) or bucket not in BUCKET_KEYS for bucket in value)
+                or len(set(value)) != len(value)
+            ):
+                raise ValueError('missing inputs require unique configured bucket keys')
+        elif key in EVIDENCE_COUNTS:
             if type(value) is not int or value < 0:
                 raise ValueError('invalid capture count')
         elif key not in EVIDENCE_ENUMS or value not in EVIDENCE_ENUMS[key]:
