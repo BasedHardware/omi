@@ -283,8 +283,13 @@ def project_episode(
             phase_shadow.observe('episode_member', row, False, episode=episode)
             hidden += 1
             continue
+        # A transcription-failed member stays projected with its "Couldn't
+        # transcribe" wire status so the user keeps the bounded recovery exit;
+        # the size-ceiling terminal's failed-status visibility exclusion does
+        # not apply to this episode member surface.
+        visibility_row = {**row, 'status': 'completed'} if row.get('status') == 'failed' else row
         if (
-            not conversations.is_visible_conversation(row, include_discarded=not list_row)
+            not conversations.is_visible_conversation(visibility_row, include_discarded=not list_row)
             or row.get('dream_duplicate_of')
             or conversations.bridge_pending.hidden(row)
             or is_relevance_discarded(row)

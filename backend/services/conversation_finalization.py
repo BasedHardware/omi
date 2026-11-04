@@ -352,7 +352,9 @@ def reconcile_listen_finalization_jobs(
                         expected_status=str(candidate.get('status') or ''),
                         expected_dispatch_generation=int(candidate.get('dispatch_generation') or 1),
                         expected_lease_epoch=int(candidate.get('lease_epoch') or 0),
-                        failure_code=str(candidate.get('last_failure_code') or 'final_attempt_failed'),
+                        failure_code=_terminal_failure_row_code(
+                            str(candidate.get('last_failure_code') or 'final_attempt_failed')
+                        ),
                         firestore_client=firestore_client,
                     )
                 except Exception:
@@ -361,6 +363,7 @@ def reconcile_listen_finalization_jobs(
                 else:
                     if terminal:
                         result['terminalized'] += 1
+                        _record_dead_letter(job_id, firestore_client=firestore_client)
                         _emit_dead_letter_observability(
                             job_id,
                             candidate,
@@ -698,6 +701,15 @@ def _normalize_dead_letter_cause(cause: str) -> str:
     return cause if cause in FINALIZATION_DEAD_LETTER_CAUSES else 'unknown'
 
 
+def _terminal_failure_row_code(failure_code: str) -> str:
+    """Preserve the conversation retry vocabulary for every terminal owner."""
+    if failure_code in SMART_MERGE_INCOMPLETE_CODES:
+        return 'processing_failed'
+    if failure_code in {'invalid_job', 'worker_failed'}:
+        return 'final_attempt_failed'
+    return failure_code
+
+
 def _emit_dead_letter_observability(
     job_id: str,
     job: Mapping[str, Any] | None,
@@ -707,7 +719,7 @@ def _emit_dead_letter_observability(
     dispatch_generation: int | None,
     source: str,
 ) -> None:
-    """One ERROR line and one bounded counter child per terminal dead-letter.
+    """One log line and one bounded counter child per terminal dead-letter.
 
     Cause values come only from the closed set (no ids, no exception text);
     a non-member live code maps to ``'unknown'``. Runs solely after a terminal
@@ -715,7 +727,8 @@ def _emit_dead_letter_observability(
     """
     normalized = _normalize_dead_letter_cause(cause)
     OMI_CONVERSATION_FINALIZATION_DEAD_LETTER_TOTAL.labels(cause=normalized).inc()
-    logger.error(
+    log = logger.warning if (job or {}).get('requires_byok') else logger.error
+    log(
         'listen finalization dead_letter terminal=%s job_hash=%s cause=%s budget_requeues=%s '
         'attempt_count=%s dispatch_generation=%s source=%s',
         True,
@@ -758,11 +771,7 @@ def final_attempt_failed(
         )
         OMI_CONVERSATION_FINALIZATION_BUDGET_REQUEUES_TOTAL.labels(cause=cause).inc()
         return 'requeued'
-    row_code = (
-        'processing_failed'
-        if failure_code in SMART_MERGE_INCOMPLETE_CODES
-        else 'final_attempt_failed' if failure_code in {'invalid_job', 'worker_failed'} else failure_code
-    )
+    row_code = _terminal_failure_row_code(failure_code)
     dead_letter_kwargs = {'firestore_client': firestore_client}
     if row_code != 'final_attempt_failed':
         dead_letter_kwargs['failure_code'] = row_code
