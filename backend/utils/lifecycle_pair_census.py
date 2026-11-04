@@ -96,7 +96,12 @@ def sample(client, state, *, now=None):
         field, value = ('finalization_status', 'queued') if phase == 'queued' else ('status', 'processing')
         query = collection.where(filter=FieldFilter(field, '==', value))
     query = query.order_by('__name__')
-    cursor = state.get('cursor')
+    cursors = state.get('cursors')
+    if cursors is None:
+        cursors = {phase: state.get('cursor')}  # Accept a pre-map checkpoint once.
+    if not isinstance(cursors, dict) or set(cursors) - set(PHASES):
+        raise ValueError('invalid census cursor map')
+    cursor = cursors.get(phase)
     if cursor:
         parts = cursor.split('/') if isinstance(cursor, str) else []
         collection_name = 'conversation_finalization_jobs' if phase == 'jobs' else 'conversations'
@@ -168,8 +173,9 @@ def sample(client, state, *, now=None):
             elif max(COHORT_START, current - 86400) <= entered <= current:
                 fresh[kind] += 1
     next_state = {
-        'phase': phase if len(page) == PAGE_SIZE else PHASES[(PHASES.index(phase) + 1) % len(PHASES)],
-        'cursor': page[-1].reference.path if len(page) == PAGE_SIZE else None,
+        'phase': PHASES[(PHASES.index(phase) + 1) % len(PHASES)],
+        'cursors': {**cursors, phase: page[-1].reference.path if len(page) == PAGE_SIZE else None},
+        'cursor': None,
     }
     return counts, blind, next_state, fresh
 

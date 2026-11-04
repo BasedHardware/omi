@@ -21,19 +21,20 @@ def entries():
                     {
                         'phase': phase,
                         **(
-                            {
-                                'cursor': (
-                                    'conversation_finalization_jobs/previous'
-                                    if phase == 'jobs'
-                                    else 'users/shape-user/conversations/previous'
-                                )
-                            }
-                            if cursor
-                            else {}
+                            {'cursor': path}
+                            if mode == 'legacy'
+                            else {'cursors': {phase: path}} if mode == 'map' else {}
                         ),
                     }
                     for phase in ('jobs', 'queued', 'processing')
-                    for cursor in (False, True)
+                    for path in [
+                        (
+                            'conversation_finalization_jobs/previous'
+                            if phase == 'jobs'
+                            else 'users/shape-user/conversations/previous'
+                        )
+                    ]
+                    for mode in ('none', 'legacy', 'map')
                 ]
             },
         ),

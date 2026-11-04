@@ -64,6 +64,11 @@ rows are mutated. A failed read or lost owner never advances the cursor or
 freshness timestamp. The scan state contains the keyset cursor needed to resume;
 it is never exported in labels or logs.
 
+Every admitted page rotates to the next domain, even when that page is full.
+Three separate keyset cursors preserve progress. A large jobs backlog therefore
+cannot prevent the queued and processing domains from being sampled on each
+three-pass rotation.
+
 At 288 passes/day, the ceiling is 115,776 document reads plus 576 cursor writes
 per day, plus up to 288 denied lease reads/day per calling observer. This is a
 bound, not measured spend. Reconcile the additional conversation group field

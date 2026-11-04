@@ -172,15 +172,49 @@ def test_census_resumes_cursor_and_keeps_hard_read_budget(monkeypatch):
     assert result[1] is True
     assert query_client.reads + client.lifecycle_test_reads == 402
     state = client.rows['lifecycle_alarm_scan', 'pairs']
-    assert state['cursor'].endswith('/0199') and state['phase'] == 'jobs'
+    assert state['cursors']['jobs'].endswith('/0199') and state['phase'] == 'queued'
     assert all(tx._max_attempts == 1 for tx in client.transactions)
     assert set(client.rows) == {('lifecycle_alarm_scan', 'pairs')}
+    for owner in ('queued-owner', 'processing-owner'):
+        clock[0] += 301
+        census.run_page(client, clock[0], owner)
+    assert client.rows['lifecycle_alarm_scan', 'pairs']['phase'] == 'jobs'
     clock[0] += 301
     query_client.reads = 0
     result = census.run_page(client, clock[0], 'owner-two')
     assert result[0]['job_live_conv_missing'] == 1
     assert query_client.reads == 2
     assert client.rows['lifecycle_alarm_scan', 'pairs']['phase'] == 'queued'
+
+
+def test_full_jobs_page_cannot_starve_a_queued_mirror():
+    now = census.COHORT_START + 10000
+    rows = {
+        f'conversation_finalization_jobs/{i:04d}': {'status': 'queued', 'uid': 'synthetic', 'conversation_id': str(i)}
+        for i in range(201)
+    }
+    rows['conversation_finalization_jobs/terminal'] = {
+        'status': 'completed',
+        'finalization_revision': 1,
+        'created_at': now - 1,
+    }
+    rows['users/synthetic/conversations/drift'] = {
+        'finalization_status': 'queued',
+        'finalization_job_id': 'terminal',
+        'finalization_revision': 1,
+    }
+    client = Client(rows)
+    _, full, next_state, _ = census.sample(client, {'phase': 'jobs'}, now=now)
+    assert full and next_state['phase'] == 'queued'
+    assert next_state['cursors']['jobs'].endswith('/0199')
+    counts, _, after_queued, fresh = census.sample(client, next_state, now=now + 300)
+    assert counts['conv_queued_job_terminal'] == fresh['conv_queued_job_terminal'] == 1
+    assert after_queued['cursors']['jobs'] == next_state['cursors']['jobs']
+
+
+def test_unbounded_or_unknown_cursor_map_is_refused():
+    with pytest.raises(ValueError, match='invalid census cursor map'):
+        census.sample(Client(), {'phase': 'jobs', 'cursors': {'unknown': 'some/path'}})
 
 
 def test_lease_and_cadence_refuse_duplicate_scans(monkeypatch):
