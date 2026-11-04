@@ -398,7 +398,6 @@ def is_expired_transaction_error(error: BaseException) -> bool:
 # every existing ``database._client`` importer.
 from utils.firestore_transient_types import is_transient_availability_error
 
-
 _DOCUMENT_SIZE_LIMIT_MARKER = "exceeds the maximum allowed size"
 
 # Google RPC codes whose rejections do not change when the same write is
