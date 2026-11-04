@@ -556,6 +556,8 @@ class WorkerValidationReason(StrEnum):
 
     UNKNOWN = 'unknown'
     STAGED_AUDIO_INVALID = 'staged_audio_invalid'
+    RETAINED_AUDIO_INVALID = 'retained_audio_invalid'
+    DECODED_DURATION_MISMATCH = 'decoded_duration_mismatch'
     WORD_SHAPE = 'word_shape'
     WORD_CLOCK = 'word_clock'
     WORD_SEQUENCE = 'word_sequence'

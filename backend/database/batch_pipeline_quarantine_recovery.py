@@ -378,11 +378,12 @@ class RecoveryStore:
 
         return self.store.run(commit)
 
-    def hold_invalid_manifest(self, segment_id, token, now, *, audio_uri):
+    def hold_invalid_manifest(self, segment_id, token, now, *, audio_uri, refusal_reason='invalid_retained_manifest'):
         """Retain a unit whose stored manifest can never materialize, without a paid intent.
 
         failed_held leaves the recovery candidate set, so neither a task retry nor
-        the sweep re-reads it. The manifest and its sources stay in place."""
+        the sweep re-reads it. The manifest and its sources stay in place. The
+        refusal carries the closed permanent-failure family, never error text."""
 
         def commit(tx):
             job, _ = self.checked(tx, segment_id)
@@ -402,7 +403,7 @@ class RecoveryStore:
             ):
                 return False
             job['recovery_state'] = 'failed_held'
-            job['recovery'].update(settled_at=now, refusal={'reason': 'invalid_retained_manifest'})
+            job['recovery'].update(settled_at=now, refusal={'reason': refusal_reason})
             tx.put('jobs', segment_id, job)
             return True
 

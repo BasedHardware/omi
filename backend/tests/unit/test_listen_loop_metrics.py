@@ -288,8 +288,10 @@ async def test_listen_session_entry_starts_lag_probe_before_runtime(monkeypatch)
 
     monkeypatch.setattr(runtime_module, 'ensure_loop_lag_probe', lambda: calls.append('probe'))
     monkeypatch.setattr(runtime_module, 'ListenSessionRuntime', _runtime)
-    with pytest.raises(_Boom):
-        await runtime_module.run_listen_session(SimpleNamespace(source=None))
+    # Pre-supervision failures are classified, logged once and closed with the
+    # terminal code — they never re-raise into the ASGI stack, and the probe
+    # must still have started before the runtime attempt.
+    await runtime_module.run_listen_session(SimpleNamespace(source=None, uid='uid-lag-probe'))
     assert calls == ['probe', 'runtime']
 
 

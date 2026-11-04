@@ -62,7 +62,7 @@ from utils.batch_pipeline.recovery_recognizers import (
     independent_ready,
 )
 from utils.batch_pipeline.recovery_steps import ProviderStep, run_sync, run_async
-from utils.batch_pipeline.source_audio import InvalidRetainedManifest
+from utils.batch_pipeline.source_audio import InvalidRetainedManifest, RetainedAudioInvalid
 from utils.batch_pipeline.recovery_disposition import (
     inspect_audio,
     silence_payload,
@@ -366,6 +366,16 @@ class QuarantineRecovery:
                 if not self.protocol.hold_invalid_manifest(segment_id, token, self.clock(), audio_uri=item.audio_uri):
                     return 'held'
                 logger.info('event=batch_quarantine_recovery outcome=failed_held reason=invalid_retained_manifest')
+                return 'failed_held'
+            except RetainedAudioInvalid:
+                # Same deterministic-bytes permanence for every retained decode
+                # failure: hold once instead of re-reading identical bytes on
+                # every recovery sweep.
+                if not self.protocol.hold_invalid_manifest(
+                    segment_id, token, self.clock(), audio_uri=item.audio_uri, refusal_reason='retained_audio_invalid'
+                ):
+                    return 'held'
+                logger.info('event=batch_quarantine_recovery outcome=failed_held reason=retained_audio_invalid')
                 return 'failed_held'
             duration = item.duration_seconds
             # The input-bound worker VAD is acoustic evidence for ordinary

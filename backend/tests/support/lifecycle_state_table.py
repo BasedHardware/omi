@@ -97,7 +97,12 @@ FIELD_BUILDERS = {
     'database/batch_pipeline_recovery.py': {'state': ['quarantine_fenced.revoke']},
     'database/batch_pipeline_shadow.py': {
         'state': [
+            'ShadowStore._admit_job_row',
+            'ShadowStore._claim_slot',
+            'ShadowStore._consume_slot',
             'ShadowStore._finish',
+            'ShadowStore._pin_running',
+            'ShadowStore._reserve_cas',
             'ShadowStore.handoff.prepare',
             'ShadowStore.offer.update',
             'ShadowStore.ready.publish',
@@ -149,6 +154,8 @@ FIELD_BUILDERS = {
             '_claim_finalization_job_txn',
             '_claim_finalization_replay_txn',
             '_claim_result',
+            '_complete_orphan_conversation_txn',
+            '_complete_unstampable_orphan_conversation_txn',
             '_create_or_get_finalization_intent_txn',
             '_dead_letter_finalization_job',
             '_defer_sync_revision_fence_txn',
@@ -191,6 +198,7 @@ FIELD_BUILDERS = {
         'status': [
             'claim_conversation_status._claim',
             'get_conversations_finished_after',
+            'get_stale_in_progress_conversations',
             'promote_final_pass_if_current.commit',
             'transition_conversation_status',
         ],

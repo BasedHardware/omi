@@ -11,6 +11,7 @@ import json
 import struct
 from typing import Callable
 
+from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from utils.batch_pipeline.audio import audio_unit, with_context
@@ -29,13 +30,22 @@ def batch_timing_store(references: list[dict]) -> str | None:
     return None
 
 
-class InvalidRetainedManifest(ValueError):
+class RetainedAudioInvalid(ValueError):
+    """Retained audio that can never decode from these stored bytes.
+
+    Deterministic on the pinned object generations: a retry re-reads the
+    same bytes and fails the same way, so the failure must end the GPU
+    chain and recovery lane instead of walking the bounded retry ladder.
+    """
+
+
+class InvalidRetainedManifest(RetainedAudioInvalid):
     """The stored manifest itself can never materialize; a retry reads the same bytes."""
 
 
 def decode_source(raw: bytes, ref: dict, owner_key: bytes) -> bytes:
     if not raw or len(raw) > MAX_SOURCE_BYTES:
-        raise ValueError('invalid retained audio size')
+        raise RetainedAudioInvalid('invalid retained audio size')
     metadata = ref.get('metadata') or {}
     path = ref['path']
     encrypted = path.endswith('.enc') or metadata.get('encrypted') == 'true'
@@ -45,27 +55,36 @@ def decode_source(raw: bytes, ref: dict, owner_key: bytes) -> bytes:
         with leaf_timings.measure('decrypt'):
             while offset < len(raw):
                 if offset + 4 > len(raw):
-                    raise ValueError('truncated encrypted audio length')
+                    raise RetainedAudioInvalid('truncated encrypted audio length')
                 size = struct.unpack_from('>I', raw, offset)[0]
                 offset += 4
                 if not 28 <= size <= MAX_SOURCE_BYTES or offset + size > len(raw):
-                    raise ValueError('invalid encrypted audio frame')
-                decoded.extend(aes.decrypt(raw[offset : offset + 12], raw[offset + 12 : offset + size], None))
+                    raise RetainedAudioInvalid('invalid encrypted audio frame')
+                try:
+                    decoded.extend(aes.decrypt(raw[offset : offset + 12], raw[offset + 12 : offset + size], None))
+                except InvalidTag:
+                    raise RetainedAudioInvalid('retained audio authentication failed') from None
                 offset += size
         raw = bytes(decoded)
     if path.startswith('raw-live/'):
         if hashlib.sha256(raw).hexdigest() != metadata.get('sha256'):
-            raise ValueError('retained capture checksum mismatch')
-        return leaf_timings.call('decode', decode_capture, raw, metadata, 16000)
+            raise RetainedAudioInvalid('retained capture checksum mismatch')
+        try:
+            return leaf_timings.call('decode', decode_capture, raw, metadata, 16000)
+        except ValueError as error:
+            raise RetainedAudioInvalid(str(error)) from error
     if '.opus' in path:
         # Existing legacy chunk codec, shared with playback. Import is lazy in
         # the codec binding; no storage/database/provider SDK is constructed.
         from utils.other.audio_opus import decode_opus_to_pcm
 
-        return leaf_timings.call('decode', decode_opus_to_pcm, raw, sample_rate=16000)
+        try:
+            return leaf_timings.call('decode', decode_opus_to_pcm, raw, sample_rate=16000)
+        except ValueError as error:
+            raise RetainedAudioInvalid(str(error)) from error
     rate = int(ref.get('sample_rate', 16000))
     if len(raw) % 2 or not 8000 <= rate <= 48000:
-        raise ValueError('invalid retained PCM')
+        raise RetainedAudioInvalid('invalid retained PCM')
     return leaf_timings.call('decode', audioop.ratecv, raw, 2, 1, rate, 16000, None)[0] if rate != 16000 else raw
 
 
@@ -114,7 +133,7 @@ def read_reference(
         if 'sample_rate' not in ref:
             ref['sample_rate'] = int(ref['metadata'].get('record_sample_rate', 16000))
     if not blob.size or not 0 < blob.size <= MAX_SOURCE_BYTES:
-        raise ValueError('retained audio source exceeds size budget')
+        raise RetainedAudioInvalid('retained audio source exceeds size budget')
     if read_budget is not None:
         read_budget.reserve(blob.size)
     raw = leaf_timings.call(
@@ -163,7 +182,7 @@ def materialize(body: bytes, item, fetch: Callable[[dict], bytes]) -> bytes:
         else:
             source = fetch(ref)
             if hashlib.sha256(source).hexdigest() != ref['pcm_sha256']:
-                raise ValueError('retained PCM digest changed')
+                raise RetainedAudioInvalid('retained PCM digest changed')
             previous_key, previous_source = source_key if pinned else None, source
         start, offset, frames = ref.get('start_frame'), ref.get('offset_frame'), ref.get('frames')
         if any(type(v) is not int for v in (start, offset, frames)) or start < previous or offset < 0 or frames <= 0:

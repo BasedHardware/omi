@@ -176,9 +176,14 @@ def test_route_precedes_packed_segmentation_and_vad_failure(caplog):
 
 
 def test_failure_is_not_silence_and_siblings_survive():
-    worker, _, _, _, _, failures = setup_worker(decode=lambda i: Samples(99) if i.segment_id == 'bad' else Samples(2))
+    def decode(work):
+        if work.segment_id == 'bad':
+            raise RuntimeError('unclassified decode failure')
+        return Samples(2)
+
+    worker, _, _, _, _, failures = setup_worker(decode=decode)
     assert [r.segment_id for r in worker.process_batch([item('bad'), item('ok')])] == ['ok']
-    assert failures == [('bad', 'ValueError')]
+    assert failures == [('bad', 'RuntimeError')]
 
 
 @pytest.mark.asyncio
@@ -771,7 +776,12 @@ def test_failure_reporting_callback_cannot_drop_healthy_sibling():
         decode=lambda i: Samples(99) if i.segment_id == 'bad' else Samples(2),
         on_failure=lambda *args: (_ for _ in ()).throw(OSError()),
     )
-    assert [r.segment_id for r in worker.process_batch([item('bad'), item('good')])] == ['good']
+    results = worker.process_batch([item('bad'), item('good')])
+    # The duration mismatch is terminal (typed disposition), yet the callback
+    # error still cannot drop the healthy sibling's successful result.
+    assert [r.segment_id for r in results] == ['bad', 'good']
+    assert isinstance(results[0], ValidationFailureWork)
+    assert results[1].outcome == 'success'
 
 
 @pytest.mark.parametrize(
@@ -810,7 +820,9 @@ def test_pool_unit_limits_reject_conversation_on_shared_live_before_decode():
         worker.process_batch([item(duration=120)])
     assert worker.process_batch([replace(item(duration=120), unit_kind='capture_span')])
     over, words, _, _, _, failures = setup_worker(config=config, decode=lambda i: Samples(120 + 1 / 16000))
-    assert over.process_batch([replace(item(duration=120), unit_kind='capture_span')]) == []
+    results = over.process_batch([replace(item(duration=120), unit_kind='capture_span')])
+    # Over-ceiling decode is a deterministic admission disagreement: terminal.
+    assert results == [ValidationFailureWork('a', 'fetch_decode', 'decoded_duration_mismatch')]
     assert not words.calls and failures == [('a', 'ValueError')]
 
 

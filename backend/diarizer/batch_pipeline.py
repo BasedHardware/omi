@@ -61,6 +61,7 @@ from utils.batch_pipeline.errors import FatalGpuError
 from utils.batch_pipeline.word_validation import BatchValidationError, ValidationReason, validate_words
 from utils.batch_pipeline.language_metrics import record_route
 from utils.batch_pipeline.stage_timings import StageTimings
+from utils.batch_pipeline.source_audio import RetainedAudioInvalid
 from utils.batch_pipeline.worker_io import DecodeBudget, FirstDecode, PendingResults, PreparedFlight
 from utils.batch_pipeline import worker_metrics
 from utils.observability.fallback import record_fallback
@@ -699,8 +700,28 @@ class PipelineWorker:
                         'truncated staged WAV',
                     }
                 )
+                # Retained audio that can never decode is deterministic on the
+                # pinned stored bytes: a retry re-reads the same bytes and
+                # fails the same way, so it must end the chain instead of
+                # walking the bounded retry ladder on identical input.
+                retained_audio_invalid = stage == WorkerValidationStage.FETCH_DECODE.value and isinstance(
+                    exc, RetainedAudioInvalid
+                )
+                # Admitted capture metadata disagreeing with the decoded extent
+                # is equally deterministic: every retry decodes the same
+                # samples against the same admitted duration.
+                decoded_duration_mismatch = (
+                    stage == WorkerValidationStage.FETCH_DECODE.value
+                    and not retained_audio_invalid
+                    and isinstance(exc, ValueError)
+                    and str(exc) == 'decoded duration differs from admitted capture'
+                )
                 if staged_audio_invalid:
                     reason = WorkerValidationReason.STAGED_AUDIO_INVALID.value
+                elif retained_audio_invalid:
+                    reason = WorkerValidationReason.RETAINED_AUDIO_INVALID.value
+                elif decoded_duration_mismatch:
+                    reason = WorkerValidationReason.DECODED_DURATION_MISMATCH.value
                 state = states.get(item.segment_id, {})
                 measured_vad = state.get('speech_seconds', strict_measurements.get(item.segment_id))
                 receipt = (
@@ -731,9 +752,14 @@ class PipelineWorker:
                             worker_vad_receipt=receipt,
                         )
                     )
-                elif staged_audio_invalid or (
-                    isinstance(exc, BatchValidationError)
-                    and (reason == 'unsupported_language' or worker_validation_disposition_enabled())
+                elif (
+                    staged_audio_invalid
+                    or retained_audio_invalid
+                    or decoded_duration_mismatch
+                    or (
+                        isinstance(exc, BatchValidationError)
+                        and (reason == 'unsupported_language' or worker_validation_disposition_enabled())
+                    )
                 ):
                     # Repeating terminal validation cannot repair staged bytes
                     # or establish silence. End this chain now and retain

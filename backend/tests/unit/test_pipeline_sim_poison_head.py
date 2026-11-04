@@ -72,6 +72,7 @@ POISON_PAYLOAD_KINDS = frozenset(
         'payload:no-words',
         'payload:vad-spans-missing',
         'payload:source-manifest',
+        'payload:retained-undecodable',
         'payload:corrupt-artifact',
         'payload:non-object-result',
         'payload:tampered-artifact',
@@ -171,6 +172,20 @@ def test_permanent_poison_head_advances_or_waits_observably(monkeypatch, kind, l
                 return None
 
             monkeypatch.setattr(audio_module, 'read_context', read_context)
+        elif kind == 'payload:retained-undecodable':
+            # The retained decode family: pinned bytes that can never decode
+            # (typed RetainedAudioInvalid), permanent on every retry.
+            from utils.batch_pipeline.source_audio import RetainedAudioInvalid
+
+            for sid in ids:
+                log.jobs[sid]['requires_compute_admission'] = True
+
+            def fetch(item):
+                if item.segment_id == head:
+                    raise RetainedAudioInvalid('retained capture checksum mismatch')
+                return b'ok'
+
+            projector.fetch_audio = fetch
     elif kind == 'contention-value-error':
         # Luna round 2: the load seam's Firestore-backed authorization can
         # exhaust Aborted retries, surfacing the contention ValueError inside

@@ -56,6 +56,7 @@ _MESSAGES = {
             'retained source has no aligned audio',
             'truncated encrypted audio length',
             'invalid encrypted audio frame',
+            'retained audio authentication failed',
             'retained capture checksum mismatch',
             'invalid retained PCM',
             'retained PCM digest changed',

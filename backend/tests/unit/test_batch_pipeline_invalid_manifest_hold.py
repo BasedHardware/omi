@@ -10,7 +10,13 @@ from fastapi.testclient import TestClient
 import pytest
 
 from tests.unit.test_batch_pipeline_quarantine_recovery import row, setup  # noqa: F401
-from utils.batch_pipeline.source_audio import MAGIC, InvalidRetainedManifest, materialize, read_reference
+from utils.batch_pipeline.source_audio import (
+    MAGIC,
+    InvalidRetainedManifest,
+    RetainedAudioInvalid,
+    materialize,
+    read_reference,
+)
 
 SOURCE = b'\1\0' * 16000
 ITEM = SimpleNamespace(owner_id='o', conversation_id='c', capture_at=1, duration_seconds=1.0)
@@ -161,12 +167,26 @@ def test_invalid_manifest_delivery_answers_2xx_holds_once_and_keeps_audio(setup,
 
 def test_other_audio_errors_keep_their_retryable_path(setup, monkeypatch):
     client, _, _, artifacts, stt, _ = setup
-    artifacts.fetch_audio.side_effect = ValueError('retained PCM digest changed')
+    artifacts.fetch_audio.side_effect = ValueError('transient retained audio read failure')
     response = serve(setup, monkeypatch).post(
         '/v2/batch-pipeline/recover-quarantine', json={'stage': 'prod', 'segment_id': 'bad'}
     )
     assert response.status_code == 500
     assert row(client)['recovery_state'] == 'prepared' and 'refusal' not in row(client)['recovery']
+    stt.assert_not_called()
+
+
+def test_changed_source_digest_holds_once_like_the_other_permanent_failures(setup, monkeypatch):
+    """Generation-pinned bytes cannot change between retries: hold once, not a 500 loop."""
+    client, _, _, artifacts, stt, _ = setup
+    artifacts.fetch_audio.side_effect = RetainedAudioInvalid('retained PCM digest changed')
+    response = serve(setup, monkeypatch).post(
+        '/v2/batch-pipeline/recover-quarantine', json={'stage': 'prod', 'segment_id': 'bad'}
+    )
+    assert response.status_code == 200 and response.json() == {'status': 'failed_held'}
+    job = row(client)
+    assert job['recovery_state'] == 'failed_held'
+    assert job['recovery']['refusal'] == {'reason': 'retained_audio_invalid'}
     stt.assert_not_called()
 
 

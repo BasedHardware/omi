@@ -23,7 +23,12 @@ from google.api_core.exceptions import NotFound
 from utils.batch_pipeline.contracts import WorkItem
 from utils.batch_pipeline import leaf_timings
 from utils.batch_pipeline import voice_centroids
-from utils.batch_pipeline.source_audio import MAGIC as RECORD_MAGIC, materialize, read_reference
+from utils.batch_pipeline.source_audio import (
+    MAGIC as RECORD_MAGIC,
+    RetainedAudioInvalid,
+    materialize,
+    read_reference,
+)
 from utils.batch_pipeline.upload_policy import (
     UPLOAD_CHUNK_BYTES,
     UPLOAD_TIMEOUT,
@@ -309,7 +314,7 @@ class ArtifactStore:
         if body.startswith(RECORD_MAGIC):
             conversation_id = item.conversation_id
             if not conversation_id:
-                raise ValueError('retained audio requires a registered conversation')
+                raise RetainedAudioInvalid('retained audio requires a registered conversation')
             allowed = {
                 os.getenv('BUCKET_PRIVATE_CLOUD_SYNC', 'omi-private-cloud-sync'),
                 os.getenv('BUCKET_AUDIO_DERIVED', '').strip(),
