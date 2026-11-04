@@ -271,3 +271,5 @@ counts in `coverage_reasons`; other verified segments can produce terminal
 `partial_coverage`. Partial passes do not learn recurring voices and leave
 conversation speaker resolution unavailable. Shared units still skip the
 whole pass before reading audio. Complete success rate excludes partial passes.
+
+Dated local validation: [2026-11-04 speaker final pass](validation/2026-11-04-speaker-final-pass.md).
