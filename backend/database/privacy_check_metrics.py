@@ -9,7 +9,7 @@ import logging
 import threading
 import time
 
-from prometheus_client import Counter, Histogram
+from prometheus_client import Counter, Gauge, Histogram
 from database.batch_privacy_attempt import PrivacyAttempt
 from utils.async_tasks import create_named_task, drain_tasks, wait_for_event
 
@@ -42,6 +42,10 @@ DECISION_MISMATCH = Counter(
 )
 SHADOW_CHECKS = Counter('privacy_shadow_checks_total', 'Privacy shadow comparisons', ['family', 'result'])
 MEMO_REQUESTS = Counter('privacy_memo_requests_total', 'Candidate decision reuse', ['family', 'result'])
+TTL_BOUND_SECONDS = 60.0
+TTL_CACHE = Counter(
+    'privacy_ttl_cache_total', '60s-bounded privacy decision reuse (hit, miss, store)', ['family', 'result']
+)
 CENSUS = Histogram(
     'privacy_session_cycle_operations',
     'Operations in each completed 60 second session interval',
@@ -89,6 +93,24 @@ def called(family):
     try:
         CALLS.labels(_family(family), _MODE.get()).inc()
         _count(family, 'checks')
+    except Exception:
+        pass
+
+
+TTL_KILL = Gauge('privacy_ttl_cache_disabled', '1 when the privacy decision cache kill switch is set or unreadable')
+
+
+def ttl_kill_state(disabled):
+    try:
+        TTL_KILL.set(1 if disabled else 0)
+    except Exception:
+        pass
+
+
+def ttl_result(family, result):
+    try:
+        result = result if result in {'hit', 'miss', 'store'} else 'miss'
+        TTL_CACHE.labels(_family(family), result).inc()
     except Exception:
         pass
 
@@ -148,14 +170,23 @@ def mode_scope(mode):
         _MODE.reset(token)
 
 
-def compare(family, live, candidate):
-    """Only bounded decision names leave this module; never exception text."""
+def compare(family, live, candidate, *, cached_age=None):
+    """Only bounded decision names leave this module; never exception text.
+
+    ``cached_age`` is the age in seconds of a reused 60s-bounded decision
+    (database.privacy_ttl_cache). A stale allow younger than the ruling's bound
+    is the accepted cost of that bound, so it is labelled ``stale_within_ttl``
+    and kept apart from real mismatches; the kill switch ignores only that label.
+    """
     family, live, candidate = _family(family), _reason(live), _reason(candidate)
     mismatch = live != candidate
     try:
-        SHADOW_CHECKS.labels(family, 'mismatch' if mismatch else 'match').inc()
+        within = mismatch and candidate == 'allow' and cached_age is not None and 0 <= cached_age <= TTL_BOUND_SECONDS
+        SHADOW_CHECKS.labels(family, ('within_ttl' if within else 'mismatch') if mismatch else 'match').inc()
         if mismatch:
             reason = 'stale_allow' if candidate == 'allow' else 'stale_block' if live == 'allow' else 'block_reason'
+            if within:
+                reason = 'stale_within_ttl'
             DECISION_MISMATCH.labels(family, reason).inc()
             # At most one fixed-size line per family per minute, across threads.
             with _LOG_LOCK:
