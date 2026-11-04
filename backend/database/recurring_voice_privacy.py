@@ -20,7 +20,7 @@ def filter_processing_write(transaction, user, data):
 
     if 'transcript_segments' not in data:
         return
-    segments = conversations._decode_transcript_segments_blob(  # pyright: ignore[reportPrivateUsage]
+    segments = conversations.decode_transcript_segments_blob(
         user.id,
         data['transcript_segments'],
         bool(data.get('transcript_segments_compressed')),
@@ -84,7 +84,7 @@ def scrub_transcripts(uid, *, firestore_client):
                         return
                     # Decode the stored blob, without reader filtering or identity
                     # canonicalization: only the recurring pointer is erased.
-                    segments = conversations._decode_transcript_segments_blob(  # pyright: ignore[reportPrivateUsage]
+                    segments = conversations.decode_transcript_segments_blob(
                         uid,
                         raw['transcript_segments'],
                         bool(raw.get('transcript_segments_compressed')),
