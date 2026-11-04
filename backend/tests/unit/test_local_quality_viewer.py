@@ -106,7 +106,8 @@ def test_persisted_numeric_voice_zero_and_other_channels_remain_distinct():
         ],
     }
     rows = viewer.production_turns(data, 0)
-    assert [r['name'] for r in rows] == ['Speaker 0', 'Speaker 1']
+    # Unnamed voices take dense authority labels, not the raw diarization counter (#23381).
+    assert [r['name'] for r in rows] == ['Speaker A', 'Speaker B']
     assert rows[0]['speaker'] != rows[1]['speaker']
 
 

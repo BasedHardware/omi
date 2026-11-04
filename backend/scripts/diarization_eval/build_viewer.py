@@ -53,9 +53,12 @@ def joined_reference(words):
 
 
 def production_turns(run, offset):
+    from utils.speaker_display import SpeakerLabeler
+
     if run.get('clock') not in ('crop', 'capture'):
         raise ValueError('production artifact must declare clock')
     shift = offset if run['clock'] == 'capture' else 0
+    labels = SpeakerLabeler()
     result = []
     for turn in run['turns']:
         start, end = finite(turn['start']) - shift, finite(turn['end']) - shift
@@ -65,10 +68,12 @@ def production_turns(run, offset):
         scope = turn.get('speaker_id_scope') or turn.get('speaker_scope') or ''
         speaker = f'{scope}:{raw_voice}' if raw_voice is not None else 'Anonymous'
         # Only persisted identity evidence is displayed. Never fit identity from truth.
+        # Unnamed voices label through the #23381 display authority; the raw id
+        # stays a transport key and never interpolates into display text.
         name = str(
             turn.get('display_name')
             or ('You' if turn.get('is_user') else None)
-            or (f'Speaker {raw_voice}' if raw_voice is not None else 'Anonymous')
+            or (labels.label((scope, raw_voice)) if raw_voice is not None else 'Anonymous')
         )
         result.append(
             {
