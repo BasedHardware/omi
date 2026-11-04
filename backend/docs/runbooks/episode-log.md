@@ -147,10 +147,12 @@ does not invent delivery-level history or change client-held IDs.
 
 ## Train order, ramp and verification
 
-At implementation start #24577, #24579, #24582 and #24544 were open. Land batch
-close #24544 and the compatible batch-1 attach/gate #24582, composer #24579, and
-read/write trims #24577 before this PR, or co-rebase them onto one train. Reconcile
-the shared gate helper and transaction seams without duplicating append hooks.
+This branch includes merged read/write trims #24577 and attach/gate #24582.
+The shared digest normalizes the capture ID at memo verification as well as fact
+append, including raw documents without a stored ID. Cached fence reads, completed
+memo hits, conditional membership writes and invalidation remain intact.
+Batch close #24544 and composer #24579 were still open at integration; land or
+rebase them ahead of this PR on the same train without duplicating append hooks.
 The phase shadow already on main remains active.
 
 After the authorized backend train, inspect each traffic-serving revision's

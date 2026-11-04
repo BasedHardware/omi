@@ -1,8 +1,11 @@
 """Task scope and physical reads through production transactional/sync callers."""
 
+import asyncio
 from collections import Counter
 from datetime import datetime, timezone
 import json
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, Mock
 
 from google.api_core.exceptions import Aborted
 import pytest
@@ -12,6 +15,8 @@ from database import batch_pipeline_privacy as privacy, batch_pipeline_store as 
 from database.batch_privacy_attempt import batch_privacy_attempt, current_attempt
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreDocument
 from utils.sync import completed_status
+from utils.batch_pipeline import serving, projection_followup
+from utils.executors import db_executor, run_blocking
 
 UID = 'wq26-owner'
 TOKEN_PATH = ('batch_pipeline_privacy', privacy.privacy_owner_key(UID))
@@ -516,3 +521,101 @@ def test_real_store_transaction_retries_revalidate_token_and_deny(monkeypatch, r
     assert len(commits) == 1
     assert len(db.transactions) == (2 if outer_retry else 1)
     assert Counter(reads)[TOKEN_PATH] == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('entrypoint', ['reconcile', 'record_drain', 'followup'])
+@pytest.mark.parametrize('mutation', [None, 'deletion', 'privacy_flip'])
+async def test_serving_attempt_second_commit_reads_only_token_and_mutations_block(
+    monkeypatch, reads, entrypoint, mutation
+):
+    enabled(monkeypatch)
+    db = database()
+    store = storage.FirestoreStore('batch_pipeline_dev', firestore_client=db)
+    attempts, failures, token_transactions = [], [], []
+    finished = asyncio.Event()
+    original_get = StrictFirestoreDocument.get
+
+    def get(reference, transaction=None, **kwargs):
+        if reference.path == TOKEN_PATH:
+            assert transaction is not None
+            token_transactions.append(transaction)
+        return original_get(reference, transaction=transaction, **kwargs)
+
+    monkeypatch.setattr(StrictFirestoreDocument, 'get', get)
+
+    def commit_pair():
+        try:
+            attempt = current_attempt()
+            assert attempt is not None and attempt not in attempts
+            attempts.append(attempt)
+            job = {'owner_id': UID, 'conversation_id': 'source', 'privacy_generation': 7}
+            reads.clear()
+            store.run(lambda tx: tx.put('jobs', 'first', job))
+            assert len(reads) == 5  # Full walk on the first commit of each tick.
+            if mutation:
+                db.rows[TOKEN_PATH]['memo_token'] = 'b' * 32
+                if mutation == 'deletion':
+                    db.rows[('users', UID, 'deleted_conversations', 'source')] = {}
+                else:
+                    db.rows[('users', UID)]['private_cloud_sync_enabled'] = False
+            reads.clear()
+            if mutation:
+                reason = 'conversation_deleted' if mutation == 'deletion' else 'recording_privacy_changed'
+                with pytest.raises(privacy.BatchPrivacyBlocked, match=reason):
+                    store.run(lambda tx: tx.put('jobs', 'second', job))
+                assert ('batch_pipeline_dev_jobs', 'second') not in db.rows
+                assert reads[0] == TOKEN_PATH
+            else:
+                store.run(lambda tx: tx.put('jobs', 'second', job))
+                assert reads == [TOKEN_PATH]  # Real transaction-bound token read.
+                assert db.rows[('batch_pipeline_dev_jobs', 'second')] == job
+        except BaseException as error:
+            failures.append(error)
+        finally:
+            # Reset authority so a second tick must start with a cold walk.
+            db.rows[TOKEN_PATH]['memo_token'] = 'a' * 32
+            db.rows[('users', UID)].pop('private_cloud_sync_enabled', None)
+            db.rows.pop(('users', UID, 'deleted_conversations', 'source'), None)
+            db.rows.pop(('batch_pipeline_dev_jobs', 'second'), None)
+
+    if entrypoint == 'reconcile':
+        service = serving.Serving(store)
+        monkeypatch.setattr(service, 'reconcile', lambda **kwargs: commit_pair())
+        await service.reconcile_async()
+        await service.reconcile_async()
+    elif entrypoint == 'followup':
+        followups = projection_followup.ProjectionFollowups(Mock())
+
+        async def followup(segment):
+            await run_blocking(db_executor, commit_pair)
+
+        monkeypatch.setattr(followups, '_run', followup)
+        await followups.run('source')
+        await followups.run('source')
+    else:
+        monkeypatch.setenv('BATCH_PIPELINE_SERVING_ENABLED', 'true')
+        monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_DISPATCH_INTERVAL_SECONDS', 'off')
+        service = SimpleNamespace(store=store, reconcile_async=AsyncMock())
+        monkeypatch.setattr(serving, 'serving_for_stage', lambda stage: service)
+
+        async def drain(*args, **kwargs):
+            await run_blocking(db_executor, commit_pair)
+            if len(attempts) == 2 or failures:
+                finished.set()
+                return False
+            return True  # Repeat immediately; the next tick must start cold.
+
+        monkeypatch.setattr(serving, 'drain_recordings', drain)
+        runtime = serving.start_serving_from_env()
+        try:
+            await asyncio.wait_for(finished.wait(), timeout=5)
+        finally:
+            await serving.stop_serving(runtime)
+    if failures:
+        raise failures[0]
+    assert len(attempts) == 2
+    assert len(token_transactions) == 4
+    assert len({id(tx) for tx in token_transactions}) == 4
+    assert current_attempt() is None
+    assert all(attempt._closed for attempt in attempts)

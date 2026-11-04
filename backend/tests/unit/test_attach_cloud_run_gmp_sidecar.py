@@ -1484,7 +1484,7 @@ def test_sync_scrape_retains_exporter_and_direct_sentinel_consumers():
     shared = yaml.safe_load((root / 'backend/deploy/cloud_run_gmp_sidecar.yaml').read_text())
     # RunMonitoring name becomes native GMP job; direct shadow mappings pin it.
     assert config['metadata']['name'] == shared['metadata']['name']
-    assert shared['spec']['endpoints'][0]['interval'] == '30s'
+    assert shared['spec']['endpoints'][0]['interval'] == '60s'
     assert shared['spec']['endpoints'][0]['metricRelabeling'][0]['regex'] == (
         'omi_.*|omi_listen_server_batch_suppression_total|conversation_llm_input_dedupe_.*'
     )

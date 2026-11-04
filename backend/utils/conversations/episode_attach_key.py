@@ -7,6 +7,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Mapping
 
+from config import episodes as episode_config
 from utils.conversations.recorded_time import conversation_span
 from utils.conversations.fragment_visibility import is_relevance_discarded
 
@@ -129,8 +130,8 @@ def scheduling_key(row):
     span = conversation_span(row)
     if span is None:
         return None
-    # Processing clocks and generated summaries do not change episode input.
-    # Use the proven recorded span, even if finished_at advanced during reprocess.
+    # Use recorded placement clocks, even if processing advanced finished_at.
+    # Summary recovery below also covers builds without the settle composer.
     fields = (
         'id',
         'finalization_status',
@@ -160,5 +161,11 @@ def scheduling_key(row):
         'capture_group_member_context',
     )
     value = {field: row.get(field) for field in fields}
+    # Before #24579 (or during its rollback), the composer fingerprints member
+    # summaries too. Resolve its capability at the call boundary so either PR
+    # can land first, and an env flag alone cannot claim an absent capability.
+    settle_enabled = getattr(episode_config, 'episode_compose_settle_enabled', None)
+    if not callable(settle_enabled) or not settle_enabled():
+        value['structured'] = row.get('structured')
     value.update(recorded_start=span.recorded_start, recorded_end=span.recorded_end)
     return content_key(value)

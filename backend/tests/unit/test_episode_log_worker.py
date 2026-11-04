@@ -122,7 +122,7 @@ def test_switch_off_no_io(monkeypatch):
 def test_switch_off_legacy_activity_never_prepares_log_content(client, monkeypatch, recorded):
     monkeypatch.setenv('EPISODES_LOG_ENABLED', 'off')
     monkeypatch.setattr(episodes, 'recorded_episodes_enabled', lambda: recorded)
-    monkeypatch.setattr(episodes.episode_timeline, 'check_window', lambda *args: None)
+    monkeypatch.setattr(episodes.episode_timeline, 'check_window', lambda *args, **kwargs: None)
     unseal = Mock(side_effect=AssertionError('disabled log decrypted content'))
     monkeypatch.setattr(episodes, 'unseal', unseal)
     path = ('users', UID, 'episodes', 'e')

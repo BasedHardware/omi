@@ -29,6 +29,7 @@ from typing import Any, Mapping, Optional, Sequence
 
 from google.cloud import firestore
 from config.recorded_time import recorded_episodes_enabled
+from config.episode_attach import membership_dedupe_enabled
 from config.episodes import (
     MAX_EPISODE_SECONDS,
     episode_hard_cap_across_conversations_enabled,
@@ -323,8 +324,10 @@ def _record_activity(
     transaction: Any, client: Any, uid: str, episode_id: str, conversation_id: str, at: datetime
 ) -> Optional[datetime]:
     log_capture = episode_log.prepare(transaction, client, uid)
-    if recorded_episodes_enabled():
-        _links(client, uid).document('recorded_timeline').get(transaction=transaction)
+    timeline_enabled = recorded_episodes_enabled()
+    timeline_row = None
+    if timeline_enabled:
+        timeline_row = _links(client, uid).document('recorded_timeline').get(transaction=transaction).to_dict() or {}
     ref = _episodes(client, uid).document(episode_id)
     raw = ref.get(transaction=transaction).to_dict() or {}
     if (
@@ -351,8 +354,10 @@ def _record_activity(
     prior_member = members.get(conversation_id)
     members[conversation_id] = max(prior_member, member_at) if isinstance(prior_member, datetime) else member_at
     if activity != last or members != raw.get('member_activity'):
-        if recorded_episodes_enabled() and activity != last:
-            fence = episode_timeline.check_window(transaction, client, uid, {**raw, 'last_activity_at': activity})
+        if timeline_enabled and activity != last:
+            fence = episode_timeline.check_window(
+                transaction, client, uid, {**raw, 'last_activity_at': activity}, fence_row=timeline_row
+            )
             if fence:
                 transaction.set(fence[0], {'version': fence[1]})
         # This clock must not invalidate the notes state_version.
@@ -422,6 +427,12 @@ def _drop_legacy_receipts(merged: dict[str, Any], segment_receipts: Optional[Map
         merged.pop('applied_segment_ids', None)
 
 
+class MembershipLink(dict):
+    """Link data plus the reverse field read in the same transaction."""
+
+    conversation_episode_id: Any = None
+
+
 def read_memberships(transaction, client, uid, conversation_ids, *, admit_conversation_id=None):
     ids = [cid for cid in dict.fromkeys(conversation_ids) if cid and cid not in {CURRENT, LAST_CLOSED}]
     if len(ids) > MEMBERSHIP_BATCH_LIMIT:
@@ -435,10 +446,9 @@ def read_memberships(transaction, client, uid, conversation_ids, *, admit_conver
             is_relevance_discarded(row) or row.get('deleted') or row.get('sync_merged_into')
         ):
             raise EpisodeConflict('conversation_hidden')
-        members[cid] = (
-            snapshot.exists,
-            _links(client, uid).document(cid).get(transaction=transaction).to_dict() or {},
-        )
+        previous = MembershipLink(_links(client, uid).document(cid).get(transaction=transaction).to_dict() or {})
+        previous.conversation_episode_id = row.get('episode_id')
+        members[cid] = (snapshot.exists, previous)
     return members
 
 
@@ -459,14 +469,20 @@ def write_memberships(transaction, client, uid, episode_id, members, arrival_at)
                 ]
             )
         )
+        write_membership(transaction, client, uid, cid, episode_id, ids, exists, previous, arrival_at)
+
+
+def write_membership(transaction, client, uid, cid, episode_id, ids, exists, previous, arrival_at):
+    dedupe = membership_dedupe_enabled()
+    if not dedupe or previous.get('episode_id') != episode_id or previous.get('episode_ids') != ids:
         transaction.set(
             _links(client, uid).document(cid), {'episode_id': episode_id, 'episode_ids': ids, 'updated_at': arrival_at}
         )
-        if exists:
-            transaction.update(
-                client.collection('users').document(uid).collection('conversations').document(cid),
-                {'episode_id': episode_id},
-            )
+    if exists and (not dedupe or getattr(previous, 'conversation_episode_id', object()) != episode_id):
+        transaction.update(
+            client.collection('users').document(uid).collection('conversations').document(cid),
+            {'episode_id': episode_id},
+        )
 
 
 @firestore.transactional
@@ -513,8 +529,8 @@ def _commit(
     links = _member_links(None if new_episode is not None else current_raw, target, link_conversation_ids)
     _check_membership(transaction, client, uid, target['id'], [*links, *(target.get('conversation_ids') or [])])
     members = read_memberships(transaction, client, uid, links)
-    if recorded_episodes_enabled():
-        episode_timeline.check_window(transaction, client, uid, target)
+    if timeline_enabled:
+        episode_timeline.check_window(transaction, client, uid, target, fence_row=timeline_row)
     if new_episode is not None:
         if current_ref is not None and current_raw and current_raw.get('status') == 'live':
             transaction.update(current_ref, _closed_fields(close_reason or 'gap', closed_at or now))
@@ -601,8 +617,10 @@ def _reopen(
     link_conversation_ids: Sequence[str],
 ) -> Optional[dict[str, Any]]:
     log_capture = episode_log.prepare(transaction, client, uid)
-    if recorded_episodes_enabled():
-        _links(client, uid).document('recorded_timeline').get(transaction=transaction)
+    timeline_enabled = recorded_episodes_enabled()
+    timeline_row = None
+    if timeline_enabled:
+        timeline_row = _links(client, uid).document('recorded_timeline').get(transaction=transaction).to_dict() or {}
     ref = _episodes(client, uid).document(episode_id)
     snapshot = ref.get(transaction=transaction)
     raw = snapshot.to_dict() if snapshot.exists else None
@@ -631,8 +649,8 @@ def _reopen(
     links = _member_links(raw, merged, link_conversation_ids)
     _check_membership(transaction, client, uid, episode_id, [*links, *(merged.get('conversation_ids') or [])])
     members = read_memberships(transaction, client, uid, links)
-    if recorded_episodes_enabled():
-        fence = episode_timeline.check_window(transaction, client, uid, merged)
+    if timeline_enabled:
+        fence = episode_timeline.check_window(transaction, client, uid, merged, fence_row=timeline_row)
         if fence:
             transaction.set(fence[0], {'version': fence[1]})
     transaction.set(ref, seal(uid, merged))
@@ -695,8 +713,10 @@ def _close(
     expected_activity_at: Optional[datetime],
 ) -> Optional[dict[str, Any]]:
     log_capture = episode_log.prepare(transaction, client, uid)
-    if recorded_episodes_enabled():
-        _links(client, uid).document('recorded_timeline').get(transaction=transaction)
+    timeline_enabled = recorded_episodes_enabled()
+    timeline_row = None
+    if timeline_enabled:
+        timeline_row = _links(client, uid).document('recorded_timeline').get(transaction=transaction).to_dict() or {}
     ref = _episodes(client, uid).document(episode_id)
     snapshot = ref.get(transaction=transaction)
     raw = snapshot.to_dict() if snapshot.exists else None
@@ -731,7 +751,7 @@ def _close(
             ends.append(end)
     end = max(ends, default=raw.get('last_activity_at') or raw['started_at'])
     end = max(raw['started_at'], _bounded_activity(raw, end))
-    if recorded_episodes_enabled():
+    if timeline_enabled:
         rows = episode_timeline.recorded_candidates(
             uid, raw['started_at'], end, firestore_client=client, transaction=transaction
         )
@@ -739,7 +759,7 @@ def _close(
         if following:
             end = min(end, min(following))
         merged['recorded_end'] = end
-        fence = episode_timeline.check_window(transaction, client, uid, merged, rows=rows)
+        fence = episode_timeline.check_window(transaction, client, uid, merged, rows=rows, fence_row=timeline_row)
         if fence:
             transaction.set(fence[0], {'version': fence[1]})
     else:
@@ -803,14 +823,34 @@ def _update(
     updates: Mapping[str, Any],
     link_conversation_ids: Sequence[str],
     segment_receipts: Optional[Mapping[str, Sequence[str]]] = None,
+    recovery_conversation_id: Optional[str] = None,
 ) -> dict[str, Any]:
     log_capture = episode_log.prepare(transaction, client, uid)
-    if recorded_episodes_enabled():
-        _links(client, uid).document('recorded_timeline').get(transaction=transaction)
+    timeline_enabled = recorded_episodes_enabled()
+    timeline_row = None
+    if timeline_enabled:
+        timeline_row = _links(client, uid).document('recorded_timeline').get(transaction=transaction).to_dict() or {}
     ref = _episodes(client, uid).document(episode_id)
     snapshot = ref.get(transaction=transaction)
     raw = snapshot.to_dict() if snapshot.exists else None
     receipts_raw = _read_receipts(transaction, client, uid, segment_receipts)
+    if recovery_conversation_id:
+        current = (
+            client.collection('users')
+            .document(uid)
+            .collection('conversations')
+            .document(recovery_conversation_id)
+            .get(transaction=transaction)
+            .to_dict()
+            or {}
+        )
+        if (
+            is_relevance_discarded(current)
+            or current.get('deleted')
+            or current.get('sync_merged_into')
+            or (current.get('episode_id') is not None and current.get('episode_id') != episode_id)
+        ):
+            raise EpisodeConflict('conversation_hidden_or_repointed')
     if not raw or raw.get('state_version') != expected_version:
         raise EpisodeConflict('state_version_changed')
     merged = _merge_state(unseal(uid, raw) or {}, updates)
@@ -823,14 +863,27 @@ def _update(
     if moves:
         _check_membership(transaction, client, uid, episode_id, [*links, *(merged.get('conversation_ids') or [])])
     members = read_memberships(transaction, client, uid, links)
-    if moves and recorded_episodes_enabled():
-        fence = episode_timeline.check_window(transaction, client, uid, merged)
+    # Discard/duplicate transitions do not change the conversation revision.
+    # Invalidate completed proof atomically, including a later restore to the
+    # exact same visible inputs. Never leave a formerly visible stamp usable.
+    invalidated = []
+    excluded = set(merged.get('discarded_conversation_ids') or []) | set(merged.get('duplicate_conversation_ids') or [])
+    prior = set(raw.get('discarded_conversation_ids') or []) | set(raw.get('duplicate_conversation_ids') or [])
+    for cid in sorted(excluded - prior):
+        link_ref = _links(client, uid).document(cid)
+        link = link_ref.get(transaction=transaction).to_dict() or {}
+        if link.get('attach_revision'):
+            invalidated.append(link_ref)
+    if moves and timeline_enabled:
+        fence = episode_timeline.check_window(transaction, client, uid, merged, fence_row=timeline_row)
         if fence:
             transaction.set(fence[0], {'version': fence[1]})
     transaction.set(ref, seal(uid, merged))
     now = datetime.now(timezone.utc)
     _write_receipts(transaction, client, uid, segment_receipts, receipts_raw, now)
     write_memberships(transaction, client, uid, episode_id, members, now)
+    for link_ref in invalidated:
+        transaction.update(link_ref, {'attach_revision': None, 'attach_completed': None, 'attach_finalized': None})
     if log_capture is not None:
         episode_log.mutation(
             log_capture,
@@ -851,6 +904,7 @@ def update_episode(
     link_conversation_ids: Sequence[str] = (),
     segment_receipts: Optional[Mapping[str, Sequence[str]]] = None,
     firestore_client: Any = None,
+    recovery_conversation_id: Optional[str] = None,
 ) -> dict[str, Any]:
     """CAS update of any episode (open or closed). Raises ``EpisodeConflict`` on a lost race.
 
@@ -868,5 +922,6 @@ def update_episode(
         dict(updates),
         list(link_conversation_ids),
         dict(segment_receipts or {}) or None,
+        recovery_conversation_id,
         transient=True,
     )
