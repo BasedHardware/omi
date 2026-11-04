@@ -37,7 +37,6 @@ from utils.executors import llm_executor, storage_executor, submit_with_context
 from utils.other import endpoints as auth
 from utils.screen_frames import enforcement, store as screen_frame_store
 from utils.screen_frames.availability import screen_frame_storage_ready
-from utils.screen_frames.availability import screen_frame_egress_enabled
 from utils.conversations.late_meeting_notes import refresh_notes_after_evidence
 from utils.conversations.screen_content_window import (
     LEGACY_LIFECYCLE_FINGERPRINT,

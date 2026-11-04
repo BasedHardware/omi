@@ -1502,6 +1502,7 @@ export interface Conversation {
   deferred?: boolean;
   discarded?: boolean;
   episode_id?: string | null;
+  excluded_speakers?: Array<number> | null;
   external_data?: Record<string, unknown> | null;
   finished_at: string | null;
   folder_id?: string | null;
@@ -1715,6 +1716,7 @@ export interface ConversationSearchItem {
   deferred?: boolean;
   discarded?: boolean;
   episode_id?: string | null;
+  excluded_speakers?: Array<number> | null;
   external_data?: Record<string, unknown> | null;
   finished_at: string | null;
   folder_id?: string | null;

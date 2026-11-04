@@ -1114,6 +1114,7 @@ class GeneratedConversation {
   final bool deferred;
   final bool discarded;
   final String? episodeId;
+  final List<int>? excludedSpeakers;
   final Map<String, dynamic>? externalData;
   final DateTime? finishedAt;
   final String? folderId;
@@ -1182,6 +1183,7 @@ class GeneratedConversation {
     this.deferred = false,
     this.discarded = false,
     this.episodeId,
+    this.excludedSpeakers,
     this.externalData,
     required this.finishedAt,
     this.folderId,
@@ -1252,6 +1254,7 @@ class GeneratedConversation {
       deferred: _required(_readFieldValue<bool>(_readField(json, const ["deferred"]), "deferred", _readBool, requiredField: false, nullable: false, defaultValue: false), "deferred"),
       discarded: _required(_readFieldValue<bool>(_readField(json, const ["discarded"]), "discarded", _readBool, requiredField: false, nullable: false, defaultValue: false), "discarded"),
       episodeId: _readFieldValue<String>(_readField(json, const ["episode_id"]), "episode_id", _readString, requiredField: false, nullable: true),
+      excludedSpeakers: _readFieldValue<List<int>>(_readField(json, const ["excluded_speakers"]), "excluded_speakers", _readIntList, requiredField: false, nullable: true),
       externalData: _readFieldValue<Map<String, dynamic>>(_readField(json, const ["external_data"]), "external_data", _readMap, requiredField: false, nullable: true),
       finishedAt: _readFieldValue<DateTime>(_readField(json, const ["finished_at"]), "finished_at", _readDateTime, requiredField: true, nullable: true),
       folderId: _readFieldValue<String>(_readField(json, const ["folder_id"]), "folder_id", _readString, requiredField: false, nullable: true),
@@ -1323,6 +1326,7 @@ class GeneratedConversation {
       'deferred': deferred,
       'discarded': discarded,
       'episode_id': episodeId,
+      'excluded_speakers': excludedSpeakers,
       'external_data': externalData,
       'finished_at': finishedAt?.toUtc().toIso8601String(),
       'folder_id': folderId,
@@ -1614,6 +1618,7 @@ class GeneratedConversationSearchItem {
   final bool deferred;
   final bool discarded;
   final String? episodeId;
+  final List<int>? excludedSpeakers;
   final Map<String, dynamic>? externalData;
   final DateTime? finishedAt;
   final String? folderId;
@@ -1683,6 +1688,7 @@ class GeneratedConversationSearchItem {
     this.deferred = false,
     this.discarded = false,
     this.episodeId,
+    this.excludedSpeakers,
     this.externalData,
     required this.finishedAt,
     this.folderId,
@@ -1754,6 +1760,7 @@ class GeneratedConversationSearchItem {
       deferred: _required(_readFieldValue<bool>(_readField(json, const ["deferred"]), "deferred", _readBool, requiredField: false, nullable: false, defaultValue: false), "deferred"),
       discarded: _required(_readFieldValue<bool>(_readField(json, const ["discarded"]), "discarded", _readBool, requiredField: false, nullable: false, defaultValue: false), "discarded"),
       episodeId: _readFieldValue<String>(_readField(json, const ["episode_id"]), "episode_id", _readString, requiredField: false, nullable: true),
+      excludedSpeakers: _readFieldValue<List<int>>(_readField(json, const ["excluded_speakers"]), "excluded_speakers", _readIntList, requiredField: false, nullable: true),
       externalData: _readFieldValue<Map<String, dynamic>>(_readField(json, const ["external_data"]), "external_data", _readMap, requiredField: false, nullable: true),
       finishedAt: _readFieldValue<DateTime>(_readField(json, const ["finished_at"]), "finished_at", _readDateTime, requiredField: true, nullable: true),
       folderId: _readFieldValue<String>(_readField(json, const ["folder_id"]), "folder_id", _readString, requiredField: false, nullable: true),
@@ -1826,6 +1833,7 @@ class GeneratedConversationSearchItem {
       'deferred': deferred,
       'discarded': discarded,
       'episode_id': episodeId,
+      'excluded_speakers': excludedSpeakers,
       'external_data': externalData,
       'finished_at': finishedAt?.toUtc().toIso8601String(),
       'folder_id': folderId,

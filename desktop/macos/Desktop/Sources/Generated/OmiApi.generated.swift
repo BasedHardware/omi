@@ -1811,6 +1811,7 @@ public enum OmiAPI {
     public let deferred: Bool?
     public let discarded: Bool?
     public let episodeId: String?
+    public let excludedSpeakers: [Int]?
     public let externalData: [String: OmiAnyCodable]?
     public let finishedAt: String?
     public let folderId: String?
@@ -1879,6 +1880,7 @@ public enum OmiAPI {
       case deferred
       case discarded
       case episodeId = "episode_id"
+      case excludedSpeakers = "excluded_speakers"
       case externalData = "external_data"
       case finishedAt = "finished_at"
       case folderId = "folder_id"
@@ -1949,6 +1951,7 @@ public enum OmiAPI {
       deferred = try c.decodeIfPresent(Bool.self, forKey: .deferred)
       discarded = try c.decodeIfPresent(Bool.self, forKey: .discarded)
       episodeId = try c.decodeIfPresent(String.self, forKey: .episodeId)
+      excludedSpeakers = try c.decodeIfPresent([Int].self, forKey: .excludedSpeakers)
       externalData = try c.decodeIfPresent([String: OmiAnyCodable].self, forKey: .externalData)
       finishedAt = try c.decodeIfPresent(String.self, forKey: .finishedAt)
       folderId = try c.decodeIfPresent(String.self, forKey: .folderId)
@@ -1994,7 +1997,7 @@ public enum OmiAPI {
       visibility = try c.decodeIfPresent(ConversationVisibility.self, forKey: .visibility)
     }
 
-    public init(appId: String? = nil, appsResults: [AppResult]? = nil, arrivalAt: String? = nil, audioFiles: [AudioFile]? = nil, audioTimeline: AudioTimelineProvenance? = nil, calendarEvent: CalendarEventLink? = nil, calendarEventId: String? = nil, callId: String? = nil, callPlatform: String? = nil, captureCoverage: String? = nil, captureGroup: CaptureGroup? = nil, captureTimezone: String? = nil, clientDeviceId: String? = nil, clientPlatform: String? = nil, clientProcessing: ClientProcessing? = nil, clock: RecordedClock? = nil, contentKind: String? = nil, conversationAudio: ConversationAudio? = nil, createdAt: String, dataProtectionLevel: String? = nil, deferred: Bool? = nil, discarded: Bool? = nil, episodeId: String? = nil, externalData: [String: OmiAnyCodable]? = nil, finishedAt: String? = nil, folderId: String? = nil, geolocation: Geolocation? = nil, geolocationScope: String? = nil, id: String, imported: Bool? = nil, isCall: Bool? = nil, isLocked: Bool? = nil, language: String? = nil, meetingDedupSpeechS: Double? = nil, meetingDurationS: Double? = nil, meetingTreatmentEligible: Bool? = nil, meetingTreatmentReason: String? = nil, otherParticipantsLocation: String? = nil, photos: [ConversationPhoto]? = nil, pluginsResults: [PluginResult]? = nil, privateCloudSyncEnabled: Bool? = nil, processingConversationId: String? = nil, processingDeferred: Bool? = nil, processingMemoryId: String? = nil, processingState: ConversationProcessingState? = nil, recordAudioPartial: RecordAudioPartial? = nil, recordedEnd: String? = nil, recordedStart: String? = nil, screenshotSharingEnabled: Bool? = nil, source: ConversationSource? = nil, speakerResolution: ConversationSpeakers? = nil, starred: Bool? = nil, startedAt: String? = nil, status: ConversationStatus? = nil, structured: Structured, suggestedSummarizationApps: [String]? = nil, summaryRetryable: Bool? = nil, syncContentRevision: Int? = nil, syncRelevance: String? = nil, transcriptSegments: [TranscriptSegment]? = nil, transcriptSegmentsCompressed: Bool? = nil, updatedAt: String? = nil, userCorrections: [[String: OmiAnyCodable]]? = nil, userOverview: String? = nil, usesCustomStt: Bool? = nil, visibility: ConversationVisibility? = nil) {
+    public init(appId: String? = nil, appsResults: [AppResult]? = nil, arrivalAt: String? = nil, audioFiles: [AudioFile]? = nil, audioTimeline: AudioTimelineProvenance? = nil, calendarEvent: CalendarEventLink? = nil, calendarEventId: String? = nil, callId: String? = nil, callPlatform: String? = nil, captureCoverage: String? = nil, captureGroup: CaptureGroup? = nil, captureTimezone: String? = nil, clientDeviceId: String? = nil, clientPlatform: String? = nil, clientProcessing: ClientProcessing? = nil, clock: RecordedClock? = nil, contentKind: String? = nil, conversationAudio: ConversationAudio? = nil, createdAt: String, dataProtectionLevel: String? = nil, deferred: Bool? = nil, discarded: Bool? = nil, episodeId: String? = nil, excludedSpeakers: [Int]? = nil, externalData: [String: OmiAnyCodable]? = nil, finishedAt: String? = nil, folderId: String? = nil, geolocation: Geolocation? = nil, geolocationScope: String? = nil, id: String, imported: Bool? = nil, isCall: Bool? = nil, isLocked: Bool? = nil, language: String? = nil, meetingDedupSpeechS: Double? = nil, meetingDurationS: Double? = nil, meetingTreatmentEligible: Bool? = nil, meetingTreatmentReason: String? = nil, otherParticipantsLocation: String? = nil, photos: [ConversationPhoto]? = nil, pluginsResults: [PluginResult]? = nil, privateCloudSyncEnabled: Bool? = nil, processingConversationId: String? = nil, processingDeferred: Bool? = nil, processingMemoryId: String? = nil, processingState: ConversationProcessingState? = nil, recordAudioPartial: RecordAudioPartial? = nil, recordedEnd: String? = nil, recordedStart: String? = nil, screenshotSharingEnabled: Bool? = nil, source: ConversationSource? = nil, speakerResolution: ConversationSpeakers? = nil, starred: Bool? = nil, startedAt: String? = nil, status: ConversationStatus? = nil, structured: Structured, suggestedSummarizationApps: [String]? = nil, summaryRetryable: Bool? = nil, syncContentRevision: Int? = nil, syncRelevance: String? = nil, transcriptSegments: [TranscriptSegment]? = nil, transcriptSegmentsCompressed: Bool? = nil, updatedAt: String? = nil, userCorrections: [[String: OmiAnyCodable]]? = nil, userOverview: String? = nil, usesCustomStt: Bool? = nil, visibility: ConversationVisibility? = nil) {
       self.appId = appId
       self.appsResults = appsResults
       self.arrivalAt = arrivalAt
@@ -2018,6 +2021,7 @@ public enum OmiAPI {
       self.deferred = deferred
       self.discarded = discarded
       self.episodeId = episodeId
+      self.excludedSpeakers = excludedSpeakers
       self.externalData = externalData
       self.finishedAt = finishedAt
       self.folderId = folderId
@@ -4535,6 +4539,7 @@ public enum OmiAPI {
 
 
   public struct Participant: Codable {
+    public let alias: String?
     public let email: String?
     public let evidence: String?
     public let isAiAgent: Bool?
@@ -4542,8 +4547,10 @@ public enum OmiAPI {
     public let organization: String?
     public let role: String?
     public let source: String
+    public let speakerBindings: [Int]?
 
     private enum CodingKeys: String, CodingKey {
+      case alias
       case email
       case evidence
       case isAiAgent = "is_ai_agent"
@@ -4551,10 +4558,12 @@ public enum OmiAPI {
       case organization
       case role
       case source
+      case speakerBindings = "speaker_bindings"
     }
 
     public init(from decoder: Decoder) throws {
       let c = try decoder.container(keyedBy: CodingKeys.self)
+      alias = try c.decodeIfPresent(String.self, forKey: .alias)
       email = try c.decodeIfPresent(String.self, forKey: .email)
       evidence = try c.decodeIfPresent(String.self, forKey: .evidence)
       isAiAgent = try c.decodeIfPresent(Bool.self, forKey: .isAiAgent)
@@ -4562,9 +4571,11 @@ public enum OmiAPI {
       organization = try c.decodeIfPresent(String.self, forKey: .organization)
       role = try c.decodeIfPresent(String.self, forKey: .role)
       source = try c.decode(String.self, forKey: .source)
+      speakerBindings = try c.decodeIfPresent([Int].self, forKey: .speakerBindings)
     }
 
-    public init(email: String? = nil, evidence: String? = nil, isAiAgent: Bool? = nil, name: String? = nil, organization: String? = nil, role: String? = nil, source: String) {
+    public init(alias: String? = nil, email: String? = nil, evidence: String? = nil, isAiAgent: Bool? = nil, name: String? = nil, organization: String? = nil, role: String? = nil, source: String, speakerBindings: [Int]? = nil) {
+      self.alias = alias
       self.email = email
       self.evidence = evidence
       self.isAiAgent = isAiAgent
@@ -4572,6 +4583,7 @@ public enum OmiAPI {
       self.organization = organization
       self.role = role
       self.source = source
+      self.speakerBindings = speakerBindings
     }
   }
 

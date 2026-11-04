@@ -9554,6 +9554,20 @@
             ],
             "title": "Episode Id"
           },
+          "excluded_speakers": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Excluded Speakers"
+          },
           "external_data": {
             "anyOf": [
               {
@@ -10963,6 +10977,20 @@
               }
             ],
             "title": "Episode Id"
+          },
+          "excluded_speakers": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Excluded Speakers"
           },
           "external_data": {
             "anyOf": [
