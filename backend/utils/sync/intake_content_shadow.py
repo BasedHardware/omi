@@ -1,5 +1,7 @@
 """Post-commit, fixed-cardinality measurement of plain-sync append contents."""
 
+from typing import Any
+
 from prometheus_client import Counter
 
 from utils.conversations.recorded_time import conversation_span
@@ -14,7 +16,7 @@ INTAKE_CONTENT = Counter(
 )
 
 
-def capture(conversation, plans):
+def capture(conversation: dict, plans: list[Any]) -> None:
     """Use the same final survivors as live append_stats, without new reads.
 
     Mark only the returned result after payload encoding. Aborted attempts do
@@ -36,7 +38,7 @@ def capture(conversation, plans):
         conversation[FIELD] = observations
 
 
-def emit(conversation):
+def emit(conversation: dict) -> None:
     for speech, span in conversation.pop(FIELD, []):
         if speech in SPEECH and span in SPANS:
             INTAKE_CONTENT.labels(speech=speech, span=span).inc()

@@ -207,7 +207,10 @@ def test_reprocess_snapshot_catches_in_place_changes():
     assert should_schedule(snapshot, {**snapshot, 'episode_id': None})
     assert should_schedule(snapshot, {**snapshot, 'discarded': True})
     assert should_schedule(snapshot, {**snapshot, 'recorded_end': T0 + timedelta(hours=1)})
-    assert should_schedule(snapshot, {**snapshot, 'clock': 'unknown-clock'})
+    assert should_schedule(
+        snapshot,
+        {**snapshot, 'recorded_start': T0, 'recorded_end': T0 + timedelta(seconds=30), 'clock': 'unknown-clock'},
+    )
 
 
 @pytest.mark.parametrize('enabled', [False, True])
