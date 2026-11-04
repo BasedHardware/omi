@@ -6,12 +6,12 @@ atomically restores maxReplicas=12 alongside minReplicas=12 and the latency
 metric. The ordinary floor schedule still preserves the operator's cap and
 refuses targets above it.
 
-The v2 duration histogram can remain fresh with zero requests while traffic
-uses v1. The guard now measures v2's own 15-minute request counter (including
-early errors not recorded by the duration histogram) and tolerates NaN p95
-only with a fresh zero count. Missing/stale telemetry and nonfinite
-p95 with v2 traffic remain blind; three consecutive blind readings still
-trigger rollback once armed. V1 and v2 latency thresholds are not substituted.
+The v2 duration histogram can remain fresh with no completed requests while
+traffic uses v1. Its NaN p95 remains blind under the existing policy; three
+consecutive blind readings still trigger rollback once armed. Zero completions
+cannot distinguish idle v2 from stuck requests, and errors can precede duration
+observations. A safe idle exception needs endpoint-specific in-flight evidence;
+no metric-policy change or v1-for-v2 latency substitution ships in this repair.
 
 Deployment uses the independent `gcp_incluster_guards.yml` workflow on main,
 pinned to the merged SHA, with environment=prod, enabled=true, dry_run=false.

@@ -192,8 +192,6 @@ def queries(namespace):
         + inc('omi_stt_window_first_text_seconds_bucket', '{job="backend-listen-metrics",le="30.0"}'),
         'post_p95': f'histogram_quantile(0.95,sum by(le)(rate(omi_stt_window_post_seconds_bucket{sel}[15m])))',
         'v2_p95': f'histogram_quantile(0.95,sum by(le)(rate(parakeet_request_duration_seconds_bucket{v2}[15m])))',
-        # Include errors returned before the duration histogram's finally block.
-        'v2_count': inc('parakeet_requests_total', v2),
         'refusal_fraction': f'({refused} or ({accepted} * 0)) / (({accepted}) + ({refused} or ({accepted} * 0)))',
         'admission_count': f'({accepted}) + ({refused} or ({accepted} * 0))',
         'dcgm_nonzero': f'max(max_over_time(DCGM_FI_DEV_GPU_UTIL{gpu}[15m]))',
@@ -202,7 +200,6 @@ def queries(namespace):
         'admission_stale': 'max(time()-timestamp(omi_stt_window_admissions_total{job="backend-listen-metrics",outcome="accepted"}))',
         'dcgm_stale': f'max(time()-timestamp(DCGM_FI_DEV_GPU_UTIL{gpu}))',
         'v2_stale': f'max(time()-timestamp(parakeet_request_duration_seconds_count{v2}))',
-        'v2_requests_stale': f'max(time()-timestamp(parakeet_requests_total{v2}))',
         'no_text_deadline': inc(
             'omi_stt_window_session_outcome_total',
             '{job="backend-listen-metrics",outcome="no_text",reason="first_text_deadline"}',
@@ -284,24 +281,12 @@ def finite(value):
 def evaluate(values):
     counts_known = all(finite(values.get(k)) for k in ('first_count', 'admission_count'))
     low = counts_known and (values['first_count'] < 20 or values['admission_count'] < 20)
-    stale_keys = ('first_stale', 'post_stale', 'admission_stale', 'dcgm_stale', 'v2_stale', 'v2_requests_stale')
+    stale_keys = ('first_stale', 'post_stale', 'admission_stale', 'dcgm_stale', 'v2_stale')
     fresh = all(finite(values.get(k)) and 0 <= values[k] <= 120 for k in stale_keys)
     # Prometheus returns NaN for idle histogram/ratio arithmetic. Fresh low counts
     # distinguish that expected lack of samples from a missing series/query error
     # (None). It remains LOW_SAMPLE, never CLEAN, without rolling back quiet hours.
-    idle_nan = {'first_p95', 'post_p95', 'refusal_fraction'} if low and fresh else set()
-    # v2 can be idle while live-window traffic uses v1. Its fresh zero count
-    # explains NaN quantile arithmetic independently of listen sample volume;
-    # missing/failed queries (None), stale counters and nonzero counts still blind.
-    if (
-        finite(values.get('v2_count'))
-        and values['v2_count'] == 0
-        and finite(values.get('v2_stale'))
-        and 0 <= values['v2_stale'] <= 120
-        and finite(values.get('v2_requests_stale'))
-        and 0 <= values['v2_requests_stale'] <= 120
-    ):
-        idle_nan.add('v2_p95')
+    idle_nan = {'first_p95', 'post_p95', 'v2_p95', 'refusal_fraction'} if low and fresh else set()
     # The weekly first_p95 evidence (quantile + its sample count) is optional
     # (retention, metric age, sparse hour): its absence selects the fallback
     # threshold instead of blinding the whole reading. The weekly refusal

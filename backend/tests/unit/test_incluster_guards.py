@@ -27,7 +27,6 @@ def values():
         first_over30=6,
         post_p95=0.5,
         v2_p95=1,
-        v2_count=100,
         first_count=150,
         admission_count=100,
         dcgm_nonzero=1,
@@ -370,9 +369,7 @@ def test_missing_nonfinite_never_clean(key, bad):
     assert guard.evaluate(v)['blind']
 
 
-@pytest.mark.parametrize(
-    'key', ['first_stale', 'post_stale', 'admission_stale', 'dcgm_stale', 'v2_stale', 'v2_requests_stale']
-)
+@pytest.mark.parametrize('key', ['first_stale', 'post_stale', 'admission_stale', 'dcgm_stale', 'v2_stale'])
 @pytest.mark.parametrize('age', [119.99, 120, 120.01])
 def test_staleness(key, age):
     assert bool(guard.evaluate(dict(values(), **{key: age}))['blind']) == (age > 120)
@@ -1205,7 +1202,7 @@ def test_guard_chart_selects_its_behavioral_suite_on_future_changes(path):
 
 def test_fresh_quiet_nan_arithmetic_is_low_sample_not_three_blind_trips():
     hpa, dep = objects()
-    v = dict(values(), first_count=0, admission_count=0, dcgm_nonzero=0, v2_count=0)
+    v = dict(values(), first_count=0, admission_count=0, dcgm_nonzero=0)
     for key in ('first_p95', 'post_p95', 'v2_p95', 'refusal_fraction', 'first_p95_baseline'):
         v[key] = float('nan')
     state = {}
@@ -1218,55 +1215,6 @@ def test_fresh_quiet_nan_arithmetic_is_low_sample_not_three_blind_trips():
     v['first_p95'] = float('nan')
     v['first_stale'] = 121
     assert guard.evaluate(v)['blind']
-
-
-def test_v2_queries_use_the_same_endpoint_and_window_for_count_quantile_and_freshness():
-    expressions = guard.queries('prod-omi-backend')
-    for key in ('v2_count', 'v2_p95', 'v2_stale', 'v2_requests_stale'):
-        assert '{namespace="prod-omi-backend",exported_endpoint="v2_transcribe"}' in expressions[key]
-    # v2 returns some errors before recording duration; zero histogram count
-    # alone must not classify those requests as idle. Count every status.
-    assert expressions['v2_count'].startswith('sum(increase(parakeet_requests_total')
-    assert expressions['v2_requests_stale'].startswith('max(time()-timestamp(parakeet_requests_total')
-    assert 'status=' not in expressions['v2_count']
-    assert '[15m]' in expressions['v2_count']
-    assert '[15m]' in expressions['v2_p95']
-
-
-def test_fresh_idle_v2_with_busy_listen_does_not_accumulate_blind_runs():
-    hpa, dep = objects()
-    signals = dict(values(), v2_count=0, v2_p95=float('nan'))
-    state = {}
-    for now in (0, 300, 600, 900, 1200, 1500):
-        verdict, state, reading = guard.decide(hpa, dep, [], signals, state, now)
-        assert verdict == ('WARMUP' if now < 900 else 'CLEAN')
-        assert not reading['blind']
-        assert state['blind'] == 0
-    # Idle v2 must not mask harm measured by another gate.
-    signals['post_p95'] = 3
-    assert guard.decide(hpa, dep, [], signals, state, 1800)[0] == 'TRIP'
-
-
-@pytest.mark.parametrize(
-    'bad',
-    [
-        {'v2_count': None},
-        {'v2_count': float('nan')},
-        {'v2_count': 1},
-        {'v2_stale': None},
-        {'v2_stale': 121},
-        {'v2_stale': -1},
-        {'v2_requests_stale': None},
-        {'v2_requests_stale': 121},
-        {'v2_requests_stale': -1},
-        {'v2_p95': None},
-        {'v2_p95': float('inf')},
-    ],
-)
-def test_idle_v2_exception_never_masks_missing_stale_or_nonzero_sample_failures(bad):
-    signals = dict(values(), v2_count=0, v2_p95=float('nan'))
-    signals.update(bad)
-    assert guard.evaluate(signals)['blind']
 
 
 def test_render_packages_exact_entrypoint_and_shared_logging_module():
