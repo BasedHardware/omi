@@ -3138,7 +3138,10 @@ _add(
             'base_update': {'status': 'completed'},
             'time_zone_for_uid': None,
         },
-        domains={'path': ['orphan_terminal', 'byok_abandoned', 'oversized_terminal']},
+        domains={
+            'path': ['orphan_terminal', 'byok_abandoned', 'oversized_terminal'],
+            'assess_empty_transcript': [True, False],
+        },
         neutrals={'transaction': (ref_transaction(), 'snapshot fence; does not change the photo query shape')},
     )
 )
