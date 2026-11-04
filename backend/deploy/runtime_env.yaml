@@ -218,7 +218,7 @@ environments:
             value: http://parakeet.omiapi.com
           HOSTED_SPEAKER_EMBEDDING_API_URL:
             category: service_discovery
-            value: http://172.16.48.49/diarizer
+            value: http://diarizer.omiapi.com:80
           LISTEN_QUIET_FINALIZATION_ENABLED:
             value: 'true'
             category: ops_kill
@@ -329,7 +329,7 @@ environments:
             value: ''
           HOSTED_TRANSLATION_API_URL:
             category: service_discovery
-            value: http://172.16.48.49/nllb
+            value: http://nllb.omiapi.com
           OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
           TRANSCRIPTION_SHADOW_ENABLED: {value: 'false', category: rollout}
           TRANSCRIPTION_SHADOW_KILL_SWITCH: {value: 'false', category: rollout}
@@ -426,7 +426,7 @@ environments:
           MEETING_NOTES_EVIDENCE_WAIT_SECONDS: {value: '25', category: rollout}
           HOSTED_SPEAKER_EMBEDDING_API_URL:
             category: service_discovery
-            value: http://172.16.48.49/diarizer
+            value: http://diarizer.omiapi.com:80
           DREAM_AGENT_ELIGIBILITY: {value: allowlist, category: rollout}
           DREAM_AGENT_UID_ALLOWLIST: {category: rollout, value: ''}
           DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
@@ -936,7 +936,7 @@ environments:
               value: http://parakeet.omiapi.com
             HOSTED_SPEAKER_EMBEDDING_API_URL:
               category: service_discovery
-              value: http://172.16.48.49/diarizer
+              value: http://diarizer.omiapi.com:80
             LISTEN_QUIET_FINALIZATION_ENABLED:
               value: 'true'
               category: ops_kill
@@ -1201,7 +1201,7 @@ environments:
               value: http://parakeet.omiapi.com
             HOSTED_SPEAKER_EMBEDDING_API_URL:
               category: service_discovery
-              value: http://172.16.48.49/diarizer
+              value: http://diarizer.omiapi.com:80
             LISTEN_QUIET_FINALIZATION_ENABLED:
               value: 'true'
               category: ops_kill
@@ -1494,7 +1494,7 @@ environments:
               value: http://parakeet.omiapi.com
             HOSTED_SPEAKER_EMBEDDING_API_URL:
               category: service_discovery
-              value: http://172.16.48.49/diarizer
+              value: http://diarizer.omiapi.com:80
             LISTEN_QUIET_FINALIZATION_ENABLED:
               value: 'true'
               category: ops_kill
@@ -1756,7 +1756,7 @@ environments:
               value: http://parakeet.omiapi.com
             HOSTED_SPEAKER_EMBEDDING_API_URL:
               category: service_discovery
-              value: http://172.16.48.49/diarizer
+              value: http://diarizer.omiapi.com:80
             LISTEN_QUIET_FINALIZATION_ENABLED:
               value: 'true'
               category: ops_kill

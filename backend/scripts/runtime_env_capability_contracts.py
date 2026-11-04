@@ -244,11 +244,13 @@ SPEAKER_EMBEDDING_HOSTS: tuple[tuple[str, str], ...] = (
     ('cloud_run', 'backend-integration'),
 )
 _CLUSTER_LOCAL_DNS = '.svc.cluster.local'
-# Cloud Run cannot resolve cluster DNS. These are the internal-ALB routes
-# (gateway IP + /diarizer); admission rejects any other literal, including a
-# value that merely agrees across Cloud Run hosts.
+# Cloud Run cannot resolve cluster DNS. Prod routes through the internal-ALB
+# shared gateway (gateway IP + /diarizer); the dev gateway VIP was deleted
+# 2026-11-02, so dev uses the documented rollback Ingress host. Admission
+# rejects any other literal, including a value that merely agrees across
+# Cloud Run hosts.
 _CLOUD_RUN_SPEAKER_EMBEDDING_URL = {
-    'dev': 'http://172.16.48.49/diarizer',
+    'dev': 'http://diarizer.omiapi.com:80',
     'prod': 'http://172.16.160.20/diarizer',
 }
 
@@ -261,7 +263,8 @@ def validate_speaker_embedding_hosts(env: str, env_config: ConfigDict) -> list[V
     voice matching there while the others keep working. Cloud Run cannot use
     in-cluster DNS, so each Cloud Run host must use that environment's
     approved internal-ALB route. GKE hosts share one route (ClusterIP service
-    DNS in prod, the shared internal gateway in dev).
+    DNS in prod, the legacy diarizer Ingress host in dev after the shared
+    internal gateway was removed).
     """
     errors: list[ValidationError] = []
     gke_values: dict[str, str] = {}
