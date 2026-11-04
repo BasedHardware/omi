@@ -1,3 +1,4 @@
+import 'package:omi/utils/conversations/home_member_fallback.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/episode.dart';
@@ -40,7 +41,188 @@ Episode episode(
       emoji: '📝',
     );
 
+ServerConversation waiting(String id, int minute,
+        {bool locked = false, ConversationStatus status = ConversationStatus.completed}) =>
+    ServerConversation(
+      id: id,
+      createdAt: start.add(Duration(minutes: minute)),
+      startedAt: start.add(Duration(minutes: minute)),
+      finishedAt: start.add(Duration(minutes: minute + 1)),
+      structured: Structured('', ''),
+      isLocked: locked,
+      status: status,
+    );
+
 void main() {
+  test('deadline layout takes live-to-ended status from the latest episode', () {
+    final a = conversation('a'), b = conversation('b');
+    final cached = episode(live: true, members: [a, b]);
+    final held = HomeEpisodeLayout([cached]);
+    final ended = episode(members: [a, b], closedAt: start.add(const Duration(hours: 3)));
+    final projection = held.apply([ended], standaloneIds: {});
+    expect(projection.single.live, isFalse, reason: 'ending is a status update, not a refresh boundary');
+    expect(projection.single.closedAt, ended.closedAt);
+    expect(projection.single.startedAt, cached.startedAt);
+    expect(projection.single.conversationIds, cached.conversationIds);
+    expect(held.apply([], standaloneIds: {}).single.live, isFalse,
+        reason: 'a later omitted snapshot must not revert an ended episode to live');
+  });
+
+  test('deadline layout admits a new recording without absorbing an existing source row', () {
+    final old = conversation('old', hours: -1);
+    final a = conversation('a'), b = conversation('b');
+    final held = HomeEpisodeLayout([]);
+    final added = episode(members: [a, b]);
+    final projection = held.apply([added], standaloneIds: {'old'});
+    final rows = buildHomeRows([old], projection, enabled: true);
+    expect(rows.map((row) => row.conversation.id), ['episode:e', 'old']);
+    expect(rows.first.episodeConversationIds, {'a', 'b'});
+  });
+
+  test('deadline layout rejects absorption through full IDs or member metadata and pins admitted recordings', () {
+    final old = conversation('old', hours: -1), a = conversation('a'), b = conversation('b');
+    final held = HomeEpisodeLayout([]);
+    Episode candidate(String id, List<String> ids, List<ServerConversation> members) => Episode(
+        id: id,
+        live: false,
+        startedAt: start,
+        lastActivityAt: start,
+        title: id,
+        conversationIds: ids,
+        members: members,
+        moments: composedMoments);
+    final absorbsFullId = candidate('full-id', ['a', 'old'], [a]);
+    final absorbsMetadata = candidate('metadata', ['a'], [a, old]);
+    final added = candidate('safe', ['a', 'b'], [a, b]);
+    final projection = held.apply([absorbsFullId, absorbsMetadata, added], standaloneIds: {'old'});
+    expect(projection.map((e) => e.id), ['safe']);
+    final changed = candidate('safe', ['a', 'b', 'old'], [a, b, old]);
+    final updated = held.apply([changed], standaloneIds: {'old'});
+    expect(updated.single.conversationIds, ['a', 'b'], reason: 'an admitted episode also keeps its painted membership');
+    expect(updated.single.members.map((m) => m.id), ['a', 'b']);
+    final rows = buildHomeRows([old], updated, enabled: true);
+    expect(rows.map((row) => row.conversation.id), ['episode:safe', 'old']);
+  });
+
+  test('deadline layout keeps membership and order while episode title and processing status update', () {
+    final a = conversation('a');
+    final b = conversation('b', hours: 1);
+    final c = conversation('c', hours: 2);
+    final cached = episode(members: [a, b], moments: [], closedAt: start);
+    final held = HomeEpisodeLayout([cached]);
+    final latest = Episode(
+      id: cached.id,
+      live: false,
+      startedAt: start.add(const Duration(hours: 3)),
+      lastActivityAt: start.add(const Duration(hours: 4)),
+      title: 'Composed title arrived',
+      members: [a, b, c],
+      conversationIds: [a.id, b.id, c.id],
+      moments: composedMoments,
+    );
+    final lateNewEpisode = Episode(
+      id: 'new',
+      live: false,
+      startedAt: start,
+      lastActivityAt: start,
+      conversationIds: [c.id],
+      members: [c],
+    );
+    List<HomeRow> rows(List<Episode> projection) => buildHomeRows([a, b, c], projection,
+        enabled: true, finishingTitle: 'Finishing up…', now: start.add(const Duration(minutes: 1)));
+    final before = rows(held.apply([cached], standaloneIds: {'c'}));
+    final after = rows(held.apply([latest, lateNewEpisode], standaloneIds: {'c'}));
+    expect(before.map((row) => row.conversation.id), ['c', 'episode:e']);
+    expect(after.map((row) => row.conversation.id), before.map((row) => row.conversation.id));
+    expect(after.map((row) => row.startedAt), before.map((row) => row.startedAt));
+    expect(before.last.isProcessing, isTrue);
+    expect(after.last.isProcessing, isFalse, reason: 'composition status updates in place');
+    expect(after.last.conversation.structured.title, 'Composed title arrived');
+    expect(after.last.episodeConversationIds, {'a', 'b'});
+    expect(after.last.episode!.members.map((member) => member.id), ['a', 'b']);
+    expect(held.apply([], standaloneIds: {'c'}).single, isNotNull,
+        reason: 'an omitted episode cannot remove a painted row');
+    expect(latest.members.length, 3, reason: 'the provider snapshot is never mutated');
+  });
+
+  test('queued empty captures form contiguous Processing runs with every member reachable', () {
+    final a = waiting('a', 0), b = waiting('b', 2), old = waiting('old', -20);
+    final rows =
+        buildHomeRows([a, b, old], [], enabled: false, groupAwaitingTranscript: true, processingTitle: 'Processing');
+    expect(rows.length, 2);
+    expect(rows.first.conversation.structured.title, 'Processing');
+    expect(rows.first.episode!.members.map((m) => m.id).toSet(), {'a', 'b'});
+    expect(rows.expand((r) => r.episodeConversationIds).toSet(), {'a', 'b', 'old'});
+    expect(rows.every((r) => r.isProcessing), isTrue);
+    expect(buildHomeRows([a, b], [], enabled: false).map((r) => r.conversation.id), ['a', 'b'],
+        reason: 'filtered views keep exact source matches');
+  });
+  test('awaiting speech stays in its episode after the summary deadline', () {
+    final a = waiting('a', 0), b = waiting('b', 2);
+    final rows = buildHomeRows([
+      a,
+      b
+    ], [
+      episode(members: [a, b], moments: [], closedAt: start)
+    ],
+        enabled: true,
+        now: start.add(const Duration(days: 1)),
+        finishingTitle: 'Finishing up…',
+        processingTitle: 'Processing',
+        groupAwaitingTranscript: true);
+    expect(rows.single.isProcessing, isTrue);
+    expect(rows.single.conversation.structured.title, 'Finishing up…');
+    expect(rows.single.episode!.members.length, 2);
+  });
+  test('ready, locked and in-flight rows break waiting runs and remain ordinary', () {
+    final ready = conversation('ready');
+    final locked = waiting('locked', 2, locked: true);
+    final pending = waiting('pending', 3, status: ConversationStatus.processing);
+    final rows = buildHomeRows([waiting('a', 0), ready, locked, pending], [],
+        enabled: false, groupAwaitingTranscript: true, processingTitle: 'Processing');
+    for (final c in [ready, locked, pending]) {
+      expect(rows.singleWhere((r) => r.conversation.id == c.id).conversation, same(c));
+    }
+  });
+  test('suppression acknowledges full loaded snapshots and keeps unknown or unsettled members visible', () {
+    final source = conversation('a')
+      ..starred = true
+      ..folderId = 'folder';
+    final held = acknowledgeLoadedHomeMembers({
+      'e': [conversation('a'), conversation('unknown'), waiting('waiting', 0)],
+      'locked-parent': [conversation('a'), waiting('locked', 1)],
+      'locked-metadata': [conversation('a'), waiting('unknown-lock', 1, locked: true)],
+    }, [
+      source,
+      waiting('waiting', 0),
+      waiting('locked', 1, locked: true)
+    ]);
+    expect(held['e'], [same(source)]);
+    expect(held.containsKey('locked-parent'), isFalse);
+    expect(held.containsKey('locked-metadata'), isFalse);
+    final restored = retainSuppressedHomeMembers([], {source.id: held['e']!.single}, ['a']).single;
+    expect(restored.starred, isTrue);
+    expect(restored.folderId, 'folder');
+  });
+
+  test('server omissions remain reachable when an overlay is replaced, on any page', () {
+    final a = conversation('a');
+    final b = conversation('b');
+    final old = conversation('unfetched-older', hours: -300);
+    final local = retainSuppressedHomeMembers([old], {'a': a, 'b': b}, ['a', 'b']);
+    final loaded = buildHomeRows(
+        local,
+        [
+          episode(members: [a, b])
+        ],
+        enabled: true);
+    expect(loaded.map((r) => r.conversation.id), containsAll(['episode:e', old.id]));
+    expect(loaded.any((r) => r.conversation.id == a.id), isFalse);
+    final replaced = buildHomeRows(local, [], enabled: true);
+    expect(replaced.map((r) => r.conversation.id).toSet(), {'a', 'b', old.id});
+    expect(retainSuppressedHomeMembers([a, b], {'a': a}, ['a', 'unknown']).length, 2);
+  });
+
   for (final live in [false, true]) {
     test('processing owns one episode slot with live=$live, even before retained metadata arrives', () {
       final a = conversation('a');
@@ -197,6 +379,17 @@ void main() {
     final row = buildHomeRows([conversation('a'), conversation('b')], [e], enabled: true).single;
     expect(row.conversation.structured.title, 'Title a');
     expect(row.conversation.structured.emoji, '☕');
+  });
+
+  test('uncomposed episode never echoes the first member title', () {
+    final a = conversation('a');
+    final b = conversation('b');
+    final e = episode(members: [a, b], moments: const [], closedAt: start);
+    final row = buildHomeRows([a, b], [e],
+            enabled: true, finishingTitle: 'Finishing up…', now: start.add(const Duration(minutes: 1)))
+        .single;
+    expect(row.conversation.structured.title, 'Finishing up…');
+    expect(a.structured.title, 'Title a');
   });
 
   group('closed episode waiting for its summary', () {

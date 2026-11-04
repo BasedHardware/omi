@@ -4523,6 +4523,7 @@
     "liveTranscribedUpTo": "تم النسخ حتى {time}",
     "liveAudioSaved": "تم حفظ {duration}",
     "liveAudioSavedDetail": "ستظهر هنا أسماء المتحدثين والنص النهائي أثناء الرفع.",
+    "episodeFinishingUp": "جارٍ الانتهاء…",
     "referralAffiliate": "برنامج التسويق بالعمولة",
     "referralCampaignTerms": "يحصل أصدقاؤك على خصم 10% على أجهزة Omi. شراء أول صديقين مختلفين تفتحان شهرين من Pro، وشراء الأصدقاء الثلاثة المختلفين التاليين تفتح 3 أشهر أخرى. حتى 5 أصدقاء و5 أشهر إجمالاً.",
     "referralMilestone": "{months} أشهر Pro · {count}/{target} مشتريات",

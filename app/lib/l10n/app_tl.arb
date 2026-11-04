@@ -11949,6 +11949,7 @@
     "liveTranscribedUpTo": "Na-transcribe hanggang {time}",
     "liveAudioSaved": "{duration} na-save",
     "liveAudioSavedDetail": "Lalabas dito ang mga nagsasalita at huling transcript habang nag-a-upload.",
+    "episodeFinishingUp": "Tinatapos…",
     "referralAffiliate": "Affiliate program",
     "referralCampaignTerms": "May 10% diskuwento ang mga kaibigan sa Omi device. Ang pagbili ng unang 2 magkaibang kaibigan ay nagbibigay ng 2 buwang Pro, ang pagbili ng susunod na 3 pang magkaibang kaibigan ay 3 buwan pa. Hanggang 5 kaibigan at 5 buwan sa kabuuan.",
     "referralMilestone": "{months} buwang Pro · {count}/{target} pagbili",

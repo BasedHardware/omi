@@ -14949,6 +14949,9 @@ class AppLocalizationsHi extends AppLocalizations {
   String get liveAudioSavedDetail => 'अपलोड के साथ वक्ता और अंतिम ट्रांसक्रिप्ट यहाँ दिखेंगे।';
 
   @override
+  String get episodeFinishingUp => 'पूरा किया जा रहा है…';
+
+  @override
   String get referralAffiliate => 'एफ़िलिएट प्रोग्राम';
 
   @override

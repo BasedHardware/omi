@@ -4523,6 +4523,7 @@
     "liveTranscribedUpTo": "Απομαγνητοφώνηση έως τις {time}",
     "liveAudioSaved": "Αποθηκεύτηκαν {duration}",
     "liveAudioSavedDetail": "Οι ομιλητές και η τελική απομαγνητοφώνηση θα εμφανιστούν εδώ κατά τη μεταφόρτωση.",
+    "episodeFinishingUp": "Ολοκλήρωση…",
     "referralAffiliate": "Πρόγραμμα συνεργατών",
     "referralCampaignTerms": "Οι φίλοι έχουν 10% έκπτωση σε συσκευές Omi. Οι αγορές των πρώτων 2 διαφορετικών φίλων ξεκλειδώνουν 2 μήνες Pro, οι αγορές των επόμενων 3 διαφορετικών φίλων άλλους 3. Έως 5 φίλοι και 5 μήνες συνολικά.",
     "referralMilestone": "{months} μήνες Pro · {count}/{target} αγορές",

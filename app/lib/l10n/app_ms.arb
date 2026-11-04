@@ -4523,6 +4523,7 @@
     "liveTranscribedUpTo": "Ditranskripsi sehingga {time}",
     "liveAudioSaved": "{duration} disimpan",
     "liveAudioSavedDetail": "Penutur dan transkrip akhir akan muncul di sini semasa dimuat naik.",
+    "episodeFinishingUp": "Sedang menyiapkan…",
     "referralAffiliate": "Program ahli gabungan",
     "referralCampaignTerms": "Rakan mendapat diskaun 10% peranti Omi. Pembelian oleh 2 rakan berbeza pertama membuka 2 bulan Pro, pembelian oleh 3 rakan berbeza seterusnya 3 bulan lagi. Maksimum 5 rakan dan jumlah 5 bulan.",
     "referralMilestone": "{months} bulan Pro · {count}/{target} pembelian",

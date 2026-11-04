@@ -4523,6 +4523,7 @@
     "liveTranscribedUpTo": "Transkribeeritud kuni {time}",
     "liveAudioSaved": "{duration} salvestatud",
     "liveAudioSavedDetail": "Kõnelejad ja lõplik transkriptsioon ilmuvad siia üleslaadimise ajal.",
+    "episodeFinishingUp": "Lõpetamine…",
     "referralAffiliate": "Partnerprogramm",
     "referralCampaignTerms": "Sõbrad saavad Omi seadmetelt 10% soodustust. Esimese 2 erineva sõbra ostud annavad 2 kuud Pro-d, järgmise 3 erineva sõbra ostud veel 3 kuud. Kuni 5 sõpra ja kokku 5 kuud.",
     "referralMilestone": "{months} kuud Pro-d · {count}/{target} ostu",

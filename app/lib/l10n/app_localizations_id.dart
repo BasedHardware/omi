@@ -14981,6 +14981,9 @@ class AppLocalizationsId extends AppLocalizations {
   String get liveAudioSavedDetail => 'Pembicara dan transkrip akhir akan muncul di sini saat diunggah.';
 
   @override
+  String get episodeFinishingUp => 'Menyelesaikan…';
+
+  @override
   String get referralAffiliate => 'Program afiliasi';
 
   @override

@@ -4523,6 +4523,7 @@
     "liveTranscribedUpTo": "Đã chép đến {time}",
     "liveAudioSaved": "Đã lưu {duration}",
     "liveAudioSavedDetail": "Người nói và bản chép cuối cùng sẽ xuất hiện ở đây khi tải lên.",
+    "episodeFinishingUp": "Đang hoàn tất…",
     "referralAffiliate": "Chương trình tiếp thị liên kết",
     "referralCampaignTerms": "Bạn bè được giảm 10% thiết bị Omi. Lượt mua của 2 người bạn khác nhau đầu tiên mở khóa 2 tháng Pro, lượt mua của 3 người bạn khác nhau tiếp theo thêm 3 tháng. Tối đa 5 bạn và tổng cộng 5 tháng.",
     "referralMilestone": "{months} tháng Pro · {count}/{target} lượt mua",

@@ -11949,6 +11949,7 @@
     "liveTranscribedUpTo": "Транскрибовано до {time}",
     "liveAudioSaved": "Сачувано {duration}",
     "liveAudioSavedDetail": "Говорници и коначни транскрипт појавиће се овде током отпремања.",
+    "episodeFinishingUp": "Завршавање…",
     "referralAffiliate": "Партнерски програм",
     "referralCampaignTerms": "Пријатељи добијају 10% попуста на Omi уређаје. Куповине прва 2 различита пријатеља откључавају 2 месеца Pro, куповине следећа 3 различита пријатеља још 3. До 5 пријатеља и укупно 5 месеци.",
     "referralMilestone": "{months} месеци Pro · {count}/{target} куповина",

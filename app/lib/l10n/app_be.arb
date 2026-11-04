@@ -11949,6 +11949,7 @@
     "liveTranscribedUpTo": "Транскрыбавана да {time}",
     "liveAudioSaved": "Захавана {duration}",
     "liveAudioSavedDetail": "Удзельнікі і канчатковая транскрыпцыя з'явяцца тут падчас загрузкі.",
+    "episodeFinishingUp": "Завяршаем…",
     "referralAffiliate": "Партнёрская праграма",
     "referralCampaignTerms": "Сябры атрымліваюць зніжку 10% на прылады Omi. Пакупкі першых 2 розных сяброў адкрываюць 2 месяцы Pro, пакупкі наступных 3 розных сяброў — яшчэ 3. Да 5 сяброў і 5 месяцаў.",
     "referralMilestone": "{months} мес. Pro · {count}/{target} пакупак",

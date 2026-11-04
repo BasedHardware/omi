@@ -4523,6 +4523,7 @@
     "liveTranscribedUpTo": "Transcris până la {time}",
     "liveAudioSaved": "{duration} salvate",
     "liveAudioSavedDetail": "Vorbitorii și transcrierea finală vor apărea aici pe măsură ce se încarcă.",
+    "episodeFinishingUp": "Se finalizează…",
     "referralAffiliate": "Program de afiliere",
     "referralCampaignTerms": "Prietenii primesc 10% reducere la dispozitivele Omi. Achizițiile primilor 2 prieteni diferiți deblochează 2 luni Pro, cele ale următorilor 3 prieteni diferiți încă 3. Maximum 5 prieteni și 5 luni în total.",
     "referralMilestone": "{months} luni Pro · {count}/{target} achiziții",

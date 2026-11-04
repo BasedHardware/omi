@@ -4523,6 +4523,7 @@
     "liveTranscribedUpTo": "Transkribiert bis {time}",
     "liveAudioSaved": "{duration} gespeichert",
     "liveAudioSavedDetail": "Sprecher und endgültiges Transkript erscheinen hier beim Hochladen.",
+    "episodeFinishingUp": "Wird fertiggestellt…",
     "referralAffiliate": "Partnerprogramm",
     "referralCampaignTerms": "Freunde erhalten 10 % Rabatt auf Omi-Geräte. Käufe der ersten 2 verschiedenen Freunde schalten 2 Monate Pro frei, Käufe der nächsten 3 weiteren Freunde weitere 3 Monate. Maximal 5 Freunde und 5 Monate.",
     "referralMilestone": "{months} Monate Pro · {count}/{target} Käufe",

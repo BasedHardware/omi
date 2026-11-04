@@ -14878,6 +14878,9 @@ class AppLocalizationsAr extends AppLocalizations {
   String get liveAudioSavedDetail => 'ستظهر هنا أسماء المتحدثين والنص النهائي أثناء الرفع.';
 
   @override
+  String get episodeFinishingUp => 'جارٍ الانتهاء…';
+
+  @override
   String get referralAffiliate => 'برنامج التسويق بالعمولة';
 
   @override

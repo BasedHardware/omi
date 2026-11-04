@@ -14970,6 +14970,9 @@ class AppLocalizationsNo extends AppLocalizations {
   String get liveAudioSavedDetail => 'Talere og den endelige transkripsjonen dukker opp her under opplasting.';
 
   @override
+  String get episodeFinishingUp => 'Fullfører…';
+
+  @override
   String get referralAffiliate => 'Partnerprogram';
 
   @override

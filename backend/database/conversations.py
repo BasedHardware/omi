@@ -54,6 +54,7 @@ from utils.manual_speaker_assignments import (
     normalize_rejection,
     remap_absorbed_receipt,
 )
+from utils.conversations.home_titles import apply_user_title, project_home
 from database.mcp_read_queries import MCP_CONVERSATION_CARD_FIELD_PATHS, MCP_CONVERSATION_TRANSCRIPT_FIELD_PATHS
 from database.quiet_check_retirement import restore_quiet_check_in_transaction, stop_quiet_check_for_conversation
 from ._client import db, delete_collection_recursive, get_firestore_client, run_transactional
@@ -131,7 +132,7 @@ def get_conversation_ids(uid: str) -> List[str]:
 # *********************************
 
 
-def _decrypt_conversation_data(conversation_data: Dict[str, Any], uid: str) -> Dict[str, Any]:
+def _decrypt_conversation_data(conversation_data: Dict[str, Any], uid: str, *, firestore_client=None) -> Dict[str, Any]:
     data = copy.deepcopy(conversation_data)
     _reveal_match_scores_for_read(data, uid)
 
@@ -147,6 +148,9 @@ def _decrypt_conversation_data(conversation_data: Dict[str, Any], uid: str) -> D
             require_decryption=True,
         )
         _reveal_manual_speaker_assignments_for_read(data, uid)
+        from database.recurring_voice_privacy import filter_segments
+
+        filter_segments(uid, data['transcript_segments'], firestore_client=firestore_client)
         return data
 
     if isinstance(data['transcript_segments'], str):
@@ -177,6 +181,9 @@ def _decrypt_conversation_data(conversation_data: Dict[str, Any], uid: str) -> D
         from utils.conversations.speaker_grouping_storage import reveal_segments
 
         reveal_segments(segments, uid)
+        from database.recurring_voice_privacy import filter_segments
+
+        filter_segments(uid, segments, firestore_client=firestore_client)
     _reveal_manual_speaker_assignments_for_read(data, uid)
     return data
 
@@ -440,12 +447,12 @@ def _decode_transcript_segments_strict(
 ) -> List[Any]:
     from utils.conversations.speaker_grouping_storage import reveal_segments
 
-    segments = _decode_transcript_segments_blob(uid, raw_segments, compressed, require_decryption=require_decryption)
+    segments = decode_transcript_segments_blob(uid, raw_segments, compressed, require_decryption=require_decryption)
     reveal_segments(segments, uid)
     return segments
 
 
-def _decode_transcript_segments_blob(
+def decode_transcript_segments_blob(
     uid: str, raw_segments: Any, compressed: bool, *, require_decryption: bool = False
 ) -> List[Any]:
     """Decode a stored ``transcript_segments`` blob, raising when it cannot be read.
@@ -665,23 +672,15 @@ def prepare_conversation_for_read(
     _reveal_user_corrections_for_read(data, uid)
     if is_completed_rule_discard(data):
         data['discarded'] = True
-    # User titles are durable overrides. Conversation processing owns the
-    # generated title, but must never erase an explicit user edit.
-    user_title = effective_user_title(data.get('user_title'))
-    if user_title is not None:
-        structured = data.get('structured')
-        if not isinstance(structured, dict):
-            structured = {}
-            data['structured'] = structured
-        structured['title'] = user_title
+    apply_user_title(data, effective_user_title(data.get('user_title')))
     level = data.get('data_protection_level')
 
     if level == 'enhanced':
-        from utils.agent_capabilities.transcripts import project
-
-        return project(
+        return project_home(
             uid,
-            conversation_recorded_time.hydrate(_decrypt_conversation_data(data, uid)),
+            conversation_recorded_time.hydrate(
+                _decrypt_conversation_data(data, uid, firestore_client=firestore_client)
+            ),
             firestore_client=firestore_client,
             read_budget=read_budget,
         )
@@ -700,11 +699,13 @@ def prepare_conversation_for_read(
         from utils.conversations.speaker_grouping_storage import reveal_segments
 
         reveal_segments(segments, uid)
+        from database.recurring_voice_privacy import filter_segments
+
+        filter_segments(uid, segments, firestore_client=firestore_client)
     _reveal_manual_speaker_assignments_for_read(data, uid)
     _reveal_match_scores_for_read(data, uid)
-    from utils.agent_capabilities.transcripts import project
 
-    return project(
+    return project_home(
         uid, conversation_recorded_time.hydrate(data), firestore_client=firestore_client, read_budget=read_budget
     )
 
@@ -1114,6 +1115,8 @@ def _drop_summary_memo(uid: str) -> None:
 @prepare_for_write(data_arg_name='conversation_data', prepare_func=_prepare_conversation_for_write)
 @after_write('conversations')
 def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
+    from database.recurring_voice_privacy import filter_processing_write
+
     # `updated_at` is Firestore document metadata exposed by reads, never an
     # application-owned field to replay into a later write.
     conversation_data.pop('updated_at', None)
@@ -1193,6 +1196,7 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
                 write_data.setdefault('structured', {})['overview'] = existing['user_overview']
 
             _reapply_current_manual_assignments(uid, write_data, existing)
+            filter_processing_write(transaction, user_ref, write_data)
             guard_match_score_size(write_data, existing, getattr(conversation_ref, 'path', None))
 
             summary_receipt = summary_delivery.merge_result(existing, write_data, uid)
@@ -1204,6 +1208,7 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
             return
 
         write_data.setdefault('has_photos', False)
+        filter_processing_write(transaction, user_ref, write_data)
 
         summary_receipt = summary_delivery.creation_result(write_data, uid)
         delivery_outcome = summary_terminal_outcome({}, write_data)
@@ -1245,6 +1250,8 @@ def persist_processing_result_with_lifecycle(
     existing row onto ``completed``. It must not raise; the persist outcome is
     independent of observers.
     """
+    from database.recurring_voice_privacy import filter_processing_write
+
     conversation_data.pop('updated_at', None)
     if 'audio_base64_url' in conversation_data:
         del conversation_data['audio_base64_url']
@@ -1419,6 +1426,7 @@ def persist_processing_result_with_lifecycle(
             write_data.setdefault('structured', {})['overview'] = existing['user_overview']
 
         _reapply_current_manual_assignments(uid, write_data, existing)
+        filter_processing_write(transaction, user_ref, write_data)
         guard_match_score_size(write_data, existing, getattr(conversation_ref, 'path', None))
 
         summary_receipt = summary_delivery.merge_result(existing, write_data, uid)
@@ -1960,6 +1968,8 @@ def get_conversations_without_photos(
                 'sync_relevance_user_kept',
                 'has_photos',
                 'folder_user_set',
+                'episode_id',
+                'finalization_status',
                 *SETTLING_FIELDS,
             }
         )
@@ -1997,7 +2007,7 @@ def get_conversations_without_photos(
     # Sort
     conversations_ref = conversations_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
 
-    return _collect_visible_conversation_page(
+    rows = _collect_visible_conversation_page(
         conversations_ref,
         limit=limit,
         offset=offset,
@@ -2016,6 +2026,8 @@ def get_conversations_without_photos(
             starred=starred,
         ),
     )
+
+    return rows
 
 
 @prepare_for_read(decrypt_func=prepare_conversation_for_read)
@@ -3484,7 +3496,7 @@ def assign_conversation_speaker(
             current.pop(field, None)
         return current, resolved, removed, relabeled
 
-    result = run_assignment_transaction(client, assign)
+    result = run_assignment_transaction(client, assign, uid=uid)
     invalidate_people_stats_cache(uid)
     current, resolved, _, before = result
     if any(s.get('speaker_grouping_shadow') for s in current.get('transcript_segments') or []):
@@ -3514,6 +3526,9 @@ def assign_conversation_speaker(
         _reveal_match_scores_for_read(current, uid)
     except Exception:
         _drop_match_scores(current, 'malformed_doc')
+    from database.recurring_voice_privacy import filter_segments
+
+    filter_segments(uid, current.get('transcript_segments') or [], firestore_client=client)
     return result
 
 

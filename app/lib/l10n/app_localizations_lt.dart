@@ -14988,6 +14988,9 @@ class AppLocalizationsLt extends AppLocalizations {
   String get liveAudioSavedDetail => 'Kalbėtojai ir galutinė transkripcija atsiras čia įkeliant.';
 
   @override
+  String get episodeFinishingUp => 'Baigiama…';
+
+  @override
   String get referralAffiliate => 'Partnerių programa';
 
   @override

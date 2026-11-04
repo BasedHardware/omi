@@ -1193,6 +1193,13 @@ _add(
         neutrals={'now': (T1, 'claim clock; does not change serving query')},
     )
 )
+_add(
+    DriverEntry(
+        'database.recurring_voice_privacy.scrub_transcripts',
+        base={'uid': UID},
+        profiles=(CallerProfile('recurring-optout-transcript-scrub', {}),),
+    )
+)
 _add(DriverEntry('database.conversations.iter_all_conversation_photos', base={'uid': UID}))
 _add(
     DriverEntry(

@@ -1,6 +1,6 @@
 """Batch final pass on each unit's staged PCM and admitted capture clock.
 
-No audio, transcript, centroid or enrollment artifact is written by this adapter.
+After successful revalidation, retained private recurring profiles may be published.
 Incomplete conversation coverage leaves every resolver label unchanged.
 """
 
@@ -13,8 +13,12 @@ import time
 import wave
 from datetime import datetime, timezone
 
-from config.batch_conversation_speakers import BATCH_CONVERSATION_SCOPE, final_pass_enabled_for
+from config.batch_conversation_speakers import BATCH_CONVERSATION_SCOPE, final_pass_enabled_for, recurring_enabled_for
 from database.batch_final_pass import load_reference
+from database import recurring_voices
+from utils.observability.recurring_voices import identity_speech
+from utils.speakers.recurring_voices import near_misses
+from utils.product_telemetry import emit_product_event
 from database.batch_pipeline_store import FirestoreStore
 from database.redis_db import create_bounded_redis_client
 from models.conversation import ConversationSpeakers
@@ -231,7 +235,22 @@ def _run(uid, conversation, receipt, load_prints, apply):
             _fallback('skipped_budget')
         return admitted
 
-    cache = {key: {'embedding': vector} for key, vector in load_prints(uid, allow_audio_repair=False).items()}
+    expected = None
+    if recurring_enabled_for(uid, conversation.transcript_segments):
+        try:
+            expected = recurring_voices.checkpoint(uid, conversation.id, receipt=receipt)
+        except Exception:
+            record_fallback(
+                component='stt_selection',
+                from_mode='batch_final_pass',
+                to_mode='legacy_speaker_matching',
+                reason='unavailable',
+                outcome='degraded',
+            )
+    print_options = {'allow_audio_repair': False}
+    if expected is not None:
+        print_options['require_complete'] = True
+    cache = {key: {'embedding': vector} for key, vector in load_prints(uid, **print_options).items()}
     words.sort(key=lambda w: w['timestamp'])
     passed, outcome = run_final_pass(
         pcm,
@@ -311,5 +330,70 @@ def _run(uid, conversation, receipt, load_prints, apply):
             else []
         ),
     )
+    recurring_labels = {}
+    if expected is not None and outcome.get('centroids'):
+        try:
+            eligible = {
+                voice: centroid
+                for voice, centroid in outcome['centroids'].items()
+                if all(w['segment_id'] in updates for w in outcome['assignments'] if w['speaker'] == voice)
+            }
+            recurring_labels = recurring_voices.learn(
+                uid,
+                conversation,
+                eligible,
+                {k: v['embedding'] for k, v in cache.items()},
+                expected,
+                owner_reserved=manual_owner_reserved(receipt),
+            )
+        except Exception:
+            record_fallback(
+                component='stt_selection',
+                from_mode='batch_final_pass',
+                to_mode='legacy_speaker_matching',
+                reason='unavailable',
+                outcome='degraded',
+            )
+    # Only a successful transaction may project recurring identity. Manual edits
+    # remain authoritative and are excluded from both grouping and learning.
+    original_voices = {sid: voice for voice, sid in voice_ids.items()}
+    for segment in candidate.transcript_segments:
+        if segment.id not in updates:
+            continue
+        voice = original_voices.get(updates[segment.id])
+        label = recurring_labels.get(voice)
+        segment.recurring_voice_id = None
+        if label is not None:
+            pid = label.get('person_id')
+            segment.is_user = pid == 'user'
+            segment.person_id = pid if pid != 'user' else None
+            segment.recurring_voice_id = label.get('recurring_voice_id')
+            if segment.recurring_voice_id:
+                segment.voice_candidates = near_misses(
+                    outcome['centroids'][voice]['embedding'], {k: v['embedding'] for k, v in cache.items()}
+                )
+            segment.speaker_identity_status = 'user' if segment.is_user else 'not_user' if pid else 'no_match'
+    projected = {s.id: s for s in candidate.transcript_segments}
+    speech_mix = dict(owner=0.0, person=0.0, recurring=0.0, unnamed=0.0)
+    for word in outcome['assignments']:
+        segment = projected.get(word['segment_id'])
+        if segment is not None:
+            kind = (
+                'owner'
+                if segment.is_user
+                else 'person' if segment.person_id else 'recurring' if segment.recurring_voice_id else 'unnamed'
+            )
+            seconds = max(0, word['timestamp'][1] - word['timestamp'][0])
+            identity_speech(kind, seconds)
+            speech_mix[kind] += seconds
     conversation.transcript_segments = candidate.transcript_segments
     conversation.speaker_resolution = candidate.speaker_resolution
+    emit_product_event(
+        uid=uid,
+        event='Batch Speaker Identity Mix',
+        properties={
+            **speech_mix,
+            'recurring_cohort': 'on' if recurring_enabled_for(uid, conversation.transcript_segments) else 'off',
+            'speakers': len(voice_ids),
+        },
+    )

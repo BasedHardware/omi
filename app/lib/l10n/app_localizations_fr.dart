@@ -15089,6 +15089,9 @@ class AppLocalizationsFr extends AppLocalizations {
   String get liveAudioSavedDetail => 'Les intervenants et la transcription finale apparaîtront ici au fil de l\'envoi.';
 
   @override
+  String get episodeFinishingUp => 'Finalisation…';
+
+  @override
   String get referralAffiliate => 'Programme d\'affiliation';
 
   @override

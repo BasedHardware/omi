@@ -4523,6 +4523,7 @@
     "liveTranscribedUpTo": "{time} तक ट्रांसक्राइब हुआ",
     "liveAudioSaved": "{duration} सहेजा गया",
     "liveAudioSavedDetail": "अपलोड के साथ वक्ता और अंतिम ट्रांसक्रिप्ट यहाँ दिखेंगे।",
+    "episodeFinishingUp": "पूरा किया जा रहा है…",
     "referralAffiliate": "एफ़िलिएट प्रोग्राम",
     "referralCampaignTerms": "दोस्तों को Omi डिवाइस पर 10% छूट मिलती है। पहले 2 दोस्तों की खरीद से 2 महीने Pro और अगले 3 से 3 महीने और मिलते हैं। अधिकतम 5 दोस्त और कुल 5 महीने।",
     "referralMilestone": "{months} महीने Pro · {count}/{target} खरीद",

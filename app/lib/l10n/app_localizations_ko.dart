@@ -14759,6 +14759,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get liveAudioSavedDetail => '업로드되는 대로 화자와 최종 대화 내용이 여기에 표시됩니다.';
 
   @override
+  String get episodeFinishingUp => '마무리 중…';
+
+  @override
   String get referralAffiliate => '제휴 프로그램';
 
   @override

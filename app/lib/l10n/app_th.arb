@@ -4523,6 +4523,7 @@
     "liveTranscribedUpTo": "ถอดความถึง {time}",
     "liveAudioSaved": "บันทึกแล้ว {duration}",
     "liveAudioSavedDetail": "ผู้พูดและบทถอดความฉบับสุดท้ายจะปรากฏที่นี่ระหว่างอัปโหลด",
+    "episodeFinishingUp": "กำลังดำเนินการให้เสร็จ…",
     "referralAffiliate": "โปรแกรมพันธมิตร",
     "referralCampaignTerms": "เพื่อนรับส่วนลดอุปกรณ์ Omi 10% การซื้อของเพื่อนต่างคน 2 คนแรกปลดล็อก Pro 2 เดือน การซื้อของเพื่อนต่างคนอีก 3 คนปลดล็อกเพิ่ม 3 เดือน สูงสุด 5 คน รวม 5 เดือน",
     "referralMilestone": "Pro {months} เดือน · ซื้อ {count}/{target} ครั้ง",

@@ -14994,6 +14994,9 @@ class AppLocalizationsBs extends AppLocalizations {
   String get liveAudioSavedDetail => 'Govornici i konačni transkript pojavit će se ovdje tokom otpremanja.';
 
   @override
+  String get episodeFinishingUp => 'Završavamo…';
+
+  @override
   String get referralAffiliate => 'Partnerski program';
 
   @override

@@ -4523,6 +4523,7 @@
     "liveTranscribedUpTo": "Transkribuota iki {time}",
     "liveAudioSaved": "Išsaugota {duration}",
     "liveAudioSavedDetail": "Kalbėtojai ir galutinė transkripcija atsiras čia įkeliant.",
+    "episodeFinishingUp": "Baigiama…",
     "referralAffiliate": "Partnerių programa",
     "referralCampaignTerms": "Draugai gauna 10% nuolaidą Omi įrenginiams. Pirmų 2 skirtingų draugų pirkimai atrakina 2 mėnesius Pro, kitų 3 skirtingų draugų pirkimai dar 3. Iki 5 draugų ir iš viso 5 mėnesių.",
     "referralMilestone": "{months} mėn. Pro · {count}/{target} pirkimų",

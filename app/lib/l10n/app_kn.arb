@@ -11949,6 +11949,7 @@
     "liveTranscribedUpTo": "{time} ವರೆಗೆ ಪ್ರತಿಲೇಖನವಾಗಿದೆ",
     "liveAudioSaved": "{duration} ಉಳಿಸಲಾಗಿದೆ",
     "liveAudioSavedDetail": "ಅಪ್‌ಲೋಡ್ ಆಗುತ್ತಿದ್ದಂತೆ ಮಾತನಾಡುವವರು ಮತ್ತು ಅಂತಿಮ ಪ್ರತಿಲೇಖನ ಇಲ್ಲಿ ಬರುತ್ತವೆ.",
+    "episodeFinishingUp": "ಪೂರ್ಣಗೊಳಿಸಲಾಗುತ್ತಿದೆ…",
     "referralAffiliate": "ಅಫಿಲಿಯೇಟ್ ಕಾರ್ಯಕ್ರಮ",
     "referralCampaignTerms": "ಸ್ನೇಹಿತರಿಗೆ Omi ಸಾಧನಗಳ ಮೇಲೆ 10% ರಿಯಾಯಿತಿ. ಮೊದಲ 2 ವಿಭಿನ್ನ ಸ್ನೇಹಿತರ ಖರೀದಿಗಳು 2 ತಿಂಗಳ Pro, ಮುಂದಿನ 3 ವಿಭಿನ್ನ ಸ್ನೇಹಿತರ ಖರೀದಿಗಳು ಇನ್ನೂ 3 ತಿಂಗಳು ನೀಡುತ್ತವೆ. ಗರಿಷ್ಠ 5 ಸ್ನೇಹಿತರು ಮತ್ತು ಒಟ್ಟು 5 ತಿಂಗಳು.",
     "referralMilestone": "{months} ತಿಂಗಳು Pro · {count}/{target} ಖರೀದಿಗಳು",

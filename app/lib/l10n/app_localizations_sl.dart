@@ -14994,6 +14994,9 @@ class AppLocalizationsSl extends AppLocalizations {
   String get liveAudioSavedDetail => 'Govorci in končni prepis se bodo tukaj prikazali med nalaganjem.';
 
   @override
+  String get episodeFinishingUp => 'Zaključevanje…';
+
+  @override
   String get referralAffiliate => 'Partnerski program';
 
   @override

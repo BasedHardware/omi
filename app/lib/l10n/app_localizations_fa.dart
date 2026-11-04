@@ -14961,6 +14961,9 @@ class AppLocalizationsFa extends AppLocalizations {
   String get liveAudioSavedDetail => 'گویندگان و متن نهایی هنگام بارگذاری اینجا نمایش داده می‌شوند.';
 
   @override
+  String get episodeFinishingUp => 'در حال اتمام…';
+
+  @override
   String get referralAffiliate => 'برنامه همکاری در فروش';
 
   @override

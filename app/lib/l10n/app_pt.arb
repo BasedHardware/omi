@@ -4558,6 +4558,7 @@
     "liveTranscribedUpTo": "Transcrito até {time}",
     "liveAudioSaved": "{duration} salvos",
     "liveAudioSavedDetail": "Os falantes e a transcrição final aparecerão aqui durante o envio.",
+    "episodeFinishingUp": "Finalizando…",
     "referralAffiliate": "Programa de afiliados",
     "referralCampaignTerms": "Amigos recebem 10% de desconto em dispositivos Omi. As compras dos primeiros 2 amigos diferentes liberam 2 meses de Pro e as dos próximos 3 amigos diferentes, mais 3. Até 5 amigos e 5 meses no total.",
     "referralMilestone": "{months} meses de Pro · {count}/{target} compras",

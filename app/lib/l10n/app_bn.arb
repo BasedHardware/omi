@@ -11949,6 +11949,7 @@
     "liveTranscribedUpTo": "{time} পর্যন্ত ট্রান্সক্রাইব হয়েছে",
     "liveAudioSaved": "{duration} সংরক্ষিত",
     "liveAudioSavedDetail": "আপলোড হওয়ার সাথে সাথে বক্তা ও চূড়ান্ত ট্রান্সক্রিপ্ট এখানে আসবে।",
+    "episodeFinishingUp": "শেষ করা হচ্ছে…",
     "referralAffiliate": "অ্যাফিলিয়েট প্রোগ্রাম",
     "referralCampaignTerms": "বন্ধুরা Omi ডিভাইসে 10% ছাড় পান। প্রথম 2 জন আলাদা বন্ধুর কেনাকাটায় 2 মাস Pro, পরের 3 জন আলাদা বন্ধুর কেনাকাটায় আরও 3 মাস। সর্বোচ্চ 5 বন্ধু ও মোট 5 মাস।",
     "referralMilestone": "{months} মাস Pro · {count}/{target} কেনাকাটা",

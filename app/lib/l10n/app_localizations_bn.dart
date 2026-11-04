@@ -14961,6 +14961,9 @@ class AppLocalizationsBn extends AppLocalizations {
   String get liveAudioSavedDetail => 'আপলোড হওয়ার সাথে সাথে বক্তা ও চূড়ান্ত ট্রান্সক্রিপ্ট এখানে আসবে।';
 
   @override
+  String get episodeFinishingUp => 'শেষ করা হচ্ছে…';
+
+  @override
   String get referralAffiliate => 'অ্যাফিলিয়েট প্রোগ্রাম';
 
   @override

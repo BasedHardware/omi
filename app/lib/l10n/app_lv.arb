@@ -4523,6 +4523,7 @@
     "liveTranscribedUpTo": "Transkribēts līdz {time}",
     "liveAudioSaved": "Saglabāts {duration}",
     "liveAudioSavedDetail": "Runātāji un galīgā transkripcija šeit parādīsies augšupielādes laikā.",
+    "episodeFinishingUp": "Pabeidzam…",
     "referralAffiliate": "Partneru programma",
     "referralCampaignTerms": "Draugi saņem 10% atlaidi Omi ierīcēm. Pirmo 2 dažādo draugu pirkumi atver 2 Pro mēnešus, nākamo 3 dažādo draugu pirkumi vēl 3. Līdz 5 draugiem un kopā 5 mēnešiem.",
     "referralMilestone": "{months} Pro mēneši · {count}/{target} pirkumi",

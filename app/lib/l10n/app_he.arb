@@ -11949,6 +11949,7 @@
     "liveTranscribedUpTo": "תומלל עד {time}",
     "liveAudioSaved": "{duration} נשמרו",
     "liveAudioSavedDetail": "הדוברים והתמליל הסופי יופיעו כאן במהלך ההעלאה.",
+    "episodeFinishingUp": "מסיימים…",
     "referralAffiliate": "תוכנית שותפים",
     "referralCampaignTerms": "חברים מקבלים 10% הנחה על מכשירי Omi. הרכישות של 2 החברים השונים הראשונים פותחות 2 חודשי Pro, והרכישות של 3 החברים השונים הבאים עוד 3. עד 5 חברים ו-5 חודשים בסך הכול.",
     "referralMilestone": "{months} חודשי Pro · {count}/{target} רכישות",

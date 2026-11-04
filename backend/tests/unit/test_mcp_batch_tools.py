@@ -946,7 +946,7 @@ class TestConversationKeysetPage:
             ),
             _FakeDoc("p1", {"created_at": t0 - timedelta(minutes=1), "deleted": False}),
         ]
-        marked = lambda data, uid: {**data, "decrypted_for": uid}
+        marked = lambda data, uid, *, firestore_client=None: {**data, "decrypted_for": uid}
         query = _DescKeysetQuery(docs)
         with (
             self._stub_client(query),

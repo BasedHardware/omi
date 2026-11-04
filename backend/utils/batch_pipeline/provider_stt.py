@@ -56,6 +56,7 @@ from utils.batch_pipeline.recovery_disposition import (
     inspect_audio,
     result_outcome,
     silence_payload,
+    log_result_held,
 )
 from utils.batch_pipeline.scheduler import owner_key
 from utils.batch_pipeline.provider_stt_admission import PENDING, SttRoute
@@ -909,8 +910,10 @@ class ProviderSttStage:
         # encrypted object is reconciled by a later delivery without a vendor call.
         silence = response.get('outcome') == 'silence'
         outcome = VendorAttemptOutcome.SILENCE if silence else VendorAttemptOutcome.OK
+        stage = 'persist'
         try:
             uri = self.artifacts.persist_recovery_result(item, response, token)
+            stage = 'settle'
             settled = self.protocol.settle(
                 segment_id,
                 token,
@@ -922,13 +925,15 @@ class ProviderSttStage:
             )
         except BatchPrivacyBlocked:
             raise
-        except Exception:
+        except Exception as error:
+            log_result_held('provider', stage, exception_type=type(error).__name__)
             return UnitOutcome('retry', 'dependency_warming', provider_reason=route.provider_reason)
         if settled:
             vendor_metrics.attempt(plan.service, outcome, 0.0 if silence else duration)
             if not silence:
                 self._record_attempt(plan.service, outcome, latency)
         else:
+            log_result_held('provider', 'settle', reason='refused')
             # The attempt was settled elsewhere (abandoned, then failed over): never overwrite.
             vendor_metrics.late_result(plan.service, 'ignored')
         self._log('settled' if settled else 'superseded', 'none')

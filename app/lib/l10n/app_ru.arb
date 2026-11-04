@@ -4558,6 +4558,7 @@
     "liveTranscribedUpTo": "Расшифровано до {time}",
     "liveAudioSaved": "Сохранено {duration}",
     "liveAudioSavedDetail": "Участники и итоговая расшифровка появятся здесь по мере загрузки.",
+    "episodeFinishingUp": "Завершение…",
     "referralAffiliate": "Партнёрская программа",
     "referralCampaignTerms": "Друзья получают скидку 10% на устройства Omi. Покупки первых 2 разных друзей дают 2 месяца Pro, покупки следующих 3 разных друзей — ещё 3 месяца. Всего до 5 друзей и 5 месяцев.",
     "referralMilestone": "{months} мес. Pro · {count}/{target} покупок",

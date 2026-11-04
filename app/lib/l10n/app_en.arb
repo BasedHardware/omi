@@ -18297,6 +18297,10 @@
     "@liveAudioSavedDetail": {
         "description": "Under the saved-audio card's heading."
     },
+    "episodeFinishingUp": "Finishing up…",
+    "@episodeFinishingUp": {
+        "description": "Neutral Home row title while an episode summary is being completed."
+    },
     "referralAffiliate": "Affiliate program",
     "referralCampaignTerms": "Friends get 10% off Omi hardware. Your first 2 friends who purchase unlock 2 months of Pro. The next 3 unlock 3 more. Up to 5 friends and 5 months total.",
     "referralMilestone": "{months} months of Pro · {count}/{target} purchases",

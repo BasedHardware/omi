@@ -4523,6 +4523,7 @@
     "liveTranscribedUpTo": "Getranscribeerd tot {time}",
     "liveAudioSaved": "{duration} opgeslagen",
     "liveAudioSavedDetail": "Sprekers en het definitieve transcript verschijnen hier tijdens het uploaden.",
+    "episodeFinishingUp": "Afronden…",
     "referralAffiliate": "Partnerprogramma",
     "referralCampaignTerms": "Vrienden krijgen 10% korting op Omi-apparaten. Aankopen van de eerste 2 verschillende vrienden ontgrendelen 2 maanden Pro, aankopen van de volgende 3 verschillende vrienden nog 3 maanden. Maximaal 5 vrienden en 5 maanden.",
     "referralMilestone": "{months} maanden Pro · {count}/{target} aankopen",

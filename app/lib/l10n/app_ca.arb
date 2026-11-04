@@ -4523,6 +4523,7 @@
     "liveTranscribedUpTo": "Transcrit fins a les {time}",
     "liveAudioSaved": "{duration} desats",
     "liveAudioSavedDetail": "Els interlocutors i la transcripció final apareixeran aquí a mesura que es pugi.",
+    "episodeFinishingUp": "Enllestint…",
     "referralAffiliate": "Programa d'afiliats",
     "referralCampaignTerms": "Els amics tenen un 10% de descompte en dispositius Omi. Les compres dels primers 2 amics diferents desbloquegen 2 mesos de Pro i les dels 3 amics diferents següents, 3 més. Fins a 5 amics i 5 mesos en total.",
     "referralMilestone": "{months} mesos de Pro · {count}/{target} compres",

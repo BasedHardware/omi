@@ -4565,6 +4565,7 @@
     "liveTranscribedUpTo": "Transskriberet frem til {time}",
     "liveAudioSaved": "{duration} gemt",
     "liveAudioSavedDetail": "Talere og den endelige transskription dukker op her under upload.",
+    "episodeFinishingUp": "Afslutter…",
     "referralAffiliate": "Partnerprogram",
     "referralCampaignTerms": "Venner får 10% rabat på Omi-enheder. Køb fra de første 2 forskellige venner giver 2 måneder Pro, køb fra de næste 3 forskellige venner giver 3 mere. Højst 5 venner og 5 måneder i alt.",
     "referralMilestone": "{months} måneder Pro · {count}/{target} køb",

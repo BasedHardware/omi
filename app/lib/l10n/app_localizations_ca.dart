@@ -15041,6 +15041,9 @@ class AppLocalizationsCa extends AppLocalizations {
   String get liveAudioSavedDetail => 'Els interlocutors i la transcripció final apareixeran aquí a mesura que es pugi.';
 
   @override
+  String get episodeFinishingUp => 'Enllestint…';
+
+  @override
   String get referralAffiliate => 'Programa d\'afiliats';
 
   @override

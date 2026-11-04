@@ -1,7 +1,7 @@
 """Narrow Firestore transaction fixture for ordering-sensitive unit tests.
 
 This fixture models document-reference ``get(transaction=...)`` plus transaction
-``create``, ``set``, and ``update``, plus the emulator-proven People
+``create``, ``set``, ``update`` and ``delete``, plus the emulator-proven People
 generation merge increment. It enforces Firestore's rule that every
 transactional read must occur before the first transactional write.
 
@@ -13,7 +13,9 @@ proven by daily_memory_sweep_emulator_test.py for legacy window fence admission.
 Projected client BatchGet of folder membership is covered by
 test_folder_delete_concurrency_emulator.py; all of its reads obey the same
 read-before-write rule. BatchGet does not promise request-order results.
-It deliberately does not model other queries, deletes, commit/rollback visibility,
+Transaction deletes are proven by test_recurring_voice_privacy_firestore.py:
+removed profiles must disappear rather than leave documents outside TTL.
+It deliberately does not model other queries, standalone deletes, commit/rollback visibility,
 or retry and contention semantics. Extend it only when an incident proves that
 one of those boundaries needs a hermetic guard.
 
@@ -59,7 +61,7 @@ def _assert_storable(value: Any, *, in_array: bool = False) -> None:
 
 
 _SUPPORTED_OPERATIONS = (
-    'document get/create, transaction-bound document get, transaction create/set/update, bounded equality id queries, '
+    'document get/create, transaction-bound document get, transaction create/set/update/delete, bounded equality id queries, '
     'projected client folder-membership BatchGet'
 )
 
@@ -134,6 +136,27 @@ class StrictFirestoreDocument:
                     'user_title',
                     'starred',
                     'folder_user_set',
+                    'record_lane_owner',
+                    'record_projection_revision',
+                    'record_upload_failed',
+                    'record_audio_partial',
+                    'status',
+                    'started_at',
+                    'finished_at',
+                    'structured',
+                ],
+                [
+                    'discarded',
+                    'deleted',
+                    'sync_merged_into',
+                    'relevance_decision',
+                    'sync_relevance_user_kept',
+                    'has_photos',
+                    'photos',
+                    'user_title',
+                    'starred',
+                    'folder_user_set',
+                    'summary_blocked_reason',
                     'record_lane_owner',
                     'record_projection_revision',
                     'record_upload_failed',
@@ -274,6 +297,7 @@ class StrictFirestoreTransaction:
         self.creates: list[tuple[tuple[str, ...], dict[str, Any]]] = []
         self.sets: list[tuple[tuple[str, ...], dict[str, Any]]] = []
         self.updates: list[tuple[tuple[str, ...], dict[str, Any]]] = []
+        self.deletes: list[tuple[str, ...]] = []
         self.has_written = False
         self._read_only = False
         self._max_attempts = 1
@@ -342,8 +366,11 @@ class StrictFirestoreTransaction:
         self.updates.append((ref.path, payload))
         self._database.rows[ref.path].update(payload)
 
-    def delete(self, *args: Any, **kwargs: Any) -> None:
-        raise UnsupportedFirestoreOperationError(f'StrictFirestore supports only {_SUPPORTED_OPERATIONS}')
+    def delete(self, ref: StrictFirestoreDocument) -> None:
+        self._assert_reference_belongs(ref)
+        self.has_written = True
+        self.deletes.append(ref.path)
+        self._database.rows.pop(ref.path, None)
 
     def get(self, *args: Any, **kwargs: Any) -> None:
         raise UnsupportedFirestoreOperationError(f'StrictFirestore supports only {_SUPPORTED_OPERATIONS}')

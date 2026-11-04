@@ -4558,6 +4558,7 @@
     "liveTranscribedUpTo": "{time} saatine kadar yazıya döküldü",
     "liveAudioSaved": "{duration} kaydedildi",
     "liveAudioSavedDetail": "Konuşmacılar ve son döküm, yükleme sırasında burada görünür.",
+    "episodeFinishingUp": "Tamamlanıyor…",
     "referralAffiliate": "Satış ortaklığı programı",
     "referralCampaignTerms": "Arkadaşlar Omi cihazlarında %10 indirim alır. İlk 2 farklı arkadaşın satın alması 2 ay Pro, sonraki 3 farklı arkadaşın satın alması ise 3 ay daha kazandırır. En fazla 5 arkadaş ve toplam 5 ay.",
     "referralMilestone": "{months} ay Pro · {count}/{target} satın alma",

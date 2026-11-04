@@ -15000,6 +15000,9 @@ class AppLocalizationsBe extends AppLocalizations {
   String get liveAudioSavedDetail => 'Удзельнікі і канчатковая транскрыпцыя з\'явяцца тут падчас загрузкі.';
 
   @override
+  String get episodeFinishingUp => 'Завяршаем…';
+
+  @override
   String get referralAffiliate => 'Партнёрская праграма';
 
   @override

@@ -4523,6 +4523,7 @@
     "liveTranscribedUpTo": "Транскрибовано до {time}",
     "liveAudioSaved": "Збережено {duration}",
     "liveAudioSavedDetail": "Учасники й остаточна транскрипція з'являться тут під час завантаження.",
+    "episodeFinishingUp": "Завершення…",
     "referralAffiliate": "Партнерська програма",
     "referralCampaignTerms": "Друзі отримують знижку 10% на пристрої Omi. Покупки перших 2 різних друзів дають 2 місяці Pro, покупки наступних 3 різних друзів — ще 3. Разом до 5 друзів і 5 місяців.",
     "referralMilestone": "{months} міс. Pro · {count}/{target} покупок",

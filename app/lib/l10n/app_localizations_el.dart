@@ -15066,6 +15066,9 @@ class AppLocalizationsEl extends AppLocalizations {
       'Οι ομιλητές και η τελική απομαγνητοφώνηση θα εμφανιστούν εδώ κατά τη μεταφόρτωση.';
 
   @override
+  String get episodeFinishingUp => 'Ολοκλήρωση…';
+
+  @override
   String get referralAffiliate => 'Πρόγραμμα συνεργατών';
 
   @override

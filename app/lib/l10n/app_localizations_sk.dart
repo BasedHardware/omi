@@ -14960,6 +14960,9 @@ class AppLocalizationsSk extends AppLocalizations {
   String get liveAudioSavedDetail => 'Rečníci a konečný prepis sa tu objavia počas nahrávania.';
 
   @override
+  String get episodeFinishingUp => 'Dokončuje sa…';
+
+  @override
   String get referralAffiliate => 'Partnerský program';
 
   @override

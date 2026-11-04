@@ -15079,6 +15079,9 @@ class AppLocalizationsDe extends AppLocalizations {
   String get liveAudioSavedDetail => 'Sprecher und endgültiges Transkript erscheinen hier beim Hochladen.';
 
   @override
+  String get episodeFinishingUp => 'Wird fertiggestellt…';
+
+  @override
   String get referralAffiliate => 'Partnerprogramm';
 
   @override

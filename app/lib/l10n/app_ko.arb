@@ -4523,6 +4523,7 @@
     "liveTranscribedUpTo": "{time}까지 변환됨",
     "liveAudioSaved": "{duration} 저장됨",
     "liveAudioSavedDetail": "업로드되는 대로 화자와 최종 대화 내용이 여기에 표시됩니다.",
+    "episodeFinishingUp": "마무리 중…",
     "referralAffiliate": "제휴 프로그램",
     "referralCampaignTerms": "친구는 Omi 기기를 10% 할인받아요. 첫 2명의 구매로 Pro 2개월, 다음 3명으로 3개월을 더 받아요. 최대 5명, 총 5개월이에요.",
     "referralMilestone": "Pro {months}개월 · 구매 {count}/{target}건",

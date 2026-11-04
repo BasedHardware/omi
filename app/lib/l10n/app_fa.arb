@@ -11949,6 +11949,7 @@
     "liveTranscribedUpTo": "رونویسی تا {time}",
     "liveAudioSaved": "{duration} ذخیره شد",
     "liveAudioSavedDetail": "گویندگان و متن نهایی هنگام بارگذاری اینجا نمایش داده می‌شوند.",
+    "episodeFinishingUp": "در حال اتمام…",
     "referralAffiliate": "برنامه همکاری در فروش",
     "referralCampaignTerms": "دوستان ۱۰٪ تخفیف دستگاه Omi می‌گیرند. خرید ۲ دوست متفاوت اول ۲ ماه Pro و خرید ۳ دوست متفاوت بعدی ۳ ماه دیگر باز می‌کند. حداکثر ۵ دوست و مجموعاً ۵ ماه.",
     "referralMilestone": "{months} ماه Pro · {count}/{target} خرید",

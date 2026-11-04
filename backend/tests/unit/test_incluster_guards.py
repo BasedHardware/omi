@@ -393,6 +393,34 @@ def test_reference_rollback_exact_and_atomic():
     assert old == before
 
 
+@pytest.mark.parametrize('cap', [1, 4, 6, 12])
+def test_capped_hpa_rollback_restores_capacity_atomically(cap):
+    old = objects()[0]['spec']
+    old.update(minReplicas=cap, maxReplicas=cap)
+    before = deepcopy(old)
+    assert guard.workload_only(old) == (cap < guard.ROLLBACK_REPLICAS)
+    patch = guard.build_rollback(old)
+    assert patch[0] == {'op': 'test', 'path': '/spec', 'value': before}
+    restored = deepcopy(old)
+    for operation in patch[1:]:
+        assert operation['op'] == 'replace'
+        restored[operation['path'].removeprefix('/spec/')] = operation['value']
+    assert restored['minReplicas'] == restored['maxReplicas'] == guard.ROLLBACK_REPLICAS
+    assert restored['metrics'] == [*before['metrics'], guard.LATENCY]
+    assert guard.rolled_back(restored)
+    assert not guard.workload_only(restored)
+    assert restored['behavior'] == before['behavior']
+    assert old == before
+
+
+@pytest.mark.parametrize('cap', [0, -1, 13, 6.0, True, None, '6'])
+def test_rollback_rejects_invalid_caps(cap):
+    old = objects()[0]['spec']
+    old['maxReplicas'] = cap
+    with pytest.raises(AssertionError, match='Unexpected cap'):
+        guard.build_rollback(old)
+
+
 def test_proposed_scale_up_can_rollback_actual_rendered_production_hpa():
     chart = ROOT / 'backend/charts/parakeet'
     output = subprocess.check_output(
@@ -404,11 +432,12 @@ def test_proposed_scale_up_can_rollback_actual_rendered_production_hpa():
             '-f',
             str(chart / 'prod_omi_parakeet_values.yaml'),
             '--set',
-            'image.tag=test',
+            'image.tag=test,fleetRetired=false,maintenanceMode=false',
         ],
         text=True,
     )
     old = next(obj['spec'] for obj in yaml.safe_load_all(output) if obj and obj['kind'] == 'HorizontalPodAutoscaler')
+    assert old['maxReplicas'] == guard.ROLLBACK_REPLICAS
     assert old['behavior']['scaleUp'] == guard.FAST_SCALE_UP
     patch = guard.build_rollback(old)
     assert patch[0] == {'op': 'test', 'path': '/spec', 'value': old}
@@ -426,8 +455,10 @@ def test_proposed_scale_up_drift_refuses(key, bad):
 
 
 @pytest.mark.parametrize('drift', ['cap', 'extra', 'duplicate', 'missing', 'requests', 'gpu', 'up', 'down'])
-def test_drift_refuses(drift):
+@pytest.mark.parametrize('cap', [4, 6, 12])
+def test_drift_refuses(drift, cap):
     old = objects()[0]['spec']
+    old.update(minReplicas=cap, maxReplicas=cap)
     if drift == 'cap':
         old['maxReplicas'] = 13
     if drift == 'extra':
@@ -695,6 +726,54 @@ def test_floor_schedule_dry_run_and_cap_refusals(monkeypatch, caplog):
     assert all(path == 'state' for path, _ in client.patches)
 
 
+@pytest.mark.parametrize('cap', [4, 6])
+def test_capped_hpa_floor_schedule_respects_cap_and_arming(cap, caplog):
+    client = FakeClient()
+    client.hpa['spec'].update(minReplicas=cap, maxReplicas=cap)
+    state = {'identity': guard.state_identity(client.hpa, client.dep), 'since': 0}
+    # An ordinary scheduled raise cannot undo the operator's cap.
+    guard.apply_floor_schedule(client, client.hpa, client.dep, state, {}, [cap + 1] * 24, 900, False)
+    assert not client.patches
+    assert 'refused_target_above_cap' in caplog.text
+    # A lower still requires a full window and usable current measurements.
+    target = cap - 1
+    guard.apply_floor_schedule(client, client.hpa, client.dep, state, {}, [target] * 24, 899, False)
+    assert not client.patches
+    assert 'deferred_guard_not_armed' in caplog.text
+    guard.apply_floor_schedule(client, client.hpa, client.dep, state, {'blind': ['v2_p95']}, [target] * 24, 900, False)
+    assert not client.patches
+    assert 'deferred_guard_blind' in caplog.text
+    guard.apply_floor_schedule(client, client.hpa, client.dep, state, {}, [target] * 24, 900, False)
+    assert client.patches == [
+        (
+            'hpa',
+            [
+                {'op': 'test', 'path': '/spec', 'value': client.hpa['spec']},
+                {'op': 'replace', 'path': '/spec/minReplicas', 'value': target},
+            ],
+        )
+    ]  # The schedule changes only the floor, preserving maxReplicas=cap.
+
+
+@pytest.mark.parametrize('cap', [4, 6])
+@pytest.mark.parametrize('dry_run', [False, True])
+def test_capped_hpa_three_blind_v2_runs_reach_rollback(cap, dry_run, monkeypatch, caplog):
+    monkeypatch.setattr(guard, 'load_floor_schedule', lambda: [8] * 24)
+    client = FakeClient()
+    client.hpa['spec'].update(minReplicas=cap, maxReplicas=cap)
+    client.hpa['status']['desiredReplicas'] = cap
+    client.dep['status']['readyReplicas'] = cap
+    client.signals.update(v2_p95=float('nan'), live_requests_max=cap)
+    assert guard.run(client, dry_run, 0) == 0  # WARMUP, first blind reading
+    assert guard.run(client, dry_run, 300) == 0  # WARMUP retains cap, blind count 2
+    assert guard.run(client, dry_run, 900) == 1  # armed, blind count 3 -> TRIP
+    assert client.state['blind'] == 3
+    assert 'missing_or_nonfinite_v2_p95' in caplog.text
+    hpa_writes = [patch for path, patch in client.patches if path == 'hpa']
+    assert hpa_writes == ([] if dry_run else [guard.build_rollback(client.hpa['spec'])])
+    assert 'parakeet_rollback' in caplog.text
+
+
 def test_scheduled_lower_waits_for_armed_guard_not_a_fresh_warmup(monkeypatch, caplog):
     # Review r1 P1: after an operator clears a rollback while parked at 12, the
     # schedule must not drop the floor onto a disarmed guard. NOOP readings
@@ -830,10 +909,7 @@ def test_floor_schedule_renders_into_script_configmap_only_when_enabled():
         for obj in render_docs('prod')
         if obj['kind'] == 'ConfigMap' and obj['metadata']['name'] == 'prod-omi-incluster-guards-script'
     )
-    # The production override must survive rendering: the hourly writer would
-    # otherwise restore the inherited 8..12 floor after a floor-only HPA apply.
-    # L4 stockout hold (ruling 1ca4cb); exit restores [4] * 12 + [7] * 12.
-    assert json.loads(prod['data']['floors.json']) == [7] * 24
+    assert 'floors.json' not in prod['data']
     default = next(
         obj
         for obj in render_docs('prod', overlay=False)
@@ -841,7 +917,9 @@ def test_floor_schedule_renders_into_script_configmap_only_when_enabled():
     )
     assert 'floors.json' not in default['data']
     with pytest.raises(subprocess.CalledProcessError):
-        render_docs('prod', '--set', 'floorSchedule.hours={1,2}')
+        render_docs(
+            'prod', '--set', 'parakeetSuspended=false,floorSchedule.enabled=true', '--set', 'floorSchedule.hours={1,2}'
+        )
     kinds = {(doc['kind'], doc['metadata']['name']) for doc in render_docs('prod')}
     assert not any(name.endswith('-floor') for _, name in kinds)
 
@@ -894,6 +972,8 @@ def test_helm_state_configmaps_keep_job_owned_fields_out_of_apply(environment, b
         environment,
         '--set',
         f'batch.enabled={str(batch_enabled).lower()}',
+        '--set',
+        f'batch.cloudRunRollbackEnabled={str(batch_enabled).lower()}',
         '--set',
         f'enabled={str(enabled).lower()}',
     )
@@ -968,7 +1048,7 @@ def test_helm_rbac_and_cpu_placement(environment):
             'apiGroups': ['autoscaling'],
             'resources': ['horizontalpodautoscalers'],
             'resourceNames': [f'{environment}-omi-parakeet'],
-            'verbs': ['get', 'patch'],
+            'verbs': ['get'] if environment == 'prod' else ['get', 'patch'],
         },
         {
             'apiGroups': ['apps'],
@@ -1011,7 +1091,15 @@ def test_helm_rbac_and_cpu_placement(environment):
 
 def test_cloud_run_gate_refuses_unapproved_identity_or_namespace():
     with pytest.raises(subprocess.CalledProcessError):
-        render('prod', '--set', 'batch.enabled=true', '--set', 'batch.gcpServiceAccount=wrong@example.com')
+        render(
+            'prod',
+            '--set',
+            'batch.enabled=true',
+            '--set',
+            'batch.cloudRunRollbackEnabled=true',
+            '--set',
+            'batch.gcpServiceAccount=wrong@example.com',
+        )
     with pytest.raises(subprocess.CalledProcessError):
         render('dev', '--set', 'batch.cloudRunRollbackEnabled=true')
 
@@ -1035,8 +1123,15 @@ def test_prod_overlay_defers_batch_guard_objects_until_deployer_rbac_and_produce
     assert not rendered & BATCH_GUARD_OBJECTS
     assert ('PodMonitor', 'prod-omi-incluster-guards-batch') in rendered  # Predates the batch guard; stays live.
     assert ('CronJob', 'prod-omi-incluster-guards') in rendered
-    # The default toggle stays on: re-enabling in prod needs only this flip.
-    reenabled = {(doc['kind'], doc['metadata']['name']) for doc in render_docs('prod', '--set', 'batch.enabled=true')}
+    # Batch auto-rollback is removed (David, 2026-11-04): batch.enabled alone renders nothing.
+    enabled_only = {
+        (doc['kind'], doc['metadata']['name']) for doc in render_docs('prod', '--set', 'batch.enabled=true')
+    }
+    assert not enabled_only & BATCH_GUARD_OBJECTS
+    reenabled = {
+        (doc['kind'], doc['metadata']['name'])
+        for doc in render_docs('prod', '--set', 'batch.enabled=true', '--set', 'batch.cloudRunRollbackEnabled=true')
+    }
     assert BATCH_GUARD_OBJECTS <= reenabled
     # Default values alone render no batch objects, exactly as before the toggle.
     assert (
@@ -1767,7 +1862,7 @@ def test_identity_change_resets_window(tmp_path, monkeypatch):
 
 
 def test_helm_dedicated_identity_state_only_rbac_and_cpu_placement():
-    docs = render_docs('prod', '--set', 'batch.enabled=true')
+    docs = render_docs('prod', '--set', 'batch.enabled=true', '--set', 'batch.cloudRunRollbackEnabled=true')
     resources = {d['kind']: d for d in docs if d and d['metadata']['name'] == 'prod-omi-incluster-guards-batch'}
     assert resources['ServiceAccount']['metadata']['annotations'] == {
         'iam.gke.io/gcp-service-account': 'omi-batch-rollback-guard@based-hardware.iam.gserviceaccount.com'

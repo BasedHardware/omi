@@ -191,10 +191,19 @@ night hours from becoming a rollback solely because quantiles are undefined. Thr
 trip after the full arming window. A fresh usable reading resets the counter.
 Prometheus warnings and incomplete/old query results count as blind. The v2
 counter also gets an explicit freshness check beyond the original script.
+The v2 duration series can be fresh with no completed observations while v1
+is busy. Its NaN p95 remains blind under the existing policy: zero completed
+requests cannot distinguish an idle v2 endpoint from requests stuck in flight.
+No idle exception or v1-for-v2 latency substitution is applied. Three blind
+readings can therefore restore the rollback cap after the arming window.
 
-The only serving write is P77 `step_fast.build(old, 12, rollback=True)`:
-JSON Patch tests the **entire observed `/spec`**, sets minReplicas=12, and restores
-the Value=3 latency metric. Metric/cap/downscale drift assertions are retained.
+The serving rollback retains P77's atomic whole-spec test and latency metric:
+JSON Patch tests the **entire observed `/spec`**, sets minReplicas=12, restores
+maxReplicas=12 when capped lower, and restores the Value=3 latency metric.
+Integer live caps from 1 through the chart's rollback cap (12) are accepted;
+caps outside that range and all other metric/downscale drift still fail the Job.
+Ordinary floor scheduling preserves the live cap and refuses a target above it;
+only a safety rollback restores the cap to 12.
 Scale-up must match either the legacy +1 pod/60s policy with zero stabilization,
 or P77r's exact zero-stabilization, selectPolicy Max, +4 pods/15s policy.
 Concurrent changes fail the test, with no retry against a newly read
@@ -331,10 +340,10 @@ dropped capabilities, and bounded CPU/memory keep the Job small.
 
 ## Cloud Run rollback: approved scoped identity
 
-Production keeps `batch.enabled: false` (see `prod_omi_incluster_guards_values.yaml`)
-until the deployer RBAC for the `-batch` objects is approved (access change,
-David) and g2's trusted producer exists; `batch.cloudRunRollbackEnabled` stays
-true there so re-enabling needs only the `batch.enabled` flip. Development
+Production keeps both `batch.enabled` and `batch.cloudRunRollbackEnabled`
+false (see `prod_omi_incluster_guards_values.yaml`): David removed batch
+auto-rollback on 2026-11-04, so batch step-backs are manual lead decisions.
+Re-enabling needs both flips and David's approval. Development
 leaves the writer off entirely.
 The dedicated KSA/GSA, four service-level `roles/run.developer` bindings,
 runtime-SA actAs if required, and exact-KSA WIF binding are described in

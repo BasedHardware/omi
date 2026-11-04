@@ -4523,6 +4523,7 @@
     "liveTranscribedUpTo": "Транскрибирано до {time}",
     "liveAudioSaved": "Запазени {duration}",
     "liveAudioSavedDetail": "Говорителите и окончателната транскрипция ще се появят тук при качването.",
+    "episodeFinishingUp": "Завършване…",
     "referralAffiliate": "Партньорска програма",
     "referralCampaignTerms": "Приятелите получават 10% отстъпка за устройства Omi. Покупките на първите 2 различни приятели отключват 2 месеца Pro, покупките на следващите 3 различни приятели още 3. До 5 приятели и 5 месеца общо.",
     "referralMilestone": "{months} месеца Pro · {count}/{target} покупки",

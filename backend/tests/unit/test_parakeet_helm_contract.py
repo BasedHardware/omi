@@ -65,7 +65,7 @@ def test_demand_scaler_renders_requests_and_queue_ages_without_raw_tail_or_gpu()
         '-f',
         str(CHART / 'prod_omi_parakeet_values.yaml'),
         '--set',
-        'autoscaling.demand.enabled=true',
+        'fleetRetired=false,autoscaling.demand.enabled=true',
         '--set-string',
         'image.tag=packing-contract-test',
         '--show-only',
@@ -105,7 +105,7 @@ def test_workload_only_hpa_omits_mixed_latency_and_preserves_capacity_controls(d
         '-f',
         str(CHART / 'prod_omi_parakeet_values.yaml'),
         '--set',
-        'autoscaling.workloadOnly=true',
+        'fleetRetired=false,autoscaling.workloadOnly=true',
         '--set',
         f'autoscaling.demand.enabled={str(demand_enabled).lower()}',
         '--set-string',
@@ -177,38 +177,11 @@ def test_rendered_prod_deployment_contains_stream_admission_settings():
     assert 'name: PARAKEET_STREAM_CAPACITY\n              value: "25"' in rendered
     assert 'name: PARAKEET_STREAM_ALLOCATION_PERCENT\n              value: "100"' in rendered
     deployment = next(document for document in yaml.safe_load_all(rendered) if document.get('kind') == 'Deployment')
-    hpa = next(
-        document for document in yaml.safe_load_all(rendered) if document.get('kind') == 'HorizontalPodAutoscaler'
+    # Production retirement keeps model/admission configuration without an autoscaler.
+    assert deployment['spec']['replicas'] == 0
+    assert not any(
+        document and document.get('kind') == 'HorizontalPodAutoscaler' for document in yaml.safe_load_all(rendered)
     )
-    assert hpa['spec']['minReplicas'] == 7
-    assert hpa['spec']['maxReplicas'] == 12
-    assert hpa['spec']['metrics'] == [
-        {
-            'type': 'Pods',
-            'pods': {
-                'metric': {'name': 'parakeet_active_requests_total'},
-                'target': {'type': 'AverageValue', 'averageValue': '2'},
-            },
-        },
-        {
-            'type': 'External',
-            'external': {
-                'metric': {'name': 'parakeet_gpu_utilization'},
-                'target': {'type': 'Value', 'value': '35'},
-            },
-        },
-    ]
-    assert hpa['spec']['behavior'] == {
-        'scaleUp': {
-            'stabilizationWindowSeconds': 0,
-            'selectPolicy': 'Max',
-            'policies': [{'type': 'Pods', 'value': 4, 'periodSeconds': 15}],
-        },
-        'scaleDown': {
-            'stabilizationWindowSeconds': 900,
-            'policies': [{'type': 'Pods', 'value': 1, 'periodSeconds': 900}],
-        },
-    }
     assert 'progressDeadlineSeconds' not in deployment['spec']
     container = deployment['spec']['template']['spec']['containers'][0]
     assert container['readinessProbe']['httpGet']['path'] == '/health'

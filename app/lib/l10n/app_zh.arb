@@ -4523,6 +4523,7 @@
     "liveTranscribedUpTo": "已转录至 {time}",
     "liveAudioSaved": "已保存 {duration}",
     "liveAudioSavedDetail": "上传时，说话人和最终转录内容会显示在这里。",
+    "episodeFinishingUp": "即将完成…",
     "referralAffiliate": "推广合作计划",
     "referralCampaignTerms": "好友购买 Omi 硬件可享九折。前 2 位好友购买后解锁 2 个月 Pro，接下来 3 位再解锁 3 个月。最多 5 位好友，共 5 个月。",
     "referralMilestone": "{months} 个月 Pro · {count}/{target} 次购买",

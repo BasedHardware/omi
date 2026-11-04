@@ -11949,6 +11949,7 @@
     "liveTranscribedUpTo": "{time} تک ٹرانسکرائب ہوا",
     "liveAudioSaved": "{duration} محفوظ",
     "liveAudioSavedDetail": "اپ لوڈ کے ساتھ مقررین اور حتمی ٹرانسکرپٹ یہاں آئیں گے۔",
+    "episodeFinishingUp": "مکمل کیا جا رہا ہے…",
     "referralAffiliate": "افیلیئیٹ پروگرام",
     "referralCampaignTerms": "دوستوں کو Omi آلات پر 10% رعایت ملتی ہے۔ پہلے 2 مختلف دوستوں کی خریداریوں سے 2 ماہ Pro، اگلے 3 مختلف دوستوں کی خریداریوں سے مزید 3 ماہ ملتے ہیں۔ زیادہ سے زیادہ 5 دوست اور کل 5 ماہ۔",
     "referralMilestone": "{months} ماہ Pro · {count}/{target} خریداریاں",
