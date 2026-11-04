@@ -77,3 +77,16 @@ def final_pass_enabled_for(uid: str, segments) -> bool:
         )
     except ValueError:
         return False
+
+
+def recurring_enabled_for(uid: str, segments) -> bool:
+    """Default-on private learning; reuse the final-pass UID hash, nested admission."""
+    if not final_pass_enabled_for(uid, segments) or not default_on('SPEAKER_RECURRING_VOICES_ENABLED'):
+        return False
+    try:
+        percent = float(os.getenv('SPEAKER_RECURRING_PERCENT', '100'))
+        return math.isfinite(percent) and cohort_bucket(uid, COHORT_SALTS['transcription-final-pass']) < max(
+            0, min(100, percent)
+        )
+    except ValueError:
+        return False
