@@ -24,8 +24,8 @@ struct ConversationStatusBadge: View {
     case .locked:
       Pill(
         icon: "hourglass",
-        text: "Saved and waiting",
-        color: PageGlass.warning,
+        text: "Waiting",
+        color: Ink.secondary,
         help: "This conversation is saved. Check your plan and usage to see when processing is available."
       )
     case .failed:

@@ -50,8 +50,7 @@ void main() {
       ..conversations = [a, b]
       ..groupedConversations = {
         day: [a, b],
-      }
-      ..hiddenNoiseCountsFetcherOverride = (_, __) async => <DateTime, int>{};
+      };
     final overlay = Completer<ApiResult<EpisodePageRead>>();
     DateTime? requestedFrom;
     final episodes = EpisodeProvider(
@@ -200,7 +199,7 @@ void main() {
         conversationListFetcher: () => page.future,
         isSignedIn: () => true,
         dailySummariesChecker: () => summaries.future,
-      )..hiddenNoiseCountsFetcherOverride = (_, __) async => <DateTime, int>{};
+      );
       final episodes = EpisodeProvider(
         fetchLive: () async => const ApiSuccess(EpisodeRead(enabled: true)),
         lookup: (_) async => const ApiSuccess(EpisodeRead(enabled: true)),
@@ -309,8 +308,7 @@ void main() {
     final conversations = ConversationProvider(
         isSignedIn: () => true,
         conversationListFetcher: () async => (items: [a, b], ok: true),
-        dailySummariesChecker: () async => false)
-      ..hiddenNoiseCountsFetcherOverride = (_, __) async => <DateTime, int>{};
+        dailySummariesChecker: () async => false);
     final retry = Completer<ApiResult<EpisodePageRead>>();
     var reads = 0;
     final episodes = EpisodeProvider(
@@ -383,8 +381,7 @@ void main() {
       final conversations = ConversationProvider(
           isSignedIn: () => true,
           conversationListFetcher: () async => (items: [a, b, other], ok: true),
-          dailySummariesChecker: () async => false)
-        ..hiddenNoiseCountsFetcherOverride = (_, __) async => <DateTime, int>{};
+          dailySummariesChecker: () async => false);
       final retry = Completer<ApiResult<EpisodePageRead>>();
       var reads = 0;
       final episodes = EpisodeProvider(
@@ -549,8 +546,7 @@ void main() {
       final conversations = ConversationProvider(
           isSignedIn: () => true,
           conversationListFetcher: () async => (items: [row], ok: true),
-          dailySummariesChecker: () async => false)
-        ..hiddenNoiseCountsFetcherOverride = (_, __) async => <DateTime, int>{};
+          dailySummariesChecker: () async => false);
       var reads = 0;
       final episodes = EpisodeProvider(
         fetchLive: () async => const ApiSuccess(EpisodeRead(enabled: true)),
