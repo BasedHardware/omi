@@ -6,6 +6,8 @@ import 'package:omi/backend/http/shared.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/backend/schema/gen/referrals_wire.g.dart' as wire;
 
+// Referral API client: fetches the signed referral link and the campaign snapshot, and validates both.
+// The backend snapshot decides whether the campaign shows; anything invalid fails closed to the affiliate page.
 const mobileReferralCampaignEnabled = bool.fromEnvironment('OMI_MOBILE_REFERRAL_CAMPAIGN', defaultValue: true);
 
 Future<String> getReferralLink({required AuthSessionSnapshot session}) async {

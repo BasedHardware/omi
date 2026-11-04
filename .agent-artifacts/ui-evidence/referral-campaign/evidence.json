@@ -2,30 +2,23 @@
   "version": 1,
   "images": [
     {
-      "file": "001-mobile-ios-referral-program.png",
+      "file": "001-mobile-ios-referral-pocket-light.png",
       "platform": "mobile-ios",
-      "description": "Enabled referral candidate in iPhone simulator with local fixture account; existing signed-link backend, no live claim.",
+      "description": "Design A Pocket-style referral page, light, iPhone simulator against a local backend with the uid in OMI_REFERRAL_CAMPAIGN_PREVIEW_UIDS and the campaign flag off. Short link shown; Copy put the full signed link on the clipboard.",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
-      "file": "002-mobile-ios-pocket-match-start.png",
+      "file": "002-mobile-ios-referral-pocket-dark.png",
       "platform": "mobile-ios",
-      "description": "Final enabled iPhone simulator candidate at zero purchases; real Firebase emulator SDK auth and local signed order ledger. No live checkout or grant.",
+      "description": "Same preview account in dark appearance.",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
-      "file": "003-mobile-ios-pocket-match-claim.png",
+      "file": "003-mobile-ios-referral-pocket-max-text.png",
       "platform": "mobile-ios",
-      "description": "Two distinct local signed purchasing friends unlock the two-month claim in the running final binary.",
-      "captured_by": "agent",
-      "source": "visual-audit"
-    },
-    {
-      "file": "004-mobile-ios-pocket-match-complete.png",
-      "platform": "mobile-ios",
-      "description": "Final running candidate after two UI claims totaling five months; consumed refund retains milestone credit, current valid orders four and milestone progress five. Local adapter only.",
+      "description": "Largest accessibility text size, scrolled to the rewards rows; the page scrolls without clipping.",
       "captured_by": "agent",
       "source": "visual-audit"
     }
