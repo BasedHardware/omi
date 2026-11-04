@@ -23,10 +23,13 @@ def seed_recordings(seed, environment, live, storage):
     if any(type(value) is not int or not 1 <= value <= 60 for value in (chunk_seconds, capture_seconds)):
         raise ValueError('invalid bounded synthetic duration')
     recordings = []
-    users = environment.harness.replay_users = []
+    users = []
+    replay_users = getattr(environment.harness, 'replay_users', [])
+    environment.harness.replay_users = replay_users
     for index in range(rows):
         if not users or seed.get('distinct_owners'):
             users.append(environment.harness.seed_user(f'synthetic-replay-owner-{index}'))
+            replay_users.append(users[-1])
         uid = users[-1]
         cid = f'synthetic-replay-conversation-{index}'
         capture = environment.clock.time() - 120

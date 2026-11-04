@@ -16,7 +16,7 @@ def test_admission_seed_cases(tmp_path):
     from testing.replay_harness.runner import run_cases
     from testing.replay_harness.report import write_report, table
 
-    items = asyncio.run(run_cases(sorted(FIXTURES.iterdir())))
+    items = asyncio.run(run_cases(sorted(p for p in FIXTURES.iterdir() if p.name.startswith('admission-'))))
     write_report(items, tmp_path)
     print('\n' + table(items))
     by_id = {item['item']: item for item in items}

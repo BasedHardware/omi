@@ -15,15 +15,23 @@ async def run_cases(directories: list[Path]) -> list[dict]:
         raise ValueError('duplicate case id would overwrite an item report')
     from testing.replay_harness.env import replay_environment
     from testing.replay_harness.stages.admission import AdmissionDriver
+    from testing.replay_harness.stages.capture_upload import CaptureUploadDriver
+    from testing.replay_harness.stages.finalization import TitlingDriver
+    from testing.replay_harness.stages.episodes import EpisodesDriver
 
     items = []
     for case in cases:
         results = []
         with replay_environment() as environment:
             for name in STAGES:
-                if name not in case.manifest.stages:
+                if name not in (case.manifest.stages or {'capture_upload': {}, 'titling': {}}):
                     continue
-                driver = AdmissionDriver() if name == 'admission' else NotImplementedStage(name)
+                driver = {
+                    'admission': AdmissionDriver,
+                    'capture_upload': CaptureUploadDriver,
+                    'titling': TitlingDriver,
+                    'episodes': EpisodesDriver,
+                }.get(name, lambda: NotImplementedStage(name))()
                 started = time.perf_counter()
                 try:
                     result = await driver.run(case, environment)
