@@ -22,6 +22,9 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 _KINDS = {'enrichment', 'sync_reprocess'}
+# Cloud Tasks abandons an attempt at its 600s dispatch deadline, so the request log records a bare 504
+# while this thread may still be working. Retries and slow deliveries log their real end and timing.
+SLOW_DELIVERY_SECONDS = 120.0
 
 
 def _audience() -> str:
@@ -56,6 +59,28 @@ def consume(key: str, token: str):
     return run_push(EnrichmentConsumer(ENRICHMENT_OUTBOX), ENRICHMENT_OUTBOX, key, token, now=time.time())
 
 
+def _timed_consume(key: str, token: str, accepted: float):
+    """``consume`` with executor wait and run time; only a retry or a slow delivery logs (no ids)."""
+    from database.outbox import Outcome
+
+    started = time.monotonic()
+    outcome, reason = 'error', 'unexpected'
+    try:
+        result = consume(key, token)
+        outcome, reason = result.outcome.value, result.reason.value
+        return result
+    finally:
+        finished = time.monotonic()
+        if outcome == Outcome.RETRY.value or finished - accepted >= SLOW_DELIVERY_SECONDS:
+            logger.info(
+                'event=enrichment_delivery outcome=%s reason=%s wait_s=%.1f run_s=%.1f',
+                outcome,
+                reason,
+                started - accepted,
+                finished - started,
+            )
+
+
 @router.post('/v2/enrichment/run', include_in_schema=False)
 async def run_enrichment_task(request: Request, _retry_count: int = Depends(verify_enrichment_task)):
     try:
@@ -69,7 +94,7 @@ async def run_enrichment_task(request: Request, _retry_count: int = Depends(veri
 
     if not outbox.owns_runtime():
         return JSONResponse(status_code=200, content={'status': 'foreign_runtime'})
-    result = await run_blocking(postprocess_executor, consume, *task)
+    result = await run_blocking(postprocess_executor, _timed_consume, *task, time.monotonic())
     return http_response(result)
 
 
