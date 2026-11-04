@@ -1,4 +1,4 @@
-"""Reviewed legacy lifecycle inventory for WP-B (source base 7b3911c4e878).
+"""Reviewed legacy lifecycle inventory for WP-B (source base f75e35ed2628).
 
 This is a declaration of existing mechanisms, not a new runtime state machine.
 Phase strings are the compatibility reader's strings. Derived phases do not

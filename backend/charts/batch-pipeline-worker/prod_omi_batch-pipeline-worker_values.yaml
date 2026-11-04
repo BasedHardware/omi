@@ -55,6 +55,7 @@ borrowedNodePools:
   enabled: false
   pools: [parakeet-pool, parakeet-pool-b, parakeet-pool-v2]
 worker:
+  servingMetricsMinRefreshSeconds: 60
   # Control-loop defaults; rollback independently with 64 / false / 2 / {}.
   controlCandidateFanout: 16
   admissionParallelCalls: true

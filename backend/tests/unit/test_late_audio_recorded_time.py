@@ -213,7 +213,7 @@ def test_morning_shape_34_fragments_replayed_through_sync_intake(monkeypatch, ti
     c = service.Collaborators(firestore_client=store, now=lambda: NOW)
     # No provider calls: recovery content stays in the real member conversations.
     # Exercise production repointing, including closed episodes, on each append.
-    monkeypatch.setattr(service, '_record_recovered', lambda *a: 'skipped_applied')
+    monkeypatch.setattr(service, '_record_recovered', lambda *a, **kw: 'skipped_applied')
     monkeypatch.setattr(
         episode_finalize,
         'schedule_synced_intake_attach',
@@ -657,7 +657,7 @@ def test_first_sync_finalization_reconciles_single_capped_owner(monkeypatch, tim
         ],
     )
     c = service.Collaborators(firestore_client=store, now=lambda: T0 + timedelta(hours=8))
-    monkeypatch.setattr(service, '_record_recovered', lambda *a: 'skipped_applied')
+    monkeypatch.setattr(service, '_record_recovered', lambda *a, **kw: 'skipped_applied')
     seen = []
     monkeypatch.setattr(service, '_reconcile', lambda uid, episode, *a: seen.append(episode['id']) or 'finalized')
     assert service._on_finalized('u', 'long', row, 'sync_update', None, c) == 'finalized'
