@@ -24,7 +24,7 @@
   },
   "seed_review_by": "2026-11-15",
   "budget": 169,
-  "count": 240,
+  "count": 241,
   "names": {
     "PARAKEET_LID_MODEL": {"owner": "planscost", "review_by": "2026-11-30"},
     "PARAKEET_LID_ONLY": {"owner": "planscost", "review_by": "2026-11-30"},
@@ -37,6 +37,7 @@
     "BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED": {"owner": "planscost", "review_by": "2026-11-30"},
     "BATCH_PIPELINE_INDEPENDENT_RECOVERY_MAX_SECONDS": {"owner": "planscost", "review_by": "2026-11-30"},
     "SERVER_BATCH_UNSUPPORTED_LANGUAGES": {"owner": "planscost", "review_by": "2026-11-30", "registry": "config/feature-flags.yaml"},
+    "SERVER_BATCH_ONLY_WEB_PERCENT": {"owner": "planscost", "review_by": "2026-11-30", "registry": "config/feature-flags.yaml"},
     "PUSHER_AUDIO_FILE_INCREMENTAL_ENABLED": {"owner": "planscost", "review_by": "2026-11-30"},
     "BATCH_PIPELINE_SERVING_METRICS_MIN_REFRESH_SECONDS": {"owner": "planscost", "review_by": "2026-11-30"},
     "SYNC_BACKFILL_WORKER_API_URL": {"owner": "infracost / syncsplit", "review_by": "2026-11-09"},

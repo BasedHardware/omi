@@ -14977,4 +14977,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Konuşmacılar ve son döküm, yükleme sırasında burada görünür.';
+
+  @override
+  String get episodeFinishingUp => 'Tamamlanıyor…';
 }

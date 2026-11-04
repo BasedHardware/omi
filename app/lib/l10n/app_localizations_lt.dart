@@ -14986,4 +14986,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Kalbėtojai ir galutinė transkripcija atsiras čia įkeliant.';
+
+  @override
+  String get episodeFinishingUp => 'Baigiama…';
 }

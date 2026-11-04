@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-placeholder-before.png",
+      "platform": "mobile-ios",
+      "description": "Fixture-only Home placeholder before: the base adapter passes the primary member's transcript-echo title to the production row widget.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-placeholder-after.png",
+      "platform": "mobile-ios",
+      "description": "Fixture-only Home placeholder after: the Home projection supplies localized Finishing up copy to the same production row widget.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

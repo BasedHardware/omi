@@ -516,3 +516,18 @@ async def test_unknown_control_and_ungranted_engine_event_are_noops(monkeypatch,
     assert fake.host.request.local_preview is False
     assert not getattr(fake.host, '_local_preview_engine_reported', False)
     attach.assert_not_called()
+
+
+def test_ready_event_identifies_server_batch_without_confusing_deferred_stream():
+    runtime = object.__new__(ListenSessionRuntime)
+    runtime.use_custom_stt = False
+    runtime.receiver = SimpleNamespace(cloud_live_suppressed=True)
+    assert 'server_batch_only' not in runtime._ready_event().to_json()
+    runtime.server_batch_only = True
+    payload = runtime._ready_event().to_json()
+    assert payload['server_batch_only'] is True
+    assert payload['status'] == 'ready'
+    assert 'provider' not in payload
+    runtime.use_custom_stt = True
+    assert 'server_batch_only' not in runtime._ready_event().to_json()
+    assert 'server_batch_only' not in MessageServiceStatusEvent(status='initiating').to_json()

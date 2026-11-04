@@ -14959,4 +14959,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'گویندگان و متن نهایی هنگام بارگذاری اینجا نمایش داده می‌شوند.';
+
+  @override
+  String get episodeFinishingUp => 'در حال اتمام…';
 }
