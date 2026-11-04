@@ -401,6 +401,29 @@ def test_sweep_routes_previously_unbound_backfill_by_summary_state(split_binding
     assert split_binding[1][-1]['dispatch'] == repaired['dispatch']
 
 
+def test_unbound_backfill_effects_keep_lane_for_repair_on_a_fresh_host(split_binding, sweep_query, monkeypatch):
+    rows, tasks = split_binding
+    repair_client = reprocess.get_firestore_client()
+    effects_key = reprocess.key('u', 'c\0effects')
+
+    def persist(body, *, merge):
+        assert merge
+        rows[effects_key] = {**body, 'version': 1}
+
+    document = SimpleNamespace(set=persist)
+    client = SimpleNamespace(collection=lambda _: SimpleNamespace(document=lambda _: document))
+    monkeypatch.setattr(reprocess, 'get_firestore_client', lambda: client)
+    monkeypatch.setattr(reprocess, '_effects_binding', lambda: {})
+    monkeypatch.setattr(reprocess.time, 'time', lambda: 0)
+    reprocess.mark_effects('u', 'c', 'en')
+    assert rows[effects_key]['summary_lane'] == 'backfill' and not tasks
+
+    monkeypatch.setattr(reprocess, 'get_firestore_client', lambda: repair_client)
+    monkeypatch.setattr(reprocess.summary_delivery, 'lane', lambda _: 'fresh')
+    assert reprocess.sweep(now=3600) == {'repaired': 1, 'error': 0}
+    assert tasks[-1]['dispatch']['queue'] == 'sync-backfill-fresh'
+
+
 def test_not_due_wake_rearms_and_answers_200_not_due(state, monkeypatch):  # noqa: F811
     monkeypatch.setenv('DEMAND_PROCESSING_ENABLED', 'false')
     monkeypatch.setattr(custody, 'discard_blocked', lambda _row_id: False)
