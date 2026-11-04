@@ -20,6 +20,13 @@ writes fall through to scheduling and immediate composition with the existing
 fingerprint/lease checks, emitting shared fallback telemetry rather than losing
 speech or name changes.
 
+When the process-local settle queue reaches 10,000 entries, new work also falls
+through to immediate composition with the normal fingerprint and paid-once lease.
+Existing queued work is retained. Shared `omi_fallback_total` telemetry records
+`component="conversation_notes"`, `from_mode="episode_compose_settling"`,
+`to_mode="episode_compose_immediate"`, `reason="capacity_full"`, `outcome="degraded"`
+so operators can see saturation without leaving pending notes stale.
+
 Phase-shadow mismatches during settling are expected: `needs_compose` sees
 pending freshness work while the read-only phase projection still says
 `COMPOSED`. This does not change the phase decision.

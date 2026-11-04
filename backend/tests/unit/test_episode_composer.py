@@ -814,6 +814,46 @@ def test_background_settles_without_claiming_lease_or_holding_worker(store, monk
     assert store.episode['compose_activity_at'] >= store.episode['compose_pending_since']
 
 
+@pytest.mark.parametrize('previously_composed', [False, True])
+def test_full_settle_queue_composes_immediately_without_losing_pending_evidence(
+    store, monkeypatch, previously_composed
+):
+    calls = []
+    c = _c(calls=calls)
+    if previously_composed:
+        assert composer.compose(UID, 'ep1', collaborators=c) == 'composed'
+        store.rows['c1']['transcript_segments'][0]['text'] += ' New speech.'
+    _schedule_seam(store, monkeypatch)
+    queued = {(UID, f'other-{i}'): (float('inf'), c) for i in range(10_000)}
+    composer._deferred.update(queued)
+    fallbacks = []
+    outcomes = []
+    monkeypatch.setattr(composer, 'record_fallback', lambda **kw: fallbacks.append(kw))
+    monkeypatch.setattr(composer.metrics, 'record_compose', lambda outcome, seconds: outcomes.append(outcome))
+
+    assert composer.schedule(UID, 'ep1', collaborators=c)
+
+    assert outcomes == ['composed']
+    assert len(calls) == (2 if previously_composed else 1)
+    assert store.writes[-3]['compose_pending_since']
+    assert store.writes[-2]['compose_lease']['fingerprint'] == store.episode['composed_fingerprint']
+    assert store.episode['compose_pending_since'] is None
+    assert store.episode['composed_evidence'] == composer._evidence(list(store.rows.values()))
+    assert composer._deferred == queued and not composer._inflight
+    assert len(fallbacks) == 1
+    assert fallbacks[0] == {
+        'component': 'conversation_notes',
+        'from_mode': 'episode_compose_settling',
+        'to_mode': 'episode_compose_immediate',
+        'reason': 'capacity_full',
+        'outcome': 'degraded',
+        'log': composer.logger,
+    }
+    # Saturation does not bypass the normal fingerprint deduplication on the next attempt.
+    assert composer.compose(UID, 'ep1', collaborators=c, background=True) == 'unchanged'
+    assert len(calls) == (2 if previously_composed else 1) and len(fallbacks) == 1
+
+
 @pytest.mark.parametrize('change', ['speech', 'name'])
 @pytest.mark.parametrize('failure', ['cas_exhausted', 'storage_error', 'gate_only'])
 def test_failed_pending_write_still_schedules_and_eventually_composes(store, monkeypatch, change, failure):

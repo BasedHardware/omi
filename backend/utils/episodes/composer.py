@@ -655,8 +655,18 @@ def _compose(uid: str, episode_id: str, c: Any, *, force: bool, background: bool
             episode = observed
             delay = settle_delay(episode)
             if delay > 0:
-                _defer(uid, episode_id, c, delay)
-                return 'settling'
+                if _defer(uid, episode_id, c, delay):
+                    return 'settling'
+                # Pending evidence is already persisted. Preserve progress when the queue is full
+                # by using the normal immediate compose path, including its paid-once lease.
+                record_fallback(
+                    component='conversation_notes',
+                    from_mode='episode_compose_settling',
+                    to_mode='episode_compose_immediate',
+                    reason='capacity_full',
+                    outcome='degraded',
+                    log=logger,
+                )
     invoke = (c.extras or {}).get('compose_invoke')
     if invoke is None and getattr(c, 'invoke', None) is not None:
         # Collaborators that fake the incremental model never reach the real composer model.
@@ -877,7 +887,8 @@ _deferred: dict[tuple[str, str], tuple[float, Any]] = {}
 _foreground: set[tuple[str, str]] = set()
 
 
-def _defer(uid: str, episode_id: str, c: Any, delay: float) -> None:
+def _defer(uid: str, episode_id: str, c: Any, delay: float) -> bool:
+    """Return whether work was retained; a full queue must leave the caller free to compose now."""
     key = (uid, str(episode_id))
     with _inflight_lock:
         due = time.monotonic() + delay
@@ -885,8 +896,9 @@ def _defer(uid: str, episode_id: str, c: Any, delay: float) -> None:
         if previous:
             due = min(due, previous[0])
         if key not in _deferred and len(_deferred) >= 10_000:
-            raise ComposeFailed('settle_queue_full')
+            return False
         _deferred[key] = (due, c)
+        return True
 
 
 def _schedule_due() -> None:
