@@ -26,6 +26,7 @@ tolerations:
     value: present
     effect: NoSchedule
 worker:
+  servingMetricsMinRefreshSeconds: 30
   shadowRecoveryApiUrl: "https://backend-integration-dt5lrfkkoa-uc.a.run.app"
   headPriorityEnabled: false
 recordSealSweeper:
