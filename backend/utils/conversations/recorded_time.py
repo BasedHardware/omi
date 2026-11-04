@@ -4,7 +4,7 @@ import math
 from datetime import datetime, timedelta
 from typing import Any, Mapping, Sequence
 
-from models.conversation_continuity import DEFAULT_GAP_SECONDS
+from config.recorded_time_tolerances import CONTINUE_GAP_SECONDS as DEFAULT_GAP_SECONDS
 
 
 def recorded_span(

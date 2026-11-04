@@ -9,7 +9,10 @@ from google.cloud.firestore_v1 import FieldFilter
 
 from config.episodes import MAX_EPISODE_SECONDS, CLOSE_GAP_SECONDS
 from database._client import get_firestore_client, run_transactional
-from database import episodes
+from database import episodes, episode_attach_memo
+from utils.conversations.episode_attach_key import content_key, memo_eligible
+from config.episode_attach import content_gate_enabled, optimizations_enabled
+from utils.conversations.recorded_time import conversation_span
 
 PAGE_LIMIT = 128
 FIELDS = (
@@ -56,13 +59,16 @@ def recorded_end(episode):
     return episode.get('last_activity_at')
 
 
-def check_window(transaction, client, uid, episode, *, rows=None):
+def check_window(transaction, client, uid, episode, *, rows=None, fence_row=None):
     """Serialize live writes with recorded attachment; reject overlapping windows."""
+    if not optimizations_enabled():
+        rows, fence_row = None, None
     lo, hi = episode.get('started_at'), recorded_end(episode)
     if not isinstance(lo, datetime) or not isinstance(hi, datetime):
         return
     fence = client.collection('users').document(uid).collection('episode_links').document('recorded_timeline')
-    fence_row = fence.get(transaction=transaction).to_dict() or {}
+    if fence_row is None:
+        fence_row = fence.get(transaction=transaction).to_dict() or {}
     if rows is None:
         rows = recorded_candidates(uid, lo, hi, firestore_client=client, transaction=transaction)
     for row in rows:
@@ -84,21 +90,25 @@ def _attach_recorded_window(
     new_episode: dict[str, Any],
     firestore_client: Any = None,
     expected_episode_id: str | None = None,
+    transaction: Any = None,
+    candidates: Callable | None = None,
+    fence_row: Any = None,
 ) -> dict[str, Any]:
     client = firestore_client if firestore_client is not None else get_firestore_client()
 
-    @firestore.transactional
     def attach(transaction):
         root = client.collection('users').document(uid)
         links = root.collection('episode_links')
         fence = links.document('recorded_timeline')
-        fence_row = fence.get(transaction=transaction).to_dict() or {}
+        revision = fence_row if fence_row is not None else (fence.get(transaction=transaction).to_dict() or {})
         member = links.document(conversation_id)
         member_row = member.get(transaction=transaction).to_dict() or {}
         members = episodes.read_memberships(
             transaction, client, uid, [conversation_id], admit_conversation_id=conversation_id
         )
-        rows = recorded_candidates(uid, started, finished, firestore_client=client, transaction=transaction)
+        rows = (candidates or recorded_candidates)(
+            uid, started, finished, firestore_client=client, transaction=transaction
+        )
         selected = choose(rows, started, started)
         # A conversation belongs to the episode it started in, even past a cap.
         owner_id = member_row.get('episode_id')
@@ -198,14 +208,16 @@ def _attach_recorded_window(
             )
         if existing and episodes.retained_bounds_changed(existing, result):
             result = episodes.retained_bounds(transaction, client, uid, existing, result)
-        check_window(transaction, client, uid, result, rows=rows)
+        check_window(transaction, client, uid, result, rows=rows, fence_row=revision)
         transaction.set(root.collection('episodes').document(result['id']), episodes.seal(uid, result))
         episodes.write_memberships(transaction, client, uid, result['id'], members, datetime.now(timezone.utc))
-        transaction.set(fence, {'version': int(fence_row.get('version') or 0) + 1})
+        transaction.set(fence, {'version': int(revision.get('version') or 0) + 1})
         # Never modify current/last_closed navigation pointers for late audio.
         return {**result, '_window_end': window_end}
 
-    return run_transactional(client, attach, transient=True)
+    if transaction is not None:
+        return attach(transaction)
+    return run_transactional(client, firestore.transactional(attach), transient=True)
 
 
 def attach_existing_recorded(
@@ -239,6 +251,7 @@ def attach_recorded(
     choose: Callable,
     new_episode: dict[str, Any],
     firestore_client: Any = None,
+    attach_row: Any = None,
 ) -> dict[str, Any]:
     """Place a capture once. Its owner never changes when the capture spans a cap.
 
@@ -250,32 +263,76 @@ def attach_recorded(
     from database import episode_recorded_components
 
     client = firestore_client if firestore_client is not None else get_firestore_client()
-    canonical = episode_recorded_components.attach(
-        uid,
-        conversation_id,
-        source,
-        started,
-        finished,
-        candidates=recorded_candidates,
-        template=new_episode,
-        choose=choose,
-        firestore_client=client,
-        page_limit=PAGE_LIMIT,
-    )
-    if canonical is not None:
-        return canonical
-    result = _attach_recorded_window(
-        uid,
-        conversation_id,
-        source,
-        started,
-        finished,
-        choose=choose,
-        new_episode=new_episode,
-        firestore_client=firestore_client,
-    )
-    result.pop('_window_end')
-    return {**result, '_recorded_windows': [result]}
+
+    @firestore.transactional
+    def attach(transaction):
+        # Both attachment strategies share one read phase and one fence. Cache
+        # only inside this callback: Firestore retries must issue fresh queries.
+        fence = client.collection('users').document(uid).collection('episode_links').document('recorded_timeline')
+        revision = fence.get(transaction=transaction).to_dict() or {}
+        key = content_key(attach_row) if content_gate_enabled() and attach_row and memo_eligible(attach_row) else None
+        span = conversation_span(attach_row) if key else None
+        if key and (
+            span is None
+            or (span.recorded_start, span.recorded_end) != (started, finished)
+            or getattr(attach_row.get('source'), 'value', attach_row.get('source')) != source
+        ):
+            key = None
+        if key:
+            current = client.collection('users').document(uid).collection('conversations').document(conversation_id)
+            if episode_attach_memo.current_key(uid, current.get(transaction=transaction).to_dict()) != key:
+                key = None
+        cached = []
+
+        def candidates(uid, lo, hi, **kwargs):
+            # Preserve the canonical expansion read sequence. Only the fallback
+            # strategy reuses these rows after canonical attachment declines.
+            rows = recorded_candidates(uid, lo, hi, **kwargs)
+            if optimizations_enabled():
+                cached.append((lo, hi, rows))
+            return rows
+
+        def reuse_candidates(uid, lo, hi, **kwargs):
+            for a, b, rows in cached if optimizations_enabled() else []:
+                if a <= lo and hi <= b:
+                    return rows
+            return candidates(uid, lo, hi, **kwargs)
+
+        canonical = episode_recorded_components.attach(
+            uid,
+            conversation_id,
+            source,
+            started,
+            finished,
+            candidates=candidates,
+            template=new_episode,
+            choose=choose,
+            firestore_client=client,
+            page_limit=PAGE_LIMIT,
+            transaction=transaction,
+            fence_row=revision,
+        )
+        if canonical is not None:
+            episode_attach_memo.stamp(transaction, client, uid, conversation_id, key, canonical['id'])
+            return canonical
+        result = _attach_recorded_window(
+            uid,
+            conversation_id,
+            source,
+            started,
+            finished,
+            choose=choose,
+            new_episode=new_episode,
+            firestore_client=client,
+            transaction=transaction,
+            candidates=reuse_candidates,
+            fence_row=revision,
+        )
+        result.pop('_window_end')
+        episode_attach_memo.stamp(transaction, client, uid, conversation_id, key, result['id'])
+        return {**result, '_recorded_windows': [result]}
+
+    return run_transactional(client, attach, transient=True)
 
 
 def member_episodes(uid: str, conversation_id: str, *, firestore_client: Any = None) -> list[dict[str, Any]]:

@@ -202,3 +202,96 @@ def test_existing_dispatch_does_not_scan_load_or_emit_exclusion(monkeypatch, exi
         assert not result.batch_allowlisted and not result.live_stt_retired
         assert original.batch_enabled
     read.assert_not_called()
+
+
+@pytest.fixture(autouse=True)
+def fresh_exclusion_memo():
+    batch_ramp._exclusions.clear()
+    yield
+    batch_ramp._exclusions.clear()
+
+
+def load_client(job_rows, pending_rows=()):
+    client = Mock()
+    query = client.collection.return_value
+    query.where.return_value = query
+    query.select.return_value = query
+    query.limit.return_value = query
+    query.stream.side_effect = lambda: iter(
+        SimpleNamespace(to_dict=lambda row=row: row)
+        for row in (job_rows if query.stream.call_count % 2 else pending_rows)
+    )
+    query.document.return_value.get.return_value.to_dict.return_value = {}
+    return client
+
+
+def test_light_owner_is_never_memoized_and_growing_backlog_is_fresh():
+    jobs = rows(30)
+    client = load_client(jobs)
+    kwargs = dict(firestore_client=client, stage='dev', now=100000)
+    assert ramp.exclusion_reason(batch_ramp.read_owner_load('owner', **kwargs)) is None
+    jobs.extend(rows(12))
+    load = batch_ramp.read_owner_load('owner', **kwargs)
+    assert load['open_backlog'] == 42
+    assert ramp.exclusion_reason(load) == 'open_backlog'
+    # New backlog during the memo window cannot be underreported as a stale
+    # numeric count or certified light. Only a denial of certification is reused.
+    jobs.extend(rows(20))
+    assert batch_ramp.read_owner_load('owner', **kwargs) is None
+    assert ramp.exclusion_reason(None) == 'load_unavailable'
+    assert client.collection.return_value.stream.call_count == 4
+
+
+@pytest.mark.parametrize('saturated', ['jobs', 'pending'])
+def test_saturated_reads_cannot_certify_light_owner_even_from_memo(saturated):
+    jobs = rows(ramp.READ_LIMIT, client_status='completed') if saturated == 'jobs' else []
+    pending = [{}] * ramp.READ_LIMIT if saturated == 'pending' else []
+    client = load_client(jobs, pending)
+    kwargs = dict(firestore_client=client, stage='dev', now=100000)
+    load = batch_ramp.read_owner_load('owner', **kwargs)
+    assert load['complete'] is False
+    assert ramp.exclusion_reason(load) is not None
+    client.reset_mock()
+    assert batch_ramp.read_owner_load('owner', **kwargs) is None
+    client.collection.assert_not_called()
+
+
+def test_exclusion_memo_has_fixed_60_second_expiry_and_rechecks_drained_owner(monkeypatch):
+    instant = 10.0
+    monkeypatch.setattr(batch_ramp.time, 'monotonic', lambda: instant)
+    jobs = rows(42)
+    client = load_client(jobs)
+    kwargs = dict(firestore_client=client, stage='dev', now=100000)
+    assert ramp.exclusion_reason(batch_ramp.read_owner_load('owner', **kwargs)) == 'open_backlog'
+    jobs.clear()
+    instant = 69.9
+    assert batch_ramp.read_owner_load('owner', **kwargs) is None
+    instant = 70.0
+    assert ramp.exclusion_reason(batch_ramp.read_owner_load('owner', **kwargs)) is None
+    assert client.collection.return_value.stream.call_count == 4
+
+
+def test_exclusion_memo_is_bounded_and_scoped_to_owner_stage_and_client(monkeypatch):
+    monkeypatch.setattr(batch_ramp, 'EXCLUSION_MEMO_LIMIT', 2)
+    client = load_client(rows(42))
+    kwargs = dict(firestore_client=client, stage='dev', now=100000)
+    batch_ramp.read_owner_load('one', **kwargs)
+    batch_ramp.read_owner_load('two', **kwargs)
+    assert batch_ramp.read_owner_load('one', **kwargs) is None
+    batch_ramp.read_owner_load('one', **dict(kwargs, stage='prod'))
+    assert len(batch_ramp._exclusions) == 2
+    # The oldest entry was evicted, despite its hit (no sliding expiry).
+    assert batch_ramp.read_owner_load('one', **kwargs) is not None
+    other = load_client([])
+    assert ramp.exclusion_reason(batch_ramp.read_owner_load('one', **dict(kwargs, firestore_client=other))) is None
+
+
+def test_incoming_audio_is_counted_fresh_and_does_not_memoize_owner():
+    client = load_client([])
+    kwargs = dict(firestore_client=client, stage='dev', now=100000)
+    assert (
+        ramp.exclusion_reason(batch_ramp.read_owner_load('owner', incoming_audio_seconds=72000, **kwargs))
+        == 'recording_hours'
+    )
+    assert ramp.exclusion_reason(batch_ramp.read_owner_load('owner', **kwargs)) is None
+    assert client.collection.return_value.stream.call_count == 4

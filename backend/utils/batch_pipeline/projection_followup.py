@@ -13,6 +13,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
+from database.batch_privacy_attempt import with_batch_privacy_attempt
 from config.batch_pipeline import projection_followup_page_enabled
 from config.policy import ProjectionPolicy
 from database.batch_pipeline_projection import ProjectionBlocked, ProjectionReplay
@@ -214,6 +215,7 @@ class ProjectionFollowups:
                 return session.job, session.entry, binding
         raise ProjectionBlocked('complete ordered assignment required before follow-up')
 
+    @with_batch_privacy_attempt
     async def run(self, segment):
         try:
             # Cancel this coordinator, not the drain. The persisted/ready outbox

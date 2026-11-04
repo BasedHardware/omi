@@ -2449,7 +2449,7 @@ No series carries uid, session or conversation labels.
 
 `LISTEN_LOOP_METRICS_ENABLED` is the kill switch. It is on by default; `false`, `0`, `off` or `no` disables it. It is read when the probe starts, once per session for frame timing and once per VAD gate, so a change takes effect at the next process start.
 
-The lag probe is a process-wide task started from an empty `contextvars.Context`, so it never keeps the first session's BYOK keys or uid alive.
+The lag probe is a process-wide task started from an empty `contextvars.Context`, so it never keeps the first session's BYOK keys or uid alive. `run_listen_session` starts it on each session (idempotent per loop). All four series are on the default registry that listen `/metrics` serves. The label-less lag histogram and VAD counters export zero-valued series from import, so every listen pod running #22397 or later shows `omi_listen_event_loop_lag_seconds_count` before any session. `omi_listen_frame_processing_seconds` has a `codec` label: its child appears, at zero, when a session enters its receive loop, so an idle pod without it is healthy and a zero `_count` does not mean a frame was timed. If `job="backend-listen-metrics"` has no `omi_listen_event_loop_lag_seconds_count`, check the listen deployment's image tag before you suspect the code: Cloud Run `backend` series can appear while listen still runs an older image.
 
 D0b watch: `histogram_quantile(0.99, sum by (le) (rate(omi_listen_event_loop_lag_seconds_bucket[5m])))` must stay under 50 ms for 24h after the retune rolls, and before the HPA floor is lowered.
 
@@ -7603,6 +7603,26 @@ for restart, privacy, ordering and p95 qualification limits. This changes no
 client wire fields or live STT ownership rules.
 
 
+### Recovery and admission migration conformance
+
+`tests/integration/test_recovery_admission_conformance.py` runs PL-057/072/086
+through the production scheduler and recovery coordinator on the simulator,
+Firestore emulator and Postgres. Vendor credit/uncertain replies retain the
+original speech and spent intent; a lost result acknowledgment reconciles its
+existing object without another paid call. Refusal waits survive restart,
+preserve explicit policy delays and provider attempts, and allow same-owner
+siblings to progress. Deletion must cancel before paid work or result upload.
+
+The existing emulator-proof runner includes this suite. Local qualification
+requires `OMI_REQUIRE_STORE_BACKENDS=all`; skips do not prove parity. The
+simulator/Postgres deletion-cancellation cases are strict expected failures
+linked to [#23761](https://github.com/BasedHardware/omi/issues/23761): the current
+cancellation writer directly uses a Firestore client instead of the Store
+surface. They assert no provider/result-upload calls even on that failure and
+do not satisfy migration acceptance. Physical erasure and the serving privacy
+bridge remain separate gates. All content and external IO in this suite are
+synthetic; it does not qualify real ASR accuracy or vendor transport retries.
+
 ### Paid quarantine recovery request lifetime
 
 Each serving sweep attempts up to `BATCH_PIPELINE_RECOVERY_DISPATCH_BATCH_SIZE`
@@ -8704,6 +8724,15 @@ Worker handoffs also carry a separate `worker_vad_receipt` with `version: 1`,
 `sample_rate_hz: 16000` and `input_uri_sha256` binding the staged input URI.
 The lease CAS validates its input, duration and agreement with measured seconds
 before storing it. `worker_empty_evidence` retains its existing exact shape.
+
+Migration qualification for these custody/evidence rules is shared across the
+Firestore emulator, Postgres and simulator in
+`tests/integration/test_recovery_custody_conformance.py` (PL-049/050). Run with
+`OMI_REQUIRE_STORE_BACKENDS=all`; a skipped store does not establish parity.
+The suite exercises the real scheduler and recovery coordinator with synthetic
+provider/audio/artifact boundaries. Postgres customer documents use the existing
+harness-only tables; this does not qualify the serving cross-database A4 bridge
+or real ASR quality. The emulator proof runner includes these tests.
 
 ### Manual merge completion observation
 
