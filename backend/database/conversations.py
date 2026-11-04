@@ -34,6 +34,7 @@ from models.transcript_segment import TranscriptSegment, legacy_conversation_seg
 from utils import encryption
 from utils.conversation_page_cursor import BookmarkDict, decode_cursor, encode_cursor, query_scope
 from config.firestore_read_levers import lever_enabled
+from config.recording_speakers import stamp_scope_index, with_creation_scope_index
 from utils.conversations.fragment_visibility import is_completed_rule_discard, is_user_curated
 from utils.conversations.fragment_visibility import SETTLING_FIELDS, is_settling_fragment
 from utils.conversations.transcript_hash import (
@@ -326,6 +327,7 @@ def _prepare_conversation_for_write(
 ) -> Dict[str, Any]:
     data = copy.deepcopy(data)
 
+    stamp_scope_index(data)
     conversation_recorded_time.stamp_for_write(data)
     summary_delivery.prepare(data, uid)
     if owner_diagnostics.FIELD in data:
@@ -1215,7 +1217,7 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
         summary_changed = processing_backlog.stage_transition(
             transaction, uid, conversation_data['id'], {}, write_data, firestore_client=db
         )
-        transaction.set(conversation_ref, write_data)
+        transaction.set(conversation_ref, with_creation_scope_index(write_data))
 
     run_transactional(db, _write_processing_result)
     stop_quiet_check_for_conversation(uid, conversation_data['id'], firestore_client=db)
@@ -3366,10 +3368,19 @@ def assign_conversation_speaker(
     time_range=None,
     segment_only=False,
     owner_confirmation=None,
+    expected_voices=None,
+    decided_at=None,
+    recording_voice_defaults=False,
 ):
     """Commit the manual edit, provenance, label evidence and invalidation in one transaction."""
-    from database.speaker_assignment_effects import persist_assignment_effects, run_assignment_transaction
-    from database.speaker_learning_jobs import extract_learning_receipt_markers, record_speaker_learning_job_events
+    from database import recording_speakers as recording_decisions
+    from database.speaker_assignment_effects import (
+        persist_assignment_effects,
+        run_assignment_transaction,
+        owner_confirmation_updates,
+        record_assignment_commit,
+    )
+    from database.speaker_learning_jobs import extract_learning_receipt_markers
 
     validate_assignment_range(time_range)
     rejection = normalize_rejection(rejection)
@@ -3421,26 +3432,25 @@ def assign_conversation_speaker(
         current['manual_speaker_assignments'] = decode_manual_speaker_assignments(
             uid, raw.get('manual_speaker_assignments'), bool(raw.get('manual_speaker_assignments_compressed'))
         )
-        owner_updates = {}
-        if owner_confirmation is not None:
-            # Read-only conversation consumers do not depend on prompt models.
-            # Load the authorization contract only for the explicit excerpt path.
-            from utils.speaker_tag_prompts.owner_confirmation import (
-                FIELD as OWNER_CONFIRMATION_FIELD,
-                StaleOwnerConfirmation,
-                validate_binding as validate_owner_confirmation,
-            )
-
-            binding = validate_owner_confirmation(
-                current,
-                owner_confirmation['prompt_id'],
-                owner_confirmation['evidence_id'],
-                selected_segment_ids,
-                require_played=True,
-            )
-            if not segment_only or selected_speaker_id != binding['speaker_id'] or owner_segment_ids:
-                raise StaleOwnerConfirmation('Owner excerpt cannot authorize whole-voice assignment or learning')
-            owner_updates[OWNER_CONFIRMATION_FIELD] = dict(binding, answered='yes' if is_user else 'no')
+        owner_updates = owner_confirmation_updates(
+            current,
+            owner_confirmation,
+            segment_only,
+            selected_speaker_id,
+            owner_segment_ids,
+            selected_segment_ids,
+            is_user,
+        )
+        recording_decisions.validate_selection(current, expected_voices)
+        if recording_decisions.same_assignment(
+            transaction,
+            client,
+            uid,
+            current,
+            expected_voices,
+            (person_id, is_user, use_for_speech_training, recording_voice_defaults),
+        ):
+            return current, [], [], []
         before = copy.deepcopy(current['transcript_segments'])
         if source_segments is not None:
             before_ids = {s.get('id') for s in before}
@@ -3457,6 +3467,17 @@ def assign_conversation_speaker(
             rejection=rejection,
             time_range=time_range if source_segments is None else None,
             segment_only=segment_only or time_range is not None,
+        )
+        decision_writes = recording_decisions.prepare_assignment(
+            transaction,
+            client,
+            uid,
+            current,
+            segments,
+            receipt,
+            expected_voices,
+            decided_at,
+            recording_voice_defaults,
         )
         removed, relabeled = persist_assignment_effects(
             transaction,
@@ -3489,6 +3510,8 @@ def assign_conversation_speaker(
         clear_client_processing(payload)
         guard_match_score_size(payload, raw, getattr(ref, 'path', None))
         transaction.update(ref, payload)
+        for decision_ref, decision_payload in decision_writes:
+            transaction.set(decision_ref, decision_payload)
         current.update(transcript_segments=segments, manual_speaker_assignments=receipt)
         if payload.get(match_scores.FIELD) is firestore.DELETE_FIELD:
             current.pop(match_scores.FIELD, None)
@@ -3497,31 +3520,8 @@ def assign_conversation_speaker(
         return current, resolved, removed, relabeled
 
     result = run_assignment_transaction(client, assign, uid=uid)
-    invalidate_people_stats_cache(uid)
-    current, resolved, _, before = result
-    if any(s.get('speaker_grouping_shadow') for s in current.get('transcript_segments') or []):
-        try:
-            from utils.conversations.speaker_grouping_shadow import record_correction
-
-            record_correction(current, resolved)
-        except Exception as error:
-            # A committed user correction cannot fail because optional telemetry
-            # is unavailable (including its lazy import).
-            from utils.observability.fallback import record_fallback
-
-            record_fallback(
-                component='other',
-                from_mode='speaker_grouping',
-                to_mode='incumbent',
-                reason='other',
-                outcome='recovered',
-                log=logger,
-            )
-            logger.warning(
-                'event=speaker_grouping_correction outcome=unavailable exception_type=%s', type(error).__name__
-            )
-    record_speaker_review(uid, current['id'], before, current['transcript_segments'])
-    record_speaker_learning_job_events(current.pop('_speaker_learning_job_events', ()))
+    record_assignment_commit(uid, result, logger)
+    current = result[0]
     try:
         _reveal_match_scores_for_read(current, uid)
     except Exception:

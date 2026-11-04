@@ -4523,5 +4523,9 @@
     "liveTranscribedUpTo": "Ditranskripsi sehingga {time}",
     "liveAudioSaved": "{duration} disimpan",
     "liveAudioSavedDetail": "Penutur dan transkrip akhir akan muncul di sini semasa dimuat naik.",
+    "speakerWholeRecording": "Gunakan pada seluruh rakaman",
+    "speakerSelectionChanged": "Penutur telah berubah. Pilih baris sekali lagi.",
+    "speakerRenameIssue": "{reason, select, limit{Rakaman terlalu besar. Pilih lebih sedikit baris dalam satu perbualan.} partial{Beberapa baris telah disimpan. Pilih baris yang tinggal dan cuba lagi.} other{Beberapa baris telah disimpan. Pilih baris yang tinggal dan cuba lagi.}}",
+    "speakerRecordingCoverage": "{state, select, scope{Baris lain suara ini (liputan rakaman belum disahkan)} other{{count, plural, =1{Menamakan semula 1 baris dalam perbualan yang tersedia sahaja.} other{Menamakan semula {count} baris dalam perbualan yang tersedia sahaja.}}}}",
     "episodeFinishingUp": "Sedang menyiapkan…"
 }

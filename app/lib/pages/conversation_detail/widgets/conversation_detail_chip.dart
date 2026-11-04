@@ -11,7 +11,7 @@ abstract final class ConversationDetailInk {
 }
 
 /// One fact or control on the conversation page (Omi v8 `.chipm`): a 34 pt capsule with a hairline
-/// edge, a glyph and one line of text. Used under the title (when, folder, people, visibility) and
+/// edge, a glyph and normally one line of text. Used under the title (when, folder, people, visibility) and
 /// at the top of the transcript ("Transcript · 14 min · 2 speakers").
 class ConversationDetailChip extends StatelessWidget {
   const ConversationDetailChip({
@@ -20,10 +20,14 @@ class ConversationDetailChip extends StatelessWidget {
     required this.label,
     this.color,
     this.startPadding = 13,
+    this.maxLines = 1,
   });
 
   final Widget icon;
   final String label;
+
+  /// Null lets a transcript heading wrap fully when the text is enlarged.
+  final int? maxLines;
 
   /// The text and glyph ink; [ConversationDetailInk.words] when null.
   final Color? color;
@@ -50,8 +54,8 @@ class ConversationDetailChip extends StatelessWidget {
             child: Text(
               label,
               style: OmiType.subhead.copyWith(color: ink, height: 1.2),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+              maxLines: maxLines,
+              overflow: maxLines == null ? TextOverflow.visible : TextOverflow.ellipsis,
             ),
           ),
         ],

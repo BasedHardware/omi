@@ -18297,6 +18297,29 @@
     "@liveAudioSavedDetail": {
         "description": "Under the saved-audio card's heading."
     },
+    "speakerWholeRecording": "Apply to the whole recording",
+    "speakerSelectionChanged": "The speaker changed. Select the lines again.",
+    "speakerRenameIssue": "{reason, select, limit{Recording too large. Select fewer lines in one conversation.} partial{Some lines were saved. Select the remaining lines and try again.} other{Some lines were saved. Select the remaining lines and try again.}}",
+    "@speakerRenameIssue": {
+        "description": "Speaker rename budget refusal or partial member save; successful labels remain applied.",
+        "placeholders": {
+            "reason": {
+                "type": "String"
+            }
+        }
+    },
+    "speakerRecordingCoverage": "{state, select, scope{Other lines from this voice (recording coverage unconfirmed)} other{{count, plural, =1{Renamed 1 line in the available conversations only.} other{Renamed {count} lines in the available conversations only.}}}}",
+    "@speakerRecordingCoverage": {
+        "description": "Scope explanation or saved confirmation when full recording coverage is unconfirmed.",
+        "placeholders": {
+            "state": {
+                "type": "String"
+            },
+            "count": {
+                "type": "int"
+            }
+        }
+    },
     "episodeFinishingUp": "Finishing up…",
     "@episodeFinishingUp": {
         "description": "Neutral Home row title while an episode summary is being completed."

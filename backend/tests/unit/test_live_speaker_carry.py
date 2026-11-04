@@ -225,6 +225,9 @@ class _CarryHarness:
 
     def __init__(self, monkeypatch):
         self.store = StrictFirestore()
+        from database import recording_speakers as recording_decisions
+
+        monkeypatch.setattr(recording_decisions, 'get_firestore_client', lambda: self.store)
         self.rows = {}
         self.pointer = None
         self.on_scope_swap = None
@@ -251,6 +254,8 @@ class _CarryHarness:
 
     async def call(self, fn, *args, **kwargs):
         name = fn.__name__
+        if name == 'recording_carry':
+            return fn(*args, **kwargs)
         if name == 'arm':
             return fn(*args, firestore_client=self.store, **kwargs)
         if name == 'authority_snapshot':
