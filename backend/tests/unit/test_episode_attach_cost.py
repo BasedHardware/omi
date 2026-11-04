@@ -59,15 +59,16 @@ def test_completed_identical_sync_has_no_episode_reads_or_writes(lane, monkeypat
     assert before == store.rows
 
 
-def test_wal_revision_is_not_semantic_content_revision(lane):
+def test_wal_revision_change_conservatively_falls_through(lane):
     store, c, _ = lane
     member = seed(store, sync_content_revision=1)
     service._attach_synced('u', 'same', member, c)
+    member = deepcopy(member)
     stored = store.rows[('users', 'u', 'conversations', 'same')]
     stored['sync_content_revision'] = 19
     updated = {**member, 'sync_content_revision': 19}
-    assert content_key(updated) == content_key(member)
-    assert service._attach_synced('u', 'same', updated, c) == 'attached_unchanged'
+    assert content_key(updated) != content_key(member)
+    assert service._attach_synced('u', 'same', updated, c) == 'recorded'
 
 
 @pytest.mark.parametrize('change', ['span', 'text', 'new_member', 'discard', 'delete', 'donor'])
@@ -203,8 +204,10 @@ def test_reprocess_snapshot_catches_in_place_changes():
     before['transcript_segments'][0]['text'] = 'changed'
     assert should_schedule(snapshot, before)
     assert should_schedule({**snapshot, 'episode_id': None}, snapshot)
+    assert should_schedule(snapshot, {**snapshot, 'episode_id': None})
     assert should_schedule(snapshot, {**snapshot, 'discarded': True})
     assert should_schedule(snapshot, {**snapshot, 'recorded_end': T0 + timedelta(hours=1)})
+    assert should_schedule(snapshot, {**snapshot, 'clock': 'unknown-clock'})
 
 
 @pytest.mark.parametrize('enabled', [False, True])
@@ -273,3 +276,129 @@ def test_memo_read_failure_falls_through(lane, monkeypatch):
     monkeypatch.setattr(episode_attach_memo, 'record_fallback', fallback)
     assert not episode_attach_memo.matches('u', 'same', member, firestore_client=store)
     assert fallback.call_count == 1
+
+
+def test_scheduling_gate_runs_before_submit_and_preserves_first_finalize(lane, monkeypatch):
+    from utils.episodes import finalize
+
+    store, c, _ = lane
+    member = seed(store, sync_content_revision=4)
+    service._attach_synced('u', 'same', member, c)
+    fresh = deepcopy(store.rows[('users', 'u', 'conversations', 'same')])
+    monkeypatch.setattr(episode_attach_memo, 'get_firestore_client', lambda: store)
+    submit = Mock()
+    monkeypatch.setattr(finalize, 'submit_with_context', submit)
+    monkeypatch.setattr(finalize, 'lifecycle_executor', lambda *a, **kw: object())
+    # Intake may skip now, but finalize must emit its FIRST compose signal.
+    finalize.schedule_synced_intake_attach('u', 'same', fresh)
+    assert submit.call_count == 0
+    finalize.schedule_after_finalization('u', 'same', finalize.ProcessingTrigger.SYNC_UPDATE, row=fresh)
+    assert submit.call_count == 1
+    episode_attach_memo.complete('u', 'same', fresh, None, finalized=True, firestore_client=store)
+    finalize.schedule_after_finalization('u', 'same', finalize.ProcessingTrigger.SYNC_UPDATE, row=fresh)
+    assert submit.call_count == 1
+    monkeypatch.setenv('EPISODE_ATTACH_CONTENT_GATE_ENABLED', 'false')
+    finalize.schedule_after_finalization('u', 'same', finalize.ProcessingTrigger.SYNC_UPDATE, row=fresh)
+    assert submit.call_count == 2
+
+
+def test_discard_after_intake_same_revision_still_schedules_and_ends_member(lane, monkeypatch):
+    from utils.episodes import finalize
+
+    store, c, _ = lane
+    member = seed(store, sync_content_revision=7)
+    service._attach_synced('u', 'same', member, c)
+    fresh = deepcopy(store.rows[('users', 'u', 'conversations', 'same')])
+    episode_attach_memo.complete('u', 'same', fresh, None, finalized=True, firestore_client=store)
+    old_key = content_key(fresh)
+    fresh['discarded'] = True  # Discard does not bump the revision.
+    store.rows[('users', 'u', 'conversations', 'same')] = fresh
+    assert fresh['sync_content_revision'] == member['sync_content_revision'] == 7
+    assert content_key(fresh) != old_key
+    monkeypatch.setattr(episode_attach_memo, 'matches', unexpected)
+    assert not finalize.skip_unchanged_schedule('u', 'same', fresh, finalized=True)
+    owner_id = fresh['episode_id']
+    assert (
+        service.on_conversation_finalized('u', 'same', fresh, trigger='sync_update', collaborators=c)
+        == 'skipped_discarded'
+    )
+    owner = episodes.get_episode('u', owner_id, firestore_client=store)
+    assert 'same' in owner['discarded_conversation_ids']
+
+
+def test_smart_merge_same_revision_cannot_skip_absorbed_donor_repoint(lane, monkeypatch):
+    from utils.episodes import finalize
+
+    store, c, _ = lane
+    donor = seed(store, 'donor', sync_content_revision=7)
+    survivor = seed(store, 'survivor', sync_content_revision=7)
+    service._attach_synced('u', 'donor', donor, c)
+    service._attach_synced('u', 'survivor', survivor, c)
+    fresh = deepcopy(store.rows[('users', 'u', 'conversations', 'survivor')])
+    episode_attach_memo.complete('u', 'survivor', fresh, None, finalized=True, firestore_client=store)
+    monkeypatch.setattr(episode_attach_memo, 'matches', unexpected)
+    assert not finalize.skip_unchanged_schedule('u', 'survivor', fresh, finalized=True, absorbed_from='donor')
+    assert service._attach_synced('u', 'survivor', fresh, c, absorbed_from='donor') != 'attached_unchanged'
+    owner = episodes.get_episode_for_conversation('u', 'survivor', firestore_client=store)
+    assert owner['conversation_ids'] == ['survivor']
+    assert_timeline(store)
+
+
+def test_pending_to_failed_same_revision_changes_key_and_schedules(lane, monkeypatch):
+    from utils.episodes import finalize
+
+    store, c, _ = lane
+    member = seed(store, sync_content_revision=7, episode_transcription_pending_at=T0)
+    service._attach_synced('u', 'same', member, c)
+    fresh = deepcopy(store.rows[('users', 'u', 'conversations', 'same')])
+    episode_attach_memo.complete('u', 'same', fresh, None, finalized=True, firestore_client=store)
+    failed = {**fresh, 'summary_blocked_reason': 'transcription_failed', 'record_upload_failed': True}
+    assert content_key(fresh) != content_key(failed)
+    monkeypatch.setattr(episode_attach_memo, 'get_firestore_client', lambda: store)
+    assert not finalize.skip_unchanged_schedule('u', 'same', failed, finalized=True)
+
+
+@pytest.mark.parametrize('gate_during_discard', ['true', 'false'])
+def test_restore_cannot_reuse_the_pre_discard_completed_memo(lane, monkeypatch, gate_during_discard):
+    from utils.episodes import finalize
+
+    store, c, _ = lane
+    member = seed(store, sync_content_revision=7, sync_relevance_user_kept=True)
+    service._attach_synced('u', 'same', member, c)
+    visible = deepcopy(store.rows[('users', 'u', 'conversations', 'same')])
+    episode_attach_memo.complete('u', 'same', visible, None, finalized=True, firestore_client=store)
+    monkeypatch.setenv('EPISODE_ATTACH_CONTENT_GATE_ENABLED', gate_during_discard)
+    hidden = {**visible, 'discarded': True, 'sync_relevance_user_kept': False}
+    store.rows[('users', 'u', 'conversations', 'same')] = hidden
+    assert service._attach_synced('u', 'same', hidden, c) == 'skipped_discarded'
+    # Re-enabling the gate after rollback must also reject the old stamp.
+    monkeypatch.setenv('EPISODE_ATTACH_CONTENT_GATE_ENABLED', 'true')
+    # A second user restore has exactly the original visible key/revision.
+    store.rows[('users', 'u', 'conversations', 'same')] = visible
+    monkeypatch.setattr(episode_attach_memo, 'get_firestore_client', lambda: store)
+    assert not finalize.skip_unchanged_schedule('u', 'same', visible, finalized=True)
+    assert not episode_attach_memo.matches('u', 'same', visible, firestore_client=store)
+
+
+def test_scheduling_hit_only_reads_the_link_and_never_submits(lane, monkeypatch):
+    from utils.episodes import finalize
+
+    store, c, _ = lane
+    member = seed(store, sync_content_revision=7)
+    service._attach_synced('u', 'same', member, c)
+    fresh = deepcopy(store.rows[('users', 'u', 'conversations', 'same')])
+    episode_attach_memo.complete('u', 'same', fresh, None, finalized=True, firestore_client=store)
+    monkeypatch.setattr(episode_attach_memo, 'get_firestore_client', lambda: store)
+    read = StrictFirestoreDocument.get
+    reads = []
+
+    def counted(ref, *a, **kw):
+        reads.append(ref.path)
+        return read(ref, *a, **kw)
+
+    monkeypatch.setattr(StrictFirestoreDocument, 'get', counted)
+    monkeypatch.setattr(StrictFirestoreTransaction, 'set', unexpected)
+    monkeypatch.setattr(StrictFirestoreTransaction, 'update', unexpected)
+    monkeypatch.setattr(finalize, 'submit_with_context', unexpected)
+    finalize.schedule_after_finalization('u', 'same', finalize.ProcessingTrigger.SYNC_UPDATE, row=fresh)
+    assert [p[2:] for p in reads] == [('episode_links', 'same')]

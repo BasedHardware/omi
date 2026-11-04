@@ -806,3 +806,35 @@ def test_memo_is_not_completed_when_content_changes_during_recovery(store, monke
     assert service._attach_synced(uid, 'race', member, c) == 'recorded'
     assert root.collection('episode_links').document('race').get().to_dict()['attach_completed'] is None
     assert not episode_attach_memo.matches(uid, 'race', member, firestore_client=client)
+
+
+def test_discard_invalidates_pre_restore_memo_in_the_same_transaction(store):
+    from database import episode_attach_memo
+    from utils.episodes import service
+
+    client, uid = store
+    root = client.collection('users').document(uid)
+    member = dict(
+        id='restore',
+        source='omi',
+        sync_content_revision=7,
+        started_at=T0,
+        finished_at=T0 + timedelta(minutes=1),
+        recorded_start=T0,
+        recorded_end=T0 + timedelta(minutes=1),
+        transcript_segments=[],
+        sync_relevance_user_kept=True,
+    )
+    ref = root.collection('conversations').document('restore')
+    ref.set(member)
+    c = service.Collaborators(firestore_client=client, now=lambda: T0 + timedelta(hours=1))
+    assert service._attach_synced(uid, 'restore', member, c) == 'recorded'
+    visible = ref.get().to_dict()
+    episode_attach_memo.complete(uid, 'restore', visible, None, finalized=True, firestore_client=client)
+    hidden = {**visible, 'discarded': True, 'sync_relevance_user_kept': False}
+    ref.set(hidden)
+    assert service._attach_synced(uid, 'restore', hidden, c) == 'skipped_discarded'
+    ref.set(visible)
+    # A delayed completion from before discard cannot reactivate the proof.
+    episode_attach_memo.complete(uid, 'restore', visible, None, finalized=True, firestore_client=client)
+    assert not episode_attach_memo.matches(uid, 'restore', visible, finalized=True, firestore_client=client)

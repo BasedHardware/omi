@@ -24,7 +24,7 @@ def current_key(uid, row):
         return None
 
 
-def matches(uid, cid, row, *, firestore_client=None):
+def matches(uid, cid, row, *, firestore_client=None, finalized=False, validate_current=True):
     key = content_key(row) if content_gate_enabled() and memo_eligible(row) else None
     if key is None:
         return False
@@ -41,6 +41,12 @@ def matches(uid, cid, row, *, firestore_client=None):
             or link.get('attach_completed') != key
         ):
             return False
+        if finalized and link.get('attach_finalized') != key:
+            return False
+        if not validate_current:
+            # Scheduling callers hold the just-committed/read row. No additional
+            # conversation read is needed to derive or validate its key.
+            return row.get('episode_id') == link['episode_id']
         current = root.collection('conversations').document(cid).get(transaction=transaction).to_dict() or {}
         return current.get('episode_id') == link['episode_id'] and current_key(uid, current) == key
 
@@ -66,11 +72,11 @@ def stamp(transaction, client, uid, cid, key, owner_id):
     if key and content_gate_enabled():
         transaction.update(
             client.collection('users').document(uid).collection('episode_links').document(cid),
-            {'attach_revision': key, 'attach_completed': None, 'attach_owner_id': owner_id},
+            {'attach_revision': key, 'attach_completed': None, 'attach_finalized': None, 'attach_owner_id': owner_id},
         )
 
 
-def complete(uid, cid, row, owner, *, firestore_client=None):
+def complete(uid, cid, row, owner, *, firestore_client=None, finalized=False):
     key = content_key(row) if content_gate_enabled() and memo_eligible(row) else None
     if key is None:
         return
@@ -82,13 +88,17 @@ def complete(uid, cid, row, owner, *, firestore_client=None):
         ref = root.collection('episode_links').document(cid)
         link = ref.get(transaction=transaction).to_dict() or {}
         current = root.collection('conversations').document(cid).get(transaction=transaction).to_dict() or {}
+        owner_id = owner['id'] if owner is not None else link.get('episode_id')
+        marker = 'attach_finalized' if finalized else 'attach_completed'
         if (
-            link.get('episode_id') == owner['id'] == current.get('episode_id')
-            and link.get('attach_owner_id') == owner['id']
+            owner_id
+            and link.get('episode_id') == owner_id == current.get('episode_id')
+            and link.get('attach_owner_id') == owner_id
             and link.get('attach_revision') == key
             and current_key(uid, current) == key
-            and link.get('attach_completed') != key
+            and (not finalized or link.get('attach_completed') == key)
+            and link.get(marker) != key
         ):
-            transaction.update(ref, {'attach_completed': key})
+            transaction.update(ref, {marker: key})
 
     run_transactional(client, finish, transient=True)

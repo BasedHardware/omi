@@ -1281,7 +1281,12 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
     schedule_episode = not noop_schedule_enabled() or should_schedule(episode_before, processed_conversation)
     record_feature(uid, processed_conversation, 'episode_attach', 'scheduled' if schedule_episode else 'unchanged')
     if schedule_episode:
-        schedule_after_finalization(uid, conversation_id, ProcessingTrigger.SYNC_UPDATE)
+        schedule_after_finalization(
+            uid,
+            conversation_id,
+            ProcessingTrigger.SYNC_UPDATE,
+            row=process_snapshot(conversation_data, processed_conversation),
+        )
 
     logger.info(f'Successfully reprocessed conversation {conversation_id}')
     return sync_done(processed_conversation)

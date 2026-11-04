@@ -1,4 +1,4 @@
-"""Semantic episode input identity, independent of WAL processing generations."""
+"""Semantic episode input identity with a conservative WAL generation fence."""
 
 from copy import deepcopy
 import hashlib
@@ -25,8 +25,9 @@ def content_key(row: Mapping[str, Any]) -> str | None:
     """None is uncertainty, never permission to skip. Include every recovery input.
 
     assignment.assign_in_transaction increments sync_content_revision on every admitted WAL
-    merge, including identical text/extent. Hash the transcript itself instead;
-    there is no narrower authoritative transcript revision shared by all writers.
+    merge, including identical text/extent. Pair that conservative fence with a
+    transcript/span digest, ancestry and member flags; equal revisions alone
+    cannot prove unchanged discard or smart-merge state.
     """
     try:
         span = conversation_span(row)
@@ -37,6 +38,16 @@ def content_key(row: Mapping[str, Any]) -> str | None:
             'finished_at',
             'created_at',
             'source',
+            'sync_content_revision',
+            'status',
+            'structured',
+            'summary_blocked_reason',
+            'record_lane_owner',
+            'record_projection_revision',
+            'record_upload_failed',
+            'record_audio_partial',
+            'episode_transcription_pending_at',
+            'episode_transcription_deadline_at',
             'language',
             'calendar_identity',
             'external_data',
@@ -61,7 +72,7 @@ def content_key(row: Mapping[str, Any]) -> str | None:
             sync_merged_from=sorted(set(row.get('sync_merged_from') or [])),
         )
         return (
-            'v1:'
+            'v2:'
             + hashlib.sha256(json.dumps(value, sort_keys=True, default=_json, allow_nan=False).encode()).hexdigest()
         )
     except (TypeError, ValueError, OverflowError, AttributeError):
@@ -97,7 +108,12 @@ def should_schedule(before, after):
     # Wire models omit raw relevance/ancestry metadata. Preserve raw fields
     # unless the processor exposes them, and compare visibility explicitly.
     merged = {**before, **after}
-    old, new = scheduling_key(before), scheduling_key(merged)
+    if not merged.get('episode_id'):
+        return True
+    try:
+        old, new = scheduling_key(before), scheduling_key(merged)
+    except (TypeError, ValueError, OverflowError, AttributeError):
+        return True
     return old is None or new is None or old != new
 
 
@@ -113,6 +129,14 @@ def scheduling_key(row):
     # Processing clocks and generated summaries do not change episode input.
     # Use the proven recorded span, even if finished_at advanced during reprocess.
     fields = (
+        'status',
+        'summary_blocked_reason',
+        'record_lane_owner',
+        'record_projection_revision',
+        'record_upload_failed',
+        'record_audio_partial',
+        'episode_transcription_pending_at',
+        'episode_transcription_deadline_at',
         'source',
         'transcript_segments',
         'discarded',

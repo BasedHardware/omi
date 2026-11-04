@@ -53,7 +53,7 @@ from utils.conversations.fragment_visibility import is_relevance_discarded
 from utils.sync.repeat_work_metrics import conversation_scope
 from utils.episodes.timeline import episode_owning_recorded_time, choose_recorded_episode
 from utils.episodes.timeline import episode_at as episode_at, episodes_between as episodes_between
-from database import episode_timeline
+from database import episode_timeline, episode_attach_memo
 
 from config.episodes import (
     CLOSE_GAP_SECONDS,
@@ -1158,9 +1158,14 @@ def on_conversation_finalized(
             # No app of this user can show episodes: no tail update, no reconciliation reads.
             metrics.record_moment_skipped_no_client('finalize')
             return 'skipped_no_client'
-        return composer.after_finalized(
+        outcome = composer.after_finalized(
             uid, conversation_id, _on_finalized(uid, conversation_id, row, trigger, absorbed_from, c), c
         )
+        if trigger == SYNC_UPDATE and not absorbed_from and outcome not in {'error', 'conflict', 'skipped_discarded'}:
+            episode_attach_memo.complete(
+                uid, conversation_id, row, None, finalized=True, firestore_client=c.firestore_client
+            )
+        return outcome
     except Exception as error:
         logger.warning('event=episode_finalize outcome=error exception_type=%s', type(error).__name__)
         return 'error'

@@ -820,6 +820,17 @@ def _update(
     if moves:
         _check_membership(transaction, client, uid, episode_id, [*links, *(merged.get('conversation_ids') or [])])
     members = read_memberships(transaction, client, uid, links)
+    # Discard/duplicate transitions do not change the conversation revision.
+    # Invalidate completed proof atomically, including a later restore to the
+    # exact same visible inputs. Never leave a formerly visible stamp usable.
+    invalidated = []
+    excluded = set(merged.get('discarded_conversation_ids') or []) | set(merged.get('duplicate_conversation_ids') or [])
+    prior = set(raw.get('discarded_conversation_ids') or []) | set(raw.get('duplicate_conversation_ids') or [])
+    for cid in sorted(excluded - prior):
+        link_ref = _links(client, uid).document(cid)
+        link = link_ref.get(transaction=transaction).to_dict() or {}
+        if link.get('attach_revision'):
+            invalidated.append(link_ref)
     if moves and timeline_enabled:
         fence = episode_timeline.check_window(transaction, client, uid, merged, fence_row=timeline_row)
         if fence:
@@ -828,6 +839,8 @@ def _update(
     now = datetime.now(timezone.utc)
     _write_receipts(transaction, client, uid, segment_receipts, receipts_raw, now)
     write_memberships(transaction, client, uid, episode_id, members, now)
+    for link_ref in invalidated:
+        transaction.update(link_ref, {'attach_revision': None, 'attach_completed': None, 'attach_finalized': None})
     return merged
 
 
