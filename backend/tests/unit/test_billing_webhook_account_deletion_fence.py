@@ -105,7 +105,6 @@ def lane(monkeypatch):
     monkeypatch.setattr(payment.users_db, 'set_stripe_customer_id', effect('customer'))
     monkeypatch.setattr(payment, 'find_active_paid_subscription_for_user', lambda uid: None)
     monkeypatch.setattr(payment, 'set_credits_invalidation_signal', effect('credits'))
-    monkeypatch.setattr(payment, 'clear_trial_paywall_cache', effect('trial_cache'))
     monkeypatch.setattr(payment, 'clear_fair_use_on_upgrade', effect('fair_use'))
     monkeypatch.setattr(payment.conversations_db, 'unlock_all_conversations', conversations)
     monkeypatch.setattr(payment.memories_db, 'unlock_all_memories', effect('memories'))
@@ -194,7 +193,6 @@ def test_deletion_wipe_refusal_is_acknowledged_without_unlocks(lane, wipe_status
         'write',
         'telemetry',
         'credits',
-        'trial_cache',
         'fair_use',
     ]
     assert state.current.plan == PlanType.plus
@@ -274,7 +272,6 @@ def test_temporary_gate_before_a_deletion_marker_keeps_retrying(lane):
         'write',
         'telemetry',
         'credits',
-        'trial_cache',
         'fair_use',
     ]
     assert state.current.plan == PlanType.plus
@@ -355,7 +352,7 @@ def test_adoption_requires_a_live_active_replacement_not_a_stale_row(lane):
     assert response.status_code == 200
     assert response.json()['status'] == 'success'
     # A Basic projection carries no unlock/set_customer effects to fence.
-    assert _call_names(state) == ['write', 'telemetry', 'credits', 'trial_cache']
+    assert _call_names(state) == ['write', 'telemetry', 'credits']
     assert 'conversations' not in _call_names(state)
     assert state.current.plan == PlanType.basic
 
@@ -426,7 +423,7 @@ def test_basic_downgrade_with_unpaid_status_still_projects_through_the_fence(lan
     assert response.status_code == 200
     assert response.json()['status'] == 'success'
     # No unlock effects exist for a Basic projection; the downgrade persists.
-    assert _call_names(state) == ['write', 'telemetry', 'credits', 'trial_cache']
+    assert _call_names(state) == ['write', 'telemetry', 'credits']
     assert state.current.plan == PlanType.basic
 
 
@@ -474,7 +471,6 @@ def test_paid_event_still_invalidates_caches_behind_the_marker(lane):
     assert response.status_code == 200
     calls = _call_names(state)
     assert 'credits' in calls
-    assert 'trial_cache' in calls
     assert 'write' in calls
     assert 'memories' not in calls
     assert 'actions' not in calls
@@ -540,7 +536,6 @@ def test_memories_unlock_alone_failing_is_not_classified(lane, monkeypatch):
         'write',
         'telemetry',
         'credits',
-        'trial_cache',
         'fair_use',
     ]
 
@@ -646,6 +641,6 @@ def test_empty_locked_content_and_fenced_unlock_is_still_acknowledged(lane):
     assert response.status_code == 200
     assert response.json()['status'] == 'success'
     # A Basic projection carries no unlock/set_customer effects to fence.
-    assert _call_names(state) == ['write', 'telemetry', 'credits', 'trial_cache']
+    assert _call_names(state) == ['write', 'telemetry', 'credits']
     assert 'conversations' not in _call_names(state)
     assert state.current.plan == PlanType.basic

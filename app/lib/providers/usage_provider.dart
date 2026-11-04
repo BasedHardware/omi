@@ -143,8 +143,6 @@ class UsageProvider with ChangeNotifier {
   String? _error;
   String? get error => _error;
 
-  bool _forceOutOfCredits = false;
-
   /// Bumped on [clearUserData] so responses from a previous session's
   /// in-flight fetches are discarded instead of repopulating cleared state.
   int _sessionGeneration = 0;
@@ -155,20 +153,12 @@ class UsageProvider with ChangeNotifier {
   double get chatQuotaPercent => _subscription?.chatQuotaPercent ?? 0.0;
   bool get chatQuotaAllowed => _subscription?.chatQuotaAllowed ?? true;
 
-  // Phone call feature — derived from subscription response. Only consult
-  // the server-driven quota when the user is on the free tier or the
-  // subscription UI is hidden; paid users with the paywall visible skip
-  // straight to the existing unlimited behavior.
+  // Older servers omit the quota; preserve their paid-plan admission rule.
   PhoneCallQuota? get phoneCallQuota => _subscription?.phoneCallQuota;
 
   bool get _isPaidPlan => _subscription?.subscription.plan.isPaid ?? false;
 
-  bool get canAccessPhoneCalls {
-    if (_isPaidPlan) return true;
-    final quota = phoneCallQuota;
-    if (quota == null) return false;
-    return quota.hasAccess;
-  }
+  bool get canAccessPhoneCalls => phoneCallQuota?.hasAccess ?? _isPaidPlan;
 
   bool get shouldShowPhoneCallsEntry {
     if (_isPaidPlan) return true;
@@ -187,18 +177,20 @@ class UsageProvider with ChangeNotifier {
   bool get isLoadingPlans => _isLoadingPlans;
 
   bool get isOutOfCredits {
-    if (_forceOutOfCredits) return true;
-    if (_subscription == null) return false;
-    if (_subscription!.transcriptionAllowance?.reason == 'usage_budget_exhausted') return true;
-    final plan = _subscription!.subscription.plan;
-    // Plus is paid but metered, so it falls through to the usage check below.
-    if (plan.hasUnlimitedTranscription) return false;
-    // For metered plans, check if used is >= limit and limit is not 0 (unlimited).
-    if (_subscription!.transcriptionSecondsLimit > 0 &&
-        _subscription!.transcriptionSecondsUsed >= _subscription!.transcriptionSecondsLimit) {
-      return true;
+    final allowance = _subscription?.transcriptionAllowance;
+    if (allowance == null) {
+      // Older servers only send plan limits and usage counters.
+      final subscription = _subscription;
+      if (subscription == null || subscription.subscription.plan.hasUnlimitedTranscription) return false;
+      return subscription.transcriptionSecondsLimit > 0 &&
+          subscription.transcriptionSecondsUsed >= subscription.transcriptionSecondsLimit;
     }
-    return false;
+    if (allowance.isBlocked) return true;
+    if (!allowance.isOnDevice) return false;
+    // These reasons refuse a billed socket temporarily; they do not mean the
+    // user spent their credits and must not present an upgrade as the remedy.
+    if (allowance.reason == 'allowance_unavailable' || allowance.reason == 'usage_invalid') return false;
+    return true;
   }
 
   @visibleForTesting
@@ -263,7 +255,6 @@ class UsageProvider with ChangeNotifier {
     _timeZoneLookupInFlight = null;
     _usageFetchInFlight = null;
     _availablePlans = null;
-    _forceOutOfCredits = false;
     _error = null;
     _sessionGeneration++;
     _isSubscriptionLoading = false;
@@ -274,11 +265,9 @@ class UsageProvider with ChangeNotifier {
   }
 
   Future<void> markAsOutOfCreditsAndRefresh() async {
-    if (!_forceOutOfCredits) {
-      _forceOutOfCredits = true;
-      notifyListeners(); // Immediate UI update
-    }
-    await fetchSubscription(); // Sync with backend
+    // The socket's existing invalidation signal requests a fresh server answer.
+    // Keep the last answer while it loads, including when the request fails.
+    await fetchSubscription();
   }
 
   Future<void>? _subscriptionFetch;
@@ -316,7 +305,6 @@ class UsageProvider with ChangeNotifier {
       }
       _subscription = subscription;
       TranscriptionAllowanceCache.replace(subscription.transcriptionAllowance);
-      await _releasePaywallOnDevicePin(subscription.subscription.plan);
       PlatformManager.instance.analytics.setSubscriptionTier(subscription.subscription.plan.name);
     } catch (e) {
       if (generation != _sessionGeneration) return;
@@ -324,21 +312,30 @@ class UsageProvider with ChangeNotifier {
       Logger.debug('Failed to fetch subscription: $e');
     } finally {
       if (generation == _sessionGeneration) {
-        _isSubscriptionLoading = false;
-        _scheduleBacklogRefresh();
-        _forceOutOfCredits = false; // Reset optimistic flag
-        notifyListeners();
+        try {
+          await _releasePaywallOnDevicePin();
+        } catch (e) {
+          Logger.debug('Failed to release paywall STT pin: $e');
+        }
+        if (generation == _sessionGeneration) {
+          _isSubscriptionLoading = false;
+          _scheduleBacklogRefresh();
+          notifyListeners();
+        }
       }
     }
   }
 
   /// The paywall's "switch to free" persists on-device STT with raw audio off, and a persisted
-  /// Custom STT outranks the plan. Once the user pays, release that pin so capture returns to Omi
+  /// Custom STT outranks the allowance. Once the server grants managed STT, release the pin so capture returns to Omi
   /// (and audio reaches Omi again, e.g. for audio-bytes webhooks) instead of staying on-device.
-  Future<void> _releasePaywallOnDevicePin(PlanType plan) async {
+  /// Older servers omit the allowance, so retain their paid-plan release rule.
+  Future<void> _releasePaywallOnDevicePin() async {
     final prefs = SharedPreferencesUtil();
     final pinned = prefs.paywallOnDeviceSttConfigId;
-    if (!plan.isPaid || pinned.isEmpty) return;
+    final allowance = _subscription?.transcriptionAllowance ?? TranscriptionAllowanceCache.current;
+    final canUseManaged = allowance?.isManaged ?? _isPaidPlan;
+    if (!canUseManaged || pinned.isEmpty) return;
     if (prefs.customSttConfig.sttConfigId == pinned) {
       await prefs.saveCustomSttConfig(CustomSttConfig.defaultConfig);
     }

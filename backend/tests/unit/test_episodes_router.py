@@ -32,6 +32,15 @@ EPISODE = {
 
 @pytest.fixture
 def client(monkeypatch):
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+    from database import episodes
+
+    store = StrictFirestore()
+    store.rows[('users', 'uid-1', 'episodes', 'e1')] = episodes.seal('uid-1', EPISODE)
+    monkeypatch.setattr(router_module.home_read.conversations, 'db', store)
+    # This admission/wire fixture has legacy episodes; recorded timeline CAS
+    # is exercised by the recorded-time service/emulator suites.
+    monkeypatch.setenv('EPISODE_RECORDED_TIME_ENABLED', 'false')
     monkeypatch.delenv(config.EPISODES_ENABLED_ENV, raising=False)
     monkeypatch.delenv(config.EPISODES_PERCENT_ENV, raising=False)
     # The capability marker is Redis; test_episodes_client_gate covers it.

@@ -553,6 +553,8 @@ class TestConversationWriteWiring:
 
         conversation_ref = _Ref(_Snapshot({"data_protection_level": "standard"}))
         db = MagicMock()
+        db.document.return_value.get.return_value = _Snapshot(None)
+        db.collection.return_value.document.return_value.get.return_value = _Snapshot({})
         db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
             conversation_ref
         )
@@ -739,6 +741,8 @@ class TestFailOpenWiring:
         discard update nor the delete may raise or skip its Firestore write."""
         conversation_ref = _Ref(_Snapshot({"data_protection_level": "standard"}))
         db = MagicMock()
+        db.document.return_value.get.return_value = _Snapshot(None)
+        db.collection.return_value.document.return_value.get.return_value = _Snapshot({})
         db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
             conversation_ref
         )
@@ -774,6 +778,8 @@ class TestFailOpenWiring:
 
         conversation_ref = _Ref(_Snapshot({"data_protection_level": "standard"}))
         db = MagicMock()
+        db.document.return_value.get.return_value = _Snapshot(None)
+        db.collection.return_value.document.return_value.get.return_value = _Snapshot({})
         db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
             conversation_ref
         )

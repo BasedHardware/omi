@@ -895,6 +895,8 @@ def _summary_stub() -> Dict[str, Any]:
     }
     summary['oldest_nonterminal_age_seconds'] = 0.0
     summary['oldest_blocked_byok_age_seconds'] = 0.0
+    summary['oldest_dead_letter_age_seconds'] = 0.0
+    summary['byok_abandoned_last_24h'] = 0
     return summary
 
 

@@ -288,6 +288,8 @@ record_barrier_executor = MonitoredThreadPoolExecutor(
     thread_name_prefix="record-barrier",
 )
 llm_executor = MonitoredThreadPoolExecutor(name="llm", max_workers=6, thread_name_prefix="llm")
+# Batch policy HTTP leaves only; coordinators stay in async Pump code.
+admission_executor = MonitoredThreadPoolExecutor(name="admission", max_workers=4, thread_name_prefix="admission")
 stripe_executor = MonitoredThreadPoolExecutor(name="stripe", max_workers=4, thread_name_prefix="stripe")
 sync_executor = MonitoredThreadPoolExecutor(name="sync", max_workers=16, thread_name_prefix="sync")
 # Optional per-window LID must not hold the shared sync coordination pool.
@@ -338,6 +340,7 @@ _ALL_EXECUTORS = [
     record_barrier_executor,
     llm_executor,
     stripe_executor,
+    admission_executor,
     sync_executor,
     record_language_executor,
     postprocess_executor,

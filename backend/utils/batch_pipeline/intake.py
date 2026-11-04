@@ -37,13 +37,14 @@ from database.sync_ledger import (
 from utils.batch_pipeline.artifact_policy import artifacts_for
 from utils.batch_pipeline.audio import with_context
 from utils.batch_pipeline.capture_decode import decode_units
+from utils.batch_pipeline.repair_lineage import language_proof, lineage_record
 from utils.capture.batch_coverage import decode_for_intake, covered_response
 from config.refactor_modes import serving_for
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem
 from utils.batch_pipeline.intake_outcome import IntakeRouteEvidence
 from database.outbox import OutboxKind, outbox_for
 from utils.batch_pipeline import gpu_overflow
-from utils.batch_pipeline.provider_stt import provider_enqueue
+from utils.batch_pipeline.provider_stt_admission import provider_enqueue
 from utils.batch_pipeline.route_selection import select_route
 from utils.sync import legacy_dark
 from utils.sync.legacy_dark import LegacySyncMode
@@ -223,6 +224,8 @@ def _only_deleted_total(tx, uid: str, content_id: str) -> int | None:
 
 
 def durable_status(store, uid: str, job_id: str) -> dict | None:
+    from database.batch_pipeline_artifact_missing import artifact_missing, REASON_CODE
+
     def read(tx):
         intake = tx.get('intakes', job_id)
         if not intake:
@@ -241,7 +244,11 @@ def durable_status(store, uid: str, job_id: str) -> dict | None:
             # Completed content whose conversation the user deleted is final:
             # ACK without IDs so the phone stops re-uploading deleted audio.
             # Unfinished work and every other denial keep the 409.
-            terminal = _deleted_conversation_status(ledger, intake, job_id) if is_conversation_deleted(error) else None
+            terminal = (
+                _deleted_conversation_status(ledger, intake, job_id)
+                if is_conversation_deleted(error) and not any(artifact_missing(job) for job in jobs)
+                else None
+            )
             if terminal is None:
                 raise
             generation = jobs[0].get('privacy_generation') if jobs else None
@@ -249,6 +256,25 @@ def durable_status(store, uid: str, job_id: str) -> dict | None:
             logger.info('event=batch_intake_status outcome=conversation_deleted_terminal')
             return terminal
         result = ledger.get('result')
+        missing = sum(artifact_missing(job) for job in jobs)
+        if missing:
+            # Must precede both all-success and held-partial completion. Phones
+            # acknowledge only `completed`; missing bytes remain in custody.
+            projected = sum(job.get('state') == 'committed' for job in jobs)
+            return {
+                'job_id': job_id,
+                'status': 'failed',
+                'reason_code': REASON_CODE,
+                'lane': intake['lane'],
+                'total_files': intake['total_files'],
+                'total_segments': len(jobs),
+                'processed_segments': projected,
+                'successful_segments': projected,
+                'failed_segments': missing,
+                'errors': [],
+                'result': result if is_valid_partial_sync_content_result(result) else None,
+                'poll_after_ms': 0,
+            }
         completed = ledger.get('status') == 'completed' and is_valid_completed_sync_content_result(result)
         if not completed:
             for job in jobs:
@@ -370,6 +396,7 @@ async def accept_upload(
     policy: BatchUnitPolicy | None = None,
     usage_period: str | None = None,
     evidence: IntakeRouteEvidence | None = None,
+    repair_job_id: str | None = None,
     vendor_table: bool = True,
     release: str | None = None,
 ) -> JSONResponse | None:
@@ -384,12 +411,33 @@ async def accept_upload(
     public_job_id = JOB_PREFIX + job_id
     iterator = None
     sample_directory = None
+    phase = 'receipt_read'
+    started = time.monotonic()
     try:
         # A2 seam: the sync upload admission (intakes, jobs, owners, queues, control) is mirrored in shadow mode.
         store = await run_blocking(
             db_executor, lambda: shadow_from_env(FirestoreStore(f'batch_pipeline_{current_stage()}'))
         )
         previous = await run_blocking(db_executor, store.run, lambda tx: tx.get('content', f'{uid}/{content_id}'))
+        refused = await _repair_prior_upload(
+            store,
+            previous,
+            uid,
+            content_id,
+            paths,
+            repair_job_id,
+            decode,
+            {
+                'source': source,
+                'should_lock': should_lock,
+                'conversation_id': conversation_id,
+                'client_device_id': client_device_id,
+                'client_platform': client_platform,
+                'intake_context': intake_context,
+            },
+        )
+        if refused is not None:
+            return refused
         if previous.get('dispatch_protocol') == 'batch_v1':
             status = await run_blocking(db_executor, durable_status, store, uid, previous['job_id'])
             return start_response(status) if status else sync_content_in_progress_response(previous['job_id'])
@@ -428,6 +476,7 @@ async def accept_upload(
                 status = await run_blocking(db_executor, durable_status, store, uid, public_job_id)
                 if status:
                     return start_response(status)
+        phase = 'ownership_fence'
         mode = await run_blocking(db_executor, legacy_dark.current_mode, uid)
         adopt = None
         if previous:
@@ -467,6 +516,7 @@ async def accept_upload(
             requires_compute_admission=True,
             conversation_id=conversation_id,
         )
+        phase = 'authorization'
         snapshots = {}
         context = await run_blocking(db_executor, batch_artifact_authorize, store, seed, snapshots=snapshots)
         user = snapshots['user']
@@ -475,7 +525,9 @@ async def accept_upload(
         # native owner here without adding an ownership-discovery read to dark
         # uploads, or accidentally admitting a second GPU job.
         if target.get('record_lane_owner') == 'batch_live_v1':
+            phase = 'record_routing'
             if record_router is None:
+                logger.info('event=sync_record_upload outcome=pending reason=record_router_missing')
                 return JSONResponse(status_code=503, content={'code': 'record_capture_pending'})
             return await record_router(
                 uid=uid,
@@ -489,6 +541,7 @@ async def accept_upload(
                 policy=policy,
                 evidence=evidence,
             )
+        phase = 'route_selection'
         admission_language = None
         sampled = False
         if admission_language_exclusion_enabled() and target.get('record_lane_owner') != 'batch_sync_v1':
@@ -652,6 +705,7 @@ async def accept_upload(
             # conversation language must replace, not append beside provisional text.
             and language in PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL['nvidia/parakeet-tdt-0.6b-v3']
         )
+        phase = 'artifact_setup'
         artifacts = await run_blocking(storage_executor, artifacts_for, store)
         config = provider_config()
         if config.pool_kind != 'dedicated_batch':
@@ -678,12 +732,17 @@ async def accept_upload(
             return replace(
                 seed,
                 segment_id=hashlib.sha256(f'{content_id}:{index}'.encode()).hexdigest(),
-                capture_at=unit.capture_at,
+                capture_at=(
+                    unit.stored_capture_at if getattr(unit, 'stored_capture_at', None) is not None else unit.capture_at
+                ),
                 duration_seconds=unit.duration_seconds,
                 unit_kind='conversation' if conversation_id else 'capture_span',
                 conversation_id=conversation_id
                 or chunk_identity(uid, source, client_device_id, should_lock, unit.capture_at),
                 privacy_generation=context.generation,
+                # The built-in decoder times WAL PCM from sync filenames.
+                # Alternate adapters (for example held WAV) have no such proof.
+                timing_store='sync' if decode is None else None,
             )
 
         from utils.stt.batch_language import resolve_language, self_language_class
@@ -697,6 +756,7 @@ async def accept_upload(
         # no unit inherits another's language.
         queue, decisions, first = [], {}, None
         if sampled:
+            phase = 'sample_decode'
             speeches = []
             while unit := await run_blocking(sync_executor, _next_unit, iterator):
                 if len(queue) >= 128 or sum(u.duration_seconds for u in queue) + unit.duration_seconds > (
@@ -712,6 +772,7 @@ async def accept_upload(
                 # No strict-VAD speech to sample: nothing was probed or staged; the upload keeps legacy.
                 return _sampled_refusal(target, user, evidence)
             for index, (unit, speech) in enumerate(zip(queue, speeches)):
+                phase = 'language_probe'
                 # Every probe of the upload runs here, so any refusal happens before anything is staged.
                 # Authorize each as the exact unit it will replay as (index, derived conversation).
                 probe_guard = ServingLanguageProbeGuard(
@@ -746,6 +807,9 @@ async def accept_upload(
                 first = first or decision
             if first is not None:  # always set here: at least one speech unit passed above
                 record_route('intake', first.language, 'parakeet')
+        # A missing-input repair replays these exact decisions; it never probes again.
+        repair_languages: dict[str, dict] = {}
+        phase = 'decode'
         while unit := (
             queue.pop(0) if queue else None if sampled else await run_blocking(sync_executor, _next_unit, iterator)
         ):
@@ -756,6 +820,7 @@ async def accept_upload(
                 # This unit was classified above under fresh authority (silent units on their own audio).
                 language_decision = decisions[len(items)]
             else:
+                phase = 'language_probe'
                 probe_guard = ServingLanguageProbeGuard(store, item, authorize=batch_artifact_authorize)
                 # Every self/vendor classification gets fresh dispatch authority on CPU.
                 language_decision = await run_blocking(
@@ -775,6 +840,8 @@ async def accept_upload(
                 if language_decision.parakeet_safe or language_class(language_decision.language) == 'unsupported'
                 else 'und' if language_guard_enabled() else input_language
             )
+            repair_languages[item.segment_id] = proof = language_proof(frozen_language, language_decision)
+            phase = 'freeze_audio'
             frozen = await run_blocking(
                 sync_executor,
                 with_context,
@@ -791,16 +858,15 @@ async def accept_upload(
                     'client_device_id': client_device_id,
                     'client_platform': client_platform,
                     'conversation_id': conversation_id,
-                    'stt_language': frozen_language,
                     'capture_coverage_runs': list(getattr(unit, 'coverage_runs', ())),
-                    'stt_language_evidence': language_decision.evidence,
-                    'stt_language_confidence': language_decision.confidence,
-                    'stt_language_probe_seconds': language_decision.probe_seconds,
+                    **proof,
                 },
             )
+            phase = 'stage_audio'
             uri = await run_blocking(storage_executor, artifacts.stage_audio, item, frozen)
             # Provider units are funded by the provider stage, not GPU compute admission.
             items.append(replace(item, audio_uri=uri, requires_compute_admission=not provider))
+            phase = 'decode'
         if not items and serving_for('CAPTURE_COVERAGE_MODE', uid):
             return covered_response()
         binding = ProjectionBinding(
@@ -820,6 +886,7 @@ async def accept_upload(
             record_origin=record_origin,
         )
         wakes: dict[str, str] = {}
+        phase = 'admit'
         outbox = await run_blocking(db_executor, outbox_for, OutboxKind.PROVIDER_STT) if provider else None
         outcome = await run_blocking(
             db_executor,
@@ -840,6 +907,8 @@ async def accept_upload(
                 'total_files': len(paths),
                 'total_audio_seconds': sum(item.duration_seconds for item in items),
                 'lane': lane,
+                'repair_lineage': lineage_record(intake_context),
+                'repair_languages': repair_languages,
                 # Funded period the owner's choice was made in (cap-hold re-entry); projection
                 # attributes usage to it across a month rollover (lane 6, Subscription ruling B).
                 **({'usage_period': usage_period} if usage_period else {}),
@@ -850,6 +919,7 @@ async def accept_upload(
             enqueue=provider_enqueue(route, outbox, wakes) if provider else None,
             adopt=adopt,
         )
+        phase = 'wake'
         for row_id, wake_token in wakes.items():
             try:
                 await run_blocking(db_executor, outbox.wake, row_id, wake_token)  # type: ignore[union-attr]
@@ -866,6 +936,7 @@ async def accept_upload(
             # job (Luna r2), which is a re-ACK, not a new admission.
             if evidence is not None and outcome.get('job_id') == public_job_id:
                 evidence.batch_accepted = True
+            phase = 'status_read'
             status = await run_blocking(db_executor, durable_status, store, uid, outcome['job_id'])
             return start_response(status) if status else sync_content_in_progress_response(outcome['job_id'])
         return sync_content_in_progress_response(outcome.get('job_id'))
@@ -874,7 +945,12 @@ async def accept_upload(
     except Exception as error:
         # A transaction may have committed even when its reply was lost. Keep
         # the staging outbox for reconciliation; never release/re-route content.
-        logger.error('event=batch_intake outcome=retry exception_type=%s', type(error).__name__)
+        logger.error(
+            'event=batch_intake outcome=retry exception_type=%s phase=%s elapsed_ms=%d',
+            type(error).__name__,
+            phase,
+            round((time.monotonic() - started) * 1000),
+        )
         return JSONResponse(
             status_code=503,
             headers={'Retry-After': '30'},
@@ -919,7 +995,55 @@ def privacy_blocked_response() -> JSONResponse:
     )
 
 
-def get_durable_job_status(job_id: str, uid: str) -> dict | None:
+async def _repair_prior_upload(
+    store, previous: dict, uid: str, content_id: str, paths, repair_job_id: str | None, decode, binding: dict
+) -> JSONResponse | None:
+    """The original batch owner's missing-span repair; a 409 when the retry is not that upload.
+
+    Kept out of ``accept_upload`` so that function stays within the type checker's complexity bound.
+    """
+    if repair_job_id is not None and not _repair_owner_matches(previous, repair_job_id):
+        # A regrouped/subset retry must never enter fresh admission. The
+        # client retains every surviving file and the original repair tag.
+        return JSONResponse(
+            status_code=409,
+            content={
+                'code': 'sync_repair_bundle_changed',
+                'detail': 'The original complete upload is required; retain local audio',
+            },
+        )
+    if previous.get('dispatch_protocol') == 'batch_v1' and previous.get('artifact_missing_units'):
+        # A fresh owner would lose batch checkpoint identities. Repair
+        # only missing spans under the original content/job binding.
+        from utils.batch_pipeline.artifact_reupload import restore_upload
+
+        repair_artifacts = await run_blocking(storage_executor, artifacts_for, store)
+        await restore_upload(store, uid, content_id, paths, artifacts=repair_artifacts, decode=decode, **binding)
+    return None
+
+
+def _repair_owner_matches(ledger: dict, job_id: object) -> bool:
+    return (
+        isinstance(job_id, str)
+        and job_id.startswith(JOB_PREFIX)
+        and len(job_id) <= 128
+        and '/' not in job_id
+        and ledger.get('dispatch_protocol') == 'batch_v1'
+        and ledger.get('job_id') == job_id
+    )
+
+
+def repair_upload_owner_matches(uid: str, content_id: str, job_id: str) -> bool:
+    """Read-only original-owner proof before archiving or waiving new-upload age.
+
+    Admission rechecks this row and every privacy/binding fence transactionally;
+    this lookup cannot grant a fresh owner, processing, completion or a write.
+    """
+    store = shadow_from_env(FirestoreStore(f'batch_pipeline_{current_stage()}'))
+    return store.run(lambda tx: _repair_owner_matches(tx.get('content', f'{uid}/{content_id}'), job_id))
+
+
+def get_durable_job_status(job_id: str, uid: str, *, artifact_retry: bool = False) -> dict | None:
     if not job_id.startswith(JOB_PREFIX):
         return None
     if len(job_id) > 128 or '/' in job_id:
@@ -928,4 +1052,8 @@ def get_durable_job_status(job_id: str, uid: str) -> dict | None:
     status = durable_status(shadow_from_env(FirestoreStore(f'batch_pipeline_{current_stage()}')), uid, job_id)
     if status is None:
         raise HTTPException(status_code=404, detail='Sync job not found')
+    if status.get('reason_code') == 'batch_artifact_missing' and not artifact_retry:
+        # Released clients regroup terminal failures and cannot preserve the
+        # original content identity. Only a capable exact-bundle client retries.
+        return {**status, 'status': 'processing', 'poll_after_ms': 300000}
     return status
