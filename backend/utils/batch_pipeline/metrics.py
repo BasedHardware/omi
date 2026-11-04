@@ -16,6 +16,7 @@ from config.batch_timeliness import (
 from database.batch_pipeline_store import Store, FirestoreStore, PROJECTION_OBLIGATION_STATES, timeliness_sample
 from utils.batch_pipeline.contracts import Priority, WORK_OUTCOMES
 from utils.observability.reasons import AdmissionHoldReason, ReasonFamily, reason_label
+from utils.lifecycle_metrics import PhaseMetrics
 
 LABELS = {Priority.FRESH: 'fresh', Priority.RECENT: 'recent', Priority.DEEP: 'deep'}
 AGE_TARGETS = {Priority.FRESH: 30, Priority.RECENT: 300, Priority.DEEP: 3600}
@@ -93,6 +94,8 @@ class QueueMetrics:
             registry=registry,
         )
         self._timeliness_due = 0.0
+        self.record_pending = PhaseMetrics('omi_batch_record_pending', ['state'], registry=registry)
+        self.nojob = PhaseMetrics('omi_record_seal_nojob', ['kind'], registry=registry)
         self.oldest_age = Gauge(
             'omi_batch_pipeline_oldest_age_seconds',
             'Oldest admitted uncommitted item age',
@@ -251,6 +254,10 @@ class QueueMetrics:
                 self.ready_units.labels(LABELS[priority], *self.scope).set(count)
             self.capacity_refreshed_at.labels(*self.scope).set(now)
         if isinstance(store, FirestoreStore):
+            from database.lifecycle_metrics_queries import record_pending, nojob
+
+            self.record_pending.refresh(now, lambda: record_pending(store.client, store.namespace, now))
+            self.nojob.refresh(now, lambda: nojob(store.client, store.namespace))
             self.refresh_timeliness(store, now)
             self.refresh_projection(store, now)
 

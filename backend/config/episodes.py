@@ -58,6 +58,7 @@ HOME_NEUTRAL_MINIMUM_TITLES_ENV = 'HOME_NEUTRAL_MINIMUM_TITLES'
 EPISODE_CARRY_ON_SESSION_END_ENV = 'EPISODE_CARRY_ON_SESSION_END'
 EPISODE_MOMENT_OUTPUT_VALIDATOR_ENV = 'EPISODE_MOMENT_OUTPUT_VALIDATOR'
 EPISODE_COMPOSER_ENV = 'EPISODE_COMPOSER'
+EPISODE_COMPOSE_SETTLE_ENABLED_ENV = 'EPISODE_COMPOSE_SETTLE_ENABLED'
 APP_CHANNEL_HEADER = 'X-Omi-App-Channel'
 APP_CHANNELS = frozenset({'beta', 'store'})
 _DEFAULT_CLIENT_CHANNELS = frozenset({'beta'})
@@ -145,6 +146,11 @@ def episode_composer_enabled() -> bool:
     Off keeps the live incremental notes as the final episode notes, as before.
     """
     return modes_default_on(EPISODE_COMPOSER_ENV)
+
+
+def episode_compose_settle_enabled() -> bool:
+    """Default-on cost control; off restores the original trigger and retry behavior."""
+    return modes_default_on(EPISODE_COMPOSE_SETTLE_ENABLED_ENV)
 
 
 def client_channel_admitted(raw: str | None) -> bool:
@@ -265,6 +271,8 @@ COMPOSER_READ_THROTTLE_SECONDS = 600
 COMPOSER_LOOKUP_SCHEDULES_PER_WINDOW = 4
 # One paid call per evidence across replicas: the claim outlives the model call (90 s x 2 attempts).
 COMPOSER_LEASE_SECONDS = 240
+COMPOSER_SETTLE_SECONDS = 10 * 60
+COMPOSER_MAX_SETTLE_SECONDS = 25 * 60
 # After a failed paid attempt the read-side net backs off 10, 20, 40 min, then stops until
 # the evidence changes (a member finalize still composes).
 COMPOSER_RETRY_MINUTES = 10

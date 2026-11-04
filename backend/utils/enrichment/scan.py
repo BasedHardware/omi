@@ -5,6 +5,15 @@ from typing import Any
 
 from google.api_core.exceptions import AlreadyExists, FailedPrecondition, NotFound
 from google.cloud import firestore
+from utils.lifecycle_metrics import PhaseMetrics
+
+METRICS = PhaseMetrics('omi_enrichment_obligation', ['lane'])
+
+
+def observe(client, now):
+    from database.lifecycle_metrics_queries import enrichment
+
+    METRICS.refresh(now, lambda: enrichment(client, now))
 
 
 def begin(client: Any, collection: str) -> tuple[Any, dict[str, Any] | None]:

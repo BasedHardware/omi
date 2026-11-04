@@ -4,7 +4,6 @@ Four offers share the existing four-node fleet. No ordinary scheduler, content
 ledger, owner ring, user quota, projection receipt or legacy lock is mutated.
 """
 
-from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
 import hashlib
 import logging
@@ -303,7 +302,7 @@ class ShadowStore:
                 {
                     **job,
                     'state': 'ready',
-                    'item': asdict(item),
+                    'item': item.to_dict(),
                     'language': language,
                     'projection_context': projection_context or {},
                 },

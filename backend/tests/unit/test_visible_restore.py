@@ -80,6 +80,63 @@ async def flush(h, data=b'\x01\x00' * 160, *, settle=True):
     assert buffer == b''
 
 
+@pytest.mark.parametrize(
+    ('declared', 'enabled', 'granted'), [(True, False, False), (True, True, True), (False, True, False)]
+)
+@pytest.mark.asyncio
+async def test_server_batch_restore_uses_preview_grant_and_delivers_refused_audio(
+    harness, monkeypatch, declared, enabled, granted
+):
+    h = harness
+    monkeypatch.setenv('LOCAL_PREVIEW_BATCH_ENABLED', str(enabled).lower())
+    monkeypatch.setattr(local_preview_module, 'local_preview_batch_owned', lambda uid: True)
+    monkeypatch.setattr(receiver_module, 'server_batch_suppresses_live', lambda host: True)
+    h.host.request.local_preview = declared
+    h.host.request.onboarding_mode = False
+    h.host.request.source = 'omi'
+    h.host.private_cloud_sync_enabled = True
+    # Exercise initialization's real admission and restore attachment; only the
+    # unrelated lifetime monitors are omitted from this bounded audio test.
+    h.host.task_supervisor = SimpleNamespace(create_lifetime_task=lambda coro, **kwargs: coro.close())
+    h.receiver.ensure_live_demand_routing = Mock()
+    h.receiver.visible_restore = None
+
+    assert await ListenReceiver._initialize_stt(h.receiver)
+    assert h.host.local_preview_batch is granted
+    assert restore_module.admitted(h.host) is (not granted)
+    assert h.receiver.cloud_live_suppressed is True
+    if granted:
+        assert h.receiver.visible_restore is None
+        buffer = bytearray(b'\x01\x00' * 160)
+        await ListenReceiver._flush_stt_buffer(h.receiver, buffer)
+        assert buffer == b''
+        h.dial.assert_not_awaited()
+        return
+
+    h.restore = h.receiver.visible_restore
+    assert h.restore is not None
+    h.restore.presence.policy.clock = lambda: h.now[0]
+    h.restore.presence.policy.changed_at = h.now[0]
+    monkeypatch.setattr(h.restore.presence, 'observe', h.restore.presence.policy.observe)
+    try:
+        await flush(h, settle=False)  # Hidden audio cannot open a provider.
+        h.dial.assert_not_awaited()
+        observe(h, True)
+        h.now[0] += 15
+        await flush(h, settle=False)  # The receive loop starts the nonblocking dial.
+        await h.restore.opening
+        await flush(h, b'\x02\x00' * 160, settle=False)
+        h.dial.assert_awaited_once()
+        h.raw.send.assert_called_once_with(b'\x02\x00' * 160)
+        h.dial.call_args.args[0]([{'text': 'Restored preview.'}])
+        assert h.callback.call_args.args[0][0]['text'] == 'Restored preview.'
+        assert h.host.server_batch_only is True
+        assert h.receiver.cloud_live_suppressed is True
+        assert h.host.batch_record_capture['record_lane_owner'] == 'batch_live_v1'
+    finally:
+        await h.restore.shutdown()
+
+
 async def revoke_grant(h, monkeypatch, cause):
     if cause == 'engine':
         monkeypatch.delenv('LOCAL_PREVIEW_ENGINE_RESCIND_ENABLED', raising=False)
@@ -284,12 +341,13 @@ def test_closed_flag_defaults_and_invalid_values(harness, monkeypatch, percent):
     assert not restore_module.admitted(harness.host)
 
 
-@pytest.mark.parametrize('field,value', [('local_preview', True), ('platform', 'macos')])
-def test_only_mobile_without_local_preview(harness, field, value):
+@pytest.mark.parametrize('field,value', [('local_preview_batch', True), ('platform', 'macos')])
+def test_only_mobile_without_granted_local_preview(harness, field, value):
     if field == 'platform':
         harness.host.client_device_context.platform = value
     else:
-        harness.host.request.local_preview = value
+        harness.host.request.local_preview = True
+        harness.host.local_preview_batch = value
     assert not restore_module.admitted(harness.host)
 
 

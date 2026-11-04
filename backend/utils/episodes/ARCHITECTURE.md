@@ -248,9 +248,13 @@ episode's final notes in one `episode_composer` call (gpt-6-luna, low effort):
   `content` blob with the other notes.
 - `composer_version` changes recompose an episode once on read.
 - `composed_fingerprint` covers retained members, every member's transcript text
-  and timing, and its own summary and action items. Unchanged evidence never
-  spends a second call; a late member, a sync upgrade, a transcript edit or a
-  discard recomposes. `summary_needs_regeneration` forces it. An episode with no
+  and timing, and its own summary and action items. This full fingerprint remains
+  the paid-call lease and composed-state stamp. With the default-on
+  `EPISODE_COMPOSE_SETTLE_ENABLED` switch, `composed_evidence` separately hashes
+  each member's speech text and resolved `person_name`; `composed_membership`
+  stamps the retained member set. Label/summary/timing-only drift does not buy
+  another call. Real speech, a name change, late membership or a discard still
+  recomposes. `summary_needs_regeneration` forces it. An episode with no
   speech is stamped once instead of retried.
 - `composed_notes` hashes the composed title, notes and moment headings. A later
   per-moment write over them (a closing conversation's tail, a sync replay) still
@@ -264,7 +268,35 @@ episode's final notes in one `episode_composer` call (gpt-6-luna, low effort):
   10/20/40 minutes and stops after four until the evidence changes.
 - Chapter clock times are mapped on the same clock as the transcript labels and
   must fall inside the episode's transcript span (two-minute slack).
-- Triggers: close, every member finalize (including `sync_update`), and a
+- Background close/finalize triggers wait for ten quiet minutes, capped at 25
+  minutes from the first pending arrival. `compose_pending_since` and
+  `compose_activity_at` track arrival time without changing recorded boundaries.
+  A tracked async task requeues process-local due work without occupying composer
+  workers; shutdown cancels it. Finalizes and reads recover pending work after
+  restart using the persisted window (no new durable queue or sweeper). A paid
+  background `stale`/`superseded` result starts a fresh quiet window before retry,
+  including when the previous window reached its cap. Read-side schedules
+  (`throttle=True`) promote pending work immediately. Foreground retries, direct
+  `compose` and `force=True` bypass settling. Turning the switch off restores the
+  full-fingerprint scheduling and immediate-retry behavior. No composer version
+  bump or eager recompose wave.
+  Persisted pending work remains read-eligible with the switch off, so rollback
+  after restart drains it immediately. With the switch on, a later trigger
+  retains the persisted first-pending cap; a read bypasses the quiet window.
+  If pending-state persistence fails, finalizers still schedule and workers
+  bypass settling, retaining the normal fingerprint/lease checks. This favors
+  paying over losing new speech or names and emits shared fallback telemetry.
+  Legacy episodes have no narrow trigger stamp: an unchanged full fingerprint
+  backfills it without a paid call. A changed full fingerprint conservatively
+  composes once behind the background settle window, because the old hash cannot
+  distinguish label drift from new speech. That successful compose seeds the
+  narrow stamp, so subsequent label-only finalizes skip. No historical backfill
+  or production-data migration is required.
+- `omi_episode_compose_total{outcome="settling"}` counts deferred runs;
+  `omi_episode_compose_trigger_skipped_total{reason="evidence_unchanged"}` counts
+  avoided triggers. Both have bounded labels and no user identifiers.
+- Triggers: close, member finalize (including `sync_update`, gated on the changed
+  member already loaded by finalization), and a
   read-side safety net in `home_read.project_episodes` for a closed episode that
   is uncomposed, drifted or whose visible members changed, closed over a minute
   ago (at most two per read, each episode at most every ten minutes per process).
@@ -507,3 +539,30 @@ When atomic sync intake appends meaningful speech, its new content revision
 invalidates an older automatic model/Jev/deterministic discard. Transport replays
 and content still needing fragment review retain the assessment; user decisions remain authoritative.
 The final-discard predicate continues to ignore the intake hint itself.
+
+Batch audio close attaches membership before queued transcription/finalization.
+`routers.listen.batch_close` preserves the archive barrier and reuses its existing
+conversation reread. `utils.episodes.batch_close` checks ownership, privacy,
+retention and episode/recorded-time admission, then calls `service.attach_recorded`
+with committed audio bounds. Live and sync attachment use that same primitive;
+neither the current pointer nor processing time selects a batch capture's owner.
+This metadata-only attachment is an explicit exception to the client-seen rule
+above: ownership must exist before transcription, even when an older client has
+not acknowledged episodes. It retains episode and recorded-time admission,
+adds no model work, and does not change paid-work gates. An attachment error
+emits shared `record_fallback` degraded telemetry before finalization repairs it.
+
+The scoped `EPISODE_BATCH_CLOSE_ATTACH_ENABLED` kill switch defaults on. Off
+restores attach-after-transcription without changing live/sync attachment.
+The membership transaction stamps a pending start and a fixed 2h transcription
+deadline on the conversation, using `config.batch_timeliness.SLA_SECONDS` (normal
+target: 30m). Close replay does not renew the deadline or bump the canonical
+recorded component's state version or timeline fence. Home reads use the durable
+`record_projection_revision` delivery receipt: until it exists they show
+“Transcribing…” / processing, then “Couldn't transcribe” / failed on terminal
+failure or deadline expiry. A late projection restores normal metadata. Audio
+bounds still supply a finish time if finalization failed before writing one.
+The unlabeled overdue-read counter counts observations, not unique members.
+Its info alert is staged beside the existing batch timeliness rules; idle
+members remain covered by queue timeliness monitoring. No production alert
+or runtime configuration is changed here.

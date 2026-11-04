@@ -9,6 +9,7 @@ import json
 import logging
 import threading
 import time
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -303,6 +304,8 @@ def split_binding(state, monkeypatch):  # noqa: F811
     monkeypatch.delenv('ENRICHMENT_BACKFILL_ROUTING_ENABLED', raising=False)
     monkeypatch.setattr(reprocess.summary_delivery, 'lane', lambda _: 'backfill')
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'false')
+    monkeypatch.setattr(reprocess, '_conversation_finished_at', lambda *_: 0)
+    monkeypatch.delenv('ENRICHMENT_FRESH_PROMOTE_MAX_AGE_MIN', raising=False)
     return state
 
 
@@ -367,6 +370,141 @@ def test_reopened_backfill_receipt_routes_new_background_obligation(split_bindin
 
 def test_backfill_effects_use_existing_queue(split_binding):
     assert reprocess._effects_binding()['queue'] == 'sync-backfill-fresh'
+
+
+@pytest.mark.parametrize('lane', ['fresh', 'live', 'batch', 'integration'])
+def test_new_user_facing_work_has_reserved_dispatch_slots(split_binding, monkeypatch, lane):
+    monkeypatch.setenv('ENRICHMENT_FRESH_TASKS_QUEUE', 'enrichment-fresh')
+    monkeypatch.setattr(reprocess.summary_delivery, 'lane', lambda _: lane)
+    reprocess.mark('u', 'c', 'en', now=0)
+    assert split_binding[0][KEY]['dispatch']['queue'] == 'enrichment-fresh'
+
+
+def test_backfill_fallback_cannot_enter_fresh_queue(split_binding, monkeypatch):
+    monkeypatch.setenv('ENRICHMENT_FRESH_TASKS_QUEUE', 'enrichment-fresh')
+    monkeypatch.delenv('SYNC_BACKFILL_TASKS_QUEUE')
+    reprocess.mark('u', 'c', 'en', now=0)
+    assert split_binding[0][KEY]['dispatch']['queue'] == 'enrichment'
+
+
+def test_fresh_lazy_effects_cannot_enter_fresh_queue(split_binding, monkeypatch):
+    monkeypatch.setenv('ENRICHMENT_FRESH_TASKS_QUEUE', 'enrichment-fresh')
+    monkeypatch.setattr(reprocess.summary_delivery, 'lane', lambda _: 'fresh')
+    assert reprocess._effects_binding()['queue'] == 'enrichment'
+    reprocess.mark('u', 'c', 'en', now=0, effects_only=True)
+    assert split_binding[0][reprocess.key('u', 'c\0effects')]['dispatch']['queue'] == 'enrichment'
+
+
+@pytest.mark.parametrize('pending', [False, True])
+def test_backfill_first_summary_gets_priority_only_while_pending(split_binding, monkeypatch, pending):
+    monkeypatch.setenv('ENRICHMENT_FRESH_TASKS_QUEUE', 'enrichment-fresh')
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', str(pending).lower())
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
+    reprocess.mark('u', 'c', 'en', now=0, snapshot_summary=True)
+    assert split_binding[0][KEY]['dispatch']['queue'] == ('enrichment-fresh' if pending else 'sync-backfill-fresh')
+
+
+def test_sweep_promotes_waiting_fresh_work_and_fences_old_delivery(split_binding, sweep_query, monkeypatch):
+    monkeypatch.setattr(reprocess.summary_delivery, 'lane', lambda _: 'batch')
+    reprocess.mark('u', 'c', 'en', now=0)
+    old_token = split_binding[0][KEY]['task_token']
+    monkeypatch.setenv('ENRICHMENT_FRESH_TASKS_QUEUE', 'enrichment-fresh')
+    monkeypatch.setattr(reprocess, '_conversation_finished_at', lambda *_: 9700)  # Finished five minutes ago.
+    assert reprocess.sweep(now=10_000) == {'repaired': 1, 'error': 0}
+    row = split_binding[0][KEY]
+    assert row['dispatch'] == {
+        'queue': 'enrichment-fresh',
+        'handler': 'https://workers.invalid/v2/enrichment/run',
+        'audience': 'https://workers.invalid/v2/enrichment/run',
+        'invoker_sa': 'invoker@example.invalid',
+    }
+    assert row['task_token'] != old_token
+    process = Mock()
+    assert reprocess.run(KEY, old_token, process, now=10_000) == 'stale'
+    process.assert_not_called()
+
+
+@pytest.mark.parametrize('reopened', [False, True])
+@pytest.mark.parametrize('age,queue', [(300, 'enrichment-fresh'), (7200, 'enrichment')])
+def test_dispatch_uses_conversation_age_not_new_obligation_age(split_binding, monkeypatch, reopened, age, queue):
+    monkeypatch.setattr(reprocess.summary_delivery, 'lane', lambda _: 'batch')
+    if reopened:
+        reprocess.mark('u', 'c', 'en', now=0)
+        split_binding[0][KEY]['dormant'] = True
+    monkeypatch.setenv('ENRICHMENT_FRESH_TASKS_QUEUE', 'enrichment-fresh')
+    monkeypatch.setattr(reprocess, '_conversation_finished_at', lambda *_: 10_000 - age)
+    reprocess.mark('u', 'c', 'en', now=10_000)
+    assert split_binding[0][KEY]['dispatch']['queue'] == queue
+
+
+def test_sweep_keeps_two_hour_old_idle_backlog_on_existing_queue(split_binding, sweep_query, monkeypatch):
+    monkeypatch.setattr(reprocess.summary_delivery, 'lane', lambda _: 'batch')
+    reprocess.mark('u', 'c', 'en', now=0)
+    binding = dict(split_binding[0][KEY]['dispatch'])
+    monkeypatch.setenv('ENRICHMENT_FRESH_TASKS_QUEUE', 'enrichment-fresh')
+    monkeypatch.setattr(reprocess, '_conversation_finished_at', lambda *_: 2800)
+    reprocess.sweep(now=10_000)
+    assert split_binding[0][KEY]['dispatch'] == binding
+
+
+@pytest.mark.parametrize('minutes,expected', [('1', False), ('30', True), ('0', False), ('bad', True), ('nan', True)])
+def test_fresh_priority_window_configuration(split_binding, monkeypatch, minutes, expected):
+    monkeypatch.setenv('ENRICHMENT_FRESH_TASKS_QUEUE', 'enrichment-fresh')
+    monkeypatch.setenv('ENRICHMENT_FRESH_PROMOTE_MAX_AGE_MIN', minutes)
+    monkeypatch.setattr(reprocess, '_conversation_finished_at', lambda *_: 9700)
+    assert reprocess._recent_conversation('u', 'c', 10_000) is expected
+
+
+@pytest.mark.parametrize('metadata', [None, 'invalid', float('nan'), True, 10_001])
+def test_unknown_or_future_conversation_time_keeps_established_queue(split_binding, monkeypatch, metadata):
+    monkeypatch.setenv('ENRICHMENT_FRESH_TASKS_QUEUE', 'enrichment-fresh')
+    monkeypatch.setattr(reprocess, '_conversation_finished_at', lambda *_: metadata)
+    assert not reprocess._recent_conversation('u', 'c', 10_000)
+
+
+@pytest.mark.parametrize('finished', [None, datetime.fromtimestamp(9700, timezone.utc)])
+def test_priority_lookup_reads_only_conversation_clocks(state, monkeypatch, finished):
+    from utils.enrichment import outbox
+
+    document = Mock()
+    document.get.return_value.to_dict.return_value = {
+        'created_at': datetime.fromtimestamp(9700, timezone.utc),
+        'finished_at': finished,
+    }
+    client = Mock()
+    client.document.return_value = document
+    monkeypatch.setattr(outbox, 'get_firestore_client', lambda: client)
+    monkeypatch.setenv('ENRICHMENT_ROUTE', 'enrichment_queue')
+    monkeypatch.setenv('ENRICHMENT_FRESH_TASKS_QUEUE', 'enrichment-fresh')
+    assert outbox._recent_conversation('u', 'c', 10_000)
+    document.get.assert_called_once_with(field_paths=['finished_at', 'created_at'], timeout=2, retry=None)
+
+
+def test_priority_metadata_failure_leaves_new_work_on_existing_queue(split_binding, monkeypatch):
+    monkeypatch.setattr(reprocess.summary_delivery, 'lane', lambda _: 'batch')
+    monkeypatch.setenv('ENRICHMENT_FRESH_TASKS_QUEUE', 'enrichment-fresh')
+    monkeypatch.setattr(reprocess, '_conversation_finished_at', Mock(side_effect=RuntimeError('unavailable')))
+    reprocess.mark('u', 'c', 'en', now=10_000)
+    assert split_binding[0][KEY]['dispatch']['queue'] == 'enrichment'
+
+
+@pytest.mark.parametrize('fence', ['lease', 'effects', 'backfill', 'identity'])
+def test_priority_sweep_preserves_custody_and_background_work(split_binding, sweep_query, monkeypatch, fence):
+    monkeypatch.setattr(reprocess.summary_delivery, 'lane', lambda _: 'batch')
+    reprocess.mark('u', 'c', 'en', now=0)
+    row = split_binding[0][KEY]
+    if fence == 'lease':
+        row['lease_until'] = 20_000
+    elif fence == 'effects':
+        row['effects_only'] = True
+    elif fence == 'backfill':
+        row['summary_lane'] = 'backfill'
+    else:
+        row['dispatch']['handler'] = row['dispatch']['audience'] = 'https://other.invalid/v2/enrichment/run'
+    monkeypatch.setenv('ENRICHMENT_FRESH_TASKS_QUEUE', 'enrichment-fresh')
+    monkeypatch.setattr(reprocess, '_conversation_finished_at', lambda *_: 9700)
+    reprocess.sweep(now=10_000)
+    assert split_binding[0][KEY]['dispatch']['queue'] == 'enrichment'
 
 
 def test_backfill_route_reaches_named_task_creation(split_binding, monkeypatch):

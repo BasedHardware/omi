@@ -38,6 +38,7 @@ import asyncio
 import atexit
 import contextvars
 import functools
+import importlib
 import logging
 import os
 import queue
@@ -505,6 +506,18 @@ def _log_background_failure(name: str, future: "Future[Any]") -> None:
     if type(error).__name__ == 'DestructiveOperationInProgress':
         logger.info('background task %s deferred reason=destructive_operation', name)
         return
+    # A spent BYOK provider account (direct OpenRouter answers 402 'requires
+    # more credits') is user account state, not a defect: retries can never
+    # succeed and the provider's error body must not reach logs. The task body
+    # classified the raw provider error inside the propagated BYOK context
+    # (see _classify_byok_halt_in_context); the quota classification needs the
+    # request's validated key, and this callback thread has no task context.
+    # Logging the bounded class without a traceback keeps Error Reporting from
+    # grouping the account state as a crash at the openai SDK frame.
+    halt_class = getattr(error, 'omi_byok_halt_class', None)
+    if isinstance(halt_class, str) and halt_class:
+        logger.warning('background task %s halted reason=%s', name, halt_class)
+        return
     # A BYOK provider failure is the user's own provider account state, not a
     # server fault: one structured WARNING, never a traceback at ERROR.
     byok_class = _byok_detail_code(error)
@@ -519,6 +532,34 @@ def _log_background_failure(name: str, future: "Future[Any]") -> None:
     logger.error("background task %s failed: %s", name, error, exc_info=error)
 
 
+def _classify_byok_halt_in_context(fn: Callable[P, T]) -> Callable[P, T]:
+    """Run *fn* and, on failure, classify a raw BYOK quota halt while the
+    task's propagated contextvars (validated BYOK keys) are still live.
+
+    The conversation boundary answers the same classification as a typed 429;
+    tagging the exception here lets the done callback log the bounded halt
+    without a traceback. A server-key error (no validated key in context)
+    stays untagged and remains a loud server fault.
+    """
+
+    @functools.wraps(fn)
+    def run(*args: P.args, **kwargs: P.kwargs) -> T:
+        try:
+            return fn(*args, **kwargs)
+        except BaseException as error:
+            # Late-bound like merge_before_processing.py: executors sits below
+            # utils.byok in the import graph (see _byok_detail_code), so a
+            # static gateway_error_contract import would drag utils.cloud_tasks
+            # into the GPU worker runtime image closure.
+            gateway_error_contract = importlib.import_module('utils.llm.gateway_error_contract')
+
+            if gateway_error_contract.is_byok_quota_error(error):
+                setattr(error, 'omi_byok_halt_class', 'byok_quota')
+            raise
+
+    return run
+
+
 def submit_with_context(
     executor: ThreadPoolExecutor, fn: Callable[P, T], *args: P.args, **kwargs: P.kwargs
 ) -> Future[T]:
@@ -529,7 +570,7 @@ def submit_with_context(
     that do read the Future keep their own handling.
     """
     ctx = contextvars.copy_context()
-    future = executor.submit(ctx.run, fn, *args, **kwargs)
+    future = executor.submit(ctx.run, _classify_byok_halt_in_context(fn), *args, **kwargs)
     future.add_done_callback(functools.partial(_log_background_failure, getattr(fn, '__name__', repr(fn))))
     return future
 

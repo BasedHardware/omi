@@ -17,6 +17,7 @@ from config.batch_pipeline import (
     serving_metrics_min_refresh_seconds,
 )
 from database.outbox import OutboxKind, outbox_for
+from database.batch_privacy_attempt import with_batch_privacy_attempt
 from database.batch_pipeline_store import FirestoreStore
 from database.batch_pipeline_shadow_hook import shadow_from_env
 from database.batch_pipeline_staging import reap
@@ -50,6 +51,8 @@ HELD_PARTIAL_WINDOW_SECONDS = 3600.0
 # Re-examine landed targets at most once per minute on the maintenance leader.
 # One page has its own inter-row time budget, so fresh projection resumes.
 RELEASE_HELD_INTERVAL_SECONDS = 60.0
+# Count keys of one held-partial pass, summed across its budget-resumed segments.
+HELD_PASS_COUNT_KEYS = ('pages', 'units', 'partial', 'waiting', 'error', 'reads')
 
 
 class Serving:
@@ -83,6 +86,13 @@ class Serving:
         # (monotonic instant, reads charged) pairs: the hourly read governor.
         # Per serving instance; the maintenance lease usually pins one leader.
         self.held_partial_reads: list[tuple[float, int]] = []
+        # The held-partial pass across budget-resumed segments: the first
+        # segment's monotonic start and its summed counts. A wrapped scan
+        # (``more == 0``) closes it; deferred ticks and failed sweeps leave an
+        # in-flight pass alone.
+        self.held_pass_started: float | None = None
+        self.held_pass_counts = dict.fromkeys(HELD_PASS_COUNT_KEYS, 0)
+        self.held_pass_segments = 0
 
     def queue(self, pool='batch'):
         return Scheduler(self.store, metrics=self.metrics, pool=pool)
@@ -109,6 +119,7 @@ class Serving:
             if self.merge.commit_next(owner_id, time.time(), release=release) is None:
                 break
 
+    @with_batch_privacy_attempt
     async def reconcile_async(
         self, *, recover_quarantine=False, periodic=False, owner_id=None, recovered=None, owner_only=False
     ):
@@ -214,6 +225,50 @@ class Serving:
         spent = sum(reads for _, reads in self.held_partial_reads)
         return (HELD_PARTIAL_READS_PER_HOUR - spent) // (HELD_PARTIAL_PAGE * HELD_PARTIAL_READS_PER_UNIT)
 
+    def _log_held_partial_segment(self, counts: dict, segment_started: float, budget_pages: int) -> None:
+        """One INFO line per sweep segment; a wrapped scan closes the pass with
+        one summed line. Counts and durations only, never an id."""
+
+        def count(key: str) -> int:
+            value = counts.get(key)
+            return value if isinstance(value, int) and value >= 0 else 0
+
+        now = time.monotonic()
+        if self.held_pass_started is None:
+            self.held_pass_started = segment_started
+            self.held_pass_segments = 0
+            self.held_pass_counts = dict.fromkeys(HELD_PASS_COUNT_KEYS, 0)
+        for key in HELD_PASS_COUNT_KEYS:
+            self.held_pass_counts[key] += count(key)
+        self.held_pass_segments += 1
+        logging.getLogger(__name__).info(
+            'event=batch_held_partial action=segment pages=%d units=%d partial=%d waiting=%d error=%d reads=%d '
+            'more=%d elapsed_ms=%d budget_pages=%d',
+            count('pages'),
+            count('units'),
+            count('partial'),
+            count('waiting'),
+            count('error'),
+            count('reads'),
+            1 if counts.get('more') else 0,
+            int((now - segment_started) * 1000),
+            budget_pages,
+        )
+        if not counts.get('more'):
+            logging.getLogger(__name__).info(
+                'event=batch_held_partial action=pass outcome=completed segments=%d pages=%d units=%d partial=%d '
+                'waiting=%d error=%d reads=%d pass_seconds=%.1f',
+                self.held_pass_segments,
+                self.held_pass_counts['pages'],
+                self.held_pass_counts['units'],
+                self.held_pass_counts['partial'],
+                self.held_pass_counts['waiting'],
+                self.held_pass_counts['error'],
+                self.held_pass_counts['reads'],
+                now - self.held_pass_started,
+            )
+            self.held_pass_started = None
+
     def _maintain(self, *, recover_quarantine: bool):
         """Idempotent, transaction-fenced maintenance: cleanup, sweeps, discovery, recovery, drain."""
         if self.cleanup:
@@ -239,9 +294,11 @@ class Serving:
                     # costs no reads, and the backlog resumes as it refills.
                     self.held_partial_due = time.monotonic()
                 else:
-                    counts = sweep_held(deadline=time.monotonic() + HELD_PARTIAL_TICK_SECONDS, max_pages=pages)
+                    segment_started = time.monotonic()
+                    counts = sweep_held(deadline=segment_started + HELD_PARTIAL_TICK_SECONDS, max_pages=pages)
                     if isinstance(counts, dict):
                         self._charge_held_partial_reads(counts)
+                        self._log_held_partial_segment(counts, segment_started, pages)
                         if counts.get('more'):
                             # The tick or read budget stopped the pass mid-backlog.
                             self.held_partial_due = time.monotonic()
@@ -325,14 +382,18 @@ def start_serving_from_env():
             except asyncio.TimeoutError:
                 pass
 
+    @with_batch_privacy_attempt
+    async def drain_tick():
+        service = await run_blocking(sync_executor, serving_for_stage, current_stage())
+        return await drain_recordings(
+            service.store, provider_outbox_factory=lambda: outbox_for(OutboxKind.PROVIDER_STT)
+        )
+
     async def drain():
         # Record admission must not wait for a full reconciliation pass.
         while not stop.is_set():
             try:
-                service = await run_blocking(sync_executor, serving_for_stage, current_stage())
-                if await drain_recordings(
-                    service.store, provider_outbox_factory=lambda: outbox_for(OutboxKind.PROVIDER_STT)
-                ):
+                if await drain_tick():
                     # Keep draining a backlog without the idle poll delay, but
                     # always yield so shutdown and sibling loops can progress.
                     await asyncio.sleep(0)

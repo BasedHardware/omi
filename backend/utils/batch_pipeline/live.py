@@ -22,7 +22,7 @@ from config.policy import resolve_batch_policy
 from config.audio_archive import derived_audio_bucket
 from config.record_audio import require_record_audio_barrier, record_identity
 from config.record_partial import UNIT_SECONDS, UNIT_REFERENCES, INVENTORY_POLL_SECONDS
-from config.record_drain import record_drain_batch, record_drain_concurrency
+from config.record_drain import record_drain_batch, record_drain_concurrency, record_drain_lease_seconds
 from database.batch_pipeline_policy import load_job_policy
 from database.batch_ramp import ramp_admission_policy
 from config.batch_pipeline import Priority, RecordOwnerContention, record_capture_eligible
@@ -37,6 +37,7 @@ from utils.batch_pipeline.scheduler import owner_key
 from utils.batch_pipeline.source_audio import MAGIC, MAX_REFERENCES, read_reference, batch_timing_store
 from utils.batch_pipeline.record_barrier import validate_record_tail
 from utils.batch_pipeline.record_language import prove_manifest
+from utils.batch_pipeline.language_receipt import admission as language_admission_receipt
 from utils.batch_pipeline.record_partial import drain_partial, record_failure as record_partial_failure
 from config.record_seal_rules import overlap_trim_enabled
 from utils.executors import db_executor, storage_executor, run_blocking
@@ -48,6 +49,48 @@ from config.server_batch import owned as server_batch_owned, has_audio as server
 logger = logging.getLogger(__name__)
 OWNER = 'batch_live_v1'
 UPLOAD_GRACE_SECONDS = 0
+# Literal admission refusals worth counting; any other text could carry a value
+# and is reported only as `other`.
+_RETRY_REASONS = frozenset(
+    {
+        'audio staging reservation missing or reclaimed',
+        'capture upload barrier changed during staging',
+        'capture upload/finalization barrier not closed',
+        'complete ordered sibling set must match immutable projection binding',
+        'conflicting retained audio overlap',
+        'existing segment cannot change its immutable intake binding',
+        'invalid encrypted audio frame',
+        'invalid retained audio size',
+        'native provider outbox factory required',
+        'partial continuation changed',
+        'partial continuation ownership changed',
+        'partial page unavailable',
+        'partial record barrier disabled',
+        'pending recording owner cannot change',
+        'record owner is immutable',
+        'record protocol cutover barrier closed',
+        'registered record target unavailable',
+        'retained audio reference is outside admitted source',
+        'retained audio source exceeds size budget',
+        'retained capture checksum mismatch',
+        'retained capture finish missing',
+        'retained capture not durable yet',
+        'retained capture reference budget exceeded',
+        'retained capture tail not durable yet',
+        'retained capture unit budget exceeded',
+        'retained source has no aligned audio',
+        'truncated encrypted audio length',
+        'unit has no capture end',
+        'work identity must match projection binding',
+    }
+)
+
+
+def _retry_reason(error: BaseException) -> str:
+    if not isinstance(error, ValueError):
+        return '-'
+    text = str(error)
+    return text.replace(' ', '_').replace('/', '_') if text in _RETRY_REASONS else 'other'
 
 
 def reserve_recording(uid: str, conversation: dict) -> str | None:
@@ -307,6 +350,14 @@ async def admit_recording(store, pending, *, now=None, provider_outbox_factory=N
     # from the durable upload. The pending obligation has no TTL.
     validate_record_tail(units, row.get('finished_at'))
     validate_record_tail(units, current.get('finished_at'))
+    from utils.batch_pipeline.language_receipt import auto_language_cohort
+
+    receipt_enabled = auto_language_cohort(
+        server_batch_only=row.get('server_batch_only') is True,
+        client_platform=row.get('client_platform'),
+        native_record=True,
+        language=row.get('language'),
+    )
     items = [
         WorkItem(
             hashlib.sha256(f'{content}:{i}'.encode()).hexdigest(),
@@ -318,6 +369,7 @@ async def admit_recording(store, pending, *, now=None, provider_outbox_factory=N
             conversation_id=conversation_id,
             privacy_generation=pending['privacy_generation'],
             requires_compute_admission=True,
+            language_receipt_enabled=True if receipt_enabled else None,
         )
         for i, (start, duration, _) in enumerate(units)
     ]
@@ -338,7 +390,7 @@ async def admit_recording(store, pending, *, now=None, provider_outbox_factory=N
         record_origin=True,
         native_record=True,
     )
-    staged = []
+    staged, language_receipts = [], {}
     for item, (_, _, refs) in zip(items, units):
         context = {
             'owner_id': uid,
@@ -366,6 +418,8 @@ async def admit_recording(store, pending, *, now=None, provider_outbox_factory=N
         }
         if row.get('server_batch_only') is True:
             manifest = await prove_manifest(store, artifacts, item, manifest)
+        if item.language_receipt_enabled:
+            language_receipts[item.segment_id] = language_admission_receipt(manifest['context'])
         uri = await run_blocking(
             storage_executor, artifacts.stage_audio, item, MAGIC + json.dumps(manifest, separators=(',', ':')).encode()
         )
@@ -392,6 +446,7 @@ async def admit_recording(store, pending, *, now=None, provider_outbox_factory=N
             'total_audio_seconds': sum(i.duration_seconds for i in staged),
             'lane': 'fresh',
             'record_ranges': [{'start': i.capture_at, 'end': i.capture_at + i.duration_seconds} for i in staged],
+            **({'language_receipts': language_receipts} if language_receipts else {}),
             **({'server_batch_only': True} if row.get('server_batch_only') is True else {}),
         },
     )
@@ -402,6 +457,7 @@ async def drain_recordings(store, *, provider_outbox_factory=None) -> bool:
     started = time.monotonic()
     batch_size = record_drain_batch()
     concurrency = record_drain_concurrency()
+    lease_seconds = record_drain_lease_seconds()
     segments, partial_count = [], 0
     privacy_blocked = False
     # Every admission rewrites the owner's scheduler row, so two local workers
@@ -410,6 +466,7 @@ async def drain_recordings(store, *, provider_outbox_factory=None) -> bool:
     busy_owners = set()
 
     async def drain_one(segment):
+        nonlocal privacy_blocked
         pending = await run_blocking(db_executor, store.run, lambda tx: tx.get('jobs', segment))
         if pending.get('state') != 'record_pending':
             return
@@ -418,11 +475,35 @@ async def drain_recordings(store, *, provider_outbox_factory=None) -> bool:
             return
         busy_owners.add(owner)
         try:
-            await admit_and_defer(segment, pending)
+            try:
+                lease = await run_blocking(db_executor, store.run, lambda tx: claim(tx, segment))
+            except BatchPrivacyBlocked:
+                # The claim write meets the same privacy fence as admission;
+                # erasure owns the row and this worker moves on.
+                privacy_blocked = True
+                return
+            if lease is None:
+                return
+            await admit_and_defer(segment, pending, lease)
         finally:
             busy_owners.discard(owner)
 
-    async def admit_and_defer(segment, pending):
+    def claim(tx, segment):
+        # Every replica selects the same oldest page. Without a claim, each one
+        # repeated the same listing, download and staging for a row until the
+        # first finished, multiplying admission work by the replica count. A
+        # bounded lease moves the row out of other replicas' due pages; a
+        # crashed worker's row becomes due again when the lease ends.
+        latest = tx.get('jobs', segment)
+        now = time.time()
+        if latest.get('state') != 'record_pending' or latest.get('available_at', 0) > now:
+            return None
+        lease = now + lease_seconds
+        latest['available_at'] = lease
+        tx.put('jobs', segment, latest)
+        return lease
+
+    async def admit_and_defer(segment, pending, lease):
         nonlocal partial_count, privacy_blocked
         partial_count += bool(pending.get('partial_coordinator'))
         failed = False
@@ -442,7 +523,11 @@ async def drain_recordings(store, *, provider_outbox_factory=None) -> bool:
             failed = True
             if pending.get('partial_coordinator'):
                 record_partial_failure(error, run=pending.get('partial_run'))
-            logger.warning('event=batch_live_admission outcome=retry exception_type=%s', type(error).__name__)
+            logger.warning(
+                'event=batch_live_admission outcome=retry exception_type=%s reason=%s',
+                type(error).__name__,
+                _retry_reason(error),
+            )
 
         def defer(tx):
             # Admission can return without moving the obligation (for example
@@ -454,7 +539,10 @@ async def drain_recordings(store, *, provider_outbox_factory=None) -> bool:
                 delay = 60
                 if not failed and (latest.get('partial_run') or {}).get('complete'):
                     delay = INVENTORY_POLL_SECONDS
-                latest['available_at'] = max(latest.get('available_at', 0), time.time() + delay)
+                # Our own lease ends now; a later deferral written during
+                # admission (or another replica's newer lease) is kept.
+                current = latest.get('available_at', 0)
+                latest['available_at'] = max(0 if current == lease else current, time.time() + delay)
                 tx.put('jobs', segment, latest)
 
         await run_blocking(db_executor, store.run, defer)
@@ -466,13 +554,13 @@ async def drain_recordings(store, *, provider_outbox_factory=None) -> bool:
 
     try:
         segments = await run_blocking(db_executor, store.due, 'record_pending', time.time(), batch_size)
-        # Every replica selects the same oldest page; a per-replica order keeps
-        # replicas from admitting the same rows at once and exhausting contention.
+        # Every replica selects the same oldest page; a per-replica order plus
+        # the per-row lease keeps replicas from admitting the same rows at once.
         random.shuffle(segments)
         remaining = iter(segments)
         # Join every worker even on failure; a retry must not overlap unfinished
         # work from this pass. Across replicas the existing intake/partial CAS
-        # still decides admission; selection itself never claims or expires rows.
+        # still decides admission; the lease only hides a row, never expires it.
         results = await asyncio.gather(
             *(worker() for _ in range(min(concurrency, len(segments)))), return_exceptions=True
         )

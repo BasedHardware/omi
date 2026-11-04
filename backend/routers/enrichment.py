@@ -17,7 +17,7 @@ import time
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 
-from utils.executors import postprocess_executor, run_blocking
+from utils.executors import db_executor, postprocess_executor, run_blocking
 from utils.observability.reasons import RetryReason
 from utils.workers.consumer import http_response, run_push
 from utils.workers.retry import retry_response
@@ -121,6 +121,19 @@ async def run_enrichment_task(request: Request, _retry_count: int = Depends(veri
 
     if not outbox.owns_runtime():
         return JSONResponse(status_code=200, content={'status': 'foreign_runtime'})
+    from utils.enrichment.age_gate import max_age_seconds, park_if_expired
+
+    # Historical work must not wait behind the long-running callback pool.
+    if max_age_seconds() > 0:
+        try:
+            if await run_blocking(db_executor, park_if_expired, *task):
+                return JSONResponse(status_code=200, content={'status': 'deferred', 'reason': 'age_gate_72h'})
+        except Exception as error:
+            from utils.enrichment.consumer import transient_dependency
+
+            if not transient_dependency(error):
+                raise
+            return retry_response(RetryReason.DEPENDENCY_WARMING)
     budget = _delivery_budget()
     if budget <= 0:  # Kill switch: 0 restores the middleware-only cut.
         return http_response(await run_blocking(postprocess_executor, consume, *task, time.monotonic()))
