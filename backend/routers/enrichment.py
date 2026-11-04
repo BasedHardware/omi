@@ -129,9 +129,9 @@ async def run_enrichment_task(request: Request, _retry_count: int = Depends(veri
             if await run_blocking(db_executor, park_if_expired, *task):
                 return JSONResponse(status_code=200, content={'status': 'deferred', 'reason': 'age_gate_72h'})
         except Exception as error:
-            from utils.enrichment.consumer import _transient_dependency
+            from utils.enrichment.consumer import transient_dependency
 
-            if not _transient_dependency(error):
+            if not transient_dependency(error):
                 raise
             return retry_response(RetryReason.DEPENDENCY_WARMING)
     budget = _delivery_budget()
