@@ -1029,3 +1029,27 @@ def test_off_restores_immediate_superseded_retry(store, monkeypatch):
     assert composer.schedule(UID, 'ep1', collaborators=_c(invoke=invoke))
     assert len(calls) == 2 and not composer._deferred
     assert store.episode['composed_fingerprint']
+
+
+def test_read_arriving_as_background_worker_exits_is_not_lost(store, monkeypatch):
+    calls = []
+    c = _c(calls=calls)
+    _schedule_seam(store, monkeypatch)
+    lock = composer.threading.Lock()
+
+    class ExitRace:
+        exits = 0
+
+        def __enter__(self):
+            lock.acquire()
+
+        def __exit__(self, *_):
+            lock.release()
+            self.exits += 1
+            if self.exits == 3:
+                # After the outcome decision, before inflight ownership is released.
+                assert not composer.schedule(UID, 'ep1', collaborators=c, throttle=True)
+
+    monkeypatch.setattr(composer, '_inflight_lock', ExitRace())
+    assert composer.schedule(UID, 'ep1', collaborators=c)
+    assert len(calls) == 1 and not composer._deferred and not composer._inflight

@@ -922,8 +922,8 @@ def schedule(uid: str, episode_id: str, *, collaborators: Any = None, throttle: 
         _inflight.add(key)
 
     def run() -> None:
+        foreground = throttle
         try:
-            foreground = throttle
             for _attempt in range(3):
                 if episode_compose_settle_enabled():
                     outcome = compose(uid, str(episode_id), collaborators=collaborators, background=not foreground)
@@ -946,7 +946,7 @@ def schedule(uid: str, episode_id: str, *, collaborators: Any = None, throttle: 
                     _rerun.discard(key)
                     foreground = foreground or key in _foreground
                     _foreground.discard(key)
-                    if outcome in {'composed', 'unchanged', 'empty', 'live', 'no_episode', 'disabled'}:
+                    if outcome != 'settling':
                         _deferred.pop(key, None)
                 if outcome == 'settling' and not foreground:
                     break
@@ -954,9 +954,18 @@ def schedule(uid: str, episode_id: str, *, collaborators: Any = None, throttle: 
                     break
         finally:
             with _inflight_lock:
+                # A read/finalize can arrive after the loop decides to stop but before it releases
+                # inflight ownership. Hand it off instead of dropping its promotion until the timer.
+                enabled = episode_compose_settle_enabled()
+                promote = enabled and (key in _foreground or (foreground and key in _deferred))
+                reschedule = enabled and (key in _rerun or promote)
+                if promote:
+                    _deferred[key] = (time.monotonic(), collaborators)
                 _inflight.discard(key)
                 _rerun.discard(key)
                 _foreground.discard(key)
+            if reschedule:
+                schedule(uid, str(episode_id), collaborators=collaborators, throttle=promote)
 
     try:
         _executor.submit(run)
