@@ -14438,7 +14438,9 @@ class AppLocalizationsBe extends AppLocalizations {
   String get processingAction => 'Апрацаваць запісы ў чаканні';
 
   @override
-  String get processingProgress => 'Апрацоўваем запісы ў чаканні…';
+  String processingProgress(int current, int total) {
+    return 'Апрацоўваем запісы ў чаканні…';
+  }
 
   @override
   String get processingDeferred => 'Чакае апрацоўкі';
@@ -15042,4 +15044,289 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get episodeFinishingUp => 'Завяршаем…';
+
+  @override
+  String get buildAndShareApp => 'Стварыце і раздзеліцеся сваім дадатком';
+
+  @override
+  String get membersAndCounting => '8000+ членаў і больш.';
+
+  @override
+  String get privacyIntro =>
+      'У Omi мы адданы абаронцы вашай прыватнасці. Гэта старонка дазваляе вам кантраляваць, як вашы дадзеныя захоўваюцца і выкарыстоўваюцца.';
+
+  @override
+  String get dataProtectionDesc =>
+      'Вашы дадзеныя абаронены па змаўчанні сільным шыфраваннем. Прагледзьце ваш параметры і адносныя вариянты прыватнасці ніжэй.';
+
+  @override
+  String get transcriptionConfig => 'Наладзіць пастаўшчыка STT';
+
+  @override
+  String get importDataConfig => 'Імпартаваць дадзеныя з іншых крыніц';
+
+  @override
+  String get understandingSubtitle => 'Слоў разумена з вашых размоў.';
+
+  @override
+  String get rememberingSubtitle => 'Факты і дэталі запамінаны для вас.';
+
+  @override
+  String get debugLogsDesc => 'Дапамагае дыягнаставаць праблемы';
+
+  @override
+  String get deleteKnowledgeGraphMessage =>
+      'Гэта выдаліць усе вывераныя дадзеныя графа ведаў (вузлы і звязкі). Вашы арыгінальныя ўспаміны заставаюцца бяспечныя. Граф будзе перабудаваны з часам або пры наступным запыце.';
+
+  @override
+  String get deleteKnowledgeGraphDesc => 'Ачысціць усе вузлы і звязкі';
+
+  @override
+  String get enhanceTranscriptAccuracyDesc =>
+      'Па меры палепшэння нашай мадэлі, мы можам забяспечыць лепшыя вынікі транскрыпцыі для вашых запісаў.';
+
+  @override
+  String get bestInClassTranscription => 'Лепшая ў сваім класе расшыфроўка без наладкі';
+
+  @override
+  String get optimizedForConversation => 'Аптымізавана для разговора';
+
+  @override
+  String get highAccuracy => 'Высокая дакладнасць';
+
+  @override
+  String get privacyFirst => 'Прыватнасць наперш';
+
+  @override
+  String get keepGoing => 'Прадоўжайце, вы робіце адлічна';
+
+  @override
+  String get personalGrowthJourney => 'Ваш персаніфічны шлях росту з AI, які слухае кожнае вашае слова.';
+
+  @override
+  String get memoryAllowUse => 'Дазволіць выкарыстанне';
+
+  @override
+  String get memoryDontUse => 'Не выкарыстоўваць';
+
+  @override
+  String get alwaysInContext => 'Заўсёды ў кантэксце';
+
+  @override
+  String get firmwareBatteryAbove15 => 'Батарэя вышэй за 15%';
+
+  @override
+  String get configureSttProvider => 'Наладзьце пастаўшчыка STT';
+
+  @override
+  String get clearAllNodesAndConnections => 'Очыстіць усе вузлы і злучэнні';
+
+  @override
+  String get welcomeToOmiDescription =>
+      'Вітаем у Omi! Ваш AI асістэнт готаў дапамагаць вам з разнамовамі, задачамі і многім іншым.';
+
+  @override
+  String get conversationsProcessedAutomatically => 'Разнамовы апрацоўваюцца аўтаматычна';
+
+  @override
+  String get getInsightsInstantly => 'Атрымаць ўгледзінаў і рэзюмаў танічна';
+
+  @override
+  String get dailyScoreDescription => 'Оценка, чтобы помочь вам лучше\nсосредоточиться на исполнении.';
+
+  @override
+  String get startConversation => 'Пачніце разнамову і дайце чарадзэйству пачаціся';
+
+  @override
+  String get wearableAiCompanion => 'Надзеваны AI асістэнт';
+
+  @override
+  String get organizeAndControlMemories => 'Арганізуйце і кіруйце вашымі памяткамі';
+
+  @override
+  String get setAllMemoriesToPrivate => 'Установіць усе памяткі на прыватны доступ';
+
+  @override
+  String get setAllMemoriesToPublic => 'Установіць усе памяткі на публічны доступ';
+
+  @override
+  String get selectPreferredLanguageForBestExperience => 'Выберыце вашу аддаленую мову для лепшага вопыту Omi';
+
+  @override
+  String get enableFeaturesForBestExperience => 'Ўключыце функцыі для лепшага вопыту Omi на вашым прыладзе.';
+
+  @override
+  String get deliveryTimeDescription => 'Когда атрымаць вашу щодзённую зводку';
+
+  @override
+  String get configureSTTProvider => 'Наканфігуйце пастаўшчыка STT';
+
+  @override
+  String get setConversationEndDescription => 'Ўстаноўце, калі размовы аўтаматычна заканчваюцца';
+
+  @override
+  String get clearNodesDescription => 'Очысціць ўсе вузлы і злучэнні';
+
+  @override
+  String get deleteKnowledgeGraphWarning =>
+      'Гэта выдаліць ўсе вывядзеныя даныя графа ведаў. Вашы асноўныя спогады застаюцца бяспечны.';
+
+  @override
+  String get createAndShareYourApp => 'Стварыце і дзяліцеся вашым прыкладаннем';
+
+  @override
+  String get e2eeDescription =>
+      'Шыфраванне ад канца да канца - гэта золаты стандарт для прыватнасці. Калі ўключана, вашы даныя шыфруюцца на вашым прыладзе да адпраўкі на нашы серверы. Гэта азначае, што ніхто, нават Omi, не можа атрымаць доступ да вашага змесціва.';
+
+  @override
+  String get secureEncryptionDescription =>
+      'Вашы даныя шыфруюцца з ключом, адзінкавым для вас на нашых серверах, размешчаны на Google Cloud. Гэта азначае, што ваше сыра змесціва недаступна ніхто, уключаючы персонал Omi або Google, непасрэдна з базы даных.';
+
+  @override
+  String get e2eeCardDescription =>
+      'Ўключыце для максімальнай бяспекі, дзе толькі вы можаце мець доступ да вашых даных. Клацніце для больш дэталяў.';
+
+  @override
+  String get yourOmiUnleashed => 'Ваш Omi, далі. Прайсцяце неабмежавана для бясконцых магчымасцей.';
+
+  @override
+  String get privacyIntroText =>
+      'У Omi мы вельмі цэнім вашу прыватнасць. Мы хочам быць прозрыстымі адносна дадзеных, якія мы збіраем, і як мы іх выкарыстоўваем для палепшэння нашага прадукту для вас. Вось што вам трэба ведаць:';
+
+  @override
+  String get commitmentText =>
+      'Мы зацвёрджаны выкарыстоўваць дадзеныя, якія мы збіраем, толькі для палепшэння Omi. Ваша прыватнасць і даверыгу нам вельмі важныя.';
+
+  @override
+  String get thankYouText =>
+      'Дзякуем, што вы каристальнік Omi. Калі ў вас ёсць якія-либо пытанні або ўзнікаюць праблемы, не вагайцеся звяртацца да нас team@basedhardware.com.';
+
+  @override
+  String get knowledgeGraphDeleteDescription =>
+      'Гэта удаліт усе дадзеныя дэрыванага графа ведаў (вузлы і злучэнні). Ваша арыгінальная память застанецца ў безпеце. Граф будзе адбудаваны з часам або пры наступным запыце.';
+
+  @override
+  String get howPeopleWorks =>
+      'Як толькі чалавек створаны, вы можаце перайсці да транскрыпцыі разговора і прызначыць яму іх адпаведныя сегменты, гэта дозваліт Omi распазнаваць іх мову!';
+
+  @override
+  String get buildAndShareYourCustomApp => 'Постаў і дзелісь сваім адмысловым прыкладаннем';
+
+  @override
+  String get onboardingChooseYourPreference => 'Выберыце ваш перавагу';
+
+  @override
+  String get onboardingGrantRequiredAccess => 'Прадаць патрэбны доступ';
+
+  @override
+  String get apiEnvironmentDescription => 'Выберыце, да якога бэкэнда падключыцца';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Ваш вызовы астаюцца прыватнымі і бяспечнымі';
+
+  @override
+  String get omisStorageDesc =>
+      'Калі вашы Omi не злучаны з вашым тэлефонам, ён захоўвае аўдыё адзінаў у абрана пам\'яці прыстасавання. Вы ніколі не страчаеце запіс.';
+
+  @override
+  String get permissionsSetupDescription => 'Уключыце некалькі дазволаў, каб Omi мог адкрыць свайна магію.';
+
+  @override
+  String get architectSubtitle => 'AI для прафесіяналаў — тысячы чатаў + агентная аўтаматызацыя';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$current з $total';
+  }
+
+  @override
+  String get newestFirst => 'Спачатку новыя';
+
+  @override
+  String get backgroundModeNote => 'Пакуль працуе толькі з прыладамі Omi і пастаянна ўдасканальваецца.';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return 'Не запісана ($count)';
+  }
+
+  @override
+  String get speakerTagPromptSubtitle => 'Хуткая праверка галасоў за апошнія два дні';
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Транскрыпцый у чаканні $count';
+  }
+
+  @override
+  String get captureRecoveryBanner => 'Omi не перадае гук — націсніце, каб падключыцца зноў';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Кулон страціў сувязь з гэтым тэлефонам. Omi перападключыцца сам, калі кулон уключаны і побач. Усё, што запісана да гэтага, захавана.';
+
+  @override
+  String get capturePendantDisconnectedShort => 'Omi перападключыцца сам';
+
+  @override
+  String pinPersonSubtitle(String name) {
+    return 'Захаваць $name і чакаць у вашых размовах';
+  }
+
+  @override
+  String get pinPersonHonestLine => 'Omi пытаецца, перш чым супаставіць падобныя галасы.';
+
+  @override
+  String speakerTagPromptHintConfirm(String name) {
+    return '«Так» павышае ўпэўненасць у $name.';
+  }
+
+  @override
+  String get localCopiesSection => 'Лакальныя копіі';
+
+  @override
+  String get forYou => 'Для вас';
+
+  @override
+  String get stopThese => 'Спыніць гэта';
+
+  @override
+  String get meetingActionItemsTitle => 'Элементы действий';
+
+  @override
+  String get addToTasks => 'Дадаць у задачы';
+
+  @override
+  String get showInTranscript => 'Паказаць у расшыфроўцы';
+
+  @override
+  String tentativeTaskDueDate(String date) {
+    return 'Тэрмін прыблізна $date';
+  }
+
+  @override
+  String tentativeTaskDueDateSemantics(String date) {
+    return 'Меркаваны тэрмін $date';
+  }
+
+  @override
+  String get openTask => 'Адкрыць задачу';
+
+  @override
+  String get completeTask => 'Завяршыць задачу';
+
+  @override
+  String get reopenTask => 'Адкрыць задачу нанова';
+
+  @override
+  String get addingToTasks => 'Дадаецца ў задачы';
+
+  @override
+  String get taskAddedToTasks => 'Задача створана';
+
+  @override
+  String get completedStatus => 'Завершана';
+
+  @override
+  String get notCompletedStatus => 'Чакаючыя';
 }

@@ -5106,6 +5106,7 @@ export interface SharedActionItem {
   context?: string | null;
   description: string;
   due_at?: string | null;
+  due_certainty?: "confirmed" | "tentative" | null;
   owner_name?: string | null;
 }
 

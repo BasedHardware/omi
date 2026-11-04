@@ -25497,11 +25497,11 @@ abstract class AppLocalizations {
   /// **'Process waiting recordings'**
   String get processingAction;
 
-  /// No description provided for @processingProgress.
+  /// Progress label showing current/total items
   ///
   /// In en, this message translates to:
   /// **'Processing your waiting recordings…'**
-  String get processingProgress;
+  String processingProgress(int current, int total);
 
   /// No description provided for @processingDeferred.
   ///
@@ -26360,6 +26360,516 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Finishing up…'**
   String get episodeFinishingUp;
+
+  /// Create app button subtitle
+  ///
+  /// In en, this message translates to:
+  /// **'Build and share your custom app'**
+  String get buildAndShareApp;
+
+  /// Discord member count
+  ///
+  /// In en, this message translates to:
+  /// **'8000+ members and counting.'**
+  String get membersAndCounting;
+
+  /// Data privacy page introduction
+  ///
+  /// In en, this message translates to:
+  /// **'At Omi, we are committed to protecting your privacy. This page allows you to control how your data is stored and used.'**
+  String get privacyIntro;
+
+  /// Data protection section description
+  ///
+  /// In en, this message translates to:
+  /// **'Your data is secured by default with strong encryption. Review your settings and future privacy options below.'**
+  String get dataProtectionDesc;
+
+  /// Transcription configuration subtitle
+  ///
+  /// In en, this message translates to:
+  /// **'Configure STT provider'**
+  String get transcriptionConfig;
+
+  /// Import data details subtitle
+  ///
+  /// In en, this message translates to:
+  /// **'Import data from other sources'**
+  String get importDataConfig;
+
+  /// Understanding stat subtitle
+  ///
+  /// In en, this message translates to:
+  /// **'Words understood from your conversations.'**
+  String get understandingSubtitle;
+
+  /// Remembering stat subtitle
+  ///
+  /// In en, this message translates to:
+  /// **'Facts and details remembered for you.'**
+  String get rememberingSubtitle;
+
+  /// No description provided for @debugLogsDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Helps diagnose issues'**
+  String get debugLogsDesc;
+
+  /// Dialog message explaining delete knowledge graph action
+  ///
+  /// In en, this message translates to:
+  /// **'This will delete all derived knowledge graph data (nodes and connections). Your original memories will remain safe. The graph will be rebuilt over time or upon next request.'**
+  String get deleteKnowledgeGraphMessage;
+
+  /// No description provided for @deleteKnowledgeGraphDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear all nodes and connections'**
+  String get deleteKnowledgeGraphDesc;
+
+  /// No description provided for @enhanceTranscriptAccuracyDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'As our model improves, we can provide better transcription results for your recordings.'**
+  String get enhanceTranscriptAccuracyDesc;
+
+  /// No description provided for @bestInClassTranscription.
+  ///
+  /// In en, this message translates to:
+  /// **'Best in class transcription with zero setup'**
+  String get bestInClassTranscription;
+
+  /// No description provided for @optimizedForConversation.
+  ///
+  /// In en, this message translates to:
+  /// **'Optimized for conversation'**
+  String get optimizedForConversation;
+
+  /// No description provided for @highAccuracy.
+  ///
+  /// In en, this message translates to:
+  /// **'High accuracy'**
+  String get highAccuracy;
+
+  /// No description provided for @privacyFirst.
+  ///
+  /// In en, this message translates to:
+  /// **'Privacy first'**
+  String get privacyFirst;
+
+  /// Encouragement text during a multi-step process
+  ///
+  /// In en, this message translates to:
+  /// **'Keep going, you are doing great'**
+  String get keepGoing;
+
+  /// Subtitle describing Omi on auth screen
+  ///
+  /// In en, this message translates to:
+  /// **'Your personal growth journey with AI that listens to your every word.'**
+  String get personalGrowthJourney;
+
+  /// Button that clears suppression so this memory may be used
+  ///
+  /// In en, this message translates to:
+  /// **'Allow Use'**
+  String get memoryAllowUse;
+
+  /// Button that suppresses this memory from future use
+  ///
+  /// In en, this message translates to:
+  /// **'Don\'t Use'**
+  String get memoryDontUse;
+
+  /// Description for baseline memory being always in context
+  ///
+  /// In en, this message translates to:
+  /// **'Always in context'**
+  String get alwaysInContext;
+
+  /// Firmware update step title about battery level
+  ///
+  /// In en, this message translates to:
+  /// **'Battery Above 15%'**
+  String get firmwareBatteryAbove15;
+
+  /// Description for transcription settings
+  ///
+  /// In en, this message translates to:
+  /// **'Configure STT provider'**
+  String get configureSttProvider;
+
+  /// Description for delete knowledge graph
+  ///
+  /// In en, this message translates to:
+  /// **'Clear all nodes and connections'**
+  String get clearAllNodesAndConnections;
+
+  /// Welcome message on completion screen
+  ///
+  /// In en, this message translates to:
+  /// **'Welcome to Omi! Your AI companion is ready to assist you with conversations, tasks, and more.'**
+  String get welcomeToOmiDescription;
+
+  /// Tip about automatic conversation processing
+  ///
+  /// In en, this message translates to:
+  /// **'Conversations are processed automatically'**
+  String get conversationsProcessedAutomatically;
+
+  /// Tip about instant insights feature
+  ///
+  /// In en, this message translates to:
+  /// **'Get insights and summaries instantly'**
+  String get getInsightsInstantly;
+
+  /// Description text for daily score widget
+  ///
+  /// In en, this message translates to:
+  /// **'A score to help you better\nfocus on execution.'**
+  String get dailyScoreDescription;
+
+  /// Empty state subtitle when connected
+  ///
+  /// In en, this message translates to:
+  /// **'Start a conversation and let the magic begin'**
+  String get startConversation;
+
+  /// Widget subtitle for device promotion
+  ///
+  /// In en, this message translates to:
+  /// **'Wearable AI companion'**
+  String get wearableAiCompanion;
+
+  /// Subtitle for memory management dialog
+  ///
+  /// In en, this message translates to:
+  /// **'Organize and control your memories'**
+  String get organizeAndControlMemories;
+
+  /// Description for making all memories private
+  ///
+  /// In en, this message translates to:
+  /// **'Set all memories to private visibility'**
+  String get setAllMemoriesToPrivate;
+
+  /// Description for making all memories public
+  ///
+  /// In en, this message translates to:
+  /// **'Set all memories to public visibility'**
+  String get setAllMemoriesToPublic;
+
+  /// No description provided for @selectPreferredLanguageForBestExperience.
+  ///
+  /// In en, this message translates to:
+  /// **'Select your preferred language for the best Omi experience'**
+  String get selectPreferredLanguageForBestExperience;
+
+  /// No description provided for @enableFeaturesForBestExperience.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable features for the best Omi experience on your device.'**
+  String get enableFeaturesForBestExperience;
+
+  /// Delivery time description
+  ///
+  /// In en, this message translates to:
+  /// **'When to receive your daily summary'**
+  String get deliveryTimeDescription;
+
+  /// No description provided for @configureSTTProvider.
+  ///
+  /// In en, this message translates to:
+  /// **'Configure STT provider'**
+  String get configureSTTProvider;
+
+  /// No description provided for @setConversationEndDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Set when conversations auto-end'**
+  String get setConversationEndDescription;
+
+  /// No description provided for @clearNodesDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear all nodes and connections'**
+  String get clearNodesDescription;
+
+  /// No description provided for @deleteKnowledgeGraphWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'This will delete all derived knowledge graph data. Your original memories remain safe.'**
+  String get deleteKnowledgeGraphWarning;
+
+  /// Subtitle for create app option
+  ///
+  /// In en, this message translates to:
+  /// **'Create and share your app'**
+  String get createAndShareYourApp;
+
+  /// Description of E2EE encryption explaining its benefits
+  ///
+  /// In en, this message translates to:
+  /// **'End-to-end encryption is the gold standard for privacy. When enabled, your data is encrypted on your device before it\'s sent to our servers. This means no one, not even Omi, can access your content.'**
+  String get e2eeDescription;
+
+  /// Description of secure encryption explaining how data is protected
+  ///
+  /// In en, this message translates to:
+  /// **'Your data is encrypted with a key unique to you on our servers, hosted on Google Cloud. This means your raw content is inaccessible to anyone, including Omi staff or Google, directly from the database.'**
+  String get secureEncryptionDescription;
+
+  /// Description for E2EE card explaining its benefit
+  ///
+  /// In en, this message translates to:
+  /// **'Enable for maximum security where only you can access your data. Tap to learn more.'**
+  String get e2eeCardDescription;
+
+  /// Marketing text for unlimited plan
+  ///
+  /// In en, this message translates to:
+  /// **'Your Omi, unleashed. Go unlimited for endless possibilities.'**
+  String get yourOmiUnleashed;
+
+  /// Privacy page - privacyIntroText
+  ///
+  /// In en, this message translates to:
+  /// **'At Omi, we take your privacy very seriously. We want to be transparent about the data we collect and how we use it to improve our product for you. Here\'s what you need to know:'**
+  String get privacyIntroText;
+
+  /// Privacy page - commitmentText
+  ///
+  /// In en, this message translates to:
+  /// **'We are committed to using the data we collect only to make Omi a better product for you. Your privacy and trust are paramount to us.'**
+  String get commitmentText;
+
+  /// Privacy page - thankYouText
+  ///
+  /// In en, this message translates to:
+  /// **'Thank you for being a valued user of Omi. If you have any questions or concerns, feel free to reach out to us to team@basedhardware.com.'**
+  String get thankYouText;
+
+  /// Developer settings - knowledgeGraphDeleteDescription
+  ///
+  /// In en, this message translates to:
+  /// **'This will delete all derived knowledge graph data (nodes and connections). Your original memories will remain safe. The graph will be rebuilt over time or upon next request.'**
+  String get knowledgeGraphDeleteDescription;
+
+  /// Explanation of how people/speech recognition works
+  ///
+  /// In en, this message translates to:
+  /// **'Once a person is created, you can go to a conversation transcript, and assign them their corresponding segments, that way Omi will be able to recognize their speech too!'**
+  String get howPeopleWorks;
+
+  /// Subtitle for create app button
+  ///
+  /// In en, this message translates to:
+  /// **'Build and share your custom app'**
+  String get buildAndShareYourCustomApp;
+
+  /// Onboarding step description for language selection
+  ///
+  /// In en, this message translates to:
+  /// **'Choose your preference'**
+  String get onboardingChooseYourPreference;
+
+  /// Onboarding step description for permissions
+  ///
+  /// In en, this message translates to:
+  /// **'Grant required access'**
+  String get onboardingGrantRequiredAccess;
+
+  /// Subtitle for the API environment switcher
+  ///
+  /// In en, this message translates to:
+  /// **'Choose which backend to connect to'**
+  String get apiEnvironmentDescription;
+
+  /// Phone calls upsell feature 4
+  ///
+  /// In en, this message translates to:
+  /// **'Your calls stay private and secure'**
+  String get phoneCallsUpsellFeature4;
+
+  /// Description of device storage in sync info sheet
+  ///
+  /// In en, this message translates to:
+  /// **'When your Omi is not connected to your phone, it stores audio locally on its built-in memory. You never lose a recording.'**
+  String get omisStorageDesc;
+
+  /// Subtitle for the permissions interstitial screen
+  ///
+  /// In en, this message translates to:
+  /// **'Enable a few permissions so Omi can work its magic.'**
+  String get permissionsSetupDescription;
+
+  /// No description provided for @architectSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Power-user AI — thousands of chats + agentic automations'**
+  String get architectSubtitle;
+
+  /// Top status card: secondary progress line under the phase title.
+  ///
+  /// In en, this message translates to:
+  /// **'{current} of {total}'**
+  String syncCardProgressOf(int current, int total);
+
+  /// Subtle sort-order indicator next to the recordings list header so the user knows the newest items are at the top.
+  ///
+  /// In en, this message translates to:
+  /// **'Newest first'**
+  String get newestFirst;
+
+  /// Caveat note shown in the Background Mode sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Works with Omi devices only for now, and is being improved continuously.'**
+  String get backgroundModeNote;
+
+  /// Header for the calendar capture-gap group in the conversations list
+  ///
+  /// In en, this message translates to:
+  /// **'Not captured ({count})'**
+  String conversationsNotCapturedCount(int count);
+
+  /// Card subtitle for the speaker tagging prompt
+  ///
+  /// In en, this message translates to:
+  /// **'A quick check on voices from the last two days'**
+  String get speakerTagPromptSubtitle;
+
+  /// Phone-local recordings still waiting to be uploaded for transcription, on the conversations list banner.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcriptions pending {count}'**
+  String transcriptionsPendingCount(int count);
+
+  /// Reconnect banner shown after automatic BLE recovery has not restored pendant audio; tapping opens device settings
+  ///
+  /// In en, this message translates to:
+  /// **'Omi isn\'t sending audio — tap to reconnect'**
+  String get captureRecoveryBanner;
+
+  /// Details sheet from the Home live capture card when the pendant disconnected in the middle of a capture.
+  ///
+  /// In en, this message translates to:
+  /// **'Your pendant lost its connection to this phone. Omi reconnects on its own when the pendant is on and nearby. Everything recorded before this is safe.'**
+  String get capturePendantDisconnectedDetail;
+
+  /// Listening pill, after the status, when the pendant dropped and is not reconnecting yet: the one-line reassurance. The details sheet has the full explanation.
+  ///
+  /// In en, this message translates to:
+  /// **'Omi reconnects on its own'**
+  String get capturePendantDisconnectedShort;
+
+  /// What pinning a person means, under the Pin switch.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep {name}, and expect them in your conversations'**
+  String pinPersonSubtitle(String name);
+
+  /// Footer under the Pin switch: pinning makes Omi ask about near matches rather than label them.
+  ///
+  /// In en, this message translates to:
+  /// **'Omi asks before matching close voices.'**
+  String get pinPersonHonestLine;
+
+  /// Hint at the bottom of the 'Is this <name>?' card.
+  ///
+  /// In en, this message translates to:
+  /// **'Yes raises {name}\'s confidence.'**
+  String speakerTagPromptHintConfirm(String name);
+
+  /// Section header above the auto-remove synced copies setting
+  ///
+  /// In en, this message translates to:
+  /// **'Local Copies'**
+  String get localCopiesSection;
+
+  /// Home proactivity feed section title
+  ///
+  /// In en, this message translates to:
+  /// **'For You'**
+  String get forYou;
+
+  /// Disable the producer of a For You card
+  ///
+  /// In en, this message translates to:
+  /// **'Stop These'**
+  String get stopThese;
+
+  /// meetingActionItemsTitle
+  ///
+  /// In en, this message translates to:
+  /// **'Action items'**
+  String get meetingActionItemsTitle;
+
+  /// addToTasks
+  ///
+  /// In en, this message translates to:
+  /// **'Add to Tasks'**
+  String get addToTasks;
+
+  /// showInTranscript
+  ///
+  /// In en, this message translates to:
+  /// **'Show in Transcript'**
+  String get showInTranscript;
+
+  /// tentativeTaskDueDate
+  ///
+  /// In en, this message translates to:
+  /// **'Due ~{date}'**
+  String tentativeTaskDueDate(String date);
+
+  /// tentativeTaskDueDateSemantics
+  ///
+  /// In en, this message translates to:
+  /// **'Tentatively due {date}'**
+  String tentativeTaskDueDateSemantics(String date);
+
+  /// openTask
+  ///
+  /// In en, this message translates to:
+  /// **'Open Task'**
+  String get openTask;
+
+  /// completeTask
+  ///
+  /// In en, this message translates to:
+  /// **'Complete task'**
+  String get completeTask;
+
+  /// reopenTask
+  ///
+  /// In en, this message translates to:
+  /// **'Reopen task'**
+  String get reopenTask;
+
+  /// addingToTasks
+  ///
+  /// In en, this message translates to:
+  /// **'Adding to Tasks…'**
+  String get addingToTasks;
+
+  /// taskAddedToTasks
+  ///
+  /// In en, this message translates to:
+  /// **'Added to Tasks'**
+  String get taskAddedToTasks;
+
+  /// completedStatus
+  ///
+  /// In en, this message translates to:
+  /// **'Completed'**
+  String get completedStatus;
+
+  /// notCompletedStatus
+  ///
+  /// In en, this message translates to:
+  /// **'Not completed'**
+  String get notCompletedStatus;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

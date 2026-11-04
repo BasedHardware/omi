@@ -17,7 +17,10 @@ export default function ActionItems({ items, knownIDs = [] }: ActionsItemsProps)
       <h2 className="sn-h3">Action items</h2>
       <ul className="sn-actions">
         {items.map((item, index) => {
-          const { owner, context, due } = actionItemFacts(item);
+          const { owner, ownerKnown, context, due } = actionItemFacts(item);
+          // Owner and due share one line; context gets its own. An unknown owner or due
+          // date is left out rather than spelled "Unknown".
+          const hasMeta = ownerKnown || Boolean(due);
           return (
             <li
               key={index}

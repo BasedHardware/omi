@@ -15,6 +15,7 @@ import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/http/api/messages.dart' show ChatPageContext;
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/pages/chat/chat_route.dart';
 import 'package:omi/pages/chat/page.dart';
 import 'package:omi/pages/conversations/conversation_action_analytics.dart';
@@ -49,6 +50,7 @@ import 'capture_group_separation.dart';
 import 'widgets/calendar_event_sheets.dart';
 import 'widgets/capture_recordings.dart';
 import 'widgets/conversation_activity_strip.dart';
+import 'widgets/conversation_action_items_section.dart' show conversationActionItemSearchMatchCount;
 import 'widgets/conversation_detail_header.dart';
 import 'widgets/conversation_detail_tabs.dart';
 import 'widgets/detail_search_bar.dart';
@@ -166,12 +168,18 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
   final FocusNode _searchFocusNode = FocusNode();
   int _currentSearchIndex = 0;
   int _totalSearchResults = 0;
+
+  /// The Summary tab's matches that belong to the note itself; the tab's
+  /// action-item section's matches follow them, so this is the section's
+  /// offset into the tab's results.
+  int _summaryContentSearchResults = 0;
   final List<(Timer, Completer<void>)> _ownedDelays = [];
   final _separation = CaptureGroupSeparationController();
 
   void _updateSearchResults() {
     if (_searchQuery.isEmpty) {
       _totalSearchResults = 0;
+      _summaryContentSearchResults = 0;
       _currentSearchIndex = 0;
       return;
     }
@@ -189,6 +197,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
     }
 
     int count = 0;
+    _summaryContentSearchResults = 0;
     if (selectedTab == ConversationTab.transcript) {
       for (var segment in provider.conversation.transcriptSegments) {
         count += countIn(segment.text.toLowerCase());
@@ -196,8 +205,12 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
     } else if (selectedTab == ConversationTab.summary) {
       final summarySelection = provider.getSummarySelection();
       if (summarySelection.content.isNotEmpty) {
-        count += countIn(summarySelection.content.decodeString.toLowerCase());
+        _summaryContentSearchResults = countIn(summarySelection.content.decodeString.toLowerCase());
       }
+      // The tab renders its action items after the note; their matches count
+      // toward the tab's total and are navigated inside the section.
+      count = _summaryContentSearchResults +
+          conversationActionItemSearchMatchCount(provider.conversation.structured.actionItems, _searchQuery);
     }
 
     _totalSearchResults = count;
@@ -435,15 +448,27 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
     _controller?.animateTo(_transcriptTabIndex);
   }
 
-  /// Backgrounding the app ends a speaker-labeling pass like Done: one summary update, landing on
-  /// this page if the reader comes back. Coming back re-reads the conversation.
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused) {
-      _detailProvider.confirmSpeakerLabelingSession(conversationId: widget.conversation.id);
-    } else if (state == AppLifecycleState.resumed) {
-      // The list refresh on resume does not carry the transcript; re-read what is on screen.
-      unawaited(_detailProvider.refreshConversation());
+  void _showActionItemInTranscript(List<String> sourceSegmentIds) {
+    final provider = context.read<ConversationDetailProvider>();
+    TranscriptSegment? target;
+    for (final segment in provider.conversation.transcriptSegments) {
+      if (sourceSegmentIds.contains(segment.id)) {
+        target = segment;
+        break;
+      }
+    }
+    setState(() {
+      selectedTab = ConversationTab.transcript;
+      _hasExplicitTabSelection = true;
+    });
+    _controller?.animateTo(_transcriptTabIndex);
+    final resolvedTarget = target;
+    if (resolvedTarget != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        if (mounted && _seekToSegmentCallback != null) {
+          await _seekToSegmentCallback!(resolvedTarget.start, resolvedTarget.end);
+        }
+      });
     }
   }
 
@@ -1229,8 +1254,9 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
                                 !_reviewInterrupted,
                             searchQuery: _searchQuery,
                             currentResultIndex: getCurrentResultIndexForHighlighting(),
+                            summarySearchResultOffset: _summaryContentSearchResults,
                             onTapWhenSearchEmpty: _closeSearchIfEmpty,
-                            onOpenTranscript: _openTranscriptTab,
+                            onShowActionItemInTranscript: _showActionItemInTranscript,
                           ),
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),

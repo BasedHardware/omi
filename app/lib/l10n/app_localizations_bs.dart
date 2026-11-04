@@ -14432,7 +14432,9 @@ class AppLocalizationsBs extends AppLocalizations {
   String get processingAction => 'Obradi snimke na čekanju';
 
   @override
-  String get processingProgress => 'Obrada vaših snimaka na čekanju…';
+  String processingProgress(int current, int total) {
+    return 'Obrada vaših snimaka na čekanju…';
+  }
 
   @override
   String get processingDeferred => 'Čeka obradu';
@@ -15036,4 +15038,289 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get episodeFinishingUp => 'Završavamo…';
+
+  @override
+  String get buildAndShareApp => 'Izgradi i deli svoju prilagođenu aplikaciju';
+
+  @override
+  String get membersAndCounting => '8000+ članova i raste.';
+
+  @override
+  String get privacyIntro =>
+      'U Omiju smo posvećeni zaštiti vaše privatnosti. Ova stranica vam omogućava da kontrolišete kako se vaši podaci čuvaju i koriste.';
+
+  @override
+  String get dataProtectionDesc =>
+      'Vaši podaci su podrazumevano zaštićeni jakim šifrovanjem. Pregledajte vaše postavke i budućne opcije privatnosti ispod.';
+
+  @override
+  String get transcriptionConfig => 'Konfigurišite dobavljača STT-a';
+
+  @override
+  String get importDataConfig => 'Uvezite podatke iz drugih izvora';
+
+  @override
+  String get understandingSubtitle => 'Reči razumevene iz vaših razgovora.';
+
+  @override
+  String get rememberingSubtitle => 'Činjenice i detalje zapamćene za vas.';
+
+  @override
+  String get debugLogsDesc => 'Pomaže dijagnostici problema';
+
+  @override
+  String get deleteKnowledgeGraphMessage =>
+      'Ovo će izbrisati sve izvedene podatke grafikona znanja (čvorove i veze). Vaše originalne uspomene će ostati sigurne. Grafikon će biti ponovo izgrađen tokom vremena ili na sledeći zahtev.';
+
+  @override
+  String get deleteKnowledgeGraphDesc => 'Očisti sve čvorove i veze';
+
+  @override
+  String get enhanceTranscriptAccuracyDesc =>
+      'Kako se naš model poboljšava, možemo pružiti bolje rezultate transkripcije za vaše snimke.';
+
+  @override
+  String get bestInClassTranscription => 'Najbolja transkripcija sa nultom konfiguracijom';
+
+  @override
+  String get optimizedForConversation => 'Optimizovano za razgovor';
+
+  @override
+  String get highAccuracy => 'Visoka preciznost';
+
+  @override
+  String get privacyFirst => 'Privatnost na prvom mestu';
+
+  @override
+  String get keepGoing => 'Nastavite, odličan ste';
+
+  @override
+  String get personalGrowthJourney => 'Vaš lični put rasta sa AI koji sluša svaku vašu reč.';
+
+  @override
+  String get memoryAllowUse => 'Dozvoli korištenje';
+
+  @override
+  String get memoryDontUse => 'Nemoj koristiti';
+
+  @override
+  String get alwaysInContext => 'Uvijek u kontekstu';
+
+  @override
+  String get firmwareBatteryAbove15 => 'Baterija iznad 15%';
+
+  @override
+  String get configureSttProvider => 'Konfiguriši STT pružatelja';
+
+  @override
+  String get clearAllNodesAndConnections => 'Očisti sve čvorove i veze';
+
+  @override
+  String get welcomeToOmiDescription =>
+      'Dobrodošao u Omi! Tvoj AI asistent je spreman da ti pomogne sa razgovorima, zadacima i još mnogo toga.';
+
+  @override
+  String get conversationsProcessedAutomatically => 'Razgovori se obrađuju automatski';
+
+  @override
+  String get getInsightsInstantly => 'Dobij uvide i sažetke trenutno';
+
+  @override
+  String get dailyScoreDescription => 'Ocjena koja će ti pomoći da bolje\nuslijediš sa izvršavanjem.';
+
+  @override
+  String get startConversation => 'Počni razgovor i pusti magiju da počne';
+
+  @override
+  String get wearableAiCompanion => 'Nosivi AI asistent';
+
+  @override
+  String get organizeAndControlMemories => 'Organizuj i kontroliši svoje uspomene';
+
+  @override
+  String get setAllMemoriesToPrivate => 'Postavi sve uspomene na privatnu vidljivost';
+
+  @override
+  String get setAllMemoriesToPublic => 'Postavi sve uspomene na javnu vidljivost';
+
+  @override
+  String get selectPreferredLanguageForBestExperience => 'Odaberi svoj omiljeni jezik za najbolje Omi iskustvo';
+
+  @override
+  String get enableFeaturesForBestExperience => 'Aktiviraj značajke za najbolje Omi iskustvo na svom uređaju.';
+
+  @override
+  String get deliveryTimeDescription => 'Kada primiti tvoj dnevni sažetak';
+
+  @override
+  String get configureSTTProvider => 'Konfiguriraj pružatelja STT-a';
+
+  @override
+  String get setConversationEndDescription => 'Postavi kada se razgovori automatski završavaju';
+
+  @override
+  String get clearNodesDescription => 'Očisti sve čvorove i veze';
+
+  @override
+  String get deleteKnowledgeGraphWarning =>
+      'Ovo će obrisati sve izvedene podatke grafa znanja. Tvoje originalne uspomene ostaju sigurne.';
+
+  @override
+  String get createAndShareYourApp => 'Stvori i podijeli svoju aplikaciju';
+
+  @override
+  String get e2eeDescription =>
+      'End-to-end enkripcija je zlatni standard za privatnost. Kada je aktivirana, tvoji su podaci šifrirani na svom uređaju prije nego što se pošalju našim poslužiteljima. To znači da nitko, čak ni Omi, ne može pristupiti tvojoj sadržaju.';
+
+  @override
+  String get secureEncryptionDescription =>
+      'Tvoji su podaci šifrirani s ključem jedinstvenim za tebe na našim poslužiteljima, hostiranom na Google Cloud-u. To znači da je tvoj sirovi sadržaj nedostupan bilo kome, uključujući Omi personale ili Google, izravno iz baze podataka.';
+
+  @override
+  String get e2eeCardDescription =>
+      'Aktivira za maksimalnu sigurnost gdje samo ti možeš pristupiti tvojim podacima. Dodirni kako bi saznao više.';
+
+  @override
+  String get yourOmiUnleashed => 'Vaš Omi, oslobođen. Idite na neograničeno za beskonačne mogućnosti.';
+
+  @override
+  String get privacyIntroText =>
+      'U Omiju shvaćamo vašu privatnost vrlo ozbiljno. Želimo biti transparentni o podacima koje prikupljamo i kako ih koristimo da poboljšamo naš proizvod za vas. Evo što trebate znati:';
+
+  @override
+  String get commitmentText =>
+      'Obavezani smo koristiti podatke koje prikupljamo samo kako bismo Omi učinili boljim proizvodom za vas. Vaša privatnost i povjerenje su nama od prvorazrednog značaja.';
+
+  @override
+  String get thankYouText =>
+      'Hvala što ste dragocjeni korisnik Omija. Ako imate bilo kakvih pitanja ili zabrinutosti, slobodno nam se obratite na team@basedhardware.com.';
+
+  @override
+  String get knowledgeGraphDeleteDescription =>
+      'Ovo će obrisati sve izvedene podatke grafa znanja (čvorove i veze). Vaše originalne uspomene će ostati sigurne. Grafikon će biti ponovno izgrađen tijekom vremena ili pri sljedećem zahtjevu.';
+
+  @override
+  String get howPeopleWorks =>
+      'Kada se osoba kreira, možete prijeći na transkripciju razgovora i dodijeliti im odgovarajuće segmente, tako će Omi moći prepoznati njihov govor!';
+
+  @override
+  String get buildAndShareYourCustomApp => 'Napravi i podeli svoju prilagođenu aplikaciju';
+
+  @override
+  String get onboardingChooseYourPreference => 'Odaberite vašu preferencu';
+
+  @override
+  String get onboardingGrantRequiredAccess => 'Dozvoli potreban pristup';
+
+  @override
+  String get apiEnvironmentDescription => 'Odaberite koji backend da se konektuje';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Vaši pozivi ostaju privatni i bezbedni';
+
+  @override
+  String get omisStorageDesc =>
+      'Kada vaš Omi nije povezan sa vašim telefonom, čuva audio lokalno na svojoj ugrađenoj memoriji. Nikada ne gubite snimak.';
+
+  @override
+  String get permissionsSetupDescription => 'Omogući nekoliko dozvola kako bi Omi mogao da radi svoju magiju.';
+
+  @override
+  String get architectSubtitle => 'Napredni AI — hiljade razgovora + agentna automatizacija';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$current od $total';
+  }
+
+  @override
+  String get newestFirst => 'Prvo najnoviji';
+
+  @override
+  String get backgroundModeNote => 'Zasad radi samo s Omi uređajima i kontinuirano se poboljšava.';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return 'Nije snimljeno ($count)';
+  }
+
+  @override
+  String get speakerTagPromptSubtitle => 'Brza provjera glasova iz posljednja dva dana';
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Transkripcije na čekanju $count';
+  }
+
+  @override
+  String get captureRecoveryBanner => 'Omi ne šalje zvuk — dodirnite za ponovno povezivanje';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Privjesak je izgubio vezu s ovim telefonom. Omi će se sam ponovo povezati kad je privjesak uključen i u blizini. Sve snimljeno do sada je sačuvano.';
+
+  @override
+  String get capturePendantDisconnectedShort => 'Omi će se sam ponovo povezati';
+
+  @override
+  String pinPersonSubtitle(String name) {
+    return 'Zadržite osobu $name i očekujte je u svojim razgovorima';
+  }
+
+  @override
+  String get pinPersonHonestLine => 'Omi pita prije nego što upari slične glasove.';
+
+  @override
+  String speakerTagPromptHintConfirm(String name) {
+    return '„Da“ povećava sigurnost za osobu $name.';
+  }
+
+  @override
+  String get localCopiesSection => 'Lokalne kopije';
+
+  @override
+  String get forYou => 'Za vas';
+
+  @override
+  String get stopThese => 'Zaustavi ovo';
+
+  @override
+  String get meetingActionItemsTitle => 'Stavke za uraditi';
+
+  @override
+  String get addToTasks => 'Dodaj u zadatke';
+
+  @override
+  String get showInTranscript => 'Prikaži transkript';
+
+  @override
+  String tentativeTaskDueDate(String date) {
+    return 'Rok oko $date';
+  }
+
+  @override
+  String tentativeTaskDueDateSemantics(String date) {
+    return 'Okvirni rok $date';
+  }
+
+  @override
+  String get openTask => 'Otvori zadatak';
+
+  @override
+  String get completeTask => 'Završi zadatak';
+
+  @override
+  String get reopenTask => 'Ponovo otvori zadatak';
+
+  @override
+  String get addingToTasks => 'Dodavanje u zadatke';
+
+  @override
+  String get taskAddedToTasks => 'Zadatak je kreiran';
+
+  @override
+  String get completedStatus => 'Završeno';
+
+  @override
+  String get notCompletedStatus => 'Na čekanju';
 }
