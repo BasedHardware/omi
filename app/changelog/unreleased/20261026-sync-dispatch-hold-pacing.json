@@ -1,0 +1,3 @@
+{
+  "change": "Offline Sync briefly rechecks account maintenance fences, then pauses for 60 seconds and backs off on repeated holds while keeping recordings ready to retry"
+}

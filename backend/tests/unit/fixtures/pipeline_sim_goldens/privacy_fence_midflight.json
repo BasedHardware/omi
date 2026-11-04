@@ -10,7 +10,7 @@
    "final_result": null,
    "job_transitions": [
     "<1s ready",
-    "<1s leased",
+    "<5s leased",
     "<30s quarantined recovery:held",
     "<30s quarantined recovery:prepared",
     "<5m quarantined recovery:running",
@@ -38,7 +38,7 @@
    "final_result": null,
    "job_transitions": [
     "<1s ready",
-    "<1s leased",
+    "<30s leased",
     "<30s quarantined recovery:held",
     "<30s quarantined recovery:prepared",
     "<5m purged"
@@ -57,11 +57,15 @@
    "final_job": {
     "attempt": 1,
     "client_status": "completed",
+    "compute_decision": {
+     "outcome": "unattempted"
+    },
     "conversation_id": "conv-4",
     "duration_seconds": 220.21,
     "failure": "worker_failed",
     "fresh_capture": false,
     "late_capture": true,
+    "measured_held_vad_speech_seconds": 220.21,
     "merge_pending": false,
     "owner_id": "owner-2",
     "priority": 1,
@@ -91,6 +95,13 @@
     "worker_failure": {
      "reason": "empty_asr",
      "stage": "assemble_words"
+    },
+    "worker_vad_receipt": {
+     "captured_samples": 3523360,
+     "sample_rate_hz": 16000,
+     "speech_samples": 3523360,
+     "state": "measured",
+     "version": 1
     }
    },
    "final_result": {
@@ -98,7 +109,7 @@
     "late_capture": true,
     "log_sequence": 3,
     "owner_id": "owner-2",
-    "previous_segment_id": "seg-3",
+    "previous_segment_id": "seg-4",
     "privacy_generation": 0,
     "projection": {
      "speech_seconds": 220.21,
@@ -146,7 +157,7 @@
    "final_result": null,
    "job_transitions": [
     "<1s ready",
-    "<1s leased",
+    "<30s leased",
     "<30s quarantined recovery:held",
     "<30s quarantined recovery:prepared",
     "<1m purged"
@@ -166,7 +177,7 @@
    "final_result": null,
    "job_transitions": [
     "<1s ready",
-    "<1s leased",
+    "<30s leased",
     "<30s quarantined recovery:held",
     "<30s quarantined recovery:prepared",
     "<1m purged"
@@ -174,7 +185,7 @@
    "owner": "owner-1",
    "paid_calls": 0,
    "recover_task_responses": [
-    "unfinished_at_end"
+    "held"
    ],
    "result_artifact": null,
    "result_transitions": []
@@ -186,7 +197,7 @@
    "final_result": null,
    "job_transitions": [
     "<1s ready",
-    "<1s leased",
+    "<30s leased",
     "<30s quarantined recovery:held",
     "<30s quarantined recovery:prepared",
     "<1m purged"
@@ -230,7 +241,7 @@
    "final_result": null,
    "job_transitions": [
     "<1s ready",
-    "<1s leased",
+    "<5s leased",
     "<30s quarantined recovery:held",
     "<30s quarantined recovery:prepared",
     "<5m quarantined recovery:running",
@@ -257,11 +268,15 @@
    "final_job": {
     "attempt": 1,
     "client_status": "completed",
+    "compute_decision": {
+     "outcome": "unattempted"
+    },
     "conversation_id": "conv-1",
     "duration_seconds": 494.07,
     "failure": "worker_failed",
     "fresh_capture": false,
     "late_capture": false,
+    "measured_held_vad_speech_seconds": 494.07,
     "merge_pending": false,
     "owner_id": "owner-2",
     "priority": 1,
@@ -291,14 +306,21 @@
     "worker_failure": {
      "reason": "empty_asr",
      "stage": "assemble_words"
+    },
+    "worker_vad_receipt": {
+     "captured_samples": 7905120,
+     "sample_rate_hz": 16000,
+     "speech_samples": 7905120,
+     "state": "measured",
+     "version": 1
     }
    },
    "final_result": {
     "conversation_id": "conv-1",
-    "late_capture": true,
-    "log_sequence": 2,
+    "late_capture": false,
+    "log_sequence": 1,
     "owner_id": "owner-2",
-    "previous_segment_id": "seg-4",
+    "previous_segment_id": null,
     "privacy_generation": 0,
     "projection": {
      "speech_seconds": 494.07,
@@ -313,7 +335,7 @@
    },
    "job_transitions": [
     "<1s ready",
-    "<1s leased",
+    "<30s leased",
     "<30s quarantined recovery:held",
     "<30s quarantined recovery:prepared",
     "<5m quarantined recovery:running",
@@ -345,11 +367,15 @@
    "final_job": {
     "attempt": 1,
     "client_status": "completed",
+    "compute_decision": {
+     "outcome": "unattempted"
+    },
     "conversation_id": "conv-2",
     "duration_seconds": 328.42,
     "failure": "worker_failed",
     "fresh_capture": true,
     "late_capture": false,
+    "measured_held_vad_speech_seconds": 328.42,
     "merge_pending": false,
     "owner_id": "owner-2",
     "priority": 1,
@@ -379,14 +405,21 @@
     "worker_failure": {
      "reason": "empty_asr",
      "stage": "assemble_words"
+    },
+    "worker_vad_receipt": {
+     "captured_samples": 5254720,
+     "sample_rate_hz": 16000,
+     "speech_samples": 5254720,
+     "state": "measured",
+     "version": 1
     }
    },
    "final_result": {
     "conversation_id": "conv-2",
     "late_capture": false,
-    "log_sequence": 1,
+    "log_sequence": 2,
     "owner_id": "owner-2",
-    "previous_segment_id": null,
+    "previous_segment_id": "seg-3",
     "privacy_generation": 0,
     "projection": {
      "speech_seconds": 328.42,
@@ -401,7 +434,7 @@
    },
    "job_transitions": [
     "<1s ready",
-    "<1s leased",
+    "<30s leased",
     "<30s quarantined recovery:held",
     "<30s quarantined recovery:prepared",
     "<5m quarantined recovery:running",
@@ -433,11 +466,15 @@
    "final_job": {
     "attempt": 1,
     "client_status": "completed",
+    "compute_decision": {
+     "outcome": "unattempted"
+    },
     "conversation_id": "conv-3",
     "duration_seconds": 547.49,
     "failure": "worker_failed",
     "fresh_capture": true,
     "late_capture": false,
+    "measured_held_vad_speech_seconds": 547.49,
     "merge_pending": false,
     "owner_id": "owner-3",
     "priority": 0,
@@ -467,6 +504,13 @@
     "worker_failure": {
      "reason": "empty_asr",
      "stage": "assemble_words"
+    },
+    "worker_vad_receipt": {
+     "captured_samples": 8759840,
+     "sample_rate_hz": 16000,
+     "speech_samples": 8759840,
+     "state": "measured",
+     "version": 1
     }
    },
    "final_result": {
@@ -489,7 +533,7 @@
    },
    "job_transitions": [
     "<1s ready",
-    "<1s leased",
+    "<5s leased",
     "<30s quarantined recovery:held",
     "<30s quarantined recovery:prepared",
     "<5m quarantined recovery:running",
@@ -546,7 +590,7 @@
    "final_result": null,
    "job_transitions": [
     "<1s ready",
-    "<1s leased",
+    "<30s leased",
     "<30s quarantined recovery:held",
     "<30s quarantined recovery:prepared",
     "<5m purged"
@@ -566,7 +610,7 @@
    "final_result": null,
    "job_transitions": [
     "<1s ready",
-    "<1s leased",
+    "<30s leased",
     "<30s quarantined recovery:held",
     "<30s quarantined recovery:prepared",
     "<5m quarantined recovery:running",
@@ -591,7 +635,7 @@
    "asr_empty": 12,
    "excluded_privacy_blocked": 2,
    "purged_jobs": 8,
-   "recovery_held": 2,
+   "recovery_held": 3,
    "recovery_recovered": 7,
    "recovery_tasks_enqueued": 12
   },
@@ -608,8 +652,8 @@
   "revision_drain": {
    "fire_and_forget:completed": 4,
    "fire_and_forget:stopped_at_horizon": 1,
-   "request_scoped:completed": 9,
-   "request_scoped:stopped_at_horizon": 3
+   "request_scoped:completed": 10,
+   "request_scoped:stopped_at_horizon": 2
   }
  },
  "uploads": [

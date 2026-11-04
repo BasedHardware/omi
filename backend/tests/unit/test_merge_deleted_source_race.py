@@ -137,3 +137,23 @@ def test_merge_renews_processing_lease_during_live_processing(monkeypatch):
     merge.perform_merge_async('u1', ['c1', 'c2'], reprocess=True)
 
     assert lease_renewed.is_set()
+
+
+def test_already_incorporated_source_is_rejected_at_admission_and_worker_recheck(monkeypatch):
+    sources = {
+        'c1': {'id': 'c1', 'status': 'completed', 'transcript_corrections_moved_to': 'retained-target'},
+        'c2': {'id': 'c2', 'status': 'completed'},
+    }
+    assert merge.validate_merge_compatibility(list(sources.values()))[0] is False
+    fail, create = _install(monkeypatch, sources)
+    merge.perform_merge_async('u1', ['c1', 'c2'])
+    fail.assert_called_once()
+    create.assert_not_called()
+
+
+def test_semantic_duplicate_hint_does_not_claim_content_was_already_merged():
+    rows = [
+        {'id': 'a', 'status': 'completed', 'dream_duplicate_of': 'similar-conversation'},
+        {'id': 'b', 'status': 'completed'},
+    ]
+    assert merge.validate_merge_compatibility(rows)[0] is True

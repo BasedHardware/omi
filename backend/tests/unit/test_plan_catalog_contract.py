@@ -30,6 +30,8 @@ from scripts.generate_plan_catalog import (
     validate_publishable_catalog,
 )
 
+pytestmark = pytest.mark.usefixtures('isolated_git_env')
+
 
 def test_catalog_is_valid_and_generated_projection_is_current():
     catalog = load_catalog()
@@ -297,3 +299,15 @@ def test_catalog_cli_keeps_structural_labels_without_echoing_values(capsys):
     assert 'missing legacy entitlement key allocations' in output
     assert 'nonempty price_id' in output
     assert 'private-token' not in output
+
+
+def test_currency_management_offer_must_match_recognized_billing_identity():
+    catalog = load_catalog()
+    catalog['management_currency_prices'][0]['plan_id'] = 'operator'
+    assert any('retained plan and interval' in error for error in validate_catalog(catalog))
+
+
+def test_currency_management_offer_cannot_be_duplicated():
+    catalog = load_catalog()
+    catalog['management_currency_prices'].append(dict(catalog['management_currency_prices'][0]))
+    assert any('duplicate management' in error for error in validate_catalog(catalog))

@@ -31,9 +31,11 @@ vi.mock('../../../lib/billing', async (importOriginal) => {
 
 const catalog = [
   {
-    id: 'operator',
-    title: 'Operator',
-    prices: [{ id: 'price_op_m', title: 'Monthly', price_string: '$49/mo', interval: 'month' }]
+    id: 'unlimited_v2',
+    title: 'Omi Pro',
+    prices: [
+      { id: 'price_omi_pro_m', title: 'Monthly', price_string: '$29.99/mo', interval: 'month' }
+    ]
   }
 ]
 
@@ -61,8 +63,8 @@ async function openMonthly(): Promise<void> {
       <PlanUsageTab />
     </SettingsSearchProvider>
   )
-  await waitFor(() => expect(screen.getByRole('button', { name: 'Select Pro' })).toBeTruthy())
-  fireEvent.click(screen.getByRole('button', { name: 'Select Pro' }))
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Select Omi Pro' })).toBeTruthy())
+  fireEvent.click(screen.getByRole('button', { name: 'Select Omi Pro' }))
   fireEvent.click(screen.getByRole('button', { name: /Monthly/ }))
 }
 

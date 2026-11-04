@@ -13,6 +13,7 @@ from models.memory_admission import (
     REQUIRED_PROCESSOR_VERSION,
 )
 from models.memory_evidence import MemoryEvidence
+from models.memory_apply import MemoryControlState
 from models.product_memory import MemoryItem
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.memory import canonical_consolidation as intake
@@ -76,7 +77,10 @@ def item(memory_id, *, required=True):
 def setup(monkeypatch, items):
     db = StrictFirestore()
     head = db.document(f'users/{UID}/memory_state/apply_control')
-    head.create({'head_commit_id': 'concurrent', 'commit_sequence': 42})
+    control = MemoryControlState(
+        uid=UID, head_commit_id='concurrent', commit_sequence=42, account_generation=0, source_generation=0
+    )
+    head.create(control.model_dump(mode='python'))
 
     def page(uid, *, db_client, cursor=None):
         assert uid == UID and db_client is db
@@ -84,7 +88,7 @@ def setup(monkeypatch, items):
         return [SimpleNamespace(to_dict=lambda row=row: row.model_dump(mode='python')) for row in selected[:100]]
 
     monkeypatch.setattr(intake, '_required_intake_page', page)
-    monkeypatch.setattr(intake, '_read_control_state', lambda *_, **__: object())
+    monkeypatch.setattr(intake, '_read_control_state', lambda *_, **__: control)
     return db, head
 
 

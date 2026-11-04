@@ -88,15 +88,14 @@ def build_reminder_test_app(monkeypatch, *, expose_effects=False):
 
         @app.get('/__test__/reminder-effects')
         def reminder_effects():
-            return {'fcm': transports.fcm, 'queued': transports.queued, 'created_ids': repo.created}
+            return {'fcm': transports.fcm, 'created_ids': repo.created}
 
         @app.post('/__test__/reminder-effects/reset')
         def reset_reminder_effects():
             transports.fcm.clear()
-            transports.queued.clear()
             return {'status': 'ok'}
 
-    return SimpleNamespace(app=app, repo=repo, fcm=transports.fcm, queued=transports.queued)
+    return SimpleNamespace(app=app, repo=repo, fcm=transports.fcm)
 
 
 @pytest.fixture
@@ -130,7 +129,6 @@ def test_status_only_patch_cancels_instead_of_rearming_an_open_dated_task(scenar
     assert response.json()['completed'] is False
     assert _armed_ids(scenario) == []
     assert _cancelled_ids(scenario) == ['task-1']
-    assert scenario.queued == []
 
 
 @pytest.mark.parametrize('status', ['cancelled', 'superseded'])
@@ -144,7 +142,6 @@ def test_terminal_post_never_arms_a_dated_task(scenario, status):
     assert response.json()['status'] == status
     assert response.json()['completed'] is False
     assert _armed_ids(scenario) == []
-    assert scenario.queued == []
 
 
 def test_mixed_batch_arms_only_saved_active_incomplete_dated_tasks(scenario):
@@ -162,7 +159,6 @@ def test_mixed_batch_arms_only_saved_active_incomplete_dated_tasks(scenario):
     assert response.status_code == 200
     assert response.json()['created_count'] == 5
     assert _armed_ids(scenario) == ['task-1']
-    assert [call['payload']['task_id'] for call in scenario.queued] == ['task-1']
 
 
 @pytest.mark.parametrize('status', ['cancelled', 'superseded'])
@@ -173,7 +169,6 @@ def test_keyed_create_replay_uses_saved_terminal_state_not_the_stale_active_requ
     task_id = first.json()['id']
     scenario.repo.rows[task_id].update({'status': status, 'completed': False, 'description': 'Saved terminal title'})
     scenario.fcm.clear()
-    scenario.queued.clear()
 
     replay = scenario.client.post('/v1/action-items', json=payload, headers={'Idempotency-Key': 'request-1'})
 
@@ -183,7 +178,6 @@ def test_keyed_create_replay_uses_saved_terminal_state_not_the_stale_active_requ
     assert replay.json()['status'] == status
     assert scenario.repo.created == [task_id]
     assert _armed_ids(scenario) == []
-    assert scenario.queued == []
 
 
 def test_saved_legacy_deleted_marker_prevents_replay_arming_even_with_active_status(scenario):
@@ -193,13 +187,11 @@ def test_saved_legacy_deleted_marker_prevents_replay_arming_even_with_active_sta
     task_id = first.json()['id']
     scenario.repo.rows[task_id]['deleted'] = True
     scenario.fcm.clear()
-    scenario.queued.clear()
 
     replay = scenario.client.post('/v1/action-items', json=payload, headers={'Idempotency-Key': 'request-1'})
 
     assert replay.status_code == 200
     assert _armed_ids(scenario) == []
-    assert scenario.queued == []
 
 
 @pytest.mark.parametrize('previous_status', ['cancelled', 'superseded'])
@@ -213,7 +205,6 @@ def test_explicit_reopen_to_active_schedules_both_transports(scenario, previous_
     assert response.json()['completed'] is False
     assert _armed_ids(scenario) == ['task-1']
     assert _cancelled_ids(scenario) == []
-    assert [call['payload']['task_id'] for call in scenario.queued] == ['task-1']
 
 
 @pytest.mark.parametrize('payload', [{'completed': True}, {'status': 'completed'}, {'clear_due_at': True}])
@@ -225,7 +216,6 @@ def test_existing_completion_and_clear_due_patch_behavior_still_cancels(scenario
     assert response.status_code == 200
     assert _armed_ids(scenario) == []
     assert _cancelled_ids(scenario) == ['task-1']
-    assert scenario.queued == []
 
 
 def test_completion_query_route_cancels_then_schedules_when_uncompleted(scenario):
@@ -235,7 +225,6 @@ def test_completion_query_route_cancels_then_schedules_when_uncompleted(scenario
     assert completed.status_code == 200
     assert completed.json()['completed'] is True
     assert _cancelled_ids(scenario) == ['task-1']
-    assert scenario.queued == []
     scenario.fcm.clear()
 
     reopened = scenario.client.patch('/v1/action-items/task-1/completed', params={'completed': 'false'})
@@ -244,7 +233,6 @@ def test_completion_query_route_cancels_then_schedules_when_uncompleted(scenario
     assert reopened.json()['completed'] is False
     assert _armed_ids(scenario) == ['task-1']
     assert _cancelled_ids(scenario) == []
-    assert [call['payload']['task_id'] for call in scenario.queued] == ['task-1']
 
 
 def test_rename_patch_rearms_the_reminder_with_the_new_title(scenario):
@@ -278,4 +266,3 @@ def test_rename_patch_never_arms_a_task_without_a_live_reminder(scenario, seed):
 
     assert response.status_code == 200
     assert _armed_ids(scenario) == []
-    assert scenario.queued == []

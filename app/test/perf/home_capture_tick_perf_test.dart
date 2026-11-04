@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:omi/services/live_preview/live_preview_controller.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
@@ -20,6 +21,11 @@ import 'package:omi/utils/enums.dart';
 enum _Live { idle, idleDeviceConnected, pendant, pendantPaused, pendantBatch, phone, phoneAfterPendant }
 
 class _Capture extends ChangeNotifier implements CaptureProvider {
+  @override
+  LivePreviewController? get livePreview => null;
+  @override
+  bool get localPreviewAdmitted => false;
+
   _Capture(this.live, {this.batch = false});
   @override
   LocalSttFailure? localSttFailure;
@@ -30,6 +36,10 @@ class _Capture extends ChangeNotifier implements CaptureProvider {
   int? offlineElapsedOverride;
   @override
   bool get pendantCaptureVerified => verified;
+  @override
+  bool get pendantCaptureActionRequired => false;
+  @override
+  bool get pendantReconnectInFlight => false;
 
   final _Live live;
   final bool failure = false;

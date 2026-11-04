@@ -8,11 +8,16 @@ from __future__ import annotations
 
 import math
 from datetime import datetime, timedelta, timezone
-from hashlib import sha256
 from typing import Any
 
 from google.cloud import firestore
+from prometheus_client import Counter
 
+from database.quiet_check_retirement import (
+    quiet_check_id,
+    stop_quiet_check as stop_quiet_check,
+    stop_quiet_check_for_conversation,
+)
 from database._client import get_firestore_client
 from database import conversation_finalization_jobs as jobs_db
 from models.conversation_continuity import continuation_timeout
@@ -23,6 +28,14 @@ QUIET_CHECK_KIND = 'listen_quiet_check'
 QUIET_CHECK_STATUS = 'waiting_quiet'
 QUIET_SOURCES = frozenset({'omi', 'phone'})
 
+ARM_OUTCOMES = Counter('listen_quiet_check_arm_total', 'Quiet-check arm attempts by durable outcome', ['outcome'])
+ARM_METRICS = {
+    'created': ARM_OUTCOMES.labels(outcome='created'),
+    'rearmed': ARM_OUTCOMES.labels(outcome='rearmed'),
+    'reused': ARM_OUTCOMES.labels(outcome='reused'),
+    'refused': ARM_OUTCOMES.labels(outcome='refused'),
+}
+
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
@@ -30,10 +43,6 @@ def _now() -> datetime:
 
 def _client(firestore_client: Any) -> Any:
     return firestore_client if firestore_client is not None else get_firestore_client()
-
-
-def quiet_check_id(uid: str, conversation_id: str) -> str:
-    return 'quiet-' + sha256(f'{uid}\0{conversation_id}'.encode()).hexdigest()
 
 
 def quiet_timeout(value: Any) -> float:
@@ -70,7 +79,9 @@ def arm_quiet_check(
         job = job_ref.get(transaction=transaction).to_dict() or {}
         if row.get('source') not in QUIET_SOURCES or row.get('status') != 'in_progress':
             return None
-        if any(row.get(key) for key in ('deleted', 'discarded', 'is_locked', 'finalization_job_id')):
+        if any(
+            row.get(key) for key in ('deleted', 'discarded', 'sync_merged_into', 'is_locked', 'finalization_job_id')
+        ):
             return None
         deadline = quiet_deadline(row, timeout, uid=uid)
         if deadline is None:
@@ -92,7 +103,7 @@ def arm_quiet_check(
                     },
                 )
                 transaction.update(job_ref, {'quiet_timeout_seconds': quiet_timeout(timeout)})
-            return job | {'job_id': job_id, 'quiet_timeout_seconds': quiet_timeout(timeout)}
+            return job | {'job_id': job_id, 'quiet_timeout_seconds': quiet_timeout(timeout), '_arm_outcome': 'reused'}
         generation = int(job.get('dispatch_generation') or 0) + 1
         updated = {
             'kind': QUIET_CHECK_KIND,
@@ -114,9 +125,14 @@ def arm_quiet_check(
             },
         )
         transaction.set(job_ref, updated)
-        return updated | {'job_id': job_id}
+        return updated | {'job_id': job_id, '_arm_outcome': 'rearmed' if job else 'created'}
 
-    return arm(client.transaction())
+    result = arm(client.transaction())
+    outcome = result.pop('_arm_outcome') if result is not None else 'refused'
+    ARM_METRICS[outcome].inc()
+    if result is None:
+        stop_quiet_check_for_conversation(uid, conversation_id, firestore_client=client)
+    return result
 
 
 def evaluate_quiet_check(job_id: str, generation: int, *, firestore_client: Any = None) -> dict[str, Any]:
@@ -201,29 +217,6 @@ def _evaluate_quiet_check(job_id: str, generation: int, *, firestore_client: Any
         }
 
     return evaluate(client.transaction())
-
-
-def stop_quiet_check(
-    job_id: str, generation: int, *, failure_code: str | None = None, firestore_client: Any = None
-) -> None:
-    """Retire the check; ``failure_code`` records why a still-owed row was given up on."""
-    client = _client(firestore_client)
-    ref = client.collection(jobs_db.FINALIZATION_JOBS_COLLECTION).document(job_id)
-
-    @firestore.transactional
-    def stop(transaction: Any) -> None:
-        job = ref.get(transaction=transaction).to_dict() or {}
-        if job.get('kind') == QUIET_CHECK_KIND and job.get('dispatch_generation') == generation:
-            updates: dict[str, Any] = {
-                'status': 'quiet_done',
-                'reconcile_after_at': firestore.DELETE_FIELD,
-                'updated_at': _now(),
-            }
-            if failure_code is not None:
-                updates['last_failure_code'] = failure_code
-            transaction.update(ref, updates)
-
-    stop(client.transaction())
 
 
 def ensure_quiet_check_progress(job_id: str, *, firestore_client: Any = None) -> bool:

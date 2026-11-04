@@ -287,6 +287,51 @@ def test_stub_modules_preserves_allowlisted_jiter_extension_with_existing_origin
     assert fake_package.jiter is fake_extension
 
 
+def test_stub_modules_keeps_zoneinfo_first_imported_inside_the_block(monkeypatch: pytest.MonkeyPatch):
+    zoneinfo_names = ("_zoneinfo", "zoneinfo", "zoneinfo._common", "zoneinfo._tzpath")
+    originals = {name: importlib.import_module(name) for name in zoneinfo_names}
+    for name in zoneinfo_names:
+        monkeypatch.delitem(sys.modules, name)
+
+    with stub_modules({}):
+        for name in zoneinfo_names:
+            sys.modules[name] = originals[name]
+
+    # Evicting _zoneinfo lets a later collection null the globals of the surviving
+    # ZoneInfo type, so the whole family stays loaded.
+    for name in zoneinfo_names:
+        assert sys.modules[name] is originals[name]
+    assert originals["_zoneinfo"].ZoneInfo("UTC").key == "UTC"
+
+
+def test_stub_modules_keeps_a_fresh_zoneinfo_reimported_inside_the_block(monkeypatch: pytest.MonkeyPatch):
+    # Re-import the pure-Python members only: a second _zoneinfo object would itself null
+    # the shared C globals once monkeypatch restores the original and drops it.
+    python_names = ("zoneinfo", "zoneinfo._common", "zoneinfo._tzpath")
+    originals = {name: importlib.import_module(name) for name in python_names}
+    for name in python_names:
+        monkeypatch.delitem(sys.modules, name)
+
+    with stub_modules({}):
+        fresh = importlib.import_module("zoneinfo")
+
+    assert fresh is not originals["zoneinfo"]
+    assert sys.modules["zoneinfo"] is fresh
+    for name in python_names:
+        assert sys.modules[name] is not originals[name]
+    assert fresh.ZoneInfo("UTC").key == "UTC"
+
+
+def test_stub_modules_still_evicts_a_fake_installed_under_a_zoneinfo_name(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.delitem(sys.modules, "_zoneinfo")
+    fake = ModuleType("_zoneinfo")
+
+    with stub_modules({}):
+        sys.modules["_zoneinfo"] = fake
+
+    assert "_zoneinfo" not in sys.modules
+
+
 @pytest.fixture
 def atom_keyword_index_with_top_level_typesense_only():
     module_path = Path(__file__).resolve().parents[2] / "utils" / "memory" / "atom_keyword_index.py"

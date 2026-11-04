@@ -188,6 +188,7 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
     assert preflight.direct_pusher_bindings(deployment) == expected
     assert {name: preflight.literal_pusher_values(deployment)[name] for name in literals} == literals
     assert literals == {
+        "RECORD_SEAL_OVERLAP_TRIM_ENABLED": "true",
         "LISTEN_QUIET_FINALIZATION_ENABLED": "true",
         "STT_CAP_DISPATCH_ENFORCEMENT": "false",
         "STT_CAP_DISPATCH_COHORT": "",
@@ -204,8 +205,7 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED": "false",
         "DEMAND_PROCESSING_UID_ALLOWLIST": "",
         "DEMAND_PROCESSING_PERCENT": "0",
-        "PLAYBACK_ON_DEMAND_ENABLED": "false",
-        "REPEAT_WORK_REVISION_ENABLED": "false",
+        "PLAYBACK_ON_DEMAND_ENABLED": "true",
         "REPEAT_WORK_LLM_VERSION": "2026-10-16-v1",
         "SYNC_POLL_BACKOFF_ENABLED": "false",
         "AUDIO_ARCHIVE_LIVE_ENABLED": "true",
@@ -217,6 +217,7 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED": "false",
         "AUDIO_ARCHIVE_PERCENT": "0",
         "AUDIO_ARCHIVE_STOP_PCM_PERCENT": "0",
+        "AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT": "0",
         "AUDIO_ARCHIVE_UID_ALLOWLIST": "vi7SA9ckQCe4ccobWNxlbdcNdC23",
         "BUCKET_AUDIO_DERIVED": "",
         "AUDIO_MERGE_WORKER_URL": "",
@@ -230,7 +231,7 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "OMI_SHAPED_AGENT_MODE": "on",
         "CAPTURE_GROUP_CONTAINMENT_MODE": "shadow",
         "CLIENT_SUMMARIES_AT_CAP_ENABLED": "true",
-        "FIRESTORE_READ_LEVERS": '{"action_items_page":100,"backfill_task_reads":100,"candidates_page":100,"canonical_statuses_dedupe":100,"deletion_marker_cache":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":25,"people_scan_dedupe":0,"queue_age_sample_budget":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100}',
+        "FIRESTORE_READ_LEVERS": '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":5,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":5,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":5,"usage_month_cache":0,"usage_month_total":0}',
         "FSR_QUEUE_AGE_PUBLISHER": "0",
         "FSR_QUEUE_AGE_LEASE_SECONDS": "120",
         "FSR_LEADER_LEASE_TTL_SECONDS": "0",
@@ -243,6 +244,7 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS": "30",
         "CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS": "30",
         "GOOGLE_CLOUD_PROJECT": "based-hardware-dev",
+        "HOSTED_LID_API_URL": "",
         "HOSTED_PARAKEET_API_URL": "http://parakeet.omiapi.com",
         "HOSTED_SPEAKER_EMBEDDING_API_URL": "http://172.16.48.49/diarizer",
         "LLM_GATEWAY_ACCOUNTING_ENABLED": "true",
@@ -265,7 +267,7 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "PROACTIVITY_V2_POSTHOG_TOKEN": public_token,
         "PROACTIVITY_V2_POSTHOG_HOST": "https://us.posthog.com",
         "STT_PRERECORDED_MODEL": "parakeet,modulate-velma-2",
-        "STT_SERVICE_MODELS": "modulate-velma-2,soniox,parakeet",
+        "STT_SERVICE_MODELS": "modulate-velma-2,soniox",
         "TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS": "1",
         "TRANSCRIPTION_SHADOW_ENABLED": "true",
         "TRANSCRIPTION_SHADOW_KILL_SWITCH": "false",
@@ -336,7 +338,7 @@ def test_prod_pusher_retires_self_hosted_deepgram_without_changing_cloud_policy(
         "DEEPGRAM_SELF_HOSTED_URL",
     ):
         assert retired not in literals
-    assert literals["STT_SERVICE_MODELS"] == "modulate-velma-2,soniox,parakeet"
+    assert literals["STT_SERVICE_MODELS"] == "modulate-velma-2,soniox"
 
 
 def test_dev_pusher_literal_policy_rejects_stale_deepgram_model(preflight: SimpleNamespace):
@@ -347,7 +349,7 @@ def test_dev_pusher_literal_policy_rejects_stale_deepgram_model(preflight: Simpl
 
     assert preflight.validate_dev_pusher_binding_contract(deployment) == [
         "dev pusher literal contract mismatch for STT_SERVICE_MODELS: "
-        "expected 'modulate-velma-2,soniox,parakeet', got 'modulate-velma-2'"
+        "expected 'modulate-velma-2,soniox', got 'modulate-velma-2'"
     ]
 
 

@@ -1,3 +1,4 @@
+import 'sync_upload_refusal.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
@@ -18,9 +19,13 @@ import 'package:omi/services/capture/empty_recording_notice.dart';
 import 'package:omi/services/integrations/google_calendar_service.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/conversations/home_member_fallback.dart';
 import 'package:omi/utils/off_ui_isolate.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/wal_sync_upload.dart';
+
+part 'sync_job_fetch.dart';
+part 'conversation_home_list.dart';
 
 /// Whether a non-200 response from POST /v1/conversations (process in-progress
 /// conversation) is a benign race rather than a failure worth crash-reporting.
@@ -91,6 +96,8 @@ Future<List<ServerConversation>> getConversations({
 // (no response / non-200, e.g. auth token not ready right after a cold
 // start) — which callers must NOT treat as "the user has no conversations".
 Future<({List<ServerConversation> items, bool ok, bool truncated})> getConversationsResult({
+  Map<String, List<ServerConversation>> heldHomeEpisodes = const {},
+  void Function(int)? onStorageCount,
   int limit = 50,
   int offset = 0,
   List<ConversationStatus> statuses = const [],
@@ -112,7 +119,18 @@ Future<({List<ServerConversation> items, bool ok, bool truncated})> getConversat
     starred: starred,
   );
 
-  var response = await makeApiCall(url: url, headers: {}, method: 'GET', body: '');
+  final held = <String, ServerConversation>{};
+  final pairs = <String>[];
+  for (final entry in heldHomeEpisodes.entries) {
+    for (final member in entry.value) {
+      if (pairs.length == 50) break;
+      pairs.add('${entry.key}:${member.id}');
+      held[member.id] = member;
+    }
+    if (pairs.length == 50) break;
+  }
+  var response = await makeApiCall(
+      url: url, headers: {if (pairs.isNotEmpty) 'X-Omi-Home-Episode-Ids': pairs.join(',')}, method: 'GET', body: '');
   if (response == null) return (items: <ServerConversation>[], ok: false, truncated: false);
   if (response.statusCode == 200) {
     final bodyBytes = response.bodyBytes;
@@ -123,8 +141,13 @@ Future<({List<ServerConversation> items, bool ok, bool truncated})> getConversat
         size: bodyBytes.length,
         threshold: conversationListBackgroundParseBytes,
         debugName: 'conversation_list_parse');
-    Logger.debug('getConversations length: ${memories.length}');
-    return (items: memories, ok: true, truncated: isOmiListTruncated(response));
+    onStorageCount?.call(int.tryParse(response.headers['x-omi-conversation-page-size'] ?? '') ?? memories.length);
+    // Preserve an exact local fallback for each server omission. If a later
+    // overlay refresh drops this episode, its members can still render on Home.
+    final retained =
+        retainSuppressedHomeMembers(memories, held, (response.headers['x-omi-home-suppressed-ids'] ?? '').split(','));
+    Logger.debug('getConversations length: ${retained.length}');
+    return (items: retained, ok: true, truncated: isOmiListTruncated(response));
   }
   Logger.debug('getConversations error ${response.statusCode}');
   return (items: <ServerConversation>[], ok: false, truncated: false);
@@ -399,6 +422,41 @@ Future<({ServerConversation? item, bool ok})> getConversationByIdResult(String c
   return (item: null, ok: false);
 }
 
+/// Per local day in [tz], how many noise/media clips the server folded away from Home
+/// (`GET /v1/conversations/hidden-noise-counts`). Null when the request failed: the caller keeps
+/// what it showed, never reading a failure as "nothing hidden".
+Future<Map<DateTime, int>?> getHiddenNoiseCounts({required DateTime start, required DateTime end, String? tz}) async {
+  final base = Env.apiBaseUrl ?? '';
+  final root = base.endsWith('/') ? base : '$base/';
+  var url = '${root}v1/conversations/hidden-noise-counts'
+      '?start_date=${Uri.encodeQueryComponent(start.toUtc().toIso8601String())}'
+      '&end_date=${Uri.encodeQueryComponent(end.toUtc().toIso8601String())}';
+  if (tz != null && tz.isNotEmpty) url += '&tz=${Uri.encodeQueryComponent(tz)}';
+  final response = await makeApiCall(url: url, headers: {}, method: 'GET', body: '');
+  if (response == null || response.statusCode != 200) return null;
+  try {
+    // omi-perf-allow: history-json-on-ui -- at most 31 day rows, independent of history size
+    return parseHiddenNoiseCounts(jsonDecode(response.body));
+  } catch (_) {
+    return null;
+  }
+}
+
+/// `{"days": [{"date": "2026-10-27", "count": 5}, ...]}` → local day keys.
+Map<DateTime, int> parseHiddenNoiseCounts(Object? body) {
+  final days = body is Map ? body['days'] : null;
+  return {
+    if (days is List)
+      for (final day in days)
+        if (day is Map && day['date'] is String && day['count'] is int && (day['count'] as int) > 0)
+          DateTime.parse(day['date'] as String).let((d) => DateTime(d.year, d.month, d.day)): day['count'] as int,
+  };
+}
+
+extension _Let<T> on T {
+  R let<R>(R Function(T) f) => f(this);
+}
+
 Future<ServerConversation?> getConversationById(String conversationId) async {
   return (await getConversationByIdResult(conversationId)).item;
 }
@@ -451,11 +509,10 @@ class ConversationApi {
     DateTime? endDate,
     String? folderId,
     bool? starred,
-  }) async {
-    final sent = await executeApi<String>(
-      request: ApiRequest(
-        url: conversationCollectionUrl(
-          _baseUrl,
+    Map<String, List<ServerConversation>> heldHomeEpisodes = const {},
+    void Function(int)? onStorageCount,
+  }) =>
+      _listHomeConversations(this,
           limit: limit,
           offset: offset,
           statuses: statuses,
@@ -464,20 +521,8 @@ class ConversationApi {
           endDate: endDate,
           folderId: folderId,
           starred: starred,
-        ),
-        method: 'GET',
-      ),
-      send: _send,
-      decode: (body) => body,
-    );
-    return switch (sent) {
-      ApiFailure(:final problem) => ApiFailure(problem),
-      ApiSuccess(:final data, :final truncated) => switch (await _decodeOffUi(data, conversationRowsDecoder)) {
-          ApiSuccess(:final data, :final rejectedRows) => _rows(data, rejectedRows, truncated),
-          ApiFailure(:final problem) => ApiFailure(problem),
-        },
-    };
-  }
+          heldHomeEpisodes: heldHomeEpisodes,
+          onStorageCount: onStorageCount);
 
   static ApiResult<List<ServerConversation>> _rows(List<ServerConversation> rows, int rejectedRows, bool truncated) {
     // decodeApiRows' partial-decode report, raised here because the decode may run on another isolate.
@@ -786,8 +831,15 @@ class UploadFilesResult {
 class SyncUploadHttpException implements Exception {
   final int statusCode;
   final String message;
+  final String? reasonCode;
 
-  const SyncUploadHttpException(this.statusCode, this.message);
+  /// The server's `Retry-After` (delta-seconds) on a 5xx, when provided. The
+  /// sync dispatch and ledger-fence refusals carry one so the client pauses
+  /// instead of failing every remaining batch on the same gate; null when the
+  /// server gave no pacing guidance (e.g. platform-generated 503s).
+  final int? retryAfterSeconds;
+
+  const SyncUploadHttpException(this.statusCode, this.message, {this.retryAfterSeconds, this.reasonCode});
 
   @override
   String toString() => 'SyncUploadHttpException(status=$statusCode): $message';
@@ -871,6 +923,21 @@ bool isSyncRecoveryWindowExceededResponse(http.Response response) {
   }
 }
 
+/// Thrown when the server refuses an upload because its filename carries a
+/// capture time it will not accept (HTTP 400 `invalid_capture_time`): before
+/// 2024-01-01 or in the future. The audio is fine — only its claimed time is
+/// not. The app never deletes or renames the file for this: the row parks on
+/// attention with the reason kept, and a retry resends it unchanged, which a
+/// later server-side widening of the clock window can still accept.
+class SyncInvalidCaptureTimeException implements Exception {
+  final String? serverReason;
+
+  const SyncInvalidCaptureTimeException({this.serverReason});
+
+  @override
+  String toString() => 'SyncInvalidCaptureTimeException(reason: $serverReason)';
+}
+
 /// A synchronous upload response that durably reached the server but did not
 /// transcribe every segment. Callers keep the local WAL and retry it; the
 /// backend deduplicates any segments that already succeeded.
@@ -906,7 +973,9 @@ int? _parseRetryAfterSeconds(http.Response response) {
 SyncRateLimitKind syncRateLimitKindForResponse(http.Response response) {
   final reason = syncRateLimitReasonCode(response);
   if (reason == 'fair_use') return SyncRateLimitKind.fairUse;
-  if (reason == 'backfill_capacity' || reason == 'backfill_paced') return SyncRateLimitKind.backendCapacity;
+  if (reason == 'backfill_capacity' || reason == 'backfill_paced' || reason == 'dispatch_hold') {
+    return SyncRateLimitKind.backendCapacity;
+  }
   return SyncRateLimitKind.edgeThrottle;
 }
 
@@ -917,15 +986,15 @@ String? syncRateLimitReasonCode(http.Response response) {
   return reason;
 }
 
-/// Historical-recovery pacing the backend asks the client to wait out.
+/// Account-scoped admission pacing the backend asks the client to wait out.
 ///
-/// One predicate for the upload response and the job reconciler. `backfill_paced`
-/// and `backfill_capacity` stay pending and retry on Retry-After; they are not
-/// a second failure taxonomy.
-bool isPacedBackfillReasonCode(String? reasonCode) {
+/// These reasons stay pending and retry on Retry-After without spending a WAL
+/// retry; they are not a second failure taxonomy.
+bool isPacedSyncAdmissionReasonCode(String? reasonCode) {
   switch (reasonCode?.trim().toLowerCase()) {
     case 'backfill_paced':
     case 'backfill_capacity':
+    case 'dispatch_hold':
       return true;
     default:
       return false;
@@ -935,11 +1004,11 @@ bool isPacedBackfillReasonCode(String? reasonCode) {
 /// Upload responses that are admission throttles rather than processing failures.
 ///
 /// Every 429 is a throttle. A 503 is a throttle only when the backend scopes it
-/// with `backfill_capacity`. An unscoped 503, including job-status finalization
-/// retry and `sync_dispatch_unavailable`, is not this predicate.
+/// with a recognized admission reason. Unknown 503 reasons remain generic,
+/// including job-status finalization retry and `sync_dispatch_unavailable`.
 bool isSyncUploadRateLimitResponse(http.Response response) {
   if (response.statusCode == 429) return true;
-  return response.statusCode == 503 && syncRateLimitReasonCode(response) == 'backfill_capacity';
+  return response.statusCode == 503 && isPacedSyncAdmissionReasonCode(syncRateLimitReasonCode(response));
 }
 
 /// The server still owns these bytes; wait without spending recording retries.
@@ -1032,11 +1101,24 @@ Future<UploadFilesResult> uploadLocalFilesV2(
     return UploadFilesResult.queued(start.jobId, pollAfterMs: start.pollAfterMs);
   }
   if (response.statusCode == 400) {
-    throw SyncUploadHttpException(response.statusCode, 'Audio file could not be processed by server');
+    final refusal = switch (decodeSyncUploadRefusal(response)) {
+      ApiSuccess(:final data) => data,
+      ApiFailure() => const SyncUploadRefusalBody(),
+    };
+    if (refusal.invalidCaptureTime) {
+      throw const SyncInvalidCaptureTimeException(serverReason: 'invalid_capture_time');
+    }
+    // Other 400s stay terminal, but the server's own reason travels with the
+    // refusal instead of being dropped at the HTTP boundary.
+    throw SyncUploadHttpException(
+      response.statusCode,
+      'Audio file could not be processed by server',
+      reasonCode: refusal.reasonCode,
+    );
   } else if (response.statusCode == 401 || response.statusCode == 403) {
     throw SyncUploadHttpException(response.statusCode, 'Upload authentication failed');
   } else if (response.statusCode == 413) {
-    throw SyncUploadHttpException(response.statusCode, 'Audio file is too large to upload');
+    throw SyncUploadHttpException(response.statusCode, 'Audio file is too large to upload', reasonCode: 'too_large');
   } else if (isSyncContentInProgressResponse(response)) {
     final existingJob = syncContentInProgressResult(response);
     if (existingJob != null) return existingJob;
@@ -1055,7 +1137,11 @@ Future<UploadFilesResult> uploadLocalFilesV2(
   } else if (isSyncRecoveryWindowExceededResponse(response)) {
     throw const SyncRecoveryWindowExceededException();
   } else if (response.statusCode >= 500) {
-    throw SyncUploadHttpException(response.statusCode, 'Server is temporarily unavailable');
+    throw SyncUploadHttpException(
+      response.statusCode,
+      'Server is temporarily unavailable',
+      retryAfterSeconds: _parseRetryAfterSeconds(response),
+    );
   }
   throw SyncUploadHttpException(response.statusCode, 'Upload failed unexpectedly');
 }
@@ -1082,16 +1168,6 @@ SyncJobFetchOutcome syncJobFetchOutcomeForStatusCode(int statusCode) {
   if (statusCode == 404 || statusCode == 403) return SyncJobFetchOutcome.notFound;
   if (statusCode != 200) return SyncJobFetchOutcome.transient;
   return SyncJobFetchOutcome.ok;
-}
-
-class SyncJobFetch {
-  final SyncJobFetchOutcome outcome;
-  final SyncJobStatusResponse? status;
-  final SyncRateLimitedException? rateLimit;
-  const SyncJobFetch(this.outcome, [this.status]) : rateLimit = null;
-  const SyncJobFetch.throttled(this.rateLimit)
-      : outcome = SyncJobFetchOutcome.throttled,
-        status = null;
 }
 
 /// Single GET of a sync job's status — no polling loop. The reconciler owns
@@ -1335,11 +1411,13 @@ class MergeConversationsResponse {
   final String message;
   final String? warning;
   final List<String> conversationIds;
+  final String? mergedConversationId;
 
   MergeConversationsResponse({
     required this.status,
     required this.message,
     this.warning,
+    this.mergedConversationId,
     required this.conversationIds,
   });
 
@@ -1352,6 +1430,7 @@ class MergeConversationsResponse {
       status: generated.status,
       message: generated.message,
       warning: generated.warning,
+      mergedConversationId: generated.mergedConversationId,
       conversationIds: generated.conversationIds,
     );
   }

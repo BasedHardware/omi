@@ -25,6 +25,11 @@ FRESH = NOW - timedelta(hours=1)
 ANCIENT = NOW - timedelta(hours=20)
 
 
+@pytest.fixture(autouse=True)
+def _allow_test_users_through_deletion_fence(monkeypatch):
+    monkeypatch.setattr(sweep, 'account_deletion_blocks_user_work', lambda _uid: False)
+
+
 def test_api_reconciler_runs_the_fenced_selfheal_primitive_in_heal_mode(monkeypatch):
     calls = []
     monkeypatch.setattr(finalization_service, 'is_listen_finalization_dispatch_enabled', lambda: True)
@@ -232,6 +237,17 @@ def test_heal_enqueues_and_records_pending_verification(capsys):
     assert advance['pending'] == [{'uid': 'u1', 'conversation_id': 'c1', 'job_id': 'job-c1', 'admitted_at': NOW}]
     enqueued = [e for e in _stdout_events(capsys) if e.get('outcome') == 'enqueued']
     assert len(enqueued) == 1 and enqueued[0]['uid'] == 'u1'
+
+
+def test_pending_deletion_user_is_skipped_before_recovery_admission(monkeypatch):
+    monkeypatch.setattr(sweep, 'account_deletion_blocks_user_work', lambda _uid: True)
+    state, kwargs = _harness([_row('u1', 'c1', _eligible_data())], mode='heal')
+
+    counters = sweep.run_selfheal_tick(**kwargs)
+
+    assert counters['enqueued'] == 0
+    assert counters['skipped'] == 1
+    assert state['finalization_calls'] == []
 
 
 def test_heal_caps_admissions_at_ten_per_tick():
@@ -973,3 +989,10 @@ def test_fast_recovery_pages_past_a_refused_lease_prefix():
     assert second['enqueued'] == 1
     assert [call['conversation_id'] for call in state['finalization_calls']] == ['expired']
     assert state['cursor']['resume_after_path'] is None
+
+
+def test_scan_uses_the_same_cutoff_as_recovery_admission():
+    state, kwargs = _harness([_row('u1', 'c1', _eligible_data())], mode='heal')
+    sweep.run_selfheal_tick(**kwargs)
+    assert state['scan_calls'][0]['finished_before'] == NOW - sweep.STALE_AFTER
+    assert state['finalization_calls'][0]['recovery_cutoff'] == state['scan_calls'][0]['finished_before']

@@ -37,8 +37,13 @@ Unhandled exceptions retain their validated trace IDs for the outer Uvicorn log
 after request context resets. The requested level also constrains named loggers.
 Cloud Run uses platform request logs. GKE suppresses successful health/metrics
 probes and uses LB logs for diarizer, nllb, parakeet, pusher and vad. Keep general
-access records for listen, llm-gateway and diarizer-batch until actual route
-coverage is proven. A local project ID alone does not suppress general access
+access records for llm-gateway and diarizer-batch until actual route
+coverage is proven. listen moved to `access_policy='platform'` on 2026-10-26:
+its uvicorn access records had grown to ~21M INFO lines/day (~23 GiB/day billed,
+the fleet's largest single stdout source) behind the fronting LB, while per-route
+debugging rides the LB request records and omi_* metrics; revert the
+`main.py` call if a route needs in-pod access lines again. A local project ID
+alone does not suppress general access
 records. Exceptions and ERROR records are never suppressed by noise filters.
 
 ## Consumer admission
@@ -104,8 +109,9 @@ through the same workflow using the recorded previous source SHA.
 
 NLLB records the currently serving immutable digest in the deployment annotation
 `omi.me/previous-image-digest` before each normal workflow rollout. Normal releases deploy the resolved candidate
-digest; retries of an already-serving candidate retain the original rollback receipt. To recover,
-dispatch the same `gcp_nllb_translation.yml` workflow with `environment=prod` and
+digest; retries of an already-serving candidate retain the original rollback receipt. Prod NLLB
+is retired (2026-11-02; translation runs on Luna), so this path is development only. To recover,
+dispatch the same `gcp_nllb_translation.yml` workflow with `environment=development` and
 `rollback_digest=<recorded sha256 digest>`. This uses protected-main tooling,
 validates the receipt and registry artifact, and replays the existing image without
 rebuilding historical sources that predate the runtime-image registry. Rollback

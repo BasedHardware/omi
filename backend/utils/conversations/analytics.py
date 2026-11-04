@@ -6,29 +6,11 @@ pure (no I/O) so it is fully unit-tested; the router supplies the conversation a
 person_id -> name map.
 """
 
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional
+
+from utils.speakers.display import display_participants
 
 from models.conversation import ConversationAnalytics, SpeakerAnalytics
-from utils.speaker_display import SpeakerLabeler, voice_key
-
-
-def _speaker_identity(seg, names: Dict[str, str], labeler: SpeakerLabeler) -> Tuple[str, str, Optional[str], bool]:
-    """Return (grouping key, display label, person_id, is_user) for a segment.
-
-    The account owner's segments group under "You"; identified people group by their
-    person_id (resolved to a name); everyone else groups by the diarization speaker
-    id but is displayed with a dense per-conversation label, never the raw id.
-    """
-    if getattr(seg, 'is_user', False):
-        return ('user', 'You', None, True)
-    person_id = getattr(seg, 'person_id', None)
-    if person_id:
-        return (f'person:{person_id}', names.get(person_id) or 'Unknown', person_id, False)
-    speaker_id = getattr(seg, 'speaker_id', None)
-    if speaker_id is not None:
-        return (f'speaker:{speaker_id}', labeler.label(voice_key(seg)), None, False)
-    speaker = getattr(seg, 'speaker', None) or 'SPEAKER_00'
-    return (f'speaker:{speaker}', labeler.label(('speaker', str(speaker))), None, False)
 
 
 def build_conversation_analytics(conversation, names: Dict[str, str]) -> ConversationAnalytics:
@@ -40,9 +22,13 @@ def build_conversation_analytics(conversation, names: Dict[str, str]) -> Convers
     person_ids: Dict[str, Optional[str]] = {}
     is_user_flags: Dict[str, bool] = {}
 
-    labeler = SpeakerLabeler()
-    for seg in getattr(conversation, 'transcript_segments', None) or []:
-        key, label, person_id, is_user = _speaker_identity(seg, names, labeler)
+    segments = getattr(conversation, 'transcript_segments', None) or []
+    display = display_participants(segments, names=names, resolution=getattr(conversation, 'speaker_resolution', None))
+    for seg in segments:
+        participant = display.for_segment(seg)
+        person_id, is_user = getattr(seg, 'person_id', None), getattr(seg, 'is_user', False)
+        key = 'user' if is_user else ('person:' + person_id if person_id else participant.key)
+        label = participant.label
         start = getattr(seg, 'start', 0) or 0
         end = getattr(seg, 'end', 0) or 0
         text = getattr(seg, 'text', '') or ''
@@ -86,6 +72,16 @@ def build_conversation_analytics(conversation, names: Dict[str, str]) -> Convers
         total_seconds=round(total_talk, 1),
         total_words=total_words,
         words_per_minute=overall_wpm,
-        speaker_count=len(speakers),
+        speaker_count=len(
+            {
+                (
+                    "user"
+                    if seg.is_user
+                    else ("person:" + seg.person_id if seg.person_id else display.for_segment(seg).key)
+                )
+                for seg in segments
+                if display.for_segment(seg).countable
+            }
+        ),
         speakers=speakers,
     )

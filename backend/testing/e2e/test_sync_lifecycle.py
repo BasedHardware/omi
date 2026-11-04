@@ -157,7 +157,6 @@ def _patch_sync_pipeline(
     monkeypatch.setattr(sync_router, "has_transcription_credits", lambda uid: True)
     monkeypatch.setattr(sync_pipeline, "build_person_embeddings_cache", lambda uid: {})
     monkeypatch.setattr(sync_pipeline, "get_syncing_file_temporal_signed_url", lambda path: path)
-    monkeypatch.setattr(sync_pipeline, "schedule_syncing_temporal_file_deletion", lambda path: None)
     monkeypatch.setattr(sync_pipeline, "prerecorded", fake_prerecorded)
     monkeypatch.setattr(sync_pipeline, "postprocess_words", fake_postprocess_words)
     monkeypatch.setattr("utils.conversations.lifecycle.ingest_sync_conversation", fake_ingest_sync_conversation)

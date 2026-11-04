@@ -8,7 +8,13 @@ import os
 
 from config.rollout_cohorts import rollout_cohort_members
 from typing import Callable, TypeVar
-from config.stt_provider_policy import PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL, normalized_stt_language
+from config.stt_provider_policy import (
+    MODULATE_SUPPORTED_LANGUAGES,
+    PARAKEET_MODEL_BY_SURFACE,
+    PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL,
+    STTServingSurface,
+    normalized_stt_language,
+)
 
 
 class Priority(IntEnum):
@@ -19,6 +25,15 @@ class Priority(IntEnum):
 
 # David's fresh bar (2026-10-20): capture lag at most 10 min at upload.
 FRESH_CAPTURE_LAG_SECONDS = 600.0
+
+
+def projection_hold_recovery_enabled() -> bool:
+    """Ship-on hold age gate and automatic redrive; false restores old behavior."""
+    return rollout_default_on(
+        'BATCH_PIPELINE_PROJECTION_HOLD_RECOVERY_ENABLED',
+        os.getenv('BATCH_PIPELINE_PROJECTION_HOLD_RECOVERY_ENABLED', 'true').strip().lower() != 'false',
+    )
+
 
 T = TypeVar('T')
 
@@ -55,6 +70,44 @@ def fresh_gpu_priority_enabled() -> bool:
     )
 
 
+def language_inheritance_enabled() -> bool:
+    """Default-on context inheritance; false restores per-piece detection input."""
+    return rollout_default_on(
+        'BATCH_PIPELINE_LANGUAGE_INHERITANCE_ENABLED',
+        os.getenv('BATCH_PIPELINE_LANGUAGE_INHERITANCE_ENABLED', 'true').strip().lower() != 'false',
+    )
+
+
+def language_eligibility_enabled() -> bool:
+    """Kill switch (unset is on; only ``false`` disables it).
+
+    While legacy sync is on, a new sync upload whose conversation-or-user language
+    is a named language the batch Parakeet model cannot serve stays on legacy sync
+    instead of entering batch custody, where the worker language guard would
+    quarantine it. Blank, ``multi`` and unknown languages are unaffected.
+    ``false`` restores admitting those uploads to batch.
+    """
+    return rollout_default_on(
+        'BATCH_PIPELINE_LANGUAGE_ELIGIBILITY_ENABLED',
+        os.getenv('BATCH_PIPELINE_LANGUAGE_ELIGIBILITY_ENABLED', 'true').strip().lower() != 'false',
+    )
+
+
+def known_unsupported_batch_language(language: str | None) -> bool:
+    """True only for a recognized language code the batch Parakeet model cannot serve.
+
+    Lead ruling 304254: not English-only admission. Blank, ``multi``, ``auto``,
+    ``und`` and any unrecognized value are unknown, never "known unsupported";
+    only a code an STT provider recognizes (the stored-preference vocabulary)
+    that the prerecorded Parakeet model does not support qualifies.
+    """
+    if not language_eligibility_enabled() or not isinstance(language, str):
+        return False
+    code = normalized_stt_language(language.strip())
+    parakeet = PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL[PARAKEET_MODEL_BY_SURFACE[STTServingSurface.PRERECORDED]]
+    return code in MODULATE_SUPPORTED_LANGUAGES and code not in parakeet
+
+
 def priority_for(lane: str, recording_age_seconds: float | None) -> Priority:
     if lane == 'fresh':
         if (
@@ -87,6 +140,12 @@ def live_record_admission_enabled() -> bool:
     return resolve_batch_policy('').live_admission_enabled
 
 
+def require_record_protocol_ready() -> None:
+    """One-time producer protocol cutover; never expires a pending obligation."""
+    if os.getenv('BATCH_PIPELINE_RECORD_PROTOCOL_READY', 'false').strip().lower() != 'true':
+        raise ValueError('record protocol cutover barrier closed')
+
+
 def live_record_enabled_for(owner_id: str) -> bool:
     from config.policy import resolve_batch_policy
 
@@ -115,7 +174,37 @@ def shared_live_enabled() -> bool:
     return resolve_stage_policy('', 'scheduler').shared_live
 
 
+def control_candidate_fanout(fanout: int | None = None) -> int:
+    """Bound hint reads; 64 restores the previous candidate query width."""
+    try:
+        value = int(os.getenv('BATCH_CONTROL_CANDIDATE_FANOUT', '16') if fanout is None else fanout)
+    except ValueError:
+        return 16
+    return min(64, max(1, value))
+
+
+def admission_parallel_calls_enabled() -> bool:
+    return os.getenv('BATCH_ADMISSION_PARALLEL_CALLS', 'true').strip().lower() != 'false'
+
+
+def idle_poll_max_seconds() -> float:
+    """Bound empty-lane backoff; 2 restores fixed polling."""
+    try:
+        value = float(os.getenv('BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS', '10'))
+    except ValueError:
+        return 10.0
+    return min(30.0, max(2.0, value)) if math.isfinite(value) else 10.0
+
+
 SCHEDULER_SHARDS = 64
+
+
+def shard_spread_enabled() -> bool:
+    return os.getenv('BATCH_SHARD_SPREAD_ENABLED', 'true').strip().lower() != 'false'
+
+
+def pull_multi_lease_enabled() -> bool:
+    return os.getenv('BATCH_PULL_MULTI_LEASE_ENABLED', 'true').strip().lower() != 'false'
 
 
 def scheduler_control_key(hashed_owner: str) -> str:
@@ -182,6 +271,14 @@ def projection_contention_enabled() -> bool:
     return resolve_stage_policy('', 'projection').projection_contention
 
 
+def contention_retry_enabled() -> bool:
+    """Retry atomic batch Firestore contention by default; false is the kill switch."""
+    return rollout_default_on(
+        'BATCH_PIPELINE_CONTENTION_RETRY_ENABLED',
+        os.getenv('BATCH_PIPELINE_CONTENTION_RETRY_ENABLED', 'true').strip().lower() != 'false',
+    )
+
+
 def speech_empty_multilingual_enabled() -> bool:
     from config.policy import resolve_stage_policy
 
@@ -237,8 +334,9 @@ def long_speech_handoff_enabled() -> bool:
 def second_multilingual_enabled() -> bool:
     """Kill switch (unset is on; only ``false`` disables it).
 
-    A long-speech handoff unit whose Modulate recovery came back valid-empty gets
-    one Deepgram multilingual call inside the same paid recovery intent.
+    A held unit whose Modulate recovery came back valid-empty gets one Soniox
+    multilingual call inside the same paid recovery intent. Language-guarded
+    recovery retains its separate switch and one-minute bound.
     """
     return rollout_default_on(
         'BATCH_PIPELINE_SECOND_MULTILINGUAL_ENABLED',
@@ -252,6 +350,29 @@ def worker_validation_disposition_enabled() -> bool:
         'BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED',
         os.getenv('BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED', 'true').strip().lower() == 'true',
     )
+
+
+STRICT_VAD_SHADOW_PERCENT_DEFAULT = 10.0
+
+
+def strict_vad_shadow_percent() -> float:
+    """Sampled share of the CPU strict-VAD shadow; 0 disables, 100 restores full."""
+    try:
+        value = float(os.getenv('BATCH_PIPELINE_STRICT_VAD_SHADOW_PERCENT', '10').strip())
+    except ValueError:
+        return STRICT_VAD_SHADOW_PERCENT_DEFAULT
+    if not math.isfinite(value):
+        return STRICT_VAD_SHADOW_PERCENT_DEFAULT
+    return min(100.0, max(0.0, value))
+
+
+def strict_vad_shadow_sampled(segment_id: str) -> bool:
+    """Deterministic by segment hash: a re-leased unit samples identically."""
+    if not segment_id:
+        return False
+    from config.policy import cohort_bucket
+
+    return cohort_bucket(segment_id, '') < strict_vad_shadow_percent()
 
 
 def head_priority_enabled() -> bool:
@@ -307,6 +428,59 @@ def recovery_dispatch_interval_seconds() -> float:
     return value if 1 <= value <= RECOVERY_DISPATCH_INTERVAL_MAX else RECOVERY_DISPATCH_INTERVAL_DEFAULT
 
 
+SERVING_METRICS_MIN_REFRESH_DEFAULT = 30.0
+SERVING_METRICS_MIN_REFRESH_MAX = 60.0
+
+
+def serving_metrics_min_refresh_seconds() -> float:
+    """Ship-on: one queue-gauge refresh per serving instance per interval.
+
+    Every serving instance refreshed the same global gauges on each 20 s
+    supervisor tick and each scrape; the policy-hold walk in ``oldest`` made
+    that about 1.6M Firestore reads/h at 28 instances. The guard calls the
+    sample blind after 120 s, so the cap stays at 60 s. ``off`` or a value
+    <= 0 is the kill switch: refresh on every call. Malformed or out-of-range
+    values keep the default.
+    """
+    raw = os.getenv('BATCH_PIPELINE_SERVING_METRICS_MIN_REFRESH_SECONDS', '').strip().lower()
+    if not raw:
+        return SERVING_METRICS_MIN_REFRESH_DEFAULT
+    if raw == 'off':
+        return 0.0
+    try:
+        value = float(raw)
+    except ValueError:
+        return SERVING_METRICS_MIN_REFRESH_DEFAULT
+    if value <= 0:
+        return 0.0
+    return value if 1 <= value <= SERVING_METRICS_MIN_REFRESH_MAX else SERVING_METRICS_MIN_REFRESH_DEFAULT
+
+
+ALLOWANCE_HOLD_RETRY_DEFAULT_SECONDS = 1800
+ALLOWANCE_HOLD_RETRY_MAX_SECONDS = 86400
+
+
+def allowance_hold_retry_seconds() -> int:
+    """Ship-on re-lease hold for an exhausted plan allowance or usage budget.
+
+    An exhausted allowance is durable until the plan changes, so a held unit's
+    lease + admission RPC + defer + requeue cycle runs for nothing while it
+    waits; the scheduler escalation ladder keeps today's behaviour below this
+    value. ``60`` restores the former short cycle (steady 300 s after
+    escalation). Malformed or out-of-range values keep the default.
+    """
+    raw = os.getenv('BATCH_ALLOWANCE_HOLD_RETRY_SECONDS', '').strip()
+    if not raw:
+        return ALLOWANCE_HOLD_RETRY_DEFAULT_SECONDS
+    try:
+        value = float(raw)
+    except ValueError:
+        return ALLOWANCE_HOLD_RETRY_DEFAULT_SECONDS
+    if not math.isfinite(value):
+        return ALLOWANCE_HOLD_RETRY_DEFAULT_SECONDS
+    return int(value) if 1 <= value <= ALLOWANCE_HOLD_RETRY_MAX_SECONDS else ALLOWANCE_HOLD_RETRY_DEFAULT_SECONDS
+
+
 def projection_pagination_enabled() -> bool:
     from config.policy import kill_switch
 
@@ -329,6 +503,13 @@ def recovered_merge_release_enabled() -> bool:
     return kill_switch('BATCH_PIPELINE_RECOVERED_MERGE_RELEASE_ENABLED')
 
 
+def recovery_owner_only_enabled() -> bool:
+    """Kill switch: post-recovery requests drain their owner without global maintenance."""
+    from config.policy import kill_switch
+
+    return kill_switch('BATCH_PIPELINE_RECOVERY_OWNER_ONLY_ENABLED')
+
+
 def sweep_owner_chain_enabled() -> bool:
     """Kill switch: a sweep that advances an owner's head keeps walking that chain."""
     from config.policy import kill_switch
@@ -348,6 +529,13 @@ def projection_pending_page_enabled() -> bool:
     from config.policy import kill_switch
 
     return kill_switch('BATCH_PIPELINE_PROJECTION_PENDING_PAGE_ENABLED')
+
+
+def projection_followup_page_enabled() -> bool:
+    """Kill switch: discover only finishable receipts, without per-row fetches."""
+    from config.policy import kill_switch
+
+    return kill_switch('BATCH_PIPELINE_PROJECTION_FOLLOWUP_PAGE_ENABLED')
 
 
 def owner_drain_enabled() -> bool:
@@ -420,15 +608,50 @@ def worker_pipeline_depth() -> int:
     return value if 1 <= value <= WORKER_PIPELINE_DEPTH_MAX else WORKER_PIPELINE_DEPTH_DEFAULT
 
 
-WORKER_IO_CONCURRENCY_DEFAULT = 3
+WORKER_PROCESSES_DEFAULT = 1
+WORKER_PROCESSES_MAX = 3
+
+
+def worker_processes() -> int:
+    """Independent pump processes sharing the pod's one GPU; ``1`` (default) runs no supervisor.
+
+    Each process loads its own model chain and keeps its own pump depth and
+    decoded-audio bound, so host and device memory scale with the count; the
+    chart sizes pod resources per count. Malformed or out-of-range values run
+    one process: a typo must never multiply the pod's memory.
+    """
+    try:
+        value = int(os.getenv('BATCH_PIPELINE_WORKER_PROCESSES', str(WORKER_PROCESSES_DEFAULT)))
+    except ValueError:
+        return 1
+    return value if 1 <= value <= WORKER_PROCESSES_MAX else 1
+
+
+WORKER_IO_CONCURRENCY_DEFAULT = 5
 WORKER_IO_CONCURRENCY_MAX = 8
 
 
+def stage_profiling_enabled() -> bool:
+    """Dedicated-worker per-stage wall-clock histograms (metrics-only).
+
+    Default on only for the ``dev`` stage; ``prod`` and an unset stage stay off.
+    An explicit ``true``/``false`` (also 1/0, on/off, yes/no) overrides the
+    stage default so local/offline can opt in; malformed values fall back to
+    the stage default rather than failing the worker.
+    """
+    raw = os.getenv('BATCH_PIPELINE_STAGE_PROFILING_ENABLED', '').strip().lower()
+    if raw in {'true', '1', 'on', 'yes'}:
+        return True
+    if raw in {'false', '0', 'off', 'no'}:
+        return False
+    return os.getenv('OMI_ENV_STAGE', '').strip().lower() == 'dev'
+
+
 def worker_io_concurrency() -> int:
-    """Bounded artifact fetch/decode and encrypted persistence inside one GPU flight.
+    """Shared bounded artifact fetch/decode and persistence across pump lanes.
 
     1 restores the fully serial chain. Malformed or out-of-range values keep the
-    conservative default; GPU work and the chain lock are unaffected either way.
+    bounded default; GPU work and the chain lock are unaffected either way.
     """
     try:
         value = int(os.getenv('BATCH_PIPELINE_WORKER_IO_CONCURRENCY', str(WORKER_IO_CONCURRENCY_DEFAULT)))

@@ -2,12 +2,12 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, cast
 
 from google.cloud.firestore_v1.base_query import BaseCompositeFilter, FieldFilter
-from google.cloud.firestore import ArrayUnion, ArrayRemove
+from google.cloud.firestore import ArrayUnion, ArrayRemove, transactional
 
 
 from models.app import App, UsageHistoryType
 from .redis_db import get_generic_cache, set_generic_cache
-from ._client import db
+from ._client import db, get_firestore_client
 import logging
 
 logger = logging.getLogger(__name__)
@@ -230,6 +230,64 @@ def upsert_app_to_db(app_data: Dict[str, Any]) -> None:
         raise ValueError("app_data must include 'id'")
     app_ref = db.collection(apps_collection).document(app_id)
     app_ref.set(app_data, merge=True)
+
+
+def set_mcp_code_verifier(app_id: str, code_verifier: str, *, firestore_client: Any = None) -> None:
+    """Rotate only the pending PKCE verifier of an MCP app.
+
+    A field-path update leaves every other stored OAuth value (for example tokens a
+    concurrent callback has just saved) untouched, unlike replacing the token map.
+    """
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    client.collection(apps_collection).document(app_id).update(
+        {'external_integration.mcp_oauth_tokens.code_verifier': code_verifier}
+    )
+
+
+def complete_mcp_oauth_authorization(
+    app_id: str,
+    uid: str,
+    oauth_tokens: Dict[str, Any],
+    server_url: str,
+    chat_tools: List[Dict[str, Any]],
+    *,
+    firestore_client: Any = None,
+) -> bool:
+    """Commit a callback only while its owner and PKCE attempt are still current.
+
+    Provider exchange/discovery run outside Firestore. A retry may rotate the
+    verifier during either await; an ordinary snapshot write would restore the
+    old verifier or overwrite a newer callback's credentials. The transaction
+    fences that commit without holding a database lock during provider IO.
+    """
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    app_ref = client.collection(apps_collection).document(app_id)
+
+    @transactional
+    def _complete(transaction):
+        snapshot = app_ref.get(transaction=transaction)
+        if not snapshot.exists:
+            return False
+        current = _typed_doc(snapshot)
+        integration = current.get('external_integration') or {}
+        tokens = integration.get('mcp_oauth_tokens') or {}
+        if current.get('uid') != uid or tokens.get('code_verifier') != oauth_tokens.get('code_verifier'):
+            return False
+        transaction.update(
+            app_ref,
+            {
+                'status': 'approved',
+                'external_integration': {
+                    **integration,
+                    'mcp_server_url': server_url,
+                    'mcp_oauth_tokens': oauth_tokens,
+                },
+                'chat_tools': chat_tools,
+            },
+        )
+        return True
+
+    return _complete(client.transaction())
 
 
 def update_app_in_db(app_data: Dict[str, Any]) -> None:

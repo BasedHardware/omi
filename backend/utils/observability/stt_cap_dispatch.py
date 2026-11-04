@@ -82,8 +82,8 @@ def record_decision(path: DispatchPath, allowed: bool, reason: DispatchReason) -
     return allowed
 
 
-def record_allowance_decision(path: DispatchPath, allowance) -> bool:
-    reason = (
+def allowance_decision_reason(allowance) -> DispatchReason:
+    return (
         DispatchReason.ENTITLED
         if allowance.managed
         else {
@@ -93,4 +93,7 @@ def record_allowance_decision(path: DispatchPath, allowance) -> bool:
             'usage_invalid': DispatchReason.ALLOWANCE_UNAVAILABLE,
         }.get(allowance.reason, DispatchReason.ACCESS_DENIED)
     )
-    return record_decision(path, allowance.managed, reason)
+
+
+def record_allowance_decision(path: DispatchPath, allowance) -> bool:
+    return record_decision(path, allowance.managed, allowance_decision_reason(allowance))

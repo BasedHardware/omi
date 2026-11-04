@@ -170,6 +170,42 @@ def test_defer_mints_a_new_wake_and_release_keeps_it(rows):
     assert isinstance(outbox.claim_key(KEY, claim.wake_token, 120, now=602), Claim)  # the queue retry claims
 
 
+def test_long_stuck_custody_deferral_polls_hourly_on_the_consumer_route(rows):
+    # The C3 consumer serves prod; the same episode rule as the sync handler's run() applies (#24264).
+    state_rows, _ = rows
+    grace = reprocess.STUCK_DEFER_GRACE_SECONDS
+    _enqueue(1.0)
+    claim = _claim(rows, now=10)
+    outbox.defer(claim, 130.0, 'redirect_unresolved', now=10)
+    assert state_rows[KEY]['deferred_since'] == 10 and state_rows[KEY]['due_at'] == 130.0  # fresh: cadence kept
+    late = 10 + grace
+    claim = _claim(rows, now=late)
+    outbox.defer(claim, late + 120, 'redirect_unresolved', now=late)
+    assert state_rows[KEY]['deferred_since'] == 10
+    assert state_rows[KEY]['due_at'] == late + reprocess.STUCK_DEFER_POLL_SECONDS
+    assert state_rows[KEY]['task_due_at'] == state_rows[KEY]['wake_check_after'] == state_rows[KEY]['due_at']
+
+
+def test_new_cause_or_completed_callback_restarts_the_consumer_episode(rows):
+    state_rows, _ = rows
+    grace = reprocess.STUCK_DEFER_GRACE_SECONDS
+    _enqueue(1.0)
+    outbox.defer(_claim(rows, now=10), 20.0, 'redirect_unresolved', now=10)
+    late = 10 + grace
+    # A different cause starts a new episode: its first deferral keeps the requested cadence.
+    outbox.defer(_claim(rows, now=late), late + 120, 'pending_live_bridge', now=late)
+    assert state_rows[KEY]['deferred_since'] == late and state_rows[KEY]['due_at'] == late + 120
+    # A cause outside the stuck set never backs off, however long it lasts.
+    later = late + grace
+    outbox.defer(_claim(rows, now=later), later + 30, 'not_due', now=later)
+    assert state_rows[KEY]['due_at'] == later + 30
+    # A completed callback ends the episode.
+    claim = _claim(rows, now=later + 40)
+    _enqueue(later + 1, now=later + 40)  # an append during processing: ack re-arms instead of retiring the row
+    assert outbox.ack(claim, 'processed', now=later + 41)
+    assert 'deferred_since' not in state_rows[KEY]
+
+
 def test_transactional_enqueue_defers_the_wake_to_the_caller(rows, monkeypatch):
     state_rows, tasks = rows
     written = {}

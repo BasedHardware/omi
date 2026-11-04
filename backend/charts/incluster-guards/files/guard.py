@@ -27,10 +27,24 @@ LATENCY = {
 WINDOW = 900
 BLIND_LIMIT = 3
 REFUSAL_GATE_VERSION = 'same-hour-of-week-12-pod-v2'
+REFUSAL_ABSOLUTE_CEILING = 0.02
+ROLLBACK_REPLICAS = 12
 FIRST_P95_FLOOR = 30
 FIRST_P95_BASELINE_FACTOR = 1.2
-FIRST_P95_MIN_SLOW_TEXTS = 4
+FIRST_P95_MIN_SLOW_TEXTS = 5
 FIRST_P95_BASELINE_MIN_COUNT = 20
+FIRST_P95_MIN_COUNT = 100
+FIRST_P95_BASELINE_COUNT_SHARE = 0.5
+# The weekly baseline counts one hour; the live sample counts WINDOW seconds.
+WINDOW_SHARE_OF_BASELINE = WINDOW / 3600
+# live_metrics.py buckets end at (2, 5, 10, 15, 20, 25, 30, 45, 60): a quantile
+# that lands beyond the last finite bucket is reported as exactly this
+# boundary, not measured.
+FIRST_P95_TOP_BUCKET = 60.0
+# The HPA's own scale-out targets (build_rollback asserts the live spec still
+# carries exactly these): what the live load needs, never the floor.
+REQUESTS_PER_POD = 2
+GPU_TARGET_PERCENT = 35
 FAST_SCALE_UP = {
     'stabilizationWindowSeconds': 0,
     'selectPolicy': 'Max',
@@ -88,7 +102,12 @@ def refusal_baseline_queries(namespace):
 
 
 def refusal_limit(values):
-    """None means unqualified evidence, never an implicit 2% fallback."""
+    """The same-hour-of-week relative limit, or None when that baseline is unqualified.
+
+    None is not a limit: evaluate substitutes REFUSAL_ABSOLUTE_CEILING rather
+    than blinding, so a coverage series younger than the 7d offset cannot roll
+    the floor back on blindness alone (2026-10-24 16:05Z, blind_runs=4).
+    """
     if not all(finite(values.get(k)) for k in refusal_baseline_queries('unused')):
         return None
     if not 0 <= values['refusal_baseline_fraction'] <= 1 or values['refusal_baseline_count'] < 20:
@@ -107,7 +126,7 @@ def refusal_limit(values):
         )
     ):
         return None
-    return max(0.02, values['refusal_baseline_fraction'] * 1.25 + 0.005)
+    return max(REFUSAL_ABSOLUTE_CEILING, values['refusal_baseline_fraction'] * 1.25 + 0.005)
 
 
 def first_p95_limit(values):
@@ -128,6 +147,21 @@ def first_p95_limit(values):
     ):
         return max(FIRST_P95_FLOOR, FIRST_P95_BASELINE_FACTOR * baseline)
     return FIRST_P95_FLOOR
+
+
+def first_p95_sample_floor(values):
+    """max(100, half the weekly same-hour rate); 100 when that baseline is unavailable.
+
+    first_count_baseline counts a whole hour; first_count counts the live
+    15-minute window. Convert the baseline to its per-window equivalent
+    (x 15/60) before halving, or the floor would always demand roughly twice
+    the historical window rate and a real regression at normal volume could
+    never collect a decisive sample (review r1 P1).
+    """
+    baseline = values.get('first_count_baseline')
+    if finite(baseline):
+        return max(FIRST_P95_MIN_COUNT, FIRST_P95_BASELINE_COUNT_SHARE * WINDOW_SHARE_OF_BASELINE * baseline)
+    return FIRST_P95_MIN_COUNT
 
 
 def queries(namespace):
@@ -170,19 +204,32 @@ def queries(namespace):
             'omi_stt_window_session_outcome_total',
             '{job="backend-listen-metrics",outcome="no_text",reason="first_text_deadline"}',
         ),
+        # The HPA's inputs at their worst minute of the lookback window (the
+        # adapter's parakeet_active_requests_total and parakeet_gpu_utilization),
+        # so load_need() is what the live load asks for, not what a floor or the
+        # 900s scale-down window holds.
+        'live_requests_max': (
+            f'max_over_time((sum(parakeet_active_streams{gpu})'
+            f' + (sum(parakeet_active_batch_requests{gpu}) or vector(0)))[15m:1m])'
+        ),
+        'gpu_util_max': f'max_over_time(avg(avg_over_time(DCGM_FI_DEV_GPU_UTIL{gpu}[1m]))[15m:1m])',
     }
 
 
 def workload_only(spec):
-    return spec.get('minReplicas') in (5, 8) and not any(
+    # Every workload-only floor below the rollback cap is armed; the floor is
+    # read from the HPA itself. The old (5, 8) enumeration read NOOP at the
+    # 10-23 baseline floor 10 (2026-10-25 11:29Z), leaving the fleet unguarded
+    # whenever the operator moved the floor off the enumerated pair.
+    return spec.get('minReplicas') < ROLLBACK_REPLICAS and not any(
         m.get('external', {}).get('metric', {}).get('name') == 'parakeet_request_latency_p99'
         for m in spec.get('metrics', [])
     )
 
 
 def build_rollback(old):
-    """Exact step_fast.build(old, 12, rollback=True) patch and drift assertions."""
-    assert old['maxReplicas'] == 12, 'Unexpected cap'
+    """Restore rollback capacity, including an operator-capped workload HPA."""
+    assert type(old['maxReplicas']) is int and 1 <= old['maxReplicas'] <= ROLLBACK_REPLICAS, 'Unexpected cap'
     metrics = old['metrics']
     names = [m.get('pods', m.get('external', {})).get('metric', {}).get('name') for m in metrics]
     assert set(names) <= {
@@ -196,10 +243,10 @@ def build_rollback(old):
     }, 'Missing/duplicate metric'
     assert next(
         m for m in metrics if m.get('pods', {}).get('metric', {}).get('name') == 'parakeet_active_requests_total'
-    )['pods']['target'] == {'type': 'AverageValue', 'averageValue': '2'}, 'Requests drift'
+    )['pods']['target'] == {'type': 'AverageValue', 'averageValue': str(REQUESTS_PER_POD)}, 'Requests drift'
     assert next(
         m for m in metrics if m.get('external', {}).get('metric', {}).get('name') == 'parakeet_gpu_utilization'
-    )['external']['target'] == {'type': 'Value', 'value': '35'}, 'GPU drift'
+    )['external']['target'] == {'type': 'Value', 'value': str(GPU_TARGET_PERCENT)}, 'GPU drift'
     # Kubernetes defaults selectPolicy=Max on stored objects; Helm may omit it.
     up = {'selectPolicy': 'Max', **old['behavior']['scaleUp']}
     legacy_up = {
@@ -215,7 +262,14 @@ def build_rollback(old):
     restored.append(copy.deepcopy(LATENCY))
     return [
         {'op': 'test', 'path': '/spec', 'value': copy.deepcopy(old)},
-        {'op': 'replace', 'path': '/spec/minReplicas', 'value': 12},
+        # Restore the cap in the same atomic patch as the floor, or Kubernetes
+        # rejects minReplicas=12 under an operator's maxReplicas=4/6 cap.
+        *(
+            [{'op': 'replace', 'path': '/spec/maxReplicas', 'value': ROLLBACK_REPLICAS}]
+            if old['maxReplicas'] < ROLLBACK_REPLICAS
+            else []
+        ),
+        {'op': 'replace', 'path': '/spec/minReplicas', 'value': ROLLBACK_REPLICAS},
         {'op': 'replace', 'path': '/spec/metrics', 'value': restored},
     ]
 
@@ -235,11 +289,14 @@ def evaluate(values):
     idle_nan = {'first_p95', 'post_p95', 'v2_p95', 'refusal_fraction'} if low and fresh else set()
     # The weekly first_p95 evidence (quantile + its sample count) is optional
     # (retention, metric age, sparse hour): its absence selects the fallback
-    # threshold instead of blinding the whole reading.
+    # threshold instead of blinding the whole reading. The weekly refusal
+    # baseline is optional the same way: missing or unqualified selects the
+    # absolute refusal ceiling below, never blindness.
+    optional_weekly = ('first_p95_baseline', 'first_count_baseline', *refusal_baseline_queries('unused'))
     blind = [
         f'missing_or_nonfinite_{k}'
         for k in queries('unused')
-        if k not in ('first_p95_baseline', 'first_count_baseline')
+        if k not in optional_weekly
         and not finite(values.get(k))
         and not (k in idle_nan and isinstance(values.get(k), float) and math.isnan(values[k]))
     ]
@@ -247,22 +304,39 @@ def evaluate(values):
     if finite(values.get('dcgm_nonzero')) and values['dcgm_nonzero'] <= 0 and not low:
         blind.append('dcgm_no_real_nonzero_value')
     trips = []
+    unmeasured = []
     refusal_threshold = refusal_limit(values)
+    refusal_mode = 'relative'
     if refusal_threshold is None:
-        blind.append('unqualified_refusal_baseline')
+        # An unqualified weekly baseline (coverage series younger than its 7d
+        # offset, sparse hour, missing series) left this guard BLIND on every
+        # run and rolled floor 8 back with zero refusals. Fail closed on the
+        # absolute ceiling instead; missing or stale CURRENT refusal data
+        # still blinds via the keys above.
+        refusal_threshold = REFUSAL_ABSOLUTE_CEILING
+        refusal_mode = 'absolute_fallback'
     if not low:
         trips += [k for k, limit in [('post_p95', 3), ('v2_p95', 3)] if finite(values.get(k)) and values[k] >= limit]
-        # A 15-minute p95 over ~35-45 first texts is small-sample noise: one or
-        # two slow sessions drove floor-10 rollbacks at 04:08Z/06:19Z while the
-        # floor-10 fleet beat floor 12. Trip only with several slow texts AND a
-        # p95 worse than both the floor and the same UTC hour a week ago.
-        if (
-            finite(values.get('first_p95'))
-            and finite(values.get('first_over30'))
-            and values['first_over30'] >= FIRST_P95_MIN_SLOW_TEXTS
-            and values['first_p95'] >= first_p95_limit(values)
-        ):
-            trips.append('first_p95')
+        # 2026-10-25 05:40Z (floor 8) and 2026-10-24 06:19Z: 26-37 first texts
+        # pushed the 95th percentile into the 60s top bucket and rolled the
+        # floor back on an unmeasured p95 while the fleet was healthy. Trip only
+        # on a value interpolated inside the histogram (the top-bucket boundary
+        # 60.0 is saturation, not a measurement), several slow texts, and a
+        # 15-minute sample of at least max(100, half the weekly same-hour
+        # count). A regression-shaped reading below that sample floor is
+        # unmeasured evidence: BLIND alert, never rollback, never counted
+        # toward the three-blind-strike rollback.
+        if finite(values.get('first_p95')) and values['first_p95'] >= first_p95_limit(values):
+            if (
+                values['first_p95'] < FIRST_P95_TOP_BUCKET
+                and finite(values.get('first_over30'))
+                and values['first_over30'] >= FIRST_P95_MIN_SLOW_TEXTS
+                and finite(values.get('first_count'))
+                and values['first_count'] >= first_p95_sample_floor(values)
+            ):
+                trips.append('first_p95')
+            else:
+                unmeasured.append('first_p95')
         if (
             refusal_threshold is not None
             and finite(values.get('refusal_fraction'))
@@ -277,10 +351,57 @@ def evaluate(values):
     return {
         'trips': trips,
         'blind': blind,
+        'unmeasured': unmeasured,
         'low_sample': low,
         'refusal_threshold': refusal_threshold,
+        'refusal_mode': refusal_mode,
         'first_p95_threshold': first_p95_limit(values),
+        'first_p95_sample_floor': first_p95_sample_floor(values),
     }
+
+
+def load_need(values, ready):
+    """Pods the live load needs at the HPA's targets; None when unmeasured (evaluate blinds).
+
+    Never below one, so an empty fleet cannot pass as an idle one. GPU work is
+    the ready pods' average utilization times their count: Pending pods carry
+    none.
+    """
+    requests, gpu = values.get('live_requests_max'), values.get('gpu_util_max')
+    if not (finite(requests) and finite(gpu)) or requests < 0 or gpu < 0:
+        return None
+    return max(1, math.ceil(requests / REQUESTS_PER_POD), math.ceil(ready * gpu / GPU_TARGET_PERCENT))
+
+
+def capacity_shortfall(hpa, deployment, events, values, reading, now):
+    """Trip only when ready pods are short of the live load, with that shortfall's scheduling evidence.
+
+    2026-10-30..11-02 01:25Z: 28 of 31 rollbacks tripped only on
+    FailedScheduling or ready < desired, with latency healthy; replaying this
+    rule keeps 4 of them (ready short of the load). In the L4 stockout a rollback's 12 pods
+    leave Pending pods and their events on a 10-node pool; after it expires
+    and the schedule lowers the floor, the 900s scale-down window still holds
+    desired near 12, so the next run tripped again (about every 50 minutes),
+    and an ordinary one-pod scale-up waiting for its node tripped the same
+    way. Pending pods the live load does not need are recorded, not tripped.
+    A real stockout at peak still trips here, and latency, refusals and the
+    first-text gates trip on harm whatever the pod counts say.
+    """
+    desired = hpa.get('status', {}).get('desiredReplicas')
+    if desired is None:
+        reading['blind'].append('desired_replicas_missing')
+        return
+    ready = deployment.get('status', {}).get('readyReplicas', 0)
+    need = load_need(values, ready)
+    failures = scheduling_failures(events, hpa['metadata']['name'], now)
+    reading['load_need'] = need
+    if need is None:
+        return
+    if ready < min(desired, need):
+        reading['trips'].append('ready_shortfall')
+        reading['trips'] += failures
+    else:
+        reading['pending_beyond_load'] = len(failures)
 
 
 def scheduling_failures(events, name, now):
@@ -316,40 +437,63 @@ def advance(state, identity, now, blind):
     }
 
 
-def decide(hpa, deployment, events, values, state, now):
-    reading = evaluate(values)
-    if not workload_only(hpa['spec']):
-        return 'NOOP', {}, reading
-    # HPA configuration/generation and image changes invalidate the lookback.
-    # Deployment generation also changes on ordinary HPA replica writes; using
-    # it here would keep a scaling or unschedulable workload in perpetual warmup.
-    identity = hashlib.sha256(
+def state_identity(hpa, deployment):
+    """Arming identity: the whole HPA spec except the floor, plus serving images.
+
+    HPA configuration and image changes invalidate the lookback, but scheduled
+    floor changes do not: the floor schedule rewrites spec.minReplicas hourly,
+    which also bumps the HPA generation, so both minReplicas and the generation
+    counter are excluded and arming survives every scheduled change. Deployment
+    generation also changes on ordinary HPA replica writes; using it here would
+    keep a scaling or unschedulable workload in perpetual warmup.
+    """
+    spec_identity = {k: v for k, v in hpa['spec'].items() if k != 'minReplicas'}
+    return hashlib.sha256(
         json.dumps(
             [
                 REFUSAL_GATE_VERSION,
-                hpa['spec'],
-                hpa['metadata'].get('generation'),
+                spec_identity,
                 [c['image'] for c in deployment['spec']['template']['spec']['containers']],
             ],
             sort_keys=True,
         ).encode()
     ).hexdigest()
-    reading['trips'] += scheduling_failures(events, hpa['metadata']['name'], now)
+
+
+def decide(hpa, deployment, events, values, state, now):
+    reading = evaluate(values)
+    identity = state_identity(hpa, deployment)
+    if not workload_only(hpa['spec']):
+        # Keep advancing the arming clock while parked above the rollback cap
+        # (or rolled back): a scheduled drop onto this spec must land on an
+        # already-armed guard, never a fresh 15-minute warmup during which a
+        # demand spike could not roll the floor back (review r1 P1). The floor
+        # itself is excluded from the identity, so this elapsed time counts.
+        # advance() rebuilds its dict, so the rolled-back clean streak must be
+        # carried explicitly - same identity only; a spec change restarts it
+        # (review r3 P1: without the carry the streak reset on every run and
+        # the rollback could never expire).
+        advanced = advance(state, identity, now, False)
+        if state.get('identity') == identity and 'rollback' in state:
+            advanced['rollback'] = state['rollback']
+        # A rollback expires only once ready also covers the live load: a real
+        # peak stockout holds it instead of cycling expiry -> lower -> trip.
+        capacity_shortfall(hpa, deployment, events, values, reading, now)
+        return 'NOOP', advanced, reading
+    capacity_shortfall(hpa, deployment, events, values, reading, now)
     if not any(
         c['type'] == 'ScalingActive' and c['status'] == 'True' for c in hpa.get('status', {}).get('conditions', [])
     ):
         reading['trips'].append('HPA_not_ScalingActive')
-    desired = hpa.get('status', {}).get('desiredReplicas')
-    if desired is None:
-        reading['blind'].append('desired_replicas_missing')
-    elif deployment.get('status', {}).get('readyReplicas', 0) < desired:
-        reading['trips'].append('ready_shortfall')
     state = advance(state, identity, now, bool(reading['blind']))
     if now - state['since'] < WINDOW:
         verdict = 'WARMUP'
     elif reading['trips'] or state['blind'] >= BLIND_LIMIT:
         verdict = 'TRIP'
-    elif reading['blind']:
+    elif reading['blind'] or reading['unmeasured']:
+        # unmeasured (thin-sample first_p95) alerts like blind but never
+        # accumulates: advance() counts only reading['blind'], so a thin
+        # sample cannot reach the three-strike rollback.
         verdict = 'BLIND'
     else:
         verdict = 'LOW_SAMPLE' if reading['low_sample'] else 'CLEAN'
@@ -360,7 +504,17 @@ def batch_queries(namespace):
     sel = '{namespace="' + namespace + '"}'
     return {
         'oldest_age': f'max(omi_batch_pipeline_oldest_age_seconds{sel})',
+        # Prometheus max ignores NaNs when another priority has a finite age.
+        # Count them separately so one saturated priority cannot look healthy.
+        'age_incomplete': (
+            f'(count(omi_batch_pipeline_oldest_age_seconds{sel} != '
+            f'omi_batch_pipeline_oldest_age_seconds{sel}) or vector(0))'
+        ),
         'retry_age': f'max(omi_batch_pipeline_retry_age_seconds{sel})',
+        'retry_incomplete': (
+            f'(count(omi_batch_pipeline_retry_age_seconds{sel} != '
+            f'omi_batch_pipeline_retry_age_seconds{sel}) or vector(0))'
+        ),
         'freshness': f'max(time() - omi_batch_pipeline_metrics_refreshed_at_seconds{sel})',
         'scrape_age': f'max(time() - timestamp(omi_batch_pipeline_metrics_refreshed_at_seconds{sel}))',
     }
@@ -370,8 +524,13 @@ def evaluate_batch(values):
     # No invented projection/custody/speech metrics: worker queue age is a proxy only.
     unknown = ['new_projection_obligations_unavailable', 'audio_custody_unavailable', 'proven_speech_loss_unavailable']
     blind = any(not finite(values.get(k)) for k in batch_queries('unused'))
-    blind = blind or values.get('freshness', 0) > 120 or values.get('scrape_age', 0) > 120
-    trips = [] if blind else (['uncommitted_job_age_over_30m'] if values['oldest_age'] > 1800 else [])
+    fresh = all(finite(values.get(k)) and values[k] <= 120 for k in ('freshness', 'scrape_age'))
+    blind = blind or not fresh
+    blind = blind or values.get('age_incomplete', 0) > 0 or values.get('retry_incomplete', 0) > 0
+    # A missing priority cannot erase a fresh, positively measured breach in
+    # another priority. Keep metrics_blind alongside that known TRIP.
+    late = finite(values.get('oldest_age')) and values['oldest_age'] > 1800
+    trips = ['uncommitted_job_age_over_30m'] if fresh and late else []
     return {
         'verdict': 'TRIP' if trips else 'BLIND' if blind else 'PARTIAL',
         'trips': trips,
@@ -453,6 +612,121 @@ def log(event, **fields):
     )
 
 
+def rolled_back(spec):
+    return any(
+        m.get('external', {}).get('metric', {}).get('name') == 'parakeet_request_latency_p99'
+        for m in spec.get('metrics', [])
+    )
+
+
+def build_rollback_clear(spec):
+    """The inverse rollback: restore workload-only metrics, keep the current floor.
+
+    The floor stays at ROLLBACK_REPLICAS; the time-of-day schedule and the
+    arming/usable gates own any later reduction. Drift-refuses exactly like
+    build_rollback through the whole-spec test patch.
+    """
+    restored = [
+        m
+        for m in spec['metrics']
+        if m.get('external', {}).get('metric', {}).get('name') != 'parakeet_request_latency_p99'
+    ]
+    return [
+        {'op': 'test', 'path': '/spec', 'value': copy.deepcopy(spec)},
+        {'op': 'replace', 'path': '/spec/metrics', 'value': restored},
+    ]
+
+
+def advance_rollback_state(state, is_rolled_back, reading, now):
+    """Track the rolled-back clock; return True when the rollback may expire.
+
+    A rollback expires only after one full lookback window of consecutive
+    usable, clean readings while rolled back (2026-10-25 21:06Z: the 13:50Z
+    rollback kept the floor schedule deferred every hour with a healthy
+    fleet, and no in-band clear existed). Any trip, blind, unmeasured or
+    low-sample reading restarts the clean streak.
+    """
+    if not is_rolled_back:
+        state.pop('rollback', None)
+        return False
+    entry = state.get('rollback') or {}
+    since = entry.get('since', now)
+    clean = (
+        not reading.get('trips')
+        and not reading.get('blind')
+        and not reading.get('unmeasured')
+        and not reading.get('low_sample')
+    )
+    clean_since = now if clean and entry.get('clean_since') is None else (entry['clean_since'] if clean else None)
+    state['rollback'] = {'since': since, 'clean_since': clean_since}
+    return clean_since is not None and now - clean_since >= WINDOW and now - since >= WINDOW
+
+
+def load_floor_schedule():
+    """The reviewed 24-entry UTC-hour floor table, or None when not installed.
+
+    The chart renders /guard/floors.json only when floorSchedule.enabled; its
+    absence is the schedule's off switch, so development and any release that
+    does not opt in never write the floor from a schedule.
+    """
+    try:
+        rows = json.loads(open('/guard/floors.json').read())
+    except (OSError, ValueError):
+        return None
+    if not isinstance(rows, list) or len(rows) != 24:
+        return None
+    if any(not isinstance(v, int) or not 1 <= v <= 12 for v in rows):
+        return None
+    return rows
+
+
+def apply_floor_schedule(client, hpa, deployment, state, reading, schedule, now, dry_run):
+    """One bounded scheduled-floor write per hourly change; never fights the guard.
+
+    Deferred whenever the guard has rolled back (the latency metric is present):
+    the reviewed schedule resumes only after an operator clears the rollback.
+    A LOWER requires the guard to be armed under the current spec identity AND
+    the current reading to be usable - not blind, and not carrying an
+    unmeasured regression-shaped first_p95. Dropping onto a fresh warmup would
+    leave a spike unable to roll back (review r1 P1); dropping while the guard
+    cannot even measure would leave capacity reduced until three post-drop
+    blind runs accumulate (review r2 P1). Raises apply immediately - more
+    capacity is the safe direction. The whole observed /spec is JSON-patch
+    tested, so a concurrent change fails this run loudly instead of
+    overwriting.
+    """
+    spec = hpa['spec']
+    hour = dt.datetime.fromtimestamp(now, dt.timezone.utc).hour
+    target = schedule[hour]
+    current = spec.get('minReplicas')
+    if rolled_back(spec):
+        log('floor_schedule', result='deferred_guard_rollback', hour=hour, target=target, floor=current)
+        return
+    if current == target:
+        return
+    if not isinstance(spec.get('maxReplicas'), int) or target > spec['maxReplicas']:
+        log('floor_schedule', result='refused_target_above_cap', hour=hour, target=target, floor=current)
+        return
+    if dry_run:
+        log('floor_schedule', result='dry_run', hour=hour, target=target, floor=current)
+        return
+    if target < current:
+        if state.get('identity') != state_identity(hpa, deployment) or now - state.get('since', now) < WINDOW:
+            log('floor_schedule', result='deferred_guard_not_armed', hour=hour, target=target, floor=current)
+            return
+        if reading.get('blind') or reading.get('unmeasured'):
+            log('floor_schedule', result='deferred_guard_blind', hour=hour, target=target, floor=current)
+            return
+    client.kube(
+        client.path('hpa'),
+        [
+            {'op': 'test', 'path': '/spec', 'value': copy.deepcopy(spec)},
+            {'op': 'replace', 'path': '/spec/minReplicas', 'value': target},
+        ],
+    )
+    log('floor_schedule', result='applied', hour=hour, target=target, floor=current)
+
+
 def run(client, dry_run, now=None):
     now = time.time() if now is None else now
     cm = client.kube(client.path('state'))
@@ -463,15 +737,23 @@ def run(client, dry_run, now=None):
     log('batch_safety', **batch, values=batch_values, cloud_run_rollback='disabled')
     hpa = None
     values = {}
+    schedule = None
     try:
         hpa = client.kube(client.path('hpa'))
         values = client.sample(queries(client.namespace))
-        if workload_only(hpa['spec']):
+        schedule = load_floor_schedule()
+        # With a schedule installed, even a parked (non-workload) HPA runs the
+        # full decide pass so the arming clock advances and the scheduled change
+        # is evaluated against an armed guard; without one, the historical
+        # minimal NOOP path (no deployment/events reads) is preserved.
+        if workload_only(hpa['spec']) or schedule is not None:
             deployment = client.kube(client.path('deployment'))
             events = client.kube(client.path('events'))['items']
             verdict, state, reading = decide(hpa, deployment, events, values, state, now)
         else:
-            verdict, state, reading = 'NOOP', {}, evaluate(values)
+            # Preserve the loaded state: the rolled-back clock must survive
+            # parked readings, not reset on every one of them.
+            verdict, reading = 'NOOP', evaluate(values)
     except Exception as exc:
         # No exact observed spec => no rollback; failed Job still alerts.
         log('parakeet_read_error', error=type(exc).__name__)
@@ -485,6 +767,19 @@ def run(client, dry_run, now=None):
         blind_runs=state.get('blind', 0),
         dry_run=dry_run,
     )
+    # Rollback expiry bookkeeping rides the same persisted state: a rolled-back
+    # HPA that has been clean for one full lookback window clears itself, so a
+    # rolled-back fleet cannot keep the floor schedule deferred forever with no
+    # in-band clear path (2026-10-25 21:06Z). Any unusable reading restarts it.
+    rollback_expires = False
+    if hpa is not None and verdict != 'BLIND':
+        rollback_expires = advance_rollback_state(state, rolled_back(hpa['spec']), reading, now)
+    elif hpa is not None and state.get('rollback'):
+        # An unreadable section never counts as clean: keep the clock, restart
+        # the clean streak.
+        state['rollback']['clean_since'] = None
+    # With no HPA read at all, leave any bookkeeping; the next readable run
+    # reconciles it.
     # Record evidence before attempting rollback; optimistic concurrency protects the persisted counter.
     data = {
         'state': json.dumps(state, sort_keys=True),
@@ -502,6 +797,8 @@ def run(client, dry_run, now=None):
                 'op': 'add',
                 'path': '/metadata/annotations',
                 'value': {
+                    **cm.get('metadata', {}).get('annotations', {}),
+                    'helm.sh/resource-policy': 'keep',
                     'omi.me/batch-safety-verdict': batch['verdict'],
                     'omi.me/parakeet-guard-verdict': verdict,
                 },
@@ -513,7 +810,25 @@ def run(client, dry_run, now=None):
         if not dry_run:
             client.kube(client.path('hpa'), patch)
         log('parakeet_rollback', result='dry_run' if dry_run else 'applied')
-    return 1 if verdict in {'TRIP', 'BLIND'} or batch['verdict'] in {'TRIP', 'BLIND'} else 0
+    elif rollback_expires and hpa is not None:
+        clear = build_rollback_clear(hpa['spec'])
+        if not dry_run:
+            client.kube(client.path('hpa'), clear)
+        log('parakeet_rollback_expired', result='dry_run' if dry_run else 'applied')
+    elif hpa is not None and verdict != 'BLIND' and schedule is not None:
+        # Scheduled floor changes are ordinary operation, not a safety action:
+        # they run after the reading (never in the same run as a rollback) and
+        # apply_floor_schedule defers while a guard rollback is in force or the
+        # guard is not yet armed for a lower.
+        try:
+            apply_floor_schedule(client, hpa, deployment, state, reading, schedule, now, dry_run)
+        except Exception as exc:
+            log('floor_schedule_error', error=type(exc).__name__)
+            return 2
+    # The batch observer is isolated evidence: its trips/unknowns never fail
+    # the Job or block the Parakeet schedule (2026-10-25 21:06Z ruling); only
+    # the Parakeet section owns the exit code.
+    return 1 if verdict in {'TRIP', 'BLIND'} else 0
 
 
 def main():

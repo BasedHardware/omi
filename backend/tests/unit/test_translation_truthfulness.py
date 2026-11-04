@@ -258,6 +258,14 @@ def test_decision_metrics_wire_existing_skip_counter_with_bounded_reasons():
     assert metrics._decisions.labels(target_lang='en', decision='other', reason='other')._value.get() >= 1
 
 
+def test_unsupported_target_skip_reason_survives_the_bounded_vocabulary():
+    metrics = PrometheusTranslationMetrics()
+    child = metrics._skips.labels(target_lang='lt', reason='unsupported_target')
+    before = child._value.get()
+    metrics.decision('lt', 'skip', 'unsupported_target')
+    assert child._value.get() == before + 1
+
+
 def test_translation_metrics_keep_luna_provider_attribution():
     metrics = PrometheusTranslationMetrics()
     metrics.batch('luna', 'en', 2)
@@ -369,7 +377,7 @@ async def test_phone_interpreter_keeps_short_foreign_replies(expected):
             'Necesitamos terminar este trabajo antes del almuerzo.',
             'Precisamos terminar este trabalho antes do almoço.',
         ),
-        ('da', ('no', 'da'), 'Vi må avslutte møtet før middag.', 'Vi skal afslutte mødet inden middag.'),
+        ('ru', ('uk', 'ru'), 'Ми маємо закінчити зустріч до вечора.', 'Мы должны закончить встречу до вечера.'),
     ],
 )
 async def test_non_english_targets_and_close_language_pairs(target, expected, source, output):

@@ -178,6 +178,7 @@ def notification_harness() -> Iterator[SimpleNamespace]:
         'utils.executors',
         db_executor=MagicMock(),
         postprocess_executor=MagicMock(),
+        open_loops_executor=MagicMock(),
         run_blocking=MagicMock(),
     )
 
@@ -215,6 +216,11 @@ def notification_harness() -> Iterator[SimpleNamespace]:
         ),
     }
 
+    # Keep the native timezone module outside the isolation snapshot. Repeated
+    # eviction/re-import of _zoneinfo can corrupt its process-global references.
+    from zoneinfo import ZoneInfo
+
+    ZoneInfo('UTC')
     with stub_modules(stubs):
         module = load_module_fresh(
             'utils.other.notifications',

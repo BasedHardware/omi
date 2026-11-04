@@ -1,13 +1,7 @@
-"""Dense speaker display labels shared by every transcript renderer.
+"""Small label alphabet used only by utils.speakers.display.display_participants.
 
-A ``speaker_id`` is a per-conversation diarization counter, not a person: it
-reaches the hundreds in a long conversation, and LLMs copy ``Speaker 379``-
-style dialogue labels verbatim into user-visible notes (#23381). Renderers that
-need a label for an unnamed voice use :class:`SpeakerLabeler` instead: named
-people keep their names, and each unnamed voice gets a small stable label
-("Speaker A", "Speaker B", ...) in order of first appearance within the
-rendered transcript. One labeler instance per rendered transcript keeps the
-labels consistent across its lines.
+Originally introduced by the live-speaker-names lane. Renderers must use the
+participants authority so identity evidence and count sanity cannot be bypassed.
 """
 
 from __future__ import annotations
@@ -24,7 +18,7 @@ def _column(index: int) -> str:
 
 
 def voice_key(segment: Any) -> tuple[Optional[Any], Optional[Any]]:
-    """(speaker_id_scope, speaker_id): merged multi-source transcripts reuse ids across scopes."""
+    """Legacy scoped wire-identity helper; renderers use display_participants."""
     if isinstance(segment, Mapping):
         return (segment.get('speaker_id_scope'), segment.get('speaker_id'))
     return (getattr(segment, 'speaker_id_scope', None), getattr(segment, 'speaker_id', None))

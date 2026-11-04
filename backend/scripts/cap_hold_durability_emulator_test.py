@@ -212,7 +212,6 @@ def prove_pipeline_result_restart(client, directory, uid):
             'sync_allowed': lambda *a: True,
             'funded_allowance': lambda *a: SimpleNamespace(reason='available'),
             'get_syncing_file_temporal_signed_url': lambda *a: 'http://synthetic.invalid',
-            'schedule_syncing_temporal_file_deletion': Mock(),
             'keyterms': AsyncMock(return_value=[]),
             'prerecorded': post,
             'postprocess_words': parser,

@@ -156,10 +156,19 @@ def _stub_external_deletion_boundaries(monkeypatch) -> None:
     """Keep Firebase, Twilio, billing, and vector service calls inside the harness."""
 
     from services.users import account_deletion
+    from database import user_data_deletion
 
     monkeypatch.setattr(account_deletion.auth, "delete_account", lambda _uid: None)
+    monkeypatch.setattr(account_deletion.firebase_auth, "revoke_refresh_tokens", lambda _uid: None)
     monkeypatch.setattr(account_deletion.users_db, "get_user_subscription", lambda _uid: None)
     monkeypatch.setattr(account_deletion.stripe_utils, "find_billable_app_subscription_ids", lambda _uid: [])
+    # The harness disables Typesense globally. The account-deletion service
+    # requires a verified owner purge before completion, so keep this external
+    # boundary hermetic just like Stripe, Firebase, and storage.
+    monkeypatch.setattr(account_deletion, "purge_user_conversation_index", lambda _uid: None)
+    # This E2E focuses on the durable wipe lifecycle, not marketplace query
+    # semantics; creator-app erasure is covered by the focused unit test.
+    monkeypatch.setattr(user_data_deletion, "search_apps_db", lambda _uid, my_apps: [])
     monkeypatch.setattr(account_deletion, "delete_user_caller_ids", lambda _uid: None)
     monkeypatch.setattr(account_deletion, "delete_agent_vm_for_account", lambda _uid: None)
     monkeypatch.setattr(account_deletion, "delete_account_credentials", lambda _uid: None)
@@ -224,6 +233,12 @@ def test_account_deletion_cloud_task_completes_once_and_redelivery_is_acked(
     _configure_durable_account_deletion(monkeypatch)
     _stub_external_deletion_boundaries(monkeypatch)
     purge_calls: list[str] = []
+    wipe_failures: list[dict[str, Any]] = []
+    monkeypatch.setattr(
+        account_deletion,
+        "_emit_deletion_telemetry",
+        lambda _uid, event, properties: wipe_failures.append({"event": event, **properties}),
+    )
 
     def successful_purge(uid: str) -> dict[str, list[dict[str, str]]]:
         purge_calls.append(uid)
@@ -238,9 +253,14 @@ def test_account_deletion_cloud_task_completes_once_and_redelivery_is_acked(
     cloud_tasks_client.expect_pending_marker(fake_firestore, test_uid)
     claimed_markers = _observe_claim_transitions(monkeypatch, fake_firestore, test_uid)
 
-    admitted = client.delete("/v1/users/delete-account", headers=auth_headers)
+    admitted = client.request("DELETE", "/v1/users/delete-account", headers=auth_headers, json={"erase_now": True})
     assert admitted.status_code == 200, admitted.text
-    assert admitted.json() == {"status": "ok", "message": "Account deletion started"}
+    assert admitted.json() == {
+        "status": "ok",
+        "message": "Account deletion started",
+        "pending_deletion": False,
+        "wipe_at": None,
+    }
 
     pending_marker = _read_marker(fake_firestore, test_uid)
     assert pending_marker["wipe_status"] == "pending"
@@ -254,7 +274,7 @@ def test_account_deletion_cloud_task_completes_once_and_redelivery_is_acked(
     completed = client.post(
         "/v1/users/account-deletion-wipes/run", json=payload, headers=_worker_headers(retry_count=0)
     )
-    assert completed.status_code == 200, completed.text
+    assert completed.status_code == 200, f"{completed.text}; wipe_failures={wipe_failures!r}"
     assert completed.json() == {"status": "done"}
     assert _read_marker(fake_firestore, test_uid)["wipe_status"] == "completed"
     _assert_user_data_deleted(fake_firestore, test_uid)
@@ -307,7 +327,7 @@ def test_account_deletion_cloud_task_retries_required_purge_failure_without_losi
     cloud_tasks_client.expect_pending_marker(fake_firestore, test_uid)
     claimed_markers = _observe_claim_transitions(monkeypatch, fake_firestore, test_uid)
 
-    admitted = client.delete("/v1/users/delete-account", headers=auth_headers)
+    admitted = client.request("DELETE", "/v1/users/delete-account", headers=auth_headers, json={"erase_now": True})
     assert admitted.status_code == 200, admitted.text
     wipe_job_id = _read_marker(fake_firestore, test_uid)["wipe_job_id"]
     payload = _assert_enqueued_task_schema(cloud_tasks_client, wipe_job_id)
@@ -369,10 +389,15 @@ def test_queue_not_found_preserves_auth_and_reconciles_from_the_marker(
     )
     cloud_tasks_client.create_error = NotFound("account-deletion queue is absent")
 
-    accepted = client.delete("/v1/users/delete-account", headers=auth_headers)
+    accepted = client.request("DELETE", "/v1/users/delete-account", headers=auth_headers, json={"erase_now": True})
 
     assert accepted.status_code == 200, accepted.text
-    assert accepted.json() == {"status": "ok", "message": "Account deletion started"}
+    assert accepted.json() == {
+        "status": "ok",
+        "message": "Account deletion started",
+        "pending_deletion": False,
+        "wipe_at": None,
+    }
     assert auth_deletions == []
     assert _read_marker(fake_firestore, test_uid)["wipe_status"] == "failed"
     assert fake_firestore.collection("users").document(test_uid).get().exists
@@ -416,13 +441,15 @@ def test_repeated_delete_request_is_fenced_without_requeueing(
         lambda _uid: {"required_failures": [], "best_effort_failures": []},
     )
 
-    first = client.delete("/v1/users/delete-account", headers=auth_headers)
+    first = client.request("DELETE", "/v1/users/delete-account", headers=auth_headers, json={"erase_now": True})
     assert first.status_code == 200, first.text
     marker = _read_marker(fake_firestore, test_uid)
     assert marker["wipe_status"] == "pending"
     assert len(cloud_tasks_client.create_calls) == 1
 
-    repeated_pending = client.delete("/v1/users/delete-account", headers=auth_headers)
+    repeated_pending = client.request(
+        "DELETE", "/v1/users/delete-account", headers=auth_headers, json={"erase_now": True}
+    )
     assert repeated_pending.status_code == 403, repeated_pending.text
     assert repeated_pending.json() == {
         "detail": {
@@ -438,7 +465,9 @@ def test_repeated_delete_request_is_fenced_without_requeueing(
     account_deletion.users_db.mark_user_deletion_wipe_running(test_uid)
     assert _read_marker(fake_firestore, test_uid)["wipe_status"] == "running"
 
-    repeated_running = client.delete("/v1/users/delete-account", headers=auth_headers)
+    repeated_running = client.request(
+        "DELETE", "/v1/users/delete-account", headers=auth_headers, json={"erase_now": True}
+    )
     assert repeated_running.status_code == 403, repeated_running.text
     assert repeated_running.json() == {
         "detail": {
@@ -473,7 +502,7 @@ def test_missing_root_document_does_not_hide_immediate_child_data(
         lambda _uid: {"required_failures": [], "best_effort_failures": []},
     )
 
-    admitted = client.delete("/v1/users/delete-account", headers=auth_headers)
+    admitted = client.request("DELETE", "/v1/users/delete-account", headers=auth_headers, json={"erase_now": True})
     assert admitted.status_code == 200, admitted.text
     wipe_job_id = _read_marker(fake_firestore, test_uid)["wipe_job_id"]
     payload = _assert_enqueued_task_schema(cloud_tasks_client, wipe_job_id)

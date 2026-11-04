@@ -277,6 +277,77 @@ def shaped_agentic():
     return agentic
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize('found', [False, True])
+async def test_shaped_transcript_recall_keeps_the_same_no_evidence_gate(monkeypatch, shaped_agentic, found):
+    from unittest.mock import AsyncMock
+    from utils.retrieval.transcript_recall import UNVERIFIED_TRANSCRIPT_ANSWER, begin_transcript_recall
+
+    agentic = shaped_agentic
+    captures = []
+
+    class Model:
+        model_name = 'synthetic-model'
+
+        def bind(self, **kwargs):
+            return self
+
+        async def astream(self, history):
+            captures.append(copy.deepcopy(history))
+            if len(captures) == 1:
+                yield SimpleNamespace(
+                    content='',
+                    tool_call_chunks=[
+                        {
+                            'index': 0,
+                            'id': 'search',
+                            'name': 'search_conversations_tool',
+                            'args': '{"query":"invoice","transcript_query":"invoice"}',
+                        }
+                    ],
+                )
+            else:
+                yield SimpleNamespace(content='It was 999 dollars[1].', tool_call_chunks=[])
+
+    async def execute(_name, _input, _registry, configurable):
+        begin_transcript_recall(configurable).found = found
+        return 'Source [1]: invoice 999 dollars.' if found else 'No matching transcript excerpts.'
+
+    monkeypatch.setattr(agentic, 'get_llm', lambda *a, **k: Model())
+    monkeypatch.setattr(agentic, '_execute_tool', execute)
+    monkeypatch.setattr(context_module, 'take_prepared', AsyncMock(return_value={'summary': '', 'digest': ''}))
+    monkeypatch.setattr(context_module, 'schedule_refresh', lambda *a, **k: None)
+    output = []
+    callback = agentic.AsyncStreamingCallback()
+    await agentic._run_shaped_chat_stream(
+        'remote base prompt',
+        [{'role': 'user', 'content': 'Check the invoice again.'}],
+        [
+            {
+                'type': 'function',
+                'function': {
+                    'name': 'search_conversations_tool',
+                    'description': 'Search saved transcripts',
+                    'parameters': {'type': 'object', 'properties': {}},
+                },
+            }
+        ],
+        {'search_conversations_tool': object()},
+        callback,
+        output,
+        agentic.AgentSafetyGuard(),
+        {'user_id': 'u', 'chat_session_id': 's'},
+    )
+    assert '<transcript_recall>' in str(captures[0])
+    assert ''.join(output) == ('It was 999 dollars[1].' if found else UNVERIFIED_TRANSCRIPT_ANSWER)
+    streamed = []
+    while not callback.queue.empty():
+        event = callback.queue.get_nowait()
+        if isinstance(event, str) and event.startswith('data: '):
+            streamed.append(event[6:])
+    assert ''.join(streamed) == ''.join(output)
+
+
 @pytest.mark.parametrize('channel', [None, 'telegram', 'imessage'])
 def test_real_shaped_runner_preserves_system_and_stable_history(monkeypatch, channel, shaped_agentic):
     agentic = shaped_agentic

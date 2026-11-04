@@ -9,6 +9,9 @@
    "final_job": {
     "attempt": 1,
     "client_status": "completed",
+    "compute_decision": {
+     "outcome": "unattempted"
+    },
     "conversation_id": "conv-1",
     "duration_seconds": 117.77,
     "fresh_capture": false,
@@ -115,6 +118,9 @@
    "final_job": {
     "attempt": 1,
     "client_status": "completed",
+    "compute_decision": {
+     "outcome": "unattempted"
+    },
     "conversation_id": "conv-2",
     "duration_seconds": 217.61,
     "fresh_capture": true,
@@ -211,6 +217,9 @@
    "final_job": {
     "attempt": 1,
     "client_status": "completed",
+    "compute_decision": {
+     "outcome": "unattempted"
+    },
     "conversation_id": "conv-3",
     "duration_seconds": 329.81,
     "fresh_capture": true,
@@ -291,7 +300,7 @@
    },
    "job_transitions": [
     "<1s ready",
-    "<1s leased",
+    "<5s leased",
     "<30s result_ready",
     "<30s committed",
     "<30s committed client:completed"
@@ -317,6 +326,9 @@
    "final_job": {
     "attempt": 1,
     "client_status": "completed",
+    "compute_decision": {
+     "outcome": "unattempted"
+    },
     "conversation_id": "conv-4",
     "duration_seconds": 559.77,
     "fresh_capture": true,
@@ -387,7 +399,7 @@
    },
    "job_transitions": [
     "<1s ready",
-    "<1s leased",
+    "<5s leased",
     "<30s result_ready",
     "<30s committed",
     "<30s committed client:completed"
@@ -413,6 +425,9 @@
    "final_job": {
     "attempt": 1,
     "client_status": "completed",
+    "compute_decision": {
+     "outcome": "unattempted"
+    },
     "conversation_id": "conv-5",
     "duration_seconds": 552.98,
     "fresh_capture": true,
@@ -493,7 +508,7 @@
    },
    "job_transitions": [
     "<1s ready",
-    "<5s leased",
+    "<30s leased",
     "<30s result_ready",
     "<30s committed",
     "<30s committed client:completed"
@@ -519,6 +534,9 @@
    "final_job": {
     "attempt": 1,
     "client_status": "completed",
+    "compute_decision": {
+     "outcome": "unattempted"
+    },
     "conversation_id": "conv-6",
     "duration_seconds": 447.66,
     "fresh_capture": true,
@@ -589,7 +607,7 @@
    },
    "job_transitions": [
     "<1s ready",
-    "<5s leased",
+    "<30s leased",
     "<30s result_ready",
     "<30s committed",
     "<30s committed client:completed"
@@ -615,6 +633,9 @@
    "final_job": {
     "attempt": 1,
     "client_status": "completed",
+    "compute_decision": {
+     "outcome": "unattempted"
+    },
     "conversation_id": "conv-7",
     "duration_seconds": 525.29,
     "fresh_capture": true,
@@ -685,7 +706,7 @@
    },
    "job_transitions": [
     "<1s ready",
-    "<5s leased",
+    "<30s leased",
     "<30s result_ready",
     "<30s committed",
     "<30s committed client:completed"

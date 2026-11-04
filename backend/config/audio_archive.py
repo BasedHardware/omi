@@ -18,6 +18,8 @@ logger = logging.getLogger(__name__)
 
 
 def _phase_enabled(phase: str) -> bool:
+    # LIVE controls legacy admission after AUDIO_DURABLE_OUTBOX_ENABLED=false;
+    # the default-on custody path deliberately uses its own sole kill switch.
     # LIVE and READ default on: the raw Opus archive must exist wherever the
     # kill switch is not explicitly disabled. A default-off fleet phase would
     # leave the as-captured ruling unimplemented on every service that has not
@@ -56,11 +58,15 @@ def _phase_enabled(phase: str) -> bool:
 
 
 def _cohort_percent(phase: str) -> float | None:
-    # STOP_PCM ramps against its own percent: AUDIO_ARCHIVE_PERCENT is pinned
-    # at 100 fleet-wide for COALESCE, so a shared knob could not hold STOP_PCM
-    # back without breaking merge coalescing.
+    # STOP_PCM and REGIONAL_CACHE ramp against their own percent:
+    # AUDIO_ARCHIVE_PERCENT is pinned at 100 fleet-wide for COALESCE, so a
+    # shared knob could not hold either phase back without breaking merge
+    # coalescing — and for REGIONAL_CACHE it would make the enable flag an
+    # instant 100% cutover with no ramp.
     if phase == 'STOP_PCM':
         raw = os.getenv('AUDIO_ARCHIVE_STOP_PCM_PERCENT', '0')
+    elif phase == 'REGIONAL_CACHE':
+        raw = os.getenv('AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT', '0')
     else:
         raw = os.getenv('AUDIO_ARCHIVE_PERCENT', '0')
     try:
@@ -84,11 +90,40 @@ def admitted(uid: str, phase: str) -> bool:
     return in_rollout_cohort(uid, 'audio-archive') or bucket < percent
 
 
+def derived_audio_bucket() -> str:
+    """Configured rendition storage resource, shared by writers and readers."""
+    return os.getenv('BUCKET_AUDIO_DERIVED', '').strip()
+
+
 def regional_bucket(uid: str, legacy: str | None) -> str | None:
     if admitted(uid, 'REGIONAL_CACHE'):
-        configured = os.getenv('BUCKET_AUDIO_DERIVED', '').strip()
+        configured = derived_audio_bucket()
         if not configured:
             logger.warning('regional audio cache missing BUCKET_AUDIO_DERIVED; retaining legacy bucket')
             return legacy
         return configured
     return legacy
+
+
+def _regional_chunks_percent() -> float:
+    try:
+        percent = float(os.getenv('AUDIO_ARCHIVE_REGIONAL_CHUNKS_PERCENT', '0'))
+    except ValueError:
+        return 0.0
+    return percent if 0 <= percent <= 100 else 0.0
+
+
+def regional_chunk_bucket(uid: str, legacy: str) -> str:
+    """Bucket for new pusher PCM chunk batches.
+
+    A second ramp behind the REGIONAL_CACHE enable with its own percent: live
+    PCM chunks are a rendition of the canonical raw-live packs, which stay in
+    the multi-region bucket. Chunk readers list and resolve both buckets.
+    Percent only (no allowlist admission), so percent 0 is a complete rollback.
+    """
+    if not uid or not _phase_enabled('REGIONAL_CACHE'):
+        return legacy
+    configured = derived_audio_bucket()
+    if not configured:
+        return legacy
+    return configured if cohort_bucket(uid, 'audio-archive', bits=64) < _regional_chunks_percent() else legacy

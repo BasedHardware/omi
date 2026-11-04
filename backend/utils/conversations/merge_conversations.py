@@ -23,6 +23,7 @@ from google.api_core import exceptions as google_exceptions
 
 import database.conversations as conversations_db
 from database import conversation_tombstones
+from database.conversation_merge_policy import source_has_merge_receipt
 from database._client import db as firestore_db
 from database.vector_db import delete_action_item_vectors_batch, delete_vector
 from models.audio_file import AudioFile
@@ -171,6 +172,9 @@ def validate_merge_compatibility(
         if conv.get("deleted"):
             return False, "Cannot merge a deleted conversation.", None
 
+    if any(source_has_merge_receipt(conv) for conv in conversations):
+        return False, "A conversation is already incorporated into a merged result.", None
+
     # Check none are locked
     for conv in conversations:
         if conv.get("is_locked", False):
@@ -271,6 +275,11 @@ def perform_merge_async(
             checkpoint() if merge_job_id else _handle_merge_failure(uid, conversation_ids)
             return
 
+        if any(source_has_merge_receipt(conv) for conv in conversations):
+            logger.error(f"Merge aborted: a source was already incorporated into another target uid={uid}")
+            checkpoint() if merge_job_id else _handle_merge_failure(uid, conversation_ids)
+            return
+
         # Normalise timestamp fields once so the sort key, max() reducer,
         # .isoformat() metadata, and _merge_transcript_segments arithmetic
         # below can all assume tz-aware datetimes regardless of how each
@@ -290,6 +299,11 @@ def perform_merge_async(
         # 3. Generate new conversation ID and copy audio chunks
         checkpoint('target_started')
         new_conversation_id = merge_target_id or str(uuid.uuid4())
+        # skip_existing: merge retries and re-processing campaigns re-copy
+        # every chunk unconditionally otherwise, creating a superseded
+        # generation per object per run (the 10-16..19 CloneObject burst).
+        # The bridge copy skips a destination already holding the same bytes
+        # and preconditions concurrent writers on the destination generation.
         merged_audio_files = _copy_audio_chunks_for_merge(uid, sorted_convs, new_conversation_id, skip_existing=True)
 
         # 4. Determine basic fields from source conversations
@@ -684,11 +698,22 @@ def _copy_audio_chunks_for_merge(
     """
     bucket = _get_storage_client().bucket(private_cloud_sync_bucket)
     has_chunks = False
-    existing = (
-        {blob.name: blob for blob in bucket.list_blobs(prefix=f"chunks/{uid}/{new_conversation_id}/")}
-        if skip_existing
-        else None
-    )
+    # A chunk is copied within the bucket it was listed from (a regional-cohort
+    # owner's batches live in BUCKET_AUDIO_DERIVED); list_audio_chunks lists both.
+    buckets: Dict[str, Any] = {private_cloud_sync_bucket: bucket}
+    existing_by_bucket: Dict[str, Dict[str, Any]] = {}
+
+    def existing_in(name: str) -> Dict[str, Any]:
+        if name not in buckets:
+            buckets[name] = _get_storage_client().bucket(name)
+        if name not in existing_by_bucket:
+            existing_by_bucket[name] = {
+                blob.name: blob for blob in buckets[name].list_blobs(prefix=f"chunks/{uid}/{new_conversation_id}/")
+            }
+        return existing_by_bucket[name]
+
+    if skip_existing:
+        existing_in(private_cloud_sync_bucket)
 
     for conv in conversations:
         conv_id = conv["id"]
@@ -707,12 +732,16 @@ def _copy_audio_chunks_for_merge(
             # Preserve original filename (handles both single and batch blob naming)
             original_filename = chunk["path"].split("/")[-1]
             new_path = f"chunks/{uid}/{new_conversation_id}/{original_filename}"
-            source_blob = bucket.blob(chunk["path"])
-            if existing is None:
-                _copy_chunk_with_backoff(uid, bucket, source_blob, new_path)
+            name = chunk.get('bucket') or private_cloud_sync_bucket
+            if name not in buckets:
+                buckets[name] = _get_storage_client().bucket(name)
+            target = buckets[name]
+            source_blob = target.blob(chunk["path"])
+            if not skip_existing:
+                _copy_chunk_with_backoff(uid, target, source_blob, new_path)
             else:
-                identity = _copied_source_identity(bucket, chunk)
-                _copy_bridge_chunk(uid, bucket, source_blob, new_path, identity, existing.get(new_path))
+                identity = _copied_source_identity(chunk)
+                _copy_bridge_chunk(uid, target, source_blob, new_path, identity, existing_in(name).get(new_path))
 
     # Create AudioFile records from copied chunks
     if has_chunks:
@@ -764,16 +793,13 @@ def _copy_chunk_with_backoff(
         return
 
 
-def _copied_source_identity(bucket: Any, chunk: Dict) -> Dict:
-    """Checksum and size of the object copy_blob actually reads: private bucket, chunk path.
+def _copied_source_identity(chunk: Dict) -> Dict:
+    """Checksum and size of the object copy_blob actually reads.
 
-    A chunk listed from BUCKET_AUDIO_DERIVED carries that bucket's checksum, not the
-    private object's, so stat the private source instead of trusting the listing.
+    The copy reads the listed object in the bucket it was listed from, so the
+    listing's own checksum describes exactly the copied bytes.
     """
-    if not chunk.get('bucket'):
-        return {'crc32c': chunk.get('crc32c'), 'size': chunk.get('size')}
-    source = bucket.get_blob(chunk['path'], retry=None)  # a 429 must not wait out the library's 120 s retry
-    return {} if source is None else {'crc32c': source.crc32c, 'size': source.size}
+    return {'crc32c': chunk.get('crc32c'), 'size': chunk.get('size')}
 
 
 def _same_object(blob: Any, identity: Dict) -> bool:

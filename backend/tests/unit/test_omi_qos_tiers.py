@@ -336,6 +336,7 @@ class TestModelQosProfiles:
             'conv_structure',
             'conv_app_result',
             'daily_summary',
+            'open_loop_daily',
             'external_structure',
             'memories',
             'x_memory_extraction_flex',
@@ -367,6 +368,7 @@ class TestModelQosProfiles:
             'translation',
             'screen_frame_judge',
             'wrapped_analysis',
+            'episode_composer',
         }
         nano_features = {
             'conv_app_select',
@@ -378,6 +380,7 @@ class TestModelQosProfiles:
             'persona_chat',
             'sync_redrive_title',
             'episode_incremental',
+            'open_loop_card',
         }
         expected_openai = {
             **{feature: (LUNA_MODEL, 'openai') for feature in luna_features},

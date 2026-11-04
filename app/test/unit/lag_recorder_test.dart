@@ -136,6 +136,35 @@ void main() {
     observer.dispose();
   });
 
+  testWidgets('the stall watchdog stops on inactive and hidden, not only paused', (tester) async {
+    final observer = MobilePerformanceTelemetry(
+      emit: (_, __) {},
+      identityEpoch: () => 0,
+      diagnosticsEnabled: () => true,
+      lag: lag,
+    );
+    lag.active = false;
+    observer.attach();
+    observer.onLifecycleState(AppLifecycleState.resumed);
+    expect(lag.watchdogRunning, isTrue);
+    // iOS delivers inactive → hidden → paused, and Dart timers are throttled
+    // before `paused`: every non-resumed state must already stop the watchdog
+    // or the throttled background gap is recorded as UI stalls.
+    for (final state in [
+      AppLifecycleState.inactive,
+      AppLifecycleState.hidden,
+      AppLifecycleState.paused,
+    ]) {
+      observer.onLifecycleState(state);
+      expect(lag.watchdogRunning, isFalse, reason: '$state must suspend the stall watchdog');
+      expect(lag.active, isFalse, reason: '$state must stop lag capture');
+    }
+    observer.onLifecycleState(AppLifecycleState.resumed);
+    expect(lag.watchdogRunning, isTrue);
+    expect(lag.active, isTrue);
+    observer.dispose();
+  });
+
   testWidgets('real drags reach the recorder through the global pointer route, with no widget mounted', (tester) async {
     final observer = MobilePerformanceTelemetry(
       emit: (_, __) {},

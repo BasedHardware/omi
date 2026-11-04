@@ -88,6 +88,25 @@ reconciliation. Trials retain their separate user votes, generation fences,
 30 admitted outcomes from at least 10 witnesses after 300 seconds for the 5%
 step, and 60 admitted outcomes from at least 20 witnesses after 600 seconds for
 the 25% step; a completed admitted window before the dwell holds at its stage.
+Recovery re-benching uses two tiers of **admitted, non-censored outcomes in
+the current trial window**. Ordinary rejection needs at least 100 outcomes,
+the same CUSUM burst evidence as stage 100, broad failure witnesses, and a
+user failure share above the gate. A fast path for a truly broken provider
+needs at least 20 outcomes, at least 25% attributable failures, and broad
+failure witnesses. One or two timeouts in a tiny trial do not qualify.
+The former 30/60-outcome rate-only rejection is removed. Promotion, dwell and
+bounded trial windows (120/240 outcomes) are unchanged; completing the clean
+5→25→100 ramp clears the consecutive failure history. The default-on
+`STT_ROUTING_RECOVERY_SAMPLE_GUARD_ENABLED` switch restores the former rules
+when explicitly set to `false`, `0`, or `off`.
+To retain the chronic-provider disruption budget with the larger recovery
+sample, a guarded re-bench advances two cooldown exponents (instead of one)
+and caps the wait at six hours. After a first full-traffic bench, successive
+failed recovery trials wait 20 minutes, 80 minutes, 320 minutes, then six hours.
+A single false bench still starts its first 5% recovery after five minutes.
+Stage-100 detection/cooldowns are unchanged. The deterministic 17,900-session,
+61%-failure daily replay retains its original bounds: fewer than 100 failed
+sessions including the initial detection allowance and fewer than 200 trials.
 Redis CAS enforces all
 of this fleet-wide. Bench writes are one atomic Lua update — an active account
 quarantine rejects a selection write, same-kind writes keep the longest
@@ -127,6 +146,56 @@ provider errors bench at median 20/13/8 and p95 48/21/8 sessions. At 62 sessions
 per five minutes that is about four minutes at the 40% p95, plus settlement
 and cache delay. The rate must be representative admitted votes, not one
 client's repeated reconnects. These are synthetic bounds, not prod acceptance.
+
+## Audited operator cost-gate reset
+
+After a confirmed false bench, an authorized operator may reset **one registered
+target** using the deployed backend image and its existing runtime environment.
+Complete the rolling deployment first so old pods cannot reconcile pre-fix local
+fault evidence. This action writes cost-routing state, not user/account data.
+It does not change account quarantines, endpoint circuits, admission capacity,
+language capabilities, or allocation. No runtime config change is required;
+leave `STT_ROUTING_RECOVERY_SAMPLE_GUARD_ENABLED` unset or `true`.
+
+Run from `backend/` in that environment, first without `--apply`:
+
+```bash
+python scripts/reset_live_stt_cost_gate.py --target parakeet-window --environment prod --reason sttbench-20261027-06z
+python scripts/reset_live_stt_cost_gate.py --target parakeet-window --environment prod --reason sttbench-20261027-06z --apply
+```
+
+The explicit environment must match `OMI_ENV_STAGE`. Both commands print only
+the target, environment, change identifier, stages and generations by language.
+Apply uses one Redis WATCH/MULTI transaction for `all` and every supported
+language: clears evidence/strikes, sets stage 100 and advances each generation.
+Generations advance into a new Redis-time reset epoch to also supersede
+unreconciled pod-local fault generations. Every dial captures that epoch before
+awaiting the handshake; connect failures may follow ordinary gate changes but
+cannot cross an operator reset. A separate content-free generation floor
+persists under the target identity, so expiry of the normal 900-second healthy
+evidence key cannot re-admit a long-lived pre-reset session's votes. Refresh
+and cold writers seed missing evidence from that floor. The reset epoch carries
+no user/fairness data; the normal fairness-data TTL remains unchanged.
+A competing health update retries the entire reset, at most five times.
+The same transaction writes a content-free audit receipt under the target's
+endpoint/account namespace for 30 days; stdout and the warning log contain
+the receipt and its `audit_id`. Retain the output in the operator's train record.
+This is a one-time reset; subsequent real failures can immediately bench again.
+
+After the next shared refresh (normally five seconds), verify stage 100 on every
+fresh pod and check language state, timeout counters, transcript success and
+first-text latency. A transport interruption after submission can make the
+command's result uncertain: use the pre-submit log's `audit_id` to read that
+target's `operator-audit:<audit_id>` receipt through the same runtime namespace
+and inspect fresh stage telemetry before retrying. A repeated apply advances generations
+again, so do not run it as a recurring job.
+
+To reverse the release, use the same command with `--stage 0`, a new reason and
+`--apply`: it benches the target for five minutes and then resumes normal staged
+recovery. Removing the command or changing the guard switch does not undo a
+committed reset. A malformed scope aborts the entire transaction, preserving all
+existing state. Healthy state retains the normal 900-second idle TTL; a reversed
+bench persists until normal recovery advances it.
 
 ## Minimum shadow go/no-go (normally 60–120 minutes)
 

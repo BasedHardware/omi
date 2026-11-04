@@ -69,11 +69,24 @@ class LocalRecordingsProvider extends ChangeNotifier {
       }
       if (provider == null) return;
       final pointers = await ConversationSyncUtils.processConversationIds(
-          newConversationIds: result.newConversationIds, updatedConversationIds: result.updatedConversationIds);
+          newConversationIds: result.newConversationIds,
+          updatedConversationIds: result.updatedConversationIds,
+          onConversation: (requestedId, row) {
+            if (!_disposed && session == _ledger.sessionGeneration && identical(provider, _conversationProvider)) {
+              if (requestedId != row.id) {
+                provider.replaceBridgedConversation(requestedId, row);
+              } else if (row.isHiddenFromDefaultList) {
+                provider.upsertConversation(row);
+              }
+            }
+          });
       if (_disposed || session != _ledger.sessionGeneration || !identical(provider, _conversationProvider)) return;
       for (final pointer in pointers) {
         provider.upsertConversation(pointer.conversation);
       }
+      // A sync response can name only the survivor. Refresh the authoritative
+      // list too so older donor IDs disappear when no event names them.
+      await provider.forceRefreshConversations();
     } catch (e) {
       Logger.error('LocalRecordings: surfacing confirmed conversations failed: $e');
     }

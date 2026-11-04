@@ -54,7 +54,10 @@ def test_record_silence_assignment_mirrors_even_when_the_transaction_fails(monke
 
     monkeypatch.setattr(projector_module.conversations_db, 'assign_sync_conversation', fail)
     session = SimpleNamespace(
-        prepare=None, validate_plan=None, policy=SimpleNamespace(projection_contention=False, projection_timing=None)
+        entry={},
+        prepare=None,
+        validate_plan=None,
+        policy=SimpleNamespace(projection_contention=False, projection_timing=None),
     )
     item = SimpleNamespace(capture_at=1.0, duration_seconds=2.0)
     bound = SimpleNamespace(target_conversation_id='c', data_protection_level='standard', owner_id='o')
@@ -165,7 +168,10 @@ def test_artifact_cleanup_refreshes_what_it_touched(monkeypatch):
     calls = []
     monkeypatch.setattr(retention, 'mirror_refresh', lambda ns, keys: calls.append((ns, keys)))
     artifacts = [Snap({'owner_id': 'u', 'uri': 'gs://b/1'}, 'a1'), Snap({'owner_id': 'u', 'uri': 'gs://b/2'}, 'a2')]
+    for artifact in artifacts:
+        artifact._doc['owner_key'] = retention.privacy_owner_key('u')
     artifacts[1]._doc['erasure_requested'] = True
+    artifacts[0]._doc.update(capture_at=datetime(2026, 10, 21, tzinfo=timezone.utc).timestamp(), duration_seconds=1)
     monkeypatch.setattr(retention.queries, 'due_artifacts', lambda *a: artifacts)
     store = SimpleNamespace(client=None, namespace='batch_pipeline_dev')
     now = datetime(2026, 10, 21, tzinfo=timezone.utc)

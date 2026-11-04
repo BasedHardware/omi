@@ -28,6 +28,65 @@ def seed(pressure, now, busy=False):
     pressure._last_good_at = now
 
 
+def test_ready_replicas_excludes_stale_or_removed_pods_without_io(monkeypatch):
+    pressure = pressure_module.BatchPressure()
+    now = [100.0]
+    monkeypatch.setattr(pressure_module, 'time', SimpleNamespace(monotonic=lambda: now[0]))
+    assert pressure.ready_replicas() == ()
+    seed(pressure, now[0])
+    pressure._samples['10.0.0.9'] = pressure_module.ReplicaPressure(0, 0, now[0])
+    assert pressure.ready_replicas() == ('10.0.0.1', '10.0.0.2')
+    pressure._samples['10.0.0.1'] = pressure_module.ReplicaPressure(0, 0, 1)
+    assert pressure.ready_replicas() == ('10.0.0.2',)
+    assert pressure.discovered_replicas() == ('10.0.0.1', '10.0.0.2')
+    # adm2 preserves cached timestamps for bounded admission grace, while
+    # explicitly marking failed DNS discovery unavailable. Such a snapshot
+    # must never be offered as fresh direct-pod routing authority.
+    monkeypatch.setattr(pressure, '_discovery_available', False, raising=False)
+    assert pressure.ready_replicas() == ()
+    assert pressure.discovered_replicas() == ()
+    monkeypatch.setattr(pressure, '_discovery_available', True)
+    now[0] += pressure.STALE_SECONDS + 1
+    assert pressure.ready_replicas() == ()
+    assert pressure.discovered_replicas() == ()
+
+
+def test_stale_pressure_cannot_erase_dns_ready_gpu_quarantine(monkeypatch):
+    from utils.stt.window_replicas import WindowReplicas
+
+    now = [100.0]
+    monkeypatch.setattr(pressure_module, 'time', SimpleNamespace(monotonic=lambda: now[0]))
+    pressure = pressure_module.BatchPressure()
+    seed(pressure, now[0])
+    pool = WindowReplicas(clock=lambda: now[0])
+    pool._cursor = 0
+    failed = pool.claim(pressure.ready_replicas(), discovered=pressure.discovered_replicas())
+    pool.settle(failed, failed=True)
+    now[0] += 20
+    pressure._observed_at = now[0]  # DNS still sees both pods
+    pressure._samples['10.0.0.2'] = pressure_module.ReplicaPressure(0, 0, now[0])
+    assert pool.claim(pressure.ready_replicas(), discovered=pressure.discovered_replicas()).ip == '10.0.0.2'
+    pressure._samples['10.0.0.1'] = pressure_module.ReplicaPressure(0, 0, now[0])
+    assert (
+        pool.claim(
+            pressure.ready_replicas(), exclude=frozenset({'10.0.0.2'}), discovered=pressure.discovered_replicas()
+        )
+        is None
+    )
+    now[0] = 220
+    seed(pressure, now[0])
+    probe = pool.claim(
+        pressure.ready_replicas(), exclude=frozenset({'10.0.0.2'}), discovered=pressure.discovered_replicas()
+    )
+    assert probe.ip == '10.0.0.1'
+    assert (
+        pool.claim(
+            pressure.ready_replicas(), exclude=frozenset({'10.0.0.2'}), discovered=pressure.discovered_replicas()
+        )
+        is None
+    )
+
+
 @pytest.fixture(autouse=True)
 def settings(monkeypatch):
     monkeypatch.setenv('STT_CONNECT_ORDER_FROM_CONFIG', 'true')

@@ -16,6 +16,7 @@ from typing import Any, Callable, Literal, Mapping
 from config.sync_telemetry import SyncFailureReason
 from models.conversation_enums import ConversationSource
 from utils.journey_metrics_contract import bounded_app_build
+from utils.conversations.size_limit import PROJECTED_SIZE_BUCKETS
 from utils.metrics import (
     OMI_LIVE_SESSION_TRANSCRIPT_OUTCOME_TOTAL,
     OMI_LIVE_STT_ACCEPTED_TOTAL,
@@ -30,6 +31,7 @@ from utils.metrics import (
     OMI_LISTEN_UNKNOWN_CHANNEL_PREFIX_TOTAL,
     OMI_LISTEN_ZERO_BYTE_SESSION_TOTAL,
     OMI_SYNC_INTAKE_TOTAL,
+    OMI_SYNC_QUEUE_WAIT_SECONDS,
     OMI_SYNC_INTERNAL_FAILURES_TOTAL,
     OMI_SYNC_TRANSCRIPTION_JOBS_TOTAL,
     OMI_SYNC_TRANSCRIPTION_SEGMENTS_TOTAL,
@@ -51,6 +53,9 @@ _ROUTES = {'voice_chat_sse', 'voice_rest_multipart', 'voice_rest_pcm', 'sync'}
 _PLATFORMS = {'android', 'desktop', 'ios', 'linux', 'macos', 'mobile', 'web', 'windows'}
 _REVISION_PATTERN = re.compile(r'[^a-zA-Z0-9_.-]')
 _SYNC_LANES = {'backfill', 'fresh'}
+# Sync pipeline startup exposes idle lanes without inventing wait observations.
+for _sync_lane in _SYNC_LANES:
+    OMI_SYNC_QUEUE_WAIT_SECONDS.labels(lane=_sync_lane)
 _SYNC_MODELS = {'nova-3', 'parakeet', 'velma-2'}
 _SYNC_INTERNAL_FAILURE_REASONS = frozenset(reason.value for reason in SyncFailureReason) - {
     SyncFailureReason.NONE.value
@@ -88,6 +93,12 @@ def _bounded_source(source: str | None) -> str:
         return ConversationSource(normalized).value if normalized else ConversationSource.unknown.value
     except ValueError:
         return ConversationSource.unknown.value
+
+
+def bounded_client_platform(platform: str | None) -> str:
+    """Public alias so listen-session counters share the bounded platform labels."""
+
+    return _bounded_platform(platform)
 
 
 def _deployment_version() -> str:
@@ -322,15 +333,20 @@ def record_live_stt_pre_audio_failure(
         cohort.terminal('failure')
 
 
-def record_sync_intake_outcome(*, created: bool) -> None:
+def record_sync_intake_outcome(*, created: bool, projected_size_bucket: str | None = None) -> None:
     """Count one sync intake as created or merged. Never labeled by uid."""
 
     outcome = 'created' if created else 'merged'
     if outcome not in _SYNC_INTAKE_OUTCOMES:
         raise ValueError(f'unknown sync intake outcome: {outcome}')
-    OMI_SYNC_INTAKE_TOTAL.labels(outcome=outcome).inc()
+    bucket = projected_size_bucket if projected_size_bucket in PROJECTED_SIZE_BUCKETS else None
+    # A missing observation must not invent a size band. Production assignment
+    # supplies one on every write/no-op path; legacy test adapters may not.
+    if bucket is not None:
+        OMI_SYNC_INTAKE_TOTAL.labels(outcome=outcome, projected_size_bucket=bucket).inc()
     try:
-        logger.info('omi_sync_intake outcome=%s', outcome)
+        suffix = f' projected_size_bucket={bucket}' if bucket is not None else ''
+        logger.info('omi_sync_intake outcome=%s%s', outcome, suffix)
     except Exception:
         pass
 

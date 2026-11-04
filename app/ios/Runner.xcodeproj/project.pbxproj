@@ -35,12 +35,14 @@
 		2A0DF503EBD959F1F386CE33 /* SiriPigeon.g.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50BD5A208177AB3828AC0828 /* SiriPigeon.g.swift */; };
 		2AE34400DB52FFE4BE215840 /* PhoneMicInterruptionMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFD07 /* PhoneMicInterruptionMonitor.swift */; };
 		2B99FAF9526FEECCB4348D72 /* OmiPhoneCallsPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFB72F2A81B100E78A3C /* OmiPhoneCallsPlugin.swift */; };
+		A1B2C3D4E5F60718293A4B5C /* OmiCapturePresentationPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4E5F6071829394A0515E2F3 /* OmiCapturePresentationPolicy.swift */; };
 		369B31A8217B2FEE8CEB4B22 /* OmiCaptureAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39E21825B797F6BEAD08E6C3 /* OmiCaptureAttributes.swift */; };
 		36D27A357376AC5C2E2B2921 /* prodDebug.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = 08E3947A4217EF205E22BD44 /* prodDebug.xcconfig */; };
 		387657874D0C4CD5BAE2E8F1 /* OmiDeviceHealthStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56F18562DF5D43B1890404F7 /* OmiDeviceHealthStore.swift */; };
 		3B3967161E833CAA004F5970 /* AppFrameworkInfo.plist in Resources */ = {isa = PBXBuildFile; fileRef = 3B3967151E833CAA004F5970 /* AppFrameworkInfo.plist */; };
 		3E200B606D3D02BFEF213BF1 /* MWDATCore in Frameworks */ = {isa = PBXBuildFile; productRef = F954EF7C37697F83E05F20D8 /* MWDATCore */; };
 		3FF07873AB8530FF5964C7E4 /* devDebug.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = 17DD34CA2CFE6F3845E13C99 /* devDebug.xcconfig */; };
+		B2C3D4E5F60718293940515D /* OmiCapturePresentationPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4E5F6071829394A0515E2F3 /* OmiCapturePresentationPolicy.swift */; };
 		4177FE2DA51D5720F8F5D01E /* OmiCaptureAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39E21825B797F6BEAD08E6C3 /* OmiCaptureAttributes.swift */; };
 		4255287D2E7C4B8300FD5CFB /* RecorderHostApiImpl.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4255287C2E7C4B8300FD5CFB /* RecorderHostApiImpl.swift */; };
 		426B89AD2C46919D00E24442 /* Config in Resources */ = {isa = PBXBuildFile; fileRef = 426B89AC2C46919D00E24442 /* Config */; };
@@ -84,6 +86,7 @@
 		6F05FE70A6EBD0F070295CEC /* SiriBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04725A34C6451C370260A182 /* SiriBridge.swift */; };
 		706F05FDF2E05DA66960E710 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = B7E1D0A1B7E1D0A1B7E1D0A1 /* Localizable.xcstrings */; };
 		715D47AFEB21D49E37F16F3B /* WatchConnectivity.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 42A7BA4B2E788F0100138969 /* WatchConnectivity.framework */; };
+		C3D4E5F6071829394A0515E2F /* OmiCapturePresentationPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4E5F6071829394A0515E2F3 /* OmiCapturePresentationPolicy.swift */; };
 		728AD3B9CE56CAD614E49BC8 /* OmiCaptureAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39E21825B797F6BEAD08E6C3 /* OmiCaptureAttributes.swift */; };
 		7361ED343F303C57EF2931A2 /* OmiCallCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFC82F2A81B100E78A3C /* OmiCallCoordinator.swift */; };
 		74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74858FAE1ED2DC5600515810 /* AppDelegate.swift */; };
@@ -186,6 +189,12 @@
 		DE48ED224FF11175DA9FFC6A /* OmiHomeWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BFFBC8C660B65EEFE79C220 /* OmiHomeWidgets.swift */; };
 		DECE0A4513CE66136ABC42D2 /* Config in Resources */ = {isa = PBXBuildFile; fileRef = 426B89AC2C46919D00E24442 /* Config */; };
 		DF385A18EA9CC7E3C915F581 /* OmiDirectCallCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFCC2F2A81B100E78A3C /* OmiDirectCallCoordinator.swift */; };
+		E5ECD5F893BE640A2A446738 /* LivePreviewPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E9FCBF3791B725CA1BEA76C /* LivePreviewPlugin.swift */; };
+		F3A44AF484B44F559ADD1671 /* LivePreviewNotesPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3EEA6589ABA4CE7924CDA2D /* LivePreviewNotesPlugin.swift */; };
+		B9C64E7F6FA52D7B7B3F1403 /* LivePreviewPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E9FCBF3791B725CA1BEA76C /* LivePreviewPlugin.swift */; };
+		8F414CD61C9E4B5DA84FBCCD /* LivePreviewNotesPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3EEA6589ABA4CE7924CDA2D /* LivePreviewNotesPlugin.swift */; };
+		908FD40D876E8C8344452BC0 /* LivePreviewSelection.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0E325766888761A213589D3 /* LivePreviewSelection.swift */; };
+		E2656CA5F9118C50722F0764 /* LivePreviewSelection.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0E325766888761A213589D3 /* LivePreviewSelection.swift */; };
 		E1293501E1293501E1293501 /* SpeechDeadline.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1293503E1293503E1293503 /* SpeechDeadline.swift */; };
 		E1293502E1293502E1293502 /* SpeechDeadline.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1293503E1293503E1293503 /* SpeechDeadline.swift */; };
 		E3EBE5F3951B8B2945870160 /* OnDeviceOverflowPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F972B4450EC1589187A56A5 /* OnDeviceOverflowPlugin.swift */; };
@@ -301,6 +310,7 @@
 		31D5B906D56C4FDBBCCFF403 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 		35656BCB5CBAA7C0BB162EE0 /* prodRelease.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = prodRelease.xcconfig; path = Flutter/prodRelease.xcconfig; sourceTree = "<group>"; };
 		39E21825B797F6BEAD08E6C3 /* OmiCaptureAttributes.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = OmiCaptureAttributes.swift; sourceTree = "<group>"; };
+		D4E5F6071829394A0515E2F3 /* OmiCapturePresentationPolicy.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = OmiCapturePresentationPolicy.swift; sourceTree = "<group>"; };
 		3B3967151E833CAA004F5970 /* AppFrameworkInfo.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = AppFrameworkInfo.plist; path = Flutter/AppFrameworkInfo.plist; sourceTree = "<group>"; };
 		42127D962C283C250005AB40 /* OneSignalCore.xcframework */ = {isa = PBXFileReference; expectedSignature = "AppleDeveloperProgram:J3J28YJX9L:OneSignal, Inc."; lastKnownFileType = wrapper.xcframework; name = OneSignalCore.xcframework; path = Pods/OneSignalXCFramework/iOS_SDK/OneSignalSDK/OneSignal_Core/OneSignalCore.xcframework; sourceTree = "<group>"; };
 		42127D9A2C283C310005AB40 /* OneSignalExtension.xcframework */ = {isa = PBXFileReference; expectedSignature = "AppleDeveloperProgram:J3J28YJX9L:OneSignal, Inc."; lastKnownFileType = wrapper.xcframework; name = OneSignalExtension.xcframework; path = Pods/OneSignalXCFramework/iOS_SDK/OneSignalSDK/OneSignal_Extension/OneSignalExtension.xcframework; sourceTree = "<group>"; };
@@ -411,6 +421,9 @@
 		C4A7D0E0C4A7D0E0C4A7D0E0 /* ChatVideoSampler.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ChatVideoSampler.swift; sourceTree = "<group>"; };
 		D71C4A0A2F0A11E700DE7000 /* DeviceToolsService.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = DeviceToolsService.swift; sourceTree = "<group>"; };
 		DAD10001DAD10001DAD10001 /* OmiBleConnectionPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiBleConnectionPolicy.swift; sourceTree = "<group>"; };
+		9E9FCBF3791B725CA1BEA76C /* LivePreviewPlugin.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = LivePreviewPlugin.swift; sourceTree = "<group>"; };
+		E3EEA6589ABA4CE7924CDA2D /* LivePreviewNotesPlugin.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = LivePreviewNotesPlugin.swift; sourceTree = "<group>"; };
+		F0E325766888761A213589D3 /* LivePreviewSelection.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = LivePreviewSelection.swift; sourceTree = "<group>"; };
 		E1293503E1293503E1293503 /* SpeechDeadline.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SpeechDeadline.swift; sourceTree = "<group>"; };
 		E2100BFB54B13863400AB3AB /* Pods-Runner.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.debug.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.debug.xcconfig"; sourceTree = "<group>"; };
 		E222EF675661E5A68C84D45B /* SiriIntents.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SiriIntents.swift; sourceTree = "<group>"; };
@@ -487,6 +500,7 @@
 			isa = PBXGroup;
 			children = (
 				39E21825B797F6BEAD08E6C3 /* OmiCaptureAttributes.swift */,
+				D4E5F6071829394A0515E2F3 /* OmiCapturePresentationPolicy.swift */,
 				A832E7FCE2964D801A4EB21F /* OmiCaptureIntents.swift */,
 			);
 			name = LiveActivity;
@@ -687,6 +701,9 @@
 				7AA100000000000000000005 /* minimp3.h */,
 				7AA100000000000000000008 /* TtsPcmPlayer.swift */,
 				E1293503E1293503E1293503 /* SpeechDeadline.swift */,
+				F0E325766888761A213589D3 /* LivePreviewSelection.swift */,
+				9E9FCBF3791B725CA1BEA76C /* LivePreviewPlugin.swift */,
+				E3EEA6589ABA4CE7924CDA2D /* LivePreviewNotesPlugin.swift */,
 				A2047903A2047903A2047903 /* WatchAudioChunkRelay.swift */,
 				A2047910A2047910A2047910 /* WatchRecordingStore.swift */,
 				D71C4A0A2F0A11E700DE7000 /* DeviceToolsService.swift */,
@@ -1215,6 +1232,9 @@
 				7AA100000000000000000001 /* TtsMp3Decoder.c in Sources */,
 				7AA100000000000000000006 /* TtsPcmPlayer.swift in Sources */,
 				E1293501E1293501E1293501 /* SpeechDeadline.swift in Sources */,
+				908FD40D876E8C8344452BC0 /* LivePreviewSelection.swift in Sources */,
+				E5ECD5F893BE640A2A446738 /* LivePreviewPlugin.swift in Sources */,
+				F3A44AF484B44F559ADD1671 /* LivePreviewNotesPlugin.swift in Sources */,
 				A2047901A2047901A2047901 /* WatchAudioChunkRelay.swift in Sources */,
 				E91B0002E91B0002E91B0002 /* OmiBleEnergyPolicy.swift in Sources */,
 				387657874D0C4CD5BAE2E8F1 /* OmiDeviceHealthStore.swift in Sources */,
@@ -1264,6 +1284,7 @@
 				4255287D2E7C4B8300FD5CFB /* RecorderHostApiImpl.swift in Sources */,
 				42B17C7C2F69BC6600BFDA9D /* PigeonCommunicator.g.swift in Sources */,
 				369B31A8217B2FEE8CEB4B22 /* OmiCaptureAttributes.swift in Sources */,
+				A1B2C3D4E5F60718293A4B5C /* OmiCapturePresentationPolicy.swift in Sources */,
 				261E5A36C62DAF7938874E94 /* OmiCaptureIntents.swift in Sources */,
 				8003A15D092653E251FDD8E5 /* LiveActivityManager.swift in Sources */,
 				431670FD4CC27AE9A43EB1EA /* SiriPigeon.g.swift in Sources */,
@@ -1289,6 +1310,9 @@
 				7AA100000000000000000002 /* TtsMp3Decoder.c in Sources */,
 				7AA100000000000000000007 /* TtsPcmPlayer.swift in Sources */,
 				E1293502E1293502E1293502 /* SpeechDeadline.swift in Sources */,
+				E2656CA5F9118C50722F0764 /* LivePreviewSelection.swift in Sources */,
+				B9C64E7F6FA52D7B7B3F1403 /* LivePreviewPlugin.swift in Sources */,
+				8F414CD61C9E4B5DA84FBCCD /* LivePreviewNotesPlugin.swift in Sources */,
 				A2047902A2047902A2047902 /* WatchAudioChunkRelay.swift in Sources */,
 				E91B0003E91B0003E91B0003 /* OmiBleEnergyPolicy.swift in Sources */,
 				9C1738D70A50495EA3AFADF5 /* OmiDeviceHealthStore.swift in Sources */,
@@ -1338,6 +1362,7 @@
 				5B5A7C09B854EF0BFB2C4D18 /* RecorderHostApiImpl.swift in Sources */,
 				15BE32846414AB444D807D9B /* PigeonCommunicator.g.swift in Sources */,
 				4177FE2DA51D5720F8F5D01E /* OmiCaptureAttributes.swift in Sources */,
+				B2C3D4E5F60718293940515D /* OmiCapturePresentationPolicy.swift in Sources */,
 				8BD6DEAF00C1D7FBA1706D20 /* OmiCaptureIntents.swift in Sources */,
 				A64BDCA35736F648E69CBF74 /* LiveActivityManager.swift in Sources */,
 				2A0DF503EBD959F1F386CE33 /* SiriPigeon.g.swift in Sources */,
@@ -1361,6 +1386,7 @@
 				A014F817EA8AFCDD9EECCEF5 /* BatteryWidgetBundle.swift in Sources */,
 				2424617E08011B02F15737C3 /* SharedDefaults.swift in Sources */,
 				728AD3B9CE56CAD614E49BC8 /* OmiCaptureAttributes.swift in Sources */,
+				C3D4E5F6071829394A0515E2F /* OmiCapturePresentationPolicy.swift in Sources */,
 				ECDFF5DC9FC101351FF5730A /* OmiCaptureIntents.swift in Sources */,
 				AFD5C0DF5AE115C934B37047 /* OmiCaptureLiveActivity.swift in Sources */,
 				DE48ED224FF11175DA9FFC6A /* OmiHomeWidgets.swift in Sources */,

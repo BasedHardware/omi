@@ -1,5 +1,8 @@
 # Mobile UI performance admission (INV-PERF-1)
 
+For the synthetic 6,500-WAL / 2,000-conversation integration benchmark and its
+physical-profile versus simulator-debug limits, see [HEAVY_PROFILE.md](HEAVY_PROFILE.md).
+
 After preparing hermetic app inputs (`bash app/test.sh`), run from the repository root:
 
 ```bash

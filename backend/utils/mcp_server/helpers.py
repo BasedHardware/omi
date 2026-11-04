@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
 from utils.conversations.render import redact_conversation_for_list
+from utils.speakers.display import display_participants
 from utils.mcp_data import parse_date_only_utc
 from utils.mcp_server.errors import ToolExecutionError
 
@@ -27,12 +28,19 @@ def parse_mcp_date(value: Optional[str], field: str) -> Optional[datetime]:
 _parse_mcp_date = parse_mcp_date
 
 
-def conversation_participants(conversation: Dict[str, Any]) -> Dict[str, Any]:
+def conversation_participants(conversation: Dict[str, Any], *, include_display: bool = True) -> Dict[str, Any]:
     """Expose stored speaker mappings, without guessing names from prose."""
     segments = conversation.get("transcript_segments")
     if conversation.get("is_locked") or not isinstance(segments, list):
         return {"participants_included": False}
     participants = []
+    display = (
+        display_participants(
+            [s for s in segments if isinstance(s, dict)], resolution=conversation.get('speaker_resolution')
+        )
+        if include_display
+        else None
+    )
     seen = set()
     for segment in segments:
         if not isinstance(segment, dict):
@@ -41,13 +49,20 @@ def conversation_participants(conversation: Dict[str, Any]) -> Dict[str, Any]:
         person_id = segment.get("person_id")
         speaker_id = speaker_id if isinstance(speaker_id, (str, int)) and not isinstance(speaker_id, bool) else None
         person_id = person_id if isinstance(person_id, str) and person_id else None
-        key = (speaker_id, person_id, segment.get("is_user") is True)
-        if key == (None, None, False):
+        key = (display.for_segment(segment).key if display else speaker_id, person_id, segment.get("is_user") is True)
+        if speaker_id is None and person_id is None and not key[2]:
             continue
         if key in seen:
             continue
         seen.add(key)
-        participants.append({"speaker_id": key[0], "person_id": key[1], "is_user": key[2]})
+        participants.append(
+            {
+                "speaker_id": None if display else speaker_id,
+                **({"speaker_key": key[0], "speaker_label": display.label(segment)} if display else {}),
+                "person_id": key[1],
+                "is_user": key[2],
+            }
+        )
     return {
         "participants_included": True,
         "participants": participants,
@@ -57,17 +72,24 @@ def conversation_participants(conversation: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def conversation_card(conversation: Dict[str, Any]) -> Dict[str, Any]:
+def conversation_card(
+    conversation: Dict[str, Any], *, include_display: bool = True, include_participants: bool = True
+) -> Dict[str, Any]:
     redact_conversation_for_list(conversation)
     structured_raw = conversation.get("structured")
     structured = structured_raw if isinstance(structured_raw, dict) else {}
     return {
-        **conversation_participants(conversation),
+        **(
+            conversation_participants(conversation, include_display=include_display)
+            if include_participants
+            else {'participants_included': False}
+        ),
         "id": conversation.get("id"),
         "created_at": conversation.get("created_at"),
         "started_at": conversation.get("started_at"),
         "finished_at": conversation.get("finished_at"),
         "language": conversation.get("language"),
+        "discarded": bool(conversation.get("discarded", False)),
         **conversation_call_fields(conversation),
         "structured": {
             key: structured.get(key) for key in ("title", "overview", "category", "emoji") if key in structured
@@ -78,6 +100,25 @@ def conversation_card(conversation: Dict[str, Any]) -> Dict[str, Any]:
 _conversation_card = conversation_card
 
 
+def public_transcript_timing(fields: Dict[str, Any]) -> Dict[str, Any]:
+    """Clamp public offsets without changing the source's pinned live clock.
+
+    A wholly pre-origin line remains text with a zero-duration, unplaced window;
+    it does not supply a playback interval. Search millisecond aliases agree.
+    """
+    projected = dict(fields)
+    for clock_key in ("start", "end", "start_ms", "end_ms"):
+        raw_offset = projected.get(clock_key)
+        if raw_offset is None or isinstance(raw_offset, bool):
+            continue
+        try:
+            if float(raw_offset) < 0:
+                projected[clock_key] = 0
+        except (OverflowError, TypeError, ValueError):
+            continue
+    return projected
+
+
 def bounded_transcript_segments(
     segments: Any,
     *,
@@ -86,6 +127,10 @@ def bounded_transcript_segments(
     extra_keys: Tuple[str, ...] = (),
 ) -> Tuple[List[Dict[str, Any]], bool]:
     source = [segment for segment in segments if isinstance(segment, dict)] if isinstance(segments, list) else []
+    names = {
+        str(s['person_id']): str(s['speaker_name']) for s in source if s.get('person_id') and s.get('speaker_name')
+    }
+    display = display_participants(source, names=names)
     bounded: List[Dict[str, Any]] = []
     used_chars = 0
     truncated = False
@@ -115,8 +160,13 @@ def bounded_transcript_segments(
                 original_text = original_text[:remaining_after_text]
                 truncated = True
             item['original_text'] = original_text
+        item["speaker_id"] = None
+        item["speaker_key"] = display.for_segment(segment).key
+        item["speaker_label"] = display.label(segment)
+        if "speaker_name" in extra_keys and not segment.get("is_user"):
+            item["speaker_name"] = display.label(segment)
         item["text"] = text
-        bounded.append(item)
+        bounded.append(public_transcript_timing(item))
         used_chars += len(text) + len(item.get('original_text') or "")
         if truncated:
             break
@@ -190,7 +240,13 @@ def select_card_fields(card: Dict[str, Any], fields: Any) -> Dict[str, Any]:
         fields = [field.strip() for field in fields.split(',') if field.strip()]
     if not isinstance(fields, list) or not all(isinstance(field, str) for field in fields):
         raise ToolExecutionError('fields must be an array of card field names or a comma-separated string', code=-32602)
-    unknown = set(fields) - set(card)
+    aliases = {'title', 'overview', 'category', 'emoji'}
+    requested = {'structured.' + key if key in aliases else key for key in fields}
+    nested = {key.split('.', 1)[1] for key in requested if key.startswith('structured.')}
+    unknown = {key for key in requested if key not in card and key not in {'structured.' + name for name in aliases}}
     if unknown:
         raise ToolExecutionError('Unknown card fields: ' + ', '.join(sorted(unknown)), code=-32602)
-    return {key: value for key, value in card.items() if key == 'id' or key in fields}
+    result = {key: value for key, value in card.items() if key == 'id' or key in requested}
+    if nested and 'structured' not in requested:
+        result['structured'] = {key: value for key, value in (card.get('structured') or {}).items() if key in nested}
+    return result

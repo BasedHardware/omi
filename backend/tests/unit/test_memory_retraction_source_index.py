@@ -331,6 +331,7 @@ def test_account_wipe_drops_a_late_index_document(monkeypatch):
     from database import batch_pipeline_purge, user_data_deletion
 
     monkeypatch.setattr(batch_pipeline_purge, 'purge_batch_owner', lambda uid: None)
+    monkeypatch.setattr(user_data_deletion, 'search_apps_db', lambda uid, *, my_apps: [])
     monkeypatch.setattr(user_data_deletion, 'get_data_plane_firestore_client', lambda: MagicMock())
     deleted = []
     user_ref = SimpleNamespace(
@@ -341,7 +342,14 @@ def test_account_wipe_drops_a_late_index_document(monkeypatch):
         ),
     )
     client = SimpleNamespace(collection=lambda name: SimpleNamespace(document=lambda uid: user_ref))
+    retirements = []
+    monkeypatch.setattr(
+        user_data_deletion,
+        'stop_quiet_checks_for_account',
+        lambda uid, **kwargs: retirements.append((uid, kwargs['firestore_client'])),
+    )
     user_data_deletion.purge_user_subtree(UID, client, lambda *a, **k: None)
+    assert retirements == [(UID, client)]
     assert ('memory_state', msi.DOC) in deleted
     assert ('memory_state', user_data_deletion.RELEASED_MEMORY_CHANGE_HEAD) in deleted
 
@@ -351,6 +359,7 @@ def test_account_wipe_erases_head_recreated_after_state_collection(monkeypatch, 
     from database import batch_pipeline_purge, user_data_deletion
 
     monkeypatch.setattr(batch_pipeline_purge, 'purge_batch_owner', lambda uid: None)
+    monkeypatch.setattr(user_data_deletion, 'search_apps_db', lambda uid, *, my_apps: [])
     monkeypatch.setattr(user_data_deletion, 'get_data_plane_firestore_client', lambda: MagicMock())
     head = user_data_deletion.RELEASED_MEMORY_CHANGE_HEAD
     list_heads = tuple(user_data_deletion.ROW_COLLECTIONS)
@@ -380,7 +389,14 @@ def test_account_wipe_erases_head_recreated_after_state_collection(monkeypatch, 
             rows.update({family: {'version': 'source-delete-commit'} for family in list_heads})
 
     client = SimpleNamespace(collection=lambda name: SimpleNamespace(document=lambda uid: user_ref))
+    retirements = []
+    monkeypatch.setattr(
+        user_data_deletion,
+        'stop_quiet_checks_for_account',
+        lambda uid, **kwargs: retirements.append((uid, kwargs['firestore_client'])),
+    )
     assert user_data_deletion.purge_user_subtree(UID, client, erase)['status'] == 'ok'
+    assert retirements == [(UID, client)]
     assert rows == {}
     assert events == ['memory_state', user_data_deletion.STATE_COLLECTION, 'memories', 'conversations'] + (
         ['root'] if root_exists else []

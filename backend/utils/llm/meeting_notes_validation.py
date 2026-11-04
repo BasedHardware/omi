@@ -203,7 +203,7 @@ def _repair_note_citation_pass(
             return _clean_separators(remainder)
         if not re.sub(r'[\s,;]', '', content):
             return remove([], 'empty_citation_dropped')
-        if re.fullmatch(r'(?i)(?:spk|speaker)[ _]\d+:?', content):
+        if re.fullmatch(r'(?i)(?:spk|speaker)[ _]c?\d+:?', content):
             return remove([], 'speaker_placeholder')
         # Numeric and footnote markers in notes have no chat citation list to resolve.
         unknown = _ID_LIKE_RE.fullmatch(content) or re.fullmatch(r'\^\d+', content)
@@ -318,7 +318,7 @@ def enforce_structured_presentation_contract(
 # Diarization placeholders are transcript machinery, not people. Prompt wording alone
 # does not hold — v2 already forbade "Speaker 1 said that" and still leaked the token.
 # `spk N` is the compact speaker-map key (SCA-454) and leaks the same way.
-_SPEAKER_PLACEHOLDER_RE = re.compile(r'(?i)\b(?:spk|speaker)[ _]\d+\b:?[ \t]*')
+_SPEAKER_PLACEHOLDER_RE = re.compile(r'(?i)\b(?:spk|speaker)[ _]c?\d+\b:?[ \t]*')
 
 
 def strip_speaker_placeholders(text: str) -> str:
@@ -348,7 +348,7 @@ def sanitize_structured_speaker_placeholders(structured: Structured) -> Structur
             return prefix + '\ue002' * len(protected) + '\ue001'
 
         value = _CODE_RE.sub(mask, value)
-        value = re.sub(r'\[\s*(?:spk|speaker)[ _]\d+:?\s*\]', '', value, flags=re.IGNORECASE)
+        value = re.sub(r'\[\s*(?:spk|speaker)[ _]c?\d+:?\s*\]', '', value, flags=re.IGNORECASE)
         value = strip_speaker_placeholders(value)
         for index, code in enumerate(protected):
             value = value.replace(prefix + '\ue002' * (index + 1) + '\ue001', code)

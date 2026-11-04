@@ -87,7 +87,6 @@ class TestChatLimitZeroSemantics:
             sub_mod.users_db, 'get_user_valid_subscription', lambda *a, **k: Subscription(plan=PlanType.basic)
         )
         monkeypatch.setattr(sub_mod, 'get_plan_limits', lambda *a, **k: limits)
-        monkeypatch.setattr(sub_mod, 'is_trial_paywalled', lambda *a, **k: False)
         monkeypatch.setattr(
             sub_mod.user_usage_db,
             'get_monthly_chat_usage',

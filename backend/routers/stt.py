@@ -19,6 +19,9 @@ from pathlib import Path
 from typing import BinaryIO
 
 import httpx
+from config.live_stt_gpu_fleet import gpu_fleet_off
+from utils.stt.proxy_vendor import vendor_proxy_payload
+from utils.stt.modulate_batch import ModulateBatchError
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 
 from utils.http_client import get_stt_proxy_client, get_stt_proxy_semaphore, get_stt_probe_semaphore
@@ -138,8 +141,12 @@ async def stt_transcribe(
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "stt:transcribe")),
 ):
     """Transcribe an uploaded audio file via parakeet. Per-user rate limited."""
+    retired = gpu_fleet_off()
+    provider = 'modulate' if retired else 'parakeet'
     api_url = os.getenv('HOSTED_PARAKEET_API_URL')
-    if not api_url:
+    if retired and not os.getenv('MODULATE_API_KEY', '').strip():
+        raise HTTPException(status_code=503, detail='Transcription service not configured')
+    if not retired and not api_url:
         logger.error('stt_transcribe: HOSTED_PARAKEET_API_URL not configured')
         raise HTTPException(status_code=503, detail='Transcription service not configured')
 
@@ -177,7 +184,7 @@ async def stt_transcribe(
     source = request.headers.get('x-app-platform')
     await _admit(uid, source, seconds)
 
-    upstream_url = api_url.rstrip('/') + '/v2/transcribe'
+    upstream_url = (api_url or '').rstrip('/') + '/v2/transcribe'
     client = get_stt_proxy_client()
     semaphore = get_stt_proxy_semaphore()
 
@@ -202,39 +209,64 @@ async def stt_transcribe(
             del audio_bytes
             raise HTTPException(status_code=413, detail=f'Body too large (max {_MAX_UPLOAD_BYTES} bytes)')
 
-        files = {'file': (_safe_upstream_filename(file.filename), audio_bytes, file.content_type or 'audio/wav')}
-        data = {'diarize': 'true' if diarize else 'false'}
-        try:
-            with observe_parakeet_request('v2', caller='app_proxy'):
-                resp = await client.post(upstream_url, files=files, data=data)
-        except httpx.HTTPError as e:
-            logger.error(f'stt_transcribe: parakeet request failed uid={uid}: {sanitize(str(e))}')
-            raise HTTPException(status_code=502, detail='Transcription upstream unavailable')
-        finally:
-            del files
-            del audio_bytes
-        if resp.status_code >= 400:
-            # 413 (audio too long) and 503 (model loading / overloaded) carry
-            # client-actionable details — forward them as-is. Anything else is an
-            # internal upstream failure the client can't act on.
-            if resp.status_code in (413, 503):
-                detail = 'Transcription failed upstream'
-                try:
-                    payload = resp.json()
-                except ValueError:
-                    payload = None
-                if isinstance(payload, dict) and payload.get('detail'):
-                    detail = str(payload['detail'])
-                logger.warning(f'stt_transcribe: parakeet returned {resp.status_code} uid={uid}: {sanitize(detail)}')
-                raise HTTPException(status_code=resp.status_code, detail=detail)
-            logger.error(f'stt_transcribe: parakeet returned {resp.status_code} uid={uid}: {sanitize(resp.text[:200])}')
-            raise HTTPException(status_code=502, detail='Transcription failed upstream')
+        if retired:
+            try:
+                payload = await vendor_proxy_payload(
+                    audio_bytes,
+                    diarize=diarize,
+                    filename=_safe_upstream_filename(file.filename),
+                    content_type=file.content_type or 'audio/wav',
+                )
+            except ModulateBatchError as error:
+                status = 503 if error.kind in {'credit_refusal', 'rate_limited', 'breaker_open', 'timeout'} else 502
+                raise HTTPException(status_code=status, detail='Transcription upstream unavailable') from None
+            finally:
+                del audio_bytes
+            record_fallback(
+                component='stt_selection',
+                from_mode='parakeet',
+                to_mode='modulate',
+                reason='config_incomplete',
+                outcome='recovered',
+            )
+        else:
+            files = {'file': (_safe_upstream_filename(file.filename), audio_bytes, file.content_type or 'audio/wav')}
+            data = {'diarize': 'true' if diarize else 'false'}
+            try:
+                with observe_parakeet_request('v2', caller='app_proxy'):
+                    resp = await client.post(upstream_url, files=files, data=data)
+            except httpx.HTTPError as e:
+                logger.error(f'stt_transcribe: parakeet request failed uid={uid}: {sanitize(str(e))}')
+                raise HTTPException(status_code=502, detail='Transcription upstream unavailable')
+            finally:
+                del files
+                del audio_bytes
+            if resp.status_code >= 400:
+                # 413 (audio too long) and 503 (model loading / overloaded) carry
+                # client-actionable details — forward them as-is. Anything else is an
+                # internal upstream failure the client can't act on.
+                if resp.status_code in (413, 503):
+                    detail = 'Transcription failed upstream'
+                    try:
+                        payload = resp.json()
+                    except ValueError:
+                        payload = None
+                    if isinstance(payload, dict) and payload.get('detail'):
+                        detail = str(payload['detail'])
+                    logger.warning(
+                        f'stt_transcribe: parakeet returned {resp.status_code} uid={uid}: {sanitize(detail)}'
+                    )
+                    raise HTTPException(status_code=resp.status_code, detail=detail)
+                logger.error(
+                    f'stt_transcribe: parakeet returned {resp.status_code} uid={uid}: {sanitize(resp.text[:200])}'
+                )
+                raise HTTPException(status_code=502, detail='Transcription failed upstream')
 
-        try:
-            payload = resp.json()
-        except ValueError:
-            logger.error(f'stt_transcribe: parakeet returned non-JSON success body uid={uid}')
-            raise HTTPException(status_code=502, detail='Transcription upstream returned an invalid response')
+            try:
+                payload = resp.json()
+            except ValueError:
+                logger.error(f'stt_transcribe: parakeet returned non-JSON success body uid={uid}')
+                raise HTTPException(status_code=502, detail='Transcription upstream returned an invalid response')
 
         # Keep completed-but-unaccounted calls inside the four-slot bound too.
         # This is not a distributed monthly-quota reservation.
@@ -244,7 +276,7 @@ async def stt_transcribe(
                 record_usage,
                 uid,
                 transcription_seconds=seconds,
-                usage_metadata={'funding': 'omi', 'provider': 'parakeet', 'source': 'parakeet_proxy'},
+                usage_metadata={'funding': 'omi', 'provider': provider, 'source': 'parakeet_proxy'},
             )
         except Exception as error:
             # No idempotency key: withholding a completed transcript encourages

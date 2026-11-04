@@ -204,6 +204,13 @@ NLLB_SUPPORTED_SOURCE_LANGUAGES = {
     'vi',
 }
 
+# The NLLB service resolves source and target codes through one BCP47 table
+# (nllb_translation/main.py BCP47_TO_NLLB), so target coverage equals source
+# coverage. Callers check targets against this set before dispatching: an
+# unlisted target (lt, tl, ...) is rejected by the service with a 400 and only
+# burns a round trip and the NLLB error budget.
+NLLB_SUPPORTED_TARGET_LANGUAGES = NLLB_SUPPORTED_SOURCE_LANGUAGES
+
 
 def _detect_with_langdetect(text: str, hint_language: Optional[str] = None) -> Optional[str]:
     # Normalize locale-tagged language (e.g. "en-US" -> "en") for langdetect compatibility

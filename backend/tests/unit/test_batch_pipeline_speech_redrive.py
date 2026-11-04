@@ -14,7 +14,7 @@ from tests.unit.test_batch_pipeline_empty_disposition import wav, work, enable, 
 from database.batch_pipeline_speech_redrive import SpeechRedriveStore
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
-from utils.batch_pipeline.quarantine_recovery import transcribe
+from utils.batch_pipeline.recovery_recognizers import transcribe
 from utils.batch_pipeline.recovery_disposition import RecoveryFailure
 from utils.batch_pipeline.speech_redrive import redrive_one
 
@@ -319,7 +319,7 @@ def test_allowance_and_deleted_target_fence_epoch2(setup, monkeypatch, legacy_de
         redrive_one(store, artifacts, 'bad', binding.owner_id, 'plan', old, server_flags=SERVING_ENV, clock=lambda: 100)
         == 'allowance_held'
     )
-    assert row(client)['speech_redrive']['state'] == 'prepared'
+    assert not row(client).get('speech_redrive')
     target = chunk_identity(
         binding.owner_id, binding.source, binding.client_device_id, binding.is_locked, row(client)['capture_at']
     )
@@ -369,6 +369,6 @@ def test_default_on_speech_redrive_does_not_buy_unfunded_recovery(setup, monkeyp
     assert alternate.call_count == (0 if access == 'capped' else 1)
     legacy.assert_not_called()
     if access == 'capped':
-        assert result == 'allowance_held' and row(client)['speech_redrive']['state'] == 'prepared'
+        assert result == 'allowance_held' and not row(client).get('speech_redrive')
     if access in {'byok', 'kill_off'}:
         resolver.assert_not_called()

@@ -54,6 +54,7 @@ CONVERSATION_SMART_MERGE_REASONS = frozenset(
         'jev_same',
         'jev_different',
         'absorbed',
+        'size_cap_stop',
         'survivor_changed',
         'error',
         'flatten_ancestor_invalid',
@@ -190,6 +191,25 @@ def record_smart_merge_flatten(outcome: str, reason: str) -> None:
         OMI_CONVERSATION_SMART_MERGE_FLATTEN_TOTAL.labels(
             outcome=outcome if outcome in SMART_MERGE_FLATTEN_OUTCOMES else 'other',
             reason=reason if reason in SMART_MERGE_FLATTEN_REASONS else 'other',
+        ).inc()
+    except Exception:
+        pass
+
+
+MERGE_PROCESSING_STAGE = _reuse_or_create(
+    Counter,
+    'omi_conversation_merge_processing_stage_total',
+    'Committed smart absorbs by processing stage and whether donor notes were present; no user labels.',
+    ['stage', 'donor_notes'],
+)
+
+
+def record_merge_processing_stage(before_notes: bool, donor_notes: bool | None) -> None:
+    """Receipts distinguish actual rich-note waste from completed raw/minimum rows."""
+    try:
+        MERGE_PROCESSING_STAGE.labels(
+            stage='before_notes' if before_notes else 'after_notes',
+            donor_notes='yes' if donor_notes is True else 'no' if donor_notes is False else 'unknown',
         ).inc()
     except Exception:
         pass

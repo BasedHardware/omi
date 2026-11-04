@@ -44,6 +44,14 @@ KNOWN_LEVERS = frozenset(
         'mcp_conversation_cards_cache',
         'canonical_statuses_dedupe',
         'batch_privacy_memoize',
+        'bpp_generation_memo',  # batch privacy task-attempt memo; absent = 0/off
+        'privacy_checks_shadow',  # compares live decisions; never authorizes writes
+        'legal_hold_fence_cache',
+        'privacy_session_token',
+        'tombstone_negative_cache',
+        'sync_snapshot_resolve_cache',
+        'conversation_list_cursor',  # conversations:_collect_visible_conversation_page
+        'finjob_candidate_queries',  # conversation_finalization_jobs:{scan_in_progress,get_abandoned_byok,get_stale_processing}
     }
 )
 

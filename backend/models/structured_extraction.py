@@ -466,6 +466,120 @@ class AgentNotesParticipant(BaseModel):
         )
 
 
+class ExtractedOpenLoop(BaseModel):
+    """One checkable deliverable owed around the owner's work or errands.
+
+    ``who`` is the person/role as named in the source, or ``unknown`` for a
+    passive/unattributed request; never an invented name.
+    """
+
+    who: str = Field(default='unknown', description="The person/role as named in the source, or 'unknown'")
+    what: str = Field(description='Short verb phrase of the deliverable, at most 12 words')
+    by_when: Optional[str] = Field(
+        default=None,
+        description="ISO 8601 date in the user's timezone or a quoted phrase ('Monday'); null when unstated",
+    )
+    evidence: str = Field(default='', description='Quote or close paraphrase from the source, at most 20 words')
+    work_related: Optional[bool] = Field(
+        default=None, description='True when it concerns the owner\u2019s job, product, codebase or company'
+    )
+
+    @field_validator('who', 'what', 'evidence', mode='before')
+    @classmethod
+    def clip_text(cls, value: Any) -> Any:
+        if isinstance(value, str):
+            return value.strip()[:300]
+        return value
+
+
+class ExtractedObservedIssue(BaseModel):
+    """At most one narrow observed defect or errand blocker per conversation."""
+
+    kind: Literal['work_defect', 'errand_blocker']
+    what: str = Field(
+        description='Imperative verb-led phrase, at most 12 words (e.g. "File the login-screen crash bug")'
+    )
+    by_when: Optional[str] = Field(default=None, description="ISO 8601 date or quoted phrase; null when unstated")
+    evidence: str = Field(default='', description='Quote or close paraphrase from the source, at most 20 words')
+    work_related: Optional[bool] = None
+
+    @field_validator('what', 'evidence', mode='before')
+    @classmethod
+    def clip_text(cls, value: Any) -> Any:
+        if isinstance(value, str):
+            return value.strip()[:300]
+        return value
+
+
+_OPEN_LOOP_LIST_FIELDS: Dict[str, Type[BaseModel]] = {
+    'delegated_by_user': ExtractedOpenLoop,
+    'commitments_by_others': ExtractedOpenLoop,
+}
+
+
+def scrub_open_loop_fields(data: Any) -> Any:
+    """Drop unusable open-loop values the same way the base schemas drop theirs.
+
+    One malformed entry or issue must never cost the note; an out-of-vocabulary
+    issue kind becomes null rather than failing the extraction. Shared by the
+    flag-gated subclasses of StructuredExtraction and NotesOutput.
+    """
+    if isinstance(data, dict):
+        data = dict(data)
+        for field in _OPEN_LOOP_LIST_FIELDS:
+            value = data.get(field)
+            # A model that answers with one object or a word instead of an array must
+            # not cost the whole note: wrap a lone object, drop anything else.
+            if isinstance(value, dict):
+                data[field] = [value]
+            elif value is not None and not isinstance(value, list):
+                data[field] = []
+    data = _keep_usable_content(data, _OPEN_LOOP_LIST_FIELDS)
+    if not isinstance(data, dict):
+        return data
+    coerced = dict(data)
+    issue = coerced.get('observed_issue_or_blocker')
+    if issue is None:
+        return coerced
+    try:
+        coerced['observed_issue_or_blocker'] = ExtractedObservedIssue.model_validate(issue)
+    except ValidationError as error:
+        logger.warning(
+            'Dropping unusable observed_issue_or_blocker from conversation extraction: %s',
+            ['.'.join(str(part) for part in item['loc']) for item in error.errors(include_input=False)],
+        )
+        coerced['observed_issue_or_blocker'] = None
+    return coerced
+
+
+class OpenLoopStructuredExtraction(StructuredExtraction):
+    """StructuredExtraction plus the OPEN_LOOPS_ENABLED open-loop fields.
+
+    The base schema's format instructions are embedded in the shared static
+    prompt prefix, so the flag-off prompt stays byte-identical only while these
+    fields live on a subclass the flag-off path never parses — the same rule
+    RichStructuredExtraction follows.
+    """
+
+    delegated_by_user: List[ExtractedOpenLoop] = Field(
+        default_factory=list,
+        description='Deliverables the account owner asked or instructed someone else to do',
+    )
+    commitments_by_others: List[ExtractedOpenLoop] = Field(
+        default_factory=list,
+        description="Deliverables others said they would do for the owner or the owner's project",
+    )
+    observed_issue_or_blocker: Optional[ExtractedObservedIssue] = Field(
+        default=None,
+        description='At most one observed work defect or errand blocker; null for most conversations',
+    )
+
+    @model_validator(mode='before')
+    @classmethod
+    def keep_usable_open_loops(cls, data: Any) -> Any:
+        return scrub_open_loop_fields(data)
+
+
 class AgentNotesSubmission(StructuredExtraction):
     """The terminal ``submit_notes`` payload: a StructuredExtraction plus evidenced participants.
 
@@ -490,3 +604,20 @@ class AgentNotesSubmission(StructuredExtraction):
         if self.salience is not None:
             structured.salience = self.salience
         return structured
+
+
+class OpenLoopAgentNotesSubmission(AgentNotesSubmission):
+    """AgentNotesSubmission that also parses the open-loop fields when enabled.
+
+    The agentic submit tool does not request these fields yet; they default
+    empty there. Subclassing keeps the flag-off agent contract unchanged.
+    """
+
+    delegated_by_user: List[ExtractedOpenLoop] = Field(default_factory=list)
+    commitments_by_others: List[ExtractedOpenLoop] = Field(default_factory=list)
+    observed_issue_or_blocker: Optional[ExtractedObservedIssue] = Field(default=None)
+
+    @model_validator(mode='before')
+    @classmethod
+    def keep_usable_open_loops(cls, data: Any) -> Any:
+        return scrub_open_loop_fields(data)

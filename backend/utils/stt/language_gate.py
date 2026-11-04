@@ -1,9 +1,12 @@
-"""Self-hosted spoken-language gate (Parakeet `/v2/language`) for prerecorded routing.
+"""Self-hosted spoken-language gate (Parakeet `/v2/language`) for prerecorded and batch routing.
 
-Shadow: runs beside the vendor probe and records agreement; routing is unchanged.
+Shadow: runs beside the vendor probe and records agreement. On the prerecorded surface a
+confident shadow verdict also stands in for the vendor probe
+(STT_PRERECORDED_LANGUAGE_GATE_CONFIDENT_SKIP); otherwise routing is unchanged.
 Enforced (cohort under STT_PRERECORDED_LANGUAGE_GATE_PERCENT): replaces the vendor
-probe. The gate never sees recognizer text. Any gate failure returns None and the
-caller keeps the vendor path, so an unavailable gate can only cost money.
+probe on the prerecorded or batch intake surface. The gate never sees recognizer
+text. Any gate failure returns None and the caller keeps the vendor path, so an
+unavailable gate can only cost money.
 """
 
 from dataclasses import dataclass
@@ -15,6 +18,7 @@ import os
 import httpx
 from prometheus_client import Counter
 
+from config.live_stt_gpu_fleet import gpu_fleet_off
 from config.prerecorded_language import language_class, language_gate_percent, self_lid_confidence_floor
 
 logger = logging.getLogger(__name__)
@@ -25,13 +29,18 @@ _BUCKETS = frozenset({'en', 'ja', 'zh', 'ko', 'vi', 'hi', 'ar', 'th'})
 SELF_REQUESTS = Counter('omi_stt_language_gate_self_total', 'Self-hosted language gate calls', ['surface', 'outcome'])
 SHADOW = Counter(
     'omi_stt_language_gate_shadow_total',
-    'Self gate vs vendor probe on the same prerecorded audio (routing unchanged)',
+    'Self gate vs vendor probe on the same audio (routing unchanged)',
     ['surface', 'self_route', 'vendor_route', 'self_bucket', 'vendor_bucket', 'vendor_conf', 'dur_bucket'],
 )
 ENFORCED = Counter(
     'omi_stt_language_gate_enforced_total',
-    'Prerecorded routes decided by the self gate; vendor_fallback = gate unavailable, vendor probe used',
+    'Prerecorded and batch routes decided by the self gate; vendor_fallback = gate unavailable, vendor probe used',
     ['surface', 'route', 'bucket'],
+)
+CONFIDENT_SKIPS = Counter(
+    'omi_stt_language_gate_confident_skip_total',
+    'Vendor LID probes skipped on a confident shadow verdict; audit = skippable but probed for agreement',
+    ['surface', 'route'],
 )
 
 
@@ -78,9 +87,14 @@ def _probability(value) -> float | None:
 
 def self_detect(probe: bytes, *, surface: str) -> SelfVerdict | None:
     """One bounded call; no retries. `probe` is a WAV of at most 30 s."""
+    base = os.getenv('HOSTED_LID_API_URL', '').strip().rstrip('/')
+    if not base:
+        if gpu_fleet_off():
+            return None  # Keep vendor LID without dialing the retired shared pool.
+        base = os.getenv('HOSTED_PARAKEET_API_URL', '').rstrip('/')
+
     outcome = 'error'
     try:
-        base = os.getenv('HOSTED_PARAKEET_API_URL', '').rstrip('/')
         if not base:
             outcome = 'no_url'
             return None
@@ -98,6 +112,8 @@ def self_detect(probe: bytes, *, surface: str) -> SelfVerdict | None:
             not isinstance(language, str)
             or not 2 <= len(language) <= 8
             or not language.isascii()
+            or not language.replace('-', '').isalpha()
+            or any(not part for part in language.split('-'))
             or p_supported is None
             or top_p is None
             or isinstance(seconds, bool)
@@ -166,6 +182,13 @@ def record_shadow(surface: str, verdict: SelfVerdict | None, vendor) -> None:
                 vendor.confidence,
                 verdict.audio_seconds,
             )
+    except Exception:
+        pass
+
+
+def record_confident_skip(surface: str, route: str) -> None:
+    try:
+        CONFIDENT_SKIPS.labels(surface, route).inc()
     except Exception:
         pass
 

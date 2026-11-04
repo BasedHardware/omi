@@ -1,7 +1,15 @@
+# Retire the streaming GPU writer before applying the off overlays.
+# Wait for any existing guard Job to finish before setting deployment replicas to zero.
+parakeetSuspended: true
 namespace: prod-omi-backend
 hpaName: prod-omi-parakeet
 prometheusUrl: http://prod-omi-kube-prometheus-s-prometheus.prod-omi-monitoring.svc:9090
 dryRun: false
 batch:
-  cloudRunRollbackEnabled: true
+  # Batch auto-rollback is removed (David, 2026-11-04): batch step-backs are manual lead decisions.
+  enabled: false
+  cloudRunRollbackEnabled: false
   gcpServiceAccount: omi-batch-rollback-guard@based-hardware.iam.gserviceaccount.com
+# Retired with streaming GPUs; no hourly floor can restore the old fleet.
+floorSchedule:
+  enabled: false

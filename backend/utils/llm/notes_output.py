@@ -13,9 +13,12 @@ from models.structured_extraction import (
     ExtractedActionItem,
     ExtractedEvent,
     ExtractedInsight,
+    ExtractedOpenLoop,
+    ExtractedObservedIssue,
     ExtractedRichSection,
     MeetingType,
     SALIENCE_DESCRIPTION,
+    scrub_open_loop_fields,
 )
 
 # A submission that never chose an emoji must not silently store the pydantic
@@ -121,3 +124,31 @@ def submit_tool() -> dict[str, Any]:
             'parameters': NotesOutput.model_json_schema(),
         },
     }
+
+
+class OpenLoopNotesOutput(NotesOutput):
+    """NotesOutput plus the OPEN_LOOPS_ENABLED open-loop fields.
+
+    A subclass so the flag-off v2 format instructions (and the agentic
+    ``submit_notes`` tool schema, which renders NotesOutput) stay byte-identical
+    while the switch is off. The fields never reach ``to_structured``; the
+    serving seam persists them in the server-only conversation field.
+    """
+
+    delegated_by_user: list[ExtractedOpenLoop] = Field(
+        default_factory=list,
+        description='Deliverables the account owner asked or instructed someone else to do',
+    )
+    commitments_by_others: list[ExtractedOpenLoop] = Field(
+        default_factory=list,
+        description="Deliverables others said they would do for the owner or the owner's project",
+    )
+    observed_issue_or_blocker: Optional[ExtractedObservedIssue] = Field(
+        default=None,
+        description='At most one observed work defect or errand blocker; null for most conversations',
+    )
+
+    @model_validator(mode='before')
+    @classmethod
+    def keep_usable_open_loops(cls, data: Any) -> Any:
+        return scrub_open_loop_fields(data)

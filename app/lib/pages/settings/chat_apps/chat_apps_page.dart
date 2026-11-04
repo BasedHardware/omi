@@ -63,7 +63,8 @@ class ChatAppsIntegrationsEntry extends StatelessWidget {
 /// Whether the account holds the plan the gateway admits. Unknown until the subscription loads.
 enum _ProStatus { unknown, pro, free }
 
-/// Connect Telegram and iMessage, see what is connected, and join the WhatsApp waitlist.
+/// Connect Telegram, iMessage and WhatsApp, see what is connected, and join the WhatsApp waitlist
+/// while WhatsApp is not configured.
 class ChatAppsPage extends StatefulWidget {
   const ChatAppsPage({super.key});
 
@@ -74,6 +75,9 @@ class ChatAppsPage extends StatefulWidget {
 class _ChatAppsPageState extends State<ChatAppsPage> {
   /// Set when a connect sheet just finished, for the success banner and the open button.
   ChatChannel? _justConnected;
+
+  /// The line the connect sheet texted. Omi has several, so the flag's address may be another one.
+  String? _connectedAddress;
 
   @override
   void initState() {
@@ -104,10 +108,15 @@ class _ChatAppsPageState extends State<ChatAppsPage> {
     final sheet = switch (channel) {
       ChatChannel.telegram => showTelegramConnectSheet(context),
       ChatChannel.imessage => showIMessageConnectSheet(context),
-      ChatChannel.whatsapp => Future<ChannelLink?>.value(),
+      ChatChannel.whatsapp => showCodeConnectSheet(context, ChatChannel.whatsapp),
     };
     final link = await sheet;
-    if (link != null && mounted) setState(() => _justConnected = channel);
+    if (link != null && mounted) {
+      setState(() {
+        _justConnected = channel;
+        _connectedAddress = link.address;
+      });
+    }
   }
 
   /// Channels whose waitlist request is in flight.
@@ -142,7 +151,10 @@ class _ChatAppsPageState extends State<ChatAppsPage> {
 
   Future<void> _openChannel(ChatChannel channel) async {
     final endpoint = context.read<MessagingChannelsProvider>().config.endpoint(channel);
-    final opened = endpoint != null && await openChatApp(channel, endpoint);
+    final line = _connectedAddress;
+    final target =
+        endpoint == null || line == null ? endpoint : ChatChannelEndpoint(provider: endpoint.provider, address: line);
+    final opened = target != null && await openChatApp(channel, target);
     if (opened || !mounted) return;
     final l10n = context.l10n;
     OmiFeedback.error(
@@ -158,7 +170,7 @@ class _ChatAppsPageState extends State<ChatAppsPage> {
     final pro = _proStatus(context.watch<UsageProvider>());
     final online = context.watch<ConnectivityProvider>().isConnected;
     final justConnected = _justConnected;
-    final anyConnected = [ChatChannel.telegram, ChatChannel.imessage].any((c) => provider.linkFor(c) != null);
+    final anyConnected = ChatChannel.values.any((c) => provider.linkFor(c) != null);
 
     final Widget body;
     if (!provider.linksLoaded && provider.linksProblem == null) {
@@ -242,7 +254,8 @@ class _ChatAppsPageState extends State<ChatAppsPage> {
         onTap: () => routeToPage(context, ChannelSettingsPage(linkId: link.id)),
       );
     }
-    if (channel == ChatChannel.whatsapp) {
+    // WhatsApp stays a waitlist until the server config names its number.
+    if (channel == ChatChannel.whatsapp && provider.config.endpoint(channel) == null) {
       final joined = provider.whatsAppWaitlisted;
       return OmiSettingsRow(
         key: key,

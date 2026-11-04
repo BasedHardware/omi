@@ -36,7 +36,7 @@ from utils.conversations.recovery import structured_has_protected_content
 # retry budget ran out on a provider, parser or worker failure. Deliberately
 # excludes ``recovery_structure_unavailable`` (the model ran and found nothing
 # to summarize, so a retry gives the same answer) and BYOK abandonment.
-SUMMARY_RETRYABLE_FAILURE_CODES = frozenset({'processing_failed', 'final_attempt_failed'})
+SUMMARY_RETRYABLE_FAILURE_CODES = frozenset({'processing_failed', 'final_attempt_failed', 'durable_attempts_exhausted'})
 
 # Headroom kept below FIRESTORE_MAX_DOCUMENT_BYTES for estimation error.
 # Generous on purpose: dropping a title near the ceiling costs nothing, while

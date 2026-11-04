@@ -17,6 +17,7 @@ def clock(monkeypatch):
     monkeypatch.setattr(lanes, 'parse_sync_filename_timestamp', lambda name: float(name))
     monkeypatch.setenv('SYNC_FRESH_MAX_AGE_SECONDS', '21600')
     monkeypatch.setenv('SYNC_BACKFILL_MAX_AGE_SECONDS', '2592000')
+    monkeypatch.delenv('SYNC_CAPTURE_MAX_FUTURE_SKEW_SECONDS', raising=False)
     monkeypatch.delenv('SYNC_LEGACY_FRESH_ENABLED', raising=False)
     monkeypatch.delenv('SYNC_LEGACY_FRESH_UID_ALLOWLIST', raising=False)
     monkeypatch.setenv('SYNC_LEGACY_FRESH_PERCENT', '100')
@@ -48,7 +49,7 @@ def test_default_off_and_explicit_flag(clock, monkeypatch):
     [
         ([21600.01], 'unbound_capture_time'),
         ([60, 21601], 'unbound_capture_time'),
-        ([-301], 'future_capture_time'),
+        ([-601], 'future_capture_time'),
         ([31 * 86400], 'lookback_exceeded'),
         ([], 'missing_capture_time'),
     ],
@@ -59,6 +60,14 @@ def test_time_guards_survive_promotion(clock, ages, reason):
     assert decision.reason == reason
     if reason == 'lookback_exceeded':
         assert not decision.automatic_recovery_allowed
+
+
+def test_within_tolerance_future_skew_is_not_punished(clock):
+    """A phone clock ≤ SYNC_CAPTURE_MAX_FUTURE_SKEW_SECONDS ahead stays admissible."""
+    decision = decide(clock, [-170])
+    assert decision.lane is lanes.SyncLane.FRESH
+    assert decision.reason == 'recent_legacy_capture'
+    assert decision.newest_capture_at <= clock
 
 
 def test_invalid_time_stays_untrusted(clock):

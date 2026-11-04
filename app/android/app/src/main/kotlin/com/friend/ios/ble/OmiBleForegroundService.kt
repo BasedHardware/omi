@@ -250,8 +250,11 @@ class OmiBleForegroundService : Service() {
 
         override fun onGattDisconnected(address: String, gattHash: Int, status: Int) {
             val addr = address.uppercase()
+            // Consume before any early return: non-null means this disconnect is a
+            // discovery-failure retirement and its retry takes the bounded backoff.
+            val discoveryBackoffMs = bleManager.discoveryReconnectPolicy.consumeRetirementBackoffMs(addr)
             Log.i(TAG, "onGattDisconnected: $addr (status=$status)")
-            handleDisconnection(addr, gattHash, status)
+            handleDisconnection(addr, gattHash, status, discoveryBackoffMs)
         }
 
         override fun onGattServicesDiscovered(address: String, services: List<BleService>) {
@@ -289,11 +292,29 @@ class OmiBleForegroundService : Service() {
 
     private fun readFirmwareDiagnosticsIfDue(address: String) {
         val epoch = DeviceHealthPersistence.epoch(this)
-        bleManager.readFirmwareDiagnosticsIfDue(address) { result ->
+        bleManager.readFirmwareDiagnosticsIfDue(address, { outcome, skipReason ->
+            synchronized(DeviceHealthPersistence) {
+                if (DeviceHealthPersistence.enabled(this) && epoch == DeviceHealthPersistence.epoch(this)) {
+                    val prefs = getSharedPreferences(PREFS_DIAGNOSTICS, MODE_PRIVATE)
+                    val key = "firmware_read_${address.uppercase()}"
+                    val previous = runCatching { JSONObject(prefs.getString(key, "{}")) }.getOrElse { JSONObject() }
+                    val now = System.currentTimeMillis()
+                    val status = firmwareReadDiagnosticStatus(previous, outcome, skipReason, now)
+                    prefs.edit().putString(key, status.toString()).apply()
+                }
+            }
+        }) { result ->
             if (!DeviceHealthPersistence.enabled(this) || epoch != DeviceHealthPersistence.epoch(this)) return@readFirmwareDiagnosticsIfDue
             try {
                 result.getOrNull()?.let { value ->
-                    FirmwareDiagnosticsParser.parse(value, System.currentTimeMillis())?.let { parsed ->
+                    val parsed = FirmwareDiagnosticsParser.parse(value, System.currentTimeMillis())
+                    val prefs = getSharedPreferences(PREFS_DIAGNOSTICS, MODE_PRIVATE)
+                    val key = "firmware_read_${address.uppercase()}"
+                    val status = JSONObject(prefs.getString(key, "{}"))
+                        .put("parse_outcome", if (parsed == null) "invalid" else "succeeded")
+                        .put("last_parse_outcome", if (parsed == null) "invalid" else "succeeded")
+                    prefs.edit().putString(key, status.toString()).apply()
+                    parsed?.let {
                         if (!parsed.isNull("charging")) bleManager.recordChargingState(address, parsed.getBoolean("charging"))
                         parsed.put("identity_epoch", DeviceHealthPersistence.epoch(this)).put("app_build", DeviceHealthPersistence.build(this))
                         parsed.put("firmware", getSharedPreferences(PREFS_DIAGNOSTICS, MODE_PRIVATE).getString("observed_firmware_${address.uppercase()}", null) ?: JSONObject.NULL)
@@ -590,7 +611,7 @@ class OmiBleForegroundService : Service() {
 
     // ── Disconnect handling + retry ──
 
-    private fun handleDisconnection(address: String, gattHash: Int, status: Int) {
+    private fun handleDisconnection(address: String, gattHash: Int, status: Int, discoveryBackoffMs: Long? = null) {
         synchronized(syncLock) {
             val addr = address.uppercase()
             val managed = managedDevices[addr] ?: return
@@ -633,7 +654,7 @@ class OmiBleForegroundService : Service() {
         val addr = address.uppercase()
 
         val cccdTimeout = status == OmiBleManager.CCCD_TIMEOUT_STATUS
-        val retrying = handleRetryLogic(addr, status)
+        val retrying = handleRetryLogic(addr, status, discoveryBackoffMs)
         val error = BleDisconnectReason.connectionErrorFromStatus(status, retrying)
 
 
@@ -666,7 +687,7 @@ class OmiBleForegroundService : Service() {
         }
     }
 
-    private fun handleRetryLogic(address: String, status: Int): Boolean {
+    private fun handleRetryLogic(address: String, status: Int, discoveryBackoffMs: Long? = null): Boolean {
         val addr = address.uppercase()
         val managed = managedDevices[addr] ?: return false
 
@@ -674,9 +695,13 @@ class OmiBleForegroundService : Service() {
         reportSavedReconnect(addr, if (status == 137) "failed:pairing_lost" else "failed:gatt")
         if (isDestroying || (managed.pairingLost && bleManager.savedReconnect.isEnabled(addr)) || status == -1 || status == 137 || !isBluetoothEnabled) return false
 
-        val delayMs = bleManager.cccdReconnectPolicy.reconnectDelay(
-            addr, status == OmiBleManager.CCCD_TIMEOUT_STATUS, RECONNECT_DELAY_MS,
-        ) ?: return false
+        // A discovery-failure retirement backs off exponentially instead of retrying at
+        // the fixed interval forever (PR #23882); it never spends the CCCD budget, and
+        // the original status still drives diagnostics above.
+        val delayMs = discoveryBackoffMs
+            ?: bleManager.cccdReconnectPolicy.reconnectDelay(
+                addr, status == OmiBleManager.CCCD_TIMEOUT_STATUS, RECONNECT_DELAY_MS,
+            ) ?: return false
         scheduleReconnect(addr, managed, delayMs)
         return true
     }
@@ -1137,6 +1162,7 @@ class OmiBleForegroundService : Service() {
                 put("eventType", eventType)
                 put("lastRssi", bleManager.lastRssi[addr] ?: 0)
                 put("lastRssiAgeMs", BleRssiDiagnostics.ageMs(rssiSnapshot, now))
+                put("lastAudioNotificationAgeMs", bleManager.lastAudioNotificationAgeMs(addr) ?: JSONObject.NULL)
                 put("audioPacketsReceived", counter?.first ?: 0L)
                 put("audioPacketsExpected", counter?.second ?: 0L)
                 put("connectionDurationMs", durationMs)
@@ -1199,6 +1225,7 @@ class OmiBleForegroundService : Service() {
                 .put("lifecycle_events", array("lifecycle"))
                 .put("ble_log", array("log_$addr"))
                 .put("counters_since", prefs.getLong("counters_since_$addr", 0L).takeIf { it > 0L } ?: JSONObject.NULL)
+            putFeedbackDiagnostics(payload, prefs, addr)
             putAudioRecoveryStamps(payload, prefs.getString(audioRecoveryProofsKey(addr), null), epoch, now)
             return payload.toString()
         }
@@ -1311,3 +1338,23 @@ class OmiBleForegroundService : Service() {
             .build()
     }
 }
+
+/** Same persisted diagnostic shape whether or not the service is alive. Null means unobserved. */
+internal fun putFeedbackDiagnostics(payload: JSONObject, prefs: android.content.SharedPreferences, address: String) {
+    for ((field, key) in mapOf(
+        "firmware_diagnostics_read" to "firmware_read_${address.uppercase()}",
+        "process_exit_collection" to "process_exit_collection",
+        "previous_run_exit" to "previous_run_exit",
+    )) {
+        val value = prefs.getString(key, null)?.let { runCatching { JSONObject(it) }.getOrNull() }
+        payload.put(field, value ?: JSONObject.NULL)
+    }
+}
+
+internal fun firmwareReadDiagnosticStatus(previous: JSONObject, outcome: FirmwareReadOutcome, skipReason: String?, now: Long): JSONObject =
+    JSONObject().put("outcome", outcome.name.lowercase()).put("observed_at_ms", now)
+        .put("skip_reason", skipReason ?: JSONObject.NULL)
+        .put("attempted_at_ms", if (outcome == FirmwareReadOutcome.ATTEMPTED) now else previous.opt("attempted_at_ms") ?: JSONObject.NULL)
+        .put("last_attempt_outcome", if (outcome in listOf(FirmwareReadOutcome.SKIPPED, FirmwareReadOutcome.UNSUPPORTED)) previous.opt("last_attempt_outcome") ?: JSONObject.NULL else outcome.name.lowercase())
+        .put("last_parse_outcome", if (outcome == FirmwareReadOutcome.ATTEMPTED) "not_attempted" else previous.opt("last_parse_outcome") ?: "not_attempted")
+        .put("parse_outcome", "not_attempted")

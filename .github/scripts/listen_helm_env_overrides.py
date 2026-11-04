@@ -39,6 +39,10 @@ _CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f]")
 # The chart derives this one from runtimeGcpProjectId; never let a private
 # value replace it.
 _CHART_OWNED_ENV = frozenset({"GOOGLE_CLOUD_PROJECT"})
+# NLLB serves translation only where the values file binds its endpoint; prod
+# retired it (all translation on Luna), so nothing may re-select it there.
+TRANSLATION_MODELS_ENV = "TRANSLATION_SERVICE_MODELS"
+TRANSLATION_ENDPOINT_ENV = "HOSTED_TRANSLATION_API_URL"
 REDACTED = "<redacted>"
 # GitHub drops any job output that contains a masked string, and this job
 # exports short-SHA image tags. Short flag values ("true", "live") are not
@@ -176,6 +180,8 @@ def check_private_env_against_chart(
     env_entries = values.get("env") or []
     overridden = set(applied_override_names(overrides))
     for name in private_env:
+        if values.get("workloadIdentityOnly") and name in {"SERVICE_ACCOUNT_JSON", "GOOGLE_APPLICATION_CREDENTIALS"}:
+            raise ValueError(f"{PRIVATE_ENV_KEY}.{name} is forbidden by workloadIdentityOnly")
         if name in _CHART_OWNED_ENV:
             raise ValueError(f"{PRIVATE_ENV_KEY}.{name} is derived by the chart and cannot be overridden")
         if name in indices:
@@ -184,6 +190,29 @@ def check_private_env_against_chart(
                 raise ValueError(f"{PRIVATE_ENV_KEY}.{name} would replace a non-literal (valueFrom) env entry")
         if name in overridden:
             raise ValueError(f"{PRIVATE_ENV_KEY}.{name} conflicts with a workflow_dispatch override of the same env")
+
+
+def _names_nllb(models: str) -> bool:
+    return any(token.strip().lower() == "nllb" for token in models.split(","))
+
+
+def check_translation_endpoint(
+    values: Mapping,
+    overrides: Mapping[str, str | None],
+    private_env: Mapping[str, str],
+) -> None:
+    """Fail when an override would select NLLB in an environment that binds no NLLB endpoint."""
+    if TRANSLATION_ENDPOINT_ENV in env_name_indices(values):
+        return
+    if TRANSLATION_ENDPOINT_ENV in private_env:
+        raise ValueError(
+            f"{PRIVATE_ENV_KEY}.{TRANSLATION_ENDPOINT_ENV} is not allowed: this environment has no NLLB endpoint"
+        )
+    override = overrides.get(TRANSLATION_MODELS_ENV)
+    if override is not None and _names_nllb(str(override)):
+        raise ValueError(f"env {TRANSLATION_MODELS_ENV} override names nllb, but this environment has no NLLB endpoint")
+    if _names_nllb(private_env.get(TRANSLATION_MODELS_ENV, "")):
+        raise ValueError(f"{PRIVATE_ENV_KEY}.{TRANSLATION_MODELS_ENV} names nllb, but this environment has no NLLB endpoint")
 
 
 def github_mask_command(value: str) -> str:
@@ -281,6 +310,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.private_values_file is not None:
             private_env = load_private_env(args.private_values_file)
             check_private_env_against_chart(private_env, values, overrides)
+        check_translation_endpoint(values, overrides, private_env)
     except ValueError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1

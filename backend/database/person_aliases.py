@@ -9,16 +9,22 @@ import threading
 
 from config.firestore_read_levers import lever_enabled
 from database import chat_edits
+from database.people_generation import bump_people_generation, read_people_generation
 from typing import Any, Optional
 
 from google.api_core.exceptions import NotFound
 from google.cloud.firestore_v1 import FieldFilter, transactional
+from utils.speakers import auto_enroll
+from utils.observability.fallback import record_fallback
+from utils.observability.people_scans import PEOPLE_SCAN_TOTAL, PEOPLE_SCAN_SITES
 
 
 class _PeopleScanMemo:
     def __init__(self, parent):
         self.parent = parent
         self.entries = {}
+        self.seen = set()
+        self.unavailable_generations = set()
         self.bytes_used = 0
         self.generation = 0
         self.writers = 0
@@ -28,8 +34,11 @@ class _PeopleScanMemo:
         self.max_entries = _memo_bound('FIRESTORE_PEOPLE_SCAN_MEMO_MAX_ENTRIES', 256)
         self.max_bytes = _memo_bound('FIRESTORE_PEOPLE_SCAN_MEMO_MAX_BYTES', 2 * 1024 * 1024)
 
-    def clear(self):
+    def clear(self, *, preserve_seen=False):
         self.entries.clear()
+        self.unavailable_generations.clear()
+        if not preserve_seen:
+            self.seen.clear()
         self.bytes_used = 0
         self.generation += 1
 
@@ -68,13 +77,13 @@ def people_scan_attempt():
         _invalidate_people_scans()
 
 
-def _invalidate_people_scans():
+def _invalidate_people_scans(*, preserve_seen=False):
     # Clearing every UID is deliberately conservative. Also invalidate ancestors
     # when a nested attempt writes; never restore a parent's pre-write snapshot.
     memo = _people_scan_memo.get()
     while memo is not None:
         with memo.lock:
-            memo.clear()
+            memo.clear(preserve_seen=preserve_seen)
         memo = memo.parent
 
 
@@ -148,6 +157,7 @@ def update_person_name_transaction(
     }
     _invalidate_people_scans()
     transaction.update(person_ref, patch)
+    bump_people_generation(transaction, person_ref)
     if expected_chat_state is not None:
         expected_chat_state['after'] = chat_edits.encode(patch)
     return True
@@ -177,18 +187,32 @@ def dismiss_person_transaction(transaction: Any, person_ref: Any) -> bool:
         return False
     raw = snapshot.to_dict()
     data = raw if isinstance(raw, dict) else {}
+    has_pool = isinstance(data.get(auto_enroll.POOL_FIELD), str)
+    if data.get('is_dismissed') is True and not has_pool:
+        return True
+    authority_change = None
+    if has_pool:
+        owner_ref = person_ref.parent.parent
+        owner = owner_ref.get(transaction=transaction)
+        if owner.exists:
+            authority_change = (owner_ref, auto_enroll.authority_after(owner.to_dict() or {}, {person_ref.id: None}))
     if data.get('is_dismissed') is True:
+        if authority_change is not None:
+            transaction.update(*authority_change)
         return True
     now = datetime.now(timezone.utc)
     _invalidate_people_scans()
+    if authority_change is not None:
+        transaction.update(*authority_change)
     transaction.update(
         person_ref,
         {
             'is_dismissed': True,
-            'dismissed_at': now,
+            'dismissed_at': data.get('dismissed_at') or now,
             'updated_at': now,
         },
     )
+    bump_people_generation(transaction, person_ref)
     return True
 
 
@@ -210,35 +234,77 @@ def list_people(
     include_dismissed: bool = False,
     limit: Optional[int] = None,
     memoize: bool = False,
+    memo_site: str = 'other',
 ) -> list[dict[str, Any]]:
     """List people; only audited, read-only context callers may opt into reuse.
 
-    Learning/entitlement authority, privacy, destructive and mutation-adjacent
-    callers MUST keep memoize=False (the default). Complete/dismissed exports
-    always read live. Stored bytes contain only this raw result, never a learning
-    projection. Each hit decodes its own copy, preserving Firestore value types.
+    Audited sync context and name-miss fallback callers may reuse generation-
+    checked raw rows. Learning projections and entitlement/privacy authority
+    remain live. Other mutation-adjacent callers keep memoize=False (the
+    default), and complete/dismissed exports always read live. Each hit decodes
+    its own raw copy, preserving Firestore value types.
     """
     memo = _people_scan_memo.get()
     key = (uid, include_dismissed, limit)
+    site = memo_site if memo_site in PEOPLE_SCAN_SITES else 'other'
     generation = None
+    people_generation = None
+    reuse_enabled = memo is not None and memoize and not include_dismissed and lever_enabled('people_scan_dedupe', uid)
     if memo is not None:
-        if memoize and not include_dismissed and lever_enabled('people_scan_dedupe', uid):
+        # Observe repeat keys while dark, without extra generation reads.
+        # This is an upper bound on reusable scans, not booked savings.
+        if memoize and not include_dismissed:
+            with memo.lock:
+                if memo.active:
+                    PEOPLE_SCAN_TOTAL.labels(site=site, outcome='repeat' if key in memo.seen else 'first').inc()
+                    if len(memo.seen) < memo.max_entries:
+                        memo.seen.add(key)
+        if reuse_enabled:
             with memo.lock:
                 if memo.active and not memo.writers and (memo.client is None or memo.client is db_client):
                     memo.client = db_client
                     generation = memo.generation
-                    payload = memo.entries.get(key)
-                    if payload is not None:
-                        try:
-                            # Only deserialize bytes produced here, never external data.
-                            return pickle.loads(payload)
-                        except Exception:
-                            memo.clear()
-                            generation = memo.generation
+                    entry = memo.entries.get(key)
+                    # Capture BEFORE the scan, never after: a write during a fill
+                    # must retire that fill on the next hit. Hits cost one lookup.
+                    try:
+                        if uid not in memo.unavailable_generations:
+                            people_generation = read_people_generation(db_client, uid)
+                    except Exception:
+                        record_fallback(
+                            component='other',
+                            from_mode='cached',
+                            to_mode='uncached',
+                            reason='dependency_unavailable',
+                            outcome='recovered',
+                        )
+                    if entry is not None:
+                        stored_generation, payload = entry
+                        if people_generation is not None and stored_generation == people_generation:
+                            try:
+                                # Only deserialize bytes produced here, never external data.
+                                result = pickle.loads(payload)
+                                PEOPLE_SCAN_TOTAL.labels(site=site, outcome='hit').inc()
+                                return result
+                            except Exception:
+                                pass
+                        memo.clear()
+                        generation = memo.generation
+                    if people_generation is None:
+                        # Uninitialized/failed heads never permit reuse. Keep
+                        # reading People live, but avoid another paid probe
+                        # until the next invalidation/attempt. If an external
+                        # writer creates the head meanwhile, live scans still
+                        # see its rows; only the optional reuse is postponed.
+                        if len(memo.unavailable_generations) < memo.max_entries:
+                            memo.unavailable_generations.add(uid)
+                        PEOPLE_SCAN_TOTAL.labels(site=site, outcome='guard_unavailable').inc()
         else:
-            # A live authority read must not leave an older hint snapshot usable.
-            _invalidate_people_scans()
+            # Flag-off and authority reads still retire every snapshot.
+            _invalidate_people_scans(preserve_seen=memoize and not include_dismissed)
 
+    if reuse_enabled:
+        PEOPLE_SCAN_TOTAL.labels(site=site, outcome='scan').inc()
     people_ref = db_client.collection('users').document(uid).collection('people')
     if limit is not None:
         people_ref = people_ref.limit(limit)
@@ -249,7 +315,7 @@ def list_people(
             continue
         data.setdefault('id', person.id)
         result.append(data)
-    if memo is not None and generation is not None:
+    if memo is not None and generation is not None and people_generation is not None:
         try:
             payload = pickle.dumps(result, protocol=pickle.HIGHEST_PROTOCOL)
             # Payload+key bytes bounded separately from <= max_entries metadata.
@@ -263,7 +329,7 @@ def list_people(
                     and len(memo.entries) < memo.max_entries
                     and memo.bytes_used + size <= memo.max_bytes
                 ):
-                    memo.entries[key] = payload
+                    memo.entries[key] = (people_generation, payload)
                     memo.bytes_used += size
         except Exception:
             # Unsupported raw values disable reuse, never change read semantics.
@@ -290,7 +356,7 @@ def find_person_by_name(db_client: Any, uid: str, name: str) -> dict[str, Any] |
     if wanted is None:
         return None
     folded = wanted.casefold()
-    for data in list_people(db_client, uid):
+    for data in list_people(db_client, uid, memoize=True, memo_site='name_fallback'):
         stored = normalized_person_alias(data.get('name'))
         if stored is not None and stored.casefold() == folded:
             return data

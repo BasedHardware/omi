@@ -33,6 +33,9 @@ class AppProvider extends BaseProvider {
   @visibleForTesting
   AppsSearchRequest? searchAppsOverride;
 
+  @visibleForTesting
+  Future<Map<String, dynamic>?> Function(String)? appDetailsOverride;
+
   /// Test seam — overrides [enableAppServer] in [toggleApp].
   @visibleForTesting
   Future<(bool, String)> Function(String appId)? enableAppOverride;
@@ -77,6 +80,7 @@ class AppProvider extends BaseProvider {
   Future<void>? _appsLoad;
   Future<void>? _popularAppsLoad;
   int _activeCatalogLoads = 0;
+  int _detailSession = 0;
 
   List<Category> categories = [];
   List<AppCapability> capabilities = [];
@@ -105,18 +109,18 @@ class AppProvider extends BaseProvider {
   }
 
   Future<App?> getAppDetails(String id) async {
-    var appData = await getAppDetailsServer(id);
-    if (appData != null) {
-      var freshApp = App.fromJson(appData);
-      var oldApp = apps.where((element) => element.id == id).firstOrNull;
-      if (oldApp != null) {
-        var idx = apps.indexOf(oldApp);
-        apps[idx] = freshApp;
-        notifyListeners();
-      }
-      return freshApp;
+    final session = _detailSession;
+    final uid = SharedPreferencesUtil().uid;
+    final data = await (appDetailsOverride ?? getAppDetailsServer)(id);
+    if (data == null || session != _detailSession || uid != SharedPreferencesUtil().uid) return null;
+    final fresh = App.fromJson(data);
+    if (fresh.id != id) return null;
+    final index = apps.indexWhere((app) => app.id == id);
+    if (index >= 0) {
+      apps[index] = fresh;
+      notifyListeners();
     }
-    return null;
+    return fresh;
   }
 
   void updateInstalledAppsOptionSelected(bool value) {
@@ -220,6 +224,7 @@ class AppProvider extends BaseProvider {
   }
 
   void clearUserData() {
+    _detailSession++;
     apps = [];
     popularApps = [];
     groupedApps = [];

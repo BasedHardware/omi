@@ -33,6 +33,24 @@ _TRUE = frozenset(('1', 'true', 'on', 'yes'))
 _FALSE = frozenset(('0', 'false', 'off', 'no'))
 _warned: set[str] = set()
 
+# These producers and consumers must select the same accounts at every ramp
+# step. Per-mode salts make a 1% consumer almost never share a 1% producer.
+WAVE2_MODES = frozenset(
+    f'{name}_MODE'
+    for name in (
+        'SPEAKER_EVIDENCE',
+        'MEDIA_NOISE',
+        'CAPTURE_COVERAGE',
+        'NOTES_PACKET_V2',
+        'EPISODE_BOUNDARIES',
+        'LIFECYCLE_V2',
+        'CALLS_RECAP',
+        'ACTION_ITEMS_V2',
+        'STT_VOCAB',
+    )
+)
+WAVE2_COHORT_SALT = 'capture-speaker-notes:wave2'
+
 
 # Typed bindings make the generic cohort reader visible to registry validation.
 CAPTURE_COVERAGE_MODE_ENV = 'CAPTURE_COVERAGE_MODE'
@@ -126,7 +144,8 @@ def serving_for(
     if not math.isfinite(percent) or not 0 <= percent <= 100:
         _warn_once(percent_env, 'invalid')
         percent = 0.0
-    return percent > 0 and cohort_bucket(uid, name.lower()) < percent
+    salt = WAVE2_COHORT_SALT if name in WAVE2_MODES else name.lower()
+    return percent > 0 and cohort_bucket(uid, salt) < percent
 
 
 def shadow_or_serve(name: str, default: Mode = 'shadow') -> bool:

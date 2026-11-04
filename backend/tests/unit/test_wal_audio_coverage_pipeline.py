@@ -170,7 +170,7 @@ async def _run_batch(module, stubs, tmp_path, *, claims=True, session=ORIGIN, ra
         task_mode=True,
         capture_evidence_claims={BIN_NAME: _claim()} if claims is True else claims,
     )
-    await module._run_full_pipeline_background_async(
+    await module.run_full_pipeline_background_async(
         'job-coverage', 'uid', [f'/tmp/{raw_name}'], 'omi', False, str(tmp_path / 'job'), **kwargs
     )
 
@@ -333,7 +333,6 @@ def _wire_real(
     monkeypatch.setattr(recording_lineage, 'load_lineage', lambda *a, **k: (list(lineage_rows), None, False))
     monkeypatch.setattr(pipeline, 'vad_is_empty', lambda path, **k: [{'start': 0, 'end': _duration(path)}])
     monkeypatch.setattr(pipeline, 'get_syncing_file_temporal_signed_url', lambda _path: 'file://x')
-    monkeypatch.setattr(pipeline, 'schedule_syncing_temporal_file_deletion', lambda _path: None)
     monkeypatch.setattr(pipeline, 'get_prerecorded_service', lambda _lang: ('deepgram', 'cfg', 'nova-3'))
 
     def fake_prerecorded(url, **kwargs):
@@ -368,7 +367,7 @@ def _wire_real(
 
 
 async def _run_real(pipeline, tmp_path, *, target_conversation_id=None, session=ORIGIN, claims='default'):
-    await pipeline._run_full_pipeline_background_async(
+    await pipeline.run_full_pipeline_background_async(
         'job-coverage',
         'u',
         [f'/tmp/{BIN_NAME}'],
@@ -735,7 +734,7 @@ async def test_clock_skewed_filename_still_preserves_receipt_only_audio(coordina
         task_mode=True,
         capture_evidence_claims=claims,
     )
-    await module._run_full_pipeline_background_async(
+    await module.run_full_pipeline_background_async(
         'job-coverage-skew', 'uid', [f'/tmp/{skewed}.bin'], 'omi', False, str(wav_dir / 'job'), **kwargs
     )
     assert len(state.vad_seen) == 1
@@ -1120,7 +1119,6 @@ def test_saved_transcript_proof_live_words_once_then_new(real_pipeline, monkeypa
     derivative = batch['wav_paths'][0]
 
     monkeypatch.setattr(pipeline, 'get_syncing_file_temporal_signed_url', lambda _path: 'file://x')
-    monkeypatch.setattr(pipeline, 'schedule_syncing_temporal_file_deletion', lambda _path: None)
     monkeypatch.setattr(pipeline, 'get_prerecorded_service', lambda _lang: ('deepgram', 'cfg', 'nova-3'))
     prerecorded_calls = []
 
@@ -1297,7 +1295,6 @@ def test_receipt_only_saved_transcript_contains_new_word(real_pipeline, monkeypa
         return f'live-word-{value}' if value < 9 else 'new-word-9'
 
     monkeypatch.setattr(pipeline, 'get_syncing_file_temporal_signed_url', lambda _path: 'file://x')
-    monkeypatch.setattr(pipeline, 'schedule_syncing_temporal_file_deletion', lambda _path: None)
     monkeypatch.setattr(pipeline, 'get_prerecorded_service', lambda _lang: ('deepgram', 'cfg', 'nova-3'))
     prerecorded_calls = []
 
