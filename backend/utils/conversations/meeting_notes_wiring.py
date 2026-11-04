@@ -10,7 +10,6 @@ payloads that could carry participant data. This module must never import
 from __future__ import annotations
 
 import logging
-import os
 from importlib import import_module
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
@@ -33,17 +32,6 @@ from utils.conversations.screen_frame_evidence import (
 )
 
 logger = logging.getLogger(__name__)
-
-
-def _flag_enabled(name: str, *, default: bool = False) -> bool:
-    value = os.getenv(name)
-    if value is None:
-        return default
-    return value.strip().casefold() in {'1', 'true', 'yes', 'on'}
-
-
-def meeting_notes_rich_context_enabled() -> bool:
-    return _flag_enabled('MEETING_NOTES_RICH_CONTEXT_ENABLED')
 
 
 def meeting_context_sources() -> Any:

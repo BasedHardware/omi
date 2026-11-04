@@ -10,9 +10,6 @@ from database._client import get_firestore_client
 from database.notes_identity import claim_late_evidence
 from utils.conversations import lifecycle
 from utils.conversations.factory import deserialize_conversation
-from utils.conversations.meeting_notes_wiring import (
-    meeting_notes_rich_context_enabled,
-)
 from utils.conversations.process_conversation import get_structured
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.screen_content_window import selection_fingerprint, trusted_content_window
@@ -30,9 +27,11 @@ def _claim(uid, conversation_id, marker_at, fingerprint):
 
 
 async def refresh_notes_after_evidence(uid: str, conversation_id: str) -> None:
-    """No memory, app, embedding, enrollment, or learning work from this refresh."""
-    if not meeting_notes_rich_context_enabled():
-        return
+    """No memory, app, embedding, enrollment, or learning work from this refresh.
+
+    Admission is the SCREEN_EVIDENCE trigger itself (KEEP relevance policy);
+    the retired rich-context env flag no longer gates the refresh.
+    """
     try:
         raw = await run_blocking(db_executor, conversations_db.get_conversation, uid, conversation_id)
         if raw is None:
