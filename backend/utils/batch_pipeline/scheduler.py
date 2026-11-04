@@ -1,6 +1,5 @@
 """Fenced, duration-fair pull scheduling over durable transactional documents."""
 
-from dataclasses import asdict
 import hashlib
 import math
 import logging
@@ -16,6 +15,7 @@ from config.batch_pipeline import (
     FRESH_CAPTURE_LAG_SECONDS,
     SCHEDULER_SHARDS,
     control_candidate_fanout,
+    pull_busy_borrow_enabled,
     pull_multi_lease_enabled,
     scheduler_control_key,
     shard_spread_enabled,
@@ -242,7 +242,7 @@ class Scheduler:
             raise ValueError('shadow jobs may only use idle offers')
         previous = tx.get('jobs', item.segment_id)
         # Live jobs are never shadow; keep their documents free of the field.
-        immutable = {key: value for key, value in asdict(item).items() if key != 'shadow'}
+        immutable = {key: value for key, value in item.to_dict().items() if key != 'shadow'}
         immutable['priority'] = int(item.priority)
         if previous.get('state') == 'record_pending' and (
             previous.get('owner_id') != item.owner_id
@@ -294,7 +294,14 @@ class Scheduler:
         tx.put('owners', key, owner)
         return True
 
-    def pull(self, now: float, limit: int = 1, *, capacity: PoolCapacity | None = None) -> list[LeasedWork]:
+    def pull(
+        self,
+        now: float,
+        limit: int = 1,
+        *,
+        capacity: PoolCapacity | None = None,
+        borrow_when_fresh_busy: bool = False,
+    ) -> list[LeasedWork]:
         if not 1 <= limit <= 32:
             raise ValueError('pull limit must be in [1, 32]')
         with self._contention_lock:
@@ -318,6 +325,9 @@ class Scheduler:
         # One shard transaction may lease several units from the ring it has
         # already read; the kill switch restores one lease per transaction.
         multi = pull_multi_lease_enabled() and shared_gpu_id is None
+        # Only a dedicated-batch lane may borrow past claimed fresh shards; a
+        # shared live GPU takes one short item and stays strictly fresh-first.
+        borrow = borrow_when_fresh_busy and shared_gpu_id is None and pull_busy_borrow_enabled()
         while len(result) < limit:
             remaining = limit - len(result) if multi else 1
             try:
@@ -328,6 +338,7 @@ class Scheduler:
                     shared_gpu_id=shared_gpu_id,
                     max_fresh=remaining,
                     max_backfill=min(remaining, backfill_budget),
+                    borrow_when_fresh_busy=borrow,
                 )
             except Exception as error:
                 if isinstance(error, FirestoreContentionExhausted):
@@ -388,6 +399,7 @@ class Scheduler:
         shared_gpu_id: str | None = None,
         max_fresh: int = 1,
         max_backfill: int = 1,
+        borrow_when_fresh_busy: bool = False,
     ) -> list[LeasedWork]:
         for priority in Priority:
             if priority != Priority.FRESH and not allow_backfill:
@@ -456,10 +468,14 @@ class Scheduler:
                     continue
             else:
                 return []
-            if busy:
+            if busy and not borrow_when_fresh_busy:
                 # Busy higher-priority work is still pending. Do not borrow
                 # backfill capacity while another puller owns its shard.
                 return []
+            # A borrowing lane found every eligible shard of this priority
+            # claimed: each claimant is serving that work right now, so this
+            # lane leases the next priority instead of idling. The pump's
+            # first lane never borrows, which keeps fresh-first per pump.
         return []
 
     def _pull_shard(self, now, shard, priority, max_seconds, shared_gpu_id, max_leases=1):
@@ -673,12 +689,12 @@ class Scheduler:
         def commit(tx):
             job = tx.get('jobs', result.segment_id)
             if job.get('state') in {'result_ready', 'committed'}:
-                return job.get('result') == asdict(result) and job.get('token') == token, False, 0
+                return result.matches_persisted(job.get('result')) and job.get('token') == token, False, 0
             if not owns_lease(job, token, now):
                 return False, False, 0
             if job.get('requires_compute_admission') and job.get('compute_admission_token') != token:
                 return False, False, 0
-            job.update(state='result_ready', result=asdict(result), ready_at=now)
+            job.update(state='result_ready', result=result.to_dict(), ready_at=now)
             job.pop('retry_started_at', None)
             job.pop('admission_refusals', None)
             tx.put('jobs', result.segment_id, job)

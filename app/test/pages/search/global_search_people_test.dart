@@ -27,7 +27,7 @@ class _Source extends GlobalSearchSource {
 
   @override
   Future<ConversationSearchResult> conversations(String query,
-          {String? speakerId, DateTime? startDate, DateTime? endDate}) async =>
+          {String? speakerId, DateTime? startDate, DateTime? endDate, bool includeNoise = false}) async =>
       const ConversationSearchResult(
           items: [], currentPage: 1, totalPages: 1, outcome: ConversationSearchResultOutcome.success);
 

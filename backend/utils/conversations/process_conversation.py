@@ -1,3 +1,13 @@
+"""Synchronous enrichment coordinator for a completed conversation: structuring,
+summary, memories, action items, and app/goal triggers.
+
+A ProcessingTrigger (default CAPTURE_END) selects the PROCESSING_MODES row that
+fixes run-now, reprocess, first-open bypass and relevance policy, and expensive child
+work fans out to the named executor lanes instead of running inline. The managed
+vs custom-STT credit gates sit here so one path cannot bill the wrong budget
+(backend/utils/conversations/ARCHITECTURE.md).
+"""
+
 from utils import funded_processing
 from utils.sync import processing_hold
 from utils.conversations.summary_delivery import PROCESS_CONTEXT
@@ -80,6 +90,7 @@ from utils.conversations.minimum_derived import is_server_minimum
 from utils.llm.output_language import normalize_language, resolve_output_language
 from utils.conversations.deterministic_minimum import (
     build_deterministic_minimum_structured,
+    build_deferred_structured,
     deterministic_minimum_title,
 )
 from utils.conversations.duration import conversation_duration_seconds
@@ -444,6 +455,10 @@ def _get_structured(
             conversation.source == ConversationSource.workflow
             or conversation.source == ConversationSource.external_integration
         ):
+            if relevance_observer is not None:
+                # Text integrations bypass transcript relevance intentionally;
+                # record that authorized policy instead of an empty verdict.
+                relevance_observer(RelevanceDecision('keep', 'policy', 'external_text_default', trigger))
             ext_conv = conversation
             started_at = cast(datetime, ext_conv.started_at)
             if ext_conv.text_source == ExternalIntegrationConversationSource.audio:
@@ -2225,24 +2240,6 @@ def _update_personas_async(uid: str):  # type: ignore[reportUnusedFunction]  # r
         logger.info(f"[PERSONAS] Finished persona updates in background thread for uid={uid}")
 
 
-def _build_deferred_structured(
-    conversation: Union[Conversation, CreateConversation, ExternalIntegrationCreateConversation],
-) -> Structured:
-    """A cheap, no-LLM placeholder Structured for a lazily-deferred conversation. The title is
-    the first few words of the transcript so the conversation list stays usable until the user
-    opens it (which triggers the real enrichment). A non-empty title is required — an empty one
-    marks the conversation discarded in `_get_conversation_obj`."""
-    text = ''
-    for seg in list(getattr(conversation, 'transcript_segments', None) or []):
-        seg_text = (getattr(seg, 'text', '') or '').strip()
-        if seg_text:
-            text = seg_text
-            break
-    words = text.split()
-    title = ' '.join(words[:8]).strip() if words else ''
-    return Structured(title=title or 'Recording')
-
-
 def _attach_client_projection(conversation: Conversation, client_projection: ClientProcessing | None) -> None:
     """Stamp a validated display projection on the server-authored conversation.
 
@@ -2279,7 +2276,7 @@ def _store_budget_waiting(uid, conversation, *, client_projection=None):
     initial = _is_ingress_create(conversation)
     estimate = defer_estimate(conversation)
     # Model-free title only; preserve every transcript and external text field.
-    structured = _build_deferred_structured(conversation)
+    structured = build_deferred_structured(conversation)
     result = _get_conversation_obj(uid, structured, conversation, relevance_discarded=False)
     effective_projection = (
         client_projection
@@ -2325,7 +2322,7 @@ def _store_deferred_conversation(
             uid, getattr(conversation, 'started_at', None), getattr(conversation, 'finished_at', None)
         ),
     )
-    structured = _build_deferred_structured(conversation)
+    structured = build_deferred_structured(conversation)
     conversation = _get_conversation_obj(uid, structured, conversation)
     _attach_client_projection(conversation, client_projection)
     conversation.deferred = True

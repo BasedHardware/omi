@@ -1,3 +1,10 @@
+// The home page: capture start/stop entry point, permission gating,
+// foreground-service lifecycle, and on-device transcription wiring.
+//
+// Foreground-service and location decisions read actual system permission
+// state rather than the stored flag (the OS may have revoked a granted
+// permission), and the static FGS call here stays an App UI handoff -- capture
+// ownership belongs to CaptureSessionOwner (app/lib/services/capture/OWNERSHIP.md).
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/on_device/on_device_runner.dart';
 import 'package:omi/services/on_device/on_device_transcription_controller.dart';

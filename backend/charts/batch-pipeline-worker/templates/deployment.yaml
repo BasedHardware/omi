@@ -8,7 +8,9 @@
 {{- if lt (int .Values.replicaCount) 1 }}
 {{- fail "queue sampling runs in workers: replicaCount must be >=1" }}
 {{- end }}
-{{- $processes := int .Values.worker.processes }}
+{{- /* An instance may pin its own count (the T4 fallback stays at one: two
+     model chains do not fit 16 GB of T4 VRAM); otherwise worker.processes. */}}
+{{- $processes := int (ternary .instance.processes .Values.worker.processes (hasKey .instance "processes")) }}
 {{- if or (lt $processes 1) (gt $processes 3) }}
 {{- fail "worker.processes must be in [1,3]" }}
 {{- end }}
@@ -37,7 +39,14 @@ spec:
   # before new ones start, so the deadline covers drain plus startup.
   progressDeadlineSeconds: 2400
   {{- $replicas := .instance.baselineReplicas | default .Values.replicaCount }}
-  {{- if .Values.autoscaling.enabled }}
+  {{- if hasKey .instance "fixedReplicas" }}
+  {{- $replicas = .instance.fixedReplicas }}
+  {{- /* Operators scale the fallback with kubectl; upgrades keep the live count. */}}
+  {{- $current := lookup "apps/v1" "Deployment" .Release.Namespace .instance.name }}
+  {{- if $current }}
+  {{- $replicas = dig "spec" "replicas" $replicas $current }}
+  {{- end }}
+  {{- else if .Values.autoscaling.enabled }}
   {{- $current := lookup "apps/v1" "Deployment" .Release.Namespace .instance.name }}
   {{- if $current }}
   {{- $replicas = dig "spec" "replicas" $replicas $current }}
@@ -93,12 +102,14 @@ spec:
           ports:
             - {name: http, containerPort: 8080}
           env:
+            - {name: BATCH_PIPELINE_SERVING_METRICS_MIN_REFRESH_SECONDS, value: {{ .Values.worker.servingMetricsMinRefreshSeconds | quote }}}
             - {name: BATCH_CONTROL_CANDIDATE_FANOUT, value: {{ .Values.worker.controlCandidateFanout | quote }}}
             - {name: BATCH_ADMISSION_PARALLEL_CALLS, value: {{ .Values.worker.admissionParallelCalls | quote }}}
             - {name: BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS, value: {{ .Values.worker.idlePollMaxSeconds | quote }}}
             - {name: FIRESTORE_READ_LEVERS, value: {{ .Values.worker.firestoreReadLevers | quote }}}
             - {name: BATCH_SHARD_SPREAD_ENABLED, value: {{ .Values.worker.shardSpreadEnabled | quote }}}
             - {name: BATCH_PULL_MULTI_LEASE_ENABLED, value: {{ .Values.worker.pullMultiLeaseEnabled | quote }}}
+            - {name: BATCH_PULL_BUSY_BORROW_ENABLED, value: {{ .Values.worker.pullBusyBorrowEnabled | quote }}}
             - {name: BATCH_PIPELINE_CONTENTION_RETRY_ENABLED, value: {{ .Values.worker.contentionRetryEnabled | quote }}}
             {{- if ne .Values.worker.stageProfilingEnabled nil }}
             - {name: BATCH_PIPELINE_STAGE_PROFILING_ENABLED, value: {{ .Values.worker.stageProfilingEnabled | quote }}}
@@ -121,6 +132,8 @@ spec:
             - {name: BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED, value: {{ .Values.worker.emptyAsrSafetyNetEnabled | quote }}}
             - {name: BATCH_PIPELINE_EMPTY_ASR_RECOVERY_ENABLED, value: {{ .Values.worker.emptyAsrRecoveryEnabled | quote }}}
             - {name: BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED, value: {{ .Values.worker.independentLanguageRecoveryEnabled | quote }}}
+            - {name: PARAKEET_WINDOW_ALLOCATION_PERCENT, value: {{ .Values.worker.parakeetWindowAllocationPercent | quote }}}
+            - {name: PARAKEET_WINDOW_REPLICA_RECOVERY_ENABLED, value: {{ .Values.worker.parakeetWindowReplicaRecoveryEnabled | quote }}}
             - {name: BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED, value: {{ .Values.worker.correctnessMetricsEnabled | quote }}}
             - {name: BATCH_PIPELINE_HEAD_PRIORITY_ENABLED, value: {{ .Values.worker.headPriorityEnabled | quote }}}
             # Pump flights per GPU: claim and publication overlap the exclusive chain; "1" is the serial kill switch.

@@ -19,6 +19,7 @@ from utils.enrichment.admission import ConversationAbsorbed
 from config.server_batch import owned as server_batch_owned
 from config.server_batch import has_audio as server_batch_has_audio
 from config.episodes import episodes_enabled_for
+from config.episode_attach import noop_schedule_enabled
 from config.rollout_cohorts import warm_rollout_cohorts
 
 from database import conversations as conversations_db
@@ -35,7 +36,12 @@ from utils.conversations.location import async_resolve_geolocation
 from utils.conversations.episode_runtime import process_with_episode_budget
 from utils.conversations.processing_trigger import is_recovery_trigger
 from utils.conversations.processing_trigger import ProcessingTrigger
-from utils.conversations.smart_merge import smart_merge_step
+from utils.conversations.smart_merge import (
+    _INCOMPLETE_CODES,  # pyright: ignore[reportPrivateUsage] — the closed incomplete-code set this boundary must reuse, never re-declare
+    SmartMergeIncomplete,
+    _incomplete_cause,  # pyright: ignore[reportPrivateUsage]
+    smart_merge_step,
+)
 from utils.conversations.sync_hold_completion import complete_explicit
 from utils.conversations.smart_merge_policy import is_donor
 from utils.conversations.meeting_evidence_admission import await_meeting_evidence
@@ -52,6 +58,7 @@ from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.lifecycle_clocks import overlap_snapshot
 from utils.episodes.client_gate import client_seen as episode_client_seen
 from utils.episodes.finalize import close_now as close_episode_now
+from utils.episodes.finalize import skip_unchanged_schedule
 from utils.conversations.summary_delivery import finalization_pending
 from utils.executors import db_executor, lifecycle_executor, run_blocking
 from utils.metrics import OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL
@@ -148,6 +155,24 @@ async def _episode_after_finalization(
     if not row:
         return
     try:
+        if trigger == ProcessingTrigger.SYNC_UPDATE and episodes_enabled_for(uid) and noop_schedule_enabled():
+            try:
+                unchanged = await asyncio.wait_for(
+                    run_blocking(
+                        db_executor,
+                        skip_unchanged_schedule,
+                        uid,
+                        conversation_id,
+                        row,
+                        finalized=True,
+                        absorbed_from=absorbed_from,
+                    ),
+                    timeout=EPISODE_CLOSE_TIMEOUT_SECONDS,
+                )
+            except Exception:
+                unchanged = False  # A slow/unavailable memo must retain the full hook.
+            if unchanged:
+                return
         await asyncio.wait_for(
             run_blocking(
                 lifecycle_executor(uid, episode=True),
@@ -722,7 +747,16 @@ async def finalize_persisted_conversation(
             finalization_diagnostic_id(conversation_id),
             dispatch_generation,
         )
-        raise ConversationFinalizationError('processing_failed') from error
+        # A smart-merge incomplete keeps its bounded fence code so the retry
+        # budget, counters, and logs can class it; a non-member code (the
+        # generic wrapper stores an exception class name) and any other
+        # failure collapse to the generic code, keeping the conversation-row
+        # vocabulary and retry affordance byte-identical. Never the exception
+        # message (transcript risk).
+        incomplete_cause = _incomplete_cause(error) if isinstance(error, SmartMergeIncomplete) else None
+        raise ConversationFinalizationError(
+            incomplete_cause if incomplete_cause in _INCOMPLETE_CODES else 'processing_failed'
+        ) from error
 
 
 async def _load_admitted_conversation(

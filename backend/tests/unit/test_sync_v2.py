@@ -9,6 +9,7 @@ v1 remains completely unchanged.
 """
 
 from utils.sync import size_telemetry  # noqa: F401 - retain real scoped telemetry across legacy package stubs
+from utils.sync import repeat_work_metrics  # noqa: F401 - retain real telemetry across legacy package stubs
 from utils.other import owned_paths  # noqa: F401 - retain real scratch guard across legacy package stubs
 
 from models import conversation_continuity  # noqa: F401 - retain pure policy across legacy package stubs
@@ -16,6 +17,7 @@ from utils import dream_vocabulary  # noqa: F401 - retain shared keyterms across
 from utils import firestore_document_size  # noqa: F401 - retain pure size estimate across legacy package stubs
 from utils.enrichment import admission  # noqa: F401 - retain shared custody types across package stubs
 from utils.conversations import size_limit as actual_size_limit
+from utils.conversations import episode_attach_key  # noqa: F401 - retain pure identity across legacy package stubs
 from utils import manual_speaker_assignments  # noqa: F401 - retain pure policy across legacy package stubs
 from utils.stt import speaker_identity  # noqa: F401 - retain allocator across legacy package stubs
 from utils.stt import sync_speaker_evidence  # noqa: F401 - retain pure evidence policy across legacy package stubs
@@ -4205,7 +4207,9 @@ class TestTimeoutConfiguration:
 
     def test_anthropic_default_has_timeout(self):
         source = self._read_clients_source()
-        default_line = [l for l in source.split('\n') if '= anthropic.AsyncAnthropic' in l][0]
+        # The SDK import is deferred through utils.llm.clients._anthropic_module,
+        # so the default client's construction line goes through the materializer.
+        default_line = [l for l in source.split('\n') if '.AsyncAnthropic(timeout' in l][0]
         assert 'timeout=120' in default_line
         assert 'max_retries=1' in default_line
 

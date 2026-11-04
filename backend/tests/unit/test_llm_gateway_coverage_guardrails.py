@@ -62,12 +62,14 @@ DIRECT_PROVIDER_ALLOWLIST = {
     DirectUse('routers/desktop_realtime.py', 'GEMINI_API_KEY'),
     DirectUse('routers/desktop_realtime.py', 'OPENAI_API_KEY'),
     DirectUse('routers/desktop_tts_updates.py', 'OPENAI_API_KEY'),
-    DirectUse('utils/llm/providers.py', 'ChatGoogleGenerativeAI'),
+    # utils/llm/providers.py ChatGoogleGenerativeAI and utils/llm/clients.py
+    # AsyncAnthropic / ChatAnthropic constructions moved behind lazy SDK
+    # materializers inside the same gateway seam files (deferred heavy imports),
+    # so the scanner no longer sees them as direct uses; the seam itself still
+    # owns every provider client construction.
     DirectUse('utils/llm/providers.py', 'ChatOpenAI'),
     DirectUse('utils/llm/providers.py', 'GEMINI_API_KEY'),
-    DirectUse('utils/llm/clients.py', 'AsyncAnthropic'),
     DirectUse('utils/llm/gateway_anthropic.py', 'AsyncAnthropic'),
-    DirectUse('utils/llm/clients.py', 'ChatAnthropic'),
     DirectUse('utils/llm/clients.py', 'ChatOpenAI'),
     DirectUse('utils/llm/clients.py', 'GEMINI_API_KEY'),
     DirectUse('utils/llm/clients.py', 'OpenAIEmbeddings'),

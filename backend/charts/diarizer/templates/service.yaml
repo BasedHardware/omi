@@ -28,4 +28,8 @@ spec:
       protocol: TCP
       name: http
   selector:
+    {{- if .Values.service.selectorLabels }}
+    {{- toYaml .Values.service.selectorLabels | nindent 4 }}
+    {{- else }}
     {{- include "diarizer.selectorLabels" . | nindent 4 }}
+    {{- end }}

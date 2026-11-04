@@ -17,3 +17,8 @@ def record_drain_batch() -> int:
 
 def record_drain_concurrency() -> int:
     return _drain_setting('RECORD_DRAIN_CONCURRENCY', 16, 64)
+
+
+def record_drain_lease_seconds() -> int:
+    """How long a selected row stays invisible to other replicas' drain pages."""
+    return max(60, _drain_setting('RECORD_DRAIN_LEASE_SECONDS', 900, 3600))

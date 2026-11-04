@@ -472,7 +472,9 @@ def _imported_modules(
     return imported
 
 
-def source_closure_errors(contract: ImageContract) -> list[str]:
+def source_closure_errors(contract: ImageContract, *, _import_trees: dict[str, ast.Module] | None = None) -> list[str]:
+    if _import_trees is None:
+        _import_trees = {}
     errors: list[str] = []
     with tempfile.TemporaryDirectory(prefix=f"omi-runtime-image-{contract.name}-") as temp_dir:
         runtime_root = Path(temp_dir)
@@ -496,7 +498,17 @@ def source_closure_errors(contract: ImageContract) -> list[str]:
                 )
                 return
             try:
-                tree = ast.parse(runtime_path.read_text(encoding="utf-8"), filename=str(runtime_path))
+                source_text = runtime_path.read_text(encoding="utf-8")
+                if source_text not in _import_trees:
+                    parsed = ast.parse(source_text, filename=str(runtime_path))
+                    # All images still stage and resolve their own COPY surface.
+                    # Identical sources need parsing/walking only once per check;
+                    # retain imports at every nesting depth, including lazy ones.
+                    _import_trees[source_text] = ast.Module(
+                        body=[node for node in ast.walk(parsed) if isinstance(node, (ast.Import, ast.ImportFrom))],
+                        type_ignores=[],
+                    )
+                tree = _import_trees[source_text]
             except SyntaxError as exc:
                 errors.append(f"{contract.name}: staged module {module!r} has invalid syntax: {exc}")
                 return
@@ -562,9 +574,10 @@ def import_smoke_environment_errors(contracts: Iterable[ImageContract]) -> list[
 
 def check_source_closures(contracts: Iterable[ImageContract]) -> list[str]:
     errors: list[str] = []
+    import_trees: dict[str, ast.Module] = {}
     for contract in contracts:
         errors.extend(final_stage_layer_errors(contract))
-        errors.extend(source_closure_errors(contract))
+        errors.extend(source_closure_errors(contract, _import_trees=import_trees))
     return errors
 
 

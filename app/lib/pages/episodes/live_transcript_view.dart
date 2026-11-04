@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
@@ -16,7 +17,6 @@ import 'package:omi/pages/conversation_capturing/capture_recovery_status.dart';
 import 'package:omi/pages/conversation_capturing/widgets/speaker_suggestion_chip.dart';
 import 'package:omi/pages/conversation_detail/widgets/name_speaker_sheet.dart';
 import 'package:omi/pages/episodes/live_preview_transcript.dart';
-import 'package:omi/pages/held_audio/held_audio_views.dart';
 import 'package:omi/pages/settings/transcription_settings_page.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
@@ -122,7 +122,6 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
         return Column(
           children: [
             const CaptureRecoveryStatus(),
-            const HeldAudioLiveBanner(),
             if (provider.localSttFailure case final failure?)
               LocalSttRecoveryNotice(
                 failure: failure,
@@ -457,35 +456,48 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
       ConnectivityProvider.showNoInternetDialog(context);
       return;
     }
-    final suggestion = provider.suggestionsBySegmentId.values.firstWhere(
-      (s) => s.speakerId == speakerId,
-      orElse: () => SpeakerLabelSuggestionEvent.empty(),
-    );
+    final anchor = provider.segments.firstWhere((line) => line.id == segmentId);
+    final suggestion = provider.suggestionsBySegmentId[segmentId] ?? SpeakerLabelSuggestionEvent.empty();
     showNameSpeakerSheet(
       context,
       speakerId: speakerId,
       segmentId: segmentId,
-      segments: provider.segments,
+      segments: provider.segments.where((line) => anchor.sameRecordingVoice(line)).toList(),
       suggestion: suggestion,
       defaultApplyToSpeaker: true,
+      wholeRecording: true,
       onSpeakerAssigned: (speakerId, personId, personName, segmentIds, applyToSpeaker) async {
-        final saved = await provider.assignSpeakerToConversation(
+        final identity = provider.speakerAssignmentIdentity;
+        var reported = false;
+        unawaited(provider.assignSpeakerToConversation(
           speakerId,
           personId,
           personName,
           segmentIds,
           applyToSpeaker: applyToSpeaker,
-        );
-        if (saved) {
-          // The user's own answer now: no longer a label Omi carried over.
-          for (final segment in provider.segments) {
-            if (segmentIds.contains(segment.id) || (applyToSpeaker && segment.speakerId == speakerId)) {
-              segment.speakerLabelSource = SpeakerLabelSource.manual;
+          voice: anchor.recordingVoice,
+          onSettled: (result) {
+            if (!mounted || provider.speakerAssignmentIdentity != identity) return;
+            reported = true;
+            if (result.limited || result.partial) {
+              OmiFeedback.error(context, context.l10n.speakerRenameIssue(result.limited ? 'limit' : 'partial'));
+            } else if (result.saved) {
+              OmiFeedback.confirm(
+                  context,
+                  result.coverageComplete
+                      ? context.l10n.speakerLabelLinesLabeled(result.lines)
+                      : context.l10n.speakerRecordingCoverage('saved', result.lines));
+            } else {
+              OmiFeedback.error(context,
+                  result.stale ? context.l10n.speakerSelectionChanged : context.l10n.failedToSaveCheckConnection);
             }
-          }
-          if (mounted) setState(() {});
-        }
-        return saved;
+          },
+        ).then((saved) {
+          if (!mounted || provider.speakerAssignmentIdentity != identity) return;
+          if (!saved && !reported) OmiFeedback.error(context, context.l10n.failedToSaveCheckConnection);
+          setState(() {});
+        }));
+        return true;
       },
     );
   }
@@ -538,18 +550,33 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
   Future<void> _acceptSuggestion(TranscriptSegment segment, Person person, CaptureProvider provider) async {
     final ids = [
       for (final s in provider.segments)
-        if (s.speakerId == segment.speakerId && !s.isUser && s.personId == null) s.id,
+        if (segment.sameRecordingVoice(s) && !s.isUser && s.personId == null) s.id,
     ];
     OmiHaptics.light();
+    final identity = provider.speakerAssignmentIdentity;
+    var reported = false;
     final ok = await provider.assignSpeakerToConversation(
       segment.speakerId,
       person.id,
       person.name,
       ids,
       applyToSpeaker: true,
+      voice: segment.recordingVoice,
+      onSettled: (result) {
+        if (!mounted || provider.speakerAssignmentIdentity != identity) return;
+        reported = true;
+        if (result.limited || result.partial) {
+          OmiFeedback.error(context, context.l10n.speakerRenameIssue(result.limited ? 'limit' : 'partial'));
+        } else if (result.saved) {
+          OmiHaptics.success();
+        } else {
+          OmiFeedback.error(
+              context, result.stale ? context.l10n.speakerSelectionChanged : context.l10n.failedToSaveCheckConnection);
+        }
+      },
     );
-    if (!mounted) return;
-    ok ? OmiHaptics.success() : OmiFeedback.error(context, context.l10n.somethingWentWrongTryAgain);
+    if (!mounted || provider.speakerAssignmentIdentity != identity) return;
+    if (!ok && !reported) OmiFeedback.error(context, context.l10n.failedToSaveCheckConnection);
   }
 
   Widget _buildTranscriptTimelineItem(

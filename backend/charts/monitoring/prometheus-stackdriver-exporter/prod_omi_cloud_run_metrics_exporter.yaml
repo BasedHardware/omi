@@ -25,6 +25,11 @@ stackdriver:
     - "based-hardware"
   metrics:
     prefixes:
+      # WP-C lifecycle dwell and observer health (closed labels).
+      - 'prometheus.googleapis.com/omi_batch_record_pending_'
+      - 'prometheus.googleapis.com/omi_record_seal_nojob_'
+      - 'prometheus.googleapis.com/omi_enrichment_obligation_'
+      - 'prometheus.googleapis.com/omi_finalization_byok_'
       - 'prometheus.googleapis.com/omi_capture_finalization_failures_total/'
       - 'prometheus.googleapis.com/omi_capture_finalization_reconciliations_total/'
       - 'prometheus.googleapis.com/omi_chat_search_tool_outcomes_total/'
@@ -72,6 +77,11 @@ stackdriver:
       - 'prometheus.googleapis.com/omi_:resource.labels.cluster="__run__" AND resource.labels.namespace=one_of("backend","desktop-backend","notifications-job")'
     interval: '10m'
     offset: '1m'
+
+# Cache descriptor discovery only. Each scrape still fetches fresh time series;
+# the 10m metrics.interval above is a lookback window, not a polling cadence.
+extraArgs:
+  monitoring.descriptor-cache-ttl: 1h
 
 serviceAccount:
   create: false

@@ -1,0 +1,15 @@
+# First lead-owned upgrade ONLY: retain instance selectors and on-demand
+# primary placement while the same release creates and warms the fallback.
+# Then upgrade without this overlay to join both sets of Ready endpoints.
+service:
+  selectorLabels: null
+nodeSelector:
+  cloud.google.com/gke-nodepool: diarizer-batch-pool
+# Drain stage: 17 primary + 1 warm while the fallback warms; the follow-up
+# upgrade without this overlay restores main's 18-replica primary ceiling.
+# The 18 combined ceiling stays armed here so an 18-primary roll while the
+# warm Deployment exists is refused, not silently overlapped.
+autoscaling:
+  maxReplicas: 17
+warmFallback:
+  maxTotalReplicas: 18

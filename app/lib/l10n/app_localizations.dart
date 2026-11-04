@@ -109,7 +109,8 @@ import 'app_localizations_zh.dart';
 /// be consistent with the languages listed in the AppLocalizations.supportedLocales
 /// property.
 abstract class AppLocalizations {
-  AppLocalizations(String locale) : localeName = intl.Intl.canonicalizedLocale(locale.toString());
+  AppLocalizations(String locale)
+    : localeName = intl.Intl.canonicalizedLocale(locale.toString());
 
   final String localeName;
 
@@ -117,7 +118,8 @@ abstract class AppLocalizations {
     return Localizations.of<AppLocalizations>(context, AppLocalizations)!;
   }
 
-  static const LocalizationsDelegate<AppLocalizations> delegate = _AppLocalizationsDelegate();
+  static const LocalizationsDelegate<AppLocalizations> delegate =
+      _AppLocalizationsDelegate();
 
   /// A list of this localizations delegate along with the default localizations
   /// delegates.
@@ -129,12 +131,13 @@ abstract class AppLocalizations {
   /// Additional delegates can be added by appending to this list in
   /// MaterialApp. This list does not have to be used at all if a custom list
   /// of delegates is preferred or required.
-  static const List<LocalizationsDelegate<dynamic>> localizationsDelegates = <LocalizationsDelegate<dynamic>>[
-    delegate,
-    GlobalMaterialLocalizations.delegate,
-    GlobalCupertinoLocalizations.delegate,
-    GlobalWidgetsLocalizations.delegate,
-  ];
+  static const List<LocalizationsDelegate<dynamic>> localizationsDelegates =
+      <LocalizationsDelegate<dynamic>>[
+        delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+      ];
 
   /// A list of this localizations delegate's supported locales.
   static const List<Locale> supportedLocales = <Locale>[
@@ -186,7 +189,7 @@ abstract class AppLocalizations {
     Locale('uk'),
     Locale('ur'),
     Locale('vi'),
-    Locale('zh')
+    Locale('zh'),
   ];
 
   /// Message shown after an expired authenticated session returns the user to sign-in
@@ -8635,7 +8638,10 @@ abstract class AppLocalizations {
   ///
   /// In en, this message translates to:
   /// **'{accessDescription} and is {triggerDescription}.'**
-  String accessesAndTriggeredBy(String accessDescription, String triggerDescription);
+  String accessesAndTriggeredBy(
+    String accessDescription,
+    String triggerDescription,
+  );
 
   /// Sentence starting with 'Is' for trigger description
   ///
@@ -20419,13 +20425,20 @@ abstract class AppLocalizations {
   ///
   /// In en, this message translates to:
   /// **'You can change this anytime in {settings} › {voiceResponse}'**
-  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse);
+  String deviceOnboardingVoiceReplySettingsHint(
+    String settings,
+    String voiceResponse,
+  );
 
   /// Footer explaining the complete Settings menu path for replaying the device tutorial
   ///
   /// In en, this message translates to:
   /// **'Replay this tour anytime in {settings} › {deviceSettings} › {deviceTutorial}'**
-  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial);
+  String deviceOnboardingAllSetReplayHint(
+    String settings,
+    String deviceSettings,
+    String deviceTutorial,
+  );
 
   /// Generic fallback name for connected headphones when the system does not provide a device name
   ///
@@ -22353,47 +22366,17 @@ abstract class AppLocalizations {
   /// **'Other changes'**
   String get reviewChangesSectionOther;
 
-  /// How many conversations one change touched
-  ///
-  /// In en, this message translates to:
-  /// **'{count, plural, =1{1 conversation} other{{count} conversations}}'**
-  String reviewChangeConversationCount(int count);
-
-  /// How many places in transcripts one change touched
-  ///
-  /// In en, this message translates to:
-  /// **'{count, plural, =1{1 place} other{{count} places}}'**
-  String reviewChangePlaceCount(int count);
-
-  /// Button opening every place a change landed
-  ///
-  /// In en, this message translates to:
-  /// **'Show all {count}'**
-  String reviewChangeShowAll(int count);
-
   /// Button undoing every instance of one change
   ///
   /// In en, this message translates to:
   /// **'Undo all'**
   String get reviewChangeUndoAll;
 
-  /// Button showing the conversation evidence behind a change
-  ///
-  /// In en, this message translates to:
-  /// **'See evidence'**
-  String get reviewChangeSeeEvidence;
-
   /// Button opening the conversation a change came from
   ///
   /// In en, this message translates to:
   /// **'View conversation'**
   String get reviewChangeViewConversation;
-
-  /// Button opening the tasks list from a task change
-  ///
-  /// In en, this message translates to:
-  /// **'View task'**
-  String get reviewChangeViewTask;
 
   /// Undo all finished with some failures
   ///
@@ -22527,12 +22510,6 @@ abstract class AppLocalizations {
   /// **'Dream Report'**
   String get dreamReportTitle;
 
-  /// Banner when the agent runs in shadow mode. Keep 'Dream' untranslated.
-  ///
-  /// In en, this message translates to:
-  /// **'Preview mode: Dream shows what it would change, but nothing in your account changes yet.'**
-  String get dreamReportShadowBanner;
-
   /// Banner when the agent applies edits. 'Recent Changes' is the name of another screen.
   ///
   /// In en, this message translates to:
@@ -22617,12 +22594,6 @@ abstract class AppLocalizations {
   /// **'Nothing to fix'**
   String get dreamReportNothingFound;
 
-  /// Technical stats for a run: items read and model tokens used.
-  ///
-  /// In en, this message translates to:
-  /// **'Read {records} items · {tokens} tokens'**
-  String dreamReportStats(int records, int tokens);
-
   /// Section label for edits proposed in preview mode.
   ///
   /// In en, this message translates to:
@@ -22653,29 +22624,11 @@ abstract class AppLocalizations {
   /// **'Words it learned'**
   String get dreamReportLearnedWords;
 
-  /// Section label for anonymous diagnostics sent to developers. 'Omi' is a product name.
-  ///
-  /// In en, this message translates to:
-  /// **'Reported to the Omi team'**
-  String get dreamReportFeedback;
-
   /// Label for an edit whose target no longer exists.
   ///
   /// In en, this message translates to:
   /// **'Deleted item'**
   String get dreamReportDeletedItem;
-
-  /// How many scheduled agent passes ran today out of the daily limit.
-  ///
-  /// In en, this message translates to:
-  /// **'{count} of {limit} passes today'**
-  String dreamReportPasses(int count, int limit);
-
-  /// How many changed items are queued for the agent to look at.
-  ///
-  /// In en, this message translates to:
-  /// **'{count, plural, =0{No changes waiting} =1{1 change waiting} other{{count} changes waiting}}'**
-  String dreamReportQueued(int count);
 
   /// Remaining manual runs today.
   ///
@@ -22688,18 +22641,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{fixes, plural, =1{1 fix} other{{fixes} fixes}} · {asks, plural, =1{1 suggestion} other{{asks} suggestions}}'**
   String dreamReportFound(int fixes, int asks);
-
-  /// How many old queued changes were dropped because the queue was full.
-  ///
-  /// In en, this message translates to:
-  /// **'{count, plural, =1{1 older change skipped} other{{count} older changes skipped}}'**
-  String dreamReportDropped(int count);
-
-  /// Diagnostics the privacy filter refused to send.
-  ///
-  /// In en, this message translates to:
-  /// **'{count, plural, =1{1 report held back for privacy} other{{count} reports held back for privacy}}'**
-  String dreamReportPrivacyHeld(int count);
 
   /// No description provided for @speakerTagPromptExcerptSaved.
   ///
@@ -23961,24 +23902,6 @@ abstract class AppLocalizations {
   /// **'{amount} ready to sync'**
   String syncCardReadyAmount(String amount);
 
-  /// Tiny label under the first of three Offline Sync progress segments: moving audio from the Omi device to the phone.
-  ///
-  /// In en, this message translates to:
-  /// **'Omi → phone'**
-  String get syncStepLabelDownload;
-
-  /// Tiny label under the second of three Offline Sync progress segments: uploading to Omi.
-  ///
-  /// In en, this message translates to:
-  /// **'Upload'**
-  String get syncStepLabelUpload;
-
-  /// Tiny label under the third of three Offline Sync progress segments: server transcription.
-  ///
-  /// In en, this message translates to:
-  /// **'Transcribe'**
-  String get syncStepLabelTranscribe;
-
   /// Title of the Offline Sync diagnostics sheet and the link on the status card that opens it.
   ///
   /// In en, this message translates to:
@@ -24020,12 +23943,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Transcribing on Omi'**
   String get syncDetailsTranscribing;
-
-  /// Sync details section header for raw technical counts meant for customer support.
-  ///
-  /// In en, this message translates to:
-  /// **'For support'**
-  String get syncDetailsForSupport;
 
   /// Sync details row label: number of raw audio files the app holds.
   ///
@@ -25899,18 +25816,6 @@ abstract class AppLocalizations {
   /// **'Notes start when the final transcript arrives.'**
   String get episodeNotesStartWithTranscript;
 
-  /// Footnote under on-device live notes.
-  ///
-  /// In en, this message translates to:
-  /// **'Drafted on your phone as you talk. The full notes arrive with the final transcript.'**
-  String get episodeOnDeviceNotesFootnote;
-
-  /// Tag on notes drafted on-device from the live preview.
-  ///
-  /// In en, this message translates to:
-  /// **'On this phone'**
-  String get episodeOnThisPhone;
-
   /// Quiet line: how far the final transcript lags the live preview.
   ///
   /// In en, this message translates to:
@@ -25928,12 +25833,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Your words show up here a minute or two after you say them.'**
   String get livePreviewNoEngineBody;
-
-  /// No-engine preview card title.
-  ///
-  /// In en, this message translates to:
-  /// **'Recording safely'**
-  String get livePreviewNoEngineTitle;
 
   /// Divider between the final transcript and the on-device preview lines.
   ///
@@ -25958,12 +25857,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'when online'**
   String get deviceCatchUpWhenOnline;
-
-  /// Headline of the On the Way page: how much recorded audio is still uploading or being turned into conversations. {duration} is like '8h 14m'.
-  ///
-  /// In en, this message translates to:
-  /// **'{duration} catching up'**
-  String onTheWayCatchingUp(String duration);
 
   /// One quiet line under the On the Way headline and progress bar: the user does not need to do anything; conversations appear as the audio arrives on the server.
   ///
@@ -26006,30 +25899,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Recordings that fail keep retrying in the background. Anything we can\'t transcribe is reported to us automatically.'**
   String get onTheWayFootnote;
-
-  /// Small text link at the bottom of On the Way, and the title of the page it opens: a plain technical list of every pending recording with its status codes, meant for the support team.
-  ///
-  /// In en, this message translates to:
-  /// **'Details for support'**
-  String get onTheWayDetailsForSupport;
-
-  /// Quiet line at the end of a day on the Home list: how many very short or noise-only recordings Omi folded away from that day. {count} is a whole number.
-  ///
-  /// In en, this message translates to:
-  /// **'{count, plural, =1{1 short clip hidden} other{{count} short clips hidden}}'**
-  String homeNoiseFoldHidden(int count);
-
-  /// Tappable word after the hidden-clips count on Home; reveals the folded short recordings in place.
-  ///
-  /// In en, this message translates to:
-  /// **'Show'**
-  String get homeNoiseFoldShow;
-
-  /// Tappable line at the end of a day on Home after the user revealed the short recordings; folds them away again. {count} is a whole number.
-  ///
-  /// In en, this message translates to:
-  /// **'{count, plural, =1{Hide 1 short clip} other{Hide {count} short clips}}'**
-  String homeNoiseFoldHide(int count);
 
   /// Loss warning only for recordings stored on this phone and not uploaded
   ///
@@ -26325,6 +26194,180 @@ abstract class AppLocalizations {
   /// **'Speakers and the final transcript fill in here as it uploads.'**
   String get liveAudioSavedDetail;
 
+  /// Search filter chip: show only short clips (noise or media) that Home hides
+  ///
+  /// In en, this message translates to:
+  /// **'Short clips'**
+  String get searchNoiseFilter;
+
+  /// How many conversations one change touched
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 conversation} other{{count} conversations}}'**
+  String reviewChangeConversationCount(int count);
+
+  /// How many places in transcripts one change touched
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 place} other{{count} places}}'**
+  String reviewChangePlaceCount(int count);
+
+  /// Button opening every place a change landed
+  ///
+  /// In en, this message translates to:
+  /// **'Show all {count}'**
+  String reviewChangeShowAll(int count);
+
+  /// Button showing the conversation evidence behind a change
+  ///
+  /// In en, this message translates to:
+  /// **'See evidence'**
+  String get reviewChangeSeeEvidence;
+
+  /// Button opening the tasks list from a task change
+  ///
+  /// In en, this message translates to:
+  /// **'View task'**
+  String get reviewChangeViewTask;
+
+  /// Banner when the agent runs in shadow mode. Keep 'Dream' untranslated.
+  ///
+  /// In en, this message translates to:
+  /// **'Preview mode: Dream shows what it would change, but nothing in your account changes yet.'**
+  String get dreamReportShadowBanner;
+
+  /// Technical stats for a run: items read and model tokens used.
+  ///
+  /// In en, this message translates to:
+  /// **'Read {records} items · {tokens} tokens'**
+  String dreamReportStats(int records, int tokens);
+
+  /// Section label for anonymous diagnostics sent to developers. 'Omi' is a product name.
+  ///
+  /// In en, this message translates to:
+  /// **'Reported to the Omi team'**
+  String get dreamReportFeedback;
+
+  /// How many scheduled agent passes ran today out of the daily limit.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} of {limit} passes today'**
+  String dreamReportPasses(int count, int limit);
+
+  /// How many changed items are queued for the agent to look at.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =0{No changes waiting} =1{1 change waiting} other{{count} changes waiting}}'**
+  String dreamReportQueued(int count);
+
+  /// How many old queued changes were dropped because the queue was full.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 older change skipped} other{{count} older changes skipped}}'**
+  String dreamReportDropped(int count);
+
+  /// Diagnostics the privacy filter refused to send.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 report held back for privacy} other{{count} reports held back for privacy}}'**
+  String dreamReportPrivacyHeld(int count);
+
+  /// Tiny label under the first of three Offline Sync progress segments: moving audio from the Omi device to the phone.
+  ///
+  /// In en, this message translates to:
+  /// **'Omi → phone'**
+  String get syncStepLabelDownload;
+
+  /// Tiny label under the second of three Offline Sync progress segments: uploading to Omi.
+  ///
+  /// In en, this message translates to:
+  /// **'Upload'**
+  String get syncStepLabelUpload;
+
+  /// Tiny label under the third of three Offline Sync progress segments: server transcription.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcribe'**
+  String get syncStepLabelTranscribe;
+
+  /// Sync details section header for raw technical counts meant for customer support.
+  ///
+  /// In en, this message translates to:
+  /// **'For support'**
+  String get syncDetailsForSupport;
+
+  /// Footnote under on-device live notes.
+  ///
+  /// In en, this message translates to:
+  /// **'Drafted on your phone as you talk. The full notes arrive with the final transcript.'**
+  String get episodeOnDeviceNotesFootnote;
+
+  /// Tag on notes drafted on-device from the live preview.
+  ///
+  /// In en, this message translates to:
+  /// **'On this phone'**
+  String get episodeOnThisPhone;
+
+  /// No-engine preview card title.
+  ///
+  /// In en, this message translates to:
+  /// **'Recording safely'**
+  String get livePreviewNoEngineTitle;
+
+  /// Headline of the On the Way page: how much recorded audio is still uploading or being turned into conversations. {duration} is like '8h 14m'.
+  ///
+  /// In en, this message translates to:
+  /// **'{duration} catching up'**
+  String onTheWayCatchingUp(String duration);
+
+  /// Small text link at the bottom of On the Way, and the title of the page it opens: a plain technical list of every pending recording with its status codes, meant for the support team.
+  ///
+  /// In en, this message translates to:
+  /// **'Details for support'**
+  String get onTheWayDetailsForSupport;
+
+  /// Quiet line at the end of a day on the Home list: how many very short or noise-only recordings Omi folded away from that day. {count} is a whole number.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 short clip hidden} other{{count} short clips hidden}}'**
+  String homeNoiseFoldHidden(int count);
+
+  /// Tappable word after the hidden-clips count on Home; reveals the folded short recordings in place.
+  ///
+  /// In en, this message translates to:
+  /// **'Show'**
+  String get homeNoiseFoldShow;
+
+  /// Tappable line at the end of a day on Home after the user revealed the short recordings; folds them away again. {count} is a whole number.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Hide 1 short clip} other{Hide {count} short clips}}'**
+  String homeNoiseFoldHide(int count);
+
+  /// No description provided for @speakerWholeRecording.
+  ///
+  /// In en, this message translates to:
+  /// **'Apply to the whole recording'**
+  String get speakerWholeRecording;
+
+  /// No description provided for @speakerSelectionChanged.
+  ///
+  /// In en, this message translates to:
+  /// **'The speaker changed. Select the lines again.'**
+  String get speakerSelectionChanged;
+
+  /// Speaker rename budget refusal or partial member save; successful labels remain applied.
+  ///
+  /// In en, this message translates to:
+  /// **'{reason, select, limit{Recording too large. Select fewer lines in one conversation.} partial{Some lines were saved. Select the remaining lines and try again.} other{Some lines were saved. Select the remaining lines and try again.}}'**
+  String speakerRenameIssue(String reason);
+
+  /// Scope explanation or saved confirmation when full recording coverage is unconfirmed.
+  ///
+  /// In en, this message translates to:
+  /// **'{state, select, scope{Other lines from this voice (recording coverage unconfirmed)} other{{count, plural, =1{Renamed 1 line in the available conversations only.} other{Renamed {count} lines in the available conversations only.}}}}'**
+  String speakerRecordingCoverage(String state, int count);
+
   /// Neutral Home row title while an episode summary is being completed.
   ///
   /// In en, this message translates to:
@@ -26374,7 +26417,8 @@ abstract class AppLocalizations {
   String get referralCampaignTitle;
 }
 
-class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
+class _AppLocalizationsDelegate
+    extends LocalizationsDelegate<AppLocalizations> {
   const _AppLocalizationsDelegate();
 
   @override
@@ -26384,56 +26428,56 @@ class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> 
 
   @override
   bool isSupported(Locale locale) => <String>[
-        'ar',
-        'be',
-        'bg',
-        'bn',
-        'bs',
-        'ca',
-        'cs',
-        'da',
-        'de',
-        'el',
-        'en',
-        'es',
-        'et',
-        'fa',
-        'fi',
-        'fr',
-        'he',
-        'hi',
-        'hr',
-        'hu',
-        'id',
-        'it',
-        'ja',
-        'kn',
-        'ko',
-        'lt',
-        'lv',
-        'mk',
-        'mr',
-        'ms',
-        'nl',
-        'no',
-        'pl',
-        'pt',
-        'ro',
-        'ru',
-        'sk',
-        'sl',
-        'sr',
-        'sv',
-        'ta',
-        'te',
-        'th',
-        'tl',
-        'tr',
-        'uk',
-        'ur',
-        'vi',
-        'zh'
-      ].contains(locale.languageCode);
+    'ar',
+    'be',
+    'bg',
+    'bn',
+    'bs',
+    'ca',
+    'cs',
+    'da',
+    'de',
+    'el',
+    'en',
+    'es',
+    'et',
+    'fa',
+    'fi',
+    'fr',
+    'he',
+    'hi',
+    'hr',
+    'hu',
+    'id',
+    'it',
+    'ja',
+    'kn',
+    'ko',
+    'lt',
+    'lv',
+    'mk',
+    'mr',
+    'ms',
+    'nl',
+    'no',
+    'pl',
+    'pt',
+    'ro',
+    'ru',
+    'sk',
+    'sl',
+    'sr',
+    'sv',
+    'ta',
+    'te',
+    'th',
+    'tl',
+    'tr',
+    'uk',
+    'ur',
+    'vi',
+    'zh',
+  ].contains(locale.languageCode);
 
   @override
   bool shouldReload(_AppLocalizationsDelegate old) => false;
@@ -26542,8 +26586,10 @@ AppLocalizations lookupAppLocalizations(Locale locale) {
       return AppLocalizationsZh();
   }
 
-  throw FlutterError('AppLocalizations.delegate failed to load unsupported locale "$locale". This is likely '
-      'an issue with the localizations generation tool. Please file an issue '
-      'on GitHub with a reproducible sample app and the gen-l10n configuration '
-      'that was used.');
+  throw FlutterError(
+    'AppLocalizations.delegate failed to load unsupported locale "$locale". This is likely '
+    'an issue with the localizations generation tool. Please file an issue '
+    'on GitHub with a reproducible sample app and the gen-l10n configuration '
+    'that was used.',
+  );
 }
