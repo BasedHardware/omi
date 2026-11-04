@@ -150,7 +150,10 @@ def run_final_pass(
         reason = 'timeout' if isinstance(error, (TimeoutError, httpx.TimeoutException)) else 'service'
         details = error_details(error)
         logging.getLogger(__name__).warning(
-            'event=final_pass outcome=failed exception_type=%s reason=%s', details['exception_type'], details['reason']
+            'event=final_pass outcome=failed exception_type=%s reason=%s location=%s',
+            details['exception_type'],
+            details['reason'],
+            details['location'],
         )
         if record_outcome:
             OUTCOMES.labels(lane=lane, outcome='failed:' + reason).inc()

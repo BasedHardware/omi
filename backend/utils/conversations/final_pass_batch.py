@@ -11,6 +11,7 @@ import os
 import threading
 import time
 import wave
+from collections import Counter as Counts
 from contextvars import ContextVar
 from contextlib import contextmanager
 from prometheus_client import Counter
@@ -48,6 +49,10 @@ from utils.sync.stage import current_stage
 logger = logging.getLogger(__name__)
 
 _SLOTS = threading.BoundedSemaphore(1)
+# Audio and metadata admission share a two-hour budget. Charge at least one
+# second per registered unit, including tiny fragments, to bound IO fan-out.
+MAX_AUDIO_SECONDS = 7200
+MAX_UNITS = MAX_AUDIO_SECONDS
 _RECORD_TERMINAL = ContextVar('batch_final_pass_terminal', default=True)
 _IDENTITY_ONLY = ContextVar('batch_final_pass_identity_only', default=False)
 UNIT_SKIPS = Counter(
@@ -133,10 +138,11 @@ def _reserve_budget(seconds):
 def _fallback(outcome, **details):
     count_terminal(outcome)
     logger.info(
-        'event=batch_final_pass outcome=%s exception_type=%s reason=%s',
+        'event=batch_final_pass outcome=%s exception_type=%s reason=%s location=%s',
         outcome,
         details.get('exception_type', ''),
         details.get('reason', ''),
+        details.get('location', ''),
     )
     record_fallback(
         component='stt_selection',
@@ -163,7 +169,7 @@ def _assemble(units):
     for item, audio, local_words, validate in units:
         position = round((item.capture_at - origin) * 16000) * 2
         end = position + len(audio)
-        if end > 7200 * 32000:
+        if end > MAX_AUDIO_SECONDS * 32000:
             raise OverflowError('audio timeline too long')
         # Overlapping staged units must agree; different device captures cannot
         # both claim one conversation timeline. Never replace either silently.
@@ -177,28 +183,35 @@ def _assemble(units):
     return bytes(pcm), words, checks
 
 
-def _references(store, uid, conversation, units, read_budget):
-    references, errors, shared = {}, [], []
+def _references(store, uid, conversation, units, read_budget, diagnostics):
+    references, errors, shared, absent = {}, [], [], []
     for unit in units:
         read_budget.timeout(60)
         try:
             reference = load_reference(store, uid, unit, conversation.id)
             if reference is None:
-                raise IncompleteCoverage('unit unavailable')
+                raise IncompleteCoverage('no_job')
             references[unit] = reference
         except Exception as error:
             error.failing_unit = unit
             logger.warning(
-                'event=batch_final_pass outcome=unit_unavailable exception_type=%s reason=%s',
+                'event=batch_final_pass outcome=unit_unavailable exception_type=%s reason=%s location=%s',
                 error_details(error)['exception_type'],
                 error_details(error)['reason'],
+                error_details(error)['location'],
             )
+            if isinstance(error, ReferenceUnavailable) and error.reason == 'no_job':
+                absent.append(error)
+                for segment in conversation.transcript_segments:
+                    if batch_unit_scope(segment) == f'final:batch:{unit}':
+                        diagnostics[segment.id] = 'no_job'
+                continue
             errors.append(error)
             if isinstance(error, ReferenceUnavailable) and error.outcome == 'skipped_shared_unit':
                 shared.append(error)
     if shared:
         UNIT_SKIPS.labels(reason='shared_unit').inc(len(shared))
-        UNIT_SKIPS.labels(reason='blocked_by_shared_unit').inc(len(units) - len(shared))
+        UNIT_SKIPS.labels(reason='blocked_by_shared_unit').inc(len(units) - len(shared) - len(absent))
         raise shared[0]
     if errors:
         error = errors[0]
@@ -207,33 +220,38 @@ def _references(store, uid, conversation, units, read_budget):
         failure = IncompleteCoverage('unit unavailable')
         failure.failing_unit = error.failing_unit
         raise failure from error
+    if not references and absent:
+        raise absent[0]
     return references
 
 
-def _units(uid, conversation, read_budget):
+def _units(uid, conversation, read_budget, *, diagnostics=None):
+    diagnostics = {} if diagnostics is None else diagnostics
     units = sorted(
         {scope.removeprefix('final:batch:') for s in conversation.transcript_segments if (scope := batch_unit_scope(s))}
     )
-    if len(units) > 128:
-        raise ValueError('unit limit')
     store = FirestoreStore(f'batch_pipeline_{current_stage()}')
     artifacts = artifacts_for(store)
-    references = _references(store, uid, conversation, units, read_budget)
+    references = _references(store, uid, conversation, units, read_budget, diagnostics)
+    if (
+        len(references) > MAX_UNITS
+        or sum(max(1, ref[0].duration_seconds) for ref in references.values()) > MAX_AUDIO_SECONDS
+    ):
+        raise OverflowError('audio too long')
     total_bytes = 0
-    for unit in units:
+    for unit, reference in references.items():
         read_budget.timeout(60)
         try:
-            reference = references[unit]
             item, uri, binding, policy = reference
             payload = artifacts.load_result(item, uri, read_budget=read_budget)
             with wave.open(io.BytesIO(artifacts.fetch_audio(item, read_budget=read_budget))) as wav:
                 if (wav.getnchannels(), wav.getframerate(), wav.getsampwidth()) != (1, 16000, 2):
-                    raise ValueError('unit PCM format')
+                    raise ValueError('unit_pcm_format')
                 pcm = wav.readframes(wav.getnframes())
             if abs(len(pcm) / 32000 - item.duration_seconds) > 0.1 + 1 / 16000 + 1e-9:
-                raise ValueError('unit duration')
+                raise ValueError('unit_duration')
             total_bytes += len(pcm)
-            if total_bytes > 7200 * 32000:
+            if total_bytes > MAX_AUDIO_SECONDS * 32000:
                 raise OverflowError('audio too long')
             words = []
             # Record-origin projection does not split by VAD. Older committed
@@ -242,8 +260,10 @@ def _units(uid, conversation, read_budget):
             if binding.record_origin and 'speech_spans' in payload:
                 projection_speech_spans(payload, item.duration_seconds)
             parts = [(item, payload)] if binding.record_origin else split_result(item, payload)
+            reconstructed = {}
             for part, output in parts:
                 segments = projection_segments(part, binding, output, batch_segment_id=unit, policy=policy)
+                reconstructed.update((s.id, s) for s in segments)
                 # Projection uses the decoded result clock, which may differ
                 # from admitted metadata by the worker's decode tolerance.
                 local = bounded_projection_words(output['words'], float(output['audio_seconds']))
@@ -261,16 +281,47 @@ def _units(uid, conversation, read_budget):
                                 timestamp=[t + (part.capture_at - item.capture_at) for t in word['timestamp']],
                             )
                         )
-            yield item, pcm, words, lambda unit=unit, reference=reference: (
-                load_reference(store, uid, unit, conversation.id) == reference
-            )
+            # Segment indexes can shift across projection versions (point-word
+            # splitting and grouping fixes). ID equality alone is insufficient
+            # evidence if it now names different text. Never use stored offsets
+            # to repair this: merge/split operations rebase those clocks.
+            stored = {s.id: s for s in conversation.transcript_segments if batch_unit_scope(s) == f'final:batch:{unit}'}
+            placed = {word['segment_id'] for word in words}
+            for sid, segment in stored.items():
+                source = reconstructed.get(sid)
+                reason = (
+                    'projection_segment_missing'
+                    if source is None
+                    else (
+                        'projection_text_mismatch'
+                        if source.text.split() != segment.text.split()
+                        else (
+                            'projection_point_words'
+                            if source.end <= source.start
+                            else 'projection_unassigned_words' if sid not in placed else None
+                        )
+                    )
+                )
+                if reason:
+                    diagnostics[sid] = reason
+            words = [word for word in words if word['segment_id'] not in diagnostics]
+
+            def validate(unit=unit, reference=reference):
+                try:
+                    return load_reference(store, uid, unit, conversation.id) == reference
+                except Exception as error:
+                    error.failing_unit = unit
+                    raise
+
+            yield item, pcm, words, validate
         except Exception as error:
             error.failing_unit = unit
             details = error_details(error)
             logger.warning(
-                'event=batch_final_pass outcome=unit_unavailable exception_type=%s reason=%s',
+                'event=batch_final_pass outcome=unit_unavailable exception_type=%s reason=%s location=%s',
                 details['exception_type'],
                 details['reason'],
+                details['location'],
             )
             if isinstance(error, (OverflowError, ArtifactReadLimit, IncompleteCoverage, ReferenceUnavailable)):
                 raise
@@ -334,9 +385,11 @@ def run_batch_final_pass(uid, conversation, receipt, *, load_prints, apply, requ
 def _run(uid, conversation, receipt, load_prints, apply):
     deadline = time.monotonic() + 600
     # Independent of playback/speaker-reader defaults: up to two hours of PCM
-    # plus bounded encrypted results/manifests, 512 objects, 180s for all reads.
-    read_budget = ArtifactReadBudget(min(deadline, time.monotonic() + 180), 320 * 1024 * 1024, 512)
-    units = list(_units(uid, conversation, read_budget))
+    # Three objects per minimum charged second permits small registered units
+    # (result, staged audio, retained source). Byte/time limits remain independent.
+    read_budget = ArtifactReadBudget(min(deadline, time.monotonic() + 180), 320 * 1024 * 1024, 3 * MAX_UNITS)
+    diagnostics = {}
+    units = list(_units(uid, conversation, read_budget, diagnostics=diagnostics))
     read_budget.timeout(60)
     if not units:
         raise IncompleteCoverage('no units')
@@ -349,8 +402,18 @@ def _run(uid, conversation, receipt, load_prints, apply):
     ]
     covered = {s.id for s in conversation.transcript_segments if batch_unit_scope(s) and s.end > s.start}
     words = [w for w in words if w['segment_id'] in covered]
-    if {w['segment_id'] for w in words} != covered:
-        raise IncompleteCoverage('unplaced segments')
+    missing = covered - {w['segment_id'] for w in words}
+    coverage = {'required': len(covered), 'placed': len(covered - missing), 'unplaced': len(missing)}
+    coverage_reasons = dict(Counts(diagnostics.get(sid, 'projection_segment_missing') for sid in missing))
+    if not words:
+        if not covered:
+            return _fallback(
+                'skipped_no_changes', reason='projection_point_words', coverage=coverage, coverage_reasons={}
+            )
+        reason = next(iter(coverage_reasons), 'projection_unassigned_words')
+        return _fallback(
+            'failed_incomplete_coverage', reason=reason, coverage=coverage, coverage_reasons=coverage_reasons
+        )
     updates = {}
     next_id = max((s.speaker_id or 0 for s in conversation.transcript_segments), default=0) + 1
     identities, statuses = {}, {}
@@ -391,7 +454,7 @@ def _run(uid, conversation, receipt, load_prints, apply):
     if passed is None:
         return _fallback(
             'skipped_budget' if outcome.get('reason') == 'diarizer_attempt_budget' else 'failed_batch_audio',
-            **{key: outcome[key] for key in ('exception_type', 'reason') if key in outcome},
+            **{key: outcome[key] for key in ('exception_type', 'reason', 'location') if key in outcome},
         )
     if outcome.get('naming_outcome') == 'incompatible_space':
         return _fallback('failed_incompatible_space')
@@ -457,7 +520,13 @@ def _run(uid, conversation, receipt, load_prints, apply):
         ),
     )
     recurring_labels = {}
-    if not _IDENTITY_ONLY.get() and expected is not None and outcome.get('centroids'):
+    if (
+        not missing
+        and not unassigned
+        and not _IDENTITY_ONLY.get()
+        and expected is not None
+        and outcome.get('centroids')
+    ):
         try:
             eligible = {
                 voice: centroid
@@ -526,11 +595,28 @@ def _run(uid, conversation, receipt, load_prints, apply):
     )
 
     if unassigned:
-        return _fallback('failed_unassigned_words', changed_segments=len(updates), speaker_count=len(voice_ids))
+        return _fallback(
+            'failed_unassigned_words',
+            changed_segments=len(updates),
+            speaker_count=len(voice_ids),
+            coverage=coverage,
+            coverage_reasons=coverage_reasons,
+        )
+    if missing:
+        return _fallback(
+            'partial_coverage',
+            reason='projection_coverage_partial',
+            coverage=coverage,
+            coverage_reasons=coverage_reasons,
+            changed_segments=len(updates),
+            speaker_count=len(voice_ids),
+        )
     count_terminal('success')
     logger.info('event=batch_final_pass outcome=success')
     return {
         'outcome': 'success',
+        'coverage': coverage,
+        'coverage_reasons': coverage_reasons,
         'changed_segments': len(updates),
         'speaker_count': len(voice_ids),
         'covered_segments': len(covered),

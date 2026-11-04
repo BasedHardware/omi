@@ -71,7 +71,7 @@ def batch_unit_scope(segment) -> str | None:
     scope = (segment.provider_speaker or {}).get('scope') or segment.speaker_id_scope or ''
     prefix = 'final:batch:'
     unit = scope.removeprefix(prefix)
-    return scope if scope.startswith(prefix) and unit and ':' not in unit else None
+    return scope if scope.startswith(prefix) and 0 < len(unit) <= 128 and ':' not in unit and '/' not in unit else None
 
 
 def final_pass_enabled_for(uid: str, segments) -> bool:

@@ -132,13 +132,44 @@ def isolated_metrics():
     active = ContextVar('owner_lab_metrics', default=False)
 
     class SilentMetric:
+        # The full child protocol includes value access, context managers and
+        # decorators. Lazy backend imports also call Gauge.set_function().
+        def __getattr__(self, name):
+            return self
+
+        def __call__(self, *args, **kwargs):
+            if len(args) == 1 and callable(args[0]) and not kwargs:
+                return args[0]
+            return self
+
         def labels(self, *args, **kwargs):
             return self
 
-        def inc(self, *args, **kwargs):
-            pass
+        def time(self):
+            return self
 
-        observe = set = dec = info = state = inc
+        def count_exceptions(self, *args, **kwargs):
+            return self
+
+        track_inprogress = time
+
+        def set_function(self, function):
+            return None
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def get(self):
+            return 0
+
+        def __iter__(self):
+            return iter(())
+
+        def __getitem__(self, key):
+            return self
 
     silent = SilentMetric()
 
@@ -159,9 +190,11 @@ def isolated_metrics():
     with ExitStack() as stack:
         stack.enter_context(patch.object(CollectorRegistry, 'register', register))
         stack.enter_context(patch.object(MetricWrapperBase, 'labels', guarded(MetricWrapperBase.labels, silent)))
+        for name in ('remove', 'clear'):
+            stack.enter_context(patch.object(MetricWrapperBase, name, guarded(getattr(MetricWrapperBase, name))))
         for cls, names in (
             (Counter, ('inc',)),
-            (Gauge, ('set', 'inc', 'dec', 'set_to_current_time')),
+            (Gauge, ('set', 'inc', 'dec', 'set_to_current_time', 'set_function')),
             (Histogram, ('observe',)),
             (Summary, ('observe',)),
             (Info, ('info',)),
@@ -273,6 +306,7 @@ def reproduce(uid, conversation, receipt, *, diarizer='stub', load_prints=None, 
     return {
         **result,
         'exception_type': result.get('exception_type'),
+        'location': result.get('location'),
         'message': result.get('reason'),  # Same code-owned diagnostic as production.
         'failing_unit': result.get('failing_unit'),
         'scope_kinds': kinds,
@@ -327,6 +361,7 @@ def main(argv=None):
                 result = {
                     'outcome': 'failed_load',
                     'exception_type': details['exception_type'],
+                    'location': details['location'],
                     'message': details['reason'],
                     'failing_unit': None,
                     'scope_kinds': {},

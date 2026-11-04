@@ -236,9 +236,7 @@ def test_staged_pcm_and_projection_ids_with_speech_spans(lane, sync_on, record_o
     assert segments[0].id == str(uuid5(NAMESPACE_URL, f'batch:{part_id}:0'))
 
 
-@pytest.mark.parametrize(
-    'refusal', ['missing', 'expired', 'privacy', 'read_bytes', 'read_objects', 'read_time', 'segment']
-)
+@pytest.mark.parametrize('refusal', ['missing', 'expired', 'privacy', 'read_bytes', 'read_objects', 'read_time'])
 def test_incomplete_coverage_keeps_all_resolver_labels(lane, monkeypatch, refusal):
     original = batch.load_reference
 
@@ -255,7 +253,7 @@ def test_incomplete_coverage_keeps_all_resolver_labels(lane, monkeypatch, refusa
 
     def fetch(item, *, read_budget):
         assert read_budget.max_bytes == 320 * 1024 * 1024
-        assert read_budget.max_objects == 512
+        assert read_budget.max_objects == 3 * batch.MAX_UNITS
         assert 170 < read_budget.deadline - time.monotonic() <= 180
         if item.segment_id == 'unit-b':
             if refusal == 'read_bytes':
@@ -267,8 +265,6 @@ def test_incomplete_coverage_keeps_all_resolver_labels(lane, monkeypatch, refusa
         return original_fetch(item, read_budget=read_budget)
 
     monkeypatch.setattr(lane.artifacts, 'fetch_audio', fetch)
-    if refusal == 'segment':
-        lane.conversation.transcript_segments[-1].id = 'cannot-reconstruct'
     metric = batch.OUTCOMES.labels(
         lane='batch', outcome=('failed_read_budget' if refusal.startswith('read_') else 'failed_incomplete_coverage')
     )
@@ -396,7 +392,8 @@ def test_reference_is_read_only_and_requires_bound_owner_and_conversation(refere
     store, client = reference_store
     before = deepcopy(client.rows)
     assert references.load_reference(store, UID, 'unit-a', 'conversation') is not None
-    assert references.load_reference(store, 'other-owner', 'unit-a', 'conversation') is None
+    with pytest.raises(references.ReferenceUnavailable, match='job_owner_mismatch'):
+        references.load_reference(store, 'other-owner', 'unit-a', 'conversation')
     with pytest.raises(references.ReferenceUnavailable, match='skipped_merged'):
         references.load_reference(store, UID, 'unit-a', 'other-conversation')
     assert client.rows == before
@@ -420,7 +417,13 @@ def test_reference_refuses_expired_erasing_or_changed_artifacts(reference_store,
         with pytest.raises(references.ReferenceUnavailable, match='skipped_expired'):
             references.load_reference(store, UID, 'unit-a', 'conversation')
     else:
-        assert references.load_reference(store, UID, 'unit-a', 'conversation') is None
+        with pytest.raises(
+            references.ReferenceUnavailable,
+            match={'erasing': 'erasure', 'generation': 'generation_mismatch', 'wrong_kind': 'artifact_kind_mismatch'}[
+                refusal
+            ],
+        ):
+            references.load_reference(store, UID, 'unit-a', 'conversation')
 
 
 def test_reference_privacy_deletion_fence(reference_store):
@@ -862,7 +865,7 @@ def test_large_duration_disagreement_remains_a_failure(prod_shaped):
     lane.items['unit-a'] = replace(lane.items['unit-a'], duration_seconds=7.8)
     result = run_prod(lane)
     assert result['outcome'] == 'failed_incomplete_coverage'
-    assert result['reason'] == 'unit duration'
+    assert result['reason'] == 'unit_duration'
     assert result['failing_unit'] == 'unit-a'
     assert not lane.gpu
 
@@ -1130,7 +1133,7 @@ def test_record_origin_still_refuses_malformed_present_vad(prod_shaped):
     prod_shaped.payload['speech_spans'] = [{'start': 2, 'end': 1}]
     result = run_prod(prod_shaped)
     assert result['outcome'] == 'failed_incomplete_coverage'
-    assert result['reason'] == 'ordered nonoverlapping VAD spans required'
+    assert result['reason'] == 'projection_vad_order'
 
 
 def test_eof_word_uses_decoded_result_clock_not_rounded_admission(prod_shaped):

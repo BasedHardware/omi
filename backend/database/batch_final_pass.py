@@ -5,23 +5,40 @@ from datetime import datetime, timezone
 
 from config.policy import ProjectionPolicy
 from utils.batch_pipeline.contracts import WorkItem, ProjectionBinding
+from utils.conversations.final_pass_errors import REFERENCE_REASONS
 
 
 class ReferenceUnavailable(ValueError):
     """A valid owner reference whose lifecycle prevents this pass."""
 
-    def __init__(self, outcome):
+    def __init__(self, outcome, reason=None):
+        if reason is not None and reason not in REFERENCE_REASONS:
+            raise ValueError('invalid reference reason')
         self.outcome = outcome
-        super().__init__(outcome)
+        self.reason = reason or outcome
+        super().__init__(self.reason)
 
 
 def load_reference(store, uid, unit, conversation_id):
     def read(tx):
-        job, result = tx.get('jobs', unit) or {}, tx.get('results', unit) or {}
+        def unavailable(reason):
+            raise ReferenceUnavailable('failed_incomplete_coverage', reason)
+
+        job = tx.get('jobs', unit)
+        if not job:
+            unavailable('no_job')
+        result = tx.get('results', unit)
+        if not result:
+            unavailable('no_result')
         binding = job.get('projection_binding') or {}
         receipts = list((result.get('projection_parts') or {}).values()) or [result.get('projection') or {}]
-        if job.get('owner_id') != uid or job.get('segment_id') != unit or binding.get('owner_id') != uid:
-            return None
+        for matches, reason in (
+            (job.get('owner_id') == uid, 'job_owner_mismatch'),
+            (job.get('segment_id') == unit, 'job_unit_mismatch'),
+            (binding.get('owner_id') == uid, 'binding_owner_mismatch'),
+        ):
+            if not matches:
+                unavailable(reason)
         item = WorkItem(**{k: job[k] for k in WorkItem.__dataclass_fields__ if k in job})
         if not any(
             r.get('conversation_id') == conversation_id and r.get('speaker_scope') == f'final:batch:{unit}'
@@ -29,7 +46,7 @@ def load_reference(store, uid, unit, conversation_id):
         ):
             if any(r.get('conversation_id') and r.get('speaker_scope') == f'final:batch:{unit}' for r in receipts):
                 raise ReferenceUnavailable('skipped_merged')
-            return None
+            unavailable('receipt_missing')
         # PCM belongs to the entire staged unit, including other projection parts
         # and size-rollover outputs. Until reconstruction can trim that geometry,
         # never send a shared unit to the conversation diarizer.
@@ -44,18 +61,21 @@ def load_reference(store, uid, unit, conversation_id):
         uri = (result.get('result') or {}).get('result_uri')
         for kind, reference in (('audio', item.audio_uri), ('results', uri)):
             if not reference or '#' not in reference:
-                return None
+                unavailable('uri_mismatch')
             key = hashlib.sha256(f"{unit}\0{reference.split('#')[0]}".encode()).hexdigest()
-            metadata = tx.get('artifacts', key) or {}
-            if (
-                metadata.get('kind') != kind
-                or metadata.get('owner_id') != uid
-                or metadata.get('segment_id') != unit
-                or metadata.get('privacy_generation') != item.privacy_generation
-                or metadata.get('erasure_requested')
-                or metadata.get('uri') not in (reference, reference.split('#')[0])
+            metadata = tx.get('artifacts', key)
+            if not metadata:
+                unavailable('artifact_row_missing')
+            for matches, reason in (
+                (metadata.get('kind') == kind, 'artifact_kind_mismatch'),
+                (metadata.get('owner_id') == uid, 'artifact_owner_mismatch'),
+                (metadata.get('segment_id') == unit, 'artifact_unit_mismatch'),
+                (metadata.get('privacy_generation') == item.privacy_generation, 'generation_mismatch'),
+                (not metadata.get('erasure_requested'), 'erasure'),
+                (metadata.get('uri') in (reference, reference.split('#')[0]), 'uri_mismatch'),
             ):
-                return None
+                if not matches:
+                    unavailable(reason)
             if metadata.get('cleanup_after') and metadata['cleanup_after'] <= datetime.now(timezone.utc):
                 raise ReferenceUnavailable('skipped_expired')
         return (

@@ -231,3 +231,43 @@ checked-in `backend/pusher/pylock.toml` were verified: Firestore 2.20.0, Cloud
 Tasks 2.16.4, and Prometheus 0.21.1 cover the dedicated outbox. Both the role and
 legacy Pusher source surfaces passed closure validation; the role image installs
 that Pusher lock.
+
+Round 4 diagnostics include `exception_type` and `location`: the innermost
+backend-relative `file:line:function`, without stack locals or arbitrary
+exception messages. `unclassified` always retains that location (or the explicit
+`unavailable` sentinel when an exception has no traceback). Production
+`event=batch_final_pass` failure logs carry the same fields.
+
+Metric isolation supplies no-op children for timers, exception counters,
+in-progress gauges, callbacks, decorators and private value reads. Earlier
+children lacked these APIs; notably lazy `stt_cap_dispatch` gauge initialization
+calls `labels().set_function()`. The multi-unit replay tests exercise the real
+unit/reference/assembly/final-pass path, with blob transport and diarization
+substituted, rather than mocking the final-pass diarization helper.
+
+Reference failures now distinguish `no_job`, `no_result`, `receipt_missing`,
+artifact row/owner/unit/kind mismatch, generation mismatch, erasure and URI
+mismatch. Projection validation has `projection_*` codes. Missing jobs are
+unproved scopes: they count as omitted segments, never as registered units or
+audio to fetch. If no registered unit remains, the result is a specific
+coverage failure. Expired, merged and shared-unit dispositions are retained.
+
+There is no 128-unit conversation limit. Partial retained recordings can produce
+many short units (`missing_units` splits source holes; 300 seconds is a maximum,
+not a minimum). The two-hour budget charges `max(1, duration_seconds)` per
+registered unit, bounding both aggregate audio and fan-out to at most 7,200
+units. The artifact-object ceiling is three times that charge ceiling (result,
+staged audio and retained source); the independent 320 MiB, 180-second read and
+two-hour assembled-timeline limits still apply. This is an explicit minimum
+resource charge, not an assertion that every stored unit lasts a second.
+
+`bounded_projection_words` preserves all validated words; EOF tolerance can turn
+a word into a point, which provides no voice evidence. Point-only stored
+segments remain outside positive-duration coverage. Stored projection IDs can
+also differ from current grouping, or name different text at the same index.
+Only matching IDs and text with positive word evidence may change labels.
+Unplaced positive-duration segments retain their labels, with per-reason
+counts in `coverage_reasons`; other verified segments can produce terminal
+`partial_coverage`. Partial passes do not learn recurring voices and leave
+conversation speaker resolution unavailable. Shared units still skip the
+whole pass before reading audio. Complete success rate excludes partial passes.

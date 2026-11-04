@@ -307,6 +307,7 @@ class BatchFinalPassOutcome(StrEnum):
     TOO_LONG = 'failed_too_long'
     READ_BUDGET = 'failed_read_budget'
     INCOMPLETE_COVERAGE = 'failed_incomplete_coverage'
+    PARTIAL_COVERAGE = 'partial_coverage'
     BATCH_AUDIO = 'failed_batch_audio'
     INCOMPATIBLE_SPACE = 'failed_incompatible_space'
     REVOKED = 'failed_revoked'
