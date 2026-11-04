@@ -27130,5 +27130,957 @@
       ]
     },
     "record": null
+  },
+  {
+    "uid": "omi-finalization-pair-drift",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Resilience",
+    "title": "Fresh lifecycle pair drift persists",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max((sum without(kind) (omi_finalization_pair_new_mismatch)) and (time() - omi_finalization_pair_observed_at_seconds < 2100))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  25
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-11-04T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "30m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "omi-core-features",
+      "__panelId__": "31",
+      "summary": "Fresh lifecycle pair drift persists",
+      "user_impact": "A recording may wait without a transcript or summary; this observation does not change custody.",
+      "scope": "Leader-fenced cursor census: active jobs, queued mirrors, processing conversations. <=200 indexed source docs + <=200 counterpart docs + 2 lease/cursor reads per admitted pass; >=300s cadence. Counts are bounded-page mismatches, not global stock. Deleted/discarded/merged/deferred conversations and superseded generations are excluded. Page cohort requires job.created_at within24h AND at/after2026-11-04T09:27Z. Missing jobs/entry clocks, idle terminal history and bare processing rows without a job link are outside fresh-page coverage; unknown clocks mark blind. Owner uicleanup tracks missing-clock debt. Each leg retains its last page independently, so another leg cannot reset the alert.35m freshness covers the nominal15m three-leg rotation plus10m bridge/1m offset; stale checks the freshest observer of every leg.",
+      "verification": "Check observation freshness, scan incompleteness and consecutive page samples. The pair gauge measures one bounded page, not the fleet mismatch total.",
+      "safe_next_action": "Assign the observed state pair or repair-fence debt to its owning lifecycle lane. Confirm the exact generation before any repair. Never replay or delete rows automatically from this alert.",
+      "runbook": "backend/charts/monitoring/lifecycle-alarms.md",
+      "threshold": "max((sum without(kind) (omi_finalization_pair_new_mismatch)) and (time() - omi_finalization_pair_observed_at_seconds < 2100)) > 25 for 30m",
+      "evidence_date": "2026-11-04",
+      "intended_final_threshold": ">25 for 30m; review after one week of source observations.",
+      "evaluated_bad": "Synthetic: a fresh observation exceeds 259200 continuously for 1h.",
+      "evaluated_good": "Synthetic: only pre-cohort legacy rows are late, or the observed value is within its budget."
+    },
+    "labels": {
+      "severity": "critical",
+      "instatus_component": "speech-processing",
+      "alert_identity": "omi-finalization-pair-drift",
+      "component": "speech-processing",
+      "impact": "user-experience",
+      "tier": "page",
+      "audience": "human",
+      "owner": "two-lane-lead"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h",
+      "mute_time_intervals": []
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-finalization-pair-stock",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Resilience",
+    "title": "Lifecycle pair mismatch stock exceeds 25",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(sum without(kind) (omi_finalization_pair_mismatch))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  25
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-11-04T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "30m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "omi-core-features",
+      "__panelId__": "31",
+      "summary": "Lifecycle pair mismatch stock exceeds 25",
+      "user_impact": "A recording may wait without a transcript or summary; this observation does not change custody.",
+      "scope": "Leader-fenced cursor census: active jobs, queued mirrors, processing conversations. <=200 indexed source docs + <=200 counterpart docs + 2 lease/cursor reads per admitted pass; >=300s cadence. Counts are bounded-page mismatches, not global stock. Deleted/discarded/merged/deferred conversations and superseded generations are excluded. Page cohort requires job.created_at within24h AND at/after2026-11-04T09:27Z. Missing jobs/entry clocks, idle terminal history and bare processing rows without a job link are outside fresh-page coverage; unknown clocks mark blind. Owner uicleanup tracks missing-clock debt. Each leg retains its last page independently, so another leg cannot reset the alert.35m freshness covers the nominal15m three-leg rotation plus10m bridge/1m offset; stale checks the freshest observer of every leg.",
+      "verification": "Check observation freshness, scan incompleteness and consecutive page samples. The pair gauge measures one bounded page, not the fleet mismatch total.",
+      "safe_next_action": "Assign the observed state pair or repair-fence debt to its owning lifecycle lane. Confirm the exact generation before any repair. Never replay or delete rows automatically from this alert.",
+      "runbook": "backend/charts/monitoring/lifecycle-alarms.md",
+      "threshold": "max(sum without(kind) (omi_finalization_pair_mismatch)) > 25 for 30m",
+      "evidence_date": "2026-11-04",
+      "intended_final_threshold": ">25 for 30m; review after one week of source observations.",
+      "evaluated_bad": "Synthetic: a fresh observation exceeds 259200 continuously for 1h.",
+      "evaluated_good": "Synthetic: only pre-cohort legacy rows are late, or the observed value is within its budget."
+    },
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "speech-processing",
+      "alert_identity": "omi-finalization-pair-stock",
+      "component": "speech-processing",
+      "impact": "user-experience",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-finalization-pair-drift-stale",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Resilience",
+    "title": "Lifecycle pair census stale",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(time() - min(max by(leg) (omi_finalization_pair_observed_at_seconds))) or vector(1e9)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  2100
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-11-04T00:00:00Z",
+    "noDataState": "Alerting",
+    "execErrState": "KeepLast",
+    "for": "5m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "omi-core-features",
+      "__panelId__": "31",
+      "summary": "Lifecycle pair census stale",
+      "user_impact": "A recording may wait without a transcript or summary; this observation does not change custody.",
+      "scope": "Leader-fenced cursor census: active jobs, queued mirrors, processing conversations. <=200 indexed source docs + <=200 counterpart docs + 2 lease/cursor reads per admitted pass; >=300s cadence. Counts are bounded-page mismatches, not global stock. Deleted/discarded/merged/deferred conversations and superseded generations are excluded. Page cohort requires job.created_at within24h AND at/after2026-11-04T09:27Z. Missing jobs/entry clocks, idle terminal history and bare processing rows without a job link are outside fresh-page coverage; unknown clocks mark blind. Owner uicleanup tracks missing-clock debt. Each leg retains its last page independently, so another leg cannot reset the alert.35m freshness covers the nominal15m three-leg rotation plus10m bridge/1m offset; stale checks the freshest observer of every leg.",
+      "verification": "Check observation freshness, scan incompleteness and consecutive page samples. The pair gauge measures one bounded page, not the fleet mismatch total.",
+      "safe_next_action": "Assign the observed state pair or repair-fence debt to its owning lifecycle lane. Confirm the exact generation before any repair. Never replay or delete rows automatically from this alert.",
+      "runbook": "backend/charts/monitoring/lifecycle-alarms.md",
+      "threshold": "(time() - min(max by(leg) (omi_finalization_pair_observed_at_seconds))) or vector(1e9) > 2100 for 5m",
+      "evidence_date": "2026-11-04",
+      "intended_final_threshold": ">2100 for 5m; review after one week of source observations.",
+      "evaluated_bad": "Synthetic: a fresh observation exceeds 259200 continuously for 1h.",
+      "evaluated_good": "Synthetic: only pre-cohort legacy rows are late, or the observed value is within its budget."
+    },
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "speech-processing",
+      "alert_identity": "omi-finalization-pair-drift-stale",
+      "component": "speech-processing",
+      "impact": "user-experience",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-finalization-pair-drift-blind",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Resilience",
+    "title": "Lifecycle pair census incomplete",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(omi_finalization_pair_scan_truncated and (time() - omi_finalization_pair_observed_at_seconds < 2100)) or vector(1)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-11-04T00:00:00Z",
+    "noDataState": "Alerting",
+    "execErrState": "KeepLast",
+    "for": "30m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "omi-core-features",
+      "__panelId__": "31",
+      "summary": "Lifecycle pair census incomplete",
+      "user_impact": "A recording may wait without a transcript or summary; this observation does not change custody.",
+      "scope": "Leader-fenced cursor census: active jobs, queued mirrors, processing conversations. <=200 indexed source docs + <=200 counterpart docs + 2 lease/cursor reads per admitted pass; >=300s cadence. Counts are bounded-page mismatches, not global stock. Deleted/discarded/merged/deferred conversations and superseded generations are excluded. Page cohort requires job.created_at within24h AND at/after2026-11-04T09:27Z. Missing jobs/entry clocks, idle terminal history and bare processing rows without a job link are outside fresh-page coverage; unknown clocks mark blind. Owner uicleanup tracks missing-clock debt. Each leg retains its last page independently, so another leg cannot reset the alert.35m freshness covers the nominal15m three-leg rotation plus10m bridge/1m offset; stale checks the freshest observer of every leg.",
+      "verification": "Check observation freshness, scan incompleteness and consecutive page samples. The pair gauge measures one bounded page, not the fleet mismatch total.",
+      "safe_next_action": "Assign the observed state pair or repair-fence debt to its owning lifecycle lane. Confirm the exact generation before any repair. Never replay or delete rows automatically from this alert.",
+      "runbook": "backend/charts/monitoring/lifecycle-alarms.md",
+      "threshold": "max(omi_finalization_pair_scan_truncated and (time() - omi_finalization_pair_observed_at_seconds < 2100)) or vector(1) > 0 for 30m",
+      "evidence_date": "2026-11-04",
+      "intended_final_threshold": ">0 for 30m; review after one week of source observations.",
+      "evaluated_bad": "Synthetic: a fresh observation exceeds 259200 continuously for 1h.",
+      "evaluated_good": "Synthetic: only pre-cohort legacy rows are late, or the observed value is within its budget."
+    },
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "speech-processing",
+      "alert_identity": "omi-finalization-pair-drift-blind",
+      "component": "speech-processing",
+      "impact": "user-experience",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-enrichment-summary-repair-stock",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Resilience",
+    "title": "Enrichment repair-fence stock exceeds 100",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(omi_enrichment_summary_repair_count)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  100
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-11-04T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "1h",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "omi-core-features",
+      "__panelId__": "31",
+      "summary": "Enrichment repair-fence stock exceeds 100",
+      "user_impact": "A recording may wait without a transcript or summary; this observation does not change custody.",
+      "scope": "Active sync_reprocess_outbox obligations with summary_repair=true and due_at>=0, capped COUNT101. This is repair-fence stock, not retry attempts or a retry cap. No numeric retry cap exists in the source; owner uicleanup tracks that debt (ruling4256d5).",
+      "verification": "Check observation freshness, scan incompleteness and consecutive page samples. The pair gauge measures one bounded page, not the fleet mismatch total.",
+      "safe_next_action": "Assign the observed state pair or repair-fence debt to its owning lifecycle lane. Confirm the exact generation before any repair. Never replay or delete rows automatically from this alert.",
+      "runbook": "backend/charts/monitoring/lifecycle-alarms.md",
+      "threshold": "max(omi_enrichment_summary_repair_count) > 100 for 1h",
+      "evidence_date": "2026-11-04",
+      "intended_final_threshold": ">100 for 1h; review after one week of source observations.",
+      "evaluated_bad": "Synthetic: a fresh observation exceeds 259200 continuously for 1h.",
+      "evaluated_good": "Synthetic: only pre-cohort legacy rows are late, or the observed value is within its budget."
+    },
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "speech-processing",
+      "alert_identity": "omi-enrichment-summary-repair-stock",
+      "component": "speech-processing",
+      "impact": "user-experience",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-enrichment-repair-stock-stale",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Resilience",
+    "title": "Enrichment repair stock observer stale",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(time() - max(omi_enrichment_summary_repair_observed_at_seconds)) or vector(1e9)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  1200
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-11-04T00:00:00Z",
+    "noDataState": "Alerting",
+    "execErrState": "KeepLast",
+    "for": "5m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "omi-core-features",
+      "__panelId__": "31",
+      "summary": "Enrichment repair stock observer stale",
+      "user_impact": "A recording may wait without a transcript or summary; this observation does not change custody.",
+      "scope": "Active sync_reprocess_outbox obligations with summary_repair=true and due_at>=0, capped COUNT101. This is repair-fence stock, not retry attempts or a retry cap. No numeric retry cap exists in the source; owner uicleanup tracks that debt (ruling4256d5).",
+      "verification": "Check observation freshness, scan incompleteness and consecutive page samples. The pair gauge measures one bounded page, not the fleet mismatch total.",
+      "safe_next_action": "Assign the observed state pair or repair-fence debt to its owning lifecycle lane. Confirm the exact generation before any repair. Never replay or delete rows automatically from this alert.",
+      "runbook": "backend/charts/monitoring/lifecycle-alarms.md",
+      "threshold": "(time() - max(omi_enrichment_summary_repair_observed_at_seconds)) or vector(1e9) > 1200 for 5m",
+      "evidence_date": "2026-11-04",
+      "intended_final_threshold": ">1200 for 5m; review after one week of source observations.",
+      "evaluated_bad": "Synthetic: a fresh observation exceeds 259200 continuously for 1h.",
+      "evaluated_good": "Synthetic: only pre-cohort legacy rows are late, or the observed value is within its budget."
+    },
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "speech-processing",
+      "alert_identity": "omi-enrichment-repair-stock-stale",
+      "component": "speech-processing",
+      "impact": "user-experience",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
   }
 ]

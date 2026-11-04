@@ -2111,3 +2111,46 @@ def test_lifecycle_pages_use_new_cohorts_freshness_and_imported_blind_companions
                     assert prefix in rule['data'][0]['model']['expr']
     assert 'omi-record-nojob-dwell' not in gate
     assert {'omi-record-nojob-stock', 'omi-record-nojob-blind', 'omi-finalization-dead-letter-stock'} <= gate
+
+
+def test_pair_page_uses_recent_jobs_and_stock_stays_agent_tier():
+    gate = set(json.loads((MONITORING / 'live-alert-gate.json').read_text())['uids'])
+    ids = {
+        'omi-finalization-pair-drift',
+        'omi-finalization-pair-stock',
+        'omi-finalization-pair-drift-stale',
+        'omi-finalization-pair-drift-blind',
+        'omi-enrichment-summary-repair-stock',
+        'omi-enrichment-repair-stock-stale',
+    }
+    assert ids <= gate
+    for rules in _all_rule_exports().values():
+        page = rules['omi-finalization-pair-drift']
+        assert page['data'][0]['model']['expr'] == (
+            'max((sum without(kind) (omi_finalization_pair_new_mismatch)) and '
+            '(time() - omi_finalization_pair_observed_at_seconds < 2100))'
+        )
+        assert page['data'][2]['model']['conditions'][0]['evaluator']['params'] == [25]
+        assert page['for'] == '30m' and page['noDataState'] == 'OK'
+        assert page['labels']['tier'] == 'page'
+        assert not page['notification_settings']['mute_time_intervals']
+        assert '2026-11-04T09:27Z' in page['annotations']['scope']
+        assert 'job.created_at' in page['annotations']['scope']
+        assert rules['omi-finalization-pair-drift-stale']['data'][0]['model']['expr'] == (
+            '(time() - min(max by(leg) (omi_finalization_pair_observed_at_seconds))) or vector(1e9)'
+        )
+        for uid in ids:
+            rule = rules[uid]
+            assert rule['annotations']['evidence_date'] == '2026-11-04'
+            assert rule['annotations']['intended_final_threshold']
+            if uid != page['uid']:
+                assert rule['labels']['tier'] == 'agent'
+                assert rule['notification_settings']['mute_time_intervals'] == ['omi-tier-silent']
+            if uid.endswith(('-stale', '-blind')):
+                assert rule['noDataState'] == 'Alerting'
+        stock = rules['omi-finalization-pair-stock']
+        assert stock['data'][0]['model']['expr'] == 'max(sum without(kind) (omi_finalization_pair_mismatch))'
+        repair = rules['omi-enrichment-summary-repair-stock']
+        assert repair['data'][0]['model']['expr'] == 'max(omi_enrichment_summary_repair_count)'
+        assert repair['data'][2]['model']['conditions'][0]['evaluator']['params'] == [100]
+        assert 'not retry attempts or a retry cap' in repair['annotations']['scope']

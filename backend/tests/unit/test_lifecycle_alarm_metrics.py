@@ -224,3 +224,25 @@ def test_first_failed_sample_remains_never_observed_and_calls_are_throttled():
     metrics.refresh(1100, sample)
     assert len(calls) == 1
     assert registry.get_sample_value('synthetic_phase_observed_at_seconds') == 0
+
+
+def test_repair_stock_is_capped_and_excludes_settled_receipts():
+    client = Client(
+        sync_reprocess_outbox=entries(
+            [
+                *[{'summary_repair': True, 'due_at': 0} for _ in range(120)],
+                {'summary_repair': True, 'due_at': None, 'dormant': True},
+                {'summary_repair': False, 'due_at': 0},
+            ]
+        )
+    )
+    assert queries.enrichment_summary_repair(client) == {'all': (0, 101, True)}
+    client = Client(
+        sync_reprocess_outbox=entries(
+            [
+                {'summary_repair': True, 'due_at': None, 'dormant': True},
+                {'summary_repair': False, 'due_at': 0},
+            ]
+        )
+    )
+    assert queries.enrichment_summary_repair(client) == {'all': (0, 0, False)}

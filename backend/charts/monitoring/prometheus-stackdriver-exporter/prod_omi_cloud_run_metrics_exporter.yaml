@@ -25,6 +25,8 @@ stackdriver:
     - "based-hardware"
   metrics:
     prefixes:
+      - 'prometheus.googleapis.com/omi_finalization_pair_'
+      - 'prometheus.googleapis.com/omi_enrichment_summary_repair_'
       # WP-C lifecycle dwell and observer health (closed labels).
       - 'prometheus.googleapis.com/omi_batch_record_pending_'
       - 'prometheus.googleapis.com/omi_record_seal_nojob_'
