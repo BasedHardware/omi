@@ -86,8 +86,8 @@ def item_report(manifest, stages: list[StageResult]) -> dict:
         'stop_reason': stopped.reason if stopped else None,
         'duration_ms': round(sum(s.duration_ms for s in stages), 3),
         'verdict': 'FAIL' if stopped else 'PASS',
-        'expectation_met': bool(expectation_met),
-        'expectation_verdict': 'PASS' if expectation_met else 'FAIL',
+        'expectation_met': bool(expectation_met) if manifest.stages else None,
+        'expectation_verdict': ('PASS' if expectation_met else 'FAIL') if manifest.stages else 'NOT_SET',
     }
 
 

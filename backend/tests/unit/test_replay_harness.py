@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 import jsonschema
 
-from testing.replay_harness.manifest import JSON_SCHEMA, STAGES, load_case, validate_manifest
+from testing.replay_harness.manifest import IMPLEMENTED_STAGES, JSON_SCHEMA, STAGES, load_case, validate_manifest
 from testing.replay_harness.report import StageResult, item_report, record_exception, table, write_report
 from testing.replay_harness.stages.base import NotImplementedStage
 
@@ -117,7 +117,7 @@ def test_control_pass_and_unreproduced_expected_stop(manifest):
     assert report['verdict'] == 'PASS' and not report['expectation_met']
 
 
-@pytest.mark.parametrize('name', STAGES[1:])
+@pytest.mark.parametrize('name', [name for name in STAGES if name not in IMPLEMENTED_STAGES])
 def test_reserved_boundaries_cannot_pass(name, manifest):
     stage = asyncio.run(NotImplementedStage(name).run(None, None))
     assert stage.reason == 'not_implemented' and stage.status == 'not_implemented'
@@ -127,7 +127,7 @@ def test_reserved_boundaries_cannot_pass(name, manifest):
     assert not item_report(value, [stage])['expectation_met']
 
 
-@pytest.mark.parametrize('name', STAGES[1:])
+@pytest.mark.parametrize('name', [name for name in STAGES if name not in IMPLEMENTED_STAGES])
 @pytest.mark.parametrize('stop', [False, True])
 def test_manifest_rejects_every_unimplemented_stage(name, stop, manifest):
     manifest.pop('expect', None)
