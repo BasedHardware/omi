@@ -18,6 +18,7 @@ import {
   claimReferralTrial as claimOwnedReferralTrial,
   referralMobilePlatform,
   referralDownloadURL,
+  referralSignInProvider,
   parseReferralEnvironment,
   ReferralClaimError,
 } from '@/lib/referrals';
@@ -234,5 +235,36 @@ describe('web referral handoff', () => {
         expect((error as ReferralClaimError).retryable).toBe(status === 503);
       }
     }
+  });
+});
+
+describe('referral provider identity', () => {
+  it('uses only exact Firebase provider identifiers', () => {
+    expect(referralSignInProvider(['apple.com'])).toBe('Apple');
+    expect(referralSignInProvider(['google.com'])).toBe('Google');
+    expect(referralSignInProvider([])).toBeNull();
+    expect(referralSignInProvider(['apple.com', 'google.com'])).toBeNull();
+  });
+  it.each([
+    'https://apple.com',
+    'https://accounts.google.com',
+    'https://evil.test/apple.com',
+    'https://evil.test/?provider=google.com',
+    'apple.com.evil.test',
+    'google.com.evil.test',
+    'evilapple.com',
+    'evilgoogle.com',
+    'accounts.apple.com',
+    'accounts.google.com',
+    'javascript:apple.com',
+    'data:text/plain,google.com',
+    'https://apple.com@evil.test',
+    'https://google.com@evil.test',
+    '//apple.com',
+    'APPLE.COM',
+    'google.com.',
+    'password',
+  ])('does not interpret %s as a provider identifier', (value) => {
+    expect(referralSignInProvider([value])).toBeNull();
   });
 });

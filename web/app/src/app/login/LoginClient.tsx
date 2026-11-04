@@ -19,6 +19,7 @@ import {
   parseReferralEnvironment,
   referralMobilePlatform,
   referralDownloadURL,
+  referralSignInProvider,
 } from '@/lib/referrals';
 
 export function getAuthErrorMessage(
@@ -223,13 +224,9 @@ export function LoginClient() {
   };
 
   if (user && isReferralFlow && referralActivated && mobilePlatform) {
-    const providers = user.providerData?.map((provider) => provider.providerId) ?? [];
-    const provider =
-      providers.length === 1 && providers.includes('apple.com')
-        ? 'Apple'
-        : providers.length === 1 && providers.includes('google.com')
-        ? 'Google'
-        : null;
+    const provider = referralSignInProvider(
+      user.providerData?.map((entry) => entry.providerId) ?? [],
+    );
     return (
       <div className="flex min-h-[100svh] items-center justify-center bg-black px-5 text-center">
         <div className="max-w-sm">

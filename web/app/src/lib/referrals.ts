@@ -10,6 +10,16 @@ export interface ReferralClaimResult {
 
 export type ReferralMobilePlatform = 'ios' | 'android';
 
+export function referralSignInProvider(
+  providerIds: readonly string[],
+): 'Apple' | 'Google' | null {
+  if (providerIds.length !== 1) return null;
+  const providerId = providerIds[0];
+  if (providerId === 'apple.com') return 'Apple';
+  if (providerId === 'google.com') return 'Google';
+  return null;
+}
+
 export function referralMobilePlatform(userAgent: string): ReferralMobilePlatform | null {
   if (/android/i.test(userAgent)) return 'android';
   if (/iPhone|iPad|iPod/i.test(userAgent)) return 'ios';
