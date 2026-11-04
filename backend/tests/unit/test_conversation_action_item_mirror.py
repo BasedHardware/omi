@@ -232,7 +232,10 @@ def mirror(router, monkeypatch):
 
     def _get_action_item(uid, ai_id):
         fetched.append(ai_id)
-        return {"id": ai_id, "description": "Send the plan", "due_at": None}
+        # The production reader sees the post-write document; echo the state
+        # this fixture just marked so the reminder sync mirrors it.
+        completed = next((value for marked_id, value in reversed(marked) if marked_id == ai_id), False)
+        return {"id": ai_id, "description": "Send the plan", "due_at": None, "completed": completed}
 
     monkeypatch.setattr(ai_db, "get_action_item", _get_action_item)
 
@@ -273,7 +276,9 @@ def test_linked_row_mirrors_exactly_its_task_not_description_siblings(mirror):
     assert result == {"status": "Ok"}
     assert mirror.marked == [("task-linked", True)]
     assert mirror.synced == [("task-linked", True)]
-    assert mirror.fetched == [], "the linked task was in the conversation list; no direct fetch needed"
+    # Main's mirror sync re-reads the persisted row after marking, so the
+    # linked task is fetched once for the reminder sync.
+    assert mirror.fetched == ["task-linked"]
 
 
 def test_unlinked_row_keeps_the_legacy_description_mirror(mirror):
