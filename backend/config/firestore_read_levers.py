@@ -55,7 +55,7 @@ KNOWN_LEVERS = frozenset(
         'bpp_decision_cache',  # batch privacy: token-validated generation reuse across attempts, <= 60s
         'privacy_ttl60',  # legal-hold fence, tombstone and deletion-marker decisions reused <= 60s, no token read
         'action_items_ttl120',  # action_items_cache: 120s default reuse under action_items_page
-        'lifecycle_record_pending_head',  # lifecycle_metrics_queries:record_pending head(1)+count, key=namespace
+        'lifecycle_record_pending_head',  # lifecycle_metrics_queries:record_pending head(1)+count, key=serving replica
     }
 )
 
