@@ -8,6 +8,7 @@ table; a removed gap that still fails, or an improved row left xfailed, fails CI
 
 import ast
 import json
+from dataclasses import replace
 from functools import lru_cache
 from pathlib import Path
 
@@ -216,6 +217,13 @@ def assert_clause(row, clause):
         assert (row.machine, row.state) == ('fair_use', 'none')
         return  # Base state carries no outstanding enforcement obligation.
     if clause == 'automatic_exit':
+        if row.exit_exemption:
+            assert row.key == 'record_audio:capturing' and not row.terminal
+            assert row.exit.kind == 'callback-only'
+            assert row.exit.cite == 'database/record_audio.py:set_record_upload_pending'
+            assert row.deadline_exemption and 'exact-token finish' in row.exit_exemption
+            assert function_source(row.exit.cite)
+            return
         if row.terminal:
             assert (
                 row.owner and (BACKEND / row.owner.removeprefix('backend/')).is_file()
@@ -227,6 +235,12 @@ def assert_clause(row, clause):
             assert function_source(row.exit.cite), row.exit.cite
     elif clause == 'entry_deadline':
         if not row.terminal:
+            if row.deadline_exemption:
+                assert row.key in {'record_audio:capturing', 'record_audio_orphan:capturing'}
+                assert row.fields == ('record_upload_sessions',)
+                assert 'No producer TTL' in row.deadline_exemption and '9d457c' in row.deadline_exemption
+                assert row.deadline_field is None and not row.deadline_stamped_at_entry and not row.deadline_entries
+                return
             assert row.deadline_field and row.deadline_stamped_at_entry, 'deadline is absent or only computed on read'
             assert row.deadline_entries, 'every automatic entry path must be declared'
             declared = {(path.module, path.function) for path in row.deadline_entries}
@@ -369,18 +383,17 @@ KNOWN_GAPS = {
     ('finalization:completed', 'dwell_metric'): 'finalization:completed: missing authoritative dwell/stock gauge; '
     'phase contract follow-up; no fix PR yet; ANX '
     'lcinv-lifecycle-invariants',
-    ('record_audio:capturing', 'dwell_alert'): 'record_audio:capturing: missing committed dwell/stock alert; Proof '
-    'repair exists for job-backed captures; bounded dwell waits on '
-    'freshtitles open-producer-token fix, no PR yet; ANX '
-    'lcinv-lifecycle-invariants',
-    ('record_audio:capturing', 'dwell_metric'): 'record_audio:capturing: missing authoritative dwell/stock gauge; '
-    'Proof repair exists for job-backed captures; bounded dwell waits on '
-    'freshtitles open-producer-token fix, no PR yet; ANX '
-    'lcinv-lifecycle-invariants',
-    ('record_audio:capturing', 'entry_deadline'): 'record_audio:capturing: missing deadline stamped at entry; Proof '
-    'repair exists for job-backed captures; bounded dwell waits on '
-    'freshtitles open-producer-token fix, no PR yet; ANX '
-    'lcinv-lifecycle-invariants',
+    ('record_audio:capturing', 'dwell_alert'): 'Live producer custody needs a dwell alert despite no TTL; 4bf62d; '
+    'capture monitoring follow-up, no PR yet; ANX lcinv-lifecycle-invariants',
+    ('record_audio:capturing', 'dwell_metric'): 'Live producer custody needs authoritative dwell visibility; 4bf62d; '
+    'capture monitoring follow-up, no PR yet; ANX lcinv-lifecycle-invariants',
+    (
+        'record_audio_orphan:capturing',
+        'dwell_metric',
+    ): 'Proven-dead orphan recovery needs an authoritative dwell gauge; '
+    '4bf62d; capture monitoring follow-up, no PR yet; ANX lcinv-lifecycle-invariants',
+    ('record_audio_orphan:capturing', 'dwell_alert'): 'Proven-dead orphan recovery needs a dwell alert; 4bf62d; '
+    'capture monitoring follow-up, no PR yet; ANX lcinv-lifecycle-invariants',
     ('record_audio:record_audio_partial', 'dwell_alert'): 'record_audio:record_audio_partial: missing committed '
     'dwell/stock alert; phase contract follow-up; no fix PR '
     'yet; ANX lcinv-lifecycle-invariants',
@@ -501,6 +514,26 @@ def test_resolved_plan_gaps_do_not_regress():
     ):
         assert (key, clause) not in KNOWN_GAPS
         assert_clause(rows[key], clause)
+
+
+@pytest.mark.parametrize('key', ['record_audio:capturing', 'record_audio_orphan:capturing'])
+def test_no_ttl_custody_keeps_exit_and_monitoring_obligations_separate(key):
+    row = next(row for row in STATES if row.key == key)
+    assert_clause(row, 'entry_deadline')
+    assert_clause(row, 'automatic_exit')
+    for clause in ('dwell_metric', 'dwell_alert'):
+        assert (key, clause) in KNOWN_GAPS
+        with pytest.raises(AssertionError):
+            assert_clause(row, clause)
+
+
+def test_automatic_state_cannot_borrow_interactive_capture_exemptions():
+    custody = next(row for row in STATES if row.key == 'record_audio:capturing')
+    leased = next(row for row in STATES if row.key == 'batch:leased')
+    with pytest.raises(AssertionError):
+        assert_clause(replace(leased, deadline_exemption=custody.deadline_exemption), 'entry_deadline')
+    with pytest.raises(AssertionError):
+        assert_clause(replace(leased, exit_exemption=custody.exit_exemption), 'automatic_exit')
 
 
 def test_deadline_probe_rejects_a_read_without_an_entry_write():

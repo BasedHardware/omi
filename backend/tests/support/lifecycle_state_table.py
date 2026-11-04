@@ -1,4 +1,4 @@
-"""Reviewed legacy lifecycle inventory for WP-B (source base 563e6c240944).
+"""Reviewed legacy lifecycle inventory for WP-B (B2 source base 43085bb24061).
 
 This is a declaration of existing mechanisms, not a new runtime state machine.
 Phase strings are the compatibility reader's strings. Derived phases do not
@@ -51,6 +51,8 @@ class State:
     deadline_entries: tuple[EntryPath, ...] = ()
     alert_required: bool = True
     quiescent: bool = False
+    deadline_exemption: str = ''
+    exit_exemption: str = ''
 
     @property
     def key(self):
@@ -225,6 +227,8 @@ def row(
     stamped=False,
     alert_required=None,
     quiescent=False,
+    deadline_exemption='',
+    exit_exemption='',
 ):
     entries = DEADLINE_ENTRIES.get(f'{machine}:{state}', ())
     entered_by = (
@@ -249,6 +253,8 @@ def row(
         entries,
         not terminal if alert_required is None else alert_required,
         quiescent,
+        deadline_exemption,
+        exit_exemption,
     )
 
 
@@ -325,8 +331,18 @@ STATES = (
             'record_audio',
             'capturing',
             ('record_upload_sessions',),
-            exit=RECORD_REPAIR,
-            note='Proof repair exists for job-backed captures; bounded dwell waits on freshtitles open-producer-token fix, no PR yet',
+            exit=Exit('callback-only', 'database/record_audio.py:set_record_upload_pending'),
+            deadline_exemption='No producer TTL: live custody is cleared only by exact-token finish; lead2 9d457c / 4bf62d',
+            exit_exemption='Interactive live custody awaits exact-token finish, not automatic expiration; 4bf62d',
+            note='Live producer custody; dwell visibility remains required even though age cannot clear its token',
+        ),
+        row(
+            'record_audio_orphan',
+            'capturing',
+            ('record_upload_sessions',),
+            exit=Exit('sweeper', 'utils/batch_pipeline/record_seal_sweeper.py:sweep'),
+            deadline_exemption='No producer TTL: proven-dead repair needs scoped producer and retained-tail evidence; lead2 9d457c / 4bf62d',
+            note='Conditional orphan view, not a new persisted phase: producer proven dead, complete retained-tail evidence, job-backed repair',
         ),
         row(
             'record_audio',
