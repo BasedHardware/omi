@@ -2467,6 +2467,9 @@ environments:
             category: service_discovery
           OMI_FLAGS_SOURCE: {value: dual, category: rollout}
           FIRST_SUMMARY_DEADLINE_ENABLED: {value: 'true', category: rollout}
+          BATCH_ALLOWANCE_HOLD_RETRY_SECONDS:
+            value: '7200'
+            category: ops_kill
           SONIOX_IDLE_COHORT_CLOSE_SECONDS: {value: '10', category: rollout}
           SONIOX_IDLE_COHORT_REARM_SECONDS: {value: '2', category: rollout}
           SONIOX_IDLE_COHORT_MAX_CLOSES_PER_HOUR: {value: '120', category: rollout}

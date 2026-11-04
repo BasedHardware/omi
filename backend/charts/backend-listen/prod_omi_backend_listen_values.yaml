@@ -201,6 +201,10 @@ env:
     value: 'true'
   - name: BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED
     value: "true"
+  # Matches the prod runtime overlay (deploy contract): allowance-exhausted
+  # batch units park 2 h between admission re-checks. Kill switch '60'.
+  - name: BATCH_ALLOWANCE_HOLD_RETRY_SECONDS
+    value: "7200"
   - name: BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED
     value: "false"
   - name: BATCH_PIPELINE_PROJECTION_TIMING_ENABLED

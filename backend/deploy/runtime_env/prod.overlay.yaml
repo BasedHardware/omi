@@ -79,6 +79,13 @@ overlay:
         BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED:
           value: 'true'
           category: rollout
+        # Allowance-exhausted batch units park 2 h between re-checks instead of
+        # 30 min (David 065da8, 2026-11-04, interim pending the upgrade-latency
+        # ruling): ~3.1/s of leases were exhausted-owner re-claims. Kill switch:
+        # '60' restores the short cycle; removing the line restores 1800.
+        BATCH_ALLOWANCE_HOLD_RETRY_SECONDS:
+          value: '7200'
+          category: ops_kill
         BATCH_PIPELINE_API_URL:
           value: https://backend-sync-hhibjajaja-uc.a.run.app
         BUCKET_BATCH_PIPELINE:
