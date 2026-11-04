@@ -52,7 +52,6 @@ from utils.subscription import (
     desktop_to_consumer_plan_change_error,
     should_show_new_plans,
     adapt_plans_for_legacy_client,
-    clear_trial_paywall_cache,
     find_active_paid_subscription_for_user,
     price_ids_match_plan_and_interval,
 )
@@ -431,7 +430,6 @@ def _try_reactivate_subscription(uid: str, target_price_id: str) -> dict | None:
                 current_subscription.cancel_at_period_end = False
                 users_db.update_user_subscription(uid, current_subscription.model_dump())
                 set_credits_invalidation_signal(uid)
-                clear_trial_paywall_cache(uid)
                 if recovered_from_stripe:
                     record_fallback(
                         component='other',
@@ -968,7 +966,6 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
             if new_subscription:
                 users_db.update_user_subscription(uid, new_subscription.model_dump())
                 set_credits_invalidation_signal(uid)
-                clear_trial_paywall_cache(uid)
                 if is_paid_plan(new_subscription.plan):
                     conversations_db.unlock_all_conversations(uid)
                     memories_db.unlock_all_memories(uid)
@@ -1249,7 +1246,6 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
 
             persisted = await run_blocking(stripe_executor, _update_subscription_from_session, uid, session)
             await run_blocking(db_executor, set_credits_invalidation_signal, uid)
-            await run_blocking(db_executor, clear_trial_paywall_cache, uid)
             # A stored paid label with a missing, zero, or past period is Basic
             # on get_user_valid_subscription. Unlock only an open paid period.
             subscription = await run_blocking(db_executor, users_db.get_user_valid_subscription, uid)
@@ -1472,7 +1468,6 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                             ),
                         )
                     await run_blocking(db_executor, set_credits_invalidation_signal, uid)
-                    await run_blocking(db_executor, clear_trial_paywall_cache, uid)
                     if 'clear_fair_use' in decision.effects:
                         await run_blocking(db_executor, clear_fair_use_on_upgrade, uid)
                     if funded_processing_enabled(uid) and not adopted_active_paid:
@@ -1533,7 +1528,6 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                                 db_executor, users_db.update_user_subscription, uid, new_subscription.model_dump()
                             )
                             await run_blocking(db_executor, set_credits_invalidation_signal, uid)
-                            await run_blocking(db_executor, clear_trial_paywall_cache, uid)
                             if 'clear_fair_use' in decision.effects:
                                 await run_blocking(db_executor, clear_fair_use_on_upgrade, uid)
                             logger.info(
@@ -1575,7 +1569,6 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                                 db_executor, users_db.update_user_subscription, uid, new_subscription.model_dump()
                             )
                             await run_blocking(db_executor, set_credits_invalidation_signal, uid)
-                            await run_blocking(db_executor, clear_trial_paywall_cache, uid)
                             logger.info(
                                 f"Subscription schedule canceled for user {uid}. Subscription: {subscription_id}"
                             )

@@ -49,6 +49,11 @@ borrowedNodePools:
   # autoscaler's expendable cutoff (-10), so a Pending borrower is not ignored.
   priority: -1
 worker:
+  # Control-loop defaults; rollback independently with 64 / false / 2 / {}.
+  controlCandidateFanout: 16
+  admissionParallelCalls: true
+  idlePollMaxSeconds: 10
+  firestoreReadLevers: '{"batch_privacy_memoize":100}'
   # Fenced per-shard pulls and worker affinity; false restores legacy selection.
   shardSpreadEnabled: true
   # One shard transaction leases up to the pull batch; false leases one per transaction.
@@ -163,32 +168,30 @@ autoscaling:
     enabled: false
     onDemandNodePool: batch-pipeline-pool
     spotNodePool: batch-pipeline-pool-spot
-  # External metrics from the supplied Prometheus adapter rules must be installed
-  # and freshly sampled. A failed/stale metric prevents unsafe HPA scale-down.
-  # Max-of-two (batchdesign 2026-11-01 PR-2): the HPA keeps the admissible-ready
-  # backlog target AND adds GPU-chain occupancy, sizing on the higher
-  # recommendation. The ready count holds capacity through claim-chain wedges
-  # (occupancy alone sheds lanes whenever claims bind rather than flights);
-  # occupancy keeps capacity through healthy drains where backlog reads low but
-  # flights are real (hpafit 2026-11-01 replay: 0 starved minutes over 24h and
-  # replica dominance over the ready-only answer whenever backlog exceeds the
-  # per-worker target). 32, not 16: at 25% the ready count flaps 0 <-> 128
-  # minute to minute and the floor drains each burst in about two minutes, so 16
-  # bought nodes that arrived after the work was done and the 1800s window held
-  # them. Ready stays the fast path for a sustained load step, since backlog
-  # only builds when capacity is short; the chain rate is smoothed over 10m
-  # (batchretune 2026-11-02 replay: mean 4.9 vs 7.7 replicas).
-  targetQueuedUnitsPerWorker: 32
-  # GPU-chain (worker_flight) busy seconds per second per worker; 0.5 is ~89%
-  # of the measured healthy chain ceiling (hpafit 2026-11-01 replay).
-  targetChainBusyPerWorker: "0.5"
-  # Stockout-aware scale-down window; with 1 pod / 600s this sheds ~6 nodes/hour.
+  # External metrics must be freshly sampled; a failed metric blocks scale-down.
+  # Max-of-two: ready backlog protects claim-bound work; worker_flight wall time
+  # protects healthy drains whose ready backlog is low. This is serialized chain
+  # occupancy (including host work/executor wait), not CUDA/ASR utilization. The
+  # pump acquires its GPU slot before timing a flight, so pipelineDepth=2 does
+  # not double-count time waiting for that slot. Keep stage profiling enabled.
+  # Frontier: 41 is the largest integer ready target passing the unchanged
+  # sustained-step wait bound; 42 fails. 0.56 preserves zero starvation in the
+  # older 24h replay; 0.561 already starves. With the stockout policy below,
+  # current 3h replay mean/max = 4.34/5 (no hot minutes); synthetic 3.7x volume
+  # = 11.46/16 with 6 hot minutes, so full-volume capacity remains unqualified.
+  # See docs/batch-pipeline-hpa-frontier.md; the reverted 40/0.6 starved 35 min.
+  targetQueuedUnitsPerWorker: 41
+  targetChainBusyPerWorker: "0.56"
+  # Preserve stockout protection: the older replay does not faithfully model
+  # the downscale period. The chart still sheds at most 1 pod per 600 seconds.
   scaleDownStabilizationSeconds: 1800
 podMonitoring:
   enabled: true
 recordSealRepair:
   # Independent CPU CronJob: never extends or consumes the sweeper's 240s loop.
   enabled: true
+  # Retained for evening overlap and rollback; lead overrides false for the first peak.
+  suspend: true
   runtimeEnabled: true
   mode: apply
   workers: 8
@@ -196,6 +199,16 @@ recordSealRepair:
   # Lead supplies current serving-role policy flags; absent/invalid refuses IO.
   # Refresh this map per ramp rung with --reuse-values; no worker restart.
   serverFlags: {}
+recordSealWorker:
+  enabled: true
+  # Ship-on kill switch: false idles slots without removing the rollback cron.
+  runtimeEnabled: true
+  # Same policy map as repair; refresh both during an overlap ramp.
+  serverFlags: {}
+  # One sixteenth of repair's 16-slot CPU/memory ceiling, per pod.
+  # At max 16: requests 1CPU/2Gi, limits 4CPU/8Gi, as repair today.
+  maxReplicas: 16
+  targetBacklogPerWorker: 4
 recordSealSweeper:
   # Ship on with the worker release; false removes the CronJob and its pods-list RBAC.
   enabled: true

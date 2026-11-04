@@ -1,3 +1,5 @@
+from utils.conversations import phase_shadow
+
 from database import conversation_visibility_counts, processing_backlog, speaker_auto_enroll, capture_group_notes
 from database import conversation_recorded_time
 from utils.conversations import summary_delivery, lifecycle_clocks
@@ -52,6 +54,7 @@ from utils.manual_speaker_assignments import (
     normalize_rejection,
     remap_absorbed_receipt,
 )
+from utils.conversations.home_titles import apply_user_title, project_home
 from database.mcp_read_queries import MCP_CONVERSATION_CARD_FIELD_PATHS, MCP_CONVERSATION_TRANSCRIPT_FIELD_PATHS
 from database.quiet_check_retirement import restore_quiet_check_in_transaction, stop_quiet_check_for_conversation
 from ._client import db, delete_collection_recursive, get_firestore_client, run_transactional
@@ -438,12 +441,12 @@ def _decode_transcript_segments_strict(
 ) -> List[Any]:
     from utils.conversations.speaker_grouping_storage import reveal_segments
 
-    segments = _decode_transcript_segments_blob(uid, raw_segments, compressed, require_decryption=require_decryption)
+    segments = decode_transcript_segments_blob(uid, raw_segments, compressed, require_decryption=require_decryption)
     reveal_segments(segments, uid)
     return segments
 
 
-def _decode_transcript_segments_blob(
+def decode_transcript_segments_blob(
     uid: str, raw_segments: Any, compressed: bool, *, require_decryption: bool = False
 ) -> List[Any]:
     """Decode a stored ``transcript_segments`` blob, raising when it cannot be read.
@@ -663,21 +666,11 @@ def prepare_conversation_for_read(
     _reveal_user_corrections_for_read(data, uid)
     if is_completed_rule_discard(data):
         data['discarded'] = True
-    # User titles are durable overrides. Conversation processing owns the
-    # generated title, but must never erase an explicit user edit.
-    user_title = effective_user_title(data.get('user_title'))
-    if user_title is not None:
-        structured = data.get('structured')
-        if not isinstance(structured, dict):
-            structured = {}
-            data['structured'] = structured
-        structured['title'] = user_title
+    apply_user_title(data, effective_user_title(data.get('user_title')))
     level = data.get('data_protection_level')
 
     if level == 'enhanced':
-        from utils.agent_capabilities.transcripts import project
-
-        return project(
+        return project_home(
             uid,
             conversation_recorded_time.hydrate(_decrypt_conversation_data(data, uid)),
             firestore_client=firestore_client,
@@ -700,9 +693,8 @@ def prepare_conversation_for_read(
         reveal_segments(segments, uid)
     _reveal_manual_speaker_assignments_for_read(data, uid)
     _reveal_match_scores_for_read(data, uid)
-    from utils.agent_capabilities.transcripts import project
 
-    return project(
+    return project_home(
         uid, conversation_recorded_time.hydrate(data), firestore_client=firestore_client, read_budget=read_budget
     )
 
@@ -875,6 +867,7 @@ def is_soft_deleted(conversation: Optional[Mapping[str, Any]]) -> bool:
     return bool(conversation) and bool(conversation.get('deleted'))
 
 
+@phase_shadow.compare('home_visibility')
 def is_visible_conversation(conversation: Optional[Mapping[str, Any]], *, include_discarded: bool = False) -> bool:
     """Whether a stored conversation may be put in front of a user or downstream job."""
     if not conversation or is_soft_deleted(conversation):
@@ -1957,6 +1950,8 @@ def get_conversations_without_photos(
                 'sync_relevance_user_kept',
                 'has_photos',
                 'folder_user_set',
+                'episode_id',
+                'finalization_status',
                 *SETTLING_FIELDS,
             }
         )
@@ -1994,7 +1989,7 @@ def get_conversations_without_photos(
     # Sort
     conversations_ref = conversations_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
 
-    return _collect_visible_conversation_page(
+    rows = _collect_visible_conversation_page(
         conversations_ref,
         limit=limit,
         offset=offset,
@@ -2013,6 +2008,8 @@ def get_conversations_without_photos(
             starred=starred,
         ),
     )
+
+    return rows
 
 
 @prepare_for_read(decrypt_func=prepare_conversation_for_read)

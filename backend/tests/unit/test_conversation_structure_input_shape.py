@@ -43,7 +43,7 @@ def processing(stack, monkeypatch):
     monkeypatch.setattr(pc, 'conversation_known_spellings', lambda *_: '')
     monkeypatch.setattr(pc, '_proposes_task_candidates', lambda *_: False)
     monkeypatch.setattr(pc, 'track_usage', lambda *_, **__: nullcontext())
-    monkeypatch.setattr(pc, '_fetch_dedup_candidates_for_query', lambda *_, **__: [])
+    monkeypatch.setattr(pc, '_fetch_dedup_candidates_for_query', Mock(return_value=[]))
     monkeypatch.setattr(pc, 'decide_relevance', lambda **_: SimpleNamespace(discard=False, reason='kept'))
     return pc
 
@@ -84,6 +84,9 @@ def test_segment_models_use_transcript_even_with_integration_provenance(
     transcript.assert_called_once_with('synthetic-uid', conversation, None)
     message.assert_not_called()
     notes.assert_called_once()
+    processing._fetch_dedup_candidates_for_query.assert_called_once_with(
+        'synthetic-uid', 'Synthetic transcript', conversation
+    )
     assert prefix.call_args.kwargs['transcript_segment_ids'] == ['segment-1']
 
 
@@ -128,7 +131,11 @@ def test_external_create_models_keep_text_summarization(stack, processing, monke
             provider.assert_not_called()
     if text_source == 'audio':
         assert prefix.call_args.kwargs['transcript'] == conversation.text
+        processing._fetch_dedup_candidates_for_query.assert_called_once_with(
+            'synthetic-uid', conversation.text, conversation
+        )
     else:
+        processing._fetch_dedup_candidates_for_query.assert_not_called()
         assert providers[expected].call_args.args[0] == conversation.text
         if text_source == 'message':
             assert providers[expected].call_args.args[4] == conversation.text_source_spec

@@ -321,7 +321,6 @@ def test_funded_dispatch_uses_ladder_budget_instead_of_legacy_seconds(monkeypatc
         lambda *a, **k: {'budget_percent': percent, 'budget_units': 100, 'used_units': percent},
     )
     monkeypatch.setattr(subscription, 'is_marketplace_reviewer', lambda _: False)
-    monkeypatch.setattr(subscription, 'is_trial_paywalled', lambda *a, **k: False)
     monkeypatch.setattr(subscription.users_db, 'get_user_valid_subscription', lambda _: SimpleNamespace(plan='plus'))
     legacy = Mock(side_effect=AssertionError('ladder admission consulted the legacy seconds meter'))
     monkeypatch.setattr(subscription, 'get_monthly_usage_for_subscription', legacy)

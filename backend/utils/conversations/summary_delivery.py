@@ -12,6 +12,8 @@ from copy import deepcopy
 from contextvars import ContextVar
 from datetime import datetime
 from typing import Any, Callable, Mapping, cast
+from utils.conversations import phase_shadow
+
 from utils.observability.delivery import record_delivery
 
 from prometheus_client import Counter, Gauge, Histogram
@@ -121,6 +123,7 @@ def prepare(data: Row, uid: str, *, now: float | None = None) -> None:
         data.setdefault('summary_lane', lane(data))
 
 
+@phase_shadow.compare('summary_repair', accepts=lambda result: result is None)
 def refusal(row: Row) -> str | None:
     if row.get('status') != 'completed' or row.get('deleted') or row.get('discarded'):
         return 'lifecycle'

@@ -64,8 +64,10 @@ SCOPE = (
     'utils/batch_pipeline/**/*.py',
     'diarizer/batch_pipeline*.py',
     'config/batch_pipeline*.py',
+    'config/batch_language_recovery.py',
     'utils/sync/**/*.py',
     'utils/stt/**/*.py',
+    'parakeet/language_gate.py',
     'config/policy/**/*.py',
     'config/prerecorded_*.py',
     'config/live_stt_*.py',
@@ -186,7 +188,7 @@ def test_helper_kill_switch_budget_entries_match_the_default_on_registry():
     # This rollout is explicitly registered although config/server_batch.py is
     # outside the pipeline scanner's scope. Keep helper kill switches separate.
     rollout_name = 'SERVER_BATCH_ONLY_WEB_PERCENT'
-    assert helper_names == HELPER_KILL_SWITCHES | {rollout_name}
+    assert helper_names == HELPER_KILL_SWITCHES | {'SERVER_BATCH_UNSUPPORTED_LANGUAGES', rollout_name}
 
     # Keep this inventory check inside the fast-unit CPU budget; the C safe
     # loader has the same safe semantics and parses the full registry faster.
@@ -194,6 +196,12 @@ def test_helper_kill_switch_budget_entries_match_the_default_on_registry():
         FEATURE_FLAGS_PATH.read_text(encoding='utf-8'), Loader=getattr(yaml, 'CSafeLoader', yaml.SafeLoader)
     )
     flags = {flag['key']: flag for flag in registry['flags']}
+    unsupported = names['SERVER_BATCH_UNSUPPORTED_LANGUAGES']
+    assert unsupported['owner'] == 'planscost'
+    assert unsupported['review_by'] == '2026-11-30'
+    assert flags['SERVER_BATCH_UNSUPPORTED_LANGUAGES']['lifecycle'] == 'ops_kill'
+    assert flags['SERVER_BATCH_UNSUPPORTED_LANGUAGES']['owner'] == 'planscost'
+    assert 'SERVER_BATCH_UNSUPPORTED_LANGUAGES' in set(env_reads((BACKEND_DIR / 'config/server_batch.py').read_text()))
     rollout = flags[rollout_name]
     assert names[rollout_name]['owner'] == rollout['owner'] == 'planscost'
     assert names[rollout_name]['review_by'] == rollout['review_by'] == '2026-11-30'

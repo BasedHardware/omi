@@ -33,6 +33,7 @@ from config.stt_provider_policy import HELD_RECOVERY_SECOND_PROVIDER
 from config.batch_language_recovery import (
     MAX_AUDIO_SECONDS,
     allowed as independent_allowed,
+    long_recovery_allowed,
     enabled as independent_enabled,
     language_guarded,
     below_silence_threshold,
@@ -60,6 +61,7 @@ from utils.batch_pipeline.recovery_disposition import (
     inspect_audio,
     silence_payload,
     RecoveryFailure,
+    RecoveryProviderFailed,
     result_outcome,
     result_vad_evidence,
     MultilingualEmpty,
@@ -86,7 +88,7 @@ MAX_WAKE_PROBE_ERRORS = 3
 SECOND_PROVIDER = HELD_RECOVERY_SECOND_PROVIDER
 SECOND_PROVIDER_CALLS = Counter(
     'omi_batch_recovery_second_provider_total',
-    'Second multilingual recovery calls after a valid-empty Modulate response',
+    'Second multilingual recovery calls after an empty or failed Modulate response',
     ['provider', 'outcome'],
 )
 
@@ -220,6 +222,7 @@ class QuarantineRecovery:
             return payload
         if (
             outcome == 'empty'
+            and first_empty
             and bool(empty.spans)
             and policy.terminal_empty_disposition
             and terminal_empty_allowed(empty.spans)
@@ -344,6 +347,7 @@ class QuarantineRecovery:
                 language_guarded(job)
                 and inspected_spans == []
                 and not independent_allowed(duration)
+                and not long_recovery_allowed(duration)
                 and not (independent_enabled() and worker is not None)
             ):
                 if duration > MAX_AUDIO_SECONDS and self.protocol.hold_duration_limit(
@@ -369,11 +373,7 @@ class QuarantineRecovery:
             # new-admission guard is rolled back.
             # The worker's bound VAD receipt is the only evidence that may
             # locate recognized words when strict CPU VAD finds no speech.
-            multilingual = (
-                safety_net_enabled()
-                or policy.speech_empty_multilingual
-                or ((job.get('worker_failure') or {}).get('reason') == 'unsupported_language')
-            )
+            multilingual = safety_net_enabled() or policy.speech_empty_multilingual or language_guarded(job)
             if not self.protocol.start(
                 segment_id,
                 token,
@@ -392,7 +392,7 @@ class QuarantineRecovery:
                     reason='other',
                     outcome='degraded',
                 )
-            payload, empty, recognized_count = None, None, None
+            payload, empty, recognized_count, provider_failure = None, None, None, None
             try:
                 if inspection_failure is not None:
                     raise inspection_failure
@@ -432,6 +432,9 @@ class QuarantineRecovery:
             except BatchPrivacyBlocked:
                 raise
             except Exception as error:
+                if isinstance(error, RecoveryProviderFailed):
+                    provider_failure = error
+                    measured_vad = sum(span['end'] - span['start'] for span in error.spans)
                 recognized_count = error.word_count if isinstance(error, WordsWithoutVad) else None
                 failure = (
                     {'stage': error.stage, 'reason': error.reason}
@@ -476,21 +479,26 @@ class QuarantineRecovery:
                 )
             if (
                 failure
-                and language_guarded(job)
+                and multilingual
                 and empty is None
-                and inspected_spans is not None
                 and inspection_failure is None
+                and (language_guarded(job) or failure['reason'] == 'provider_failed')
+                and (inspected_spans is not None or provider_failure is not None)
             ):
-                record_recognizer(
-                    self.store,
-                    segment_id,
-                    token,
-                    'recovery',
-                    'modulate',
-                    'words' if recognized_count else 'error',
-                    recognized_count,
-                    measured_vad,
-                )
+                if provider_failure is not None:
+                    duration, inspected_spans = provider_failure.duration, provider_failure.spans
+                    measured_vad = sum(span['end'] - span['start'] for span in inspected_spans)
+                if language_guarded(job):
+                    record_recognizer(
+                        self.store,
+                        segment_id,
+                        token,
+                        'recovery',
+                        'modulate',
+                        'words' if recognized_count else 'error',
+                        recognized_count,
+                        measured_vad,
+                    )
                 empty = MultilingualEmpty(duration, inspected_spans, worker)
             # Outside the handler: neither metering nor a second provider may chain the first.
             if empty is not None:
@@ -506,7 +514,7 @@ class QuarantineRecovery:
                         audio,
                         empty,
                         policy,
-                        guarded=(job.get('worker_failure') or {}).get('reason') == 'unsupported_language',
+                        guarded=language_guarded(job),
                         token=token,
                         first_empty=first_empty,
                         job=job,

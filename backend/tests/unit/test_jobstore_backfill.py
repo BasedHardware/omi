@@ -102,6 +102,19 @@ def test_apply_copies_missing_and_differing_and_a_rerun_is_clean(world):
     assert shadow.rows[('owners', 'pg_only')] == {'v': 4}  # counted, never deleted
 
 
+def test_backfill_strips_repair_lineage_a_shadow_copy_still_holds(world):
+    # A copy made before repair_lineage became Firestore-only must read as stale and be recopied without it,
+    # since the receipt TTL never refreshes the mirror (Luna #24366 r4).
+    primary, shadow, dual = world
+    primary.rows[('intakes', 'bp_job')] = {'owner_id': 'synthetic-owner', 'repair_lineage': '{"geolocation":{}}'}
+    shadow.rows[('intakes', 'bp_job')] = dict(primary.rows[('intakes', 'bp_job')])
+    first = bf.backfill(dual, None, ['intakes'], apply=True)['intakes']
+    assert (first['mismatch'], first['copied']) == (1, 1)
+    assert shadow.rows[('intakes', 'bp_job')] == {'owner_id': 'synthetic-owner'}
+    again = bf.backfill(dual, None, ['intakes'], apply=True)['intakes']
+    assert (again['match'], again['copied']) == (1, 0)
+
+
 def test_apply_copies_the_current_state_not_the_census_snapshot(world, monkeypatch):
     primary, shadow, dual = world
     primary.rows[('jobs', 'j')] = {'state': 'ready'}

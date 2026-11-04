@@ -182,6 +182,10 @@ async def test_projection_discovery_drains_beyond_101_ready_rows_without_reproje
     import fakeredis
 
     monkeypatch.setenv('BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED', 'true')
+    # Isolate paginated discovery. Newer owner-chain walking and pending-only
+    # assignment pages intentionally bypass the legacy mixed-page stall.
+    monkeypatch.setenv('BATCH_PIPELINE_SWEEP_OWNER_CHAIN_ENABLED', 'false')
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_PENDING_PAGE_ENABLED', 'false')
     monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED', 'true')
     monkeypatch.setattr(claims, '_redis_client', lambda: fakeredis.FakeRedis())
     # All commit timestamps tie. Document-ID ordering must still cross pages.

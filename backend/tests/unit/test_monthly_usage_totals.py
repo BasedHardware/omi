@@ -143,7 +143,6 @@ def test_free_and_paid_allowance_remain_identical_through_real_resolver(monkeypa
     monkeypatch.setattr(subscription, 'datetime', Clock)
     monkeypatch.setenv('SUBSCRIPTION_LAUNCH_DATE', '2026-10-01')
     monkeypatch.setattr(subscription, 'is_marketplace_reviewer', lambda uid: False)
-    monkeypatch.setattr(subscription, 'is_trial_paywalled', lambda *a, **k: False)
     monkeypatch.setattr(subscription.ladder_v1, 'budget_snapshot', lambda *a, **k: None)
     member = Subscription(plan=plan, status=SubscriptionStatus.active)
     monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{}')

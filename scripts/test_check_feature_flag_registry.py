@@ -10,6 +10,8 @@ from datetime import date
 from unittest import mock
 from pathlib import Path
 
+from git_test_env import clean_git_env
+
 from check_feature_flag_registry import check
 from feature_flag_registry import load_registry, validate_registry
 from render_feature_flag_registry import render, _deploy_index, _parse_mapping
@@ -57,13 +59,16 @@ def ramp_plan(**overrides: object) -> dict[str, object]:
 
 class RegistryFixture(unittest.TestCase):
     def setUp(self) -> None:
+        git_env = mock.patch.dict(os.environ, clean_git_env(), clear=True)
+        git_env.start()
+        self.addCleanup(git_env.stop)
         self.temp = tempfile.TemporaryDirectory(prefix="omi-flag-registry-")
         self.root = Path(self.temp.name)
         subprocess.run(
             ["git", "init", "-q"],
             cwd=self.root,
             check=True,
-            env={key: value for key, value in os.environ.items() if not key.startswith("GIT_")},
+            env=clean_git_env(),
         )
         self.write("backend/service.py", "import os\nENABLED_NAME = 'EXAMPLE_ENABLED'\nos.getenv(ENABLED_NAME)\n")
         self.write("config/feature-flags.yaml", self.yaml([flag()]))

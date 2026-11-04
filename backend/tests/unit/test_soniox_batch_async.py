@@ -112,8 +112,8 @@ async def test_http_queue_wait_counts_against_deadline(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_default_off_prevents_even_an_upload(monkeypatch):
-    monkeypatch.delenv('BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED')
+async def test_kill_switch_off_prevents_even_an_upload(monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED', 'false')
     client = AsyncMock()
     with pytest.raises(module.SonioxBatchError):
         await module.transcribe_async(b'synthetic', 5, client=client)
