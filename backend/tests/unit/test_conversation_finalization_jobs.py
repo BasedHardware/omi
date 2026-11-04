@@ -2225,7 +2225,20 @@ def test_terminalize_exhausted_requeued_job_closes_the_parked_row_and_its_conver
     assert job_update['last_failure_code'] == 'processing_failed'
     assert transaction.updates[1] == (
         conversation_ref,
-        {'status': 'completed', 'discarded': False, 'finalization_status': 'dead_letter'},
+        {
+            'status': 'completed',
+            'discarded': False,
+            'finalization_status': 'dead_letter',
+            # The discard-detection audit stamps an explicit policy keep on
+            # every dead-letter terminal; a processing_failed row keeps.
+            'relevance_decision': {
+                'verdict': 'keep',
+                'decided_by': 'policy',
+                'reason': 'dead_letter_default',
+                'trigger': 'dead_letter',
+                'rules_version': 4,
+            },
+        },
     )
     # A queued source row decrements queued — never the dead-letter txn's leased=-1.
     shard = transaction.sets[-1][1]
