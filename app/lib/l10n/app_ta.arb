@@ -12171,5 +12171,20 @@
     "addingToTasks": "பணிகளில் சேர்க்கப்படுகிறது",
     "taskAddedToTasks": "பணி உருவாக்கப்பட்டுள்ளது",
     "completedStatus": "முடிந்தவை",
-    "notCompletedStatus": "நிலுவையில் உள்ளது"
+    "notCompletedStatus": "நிலுவையில் உள்ளது",
+    "referralAffiliate": "இணைப்பு சந்தைப்படுத்தல் திட்டம்",
+    "referralCampaignTerms": "நண்பர்களுக்கு Omi சாதனங்களில் 10% தள்ளுபடி. முதல் 2 வெவ்வேறு நண்பர்களின் வாங்குதல்கள் 2 மாத Pro, அடுத்த 3 வெவ்வேறு நண்பர்களின் வாங்குதல்கள் மேலும் 3 மாதங்களைத் திறக்கும். அதிகபட்சம் 5 நண்பர்கள், மொத்தம் 5 மாதங்கள்.",
+    "referralMilestone": "{months} மாத Pro · {count}/{target} வாங்குதல்கள்",
+    "referralClaim": "வெகுமதியைப் பெறவும்",
+    "referralClaimed": "{months} மாத Pro பெறப்பட்டது",
+    "referralRewardPending": "கட்டணச் சந்தா முடியும் வரை வெகுமதி சேமிக்கப்படும்.",
+    "referralCampaignTitle": "Omi-ஐ பரிந்துரையுங்கள். இலவச Pro பெறுங்கள்.",
+    "referralCampaignSubtitle": "அவர்களுக்கு Omi இல் 10% தள்ளுபடி. உங்களுக்கு 5 மாதங்கள் வரை Pro.",
+    "referralShareInvite": "அழைப்பைப் பகிரவும்",
+    "referralYourRewards": "உங்கள் வெகுமதிகள்",
+    "referralRewardFirstTitle": "2 மாத Pro",
+    "referralRewardFirstDetail": "2 நண்பர்கள் Omi வாங்கும்போது",
+    "referralRewardSecondTitle": "மேலும் 3 மாதங்கள்",
+    "referralRewardSecondDetail": "மேலும் 3 நண்பர்கள் வாங்கும்போது",
+    "referralClaimShort": "பெறுக"
 }

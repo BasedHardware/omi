@@ -4614,5 +4614,20 @@
     "addingToTasks": "Lägger till i Uppgifter",
     "taskAddedToTasks": "Uppgift skapad",
     "completedStatus": "Klar",
-    "notCompletedStatus": "Väntande"
+    "notCompletedStatus": "Väntande",
+    "referralAffiliate": "Partnerprogram",
+    "referralCampaignTerms": "Vänner får 10% rabatt på Omi-enheter. Köp från de första 2 olika vännerna låser upp 2 månader Pro, köp från nästa 3 olika vänner ger 3 till. Högst 5 vänner och totalt 5 månader.",
+    "referralMilestone": "{months} månader Pro · {count}/{target} köp",
+    "referralClaim": "Hämta belöning",
+    "referralClaimed": "{months} Pro-månader hämtade",
+    "referralRewardPending": "Belöningen sparas tills ditt betalda abonnemang slutar.",
+    "referralCampaignTitle": "Rekommendera Omi. Få gratis Pro.",
+    "referralCampaignSubtitle": "10 % rabatt på Omi för dem. Upp till 5 månader Pro för dig.",
+    "referralShareInvite": "Dela inbjudan",
+    "referralYourRewards": "Dina belöningar",
+    "referralRewardFirstTitle": "2 månader Pro",
+    "referralRewardFirstDetail": "När 2 vänner köper Omi",
+    "referralRewardSecondTitle": "3 månader till",
+    "referralRewardSecondDetail": "När 3 vänner till köper",
+    "referralClaimShort": "Hämta"
 }

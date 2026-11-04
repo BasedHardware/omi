@@ -15360,4 +15360,54 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get notCompletedStatus => 'În așteptare';
+
+  @override
+  String get referralAffiliate => 'Program de afiliere';
+
+  @override
+  String get referralCampaignTerms =>
+      'Prietenii primesc 10% reducere la dispozitivele Omi. Achizițiile primilor 2 prieteni diferiți deblochează 2 luni Pro, cele ale următorilor 3 prieteni diferiți încă 3. Maximum 5 prieteni și 5 luni în total.';
+
+  @override
+  String referralMilestone(int months, int count, int target) {
+    return '$months luni Pro · $count/$target achiziții';
+  }
+
+  @override
+  String get referralClaim => 'Revendică recompensa';
+
+  @override
+  String referralClaimed(int months) {
+    return '$months luni Pro revendicate';
+  }
+
+  @override
+  String get referralRewardPending => 'Recompensa se păstrează până se încheie abonamentul plătit.';
+
+  @override
+  String get referralCampaignTitle => 'Recomandă Omi. Primește Pro gratuit.';
+
+  @override
+  String get referralCampaignSubtitle => '10% reducere la Omi pentru ei. Până la 5 luni de Pro pentru tine.';
+
+  @override
+  String get referralShareInvite => 'Distribuie invitația';
+
+  @override
+  String get referralYourRewards => 'Recompensele tale';
+
+  @override
+  String get referralRewardFirstTitle => '2 luni de Pro';
+
+  @override
+  String get referralRewardFirstDetail => 'Când 2 prieteni cumpără Omi';
+
+  @override
+  String get referralRewardSecondTitle => 'Încă 3 luni';
+
+  @override
+  String get referralRewardSecondDetail => 'Când încă 3 prieteni cumpără';
+
+  @override
+  String get referralClaimShort => 'Revendică';
 }

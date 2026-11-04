@@ -12171,5 +12171,20 @@
     "addingToTasks": "টাস্কে যোগ হচ্ছে",
     "taskAddedToTasks": "কাজ তৈরি করা হয়েছে",
     "completedStatus": "সম্পন্ন",
-    "notCompletedStatus": "মুলতুবি"
+    "notCompletedStatus": "মুলতুবি",
+    "referralAffiliate": "অ্যাফিলিয়েট প্রোগ্রাম",
+    "referralCampaignTerms": "বন্ধুরা Omi ডিভাইসে 10% ছাড় পান। প্রথম 2 জন আলাদা বন্ধুর কেনাকাটায় 2 মাস Pro, পরের 3 জন আলাদা বন্ধুর কেনাকাটায় আরও 3 মাস। সর্বোচ্চ 5 বন্ধু ও মোট 5 মাস।",
+    "referralMilestone": "{months} মাস Pro · {count}/{target} কেনাকাটা",
+    "referralClaim": "পুরস্কার নিন",
+    "referralClaimed": "{months} মাস Pro নেওয়া হয়েছে",
+    "referralRewardPending": "পেইড সাবস্ক্রিপশন শেষ হওয়া পর্যন্ত পুরস্কার সংরক্ষিত থাকবে।",
+    "referralCampaignTitle": "Omi সুপারিশ করুন। বিনামূল্যে Pro পান।",
+    "referralCampaignSubtitle": "তাদের জন্য Omi-তে 10% ছাড়। আপনার জন্য 5 মাস পর্যন্ত Pro।",
+    "referralShareInvite": "আমন্ত্রণ শেয়ার করুন",
+    "referralYourRewards": "আপনার পুরস্কার",
+    "referralRewardFirstTitle": "2 মাসের Pro",
+    "referralRewardFirstDetail": "যখন 2 জন বন্ধু Omi কিনবে",
+    "referralRewardSecondTitle": "আরও 3 মাস",
+    "referralRewardSecondDetail": "যখন আরও 3 জন বন্ধু কিনবে",
+    "referralClaimShort": "নিন"
 }

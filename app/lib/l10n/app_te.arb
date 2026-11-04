@@ -12171,5 +12171,20 @@
     "addingToTasks": "పనులకు జోడిస్తోంది",
     "taskAddedToTasks": "పని సృష్టించబడింది",
     "completedStatus": "సంపూర్ణమైంది",
-    "notCompletedStatus": "పెండింగ్"
+    "notCompletedStatus": "పెండింగ్",
+    "referralAffiliate": "అఫిలియేట్ ప్రోగ్రామ్",
+    "referralCampaignTerms": "స్నేహితులకు Omi పరికరాలపై 10% తగ్గింపు. మొదటి 2 వేర్వేరు స్నేహితుల కొనుగోళ్లు 2 నెలల Pro, తదుపరి 3 వేర్వేరు స్నేహితుల కొనుగోళ్లు మరో 3 నెలలను అన్‌లాక్ చేస్తాయి. గరిష్ఠంగా 5 స్నేహితులు, మొత్తం 5 నెలలు.",
+    "referralMilestone": "{months} నెలల Pro · {count}/{target} కొనుగోళ్లు",
+    "referralClaim": "బహుమతి పొందండి",
+    "referralClaimed": "{months} నెలల Pro పొందారు",
+    "referralRewardPending": "చెల్లింపు సభ్యత్వం ముగిసే వరకు బహుమతి నిల్వ ఉంటుంది.",
+    "referralCampaignTitle": "Omiని సూచించండి. ఉచిత Pro పొందండి.",
+    "referralCampaignSubtitle": "వారికి Omi పై 10% తగ్గింపు. మీకు 5 నెలల వరకు Pro.",
+    "referralShareInvite": "ఆహ్వానాన్ని షేర్ చేయండి",
+    "referralYourRewards": "మీ రివార్డులు",
+    "referralRewardFirstTitle": "2 నెలల Pro",
+    "referralRewardFirstDetail": "2 స్నేహితులు Omi కొన్నప్పుడు",
+    "referralRewardSecondTitle": "మరో 3 నెలలు",
+    "referralRewardSecondDetail": "మరో 3 స్నేహితులు కొన్నప్పుడు",
+    "referralClaimShort": "పొందండి"
 }

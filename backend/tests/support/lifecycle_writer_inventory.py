@@ -1744,6 +1744,9 @@ FIELD_SITES = {
         )
     ],
     'database/redis_db.py': [('set_migration_status', 'status', 'status', ('status',))],
+    'database/referral_campaign.py': [
+        ('claim_months.apply', 'status', "'active'", ('campaign_id', 'ends_at', 'starts_at', 'status'))
+    ],
     'database/review_memory_hygiene.py': [
         (
             'record_change.apply',
@@ -3567,6 +3570,14 @@ FIELD_SITES = {
     'utils/pusher_record_barrier.py': [
         ('PusherRecordBarrier.__init__', 'record_upload_failed', 'False', ('record_upload_failed',)),
         ('PusherRecordBarrier.hold_recording', 'record_upload_failed', 'True', ('record_upload_failed',)),
+    ],
+    'utils/referral_campaign.py': [
+        (
+            'effective_subscription_payload',
+            'status',
+            "'active'",
+            ('cancel_at_period_end', 'current_period_end', 'current_period_start', 'plan', 'status'),
+        )
     ],
     'utils/referrals.py': [
         (

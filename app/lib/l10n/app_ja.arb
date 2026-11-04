@@ -4614,5 +4614,20 @@
     "addingToTasks": "タスクに追加中…",
     "taskAddedToTasks": "タスクを作成しました",
     "completedStatus": "完了",
-    "notCompletedStatus": "保留中"
+    "notCompletedStatus": "保留中",
+    "referralAffiliate": "アフィリエイトプログラム",
+    "referralCampaignTerms": "友達は Omi デバイスが10%オフに。最初の2人の購入でProを2か月、次の3人でさらに3か月獲得。最大5人、合計5か月です。",
+    "referralMilestone": "Pro {months}か月 · 購入 {count}/{target}件",
+    "referralClaim": "特典を受け取る",
+    "referralClaimed": "Pro {months}か月を受取済み",
+    "referralRewardPending": "有料サブスクリプション終了まで特典は保存されます。",
+    "referralCampaignTitle": "Omiを紹介して、Proを無料で。",
+    "referralCampaignSubtitle": "友達はOmiが10%オフ。あなたは最大5か月のPro。",
+    "referralShareInvite": "招待を共有",
+    "referralYourRewards": "あなたの特典",
+    "referralRewardFirstTitle": "Pro 2か月",
+    "referralRewardFirstDetail": "友達2人がOmiを購入したら",
+    "referralRewardSecondTitle": "さらに3か月",
+    "referralRewardSecondDetail": "さらに友達3人が購入したら",
+    "referralClaimShort": "受け取る"
 }

@@ -15301,4 +15301,54 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get notCompletedStatus => 'Odottaa';
+
+  @override
+  String get referralAffiliate => 'Kumppaniohjelma';
+
+  @override
+  String get referralCampaignTerms =>
+      'Ystävät saavat 10 % alennusta Omi-laitteista. Ensimmäisten 2 eri ystävän ostot avaavat 2 kuukautta Prota, seuraavien 3 eri ystävän ostot vielä 3. Enintään 5 ystävää ja yhteensä 5 kuukautta.';
+
+  @override
+  String referralMilestone(int months, int count, int target) {
+    return '$months kuukautta Prota · $count/$target ostoa';
+  }
+
+  @override
+  String get referralClaim => 'Lunasta palkinto';
+
+  @override
+  String referralClaimed(int months) {
+    return '$months Pro-kuukautta lunastettu';
+  }
+
+  @override
+  String get referralRewardPending => 'Palkinto säilyy maksullisen tilauksesi päättymiseen asti.';
+
+  @override
+  String get referralCampaignTitle => 'Suosittele Omia. Saat Pron ilmaiseksi.';
+
+  @override
+  String get referralCampaignSubtitle => 'Heille 10 % alennus Omista. Sinulle jopa 5 kuukautta Prota.';
+
+  @override
+  String get referralShareInvite => 'Jaa kutsu';
+
+  @override
+  String get referralYourRewards => 'Palkintosi';
+
+  @override
+  String get referralRewardFirstTitle => '2 kuukautta Prota';
+
+  @override
+  String get referralRewardFirstDetail => 'Kun 2 ystävää ostaa Omin';
+
+  @override
+  String get referralRewardSecondTitle => '3 kuukautta lisää';
+
+  @override
+  String get referralRewardSecondDetail => 'Kun 3 ystävää lisää ostaa';
+
+  @override
+  String get referralClaimShort => 'Lunasta';
 }

@@ -15299,4 +15299,54 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get notCompletedStatus => 'Đang chờ';
+
+  @override
+  String get referralAffiliate => 'Chương trình tiếp thị liên kết';
+
+  @override
+  String get referralCampaignTerms =>
+      'Bạn bè được giảm 10% thiết bị Omi. Lượt mua của 2 người bạn khác nhau đầu tiên mở khóa 2 tháng Pro, lượt mua của 3 người bạn khác nhau tiếp theo thêm 3 tháng. Tối đa 5 bạn và tổng cộng 5 tháng.';
+
+  @override
+  String referralMilestone(int months, int count, int target) {
+    return '$months tháng Pro · $count/$target lượt mua';
+  }
+
+  @override
+  String get referralClaim => 'Nhận thưởng';
+
+  @override
+  String referralClaimed(int months) {
+    return 'Đã nhận $months tháng Pro';
+  }
+
+  @override
+  String get referralRewardPending => 'Phần thưởng được giữ đến khi gói trả phí kết thúc.';
+
+  @override
+  String get referralCampaignTitle => 'Giới thiệu Omi. Nhận Pro miễn phí.';
+
+  @override
+  String get referralCampaignSubtitle => 'Họ được giảm 10% khi mua Omi. Bạn nhận tối đa 5 tháng Pro.';
+
+  @override
+  String get referralShareInvite => 'Chia sẻ lời mời';
+
+  @override
+  String get referralYourRewards => 'Phần thưởng của bạn';
+
+  @override
+  String get referralRewardFirstTitle => '2 tháng Pro';
+
+  @override
+  String get referralRewardFirstDetail => 'Khi 2 bạn bè mua Omi';
+
+  @override
+  String get referralRewardSecondTitle => 'Thêm 3 tháng';
+
+  @override
+  String get referralRewardSecondDetail => 'Khi thêm 3 bạn bè mua';
+
+  @override
+  String get referralClaimShort => 'Nhận';
 }

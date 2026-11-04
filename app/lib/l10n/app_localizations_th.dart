@@ -15223,4 +15223,54 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get notCompletedStatus => 'รอดำเนินการ';
+
+  @override
+  String get referralAffiliate => 'โปรแกรมพันธมิตร';
+
+  @override
+  String get referralCampaignTerms =>
+      'เพื่อนรับส่วนลดอุปกรณ์ Omi 10% การซื้อของเพื่อนต่างคน 2 คนแรกปลดล็อก Pro 2 เดือน การซื้อของเพื่อนต่างคนอีก 3 คนปลดล็อกเพิ่ม 3 เดือน สูงสุด 5 คน รวม 5 เดือน';
+
+  @override
+  String referralMilestone(int months, int count, int target) {
+    return 'Pro $months เดือน · ซื้อ $count/$target ครั้ง';
+  }
+
+  @override
+  String get referralClaim => 'รับรางวัล';
+
+  @override
+  String referralClaimed(int months) {
+    return 'รับ Pro แล้ว $months เดือน';
+  }
+
+  @override
+  String get referralRewardPending => 'รางวัลจะเก็บไว้จนกว่าการสมัครแบบชำระเงินจะสิ้นสุด';
+
+  @override
+  String get referralCampaignTitle => 'แนะนำ Omi รับ Pro ฟรี';
+
+  @override
+  String get referralCampaignSubtitle => 'เพื่อนได้ส่วนลด Omi 10% คุณได้ Pro สูงสุด 5 เดือน';
+
+  @override
+  String get referralShareInvite => 'แชร์คำเชิญ';
+
+  @override
+  String get referralYourRewards => 'รางวัลของคุณ';
+
+  @override
+  String get referralRewardFirstTitle => 'Pro 2 เดือน';
+
+  @override
+  String get referralRewardFirstDetail => 'เมื่อเพื่อน 2 คนซื้อ Omi';
+
+  @override
+  String get referralRewardSecondTitle => 'อีก 3 เดือน';
+
+  @override
+  String get referralRewardSecondDetail => 'เมื่อเพื่อนอีก 3 คนซื้อ';
+
+  @override
+  String get referralClaimShort => 'รับ';
 }

@@ -15071,4 +15071,53 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get notCompletedStatus => '保留中';
+
+  @override
+  String get referralAffiliate => 'アフィリエイトプログラム';
+
+  @override
+  String get referralCampaignTerms => '友達は Omi デバイスが10%オフに。最初の2人の購入でProを2か月、次の3人でさらに3か月獲得。最大5人、合計5か月です。';
+
+  @override
+  String referralMilestone(int months, int count, int target) {
+    return 'Pro $monthsか月 · 購入 $count/$target件';
+  }
+
+  @override
+  String get referralClaim => '特典を受け取る';
+
+  @override
+  String referralClaimed(int months) {
+    return 'Pro $monthsか月を受取済み';
+  }
+
+  @override
+  String get referralRewardPending => '有料サブスクリプション終了まで特典は保存されます。';
+
+  @override
+  String get referralCampaignTitle => 'Omiを紹介して、Proを無料で。';
+
+  @override
+  String get referralCampaignSubtitle => '友達はOmiが10%オフ。あなたは最大5か月のPro。';
+
+  @override
+  String get referralShareInvite => '招待を共有';
+
+  @override
+  String get referralYourRewards => 'あなたの特典';
+
+  @override
+  String get referralRewardFirstTitle => 'Pro 2か月';
+
+  @override
+  String get referralRewardFirstDetail => '友達2人がOmiを購入したら';
+
+  @override
+  String get referralRewardSecondTitle => 'さらに3か月';
+
+  @override
+  String get referralRewardSecondDetail => 'さらに友達3人が購入したら';
+
+  @override
+  String get referralClaimShort => '受け取る';
 }

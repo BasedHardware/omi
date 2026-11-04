@@ -12171,5 +12171,20 @@
     "addingToTasks": "ಕಾರ್ಯಗಳಿಗೆ ಸೇರಿಸಲಾಗುತ್ತಿದೆ",
     "taskAddedToTasks": "ಕಾರ್ಯ ರಚಿಸಲಾಗಿದೆ",
     "completedStatus": "ಪೂರ್ಣ",
-    "notCompletedStatus": "ಪಕ್ಷಾನುಮತಿ"
+    "notCompletedStatus": "ಪಕ್ಷಾನುಮತಿ",
+    "referralAffiliate": "ಅಫಿಲಿಯೇಟ್ ಕಾರ್ಯಕ್ರಮ",
+    "referralCampaignTerms": "ಸ್ನೇಹಿತರಿಗೆ Omi ಸಾಧನಗಳ ಮೇಲೆ 10% ರಿಯಾಯಿತಿ. ಮೊದಲ 2 ವಿಭಿನ್ನ ಸ್ನೇಹಿತರ ಖರೀದಿಗಳು 2 ತಿಂಗಳ Pro, ಮುಂದಿನ 3 ವಿಭಿನ್ನ ಸ್ನೇಹಿತರ ಖರೀದಿಗಳು ಇನ್ನೂ 3 ತಿಂಗಳು ನೀಡುತ್ತವೆ. ಗರಿಷ್ಠ 5 ಸ್ನೇಹಿತರು ಮತ್ತು ಒಟ್ಟು 5 ತಿಂಗಳು.",
+    "referralMilestone": "{months} ತಿಂಗಳು Pro · {count}/{target} ಖರೀದಿಗಳು",
+    "referralClaim": "ಬಹುಮಾನ ಪಡೆಯಿರಿ",
+    "referralClaimed": "{months} ತಿಂಗಳ Pro ಪಡೆಯಲಾಗಿದೆ",
+    "referralRewardPending": "ನಿಮ್ಮ ಪಾವತಿಸಿದ ಚಂದಾದಾರಿಕೆ ಮುಗಿಯುವವರೆಗೆ ಬಹುಮಾನ ಉಳಿಯುತ್ತದೆ.",
+    "referralCampaignTitle": "Omi ಪರಿಚಯಿಸಿ. ಉಚಿತ Pro ಪಡೆಯಿರಿ.",
+    "referralCampaignSubtitle": "ಅವರಿಗೆ Omi ಮೇಲೆ 10% ರಿಯಾಯಿತಿ. ನಿಮಗೆ 5 ತಿಂಗಳವರೆಗೆ Pro.",
+    "referralShareInvite": "ಆಹ್ವಾನ ಹಂಚಿಕೊಳ್ಳಿ",
+    "referralYourRewards": "ನಿಮ್ಮ ಬಹುಮಾನಗಳು",
+    "referralRewardFirstTitle": "2 ತಿಂಗಳ Pro",
+    "referralRewardFirstDetail": "2 ಸ್ನೇಹಿತರು Omi ಖರೀದಿಸಿದಾಗ",
+    "referralRewardSecondTitle": "ಇನ್ನೂ 3 ತಿಂಗಳು",
+    "referralRewardSecondDetail": "ಇನ್ನೂ 3 ಸ್ನೇಹಿತರು ಖರೀದಿಸಿದಾಗ",
+    "referralClaimShort": "ಪಡೆಯಿರಿ"
 }

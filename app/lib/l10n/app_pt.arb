@@ -4649,5 +4649,20 @@
     "addingToTasks": "Adicionando às tarefas",
     "taskAddedToTasks": "Tarefa criada",
     "completedStatus": "Concluído",
-    "notCompletedStatus": "Pendente"
+    "notCompletedStatus": "Pendente",
+    "referralAffiliate": "Programa de afiliados",
+    "referralCampaignTerms": "Amigos recebem 10% de desconto em dispositivos Omi. As compras dos primeiros 2 amigos diferentes liberam 2 meses de Pro e as dos próximos 3 amigos diferentes, mais 3. Até 5 amigos e 5 meses no total.",
+    "referralMilestone": "{months} meses de Pro · {count}/{target} compras",
+    "referralClaim": "Resgatar recompensa",
+    "referralClaimed": "{months} meses de Pro resgatados",
+    "referralRewardPending": "Sua recompensa fica salva até sua assinatura paga terminar.",
+    "referralCampaignTitle": "Indique Omi. Ganhe Pro grátis.",
+    "referralCampaignSubtitle": "10% de desconto no Omi para eles. Até 5 meses de Pro para você.",
+    "referralShareInvite": "Compartilhar convite",
+    "referralYourRewards": "Suas recompensas",
+    "referralRewardFirstTitle": "2 meses de Pro",
+    "referralRewardFirstDetail": "Quando 2 amigos comprarem o Omi",
+    "referralRewardSecondTitle": "Mais 3 meses",
+    "referralRewardSecondDetail": "Quando mais 3 amigos comprarem",
+    "referralClaimShort": "Resgatar"
 }

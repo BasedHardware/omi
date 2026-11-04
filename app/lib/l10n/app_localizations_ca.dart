@@ -15373,4 +15373,54 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get notCompletedStatus => 'Pendent';
+
+  @override
+  String get referralAffiliate => 'Programa d\'afiliats';
+
+  @override
+  String get referralCampaignTerms =>
+      'Els amics tenen un 10% de descompte en dispositius Omi. Les compres dels primers 2 amics diferents desbloquegen 2 mesos de Pro i les dels 3 amics diferents següents, 3 més. Fins a 5 amics i 5 mesos en total.';
+
+  @override
+  String referralMilestone(int months, int count, int target) {
+    return '$months mesos de Pro · $count/$target compres';
+  }
+
+  @override
+  String get referralClaim => 'Reclama la recompensa';
+
+  @override
+  String referralClaimed(int months) {
+    return '$months mesos de Pro reclamats';
+  }
+
+  @override
+  String get referralRewardPending => 'La recompensa es desa fins que acabi la subscripció de pagament.';
+
+  @override
+  String get referralCampaignTitle => 'Recomana Omi. Aconsegueix Pro gratis.';
+
+  @override
+  String get referralCampaignSubtitle => 'Un 10% de descompte en Omi per a ells. Fins a 5 mesos de Pro per a tu.';
+
+  @override
+  String get referralShareInvite => 'Comparteix la invitació';
+
+  @override
+  String get referralYourRewards => 'Les teves recompenses';
+
+  @override
+  String get referralRewardFirstTitle => '2 mesos de Pro';
+
+  @override
+  String get referralRewardFirstDetail => 'Quan 2 amics comprin Omi';
+
+  @override
+  String get referralRewardSecondTitle => '3 mesos més';
+
+  @override
+  String get referralRewardSecondDetail => 'Quan 3 amics més comprin';
+
+  @override
+  String get referralClaimShort => 'Reclama';
 }

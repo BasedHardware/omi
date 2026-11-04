@@ -4614,5 +4614,20 @@
     "addingToTasks": "Lisatakse ülesannetesse",
     "taskAddedToTasks": "Ülesanne loodud",
     "completedStatus": "Lõpetatud",
-    "notCompletedStatus": "Ootel"
+    "notCompletedStatus": "Ootel",
+    "referralAffiliate": "Partnerprogramm",
+    "referralCampaignTerms": "Sõbrad saavad Omi seadmetelt 10% soodustust. Esimese 2 erineva sõbra ostud annavad 2 kuud Pro-d, järgmise 3 erineva sõbra ostud veel 3 kuud. Kuni 5 sõpra ja kokku 5 kuud.",
+    "referralMilestone": "{months} kuud Pro-d · {count}/{target} ostu",
+    "referralClaim": "Võta preemia",
+    "referralClaimed": "{months} Pro-kuud võetud",
+    "referralRewardPending": "Preemia säilib tasulise tellimuse lõpuni.",
+    "referralCampaignTitle": "Soovita Omit. Saa Pro tasuta.",
+    "referralCampaignSubtitle": "Neile 10% allahindlust Omile. Sulle kuni 5 kuud Pro.",
+    "referralShareInvite": "Jaga kutset",
+    "referralYourRewards": "Sinu preemiad",
+    "referralRewardFirstTitle": "2 kuud Pro",
+    "referralRewardFirstDetail": "Kui 2 sõpra ostavad Omi",
+    "referralRewardSecondTitle": "Veel 3 kuud",
+    "referralRewardSecondDetail": "Kui veel 3 sõpra ostavad",
+    "referralClaimShort": "Lunasta"
 }

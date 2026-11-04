@@ -15332,4 +15332,54 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get notCompletedStatus => 'Na čekanju';
+
+  @override
+  String get referralAffiliate => 'Partnerski program';
+
+  @override
+  String get referralCampaignTerms =>
+      'Prijatelji dobivaju 10% popusta na Omi uređaje. Kupnje prva 2 različita prijatelja otključavaju 2 mjeseca Pro, kupnje sljedeća 3 različita prijatelja još 3. Najviše 5 prijatelja i ukupno 5 mjeseci.';
+
+  @override
+  String referralMilestone(int months, int count, int target) {
+    return '$months mjeseci Pro · $count/$target kupnji';
+  }
+
+  @override
+  String get referralClaim => 'Preuzmi nagradu';
+
+  @override
+  String referralClaimed(int months) {
+    return 'Preuzeto $months mjeseci Pro';
+  }
+
+  @override
+  String get referralRewardPending => 'Nagrada se čuva do kraja plaćene pretplate.';
+
+  @override
+  String get referralCampaignTitle => 'Preporučite Omi. Dobijte besplatni Pro.';
+
+  @override
+  String get referralCampaignSubtitle => 'Njima 10% popusta na Omi. Tebi do 5 mjeseci Pro.';
+
+  @override
+  String get referralShareInvite => 'Podijeli pozivnicu';
+
+  @override
+  String get referralYourRewards => 'Tvoje nagrade';
+
+  @override
+  String get referralRewardFirstTitle => '2 mjeseca Pro';
+
+  @override
+  String get referralRewardFirstDetail => 'Kad 2 prijatelja kupe Omi';
+
+  @override
+  String get referralRewardSecondTitle => 'Još 3 mjeseca';
+
+  @override
+  String get referralRewardSecondDetail => 'Kad još 3 prijatelja kupe';
+
+  @override
+  String get referralClaimShort => 'Preuzmi';
 }

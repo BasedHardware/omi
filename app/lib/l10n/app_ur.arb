@@ -12171,5 +12171,20 @@
     "addingToTasks": "ٹاسکس میں شامل کیا جا رہا ہے",
     "taskAddedToTasks": "کام بنایا گیا",
     "completedStatus": "مکمل",
-    "notCompletedStatus": "زیرِ التوا"
+    "notCompletedStatus": "زیرِ التوا",
+    "referralAffiliate": "افیلیئیٹ پروگرام",
+    "referralCampaignTerms": "دوستوں کو Omi آلات پر 10% رعایت ملتی ہے۔ پہلے 2 مختلف دوستوں کی خریداریوں سے 2 ماہ Pro، اگلے 3 مختلف دوستوں کی خریداریوں سے مزید 3 ماہ ملتے ہیں۔ زیادہ سے زیادہ 5 دوست اور کل 5 ماہ۔",
+    "referralMilestone": "{months} ماہ Pro · {count}/{target} خریداریاں",
+    "referralClaim": "انعام لیں",
+    "referralClaimed": "{months} ماہ Pro لیے گئے",
+    "referralRewardPending": "آپ کی ادا شدہ رکنیت ختم ہونے تک انعام محفوظ ہے۔",
+    "referralCampaignTitle": "Omi کی سفارش کریں۔ مفت Pro پائیں۔",
+    "referralCampaignSubtitle": "ان کے لیے Omi پر 10% رعایت۔ آپ کے لیے 5 ماہ تک Pro۔",
+    "referralShareInvite": "دعوت شیئر کریں",
+    "referralYourRewards": "آپ کے انعامات",
+    "referralRewardFirstTitle": "2 ماہ کا Pro",
+    "referralRewardFirstDetail": "جب 2 دوست Omi خریدیں",
+    "referralRewardSecondTitle": "مزید 3 ماہ",
+    "referralRewardSecondDetail": "جب مزید 3 دوست خریدیں",
+    "referralClaimShort": "حاصل کریں"
 }

@@ -15281,4 +15281,54 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get notCompletedStatus => 'Not completed';
+
+  @override
+  String get referralAffiliate => 'Affiliate program';
+
+  @override
+  String get referralCampaignTerms =>
+      'Friends get 10% off Omi hardware. Your first 2 friends who purchase unlock 2 months of Pro. The next 3 unlock 3 more. Up to 5 friends and 5 months total.';
+
+  @override
+  String referralMilestone(int months, int count, int target) {
+    return '$months months of Pro · $count/$target purchases';
+  }
+
+  @override
+  String get referralClaim => 'Claim Reward';
+
+  @override
+  String referralClaimed(int months) {
+    return '$months Pro months claimed';
+  }
+
+  @override
+  String get referralRewardPending => 'Your reward is saved until your paid subscription ends.';
+
+  @override
+  String get referralCampaignTitle => 'Refer Omi. Get free Pro.';
+
+  @override
+  String get referralCampaignSubtitle => '10% off Omi for them. Up to 5 months of Pro for you.';
+
+  @override
+  String get referralShareInvite => 'Share invite';
+
+  @override
+  String get referralYourRewards => 'Your rewards';
+
+  @override
+  String get referralRewardFirstTitle => '2 months of Pro';
+
+  @override
+  String get referralRewardFirstDetail => 'When 2 friends buy Omi';
+
+  @override
+  String get referralRewardSecondTitle => '3 more months';
+
+  @override
+  String get referralRewardSecondDetail => 'When 3 more friends buy';
+
+  @override
+  String get referralClaimShort => 'Claim';
 }

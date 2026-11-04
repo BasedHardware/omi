@@ -12171,5 +12171,20 @@
     "addingToTasks": "Додаје се у задатке",
     "taskAddedToTasks": "Задатак је креиран",
     "completedStatus": "Завршено",
-    "notCompletedStatus": "На чекању"
+    "notCompletedStatus": "На чекању",
+    "referralAffiliate": "Партнерски програм",
+    "referralCampaignTerms": "Пријатељи добијају 10% попуста на Omi уређаје. Куповине прва 2 различита пријатеља откључавају 2 месеца Pro, куповине следећа 3 различита пријатеља још 3. До 5 пријатеља и укупно 5 месеци.",
+    "referralMilestone": "{months} месеци Pro · {count}/{target} куповина",
+    "referralClaim": "Преузми награду",
+    "referralClaimed": "Преузето {months} месеци Pro",
+    "referralRewardPending": "Награда се чува до краја плаћене претплате.",
+    "referralCampaignTitle": "Препоручите Omi. Добијте Pro бесплатно.",
+    "referralCampaignSubtitle": "Њима 10% попуста на Omi. Теби до 5 месеци Pro.",
+    "referralShareInvite": "Подели позивницу",
+    "referralYourRewards": "Твоје награде",
+    "referralRewardFirstTitle": "2 месеца Pro",
+    "referralRewardFirstDetail": "Када 2 пријатеља купе Omi",
+    "referralRewardSecondTitle": "Још 3 месеца",
+    "referralRewardSecondDetail": "Када још 3 пријатеља купе",
+    "referralClaimShort": "Преузми"
 }

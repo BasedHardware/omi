@@ -4614,5 +4614,20 @@
     "addingToTasks": "Προσθήκη στις Εργασίες…",
     "taskAddedToTasks": "Η εργασία δημιουργήθηκε",
     "completedStatus": "Ολοκληρώθηκε",
-    "notCompletedStatus": "Εκκρεμεί"
+    "notCompletedStatus": "Εκκρεμεί",
+    "referralAffiliate": "Πρόγραμμα συνεργατών",
+    "referralCampaignTerms": "Οι φίλοι έχουν 10% έκπτωση σε συσκευές Omi. Οι αγορές των πρώτων 2 διαφορετικών φίλων ξεκλειδώνουν 2 μήνες Pro, οι αγορές των επόμενων 3 διαφορετικών φίλων άλλους 3. Έως 5 φίλοι και 5 μήνες συνολικά.",
+    "referralMilestone": "{months} μήνες Pro · {count}/{target} αγορές",
+    "referralClaim": "Λήψη ανταμοιβής",
+    "referralClaimed": "Λήφθηκαν {months} μήνες Pro",
+    "referralRewardPending": "Η ανταμοιβή αποθηκεύεται μέχρι να λήξει η συνδρομή επί πληρωμή.",
+    "referralCampaignTitle": "Προτείνετε το Omi. Αποκτήστε Pro δωρεάν.",
+    "referralCampaignSubtitle": "10% έκπτωση στο Omi για αυτούς. Έως 5 μήνες Pro για εσένα.",
+    "referralShareInvite": "Κοινοποίηση πρόσκλησης",
+    "referralYourRewards": "Οι ανταμοιβές σου",
+    "referralRewardFirstTitle": "2 μήνες Pro",
+    "referralRewardFirstDetail": "Όταν 2 φίλοι αγοράσουν Omi",
+    "referralRewardSecondTitle": "3 ακόμη μήνες",
+    "referralRewardSecondDetail": "Όταν αγοράσουν 3 ακόμη φίλοι",
+    "referralClaimShort": "Λήψη"
 }

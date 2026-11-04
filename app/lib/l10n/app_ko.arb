@@ -4614,5 +4614,20 @@
     "addingToTasks": "작업에 추가 중…",
     "taskAddedToTasks": "작업이 생성되었습니다",
     "completedStatus": "완료",
-    "notCompletedStatus": "대기 중"
+    "notCompletedStatus": "대기 중",
+    "referralAffiliate": "제휴 프로그램",
+    "referralCampaignTerms": "친구는 Omi 기기를 10% 할인받아요. 첫 2명의 구매로 Pro 2개월, 다음 3명으로 3개월을 더 받아요. 최대 5명, 총 5개월이에요.",
+    "referralMilestone": "Pro {months}개월 · 구매 {count}/{target}건",
+    "referralClaim": "보상 받기",
+    "referralClaimed": "Pro {months}개월 수령 완료",
+    "referralRewardPending": "유료 구독이 끝날 때까지 보상이 보관됩니다.",
+    "referralCampaignTitle": "Omi를 추천하고 Pro를 무료로 받으세요.",
+    "referralCampaignSubtitle": "친구는 Omi 10% 할인. 나는 최대 5개월 Pro.",
+    "referralShareInvite": "초대 공유",
+    "referralYourRewards": "내 보상",
+    "referralRewardFirstTitle": "Pro 2개월",
+    "referralRewardFirstDetail": "친구 2명이 Omi를 구매하면",
+    "referralRewardSecondTitle": "3개월 추가",
+    "referralRewardSecondDetail": "친구 3명이 더 구매하면",
+    "referralClaimShort": "받기"
 }

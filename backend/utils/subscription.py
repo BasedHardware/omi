@@ -1321,7 +1321,13 @@ def can_user_make_payment(uid: str, target_price_id: Optional[str] = None) -> Tu
     Returns:
         tuple: (can_pay: bool, reason: str)
     """
-    subscription = users_db.get_user_valid_subscription(uid)
+    from config.referral_campaign import campaign_enabled
+
+    subscription = (
+        users_db.get_user_valid_subscription(uid, provision=False, include_promotions=False)
+        if campaign_enabled()
+        else users_db.get_user_valid_subscription(uid)
+    )
     if target_price_id in configured_ladder_prices() and subscription is not None:
         if subscription.plan != PlanType.basic and ladder_policy.entitlements(subscription) is None:
             return False, "Legacy subscriptions keep their current plan"

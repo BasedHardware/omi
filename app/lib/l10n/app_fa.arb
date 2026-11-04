@@ -12171,5 +12171,20 @@
     "addingToTasks": "در حال افزودن به وظایف",
     "taskAddedToTasks": "وظیفه ایجاد شد",
     "completedStatus": "تکمیل شده",
-    "notCompletedStatus": "در انتظار"
+    "notCompletedStatus": "در انتظار",
+    "referralAffiliate": "برنامه همکاری در فروش",
+    "referralCampaignTerms": "دوستان ۱۰٪ تخفیف دستگاه Omi می‌گیرند. خرید ۲ دوست متفاوت اول ۲ ماه Pro و خرید ۳ دوست متفاوت بعدی ۳ ماه دیگر باز می‌کند. حداکثر ۵ دوست و مجموعاً ۵ ماه.",
+    "referralMilestone": "{months} ماه Pro · {count}/{target} خرید",
+    "referralClaim": "دریافت پاداش",
+    "referralClaimed": "{months} ماه Pro دریافت شد",
+    "referralRewardPending": "پاداش تا پایان اشتراک پولی شما ذخیره می‌شود.",
+    "referralCampaignTitle": "Omi را معرفی کنید. Pro رایگان بگیرید.",
+    "referralCampaignSubtitle": "۱۰٪ تخفیف Omi برای آن‌ها. تا ۵ ماه Pro برای شما.",
+    "referralShareInvite": "اشتراک‌گذاری دعوت",
+    "referralYourRewards": "پاداش‌های شما",
+    "referralRewardFirstTitle": "۲ ماه Pro",
+    "referralRewardFirstDetail": "وقتی ۲ دوست Omi بخرند",
+    "referralRewardSecondTitle": "۳ ماه دیگر",
+    "referralRewardSecondDetail": "وقتی ۳ دوست دیگر بخرند",
+    "referralClaimShort": "دریافت"
 }

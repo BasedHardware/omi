@@ -15291,4 +15291,54 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get notCompletedStatus => 'در انتظار';
+
+  @override
+  String get referralAffiliate => 'برنامه همکاری در فروش';
+
+  @override
+  String get referralCampaignTerms =>
+      'دوستان ۱۰٪ تخفیف دستگاه Omi می‌گیرند. خرید ۲ دوست متفاوت اول ۲ ماه Pro و خرید ۳ دوست متفاوت بعدی ۳ ماه دیگر باز می‌کند. حداکثر ۵ دوست و مجموعاً ۵ ماه.';
+
+  @override
+  String referralMilestone(int months, int count, int target) {
+    return '$months ماه Pro · $count/$target خرید';
+  }
+
+  @override
+  String get referralClaim => 'دریافت پاداش';
+
+  @override
+  String referralClaimed(int months) {
+    return '$months ماه Pro دریافت شد';
+  }
+
+  @override
+  String get referralRewardPending => 'پاداش تا پایان اشتراک پولی شما ذخیره می‌شود.';
+
+  @override
+  String get referralCampaignTitle => 'Omi را معرفی کنید. Pro رایگان بگیرید.';
+
+  @override
+  String get referralCampaignSubtitle => '۱۰٪ تخفیف Omi برای آن‌ها. تا ۵ ماه Pro برای شما.';
+
+  @override
+  String get referralShareInvite => 'اشتراک‌گذاری دعوت';
+
+  @override
+  String get referralYourRewards => 'پاداش‌های شما';
+
+  @override
+  String get referralRewardFirstTitle => '۲ ماه Pro';
+
+  @override
+  String get referralRewardFirstDetail => 'وقتی ۲ دوست Omi بخرند';
+
+  @override
+  String get referralRewardSecondTitle => '۳ ماه دیگر';
+
+  @override
+  String get referralRewardSecondDetail => 'وقتی ۳ دوست دیگر بخرند';
+
+  @override
+  String get referralClaimShort => 'دریافت';
 }

@@ -12171,5 +12171,20 @@
     "addingToTasks": "Idinadagdag sa Mga Gawain",
     "taskAddedToTasks": "Ang gawain ay nilikha na",
     "completedStatus": "Kumpleto",
-    "notCompletedStatus": "Naghihintay"
+    "notCompletedStatus": "Naghihintay",
+    "referralAffiliate": "Affiliate program",
+    "referralCampaignTerms": "May 10% diskuwento ang mga kaibigan sa Omi device. Ang pagbili ng unang 2 magkaibang kaibigan ay nagbibigay ng 2 buwang Pro, ang pagbili ng susunod na 3 pang magkaibang kaibigan ay 3 buwan pa. Hanggang 5 kaibigan at 5 buwan sa kabuuan.",
+    "referralMilestone": "{months} buwang Pro · {count}/{target} pagbili",
+    "referralClaim": "Kunin ang gantimpala",
+    "referralClaimed": "Nakuha ang {months} buwang Pro",
+    "referralRewardPending": "Nakatabi ang gantimpala hanggang matapos ang bayad mong subscription.",
+    "referralCampaignTitle": "Irekomenda ang Omi. Kumuha ng libreng Pro.",
+    "referralCampaignSubtitle": "10% off sa Omi para sa kanila. Hanggang 5 buwan ng Pro para sa iyo.",
+    "referralShareInvite": "Ibahagi ang imbitasyon",
+    "referralYourRewards": "Iyong mga reward",
+    "referralRewardFirstTitle": "2 buwan ng Pro",
+    "referralRewardFirstDetail": "Kapag bumili ng Omi ang 2 kaibigan",
+    "referralRewardSecondTitle": "3 pang buwan",
+    "referralRewardSecondDetail": "Kapag bumili ang 3 pang kaibigan",
+    "referralClaimShort": "Kunin"
 }

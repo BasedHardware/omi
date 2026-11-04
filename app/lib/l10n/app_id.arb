@@ -4649,5 +4649,20 @@
     "addingToTasks": "Menambahkan ke Tugas",
     "taskAddedToTasks": "Tugas dibuat",
     "completedStatus": "Selesai",
-    "notCompletedStatus": "Tertunda"
+    "notCompletedStatus": "Tertunda",
+    "referralAffiliate": "Program afiliasi",
+    "referralCampaignTerms": "Teman mendapat diskon 10% perangkat Omi. Pembelian oleh 2 teman berbeda pertama membuka 2 bulan Pro, pembelian oleh 3 teman berbeda berikutnya 3 bulan lagi. Maksimal 5 teman dan total 5 bulan.",
+    "referralMilestone": "{months} bulan Pro · {count}/{target} pembelian",
+    "referralClaim": "Klaim hadiah",
+    "referralClaimed": "{months} bulan Pro diklaim",
+    "referralRewardPending": "Hadiah disimpan hingga langganan berbayar Anda berakhir.",
+    "referralCampaignTitle": "Rekomendasikan Omi. Dapatkan Pro gratis.",
+    "referralCampaignSubtitle": "Diskon 10% Omi untuk mereka. Hingga 5 bulan Pro untuk kamu.",
+    "referralShareInvite": "Bagikan undangan",
+    "referralYourRewards": "Hadiahmu",
+    "referralRewardFirstTitle": "2 bulan Pro",
+    "referralRewardFirstDetail": "Saat 2 teman membeli Omi",
+    "referralRewardSecondTitle": "3 bulan lagi",
+    "referralRewardSecondDetail": "Saat 3 teman lagi membeli",
+    "referralClaimShort": "Klaim"
 }

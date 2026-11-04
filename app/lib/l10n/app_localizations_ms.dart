@@ -15334,4 +15334,54 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get notCompletedStatus => 'Belum selesai';
+
+  @override
+  String get referralAffiliate => 'Program ahli gabungan';
+
+  @override
+  String get referralCampaignTerms =>
+      'Rakan mendapat diskaun 10% peranti Omi. Pembelian oleh 2 rakan berbeza pertama membuka 2 bulan Pro, pembelian oleh 3 rakan berbeza seterusnya 3 bulan lagi. Maksimum 5 rakan dan jumlah 5 bulan.';
+
+  @override
+  String referralMilestone(int months, int count, int target) {
+    return '$months bulan Pro · $count/$target pembelian';
+  }
+
+  @override
+  String get referralClaim => 'Tuntut ganjaran';
+
+  @override
+  String referralClaimed(int months) {
+    return '$months bulan Pro dituntut';
+  }
+
+  @override
+  String get referralRewardPending => 'Ganjaran disimpan sehingga langganan berbayar anda tamat.';
+
+  @override
+  String get referralCampaignTitle => 'Syorkan Omi. Dapatkan Pro percuma.';
+
+  @override
+  String get referralCampaignSubtitle => 'Diskaun 10% Omi untuk mereka. Sehingga 5 bulan Pro untuk anda.';
+
+  @override
+  String get referralShareInvite => 'Kongsi jemputan';
+
+  @override
+  String get referralYourRewards => 'Ganjaran anda';
+
+  @override
+  String get referralRewardFirstTitle => '2 bulan Pro';
+
+  @override
+  String get referralRewardFirstDetail => 'Apabila 2 rakan membeli Omi';
+
+  @override
+  String get referralRewardSecondTitle => '3 bulan lagi';
+
+  @override
+  String get referralRewardSecondDetail => 'Apabila 3 lagi rakan membeli';
+
+  @override
+  String get referralClaimShort => 'Tuntut';
 }

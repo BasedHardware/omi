@@ -4614,5 +4614,20 @@
     "addingToTasks": "Se adaugă la Sarcini",
     "taskAddedToTasks": "Sarcină creată",
     "completedStatus": "Finalizat",
-    "notCompletedStatus": "În așteptare"
+    "notCompletedStatus": "În așteptare",
+    "referralAffiliate": "Program de afiliere",
+    "referralCampaignTerms": "Prietenii primesc 10% reducere la dispozitivele Omi. Achizițiile primilor 2 prieteni diferiți deblochează 2 luni Pro, cele ale următorilor 3 prieteni diferiți încă 3. Maximum 5 prieteni și 5 luni în total.",
+    "referralMilestone": "{months} luni Pro · {count}/{target} achiziții",
+    "referralClaim": "Revendică recompensa",
+    "referralClaimed": "{months} luni Pro revendicate",
+    "referralRewardPending": "Recompensa se păstrează până se încheie abonamentul plătit.",
+    "referralCampaignTitle": "Recomandă Omi. Primește Pro gratuit.",
+    "referralCampaignSubtitle": "10% reducere la Omi pentru ei. Până la 5 luni de Pro pentru tine.",
+    "referralShareInvite": "Distribuie invitația",
+    "referralYourRewards": "Recompensele tale",
+    "referralRewardFirstTitle": "2 luni de Pro",
+    "referralRewardFirstDetail": "Când 2 prieteni cumpără Omi",
+    "referralRewardSecondTitle": "Încă 3 luni",
+    "referralRewardSecondDetail": "Când încă 3 prieteni cumpără",
+    "referralClaimShort": "Revendică"
 }

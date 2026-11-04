@@ -15294,4 +15294,54 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get notCompletedStatus => 'Čekající';
+
+  @override
+  String get referralAffiliate => 'Partnerský program';
+
+  @override
+  String get referralCampaignTerms =>
+      'Přátelé získají 10% slevu na zařízení Omi. Nákupy prvních 2 různých přátel odemknou 2 měsíce Pro, nákupy dalších 3 různých přátel další 3 měsíce. Nejvýše 5 přátel a celkem 5 měsíců.';
+
+  @override
+  String referralMilestone(int months, int count, int target) {
+    return '$months měsíců Pro · $count/$target nákupů';
+  }
+
+  @override
+  String get referralClaim => 'Vyzvednout odměnu';
+
+  @override
+  String referralClaimed(int months) {
+    return 'Vyzvednuto $months měsíců Pro';
+  }
+
+  @override
+  String get referralRewardPending => 'Odměna je uložená do konce placeného předplatného.';
+
+  @override
+  String get referralCampaignTitle => 'Doporučte Omi. Získejte Pro zdarma.';
+
+  @override
+  String get referralCampaignSubtitle => 'Pro ně 10% sleva na Omi. Pro tebe až 5 měsíců Pro.';
+
+  @override
+  String get referralShareInvite => 'Sdílet pozvánku';
+
+  @override
+  String get referralYourRewards => 'Tvoje odměny';
+
+  @override
+  String get referralRewardFirstTitle => '2 měsíce Pro';
+
+  @override
+  String get referralRewardFirstDetail => 'Když si 2 přátelé koupí Omi';
+
+  @override
+  String get referralRewardSecondTitle => 'Další 3 měsíce';
+
+  @override
+  String get referralRewardSecondDetail => 'Když si koupí další 3 přátelé';
+
+  @override
+  String get referralClaimShort => 'Získat';
 }

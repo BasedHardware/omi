@@ -15305,4 +15305,54 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get notCompletedStatus => 'Väntande';
+
+  @override
+  String get referralAffiliate => 'Partnerprogram';
+
+  @override
+  String get referralCampaignTerms =>
+      'Vänner får 10% rabatt på Omi-enheter. Köp från de första 2 olika vännerna låser upp 2 månader Pro, köp från nästa 3 olika vänner ger 3 till. Högst 5 vänner och totalt 5 månader.';
+
+  @override
+  String referralMilestone(int months, int count, int target) {
+    return '$months månader Pro · $count/$target köp';
+  }
+
+  @override
+  String get referralClaim => 'Hämta belöning';
+
+  @override
+  String referralClaimed(int months) {
+    return '$months Pro-månader hämtade';
+  }
+
+  @override
+  String get referralRewardPending => 'Belöningen sparas tills ditt betalda abonnemang slutar.';
+
+  @override
+  String get referralCampaignTitle => 'Rekommendera Omi. Få gratis Pro.';
+
+  @override
+  String get referralCampaignSubtitle => '10 % rabatt på Omi för dem. Upp till 5 månader Pro för dig.';
+
+  @override
+  String get referralShareInvite => 'Dela inbjudan';
+
+  @override
+  String get referralYourRewards => 'Dina belöningar';
+
+  @override
+  String get referralRewardFirstTitle => '2 månader Pro';
+
+  @override
+  String get referralRewardFirstDetail => 'När 2 vänner köper Omi';
+
+  @override
+  String get referralRewardSecondTitle => '3 månader till';
+
+  @override
+  String get referralRewardSecondDetail => 'När 3 vänner till köper';
+
+  @override
+  String get referralClaimShort => 'Hämta';
 }

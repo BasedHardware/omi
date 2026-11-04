@@ -4614,5 +4614,20 @@
     "addingToTasks": "جارٍ الإضافة إلى المهام",
     "taskAddedToTasks": "تم إنشاء المهمة",
     "completedStatus": "مكتمل",
-    "notCompletedStatus": "قيد الانتظار"
+    "notCompletedStatus": "قيد الانتظار",
+    "referralAffiliate": "برنامج التسويق بالعمولة",
+    "referralCampaignTerms": "يحصل أصدقاؤك على خصم 10% على أجهزة Omi. شراء أول صديقين مختلفين تفتحان شهرين من Pro، وشراء الأصدقاء الثلاثة المختلفين التاليين تفتح 3 أشهر أخرى. حتى 5 أصدقاء و5 أشهر إجمالاً.",
+    "referralMilestone": "{months} أشهر Pro · {count}/{target} مشتريات",
+    "referralClaim": "استلام المكافأة",
+    "referralClaimed": "تم استلام {months} أشهر Pro",
+    "referralRewardPending": "تُحفظ مكافأتك حتى انتهاء اشتراكك المدفوع.",
+    "referralCampaignTitle": "أحِل أصدقاءك إلى Omi. واحصل على Pro مجانًا.",
+    "referralCampaignSubtitle": "خصم 10% على Omi لهم. حتى 5 أشهر من Pro لك.",
+    "referralShareInvite": "شارك الدعوة",
+    "referralYourRewards": "مكافآتك",
+    "referralRewardFirstTitle": "شهران من Pro",
+    "referralRewardFirstDetail": "عندما يشتري صديقان Omi",
+    "referralRewardSecondTitle": "3 أشهر إضافية",
+    "referralRewardSecondDetail": "عندما يشتري 3 أصدقاء آخرين",
+    "referralClaimShort": "استلام"
 }

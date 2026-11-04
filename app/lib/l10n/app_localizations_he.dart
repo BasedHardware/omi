@@ -15183,4 +15183,54 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get notCompletedStatus => 'בהמתנה';
+
+  @override
+  String get referralAffiliate => 'תוכנית שותפים';
+
+  @override
+  String get referralCampaignTerms =>
+      'חברים מקבלים 10% הנחה על מכשירי Omi. הרכישות של 2 החברים השונים הראשונים פותחות 2 חודשי Pro, והרכישות של 3 החברים השונים הבאים עוד 3. עד 5 חברים ו-5 חודשים בסך הכול.';
+
+  @override
+  String referralMilestone(int months, int count, int target) {
+    return '$months חודשי Pro · $count/$target רכישות';
+  }
+
+  @override
+  String get referralClaim => 'קבלת פרס';
+
+  @override
+  String referralClaimed(int months) {
+    return 'התקבלו $months חודשי Pro';
+  }
+
+  @override
+  String get referralRewardPending => 'הפרס נשמר עד לסיום המנוי בתשלום.';
+
+  @override
+  String get referralCampaignTitle => 'המליצו על Omi. קבלו Pro בחינם.';
+
+  @override
+  String get referralCampaignSubtitle => '10% הנחה על Omi בשבילם. עד 5 חודשי Pro בשבילך.';
+
+  @override
+  String get referralShareInvite => 'שיתוף הזמנה';
+
+  @override
+  String get referralYourRewards => 'התגמולים שלך';
+
+  @override
+  String get referralRewardFirstTitle => 'חודשיים של Pro';
+
+  @override
+  String get referralRewardFirstDetail => 'כש-2 חברים קונים Omi';
+
+  @override
+  String get referralRewardSecondTitle => 'עוד 3 חודשים';
+
+  @override
+  String get referralRewardSecondDetail => 'כשעוד 3 חברים קונים';
+
+  @override
+  String get referralClaimShort => 'קבלה';
 }

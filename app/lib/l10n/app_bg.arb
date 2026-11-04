@@ -4614,5 +4614,20 @@
     "addingToTasks": "Добавя се в Задачи",
     "taskAddedToTasks": "Задачата е създадена",
     "completedStatus": "Завършено",
-    "notCompletedStatus": "В изчакване"
+    "notCompletedStatus": "В изчакване",
+    "referralAffiliate": "Партньорска програма",
+    "referralCampaignTerms": "Приятелите получават 10% отстъпка за устройства Omi. Покупките на първите 2 различни приятели отключват 2 месеца Pro, покупките на следващите 3 различни приятели още 3. До 5 приятели и 5 месеца общо.",
+    "referralMilestone": "{months} месеца Pro · {count}/{target} покупки",
+    "referralClaim": "Вземи наградата",
+    "referralClaimed": "Получени {months} месеца Pro",
+    "referralRewardPending": "Наградата се запазва до края на платения абонамент.",
+    "referralCampaignTitle": "Препоръчайте Omi. Получете Pro безплатно.",
+    "referralCampaignSubtitle": "10% отстъпка от Omi за тях. До 5 месеца Pro за теб.",
+    "referralShareInvite": "Сподели покана",
+    "referralYourRewards": "Твоите награди",
+    "referralRewardFirstTitle": "2 месеца Pro",
+    "referralRewardFirstDetail": "Когато 2 приятели купят Omi",
+    "referralRewardSecondTitle": "Още 3 месеца",
+    "referralRewardSecondDetail": "Когато още 3 приятели купят",
+    "referralClaimShort": "Вземи"
 }

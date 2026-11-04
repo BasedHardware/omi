@@ -26876,6 +26876,96 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Not completed'**
   String get notCompletedStatus;
+
+  /// No description provided for @referralAffiliate.
+  ///
+  /// In en, this message translates to:
+  /// **'Affiliate program'**
+  String get referralAffiliate;
+
+  /// No description provided for @referralCampaignTerms.
+  ///
+  /// In en, this message translates to:
+  /// **'Friends get 10% off Omi hardware. Your first 2 friends who purchase unlock 2 months of Pro. The next 3 unlock 3 more. Up to 5 friends and 5 months total.'**
+  String get referralCampaignTerms;
+
+  /// No description provided for @referralMilestone.
+  ///
+  /// In en, this message translates to:
+  /// **'{months} months of Pro · {count}/{target} purchases'**
+  String referralMilestone(int months, int count, int target);
+
+  /// No description provided for @referralClaim.
+  ///
+  /// In en, this message translates to:
+  /// **'Claim Reward'**
+  String get referralClaim;
+
+  /// No description provided for @referralClaimed.
+  ///
+  /// In en, this message translates to:
+  /// **'{months} Pro months claimed'**
+  String referralClaimed(int months);
+
+  /// No description provided for @referralRewardPending.
+  ///
+  /// In en, this message translates to:
+  /// **'Your reward is saved until your paid subscription ends.'**
+  String get referralRewardPending;
+
+  /// No description provided for @referralCampaignTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Refer Omi. Get free Pro.'**
+  String get referralCampaignTitle;
+
+  /// Referral page subtitle under the title
+  ///
+  /// In en, this message translates to:
+  /// **'10% off Omi for them. Up to 5 months of Pro for you.'**
+  String get referralCampaignSubtitle;
+
+  /// Primary button that opens the share sheet with the referral link
+  ///
+  /// In en, this message translates to:
+  /// **'Share invite'**
+  String get referralShareInvite;
+
+  /// Section header above the referral reward rows
+  ///
+  /// In en, this message translates to:
+  /// **'Your rewards'**
+  String get referralYourRewards;
+
+  /// First referral reward row title
+  ///
+  /// In en, this message translates to:
+  /// **'2 months of Pro'**
+  String get referralRewardFirstTitle;
+
+  /// First referral reward row condition
+  ///
+  /// In en, this message translates to:
+  /// **'When 2 friends buy Omi'**
+  String get referralRewardFirstDetail;
+
+  /// Second referral reward row title, months of Pro
+  ///
+  /// In en, this message translates to:
+  /// **'3 more months'**
+  String get referralRewardSecondTitle;
+
+  /// Second referral reward row condition
+  ///
+  /// In en, this message translates to:
+  /// **'When 3 more friends buy'**
+  String get referralRewardSecondDetail;
+
+  /// Short pill button to claim an earned referral reward
+  ///
+  /// In en, this message translates to:
+  /// **'Claim'**
+  String get referralClaimShort;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

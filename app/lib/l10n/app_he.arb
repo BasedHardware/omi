@@ -12171,5 +12171,20 @@
     "addingToTasks": "מוסיף למשימות",
     "taskAddedToTasks": "המשימה נוצרה",
     "completedStatus": "הושלם",
-    "notCompletedStatus": "בהמתנה"
+    "notCompletedStatus": "בהמתנה",
+    "referralAffiliate": "תוכנית שותפים",
+    "referralCampaignTerms": "חברים מקבלים 10% הנחה על מכשירי Omi. הרכישות של 2 החברים השונים הראשונים פותחות 2 חודשי Pro, והרכישות של 3 החברים השונים הבאים עוד 3. עד 5 חברים ו-5 חודשים בסך הכול.",
+    "referralMilestone": "{months} חודשי Pro · {count}/{target} רכישות",
+    "referralClaim": "קבלת פרס",
+    "referralClaimed": "התקבלו {months} חודשי Pro",
+    "referralRewardPending": "הפרס נשמר עד לסיום המנוי בתשלום.",
+    "referralCampaignTitle": "המליצו על Omi. קבלו Pro בחינם.",
+    "referralCampaignSubtitle": "10% הנחה על Omi בשבילם. עד 5 חודשי Pro בשבילך.",
+    "referralShareInvite": "שיתוף הזמנה",
+    "referralYourRewards": "התגמולים שלך",
+    "referralRewardFirstTitle": "חודשיים של Pro",
+    "referralRewardFirstDetail": "כש-2 חברים קונים Omi",
+    "referralRewardSecondTitle": "עוד 3 חודשים",
+    "referralRewardSecondDetail": "כשעוד 3 חברים קונים",
+    "referralClaimShort": "קבלה"
 }

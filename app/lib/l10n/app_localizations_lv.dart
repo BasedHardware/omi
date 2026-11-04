@@ -15330,4 +15330,54 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get notCompletedStatus => 'Gaida';
+
+  @override
+  String get referralAffiliate => 'Partneru programma';
+
+  @override
+  String get referralCampaignTerms =>
+      'Draugi saņem 10% atlaidi Omi ierīcēm. Pirmo 2 dažādo draugu pirkumi atver 2 Pro mēnešus, nākamo 3 dažādo draugu pirkumi vēl 3. Līdz 5 draugiem un kopā 5 mēnešiem.';
+
+  @override
+  String referralMilestone(int months, int count, int target) {
+    return '$months Pro mēneši · $count/$target pirkumi';
+  }
+
+  @override
+  String get referralClaim => 'Saņemt balvu';
+
+  @override
+  String referralClaimed(int months) {
+    return 'Saņemti $months Pro mēneši';
+  }
+
+  @override
+  String get referralRewardPending => 'Balva tiek glabāta līdz maksas abonementa beigām.';
+
+  @override
+  String get referralCampaignTitle => 'Iesakiet Omi. Saņemiet Pro bez maksas.';
+
+  @override
+  String get referralCampaignSubtitle => 'Viņiem 10% atlaide Omi. Tev līdz 5 mēnešiem Pro.';
+
+  @override
+  String get referralShareInvite => 'Kopīgot ielūgumu';
+
+  @override
+  String get referralYourRewards => 'Tavas balvas';
+
+  @override
+  String get referralRewardFirstTitle => '2 mēneši Pro';
+
+  @override
+  String get referralRewardFirstDetail => 'Kad 2 draugi nopērk Omi';
+
+  @override
+  String get referralRewardSecondTitle => 'Vēl 3 mēneši';
+
+  @override
+  String get referralRewardSecondDetail => 'Kad vēl 3 draugi nopērk';
+
+  @override
+  String get referralClaimShort => 'Saņemt';
 }

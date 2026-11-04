@@ -4614,5 +4614,20 @@
     "addingToTasks": "टास्क में जोड़ा जा रहा है",
     "taskAddedToTasks": "कार्य बनाया गया",
     "completedStatus": "पूर्ण",
-    "notCompletedStatus": "लंबित"
+    "notCompletedStatus": "लंबित",
+    "referralAffiliate": "एफ़िलिएट प्रोग्राम",
+    "referralCampaignTerms": "दोस्तों को Omi डिवाइस पर 10% छूट मिलती है। पहले 2 दोस्तों की खरीद से 2 महीने Pro और अगले 3 से 3 महीने और मिलते हैं। अधिकतम 5 दोस्त और कुल 5 महीने।",
+    "referralMilestone": "{months} महीने Pro · {count}/{target} खरीद",
+    "referralClaim": "इनाम लें",
+    "referralClaimed": "{months} महीने Pro लिए गए",
+    "referralRewardPending": "आपकी सशुल्क सदस्यता समाप्त होने तक इनाम सुरक्षित है।",
+    "referralCampaignTitle": "Omi की सिफारिश करें। मुफ़्त Pro पाएं।",
+    "referralCampaignSubtitle": "उनके लिए Omi पर 10% छूट। आपके लिए 5 महीने तक Pro।",
+    "referralShareInvite": "आमंत्रण शेयर करें",
+    "referralYourRewards": "आपके इनाम",
+    "referralRewardFirstTitle": "2 महीने का Pro",
+    "referralRewardFirstDetail": "जब 2 दोस्त Omi खरीदें",
+    "referralRewardSecondTitle": "3 और महीने",
+    "referralRewardSecondDetail": "जब 3 और दोस्त खरीदें",
+    "referralClaimShort": "पाएं"
 }

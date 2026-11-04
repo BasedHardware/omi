@@ -15347,4 +15347,54 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get notCompletedStatus => 'ಪಕ್ಷಾನುಮತಿ';
+
+  @override
+  String get referralAffiliate => 'ಅಫಿಲಿಯೇಟ್ ಕಾರ್ಯಕ್ರಮ';
+
+  @override
+  String get referralCampaignTerms =>
+      'ಸ್ನೇಹಿತರಿಗೆ Omi ಸಾಧನಗಳ ಮೇಲೆ 10% ರಿಯಾಯಿತಿ. ಮೊದಲ 2 ವಿಭಿನ್ನ ಸ್ನೇಹಿತರ ಖರೀದಿಗಳು 2 ತಿಂಗಳ Pro, ಮುಂದಿನ 3 ವಿಭಿನ್ನ ಸ್ನೇಹಿತರ ಖರೀದಿಗಳು ಇನ್ನೂ 3 ತಿಂಗಳು ನೀಡುತ್ತವೆ. ಗರಿಷ್ಠ 5 ಸ್ನೇಹಿತರು ಮತ್ತು ಒಟ್ಟು 5 ತಿಂಗಳು.';
+
+  @override
+  String referralMilestone(int months, int count, int target) {
+    return '$months ತಿಂಗಳು Pro · $count/$target ಖರೀದಿಗಳು';
+  }
+
+  @override
+  String get referralClaim => 'ಬಹುಮಾನ ಪಡೆಯಿರಿ';
+
+  @override
+  String referralClaimed(int months) {
+    return '$months ತಿಂಗಳ Pro ಪಡೆಯಲಾಗಿದೆ';
+  }
+
+  @override
+  String get referralRewardPending => 'ನಿಮ್ಮ ಪಾವತಿಸಿದ ಚಂದಾದಾರಿಕೆ ಮುಗಿಯುವವರೆಗೆ ಬಹುಮಾನ ಉಳಿಯುತ್ತದೆ.';
+
+  @override
+  String get referralCampaignTitle => 'Omi ಪರಿಚಯಿಸಿ. ಉಚಿತ Pro ಪಡೆಯಿರಿ.';
+
+  @override
+  String get referralCampaignSubtitle => 'ಅವರಿಗೆ Omi ಮೇಲೆ 10% ರಿಯಾಯಿತಿ. ನಿಮಗೆ 5 ತಿಂಗಳವರೆಗೆ Pro.';
+
+  @override
+  String get referralShareInvite => 'ಆಹ್ವಾನ ಹಂಚಿಕೊಳ್ಳಿ';
+
+  @override
+  String get referralYourRewards => 'ನಿಮ್ಮ ಬಹುಮಾನಗಳು';
+
+  @override
+  String get referralRewardFirstTitle => '2 ತಿಂಗಳ Pro';
+
+  @override
+  String get referralRewardFirstDetail => '2 ಸ್ನೇಹಿತರು Omi ಖರೀದಿಸಿದಾಗ';
+
+  @override
+  String get referralRewardSecondTitle => 'ಇನ್ನೂ 3 ತಿಂಗಳು';
+
+  @override
+  String get referralRewardSecondDetail => 'ಇನ್ನೂ 3 ಸ್ನೇಹಿತರು ಖರೀದಿಸಿದಾಗ';
+
+  @override
+  String get referralClaimShort => 'ಪಡೆಯಿರಿ';
 }

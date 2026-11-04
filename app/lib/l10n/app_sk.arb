@@ -4614,5 +4614,20 @@
     "addingToTasks": "Pridáva sa do úloh",
     "taskAddedToTasks": "Úloha bola vytvorená",
     "completedStatus": "Dokončené",
-    "notCompletedStatus": "Čakajúce"
+    "notCompletedStatus": "Čakajúce",
+    "referralAffiliate": "Partnerský program",
+    "referralCampaignTerms": "Priatelia získajú 10% zľavu na zariadenia Omi. Nákupy prvých 2 rôznych priateľov odomknú 2 mesiace Pro, nákupy ďalších 3 rôznych priateľov ešte 3. Najviac 5 priateľov a spolu 5 mesiacov.",
+    "referralMilestone": "{months} mesiacov Pro · {count}/{target} nákupov",
+    "referralClaim": "Vyzdvihnúť odmenu",
+    "referralClaimed": "Vyzdvihnutých {months} mesiacov Pro",
+    "referralRewardPending": "Odmena sa uchová do konca plateného predplatného.",
+    "referralCampaignTitle": "Odporučte Omi. Získajte Pro zadarmo.",
+    "referralCampaignSubtitle": "Pre nich 10% zľava na Omi. Pre teba až 5 mesiacov Pro.",
+    "referralShareInvite": "Zdieľať pozvánku",
+    "referralYourRewards": "Tvoje odmeny",
+    "referralRewardFirstTitle": "2 mesiace Pro",
+    "referralRewardFirstDetail": "Keď si 2 priatelia kúpia Omi",
+    "referralRewardSecondTitle": "Ďalšie 3 mesiace",
+    "referralRewardSecondDetail": "Keď si kúpia ďalší 3 priatelia",
+    "referralClaimShort": "Získať"
 }

@@ -1015,6 +1015,26 @@ export interface CalendarOnboardingStatusResponse {
   state: string;
 }
 
+export interface CampaignAttributionResponse {
+  campaign_id: string;
+  checkout_url: string;
+  discount_percent: number;
+  state: string;
+}
+
+export interface CampaignSnapshotResponse {
+  campaign_id: string;
+  claimable_months: number;
+  claimed_months: number;
+  earned_months?: number | null;
+  enabled: boolean;
+  milestone_progress?: number | null;
+  qualified_purchases: number;
+  reason?: string | null;
+  referral_url?: string | null;
+  reward_status: string;
+}
+
 export interface CancelSubscriptionRequest {
   reason?: string | null;
   reason_details?: string | null;
@@ -6726,6 +6746,8 @@ export interface OmiApiSchemas {
   "CalendarOnboardingResetResponse": CalendarOnboardingResetResponse;
   "CalendarOnboardingSkipResponse": CalendarOnboardingSkipResponse;
   "CalendarOnboardingStatusResponse": CalendarOnboardingStatusResponse;
+  "CampaignAttributionResponse": CampaignAttributionResponse;
+  "CampaignSnapshotResponse": CampaignSnapshotResponse;
   "CancelSubscriptionRequest": CancelSubscriptionRequest;
   "CandidateAcceptanceRequest": CandidateAcceptanceRequest;
   "CandidateAction": CandidateAction;
@@ -12619,6 +12641,36 @@ export interface OmiApiPaths {
       operationId: "tts_synthesize_v2_tts_synthesize_post";
       responses: {
         "200": unknown;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v2/users/me/referral/campaign": {
+    get: {
+      operationId: "get_campaign_v2_users_me_referral_campaign_get";
+      responses: {
+        "200": CampaignSnapshotResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v2/users/me/referral/campaign/attribution": {
+    post: {
+      operationId: "attribute_campaign_v2_users_me_referral_campaign_attribution_post";
+      responses: {
+        "200": CampaignAttributionResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v2/users/me/referral/campaign/claim": {
+    post: {
+      operationId: "claim_campaign_v2_users_me_referral_campaign_claim_post";
+      responses: {
+        "200": CampaignSnapshotResponse;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -23108,6 +23160,56 @@ export async function get_sync_job_status_v2_sync_local_files__job_id__get(path:
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function get_campaign_v2_users_me_referral_campaign_get(header: { authorization?: string }, init?: OmiApiClientInit): Promise<CampaignSnapshotResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v2/users/me/referral/campaign`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function attribute_campaign_v2_users_me_referral_campaign_attribution_post(header: { authorization?: string }, body: ReferralClaimRequest, init?: OmiApiClientInit): Promise<CampaignAttributionResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v2/users/me/referral/campaign/attribution`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function claim_campaign_v2_users_me_referral_campaign_claim_post(header: { authorization?: string }, init?: OmiApiClientInit): Promise<CampaignSnapshotResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v2/users/me/referral/campaign/claim`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function transcribe_voice_message_v2_voice_message_transcribe_post(header: { X_App_Platform?: string, authorization?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<VoiceMessageTranscriptionResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v2/voice-message/transcribe`;
@@ -23632,4 +23734,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 539 client methods generated.
+// Total: 542 client methods generated.

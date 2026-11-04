@@ -15048,4 +15048,53 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get notCompletedStatus => '待处理';
+
+  @override
+  String get referralAffiliate => '推广合作计划';
+
+  @override
+  String get referralCampaignTerms => '好友购买 Omi 硬件可享九折。前 2 位好友购买后解锁 2 个月 Pro，接下来 3 位再解锁 3 个月。最多 5 位好友，共 5 个月。';
+
+  @override
+  String referralMilestone(int months, int count, int target) {
+    return '$months 个月 Pro · $count/$target 次购买';
+  }
+
+  @override
+  String get referralClaim => '领取奖励';
+
+  @override
+  String referralClaimed(int months) {
+    return '已领取 $months 个月 Pro';
+  }
+
+  @override
+  String get referralRewardPending => '奖励将保留至你的付费订阅结束。';
+
+  @override
+  String get referralCampaignTitle => '推荐 Omi，免费享用 Pro。';
+
+  @override
+  String get referralCampaignSubtitle => '好友购买 Omi 享 9 折。你最多可得 5 个月 Pro。';
+
+  @override
+  String get referralShareInvite => '分享邀请';
+
+  @override
+  String get referralYourRewards => '你的奖励';
+
+  @override
+  String get referralRewardFirstTitle => '2 个月 Pro';
+
+  @override
+  String get referralRewardFirstDetail => '2 位好友购买 Omi 后';
+
+  @override
+  String get referralRewardSecondTitle => '再得 3 个月';
+
+  @override
+  String get referralRewardSecondDetail => '再有 3 位好友购买后';
+
+  @override
+  String get referralClaimShort => '领取';
 }

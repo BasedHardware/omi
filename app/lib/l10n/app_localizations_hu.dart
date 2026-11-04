@@ -15355,4 +15355,54 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get notCompletedStatus => 'Függőben';
+
+  @override
+  String get referralAffiliate => 'Partnerprogram';
+
+  @override
+  String get referralCampaignTerms =>
+      'A barátok 10% kedvezményt kapnak az Omi eszközökre. Az első 2 különböző barát vásárlása 2 hónap Pro-t, a következő 3 különböző barát vásárlása további 3 hónapot ad. Legfeljebb 5 barát, összesen 5 hónap.';
+
+  @override
+  String referralMilestone(int months, int count, int target) {
+    return '$months hónap Pro · $count/$target vásárlás';
+  }
+
+  @override
+  String get referralClaim => 'Jutalom igénylése';
+
+  @override
+  String referralClaimed(int months) {
+    return '$months Pro-hónap igényelve';
+  }
+
+  @override
+  String get referralRewardPending => 'A jutalom a fizetős előfizetés végéig megmarad.';
+
+  @override
+  String get referralCampaignTitle => 'Ajánld az Omit. Szerezz ingyen Pro-t.';
+
+  @override
+  String get referralCampaignSubtitle => 'Nekik 10% kedvezmény az Omiból. Neked akár 5 hónap Pro.';
+
+  @override
+  String get referralShareInvite => 'Meghívó megosztása';
+
+  @override
+  String get referralYourRewards => 'Jutalmaid';
+
+  @override
+  String get referralRewardFirstTitle => '2 hónap Pro';
+
+  @override
+  String get referralRewardFirstDetail => 'Ha 2 barátod megveszi az Omit';
+
+  @override
+  String get referralRewardSecondTitle => 'Még 3 hónap';
+
+  @override
+  String get referralRewardSecondDetail => 'Ha még 3 barátod vásárol';
+
+  @override
+  String get referralClaimShort => 'Beváltás';
 }

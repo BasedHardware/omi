@@ -15289,4 +15289,54 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get notCompletedStatus => 'Ootel';
+
+  @override
+  String get referralAffiliate => 'Partnerprogramm';
+
+  @override
+  String get referralCampaignTerms =>
+      'Sõbrad saavad Omi seadmetelt 10% soodustust. Esimese 2 erineva sõbra ostud annavad 2 kuud Pro-d, järgmise 3 erineva sõbra ostud veel 3 kuud. Kuni 5 sõpra ja kokku 5 kuud.';
+
+  @override
+  String referralMilestone(int months, int count, int target) {
+    return '$months kuud Pro-d · $count/$target ostu';
+  }
+
+  @override
+  String get referralClaim => 'Võta preemia';
+
+  @override
+  String referralClaimed(int months) {
+    return '$months Pro-kuud võetud';
+  }
+
+  @override
+  String get referralRewardPending => 'Preemia säilib tasulise tellimuse lõpuni.';
+
+  @override
+  String get referralCampaignTitle => 'Soovita Omit. Saa Pro tasuta.';
+
+  @override
+  String get referralCampaignSubtitle => 'Neile 10% allahindlust Omile. Sulle kuni 5 kuud Pro.';
+
+  @override
+  String get referralShareInvite => 'Jaga kutset';
+
+  @override
+  String get referralYourRewards => 'Sinu preemiad';
+
+  @override
+  String get referralRewardFirstTitle => '2 kuud Pro';
+
+  @override
+  String get referralRewardFirstDetail => 'Kui 2 sõpra ostavad Omi';
+
+  @override
+  String get referralRewardSecondTitle => 'Veel 3 kuud';
+
+  @override
+  String get referralRewardSecondDetail => 'Kui veel 3 sõpra ostavad';
+
+  @override
+  String get referralClaimShort => 'Lunasta';
 }

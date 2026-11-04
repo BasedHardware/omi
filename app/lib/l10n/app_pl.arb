@@ -4649,5 +4649,20 @@
     "addingToTasks": "Dodawanie do zadań",
     "taskAddedToTasks": "Zadanie utworzone",
     "completedStatus": "Ukończone",
-    "notCompletedStatus": "Oczekujące"
+    "notCompletedStatus": "Oczekujące",
+    "referralAffiliate": "Program partnerski",
+    "referralCampaignTerms": "Znajomi otrzymują 10% zniżki na urządzenia Omi. Zakupy pierwszych 2 różnych znajomych odblokowują 2 miesiące Pro, zakupy kolejnych 3 różnych znajomych następne 3. Maksymalnie 5 znajomych i 5 miesięcy.",
+    "referralMilestone": "{months} mies. Pro · {count}/{target} zakupów",
+    "referralClaim": "Odbierz nagrodę",
+    "referralClaimed": "Odebrano {months} mies. Pro",
+    "referralRewardPending": "Nagroda jest zachowana do końca płatnej subskrypcji.",
+    "referralCampaignTitle": "Poleć Omi. Otrzymaj Pro za darmo.",
+    "referralCampaignSubtitle": "Dla nich 10% zniżki na Omi. Dla ciebie do 5 miesięcy Pro.",
+    "referralShareInvite": "Udostępnij zaproszenie",
+    "referralYourRewards": "Twoje nagrody",
+    "referralRewardFirstTitle": "2 miesiące Pro",
+    "referralRewardFirstDetail": "Gdy 2 znajomych kupi Omi",
+    "referralRewardSecondTitle": "Kolejne 3 miesiące",
+    "referralRewardSecondDetail": "Gdy kupi 3 kolejnych znajomych",
+    "referralClaimShort": "Odbierz"
 }

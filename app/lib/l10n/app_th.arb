@@ -4614,5 +4614,20 @@
     "addingToTasks": "กำลังเพิ่มไปยังงาน",
     "taskAddedToTasks": "สร้างงานแล้ว",
     "completedStatus": "เสร็จสิ้น",
-    "notCompletedStatus": "รอดำเนินการ"
+    "notCompletedStatus": "รอดำเนินการ",
+    "referralAffiliate": "โปรแกรมพันธมิตร",
+    "referralCampaignTerms": "เพื่อนรับส่วนลดอุปกรณ์ Omi 10% การซื้อของเพื่อนต่างคน 2 คนแรกปลดล็อก Pro 2 เดือน การซื้อของเพื่อนต่างคนอีก 3 คนปลดล็อกเพิ่ม 3 เดือน สูงสุด 5 คน รวม 5 เดือน",
+    "referralMilestone": "Pro {months} เดือน · ซื้อ {count}/{target} ครั้ง",
+    "referralClaim": "รับรางวัล",
+    "referralClaimed": "รับ Pro แล้ว {months} เดือน",
+    "referralRewardPending": "รางวัลจะเก็บไว้จนกว่าการสมัครแบบชำระเงินจะสิ้นสุด",
+    "referralCampaignTitle": "แนะนำ Omi รับ Pro ฟรี",
+    "referralCampaignSubtitle": "เพื่อนได้ส่วนลด Omi 10% คุณได้ Pro สูงสุด 5 เดือน",
+    "referralShareInvite": "แชร์คำเชิญ",
+    "referralYourRewards": "รางวัลของคุณ",
+    "referralRewardFirstTitle": "Pro 2 เดือน",
+    "referralRewardFirstDetail": "เมื่อเพื่อน 2 คนซื้อ Omi",
+    "referralRewardSecondTitle": "อีก 3 เดือน",
+    "referralRewardSecondDetail": "เมื่อเพื่อนอีก 3 คนซื้อ",
+    "referralClaimShort": "รับ"
 }

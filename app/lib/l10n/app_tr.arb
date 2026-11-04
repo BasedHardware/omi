@@ -4649,5 +4649,20 @@
     "addingToTasks": "Görevlere Ekleniyor",
     "taskAddedToTasks": "Görev oluşturuldu",
     "completedStatus": "Tamamlandı",
-    "notCompletedStatus": "Beklemede"
+    "notCompletedStatus": "Beklemede",
+    "referralAffiliate": "Satış ortaklığı programı",
+    "referralCampaignTerms": "Arkadaşlar Omi cihazlarında %10 indirim alır. İlk 2 farklı arkadaşın satın alması 2 ay Pro, sonraki 3 farklı arkadaşın satın alması ise 3 ay daha kazandırır. En fazla 5 arkadaş ve toplam 5 ay.",
+    "referralMilestone": "{months} ay Pro · {count}/{target} satın alma",
+    "referralClaim": "Ödülü al",
+    "referralClaimed": "{months} ay Pro alındı",
+    "referralRewardPending": "Ödülünüz ücretli aboneliğiniz bitene kadar saklanır.",
+    "referralCampaignTitle": "Omi'yi öner. Ücretsiz Pro kazan.",
+    "referralCampaignSubtitle": "Onlara Omi'de %10 indirim. Sana 5 aya kadar Pro.",
+    "referralShareInvite": "Daveti paylaş",
+    "referralYourRewards": "Ödüllerin",
+    "referralRewardFirstTitle": "2 ay Pro",
+    "referralRewardFirstDetail": "2 arkadaşın Omi aldığında",
+    "referralRewardSecondTitle": "3 ay daha",
+    "referralRewardSecondDetail": "3 arkadaşın daha aldığında",
+    "referralClaimShort": "Al"
 }

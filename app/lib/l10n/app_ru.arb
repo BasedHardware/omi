@@ -4649,5 +4649,20 @@
     "addingToTasks": "Добавление в задачи…",
     "taskAddedToTasks": "Задача создана",
     "completedStatus": "Завершено",
-    "notCompletedStatus": "Ожидание"
+    "notCompletedStatus": "Ожидание",
+    "referralAffiliate": "Партнёрская программа",
+    "referralCampaignTerms": "Друзья получают скидку 10% на устройства Omi. Покупки первых 2 разных друзей дают 2 месяца Pro, покупки следующих 3 разных друзей — ещё 3 месяца. Всего до 5 друзей и 5 месяцев.",
+    "referralMilestone": "{months} мес. Pro · {count}/{target} покупок",
+    "referralClaim": "Получить награду",
+    "referralClaimed": "Получено месяцев Pro: {months}",
+    "referralRewardPending": "Награда сохранена до окончания платной подписки.",
+    "referralCampaignTitle": "Приглашайте в Omi. Получайте Pro бесплатно.",
+    "referralCampaignSubtitle": "Им скидка 10% на Omi. Вам до 5 месяцев Pro.",
+    "referralShareInvite": "Поделиться приглашением",
+    "referralYourRewards": "Ваши награды",
+    "referralRewardFirstTitle": "2 месяца Pro",
+    "referralRewardFirstDetail": "Когда 2 друга купят Omi",
+    "referralRewardSecondTitle": "Ещё 3 месяца",
+    "referralRewardSecondDetail": "Когда ещё 3 друга купят",
+    "referralClaimShort": "Получить"
 }

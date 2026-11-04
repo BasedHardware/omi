@@ -15078,4 +15078,53 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get notCompletedStatus => '대기 중';
+
+  @override
+  String get referralAffiliate => '제휴 프로그램';
+
+  @override
+  String get referralCampaignTerms => '친구는 Omi 기기를 10% 할인받아요. 첫 2명의 구매로 Pro 2개월, 다음 3명으로 3개월을 더 받아요. 최대 5명, 총 5개월이에요.';
+
+  @override
+  String referralMilestone(int months, int count, int target) {
+    return 'Pro $months개월 · 구매 $count/$target건';
+  }
+
+  @override
+  String get referralClaim => '보상 받기';
+
+  @override
+  String referralClaimed(int months) {
+    return 'Pro $months개월 수령 완료';
+  }
+
+  @override
+  String get referralRewardPending => '유료 구독이 끝날 때까지 보상이 보관됩니다.';
+
+  @override
+  String get referralCampaignTitle => 'Omi를 추천하고 Pro를 무료로 받으세요.';
+
+  @override
+  String get referralCampaignSubtitle => '친구는 Omi 10% 할인. 나는 최대 5개월 Pro.';
+
+  @override
+  String get referralShareInvite => '초대 공유';
+
+  @override
+  String get referralYourRewards => '내 보상';
+
+  @override
+  String get referralRewardFirstTitle => 'Pro 2개월';
+
+  @override
+  String get referralRewardFirstDetail => '친구 2명이 Omi를 구매하면';
+
+  @override
+  String get referralRewardSecondTitle => '3개월 추가';
+
+  @override
+  String get referralRewardSecondDetail => '친구 3명이 더 구매하면';
+
+  @override
+  String get referralClaimShort => '받기';
 }

@@ -15410,4 +15410,54 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get notCompletedStatus => 'Ausstehend';
+
+  @override
+  String get referralAffiliate => 'Partnerprogramm';
+
+  @override
+  String get referralCampaignTerms =>
+      'Freunde erhalten 10 % Rabatt auf Omi-Geräte. Käufe der ersten 2 verschiedenen Freunde schalten 2 Monate Pro frei, Käufe der nächsten 3 weiteren Freunde weitere 3 Monate. Maximal 5 Freunde und 5 Monate.';
+
+  @override
+  String referralMilestone(int months, int count, int target) {
+    return '$months Monate Pro · $count/$target Käufe';
+  }
+
+  @override
+  String get referralClaim => 'Prämie einlösen';
+
+  @override
+  String referralClaimed(int months) {
+    return '$months Pro-Monate eingelöst';
+  }
+
+  @override
+  String get referralRewardPending => 'Deine Prämie bleibt bis zum Ende deines bezahlten Abos gespeichert.';
+
+  @override
+  String get referralCampaignTitle => 'Empfiehl Omi. Erhalte Pro kostenlos.';
+
+  @override
+  String get referralCampaignSubtitle => '10 % Rabatt auf Omi für sie. Bis zu 5 Monate Pro für dich.';
+
+  @override
+  String get referralShareInvite => 'Einladung teilen';
+
+  @override
+  String get referralYourRewards => 'Deine Prämien';
+
+  @override
+  String get referralRewardFirstTitle => '2 Monate Pro';
+
+  @override
+  String get referralRewardFirstDetail => 'Wenn 2 Freunde Omi kaufen';
+
+  @override
+  String get referralRewardSecondTitle => '3 weitere Monate';
+
+  @override
+  String get referralRewardSecondDetail => 'Wenn 3 weitere Freunde kaufen';
+
+  @override
+  String get referralClaimShort => 'Einlösen';
 }
