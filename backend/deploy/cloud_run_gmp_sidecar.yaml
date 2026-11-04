@@ -8,7 +8,8 @@ spec:
   endpoints:
     - port: 9090
       path: /metrics
-      interval: 30s
+      # margin-20: halve shared-profile ingestion; rollback 30s.
+      interval: 60s
       timeout: 10s
       metricRelabeling:
         - action: keep
