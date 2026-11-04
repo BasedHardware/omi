@@ -5,9 +5,13 @@ alert install, merge or deployment is performed by this change.
 
 ## Storage and authority
 
-Everything is inside `users/{uid}`: `episode_facts`,
+All new data is inside `users/{uid}`: `episode_facts`,
 `episode_log_state/owner`, `episode_log_checkpoint`, `episode_views`, and
 `episode_view_links`. Existing recursive account deletion covers these namespaces.
+The existing durable account-deletion marker also fences new independent fact/
+policy writers and leased publication, including deletion accepted mid-drain.
+The marker is read on the same Firestore plane and inside the publication
+transaction, so an erased view cannot be recreated by an old worker.
 No new deletion implementation is included. Conversations/audio remain owned by
 conversation processing; episode workers never edit them.
 

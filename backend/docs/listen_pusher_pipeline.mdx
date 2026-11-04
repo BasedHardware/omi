@@ -9117,6 +9117,8 @@ fingerprint still owns leases and composed-state validation. See the
 explicitly off (`0`, `false`, `off`, `no`). Unknown values retain on and warn.
 Capture and shadow views live under `users/{uid}`; legacy writers keep serving.
 The drain never invokes paid composition or writes the legacy namespaces.
+The existing durable account-deletion authority fences new independent log
+writers and transactional publication, including a worker claimed before deletion.
 
 `EPISODES_LOG_READ_PERCENT` defaults to zero. Its Firestore rule is authoritative;
 the numeric env percentage is the absent-rule fallback. The existing Omi flag

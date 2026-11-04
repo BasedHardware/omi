@@ -1,8 +1,8 @@
 # Episode batch 2: qualification and cost model
 
-Recorded at **2026-11-04 15:11:48 UTC**. Owner: planscost.
+Recorded at **2026-11-04 15:47:03 UTC**. Owner: planscost.
 Repository: `BasedHardware/omi`, lane `lane/epbatch2`.
-Qualified source: `c3bbb7375ed423685ab50d3dc1b7d3cc716dfed2`.
+Qualified source: `968565da335462ad71e94443bc5064d6e5656c1f`.
 [PR #24607](https://github.com/BasedHardware/omi/pull/24607) owns current head,
 review and CI state. This is a dated qualification/forecast record, not a live
 cost meter or a deployment receipt. Re-measure before any production ramp.
@@ -48,12 +48,14 @@ comparison reads instead of assuming they are free or reusing stale policy data.
   assumed 50,000 scan-rotation writes. Total approximately **9.55 million writes**.
 - Input dedupe/owner reads, legacy capture reads, policy fences, sequenced fact
   reads, independent legacy comparison rows, two member projection passes and
-  bounded control reads: approximately **14.05 million reads/day** in this scenario.
+  bounded control reads: approximately **14.05 million reads/day** before account fences.
+  Uncached deletion-authority reads add an estimated `I + 2E + 5P = 3.25 million`;
+  total approximately **17.30 million reads/day** in this scenario.
 - The supplied worker de-risk allowance is **$0–2/day** for task/wake/compute
   overhead. Neither task volume nor CPU has been measured after deployment.
 
-This gives approximately **$21–25/day of additional shadow operations**. A rough
-30% workload sensitivity gives a budgeting envelope of **$15–35/day**, before
+This gives approximately **$23–27/day of additional shadow operations**. A rough
+30% workload sensitivity gives a budgeting envelope of **$15–40/day**, before
 retained storage/index growth, ingestion/logging charges, transaction retries,
 backfill, additional checkpoint parts, and any workload outside these assumptions.
 This supersedes the earlier draft allowance, which omitted policy-barrier and
@@ -78,18 +80,20 @@ by retaining legacy consolidation during shadow dual-write.
 No production account data was read or written. No GCP tier was used. All emulator
 owners and HTTP requests were synthetic. Nothing was merged or deployed by this lane.
 
-- Episode/merge/sync/flag acceptance: **1,674 tests passed**, 61 test-bearing files
-  from 64 selected paths (three support modules have no tests), before the final
-  scoped off-path and cached-compose compatibility additions.
-- Off-path/remote-ramp follow-up: **116 passed**, including disabled-sweep no-client
-  construction and the unchanged legacy sequencer response.
-- Cached-compose compatibility: **122 passed** across API/worker/composer, including
-  existing bounded read repair and a pending-compose cache deadline after restart.
+- Episode/merge/sync/flag acceptance: **1,685 tests passed**, 61 test-bearing files
+  from 64 checked-in selected paths (three support modules have no tests), on the
+  qualified source above. It includes the final visibility and deletion fences,
+  remote ramp/rollback, disabled-sweep behavior and cached-compose recovery.
+- Scoped deletion/visibility follow-up: **51 passed** before the full acceptance
+  rerun, including accepted/malformed deletion, restored access and publication
+  fenced after lease claim.
 - Query/index guard: **831 passed**, including 547 query-shape cases, on the review
-  changes before the final scoped compose/off-path additions.
-- Real loopback Firestore emulator: **4 passed**, including aborted atomic capture,
+  changes before the final scoped compose/off-path, visibility and deletion additions.
+  Current-head guard evidence belongs to the guarded push and PR checks.
+- Real loopback Firestore emulator: **5 passed**, including aborted atomic capture,
   competing claims, stale publication, bounded contiguous facts and transactional
-  whole-document BatchGet through a fixed episode window. The emulator shut down.
+  whole-document BatchGet through a fixed episode window, and deletion accepted
+  after a claim but before publication. The emulator shut down.
 - Earlier guarded publication on `0af0ee8128bee662a17f351e054979419b5fc2f1` passed
   local PR preflight, type checking with zero errors, selected backend tests,
   API/generated contracts, web tests and a Swift debug compile. Current-head
@@ -110,6 +114,13 @@ log proof, under the existing loopback Firebase emulator. Unit tests and emulato
 proofs are separate layers; neither claims installed or deployed behavior.
 
 ## Review decisions and limits
+
+View-backed live/detail reads use the same canonical member-visibility function
+as legacy. New independent fact/policy writers, lease admission/publication and
+backfill completion check the existing durable deletion authority on their own
+Firestore plane. Publication reads that authority in its transaction, so accepted
+deletion fences an already-running worker against recreating erased views. No
+deletion routine is added. Atomic legacy capture remains joined to its producer.
 
 The reviewed fixes cover repeat-span growth, fixed-boundary clipping and retained
 ends, duplicate discard projection, uncertain X→Y→X inputs, link-only mutation
