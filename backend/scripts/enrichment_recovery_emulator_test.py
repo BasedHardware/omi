@@ -14,7 +14,6 @@ import json
 import os
 import sys
 from pathlib import Path
-from time import monotonic
 from types import SimpleNamespace
 
 os.environ.setdefault('OMI_ENV_STAGE', 'offline')
@@ -108,7 +107,7 @@ def test_pl397_transient_dependency_retries_before_the_original_lease_expires(ob
             raise error
 
     # Inject only the consumer clock; transport deadline clocks remain real.
-    monkeypatch.setattr(enrichment_consumer, 'time', SimpleNamespace(time=lambda: T0 + 1, monotonic=monotonic))
+    monkeypatch.setattr(enrichment_consumer, 'time', SimpleNamespace(time=lambda: T0 + 1, monotonic=lambda: T0 + 1))
     consumer = EnrichmentConsumer(ob.outbox, process=callback)
     retry = run_push(consumer, ob.outbox, queued.row_id, queued.wake_token, now=T0)
     response = http_response(retry)
@@ -126,7 +125,7 @@ def test_pl397_transient_dependency_retries_before_the_original_lease_expires(ob
 def test_pl397_unexpected_fault_keeps_custody_until_expiry(ob, monkeypatch, kind):
     queued = put(ob)
     error = fault(kind)
-    monkeypatch.setattr(enrichment_consumer, 'time', SimpleNamespace(time=lambda: T0, monotonic=monotonic))
+    monkeypatch.setattr(enrichment_consumer, 'time', SimpleNamespace(time=lambda: T0, monotonic=lambda: T0))
 
     def callback(*_):
         raise error
@@ -144,7 +143,7 @@ def test_pl397_unexpected_fault_keeps_custody_until_expiry(ob, monkeypatch, kind
 def test_pl397_retry_settlement_cannot_release_a_replacement_owner(ob, monkeypatch):
     queued = put(ob)
     replacement = []
-    monkeypatch.setattr(enrichment_consumer, 'time', SimpleNamespace(time=lambda: T0, monotonic=monotonic))
+    monkeypatch.setattr(enrichment_consumer, 'time', SimpleNamespace(time=lambda: T0, monotonic=lambda: T0))
 
     def callback(*_):
         replacement.append(take(ob, queued, now=T0 + LEASE + 1))
