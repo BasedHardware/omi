@@ -440,6 +440,11 @@ def test_production_cutover_preserves_live_single_od_hpa_min6_max12():
     # The T4 stockout fallback ships at zero replicas with no HPA.
     assert by_name(docs, 'Deployment')['synthetic-worker-t4']['spec']['replicas'] == 0
     assert 'synthetic-worker-t4' not in hpas
+    # Prod L4 workers run two pump processes; the T4 sibling stays at one.
+    for name, processes in (('synthetic-worker', '2'), ('synthetic-worker-t4', '1')):
+        container = by_name(docs, 'Deployment')[name]['spec']['template']['spec']['containers'][0]
+        env = {v['name']: v.get('value') for v in container['env']}
+        assert env['BATCH_PIPELINE_WORKER_PROCESSES'] == processes
 
 
 PROD_BORROWED = ['parakeet-pool', 'parakeet-pool-b', 'parakeet-pool-v2']
@@ -796,6 +801,30 @@ def test_t4_fallback_is_a_zero_replica_t4_sibling_without_hpa():
     assert pod['spec']['tolerations'] == primary['spec']['template']['spec']['tolerations']
     assert pod['spec']['containers'][0]['image'] == primary['spec']['template']['spec']['containers'][0]['image']
     assert t4['spec']['strategy']['type'] == 'Recreate'
+
+
+@pytest.mark.parametrize(
+    't4_setting,t4_expected,t4_memory', [((), '1', '14Gi'), (('--set', 't4Fallback.processes=2'), '2', '26Gi')]
+)
+def test_t4_fallback_keeps_its_own_process_count(t4_setting, t4_expected, t4_memory):
+    # Two model chains are qualified on a 24 GB L4, not a 16 GB T4: the
+    # sibling takes t4Fallback.processes, never worker.processes.
+    result = render(*enabled_arguments(), '--set', 'worker.processes=2,t4Fallback.enabled=true', *t4_setting)
+    assert result.returncode == 0, result.stderr
+    deployments = by_name([doc for doc in yaml.safe_load_all(result.stdout) if doc], 'Deployment')
+
+    def shape(name):
+        container = deployments[name]['spec']['template']['spec']['containers'][0]
+        env = {v['name']: v.get('value') for v in container['env']}
+        return env['BATCH_PIPELINE_WORKER_PROCESSES'], container['resources']['limits']['memory']
+
+    assert shape('synthetic-worker') == ('2', '26Gi')
+    assert shape('synthetic-worker-t4') == (t4_expected, t4_memory)
+
+
+def test_t4_fallback_refuses_an_out_of_range_process_count():
+    result = render(*enabled_arguments(), '--set', 't4Fallback.enabled=true,t4Fallback.processes=0')
+    assert result.returncode != 0 and 'must be in' in result.stderr
 
 
 @pytest.mark.parametrize('setting', ['t4Fallback.nodePool=batch-pipeline-pool', 't4Fallback.replicas=-1'])
