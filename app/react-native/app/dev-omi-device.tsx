@@ -16,6 +16,8 @@ import { useTheme } from '@/hooks/use-theme';
 import { Spacing } from '@/constants/theme';
 import { DEV_LOCAL_BRAIN } from '@/devFlags';
 import { useCaptureStore } from '@/state/captureStore';
+import { makeTonePcm, playPcm16Mono8k } from '@/services/omiSpeaker';
+import { tts } from '@/services/tts';
 import {
   omiBle,
   OMI,
@@ -142,6 +144,35 @@ export default function DevOmiDeviceScreen() {
     omiBle.stopAudio();
     setListening(false);
     say('audio stopped');
+  }, [say]);
+
+  const [speakerBusy, setSpeakerBusy] = useState(false);
+
+  const playTone = useCallback(async () => {
+    setSpeakerBusy(true);
+    say('speaker: tone 660/880 Hz...');
+    try {
+      // Two 100 ms notes at 8 kHz = 3,200 mono bytes: one transmission, fits
+      // even the pre-2.0.11 buffer. Verifies the BLE -> I2S -> MAX98357 path
+      // end to end with no account, no network, no TTS dependency.
+      const chirp = concatPcm([makeTonePcm(660, 100), makeTonePcm(880, 100)]);
+      await playPcm16Mono8k(chirp, {
+        onTransmission: (n, of) => say(`speaker: send ${n}/${of}`),
+      });
+      say('speaker: done - did it chirp?');
+    } catch (e) {
+      say(`speaker failed: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setSpeakerBusy(false);
+    }
+  }, [say]);
+
+  const speakOnDevice = useCallback(async () => {
+    setSpeakerBusy(true);
+    say('tts: synthesizing for device...');
+    const ok = await tts.speakOnOmi('Hello from your Omi.');
+    say(ok ? 'tts: played on device speaker' : 'tts: failed (signed in? backend honoring ulaw_8000?)');
+    setSpeakerBusy(false);
   }, [say]);
 
   if (!DEV_LOCAL_BRAIN) {
@@ -275,6 +306,27 @@ export default function DevOmiDeviceScreen() {
             </>
           )}
 
+          <Text style={[styles.label, { color: theme.textSecondary }]}>SPEAKER</Text>
+          <Text style={[styles.dim, { color: theme.textSecondary }]}>
+            BLE -&gt; I2S path. The tone needs no account; &ldquo;say hello&rdquo; needs sign-in
+            and a backend serving ulaw_8000. Firmware before 2.0.11 plays clips as ~0.3 s
+            bursts paced by a 4 s device-side sleep.
+          </Text>
+          <View style={styles.row}>
+            <Btn
+              label="Play tone"
+              onPress={playTone}
+              bg="#16a34a"
+              disabled={speakerBusy || !identity}
+            />
+            <Btn
+              label="Say hello"
+              onPress={speakOnDevice}
+              bg="#2563eb"
+              disabled={speakerBusy || !identity}
+            />
+          </View>
+
           <Text style={[styles.label, { color: theme.textSecondary }]}>LOG</Text>
           {log.length === 0 ? (
             <Text style={[styles.dim, { color: theme.textSecondary }]}>Scan first.</Text>
@@ -289,6 +341,17 @@ export default function DevOmiDeviceScreen() {
       </ScrollView>
     </View>
   );
+}
+
+function concatPcm(parts: Uint8Array[]): Uint8Array {
+  const total = parts.reduce((n, p) => n + p.length, 0);
+  const out = new Uint8Array(total);
+  let o = 0;
+  for (const p of parts) {
+    out.set(p, o);
+    o += p.length;
+  }
+  return out;
 }
 
 function Btn({ label, onPress, bg, disabled }: { label: string; onPress: () => void; bg: string; disabled?: boolean }) {

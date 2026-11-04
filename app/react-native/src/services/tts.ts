@@ -1,22 +1,24 @@
 import { createAudioPlayer, type AudioPlayer } from 'expo-audio';
+import { looksLikeMp3, playPcm16Mono8k, ulawToPcm16 } from './omiSpeaker';
 
 /**
- * Speech playback for agent replies.
+ * Speech playback for agent replies, on two outputs:
  *
- * The previous implementation called window.speechSynthesis, which does not exist
- * in a React Native runtime -- it is a web API. So there was no voice output at
- * all, only a stub that returned false.
+ * - speak(): the phone, via expo-audio. (The first implementation called
+ *   window.speechSynthesis, which does not exist in a React Native runtime --
+ *   it is a web API.) expo-audio plays from a URI, so the synthesised bytes go
+ *   to a cache file first; there is no data-URI playback path worth relying on.
+ * - speakOnOmi(): the DevKit 2's I2S speaker over BLE, via omiSpeaker. This is
+ *   the path the monologur agent wants: the voice comes from the wearable, not
+ *   the pocket -- which is also the only carrier-call workaround, since Android
+ *   mutes third-party mic and audio streams mid-call (see modules/local-calls).
  *
  * Synthesis is server-side, through the omi backend, matching
  * synthesizeSpeech() in the Flutter client (v2/tts/synthesize, ElevenLabs
  * defaults). Generating audio on the phone is not an option: a TTS model that
- * fits in 3.6 GB of RAM produces noticeably worse speech than the server, and the
- * whole point of the local brain was to keep latency off the critical path, not to
+ * fits in 3.6 GB of RAM produces noticeably worse speech than the server, and
+ * the whole point of the local brain was to keep latency off the critical path, not to
  * reimplement synthesis.
- *
- * Playback is expo-audio, which is the maintained module for this on SDK 56;
- * expo-av is deprecated. It plays from a URI, so the synthesised bytes go to a
- * cache file first -- there is no data-URI playback path worth relying on.
  */
 export interface SpeakOptions {
   voiceId?: string;
@@ -28,6 +30,8 @@ export interface SpeakOptions {
 const DEFAULT_VOICE = 'BAMYoBHLZM7lJgJAmFz0';
 const DEFAULT_MODEL = 'eleven_turbo_v2_5';
 const OUTPUT_FORMAT = 'mp3_44100_128';
+/** 8 kHz mu-law: the device's native rate, decoded client-side, no resampling. */
+const DEVICE_OUTPUT_FORMAT = 'ulaw_8000';
 
 class Tts {
   private player: AudioPlayer | null = null;
@@ -72,6 +76,34 @@ class Tts {
     }
   }
 
+  /**
+   * Synthesizes `text` and plays it on a connected DevKit 2 speaker over BLE.
+   * Resolves true when playback completed.
+   *
+   * Deliberately NOT sharing the inflight lock with speak(): the phone and the
+   * wearable are independent outputs, and an agent that echoes its answer on
+   * both is a legitimate configuration, not a duplicate request.
+   */
+  async speakOnOmi(text: string, opts: SpeakOptions = {}): Promise<boolean> {
+    const trimmed = text.trim();
+    if (!trimmed) return false;
+    try {
+      const bytes = await synthesize(trimmed, opts, DEVICE_OUTPUT_FORMAT);
+      if (!bytes || bytes.length === 0) return false;
+      if (looksLikeMp3(bytes)) {
+        // A backend that ignores output_format hands us MP3 whatever we asked
+        // for; mu-law-decoding that is a buzz, not speech. Refuse visibly.
+        console.warn('[tts] backend returned MP3, not ulaw_8000; device playback needs PCM');
+        return false;
+      }
+      await playPcm16Mono8k(ulawToPcm16(bytes));
+      return true;
+    } catch (e) {
+      console.warn('[tts] device playback failed:', e);
+      return false;
+    }
+  }
+
   async stop(): Promise<void> {
     try {
       this.player?.pause();
@@ -98,8 +130,18 @@ class Tts {
   }
 }
 
-/** POSTs to the backend TTS endpoint and returns the audio bytes. */
-async function synthesize(text: string, opts: SpeakOptions): Promise<Uint8Array | null> {
+/**
+ * POSTs to the backend TTS endpoint and returns the audio bytes.
+ *
+ * `outputFormat` must be one the backend's upstream honors; the device path
+ * asks for ulaw_8000 (8 kHz mu-law, the DevKit 2 speaker's native rate) while
+ * phone playback keeps MP3, which expo-audio decodes for us.
+ */
+async function synthesize(
+  text: string,
+  opts: SpeakOptions,
+  outputFormat: string = OUTPUT_FORMAT
+): Promise<Uint8Array | null> {
   const { ENV } = require('@/config/env') as typeof import('@/config/env');
   const { useAuthStore } = require('@/state/authStore') as typeof import('@/state/authStore');
   const token = useAuthStore.getState().token;
@@ -116,7 +158,7 @@ async function synthesize(text: string, opts: SpeakOptions): Promise<Uint8Array 
       text,
       voice_id: opts.voiceId ?? DEFAULT_VOICE,
       model_id: opts.modelId ?? DEFAULT_MODEL,
-      output_format: OUTPUT_FORMAT,
+      output_format: outputFormat,
     }),
   });
   if (!res.ok) return null;

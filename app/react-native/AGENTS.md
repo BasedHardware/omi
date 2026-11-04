@@ -9,7 +9,8 @@ backend as `desktop/linux` and `desktop/windows`.
 - `src/state/*` — Zustand stores (auth, conversations, memories, capture).
 - `src/services/stt.ts` — Deepgram streaming STT (nova-2 + diarize), matches `deepgramListen.ts`.
 - `src/services/voiceprint.ts` — speaker enrollment ("You" / "Other N"); mirrors `voiceprint.ts`.
-- `src/services/tts.ts` — TTS (Web Speech, Deepgram Aura fallback pending).
+- `src/services/tts.ts` — server-side TTS (v2/tts/synthesize): phone playback via expo-audio, DevKit 2 speaker via `omiSpeaker`.
+- `src/services/omiSpeaker.ts` — DevKit 2 I2S speaker over BLE: 4-byte length header + 400-byte pump-paced PCM packets at 8 kHz.
 - `src/screens/*` — Onboarding, Home, Conversations, ConversationDetail, Memories, Capture, Settings.
 
 ## Build (Expo, Android)

@@ -67,6 +67,9 @@ export const OMI = {
   service: '19b10000-e8f2-537e-4f6c-d104768a1214',
   audioDataStream: '19b10001-e8f2-537e-4f6c-d104768a1214',
   audioCodec: '19b10002-e8f2-537e-4f6c-d104768a1214',
+  // DevKit 2 speaker (transport.c, gated on CONFIG_OMI_ENABLE_SPEAKER): write
+  // with response in, pump notify out. CV1 does not expose this characteristic.
+  audioSpeaker: '19b10003-e8f2-537e-4f6c-d104768a1214',
 
   timeSyncService: '19b10030-e8f2-537e-4f6c-d104768a1214',
   timeSyncWrite: '19b10031-e8f2-537e-4f6c-d104768a1214',
@@ -154,6 +157,7 @@ export class OmiBle {
   private lastAudioError: string | null = null;
   private batterySub: Subscription | null = null;
   private audioSub: Subscription | null = null;
+  private speakerSub: Subscription | null = null;
 
   /** Lazily constructed: constructing BleManager eagerly at import time reads
    *  native state that is not ready while the module is still autolinking. */
@@ -237,6 +241,7 @@ export class OmiBle {
   async disconnect(): Promise<void> {
     await this.stopAudio();
     this.stopBattery();
+    this.stopSpeakerNotify();
     if (this.device) {
       const d = this.device;
       this.device = null;
@@ -405,6 +410,47 @@ export class OmiBle {
   stopAudio(): void {
     this.audioSub?.remove();
     this.audioSub = null;
+  }
+
+  /**
+   * Negotiates a large-enough ATT MTU for the speaker's 400-byte packets.
+   *
+   * speak() does its bookkeeping in units of exactly 400 bytes, so a write that
+   * fragments (default MTU 23) is not merely slow, it corrupts the stream. The
+   * firmware runs L2CAP_TX_MTU=498; Android negotiates on request.
+   */
+  async ensureSpeakerMtu(target = 517): Promise<number> {
+    const d = this.requireDevice();
+    const updated = await d.requestMTU(target);
+    return updated.mtu ?? 23;
+  }
+
+  /** Write-with-response to the speaker characteristic; the firmware declares no WRITE_NO_RSP. */
+  async writeSpeaker(bytes: Uint8Array): Promise<void> {
+    const d = this.requireDevice();
+    await d.writeCharacteristicWithResponseForService(OMI.service, OMI.audioSpeaker, toBase64(bytes));
+  }
+
+  /**
+   * Subscribes to the speaker's pump notifications. The write handler notifies
+   * once before processing every write (including the length header), so each
+   * event means "one packet was accepted; the next may go out".
+   */
+  onSpeakerNotify(onPump: () => void, onError?: (e: unknown) => void): void {
+    const d = this.requireDevice();
+    this.speakerSub = d.monitorCharacteristicForService(OMI.service, OMI.audioSpeaker, (error, chunk) => {
+      if (error) {
+        onError?.(error);
+        return;
+      }
+      if (!chunk || !chunk.value) return;
+      onPump();
+    });
+  }
+
+  stopSpeakerNotify(): void {
+    this.speakerSub?.remove();
+    this.speakerSub = null;
   }
 
   get connectedDeviceId(): string | null {
