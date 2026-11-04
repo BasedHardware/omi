@@ -3,6 +3,7 @@
 from utils.batch_pipeline import provider_stt_admission
 
 import json
+import logging
 from dataclasses import replace
 from pathlib import Path
 
@@ -322,6 +323,34 @@ def test_crash_after_paid_call_reconciles_without_a_second_call(world, monkeypat
     artifacts.results[f'gs://synthetic/results/p1/{token}.enc'] = Vendor()(None, 'ja', SPEECH, service='modulate')
     assert stage(store, artifacts, vendor, now=310.0).run('p1').reason == 'processed'
     assert vendor.calls == 1 and job(store, 'p1')['state'] == 'result_ready'
+
+
+@pytest.mark.parametrize('fault', ['persist', 'settle', 'refused'])
+def test_provider_result_write_logs_stage_and_type_without_private_content(world, monkeypatch, caplog, fault):
+    _, store = world
+    admit(monkeypatch, store, [item('p1', 10)], 'content-p', JA)
+    artifacts, vendor = Artifacts(), Vendor()
+    runner = stage(store, artifacts, vendor)
+    private = 'PRIVATE_TRANSCRIPT_AUDIO_SENTINEL'
+    if fault == 'persist':
+        monkeypatch.setattr(artifacts, 'persist_recovery_result', Mock(side_effect=OSError(private)))
+    elif fault == 'settle':
+        monkeypatch.setattr(runner.protocol, 'settle', Mock(side_effect=TimeoutError(private)))
+    else:
+        monkeypatch.setattr(runner.protocol, 'settle', Mock(return_value=False))
+    with caplog.at_level(logging.WARNING):
+        outcome = runner.run('p1')
+    assert outcome.outcome == ('done' if fault == 'refused' else 'retry')
+    assert f'route=provider stage={"persist" if fault == "persist" else "settle"}' in caplog.text
+    assert (
+        f'exception_type={"OSError" if fault == "persist" else "TimeoutError" if fault == "settle" else "none"}'
+        in caplog.text
+    )
+    if fault == 'refused':
+        assert 'reason=refused' in caplog.text
+    assert private not in caplog.text
+    assert all(record.exc_info is None for record in caplog.records)
+    assert vendor.calls == 1
 
 
 @pytest.mark.parametrize('stored_speech', [None, 0.0, 0.5])

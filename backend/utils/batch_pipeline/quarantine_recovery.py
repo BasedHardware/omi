@@ -40,7 +40,13 @@ from config.batch_language_recovery import (
 )
 from database.batch_pipeline_recognizer_receipts import record_recognizer
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
-from database.batch_pipeline_quarantine_recovery import RecoveryStore, recovery_candidates, cancel_fenced_recovery
+from database.batch_pipeline_quarantine_recovery import (
+    RecoveryStore,
+    recovery_candidates,
+    cancel_fenced_recovery,
+    has_words_receipt,
+    MISSING_RESULT_DWELL_SECONDS,
+)
 from utils.batch_pipeline.contracts import (
     WorkItem,
     held_vad_census,
@@ -71,6 +77,7 @@ from utils.batch_pipeline.recovery_disposition import (
     TWO_PROVIDER_EMPTY_EVIDENCE,
     SECOND_CHANCE_EMPTY_EVIDENCE,
     independent_silence_payload,
+    log_result_held,
 )
 
 from utils.cloud_tasks import enqueue_named_task, named_task_exists
@@ -250,6 +257,31 @@ class QuarantineRecovery:
     async def recover_async(self, segment_id, owner_id):
         return await run_async(self._recover_steps(segment_id, owner_id))
 
+    def _previous_result(self, job, item, token):
+        """Adopt a predecessor upload that finished after its missing-object probe."""
+        for entry in job['recovery'].get('missing_result_history', []):
+            previous = entry['token']
+            uri = self.artifacts.find_recovery_result(item, previous)
+            if uri:
+                payload = self.artifacts.load_result(item, uri)
+                outcome = result_outcome(payload)
+                measured = result_vad_evidence(payload)
+                independent = payload.get('words_provider') == 'independent_empty_strict_vad'
+                if not held_result_allowed(job, outcome, measured, independent=independent):
+                    continue
+                changed = self.protocol.settle(
+                    item.segment_id,
+                    token,
+                    self.clock(),
+                    uri,
+                    outcome=outcome,
+                    measured_held_vad_speech_seconds=measured,
+                    independent_silence=independent,
+                    previous_token=previous,
+                )
+                return 'reconciled' if changed else 'held'
+        return None
+
     def _recover_steps(self, segment_id, owner_id):
         try:
             job, policy = load_stage_policy(self.store, segment_id, 'recovery')
@@ -297,13 +329,22 @@ class QuarantineRecovery:
                         )
                         else 'held'
                     )
-                # Bound the scan dwell without allowing takeover. A very late
-                # provider reply is rejected after this terminal transition.
-                if self.clock() - job['recovery']['started_at'] > 900:
+                # Receipts contain counts, not the transcript. Requeue once
+                # under a new token; the normal task path rechecks funding and
+                # privacy before another call. Never run STT in this scan.
+                if self.clock() - job['recovery']['started_at'] > MISSING_RESULT_DWELL_SECONDS:
+                    if has_words_receipt(job['recovery']):
+                        retry = self.protocol.retry_missing_result(segment_id, token, self.clock())
+                        logger.warning('event=batch_recovery_missing_result outcome=%s', retry)
+                        return 'held'
+                    # No usable receipt: retain the existing bounded dwell.
                     failure = {'stage': 'provider', 'reason': 'abandoned_running'}
                     if self.protocol.settle(segment_id, token, self.clock(), failure=failure):
                         log_failure(failure)
                 return 'held'
+            previous = self._previous_result(job, item, token)
+            if previous is not None:
+                return previous
             byok = admitted_as_byok(job)
             if byok and not language_guarded(job):
                 record_decision(DispatchPath.QUARANTINE, True, DispatchReason.BYOK)
@@ -374,6 +415,11 @@ class QuarantineRecovery:
             # The worker's bound VAD receipt is the only evidence that may
             # locate recognized words when strict CPU VAD finds no speech.
             multilingual = safety_net_enabled() or policy.speech_empty_multilingual or language_guarded(job)
+            # Downloads/VAD/funding checks may have taken minutes. Recheck the
+            # old upload immediately before minting the replacement's call.
+            previous = self._previous_result(job, item, token)
+            if previous is not None:
+                return previous
             if not self.protocol.start(
                 segment_id,
                 token,
@@ -537,9 +583,11 @@ class QuarantineRecovery:
                 return 'held'
             # Storage/commit failures leave running intact: the deterministic
             # encrypted object can be reconciled without repeating STT.
+            stage = 'persist'
             try:
                 outcome = result_outcome(payload)
                 uri = self.artifacts.persist_recovery_result(item, payload, token)
+                stage = 'settle'
                 changed = self.protocol.settle(
                     segment_id,
                     token,
@@ -549,6 +597,8 @@ class QuarantineRecovery:
                     measured_held_vad_speech_seconds=result_vad_evidence(payload),
                     independent_silence=payload.get('words_provider') == 'independent_empty_strict_vad',
                 )
+                if not changed:
+                    log_result_held('quarantine', 'settle', reason='refused')
                 if changed and outcome == 'no_recoverable_speech':
                     log_terminal_empty()
                 if changed and outcome == 'silence':
@@ -562,7 +612,8 @@ class QuarantineRecovery:
                 return 'recovered' if changed else 'result_held'
             except BatchPrivacyBlocked:
                 raise
-            except Exception:
+            except Exception as error:
+                log_result_held('quarantine', stage, exception_type=type(error).__name__)
                 return 'result_held'
         except BatchPrivacyBlocked:
             cancel_fenced_recovery(self.store, segment_id)

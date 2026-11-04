@@ -22,6 +22,20 @@ AUDIO_DURATION_TOLERANCE_SECONDS = 0.1
 logger = logging.getLogger(__name__)
 
 
+def log_result_held(route, stage, *, exception_type='none', reason='exception'):
+    """Content-free diagnostics; logging must not chain a private exception."""
+    try:
+        logger.warning(
+            'event=batch_recovery_result_held route=%s stage=%s reason=%s exception_type=%s',
+            route,
+            stage,
+            reason,
+            exception_type,
+        )
+    except Exception:
+        pass
+
+
 class RecoveryFailure(ValueError):
     def __init__(self, stage: str, reason: str):
         self.stage = stage if stage in STAGES else 'provider'
