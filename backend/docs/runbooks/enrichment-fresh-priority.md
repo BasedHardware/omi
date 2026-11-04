@@ -18,8 +18,9 @@ scheduling; it does not establish spare backend executor or LLM capacity. Check
 handler 5xx, 409 delivery-budget cuts, executor wait, LLM request latency/errors
 and title age before raising the cap. The new queue must exist before activation;
 `backend/deploy/ops/prod.yaml` reconciles these limits through config-train.
-Staging intentionally maps both enrichment queues to `staging-enrichment`;
-it does not claim an isolated priority capacity lane.
+Staging maps the reserved queue to `staging-enrichment-fresh`, with the same
+5-concurrent/2-per-second ops contract. Its existing `create_queues.sh` helper
+provisions this queue before staging deployment; the lane did not run it.
 
 The normal bounded sweep promotes only due unleased user-facing rows bound to
 the old enrichment queue whose conversation is within that same freshness window.
