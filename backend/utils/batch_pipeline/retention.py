@@ -17,6 +17,7 @@ from google.api_core.exceptions import FailedPrecondition, NotFound
 from google.cloud import firestore
 
 from config.batch_language_recovery import language_guarded, words_repair_eligible, REPAIR_EPOCH, REPAIR_PROVIDER
+from config.batch_pipeline import contention_retry_enabled
 from config.firestore_read_levers import lever_enabled
 from config.policy import RecoveryPolicy
 from database import batch_pipeline_privacy_queries as queries
@@ -245,7 +246,19 @@ def register_batch_artifact(
                 },
             )
 
-    register(client.transaction())
+    # Persist-phase registration is a read-write transaction over the hot
+    # segment job and the privacy fence, so a read-time ``Aborted`` under
+    # merge/admission load escaped the GPU worker's persist stage as a raw
+    # worker failure and re-ran a whole unit for a commit nobody made. The
+    # completion phase hit the same class and already replays it here; the
+    # register body rereads every document, so each fresh transaction
+    # re-derives the lease, privacy, retention and token windows it needs.
+    if not contention_retry_enabled():
+        # Kill switch restores the bare single-shot commit: the SDK alone
+        # replays commit-time aborts on its one transaction id.
+        register(client.transaction())
+    else:
+        run_retention_transaction(client, register, operation_name='batch_artifact_register')
     mirror_refresh(namespace, [('artifacts', artifact_id)])  # A2 shadow: no-op unless shadow mode
     return artifact_id
 
@@ -308,7 +321,9 @@ def expire_completed_segment(store: Any, uid: str, segment_id: str, now: float) 
     return expired
 
 
-def run_retention_transaction(client: Any, operation: Callable[[Any], Any]) -> Any:
+def run_retention_transaction(
+    client: Any, operation: Callable[[Any], Any], *, operation_name: str = 'batch_retention'
+) -> Any:
     """Run a retention transaction with the projection path's bounded retries.
 
     A bare ``operation(client.transaction())`` is retried by the SDK only for a
@@ -317,6 +332,8 @@ def run_retention_transaction(client: Any, operation: Callable[[Any], Any]) -> A
     exhausted-commit ``ValueError`` all escaped and failed the completion's
     retention phase. Aborted and expired transactions write nothing, and the
     body rereads every document, so a fresh transaction replays it safely.
+    ``operation_name`` keeps the shared contention logs attributable per
+    caller; the default preserves the completion phase's historical label.
     """
     from database._client import run_transactional
     from database.firestore_transaction_retry import run_with_transaction_contention_retry
@@ -326,7 +343,7 @@ def run_retention_transaction(client: Any, operation: Callable[[Any], Any]) -> A
         # commit-contention budget (5 bodies, not 5 x 5).
         lambda: client.transaction(max_attempts=1),
         lambda transaction: run_transactional(client, operation, initial_transaction=transaction),
-        operation_name='batch_retention',
+        operation_name=operation_name,
     )
 
 
