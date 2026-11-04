@@ -7,6 +7,7 @@ rows bound to either handler drain (contract (b) invariant 7). Responses follow 
 an unexpected exception.
 """
 
+import asyncio
 import logging
 import os
 import re
@@ -16,12 +17,34 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 
 from utils.executors import postprocess_executor, run_blocking
+from utils.observability.reasons import RetryReason
 from utils.workers.consumer import http_response, run_push
+from utils.workers.retry import retry_response
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
 _KINDS = {'enrichment', 'sync_reprocess'}
+# TimeoutMiddleware cuts this path at HTTP_POST_TIMEOUT (600s) with a bare 504 while the worker thread keeps
+# its heartbeated lease, so a slow delivery held a queue slot for the full 600s. Answer a 409 retry at the
+# budget instead; the worker still settles its own lease, and the queue retry or sweep claims after it.
+DELIVERY_BUDGET_SECONDS = 300.0
+
+
+def _delivery_budget() -> float:
+    try:
+        return float(os.getenv('ENRICHMENT_DELIVERY_BUDGET_SECONDS', DELIVERY_BUDGET_SECONDS))
+    except ValueError:
+        return DELIVERY_BUDGET_SECONDS
+
+
+def _drain(work: asyncio.Future) -> None:
+    # The abandoned delivery's own settlement already ran; only retrieve its outcome so it is not lost silently.
+    if not work.cancelled() and work.exception() is not None:
+        logger.warning(
+            'event=enrichment_delivery outcome=error phase=after_budget exception_type=%s',
+            type(work.exception()).__name__,
+        )
 
 
 def _audience() -> str:
@@ -69,7 +92,16 @@ async def run_enrichment_task(request: Request, _retry_count: int = Depends(veri
 
     if not outbox.owns_runtime():
         return JSONResponse(status_code=200, content={'status': 'foreign_runtime'})
-    result = await run_blocking(postprocess_executor, consume, *task)
+    budget = _delivery_budget()
+    if budget <= 0:  # Kill switch: 0 restores the middleware-only cut.
+        return http_response(await run_blocking(postprocess_executor, consume, *task))
+    work = asyncio.ensure_future(run_blocking(postprocess_executor, consume, *task))
+    try:
+        result = await asyncio.wait_for(asyncio.shield(work), timeout=budget)
+    except asyncio.TimeoutError:
+        work.add_done_callback(_drain)
+        logger.warning('event=enrichment_delivery outcome=retry reason=delivery_budget budget_s=%.0f', budget)
+        return retry_response(RetryReason.DEPENDENCY_WARMING)
     return http_response(result)
 
 
