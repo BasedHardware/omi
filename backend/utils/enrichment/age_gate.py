@@ -3,9 +3,10 @@
 from datetime import datetime, timezone
 import logging
 import math
-import os
 import time
 import uuid
+
+from config import enrichment as enrichment_config
 
 logger = logging.getLogger(__name__)
 REASON = 'age_gate_72h'
@@ -13,7 +14,7 @@ REASON = 'age_gate_72h'
 
 def max_age_seconds() -> float:
     try:
-        hours = float(os.getenv('ENRICHMENT_MAX_AGE_HOURS', '72'))
+        hours = float(enrichment_config.max_age_hours())
         seconds = hours * 3600
         if hours < 0 or not math.isfinite(seconds):
             return 72 * 3600

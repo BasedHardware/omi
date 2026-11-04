@@ -22,6 +22,11 @@ def route() -> EnrichmentRoute:
     return 'enrichment_queue' if value == 'enrichment_queue' else 'sync_handler'
 
 
+def max_age_hours() -> str:
+    # Host deployment setting for the historical-enrichment age gate; parsed by utils.enrichment.age_gate.
+    return os.getenv('ENRICHMENT_MAX_AGE_HOURS', '72')
+
+
 def dispatch_binding(*, backfill: bool = False) -> dict[str, str]:
     # Share the existing worker/auth binding, but isolate new background work
     # from first-summary dispatch slots. Never change a persisted row's queue.
