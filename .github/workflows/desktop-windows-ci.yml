@@ -129,13 +129,18 @@ jobs:
   build-linux:
     name: Linux package · helper smoke
     runs-on: ubuntu-latest
-    # A successful run finishes in ~10 minutes; 20 gives headroom while still
-    # failing fast instead of riding out the 6h GitHub Actions job ceiling.
+    # A successful run finishes in ~10 minutes. The budget must also cover
+    # the rare worst case: a cold apt cache on a degraded mirror can consume
+    # the full 20-minute step budget below (job 120074210159 measured
+    # ~40-45 KB/s pool throughput), so 20 + ~70s setup + ~5m packaging and
+    # smoke needs ~26m — 30 gives that headroom while still failing fast
+    # instead of riding out the 6h GitHub Actions job ceiling. Below that,
+    # a cancelled job never saves the apt cache and every retry stays cold.
     # This job has hung for the full 6h on multiple unrelated PRs and on
     # main (apt's mirror lookup in "Install Linux runtime dependencies"
     # stalls with no output and no built-in timeout) -- a pre-existing,
     # recurring infra flake, not specific to any one change.
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
         with:
@@ -161,17 +166,62 @@ jobs:
             ~/.cache/electron-builder
           key: electron-builder-linux-${{ hashFiles('desktop/windows/pnpm-lock.yaml') }}
           restore-keys: electron-builder-linux-
+      # The runtime-dependency install below pulls ~35 MB of .debs from the
+      # Ubuntu mirror on every uncached run. Runner<->mirror throughput is
+      # intermittently degraded (~70 KB/s in job 120062237675's log), so the
+      # download alone can blow the step budget while every connection is
+      # still streaming — the per-request apt timeouts cannot catch that.
+      # Caching the .debs makes steady-state installs download-free; apt
+      # verifies each cached file against the fresh indexes and fetches only
+      # version changes.
+      - name: Identify Linux apt package cache
+        id: linux-apt-image
+        run: |
+          echo "image=${ImageOS:?}-${ImageVersion:?}" >> "$GITHUB_OUTPUT"
+          echo "imageos=${ImageOS:?}" >> "$GITHUB_OUTPUT"
+      - name: Cache apt runtime packages
+        uses: actions/cache@v6
+        with:
+          path: ~/apt-debs
+          # actions/cache never re-saves when an exact key already exists, so
+          # a key that stays an exact match forever (e.g. hashFiles of this
+          # workflow) would freeze the cached .debs at their first versions
+          # as Ubuntu publishes updates, and gratuitously cold-start on every
+          # workflow edit. Key on the runner image instead: ImageVersion bumps
+          # roll the key so refreshed .debs are saved, and package-list edits
+          # rotate via the literal token (matches the scheme in PR #23344).
+          key: apt-linux-runtime-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.linux-apt-image.outputs.image }}-imagemagick-dejavu-tesseract-xvfb
+          # Same restore-key strategy as #23344: fall back to the newest
+          # saved image of the same runner OS so image bumps reuse still-
+          # current .debs instead of forcing a cold ~35 MB download.
+          restore-keys: apt-linux-runtime-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.linux-apt-image.outputs.imageos }}-
       - name: Install Linux runtime dependencies
         # Bound apt's network calls explicitly: a stalled mirror connection
         # (observed against the azure.archive.ubuntu.com mirror) otherwise
         # hangs with no output and no built-in timeout, burning the full 6h
         # job ceiling instead of failing fast. DEBIAN_FRONTEND=noninteractive
         # avoids any possibility of a debconf prompt blocking on stdin.
-        timeout-minutes: 5
+        # 20 minutes, not the previous 5: a cold cache must download the full
+        # ~35 MB, and the degraded mirror throughput is worse than first
+        # sized: job 120074210159 (this PR's own first run, 2026-10-22)
+        # streamed the deb pool at ~40-45 KB/s (fonts-urw-base35 alone took
+        # 4m27s for 11 MB) and blew the 10-minute budget mid-download at
+        # Get:30 of 30 — ~14.4 min of pure download at that pacing. 20 min
+        # covers ~32 KB/s effective while reserving 2 min for indexes and
+        # unpack; warm-cache runs download nothing and finish in seconds.
+        timeout-minutes: 20
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
+          if compgen -G "$HOME/apt-debs/*.deb" > /dev/null; then
+            sudo cp -a "$HOME"/apt-debs/*.deb /var/cache/apt/archives/
+          fi
           sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 update
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 install -y --download-only imagemagick fonts-dejavu-core tesseract-ocr tesseract-ocr-eng xvfb
+          mkdir -p "$HOME/apt-debs"
+          if compgen -G "/var/cache/apt/archives/*.deb" > /dev/null; then
+            cp /var/cache/apt/archives/*.deb "$HOME/apt-debs/"
+          fi
           sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 install -y imagemagick fonts-dejavu-core tesseract-ocr tesseract-ocr-eng xvfb
       - name: Provision .env
         run: cp .env.example .env
