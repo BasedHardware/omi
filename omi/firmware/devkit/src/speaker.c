@@ -163,12 +163,12 @@ int speaker_init()
         // .format = I2S_FMT_DATA_FORMAT_I2S,
         .options =
             I2S_OPT_FRAME_CLK_MASTER | I2S_OPT_BIT_CLK_MASTER | I2S_OPT_BIT_CLK_GATED, // how to configure the mclock
-        .frame_clk_freq = SAMPLE_FREQUENCY,      /* Sampling rate */
-        .mem_slab = &mem_slab,                   /* Memory slab to store rx/tx data */
-        .block_size = I2S_TX_BLOCK_SIZE,         /* same geometry the burst path proved */
-        .timeout = 1000,                         /* a full Tx queue stalls the write up to this long;
-                                                    the stalled write delays the BLE response, which
-                                                    paces the host - no fixed sleep needed */
+        .frame_clk_freq = SAMPLE_FREQUENCY,                                            /* Sampling rate */
+        .mem_slab = &mem_slab,           /* Memory slab to store rx/tx data */
+        .block_size = I2S_TX_BLOCK_SIZE, /* same geometry the burst path proved */
+        .timeout = 1000,                 /* a full Tx queue stalls the write up to this long;
+                                            the stalled write delays the BLE response, which
+                                            paces the host - no fixed sleep needed */
     };
     int err = i2s_configure(audio_speaker, I2S_DIR_TX, &config);
     if (err) {
@@ -249,7 +249,7 @@ uint16_t speak(uint16_t len, const void *buf) // direct from bt
         // I2S_STATE_ERROR (sticky: every write -EIO until reset). PREPARE is
         // the driver's ERROR->READY recovery and is rejected harmlessly from
         // every other state, so a new transmission always clears the trap.
-        (void)i2s_trigger(audio_speaker, I2S_DIR_TX, I2S_TRIGGER_PREPARE);
+        (void) i2s_trigger(audio_speaker, I2S_DIR_TX, I2S_TRIGGER_PREPARE);
         LOG_INF("About to write %u bytes", stream_remaining);
         return len;
     }
@@ -378,7 +378,19 @@ void play_talk_cue(void)
     tx_used = 2 * note_samples * NUM_CHANNELS * sizeof(int16_t);
     flush_block(); // queue-only (READY): pads to a full block and enqueues
 
-    int ret = i2s_trigger(audio_speaker, I2S_DIR_TX, I2S_TRIGGER_START);
+    int ret;
+    for (int r = 0; r < 12; r++) {
+        // START is rejected while a previous stream's DRAIN is still winding
+        // down (STOPPING). The retry loop waits it out, as flush_block() does
+        // for writes. If the block still cannot start it stays queued; nothing
+        // poisons the device, because PREPARE at the next transmission header
+        // purges the queue before rebuilding it (driver: purge_queue + READY).
+        ret = i2s_trigger(audio_speaker, I2S_DIR_TX, I2S_TRIGGER_START);
+        if (ret == 0) {
+            break;
+        }
+        k_sleep(K_MSEC(50));
+    }
     if (ret) {
         LOG_WRN("Talk cue start failed: %d", ret);
         return;

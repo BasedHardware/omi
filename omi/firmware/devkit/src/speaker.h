@@ -16,12 +16,21 @@ int speaker_init();
  *
  * Call this function in the following way (Via ble)
  * 1. Send a 4 byte little-endian packet containing the audio data size in bytes
- * 2. Send the PCM as writes of at most 400 bytes (16-bit signed mono, 8 kHz).
- *    The device notifies after every write to pump the next one.
- * 3. Each packet is queued and played as it arrives; playback starts with the
- *    first packet and drains after the byte count written equals the size sent.
- * 4. To stream a second clip while idle, go back to step 1. A length-header
- *    sized packet (4 bytes) arriving mid-stream is treated as audio.
+ *    (16-bit signed mono, 8 kHz). A 4-byte packet arriving mid-stream is
+ *    treated as audio; it re-arms as a header only once the stream is idle or
+ *    the host has been quiet for ~2 s.
+ * 2. Send the PCM as writes of at most 400 bytes. The device notifies after
+ *    every write to pump the next one.
+ * 3. Every block of the stream is queued while the I2S peripheral is idle and
+ *    a single START fires when the bytes written reach the declared size, so
+ *    the clip plays without gaps. One stream must therefore fit the device
+ *    queue: at most ~7 blocks (~2.2 s of audio). Longer text should be split
+ *    into several step 1-3 transmissions at sentence boundaries, where the
+ *    inter-stream gap lands as a natural pause.
+ * 4. If the host stalls longer than the re-arm window mid-stream, the
+ *    unfinished stream is abandoned when the next header re-arms; the re-arm
+ *    also recovers the peripheral from any error state, so a stalled or
+ *    over-long transmission never poisons later audio.
  *
  * @return The amount of data successfully sent in bytes.
  */
