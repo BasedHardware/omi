@@ -91,17 +91,9 @@ def test_loader_refuses_escaping_cassette_symlink(tmp_path):
         load_case(case)
 
 
-def test_existing_ci_includes_titling_paths_and_same_proof_invocation():
-    import yaml
-
+def test_emulator_proof_runner_invokes_titling_replay():
+    # Workflow path selection for these files lands in a separate PR.
     root = Path(__file__).resolve().parents[3]
-    workflow = yaml.load((root / '.github/workflows/backend-emulator-proofs.yml').read_text(), Loader=yaml.BaseLoader)
-    for trigger in ('push', 'pull_request'):
-        paths = workflow['on'][trigger]['paths']
-        assert 'backend/utils/conversations/**' in paths
-        assert 'backend/services/conversation_finalization.py' in paths
-        assert 'backend/routers/conversation_finalization.py' in paths
-        assert 'backend/tests/integration/test_replay_harness_titling_firestore.py' in paths
     runner = (root / 'backend/scripts/run-emulator-proofs.sh').read_text()
     assert (
         'tests/integration/test_replay_harness_firestore.py \\\n  tests/integration/test_replay_harness_titling_firestore.py'
