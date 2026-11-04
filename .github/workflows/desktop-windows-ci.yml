@@ -180,6 +180,7 @@ jobs:
           echo "image=${ImageOS:?}-${ImageVersion:?}" >> "$GITHUB_OUTPUT"
           echo "imageos=${ImageOS:?}" >> "$GITHUB_OUTPUT"
       - name: Cache apt runtime packages
+        id: linux-apt-debs
         uses: actions/cache@v6
         with:
           path: ~/apt-debs
@@ -209,20 +210,36 @@ jobs:
         # Get:30 of 30 — ~14.4 min of pure download at that pacing. 20 min
         # covers ~32 KB/s effective while reserving 2 min for indexes and
         # unpack; warm-cache runs download nothing and finish in seconds.
+        # Warm runs must also stay off the network entirely: apt-get update
+        # fetches indexes even when every .deb is already local, and on a
+        # throttled mirror the downloads alone have eaten the full 5m budget
+        # (runs 39846837408 on PR #23335, 37693118159 on main and 33911765703),
+        # so replay the cached closure with dpkg and fall back to apt only if
+        # that replay fails.
         timeout-minutes: 20
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
           if compgen -G "$HOME/apt-debs/*.deb" > /dev/null; then
-            sudo cp -a "$HOME"/apt-debs/*.deb /var/cache/apt/archives/
+            if sudo dpkg -i "$HOME"/apt-debs/*.deb; then
+              exit 0
+            fi
+            sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 update
+            sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 -o Dir::Cache::archives="$HOME/apt-debs" -o APT::Keep-Downloaded-Packages=true install -y -f imagemagick fonts-dejavu-core tesseract-ocr tesseract-ocr-eng xvfb
+          else
+            sudo install -d -m 0755 "$HOME/apt-debs/partial"
+            sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 update
+            sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 -o Dir::Cache::archives="$HOME/apt-debs" -o APT::Keep-Downloaded-Packages=true install -y imagemagick fonts-dejavu-core tesseract-ocr tesseract-ocr-eng xvfb
           fi
-          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 update
-          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 install -y --download-only imagemagick fonts-dejavu-core tesseract-ocr tesseract-ocr-eng xvfb
-          mkdir -p "$HOME/apt-debs"
-          if compgen -G "/var/cache/apt/archives/*.deb" > /dev/null; then
-            cp /var/cache/apt/archives/*.deb "$HOME/apt-debs/"
-          fi
-          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 install -y imagemagick fonts-dejavu-core tesseract-ocr tesseract-ocr-eng xvfb
+      # Seed the cache right after a successful install, so a later step's
+      # failure cannot force the next run back onto the network. This job has
+      # no matrix, so there is no concurrent same-key save race to gate.
+      - name: Save Linux runtime dependency packages
+        if: steps.linux-apt-debs.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ~/apt-debs
+          key: apt-linux-runtime-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.linux-apt-image.outputs.image }}-imagemagick-dejavu-tesseract-xvfb
       - name: Provision .env
         run: cp .env.example .env
       - name: Install dependencies
