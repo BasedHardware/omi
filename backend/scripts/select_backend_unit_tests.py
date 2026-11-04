@@ -235,7 +235,32 @@ def is_firestore_index_guard_path(path: str) -> bool:
     )
 
 
+LIFECYCLE_INVARIANT_TESTS = (
+    'tests/unit/test_lifecycle_state_table_writers.py',
+    'tests/unit/test_lifecycle_invariants.py',
+)
+
 AREA_TESTS = (
+    (
+        (
+            'backend/utils/conversations/',
+            'backend/utils/batch_pipeline/',
+            'backend/database/record_audio.py',
+            'backend/database/record_partial.py',
+            'backend/database/conversation_finalization_jobs.py',
+            'backend/database/episodes.py',
+            'backend/database/episode_timeline.py',
+            'backend/utils/episodes/',
+            'backend/utils/fair_use.py',
+            'backend/database/fair_use.py',
+            'backend/utils/sync/assignment.py',
+            'backend/utils/sync/bridge_pending.py',
+            'backend/tests/support/lifecycle_state_table.py',
+            'backend/charts/monitoring/alerts/',
+        ),
+        ('backend/database/batch_pipeline_*.py',),
+        LIFECYCLE_INVARIANT_TESTS,
+    ),
     (
         ('backend/charts/incluster-guards/',),
         (
@@ -645,6 +670,10 @@ def tests_for_changed_paths(changed_paths: list[str], all_tests: list[str]) -> t
         selected.update(test for test in BACKGROUND_TASK_RATCHET_TESTS if test in all_tests)
     if any(is_reason_label_scope_path(path) for path in changed_paths):
         selected.update(test for test in REASON_LABEL_ENUM_TESTS if test in all_tests)
+    # The AST inventory also discovers a new writer in a previously unrelated
+    # module. Keep the source fallback unchanged while always running its guard.
+    if any(path.startswith(('backend/database/', 'backend/utils/')) and path.endswith('.py') for path in changed_paths):
+        selected.update(test for test in LIFECYCLE_INVARIANT_TESTS if test in all_tests)
     if any(path.startswith(BATCH_STAGE_ENV_RATCHET_PREFIXES) for path in changed_paths):
         selected.update(test for test in BATCH_STAGE_ENV_RATCHET_TESTS if test in all_tests)
     if any(path.startswith(FLAG_BUDGET_PREFIXES) for path in changed_paths):
