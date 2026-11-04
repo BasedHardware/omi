@@ -303,3 +303,34 @@ def test_failed_counterpart_read_never_advances_cursor_or_publishes_zero(monkeyp
     with pytest.raises(ValueError, match='incomplete counterpart'):
         census.sample(client, {'phase': 'queued'})
     assert client.writes == []
+
+
+def test_nested_collection_group_rows_never_count_as_current_mirrors():
+    now = census.COHORT_START + 10000
+    conv = {'finalization_status': 'queued', 'finalization_job_id': 'job', 'finalization_revision': 1}
+    client = Client(
+        {
+            'archives/backup/buckets/old/conversations/one': conv,
+            'users/synthetic/conversations/one': conv,
+            'conversation_finalization_jobs/job': {
+                'status': 'completed',
+                'finalization_revision': 1,
+                'created_at': now - 1,
+            },
+        }
+    )
+    counts, blind, _, fresh = census.sample(client, {'phase': 'queued'}, now=now)
+    assert counts['conv_queued_job_terminal'] == fresh['conv_queued_job_terminal'] == 1
+    assert blind
+    assert client.reads == 3  # Two source rows, one allowed counterpart.
+
+
+def test_group_cursor_can_resume_after_an_excluded_nested_document():
+    client = Client(
+        {'users/synthetic/conversations/one': {'finalization_status': 'queued', 'finalization_job_id': 'job'}}
+    )
+    counts, blind, cursor, _ = census.sample(
+        client, {'phase': 'queued', 'cursor': 'archives/backup/buckets/old/conversations/last'}
+    )
+    assert counts['finalization_job_id_set_job_absent'] == 1
+    assert blind and cursor['phase'] == 'processing'

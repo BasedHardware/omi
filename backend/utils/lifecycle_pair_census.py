@@ -98,7 +98,15 @@ def sample(client, state, *, now=None):
     query = query.order_by('__name__')
     cursor = state.get('cursor')
     if cursor:
-        if not isinstance(cursor, str) or len(cursor.split('/')) != (2 if phase == 'jobs' else 4):
+        parts = cursor.split('/') if isinstance(cursor, str) else []
+        collection_name = 'conversation_finalization_jobs' if phase == 'jobs' else 'conversations'
+        if (
+            not parts
+            or len(parts) % 2
+            or not all(_part(part) for part in parts)
+            or parts[-2] != collection_name
+            or (phase == 'jobs' and len(parts) != 2)
+        ):
             raise ValueError('invalid census cursor')
         query = query.start_after({'__name__': client.document(cursor)})
     page = list(
@@ -117,6 +125,10 @@ def sample(client, state, *, now=None):
                 continue
             ref = client.document(f'users/{uid}/conversations/{cid}')
         else:
+            parts = doc.reference.path.split('/')
+            if len(parts) != 4 or parts[0] != 'users' or parts[2] != 'conversations':
+                blind = True
+                continue
             job_id = row.get('finalization_job_id')
             if not job_id:
                 continue  # Bare processing has its own existing orphan repair.

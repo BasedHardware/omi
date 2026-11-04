@@ -90,6 +90,11 @@ the observer does not promise detection of every individual mismatch. The
 stale/blind companions remain agent tier. Missing-clock/coverage follow-up owner:
 uicleanup, evidence date 2026-11-04.
 
+Only `users/{uid}/conversations/{cid}` mirrors are inspected. Other collection-
+group paths, such as nested archives, mark the sample blind and are skipped.
+The keyset cursor still accepts those valid document paths so a full excluded
+page cannot strand the scan at the same cursor forever.
+
 `omi_enrichment_summary_repair_count{lane="all"}` is a capped count of active
 outbox obligations with `summary_repair=true` and numeric `due_at>=0`. COUNT101
 can prove >100 but cannot report total stock. Settled receipts have no numeric
