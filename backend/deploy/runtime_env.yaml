@@ -4412,6 +4412,9 @@ environments:
               category: reliability
             CAPTURE_SHARED_SPEECH_MODE: {value: 'off', category: rollout}
             CAPTURE_SHARED_SPEECH_PERCENT: {value: '0', category: rollout}
+            BATCH_PIPELINE_SERVING_METRICS_MIN_REFRESH_SECONDS:
+              value: '60'
+              category: reliability
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
             DREAM_AGENT_PAID_PERCENT: {value: '100', category: rollout}
