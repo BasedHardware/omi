@@ -14,7 +14,7 @@ from google.cloud import firestore
 
 from config.recorded_time_tolerances import CLOSE_GAP_SECONDS, MAX_EPISODE_SECONDS
 from database._client import run_transactional
-from database import episodes
+from database import episodes, episode_batch_pending
 
 
 def _automatic(row):
@@ -140,7 +140,9 @@ def _state(template, window, previous, facts):
     return result
 
 
-def attach(uid, cid, source, start, end, *, candidates, template, choose, firestore_client, page_limit):
+def attach(
+    uid, cid, source, start, end, *, candidates, template, choose, firestore_client, page_limit, pending_at=None
+):
     """One fenced transaction, or None when an established boundary owns intake."""
     client = firestore_client
     root = client.collection('users').document(uid)
@@ -151,10 +153,26 @@ def attach(uid, cid, source, start, end, *, candidates, template, choose, firest
     def commit(transaction):
         fence_row = fence.get(transaction=transaction).to_dict() or {}
         linked = root.collection('episode_links').document(cid).get(transaction=transaction).to_dict() or {}
+        pending_patch = episode_batch_pending.read_patch(transaction, client, uid, cid, pending_at)
         if linked.get('episode_id'):
             owner = collection.document(linked['episode_id']).get(transaction=transaction).to_dict() or {}
             if not _automatic(owner):
                 return None
+            if (
+                not owner.get('recorded_merged_into')
+                and (owner.get('recorded_members') or {}).get(cid) == {'start': start, 'end': end, 'source': source}
+                and cid in (owner.get('conversation_ids') or [])
+            ):
+                # Unchanged recorded fact: no repartition, version bump, or timeline write.
+                episodes.read_memberships(transaction, client, uid, [cid], admit_conversation_id=cid)
+                member = root.collection('conversations').document(cid).get(transaction=transaction).to_dict() or {}
+                if member.get('episode_id') == linked['episode_id']:
+                    if pending_patch:
+                        transaction.update(root.collection('conversations').document(cid), pending_patch)
+                    result = episodes.unseal(uid, dict(owner, id=linked['episode_id']))
+                    if result is None:
+                        raise episodes.EpisodeConflict('recorded_owner_missing')
+                    return {**result, '_recorded_windows': [result]}
         facts = {cid: {'start': start, 'end': end, 'source': source}}
         previous = {}
         lo, hi = start, end
@@ -248,6 +266,8 @@ def attach(uid, cid, source, start, end, *, candidates, template, choose, firest
             )
             if exists:
                 transaction.update(root.collection('conversations').document(member), {'episode_id': assigned[-1]})
+        if pending_patch:
+            transaction.update(root.collection('conversations').document(cid), pending_patch)
         transaction.set(fence, {'version': int(fence_row.get('version') or 0) + 1})
         incoming = [row for row in result if cid in row['conversation_ids']]
         return {**incoming[-1], '_recorded_windows': incoming}

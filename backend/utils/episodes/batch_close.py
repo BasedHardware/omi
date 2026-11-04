@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from typing import Any, Mapping
 
 from config.episodes import episodes_enabled_for
-from config.recorded_time import recorded_episodes_enabled
+from config.recorded_time import batch_close_attach_enabled, recorded_episodes_enabled
 from config.server_batch import has_audio, owned
 from database import conversations
 from utils.conversations.fragment_visibility import is_relevance_discarded
@@ -28,7 +28,7 @@ def attach_closed_batch_capture(
     Finalization remains the repair path after a transient attachment failure;
     source rows remain available while they wait. No client-seen or paid work.
     """
-    if not episodes_enabled_for(uid) or not recorded_episodes_enabled():
+    if not episodes_enabled_for(uid) or not recorded_episodes_enabled() or not batch_close_attach_enabled():
         return 'disabled'
     if (
         not conversation_id
@@ -47,7 +47,7 @@ def attach_closed_batch_capture(
         started = datetime.fromtimestamp(row['server_batch_audio_start'], timezone.utc)
         finished = datetime.fromtimestamp(row['server_batch_audio_end'], timezone.utc)
         c = collaborators or service.Collaborators(firestore_client=conversations.db)
-        service.attach_recorded(uid, conversation_id, row, started, finished, c)
+        service.attach_recorded(uid, conversation_id, row, started, finished, c, pending_transcription=True)
         return 'attached'
     except Exception as error:
         logger.warning('event=episode_batch_audio_close_attach exception_type=%s', type(error).__name__)

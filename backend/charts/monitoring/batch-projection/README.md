@@ -59,7 +59,7 @@ contracts reject rules that read metrics missing from `metric-inventory.prod.jso
 1. Deploy a batch worker image that contains this change.
 2. Confirm in Prometheus that `max(omi_batch_timeliness_observed_at_seconds) > 0` and that
    `omi_batch_timeliness_samples_total{outcome="ok"}` increases.
-3. Move the three rule objects from `../pending/batch-timeliness.json` into `../alerts/batch-timeliness.json` and append
+3. Move the rule objects from `../pending/batch-timeliness.json` into `../alerts/batch-timeliness.json` and append
    them to `../alert-rules.json`. Refresh `metric-inventory.prod.json` with its documented generator, then run the
    monitoring contract tests.
 4. Import with the documented Grafana rule provisioning path (`--apply --backup-file <new-file>`).
@@ -70,3 +70,15 @@ to `page` only if David wants the alarm on his phone.
 Rollback: set `BATCH_TIMELINESS_ALARM_ENABLED=false` on the worker (gauges freeze and the stale rule fires), or pause
 the three Grafana rules. The index step: merge triggers the Firestore index reconcile; approve its prod job and wait
 for READY before shipping the worker (merge_pr.sh waits out these gates).
+
+## Home pending member observations
+
+`omi_episode_batch_pending_overdue_reads_total` counts Home observations without
+`record_projection_revision` after the member's stamped 2h deadline. It has no
+labels and counts repeated observations, not distinct members. A staged info rule
+in `../pending/batch-timeliness.json` watches increases over 15m. Home already
+returns a terminal failure placeholder at that point, so the alert reports dwell
+without leaving the user on an indefinite processing row. Queue timeliness
+alarms remain responsible for pending members that nobody reads. The scoped
+`EPISODE_BATCH_CLOSE_ATTACH_ENABLED=false` rollback affects new early attachments,
+not existing deadlines, retained audio, finalization retries or late recovery.

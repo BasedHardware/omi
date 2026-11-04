@@ -488,3 +488,18 @@ above: ownership must exist before transcription, even when an older client has
 not acknowledged episodes. It retains episode and recorded-time admission,
 adds no model work, and does not change paid-work gates. An attachment error
 emits shared `record_fallback` degraded telemetry before finalization repairs it.
+
+The scoped `EPISODE_BATCH_CLOSE_ATTACH_ENABLED` kill switch defaults on. Off
+restores attach-after-transcription without changing live/sync attachment.
+The membership transaction stamps a pending start and a fixed 2h transcription
+deadline on the conversation, using `config.batch_timeliness.SLA_SECONDS` (normal
+target: 30m). Close replay does not renew the deadline or bump the canonical
+recorded component's state version or timeline fence. Home reads use the durable
+`record_projection_revision` delivery receipt: until it exists they show
+“Transcribing…” / processing, then “Couldn't transcribe” / failed on terminal
+failure or deadline expiry. A late projection restores normal metadata. Audio
+bounds still supply a finish time if finalization failed before writing one.
+The unlabeled overdue-read counter counts observations, not unique members.
+Its info alert is staged beside the existing batch timeliness rules; idle
+members remain covered by queue timeliness monitoring. No production alert
+or runtime configuration is changed here.

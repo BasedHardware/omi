@@ -1086,6 +1086,7 @@ _add(
             'choose': lambda rows, start, end: None,
             'new_episode': {'id': 'recorded-1'},
         },
+        neutrals={'pending_at': (T0, 'membership deadline metadata only; no query filter or ordering effect')},
         patchers=(_stub('database.episodes.seal', {'id': 'recorded-1'}),),
     )
 )
@@ -1101,7 +1102,10 @@ _add(
             'choose': lambda rows, start, end: None,
             'new_episode': {'id': 'recorded-1'},
         },
-        neutrals={'expected_episode_id': (None, 'membership fence; never changes the recorded-candidates query shape')},
+        neutrals={
+            'expected_episode_id': (None, 'membership fence; never changes the recorded-candidates query shape'),
+            'pending_at': (T0, 'membership deadline metadata only; no query filter or ordering effect'),
+        },
         patchers=(_stub('database.episodes.seal', {'id': 'recorded-1'}),),
     )
 )

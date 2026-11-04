@@ -1415,7 +1415,7 @@ def _attach_synced_once(uid: str, conversation_id: str, row: Mapping[str, Any], 
     return _rejoin_closed_synced(uid, conversation_id, row, started, finished, c, allow_reopen=True)
 
 
-def attach_recorded(uid, conversation_id, row, started, finished, c) -> dict[str, Any]:
+def attach_recorded(uid, conversation_id, row, started, finished, c, *, pending_transcription=False) -> dict[str, Any]:
     template = new_episode(
         conversation_id=conversation_id,
         started_at=started,
@@ -1423,8 +1423,7 @@ def attach_recorded(uid, conversation_id, row, started, finished, c) -> dict[str
         calendar_identity=_calendar_identity(row),
         now=_now(c),
     )
-    source = getattr(row.get('source'), 'value', row.get('source'))
-    template['sources'] = [source] if source else []
+    template['sources'] = [source] if (source := getattr(row.get('source'), 'value', row.get('source'))) else []
     placed = episode_timeline.attach_recorded(
         uid,
         conversation_id,
@@ -1434,6 +1433,7 @@ def attach_recorded(uid, conversation_id, row, started, finished, c) -> dict[str
         choose=choose_recorded_episode,
         new_episode=template,
         firestore_client=c.firestore_client,
+        pending_at=template['created_at'] if pending_transcription else None,
     )
     placed.pop('_recorded_windows', None)
     return placed

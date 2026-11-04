@@ -9,7 +9,7 @@ from google.cloud.firestore_v1 import FieldFilter
 
 from config.episodes import MAX_EPISODE_SECONDS, CLOSE_GAP_SECONDS
 from database._client import get_firestore_client, run_transactional
-from database import episodes
+from database import episodes, episode_batch_pending
 
 PAGE_LIMIT = 128
 FIELDS = (
@@ -84,6 +84,7 @@ def _attach_recorded_window(
     new_episode: dict[str, Any],
     firestore_client: Any = None,
     expected_episode_id: str | None = None,
+    pending_at: datetime | None = None,
 ) -> dict[str, Any]:
     client = firestore_client if firestore_client is not None else get_firestore_client()
 
@@ -98,6 +99,7 @@ def _attach_recorded_window(
         members = episodes.read_memberships(
             transaction, client, uid, [conversation_id], admit_conversation_id=conversation_id
         )
+        pending_patch = episode_batch_pending.read_patch(transaction, client, uid, conversation_id, pending_at)
         rows = recorded_candidates(uid, started, finished, firestore_client=client, transaction=transaction)
         selected = choose(rows, started, started)
         # A conversation belongs to the episode it started in, even past a cap.
@@ -111,6 +113,8 @@ def _attach_recorded_window(
             if expected_episode_id is not None and existing.get('id') != expected_episode_id:
                 raise episodes.EpisodeConflict('recorded_owner_changed')
             if started >= existing['started_at'] + timedelta(seconds=MAX_EPISODE_SECONDS):
+                if pending_patch:
+                    transaction.update(root.collection('conversations').document(conversation_id), pending_patch)
                 return {**existing, '_window_end': finished}
         if existing is None and selected:
             snapshot = root.collection('episodes').document(selected['id']).get(transaction=transaction)
@@ -201,6 +205,8 @@ def _attach_recorded_window(
         check_window(transaction, client, uid, result, rows=rows)
         transaction.set(root.collection('episodes').document(result['id']), episodes.seal(uid, result))
         episodes.write_memberships(transaction, client, uid, result['id'], members, datetime.now(timezone.utc))
+        if pending_patch:
+            transaction.update(root.collection('conversations').document(conversation_id), pending_patch)
         transaction.set(fence, {'version': int(fence_row.get('version') or 0) + 1})
         # Never modify current/last_closed navigation pointers for late audio.
         return {**result, '_window_end': window_end}
@@ -239,6 +245,7 @@ def attach_recorded(
     choose: Callable,
     new_episode: dict[str, Any],
     firestore_client: Any = None,
+    pending_at: datetime | None = None,
 ) -> dict[str, Any]:
     """Place a capture once. Its owner never changes when the capture spans a cap.
 
@@ -261,6 +268,7 @@ def attach_recorded(
         choose=choose,
         firestore_client=client,
         page_limit=PAGE_LIMIT,
+        pending_at=pending_at,
     )
     if canonical is not None:
         return canonical
@@ -273,6 +281,7 @@ def attach_recorded(
         choose=choose,
         new_episode=new_episode,
         firestore_client=firestore_client,
+        pending_at=pending_at,
     )
     result.pop('_window_end')
     return {**result, '_recorded_windows': [result]}

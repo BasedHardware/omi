@@ -1,7 +1,7 @@
 """Audio custody must establish episode membership before queued transcription."""
 
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
@@ -9,7 +9,9 @@ import pytest
 
 from routers.listen import batch_close as close
 from routers.listen.conversations import LiveConversationController
-from utils.episodes import batch_close as attachment, service
+from utils.episodes import batch_close as attachment, service, home_read
+from database import episode_timeline, episodes
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 
 
 def capture(**changes):
@@ -38,6 +40,7 @@ def capture(**changes):
 
 @pytest.fixture(autouse=True)
 def admitted(monkeypatch):
+    monkeypatch.delenv('EPISODE_BATCH_CLOSE_ATTACH_ENABLED', raising=False)
     monkeypatch.setattr(attachment, 'episodes_enabled_for', lambda uid: True)
     monkeypatch.setattr(attachment, 'recorded_episodes_enabled', lambda: True)
 
@@ -65,6 +68,7 @@ def test_audio_bounds_reuse_canonical_attachment_without_paid_work_or_row_mutati
     for uid, cid, source, started, finished, kwargs in writes:
         assert (uid, cid, source) == ('owner', 'capture', 'desktop')
         assert (started.timestamp(), finished.timestamp()) == (1000, 1120)
+        assert kwargs['pending_at'].tzinfo is not None
         assert kwargs['firestore_client'] is db
         assert kwargs['choose'] is service.choose_recorded_episode
         assert kwargs['new_episode'].get('output_language') is None
@@ -223,3 +227,159 @@ async def test_failed_archive_seal_returns_before_membership_or_finalization(mon
     seal.assert_called_once_with('owner', 'capture')
     attach.assert_not_called()
     read.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    'value, expected',
+    [('false', 'disabled'), ('off', 'disabled'), ('0', 'disabled'), ('no', 'disabled'), ('true', 'attached')],
+)
+def test_scoped_kill_switch(monkeypatch, value, expected):
+    monkeypatch.setenv('EPISODE_BATCH_CLOSE_ATTACH_ENABLED', value)
+    attach = Mock()
+    monkeypatch.setattr(service, 'attach_recorded', attach)
+    assert attachment.attach_closed_batch_capture('owner', 'capture', capture()) == expected
+    assert attach.call_count == (1 if expected == 'attached' else 0)
+
+
+@pytest.fixture
+def timeline_store(monkeypatch):
+    store = StrictFirestore()
+    monkeypatch.setattr(episodes, 'seal', lambda uid, row: row)
+    monkeypatch.setattr(episodes, 'unseal', lambda uid, row: row)
+    monkeypatch.setattr(
+        episode_timeline,
+        'recorded_candidates',
+        lambda *a, **kw: [dict(v, id=k[-1]) for k, v in store.rows.items() if k[2] == 'episodes'],
+    )
+    return store
+
+
+def test_deadline_commits_with_membership_and_close_replay_is_a_true_noop(timeline_store):
+    store = timeline_store
+    path = ('users', 'owner', 'conversations', 'capture')
+    store.rows[path] = capture(finished_at=None)
+    entered = datetime.now(timezone.utc)
+    c = service.Collaborators(firestore_client=store, now=lambda: entered)
+    assert attachment.attach_closed_batch_capture('owner', 'capture', store.rows[path], collaborators=c) == 'attached'
+    member = store.rows[path]
+    assert member['episode_transcription_pending_at'] == entered
+    assert member['episode_transcription_deadline_at'] == entered + timedelta(hours=2)
+    assert member['episode_id']
+    before = deepcopy(store.rows)
+    c.now = lambda: entered + timedelta(hours=1)
+    assert attachment.attach_closed_batch_capture('owner', 'capture', member, collaborators=c) == 'attached'
+    assert store.rows == before, 'replay must not bump episode state_version, timeline fence, links or deadline'
+    episode = store.rows[('users', 'owner', 'episodes', member['episode_id'])]
+    wire = home_read.project_episode('owner', episode, members={'capture': member})
+    assert wire['members'][0]['title'] == 'Transcribing…'
+    assert wire['members'][0]['status'] == 'processing'
+    assert wire['members'][0]['finished_at'].timestamp() == 1120
+
+
+@pytest.mark.parametrize('outcome', ['dead_letter', 'failed', 'upload_failed', 'deadline', 'projected'])
+def test_home_pending_member_has_bounded_exit_and_can_recover(timeline_store, monkeypatch, outcome):
+    store = timeline_store
+    path = ('users', 'owner', 'conversations', 'capture')
+    now = datetime.now(timezone.utc)
+    entered = now - timedelta(hours=3) if outcome in {'deadline', 'projected'} else now
+    store.rows[path] = capture(finished_at=None)
+    c = service.Collaborators(firestore_client=store, now=lambda: entered)
+    assert attachment.attach_closed_batch_capture('owner', 'capture', store.rows[path], collaborators=c) == 'attached'
+    member = store.rows[path]
+    if outcome == 'dead_letter':
+        member['finalization_status'] = 'dead_letter'
+    elif outcome == 'failed':
+        member['status'] = 'failed'
+    elif outcome == 'upload_failed':
+        member['record_upload_failed'] = True
+    elif outcome == 'projected':
+        member.update(record_projection_revision=1, structured={'title': 'Recovered transcript'}, status='completed')
+    overdue = Mock()
+    monkeypatch.setattr(home_read.episode_metrics, 'record_batch_pending_overdue', overdue)
+    episode = store.rows[('users', 'owner', 'episodes', member['episode_id'])]
+    wire = home_read.project_episode('owner', episode, members={'capture': member})['members'][0]
+    if outcome == 'projected':
+        assert wire['title'] == 'Recovered transcript' and wire['status'] == 'completed'
+    else:
+        assert wire['title'] == "Couldn't transcribe" and wire['status'] == 'failed'
+        assert wire['finished_at'].timestamp() == 1120
+    assert overdue.call_count == (1 if outcome == 'deadline' else 0)
+
+
+def test_kill_switch_keeps_attach_after_transcription_available(timeline_store, monkeypatch):
+    store = timeline_store
+    row = capture(record_projection_revision=1, structured={'title': 'Transcribed'})
+    store.rows[('users', 'owner', 'conversations', 'capture')] = row
+    monkeypatch.setenv('EPISODE_BATCH_CLOSE_ATTACH_ENABLED', 'off')
+    c = service.Collaborators(firestore_client=store)
+    assert attachment.attach_closed_batch_capture('owner', 'capture', row, collaborators=c) == 'disabled'
+    result = service.attach_recorded(
+        'owner',
+        'capture',
+        row,
+        datetime.fromtimestamp(1000, timezone.utc),
+        datetime.fromtimestamp(1120, timezone.utc),
+        c,
+    )
+    assert result['conversation_ids'] == ['capture']
+    assert not store.rows[('users', 'owner', 'conversations', 'capture')].get('episode_transcription_deadline_at')
+
+
+@pytest.mark.parametrize('seconds, status', [(-0.001, 'processing'), (0, 'failed'), (0.001, 'failed')])
+def test_deadline_is_an_exact_automatic_exit(monkeypatch, seconds, status):
+    deadline = datetime(2026, 11, 4, tzinfo=timezone.utc)
+    monkeypatch.setattr(
+        home_read,
+        'datetime',
+        SimpleNamespace(
+            now=lambda tz: deadline + timedelta(seconds=seconds),
+            fromtimestamp=datetime.fromtimestamp,
+        ),
+    )
+    episode = {
+        'id': 'e',
+        'status': 'closed',
+        'started_at': deadline,
+        'last_activity_at': deadline,
+        'conversation_ids': ['c'],
+    }
+    member = {'episode_transcription_deadline_at': deadline, 'status': 'completed'}
+    wire = home_read.project_episode('owner', episode, members={'c': member})['members'][0]
+    assert wire['status'] == status
+    assert wire['title']
+
+
+def test_changed_audio_bounds_still_update_membership_without_renewing_deadline(timeline_store):
+    store = timeline_store
+    path = ('users', 'owner', 'conversations', 'capture')
+    store.rows[path] = capture()
+    c = service.Collaborators(firestore_client=store)
+    assert attachment.attach_closed_batch_capture('owner', 'capture', store.rows[path], collaborators=c) == 'attached'
+    first_deadline = store.rows[path]['episode_transcription_deadline_at']
+    ep_path = ('users', 'owner', 'episodes', store.rows[path]['episode_id'])
+    version = store.rows[ep_path]['state_version']
+    store.rows[path]['server_batch_audio_end'] = 1200
+    assert attachment.attach_closed_batch_capture('owner', 'capture', store.rows[path], collaborators=c) == 'attached'
+    assert store.rows[ep_path]['state_version'] > version
+    assert store.rows[ep_path]['last_activity_at'].timestamp() == 1200
+    assert store.rows[path]['episode_transcription_deadline_at'] == first_deadline
+
+
+@pytest.mark.parametrize('reason', ['user', 'gap'])
+def test_existing_membership_gains_deadline_atomically_without_reset(timeline_store, reason):
+    store = timeline_store
+    path = ('users', 'owner', 'conversations', 'capture')
+    row = capture(record_projection_revision=1, structured={'title': 'Existing'})
+    store.rows[path] = row
+    c = service.Collaborators(firestore_client=store)
+    result = service.attach_recorded(
+        'owner',
+        'capture',
+        row,
+        datetime.fromtimestamp(1000, timezone.utc),
+        datetime.fromtimestamp(1120, timezone.utc),
+        c,
+    )
+    store.rows[('users', 'owner', 'episodes', result['id'])]['close_reason'] = reason
+    assert attachment.attach_closed_batch_capture('owner', 'capture', store.rows[path], collaborators=c) == 'attached'
+    assert store.rows[path]['episode_transcription_deadline_at']

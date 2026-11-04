@@ -341,3 +341,18 @@ def record_home_members(*, shown: int, hidden: int) -> None:
             EPISODE_HOME_MEMBERS_TOTAL.labels(outcome=_label('hidden_below_floor', HOME_MEMBER_OUTCOMES)).inc(hidden)
     except Exception:
         pass
+
+
+EPISODE_BATCH_PENDING_OVERDUE_READS_TOTAL = reuse_or_create(
+    Counter,
+    'omi_episode_batch_pending_overdue_reads_total',
+    'Home member observations without a batch projection past the stamped 2h deadline. Not unique members.',
+    [],
+)
+
+
+def record_batch_pending_overdue() -> None:
+    try:
+        EPISODE_BATCH_PENDING_OVERDUE_READS_TOTAL.inc()
+    except Exception:
+        pass
