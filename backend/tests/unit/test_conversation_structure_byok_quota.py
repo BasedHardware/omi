@@ -52,6 +52,11 @@ provider errors only classify when the request ran on the user's own validated
 key; the same error on Omi's server-paid key stays a loud server fault. The
 boundary logs one structured WARNING (``byok=true failure_class=...``) so
 severity>=ERROR stops counting user account state.
+
+Recurring live signature (2026-10-22, GCP group frame ``_base_client.py:1716``): Google
+moved depleted AI Studio prepayment credits from 429 to a plain 402, and direct Gemini
+BYOK rides the OpenAI-compatible AI Studio endpoint, so the same boundary must also carry
+Google's wording.
 """
 
 import logging
@@ -116,6 +121,15 @@ _OPENAI_INSUFFICIENT_QUOTA_BODY = {
     }
 }
 
+_GEMINI_PREPAYMENT_DEPLETED_BODY = {
+    "error": {
+        "code": 402,
+        "message": "Your prepayment credits are depleted. To resolve this error, go to AI Studio "
+        "Billing and purchase the minimum required prepayment.",
+        "status": "RESOURCE_EXHAUSTED",
+    }
+}
+
 
 def _anthropic_error(body: dict, status_code: int = 400) -> anthropic.BadRequestError:
     request = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
@@ -132,6 +146,14 @@ def _openai_error(body: dict, status_code: int) -> openai.APIStatusError:
 def _openrouter_error(body: dict, status_code: int = 402) -> openai.APIStatusError:
     request = httpx.Request("POST", "https://openrouter.ai/api/v1/chat/completions")
     response = httpx.Response(status_code, request=request, headers={"x-openrouter-request-id": "req_unit"}, json=body)
+    return openai.APIStatusError(f"Error code: {status_code} - {body}", response=response, body=body)
+
+
+def _gemini_error(body: dict, status_code: int = 402) -> openai.APIStatusError:
+    # Direct Gemini BYOK rides AI Studio's OpenAI-compatible endpoint, so the
+    # depleted-prepayment account state arrives as the OpenAI SDK's APIStatusError.
+    request = httpx.Request("POST", "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions")
+    response = httpx.Response(status_code, request=request, json=body)
     return openai.APIStatusError(f"Error code: {status_code} - {body}", response=response, body=body)
 
 
@@ -165,6 +187,14 @@ def byok_openrouter_key():
 @pytest.fixture
 def byok_openai_key():
     set_validated_byok_keys({"openai": "sk-byok-unit"}, "uid_byok_unit")
+    yield
+    set_validated_byok_keys({}, "uid_byok_unit")
+    set_byok_uid(None)
+
+
+@pytest.fixture
+def byok_gemini_key():
+    set_validated_byok_keys({"gemini": "AIza-byok-unit"}, "uid_byok_unit")
     yield
     set_validated_byok_keys({}, "uid_byok_unit")
     set_byok_uid(None)
@@ -257,6 +287,24 @@ def test_openai_insufficient_quota_maps_to_typed_429(byok_openai_key):
     assert mapped.detail == BYOK_QUOTA_ERROR_DETAIL
 
 
+def test_direct_gemini_prepayment_depleted_maps_to_typed_429(byok_gemini_key):
+    # 2026-10: Google answers depleted AI Studio prepayment credits with a plain
+    # 402 on the OpenAI-compatible endpoint, so the Gemini BYOK spelling reaches
+    # this boundary as the OpenAI SDK's APIStatusError.
+    error = _gemini_error(_GEMINI_PREPAYMENT_DEPLETED_BODY)
+
+    assert is_byok_quota_error(error)
+
+    mapped = conversation_processing_http_exception(error)
+
+    assert isinstance(mapped, HTTPException)
+    assert mapped.status_code == 429
+    assert mapped.detail == BYOK_QUOTA_ERROR_DETAIL
+    assert mapped.detail["code"] == "byok_quota"
+    # The provider's error body must not leak into the response contract.
+    assert "prepayment" not in str(mapped.detail["message"])
+
+
 def test_openrouter_rate_limit_metadata_maps_to_typed_429(byok_openrouter_key):
     error = _openrouter_error(
         {"error": {"message": "Rate limit exceeded", "code": 429, "metadata": {"limit_source": "requester_rates"}}},
@@ -329,6 +377,13 @@ def test_other_402_responses_keep_the_generic_500(byok_openrouter_key):
 
     assert mapped.status_code == 500
     assert mapped.detail == GENERIC_CONVERSATION_PROCESSING_ERROR_DETAIL
+
+    gemini_unrelated = _gemini_error({"error": {"code": 402, "message": "Payment required"}})
+
+    assert not is_byok_quota_error(gemini_unrelated)
+    assert (
+        conversation_processing_http_exception(gemini_unrelated).detail == GENERIC_CONVERSATION_PROCESSING_ERROR_DETAIL
+    )
 
 
 def test_other_provider_bad_requests_keep_the_generic_500(byok_anthropic_key):
