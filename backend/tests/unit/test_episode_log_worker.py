@@ -400,7 +400,7 @@ def test_shadow_member_policy_edits_dirty_before_read_flip(client, monkeypatch, 
     path = ('users', UID, 'episode_log_state', 'owner')
     client.rows[path] = {'cursor': 0, 'next_seq': 0}
 
-    @home_policy_write
+    @home_policy_write(firestore_client=lambda: client)
     def edit(uid, conversation_id):
         assert bool(client.rows[path].get('policy_barriers')) == (enabled == 'on')
         if fails:

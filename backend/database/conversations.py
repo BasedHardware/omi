@@ -1232,7 +1232,7 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
     preserve_result=True,
 )
 @after_write('conversations')
-@home_policy_write
+@home_policy_write(firestore_client=lambda: db)
 def persist_processing_result_with_lifecycle(
     uid: str,
     conversation_data: dict,
@@ -1474,7 +1474,7 @@ def persist_processing_result_with_lifecycle(
     preserve_result=True,
 )
 @after_write('conversations')
-@home_policy_write
+@home_policy_write(firestore_client=lambda: db)
 def create_conversation_if_absent_with_lifecycle(uid: str, conversation_data: dict) -> bool:
     """Atomically create a conversation document if it does not already exist."""
     conversation_data.pop('updated_at', None)
@@ -2116,7 +2116,7 @@ def audio_files_revision(files: list[dict]) -> list[tuple]:
 
 
 @after_write('conversations')
-@home_policy_write
+@home_policy_write(firestore_client=lambda: db)
 def update_conversation(
     uid: str,
     conversation_id: str,
@@ -2218,7 +2218,7 @@ def record_demand_enrichment_checkpoint(
     return True
 
 
-@home_policy_write
+@home_policy_write(firestore_client=lambda: db)
 def update_conversation_chat(uid: str, conversation_id: str, expected: dict, update_data: dict) -> dict:
     """Apply a confirmed correction without touching transcript or lifecycle fields."""
     raw = get_conversation_raw_snapshot(uid, conversation_id)
@@ -2289,7 +2289,7 @@ def create_audio_files_from_chunks(
 
 
 @after_write('conversations')
-@home_policy_write
+@home_policy_write(firestore_client=lambda: db)
 def update_conversation_title(uid: str, conversation_id: str, title: str):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
@@ -2303,7 +2303,7 @@ def update_conversation_title(uid: str, conversation_id: str, title: str):
 
 
 @after_write('conversations')
-@home_policy_write
+@home_policy_write(firestore_client=lambda: db)
 def update_conversation_summary(uid: str, conversation_id: str, app_id: Optional[str], content: str) -> str:
     """
     Update the conversation's displayed summary.
@@ -2416,7 +2416,7 @@ def delete_conversation_photos(uid: str, conversation_id: str) -> int:
     return deleted_count
 
 
-@home_policy_write
+@home_policy_write(firestore_client=lambda: db)
 def delete_conversation(uid, conversation_id):
     """Delete a conversation and every subcollection underneath it.
 
@@ -2844,7 +2844,7 @@ def claim_conversation_status(
     return claimed
 
 
-@home_policy_write
+@home_policy_write(firestore_client=lambda: db)
 def set_conversation_as_discarded(uid: str, conversation_id: str):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
@@ -2854,7 +2854,7 @@ def set_conversation_as_discarded(uid: str, conversation_id: str):
     _sync_conversation_search_index(uid, conversation_id)
 
 
-@home_policy_write
+@home_policy_write(firestore_client=lambda: db)
 def rule_discard_outcome(
     uid: str,
     conversation_id: str,
@@ -2922,7 +2922,7 @@ def discard_by_relevance(
     )
 
 
-@home_policy_write
+@home_policy_write(firestore_client=lambda: db)
 def restore_conversation_from_discarded(uid: str, conversation_id: str):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
@@ -3114,7 +3114,7 @@ def get_action_items(
 # ******************************
 
 
-@home_policy_write
+@home_policy_write(firestore_client=lambda: db)
 def update_conversation_finished_at(uid: str, conversation_id: str, finished_at: datetime):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)

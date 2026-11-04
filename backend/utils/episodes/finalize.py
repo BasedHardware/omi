@@ -134,6 +134,7 @@ def _queue_retry(uid: str, hook, *args) -> None:
 def _after_finalization(uid: str, conversation_id: str, trigger: ProcessingTrigger) -> None:
     from database import conversations as conversations_db
     from utils.episodes.service import on_conversation_finalized
+    from utils.episodes.log import worker as log_worker
 
     row = conversations_db.get_conversation(uid, conversation_id)
     if row:
