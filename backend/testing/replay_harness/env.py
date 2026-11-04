@@ -9,12 +9,16 @@ from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from testing.hermetic_network import block_outbound_network, block_local_redis
+from testing.replay_harness.gate_resources import CURRENT_SCOPE, journal_writes
 
 NAMESPACE = 'batch_pipeline_test_replayharness'
 
 
 def emulator_endpoint() -> str:
-    endpoint = os.getenv('FIRESTORE_EMULATOR_HOST', '')
+    return validate_emulator_endpoint(os.getenv('FIRESTORE_EMULATOR_HOST', ''))
+
+
+def validate_emulator_endpoint(endpoint):
     host, separator, port = endpoint.rpartition(':')
     if host not in ('127.0.0.1', 'localhost') or not separator or not port.isdigit() or not 0 < int(port) < 65536:
         raise RuntimeError('replay requires a loopback FIRESTORE_EMULATOR_HOST; no cloud fallback')
@@ -112,6 +116,11 @@ def replay_environment():
 
         harness = make_emulator()
         stack.callback(harness.close)
+        scope = CURRENT_SCOPE.get()
+        if scope:
+            # Parent chooses this token before launch, so recovery owns a precise namespace.
+            harness.uid_suffix = scope['token']
+            stack.enter_context(journal_writes(harness.store.client, scope))
         # make_emulator allocated a private client + namespace. Give this lane
         # a discoverable prefix while retaining its unique run token.
         from database.batch_pipeline_store import FirestoreStore
@@ -148,7 +157,7 @@ def replay_environment():
         from utils.other import storage as product_storage
         from database import redis_db
 
-        scratch = Path('/Volumes/Ephemeral/scratch')
+        scratch = Path(scope['root']) if scope else Path('/Volumes/Ephemeral/scratch')
         root = Path(
             stack.enter_context(TemporaryDirectory(prefix='replay-harness-', dir=scratch if scratch.is_dir() else None))
         )

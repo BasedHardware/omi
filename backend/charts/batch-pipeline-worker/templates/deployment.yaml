@@ -8,7 +8,9 @@
 {{- if lt (int .Values.replicaCount) 1 }}
 {{- fail "queue sampling runs in workers: replicaCount must be >=1" }}
 {{- end }}
-{{- $processes := int .Values.worker.processes }}
+{{- /* An instance may pin its own count (the T4 fallback stays at one: two
+     model chains do not fit 16 GB of T4 VRAM); otherwise worker.processes. */}}
+{{- $processes := int (ternary .instance.processes .Values.worker.processes (hasKey .instance "processes")) }}
 {{- if or (lt $processes 1) (gt $processes 3) }}
 {{- fail "worker.processes must be in [1,3]" }}
 {{- end }}

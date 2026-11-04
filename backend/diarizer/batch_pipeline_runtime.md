@@ -82,9 +82,12 @@ chain's GPU-lock time is CPU, Python and IO work; a sibling's kernels fill those
 gaps (3-CPU T4 bench, chain before the shared embedding trunk: 33.8
 audio-h/GPU-h with one process, 45.4 with two, identical words and speakers).
 With the shared trunk on, two processes added nothing on that 3-CPU bench (45.1
-vs 48.3 for one), so the default stays `1` (no supervisor, the process above runs
-exactly as before) until an 8-vCPU L4 canary shows a gain. Malformed or
-out-of-range values run one.
+vs 48.3 for one), so the chart default stays `1` (no supervisor, the process
+above runs exactly as before). On the 8-vCPU dev L4 (2026-11-04) two processes
+gave 172.8 audio-h/GPU-h against 112.6 for one, at 11.8 of 23 GB VRAM, and prod
+is bound by per-lane claim latency rather than the GPU, so prod values set `2`.
+The T4 fallback sibling takes `t4Fallback.processes` (default `1`), never this
+value. Malformed or out-of-range values run one.
 
 The container's process becomes a supervisor that loads no models and touches
 no cloud client. Each child re-executes this module as the unchanged
