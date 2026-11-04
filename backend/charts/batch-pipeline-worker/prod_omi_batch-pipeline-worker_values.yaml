@@ -115,15 +115,6 @@ recordSealRepair:
     TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE: 'true'
     TRANSCRIPTION_FINAL_PASS_DIARIZER: pyannote_shadow
     TRANSCRIPTION_FINAL_PASS_PERCENT: '5'
-# Same policy map for the seal worker (lead2 3b814c). NOTE: live release r71 had NO recordSealWorker override,
-# so this turns on the worker's IO (empty serverFlags refuses IO). Rollback: recordSealWorker.serverFlags: {}.
-recordSealWorker:
-  serverFlags:
-    K_SERVICE: backend
-    BATCH_PIPELINE_ENABLED: 'true'
-    BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: 'false'
-    BATCH_PIPELINE_PERCENT: '100'
-    BATCH_LIVE_STT_RETIRE_PERCENT: '0'
-    TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE: 'true'
-    TRANSCRIPTION_FINAL_PASS_DIARIZER: pyannote_shadow
-    TRANSCRIPTION_FINAL_PASS_PERCENT: '5'
+# recordSealWorker.serverFlags stays at the chart default {} (worker IO refused, as in live release r71). Running the
+# worker AND repair with IO would let both pick the same pending row: the transactional seal prevents a double seal,
+# but both would do the proof and audio reads (Luna r1 P2 on #24643). Enable one IO path at a time after measuring.

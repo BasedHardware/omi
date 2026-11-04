@@ -36,9 +36,8 @@ def test_cpu_placement_ceiling_and_identity():
     assert metric['target'] == {'type': 'AverageValue', 'averageValue': '4'}
     env = {e['name']: e.get('value') for e in container['env']}
     assert env['RECORD_SEAL_REPAIR_ENABLED'] == 'true'
-    worker_flags = json.loads(env['RECORD_SEAL_REPAIR_SERVER_FLAGS'])
-    assert worker_flags['BATCH_PIPELINE_PERCENT'] == '100'
-    assert not any('ALLOWLIST' in key for key in worker_flags)
+    # Only repair has IO in prod: an empty worker policy map refuses IO, so the two never race on one row.
+    assert json.loads(env['RECORD_SEAL_REPAIR_SERVER_FLAGS']) == {}
     assert env['RECORD_SEAL_OVERLAP_TRIM_ENABLED'] == env['RECORD_SEAL_UPLOAD_FAILED_REPAIR_ENABLED'] == 'true'
 
 
