@@ -12,7 +12,7 @@ bash backend/testing/lifecycle_sim/run.sh --keep
 The existing listen/pusher gauntlet runs these scenarios after its existing
 emulator-concurrency tail. The standalone wrapper runs only these scenarios.
 Both use the same emulator-owning shell. No CI workflow or budget change is
-required. The runner prints `added_wall_seconds` including Python startup.
+required. The runner prints `added_wall_seconds` including scenario and child setup.
 
 For helper unit tests, `BACKEND_UNIT_TEST_FILE_LIST` must name a text file
 whose single line is `tests/unit/test_lifecycle_sim_unit.py` (relative to
@@ -33,6 +33,10 @@ projection are real. `FakeSTT` and `PipelineWorker` replace GPU model leaves;
 the summary control uses the existing stack's provider leaves with the real
 recovery processing coordinator. This measures lifecycle behavior, not model
 quality or live deployment health.
+
+The simulator's local storage subclass adds the artifact stream-upload method
+to the existing stack adapter while preserving its create-only and generation
+preconditions. Production storage implementations are unchanged.
 
 Pass `stt_profile=STTProfile(exhaustion=(ExhaustionWindow(...),))` to script
 vendor errors/empty results/zero capacity on the shared `VirtualClock`.

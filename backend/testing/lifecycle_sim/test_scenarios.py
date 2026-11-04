@@ -4,6 +4,7 @@ import asyncio
 from pathlib import Path
 import os
 import time
+import shutil
 from types import SimpleNamespace
 
 import pytest
@@ -12,7 +13,7 @@ from google.api_core.exceptions import Aborted
 from database import record_audio
 from testing.lifecycle_sim.faults import BoundaryFault, InjectedLifecycleFault
 from testing.lifecycle_sim.harness import LifecycleSim
-from testing.listen_pusher_stack.run import Stack
+from testing.listen_pusher_stack.run import Stack, _wait_for_port
 from utils.batch_pipeline import live
 from utils.batch_pipeline import record_producer_proof
 from utils.conversations.phase import ConversationPhase
@@ -30,7 +31,18 @@ def invariant(condition, message):
 @pytest.fixture(scope='module')
 def stack():
     value = Stack(Path(os.environ['LIFECYCLE_SIM_STATE_DIR']))
+    # Reuse the parent's allowlisted Redis endpoint, which product modules
+    # loaded during collection already resolved. Own a fresh server there.
+    value.redis_port = int(os.environ['REDIS_DB_PORT'])
+    value.env['REDIS_DB_PORT'] = str(value.redis_port)
     try:
+        binary = shutil.which('redis-server')
+        assert binary, 'isolated Redis binary is required'
+        child = value._start(
+            'redis',
+            [binary, '--bind', '127.0.0.1', '--port', str(value.redis_port), '--save', '', '--appendonly', 'no'],
+        )
+        _wait_for_port(value.redis_port, label='lifecycle Redis', child=child)
         yield value
     finally:
         value.close()
@@ -52,6 +64,9 @@ async def test_happy_path_reaches_complete(lifecycle_sim):
     assert sim.seal() is None
     assert sim.register()
     assert sim.job()['state'] == 'record_pending'
+    # A direct production admission is the positive-control seam: its error
+    # propagates rather than being hidden by the drainer's normal retry loop.
+    await live.admit_recording(sim.store, sim.job())
     for _ in range(3):
         await sim.tick()
         if sim.phase in {ConversationPhase.TRANSCRIBED, ConversationPhase.COMPLETE, ConversationPhase.SETTLED}:

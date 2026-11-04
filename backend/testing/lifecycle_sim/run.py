@@ -20,8 +20,7 @@ def main():
     parser.add_argument('--state-dir', type=Path)
     args = parser.parse_args()
     root = args.state_dir or Path(tempfile.mkdtemp(prefix='omi-lifecycle-sim-'))
-    root.mkdir(parents=True, exist_ok=True)
-    root.chmod(0o700)
+    root.mkdir(mode=0o700, parents=True, exist_ok=True)
     started = time.monotonic()
     # Firebase sets demo project variables, but some local CLI versions leave
     # GOOGLE_CLOUD_PROJECT unset. Set only the absent value; reject a real one.
@@ -63,7 +62,9 @@ def main():
     finally:
         stack.close()
         print(f'lifecycle_sim added_wall_seconds={time.monotonic() - started:.3f}', flush=True)
-        if not args.keep:
+        # Only the fresh mkdtemp directory belongs to automatic cleanup. An
+        # explicit state directory may contain the caller's other artifacts.
+        if args.state_dir is None and not args.keep:
             shutil.rmtree(root)
 
 

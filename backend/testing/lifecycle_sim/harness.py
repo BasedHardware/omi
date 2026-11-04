@@ -13,6 +13,7 @@ import signal
 import os
 import time
 import uuid
+from unittest.mock import patch
 
 import httpx
 
@@ -24,12 +25,13 @@ from diarizer.batch_pipeline import PipelineWorker
 from testing.lifecycle_sim.clock import age_job_row
 from testing.lifecycle_sim.faults import BoundaryFault
 from testing.lifecycle_sim.preflight import preflight
+from testing.lifecycle_sim.storage import create_local_storage
 from testing.listen_pusher_stack.run import Stack, PYTHON, _wait_for_port
 from testing.listen_pusher_stack.finalizer_leaves import install_finalizer_leaves
 from testing.pipeline_sim.clock import VirtualClock, run_virtual
 from testing.pipeline_sim.stt import FakeSTT, PlannedWords, SimSamples, SPEECH, STTProfile, vad_spans
-from utils.batch_pipeline import live, record_seal_nojob, record_seal_sweeper
-from utils.batch_pipeline.artifact_policy import artifacts_for
+from utils.batch_pipeline import admission, live, record_seal_nojob, record_seal_sweeper
+from utils.batch_pipeline.artifact_policy import create_artifact_store
 from utils.batch_pipeline.contracts import PoolCapacity, WorkResult
 from utils.batch_pipeline.projection import Projector
 from utils.batch_pipeline.serving import Serving
@@ -37,7 +39,6 @@ from utils.conversations.phase import derive_conversation_phase
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations import process_conversation as processing
 from utils.conversations.processing_trigger import ProcessingTrigger
-from utils.other.local_storage import create_storage_client
 from utils.other.storage import upload_audio_chunks_batch
 
 SERVER_FLAGS = {
@@ -57,8 +58,10 @@ class LifecycleSim:
         self.cid = str(uuid.uuid4())
         self.fault = fault
         self.store = FirestoreStore(f'batch_pipeline_test_lifecycle_{self.cid[:8]}', firestore_client=stack.firestore)
-        self.storage = create_storage_client()
-        self.artifacts = artifacts_for(self.store)
+        self.storage = create_local_storage()
+        self.artifacts = create_artifact_store(
+            self.store, self.storage, os.environ['BUCKET_BATCH_PIPELINE'], os.environ['ENCRYPTION_SECRET'].encode()
+        )
         self.ref = stack.firestore.collection('users').document(self.uid).collection('conversations').document(self.cid)
         self.content, self.segment = live.record_identity(self.uid, self.cid)
         self.job_ref = stack.firestore.collection(f'{self.store.namespace}_jobs').document(self.segment)
@@ -77,11 +80,18 @@ class LifecycleSim:
             io_concurrency=1,
             language_of=lambda item: 'en',
         )
-        self.projector = Projector(self.store, self.artifacts.load_result, publish=lambda *a, **kw: None)
+        self.projector = Projector(
+            self.store,
+            self.artifacts.load_result,
+            fetch_audio=self.artifacts.fetch_audio,
+            publish=lambda *a, **kw: None,
+        )
         self.serving = Serving(self.store, projector=self.projector)
         self.ticks = 0
         self.reports = []
         self.proof_time = None
+        self._storage_patch = patch.object(live, 'create_storage_client', create_local_storage)
+        self._storage_patch.start()
 
     def seed(self, *, sessions: dict | None = None) -> None:
         self.stack.seed_user(self.uid)
@@ -221,6 +231,10 @@ class LifecycleSim:
         now = time.time()
         leases = self.serving.queue().pull(now, 4, capacity=PoolCapacity(now, 4))
         for lease in leases:
+            receipt = await admission.authorize(
+                self.store, [{'segment_id': lease.item.segment_id, 'token': lease.token}], budget=8
+            )
+            assert lease.item.segment_id in receipt['allowed'], 'real compute admission did not seal the owned lease'
             outcome = await asyncio.to_thread(
                 run_virtual, self.clock, lambda: self.stt.request(SPEECH, lease.item.duration_seconds)
             )
@@ -278,5 +292,6 @@ class LifecycleSim:
         assert self.row().get('record_upload_sessions'), 'pusher returned without a durable token'
 
     def close(self):
+        self._storage_patch.stop()
         if self.worker._io is not None:
             self.worker._io.shutdown(wait=True, cancel_futures=True)

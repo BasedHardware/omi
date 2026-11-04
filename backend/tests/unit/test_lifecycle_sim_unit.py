@@ -3,15 +3,19 @@
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 import sys
+import io
 from unittest.mock import AsyncMock, Mock
+from types import SimpleNamespace
 
 import pytest
+from google.api_core.exceptions import PreconditionFailed
 
 from testing.lifecycle_sim.clock import age_job_row, aged_job_fields
 from testing.lifecycle_sim.faults import BoundaryFault, InjectedLifecycleFault
 from testing.lifecycle_sim.preflight import HermeticRefusal, preflight
 from testing.lifecycle_sim import listener_faults
 from testing.lifecycle_sim import run as simulator_runner
+from testing.lifecycle_sim.storage import LifecycleBucket
 
 
 @pytest.fixture
@@ -69,6 +73,42 @@ def test_runner_refuses_before_constructing_stack(monkeypatch, tmp_path):
     with pytest.raises(HermeticRefusal):
         simulator_runner.main()
     construct.assert_not_called()
+
+
+def test_local_stream_upload_preserves_create_only_and_generation_fences(tmp_path):
+    bucket = LifecycleBucket(tmp_path, 'synthetic-artifacts')
+    blob = bucket.blob('synthetic.enc')
+    blob.upload_from_file(io.BytesIO(b'encrypted-fixture'), if_generation_match=0)
+    generation = blob.generation
+    assert generation > 0
+    assert blob.download_as_bytes(if_generation_match=generation) == b'encrypted-fixture'
+    with pytest.raises(PreconditionFailed):
+        blob.upload_from_file(io.BytesIO(b'replacement'), if_generation_match=0)
+    with pytest.raises(PreconditionFailed):
+        bucket.blob('synthetic.enc', generation=generation + 1).download_as_bytes()
+
+
+@pytest.mark.parametrize('explicit', [False, True])
+def test_runner_only_cleans_its_fresh_temporary_root(monkeypatch, tmp_path, explicit):
+    root = tmp_path / 'state'
+    root.mkdir()
+    witness = root / 'caller-owned.txt'
+    witness.write_text('preserve')
+    outside = tmp_path / 'outside.txt'
+    outside.write_text('outside')
+    stack = Mock(env={})
+    monkeypatch.setattr(simulator_runner, 'Stack', Mock(return_value=stack))
+    monkeypatch.setattr(simulator_runner, 'preflight', Mock())
+    monkeypatch.setattr(simulator_runner.tempfile, 'mkdtemp', Mock(return_value=str(root)))
+    monkeypatch.setattr(simulator_runner.subprocess, 'run', Mock(return_value=SimpleNamespace(returncode=0)))
+    monkeypatch.setattr(sys, 'argv', ['simulator', '--state-dir', str(root)] if explicit else ['simulator'])
+    assert simulator_runner.main() == 0
+    if explicit:
+        assert witness.read_text() == 'preserve'
+    else:
+        assert not root.exists()
+    assert outside.read_text() == 'outside'
+    stack.close.assert_called_once()
 
 
 def test_age_job_preserves_evidence_and_shifts_numeric_and_datetime_deadlines():
