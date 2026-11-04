@@ -8,6 +8,10 @@ from fastapi.testclient import TestClient
 from routers import episodes as api
 from utils.episodes.log import reads, worker
 from utils.other import endpoints
+from database import episode_log as store
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+from utils.episodes.log.clock import home_clock
+from config.episodes import CLOSE_GAP_SECONDS
 
 NOW = datetime(2026, 11, 4, tzinfo=timezone.utc)
 
@@ -56,3 +60,57 @@ def test_not_ready_and_policy_changed_use_legacy_projection(monkeypatch):
     query.reset_mock()
     assert http.get('/v1/episodes', params=params).status_code == 200
     assert not query.called
+
+
+def test_expired_home_etag_falls_back_and_queues_one_urgent_refresh(monkeypatch):
+    real_ready = reads.ready
+    http, query = setup(monkeypatch)
+    for key in ('EPISODES_ENABLED', 'EPISODES_LOG_ENABLED', 'EPISODES_HOME_ROWS_ENABLED'):
+        monkeypatch.setenv(key, 'on')
+    monkeypatch.setenv('EPISODES_PERCENT', '100')
+    monkeypatch.setattr(reads, 'selected', lambda uid: True)
+    monkeypatch.setattr(worker, 'wake', Mock())
+    client = StrictFirestore()
+    path = ('users', 'test', 'episode_log_state', 'owner')
+    client.rows[path] = {
+        'cursor': 0,
+        'next_seq': 0,
+        'home_version': 7,
+        'backfill_complete': True,
+        'home_rows_ready': True,
+        'home_valid_until': NOW + timedelta(seconds=10),
+        'home_refresh_cid': 'c',
+    }
+    clock = [NOW]
+    monkeypatch.setattr(reads, 'ready', lambda uid: real_ready(uid, firestore_client=client, now=clock[0]))
+    params = {'from': NOW.isoformat(), 'to': NOW.isoformat()}
+    first = http.get('/v1/episodes', params=params)
+    assert first.status_code == 200 and query.called
+    legacy = Mock(return_value=([], None))
+    monkeypatch.setattr(api.home_read, 'list_episode_window', legacy)
+    monkeypatch.setattr(api.home_read, 'project_episodes', lambda *args: [])
+    clock[0] = NOW + timedelta(minutes=1)
+    expired = http.get('/v1/episodes', params=params, headers={'If-None-Match': first.headers['etag']})
+    assert expired.status_code == 200 and legacy.called
+    assert 'home_version' not in expired.json()
+    assert client.rows[path]['next_seq'] == 1 and client.rows[path]['drain_at'] == clock[0]
+    worker.note_home_clock('test', client.rows[path], firestore_client=client, now=clock[0])
+    assert client.rows[path]['next_seq'] == 1  # Same clock replays without another fact.
+
+
+def test_home_clock_preserves_live_close_and_settling_expiry(monkeypatch):
+    monkeypatch.setenv('HOME_HIDE_BELOW_FLOOR_ROWS', 'on')
+    rows = {'e': {'id': 'e', 'status': 'live', 'last_activity_at': NOW, 'conversation_ids': ['c', 'd']}}
+    member = {
+        'status': 'completed',
+        'started_at': NOW - timedelta(seconds=60),
+        'finished_at': NOW,
+        'structured': {'title_provenance': 'server_minimum'},
+    }
+    clock = home_clock(rows, {'c': member}, {'d': NOW + timedelta(hours=3)}, {'c'}, NOW)
+    assert clock['deadline_at'] == NOW + timedelta(seconds=CLOSE_GAP_SECONDS)
+    assert clock['members']['c'] == NOW + timedelta(hours=2)
+    rows['e']['status'] = 'closed'
+    clock = home_clock(rows, {'c': member}, clock['members'], {'c'}, NOW + timedelta(hours=2))
+    assert clock['deadline_at'] == NOW + timedelta(hours=3) and clock['cid'] == 'd'
+    assert 'c' not in clock['members']

@@ -28,7 +28,7 @@ spec:
             summary: "Episode drain missed its retry deadline"
             description: "Inspect projection capacity and task dispatch. Disable log reads while recovering."
         - alert: OmiEpisodeLogProjectionDrift
-          expr: sum(increase(omi_episode_view_drift_total{outcome=~"mismatch|missing_view"}[10m])) > 0
+          expr: sum(increase(omi_episode_view_drift_total{outcome!="match"}[10m])) > 0
           labels: {severity: warning}
           annotations:
             summary: "Episode projection differs from the legacy namespace"

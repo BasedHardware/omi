@@ -1,6 +1,7 @@
 """Cohort read adapter. Unready users keep the legacy path; policies stay server-side."""
 
 import os
+from datetime import datetime, timezone
 
 from config import episode_log as config
 from database import episode_log as store, episodes
@@ -18,7 +19,7 @@ def selected(uid):
     return resolved.enabled if resolved is not None else config.read_cohort(uid)
 
 
-def ready(uid, *, firestore_client=None):
+def ready(uid, *, firestore_client=None, now=None):
     if not selected(uid):
         return None
     row = store.state(uid, firestore_client=firestore_client)
@@ -28,6 +29,12 @@ def ready(uid, *, firestore_client=None):
         or row.get('cursor', 0) != row.get('next_seq', 0)
         or row.get('policy_barriers')
     ):
+        return None
+    now = now or datetime.now(timezone.utc)
+    if row.get('home_valid_until') and row['home_valid_until'] <= now:
+        from utils.episodes.log import worker
+
+        worker.note_home_clock(uid, row, firestore_client=firestore_client, now=now)
         return None
     return row
 

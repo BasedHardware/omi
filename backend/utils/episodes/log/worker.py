@@ -19,6 +19,7 @@ from utils.episodes import home_read
 from utils.episodes.log import metrics
 from utils.episodes.log.codec import dumps, digest, loads
 from utils.episodes.log.fold import Fold
+from utils.episodes.log.clock import home_clock
 from utils.episodes.log.key import gate_digest, uncertain_key
 from utils.encryption import encrypt, decrypt
 
@@ -62,6 +63,26 @@ def note_dirty(uid, cid, row):
     except Exception as error:
         logger.warning('event=episode_log_mark outcome=error exception_type=%s', type(error).__name__)
         return False
+
+
+def note_home_clock(uid, state, *, firestore_client=None, now=None):
+    """Expiry is durable refresh debt, using the same queued phase and lease."""
+    cid, at = state.get('home_refresh_cid'), state.get('home_valid_until')
+    if not cid or not at:
+        return
+    try:
+        deadline = store.append(
+            uid,
+            digest({'home_clock': at, 'cid': cid}),
+            [{'kind': 'member_refresh', 'cid': cid, 'payload': {'clock_at': at}}],
+            firestore_client=firestore_client,
+            now=now,
+            urgent=True,
+        )
+        if deadline is not None:
+            wake(uid, deadline)
+    except Exception as error:
+        logger.warning('event=episode_home_clock outcome=sweep_recovery exception_type=%s', type(error).__name__)
 
 
 def _legacy(uid, eid, client):
@@ -175,6 +196,10 @@ def drain(uid, *, firestore_client=None, now=None):
             )
             views[eid] = view
         links = {cid: link for cid, link in fold.links.items() if old_links.get(cid) != link}
+        clock = None
+        if config.home_enabled():
+            refreshed = {cid for row in active for cid in row.get('conversation_ids') or []}
+            clock = home_clock(rows, members, claimed['state'].get('home_member_clocks') or {}, refreshed, now)
         result = store.publish(
             uid,
             claimed,
@@ -184,6 +209,7 @@ def drain(uid, *, firestore_client=None, now=None):
             links,
             firestore_client=client,
             now=fixed_now or datetime.now(timezone.utc),
+            home_clock=clock,
         )
         metrics.observe_state(claimed['state'], 'running', datetime.now(timezone.utc))
         # Never redrain a committed batch just because an observational read fails.

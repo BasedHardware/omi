@@ -80,7 +80,7 @@ class Capture:
         self.ref = self.root.collection(STATE_COLLECTION).document(STATE_ID)
         self.state = self.ref.get(transaction=transaction).to_dict() or {}
 
-    def stage(self, events, *, key=None, now=None):
+    def stage(self, events, *, key=None, now=None, urgent=False):
         now = now or datetime.now(timezone.utc)
         seq = int(self.state.get('next_seq', 0)) + 1
         # Input facts use the exact attach gate digest. Decision facts also need
@@ -94,6 +94,9 @@ class Capture:
             {'key': key, 'seq': seq, 'recorded_at': now, 'payload': payload},
         )
         self.state = dirty_state(self.state, now)
+        if urgent:
+            self.state['drain_at'] = now
+            self.state['scan_at'] = max(now, self.state.get('lease_until') or now)
         self.transaction.set(self.ref, self.state)
 
 
@@ -124,7 +127,7 @@ def mutation(capture, *, before=(), after=(), span=None, links=None, receipts=No
         )
 
 
-def append(uid, key, events, *, firestore_client=None, now=None):
+def append(uid, key, events, *, firestore_client=None, now=None, urgent=False):
     if not config.enabled(uid):
         return None
     client = firestore_client if firestore_client is not None else get_firestore_client()
@@ -135,7 +138,7 @@ def append(uid, key, events, *, firestore_client=None, now=None):
         exists = root(client, uid).collection('episode_facts').document(key).get(transaction=transaction).exists
         if exists:
             return None
-        capture.stage(events, key=key, now=now)
+        capture.stage(events, key=key, now=now, urgent=urgent)
         return capture.state['drain_at']
 
     return run_transactional(client, commit, transient=True)
@@ -215,9 +218,10 @@ def checkpoint(uid, *, firestore_client=None):
     return loads(zlib.decompress(base64.b64decode(''.join(chunks))).decode())
 
 
-def publish(uid, claimed, cursor, fold_state, views, links, *, firestore_client=None, now=None):
+def publish(uid, claimed, cursor, fold_state, views, links, *, firestore_client=None, now=None, home_clock=None):
     client = firestore_client if firestore_client is not None else get_firestore_client()
     now = now or datetime.now(timezone.utc)
+    home_clock = home_clock or {}
     packed = base64.b64encode(zlib.compress(dumps(fold_state).encode())).decode()
     parts = [
         encrypt(packed[offset : offset + CHECKPOINT_CHUNK_BYTES], uid)
@@ -266,6 +270,9 @@ def publish(uid, claimed, cursor, fold_state, views, links, *, firestore_client=
             home_version=int(row.get('home_version', 0)) + bool(views),
             projected_at=now,
             home_rows_ready=config.home_enabled(),
+            home_member_clocks=home_clock.get('members') or {},
+            home_valid_until=home_clock.get('deadline_at'),
+            home_refresh_cid=home_clock.get('cid'),
         )
         if cursor == row['next_seq']:
             barriers = list((row.get('policy_barriers') or {}).values())

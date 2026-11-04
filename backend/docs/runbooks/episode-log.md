@@ -111,6 +111,13 @@ UID, window, limit, cursor and server policy. Responses are private/no-cache;
 there is no cross-user/CDN cache. New clients can adopt this in the next app train.
 Existing clients continue receiving compatible full responses.
 
+Cached Home policy expires at the earliest live idle-close or temporary settling
+deadline. An expired owner cannot answer 304: it appends one deduplicated, urgent
+member-refresh fact and serves the existing legacy policy while the worker drains.
+Quiet closes still occur through the legacy read lifecycle, never in the shadow
+worker. Settling clocks are bounded to 128 per user; overflow uses the existing
+capacity retry/alert and legacy fallback. Permanent below-floor verdicts never expire.
+
 All visibility, below-floor suppression, neutral titles and member filtering stay
 server-side. #24541's client layout contract is unchanged: pin after two seconds,
 release on pull-to-refresh, resume or re-entry. No mobile layout code changes here.
@@ -157,7 +164,7 @@ Planscost owns expansion **5 -> 25 -> 50 -> 100**, one full clean day per step,
 review by 2026-11-18. Gate each step on:
 
 ```promql
-sum(increase(omi_episode_view_drift_total{outcome=~"mismatch|missing_view"}[24h])) == 0
+sum(increase(omi_episode_view_drift_total{outcome!="match"}[24h])) == 0
 sum(increase(omi_episode_drain_deadline_total[24h])) == 0
 histogram_quantile(0.99, sum by (le) (rate(omi_episode_drain_seconds_bucket[1h])))
 sum by (outcome) (increase(omi_episode_compose_total[24h]))
