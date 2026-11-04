@@ -21,6 +21,7 @@ from database import batch_final_pass as references
 from database.batch_pipeline_store import FirestoreStore
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+from tests.unit.test_sync_reprocess_coalesce import state as outbox_state  # noqa: F401
 from models.audio_file import AudioFile
 from models.conversation import Conversation
 from models.diarization import OMI_EMBEDDING_SPACE
@@ -629,7 +630,7 @@ def test_failed_pass_never_publishes_recurring_profile(lane, monkeypatch, failur
 
         # Call the real adapter with the documented apply seam.
         batch.run_batch_final_pass(
-            UID, lane.conversation, {}, load_prints=lambda *a, **kw: {'user': [1.0, 0.0]}, apply=fail
+            UID, lane.conversation, {}, load_prints=lambda *a, **kw: {'user': [1.0, 0.0]}, apply=fail, requeue=None
         )
         assert not writes
         return
@@ -679,7 +680,9 @@ def test_recurring_pass_refuses_an_incomplete_person_roster(lane, monkeypatch, f
     legacy = REAL_LOAD_PRINTS(UID, allow_audio_repair=False)
     assert ('user' in legacy) == (failure != 'owner')
     before = lane.conversation.model_dump()
-    batch.run_batch_final_pass(UID, lane.conversation, {}, load_prints=REAL_LOAD_PRINTS, apply=lambda *a, **kw: None)
+    batch.run_batch_final_pass(
+        UID, lane.conversation, {}, load_prints=REAL_LOAD_PRINTS, apply=lambda *a, **kw: None, requeue=None
+    )
     assert not writes and not lane.gpu
     assert lane.conversation.model_dump() == before
 
@@ -775,12 +778,15 @@ def prod_shaped(monkeypatch):
 
 
 def run_prod(lane):
+    from utils.enrichment import outbox
+
     return batch.run_batch_final_pass(
         UID,
         lane.conversation,
         {},
         load_prints=lambda *a, **kw: {'user': [1.0, 0.0]},
         apply=stage.apply_speaker_resolution,
+        requeue=outbox.mark,
     )
 
 
@@ -927,49 +933,126 @@ def test_real_artifact_lifecycle_is_not_a_coverage_failure(prod_shaped, referenc
     assert not lane.gpu
 
 
-def test_contended_slot_waits_and_then_runs(prod_shaped, monkeypatch):
+@pytest.mark.parametrize('distinct_conversations', [False, True])
+def test_slot_saturation_requeues_without_waiting_on_shared_pool(
+    prod_shaped, outbox_state, monkeypatch, distinct_conversations
+):
     import threading
-    from concurrent.futures import ThreadPoolExecutor
+    from concurrent.futures import ThreadPoolExecutor, wait
+    from utils.enrichment import outbox
 
-    slot = threading.BoundedSemaphore(1)
-    assert slot.acquire()
-    monkeypatch.setattr(batch, '_SLOTS', slot)
-    entered = threading.Event()
+    rows, tasks = outbox_state
+    real_slot = threading.BoundedSemaphore(1)
+    assert real_slot.acquire()
     options = []
 
     class ObservedSlot:
         def acquire(self, **kwargs):
             options.append(kwargs)
-            entered.set()
-            return slot.acquire(**kwargs)
+            assert kwargs == {'blocking': False}
+            return real_slot.acquire(**kwargs)
 
         def release(self):
-            slot.release()
+            real_slot.release()
 
     monkeypatch.setattr(batch, '_SLOTS', ObservedSlot())
-    with ThreadPoolExecutor(max_workers=1) as pool:
-        future = pool.submit(run_prod, prod_shaped)
+    # The fake CAS store is serial; retain production's per-row atomicity under
+    # 96 simultaneous callers and test the real durable mark operation.
+    mutate = outbox._mutate
+    lock = threading.Lock()
+
+    def atomic_mutate(*args):
+        with lock:
+            return mutate(*args)
+
+    monkeypatch.setattr(outbox, '_mutate', atomic_mutate)
+    cases = []
+    for index in range(96):
+        conversation = prod_shaped.conversation.model_copy(deep=True)
+        if distinct_conversations:
+            conversation.id = f'synthetic-conversation-{index}'
+        cases.append(SimpleNamespace(**{**vars(prod_shaped), 'conversation': conversation}))
+    before = batch_outcome_counts()
+    with ThreadPoolExecutor(max_workers=24) as pool:
+        futures = [pool.submit(run_prod, case) for case in cases]
         try:
-            assert entered.wait(2)
+            done, pending = wait(futures, timeout=5)
+            # Check while the sole slot is still held: no waiter may need it to
+            # return, and unrelated postprocess work must have a free thread.
+            assert not pending
+            assert pool.submit(lambda: 'available').result(timeout=1) == 'available'
+            assert {future.result()['outcome'] for future in done} == {'deferred_slot_busy'}
         finally:
-            slot.release()
-        result = future.result(timeout=5)
-        assert options == [{'timeout': 60}]
-        assert result['outcome'] == 'success'
+            real_slot.release()
+    assert len(options) == 96
+    assert not prod_shaped.gpu
+    assert batch_outcome_counts() == before  # deferrals are not terminal results
+    count = 96 if distinct_conversations else 1
+    assert len(rows) == count and len(tasks) == count
+    assert {row['version'] for row in rows.values()} == {1 if distinct_conversations else 96}
+    cases_by_id = {case.conversation.id: case for case in cases}
+    for key, row in list(rows.items()):
+        assert (
+            outbox.run(
+                key, row['task_token'], lambda uid, cid, language: run_prod(cases_by_id[cid]), now=row['due_at'] + 1
+            )
+            == 'processed'
+        )
+    assert len(prod_shaped.gpu) == count and not rows
+    assert sum(batch_outcome_counts().values()) - sum(before.values()) == count
 
 
-def test_contended_slot_timeout_has_distinct_terminal_outcome(prod_shaped, monkeypatch):
+def test_slot_deferral_during_enrichment_keeps_retry_after_current_completion(prod_shaped, outbox_state, monkeypatch):
     import threading
+    from utils.enrichment import outbox
 
+    rows, tasks = outbox_state
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'false')
     slot = threading.BoundedSemaphore(1)
     assert slot.acquire()
     monkeypatch.setattr(batch, '_SLOTS', slot)
-    monkeypatch.setattr(batch, '_SLOT_WAIT_SECONDS', 0.001)
+    outbox.mark(UID, prod_shaped.conversation.id, 'en')
+    key = outbox.key(UID, prod_shaped.conversation.id)
     try:
-        assert run_prod(prod_shaped)['outcome'] == 'skipped_slot_timeout'
-        assert not prod_shaped.gpu
+
+        def callback(*_):
+            assert run_prod(prod_shaped)['outcome'] == 'deferred_slot_busy'
+
+        assert outbox.run(key, tasks[-1]['task_token'], callback, now=rows[key]['due_at'] + 1) == 'processed'
+        assert rows[key]['version'] == 2 and rows[key]['lease_until'] == 0
+        assert len(tasks) == 2
     finally:
         slot.release()
+    assert (
+        outbox.run(key, tasks[-1]['task_token'], lambda *_: run_prod(prod_shaped), now=rows[key]['due_at'] + 1)
+        == 'processed'
+    )
+    assert prod_shaped.gpu and not rows
+
+
+@pytest.mark.parametrize('failure_point', ['persist', 'enqueue'])
+def test_slot_deferral_custody_failure_propagates(prod_shaped, outbox_state, monkeypatch, failure_point):
+    import threading
+    from utils.enrichment import outbox
+
+    rows, _ = outbox_state
+    slot = threading.BoundedSemaphore(1)
+    assert slot.acquire()
+    monkeypatch.setattr(batch, '_SLOTS', slot)
+
+    def fail(*args, **kwargs):
+        raise RuntimeError('synthetic enqueue or persistence failure')
+
+    monkeypatch.setattr(outbox, '_mutate' if failure_point == 'persist' else '_enqueue', fail)
+    before = batch_outcome_counts()
+    try:
+        with pytest.raises(RuntimeError):
+            run_prod(prod_shaped)
+    finally:
+        slot.release()
+    assert bool(rows) == (failure_point == 'enqueue')  # lost enqueue retains sweep-repairable debt
+    assert sum(batch_outcome_counts().values()) - sum(before.values()) == 1
+    assert not prod_shaped.gpu
 
 
 def batch_outcome_counts():
@@ -1176,3 +1259,130 @@ def test_vendor_recovery_result_reconstructs_the_same_stored_batch_segment(prod_
     result = run_prod(lane)
     assert lane.gpu and lane.conversation.transcript_segments[0].is_user
     assert result['outcome'] == 'success'
+
+
+@pytest.mark.parametrize('geometry', ['parts', 'rollover', 'unreceipted_part', 'pending_part'])
+def test_shared_unit_never_reads_or_diarizes_other_conversation_audio(
+    prod_shaped, reference_store, monkeypatch, geometry
+):
+    store, client = reference_store
+    client.rows[(store.namespace + '_jobs', 'unit-a')]['duration_seconds'] = 140
+    parts = client.rows[(store.namespace + '_results', 'unit-a')]['projection_parts']
+    other = {'conversation_id': 'synthetic-other-conversation', 'speaker_scope': 'final:batch:unit-a'}
+    if geometry == 'parts':
+        parts['1'] = other
+    elif geometry == 'rollover':
+        parts['0']['size_rollover_outputs'] = [{'conversation_id': 'conversation'}, other]
+    elif geometry == 'unreceipted_part':
+        parts['1'] = {}  # Cannot establish exclusive ownership of the whole PCM.
+    else:
+        client.rows[(store.namespace + '_results', 'unit-a')]['projection_part_count'] = 2
+    monkeypatch.setattr(batch, 'FirestoreStore', lambda *_: store)
+    monkeypatch.setattr(batch, 'load_reference', references.load_reference)
+    monkeypatch.setattr(batch, 'artifacts_for', lambda _: prod_shaped.artifacts)
+    monkeypatch.setattr(prod_shaped.artifacts, 'fetch_audio', lambda *a, **kw: pytest.fail('shared audio fetched'))
+    monkeypatch.setattr(prod_shaped.artifacts, 'load_result', lambda *a, **kw: pytest.fail('shared result fetched'))
+    monkeypatch.setattr(batch.recurring_voices, 'learn', lambda *a, **kw: pytest.fail('shared voice learned'))
+    original = prod_shaped.conversation.model_copy(deep=True)
+    before = batch_outcome_counts()
+    result = run_prod(prod_shaped)
+    assert result['outcome'] == 'skipped_shared_unit'
+    assert result['reason'] == 'skipped_shared_unit' and result['failing_unit'] == 'unit-a'
+    assert prod_shaped.conversation == original and not prod_shaped.gpu
+    assert sum(batch_outcome_counts().values()) - sum(before.values()) == 1
+
+
+def test_centroid_without_conversation_assignments_is_never_learned(prod_shaped, monkeypatch):
+    original = final.diarize_with_speech_compaction
+
+    def diarize(*args, **kwargs):
+        output = original(*args, **kwargs)
+        # Strong evidence in staged PCM, but no assigned word in this conversation.
+        output['centroids']['other-conversation-voice'] = {'embedding': [0.0, 1.0], 'evidence_seconds': 120}
+        return output
+
+    learned = []
+    monkeypatch.setattr(final, 'diarize_with_speech_compaction', diarize)
+    monkeypatch.setattr(batch.recurring_voices, 'checkpoint', lambda *a, **kw: ('synthetic',))
+    monkeypatch.setattr(
+        batch.recurring_voices, 'learn', lambda uid, c, centroids, *a, **kw: learned.append(centroids) or {}
+    )
+    assert run_prod(prod_shaped)['outcome'] == 'success'
+    assert len(learned) == 1 and set(learned[0]) == {'voice'}
+
+
+@pytest.mark.parametrize('reason', ['flag_off', 'non_cohort', 'non_batch'])
+def test_ineligible_calls_are_outside_terminal_outcome_contract(prod_shaped, monkeypatch, reason):
+    if reason == 'non_batch':
+        prod_shaped.conversation.transcript_segments[0].speaker_id_scope = 'final:batch:sync:opaque'
+    else:
+        monkeypatch.setenv('BATCH_FINAL_PASS_ENABLED', 'false' if reason == 'flag_off' else 'true')
+        if reason == 'non_cohort':
+            monkeypatch.setenv('BATCH_FINAL_PASS_PERCENT', '0')
+    before = batch_outcome_counts()
+    assert run_prod(prod_shaped)['outcome'] == 'skipped_ineligible'
+    assert batch_outcome_counts() == before
+    assert not prod_shaped.reads and not prod_shaped.gpu
+
+
+@pytest.mark.parametrize('outcome', ['success', 'failed_incomplete_coverage'])
+def test_owner_lab_reproduce_does_not_change_default_registry(prod_shaped, monkeypatch, outcome):
+    from prometheus_client import REGISTRY
+    from testing.owner_lab import final_pass_repro as lab
+    from utils.observability.fallback import record_fallback
+    from utils.stt.vad_compaction import diarize_with_speech_compaction
+
+    monkeypatch.setattr(final, 'diarize_with_speech_compaction', diarize_with_speech_compaction)
+    # Exercise real fallback metrics too, rather than the fixture's telemetry spy.
+    monkeypatch.setattr(batch, 'record_fallback', record_fallback)
+    monkeypatch.setattr(final, 'record_fallback', record_fallback)
+    if outcome != 'success':
+        monkeypatch.setattr(batch, 'load_reference', lambda *a: None)
+
+    def snapshot():
+        return {
+            (metric.name, sample.name, tuple(sorted(sample.labels.items()))): sample.value
+            for metric in REGISTRY.collect()
+            if not metric.name.startswith(('process_', 'python_gc_'))
+            for sample in metric.samples
+        }
+
+    before = snapshot()
+    result = lab.reproduce(UID, prod_shaped.conversation, {}, load_prints=lambda *a, **kw: {})
+    assert result['outcome'] == outcome
+    assert snapshot() == before
+    # Restored production objects still observe future admitted invocations.
+    batch.OUTCOMES.labels(lane='batch', outcome='success').inc()
+    assert snapshot() != before
+
+
+def test_enrichment_resolver_passes_retry_custody_to_batch(lane, monkeypatch):
+    received = []
+
+    from utils.conversations import processing_speakers
+    from utils.enrichment import outbox
+
+    original = batch.run_batch_final_pass
+
+    def run(*args, **kwargs):
+        received.append(kwargs['requeue'])
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(batch, 'run_batch_final_pass', run)
+    assert processing_speakers.resolve_speakers_for_processing(UID, lane.conversation)
+    assert received == [outbox.mark] and lane.gpu
+
+
+def test_missing_retry_custody_never_silently_drops_busy_pass(prod_shaped, monkeypatch):
+    import threading
+
+    slot = threading.BoundedSemaphore(1)
+    assert slot.acquire()
+    monkeypatch.setattr(batch, '_SLOTS', slot)
+    try:
+        with pytest.raises(RuntimeError, match='retry_custody_required'):
+            batch.run_batch_final_pass(
+                UID, prod_shaped.conversation, {}, load_prints=lambda *a: {}, apply=lambda *a, **kw: None, requeue=None
+            )
+    finally:
+        slot.release()

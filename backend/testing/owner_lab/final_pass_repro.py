@@ -116,6 +116,66 @@ def write_fence():
         yield
 
 
+@contextmanager
+def isolated_metrics():
+    """Suppress this replay's Prometheus writes, including lazy label children.
+
+    Production modules retain their real metric objects. Context-local guards
+    keep unrelated callers in other threads observable while the lab runs.
+    New default-registry collectors imported by the replay are suppressed too.
+    """
+    from contextvars import ContextVar
+    from prometheus_client import REGISTRY, Counter, Gauge, Histogram, Summary, Info, Enum
+    from prometheus_client.metrics import MetricWrapperBase
+    from prometheus_client.registry import CollectorRegistry
+
+    active = ContextVar('owner_lab_metrics', default=False)
+
+    class SilentMetric:
+        def labels(self, *args, **kwargs):
+            return self
+
+        def inc(self, *args, **kwargs):
+            pass
+
+        observe = set = dec = info = state = inc
+
+    silent = SilentMetric()
+
+    def guarded(original, replacement=None):
+        def call(self, *args, **kwargs):
+            if active.get():
+                return replacement
+            return original(self, *args, **kwargs)
+
+        return call
+
+    original_register = CollectorRegistry.register
+
+    def register(self, collector):
+        if self is not REGISTRY or not active.get():
+            return original_register(self, collector)
+
+    with ExitStack() as stack:
+        stack.enter_context(patch.object(CollectorRegistry, 'register', register))
+        stack.enter_context(patch.object(MetricWrapperBase, 'labels', guarded(MetricWrapperBase.labels, silent)))
+        for cls, names in (
+            (Counter, ('inc',)),
+            (Gauge, ('set', 'inc', 'dec', 'set_to_current_time')),
+            (Histogram, ('observe',)),
+            (Summary, ('observe',)),
+            (Info, ('info',)),
+            (Enum, ('state',)),
+        ):
+            for name in names:
+                stack.enter_context(patch.object(cls, name, guarded(getattr(cls, name))))
+        token = active.set(True)
+        try:
+            yield
+        finally:
+            active.reset(token)
+
+
 def scope_kind(segment):
     from config.batch_conversation_speakers import batch_unit_scope
 
@@ -129,6 +189,7 @@ def scope_kind(segment):
     return 'other'
 
 
+@isolated_metrics()
 def reproduce(uid, conversation, receipt, *, diarizer='stub', load_prints=None, apply=None):
     """Run the real adapter; substitute only admission, writes and GPU transport."""
     from config.batch_conversation_speakers import batch_unit_scope
@@ -198,7 +259,12 @@ def reproduce(uid, conversation, receipt, *, diarizer='stub', load_prints=None, 
         if diarizer == 'stub':
             stack.enter_context(patch.object(batch, 'HttpDiarizer', lambda *a, **kw: ProjectionDiarizer()))
         result = batch.run_batch_final_pass(
-            uid, conversation, receipt, load_prints=load_prints or load_voiceprints_for_resolution, apply=capture_apply
+            uid,
+            conversation,
+            receipt,
+            load_prints=load_prints or load_voiceprints_for_resolution,
+            apply=capture_apply,
+            requeue=deny_write,
         )
     changed = sum(
         before[s.id] != (s.speaker_id_scope, s.speaker_id, s.is_user, s.person_id, s.recurring_voice_id)

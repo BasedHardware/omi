@@ -844,6 +844,7 @@ def resolve_speakers_for_processing(
     budget_seconds: Optional[float] = None,
     max_embedding_attempts: Optional[int] = None,
     allow_owner_audio_repair: bool = True,
+    requeue_final_pass=None,
 ) -> bool:
     """Resolve voices and return whether the manual receipt was read and applied."""
     trace = resolver_trace()
@@ -975,6 +976,7 @@ def resolve_speakers_for_processing(
                 receipt,
                 load_prints=load_voiceprints_for_resolution,
                 apply=apply_speaker_resolution,
+                requeue=requeue_final_pass,
             )
     return receipt_applied
 

@@ -154,7 +154,7 @@ from utils.conversations.owner_attribution import (
     quote_source_attribution,
     explicitly_self_referential,
 )
-from utils.conversations.speaker_resolution import resolve_speakers_for_processing
+from utils.conversations.processing_speakers import resolve_speakers_for_processing
 from utils.observability.owner_identity_retry import identity_pass
 from utils.memory.memory_service import MemoryService
 from utils.memory.decision_path_telemetry import (

@@ -45,7 +45,6 @@ from utils.sync.stage import current_stage
 logger = logging.getLogger(__name__)
 
 _SLOTS = threading.BoundedSemaphore(1)
-_SLOT_WAIT_SECONDS = 60
 _RESERVE = """
 for i = 1, 2 do
   local spent = tonumber(redis.call('hget', KEYS[i], 'audio_ms') or '0')
@@ -109,7 +108,7 @@ def _fallback(outcome, **details):
         to_mode='legacy_speaker_matching',
         reason=(
             'recovery_budget'
-            if outcome in {'failed_read_budget', 'skipped_budget', 'skipped_slot_timeout'}
+            if outcome in {'failed_read_budget', 'skipped_budget'}
             else 'unavailable' if outcome == 'failed_incomplete_coverage' else 'other'
         ),
         outcome='degraded',
@@ -212,11 +211,34 @@ def _units(uid, conversation, read_budget):
             raise failure from error
 
 
-def run_batch_final_pass(uid, conversation, receipt, *, load_prints, apply):
+def run_batch_final_pass(uid, conversation, receipt, *, load_prints, apply, requeue):
+    """One terminal metric per invocation that runs or fails custody, never per segment.
+
+    Non-cohort calls and durable slot deferrals are outside that contract. A
+    deferral records fallback telemetry; its later admitted retry owns the result.
+    """
     if not final_pass_enabled_for(uid, conversation.transcript_segments):
         return {'outcome': 'skipped_ineligible'}
-    if not _SLOTS.acquire(timeout=_SLOT_WAIT_SECONDS):
-        return _fallback('skipped_slot_timeout', reason='slot_wait_timeout')
+    if not _SLOTS.acquire(blocking=False):
+        # Persist before returning to the shared postprocess pool. mark increments
+        # an active obligation's version, so its completion retains this retry;
+        # named Cloud Tasks plus the enrichment sweep repair a lost enqueue.
+        try:
+            if requeue is None:
+                raise RuntimeError('retry_custody_required')
+            requeue(uid, conversation.id, conversation.language or 'en')
+        except Exception as error:
+            _fallback('failed_requeue', **error_details(error))
+            raise  # Do not acknowledge delivery when durable custody failed.
+        record_fallback(
+            component='stt_selection',
+            from_mode='batch_final_pass',
+            to_mode='enrichment_retry',
+            reason='recovery_budget',
+            outcome='degraded',
+        )
+        logger.info('event=batch_final_pass outcome=deferred_slot_busy reason=enrichment_outbox')
+        return {'outcome': 'deferred_slot_busy'}
     try:
         return _run(uid, conversation, receipt, load_prints, apply)
     except Exception as error:
@@ -371,7 +393,8 @@ def _run(uid, conversation, receipt, load_prints, apply):
             eligible = {
                 voice: centroid
                 for voice, centroid in outcome['centroids'].items()
-                if all(w['segment_id'] in updates for w in outcome['assignments'] if w['speaker'] == voice)
+                if (assigned := [w for w in outcome['assignments'] if w['speaker'] == voice])
+                and all(w['segment_id'] in updates for w in assigned)
             }
             recurring_labels = recurring_voices.learn(
                 uid,

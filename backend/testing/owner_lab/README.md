@@ -181,3 +181,22 @@ evidence. Other lanes and point-only segments are preserved. Missing required
 batch segments fail closed; expired artifacts and receipts for another
 conversation report `skipped_expired` and `skipped_merged`. Retention starts
 at completed projection, after enrichment is queued; reading never extends it.
+
+Shared staged units (including projection parts and size-rollover receipts for
+another conversation) report `skipped_shared_unit` before any artifact read.
+The pass cannot yet trim their audio with sufficient ownership precision.
+Recurring centroids must have at least one word assigned to an updated segment
+in this conversation; the recurring-profile evidence thresholds still apply.
+
+Slot admission never waits in the shared postprocess pool. A busy call durably
+marks the existing enrichment outbox (`sync_reprocess_outbox`) through a
+callback supplied by conversation processing and returns
+`deferred_slot_busy`; its named Cloud Task and repair sweep retain retry custody,
+including a mark made during an active enrichment lease. Enrichment replay runs
+speaker resolution again. A failed mark/enqueue propagates to the delivery
+caller rather than acknowledging lost work. Invocations that run the pass or
+fail to preserve retry custody emit one terminal
+`omi_transcription_final_pass_total` outcome. Ineligible calls and durable slot
+deferrals are outside that contract; deferrals emit fallback
+telemetry. The replay suppresses Prometheus writes inside `reproduce()`, so it
+cannot change the default registry's counters, histograms or label children.

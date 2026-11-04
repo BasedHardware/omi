@@ -34,6 +34,8 @@ _REASONS = frozenset(
         'diarizer_attempt_budget',
         'skipped_expired',
         'skipped_merged',
+        'skipped_shared_unit',
+        'retry_custody_required',
         'batch artifact encryption secret must contain at least 32 bytes',
         'durable batch staging bucket is not configured',
     }

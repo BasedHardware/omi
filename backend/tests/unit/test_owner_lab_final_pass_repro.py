@@ -100,3 +100,45 @@ def test_prebuffered_redis_write_is_refused_without_changing_data():
     with write_fence(), pytest.raises(WriteBlocked):
         pipeline.execute()
     assert client.get('synthetic-key') == b'original'
+
+
+def test_metric_isolation_covers_existing_values_new_labels_and_lazy_collectors():
+    from prometheus_client import REGISTRY, Counter, Histogram
+    from testing.owner_lab.final_pass_repro import isolated_metrics
+
+    counter = Counter('owner_lab_isolation_test', 'Synthetic metric', ['case'])
+    histogram = Histogram('owner_lab_isolation_seconds', 'Synthetic latency')
+    live = counter.labels(case='live')
+    live.inc(2)
+    try:
+        before = (list(counter.collect()), list(histogram.collect()))
+        with pytest.raises(RuntimeError, match='synthetic replay error'):
+            with isolated_metrics():
+                live.inc(10)
+                counter.labels(case='replay').inc()
+                histogram.observe(10)
+                Counter('owner_lab_lazy_test', 'Imported inside replay').inc()
+                raise RuntimeError('synthetic replay error')
+        assert (list(counter.collect()), list(histogram.collect())) == before
+        assert 'owner_lab_lazy_test' not in REGISTRY._names_to_collectors
+        live.inc()
+        assert live._value.get() == 3  # Restoration also runs on exceptional exit.
+    finally:
+        REGISTRY.unregister(counter)
+        REGISTRY.unregister(histogram)
+
+
+def test_metric_isolation_preserves_unrelated_thread_observations():
+    from concurrent.futures import ThreadPoolExecutor
+    from prometheus_client import REGISTRY, Counter
+    from testing.owner_lab.final_pass_repro import isolated_metrics
+
+    counter = Counter('owner_lab_other_thread_test', 'Synthetic metric', ['caller'])
+    try:
+        with ThreadPoolExecutor(max_workers=1) as pool, isolated_metrics():
+            counter.labels(caller='replay').inc()
+            pool.submit(lambda: counter.labels(caller='serving').inc()).result(timeout=2)
+        assert set(counter._metrics) == {('serving',)}
+        assert counter.labels(caller='serving')._value.get() == 1
+    finally:
+        REGISTRY.unregister(counter)

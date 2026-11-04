@@ -30,6 +30,16 @@ def load_reference(store, uid, unit, conversation_id):
             if any(r.get('conversation_id') and r.get('speaker_scope') == f'final:batch:{unit}' for r in receipts):
                 raise ReferenceUnavailable('skipped_merged')
             return None
+        # PCM belongs to the entire staged unit, including other projection parts
+        # and size-rollover outputs. Until reconstruction can trim that geometry,
+        # never send a shared unit to the conversation diarizer.
+        outputs = [
+            output for receipt in receipts for output in [receipt, *(receipt.get('size_rollover_outputs') or [])]
+        ]
+        if len(receipts) != result.get('projection_part_count', len(receipts)) or any(
+            output.get('conversation_id') != conversation_id for output in outputs
+        ):
+            raise ReferenceUnavailable('skipped_shared_unit')
         tx.check_privacy(uid, (conversation_id,), expected_generation=item.privacy_generation)
         uri = (result.get('result') or {}).get('result_uri')
         for kind, reference in (('audio', item.audio_uri), ('results', uri)):
