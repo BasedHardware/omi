@@ -335,3 +335,25 @@ async def test_cancelled_producer_driver_releases_its_inflight_reservation():
     with pytest.raises(asyncio.CancelledError):
         await task
     assert not barriers
+
+
+@pytest.mark.asyncio
+async def test_cancelled_old_producer_preserves_a_replacement_reservation():
+    entered = asyncio.Event()
+
+    class Barrier:
+        async def begin_recording(self, _cid):
+            entered.set()
+            await asyncio.Event().wait()
+
+    barriers = {}
+    task = asyncio.create_task(
+        begin_capture(barriers, 'synthetic-lifecycle-a', 'capture', make_barrier=lambda uid: Barrier())
+    )
+    await asyncio.wait_for(entered.wait(), 1)
+    replacement = object()
+    barriers['capture'] = replacement
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert barriers['capture'] is replacement

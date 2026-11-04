@@ -16,6 +16,7 @@ async def begin_capture(barriers, uid, conversation_id, *, make_barrier):
         if conversation_id not in barrier.upload_sessions:
             raise RuntimeError('custody token was not persisted')
     except BaseException:
-        barriers.pop(conversation_id, None)
+        if barriers.get(conversation_id) is barrier:
+            barriers.pop(conversation_id, None)
         raise
     return barrier
