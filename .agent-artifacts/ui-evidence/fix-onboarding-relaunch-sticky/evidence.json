@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-relaunch-paywall-before-after.png",
+      "platform": "mobile-ios",
+      "description": "Kill and relaunch three times on Language after closing the sign-up trial paywall. BEFORE (main 5ba33c951c): the trial paywall comes back on every relaunch. AFTER (this PR): every relaunch resumes on Language with no paywall; the app's preferences hold the stored answer (closed) and arm (control). Real simulator shots, iPhone 17 Pro, iOS 26.2, local backend.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "002-mobile-ios-relaunch-arm-before-after.png",
+      "platform": "mobile-ios",
+      "description": "Arm stickiness. A new account's first arm read falls back to control (local_dev has no PostHog); a build whose every read answers pocket (debug arm override) is then installed over it, app data kept. BEFORE (main): each of three relaunches shows the sign-up paywall again, then the 30-day downsell, then switches to pocket. AFTER (this PR): all three relaunches stay on control's Language step. Real simulator shots.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "003-mobile-ios-pocket-offers-once.png",
+      "platform": "mobile-ios",
+      "description": "AFTER, a new account on the pocket build: the sign-up paywall (closed) and the 30-day downsell (declined) are each offered once; three relaunches reopen pocket's Permissions step with no second paywall or downsell. Real simulator shots.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    }
+  ]
+}

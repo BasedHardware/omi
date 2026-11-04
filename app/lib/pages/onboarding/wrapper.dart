@@ -21,6 +21,7 @@ import 'package:omi/pages/onboarding/auth.dart';
 import 'package:omi/pages/onboarding/found_omi/found_omi_widget.dart';
 import 'package:omi/pages/onboarding/knowledge_graph_step.dart';
 import 'package:omi/pages/onboarding/name/name_widget.dart';
+import 'package:omi/pages/onboarding/onboarding_resume_state.dart';
 import 'package:omi/pages/onboarding/permissions/permissions_checker.dart';
 import 'package:omi/pages/onboarding/permissions/permissions_widget.dart';
 import 'package:omi/pages/onboarding/primary_language/primary_language_widget.dart';
@@ -271,6 +272,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     SharedPreferencesUtil().onboardingCompleted = true;
     SharedPreferencesUtil().permissionsCompleted = true;
     SharedPreferencesUtil().remove(_resumeKey);
+    unawaited(OnboardingResumeState.clear(SharedPreferencesUtil().uid));
     _stepTelemetry.exit();
     _completeOnboardingTelemetry();
     PlatformManager.instance.analytics.onboardingCompleted();
@@ -294,12 +296,20 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     await PaywallRouter.openVariant(context, source: 'onboarding', config: config);
   }
 
-  /// The `trial` arm's placement: once, right after sign-up and consent, before the first step.
-  /// Dismissing it (close button) just continues onboarding.
+  /// The `trial` arm's placement: once per account, right after sign-up and consent, before the
+  /// first step. Dismissing it (close button) just continues onboarding; a relaunch after the reader
+  /// answered it resumes after it.
   bool _signupPaywallPurchased = false;
 
   Future<void> _maybeShowSignupPaywall() async {
     if (_signupPaywallShown) return;
+    final uid = SharedPreferencesUtil().uid;
+    final answered = OnboardingResumeState.signupPaywall(uid);
+    if (answered != null) {
+      _signupPaywallShown = true;
+      _signupPaywallPurchased = answered == SignupPaywallAnswer.purchased;
+      return;
+    }
     final config = await PaywallExperiment.resolve();
     if (!mounted || config.variant != PaywallVariant.trial || !config.onboardingPaywall) return;
     _signupPaywallShown = true;
@@ -307,12 +317,16 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     final usage = context.read<UsageProvider>();
     if (usage.subscription == null) await usage.fetchSubscription();
     if (!mounted) return;
-    await PaywallRouter.openVariant(
+    final shown = await PaywallRouter.openVariant(
       context,
       source: 'onboarding',
       config: config,
       onResult: (result) => _signupPaywallPurchased = result == true,
     );
+    if (shown) {
+      await OnboardingResumeState.saveSignupPaywall(
+          uid, _signupPaywallPurchased ? SignupPaywallAnswer.purchased : SignupPaywallAnswer.closed);
+    }
   }
 
   /// Enters the steps after sign-in and consent: the arm of `onboarding-variant` for this reader
@@ -321,17 +335,23 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   Future<void> _enterSteps() async {
     await _maybeShowSignupPaywall();
     if (!mounted) return;
-    final arm = await OnboardingVariantGate.resolve();
+    // The arm this account was first given, kept for the rest of its onboarding: a relaunch never
+    // switches arms, and the exposure below always names that same arm.
+    final uid = SharedPreferencesUtil().uid;
+    final storedArm = OnboardingResumeState.arm(uid);
+    final arm = storedArm ?? await OnboardingVariantGate.resolve();
     if (!mounted) return;
+    if (storedArm == null) unawaited(OnboardingResumeState.saveArm(uid, arm));
     PlatformManager.instance.analytics.track('Onboarding Variant Shown', properties: {
       'variant': arm.variant.wireName,
       '\$feature/${OnboardingVariantGate.enabledFlag}': arm.variant.wireName,
     });
     switch (arm.variant) {
       case OnboardingVariant.pocket:
-        // Closing the sign-up trial paywall earns the 30-day downsell, once.
-        if (_signupPaywallShown && !_signupPaywallPurchased) {
+        // Closing the sign-up trial paywall earns the 30-day downsell, once per account.
+        if (_signupPaywallShown && !_signupPaywallPurchased && !OnboardingResumeState.trialUpsellDone(uid)) {
           await TrialUpsellSheet.show(context, source: 'onboarding');
+          unawaited(OnboardingResumeState.saveTrialUpsellDone(uid));
           if (!mounted) return;
         }
         // The flow offers no plan itself: skip the end placement only when sign-up already showed one.
