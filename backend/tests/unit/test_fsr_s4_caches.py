@@ -459,8 +459,8 @@ def test_serving_config_expires_and_does_not_serve_stale_after_error(env, monkey
 @pytest.mark.parametrize(
     'route,enabled,expected',
     [
-        ('trial', False, 6),
-        ('trial', True, 2),
+        ('trial', False, 2),
+        ('trial', True, 1),
         # +1 per request (this case issues two) for the trial-eligibility read of
         # stripe_customer_id; it joins the entitlement projection when request_read_dedupe
         # is on, so the deduped budget below is unchanged.
@@ -488,12 +488,6 @@ def test_real_users_endpoints_read_count_with_auth(env, monkeypatch, route, enab
     monkeypatch.setattr(auth, 'validate_byok_request', lambda uid: None)
     monkeypatch.setattr(auth, '_recover_locked_content_if_request', lambda *args: None)
     monkeypatch.setattr(auth, '_enforce_cutover_http_if_request', lambda *args: None)
-    monkeypatch.setattr(subscription, 'TRIAL_PAYWALL_ENABLED', True)
-    monkeypatch.setattr(
-        subscription,
-        '_get_user',
-        lambda uid: SimpleNamespace(user_metadata=SimpleNamespace(creation_timestamp=(time.time() - 3600) * 1000)),
-    )
     monkeypatch.setattr(router, 'is_marketplace_reviewer', lambda uid: False)
     monkeypatch.setattr(router, 'reconcile_basic_plan_with_stripe', lambda uid, sub: sub)
     monkeypatch.setattr(router, 'get_paid_plan_definitions', lambda: [])

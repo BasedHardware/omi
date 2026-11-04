@@ -69,7 +69,8 @@ not prove low busy/fallback rates when requests arrive in bursts.
    fallback if busy/errors/latency exceed budget. This IP is the checked-in
    shared internal Gateway binding, not a newly allocated address.
 4. Release the backend URL **after** the CPU service passes acceptance. The prod
-   runtime overlay declares `HOSTED_LID_API_URL=http://172.16.160.20/lid` on backend,
+   runtime overlay and the listen and pusher charts hold `HOSTED_LID_API_URL` empty
+   until then; set it to `http://172.16.160.20/lid` on backend,
    backend-sync, backend-sync-backfill, backend-integration, backend-listen and pusher.
    Regenerate `python3 backend/deploy/compose_runtime_env.py`, use normal backend
    release workflows/renderers, and verify the running releases receive the URL.

@@ -6,6 +6,15 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
+## Fair-use decay switch
+
+`FAIR_USE_THROTTLE_DECAY_ENABLED` defaults on. `false`, `off`, or `0` restores
+restrict-only decay. Enabled state reads persist throttle → warning after
+`throttle_until`, then warning → none after the written seven-day
+`warning_until` quiet period. Restrict gates remain unchanged. See the
+[decay change note](listen_pusher_pipeline/changes/2026-11-04-fair-use-throttle-decay.md)
+for legacy recovery and telemetry semantics.
+
 ## Cohort-scoped legacy sync retirement
 
 Upload admission, record-owner selection, final-pass claims, cap-hold handoff
@@ -6098,6 +6107,34 @@ list; no `STT_SERVICE_MODELS` literal change is needed. This does not change
 With the plain slot off, stale streaming lists containing `parakeet` also admit
 the canonical vendor defaults after their configured models. Managed sessions
 therefore fall through to Modulate/Soniox instead of refusing supported English.
+
+Setting `LOCAL_PREVIEW_BATCH_ENABLED` off revokes at the next renewal; the
+local-preview declaration is cleared and the session stays revoked. Owned captures
+attach visible restore; unowned captures resume their ordinary non-preview path.
+The custody promotion above applies only while the local-preview grant is active.
+
+A granted Flutter client whose engine settles unavailable (or exhausts its one
+runtime retry) sends `{"type":"local_preview_engine_unavailable","reason":"locale_asset_missing"}`
+before flushing held binary audio through the ordinary socket-refusal path. The
+reason is a closed engine-failure value; unknown/malformed reasons count as
+`other`. The app sends it once per socket and latches per capture so later
+sockets do not declare local preview. No engine-available message can un-rescind.
+
+`LOCAL_PREVIEW_ENGINE_RESCIND_ENABLED` defaults on; false/0/off/no counts and ignores
+the event. Otherwise listen clears the grant and replaces the immutable request
+with its declaration cleared. Renewal never re-grants. The counter is
+`omi_listen_local_preview_engine_unavailable_total{client_platform,reason}` (bounded
+labels, once per granted socket). Renewal revocations use the same sticky state
+transition and restore attachment, independently of the engine-event kill switch.
+Rescinded or revoked audio with durable batch custody routes through
+`VisibleRestore.flush`, never a full cloud deferred open. Paid restore requires durable
+`owned(batch_record_capture)` and the existing mobile visible-restore cohort, with
+15 seconds stable transcript visibility before opening Modulate and immediate
+close when hidden. Without durable ownership, the session instead retains or opens
+its normal non-preview cloud stream with its existing demand policy. Its audio is
+not cleared by the batch-only flush path. This restores baseline cloud cost; it
+does not expand paid visible restore. Deploy server first,
+then the Dart app build; unknown control kinds remain no-ops for older servers.
 
 ### Forward canonical audio archive (default off)
 

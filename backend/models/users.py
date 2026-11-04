@@ -197,7 +197,7 @@ class TranscriptionAllowanceSnapshot(BaseModel):
 
     ``mode``: ``managed`` (Omi-billed socket), ``on_device`` (the plan's managed
     minutes are spent; the local engine is free on every plan), ``blocked``
-    (desktop trial paywall). ``remaining_seconds`` is null when unlimited.
+    (no transcription access). ``remaining_seconds`` is null when unlimited.
     """
 
     mode: str
