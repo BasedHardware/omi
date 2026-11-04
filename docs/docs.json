@@ -112,6 +112,7 @@
           {
             "group": "Omi device",
             "pages": [
+              "doc/hardware/how-the-pendant-works",
               "doc/hardware/OmiConsumer"
             ]
           },
