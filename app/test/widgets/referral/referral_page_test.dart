@@ -45,7 +45,6 @@ void main() {
   });
 
   testWidgets('default gate never creates a referral session', (tester) async {
-    if (mobileReferralCampaignEnabled) return;
     var calls = 0;
     await tester.pumpWidget(host(ReferralPage(createSession: () {
       calls++;
@@ -56,10 +55,9 @@ void main() {
     expect(find.byKey(const Key('referral-share')), findsNothing);
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(seconds: 20));
-  });
+  }, skip: mobileReferralCampaignEnabled);
 
   testWidgets('real URL copy, cancelled share, retry and reentry remain usable', (tester) async {
-    if (!mobileReferralCampaignEnabled) return;
     var loads = 0;
     var shares = 0;
     String? copied;
@@ -101,10 +99,9 @@ void main() {
       expect(find.text(link), findsOneWidget);
     }
     expect(loads, 5);
-  });
+  }, skip: !mobileReferralCampaignEnabled);
 
   testWidgets('share failure recovers and large text remains scrollable', (tester) async {
-    if (!mobileReferralCampaignEnabled) return;
     var attempts = 0;
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
@@ -135,10 +132,9 @@ void main() {
     expect(attempts, 2);
     await tester.scrollUntilVisible(find.byKey(const Key('referral-affiliate')), 200);
     expect(tester.takeException(), isNull);
-  });
+  }, skip: !mobileReferralCampaignEnabled);
 
   testWidgets('real synchronous auth broadcast invalidates before settled gateway reload', (tester) async {
-    if (!mobileReferralCampaignEnabled) return;
     final gateway = _ReferralGateway();
     final auth = AuthService.forTesting(tokenGateway: gateway);
     auth.markAuthenticatedUser('user-a');
@@ -165,10 +161,9 @@ void main() {
     auth.markAuthenticatedUser('user-b');
     await tester.pump();
     expect(tester.takeException(), isNull);
-  });
+  }, skip: !mobileReferralCampaignEnabled);
 
   testWidgets('late account A result cannot replace account B link', (tester) async {
-    if (!mobileReferralCampaignEnabled) return;
     final changes = StreamController<void>.broadcast(sync: true);
     final old = Completer<String>();
     var generation = 0;
@@ -189,7 +184,7 @@ void main() {
     expect(find.text('$link-b'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
     await changes.close();
-  });
+  }, skip: !mobileReferralCampaignEnabled);
 }
 
 final class _ReferralGateway implements AuthTokenGateway {

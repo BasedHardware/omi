@@ -14998,7 +14998,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get referralWebSteps =>
-      '1. Partilhe a sua ligação pessoal.\n2. O seu amigo regista-se na web através da sua ligação.\n3. As novas contas elegíveis recebem 30 dias de Omi Pro.';
+      '1. Compartilhe seu link pessoal.\n2. Seu amigo se cadastra na web pelo seu link.\n3. As novas contas elegíveis recebem 30 dias de Omi Pro.';
 
   @override
   String get referralAffiliate => 'Programa de afiliados';

@@ -14959,11 +14959,11 @@ class AppLocalizationsEt extends AppLocalizations {
   String get liveAudioSavedDetail => 'Kõnelejad ja lõplik transkriptsioon ilmuvad siia üleslaadimise ajal.';
 
   @override
-  String get referralGiftTitle => 'Kingi sõbrale kuu Omi Prod';
+  String get referralGiftTitle => 'Kingi sõbrale kuu Omi Pro\'d';
 
   @override
   String get referralWebSteps =>
-      '1. Jaga oma isiklikku linki.\n2. Sõber registreerub veebis sinu lingi kaudu.\n3. Sobivad uued kontod saavad 30 päeva Omi Prod.';
+      '1. Jaga oma isiklikku linki.\n2. Sõber registreerub veebis sinu lingi kaudu.\n3. Sobivad uued kontod saavad 30 päeva Omi Pro\'d.';
 
   @override
   String get referralAffiliate => 'Partnerprogramm';

@@ -1,3 +1,4 @@
 {
-  "change": "Prepared an in-app referral page with Share and Copy, with the affiliate program below. The campaign remains disabled pending approval."
+  "kind": "none",
+  "reason": "The mobile referral campaign remains disabled by default; users continue to see the existing affiliate experience. No new mobile release-note entry is visible until activation is approved."
 }

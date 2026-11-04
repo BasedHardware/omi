@@ -1,5 +1,5 @@
 import { createElement } from 'react';
-import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // A signed-in user whose ID token cannot be read right now (a transient Firebase
@@ -12,6 +12,8 @@ let authUser: { uid: string; getIdToken: typeof harness.getIdToken } | null = nu
 const harness = vi.hoisted(() => ({
   getIdToken: vi.fn(),
   navigate: vi.fn(),
+  authListeners: new Set<(user: { uid: string } | null) => void>(),
+  unsubscribe: vi.fn(),
 }));
 
 vi.mock('@tschk/moonshine-next/navigation', () => ({
@@ -41,7 +43,13 @@ vi.mock('@/lib/firebase', () => ({
       return authUser;
     },
   },
-  onAuthStateChange: () => () => {},
+  onAuthStateChange: (callback: (user: { uid: string } | null) => void) => {
+    harness.authListeners.add(callback);
+    return () => {
+      harness.authListeners.delete(callback);
+      harness.unsubscribe();
+    };
+  },
 }));
 vi.mock('@/lib/referrals', async () => ({
   ...(await vi.importActual<typeof import('@/lib/referrals')>('@/lib/referrals')),
@@ -61,6 +69,8 @@ describe('LoginClient referral with a temporary token failure', () => {
     authUser = { uid: 'synthetic-user', getIdToken: harness.getIdToken };
     harness.getIdToken.mockReset();
     harness.navigate.mockReset();
+    harness.authListeners.clear();
+    harness.unsubscribe.mockReset();
     fetchMock.mockReset();
     fetchMock.mockResolvedValue(
       new Response(JSON.stringify({ claimed: true, trial_days: 30 }), { status: 200 }),
@@ -100,6 +110,8 @@ describe('LoginClient referral with a temporary token failure', () => {
     await waitFor(() => expect(harness.getIdToken).toHaveBeenCalledTimes(2));
 
     authUser = { uid: 'synthetic-next-user', getIdToken: harness.getIdToken };
+    expect(harness.authListeners.size).toBe(1);
+    for (const listener of harness.authListeners) listener(authUser);
     view.rerender(createElement(LoginClient));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     releaseOld('token-old-account');
@@ -108,4 +120,79 @@ describe('LoginClient referral with a temporary token failure', () => {
     const sent = fetchMock.mock.calls.map((call) => call[1].headers.Authorization);
     expect(sent).toEqual(['Bearer token-new-account']);
   });
+
+  it.each([
+    ['token', 'switch'],
+    ['dispatch', 'switch'],
+    ['decode', 'switch'],
+    ['token', 'signout'],
+    ['dispatch', 'signout'],
+    ['decode', 'signout'],
+  ] as const)(
+    'the auth listener invalidates %s pending across %s and A reentry',
+    async (stage, transition) => {
+      let releaseToken!: (token: string) => void;
+      let releaseResponse!: (response: Response) => void;
+      let releaseDecode!: (result: { claimed: boolean; trial_days: number }) => void;
+      const json = vi.fn(() =>
+        stage === 'decode'
+          ? new Promise((resolve) => {
+              releaseDecode = resolve;
+            })
+          : Promise.resolve({ claimed: true, trial_days: 30 }),
+      );
+      const response = { ok: true, json } as unknown as Response;
+      harness.getIdToken.mockImplementation(() =>
+        stage === 'token'
+          ? new Promise((resolve) => {
+              releaseToken = resolve;
+            })
+          : Promise.resolve('token-original-a'),
+      );
+      fetchMock.mockImplementation(() =>
+        stage === 'dispatch'
+          ? new Promise((resolve) => {
+              releaseResponse = resolve;
+            })
+          : Promise.resolve(response),
+      );
+      const view = render(createElement(LoginClient));
+      await waitFor(() => expect(harness.getIdToken).toHaveBeenCalledTimes(1));
+      if (stage !== 'token')
+        await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+      if (stage === 'decode') await waitFor(() => expect(json).toHaveBeenCalledTimes(1));
+      expect(harness.authListeners.size).toBe(1);
+      const originalA = authUser;
+
+      // Restore the exact A object before resuming async work, without rerendering.
+      // Live-currentUser and React owner checks then pass; only the listener latch
+      // can prevent this old attempt from dispatching or publishing success.
+      act(() => {
+        authUser =
+          transition === 'signout'
+            ? null
+            : { uid: 'user-b', getIdToken: harness.getIdToken };
+        for (const listener of harness.authListeners) listener(authUser);
+        authUser = originalA;
+        for (const listener of harness.authListeners) listener(authUser);
+      });
+      await act(async () => {
+        if (stage === 'token') releaseToken('token-original-a');
+        if (stage === 'dispatch') releaseResponse(response);
+        if (stage === 'decode') releaseDecode({ claimed: true, trial_days: 30 });
+      });
+      await view.findByText(
+        'We could not confirm activation for this account. Check your plan in Omi using this same account.',
+      );
+      expect(harness.navigate).not.toHaveBeenCalled();
+      expect(view.queryByText('Your free month is active')).toBeNull();
+      expect(fetchMock).toHaveBeenCalledTimes(stage === 'token' ? 0 : 1);
+      if (stage !== 'token')
+        expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe(
+          'Bearer token-original-a',
+        );
+      expect(harness.authListeners.size).toBe(0);
+      expect(harness.unsubscribe).toHaveBeenCalledTimes(1);
+    },
+  );
 });
