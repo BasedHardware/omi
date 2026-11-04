@@ -1,0 +1,17 @@
+{
+    "schema_version": 1,
+    "id": "FC-batch-shadow-ring-contention",
+    "violated_contract": "Every shadow rendezvous operation read all four slot documents in one Firestore transaction, so concurrent offer/take/reserve cycles shared one read set and Firestore aborted them all, surfacing as the two largest production error signatures (~1,800 log events/30min). Coordination writes that race on the same documents must not share a transaction read set: each server reads one slot at a time and claims it with a single conditional write the database arbitrates by document version; losers skip one cycle instead of aborting anybody.",
+    "canonical_prevention": "Route shadow-slot offer/take/reserve through the point-read-plus-fenced-write lane in database/batch_pipeline_shadow.py (shadow_slot_cas_enabled default-on kill switch BATCH_PIPELINE_CONTENTION_RETRY_ENABLED), pinned by the fence-race double in tests/unit/fixtures/shadow_slot_cas_firestore.py and the CAS contract tests in tests/unit/test_batch_shadow_slot_cas.py.",
+    "canonical_prevention_artifact": [
+        "backend/database/batch_pipeline_shadow.py",
+        "backend/config/batch_pipeline.py",
+        "backend/tests/unit/fixtures/shadow_slot_cas_firestore.py",
+        "backend/tests/unit/test_batch_shadow_slot_cas.py"
+    ],
+    "evidence_prs": [],
+    "scope_hints": [
+        "backend/database/batch_pipeline_shadow.py"
+    ],
+    "status": "open"
+}
