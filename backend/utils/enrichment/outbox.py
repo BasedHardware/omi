@@ -1010,6 +1010,7 @@ def mark_effects(uid: str, conversation_id: str, language: str, *, immediate: bo
         conversation_id=conversation_id,
         language=language,
         effects_only=True,
+        summary_lane=summary_delivery.lane({}),
         deferred_reason=None,
         immediate=immediate,
         task_token=uuid.uuid4().hex,
