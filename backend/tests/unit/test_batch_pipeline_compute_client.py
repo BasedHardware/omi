@@ -29,7 +29,8 @@ def test_oidc_client_sends_only_fenced_ids_and_reuses_short_lived_cached_token()
     assert client([lease()])['allowed'] == ['segment']
     token.assert_called_once()
     request, timeout = seen[0]
-    assert timeout == 5 and request.full_url.endswith('/v2/batch-pipeline/authorize-compute')
+    assert timeout == 9 and request.full_url.endswith('/v2/batch-pipeline/authorize-compute')
+    assert request.get_header('X-omi-admission-seconds') == '8.0'
     assert request.get_header('Authorization') == 'Bearer synthetic-service-token'
     assert json.loads(request.data) == {'stage': 'dev', 'leases': [{'segment_id': 'segment', 'token': 'lease-token'}]}
     assert b'synthetic/segment' not in request.data and b'owner_id' not in request.data

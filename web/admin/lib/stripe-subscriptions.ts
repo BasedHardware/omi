@@ -53,7 +53,7 @@ export interface SubscriptionFetch {
  */
 export const OMI_PLAN_PRODUCTS: Record<string, string> = {
   prod_SmpevIU38nIEUO: "Omi Unlimited",
-  prod_Uu6nrHIKWnnTWL: "Omi Unlimited v2",
+  prod_Uu6nrHIKWnnTWL: "Omi Pro",
   prod_Uu5HDt3sygCK8N: "Omi Plus",
   prod_ULep5SEo0pSdaM: "Operator",
   prod_U8x5HNGnTF50X1: "Omi Architect",

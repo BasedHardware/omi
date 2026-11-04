@@ -143,17 +143,21 @@ _MCP_KEY = 'omi_mcp_' + 'a' * 32
 
 BODY_DIGEST = {
     'database.batch_pipeline_store.FirestoreStore.ready_for_capacity': '975eabd92f43ba5da3d847439f4d8e3592525ccd31c11dcac6463365535eac10',
+    'database.batch_pipeline_store.FirestoreStore.oldest_admissible_ready': '293687cc6708d7ab2f673cb2984e6bb8cbfe581fa526db8c1040fd011dc00107',
     'database.batch_pipeline_projection_release.release_page': '51d879075128af7e074b0ab3ccdb376e2171678351cad3ade376a3a3f78e2e69',
+    'database.batch_pipeline_projection_release.release_scan_pass': '1b9c67910b80e2628cf61514e1b24875242fc623069e6a2f64764cb90f2fa27e',
     'database.monthly_usage_totals._rebuild': '2c9be83589399a6824fbb2ef7376cd7baf8492e8a780671e31b67a8294b40db0',
     'database.batch_pipeline_shadow.ShadowStore._busy': 'bf2a9290745e8dd01ebb927b03ed67b08fac05fdb43fd76f81f2dcfa54e0b85a',
     'database.batch_pipeline_shadow.ShadowStore.reap': '014a779e64fb2ab2baded6c4baef3ae9528bd080b8b7bafbd0e68948e8c418d4',
-    'database.batch_ramp.ramp_admission_policy': 'af9830f4381f5f9d880199ed21df739af633db7a327d7e723ac4d409585c9a01',
+    # Re-reviewed 2026-11-01: intake-outcome evidence kwarg only; no query or read added.
+    'database.batch_ramp.ramp_admission_policy': '2d702e87308e65426820bbe9b4b89f492a966a01bc056fa39d63ed3a8545d649',
     'database.conversations._collect_cursor_conversation_page': '1d5fc817a402bd5bb5cb8fae5492d29b1e34cb4a15405bd06a784fc8730fa4e9',
     'database.batch_pipeline_store.FirestoreTransaction.ready_predecessor': '345662386754d78758580d321467fcd012838fc0a9ae8194eeb7b3e6ede54f14',
     'database.batch_pipeline_store.projection_pending': '52cc913cca9086557133a8f7118b9980ce5f13649897207fafcfa221513a5629',
     'database.batch_pipeline_store.FirestoreStore.projection_page': 'bc9fe5cd08a05748eaa118af15031abdcb1a68d91d7f0b74bf177a27eb980a94',
     'database.batch_pipeline_store.FirestoreStore.projection_successor': '96adabf372104327c5a8065ef2ff06621648ee242b3415d04b047d50ded9e6b1',
     'database.batch_pipeline_store.FirestoreTransaction.service_frontier': '74aa1993996cdc9ca93a1141de64dfc7e05a9d831a67860ddbb8a64d55520a02',
+    'database.batch_pipeline_store.FirestoreStore.control_candidates': 'c1ce9e8170a7fde0e6a82c44a2db0c0c18909cba723e9cefd402cfe1f7993df9',
     'database.batch_pipeline_store.FirestoreStore.control_candidate': 'd82ee8b1c03be61b104e25304d6a0a732a9b59453fd302f4e7794a75622d65ad',
     'database.batch_pipeline_store.FirestoreStore.oldest_retry': '8d77904364b37100b5816f0252831ef6cf8807930dba8671cdc56bf603340315',
     'database.batch_pipeline_staging.reap': '39b0e41ad13a7bc50bb8f987b6f78d11253663fd15baf39ca6663fb9f1fde377',
@@ -356,6 +360,13 @@ _add(
     )
 )
 _add(DriverEntry('database.action_items.get_action_item_ids', base={'uid': UID}, neutrals={'budget': _BUDGET}))
+_add(
+    DriverEntry(
+        'database.action_item_dedup.may_have_recent_dedup_candidates',
+        base={'uid': UID, 'cutoff': T0},
+        neutrals={'excluded_conversation_ids': (set(), 'Python-only exclusion after bounded timestamp queries')},
+    )
+)
 _add(
     DriverEntry(
         'database.action_items.get_action_items',
@@ -1180,6 +1191,13 @@ _add(
         'database.stale_conversation_recovery.get_stale_recovery_page',
         base={'uid': UID, 'cutoff': T0},
         neutrals={'now': (T1, 'claim clock; does not change serving query')},
+    )
+)
+_add(
+    DriverEntry(
+        'database.recurring_voice_privacy.scrub_transcripts',
+        base={'uid': UID},
+        profiles=(CallerProfile('recurring-optout-transcript-scrub', {}),),
     )
 )
 _add(DriverEntry('database.conversations.iter_all_conversation_photos', base={'uid': UID}))
@@ -2512,6 +2530,14 @@ _add(
 )
 _add(
     DriverEntry(
+        'database.sync_backfill_sequencer.worker_candidates',
+        domains={'after_uid': [None, UID]},
+        neutrals={'limit': _LIMIT},
+        patchers=_SYNC_PROD,
+    )
+)
+_add(
+    DriverEntry(
         'database.sync_backfill_sequencer.due_pending',
         domains={'now': [None, T0]},
         neutrals={'limit': _LIMIT},
@@ -2544,6 +2570,7 @@ _add(
         'database.sync_backfill_sequencer.finish_job',
         base={'uid': UID, 'job_id': 'shape-job', 'epoch': 1, 'outcome': 'completed'},
         domains={'now': [None, T0]},
+        neutrals={'worker_token': (None, 'execution fencing does not change the pending-presence query')},
         setup=_seed(f'sync_backfill_sequencer/{UID}', {'active_job_id': 'shape-job', 'active_epoch': 1}),
         patchers=_SYNC_PROD,
     )
@@ -2926,6 +2953,7 @@ _add(
         neutrals={
             'include_dismissed': (False, 'post-read visibility filter; does not alter the Firestore query shape'),
             'memoize': (False, 'task-attempt memo opt-in; read-through only, does not alter the Firestore query shape'),
+            'memo_site': ('other', 'closed telemetry site; does not alter the Firestore query shape'),
         },
     )
 )
@@ -3652,7 +3680,7 @@ _add(
         'database.cap_hold_redrive.page',
         neutrals={'limit': _LIMIT},
         domains={
-            'kind': ['choices', 'staging', 'cleanup'],
+            'kind': ['choices', 'staging', 'cleanup', 'handoff'],
             'after': [None, 'users/synthetic/processing_backlog/current'],
         },
     )
@@ -3661,7 +3689,7 @@ _add(
     DriverEntry(
         'database.cap_hold_redrive.discover',
         neutrals={'limit': _LIMIT},
-        domains={'kind': ['choices', 'staging', 'cleanup']},
+        domains={'kind': ['choices', 'staging', 'cleanup', 'handoff']},
     )
 )
 _add(

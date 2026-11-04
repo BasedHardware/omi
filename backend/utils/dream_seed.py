@@ -102,7 +102,8 @@ def load(uid, caps):
     for _, raw in dream_store.own_runs(uid, limit=1):
         source = (review_store.decode_doc(uid, raw) or {}).get('source') or {}
         notes = source.get('notes')
-        if isinstance(notes, str) and len(notes) <= 2000:
+        # Older notes may quote voice text the model could then read; a model can carry them forward.
+        if source.get('notes_voice_free') and isinstance(notes, str) and len(notes) <= 2000:
             seed['previous_notes'] = notes
     records = EvidenceRecords()
     initial = 2 if limits.bucket in {'empty', 'light'} else 4 if limits.bucket == 'medium' else 8

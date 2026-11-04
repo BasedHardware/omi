@@ -188,10 +188,13 @@ class _AppsListState extends State<_AppsList> {
   @override
   Widget build(BuildContext context) {
     final currentAppId = _currentAppId;
-    final enabledApps = widget.provider.cachedEnabledConversationApps;
+    final enabledApps = [
+      widget.provider.findAppById(builtInSummaryTemplateAppId)!,
+      ...widget.provider.cachedEnabledConversationApps
+    ];
     final suggestedApps = widget.provider.cachedSuggestedApps;
 
-    final isLoading = !_loaded && enabledApps.isEmpty && suggestedApps.isEmpty;
+    final isLoading = !_loaded && widget.provider.cachedEnabledConversationApps.isEmpty && suggestedApps.isEmpty;
 
     if (isLoading) {
       return _buildShimmerLoading();
@@ -595,6 +598,9 @@ class _AppListItemState extends State<_AppListItem> {
   }
 
   Widget _buildLeadingIcon() {
+    if (widget.app.id == builtInSummaryTemplateAppId) {
+      return Icon(Icons.auto_awesome, color: OmiColors.textPrimary, size: 32);
+    }
     return CachedNetworkImage(
       imageUrl: widget.app.getImageUrl(),
       imageBuilder: (context, imageProvider) {

@@ -102,7 +102,7 @@ def test_malformed_reply_never_counts_as_empty(payload):
 
 
 @pytest.mark.parametrize('failure', ['upload', 'create', 'poll', 'transcript'])
-def test_failure_is_single_submit_content_free_and_cleans_known_resources(key, failure, caplog):
+def test_transient_refusal_is_bounded_content_free_and_cleans_known_resources(key, failure, caplog):
     calls = []
 
     def handler(request):
@@ -128,8 +128,10 @@ def test_failure_is_single_submit_content_free_and_cleans_known_resources(key, f
 
     with pytest.raises(module.SonioxBatchError, match='^soniox_batch_failed$'):
         module.transcribe(b'synthetic', 5, client_factory=client(handler), sleep=lambda _: None)
-    assert sum(m == 'POST' and p == '/v1/transcriptions' for m, p in calls) <= 1
-    assert sum(m == 'POST' and p == '/v1/files' for m, p in calls) == 1
+    assert sum(m == 'POST' and p == '/v1/transcriptions' for m, p in calls) == (
+        0 if failure == 'upload' else 3 if failure == 'create' else 1
+    )
+    assert sum(m == 'POST' and p == '/v1/files' for m, p in calls) == (3 if failure == 'upload' else 1)
     if failure != 'upload':
         assert ('DELETE', f'/v1/files/{FILE}') in calls
     assert 'PRIVATE_SENTINEL' not in caplog.text
@@ -171,7 +173,7 @@ def test_missing_key_refuses_before_http(monkeypatch):
 
 @pytest.mark.parametrize('seconds', [0.5, 61, 7200])
 def test_second_chance_is_ship_on_and_separate_from_guarded_cap(key, monkeypatch, seconds):
-    monkeypatch.delenv('BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED')
+    monkeypatch.setenv('BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED', 'false')
     monkeypatch.delenv('BATCH_PIPELINE_SECOND_MULTILINGUAL_ENABLED', raising=False)
     assert module.authorization(seconds, second_chance=True)
     with pytest.raises(module.SonioxBatchError):

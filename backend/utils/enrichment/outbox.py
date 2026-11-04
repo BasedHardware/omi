@@ -6,6 +6,7 @@ exhausted tasks in bounded batches, including a crash between mark and enqueue.
 """
 
 from __future__ import annotations
+from utils.observability.delivery import record_delivery
 
 import hashlib
 import math
@@ -52,12 +53,45 @@ FIRST_SUMMARY_HEARTBEAT_SECONDS = 30
 REPAIR_SECONDS = 1800
 WAKE_CHECK_SECONDS = 300
 LIVE_DEFER_SECONDS = 120
+# Custody deferrals whose cause can outlive the obligation: a merge redirect that
+# never resolves, a missing row, or a live target/bridge that never settles. On
+# 2026-11-01 about 1.7k such rows, most of them days old, were re-polled every
+# 30-120s: ~80% of backend-sync's /v2/sync-jobs/run deliveries. Once one reason
+# has deferred a row past the grace (``deferred_since``), it polls hourly;
+# custody, sweep repair and the eventual resume are unchanged.
+STUCK_DEFER_REASONS = frozenset(
+    {'redirect_unresolved', 'conversation_missing', 'open_live_target', 'pending_live_bridge'}
+)
+STUCK_DEFER_GRACE_SECONDS = 6 * 3600
+STUCK_DEFER_POLL_SECONDS = 3600
 # Both bindings stay valid so rows created before the C3 switch drain on their stored handler.
 HANDLER_PATHS = ('/v2/sync-jobs/run', '/v2/enrichment/run')
 COALESCED = Counter('sync_reprocess_coalesced_total', 'Sync updates folded into an existing enrichment obligation')
 UNBOUND = Counter('sync_reprocess_unbound_total', 'Sync obligations awaiting a complete worker binding', ['action'])
 # A conversation row at Firestore's 1 MiB ceiling refuses every enrichment write (#23341).
 HELD_DOCUMENT_SIZE_LIMIT = 'document_size_limit'
+
+
+def custody_deferred_since(row: Row, reason: str, now: float) -> float:
+    """Start of the row's current, uninterrupted deferral for ``reason``.
+
+    A different reason, or a completed callback, starts a new episode. It can
+    never predate the obligation's own acceptance, so a reopened dormant row
+    does not inherit an old episode.
+    """
+    since = row.get('deferred_since') if row.get('deferred_reason') == reason else None
+    if not isinstance(since, (int, float)):
+        return now
+    first = row.get('first_pending_at')
+    return max(since, first) if isinstance(first, (int, float)) else since
+
+
+def custody_defer_until(context: Row, deferred_since: float, now: float) -> float:
+    """Next wake for a callback custody deferral; long-stuck causes poll hourly."""
+    due = context.get('defer_until', now + LIVE_DEFER_SECONDS)
+    if context.get('defer_reason') in STUCK_DEFER_REASONS and now - deferred_since >= STUCK_DEFER_GRACE_SECONDS:
+        return max(due, now + STUCK_DEFER_POLL_SECONDS)
+    return due
 
 
 def _is_document_size_limit(error: BaseException) -> bool:
@@ -180,11 +214,11 @@ def valid_effects_binding(row: dict[str, Any]) -> bool:
         return False
 
 
-def _dispatch_binding() -> dict[str, str] | None:
+def _dispatch_binding(*, backfill: bool = False) -> dict[str, str] | None:
     from config import enrichment as enrichment_config
 
     if enrichment_config.route() == 'enrichment_queue':
-        binding = enrichment_config.dispatch_binding()
+        binding = enrichment_config.dispatch_binding(backfill=backfill)
         if valid_dispatch_binding(binding):
             return binding
         from utils.observability.fallback import record_fallback
@@ -421,15 +455,16 @@ def mark_update(
             )
 
         row.setdefault('summary_lane', 'batch' if batch else summary_delivery.lane({}))
+        backfill = row['summary_lane'] == 'backfill' and not first_summary_pending(row)
         if old is None:
             row.update(
                 task_token=uuid.uuid4().hex,
                 task_due_at=row['due_at'],
                 lease_until=0,
-                dispatch=(new_dispatch() if new_dispatch else None) or _dispatch_binding(),
+                dispatch=(new_dispatch() if new_dispatch else None) or _dispatch_binding(backfill=backfill),
             )
         elif old.get('dormant'):
-            row['dispatch'] = _dispatch_binding()
+            row['dispatch'] = _dispatch_binding(backfill=backfill)
         elif not valid_dispatch_binding(row.get('dispatch')):
             row['dispatch'] = None
         wake = old is None
@@ -633,6 +668,7 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
                 get_firestore_client(), COLLECTION, document_id, owner, task_token
             ):
                 raise
+            record_delivery('summary', 'failed')
             empty_blocked = True
         finally:
             ADMITTED_OWNER.reset(admitted_token)
@@ -687,10 +723,13 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
             if old is None or old.get('owner') != owner or old.get('task_token') != task_token:
                 return old, None
             pending = dict(old)
+            since = custody_deferred_since(old, process_context['defer_reason'], current)
+            due = custody_defer_until(process_context, since, current)
             pending.update(
                 deferred_reason=process_context['defer_reason'],
-                due_at=process_context.get('defer_until', current + LIVE_DEFER_SECONDS),
-                task_due_at=process_context.get('defer_until', current + LIVE_DEFER_SECONDS),
+                deferred_since=since,
+                due_at=due,
+                task_due_at=due,
                 task_token=uuid.uuid4().hex,
                 lease_until=0,
                 owner=None,
@@ -707,6 +746,7 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
     def finish(old: Row | None) -> tuple[Row | None, Row | None]:
         if old is None or old.get('owner') != owner:
             return old, None
+        old = {key: value for key, value in old.items() if key != 'deferred_since'}  # A completed callback ends it.
 
         if superseded and retry_revision is not None:
             # An append may precede the repair claim without another outbox
@@ -774,7 +814,7 @@ def sweep(
 
     ``client``/``wake`` bind the pass to an injected store and task creator (the outbox conformance suite);
     an injected creator stands in for the queue binding and the named-task probe. ``cursor=False`` (the
-    contract (b) outbox, invariant 8) scans from the oldest due row instead of resuming the shared
+    optional oldest-first scan) scans from the oldest due row instead of resuming the shared
     ``sync_reprocess_scan`` checkpoint. An expired lease is fenced and re-woken under a new token, and
     ``wake_check_after`` throttles a row only once its wake was created.
     """
@@ -788,7 +828,6 @@ def sweep(
     if not owns_runtime():
         return counts
 
-    binding = _dispatch_binding()
     limit = max(1, min(100, limit))
     bound = client
     client = bound or get_firestore_client()
@@ -851,6 +890,9 @@ def sweep(
             if not expired and row.get('wake_check_after', 0) > current:
                 return old, ('skipped', None)
             if not injected and not valid_effects_binding(row):
+                binding = _dispatch_binding(
+                    backfill=row.get('summary_lane') == 'backfill' and not first_summary_pending(row)
+                )
                 if binding is None:
                     return old, ('unbound', None)
                 # Claim and fence the repaired binding in the same CAS. Any old
@@ -968,6 +1010,7 @@ def mark_effects(uid: str, conversation_id: str, language: str, *, immediate: bo
         conversation_id=conversation_id,
         language=language,
         effects_only=True,
+        summary_lane=summary_delivery.lane({}),
         deferred_reason=None,
         immediate=immediate,
         task_token=uuid.uuid4().hex,
@@ -987,7 +1030,7 @@ def mark_effects(uid: str, conversation_id: str, language: str, *, immediate: bo
 
 
 def _effects_binding() -> dict[str, str]:
-    binding = _dispatch_binding()
+    binding = _dispatch_binding(backfill=summary_delivery.lane({}) == 'backfill')
     if binding is not None:
         return binding
     # Listen/pusher already have the durable finalization queue, identity and

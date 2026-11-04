@@ -29,7 +29,11 @@ from typing import Any, Mapping, Optional, Sequence
 
 from google.cloud import firestore
 from config.recorded_time import recorded_episodes_enabled
-from config.episodes import MAX_EPISODE_SECONDS, episode_hard_cap_across_conversations_enabled
+from config.episodes import (
+    MAX_EPISODE_SECONDS,
+    episode_hard_cap_across_conversations_enabled,
+    HOME_MEMBERSHIP_EPISODE_READ_LIMIT,
+)
 from utils.conversations.recorded_time import conversation_span, sync_recorded_end
 from utils.conversations.fragment_visibility import is_relevance_discarded
 
@@ -105,6 +109,25 @@ def get_episode(uid: str, episode_id: str, *, firestore_client: Any = None) -> O
             return unseal(uid, raw)
         episode_id = str(redirect)
     raise EpisodeConflict('recorded_redirect_cycle')
+
+
+def get_home_episode_snapshots(
+    uid: str, ids: Sequence[str], *, firestore_client: Any = None
+) -> dict[str, dict[str, Any]]:
+    """One fixed-budget batch of exact snapshots; never follow merge redirects."""
+    keys = list(dict.fromkeys(ids))[:HOME_MEMBERSHIP_EPISODE_READ_LIMIT]
+    if not keys:
+        return {}
+    client = _client(firestore_client)
+    refs = [_episodes(client, uid).document(eid) for eid in keys]
+    result = {}
+    for snapshot in client.get_all(refs) if refs else ():
+        raw = snapshot.to_dict() if snapshot.exists else None
+        if raw and not raw.get('recorded_merged_into'):
+            row = unseal(uid, dict(raw, id=snapshot.id))
+            if row is not None:
+                result[snapshot.id] = row
+    return result
 
 
 def _link_target(client: Any, uid: str, key: str, transaction: Any = None) -> Optional[str]:

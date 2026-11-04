@@ -71,7 +71,9 @@ cloud_run:
     # pump keeps conversation-finalization headroom (min 5 x concurrency 20, the
     # shape deploy-backend-stack sizes its queue against).
     # syncwall: source cap 50 -> 40; lead applies after fresh-latency review.
-    # Rollback: 50 (floor remains 5).
+    # 2026-11-02 margin G1 dropped (cap 30 never applied): after #24264 removed the
+    # short deferred re-polls, sync runs long jobs at concurrency p95 18-20 of 20 on
+    # ~33 instances, so a lower cap would queue work rather than trim idle capacity.
     max_instances: 40
     min_instances: 5
   backend-sync-backfill:

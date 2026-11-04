@@ -46,9 +46,6 @@ def legacy_snapshot():
                         'tier': sub.effective_desktop_access_tier(
                             plan, Subscription(plan=plan, current_period_start=start)
                         ),
-                        'paywall_eligible': sub.desktop_trial_paywall_eligible(
-                            plan, Subscription(plan=plan, current_period_start=start)
-                        ),
                     }
                     for start in (None, 1, 2000000000)
                 ],

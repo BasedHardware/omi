@@ -174,11 +174,37 @@ def shared_live_enabled() -> bool:
     return resolve_stage_policy('', 'scheduler').shared_live
 
 
+def control_candidate_fanout(fanout: int | None = None) -> int:
+    """Bound hint reads; 64 restores the previous candidate query width."""
+    try:
+        value = int(os.getenv('BATCH_CONTROL_CANDIDATE_FANOUT', '16') if fanout is None else fanout)
+    except ValueError:
+        return 16
+    return min(64, max(1, value))
+
+
+def admission_parallel_calls_enabled() -> bool:
+    return os.getenv('BATCH_ADMISSION_PARALLEL_CALLS', 'true').strip().lower() != 'false'
+
+
+def idle_poll_max_seconds() -> float:
+    """Bound empty-lane backoff; 2 restores fixed polling."""
+    try:
+        value = float(os.getenv('BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS', '10'))
+    except ValueError:
+        return 10.0
+    return min(30.0, max(2.0, value)) if math.isfinite(value) else 10.0
+
+
 SCHEDULER_SHARDS = 64
 
 
 def shard_spread_enabled() -> bool:
     return os.getenv('BATCH_SHARD_SPREAD_ENABLED', 'true').strip().lower() != 'false'
+
+
+def pull_multi_lease_enabled() -> bool:
+    return os.getenv('BATCH_PULL_MULTI_LEASE_ENABLED', 'true').strip().lower() != 'false'
 
 
 def scheduler_control_key(hashed_owner: str) -> str:
@@ -326,6 +352,29 @@ def worker_validation_disposition_enabled() -> bool:
     )
 
 
+STRICT_VAD_SHADOW_PERCENT_DEFAULT = 10.0
+
+
+def strict_vad_shadow_percent() -> float:
+    """Sampled share of the CPU strict-VAD shadow; 0 disables, 100 restores full."""
+    try:
+        value = float(os.getenv('BATCH_PIPELINE_STRICT_VAD_SHADOW_PERCENT', '10').strip())
+    except ValueError:
+        return STRICT_VAD_SHADOW_PERCENT_DEFAULT
+    if not math.isfinite(value):
+        return STRICT_VAD_SHADOW_PERCENT_DEFAULT
+    return min(100.0, max(0.0, value))
+
+
+def strict_vad_shadow_sampled(segment_id: str) -> bool:
+    """Deterministic by segment hash: a re-leased unit samples identically."""
+    if not segment_id:
+        return False
+    from config.policy import cohort_bucket
+
+    return cohort_bucket(segment_id, '') < strict_vad_shadow_percent()
+
+
 def head_priority_enabled() -> bool:
     from config.policy import resolve_stage_policy
 
@@ -379,6 +428,59 @@ def recovery_dispatch_interval_seconds() -> float:
     return value if 1 <= value <= RECOVERY_DISPATCH_INTERVAL_MAX else RECOVERY_DISPATCH_INTERVAL_DEFAULT
 
 
+SERVING_METRICS_MIN_REFRESH_DEFAULT = 30.0
+SERVING_METRICS_MIN_REFRESH_MAX = 60.0
+
+
+def serving_metrics_min_refresh_seconds() -> float:
+    """Ship-on: one queue-gauge refresh per serving instance per interval.
+
+    Every serving instance refreshed the same global gauges on each 20 s
+    supervisor tick and each scrape; the policy-hold walk in ``oldest`` made
+    that about 1.6M Firestore reads/h at 28 instances. The guard calls the
+    sample blind after 120 s, so the cap stays at 60 s. ``off`` or a value
+    <= 0 is the kill switch: refresh on every call. Malformed or out-of-range
+    values keep the default.
+    """
+    raw = os.getenv('BATCH_PIPELINE_SERVING_METRICS_MIN_REFRESH_SECONDS', '').strip().lower()
+    if not raw:
+        return SERVING_METRICS_MIN_REFRESH_DEFAULT
+    if raw == 'off':
+        return 0.0
+    try:
+        value = float(raw)
+    except ValueError:
+        return SERVING_METRICS_MIN_REFRESH_DEFAULT
+    if value <= 0:
+        return 0.0
+    return value if 1 <= value <= SERVING_METRICS_MIN_REFRESH_MAX else SERVING_METRICS_MIN_REFRESH_DEFAULT
+
+
+ALLOWANCE_HOLD_RETRY_DEFAULT_SECONDS = 1800
+ALLOWANCE_HOLD_RETRY_MAX_SECONDS = 86400
+
+
+def allowance_hold_retry_seconds() -> int:
+    """Ship-on re-lease hold for an exhausted plan allowance or usage budget.
+
+    An exhausted allowance is durable until the plan changes, so a held unit's
+    lease + admission RPC + defer + requeue cycle runs for nothing while it
+    waits; the scheduler escalation ladder keeps today's behaviour below this
+    value. ``60`` restores the former short cycle (steady 300 s after
+    escalation). Malformed or out-of-range values keep the default.
+    """
+    raw = os.getenv('BATCH_ALLOWANCE_HOLD_RETRY_SECONDS', '').strip()
+    if not raw:
+        return ALLOWANCE_HOLD_RETRY_DEFAULT_SECONDS
+    try:
+        value = float(raw)
+    except ValueError:
+        return ALLOWANCE_HOLD_RETRY_DEFAULT_SECONDS
+    if not math.isfinite(value):
+        return ALLOWANCE_HOLD_RETRY_DEFAULT_SECONDS
+    return int(value) if 1 <= value <= ALLOWANCE_HOLD_RETRY_MAX_SECONDS else ALLOWANCE_HOLD_RETRY_DEFAULT_SECONDS
+
+
 def projection_pagination_enabled() -> bool:
     from config.policy import kill_switch
 
@@ -399,6 +501,13 @@ def recovered_merge_release_enabled() -> bool:
     from config.policy import kill_switch
 
     return kill_switch('BATCH_PIPELINE_RECOVERED_MERGE_RELEASE_ENABLED')
+
+
+def recovery_owner_only_enabled() -> bool:
+    """Kill switch: post-recovery requests drain their owner without global maintenance."""
+    from config.policy import kill_switch
+
+    return kill_switch('BATCH_PIPELINE_RECOVERY_OWNER_ONLY_ENABLED')
 
 
 def sweep_owner_chain_enabled() -> bool:
@@ -497,6 +606,25 @@ def worker_pipeline_depth() -> int:
     except ValueError:
         return WORKER_PIPELINE_DEPTH_DEFAULT
     return value if 1 <= value <= WORKER_PIPELINE_DEPTH_MAX else WORKER_PIPELINE_DEPTH_DEFAULT
+
+
+WORKER_PROCESSES_DEFAULT = 1
+WORKER_PROCESSES_MAX = 3
+
+
+def worker_processes() -> int:
+    """Independent pump processes sharing the pod's one GPU; ``1`` (default) runs no supervisor.
+
+    Each process loads its own model chain and keeps its own pump depth and
+    decoded-audio bound, so host and device memory scale with the count; the
+    chart sizes pod resources per count. Malformed or out-of-range values run
+    one process: a typo must never multiply the pod's memory.
+    """
+    try:
+        value = int(os.getenv('BATCH_PIPELINE_WORKER_PROCESSES', str(WORKER_PROCESSES_DEFAULT)))
+    except ValueError:
+        return 1
+    return value if 1 <= value <= WORKER_PROCESSES_MAX else 1
 
 
 WORKER_IO_CONCURRENCY_DEFAULT = 5

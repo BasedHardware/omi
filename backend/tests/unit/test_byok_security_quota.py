@@ -23,10 +23,9 @@ class TestChatQuotaBYOKBypass:
     @patch('utils.subscription.get_cached_byok_state', return_value={'fingerprints': {'openai': 'fp'}})
     @patch('utils.subscription.get_byok_key', side_effect=lambda provider: 'sk-user' if provider == 'openai' else None)
     @patch('utils.subscription.users_db')
-    @patch('utils.subscription.is_trial_paywalled', return_value=False)
     @patch('utils.subscription.get_chat_quota_snapshot')
     def test_enforce_chat_quota_bypasses_for_validated_openai_key(
-        self, mock_quota_snapshot, _mock_paywalled, mock_users_db, _mock_key, _mock_state, _mock_uid, _mock_validated
+        self, mock_quota_snapshot, mock_users_db, _mock_key, _mock_state, _mock_uid, _mock_validated
     ):
         mock_users_db.is_byok_active.return_value = True
         from utils.subscription import enforce_chat_quota
@@ -169,9 +168,8 @@ class TestChatQuotaBYOKBypass:
     @patch('utils.subscription.has_validated_byok_keys', return_value=True)
     @patch('utils.subscription.get_byok_key')
     @patch('utils.subscription.users_db')
-    @patch('utils.subscription.is_trial_paywalled', return_value=False)
     def test_enforce_desktop_chat_quota_bypasses_for_anthropic(
-        self, _mock_paywalled, mock_users_db, mock_get_key, _mock_validated, _mock_fs
+        self, mock_users_db, mock_get_key, _mock_validated, _mock_fs
     ):
         from utils.subscription import enforce_desktop_chat_quota
 

@@ -17,7 +17,7 @@ import os
 import sys
 from dataclasses import dataclass
 from datetime import date
-from pathlib import PurePath
+from pathlib import Path, PurePath, PureWindowsPath
 from typing import Any, Iterable, Mapping, Optional, Sequence
 from uuid import UUID
 
@@ -187,7 +187,16 @@ def _stringify(v: Any) -> str:
 def _json_default(v: Any) -> Any:
     if isinstance(v, date):
         return v.isoformat()
-    if isinstance(v, (PurePath, UUID)):
+    # Path check must precede PureWindowsPath: on Windows, Path is a PureWindowsPath
+    # subclass. JSON is machine-readable output, so portable Path values always use
+    # forward slashes; an explicit Windows-path flavor keeps its native string.
+    if isinstance(v, Path):
+        return v.as_posix()
+    if isinstance(v, PureWindowsPath):
+        return str(v)
+    if isinstance(v, PurePath):
+        return v.as_posix()
+    if isinstance(v, UUID):
         return str(v)
     if isinstance(v, (set, frozenset)):
         # Sort by serialized value while leaving members for the JSON encoder.

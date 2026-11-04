@@ -96,8 +96,7 @@ from utils.conversations.duration import conversation_duration_seconds
 from utils.conversations.duplicate_capture import link_duplicate_captures
 from utils.conversations.sync_hold_completion import complete_explicit, defer_held_budget_denial
 from utils.conversations.merge_before_processing import before_notes, ConversationAbsorbed
-from utils.conversations.processing_trigger import is_recovery_trigger
-from utils.conversations.processing_trigger import PROCESSING_MODES, ProcessingTrigger
+from utils.conversations.processing_trigger import PROCESSING_MODES, ProcessingTrigger, is_recovery_trigger
 from utils.conversations.recovery import (
     RECOVERY_QUIET_MINIMUM_MAX_WORDS,
     RecoveryStructureUnavailableError,
@@ -129,6 +128,7 @@ from utils.conversations.relevance_io import (
     emit_recorded_decision,
     record_decision,
     rules_only_relevance,
+    short_clip_relevance,
     occasion_retention,
 )
 from utils.conversations.factory import deserialize_conversation
@@ -178,11 +178,7 @@ from utils.observability.finalization import FinalizationFailureReason, record_f
 from utils.product_telemetry import emit_product_event
 from utils.release_probe import is_release_probe_uid
 from utils.task_intelligence.workstream_association import associate_canonical_evidence
-from utils.subscription import (
-    is_trial_paywalled,
-    should_defer_desktop_processing,
-    should_skip_omi_paid_postprocessing,
-)
+from utils.subscription import should_defer_desktop_processing, should_skip_omi_paid_postprocessing
 from utils.free_tier_processing_policy import client_summaries_at_cap_enabled
 
 # The injected ``decision_for`` closure and its funding-owner resolution live in
@@ -199,6 +195,7 @@ from models.structured import Structured  # type: ignore[reportAttributeAccessIs
 from utils.notifications import send_important_conversation_message
 from models.task import Task, TaskStatus, TaskAction, TaskActionProvider
 from models.notification_message import NotificationMessage
+from utils.default_summary_template import DEFAULT_SUMMARY_APP_ID, default_summary_app
 from utils.apps import get_available_app_model_by_id, get_available_apps, update_persona_prompt
 from utils.executors import llm_executor, postprocess_executor, submit_with_context
 from utils.llm.conversation_processing import (
@@ -410,13 +407,7 @@ def _get_structured(
         task_intelligence_capture = _proposes_task_candidates(conversation)
         tz: Optional[str] = notification_db.get_user_time_zone(uid)
         tz_str: str = tz or ''
-        user_language = (
-            resolve_output_language(uid, language_code)
-            if serving_for('NOTES_PACKET_V2_MODE', uid)
-            else normalize_language(users_db.get_user_language_preference(uid))
-            or normalize_language(language_code)
-            or 'en'
-        )
+        user_language = resolve_output_language(uid, language_code, getattr(conversation, 'transcript_segments', None))
         summary_app_selected = selected_summary_app(uid, summary_app_selected, redis_db.get_user_preferred_app)
         minimum = quiet_minimum(
             uid,
@@ -426,11 +417,12 @@ def _get_structured(
             summary_app_selected=summary_app_selected,
         )
         if minimum is not None:
+            decision = short_clip_relevance(uid, conversation, trigger, _calendar_overlap_retains_conversation)
             if relevance_observer is not None:
-                relevance_observer(RelevanceDecision('keep', 'rule', 'content_below_floor', trigger))
-            if is_recovery_trigger(trigger) and recovery_minimum_fallback_observer is not None:
+                relevance_observer(decision)
+            if not decision.discard and is_recovery_trigger(trigger) and recovery_minimum_fallback_observer is not None:
                 recovery_minimum_fallback_observer()
-            return minimum, False
+            return minimum, decision.discard
         prompt_conversation_id = (
             conversation_id
             or getattr(conversation, 'id', None)
@@ -804,7 +796,11 @@ def trigger_conversation_apps(
     if is_server_minimum(conversation) and not (app_id or first_party_only):
         return True
     if serving_for('NOTES_PACKET_V2_MODE', uid):
-        language_code = resolve_output_language(uid, normalize_language(conversation.language) or language_code)
+        language_code = resolve_output_language(
+            uid,
+            normalize_language(conversation.language) or language_code,
+            getattr(conversation, 'transcript_segments', None),
+        )
     else:
         # The legacy branch never resolved: a 'multi' capture tag reached app prompts verbatim.
         language_code = normalize_language(conversation.language) or normalize_language(language_code) or 'en'
@@ -834,7 +830,9 @@ def trigger_conversation_apps(
     else:
         # Summarization apps are opt-in: only a usable preferred app runs automatically.
         preferred_app_id = redis_db.get_user_preferred_app(uid)
-        if preferred_app_id and preferred_app_id in all_apps_dict:
+        if preferred_app_id == DEFAULT_SUMMARY_APP_ID:
+            app_to_run = default_summary_app()
+        elif preferred_app_id and preferred_app_id in all_apps_dict:
             app_to_run = cast(App, all_apps_dict.get(preferred_app_id))
             logger.info(f"Using user's preferred app: {app_to_run.name} (id: {preferred_app_id})")
         elif preferred_app_id:
@@ -935,7 +933,7 @@ def trigger_conversation_apps(
             )
             if not persisted:
                 raise RuntimeError('conversation disappeared while persisting app result')
-        if usage_attribution in {
+        if app.id != 'omi-default-summary' and usage_attribution in {
             AppUsageAttribution.AUTOMATIC_PROCESSING,
             AppUsageAttribution.EXPLICIT_SELECTION,
         }:
@@ -2715,38 +2713,6 @@ def process_conversation(
     probe_uid = is_release_probe_uid(uid)
     if probe_uid:
         logger.info('release probe: desktop post-processing exemption active uid=%s', uid)
-    # Trial paywall: skip ALL post-processing (summaries, memories, action
-    # items, embeddings, app integrations) for paywalled desktop users.
-    # Without this, any segments that did get through before the trial gate
-    # (e.g. buffered transcripts, retroactive `/v1/conversations` create) still
-    # trigger expensive LLM + Pinecone work.
-    #
-    # `conversation.source` carries the originating client (desktop / omi / etc).
-    # Non-desktop sources flow through untouched — paywall is desktop-only.
-    if (
-        hasattr(conversation, 'source')
-        and conversation.source == ConversationSource.desktop
-        and not probe_uid
-        and is_trial_paywalled(uid, 'macos')
-    ):
-        logger.info(
-            "trial paywall: skipping post-processing for uid=%s conv=%s source=desktop",
-            uid,
-            getattr(conversation, 'id', '?'),
-        )
-        # Return the conversation as-is with no LLM work performed. If it has
-        # a status field, mark it processed so the client doesn't show a stuck
-        # "processing" state forever.
-        if isinstance(conversation, Conversation):
-            try:
-                conversation.status = ConversationStatus.completed
-            except Exception:
-                pass
-        report_persistence(False)
-        return cast(Conversation, conversation)
-
-    # Denied/unchosen backlog work returned above. Successful explicit enrichment
-    # also clears no-effects markers left by the retired terminal policy.
     clear_stale_terminal_marker = backlog_authorized or force_process or is_reprocess
     # Lazy desktop processing (freemium cost cut): desktop users without a desktop-entitled
     # paid plan (basic / Neo) get ONLY the raw transcript on capture. The expensive LLM

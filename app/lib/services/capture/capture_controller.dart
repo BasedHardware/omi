@@ -202,23 +202,17 @@ class CaptureController extends ChangeNotifier
     return !phone.isFrameDurable(positioned);
   }
 
-  /// Account change with no open socket: the WAL cleanup that follows drops
-  /// its in-memory tail, so frames this router kept off the socket are
-  /// written to the batch journal for the OLD owner (recovered and uploaded
-  /// through the ordinary sync path when that owner is back).
+  /// Account cleanup discards the WAL tail. Preserve suppressed, not-yet-durable
+  /// frames in the old owner's batch journal for later sync.
   bool _preserveSuppressedForAccountChange(List<HeldPendantFrame> frames) =>
-      _mobileStandardBatch?.preserveForOwner(
-        [for (final frame in frames) (frame.payload, frame.capturedAt ?? _now())],
-        codec: _localPreview.pendantCodec,
-        recordingSessionId: activeRecordingId,
-      ) ??
-      false;
+      _localPreview.preserveForAccountChange(frames, _mobileStandardBatch, activeRecordingId);
   LivePreviewController? get livePreview => _localPreview.preview;
   bool get localPreviewAdmitted => _localPreview.admitted;
 
   void installLivePreview(LivePreviewController preview) {
     if (_captureControllerDisposed) return preview.dispose();
     lifetime.own(_localPreview.install(preview, _deviceAudioListeners, _phoneMicAudioListeners));
+    lifetime.listenTo(preview, _checkLocalPreviewEngine);
   }
 
   final CaptureLivenessWatchdog _livenessWatchdog = CaptureLivenessWatchdog();
@@ -1831,7 +1825,7 @@ class CaptureController extends ChangeNotifier
     final refusal = allowed
         ? _localPreviewRefusal(codec, customStt: effectiveConfig != null)
         : LocalPreviewClientRefusal.killSwitch;
-    final localPreview = _localPreview.preview != null && refusal == null;
+    final localPreview = _localPreview.preview != null && refusal == null && !_localPreview.engineUnavailableForCapture;
     if (refusal != null) _localPreview.preview?.clientRefused(refusal.wireName, midSession: false);
     _localPreview.language = language;
 
@@ -2224,7 +2218,6 @@ class CaptureController extends ChangeNotifier
     final revision = _preferences.capturePolicy.revision;
     if (!_admitsCapture(revision)) return false;
     Logger.debug('streamAudioToWs in capture_provider');
-    _startMetricsTracking();
     _localPreview.pendantCodec = codec;
     final subscription = await _getBleAudioBytesListener(
       deviceId,
@@ -2330,9 +2323,11 @@ class CaptureController extends ChangeNotifier
       await subscription?.cancel();
       return false;
     }
+    if (subscription == null) return false;
+    _startMetricsTracking();
     _bleBytesStream = lifetime.takeSubscription(_bleBytesStream, subscription);
     notifyListeners();
-    return subscription != null;
+    return true;
   }
 
   LocalPreviewClientRefusal? _localPreviewRefusal(BleAudioCodec codec, {required bool customStt}) =>
@@ -2357,6 +2352,12 @@ class CaptureController extends ChangeNotifier
     _localPreview.refuseForSocket(send: _sendPendantToSocket);
     _mobileStandardBatch?.dropLocalPreview();
   }
+
+  void _checkLocalPreviewEngine() => _localPreview.refuseUnavailableEngine(
+      sendControl: (reason) =>
+          _socket?.sendText(jsonEncode({'type': 'local_preview_engine_unavailable', 'reason': reason.wireName})),
+      send: _sendPendantToSocket,
+      dropLocalPreview: () => _mobileStandardBatch?.dropLocalPreview());
 
   /// The pendant sender while a transcription socket is still connected.
   void Function(HeldPendantFrame frame)? get _openSocketSender =>
@@ -2445,7 +2446,7 @@ class CaptureController extends ChangeNotifier
       return Future.value(null);
     }
     if (_fenceUplinkForSync()) return null;
-    return connection.getBleAudioBytesListener(onAudioBytesReceived: onAudioBytesReceived);
+    return await connection.getBleAudioBytesListener(onAudioBytesReceived: onAudioBytesReceived);
   }
 
   Future<StreamSubscription?> _getBleButtonListener(
@@ -2561,6 +2562,9 @@ class CaptureController extends ChangeNotifier
     }
     if (foregroundAudioReady) {
       await _preferences.saveBool('nativeBleForegroundReady', true);
+    } else {
+      Logger.debug('[_initiateDeviceAudioStreaming] streamAudioToWs returned false for device $deviceId');
+      return;
     }
 
     // Update state (limitless is excluded: the pendant records on-device, so the

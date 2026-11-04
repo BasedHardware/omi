@@ -28,7 +28,7 @@ from utils.batch_pipeline.compute_client import InvalidReceipt
 from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.pump import Pump
 from utils.batch_pipeline.scheduler import Scheduler
-from utils.batch_pipeline.worker_io import DecodeBudget, FirstDecode, PendingResults
+from utils.batch_pipeline.worker_io import DecodeBudget, FirstDecode, PendingResults, PreparedFlight
 
 
 @pytest.fixture(autouse=True)
@@ -796,3 +796,183 @@ def test_broken_shadow_clock_and_counter_cannot_change_result(monkeypatch):
     monkeypatch.setattr(worker_metrics, 'strict_vad', broken)
     assert worker.process_batch([item()])[0].outcome == 'success'
     assert saved['a']['words'][0]['word'] == 'hello' and not failures
+
+
+def test_strict_vad_shadow_percent_parses_and_clamps(monkeypatch):
+    from config.batch_pipeline import strict_vad_shadow_percent
+
+    for raw, expected in {
+        '0': 0.0,
+        '100': 100.0,
+        '250': 100.0,
+        '-3': 0.0,
+        '12.5': 12.5,
+        'junk': 10.0,
+        '': 10.0,
+    }.items():
+        monkeypatch.setenv('BATCH_PIPELINE_STRICT_VAD_SHADOW_PERCENT', raw)
+        assert strict_vad_shadow_percent() == expected, raw
+    monkeypatch.delenv('BATCH_PIPELINE_STRICT_VAD_SHADOW_PERCENT')
+    assert strict_vad_shadow_percent() == 10.0
+
+
+def test_strict_vad_shadow_sampling_is_deterministic_by_segment_hash(monkeypatch):
+    from config.batch_pipeline import strict_vad_shadow_sampled
+
+    monkeypatch.setenv('BATCH_PIPELINE_STRICT_VAD_SHADOW_PERCENT', '10')
+    first = [strict_vad_shadow_sampled(f'unit-{n}') for n in range(2000)]
+    again = [strict_vad_shadow_sampled(f'unit-{n}') for n in range(2000)]
+    assert first == again
+    assert 0.07 < sum(first) / len(first) < 0.13
+    assert not strict_vad_shadow_sampled('')
+    monkeypatch.setenv('BATCH_PIPELINE_STRICT_VAD_SHADOW_PERCENT', '0')
+    assert not any(strict_vad_shadow_sampled(f'unit-{n}') for n in range(200))
+    monkeypatch.setenv('BATCH_PIPELINE_STRICT_VAD_SHADOW_PERCENT', '100')
+    assert all(strict_vad_shadow_sampled(f'unit-{n}') for n in range(200))
+
+
+def test_strict_vad_shadow_sampling_skips_inspect_and_counters_without_changing_result(monkeypatch):
+    worker, _, saved, _, _, failures = setup_worker(io_concurrency=1)
+    inspect_calls, recorded = [], []
+    monkeypatch.setattr(
+        worker_module,
+        'inspect_worker_vad',
+        lambda work, samples: (inspect_calls.append(work.segment_id) or (work.duration_seconds, [])),
+    )
+    monkeypatch.setattr(worker_metrics, 'strict_vad', lambda silent, nonempty: recorded.append((silent, nonempty)))
+    monkeypatch.setenv('BATCH_PIPELINE_STRICT_VAD_SHADOW_PERCENT', '0')
+    baseline = worker.process_batch([item()])
+    assert inspect_calls == [] and recorded == []
+    monkeypatch.setenv('BATCH_PIPELINE_STRICT_VAD_SHADOW_PERCENT', '100')
+    sampled = worker.process_batch([item()])
+    assert inspect_calls == ['a']
+    # Sampled shadow observes strict silence against pyannote speech; the
+    # comparison fires only for the sampled unit and the payload is unchanged.
+    assert recorded == [(True, True)]
+    assert sampled == baseline and saved['a']['words'][0]['word'] == 'hello' and not failures
+
+
+def test_preparation_covers_the_budgeted_flight_prefix_and_decodes_each_unit_once():
+    worker, _, _, decoded, _, _ = setup_worker(io_concurrency=3)
+    works = [item(key, 600) for key in 'abcd']
+    prepared = worker.prepare_first(works)
+    try:
+        # The shared 1800-second budget bounds the prefix; 'd' decodes in the chain.
+        assert prepared.segment_ids == ('a', 'b', 'c') and prepared.item is works[0]
+        assert worker._decode_budget.seconds == 1800
+        results = worker.process_batch_deferred(works, prepared=prepared).settle()
+    finally:
+        prepared.close()
+    assert [r.segment_id for r in results] == ['a', 'b', 'c', 'd']
+    assert decoded == ['a', 'b', 'c', 'd']
+    assert worker._decode_budget.seconds == 0
+
+
+def test_prepared_prefix_not_matching_the_dispatched_items_is_never_reused():
+    worker, _, _, decoded, _, _ = setup_worker(io_concurrency=3)
+    works = [item(key, 2) for key in 'abc']
+    prepared = worker.prepare_first(works)
+    try:
+        # A dispatch without 'a' must not take a's decode as b's.
+        results = worker.process_batch_deferred(works[1:], prepared=prepared).settle()
+    finally:
+        prepared.close()
+    assert [r.segment_id for r in results] == ['b', 'c']
+    assert sorted(decoded) == ['a', 'b', 'b', 'c', 'c']
+    assert worker._decode_budget.seconds == 0
+
+
+def test_prepare_flight_kill_switch_restores_first_item_only(monkeypatch):
+    from config.batch_pipeline_providers import ProviderConfig, provider_config
+
+    monkeypatch.delenv('BATCH_PIPELINE_PREPARE_FLIGHT_ENABLED', raising=False)
+    assert ProviderConfig().prepare_flight is True and provider_config().prepare_flight is True
+    monkeypatch.setenv('BATCH_PIPELINE_PREPARE_FLIGHT_ENABLED', 'false')
+    assert provider_config().prepare_flight is False
+    worker, _, _, _, _, _ = setup_worker(io_concurrency=3, config=ProviderConfig(prepare_flight=False))
+    prepared = worker.prepare_first([item('a'), item('b')])
+    try:
+        assert prepared.segment_ids == ('a',)
+    finally:
+        prepared.close()
+    assert worker._decode_budget.seconds == 0
+
+
+@pytest.mark.asyncio
+async def test_losing_any_prepared_lease_refunds_the_whole_prepared_prefix(monkeypatch):
+    monkeypatch.setattr(pump_module, 'HEARTBEAT_SECONDS', 0.01)
+    loop = asyncio.get_running_loop()
+    discarded = asyncio.Event()
+    calls = []
+    worker, _, _, _, _, _ = setup_worker(io_concurrency=2)
+    prepare = worker.prepare_first
+
+    def observed_prepare(items):
+        handle = prepare(items)
+        cancel = handle.cancel
+
+        def observed_cancel():
+            cancel()
+            loop.call_soon_threadsafe(discarded.set)
+
+        handle.cancel = observed_cancel
+        return handle
+
+    worker.prepare_first = observed_prepare
+    worker.vad = lambda samples: calls.append('model') or []
+    store = MemoryStore()
+    queue = Scheduler(store)
+    queue.enqueue(item('a'), time.time())
+    queue.enqueue(item('b'), time.time())
+    heartbeat = queue.heartbeat
+    monkeypatch.setattr(
+        queue, 'heartbeat', lambda segment, *args: False if segment == 'b' else heartbeat(segment, *args)
+    )
+    pump = Pump(queue, worker, flights=2)
+    await pump._gpu.acquire()
+    running = asyncio.create_task(pump.run_once(maintain=False))
+    try:
+        await asyncio.wait_for(discarded.wait(), 2)
+    finally:
+        pump._gpu.release()
+        await asyncio.wait_for(running, 3)
+    # 'a' is still ours, but its prepared decode was cancelled with the prefix:
+    # refunded without an attempt charge, never run as a fake decode failure.
+    assert not calls and ('results', 'a') not in store.rows
+    assert store.rows['jobs', 'a']['state'] == 'retry' and store.rows['jobs', 'a']['attempt'] == 0
+    assert worker._decode_budget.seconds == 0
+
+
+def test_consumed_preparation_is_released_when_the_gpu_section_returns():
+    worker, _, _, _, _, _ = setup_worker(io_concurrency=3)
+    works = [item(key, 600) for key in 'abc']
+    prepared = worker.prepare_first(works)
+    try:
+        assert worker._decode_budget.seconds == 1800
+        pending = worker.process_batch_deferred(works, prepared=prepared)
+        # Before settlement and before the owner's close: the next lane can
+        # prepare its whole flight, and no decoded buffer is retained.
+        assert worker._decode_budget.seconds == 0
+        assert all(handle.future is None for handle in prepared.handles)
+        assert [r.segment_id for r in pending.settle()] == ['a', 'b', 'c']
+    finally:
+        prepared.close()  # Idempotent after the chain's release.
+    assert worker._decode_budget.seconds == 0
+
+
+def test_release_settled_keeps_running_preparation_reserved():
+    release = threading.Event()
+    budget = DecodeBudget(1800)
+    with ThreadPoolExecutor(2) as executor:
+        done_work, running_work = item('a', 600), item('b', 400)
+        done = FirstDecode(budget, done_work, budget.submit(executor, lambda work: None, done_work))
+        done.future.result(1)
+        running = FirstDecode(budget, running_work, budget.submit(executor, lambda work: release.wait(2), running_work))
+        flight = PreparedFlight([done, running])
+        try:
+            flight.release_settled()
+            assert budget.seconds == 400 and done.future is None and running.future is not None
+        finally:
+            release.set()
+            flight.close()
+    assert budget.seconds == 0

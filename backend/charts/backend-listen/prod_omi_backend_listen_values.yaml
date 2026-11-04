@@ -100,6 +100,11 @@ envFrom:
 privateEnv: {}
 
 env:
+  - name: LISTEN_PREVIEW_BATCH_CUSTODY_ENABLED
+    value: "true"
+  # Production retirement; false restores the old routes only after GPUs are ready.
+  - name: STT_GPU_FLEET_OFF
+    value: "true"
   - name: STT_CAP_DISPATCH_ENFORCEMENT
     value: "false"
   - name: STT_CAP_DISPATCH_COHORT
@@ -118,6 +123,16 @@ env:
     value: ""
   - name: DEMAND_PROCESSING_PERCENT
     value: "0"
+  - name: BATCH_CONTROL_CANDIDATE_FANOUT
+    value: "16"
+  - name: BATCH_ADMISSION_PARALLEL_CALLS
+    value: "true"
+  - name: BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS
+    value: "10"
+  - name: SERVER_BATCH_UNSUPPORTED_LANGUAGES
+    value: "af,ar,az,be,bn,bs,ca,cy,eu,fa,gl,gu,he,hi,id,kk,kn,ko,mk,ml,mr,ms,no,pa,sq,sr,sw,ta,te,th,tl,tr,ur,vi,zh"
+  - name: SERVER_BATCH_ONLY_AUTO_LANGUAGE_PERCENT
+    value: "100"
   - name: BATCH_PIPELINE_ENABLED
     value: "true"
   - name: FIRST_SUMMARY_DEADLINE_ENABLED
@@ -129,6 +144,9 @@ env:
   - name: BATCH_LIVE_STT_RETIRE_PERCENT
     value: "0"
   - name: SERVER_BATCH_ONLY_MOBILE_PERCENT
+    value: "100"
+  # Separate listen roll after mobile batch-only 100; lead expands by 2026-11-03.
+  - name: SERVER_BATCH_ONLY_VISIBLE_RESTORE_PERCENT
     value: "0"
   - name: RECORD_SEAL_OVERLAP_TRIM_ENABLED
     value: "true"
@@ -151,10 +169,6 @@ env:
   - name: PLAYBACK_ON_DEMAND_ENABLED
     value: "true"
   - name: STALE_IN_PROGRESS_RECOVERY_ENABLED
-    value: "true"
-  - name: REPEAT_WORK_REVISION_ENABLED
-    value: "false"
-  - name: CONVERSATION_LLM_INPUT_DEDUPE_ENABLED
     value: "true"
   - name: REPEAT_WORK_LLM_VERSION
     value: "2026-10-16-v1"
@@ -232,7 +246,7 @@ env:
   - name: FIRESTORE_READ_LEDGER
     value: "1"
   - name: FIRESTORE_READ_LEVERS
-    value: '{"action_items_page":100,"backfill_task_reads":0,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":0,"historical_scan_memo":0,"ledger_purge_coalesce":0,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":0,"usage_month_total":0}'
+    value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":5,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":5,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":5,"usage_month_cache":0,"usage_month_total":0}'
   - name: FSR_QUEUE_AGE_PUBLISHER
     value: "1"
   - name: FSR_QUEUE_AGE_LEASE_SECONDS
@@ -428,10 +442,12 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: GROQ_API_KEY
+  # In-cluster callers reach these services by ClusterIP DNS; the internal-ALB
+  # routes stay for Cloud Run callers only (billed per GB inbound).
   - name: HOSTED_VAD_API_URL
-    value: "http://172.16.160.20/vad/v1/vad"
+    value: "http://prod-omi-vad.prod-omi-backend.svc.cluster.local:8080/v1/vad"
   - name: HOSTED_SPEAKER_EMBEDDING_API_URL
-    value: "http://172.16.160.20/diarizer"
+    value: "http://prod-omi-diarizer.prod-omi-backend.svc.cluster.local:8080"
   - name: PINECONE_API_KEY
     valueFrom:
       secretKeyRef:
@@ -479,7 +495,7 @@ env:
   - name: OMI_CUSTOMER_DATA_PROJECT
     value: "based-hardware"
   - name: HOSTED_PUSHER_API_URL
-    value: "http://pusher.omi.me"
+    value: "http://prod-omi-pusher.prod-omi-backend.svc.cluster.local:8080"
   - name: BUCKET_PLUGINS_LOGOS
     value: "omi_plugins"
   - name: LANGCHAIN_TRACING_V2
@@ -559,6 +575,8 @@ env:
         key: POSTHOG_PROJECT_API_KEY
   - name: GCP_LOCATION
     value: "us-central1"
+  - name: HOSTED_LID_API_URL
+    value: ""
   - name: HOSTED_PARAKEET_API_URL
     value: "http://parakeet.omi.me"
   - name: SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED
@@ -602,7 +620,7 @@ env:
   - name: STT_LEARNED_LANGUAGE_PROFILE
     value: "true"
   - name: STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT
-    value: "100"
+    value: "0"
   - name: PARAKEET_WINDOW_ALLOCATION_PERCENT
     value: "100"
   - name: PARAKEET_WINDOW_MAX_SESSIONS
@@ -642,21 +660,22 @@ env:
     value: "3"
   - name: SONIOX_CIRCUIT_COOLDOWN_SECONDS
     value: "30"
-  # Cohort off 2026-11-01: at 5% the treatment arm fell well below control on words per capture second and transcribed share. Diagnose before re-ramping.
+  # Cohort off 2026-11-01: at 5% the treatment arm fell well below control on words per capture second and transcribed share
+  # (2 s drain cap; #24278 widens it). Treatment is now the speech gate: close 10 s after the first silent frame (6 s past
+  # the hangover), re-arm 2 s, cap 120/h. Percent stays 0 until the lead ramps it; rollback SONIOX_IDLE_COHORT_PERCENT=0.
   - name: SONIOX_IDLE_COHORT_PERCENT
     value: "0"
   - name: SONIOX_IDLE_COHORT_CLOSE_SECONDS
-    value: "20"
+    value: "10"
   - name: SONIOX_IDLE_COHORT_REARM_SECONDS
-    value: "15"
+    value: "2"
   - name: SONIOX_IDLE_COHORT_MAX_CLOSES_PER_HOUR
-    value: "20"
+    value: "120"
   - name: STT_SERVICE_MODELS
     value: "parakeet-window,modulate-velma-2,soniox"
-  - name: HOSTED_TRANSLATION_API_URL
-    value: "http://172.16.160.20/nllb"
+  # All live translation runs on Luna; the NLLB GPU service is retired in prod.
   - name: TRANSLATION_SERVICE_MODELS
-    value: "nllb,gemini"
+    value: "luna"
   - name: TRANSLATION_CACHE_TTL
     value: "86400"
   - name: TRANSLATION_NEGATIVE_CACHE_TTL
@@ -840,7 +859,10 @@ startupProbe:
 # This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
 autoscaling:
   enabled: true
-  minReplicas: 30
+  # retire100: planned live residual is ~31% excluded conversations plus
+  # ~5-6% desktop. Qualify the floor against fresh batch-100 demand before
+  # applying; max 60 and all scale-out signals stay intact. Rollback: 30.
+  minReplicas: 20
   maxReplicas: 60
   behavior:
     scaleDown:

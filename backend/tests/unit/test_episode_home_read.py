@@ -201,6 +201,8 @@ def test_only_finally_discarded_members_are_absent_from_live_and_list_http(store
     live = service.live_episode
     c = service.Collaborators(firestore_client=store, now=lambda: START + timedelta(minutes=3))
     monkeypatch.setattr(service, 'live_episode', lambda uid: live(uid, collaborators=c))
+    settle = service.settle_episode_for_read
+    monkeypatch.setattr(service, 'settle_episode_for_read', lambda uid, row, _c: settle(uid, row, c))
     monkeypatch.setattr(service, 'last_closed_episode', lambda *a, **kw: None)
     app = FastAPI()
     app.include_router(router.router)
@@ -292,6 +294,14 @@ def _episode(*ids):
     }
 
 
+def test_a_stored_floor_decision_without_a_blocked_reason_leaves_the_list(monkeypatch):
+    monkeypatch.delenv('HOME_HIDE_BELOW_FLOOR_ROWS', raising=False)
+    row = _short_row(
+        summary_blocked_reason=None, relevance_decision={'verdict': 'keep', 'reason': 'content_below_floor'}
+    )
+    assert home_read.project_episode('u', _episode('c'), members={'c': row}, list_row=True) is None
+
+
 def test_short_capture_under_the_floor_leaves_the_list_but_not_a_direct_read(monkeypatch):
     monkeypatch.delenv('HOME_HIDE_BELOW_FLOOR_ROWS', raising=False)
     members = {'c': _short_row()}
@@ -314,10 +324,8 @@ def test_only_the_short_member_leaves_a_longer_episode(monkeypatch):
         {'user_title': 'mine'},
         {'has_photos': True},
         {'sync_relevance_user_kept': True},
-        {'finished_at': START + timedelta(seconds=60)},
         {'summary_blocked_reason': None},
         {'status': 'in_progress'},
-        {'structured': {'title': 'short', 'overview': 'has notes'}},
     ],
 )
 def test_short_row_stays_when_anything_says_it_matters(monkeypatch, extra):

@@ -23,7 +23,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Literal
 
 from google.cloud import firestore
-from pydantic import Field
+from pydantic import Field, PrivateAttr, ValidationError, model_validator
 
 from database import review_store
 from models.agent_edit import DreamHarnessEdit
@@ -76,7 +76,8 @@ INSTRUCTIONS = (
     'obligation or someone else\'s task. Other speakers\' facts and tasks are never the owner\'s; user-created or '
     'edited records are protected. 2) Maintain the owner\'s profile as short third-person lines, one fact each, '
     'each citing one to three supplied refs; never a fact only about another person; never instructions or '
-    'imperatives; drop lines whose support is gone. 3) Leave brief notes for next week. Use only supplied refs.'
+    'imperatives; drop lines whose support is gone. 3) Leave brief notes for next week. Use only supplied refs. '
+    'Keep the plan short: at most 12 cleanup items and 20 profile operations, one sentence per reason.'
 )
 
 
@@ -89,10 +90,56 @@ class CleanupOp(Strict):
     value: int = Field(default=3, ge=1, le=5)
 
 
+PLAN_ITEMS = 20
+NOTES_CHARS = 2000
+
+
 class StatePlan(Strict):
-    cleanup: list[CleanupOp] = Field(default_factory=list, max_length=20)
-    profile_ops: list[dream_profile_v2.ProfileLineOp] = Field(default_factory=list, max_length=20)
-    notes: str = Field(default='', max_length=2000)
+    cleanup: list[CleanupOp] = Field(default_factory=list, max_length=PLAN_ITEMS)
+    profile_ops: list[dream_profile_v2.ProfileLineOp] = Field(default_factory=list, max_length=PLAN_ITEMS)
+    notes: str = Field(default='', max_length=NOTES_CHARS)
+    # Content-free parse counts: items failing their own schema, and items past PLAN_ITEMS.
+    _dropped: int = PrivateAttr(default=0)
+    _overflow: int = PrivateAttr(default=0)
+
+    @model_validator(mode='wrap')
+    @classmethod
+    def _keep_valid_items(cls, data, handler):
+        """One malformed or surplus item costs that item, not the whole week's plan.
+
+        11-02 prod: 3 of 8 labelled runs failed on a single item (empty evidence, an
+        over-long profile line, a 21st cleanup op) after the planner tokens were spent.
+        """
+        dropped = overflow = 0
+        if isinstance(data, dict):
+            data = dict(data)
+            for field, item_model in (('cleanup', CleanupOp), ('profile_ops', dream_profile_v2.ProfileLineOp)):
+                items = data.get(field)
+                if not isinstance(items, list):
+                    continue
+                kept = []
+                for item in items:
+                    try:
+                        item_model.model_validate(item, strict=True)
+                    except ValidationError:
+                        dropped += 1
+                        continue
+                    kept.append(item)
+                overflow += max(0, len(kept) - PLAN_ITEMS)
+                data[field] = kept[:PLAN_ITEMS]
+            if isinstance(data.get('notes'), str):
+                data['notes'] = data['notes'][:NOTES_CHARS]
+        plan = handler(data)
+        plan._dropped, plan._overflow = dropped, overflow
+        return plan
+
+    @property
+    def dropped(self) -> int:
+        return self._dropped
+
+    @property
+    def overflow(self) -> int:
+        return self._overflow
 
 
 def mode() -> tuple[str, bool]:
@@ -251,7 +298,14 @@ def serialize_state(sections: dict[str, Any]) -> tuple[str, str, dict[str, str]]
 
 def plan_edits(plan: StatePlan) -> tuple[list[DreamHarnessEdit], dict[str, int]]:
     """Cap and screen cleanup ops before staging; counts are content-free."""
-    counts = {'merge_people_proposed': 0, 'capped': 0, 'merge_evidence_rejected': 0, 'invalid': 0}
+    counts = {
+        'merge_people_proposed': 0,
+        'capped': 0,
+        'merge_evidence_rejected': 0,
+        'invalid': 0,
+        'plan_dropped': plan.dropped,
+        'plan_overflow': plan.overflow,
+    }
     edits: list[DreamHarnessEdit] = []
     merges = 0
     for op in plan.cleanup:
@@ -342,6 +396,21 @@ async def check_lines(lines, records, verify_turn, *, tokens, deadline_seconds):
 # --- the pass ------------------------------------------------------------------------------------
 
 
+def failure_label(error: Exception) -> str:
+    """One bare identifier naming the cause, never model text; dream_pass drops anything else."""
+    label = type(error).__name__
+    code = str(error)
+    if isinstance(error, ValidationError):
+        items = error.errors(include_input=False, include_url=False, include_context=False)
+        first = min(items, key=lambda item: [str(part) for part in item['loc']])
+        parts = [part for part in first['loc'] if isinstance(part, str)]
+        # An extra key's name is model-authored.
+        label = '__'.join([label, *(parts[:-1] if first['type'] == 'extra_forbidden' else parts), first['type']])
+    elif code.startswith(('dream_', 'agent_')):
+        label += '__' + code
+    return label[:64] if label[:64].isidentifier() else type(error).__name__
+
+
 async def run(
     uid: str,
     *,
@@ -386,9 +455,12 @@ async def run(
             )
     except TimeoutError:
         summary['status'] = 'timeout'
+        summary['total_tokens'] = spent()
     except Exception as error:
         logger.warning('event=dream_lever_error lever=state_pass exc=%s', type(error).__name__)
         summary['status'] = 'failed'
+        summary['failure'] = failure_label(error)
+        summary['total_tokens'] = spent()
     doc = summary.pop('_profile_doc', None)
     if summary['status'] != 'ready' or doc is None:
         return summary
