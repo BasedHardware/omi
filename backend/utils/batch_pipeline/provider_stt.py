@@ -1075,7 +1075,9 @@ class ProviderSttStage:
             if not settled:
                 return UnitOutcome('done', 'superseded')
             vendor_metrics.attempt(intent['service'], VendorAttemptOutcome.ABANDONED, item.duration_seconds)
-            vendor_metrics.overflow_attempt(route, intent['service'], item.duration_seconds)
+            # No strict-VAD speech means _call_sync answered silence locally: no vendor call, no spend.
+            silent = intent.get('measured_vad_speech_seconds') == 0
+            vendor_metrics.overflow_attempt(route, intent['service'], 0.0 if silent else item.duration_seconds)
             self._record_attempt(intent['service'], VendorAttemptOutcome.ABANDONED, None)
             if settled == 'failover':
                 self._log('failover', 'abandoned_running')
