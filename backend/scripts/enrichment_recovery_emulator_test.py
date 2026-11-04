@@ -1,3 +1,4 @@
+# LIFECYCLE: permanent
 """Daily parity PL-342/397/398: enrichment debt survives retries and bounded scans.
 
 The same consumer and Outbox contract runs on legacy Firestore, reference sim and
@@ -11,9 +12,18 @@ from __future__ import annotations
 import dataclasses
 import json
 import os
+import sys
+from pathlib import Path
 from types import SimpleNamespace
 
 os.environ.setdefault('OMI_ENV_STAGE', 'offline')
+BACKEND_DIR = Path(__file__).resolve().parents[1]
+if str(BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(BACKEND_DIR))
+
+# This proof lives in the workflow's existing *_emulator_test.py path filter.
+# Reuse the canonical backend test environment and outbound-network guards.
+pytest_plugins = ['tests.conftest']
 
 import httpx
 import pytest

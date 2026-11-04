@@ -81,7 +81,7 @@ run_proof "job-store conformance (sim + emulator)" \
 # CI requires sim + emulator; local/staging qualification must require all.
 run_proof "enrichment recovery conformance (PL-342/397/398)" \
   env OMI_REQUIRE_STORE_BACKENDS="${OMI_REQUIRE_STORE_BACKENDS:-sim,emulator}" OMI_ENV_STAGE=offline \
-  "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_enrichment_recovery_conformance.py
+  "$PYTHON" -m pytest -q -p no:cacheprovider scripts/enrichment_recovery_emulator_test.py
 
 if (( ${#failures[@]} )); then
   echo
