@@ -87,6 +87,7 @@ def replay_environment():
             'GOOGLE_CLOUD_PROJECT': 'demo-omi-isolated-tests',
             'OMI_ENV_STAGE': 'local',
             'PROVIDER_MODE': 'offline',
+            'MEMORY_ENABLED': 'on',
             'ENCRYPTION_SECRET': 'replay-harness-synthetic-encryption-key-0000',
             'OPENAI_API_KEY': 'fake-key-for-hermetic-replay',
             'BUCKET_BATCH_PIPELINE': 'replay-staged',
@@ -181,4 +182,11 @@ def replay_environment():
         # imported storage under different ambient defaults.
         stack.enter_context(patch.object(product_storage, 'private_cloud_sync_bucket', 'replay-chunks'))
         stack.enter_context(patch.object(redis_db, 'r', fake_redis))
-        yield ReplayEnvironment(harness, local, fake_redis, VirtualClock(1_800_000_000), stack)
+        environment = ReplayEnvironment(harness, local, fake_redis, VirtualClock(1_800_000_000), stack)
+
+        def cleanup_replay_documents():
+            for ref in getattr(environment, 'replay_documents', ()):
+                ref.delete()
+
+        stack.callback(cleanup_replay_documents)
+        yield environment
