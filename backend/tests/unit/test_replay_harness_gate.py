@@ -74,6 +74,7 @@ def test_new_exception_is_checked_in_every_observation_even_minority(case):
     old = outcome(exception_type='ValueError', site='product.old')
     new = outcome(exception_type='TypeError', site='product.old')
     new['stages'][0]['observations'] = [{'exception_type': 'ValueError', 'site': 'product.new'}]
+    case = replace(case, corpus={'admission': {'drainers': 8}})
     result = gate.compare([case], {'baseline': [[old] * 3], 'candidate': [[old, old, new]]})
     assert result['cases'][0]['classification'] == 'still_failing'
     assert result['verdict'] == 'FAIL'
@@ -83,13 +84,22 @@ def test_new_exception_is_checked_in_every_observation_even_minority(case):
     ]
 
 
-def test_majority_and_no_majority_fail_closed(case):
+@pytest.mark.parametrize('mixed_side', ['baseline', 'candidate', 'both'])
+def test_mixed_stress_outcomes_are_unstable_not_regressions(case, mixed_side):
+    case = replace(case, corpus={'admission': {'drainers': 8}})
     before, after = outcome(), outcome('pass')
-    assert gate.majority([before, after, after]) == after
-    assert gate.majority([before, after]) is None
-    result = gate.compare([case], {'baseline': [[before, after]], 'candidate': [[after]]})
-    assert result['verdict'] == 'FAIL' and result['cases'][0]['inconclusive']
-    assert len(result['cases'][0]['baseline']['outcomes']) == 2
+    assert gate.unanimous([before, after, after]) is None
+    assert gate.unanimous([before] * 3) == before
+    reports = {'baseline': [[before] * 3], 'candidate': [[before] * 3]}
+    for side in ('baseline', 'candidate'):
+        if mixed_side in (side, 'both'):
+            reports[side] = [[before, after, after]]
+    result = gate.compare([case], reports)
+    assert result['cases'][0]['classification'] == 'unstable'
+    assert result['verdict'] == 'REGRESSION_ONLY'
+    assert not result['cases'][0]['inconclusive']
+    assert gate.exit_code(result['verdict'], regression_only=True) == 0
+    assert len(result['cases'][0]['baseline']['outcomes']) == len(result['cases'][0]['candidate']['outcomes']) == 3
 
 
 @pytest.mark.parametrize('status', ['not_implemented', 'invalid'])
@@ -393,3 +403,87 @@ def test_parent_cleanup_deletes_only_journaled_documents(tmp_path, monkeypatch):
     with pytest.raises(RuntimeError, match='loopback'):
         gate_resources.cleanup_scopes(tmp_path, 'production.invalid:443')
     assert len(requests) == 1
+
+
+@pytest.mark.parametrize('mixed_side', ['baseline', 'candidate', 'both'])
+def test_unstable_target_is_inconclusive(case, mixed_side):
+    case = replace(
+        case, corpus={'admission': {'drainers': 8}}, manifest=replace(case.manifest, gate={'fixed_by_ref': True})
+    )
+    reports = {'baseline': [[outcome()] * 5], 'candidate': [[outcome('pass')] * 5]}
+    for side in ('baseline', 'candidate'):
+        if mixed_side in (side, 'both'):
+            reports[side] = [[outcome(), outcome('pass'), outcome(), outcome('pass'), outcome('pass')]]
+    result = gate.compare([case], reports, repeats=5)
+    assert result['cases'][0]['classification'] == 'unstable'
+    assert result['verdict'] == 'INCONCLUSIVE'
+    assert gate.exit_code(result['verdict']) != 0
+    assert gate.exit_code(result['verdict'], regression_only=True) != 0
+
+
+@pytest.mark.parametrize('repeats', [1, 2, 3, 4, 5])
+def test_stress_target_fix_requires_five_unanimous_runs(case, repeats):
+    case = replace(
+        case, corpus={'admission': {'drainers': 8}}, manifest=replace(case.manifest, gate={'fixed_by_ref': True})
+    )
+    result = gate.compare(
+        [case], {'baseline': [[outcome()] * repeats], 'candidate': [[outcome('pass')] * repeats]}, repeats=repeats
+    )
+    assert result['cases'][0]['classification'] == ('fixed' if repeats >= 5 else 'insufficient_repeats')
+    assert result['verdict'] == ('PASS' if repeats >= 5 else 'DIAGNOSTIC')
+
+
+def test_unstable_non_target_does_not_block_a_proven_target(case):
+    target = replace(case, manifest=replace(case.manifest, gate={'fixed_by_ref': True}))
+    stress = replace(case, corpus={'admission': {'drainers': 8}})
+    result = gate.compare(
+        [target, stress],
+        {
+            'baseline': [[outcome()], [outcome(), outcome('pass'), outcome('pass')]],
+            'candidate': [[outcome('pass')], [outcome()] * 3],
+        },
+    )
+    assert [r['classification'] for r in result['cases']] == ['fixed', 'unstable']
+    assert result['verdict'] == 'PASS'
+
+
+def test_unstable_still_rejects_new_exception_from_any_run(case):
+    case = replace(case, corpus={'admission': {'drainers': 8}})
+    rare = outcome(reason='new exception', exception_type='TypeError', site='product.new')
+    result = gate.compare([case], {'baseline': [[outcome()] * 3], 'candidate': [[outcome(), outcome('pass'), rare]]})
+    assert result['cases'][0]['classification'] == 'unstable'
+    assert result['verdict'] == 'FAIL'
+    assert result['new_exception_sites'] == [{'exception_type': 'TypeError', 'site': 'product.new'}]
+
+
+def test_stress_fix_requires_full_ref_pass_not_a_later_stop(case):
+    case = replace(
+        case, corpus={'admission': {'drainers': 8}}, manifest=replace(case.manifest, gate={'fixed_by_ref': True})
+    )
+    after = {'stages': outcome('pass')['stages'] + outcome(stage='titling')['stages']}
+    result = gate.compare([case], {'baseline': [[outcome()] * 5], 'candidate': [[after] * 5]}, repeats=5)
+    assert result['cases'][0]['classification'] != 'fixed'
+    assert result['verdict'] == 'FAIL'
+
+
+def test_missing_stress_runs_fail_instead_of_becoming_unstable(case):
+    case = replace(case, corpus={'admission': {'drainers': 8}})
+    result = gate.compare([case], {'baseline': [[outcome(), outcome('pass')]], 'candidate': [[outcome()] * 3]})
+    assert result['verdict'] == 'FAIL' and result['cases'][0]['incomplete']
+
+
+@pytest.mark.parametrize('matching_indices', [{0}, {4}, {0, 1, 2, 3, 4}])
+def test_every_base_run_must_reproduce_observation_only_expected_stop(case, matching_indices):
+    case = replace(
+        case, corpus={'admission': {'drainers': 8}}, manifest=replace(case.manifest, gate={'fixed_by_ref': True})
+    )
+    baseline = []
+    for index in range(5):
+        row = outcome(reason='primary')
+        row['stages'][0]['observations'] = [{'reason': 'expected'}] if index in matching_indices else []
+        baseline.append(row)
+    result = gate.compare([case], {'baseline': [baseline], 'candidate': [[outcome('pass')] * 5]}, repeats=5)
+    if len(matching_indices) == 5:
+        assert result['verdict'] == 'PASS' and result['cases'][0]['classification'] == 'fixed'
+    else:
+        assert result['verdict'] == 'INCONCLUSIVE' and result['cases'][0]['classification'] == 'unstable'

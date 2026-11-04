@@ -1,7 +1,6 @@
 """Gate a candidate against a last-good ref with one fixed local replay adapter."""
 
 import argparse
-from collections import Counter
 from dataclasses import replace
 import hashlib
 import hmac
@@ -78,26 +77,31 @@ def outcome_key(outcome):
     return 'pass', tuple(s['stage'] for s in outcome['stages']), None
 
 
-def majority(outcomes):
-    key, count = Counter(outcome_key(o) for o in outcomes).most_common(1)[0]
-    if count * 2 <= len(outcomes):
+def unanimous(outcomes, key=outcome_key):
+    if not outcomes or any(key(o) != key(outcomes[0]) for o in outcomes[1:]):
         return None
-    return next(o for o in outcomes if outcome_key(o) == key)
+    return outcomes[0]
+
+
+def reproduces_expected_stop(outcome, manifest):
+    stopped = stop(outcome)
+    if stopped is None:
+        return False
+    expected = manifest.stages.get(stopped['stage'], {})
+    return (
+        'expect_stop_stage' in expected
+        and item_report(replace(manifest, stages={stopped['stage']: expected}), [StageResult(**stopped)])[
+            'expectation_met'
+        ]
+    )
 
 
 def classify(baseline, candidate, manifest):
     """Use product outcomes, never whether an incident expectation still holds on REF."""
     before, after = stop(baseline), stop(candidate)
     if before:
-        expected = manifest.stages.get(before['stage'], {})
-        reproduced = (
-            'expect_stop_stage' in expected
-            and item_report(replace(manifest, stages={before['stage']: expected}), [StageResult(**before)])[
-                'expectation_met'
-            ]
-        )
         passed_stage = any(s['stage'] == before['stage'] and s['status'] == 'pass' for s in candidate['stages'])
-        if reproduced and passed_stage:
+        if reproduces_expected_stop(baseline, manifest) and passed_stage:
             return 'fixed'
     if before is None:
         return 'regressed' if after else 'unchanged_pass'
@@ -122,22 +126,50 @@ def compare(cases, reports, key=b'', repeats=3):
     for case, before, after in zip(cases, reports['baseline'], reports['candidate'], strict=True):
         baseline_exceptions.update(exception_sites(before))
         candidate_exceptions.update(exception_sites(after))
-        baseline, candidate = majority(before), majority(after)
-        incomplete = any(
-            not o['stages'] or any(s['status'] not in ('pass', 'stopped') for s in o['stages']) for o in before + after
+        # The reason matcher also examines sanitized observations. Every BASE
+        # run must agree on reproduction, not only on its primary reason.
+        baseline = unanimous(
+            before, key=lambda outcome: (outcome_key(outcome), reproduces_expected_stop(outcome, case.manifest))
         )
+        candidate = unanimous(after)
+        load_sensitive = repeats_for(case, 3) > 1
+        target = bool((case.manifest.gate or {}).get('fixed_by_ref'))
+        expected_runs = repeats_for(case, repeats)
+        incomplete = (
+            len(before) != expected_runs
+            or len(after) != expected_runs
+            or any(
+                not o['stages'] or any(s['status'] not in ('pass', 'stopped') for s in o['stages'])
+                for o in before + after
+            )
+        )
+        unstable = load_sensitive and (baseline is None or candidate is None)
+        classification = (
+            'unstable'
+            if unstable
+            else (classify(baseline, candidate, case.manifest) if baseline and candidate else 'changed_reason')
+        )
+        minimum_runs = (5 if target else 3) if load_sensitive else 1
+        insufficient = min(len(before), len(after)) < minimum_runs
+        if load_sensitive and classification == 'fixed':
+            # A later stop is not an end-to-end stress pass. A small unanimous
+            # sample cannot establish a target fix either.
+            if stop(candidate) is not None:
+                classification = 'changed_reason'
+            elif insufficient:
+                classification = 'insufficient_repeats'
         rows.append(
             {
                 'case_id': case_id(case, key),
                 'identity_scheme': 'hmac-sha256' if case.manifest.tier == 'C' else 'sha256',
                 **({'corpus_sha256': case_digest(case)} if case.manifest.tier == 'S' else {}),
-                'fixed_by_ref': bool((case.manifest.gate or {}).get('fixed_by_ref')),
-                'classification': (
-                    classify(baseline, candidate, case.manifest) if baseline and candidate else 'changed_reason'
-                ),
-                'inconclusive': baseline is None or candidate is None or incomplete,
-                'baseline': {'outcomes': before, 'majority': baseline},
-                'candidate': {'outcomes': after, 'majority': candidate},
+                'fixed_by_ref': target,
+                'classification': classification,
+                'incomplete': incomplete,
+                'insufficient_repeats': insufficient,
+                'inconclusive': incomplete or (target and unstable),
+                'baseline': {'outcomes': before, 'unanimous': baseline},
+                'candidate': {'outcomes': after, 'unanimous': candidate},
             }
         )
     new_sites = [
@@ -146,22 +178,21 @@ def compare(cases, reports, key=b'', repeats=3):
             candidate_exceptions - baseline_exceptions, key=lambda value: (value[0], value[1] or '')
         )
     ]
-    passed = (
-        bool(rows)
-        and not new_sites
-        and all(
-            not row['inconclusive']
-            and row['classification'] not in ('regressed', 'changed_reason')
-            and (not row['fixed_by_ref'] or row['classification'] == 'fixed')
-            for row in rows
-        )
+    hard_failure = (
+        not rows
+        or bool(new_sites)
+        or any(row['incomplete'] or row['classification'] in ('regressed', 'changed_reason') for row in rows)
     )
-    diagnostic = any(repeats_for(case, repeats) < 3 and repeats_for(case, 3) > 1 for case in cases)
     verdict = 'FAIL'
-    if passed:
-        verdict = (
-            'DIAGNOSTIC' if diagnostic else 'PASS' if any(row['fixed_by_ref'] for row in rows) else 'REGRESSION_ONLY'
-        )
+    if not hard_failure:
+        if any(row['fixed_by_ref'] and row['classification'] == 'unstable' for row in rows):
+            verdict = 'INCONCLUSIVE'
+        elif any(row['insufficient_repeats'] for row in rows):
+            verdict = 'DIAGNOSTIC'
+        elif any(row['fixed_by_ref'] and row['classification'] != 'fixed' for row in rows):
+            verdict = 'FAIL'
+        else:
+            verdict = 'PASS' if any(row['fixed_by_ref'] for row in rows) else 'REGRESSION_ONLY'
     return {'cases': rows, 'new_exception_sites': new_sites, 'verdict': verdict}
 
 

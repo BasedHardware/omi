@@ -27,8 +27,9 @@ def evidence_output(tmp_path, label):
     return root / label
 
 
-def test_identical_refs(tmp_path):
-    output = evidence_output(tmp_path, 'identical')
+@pytest.mark.parametrize('trial', [1, 2, 3])
+def test_identical_refs(tmp_path, trial):
+    output = evidence_output(tmp_path, f'identical-{trial}')
     assert gate(ROOT, sorted(FIXTURES.iterdir()), 'HEAD', 'HEAD', output, regression_only=True) == 0
     result = json.loads((output / 'gate.json').read_text())
     assert result['verdict'] == 'REGRESSION_ONLY'
