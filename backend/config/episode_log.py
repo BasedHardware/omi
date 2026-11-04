@@ -1,0 +1,34 @@
+"""Episode log migration switches. Read config at call time; no IO on import."""
+
+import os
+
+from config.episodes import episodes_enabled_for
+from config.jev_decisions import uid_bucket
+
+DEBOUNCE_SECONDS = 180
+MAX_AGE_SECONDS = 1500
+LEASE_SECONDS = 600
+BATCH_SIZE = 64
+SWEEP_SIZE = 32
+RETRY_SECONDS = 30
+WAKE_BUCKET_SECONDS = 30
+
+
+def default_on(name: str) -> bool:
+    return os.getenv(name, 'on').strip().lower() in {'', '1', 'on', 'true', 'yes'}
+
+
+def enabled(uid: str) -> bool:
+    return episodes_enabled_for(uid) and default_on('EPISODES_LOG_ENABLED')
+
+
+def home_enabled() -> bool:
+    return default_on('EPISODES_HOME_ROWS_ENABLED')
+
+
+def read_cohort(uid: str) -> bool:
+    try:
+        percent = float(os.getenv('EPISODES_LOG_READ_PERCENT', '0'))
+    except ValueError:
+        return False
+    return enabled(uid) and home_enabled() and 0 <= percent <= 100 and uid_bucket(uid, 'episodes-log-v1') < percent

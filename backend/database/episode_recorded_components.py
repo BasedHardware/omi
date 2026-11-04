@@ -14,7 +14,7 @@ from google.cloud import firestore
 
 from config.recorded_time_tolerances import CLOSE_GAP_SECONDS, MAX_EPISODE_SECONDS
 from database._client import run_transactional
-from database import episodes
+from database import episodes, episode_log
 
 
 def _automatic(row):
@@ -149,6 +149,7 @@ def attach(uid, cid, source, start, end, *, candidates, template, choose, firest
 
     @firestore.transactional
     def commit(transaction):
+        log_capture = episode_log.prepare(transaction, client, uid)
         fence_row = fence.get(transaction=transaction).to_dict() or {}
         linked = root.collection('episode_links').document(cid).get(transaction=transaction).to_dict() or {}
         if linked.get('episode_id'):
@@ -249,6 +250,26 @@ def attach(uid, cid, source, start, end, *, candidates, template, choose, firest
             if exists:
                 transaction.update(root.collection('conversations').document(member), {'episode_id': assigned[-1]})
         transaction.set(fence, {'version': int(fence_row.get('version') or 0) + 1})
+        redirects = [
+            {
+                **row,
+                'recorded_merged_into': next(
+                    (w for w in result if w['started_at'] <= row['started_at'] < w['last_activity_at']), result[-1]
+                )['id'],
+            }
+            for row in previous.values()
+            if row['id'] not in new_ids
+        ]
+        episode_log.mutation(
+            log_capture,
+            before=list(previous.values()),
+            after=[*result, *redirects],
+            span={'cid': cid, 'start': start, 'end': end, 'source': source},
+            links={
+                member: {'episode_id': assigned[-1], 'episode_ids': assigned}
+                for member, assigned in assignments.items()
+            },
+        )
         incoming = [row for row in result if cid in row['conversation_ids']]
         return {**incoming[-1], '_recorded_windows': incoming}
 

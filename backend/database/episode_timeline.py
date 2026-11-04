@@ -9,7 +9,7 @@ from google.cloud.firestore_v1 import FieldFilter
 
 from config.episodes import MAX_EPISODE_SECONDS, CLOSE_GAP_SECONDS
 from database._client import get_firestore_client, run_transactional
-from database import episodes
+from database import episodes, episode_log
 
 PAGE_LIMIT = 128
 FIELDS = (
@@ -89,6 +89,7 @@ def _attach_recorded_window(
 
     @firestore.transactional
     def attach(transaction):
+        log_capture = episode_log.prepare(transaction, client, uid)
         root = client.collection('users').document(uid)
         links = root.collection('episode_links')
         fence = links.document('recorded_timeline')
@@ -99,6 +100,20 @@ def _attach_recorded_window(
             transaction, client, uid, [conversation_id], admit_conversation_id=conversation_id
         )
         rows = recorded_candidates(uid, started, finished, firestore_client=client, transaction=transaction)
+        log_fixed = []
+        if log_capture is not None:
+            for row in rows:
+                if not (
+                    row.get('recorded_members') is not None
+                    and not row.get('discarded_conversation_ids')
+                    and row.get('status') == 'closed'
+                    and row.get('close_reason') in {'gap', 'idle', 'hard_cap'}
+                ):
+                    full = episodes.unseal(
+                        uid, root.collection('episodes').document(row['id']).get(transaction=transaction).to_dict()
+                    )
+                    if full:
+                        log_fixed.append(full)
         selected = choose(rows, started, started)
         # A conversation belongs to the episode it started in, even past a cap.
         owner_id = member_row.get('episode_id')
@@ -202,6 +217,13 @@ def _attach_recorded_window(
         transaction.set(root.collection('episodes').document(result['id']), episodes.seal(uid, result))
         episodes.write_memberships(transaction, client, uid, result['id'], members, datetime.now(timezone.utc))
         transaction.set(fence, {'version': int(fence_row.get('version') or 0) + 1})
+        episode_log.mutation(
+            log_capture,
+            before=[*log_fixed, *([existing] if existing else [])],
+            after=[result],
+            span={'cid': conversation_id, 'start': started, 'end': finished, 'source': source},
+            links={conversation_id: {'episode_id': result['id']}},
+        )
         # Never modify current/last_closed navigation pointers for late audio.
         return {**result, '_window_end': window_end}
 
@@ -294,6 +316,7 @@ def resume_recorded(uid, episode_id, at, *, expected_version, choose: Callable, 
 
     @firestore.transactional
     def resume(transaction):
+        log_capture = episode_log.prepare(transaction, client, uid)
         root = client.collection('users').document(uid)
         links = root.collection('episode_links')
         fence = links.document('recorded_timeline')
@@ -327,6 +350,15 @@ def resume_recorded(uid, episode_id, at, *, expected_version, choose: Callable, 
         if last_closed.get('episode_id') == episode_id:
             transaction.set(links.document('last_closed'), {'episode_id': None})
         transaction.set(fence, {'version': int(fence_row.get('version') or 0) + 1})
+        episode_log.mutation(
+            log_capture,
+            before=[owner],
+            after=[result],
+            links={
+                'current': {'episode_id': episode_id},
+                **({'last_closed': {'episode_id': None}} if last_closed.get('episode_id') == episode_id else {}),
+            },
+        )
         return result
 
     return run_transactional(client, resume, transient=True)

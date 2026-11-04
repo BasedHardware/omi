@@ -37,7 +37,7 @@ from config.episodes import (
 from utils.conversations.recorded_time import conversation_span, sync_recorded_end
 from utils.conversations.fragment_visibility import is_relevance_discarded
 
-from database import episode_receipts, episode_timeline
+from database import episode_receipts, episode_timeline, episode_log
 from database._client import get_firestore_client, run_transactional
 from database.conversations import decode_transcript_segments_verified
 from utils.encryption import decrypt, encrypt
@@ -322,6 +322,7 @@ def _bounded_activity(episode, at):
 def _record_activity(
     transaction: Any, client: Any, uid: str, episode_id: str, conversation_id: str, at: datetime
 ) -> Optional[datetime]:
+    log_capture = episode_log.prepare(transaction, client, uid)
     if recorded_episodes_enabled():
         _links(client, uid).document('recorded_timeline').get(transaction=transaction)
     ref = _episodes(client, uid).document(episode_id)
@@ -356,6 +357,11 @@ def _record_activity(
                 transaction.set(fence[0], {'version': fence[1]})
         # This clock must not invalidate the notes state_version.
         transaction.update(ref, {'last_activity_at': activity, 'member_activity': members})
+        episode_log.mutation(
+            log_capture,
+            before=[unseal(uid, raw)],
+            after=[{**unseal(uid, raw), 'last_activity_at': activity, 'member_activity': members}],
+        )
     return activity
 
 
@@ -474,6 +480,7 @@ def _commit(
     link_conversation_ids: Sequence[str],
     segment_receipts: Optional[Mapping[str, Sequence[str]]] = None,
 ) -> dict[str, Any]:
+    log_capture = episode_log.prepare(transaction, client, uid)
     pointer = _links(client, uid).document(CURRENT)
     timeline_ref = _links(client, uid).document('recorded_timeline')
     timeline_enabled = recorded_episodes_enabled()
@@ -527,6 +534,15 @@ def _commit(
     if timeline_enabled:
         transaction.set(timeline_ref, {'version': int(timeline_row.get('version') or 0) + 1})
     write_memberships(transaction, client, uid, episode_id, members, now)
+    log_before = [unseal(uid, current_raw)] if current_raw else []
+    log_after = [result]
+    log_links = {cid: {'episode_id': episode_id} for cid in members}
+    if new_episode is not None:
+        log_links[CURRENT] = {'episode_id': episode_id}
+        if current_raw and current_raw.get('status') == 'live':
+            log_after.insert(0, {**unseal(uid, current_raw), **_closed_fields(close_reason or 'gap', closed_at or now)})
+            log_links[LAST_CLOSED] = {'episode_id': current_id}
+    episode_log.mutation(log_capture, before=log_before, after=log_after, links=log_links, receipts=segment_receipts)
     return result
 
 
@@ -576,6 +592,7 @@ def _reopen(
     updates: Mapping[str, Any],
     link_conversation_ids: Sequence[str],
 ) -> Optional[dict[str, Any]]:
+    log_capture = episode_log.prepare(transaction, client, uid)
     if recorded_episodes_enabled():
         _links(client, uid).document('recorded_timeline').get(transaction=transaction)
     ref = _episodes(client, uid).document(episode_id)
@@ -615,6 +632,16 @@ def _reopen(
     # The recap must not advertise a live episode as the last closed one.
     transaction.set(_links(client, uid).document(LAST_CLOSED), {'episode_id': None, 'updated_at': now})
     write_memberships(transaction, client, uid, episode_id, members, now)
+    episode_log.mutation(
+        log_capture,
+        before=[unseal(uid, raw)],
+        after=[merged],
+        links={
+            **{cid: {'episode_id': episode_id} for cid in members},
+            CURRENT: {'episode_id': episode_id},
+            LAST_CLOSED: {'episode_id': None},
+        },
+    )
     return merged
 
 
@@ -658,6 +685,7 @@ def _close(
     extra: Mapping[str, Any],
     expected_activity_at: Optional[datetime],
 ) -> Optional[dict[str, Any]]:
+    log_capture = episode_log.prepare(transaction, client, uid)
     if recorded_episodes_enabled():
         _links(client, uid).document('recorded_timeline').get(transaction=transaction)
     ref = _episodes(client, uid).document(episode_id)
@@ -713,6 +741,10 @@ def _close(
     if current_id == episode_id:
         transaction.set(_links(client, uid).document(CURRENT), {'episode_id': None, 'updated_at': closed_at})
         transaction.set(_links(client, uid).document(LAST_CLOSED), {'episode_id': episode_id, 'updated_at': closed_at})
+    log_links = (
+        {CURRENT: {'episode_id': None}, LAST_CLOSED: {'episode_id': episode_id}} if current_id == episode_id else {}
+    )
+    episode_log.mutation(log_capture, before=[unseal(uid, raw)], after=[merged], links=log_links)
     return merged
 
 
@@ -762,6 +794,7 @@ def _update(
     link_conversation_ids: Sequence[str],
     segment_receipts: Optional[Mapping[str, Sequence[str]]] = None,
 ) -> dict[str, Any]:
+    log_capture = episode_log.prepare(transaction, client, uid)
     if recorded_episodes_enabled():
         _links(client, uid).document('recorded_timeline').get(transaction=transaction)
     ref = _episodes(client, uid).document(episode_id)
@@ -788,6 +821,13 @@ def _update(
     now = datetime.now(timezone.utc)
     _write_receipts(transaction, client, uid, segment_receipts, receipts_raw, now)
     write_memberships(transaction, client, uid, episode_id, members, now)
+    episode_log.mutation(
+        log_capture,
+        before=[unseal(uid, raw)],
+        after=[merged],
+        links={cid: {'episode_id': episode_id} for cid in members},
+        receipts=segment_receipts,
+    )
     return merged
 
 
