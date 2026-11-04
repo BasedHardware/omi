@@ -738,11 +738,11 @@ class CaptureController extends ChangeNotifier
   /// listener, and DeviceProvider after it, on each chat token or list refresh.
   void updateExternalActions(CaptureExternalActions? actions) {
     final next = actions ?? const NoopCaptureExternalActions();
-    if (next == externalActions) return;
-    externalActions = next;
-    // A first-time binding that publishes the same projection (no credits
-    // flag, no top conversation) is not a state change: the adapters read the
-    // mutable providers live, so the listeners have nothing new to render.
+    // The adapters read mutable providers live, so a mutated instance can
+    // change its published projection while staying the same object: the
+    // projection comparison below is what decides quiet-vs-notify, for both
+    // re-binding and mutation.
+    if (next != externalActions) externalActions = next;
     final projection = (outOfCredits, topConversationId);
     if (projection == _boundExternalProjection) return;
     _boundExternalProjection = projection;
