@@ -4522,5 +4522,7 @@
     "episodeCoversUpTo": "{time}まで · 終了後に完全なメモ",
     "liveTranscribedUpTo": "{time}まで文字起こし済み",
     "liveAudioSaved": "{duration}を保存済み",
-    "liveAudioSavedDetail": "アップロードが進むと、話者と最終的な文字起こしがここに表示されます。"
+    "liveAudioSavedDetail": "アップロードが進むと、話者と最終的な文字起こしがここに表示されます。",
+    "consentShortMessage": "OmiはAIで会話をメモにまとめます。メモはいつでも削除できます。",
+    "consentAiProviders": "{providers} で処理されます。"
 }

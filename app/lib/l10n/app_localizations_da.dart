@@ -14956,4 +14956,13 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Talere og den endelige transskription dukker op her under upload.';
+
+  @override
+  String get consentShortMessage =>
+      'Omi bruger AI til at gøre dine samtaler til noter. Du kan slette dem når som helst.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Behandles med $providers.';
+  }
 }

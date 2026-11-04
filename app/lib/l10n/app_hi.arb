@@ -4522,5 +4522,7 @@
     "episodeCoversUpTo": "{time} तक · समाप्त होने पर पूरे नोट्स",
     "liveTranscribedUpTo": "{time} तक ट्रांसक्राइब हुआ",
     "liveAudioSaved": "{duration} सहेजा गया",
-    "liveAudioSavedDetail": "अपलोड के साथ वक्ता और अंतिम ट्रांसक्रिप्ट यहाँ दिखेंगे।"
+    "liveAudioSavedDetail": "अपलोड के साथ वक्ता और अंतिम ट्रांसक्रिप्ट यहाँ दिखेंगे।",
+    "consentShortMessage": "Omi AI की मदद से आपकी बातचीत को नोट्स में बदलता है। आप उन्हें कभी भी हटा सकते हैं।",
+    "consentAiProviders": "{providers} के साथ प्रोसेस किया जाता है।"
 }

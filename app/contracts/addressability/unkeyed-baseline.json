@@ -97,7 +97,6 @@
   "app/lib/pages/onboarding/apple_watch_permission_page.dart": 9,
   "app/lib/pages/onboarding/auth.dart": 6,
   "app/lib/pages/onboarding/complete_screen.dart": 2,
-  "app/lib/pages/onboarding/device_selection.dart": 2,
   "app/lib/pages/onboarding/find_device/found_devices.dart": 1,
   "app/lib/pages/onboarding/find_device/page.dart": 2,
   "app/lib/pages/onboarding/found_omi/found_omi_widget.dart": 4,

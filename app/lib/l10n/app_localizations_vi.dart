@@ -14966,4 +14966,13 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Người nói và bản chép cuối cùng sẽ xuất hiện ở đây khi tải lên.';
+
+  @override
+  String get consentShortMessage =>
+      'Omi dùng AI để biến các cuộc trò chuyện của bạn thành ghi chú. Bạn có thể xóa chúng bất cứ lúc nào.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Được xử lý bằng $providers.';
+  }
 }

@@ -14751,4 +14751,12 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'アップロードが進むと、話者と最終的な文字起こしがここに表示されます。';
+
+  @override
+  String get consentShortMessage => 'OmiはAIで会話をメモにまとめます。メモはいつでも削除できます。';
+
+  @override
+  String consentAiProviders(String providers) {
+    return '$providers で処理されます。';
+  }
 }

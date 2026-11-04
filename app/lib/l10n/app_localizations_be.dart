@@ -14998,4 +14998,13 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Удзельнікі і канчатковая транскрыпцыя з\'явяцца тут падчас загрузкі.';
+
+  @override
+  String get consentShortMessage =>
+      'Omi з дапамогай ШІ ператварае вашы размовы ў нататкі. Іх можна выдаліць у любы момант.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Апрацоўка: $providers.';
+  }
 }

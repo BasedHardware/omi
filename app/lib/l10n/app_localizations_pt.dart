@@ -14992,4 +14992,13 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Os falantes e a transcrição final aparecerão aqui durante o envio.';
+
+  @override
+  String get consentShortMessage =>
+      'O Omi usa IA para transformar suas conversas em notas. Você pode excluí-las quando quiser.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Processado com $providers.';
+  }
 }

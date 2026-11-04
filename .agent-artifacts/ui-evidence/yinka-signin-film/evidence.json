@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-sign-in-film.png",
+      "platform": "mobile-ios",
+      "description": "Sign-in over the launch film, no Get started page (iOS simulator, local test build: one local sign-in button where store builds show Apple/Google)",
+      "captured_by": "agent",
+      "source": "manual"
+    },
+    {
+      "file": "002-mobile-ios-data-privacy-film.png",
+      "platform": "mobile-ios",
+      "description": "Data & Privacy over a frame of the launch film where a burned-in notification card sits behind the text; the stronger shade hides it. Agree & Continue and Use a Different Account. Rendered at iPhone size by a widget test, not the simulator",
+      "captured_by": "agent",
+      "source": "manual"
+    }
+  ]
+}

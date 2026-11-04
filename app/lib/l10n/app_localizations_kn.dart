@@ -15013,4 +15013,12 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'ಅಪ್‌ಲೋಡ್ ಆಗುತ್ತಿದ್ದಂತೆ ಮಾತನಾಡುವವರು ಮತ್ತು ಅಂತಿಮ ಪ್ರತಿಲೇಖನ ಇಲ್ಲಿ ಬರುತ್ತವೆ.';
+
+  @override
+  String get consentShortMessage => 'Omi AI ಬಳಸಿ ನಿಮ್ಮ ಸಂಭಾಷಣೆಗಳನ್ನು ಟಿಪ್ಪಣಿಗಳಾಗಿ ಮಾಡುತ್ತದೆ. ಯಾವಾಗ ಬೇಕಾದರೂ ಅಳಿಸಬಹುದು.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return '$providers ಮೂಲಕ ಸಂಸ್ಕರಿಸಲಾಗುತ್ತದೆ.';
+  }
 }

@@ -11948,5 +11948,7 @@
     "episodeCoversUpTo": "מכסה עד {time} · הערות מלאות בסיום",
     "liveTranscribedUpTo": "תומלל עד {time}",
     "liveAudioSaved": "{duration} נשמרו",
-    "liveAudioSavedDetail": "הדוברים והתמליל הסופי יופיעו כאן במהלך ההעלאה."
+    "liveAudioSavedDetail": "הדוברים והתמליל הסופי יופיעו כאן במהלך ההעלאה.",
+    "consentShortMessage": "Omi משתמש בבינה מלאכותית כדי להפוך את השיחות שלך להערות. אפשר למחוק אותן בכל עת.",
+    "consentAiProviders": "מעובד באמצעות {providers}."
 }

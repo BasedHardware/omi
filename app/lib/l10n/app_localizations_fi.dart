@@ -14968,4 +14968,13 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Puhujat ja lopullinen litterointi tulevat tähän latauksen edetessä.';
+
+  @override
+  String get consentShortMessage =>
+      'Omi tekee keskusteluistasi muistiinpanoja tekoälyn avulla. Voit poistaa ne milloin tahansa.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Käsittely: $providers.';
+  }
 }

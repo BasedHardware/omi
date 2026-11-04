@@ -18296,5 +18296,19 @@
     "liveAudioSavedDetail": "Speakers and the final transcript fill in here as it uploads.",
     "@liveAudioSavedDetail": {
         "description": "Under the saved-audio card's heading."
+    },
+    "consentShortMessage": "Omi uses AI to turn your conversations into notes. You can delete them anytime.",
+    "@consentShortMessage": {
+        "description": "Onboarding data & privacy consent: one-line summary of storage and AI processing"
+    },
+    "consentAiProviders": "Processed with {providers}.",
+    "@consentAiProviders": {
+        "description": "Onboarding consent: names the third-party AI providers (brand names, not translated)",
+        "placeholders": {
+            "providers": {
+                "type": "String",
+                "example": "Deepgram, OpenAI"
+            }
+        }
     }
 }

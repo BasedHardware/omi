@@ -14962,4 +14962,12 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Mluvčí a konečný přepis se zde objeví během nahrávání.';
+
+  @override
+  String get consentShortMessage => 'Omi pomocí AI mění vaše konverzace v poznámky. Kdykoli je můžete smazat.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Zpracovává $providers.';
+  }
 }

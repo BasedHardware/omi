@@ -4522,5 +4522,7 @@
     "episodeCoversUpTo": "{time}까지 · 끝나면 전체 메모 제공",
     "liveTranscribedUpTo": "{time}까지 변환됨",
     "liveAudioSaved": "{duration} 저장됨",
-    "liveAudioSavedDetail": "업로드되는 대로 화자와 최종 대화 내용이 여기에 표시됩니다."
+    "liveAudioSavedDetail": "업로드되는 대로 화자와 최종 대화 내용이 여기에 표시됩니다.",
+    "consentShortMessage": "Omi는 AI로 대화를 메모로 정리합니다. 언제든지 삭제할 수 있습니다.",
+    "consentAiProviders": "{providers}(으)로 처리됩니다."
 }

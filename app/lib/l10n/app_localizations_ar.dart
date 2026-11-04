@@ -14876,4 +14876,12 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'ستظهر هنا أسماء المتحدثين والنص النهائي أثناء الرفع.';
+
+  @override
+  String get consentShortMessage => 'يستخدم Omi الذكاء الاصطناعي لتحويل محادثاتك إلى ملاحظات. يمكنك حذفها في أي وقت.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'تتم المعالجة بواسطة $providers.';
+  }
 }

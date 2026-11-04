@@ -11948,5 +11948,7 @@
     "episodeCoversUpTo": "{time} వరకు · ముగిశాక పూర్తి నోట్స్",
     "liveTranscribedUpTo": "{time} వరకు ట్రాన్స్‌క్రైబ్ అయింది",
     "liveAudioSaved": "{duration} సేవ్ అయింది",
-    "liveAudioSavedDetail": "అప్‌లోడ్ అవుతున్నప్పుడు వక్తలు, తుది ట్రాన్స్‌క్రిప్ట్ ఇక్కడ కనిపిస్తాయి."
+    "liveAudioSavedDetail": "అప్‌లోడ్ అవుతున్నప్పుడు వక్తలు, తుది ట్రాన్స్‌క్రిప్ట్ ఇక్కడ కనిపిస్తాయి.",
+    "consentShortMessage": "Omi AI సహాయంతో మీ సంభాషణలను నోట్స్‌గా మారుస్తుంది. వాటిని ఎప్పుడైనా తొలగించవచ్చు.",
+    "consentAiProviders": "{providers} ద్వారా ప్రాసెస్ చేయబడుతుంది."
 }

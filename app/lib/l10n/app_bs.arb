@@ -11948,5 +11948,7 @@
     "episodeCoversUpTo": "Pokriva do {time} · potpune bilješke po završetku",
     "liveTranscribedUpTo": "Transkribovano do {time}",
     "liveAudioSaved": "Sačuvano {duration}",
-    "liveAudioSavedDetail": "Govornici i konačni transkript pojavit će se ovdje tokom otpremanja."
+    "liveAudioSavedDetail": "Govornici i konačni transkript pojavit će se ovdje tokom otpremanja.",
+    "consentShortMessage": "Omi koristi AI da vaše razgovore pretvori u bilješke. Možete ih izbrisati bilo kada.",
+    "consentAiProviders": "Obrađuje se pomoću {providers}."
 }

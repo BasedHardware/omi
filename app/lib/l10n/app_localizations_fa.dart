@@ -14959,4 +14959,13 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'گویندگان و متن نهایی هنگام بارگذاری اینجا نمایش داده می‌شوند.';
+
+  @override
+  String get consentShortMessage =>
+      'Omi با هوش مصنوعی گفتگوهای شما را به یادداشت تبدیل می‌کند. هر زمان بخواهید می‌توانید آن‌ها را حذف کنید.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'پردازش با $providers.';
+  }
 }

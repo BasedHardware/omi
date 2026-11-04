@@ -14995,4 +14995,13 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Учасники й остаточна транскрипція з\'являться тут під час завантаження.';
+
+  @override
+  String get consentShortMessage =>
+      'Omi за допомогою ШІ перетворює ваші розмови на нотатки. Їх можна видалити будь-коли.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Обробка: $providers.';
+  }
 }

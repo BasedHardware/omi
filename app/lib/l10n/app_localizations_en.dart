@@ -14949,4 +14949,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Speakers and the final transcript fill in here as it uploads.';
+
+  @override
+  String get consentShortMessage => 'Omi uses AI to turn your conversations into notes. You can delete them anytime.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Processed with $providers.';
+  }
 }

@@ -4522,5 +4522,7 @@
     "episodeCoversUpTo": "Līdz {time} · pilnas piezīmes beigās",
     "liveTranscribedUpTo": "Transkribēts līdz {time}",
     "liveAudioSaved": "Saglabāts {duration}",
-    "liveAudioSavedDetail": "Runātāji un galīgā transkripcija šeit parādīsies augšupielādes laikā."
+    "liveAudioSavedDetail": "Runātāji un galīgā transkripcija šeit parādīsies augšupielādes laikā.",
+    "consentShortMessage": "Omi ar MI palīdzību pārvērš jūsu sarunas piezīmēs. Tās var izdzēst jebkurā laikā.",
+    "consentAiProviders": "Apstrādā {providers}."
 }

@@ -14977,4 +14977,13 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Konuşmacılar ve son döküm, yükleme sırasında burada görünür.';
+
+  @override
+  String get consentShortMessage =>
+      'Omi, konuşmalarını yapay zekâ ile notlara dönüştürür. İstediğin zaman silebilirsin.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return '$providers ile işlenir.';
+  }
 }

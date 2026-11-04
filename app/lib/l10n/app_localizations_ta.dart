@@ -15067,4 +15067,13 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'பதிவேற்றத்தின் போது பேசுபவர்களும் இறுதி படியெடுப்பும் இங்கே வரும்.';
+
+  @override
+  String get consentShortMessage =>
+      'Omi AI மூலம் உங்கள் உரையாடல்களைக் குறிப்புகளாக மாற்றுகிறது. எப்போது வேண்டுமானாலும் நீக்கலாம்.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return '$providers மூலம் செயலாக்கப்படுகிறது.';
+  }
 }

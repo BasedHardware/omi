@@ -15023,4 +15023,13 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'A beszélők és a végleges átirat feltöltés közben itt jelennek meg.';
+
+  @override
+  String get consentShortMessage =>
+      'Az Omi mesterséges intelligenciával jegyzetekké alakítja a beszélgetéseidet. Bármikor törölheted őket.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Feldolgozás: $providers.';
+  }
 }

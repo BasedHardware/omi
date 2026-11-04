@@ -14971,4 +14971,13 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Говорници и коначни транскрипт појавиће се овде током отпремања.';
+
+  @override
+  String get consentShortMessage =>
+      'Omi користи AI да ваше разговоре претвори у белешке. Можете их обрисати у било ком тренутку.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Обрађује се помоћу $providers.';
+  }
 }

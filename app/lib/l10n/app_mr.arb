@@ -11948,5 +11948,7 @@
     "episodeCoversUpTo": "{time} पर्यंत · संपल्यावर पूर्ण नोट्स",
     "liveTranscribedUpTo": "{time} पर्यंत ट्रान्सक्राइब झाले",
     "liveAudioSaved": "{duration} जतन केले",
-    "liveAudioSavedDetail": "अपलोड होताना वक्ते आणि अंतिम ट्रान्सक्रिप्ट येथे दिसतील."
+    "liveAudioSavedDetail": "अपलोड होताना वक्ते आणि अंतिम ट्रान्सक्रिप्ट येथे दिसतील.",
+    "consentShortMessage": "Omi AI वापरून तुमच्या संभाषणांच्या नोट्स बनवते. तुम्ही त्या कधीही हटवू शकता.",
+    "consentAiProviders": "{providers} द्वारे प्रक्रिया केली जाते."
 }

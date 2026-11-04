@@ -14979,4 +14979,13 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Pembicara dan transkrip akhir akan muncul di sini saat diunggah.';
+
+  @override
+  String get consentShortMessage =>
+      'Omi menggunakan AI untuk mengubah percakapanmu menjadi catatan. Kamu bisa menghapusnya kapan saja.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Diproses dengan $providers.';
+  }
 }

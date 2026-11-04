@@ -15012,4 +15012,13 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Участники и итоговая расшифровка появятся здесь по мере загрузки.';
+
+  @override
+  String get consentShortMessage =>
+      'Omi с помощью ИИ превращает ваши разговоры в заметки. Их можно удалить в любой момент.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Обработка: $providers.';
+  }
 }

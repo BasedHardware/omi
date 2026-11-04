@@ -11948,5 +11948,7 @@
     "episodeCoversUpTo": "تا {time} · یادداشت‌های کامل در پایان",
     "liveTranscribedUpTo": "رونویسی تا {time}",
     "liveAudioSaved": "{duration} ذخیره شد",
-    "liveAudioSavedDetail": "گویندگان و متن نهایی هنگام بارگذاری اینجا نمایش داده می‌شوند."
+    "liveAudioSavedDetail": "گویندگان و متن نهایی هنگام بارگذاری اینجا نمایش داده می‌شوند.",
+    "consentShortMessage": "Omi با هوش مصنوعی گفتگوهای شما را به یادداشت تبدیل می‌کند. هر زمان بخواهید می‌توانید آن‌ها را حذف کنید.",
+    "consentAiProviders": "پردازش با {providers}."
 }

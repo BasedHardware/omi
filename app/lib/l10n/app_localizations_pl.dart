@@ -15007,4 +15007,13 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Rozmówcy i końcowa transkrypcja pojawią się tutaj podczas przesyłania.';
+
+  @override
+  String get consentShortMessage =>
+      'Omi za pomocą AI zamienia Twoje rozmowy w notatki. Możesz je usunąć w każdej chwili.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Przetwarzane przez $providers.';
+  }
 }

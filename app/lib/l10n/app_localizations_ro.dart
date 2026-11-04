@@ -15027,4 +15027,13 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'Vorbitorii și transcrierea finală vor apărea aici pe măsură ce se încarcă.';
+
+  @override
+  String get consentShortMessage =>
+      'Omi folosește AI pentru a transforma conversațiile tale în notițe. Le poți șterge oricând.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Procesat cu $providers.';
+  }
 }

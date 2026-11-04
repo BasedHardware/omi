@@ -15027,4 +15027,12 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => 'అప్‌లోడ్ అవుతున్నప్పుడు వక్తలు, తుది ట్రాన్స్‌క్రిప్ట్ ఇక్కడ కనిపిస్తాయి.';
+
+  @override
+  String get consentShortMessage => 'Omi AI సహాయంతో మీ సంభాషణలను నోట్స్‌గా మారుస్తుంది. వాటిని ఎప్పుడైనా తొలగించవచ్చు.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return '$providers ద్వారా ప్రాసెస్ చేయబడుతుంది.';
+  }
 }

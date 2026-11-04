@@ -4557,5 +4557,7 @@
     "episodeCoversUpTo": "{time} saatine kadar · bitince tam notlar",
     "liveTranscribedUpTo": "{time} saatine kadar yazıya döküldü",
     "liveAudioSaved": "{duration} kaydedildi",
-    "liveAudioSavedDetail": "Konuşmacılar ve son döküm, yükleme sırasında burada görünür."
+    "liveAudioSavedDetail": "Konuşmacılar ve son döküm, yükleme sırasında burada görünür.",
+    "consentShortMessage": "Omi, konuşmalarını yapay zekâ ile notlara dönüştürür. İstediğin zaman silebilirsin.",
+    "consentAiProviders": "{providers} ile işlenir."
 }

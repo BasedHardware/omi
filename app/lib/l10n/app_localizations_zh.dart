@@ -14732,4 +14732,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => '上传时，说话人和最终转录内容会显示在这里。';
+
+  @override
+  String get consentShortMessage => 'Omi 用 AI 把你的对话整理成笔记。你可以随时删除。';
+
+  @override
+  String consentAiProviders(String providers) {
+    return '由 $providers 处理。';
+  }
 }
