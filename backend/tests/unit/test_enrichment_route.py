@@ -158,6 +158,32 @@ def test_a_delivery_past_its_budget_frees_the_slot_with_a_409_and_still_settles(
     assert KEY not in rows[0]  # the worker settled its own lease: nothing is dropped
 
 
+def test_a_retry_after_the_budget_rearms_under_a_fresh_wake(rows, client, monkeypatch):
+    from fastapi import HTTPException
+
+    monkeypatch.setenv('ENRICHMENT_DELIVERY_BUDGET_SECONDS', '0.2')
+    release = threading.Event()
+
+    def slow_then_warming(*_):
+        assert release.wait(10)
+        raise HTTPException(status_code=503, detail='synthetic')
+
+    monkeypatch.setattr(consumer_module.EnrichmentConsumer, '_callback', lambda self: slow_then_warming)
+    state_rows, tasks = rows
+    token = state_rows[KEY]['task_token']
+    response = client.post('/v2/enrichment/run', json={'kind': 'enrichment', 'key': KEY, 'task_token': token})
+    assert response.status_code == 409
+    woken = len(tasks)
+    release.set()
+    deadline = time.monotonic() + 5
+    while state_rows[KEY]['task_token'] == token and time.monotonic() < deadline:
+        time.sleep(0.02)
+    row = state_rows[KEY]
+    # The budget 409's queue retry was consumed as BUSY, so the released row gets its own new wake.
+    assert row['task_token'] != token and row['lease_until'] == 0 and not row.get('owner')
+    assert len(tasks) == woken + 1 and tasks[-1]['task_token'] == row['task_token']
+
+
 def test_heartbeat_stops_renewing_after_the_hold_cap(monkeypatch):
     monkeypatch.setattr(consumer_module.EnrichmentConsumer, 'max_hold_seconds', 0.05)
     heartbeat = Mock(return_value=True)

@@ -11,6 +11,7 @@ import asyncio
 import logging
 import os
 import re
+import threading
 import time
 
 from fastapi import APIRouter, Depends, Request
@@ -71,12 +72,20 @@ def _task(payload: object) -> tuple[str, str] | None:
     return key, token
 
 
-def consume(key: str, token: str):
-    """One push delivery through the enrichment consumer; shared with the legacy sync-jobs handler."""
+def consume(key: str, token: str, abandoned: threading.Event | None = None):
+    """One push delivery through the enrichment consumer; shared with the legacy sync-jobs handler.
+
+    ``abandoned`` is set once the route answered its budget 409. That retry met this delivery's lease and
+    was consumed as BUSY, so a RETRY here re-arms the row under a fresh wake instead of stranding it.
+    """
+    from database.outbox import Outcome
     from database.outbox_firestore import ENRICHMENT_OUTBOX
     from utils.enrichment.consumer import EnrichmentConsumer
 
-    return run_push(EnrichmentConsumer(ENRICHMENT_OUTBOX), ENRICHMENT_OUTBOX, key, token, now=time.time())
+    result = run_push(EnrichmentConsumer(ENRICHMENT_OUTBOX), ENRICHMENT_OUTBOX, key, token, now=time.time())
+    if abandoned is not None and abandoned.is_set() and result.outcome is Outcome.RETRY:
+        ENRICHMENT_OUTBOX.rearm_released(key, token, now=time.time())
+    return result
 
 
 @router.post('/v2/enrichment/run', include_in_schema=False)
@@ -95,10 +104,12 @@ async def run_enrichment_task(request: Request, _retry_count: int = Depends(veri
     budget = _delivery_budget()
     if budget <= 0:  # Kill switch: 0 restores the middleware-only cut.
         return http_response(await run_blocking(postprocess_executor, consume, *task))
-    work = asyncio.ensure_future(run_blocking(postprocess_executor, consume, *task))
+    abandoned = threading.Event()
+    work = asyncio.ensure_future(run_blocking(postprocess_executor, consume, *task, abandoned))
     try:
         result = await asyncio.wait_for(asyncio.shield(work), timeout=budget)
     except asyncio.TimeoutError:
+        abandoned.set()
         work.add_done_callback(_drain)
         logger.warning('event=enrichment_delivery outcome=retry reason=delivery_budget budget_s=%.0f', budget)
         return retry_response(RetryReason.DEPENDENCY_WARMING)
