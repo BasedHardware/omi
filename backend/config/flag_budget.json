@@ -24,7 +24,7 @@
   },
   "seed_review_by": "2026-11-15",
   "budget": 169,
-  "count": 243,
+  "count": 244,
   "names": {
     "PARAKEET_SHAPE_CANARY_FILE": {"owner": "two-lane lead", "review_by": "2026-12-04"},
     "PARAKEET_LID_MODEL": {"owner": "planscost", "review_by": "2026-11-30"},

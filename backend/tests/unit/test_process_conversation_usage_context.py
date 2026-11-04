@@ -147,7 +147,8 @@ def _build_fakes() -> dict[str, ModuleType]:
         add(name, AutoMockModule(name))
 
     task_intelligence = ModuleType("utils.task_intelligence")
-    task_intelligence.__path__ = []  # type: ignore[attr-defined]
+    # Keep pure policy modules importable while persistence adapters stay stubbed.
+    task_intelligence.__path__ = [str(BACKEND_DIR / 'utils' / 'task_intelligence')]  # type: ignore[attr-defined]
     add("utils.task_intelligence", task_intelligence)
     conversation_capture = AutoMockModule("utils.task_intelligence.conversation_capture")
     conversation_capture.capture_enabled = MagicMock(return_value=False)

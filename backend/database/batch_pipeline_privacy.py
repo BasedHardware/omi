@@ -13,8 +13,13 @@ from config.firestore_read_levers import lever_enabled
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 from database.batch_privacy_attempt import current_attempt, token_version
 from database import privacy_check_metrics as metrics
+from database.privacy_ttl_cache import BoundedTTLCache, enabled as ttl_enabled, is_missing
 
 PRIVACY_COLLECTION = 'batch_pipeline_privacy'
+# Token-validated generations shared across task attempts in this process
+# (lever bpp_decision_cache). Keys hold the client object itself, so planes and
+# recycled ids never mix; entries expire 60s after the authority walk started.
+PROCESS_DECISIONS = BoundedTTLCache()
 
 
 class BatchPrivacyReason(str, Enum):
@@ -173,6 +178,8 @@ def _assert_batch_write_allowed_memo(
     # Retain the client object itself, preventing id reuse and cross-plane hits.
     key = (client, uid, ids)
     reference = client.collection(PRIVACY_COLLECTION).document(privacy_owner_key(uid))
+    process_on = ttl_enabled('bpp_decision_cache', uid)
+    started = PROCESS_DECISIONS.clock()
     try:
         # Never use the transaction-scoped WQ12 snapshot memo for this read.
         # Every authorizing transaction enrolls the token in its conflict set.
@@ -184,6 +191,19 @@ def _assert_batch_write_allowed_memo(
         version = token_version(snapshot)
         eligible = version is not None
         generation = attempt.get(key, version) if eligible else None
+        if generation is None and eligible and process_on:
+            # Process-wide reuse across attempts (lever bpp_decision_cache), at most
+            # 60s old, and still certified by THIS transaction's token read: any
+            # authority write since the cached walk rotated the token in the same
+            # commit (database.batch_privacy_write_fence), so a changed token misses
+            # and a concurrent writer aborts this transaction at commit.
+            cached, _age = PROCESS_DECISIONS.get(key)
+            if not is_missing(cached) and cached[0] == version:
+                generation = cached[1]
+                metrics.ttl_result('batch', 'hit')
+                attempt.put(key, version, generation)
+            else:
+                metrics.ttl_result('batch', 'miss')
         if generation is not None and (expected_generation is None or generation == expected_generation):
             metrics.memo_result('batch', 'hit')
             return generation
@@ -200,10 +220,13 @@ def _assert_batch_write_allowed_memo(
         )
         if eligible:
             attempt.put(key, version, generation)
+            if process_on and PROCESS_DECISIONS.put(key, (version, generation), started=started):
+                metrics.ttl_result('batch', 'store')
         return generation
     except BaseException:
         # Neither a partial authority walk nor a failed token read is reusable.
         attempt.forget(key)
+        PROCESS_DECISIONS.forget(key)
         raise
 
 

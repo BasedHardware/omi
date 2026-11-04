@@ -164,6 +164,9 @@ SCHEMA_GROUPS = {
             'Translation',
             'TranscriptSegment',
             'ActionItem',
+            'TaskDue',
+            'ReminderIntent',
+            'ReminderOrigin',
             'AppResult',
             'PluginResult',
             'Event',
@@ -237,6 +240,8 @@ SCHEMA_GROUPS = {
         'schemas': (
             'EvidenceRef',
             'ActionItemResponse',
+            'TaskDue',
+            'ReminderOrigin',
             'ActionItemCreateRequest',
             'ActionItemUpdateRequest',
             'ActionItemsResponse',
@@ -260,6 +265,8 @@ SCHEMA_GROUPS = {
         'schemas': (
             'EvidenceRef',
             'ActionItemResponse',
+            'TaskDue',
+            'ReminderOrigin',
             'TaskCreatePayload',
             'TaskChangePayload',
             'GoalMetric',

@@ -95,10 +95,13 @@ export interface ActionItem {
   conversation_id?: string | null;
   created_at?: string | null;
   description: string;
+  due?: TaskDue | null;
   due_at?: string | null;
   due_certainty?: "confirmed" | "tentative" | null;
   owner_name?: string | null;
   ownership_confidence?: number | null;
+  reminder_intent?: ReminderIntent | null;
+  reminder_origin?: ReminderOrigin | null;
   source_segment_ids?: Array<string>;
   target_task_id?: string | null;
   updated_at?: string | null;
@@ -109,6 +112,7 @@ export interface ActionItemCreateRequest {
   completed?: boolean | null;
   conversation_id?: string | null;
   description: string;
+  due?: TaskDue | null;
   due_at?: string | null;
   due_confidence?: number | null;
   export_date?: string | null;
@@ -139,7 +143,9 @@ export interface ActionItemResponse {
   completed_at?: string | null;
   conversation_id?: string | null;
   created_at?: string | null;
+  creation_receipt?: Record<string, unknown> | null;
   description: string;
+  due?: TaskDue | null;
   due_at?: string | null;
   due_confidence?: number | null;
   export_date?: string | null;
@@ -154,6 +160,7 @@ export interface ActionItemResponse {
   provenance?: Array<EvidenceRef>;
   recurrence_parent_id?: string | null;
   recurrence_rule?: string | null;
+  reminder_origin?: ReminderOrigin | null;
   sort_order?: number;
   source?: string;
   status?: TaskStatus;
@@ -168,6 +175,7 @@ export interface ActionItemUpdateRequest {
   clear_due_at?: boolean;
   completed?: boolean | null;
   description?: string | null;
+  due?: TaskDue | null;
   due_at?: string | null;
   due_confidence?: number | null;
   export_date?: string | null;
@@ -1115,6 +1123,7 @@ export type CandidateRecord = {
 
 export interface CandidateResolutionReceipt {
   candidate_id: string;
+  creation_receipt?: Record<string, unknown> | null;
   newly_resolved: boolean;
   receipt_id: string;
   resolved_at: string;
@@ -1501,6 +1510,7 @@ export interface Conversation {
   call_platform?: string | null;
   capture_coverage?: "unknown" | "incomplete" | "mapped" | null;
   capture_group?: CaptureGroup | null;
+  capture_timezone?: string | null;
   client_device_id?: string | null;
   client_platform?: string | null;
   client_processing?: ClientProcessing | null;
@@ -1512,6 +1522,7 @@ export interface Conversation {
   deferred?: boolean;
   discarded?: boolean;
   episode_id?: string | null;
+  excluded_speakers?: Array<number> | null;
   external_data?: Record<string, unknown> | null;
   finished_at: string | null;
   folder_id?: string | null;
@@ -1713,6 +1724,7 @@ export interface ConversationSearchItem {
   call_platform?: string | null;
   capture_coverage?: "unknown" | "incomplete" | "mapped" | null;
   capture_group?: CaptureGroup | null;
+  capture_timezone?: string | null;
   client_device_id?: string | null;
   client_platform?: string | null;
   client_processing?: ClientProcessing | null;
@@ -1724,6 +1736,7 @@ export interface ConversationSearchItem {
   deferred?: boolean;
   discarded?: boolean;
   episode_id?: string | null;
+  excluded_speakers?: Array<number> | null;
   external_data?: Record<string, unknown> | null;
   finished_at: string | null;
   folder_id?: string | null;
@@ -4006,6 +4019,7 @@ export interface PageContext {
 }
 
 export interface Participant {
+  alias?: string | null;
   email?: string | null;
   evidence?: string | null;
   is_ai_agent?: boolean;
@@ -4013,6 +4027,7 @@ export interface Participant {
   organization?: string | null;
   role?: string | null;
   source: "roster" | "transcript";
+  speaker_bindings?: Array<number>;
 }
 
 export interface PayPalPaymentDetailsResponse {
@@ -4629,6 +4644,20 @@ export interface ReleaseChannel {
   release_channel: "testflight" | "app_store" | "dev";
 }
 
+export interface ReminderIntent {
+  due_expression?: string | null;
+  kind: "explicit_reminder" | "quoted" | "hypothetical" | "current_session" | "status" | "waiting_on";
+}
+
+export interface ReminderOrigin {
+  extracted_at: string;
+  input_revision: string;
+  policy_revision?: "explicit-reminders-v1";
+  review_reason?: "owner_unresolved" | null;
+  source_at?: string | null;
+  speaker_evidence_revision: string;
+}
+
 export interface ReorderFoldersRequest {
   folder_ids: Array<string>;
 }
@@ -5099,6 +5128,7 @@ export interface SharedActionItem {
   context?: string | null;
   description: string;
   due_at?: string | null;
+  due_certainty?: "confirmed" | "tentative" | null;
   owner_name?: string | null;
 }
 
@@ -5767,6 +5797,7 @@ export interface TaskCancelCandidate {
   goal_id?: string | null;
   ownership_confidence: number;
   proposed_action?: "cancel";
+  reminder_origin?: ReminderOrigin | null;
   source_surface: string;
   subject_kind?: "task";
   task_change: TaskChangePayload;
@@ -5783,6 +5814,7 @@ export interface TaskCardSpec {
 
 export interface TaskChangePayload {
   description?: string | null;
+  due?: TaskDue | null;
   due_at?: string | null;
   due_confidence?: number | null;
   owner?: TaskOwner | null;
@@ -5800,6 +5832,7 @@ export interface TaskCompleteCandidate {
   goal_id?: string | null;
   ownership_confidence: number;
   proposed_action?: "complete";
+  reminder_origin?: ReminderOrigin | null;
   source_surface: string;
   subject_kind?: "task";
   task_change: TaskChangePayload;
@@ -5814,6 +5847,7 @@ export interface TaskCreateCandidate {
   goal_id?: string | null;
   ownership_confidence: number;
   proposed_action?: "create";
+  reminder_origin?: ReminderOrigin | null;
   source_surface: string;
   subject_kind?: "task";
   task_change: TaskCreatePayload;
@@ -5822,12 +5856,23 @@ export interface TaskCreateCandidate {
 
 export interface TaskCreatePayload {
   description: string;
+  due?: TaskDue | null;
   due_at?: string | null;
   due_confidence?: number | null;
   owner?: TaskOwner;
   priority?: TaskPriority | null;
   recurrence_parent_id?: string | null;
   recurrence_rule?: string | null;
+}
+
+export interface TaskDue {
+  date?: string | null;
+  expression?: string | null;
+  instant?: string | null;
+  kind: "none" | "date" | "instant" | "unresolved";
+  reason?: string | null;
+  timezone?: string | null;
+  year_basis?: "spoken" | "source_relative" | "next_future_occurrence" | null;
 }
 
 export interface TaskGoalLinkImport {
@@ -5924,6 +5969,7 @@ export interface TaskSupersedeCandidate {
   goal_id?: string | null;
   ownership_confidence: number;
   proposed_action?: "supersede";
+  reminder_origin?: ReminderOrigin | null;
   source_surface: string;
   subject_kind?: "task";
   task_change: TaskChangePayload;
@@ -5938,6 +5984,7 @@ export interface TaskUpdateCandidate {
   goal_id?: string | null;
   ownership_confidence: number;
   proposed_action?: "update";
+  reminder_origin?: ReminderOrigin | null;
   source_surface: string;
   subject_kind?: "task";
   task_change: TaskChangePayload;
@@ -6432,6 +6479,7 @@ export interface WorkstreamCreateCandidate {
   goal_id?: string | null;
   ownership_confidence: number;
   proposed_action?: "create";
+  reminder_origin?: ReminderOrigin | null;
   source_surface: string;
   subject_kind?: "workstream";
   workstream_id?: string | null;
@@ -7164,6 +7212,8 @@ export interface OmiApiSchemas {
   "ReferralLinkResponse": ReferralLinkResponse;
   "RejectSpeakerRequest": RejectSpeakerRequest;
   "ReleaseChannel": ReleaseChannel;
+  "ReminderIntent": ReminderIntent;
+  "ReminderOrigin": ReminderOrigin;
   "ReorderFoldersRequest": ReorderFoldersRequest;
   "ReplyToReviewRequest": ReplyToReviewRequest;
   "ResponseMessage": ResponseMessage;
@@ -7322,6 +7372,7 @@ export interface OmiApiSchemas {
   "TaskCompleteCandidate": TaskCompleteCandidate;
   "TaskCreateCandidate": TaskCreateCandidate;
   "TaskCreatePayload": TaskCreatePayload;
+  "TaskDue": TaskDue;
   "TaskGoalLinkImport": TaskGoalLinkImport;
   "TaskGoalLinkImportReport": TaskGoalLinkImportReport;
   "TaskGoalLinkImportRequest": TaskGoalLinkImportRequest;

@@ -69,6 +69,7 @@ _ACCOUNT_DELETION_AUTHORITY_TESTS = {
     'tests/unit/test_conversation_quiet_finalization.py',
     'tests/unit/test_firestore_read_site_attribution.py',
     'tests/unit/test_fsr_s4_caches.py',
+    'tests/unit/test_privacy_ttl_cache.py',
 }
 
 

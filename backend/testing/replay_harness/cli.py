@@ -11,11 +11,14 @@ def main(argv=None) -> int:
     run = commands.add_parser('run')
     run.add_argument('--case', type=Path, action='append', required=True)
     run.add_argument('--output', type=Path, required=True)
+    run.add_argument(
+        '--privacy-ttl-override-s', type=int, help='test-only cache TTL monkeypatch; never changes the manifest bound'
+    )
     args = parser.parse_args(argv)
     from testing.replay_harness.runner import run_cases
     from testing.replay_harness.report import table, write_report
 
-    items = asyncio.run(run_cases(args.case))
+    items = asyncio.run(run_cases(args.case, privacy_ttl_override_s=args.privacy_ttl_override_s))
     write_report(items, args.output)
     print(table(items))
     return 0 if all(item['expectation_met'] for item in items) else 1

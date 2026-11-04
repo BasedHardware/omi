@@ -2281,10 +2281,10 @@ class AppLocalizationsId extends AppLocalizations {
   String get firmwareUsbWarning => 'Koneksi USB selama pembaruan dapat merusak perangkat Anda.';
 
   @override
-  String get firmwareBatteryAbove15 => 'Baterai di atas 15%';
+  String get firmwareBatteryRequirement => 'Baterai di atas 30%';
 
   @override
-  String get firmwareEnsureBattery => 'Pastikan perangkat Anda memiliki baterai 15%.';
+  String get firmwareEnsureBattery => 'Pastikan perangkat Anda memiliki baterai 30%.';
 
   @override
   String get firmwareStableConnection => 'Koneksi stabil';
@@ -10588,8 +10588,12 @@ class AppLocalizationsId extends AppLocalizations {
       'Pembaruan tidak dapat diunduh dan perangkat Anda tidak berubah. Periksa koneksi internet, lalu coba lagi.';
 
   @override
+  String get firmwareBatteryUnavailable =>
+      'Level baterai belum tersedia. Tunggu sebentar dan sambungkan kembali jika masih seperti ini.';
+
+  @override
   String firmwareBatteryTooLow(int level) {
-    return 'Baterai $level%. Isi daya perangkat minimal 15% sebelum memperbarui.';
+    return 'Baterai $level%. Isi daya perangkat minimal 30% sebelum memperbarui.';
   }
 
   @override
@@ -15022,6 +15026,292 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get episodeFinishingUp => 'Menyelesaikan…';
+
+  @override
+  String get buildAndShareApp => 'Bangun dan bagikan aplikasi kustom Anda';
+
+  @override
+  String get membersAndCounting => '8000+ anggota dan terus bertambah.';
+
+  @override
+  String get privacyIntro =>
+      'Di Omi, kami berkomitmen untuk melindungi privasi Anda. Halaman ini memungkinkan Anda mengontrol bagaimana data Anda disimpan dan digunakan.';
+
+  @override
+  String get dataProtectionDesc =>
+      'Data Anda diamankan secara default dengan enkripsi yang kuat. Tinjau pengaturan dan opsi privasi Anda di bawah ini.';
+
+  @override
+  String get transcriptionConfig => 'Konfigurasi penyedia STT';
+
+  @override
+  String get importDataConfig => 'Impor data dari sumber lain';
+
+  @override
+  String get understandingSubtitle => 'Kata-kata yang dipahami dari percakapan Anda.';
+
+  @override
+  String get rememberingSubtitle => 'Fakta dan detail yang diingat untuk Anda.';
+
+  @override
+  String get debugLogsDesc => 'Membantu mendiagnosis masalah';
+
+  @override
+  String get deleteKnowledgeGraphMessage =>
+      'Ini akan menghapus semua data grafik pengetahuan turunan (simpul dan koneksi). Memori asli Anda akan tetap aman. Grafik akan dibangun kembali seiring waktu atau pada permintaan berikutnya.';
+
+  @override
+  String get deleteKnowledgeGraphDesc => 'Bersihkan semua simpul dan koneksi';
+
+  @override
+  String get enhanceTranscriptAccuracyDesc =>
+      'Seiring model kami meningkat, kami dapat memberikan hasil transkripsi yang lebih baik untuk rekaman Anda.';
+
+  @override
+  String get bestInClassTranscription => 'Transkripsi terbaik di kelasnya tanpa pengaturan';
+
+  @override
+  String get optimizedForConversation => 'Dioptimalkan untuk percakapan';
+
+  @override
+  String get highAccuracy => 'Akurasi tinggi';
+
+  @override
+  String get privacyFirst => 'Privasi utama';
+
+  @override
+  String get keepGoing => 'Terus lanjutkan, Anda melakukannya dengan baik';
+
+  @override
+  String get personalGrowthJourney =>
+      'Perjalanan pertumbuhan pribadi Anda dengan AI yang mendengarkan setiap kata Anda.';
+
+  @override
+  String get memoryAllowUse => 'Izinkan penggunaan';
+
+  @override
+  String get memoryDontUse => 'Jangan gunakan';
+
+  @override
+  String get alwaysInContext => 'Selalu dalam konteks';
+
+  @override
+  String get firmwareBatteryAbove15 => 'Baterai di atas 15%';
+
+  @override
+  String get configureSttProvider => 'Konfigurasikan penyedia STT';
+
+  @override
+  String get clearAllNodesAndConnections => 'Hapus semua node dan koneksi';
+
+  @override
+  String get welcomeToOmiDescription =>
+      'Selamat datang di Omi! Pendamping AI Anda siap membantu Anda dengan percakapan, tugas, dan banyak lagi.';
+
+  @override
+  String get conversationsProcessedAutomatically => 'Percakapan diproses secara otomatis';
+
+  @override
+  String get getInsightsInstantly => 'Dapatkan wawasan dan ringkasan secara instan';
+
+  @override
+  String get dailyScoreDescription => 'Skor untuk membantu Anda\nlebih fokus pada eksekusi.';
+
+  @override
+  String get startConversation => 'Mulai percakapan dan biarkan keajaiban dimulai';
+
+  @override
+  String get wearableAiCompanion => 'Pendamping AI yang dapat dikenakan';
+
+  @override
+  String get organizeAndControlMemories => 'Atur dan kontrol memori Anda';
+
+  @override
+  String get setAllMemoriesToPrivate => 'Atur semua memori ke visibilitas privat';
+
+  @override
+  String get setAllMemoriesToPublic => 'Atur semua memori ke visibilitas publik';
+
+  @override
+  String get selectPreferredLanguageForBestExperience => 'Pilih bahasa pilihan Anda untuk pengalaman Omi terbaik';
+
+  @override
+  String get enableFeaturesForBestExperience => 'Aktifkan fitur untuk pengalaman Omi terbaik di perangkat Anda.';
+
+  @override
+  String get deliveryTimeDescription => 'Kapan menerima ringkasan harian Anda';
+
+  @override
+  String get configureSTTProvider => 'Konfigurasi penyedia STT';
+
+  @override
+  String get setConversationEndDescription => 'Atur kapan percakapan berakhir otomatis';
+
+  @override
+  String get clearNodesDescription => 'Hapus semua node dan koneksi';
+
+  @override
+  String get deleteKnowledgeGraphWarning =>
+      'Ini akan menghapus semua data grafik pengetahuan turunan. Kenangan asli Anda tetap aman.';
+
+  @override
+  String get createAndShareYourApp => 'Buat dan bagikan aplikasi Anda';
+
+  @override
+  String get e2eeDescription =>
+      'Enkripsi end-to-end adalah standar emas untuk privasi. Saat diaktifkan, data Anda dienkripsi di perangkat Anda sebelum dikirim ke server kami. Ini berarti tidak ada seorang pun, bahkan Omi, yang dapat mengakses konten Anda.';
+
+  @override
+  String get secureEncryptionDescription =>
+      'Data Anda dienkripsi dengan kunci yang unik untuk Anda di server kami, yang dihosting di Google Cloud. Ini berarti konten mentah Anda tidak dapat diakses oleh siapa pun, termasuk staf Omi atau Google, langsung dari database.';
+
+  @override
+  String get e2eeCardDescription =>
+      'Aktifkan untuk keamanan maksimum di mana hanya Anda yang dapat mengakses data Anda. Ketuk untuk mempelajari lebih lanjut.';
+
+  @override
+  String get yourOmiUnleashed => 'Omi Anda, dibebaskan. Pilih tak terbatas untuk kemungkinan tanpa akhir.';
+
+  @override
+  String get privacyIntroText =>
+      'Di Omi, kami menganggap privasi Anda dengan sangat serius. Kami ingin transparan tentang data yang kami kumpulkan dan bagaimana kami menggunakannya. Inilah yang perlu Anda ketahui:';
+
+  @override
+  String get commitmentText =>
+      'Kami berkomitmen untuk menggunakan data yang kami kumpulkan hanya untuk membuat Omi menjadi produk yang lebih baik untuk Anda. Privasi dan kepercayaan Anda sangat penting bagi kami.';
+
+  @override
+  String get thankYouText =>
+      'Terima kasih telah menjadi pengguna Omi yang berharga. Jika Anda memiliki pertanyaan atau kekhawatiran, jangan ragu untuk menghubungi kami di team@basedhardware.com.';
+
+  @override
+  String get knowledgeGraphDeleteDescription =>
+      'Ini akan menghapus semua data grafik pengetahuan turunan (node dan koneksi). Memori asli Anda akan tetap aman. Grafik akan dibangun kembali seiring waktu atau pada permintaan berikutnya.';
+
+  @override
+  String get howPeopleWorks =>
+      'Setelah seseorang dibuat, Anda dapat pergi ke transkrip percakapan dan menetapkan segmen yang sesuai, dengan cara itu Omi akan dapat mengenali ucapan mereka juga!';
+
+  @override
+  String get buildAndShareYourCustomApp => 'Buat dan bagikan aplikasi kustom Anda';
+
+  @override
+  String get onboardingChooseYourPreference => 'Pilih preferensi Anda';
+
+  @override
+  String get onboardingGrantRequiredAccess => 'Berikan akses yang diperlukan';
+
+  @override
+  String get apiEnvironmentDescription => 'Pilih server yang akan dihubungkan';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Panggilan Anda tetap pribadi dan aman';
+
+  @override
+  String get omisStorageDesc =>
+      'Saat Omi tidak terhubung ke ponsel Anda, ia menyimpan audio secara lokal di memori bawaannya. Anda tidak akan pernah kehilangan rekaman.';
+
+  @override
+  String get permissionsSetupDescription => 'Aktifkan beberapa izin agar Omi dapat bekerja dengan maksimal.';
+
+  @override
+  String get architectSubtitle => 'AI canggih — ribuan chat + otomatisasi agen';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$current dari $total';
+  }
+
+  @override
+  String get newestFirst => 'Terbaru lebih dulu';
+
+  @override
+  String get backgroundModeNote => 'Untuk saat ini hanya berfungsi dengan perangkat Omi dan terus ditingkatkan.';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return 'Tidak direkam ($count)';
+  }
+
+  @override
+  String get speakerTagPromptSubtitle => 'Pemeriksaan singkat suara dari dua hari terakhir';
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Transkripsi tertunda $count';
+  }
+
+  @override
+  String get captureRecoveryBanner => 'Omi tidak mengirim audio — ketuk untuk menghubungkan kembali';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Liontin kehilangan koneksi dengan ponsel ini. Omi akan menyambung kembali sendiri saat liontin menyala dan berada di dekat Anda. Semua yang direkam sebelumnya aman.';
+
+  @override
+  String get capturePendantDisconnectedShort => 'Omi akan menyambung kembali sendiri';
+
+  @override
+  String pinPersonSubtitle(String name) {
+    return 'Pertahankan $name dan nantikan mereka di percakapanmu';
+  }
+
+  @override
+  String get pinPersonHonestLine => 'Omi bertanya sebelum mencocokkan suara yang mirip.';
+
+  @override
+  String speakerTagPromptHintConfirm(String name) {
+    return 'Ya menaikkan keyakinan pada $name.';
+  }
+
+  @override
+  String get localCopiesSection => 'Salinan Lokal';
+
+  @override
+  String get forYou => 'Untuk Anda';
+
+  @override
+  String get stopThese => 'Hentikan Ini';
+
+  @override
+  String get meetingActionItemsTitle => 'Tindakan';
+
+  @override
+  String get addToTasks => 'Tambahkan ke Tugas';
+
+  @override
+  String get showInTranscript => 'Tampilkan Transkrip';
+
+  @override
+  String tentativeTaskDueDate(String date) {
+    return 'Jatuh tempo sekitar $date';
+  }
+
+  @override
+  String tentativeTaskDueDateSemantics(String date) {
+    return 'Perkiraan tenggat $date';
+  }
+
+  @override
+  String get openTask => 'Buka Tugas';
+
+  @override
+  String get completeTask => 'Selesaikan tugas';
+
+  @override
+  String get reopenTask => 'Buka kembali tugas';
+
+  @override
+  String get addingToTasks => 'Menambahkan ke Tugas';
+
+  @override
+  String get taskAddedToTasks => 'Tugas dibuat';
+
+  @override
+  String get completedStatus => 'Selesai';
+
+  @override
+  String get notCompletedStatus => 'Tertunda';
 
   @override
   String get referralAffiliate => 'Program afiliasi';

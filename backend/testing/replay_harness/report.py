@@ -110,3 +110,9 @@ def write_report(items: list[dict], output: Path) -> None:
         (output / f"{item['item']}.json").write_text(json.dumps(item, indent=2) + '\n')
     (output / 'report.json').write_text(json.dumps({'schema_version': 1, 'items': items}, indent=2) + '\n')
     (output / 'report.md').write_text(table(items) + '\n')
+    from testing.replay_harness.privacy_report import table as privacy_table
+
+    for item in items:
+        for stage in item['stages']:
+            if stage['stage'] == 'privacy_cache' and 'by_family_fault_offset' in stage['details']:
+                (output / f"{item['item']}-privacy.md").write_text(privacy_table(stage['details']) + '\n')

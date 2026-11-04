@@ -873,8 +873,12 @@ runs:
         # At 4 dispatches the queue saturated (median dispatch delay ~6 min),
         # which exceeds the 300s replay window: the reconciler then minted a
         # new generation for most jobs and about half of all dispatches were
-        # stale-generation acks. 16 leaves headroom on backend-sync
-        # (min 5 x concurrency 20) for the I/O-bound handler.
+        # stale-generation acks. 16 fits inside a single backend-sync
+        # instance (concurrency 20) for the I/O-bound handler, so it needs no
+        # warm floor. Since legacy-dark (2026-11-04) the service minimum is 0;
+        # continuous upload traffic keeps instances warm, and an idle-start
+        # burst pays one cold start (2026-11-02..04: p50 ~37s, p99 <=125s,
+        # max bucket <=183s), still under the 300s replay window.
         if gcloud tasks queues describe conversation-finalization \
           --location="${{ inputs.region }}" \
           --project="${{ inputs.project_id }}" >/dev/null 2>&1; then

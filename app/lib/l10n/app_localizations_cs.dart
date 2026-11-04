@@ -2281,10 +2281,10 @@ class AppLocalizationsCs extends AppLocalizations {
   String get firmwareUsbWarning => 'Připojení USB během aktualizací může poškodit vaše zařízení.';
 
   @override
-  String get firmwareBatteryAbove15 => 'Baterie nad 15%';
+  String get firmwareBatteryRequirement => 'Baterie nad 30%';
 
   @override
-  String get firmwareEnsureBattery => 'Ujistěte se, že vaše zařízení má 15% baterie.';
+  String get firmwareEnsureBattery => 'Ujistěte se, že vaše zařízení má 30% baterie.';
 
   @override
   String get firmwareStableConnection => 'Stabilní připojení';
@@ -10585,8 +10585,12 @@ class AppLocalizationsCs extends AppLocalizations {
       'Aktualizaci se nepodařilo stáhnout a zařízení se nezměnilo. Zkontrolujte připojení k internetu a zkuste to znovu.';
 
   @override
+  String get firmwareBatteryUnavailable =>
+      'Úroveň baterie zatím není k dispozici. Chvíli počkejte, a pokud se nic nezmění, zařízení znovu připojte.';
+
+  @override
   String firmwareBatteryTooLow(int level) {
-    return 'Baterie je na $level %. Před aktualizací nabijte zařízení alespoň na 15 %.';
+    return 'Baterie je na $level %. Před aktualizací nabijte zařízení alespoň na 30 %.';
   }
 
   @override
@@ -15005,6 +15009,291 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get episodeFinishingUp => 'Dokončování…';
+
+  @override
+  String get buildAndShareApp => 'Vytvořte a sdílejte vlastní aplikaci';
+
+  @override
+  String get membersAndCounting => '8000+ členů a stále přibývá.';
+
+  @override
+  String get privacyIntro =>
+      'V Omi se zavazujeme chránit vaše soukromí. Tato stránka vám umožňuje kontrolovat, jak jsou vaše data ukládána a používána.';
+
+  @override
+  String get dataProtectionDesc =>
+      'Vaše data jsou standardně zabezpečena silným šifrováním. Níže si prohlédněte svá nastavení a budoucí možnosti ochrany soukromí.';
+
+  @override
+  String get transcriptionConfig => 'Nakonfigurovat poskytovatele STT';
+
+  @override
+  String get importDataConfig => 'Importovat data z jiných zdrojů';
+
+  @override
+  String get understandingSubtitle => 'Slova pochopená z vašich konverzací.';
+
+  @override
+  String get rememberingSubtitle => 'Fakta a detaily zapamatované pro vás.';
+
+  @override
+  String get debugLogsDesc => 'Pomáhá diagnostikovat problémy';
+
+  @override
+  String get deleteKnowledgeGraphMessage =>
+      'Tím se smažou všechna odvozená data grafu znalostí (uzly a spojení). Vaše původní vzpomínky zůstanou v bezpečí. Graf bude v průběhu času znovu vytvořen nebo při dalším požadavku.';
+
+  @override
+  String get deleteKnowledgeGraphDesc => 'Vymazat všechny uzly a spojení';
+
+  @override
+  String get enhanceTranscriptAccuracyDesc =>
+      'S vylepšením našeho modelu můžeme pro vaše nahrávky poskytovat lepší výsledky přepisu.';
+
+  @override
+  String get bestInClassTranscription => 'Nejlepší přepis ve své třídě bez nutnosti nastavení';
+
+  @override
+  String get optimizedForConversation => 'Optimalizováno pro konverzaci';
+
+  @override
+  String get highAccuracy => 'Vysoká přesnost';
+
+  @override
+  String get privacyFirst => 'Soukromí na prvním místě';
+
+  @override
+  String get keepGoing => 'Pokračujte dál, jde vám to skvěle';
+
+  @override
+  String get personalGrowthJourney => 'Vaše cesta osobního růstu s AI, které naslouchá každému vašemu slovu.';
+
+  @override
+  String get memoryAllowUse => 'Povolit použití';
+
+  @override
+  String get memoryDontUse => 'Nepoužívat';
+
+  @override
+  String get alwaysInContext => 'Vždy v kontextu';
+
+  @override
+  String get firmwareBatteryAbove15 => 'Baterie nad 15%';
+
+  @override
+  String get configureSttProvider => 'Konfigurace poskytovatele STT';
+
+  @override
+  String get clearAllNodesAndConnections => 'Vymazat všechny uzly a spojení';
+
+  @override
+  String get welcomeToOmiDescription =>
+      'Vítejte v Omi! Váš AI společník je připraven vám pomoci s rozhovory, úkoly a mnoho dalšího.';
+
+  @override
+  String get conversationsProcessedAutomatically => 'Konverzace se zpracovávají automaticky';
+
+  @override
+  String get getInsightsInstantly => 'Získejte poznatky a souhrny okamžitě';
+
+  @override
+  String get dailyScoreDescription => 'Skóre, které vám pomůže\nlépe se soustředit na plnění.';
+
+  @override
+  String get startConversation => 'Začněte konverzaci a nechte kouzlo začít';
+
+  @override
+  String get wearableAiCompanion => 'Nositelný AI společník';
+
+  @override
+  String get organizeAndControlMemories => 'Organizujte a ovládejte své vzpomínky';
+
+  @override
+  String get setAllMemoriesToPrivate => 'Nastavit všechny vzpomínky na soukromou viditelnost';
+
+  @override
+  String get setAllMemoriesToPublic => 'Nastavit všechny vzpomínky na veřejnou viditelnost';
+
+  @override
+  String get selectPreferredLanguageForBestExperience => 'Vyberte si preferovaný jazyk pro nejlepší Omi zážitek';
+
+  @override
+  String get enableFeaturesForBestExperience => 'Povolte funkce pro nejlepší Omi zážitek na vašem zařízení.';
+
+  @override
+  String get deliveryTimeDescription => 'Kdy přijímat denní souhrn';
+
+  @override
+  String get configureSTTProvider => 'Nakonfigurovat poskytovatele STT';
+
+  @override
+  String get setConversationEndDescription => 'Nastavte, kdy konverzace automaticky končí';
+
+  @override
+  String get clearNodesDescription => 'Vymazat všechny uzly a připojení';
+
+  @override
+  String get deleteKnowledgeGraphWarning =>
+      'Tím se smažou všechna odvozená data grafu znalostí. Vaše původní vzpomínky zůstanou v bezpečí.';
+
+  @override
+  String get createAndShareYourApp => 'Vytvořte a sdílejte svou aplikaci';
+
+  @override
+  String get e2eeDescription =>
+      'End-to-end šifrování je zlatý standard ochrany soukromí. Když je povoleno, vaše data jsou šifrována na vašem zařízení před odesláním na naše servery. To znamená, že nikdo, ani Omi, nemůže přistupovat k vašemu obsahu.';
+
+  @override
+  String get secureEncryptionDescription =>
+      'Vaše data jsou šifrována klíčem jedinečným pro vás na našich serverech hostovaných v Google Cloud. To znamená, že váš surový obsah je nepřístupný nikomu, včetně zaměstnanců Omi nebo Google, přímo z databáze.';
+
+  @override
+  String get e2eeCardDescription =>
+      'Povolte pro maximální zabezpečení, kde pouze vy máte přístup k vašim datům. Klepnutím se dozvíte více.';
+
+  @override
+  String get yourOmiUnleashed => 'Váš Omi, uvolněný. Přejděte na neomezený pro nekonečné možnosti.';
+
+  @override
+  String get privacyIntroText =>
+      'V Omi bereme vaše soukromí velmi vážně. Chceme být transparentní ohledně dat, která shromažďujeme a jak je používáme ke zlepšení produktu. Zde je to, co potřebujete vědět:';
+
+  @override
+  String get commitmentText =>
+      'Zavazujeme se používat shromážděná data pouze k tomu, abychom z Omi udělali lepší produkt. Vaše soukromí a důvěra jsou pro nás prvořadé.';
+
+  @override
+  String get thankYouText =>
+      'Děkujeme, že jste váženým uživatelem Omi. Máte-li jakékoli dotazy nebo obavy, neváhejte nás kontaktovat na team@basedhardware.com.';
+
+  @override
+  String get knowledgeGraphDeleteDescription =>
+      'Tímto se odstraní všechna odvozená data grafu znalostí (uzly a spojení). Vaše původní vzpomínky zůstanou v bezpečí. Graf bude postupně obnoven nebo při dalším požadavku.';
+
+  @override
+  String get howPeopleWorks =>
+      'Jakmile je osoba vytvořena, můžete přejít k přepisu konverzace a přiřadit jim odpovídající segmenty, tak Omi bude moci rozpoznat i jejich řeč!';
+
+  @override
+  String get buildAndShareYourCustomApp => 'Vytvořte a sdílejte svou vlastní aplikaci';
+
+  @override
+  String get onboardingChooseYourPreference => 'Vyberte si preference';
+
+  @override
+  String get onboardingGrantRequiredAccess => 'Udělit požadovaný přístup';
+
+  @override
+  String get apiEnvironmentDescription => 'Vyberte, ke kterému serveru se připojit';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Vaše hovory zůstávají soukromé a bezpečné';
+
+  @override
+  String get omisStorageDesc =>
+      'Když váš Omi není připojen k telefonu, ukládá zvuk lokálně ve své vestavěné paměti. Nikdy neztratíte nahrávku.';
+
+  @override
+  String get permissionsSetupDescription => 'Povolte několik oprávnění, aby Omi mohl fungovat naplno.';
+
+  @override
+  String get architectSubtitle => 'AI pro pokročilé — tisíce chatů + agentní automatizace';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$current z $total';
+  }
+
+  @override
+  String get newestFirst => 'Nejnovější první';
+
+  @override
+  String get backgroundModeNote => 'Zatím funguje pouze se zařízeními Omi a průběžně se vylepšuje.';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return 'Nezaznamenáno ($count)';
+  }
+
+  @override
+  String get speakerTagPromptSubtitle => 'Rychlá kontrola hlasů z posledních dvou dnů';
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Čekající přepisy $count';
+  }
+
+  @override
+  String get captureRecoveryBanner => 'Omi neodesílá zvuk — klepnutím se znovu připojte';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Přívěsek ztratil spojení s tímto telefonem. Omi se znovu připojí sám, až bude přívěsek zapnutý a poblíž. Vše nahrané předtím je v bezpečí.';
+
+  @override
+  String get capturePendantDisconnectedShort => 'Omi se znovu připojí sám';
+
+  @override
+  String pinPersonSubtitle(String name) {
+    return 'Ponechat osobu $name a počítat s ní ve vašich konverzacích';
+  }
+
+  @override
+  String get pinPersonHonestLine => 'Omi se zeptá, než přiřadí podobné hlasy.';
+
+  @override
+  String speakerTagPromptHintConfirm(String name) {
+    return 'Ano zvýší jistotu u osoby $name.';
+  }
+
+  @override
+  String get localCopiesSection => 'Místní kopie';
+
+  @override
+  String get forYou => 'Pro vás';
+
+  @override
+  String get stopThese => 'Zastavit tyto';
+
+  @override
+  String get meetingActionItemsTitle => 'Akční položky';
+
+  @override
+  String get addToTasks => 'Přidat do úkolů';
+
+  @override
+  String get showInTranscript => 'Zobrazit přepis';
+
+  @override
+  String tentativeTaskDueDate(String date) {
+    return 'Termín přibližně $date';
+  }
+
+  @override
+  String tentativeTaskDueDateSemantics(String date) {
+    return 'Předběžný termín $date';
+  }
+
+  @override
+  String get openTask => 'Otevřít úkol';
+
+  @override
+  String get completeTask => 'Dokončit úkol';
+
+  @override
+  String get reopenTask => 'Znovu otevřít úkol';
+
+  @override
+  String get addingToTasks => 'Přidává se do úkolů';
+
+  @override
+  String get taskAddedToTasks => 'Úkol vytvořen';
+
+  @override
+  String get completedStatus => 'Dokončeno';
+
+  @override
+  String get notCompletedStatus => 'Čekající';
 
   @override
   String get referralAffiliate => 'Partnerský program';

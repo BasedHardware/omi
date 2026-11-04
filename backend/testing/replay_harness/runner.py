@@ -1,5 +1,6 @@
 """Load case directories, execute selected boundaries, and record explicit stops."""
 
+from contextlib import ExitStack
 from pathlib import Path
 import time
 
@@ -8,7 +9,7 @@ from testing.replay_harness.report import StageResult, item_report, record_excep
 from testing.replay_harness.stages.base import NotImplementedStage
 
 
-async def run_cases(directories: list[Path]) -> list[dict]:
+async def run_cases(directories: list[Path], *, privacy_ttl_override_s=None) -> list[dict]:
     # Validate all inputs before constructing any infrastructure.
     cases = [load_case(directory) for directory in directories]
     if len({case.manifest.id for case in cases}) != len(cases):
@@ -19,10 +20,13 @@ async def run_cases(directories: list[Path]) -> list[dict]:
     from testing.replay_harness.stages.finalization import TitlingDriver
     from testing.replay_harness.stages.episodes import EpisodesDriver
 
+    from testing.replay_harness.stages.privacy_cache import PrivacyCacheDriver
+
     items = []
     for case in cases:
         results = []
-        with replay_environment() as environment:
+        with ExitStack() as stack:
+            environment = None
             for name in STAGES:
                 if name not in (case.manifest.stages or {'capture_upload': {}, 'titling': {}}):
                     continue
@@ -31,7 +35,15 @@ async def run_cases(directories: list[Path]) -> list[dict]:
                     'capture_upload': CaptureUploadDriver,
                     'titling': TitlingDriver,
                     'episodes': EpisodesDriver,
+                    'privacy_cache': lambda: PrivacyCacheDriver(ttl_override_s=privacy_ttl_override_s),
                 }.get(name, lambda: NotImplementedStage(name))()
+                # Privacy timelines own one isolated emulator/Redis context per
+                # transition. Close any preceding pipeline environment first.
+                if name == 'privacy_cache':
+                    stack.close()
+                    environment = None
+                elif environment is None:
+                    environment = stack.enter_context(replay_environment())
                 started = time.perf_counter()
                 try:
                     result = await driver.run(case, environment)

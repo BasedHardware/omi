@@ -53,6 +53,7 @@ class AppShell extends StatefulWidget {
 class _AppShellState extends State<AppShell> {
   late AppLinks _appLinks;
   StreamSubscription<Uri>? _linkSubscription;
+  Future<void>? _subscriptionReady;
   Future<void> initDeepLinks() async {
     _appLinks = AppLinks();
 
@@ -154,6 +155,9 @@ class _AppShellState extends State<AppShell> {
         _handleSharedTasksDeepLink(token);
       }
     } else if (uri.pathSegments.first == 'unlimited') {
+      // This destination needs the server's paid-surface policy, rather than
+      // support identity readiness. Other links need only hydrated caches.
+      await _subscriptionReady;
       if (mounted) {
         if (!context.read<UsageProvider>().showSubscriptionUI) return;
         final plan = context.read<UsageProvider>().subscription?.subscription.plan.wireName ?? 'unknown';
@@ -440,7 +444,7 @@ class _AppShellState extends State<AppShell> {
       context.read<MessageProvider>().setMessagesFromCache();
       context.read<AppProvider>().setAppsFromCache();
       context.read<MessageProvider>().refreshMessages();
-      context.read<UsageProvider>().fetchSubscription();
+      _subscriptionReady = context.read<UsageProvider>().fetchSubscription();
       context.read<TaskIntegrationProvider>().loadFromBackend();
       // Same fire-and-forget as task integrations: chat/settings must not
       // treat an empty in-memory map as "not connected" after process death.
