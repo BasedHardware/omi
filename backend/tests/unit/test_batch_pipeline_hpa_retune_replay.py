@@ -202,7 +202,7 @@ def test_current_bounds_absorb_the_measured_step_within_thirty_minutes():
     window = int(re.search(r'(\d+)m$', _served_chain_column().replace('_per_pod', '')).group(1))
     worst, caught = _step_load(config['ready_target'], window, config)
     before_worst, _ = _step_load(16, 2, dict(config, chain_target=0.5))
-    # The current bounds take 12m to catch this step versus 6m for the
+    # The audited 6/12 bounds take 12m to catch this step versus 6m for the
     # burst-sensitive signals. Preserve the queue-wait comparison and verify
     # the current bounds against the 30m target, not the historical 4/16 claim.
     # This synthetic capacity model is not proof of deployed delivery latency.

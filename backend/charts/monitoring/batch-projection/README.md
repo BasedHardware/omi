@@ -64,7 +64,7 @@ set. Gate changes trigger the existing metrics-egress workflow; no workflow chan
 definition is not evidence that production Grafana has imported it.
 
 1. Deploy the batch worker image and queue-age guard chart containing this fix **before** importing any
-   queue-safety pages. Keep the current worker min / max bounds (prod values; 4 / 12 since 2026-11-04).
+   queue-safety pages. Keep the audited worker min 6 / max 12 bounds.
 2. Confirm in Prometheus that `max(omi_batch_timeliness_observed_at_seconds) > 0` and that
    `omi_batch_timeliness_samples_total{outcome="ok"}` increases.
 3. Run the monitoring contracts. Dispatch the existing metrics-egress workflow for production at the reviewed

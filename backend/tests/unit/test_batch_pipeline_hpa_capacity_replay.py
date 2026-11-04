@@ -1,4 +1,4 @@
-"""Keep historical retune witnesses separate from the live 4/12 two-process bounds."""
+"""Keep historical retune witnesses separate from the audited live 6/12 bounds."""
 
 import importlib.util
 from pathlib import Path
@@ -20,14 +20,12 @@ def test_historical_volume_capacity_retains_the_retune_witness():
     assert result['floor']
 
 
-def test_current_volume_capacity_stays_cool_and_at_the_floor():
-    # The replay models one process per pod; prod pods run two, so these
-    # replica counts are an upper bound on what the live floor must carry.
+def test_current_volume_capacity_stays_cool_and_at_the_audited_floor():
     result = FRONTIER.stats(FRONTIER.series, FRONTIER.cfg)
-    assert FRONTIER.cfg['min_replicas'] == 4
+    assert FRONTIER.cfg['min_replicas'] == 6
     assert FRONTIER.cfg['max_replicas'] == 12
-    assert result['mean'] == pytest.approx(4.34, abs=0.01)
-    assert result['max'] == 5
+    assert result['mean'] == 6
+    assert result['max'] == 6
     assert result['hot'] == 0
     assert result['floor']
 
@@ -35,7 +33,7 @@ def test_current_volume_capacity_stays_cool_and_at_the_floor():
 def test_historical_full_volume_sensitivity_retains_the_leads_hot_minute_budget():
     # A synthetic 3.7x fleet-total model, not full-volume qualification. At cap16
     # even the prior 32/0.5 shape has hot minutes; never call this zero-hot safe.
-    # This remains the 4/16 retune witness, not qualification of today's 4/12
+    # This remains the 4/16 retune witness, not qualification of today's 6/12
     # bounds at full volume. Live bounds need a separate capacity assessment.
     result = FRONTIER.stats(FRONTIER.full, HISTORICAL_CFG)
     assert result['mean'] == pytest.approx(11.46, abs=0.01)
