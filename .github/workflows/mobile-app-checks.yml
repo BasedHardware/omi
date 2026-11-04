@@ -164,7 +164,13 @@ jobs:
     runs-on: ubuntu-latest
     needs: changes
     if: github.event_name == 'schedule' || needs.changes.outputs.has_app_dart == 'true'
-    timeout-minutes: 30
+    # Healthy full-suite runs measured at 27-29.6 min on main (41736391155:
+    # 29:36 for 8207 tests); run 41693050609 was cancelled at the 30-min cap
+    # with all 7842 tests so far passing and ~360 remaining — same cold-path
+    # ceiling problem test_mobile_ci_infra_guards.py documents for
+    # ios-compile-check. 40 keeps ~10 min of headroom; the CI budget check
+    # counts p50, not the ceiling.
+    timeout-minutes: 40
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
