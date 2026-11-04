@@ -214,11 +214,11 @@ def valid_effects_binding(row: dict[str, Any]) -> bool:
         return False
 
 
-def _dispatch_binding() -> dict[str, str] | None:
+def _dispatch_binding(*, backfill: bool = False) -> dict[str, str] | None:
     from config import enrichment as enrichment_config
 
     if enrichment_config.route() == 'enrichment_queue':
-        binding = enrichment_config.dispatch_binding()
+        binding = enrichment_config.dispatch_binding(backfill=backfill)
         if valid_dispatch_binding(binding):
             return binding
         from utils.observability.fallback import record_fallback
@@ -455,15 +455,16 @@ def mark_update(
             )
 
         row.setdefault('summary_lane', 'batch' if batch else summary_delivery.lane({}))
+        backfill = row['summary_lane'] == 'backfill' and not first_summary_pending(row)
         if old is None:
             row.update(
                 task_token=uuid.uuid4().hex,
                 task_due_at=row['due_at'],
                 lease_until=0,
-                dispatch=(new_dispatch() if new_dispatch else None) or _dispatch_binding(),
+                dispatch=(new_dispatch() if new_dispatch else None) or _dispatch_binding(backfill=backfill),
             )
         elif old.get('dormant'):
-            row['dispatch'] = _dispatch_binding()
+            row['dispatch'] = _dispatch_binding(backfill=backfill)
         elif not valid_dispatch_binding(row.get('dispatch')):
             row['dispatch'] = None
         wake = old is None
@@ -1026,7 +1027,7 @@ def mark_effects(uid: str, conversation_id: str, language: str, *, immediate: bo
 
 
 def _effects_binding() -> dict[str, str]:
-    binding = _dispatch_binding()
+    binding = _dispatch_binding(backfill=summary_delivery.lane({}) == 'backfill')
     if binding is not None:
         return binding
     # Listen/pusher already have the durable finalization queue, identity and
