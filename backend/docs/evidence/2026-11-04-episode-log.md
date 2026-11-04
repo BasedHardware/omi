@@ -1,8 +1,8 @@
 # Episode batch 2: qualification and cost model
 
-Recorded at **2026-11-04 15:47:03 UTC**. Owner: planscost.
+Recorded at **2026-11-04 16:14:06 UTC**. Owner: planscost.
 Repository: `BasedHardware/omi`, lane `lane/epbatch2`.
-Qualified source: `968565da335462ad71e94443bc5064d6e5656c1f`.
+Qualified source: `ebb371f920a8836324383a854f62f4eac1799c94`.
 [PR #24607](https://github.com/BasedHardware/omi/pull/24607) owns current head,
 review and CI state. This is a dated qualification/forecast record, not a live
 cost meter or a deployment receipt. Re-measure before any production ramp.
@@ -80,20 +80,23 @@ by retaining legacy consolidation during shadow dual-write.
 No production account data was read or written. No GCP tier was used. All emulator
 owners and HTTP requests were synthetic. Nothing was merged or deployed by this lane.
 
-- Episode/merge/sync/flag acceptance: **1,685 tests passed**, 61 test-bearing files
-  from 64 checked-in selected paths (three support modules have no tests), on the
+- Episode/merge/sync/flag acceptance: **1,787 tests passed**, 64 test-bearing files
+  from 67 checked-in selected paths (three support modules have no tests), on the
   qualified source above. It includes the final visibility and deletion fences,
-  remote ramp/rollback, disabled-sweep behavior and cached-compose recovery.
+  remote ramp/rollback, disabled-sweep behavior, cached-compose recovery and
+  merged #24544 batch-close/deadline integration.
 - Scoped deletion/visibility follow-up: **51 passed** before the full acceptance
   rerun, including accepted/malformed deletion, restored access and publication
   fenced after lease claim.
 - Query/index guard: **831 passed**, including 547 query-shape cases, on the review
   changes before the final scoped compose/off-path, visibility and deletion additions.
   Current-head guard evidence belongs to the guarded push and PR checks.
-- Real loopback Firestore emulator: **5 passed**, including aborted atomic capture,
+- Real loopback Firestore emulator: **33 passed** across episode log and recorded
+  timeline proofs, including aborted atomic capture,
   competing claims, stale publication, bounded contiguous facts and transactional
   whole-document BatchGet through a fixed episode window, and deletion accepted
-  after a claim but before publication. The emulator shut down.
+  after a claim but before publication. Batch-close replay, pending-deadline
+  stamping and concurrent recorded placement also pass. The emulator shut down.
 - Earlier guarded publication on `0af0ee8128bee662a17f351e054979419b5fc2f1` passed
   local PR preflight, type checking with zero errors, selected backend tests,
   API/generated contracts, web tests and a Swift debug compile. Current-head
@@ -114,6 +117,11 @@ log proof, under the existing loopback Firebase emulator. Unit tests and emulato
 proofs are separate layers; neither claims installed or deployed behavior.
 
 ## Review decisions and limits
+
+All four named prerequisites are merged and integrated: #24577, #24579, #24582
+and #24544. Metadata-only batch-close proof hits append member refresh debt,
+and cache validity includes the transcription deadline. Expired policy clocks
+are skipped/redriven instead of counted as geometry drift.
 
 View-backed live/detail reads use the same canonical member-visibility function
 as legacy. New independent fact/policy writers, lease admission/publication and
