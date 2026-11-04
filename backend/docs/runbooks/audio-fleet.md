@@ -414,6 +414,10 @@ reverify both named addresses and their Gateway Programmed conditions immediatel
 before deployment. Preserve the `/parakeet` prefix. Switch listen, all four Cloud
 Run services and pusher in both environments in one caller commit. Deploy through
 `gcp_backend.yml`, `gcp_backend_listen_helm.yml` and `gcp_backend_pusher.yml`.
+Status 2026-11-05: the dev Gateway VIP was deleted, so the dev half of this
+switch is unavailable until the Gateway is reinstalled and requalified; dev
+callers run on the legacy Ingress endpoints (see
+[internal-gateway-callers](../internal-gateway-callers.md)).
 
 Use [internal-gateway README](../../charts/internal-gateway/README.md)'s route
 installation/verification helpers. Require Accepted/ResolvedRefs, Attached policies,

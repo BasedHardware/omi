@@ -55,6 +55,14 @@ borrowedNodePools:
   enabled: false
   pools: [parakeet-pool, parakeet-pool-b, parakeet-pool-v2]
 worker:
+  # Two pump processes share each L4 (cl2-gpueff 2026-11-04, data/run-2026-11-04-gpueff
+  # in omi-workspace): prod is claim-path bound (GPU util 16%, ~1.6 units per
+  # 3.2s pull), so a second independent pump doubles concurrent claims per GPU.
+  # Dev L4 bench 1p 112.6 -> 2p 172.8 audio-h/GPU-h, 11.8 of 23 GB VRAM, same
+  # words/speakers. Pod sizing comes from processResources."2" (fits the
+  # g2-standard-8 node with daemons). The T4 fallback stays at t4Fallback.processes 1.
+  # Kill switch / rollback: processes: 1 (values-only Helm roll).
+  processes: 2
   servingMetricsMinRefreshSeconds: 60
   # Matches the prod backend hosts (deploy contract reader-split invariant):
   # window allocation 100, replica recovery explicitly off, and the
