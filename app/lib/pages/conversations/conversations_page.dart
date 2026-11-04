@@ -22,6 +22,7 @@ import 'package:omi/pages/episodes/live_episode_row.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/episode_provider.dart';
+import 'package:omi/providers/home_provider.dart';
 import 'package:omi/services/capture/empty_recording_notice.dart';
 import 'package:omi/providers/local_recordings_provider.dart';
 import 'package:omi/providers/review_provider.dart';
@@ -320,7 +321,8 @@ class ConversationsPage extends StatefulWidget {
   State<ConversationsPage> createState() => _ConversationsPageState();
 }
 
-class _ConversationsPageState extends State<ConversationsPage> with AutomaticKeepAliveClientMixin {
+class _ConversationsPageState extends State<ConversationsPage>
+    with AutomaticKeepAliveClientMixin, WidgetsBindingObserver {
   TextEditingController textController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final GlobalKey<HomeDailyRecapsState> _recapsKey = GlobalKey<HomeDailyRecapsState>();
@@ -330,6 +332,32 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
   bool _initialOverlayPending = false;
   Completer<void>? _initialOverlayReady;
   ({String owner, HomeEpisodeLayout layout})? _fallbackHomeLayout;
+  final Set<String> _paintedStandaloneIds = {};
+  bool _homeTabActive = true;
+  bool _wasBackgrounded = false;
+
+  void _releaseHomeLayout() {
+    _fallbackHomeLayout = null;
+    _paintedStandaloneIds.clear();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final home = context.watch<HomeProvider?>();
+    final active = home == null || home.selectedIndex == HomeProvider.homeTab;
+    if (active && !_homeTabActive) _releaseHomeLayout();
+    _homeTabActive = active;
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.hidden) _wasBackgrounded = true;
+    if (state == AppLifecycleState.resumed && _wasBackgrounded) {
+      _wasBackgrounded = false;
+      if (mounted) setState(_releaseHomeLayout);
+    }
+  }
 
   @override
   bool get wantKeepAlive => true;
@@ -356,6 +384,9 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    final lifecycle = WidgetsBinding.instance.lifecycleState;
+    _wasBackgrounded = lifecycle == AppLifecycleState.paused || lifecycle == AppLifecycleState.hidden;
     HomeDailyRecapsSetting.reload();
     _scheduleDayRollover();
     _pendingWork.addListener(_onPendingWorkChanged);
@@ -535,6 +566,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _pendingWork.removeListener(_onPendingWorkChanged);
     _dayTimer?.cancel();
     if (_initialOverlayReady != null && !_initialOverlayReady!.isCompleted) {
@@ -701,8 +733,9 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
           });
           final latestEpisodes = episodes?.homeEpisodes ?? const [];
           final heldLayout = _fallbackHomeLayout;
-          final paintEpisodes = heldLayout != null && heldLayout.owner == SharedPreferencesUtil().uid
-              ? heldLayout.layout.apply(latestEpisodes)
+          final holdingLayout = heldLayout != null && heldLayout.owner == SharedPreferencesUtil().uid;
+          final paintEpisodes = holdingLayout
+              ? heldLayout.layout.apply(latestEpisodes, standaloneIds: _paintedStandaloneIds)
               : latestEpisodes;
           final projected = buildHomeRows(
             [for (final list in conversationsByDate.values) ...list],
@@ -722,6 +755,19 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             projectedMemberIds.addAll(row.episodeConversationIds);
             if (row.isProcessing) projectedProcessingIds.add(row.conversation.id);
             if (row.episode != null) projectedEpisodes[row.conversation.id] = row;
+            if (holdingLayout && !_isBootstrapping && !_initialOverlayPending) {
+              if (row.episode == null) {
+                _paintedStandaloneIds.add(row.conversation.id);
+              } else if (row.episode!.id.isEmpty) {
+                // An unassigned Processing run is also an already-painted row.
+                _paintedStandaloneIds.addAll(row.episodeConversationIds);
+              }
+            }
+          }
+          if (holdingLayout && !_isBootstrapping && !_initialOverlayPending) {
+            _paintedStandaloneIds.addAll(snapshot.processingConversations
+                .where((row) => !projectedMemberIds.contains(row.id))
+                .map((row) => row.id));
           }
         }
         final mergedDates = <DateTime>{...conversationsByDate.keys, ...recordingsByDate.keys}.toList()
@@ -784,7 +830,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             final historyReady = await history;
             if (mounted && historyReady) {
               if (_initialOverlayReady case final ready? when !ready.isCompleted) ready.complete();
-              setState(() => _fallbackHomeLayout = null);
+              setState(_releaseHomeLayout);
             }
           },
           color: OmiColors.onAccent,

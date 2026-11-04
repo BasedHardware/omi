@@ -22,21 +22,42 @@ class HomeRow {
 /// or move an existing episode to another day. Source rows remain independently
 /// available, including members restored by the list acknowledgement adapter.
 class HomeEpisodeLayout {
-  HomeEpisodeLayout(List<Episode> episodes) : _episodes = List.unmodifiable(episodes);
+  HomeEpisodeLayout(List<Episode> episodes) : _episodes = {for (final episode in episodes) episode.id: episode};
 
-  final List<Episode> _episodes;
+  final Map<String, Episode> _episodes;
 
-  List<Episode> apply(List<Episode> latest) {
+  List<Episode> apply(List<Episode> latest, {required Set<String> standaloneIds}) {
+    final occupied = {
+      ...standaloneIds,
+      for (final episode in _episodes.values) ..._memberIds(episode),
+    };
+    for (final episode in latest) {
+      if (_episodes.containsKey(episode.id)) continue;
+      final ids = _memberIds(episode);
+      if (ids.isEmpty || ids.any(occupied.contains)) continue;
+      // A new recording can appear immediately without absorbing a painted row.
+      // Retain its first layout too, so a later membership change cannot remove
+      // it or absorb an older standalone row on a subsequent notification.
+      _episodes[episode.id] = episode;
+      occupied.addAll(ids);
+    }
     final byId = {for (final episode in latest) episode.id: episode};
-    return [
-      for (final previous in _episodes) _update(previous, byId[previous.id] ?? previous),
+    final projection = [
+      for (final previous in _episodes.values) _update(previous, byId[previous.id] ?? previous),
     ];
+    // An omitted episode keeps its last content/status, not its outage-era draft.
+    for (final episode in projection) {
+      _episodes[episode.id] = episode;
+    }
+    return projection;
   }
+
+  Set<String> _memberIds(Episode episode) =>
+      {...episode.conversationIds, for (final member in episode.members) member.id};
 
   Episode _update(Episode previous, Episode latest) {
     final members = {for (final member in latest.members) member.id: member};
     return latest.copyWith(
-      live: previous.live,
       startedAt: previous.startedAt,
       conversationIds: previous.conversationIds,
       members: [for (final member in previous.members) members[member.id] ?? member],

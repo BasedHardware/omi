@@ -54,6 +54,56 @@ ServerConversation waiting(String id, int minute,
     );
 
 void main() {
+  test('deadline layout takes live-to-ended status from the latest episode', () {
+    final a = conversation('a'), b = conversation('b');
+    final cached = episode(live: true, members: [a, b]);
+    final held = HomeEpisodeLayout([cached]);
+    final ended = episode(members: [a, b], closedAt: start.add(const Duration(hours: 3)));
+    final projection = held.apply([ended], standaloneIds: {});
+    expect(projection.single.live, isFalse, reason: 'ending is a status update, not a refresh boundary');
+    expect(projection.single.closedAt, ended.closedAt);
+    expect(projection.single.startedAt, cached.startedAt);
+    expect(projection.single.conversationIds, cached.conversationIds);
+    expect(held.apply([], standaloneIds: {}).single.live, isFalse,
+        reason: 'a later omitted snapshot must not revert an ended episode to live');
+  });
+
+  test('deadline layout admits a new recording without absorbing an existing source row', () {
+    final old = conversation('old', hours: -1);
+    final a = conversation('a'), b = conversation('b');
+    final held = HomeEpisodeLayout([]);
+    final added = episode(members: [a, b]);
+    final projection = held.apply([added], standaloneIds: {'old'});
+    final rows = buildHomeRows([old], projection, enabled: true);
+    expect(rows.map((row) => row.conversation.id), ['episode:e', 'old']);
+    expect(rows.first.episodeConversationIds, {'a', 'b'});
+  });
+
+  test('deadline layout rejects absorption through full IDs or member metadata and pins admitted recordings', () {
+    final old = conversation('old', hours: -1), a = conversation('a'), b = conversation('b');
+    final held = HomeEpisodeLayout([]);
+    Episode candidate(String id, List<String> ids, List<ServerConversation> members) => Episode(
+        id: id,
+        live: false,
+        startedAt: start,
+        lastActivityAt: start,
+        title: id,
+        conversationIds: ids,
+        members: members,
+        moments: composedMoments);
+    final absorbsFullId = candidate('full-id', ['a', 'old'], [a]);
+    final absorbsMetadata = candidate('metadata', ['a'], [a, old]);
+    final added = candidate('safe', ['a', 'b'], [a, b]);
+    final projection = held.apply([absorbsFullId, absorbsMetadata, added], standaloneIds: {'old'});
+    expect(projection.map((e) => e.id), ['safe']);
+    final changed = candidate('safe', ['a', 'b', 'old'], [a, b, old]);
+    final updated = held.apply([changed], standaloneIds: {'old'});
+    expect(updated.single.conversationIds, ['a', 'b'], reason: 'an admitted episode also keeps its painted membership');
+    expect(updated.single.members.map((m) => m.id), ['a', 'b']);
+    final rows = buildHomeRows([old], updated, enabled: true);
+    expect(rows.map((row) => row.conversation.id), ['episode:safe', 'old']);
+  });
+
   test('deadline layout keeps membership and order while episode title and processing status update', () {
     final a = conversation('a');
     final b = conversation('b', hours: 1);
@@ -80,8 +130,8 @@ void main() {
     );
     List<HomeRow> rows(List<Episode> projection) => buildHomeRows([a, b, c], projection,
         enabled: true, finishingTitle: 'Finishing up…', now: start.add(const Duration(minutes: 1)));
-    final before = rows(held.apply([cached]));
-    final after = rows(held.apply([latest, lateNewEpisode]));
+    final before = rows(held.apply([cached], standaloneIds: {'c'}));
+    final after = rows(held.apply([latest, lateNewEpisode], standaloneIds: {'c'}));
     expect(before.map((row) => row.conversation.id), ['c', 'episode:e']);
     expect(after.map((row) => row.conversation.id), before.map((row) => row.conversation.id));
     expect(after.map((row) => row.startedAt), before.map((row) => row.startedAt));
@@ -90,7 +140,8 @@ void main() {
     expect(after.last.conversation.structured.title, 'Composed title arrived');
     expect(after.last.episodeConversationIds, {'a', 'b'});
     expect(after.last.episode!.members.map((member) => member.id), ['a', 'b']);
-    expect(held.apply([]).single, isNotNull, reason: 'an omitted episode cannot remove a painted row');
+    expect(held.apply([], standaloneIds: {'c'}).single, isNotNull,
+        reason: 'an omitted episode cannot remove a painted row');
     expect(latest.members.length, 3, reason: 'the provider snapshot is never mutated');
   });
 
