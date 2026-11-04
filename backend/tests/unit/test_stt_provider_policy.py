@@ -161,4 +161,4 @@ def test_plain_streaming_slot_is_removed_but_window_and_ptt_remain(monkeypatch):
     assert canonical_model_config(STTServingSurface.STREAMING) == 'modulate-velma-2,soniox,parakeet'
     monkeypatch.setenv('STT_GPU_FLEET_OFF', 'true')
     assert not model_is_enabled('parakeet', STTServingSurface.STREAMING)
-    assert canonical_model_config(STTServingSurface.STREAMING) == 'soniox'
+    assert canonical_model_config(STTServingSurface.STREAMING) == 'modulate-velma-2,soniox'

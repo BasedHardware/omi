@@ -75,7 +75,7 @@ class RecordingIndex:
 
 @pytest.fixture
 def harness(monkeypatch):
-    monkeypatch.setattr(state, '_mutations', state.MutationRegistry())
+    monkeypatch.setattr(state, '_mutations', state.MutationRegistry(grace_seconds=0))
     monkeypatch.setenv('PINECONE_PARTITIONS_ENABLED', 'true')
     db = StrictFirestore()
 
@@ -273,6 +273,38 @@ def test_shutdown_settles_running_ticket_without_claiming_provider_ack(harness):
         result.result(timeout=5)
     # A late provider ack must not erase the uncertainty recorded at shutdown.
     assert state.get_route(key, firestore_client=db).uncertain_count == 1
+
+
+def test_provider_ack_inside_shutdown_grace_settles_normally(harness, monkeypatch):
+    scoped, raw, key, db = harness
+    registry = state.MutationRegistry(grace_seconds=1)
+    monkeypatch.setattr(state, '_mutations', registry)
+    entered, release, draining = Event(), Event(), Event()
+    wait = registry._lock.wait
+
+    def wait_for_provider():
+        entered.set()
+        assert release.wait(5)
+
+    def entered_grace(timeout):
+        draining.set()
+        return wait(timeout)
+
+    raw.before_write = wait_for_provider
+    monkeypatch.setattr(registry._lock, 'wait', entered_grace)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        result = pool.submit(scoped.upsert, namespace=key.family, vectors=[record()])
+        try:
+            assert entered.wait(2)
+            drain = pool.submit(state.drain_mutations)
+            assert draining.wait(2)
+        finally:
+            release.set()
+        result.result(timeout=2)
+        assert drain.result(timeout=2) == 0
+    route = state.get_route(key, firestore_client=db)
+    assert (route.pending_count, route.uncertain_count, route.latest_write_lsn) == (0, 0, raw.lsn)
+    assert len([call for call in raw.calls if call[0] == 'upsert']) == 1
 
 
 def test_provider_ack_followed_by_failed_finish_does_not_orphan_ticket(harness, monkeypatch):

@@ -175,12 +175,25 @@ def _yaml(relative: str):
     return yaml.load(text, Loader=getattr(yaml, 'CSafeLoader', yaml.SafeLoader))
 
 
-@pytest.mark.parametrize('environment', ['dev', 'prod'])
-def test_listen_rollout_stays_empty_until_the_separate_drainer_is_serving(environment):
-    name = 'SERVER_BATCH_UNSUPPORTED_LANGUAGES'
+def _listen_values(environment: str, name: str) -> tuple[str, str, str]:
     chart = _yaml(f'charts/backend-listen/{environment}_omi_backend_listen_values.yaml')
-    assert next(entry['value'] for entry in chart['env'] if entry['name'] == name) == ''
-    source = _yaml('deploy/runtime_env/_base.yaml')
-    assert source['environment_shared']['gke']['backend-listen']['env'][name]['value'] == ''
     manifest = _yaml('deploy/runtime_env.yaml')
-    assert manifest['environments'][environment]['gke']['backend-listen']['env'][name]['value'] == ''
+    return (
+        next(entry['value'] for entry in chart['env'] if entry['name'] == name),
+        _yaml('deploy/runtime_env/_base.yaml')['environment_shared']['gke']['backend-listen']['env'][name]['value'],
+        manifest['environments'][environment]['gke']['backend-listen']['env'][name]['value'],
+    )
+
+
+def test_dev_listen_rollout_stays_empty():
+    chart, base, manifest = _listen_values('dev', 'SERVER_BATCH_UNSUPPORTED_LANGUAGES')
+    assert chart == base == manifest == ''
+
+
+def test_prod_listen_allowlist_is_enabled_only_for_admitted_codes_never_japanese():
+    # Enabled 2026-11-03 after backend-sync-backfill served the native-record drainer (2172cd4).
+    chart, base, manifest = _listen_values('prod', 'SERVER_BATCH_UNSUPPORTED_LANGUAGES')
+    assert base == ''
+    assert chart == manifest
+    codes = set(chart.split(','))
+    assert codes and codes <= set(server_batch.UNSUPPORTED) and 'ja' not in codes

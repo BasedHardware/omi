@@ -893,6 +893,29 @@ class Scheduler:
         return recovered
 
     @staticmethod
+    def restore_audio_in_transaction(tx: Transaction, job: dict, now: float) -> None:
+        """Requeue one CAS-verified missing-input repair under its original identity.
+
+        The artifact-missing store owns the content/privacy/staging checks. No
+        paid recovery intent or sibling receipt is reset by this queue mutation.
+        """
+        marker = job.get('artifact_disposition') or {}
+        if (
+            job.get('state') != 'quarantined'
+            or job.get('recovery_state') != 'failed_held'
+            or marker.get('state') != 'restored'
+            or job.get('result')
+            or job.get('merge_pending') is not False
+            or job.get('token')
+            or job.get('lease_until', 0) > now
+        ):
+            raise ValueError('verified missing-input repair required')
+        control = read_control(tx, scheduler_control_key(job['owner_key']))
+        job.update(state='ready', available_at=now, merge_pending=True, token='', lease_until=0.0)
+        _append(tx, control, job)
+        tx.put('jobs', job['segment_id'], job)
+
+    @staticmethod
     def redrive_in_transaction(tx: Transaction, job: dict, now: float) -> bool:
         if job.get('state') != 'dead' or not job.get('merge_pending'):
             return False

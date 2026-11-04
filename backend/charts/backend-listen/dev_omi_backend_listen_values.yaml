@@ -460,6 +460,8 @@ env:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: ADMIN_KEY
+  - name: HOSTED_LID_API_URL
+    value: ""
   - name: HOSTED_PARAKEET_API_URL
     value: "http://parakeet.omiapi.com"
   - name: SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED

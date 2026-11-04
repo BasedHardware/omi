@@ -53,7 +53,7 @@ def test_rollback_restores_effective_models_without_mutating_the_runtime_list(
     token = current_listen_policy.set(policy)
     try:
         assert service_models(configured) == (
-            ['soniox'] if fleet_off else configured + (['parakeet'] if slot_enabled else [])
+            ['modulate-velma-2', 'soniox'] if fleet_off else configured + (['parakeet'] if slot_enabled else [])
         )
         assert configured == ['modulate-velma-2', 'soniox']
         if policy is not None:
