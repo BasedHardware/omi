@@ -886,6 +886,7 @@ case "$1" in
 esac
 """,
                 "java": "#!/bin/sh\necho '    java.version = 21.0.1' >&2\n",
+                "brew": "#!/bin/sh\nexit 1\n",
             }.items():
                 path = fake_bin / name
                 path.write_text(body, encoding="utf-8")
