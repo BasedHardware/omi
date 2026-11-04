@@ -110,6 +110,32 @@ class Fold:
 
     def apply(self, event):
         kind, payload = event['kind'], event['payload']
+        if kind == 'mutation_delta':
+            before = list(payload.get('seeds') or [])
+            after = []
+            for delta in payload['rows']:
+                seed = delta['seed']
+                if seed:
+                    before.append(seed)
+                # Seed geometry is the committed producer's base, so out-of-order
+                # post-commit delivery never applies a delta to an unrelated row.
+                row = {**seed, **delta['set'], 'id': delta['id']}
+                for key in delta['unset']:
+                    row.pop(key, None)
+                after.append(row)
+            self.apply(
+                {
+                    'kind': 'mutation',
+                    'payload': {
+                        'before': before,
+                        'after': after,
+                        'span': payload.get('span'),
+                        'links': payload.get('links'),
+                        'receipts': payload.get('receipts'),
+                    },
+                }
+            )
+            return
         if kind in {'baseline', 'fence'}:
             self._seed(payload['row'], replace=payload.get('replace', False))
         elif kind == 'member':

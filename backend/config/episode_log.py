@@ -17,7 +17,12 @@ WAKE_BUCKET_SECONDS = 30
 
 
 def enabled(uid: str) -> bool:
-    return episodes_enabled_for(uid) and default_on('EPISODES_LOG_ENABLED')
+    if not episodes_enabled_for(uid):
+        return False
+    from utils import omi_flags
+
+    resolved = omi_flags.resolve('EPISODES_LOG_ENABLED', uid)
+    return resolved.enabled if resolved is not None else default_on('EPISODES_LOG_ENABLED')
 
 
 def home_enabled() -> bool:

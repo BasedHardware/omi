@@ -518,7 +518,7 @@ and an explicit empty literal renders as `''`.
 | `ENRICHMENT_MAX_AGE_HOURS` | Default 72 hours: park historical enrichment without deleting its durable obligation; 0 disables new parking | backend | env | closed | — | — | {value: "72", category: ops_kill} | — | keep | keep | — | two-lane lead |
 | `EPISODES_ENABLED` | Default on unless set to a non-on value; live episodes overlay (per-moment gpt-5-nano update, provisional items, /v1/episodes capability). Off reports enabled=false and apps keep today's per-conversation UI | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `EPISODES_HOME_ROWS_ENABLED` | Default on; maintain sealed Home rows in shadow; off serves legacy Home projection | backend | env | open | — | — | — | — | keep | keep | — | planscost |
-| `EPISODES_LOG_ENABLED` | Default on; atomic per-user episode fact capture, shadow drain, wake and sweep | backend | env | open | — | — | — | — | keep | keep | — | planscost |
+| `EPISODES_LOG_ENABLED` | Default on; remote per-user post-commit episode fact capture, shadow drain, wake and sweep | backend | firestore | open | — | — | — | — | keep | keep | — | planscost |
 | `EPISODE_ATTACH_CONTENT_GATE_ENABLED` | Default on; skip only verified completed semantic attach inputs | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `EPISODE_ATTACH_DUPLICATES_DEDUPE_ENABLED` | Default on; omit duplicate-group CAS when its membership set is already present | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `EPISODE_ATTACH_MEMBERSHIP_DEDUPE_ENABLED` | Default on; omit value-identical episode link and reverse membership writes | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
@@ -1124,7 +1124,6 @@ their code default (`fail` tells you which way a missing value resolves).
 - `EPISODES_CLIENT_CHANNELS` — Default beta; comma-separated X-Omi-App-Channel values (beta, store) whose episodes API calls are admitted and set the client-seen marker. A missing or unknown channel is never admitted (fail: closed)
 - `EPISODES_ENABLED` — Default on unless set to a non-on value; live episodes overlay (per-moment gpt-5-nano update, provisional items, /v1/episodes capability). Off reports enabled=false and apps keep today's per-conversation UI (fail: open)
 - `EPISODES_HOME_ROWS_ENABLED` — Default on; maintain sealed Home rows in shadow; off serves legacy Home projection (fail: open)
-- `EPISODES_LOG_ENABLED` — Default on; atomic per-user episode fact capture, shadow drain, wake and sweep (fail: open)
 - `EPISODES_PERCENT` — Default 100; stable salted uid bucket admitted to episodes when EPISODES_ENABLED is on. Admission alone spends nothing: listen and the finalizer also need a client that called /v1/episodes within 14 days (Redis episodes:client_seen:{uid}). Invalid values admit only the allowlist (fail: closed)
 - `EPISODES_UID_ALLOWLIST` — Comma-separated uids always admitted to episodes while EPISODES_ENABLED is on; empty admits nobody extra (fail: closed)
 - `EPISODE_ATTACH_CONTENT_GATE_ENABLED` — Default on; skip only verified completed semantic attach inputs (fail: open)

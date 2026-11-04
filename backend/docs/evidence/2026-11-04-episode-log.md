@@ -44,11 +44,60 @@ telemetry, cached compose containment, Home policy, composer and label contracts
 review and CI state. This is a dated qualification/forecast record, not a live
 cost meter or a deployment receipt. Re-measure before any production ramp.
 
+## Round-2 review qualification
+
+Recorded **2026-11-04 23:42:30 UTC**, on the round-2 working tree based on
+`4972db0013241bbc6bf7680f99d1d7efae8fbd20`. The PR owns the final pushed SHA.
+This section supersedes historical claims below about atomic serving capture,
+retention absence and the previous cost allowance; those earlier receipts remain
+historical evidence rather than current architecture.
+
+- **2,934 unit cases passed** in the complete checked-in acceptance selection,
+  through `omi-heavy`, `BACKEND_UNIT_TEST_FILE_LIST=testing/episode_log_acceptance.txt
+  BACKEND_UNIT_FILE_BUDGET_SECONDS=1800 BACKEND_PYTEST_WORKERS=1 bash test.sh` from
+  `backend/`. The initial run found four expectations requiring the removed
+  in-transaction owner read in `test_conversation_smart_merge_audit.py`; those
+  now assert the legacy-only serving read set. The complete rerun exited zero.
+- **166 focused cases passed**, including actual geometry payloads above the
+  64 KiB encrypted fact limit, append/encryption/telemetry failures, unchanged
+  committed composer responses, exactly-once original policy writers, hard-delete
+  and tombstone privacy, TTL expiry, idle scan removal, zero-percent Home and
+  remote capture admission. A final telemetry/allowlist follow-up rechecks the
+  log-specific selection separately (**112 passed**). The current ten-test log
+  emulator suite also exited green on its own, including actual oversized
+  structural payloads with the real serving write committed before rejection.
+  A final reference-hydration regression passed **113 log-focused cases**: a
+  title-only composer write refreshes the view without putting speech into the
+  checkpoint; lease-only churn emits no fact. This follow-up is separate from
+  the earlier complete acceptance run.
+- Canonical `bash backend/scripts/typecheck.sh`, through `omi-heavy`: **zero
+  errors** (existing warning inventory remains). No typecheck bypass was used.
+- Two full loopback emulator commands each passed **37/38**: first
+  `test_concurrent_live_and_recorded_attachments_preserve_timeline`, then
+  `test_simultaneous_late_devices_converge_on_one_closed_episode` exhausted the
+  existing serving transaction lock retries. Each run passed all ten log-specific
+  proofs. A separately declared disabled control passed **28/28** legacy timeline
+  cases. These samples do not establish equal enabled/disabled failure rates or
+  rule out timing amplification. The shared legacy contention signal remains
+  unresolved; no retry budget, concurrency or skip was changed. Both emulator
+  processes exited and shut down. Full commands used Firebase CLI 15.30.1 and
+  emulator 1.22.0 via `firebase emulators:exec --only firestore --project
+  demo-omi-isolated-tests`, then Python pytest over
+  `backend/tests/integration/test_episode_log_emulator.py` and
+  `backend/tests/integration/test_recorded_episode_timeline_emulator.py`, with
+  `EPISODES_ENABLED=on EPISODES_PERCENT=100`, loopback credentials only.
+- TTL operator plan was rendered for the reviewed episode-log policy; it names
+  only `episode_facts.expires_at` and `ttl_config`. **No --apply, live TTL,
+  production data access or GCP tier was used.** Production retention requires
+  the separately authorized train owner to activate and verify the policy.
+
 ## Forecast inputs and assumptions
 
-Forecast revised at **2026-11-04 19:31:24 UTC** to respect the 64-fact drain limit.
-The earlier 50,000-drain scenario could not sustain its own fact volume; this
-revision uses 100,000 drains without changing the runtime or the budget envelope.
+Forecast revised at **2026-11-04 23:37:00 UTC** for round-2 post-commit
+capture, content-free geometry deltas and one-day retention. This replaces the
+unbounded snapshot-storage estimate and includes separate capture transactions,
+authoritative speech hydration and a distinct sync-refresh allowance. The
+workload is still a scenario, not a current production measurement.
 
 The supplied planscost `arch-data.md` snapshot is dated 2026-11-04 and describes
 aggregates from 2026-11-03/04, with its fleet write comparison from 2026-11-02.
@@ -70,48 +119,75 @@ The following workload is a **budget scenario**, not an observed daily volume:
 | --- | ---: |
 | New input/dirty facts, I | 1.0 million |
 | Committed legacy decision facts, D | 1.4 million |
-| Tracked member edits, E | 1.0 million |
+| Decorated tracked member edits, E | 1.0 million |
+| Sync/smart-merge post-commit refreshes for existing log owners, S | 0.5 million |
 | Successful drain batches, P | 100,000 |
 | Changed views and links per drain | 5 each |
 | Members per changed view | 5 |
 | Checkpoint payload parts per drain | 1 |
 
-The decision scenario uses the supplied study's rough 380,000 full attachments
-and one million update CAS operations as a conservative envelope. The remaining
-inputs are explicit assumptions. At 4.4 million facts/day, the 64-fact cap
-requires at least 68,750 successful drains/day; this scenario averages 44 facts
-per drain, so its assumed drain volume can keep up. The model intentionally
-charges independent comparison reads instead of assuming they are free or reusing stale policy data.
+`S` is an explicit new allowance, not an observed volume. The decision envelope
+still approximates the supplied study's attachments/update CAS operations.
+All other inputs are assumptions. `N = I + D + 2E + S = 4.9M facts/day` needs at
+least 76,563 drains at the 64-fact cap; 100,000 drains averages 49 facts/batch.
 
-- Fact and owner writes: `2I + 2D + 4E = 8.8 million/day`. Each policy edit fences
-  reads before the existing write and releases with refresh debt afterward: two
-  transactions, four writes and three owner reads, in addition to the original
-  writer. This is intentional correctness overhead, including shadow users.
-- Claim/publication/checkpoint/view/link writes: `14P = 1.4 million/day`, plus an
-  assumed 100,000 scan-rotation writes. Total approximately **10.30 million writes**.
-- Input dedupe/owner reads, legacy capture reads, policy fences, sequenced fact
-  reads, independent legacy comparison rows, two member projection passes and
-  bounded control reads:
-  `2I + D + 3E + (I + D + 2E) + 65P = 17.30 million reads/day` before account fences.
-  The per-drain allowance is 50 member reads (two projection passes), five legacy
-  rows and ten bounded control reads; it is a budget assumption, not a measured trace.
-  Uncached deletion-authority reads add an estimated `I + 2E + 5P = 3.50 million`;
-  total approximately **20.80 million reads/day** in this scenario.
-- The supplied worker de-risk allowance is **$0–2/day** for task/wake/compute
-  overhead. Neither task volume nor CPU has been measured after deployment.
+- Fact and owner writes: `2N = 9.8M/day`. Independent claim/publication/view/link/
+  checkpoint writes: `14P = 1.4M/day`. Keep a conservative 100,000 scan-rotation
+  write allowance, though idle owners now leave the sweep. **11.30M writes/day**.
+- Each independent append reads deletion authority, owner and dedupe key:
+  `3I + 3D`. Each decorated edit checks the owner once and enters/releases two
+  separate barriers (two owner + two deletion reads): `5E`. Each tracked sync
+  refresh checks owner existence after commit then appends: `4S`.
+  Fact reads cost `N`. Independent Home projection/comparison/control reads remain
+  budgeted at `70P`, and reference-based speech hydration adds `5P`.
+  Total: `3I + 3D + 5E + 4S + N + 75P = 26.60M reads/day`.
+- At the supplied historical effective read/write ratios this is **$30.18–32.44/day**
+  in read/write operations. Keep the supplied **$0–2/day** task/compute allowance.
+  Separate post-commit transactions increase reads; smaller facts reduce bytes,
+  not Firestore write counts. No serving owner lock is retained during append.
+- TTL eventually deletes `N = 4.9M facts/day`. As an explicitly identified regional
+  reference, the Google **us-central1 default USD** table checked at this forecast
+  lists TTL deletes at $0.01/100,000 and stored data at $0.000205479/GiB-hour
+  (about $0.15/GiB per 30 days). This adds **$0.49/day** TTL deletes. The actual
+  customer database location/effective delete/storage rates were not read; these
+  are scenario rates, not an account quote. [Official Firestore pricing](https://cloud.google.com/firestore/pricing).
 
-This gives approximately **$26–30/day of additional shadow operations**. A rough
-30% workload sensitivity remains inside the rounded **$15–40/day** budgeting
-envelope, before retained storage/index growth, ingestion/logging charges, transaction retries,
-backfill, additional checkpoint parts, and any workload outside these assumptions.
-This supersedes the earlier draft allowance, which omitted policy-barrier and
-independent member-comparison amplification. It is not an all-in daily quote.
+The revised central allowance is **$31–35/day including modeled TTL deletion and
+small-payload storage**, with a rounded **$20–50/day** workload sensitivity envelope.
+For direct comparison, excluding the new `S` allowance, the original workload now
+costs approximately **$28–32/day** with TTL deletes. Each additional million
+tracked sync refreshes adds five million reads, two million writes and one million
+TTL deletes: about **$5.6–6.0/day**, before bytes/retries/tasks.
 
-Append-only storage is cumulative and unmeasured. The scenario has approximately
-`I + D + 2E = 4.4 million facts/day`. At 1 KiB/fact this is about 4.2 GiB/day;
-at 10 KiB/fact, about 42 GiB/day, before document/index overhead. Snapshot-heavy
-facts may be larger. Measure encrypted bytes/fact and retained/index bytes before
-claiming a total daily cost. No retention or deletion mechanism is included.
+Synthetic ciphertext sizes were measured locally at **2026-11-04 23:35:16 UTC**
+using production `compact_events`, `dumps` and `encrypt` (synthetic UID/key only):
+
+| Synthetic fact shape | Prior ciphertext | New ciphertext |
+| --- | ---: | ---: |
+| member with a repeated synthetic structured title | 14,556 B | 104 B |
+| five-member compose mutation with title/bullets/lede in before and after | 90,064 B | 2,000 B |
+| policy/member refresh reference | 104 B | 104 B |
+
+The fixture used five `c0..c4` members, five-minute geometry, and the literal
+`'synthetic content ' * 600` per speech field. These are repeatable fixture
+measurements, **not fleet averages**. A weighted scenario with I/S/2E refreshes
+at 104 B and D deltas at 2,000 B gives **2.95 GiB/day** encrypted payload plus
+**1.17 GiB/day** at a separate assumed 256 B/document overhead: about **4.12 GiB**
+retained at one day, before indexes and expiry lag. At the cited regional rate
+that modeled document footprint is approximately **$0.02/day** in storage.
+At the hard 64 KiB encrypted-payload cap, the same workload instead implies
+**299.1 GiB** of one-day payload (about **$1.50/day** at that reference rate),
+not an expected mean. TTL lag scales both footprints; two days of lagged retention
+doubles these estimates. Storage is no longer cumulative by design, but physical
+bounds depend on an ACTIVE TTL policy and measured deletion lag. No live TTL was
+activated here. Account-wide erasure remains recursive under `users/{uid}`.
+
+Indexes, checkpoints/views/links, ingestion/logging/network, retry amplification,
+backfill and workloads outside these assumptions remain additional/unmeasured.
+The TTL declaration and activation prerequisite are in the runbook. A full day
+of drift comparison is the retained fact window; stale workers need a new
+baseline after a retained-window sequence gap. Reducing Home read percent to zero
+also stops sampled-log reads and expiry-triggered facts/wakes from Home.
 
 The drain introduces **no model call or paid-once authority**. Existing composer
 and transcription vendor spend continues through the legacy authority. No fresh
@@ -201,7 +277,8 @@ as legacy. New independent fact/policy writers, lease admission/publication and
 backfill completion check the existing durable deletion authority on their own
 Firestore plane. Publication reads that authority in its transaction, so accepted
 deletion fences an already-running worker against recreating erased views. No
-deletion routine is added. Atomic legacy capture remains joined to its producer.
+legacy deletion routine is added. Round-2 capture uses an independent transaction
+after the serving commit; errors are counted and dropped.
 
 Bounded discard-only batch projection explicitly opts out of episode capture;
 serving assignment imports the storage seam only when executing its transaction.
@@ -222,8 +299,9 @@ that tombstone. No link deletion code is needed or added. The 128-clock capacity
 limit remains fail-closed for the entire user's projection, with retry/deadline
 telemetry, alerts and legacy read fallback. Truncation could admit stale visibility
 policy. Large-user partitioned checkpoints/clocks require a separately qualified
-capacity extension. The full before/after fact payload and retained-log footprint
-also require measurement before scaling; a clean drift counter is not a cost proof.
+capacity extension. Content-free structural deltas, references and one-day fact expiry replace full
+before/after speech snapshots. Retained/index bytes and expiry lag still need
+measurement before scaling; a clean drift counter is not a cost proof.
 
 ## After the authorized train
 

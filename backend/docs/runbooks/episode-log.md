@@ -15,20 +15,33 @@ transaction, so an erased view cannot be recreated by an old worker.
 No new deletion implementation is included. Conversations/audio remain owned by
 conversation processing; episode workers never edit them.
 
-Legacy writers continue serving throughout this dual-write stage. Each episode
-transaction reads the per-user append sequencer before its first write, then
-atomically appends its committed input/decision envelope. A transaction rollback
-stores neither the mutation nor its fact. Input-hook facts use the shared
-`utils/conversations/episode_attach_key.py:content_key` digest, including revision,
-recorded evidence, ancestry and member flags. IDs are included so distinct
-captures with identical evidence cannot collide in a per-user log. Unknown
-recorded/transcript proof gets an explicitly separate uncertainty key, never a
-memo hit. Other lifecycle facts use their sequence and decision digest: a close
-and compose have no conversation attach revision to reuse.
+Legacy writers continue serving throughout this dual-write stage. Serving
+transactions register only content-free capture intent, with no log reads,
+writes or owner locks. After a successful SDK commit, an instance-local observer
+appends in a **separate transaction**, with at most two SDK commit attempts and
+no outer retries. An aborted serving attempt emits no fact. Capture failures,
+including encryption and oversize payloads, are caught, counted through shared
+`omi_fallback_total{component="sync_dispatch",from="episode_capture",to="legacy"}`
+and dropped; they cannot retry or replace a committed writer's response. The
+post-commit append is synchronous and can add bounded log-attempt latency after
+the serving commit; it never holds that transaction's locks. There is no durable
+outbox guarantee for a crash between commit and append. Any capture drop blocks
+ramp acceptance: roll reads to zero and obtain a fresh compared baseline before
+readmission. A caught-up watermark alone cannot prove a capture gap did not occur.
+
+Input-hook facts use the shared `utils/conversations/episode_attach_key.py:content_key`
+digest, including revision, recorded evidence, ancestry and member flags. Unknown
+proof gets a distinct uncertainty key. Lifecycle captures have unique decision
+keys and carry structural geometry deltas plus episode/member references, never
+full speech snapshots. Speech fields and current composer metadata are loaded
+from the existing episode authority by the drain. Member facts contain only a
+refresh reference. All fact writers, including backfill, strip speech using an
+allowlist and cap the **encrypted payload at 64 KiB**. A larger fact is dropped on
+the serving capture path and fails explicitly in the operator backfill path.
 
 The new sync hook only appends a member dirty fact and schedules a wake. It does
 not repartition or compose. The existing serving hook is retained during shadow;
-its committed decisions supply the log's boundary/content/identity facts. This is
+its committed decisions supply the log's boundary/identity facts. This is
 intentional dual-write, not an assertion that eager legacy costs have disappeared.
 No-op domain decisions ignore lease/version/timestamp churn.
 
@@ -40,7 +53,7 @@ recorded time still owns placement. Replaying a given sequence is deterministic.
 A shuffle is compared with legacy in that same order; IDs legitimately differ
 between different arrival orders.
 
-Boundary and content decisions are facts, not a second mutable status authority.
+Boundary decisions and content references are facts, not a second mutable status authority.
 The fold feeds those facts through `derive_episode_phase`; the owner phase is
 `derive_phase(log_watermarks_and_lease, now)`. Neither stores an extra status.
 Fingerprints, composer metadata and consumed receipt IDs survive baseline/replay.
@@ -56,7 +69,9 @@ is no sleeping executor or new queue. The existing two-minute sync sequencer
 Scheduler endpoint also sweeps at most 32 due owners and redrives wakes. Thus
 an append whose producer dies before enqueue remains discoverable.
 Each observed owner rotates its scan time by two minutes using a guarded update,
-including disabled users and failed task dispatches. This prevents a permanently
+including disabled users and failed task dispatches. Caught-up owners without
+barriers remove `scan_at` and `drain_at`, so idle owners leave the due query. The
+sweep also removes old idle scan debt without waking it. This prevents a permanently
 failing first page from starving later users; phase and drain deadlines do not move.
 
 Each drain handles at most 64 facts and publishes at most 128 changed view/link
@@ -76,8 +91,11 @@ a follow-up capacity extension if measured accounts reach this guard.
 | running | ten-minute lease stamped on claim | atomic publication, retry, or epoch takeover after expiry | same histogram with `running`, `OmiEpisodeLogRunningOverdue` |
 | retrying | 30-second retry deadline stamped on failure | next claim or sweep redrive | same histogram with `retrying`, `OmiEpisodeLogRetryingOverdue` |
 
-Member policy edits fence view reads before the change and append refresh debt
-when it finishes. A killed writer's barrier has a 25-minute deadline; the sweep
+Member policy edits attempt a separate best-effort read barrier before the
+change and append refresh debt when it finishes. Entry/client/read/release
+failures are caught and counted; the original writer runs exactly once and
+retains its own result or exception. Sync/smart-merge transactions register
+post-commit refresh intent, with no log IO in their serving transactions. A killed writer's barrier has a 25-minute deadline; the sweep
 refreshes current member policy and unblocks only after that fact drains.
 This applies to every existing log, including shadow users at zero read percent.
 While any barrier/debt exists, reads use legacy policy. These barriers live in
@@ -91,8 +109,11 @@ owner to install with the existing metrics scrape.
 
 ## Switches and read admission
 
-- `EPISODES_LOG_ENABLED`: on unless explicitly off; off disables capture, drain,
-  wake/sweep work, sampling and the read flip. Legacy remains the serving path.
+- `EPISODES_LOG_ENABLED`: remote Omi flag-store rule is authoritative; when absent,
+  the env value defaults on unless explicitly off. Remote inactive stops capture,
+  drain, wake/sweep work, sampling and read admission within the existing refresh
+  window (up to 60 seconds). Queued intent rechecks admission after commit. The
+  existing flag CLI supports this Firestore key; no deploy is needed to stop it.
 - `EPISODES_HOME_ROWS_ENABLED`: on unless off. Rows are sealed, server-filtered
   wire projections (member IDs, titles, emoji, starts, visibility and floor).
   Off returns Home to legacy. Missing or policy-outdated Home rows also fall back.
@@ -101,6 +122,9 @@ owner to install with the existing metrics scrape.
   existing flag-store operator procedure, without creating a Cloud Run revision.
   An absent rule uses the numeric env percentage, still default 0. An inactive
   remote rule rolls reads back within the flag refresh window (up to 60 seconds).
+  At zero, Home performs no episode-log reads, fact appends or wake dispatches;
+  the 1% sampler and expired-clock/row refresh hooks use the same read admission.
+  Post-drain comparisons continue independently in shadow.
 
 Rollback order: set reads to zero (or the remote rule inactive) before disabling
 `EPISODES_LOG_ENABLED`. After any capture gap, keep reads inactive until an
@@ -154,7 +178,8 @@ PYTHONPATH=backend backend/.venv/bin/python backend/scripts/backfill_episode_log
 
 It converts episode snapshots, fixed/discard/wedge fences, redirects, current/
 last-closed/member links, base receipts and all `s/{index}` archives. Stored
-`composed_fingerprint`, `composed_notes`, version and consumed-ID sets are copied.
+`composed_fingerprint`, version and consumed-ID sets are copied as structural
+metadata. Speech and current notes hashes are fetched by reference when projecting.
 The backfill watermark follows the facts; serving waits until it drains.
 Restarting deduplicates input records. A stale backfill never replaces a newer
 observed episode or link decision. Historical spans are coarser envelopes; this
@@ -167,7 +192,7 @@ The shared digest normalizes the capture ID at memo verification as well as fact
 append, including raw documents without a stored ID. Cached fence reads, completed
 memo hits, conditional membership writes and invalidation remain intact.
 Composer #24579 and batch close #24544 are also included. Metadata-only batch
-close stamps enqueue atomic member-refresh facts, including a proof-hit whose
+close stamps enqueue post-commit member-refresh facts, including a proof-hit whose
 episode shape does not change. Home caches expire at the transcription deadline
 and late projection receipts restore the normal cached metadata.
 The phase shadow already on main remains active.
@@ -209,9 +234,40 @@ operations, retained log/index storage and vendor usage when measuring the ramp.
 The drain itself introduces no paid model call. Legacy consolidation remains
 active, so the wider architecture savings are not realized by shadow migration.
 
+## Fact retention and conversation privacy
+
+Facts contain no conversation content, even after a conversation delete or
+tombstone; only IDs, geometry, state flags, fingerprints and receipt IDs remain.
+No historical transcript, title, bullets, notes, names, structured member data,
+or encrypted content blob is copied into a fact. This covers mutation, member
+and backfill producers. Account deletion retains recursive `users/{uid}` erasure
+and the durable publication fence.
+
+Each fact has `expires_at = recorded_at + 24 hours`, the shortest retained window
+that supports the ramp's one-full-day drift comparison. The reviewed TTL policy
+is [`deploy/episode-log/retention.json`](../../deploy/episode-log/retention.json).
+It uses the existing TTL-only operator (which never changes indexes):
+
+```sh
+# Read-only local plan; no credentials or cloud clients:
+backend/.venv/bin/python backend/scripts/batch_pipeline_ttl.py \
+  --project based-hardware --policy backend/deploy/episode-log/retention.json
+```
+
+The separately authorized train owner must apply that policy and verify ACTIVE
+before enabling capture in production; **this PR does not activate a live TTL**.
+The index reconciler intentionally rejects TTL changes, so this declaration is
+separate from `firestore.indexes.json`. Storage is a rolling one-day target plus
+TTL deletion lag and index/document overhead, not a strict physical 24-hour
+ceiling. Measure expiry lag and retained bytes; disable capture if TTL stalls.
+Checkpoints preserve the fold beyond fact expiry. A worker behind the retained
+window fails closed on a sequence gap and remains off the read path until an
+approved fresh baseline is installed; do not extend retention silently. Replay
+from facts alone is supported only within the retained window.
+
 ## Documented follow-up only
 
 After seven clean days at 100%, planscost must present replay checks and obtain
 specific approval before legacy receipt/link/fence/episode removal. Keep all old
-namespaces through this PR. No delete code, production backfill, writer-freeze
+namespaces through this PR. No legacy delete code, production backfill, writer-freeze
 switch, Postgres move or data cleanup is shipped here.

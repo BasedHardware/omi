@@ -121,7 +121,8 @@ def test_switch_off_no_io(monkeypatch):
     monkeypatch.setenv('EPISODES_LOG_ENABLED', 'off')
     client = Mock()
     assert store.append(UID, 'k', [], firestore_client=client) is None
-    assert store.prepare(Mock(), client, UID) is None
+    # Intent preparation is IO-free; remote admission happens after commit.
+    store.prepare(Mock(), client, UID)
     assert worker.drain(UID, firestore_client=client) == 'disabled'
     assert worker.sweep(firestore_client=client) == {'disabled': 1}
     assert not worker.mark_dirty(UID, 'c', {'id': 'c'}, firestore_client=client)
@@ -405,6 +406,7 @@ def test_drift_only_counts_a_stable_caught_up_watermark(client, monkeypatch):
 
 
 def test_read_sampling_waits_for_backfill_then_caps_at_three_rows(client, monkeypatch):
+    monkeypatch.setattr(reads, 'selected', lambda uid: True)
     monkeypatch.setenv('EPISODES_HOME_ROWS_ENABLED', 'off')
     monkeypatch.setattr(worker.random, 'random', lambda: 0)
     monkeypatch.setattr(episodes, 'unseal', lambda uid, row: row)
@@ -537,6 +539,7 @@ def test_pending_metadata_only_close_dirties_shadow_once(client, monkeypatch):
 def test_failed_wakes_emit_shared_degraded_metric_without_customer_labels(client, monkeypatch, caplog, entry):
     from utils.metrics import OMI_FALLBACK_TOTAL
 
+    monkeypatch.setattr(reads, 'selected', lambda uid: True)
     monkeypatch.setattr(store, 'append', Mock(return_value=NOW))
     enqueue = Mock(side_effect=RuntimeError(UID + ': private audio text'))
     monkeypatch.setattr(worker.cloud_tasks, 'enqueue_episode_uid_wake', enqueue)

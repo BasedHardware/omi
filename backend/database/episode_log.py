@@ -26,6 +26,8 @@ CHECKPOINT_CHUNK_BYTES = 200_000
 MAX_CHECKPOINT_PARTS = 24
 MAX_TRANSACTION_BYTES = 8_000_000
 MAX_PUBLISH_ROWS = 128
+MAX_FACT_BYTES = 65_536
+FACT_RETENTION = timedelta(days=1)
 
 
 class LostLease(RuntimeError):
@@ -91,7 +93,7 @@ def dirty_state(state, now, *, count=1):
 
 
 class Capture:
-    """Prepare before the first legacy write; stage after all legacy reads."""
+    """Independent log transaction only; never use in a serving transaction."""
 
     def __init__(self, transaction, client, uid, *, user_ref=None):
         self.transaction, self.client, self.uid = transaction, client, uid
@@ -105,12 +107,14 @@ class Capture:
         # Input facts use the exact attach gate digest. Decision facts also need
         # unique keys when identical domain state recurs after a reopen/restore.
         key = key or digest({'events': events, 'seq': seq})
-        payload = encrypt(dumps(events), self.uid)
-        if len(payload.encode()) > 800_000:
+        from utils.episodes.log.facts import compact_events
+
+        payload = encrypt(dumps(compact_events(events)), self.uid)
+        if len(payload.encode()) > MAX_FACT_BYTES:
             raise ProjectionCapacity('episode_fact_too_large')
         self.transaction.create(
             self.root.collection('episode_facts').document(key),
-            {'key': key, 'seq': seq, 'recorded_at': now, 'payload': payload},
+            {'key': key, 'seq': seq, 'recorded_at': now, 'expires_at': now + FACT_RETENTION, 'payload': payload},
         )
         self.state = dirty_state(self.state, now)
         if urgent:
@@ -120,11 +124,17 @@ class Capture:
 
 
 def prepare(transaction, client, uid):
-    return Capture(transaction, client, uid) if config.enabled(uid) else None
+    # Recording intent is IO-free. Remote admission is checked after commit.
+    from utils.episodes.log.capture import prepare_capture
+
+    return prepare_capture(transaction, client, uid)
 
 
-def mutation(capture, *, before=(), after=(), span=None, links=None, receipts=None):
+def mutation(capture, *, before=(), after=(), span=None, links=None, receipts=None, changed_fields=None):
     volatile = {'state_version', 'updated_at', 'state_updated_at', 'compose_lease', 'compose_attempted_at'}
+
+    if changed_fields is not None and not set(changed_fields) - volatile and not (receipts or links or span):
+        return
 
     def domain(rows):
         return [{key: value for key, value in row.items() if key not in volatile} for row in rows]
@@ -162,7 +172,7 @@ def append(uid, key, events, *, firestore_client=None, now=None, urgent=False):
         capture.stage(events, key=key, now=now, urgent=urgent)
         return capture.state['drain_at']
 
-    return run_transactional(client, commit, transient=True)
+    return run_transactional(client, commit, attempts=1, initial_transaction=client.transaction(max_attempts=2))
 
 
 def state(uid, *, firestore_client=None):
@@ -307,11 +317,14 @@ def publish(uid, claimed, cursor, fold_state, views, links, *, firestore_client=
                 pending_since=first,
                 queued_entered_at=first,
                 queued_deadline_at=deadline,
-                drain_at=deadline if barriers else row.get('drain_at'),
+                drain_at=deadline,
                 scan_at=deadline,
             )
         else:
             result.update(drain_at=now, scan_at=now)
+        if cursor == row['next_seq'] and not row.get('policy_barriers'):
+            result.pop('scan_at', None)
+            result.pop('drain_at', None)
         transaction.set(ref, result)
         return result
 
@@ -372,6 +385,11 @@ def redrive_scan(uid, observed, *, firestore_client=None, now=None):
         row = ref.get(transaction=transaction).to_dict() or {}
         if any(row.get(key) != observed.get(key) for key in ('scan_at', 'epoch', 'next_seq', 'cursor')):
             return False
+        if derive_phase(row, now) == 'idle':
+            row.pop('scan_at', None)
+            row.pop('drain_at', None)
+            transaction.set(ref, row)
+            return False
         transaction.update(ref, {'scan_at': now + timedelta(seconds=config.SWEEP_REDRIVE_SECONDS)})
         return True
 
@@ -399,7 +417,7 @@ def policy_barrier(uid, cid, token, *, entering, firestore_client=None, now=None
         capture.state['policy_barriers'] = barriers
         capture.stage([{'kind': 'member_refresh', 'cid': cid, 'payload': {}}], now=now)
 
-    return run_transactional(client, commit, transient=True)
+    return run_transactional(client, commit, attempts=1, initial_transaction=client.transaction(max_attempts=2))
 
 
 def recover_policy_barriers(uid, *, firestore_client=None, now=None):
@@ -448,16 +466,11 @@ def finish_backfill(uid, *, firestore_client=None):
 
 
 def prepare_member_change(transaction, user_ref):
-    """Atomic policy invalidation for sync/smart-merge writers bypassing CRUD.
-
-    Only users with an existing episode log pay a dirty write. The new fact
-    is part of the conversation transaction, so ready reads cannot race a
-    committed discard, donor redirect or changed member title.
-    """
-    if not config.enabled(user_ref.id):
-        return None
-    capture = Capture(transaction, None, user_ref.id, user_ref=user_ref)
-    return capture if capture.state else None
+    """Register an IO-free post-commit refresh for sync/smart-merge writers."""
+    capture = prepare(transaction, getattr(transaction, '_client', None), user_ref.id) if user_ref is not None else None
+    if capture is not None:
+        capture.existing_only = True
+    return capture
 
 
 def member_changed(capture, cids):

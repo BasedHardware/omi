@@ -5,14 +5,11 @@ legacy policy path until the sweeper refreshes that member after the deadline.
 """
 
 import inspect
-import logging
 from functools import partial, wraps
 from uuid import uuid4
 
 from config import episode_log as config
 from database import episode_log as store
-
-logger = logging.getLogger(__name__)
 
 
 def home_policy_write(*, firestore_client):
@@ -32,15 +29,28 @@ def _decorate(fn, *, client_factory):
         if not cid:
             data = bound.get('conversation_data') or {}
             cid = data.get('id') if isinstance(data, dict) else None
-        if not cid or not config.enabled(uid) or not config.home_enabled():
-            return fn(*args, **kwargs)
-        # Shadow rows stay fresh before read admission. Join the writer's data
-        # plane, and do not create logs for users without any episode facts.
-        client = client_factory()
-        if not store.state(uid, firestore_client=client):
+        from utils.episodes.log.capture import dropped
+
+        if not cid:
             return fn(*args, **kwargs)
         token = uuid4().hex
-        store.policy_barrier(uid, cid, token, entering=True, firestore_client=client)
+        try:
+            admitted = config.enabled(uid) and config.home_enabled()
+        except Exception as error:
+            dropped(error)
+            admitted = False
+        if not admitted:
+            return fn(*args, **kwargs)
+        try:
+            client = client_factory()
+            has_log = bool(store.state(uid, firestore_client=client))
+            if has_log:
+                store.policy_barrier(uid, cid, token, entering=True, firestore_client=client)
+        except Exception as error:
+            dropped(error)
+            return fn(*args, **kwargs)
+        if not has_log:
+            return fn(*args, **kwargs)
         try:
             return fn(*args, **kwargs)
         finally:
@@ -49,8 +59,6 @@ def _decorate(fn, *, client_factory):
             try:
                 store.policy_barrier(uid, cid, token, entering=False, firestore_client=client)
             except Exception as error:
-                logger.warning(
-                    'event=episode_home_policy_release outcome=sweep_recovery exception_type=%s', type(error).__name__
-                )
+                dropped(error)
 
     return wrapped

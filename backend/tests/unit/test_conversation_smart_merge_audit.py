@@ -140,7 +140,6 @@ def test_audit_is_written_once_inside_the_absorb_transaction(world, recorded, re
     assert len(absorb.updates) == 2
     # Durable deletion marker plus the destructive-operation gate.
     assert [path for txn, path in reads if txn is absorb] == [
-        ('users', UID, 'episode_log_state', 'owner'),
         ('users', UID, 'conversations', 'p'),
         ('users', UID, 'conversations', 'n'),
         MARKER,
@@ -370,7 +369,6 @@ def test_flag_off_is_the_pre_audit_absorb(world, recorded, reads, monkeypatch, r
     absorb = _absorb_transaction(world.store)
     assert absorb.sets == [] and len(absorb.updates) == 2
     assert [path for txn, path in reads if txn is absorb] == [
-        ('users', UID, 'episode_log_state', 'owner'),
         ('users', UID, 'conversations', 'p'),
         ('users', UID, 'conversations', 'n'),
     ]

@@ -296,6 +296,7 @@ class StrictFirestoreIdQuery:
 class StrictFirestoreTransaction:
     def __init__(self, database: StrictFirestore, *, allow_reads_after_writes: bool = False):
         self._database = database
+        self._client = database
         self._allow_reads_after_writes = allow_reads_after_writes
         self.lock = database.lock
         self.creates: list[tuple[tuple[str, ...], dict[str, Any]]] = []

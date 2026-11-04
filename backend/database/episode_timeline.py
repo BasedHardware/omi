@@ -113,23 +113,9 @@ def _attach_recorded_window(
         rows = (candidates or recorded_candidates)(
             uid, started, finished, firestore_client=client, transaction=transaction
         )
-        log_fixed = []
-        if capture is not None:
-            refs = [
-                root.collection('episodes').document(row['id'])
-                for row in rows
-                if not (
-                    row.get('recorded_members') is not None
-                    and not row.get('discarded_conversation_ids')
-                    and row.get('status') == 'closed'
-                    and row.get('close_reason') in {'gap', 'idle', 'hard_cap'}
-                )
-            ]
-            for snapshot in client.get_all(refs, transaction=transaction) if refs else ():
-                raw = snapshot.to_dict()
-                full = episodes.unseal(uid, dict(raw, id=snapshot.id) if raw is not None else None)
-                if full:
-                    log_fixed.append(full)
+        # Candidate geometry is already read for serving placement. Capture must
+        # not add BatchGet/decryption to the serving transaction.
+        log_fixed = rows if capture is not None else []
         selected = choose(rows, started, started)
         # A conversation belongs to the episode it started in, even past a cap.
         owner_id = member_row.get('episode_id')
@@ -297,9 +283,7 @@ def attach_recorded(
 
     @firestore.transactional
     def attach(transaction):
-        # Match live/sync writers: owner first, then legacy timeline/member locks.
-        # Passing one capture through both strategies avoids lock-order inversion
-        # and ensures every SDK retry reads a fresh owner snapshot.
+        # One IO-free post-commit recorder per serving attempt.
         log_capture = episode_log.prepare(transaction, client, uid)
         # Both attachment strategies share one read phase and one fence. Cache
         # only inside this callback: Firestore retries must issue fresh queries.

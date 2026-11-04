@@ -60,7 +60,7 @@ def mark_dirty(uid, cid, row, *, firestore_client=None):
     deadline = store.append(
         uid,
         gate_digest(dict(row, id=cid)) or uncertain_key(cid, fields),
-        [{'kind': 'member', 'cid': cid, 'payload': fields}],
+        [{'kind': 'member_refresh', 'cid': cid, 'payload': {}}],
         firestore_client=firestore_client,
     )
     if deadline is not None:
@@ -76,12 +76,18 @@ def note_dirty(uid, cid, row):
     try:
         return mark_dirty(uid, cid, row)
     except Exception as error:
-        logger.warning('event=episode_log_mark outcome=error exception_type=%s', type(error).__name__)
+        from utils.episodes.log.capture import dropped
+
+        dropped(error)
         return False
 
 
 def note_home_clock(uid, state, *, firestore_client=None, now=None):
     """Expiry is durable refresh debt, using the same queued phase and lease."""
+    from utils.episodes.log.reads import selected
+
+    if not selected(uid):
+        return
     cid, at = state.get('home_refresh_cid'), state.get('home_valid_until')
     if not cid or not at:
         return
@@ -97,10 +103,16 @@ def note_home_clock(uid, state, *, firestore_client=None, now=None):
         if deadline is not None:
             wake(uid, deadline)
     except Exception as error:
-        logger.warning('event=episode_home_clock outcome=sweep_recovery exception_type=%s', type(error).__name__)
+        from utils.episodes.log.capture import dropped
+
+        dropped(error)
 
 
 def note_home_refresh(uid, eid, key, *, firestore_client=None):
+    from utils.episodes.log.reads import selected
+
+    if not selected(uid):
+        return
     try:
         deadline = store.append(
             uid,
@@ -112,7 +124,9 @@ def note_home_refresh(uid, eid, key, *, firestore_client=None):
         if deadline is not None:
             wake(uid, deadline)
     except Exception as error:
-        logger.warning('event=episode_home_refresh outcome=sweep_recovery exception_type=%s', type(error).__name__)
+        from utils.episodes.log.capture import dropped
+
+        dropped(error)
 
 
 def _legacy(uid, eid, client):
@@ -189,6 +203,10 @@ def drain(uid, *, firestore_client=None, now=None):
         events, cursor = store.read_batch(uid, claimed, firestore_client=client)
         changed_members = {event['cid'] for event in events if event['kind'] in {'member', 'member_refresh'}}
         refresh_views = {event['payload']['eid'] for event in events if event['kind'] == 'home_refresh'}
+        # A referenced content-only update can leave fold geometry identical.
+        refresh_views.update(
+            delta['id'] for event in events if event['kind'] == 'mutation_delta' for delta in event['payload']['rows']
+        )
         for event in events:
             fold.apply(event)
         rows = fold.rows()
@@ -206,6 +224,12 @@ def drain(uid, *, firestore_client=None, now=None):
             home_read.read_members(uid, active, firestore_client=client) if active and config.home_enabled() else {}
         )
         for eid, row in changed.items():
+            # Facts retain only structural deltas/references. Load current speech
+            # from its existing authority, never a historical fact snapshot.
+            legacy = _legacy(uid, eid, client)
+            if legacy:
+                row = {**legacy, **row}
+                changed[eid] = row
             if config.home_enabled() and not row.get('recorded_merged_into'):
                 homes[eid] = home_read.project_episode(uid, row, members=members, list_row=True)
             # Home rows carry only server-filtered wire data, sealed per UID.
@@ -282,7 +306,10 @@ def drain(uid, *, firestore_client=None, now=None):
 
 def sweep(*, firestore_client=None, now=None):
     now = now or datetime.now(timezone.utc)
-    if not config.default_on('EPISODES_LOG_ENABLED'):
+    from utils import omi_flags
+
+    rule = omi_flags.snapshot().rules.get('EPISODES_LOG_ENABLED')
+    if (rule is not None and not rule.active) or (rule is None and not config.default_on('EPISODES_LOG_ENABLED')):
         metrics.SWEEP_OBSERVED.set(time.time())  # A deliberate kill is not a stale scheduler.
         return {'disabled': 1}
     client = firestore_client if firestore_client is not None else get_firestore_client()
@@ -309,7 +336,9 @@ def sweep(*, firestore_client=None, now=None):
 
 
 def sample_read(uid, rows, *, firestore_client=None):
-    if not config.enabled(uid) or random.random() >= 0.01:
+    from utils.episodes.log.reads import selected
+
+    if not selected(uid) or random.random() >= 0.01:
         return
     try:
         client = firestore_client if firestore_client is not None else get_firestore_client()

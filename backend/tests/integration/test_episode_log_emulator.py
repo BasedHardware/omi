@@ -140,3 +140,100 @@ def test_accepted_deletion_fences_a_previously_claimed_worker(db):
         )
     assert not store.root(client, uid).collection('episode_views').document('e').get().exists
     assert store.append(uid, 'late', [], firestore_client=client) is None
+
+
+@pytest.mark.parametrize('failure', ['capture', 'oversize'])
+def test_post_commit_capture_failure_preserves_real_composer_write_and_response(db, monkeypatch, failure):
+    from database import episodes
+
+    client, uid = db
+    ref = store.root(client, uid).collection('episodes').document('e')
+    ref.set(
+        episodes.seal(
+            uid,
+            {
+                'id': 'e',
+                'state_version': 1,
+                'status': 'closed',
+                'close_reason': 'user',
+                'started_at': NOW,
+                'last_activity_at': NOW,
+                'conversation_ids': [],
+                'title': 'before',
+            },
+        )
+    )
+    updates = {'title': 'after'}
+    if failure == 'capture':
+
+        def unavailable(*args, **kwargs):
+            assert episodes.unseal(uid, ref.get().to_dict())['title'] == 'after'
+            raise RuntimeError('synthetic capture outage')
+
+        monkeypatch.setattr(store, 'append', unavailable)
+    else:
+        updates['parallel_content_spans'] = {f'c{i}': {'start': NOW, 'end': NOW} for i in range(1000)}
+    response = episodes.update_episode(uid, 'e', expected_version=1, updates=updates, firestore_client=client)
+    committed = episodes.unseal(uid, ref.get().to_dict())
+    assert response['title'] == committed['title'] == 'after'
+    assert response['state_version'] == committed['state_version'] == 2
+    assert list(store.root(client, uid).collection('episode_facts').stream()) == []
+    assert store.state(uid, firestore_client=client) == {}
+
+
+def test_caught_up_owner_is_absent_from_real_due_query(db):
+    client, uid = db
+    store.append(uid, 'fact', [], firestore_client=client, now=NOW)
+    claimed = store.claim(uid, firestore_client=client, now=NOW + timedelta(minutes=3))
+    store.publish(uid, claimed, 1, {}, {}, {}, firestore_client=client, now=NOW + timedelta(minutes=4))
+    due = store.due_owners(NOW + timedelta(days=10), firestore_client=client, limit=10000)
+    assert uid not in {owner for owner, _ in due}
+
+
+@pytest.mark.parametrize('tombstone', [False, True])
+def test_conversation_erasure_cannot_leave_content_in_real_facts(db, tombstone):
+    from utils.encryption import decrypt
+
+    client, uid = db
+    root = store.root(client, uid)
+    ref = root.collection('conversations').document('c')
+    secret = 'synthetic private conversation text'
+    ref.set({'title': secret})
+    store.append(
+        uid,
+        'speech',
+        [
+            {
+                'kind': 'baseline',
+                'payload': {
+                    'row': {
+                        'id': 'e',
+                        'title': secret,
+                        'bullets': [secret],
+                        'content': secret,
+                        'composed_notes': secret,
+                        'conversation_ids': ['c'],
+                    }
+                },
+            }
+        ],
+        firestore_client=client,
+        now=NOW,
+    )
+
+    @firestore.transactional
+    def erase(transaction):
+        capture = store.prepare_member_change(transaction, root)
+        if tombstone:
+            transaction.update(ref, {'deleted': True, 'title': None})
+        else:
+            transaction.delete(ref)
+        store.member_changed(capture, ['c'])
+
+    erase(client.transaction())
+    facts = list(root.collection('episode_facts').stream())
+    assert len(facts) == 2
+    for snapshot in facts:
+        fact = snapshot.to_dict()
+        assert secret not in decrypt(fact['payload'], uid)
+        assert fact['expires_at'] == fact['recorded_at'] + timedelta(days=1)

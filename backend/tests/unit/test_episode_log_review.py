@@ -20,7 +20,7 @@ UID = 'review-user'
 
 
 @pytest.mark.parametrize('strategy', ['canonical', 'fallback'])
-def test_live_and_recorded_transactions_share_owner_first_lock_order(client, monkeypatch, strategy):
+def test_live_and_recorded_transactions_never_read_log_owner(client, monkeypatch, strategy):
     from database import episode_recorded_components
 
     reads = []
@@ -28,7 +28,7 @@ def test_live_and_recorded_transactions_share_owner_first_lock_order(client, mon
 
     def observed(ref, *args, **kwargs):
         if kwargs.get('transaction') is not None:
-            reads.append(ref.path)
+            reads.append((id(kwargs['transaction']), ref.path))
         return original(ref, *args, **kwargs)
 
     monkeypatch.setattr(StrictFirestoreDocument, 'get', observed)
@@ -37,7 +37,9 @@ def test_live_and_recorded_transactions_share_owner_first_lock_order(client, mon
     owner = ('users', UID, 'episode_log_state', 'owner')
     with Oracle(UID) as oracle:
         oracle.attach('recorded', NOW, NOW + timedelta(minutes=1))
-        assert reads[0] == owner and reads.count(owner) == 1
+        assert reads[0][1] != owner
+        serving = reads[0][0]
+        assert all(path != owner for tx, path in reads if tx == serving)
         reads.clear()
         episodes.commit_moment(
             UID,
@@ -52,7 +54,9 @@ def test_live_and_recorded_transactions_share_owner_first_lock_order(client, mon
             },
             firestore_client=oracle.store,
         )
-        assert reads[0] == owner and reads.count(owner) == 1
+        assert reads[0][1] != owner
+        serving = reads[0][0]
+        assert all(path != owner for tx, path in reads if tx == serving)
 
 
 @pytest.fixture
@@ -60,6 +64,7 @@ def client(monkeypatch):
     monkeypatch.setenv('EPISODES_ENABLED', 'on')
     monkeypatch.setenv('EPISODES_PERCENT', '100')
     monkeypatch.setenv('EPISODES_LOG_ENABLED', 'on')
+    monkeypatch.setenv('EPISODES_LOG_READ_PERCENT', '100')
     monkeypatch.setattr(worker, 'wake', lambda *args: None)
     return StrictFirestore()
 
@@ -75,7 +80,8 @@ def test_uncertain_member_returning_to_old_state_is_not_deduplicated(client):
     for fact in facts:
         for event in loads(decrypt(fact['payload'], UID)):
             fold.apply(event)
-    assert fold.members['c']['structured']['title'] == 'first'
+    assert fold.members == {}
+    assert all('structured' not in decrypt(fact['payload'], UID) for fact in facts)
 
 
 def test_links_only_mutation_carries_null_tombstone_without_deletion():

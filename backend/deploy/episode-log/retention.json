@@ -1,0 +1,6 @@
+{
+  "field": "expires_at",
+  "collection_groups": ["episode_facts"],
+  "retention_seconds": 86400,
+  "reason": "One full day of aligned drift comparisons per ramp step; checkpoints retain the fold beyond fact expiry."
+}

@@ -363,8 +363,7 @@ def _record_activity(
         # This clock must not invalidate the notes state_version.
         transaction.update(ref, {'last_activity_at': activity, 'member_activity': members})
         if log_capture is not None:
-            unsealed = unseal(uid, raw)
-            assert unsealed is not None  # raw is a present episode snapshot.
+            unsealed = raw
             episode_log.mutation(
                 log_capture,
                 before=[unsealed],
@@ -580,18 +579,22 @@ def _commit(
         transaction.set(timeline_ref, {'version': int(timeline_row.get('version') or 0) + 1})
     write_memberships(transaction, client, uid, episode_id, members, now)
     if log_capture is not None:
-        log_before = [unseal(uid, current_raw)] if current_raw else []
+        log_before = [current_raw] if current_raw else []
         log_after = [result]
         log_links = {cid: {'episode_id': episode_id} for cid in members}
         if new_episode is not None:
             log_links[CURRENT] = {'episode_id': episode_id}
             if current_raw and current_raw.get('status') == 'live':
-                unsealed_current = unseal(uid, current_raw)
-                assert unsealed_current is not None  # current_raw is present.
+                unsealed_current = current_raw
                 log_after.insert(0, {**unsealed_current, **_closed_fields(close_reason or 'gap', closed_at or now)})
                 log_links[LAST_CLOSED] = {'episode_id': current_id}
         episode_log.mutation(
-            log_capture, before=log_before, after=log_after, links=log_links, receipts=segment_receipts
+            log_capture,
+            before=log_before,
+            after=log_after,
+            links=log_links,
+            receipts=segment_receipts,
+            changed_fields=updates if new_episode is None else None,
         )
     return result
 
@@ -687,7 +690,7 @@ def _reopen(
     if log_capture is not None:
         episode_log.mutation(
             log_capture,
-            before=[unseal(uid, raw)],
+            before=[raw],
             after=[merged],
             links={
                 **{cid: {'episode_id': episode_id} for cid in members},
@@ -800,7 +803,7 @@ def _close(
         {CURRENT: {'episode_id': None}, LAST_CLOSED: {'episode_id': episode_id}} if current_id == episode_id else {}
     )
     if log_capture is not None:
-        episode_log.mutation(log_capture, before=[unseal(uid, raw)], after=[merged], links=log_links)
+        episode_log.mutation(log_capture, before=[raw], after=[merged], links=log_links)
     return merged
 
 
@@ -913,10 +916,11 @@ def _update(
     if log_capture is not None:
         episode_log.mutation(
             log_capture,
-            before=[unseal(uid, raw)],
+            before=[raw],
             after=[merged],
             links={cid: {'episode_id': episode_id} for cid in members},
             receipts=segment_receipts,
+            changed_fields=updates,
         )
     return merged
 
