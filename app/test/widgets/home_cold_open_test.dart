@@ -172,7 +172,11 @@ void main() {
       episodes.dispose();
     });
   }
-  for (final delay in [const Duration(milliseconds: 200), const Duration(milliseconds: 800)]) {
+  for (final delay in [
+    const Duration(milliseconds: 200),
+    const Duration(milliseconds: 800),
+    const Duration(seconds: 3)
+  ]) {
     testWidgets('cold Home joins staggered providers, overlay delay $delay', (tester) async {
       SharedPreferences.setMockInitialValues({'uid': 'fixture-home'});
       await SharedPreferencesUtil.init();

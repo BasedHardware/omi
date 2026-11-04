@@ -434,23 +434,27 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
   /// the last cached projection after a short deadline. All timers leave with Home.
   Future<void> _settleInitialOverlay(Future<bool> first, Future<bool> Function() retry) {
     final ready = _initialOverlayReady = Completer<void>();
-    late final Timer deadline;
+    Timer? deadline;
     void finish() {
       if (ready.isCompleted) return;
-      deadline.cancel();
+      deadline?.cancel();
       _deferred.remove(deadline);
       ready.complete();
     }
 
-    deadline = Timer(const Duration(seconds: 2), finish);
-    _deferred.add(deadline);
     Future<void> attempt(Future<bool> read, int retries) async {
       final complete = await read;
       if (ready.isCompleted || !mounted) return;
       if (complete) {
         finish();
-      } else if (retries > 0) {
-        _scheduleDeferred(() => attempt(retry(), retries - 1));
+      } else {
+        if (deadline == null) {
+          deadline = Timer(const Duration(seconds: 2), finish);
+          _deferred.add(deadline!);
+        }
+        if (retries > 0) {
+          _scheduleDeferred(() => attempt(retry(), retries - 1));
+        }
       }
     }
 
