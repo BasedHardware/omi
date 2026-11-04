@@ -116,7 +116,7 @@ MEMBER_FIELDS = [
 ]
 
 
-def _read_members(uid: str, rows: list[dict[str, Any]], *, firestore_client: Any = None) -> dict[str, dict[str, Any]]:
+def read_members(uid: str, rows: list[dict[str, Any]], *, firestore_client: Any = None) -> dict[str, dict[str, Any]]:
     client = firestore_client if firestore_client is not None else get_firestore_client()
     root = client.collection('users').document(uid).collection('conversations')
     all_ids: list[str] = []
@@ -147,15 +147,15 @@ def project_episodes(uid: str, rows: list[dict[str, Any]], *, firestore_client: 
         new['id'] for old, new in zip(rows, settled) if old.get('status') == 'live' and new.get('status') == 'closed'
     }
     rows = settled
-    members = _read_members(uid, rows, firestore_client=firestore_client) if rows else {}
+    members = read_members(uid, rows, firestore_client=firestore_client) if rows else {}
     wires = [wire for row in rows if (wire := project_episode(uid, row, members=members, list_row=True)) is not None]
-    contained = _contained_ids(rows, wires)
+    contained = contained_ids(rows, wires)
     wires = [wire for wire in wires if wire['id'] not in contained]
     schedule_missed_composes(uid, [row for row in rows if row.get('id') not in contained | just_closed], wires)
     return wires
 
 
-def _contained_ids(rows: list[dict[str, Any]], wires: list[dict[str, Any]]) -> set[str]:
+def contained_ids(rows: list[dict[str, Any]], wires: list[dict[str, Any]]) -> set[str]:
     """Closed episodes whose visible members another closed episode on the page already shows. Episodes
     from before membership became singular (2026-10-30) can share members, and each would otherwise
     get its own row and its own paid compose over the same speech."""
@@ -266,7 +266,7 @@ def project_episode(
 ) -> dict[str, Any] | None:
     if episode is None:
         return None
-    by_id = members if members is not None else _read_members(uid, [episode])
+    by_id = members if members is not None else read_members(uid, [episode])
     retained: list[dict[str, Any]] = []
     hidden = 0
     for cid in dict.fromkeys(episode.get('conversation_ids') or []):

@@ -9,7 +9,7 @@ from copy import deepcopy
 from types import SimpleNamespace
 
 from utils.conversations.phase import derive_episode_phase
-from utils.episodes.log.projector import Projector, _Episode
+from utils.episodes.log.projector import Projector, ProjectedEpisode
 
 GEOMETRY = frozenset(
     {
@@ -38,7 +38,7 @@ def automatic(row):
 
 
 def episode(row):
-    return _Episode(
+    return ProjectedEpisode(
         id=row['id'],
         started_at=row['started_at'],
         last_activity_at=row['last_activity_at'],
@@ -68,13 +68,13 @@ class Fold:
             p = self.projector
             for name in ('spans', 'redirects', 'cid_redirect', '_previous_rows'):
                 setattr(p, name, deepcopy(checkpoint['projector'][name]))
-            p._issued = set(checkpoint['projector']['_issued'])
+            p.issued_ids = set(checkpoint['projector']['_issued'])
             for name in ('episodes', 'windows'):
                 restored = []
                 for item in checkpoint['projector'][name]:
-                    ep = _Episode(**deepcopy(item['args']))
-                    ep._applied_members = frozenset(item['applied_members'])
-                    ep._applied_discards = tuple(item['applied_discards'])
+                    ep = ProjectedEpisode(**deepcopy(item['args']))
+                    ep.applied_members = frozenset(item['applied_members'])
+                    ep.applied_discards = tuple(item['applied_discards'])
                     restored.append(ep)
                 setattr(p, name, restored)
 
@@ -84,7 +84,7 @@ class Fold:
         if eid in self.metadata and not replace:
             return
         self.metadata[eid] = deepcopy(row)
-        p._issued.add(eid)
+        p.issued_ids.add(eid)
         if row.get('recorded_merged_into'):
             p.redirects[eid] = row['recorded_merged_into']
             return
@@ -128,7 +128,7 @@ class Fold:
                 self._seed(row)
             span = payload.get('span')
             if span:
-                self.projector._span(span['cid'], span['start'], span['end'], span.get('source'))
+                self.projector.record_span(span['cid'], span['start'], span['end'], span.get('source'))
             for row in payload['after']:
                 old = self.metadata.get(row['id'], {})
                 # Lifecycle facts go through the shared phase derivation; there is no
@@ -181,7 +181,7 @@ class Fold:
     def checkpoint(self):
         p = self.projector
         state = {name: deepcopy(getattr(p, name)) for name in ('spans', 'redirects', 'cid_redirect', '_previous_rows')}
-        state['_issued'] = sorted(p._issued)
+        state['_issued'] = sorted(p.issued_ids)
         for name in ('episodes', 'windows'):
             state[name] = [
                 {
@@ -198,8 +198,8 @@ class Fold:
                         'fixed': ep.fixed,
                         'member_activity': ep.member_activity,
                     },
-                    'applied_members': sorted(ep._applied_members),
-                    'applied_discards': list(ep._applied_discards),
+                    'applied_members': sorted(ep.applied_members),
+                    'applied_discards': list(ep.applied_discards),
                 }
                 for ep in getattr(p, name)
             ]

@@ -84,8 +84,7 @@ def list_episodes(
             if str(error) != 'episode_home_policy_changed':
                 raise HTTPException(status_code=422, detail=str(error)) from error
         else:
-            if response is not None:
-                response.headers.update(headers)
+            response.headers.update(headers)
             log_worker.sample_read(uid, rows)
             return {'enabled': True, 'episodes': wires, 'next_cursor': next_cursor, 'home_version': token}
     try:

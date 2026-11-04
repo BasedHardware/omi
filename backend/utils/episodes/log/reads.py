@@ -1,7 +1,6 @@
 """Cohort read adapter. Unready users keep the legacy path; policies stay server-side."""
 
 import os
-from datetime import datetime, timezone
 
 from config import episode_log as config
 from database import episode_log as store, episodes
@@ -80,7 +79,7 @@ def list_window(uid, start, end, *, limit=50, cursor=None, firestore_client=None
             wire = loads(decrypt(row['home_payload'], uid))
             if wire is not None:
                 wires.append(wire)
-    contained = home_read._contained_ids(rows, wires)
+    contained = home_read.contained_ids(rows, wires)
     return rows, [wire for wire in wires if wire['id'] not in contained], next_cursor
 
 

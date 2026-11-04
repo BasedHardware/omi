@@ -141,7 +141,7 @@ def drain(uid, *, firestore_client=None, now=None):
         homes, views = {}, {}
         active = [row for row in changed.values() if not row.get('recorded_merged_into')]
         members = (
-            home_read._read_members(uid, active, firestore_client=client) if active and config.home_enabled() else {}
+            home_read.read_members(uid, active, firestore_client=client) if active and config.home_enabled() else {}
         )
         for eid, row in changed.items():
             if config.home_enabled() and not row.get('recorded_merged_into'):

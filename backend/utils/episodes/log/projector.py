@@ -65,7 +65,7 @@ def _group_envelope(items: dict[str, dict], cid: str) -> tuple[set[str], dict]:
     }
 
 
-class _Episode:
+class ProjectedEpisode:
     """Window or fence state; extend() mirrors _attach_recorded_window."""
 
     def __init__(
@@ -94,8 +94,8 @@ class _Episode:
         self.member_activity: dict[str, Any] = dict(member_activity or {})
         self.discarded_conversation_ids = list(discarded)
         self.fixed = fixed  # fences never re-partition
-        self._applied_members = frozenset(self.conversation_ids)
-        self._applied_discards = tuple(self.discarded_conversation_ids)
+        self.applied_members = frozenset(self.conversation_ids)
+        self.applied_discards = tuple(self.discarded_conversation_ids)
 
     def row(self) -> dict:
         explicit = self.status == 'closed' and self.close_reason not in {'gap', 'idle'}
@@ -152,17 +152,17 @@ class _Episode:
     def _retained_changed(self) -> bool:
         """episodes.retained_bounds_changed: discards added, or any discards
         plus a changed member set (extend/repoint mutate conversation_ids)."""
-        if tuple(self.discarded_conversation_ids) != self._applied_discards:
+        if tuple(self.discarded_conversation_ids) != self.applied_discards:
             return True
-        if self.discarded_conversation_ids and frozenset(self.conversation_ids) != self._applied_members:
+        if self.discarded_conversation_ids and frozenset(self.conversation_ids) != self.applied_members:
             return True
         return False
 
     def apply_retained_bounds_if_changed(self) -> None:
         if self._retained_changed():
             self.apply_retained_bounds()
-        self._applied_members = frozenset(self.conversation_ids)
-        self._applied_discards = tuple(self.discarded_conversation_ids)
+        self.applied_members = frozenset(self.conversation_ids)
+        self.applied_discards = tuple(self.discarded_conversation_ids)
 
     def apply_retained_bounds(self) -> None:
         """database.episodes.retained_bounds on a discard CAS: bounds rebuild
@@ -185,10 +185,10 @@ class Projector:
     def __init__(self, uid: str, fixed_episodes: Iterable[dict] = ()):
         self.uid = uid
         self.spans: dict[str, dict] = {}  # envelopes of the automatic domain
-        self.episodes: list[_Episode] = []  # grown overrides + fences
+        self.episodes: list[ProjectedEpisode] = []  # grown overrides + fences
         for row in fixed_episodes:
             self.episodes.append(
-                _Episode(
+                ProjectedEpisode(
                     id=row['id'],
                     started_at=row['started_at'],
                     last_activity_at=row.get('last_activity_at'),
@@ -201,12 +201,12 @@ class Projector:
                     fixed=True,
                 )
             )
-        self.windows: list[_Episode] = []  # pure partition output
+        self.windows: list[ProjectedEpisode] = []  # pure partition output
         self.redirects: dict[str, str] = {}
         self.cid_redirect: dict[str, str] = {}
         self.events: list[str] = []
         self._previous_rows: list[dict] | None = None
-        self._issued: set[str] = set()  # every window id ever live (incl. tombstones)
+        self.issued_ids: set[str] = set()  # every window id ever live (incl. tombstones)
 
     # ------------------------------------------------------------------ utils
     def _resolve(self, cid: str) -> str:
@@ -216,7 +216,7 @@ class Projector:
             cid = self.cid_redirect[cid]
         return cid
 
-    def _find(self, cid: str) -> _Episode | None:
+    def _find(self, cid: str) -> ProjectedEpisode | None:
         for ep in [*self.episodes, *self.windows]:
             if cid in ep.conversation_ids:
                 return ep
@@ -228,7 +228,7 @@ class Projector:
     def _view_rows(self) -> list[dict]:
         return [e.row() for e in [*self.episodes, *self.windows]]
 
-    def _fences(self) -> list[_Episode]:
+    def _fences(self) -> list[ProjectedEpisode]:
         return [e for e in self.episodes if e.fixed]
 
     def _settle_id(self, window: dict, carried: set[str]) -> None:
@@ -236,7 +236,7 @@ class Projector:
         occupied id (live row or redirect tombstone) for a window that is not
         the very row being repartitioned."""
         for attempt in range(128):
-            if window['id'] not in self._issued or window['id'] in carried:
+            if window['id'] not in self.issued_ids or window['id'] in carried:
                 return
             window['id'] = str(
                 uuid5(
@@ -257,9 +257,9 @@ class Projector:
         for window in produced:
             self._settle_id(window, carried)
         new_ids = {w['id'] for w in produced}
-        self._issued |= new_ids
+        self.issued_ids |= new_ids
         new_windows = [
-            _Episode(
+            ProjectedEpisode(
                 id=w['id'],
                 started_at=w['started_at'],
                 last_activity_at=w['last_activity_at'],
@@ -287,7 +287,7 @@ class Projector:
         self._previous_rows = None
 
     # ------------------------------------------------------------------ folds
-    def _span(self, cid: str, start, end, source: str | None) -> None:
+    def record_span(self, cid: str, start, end, source: str | None) -> None:
         cid = self._resolve(cid)
         owner = self._find(cid)
         fences = self._fences()
@@ -342,7 +342,7 @@ class Projector:
             if window_end < end
             else 'gap'
         )
-        wedge = _Episode(
+        wedge = ProjectedEpisode(
             id=str(uuid5(NAMESPACE_URL, f'recorded-episode:{self.uid}:{cid}:{start.isoformat()}')),
             started_at=start,
             last_activity_at=window_end,
@@ -417,7 +417,7 @@ class Projector:
     def apply(self, fact: Any) -> None:
         payload = dict(fact.payload)
         if fact.kind == 'span_recorded':
-            self._span(fact.cid, _iso(payload['start']), _iso(payload['end']), payload.get('source'))
+            self.record_span(fact.cid, _iso(payload['start']), _iso(payload['end']), payload.get('source'))
         elif fact.kind == 'conversation_merged':
             self._merged(fact.cid, payload['survivor'])
         elif fact.kind == 'conversation_discarded':

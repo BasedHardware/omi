@@ -89,7 +89,7 @@ def test_window_reuses_phase_a_ownership_and_ignores_merged_donors(store):
 
 def test_projection_removes_discarded_deleted_missing_members_and_their_content(monkeypatch):
     members = {'a': {'discarded': False}, 'b': {'discarded': True}, 'c': {'deleted': True}}
-    monkeypatch.setattr(home_read, '_read_members', lambda uid, rows, **kw: members)
+    monkeypatch.setattr(home_read, 'read_members', lambda uid, rows, **kw: members)
     monkeypatch.setattr(home_read.conversations, 'prepare_conversation_for_read', lambda row, uid: row)
     episode = {
         'id': 'e',

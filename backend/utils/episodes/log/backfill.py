@@ -1,7 +1,6 @@
 """Bounded, restartable legacy-to-fact conversion; never deletes legacy state."""
 
-from config import episode_log as config
-from database import episode_log as store, episodes
+from database import episode_log as store
 from utils.episodes.log.codec import digest
 from utils.episodes.log.fold import automatic
 

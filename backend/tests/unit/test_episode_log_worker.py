@@ -251,7 +251,7 @@ def test_real_drain_recovers_failure_publishes_sealed_home_and_never_changes_leg
     monkeypatch.setattr(episodes, 'unseal', lambda uid, row: row)
     monkeypatch.setattr(
         home_read,
-        '_read_members',
+        'read_members',
         lambda *args, **kwargs: {
             'c': {
                 'structured': {'title': 'Synthetic member', 'emoji': '🗒️'},

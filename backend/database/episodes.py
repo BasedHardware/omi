@@ -357,10 +357,12 @@ def _record_activity(
                 transaction.set(fence[0], {'version': fence[1]})
         # This clock must not invalidate the notes state_version.
         transaction.update(ref, {'last_activity_at': activity, 'member_activity': members})
+        unsealed = unseal(uid, raw)
+        assert unsealed is not None  # raw is a present episode snapshot.
         episode_log.mutation(
             log_capture,
-            before=[unseal(uid, raw)],
-            after=[{**unseal(uid, raw), 'last_activity_at': activity, 'member_activity': members}],
+            before=[unsealed],
+            after=[{**unsealed, 'last_activity_at': activity, 'member_activity': members}],
         )
     return activity
 
@@ -540,7 +542,9 @@ def _commit(
     if new_episode is not None:
         log_links[CURRENT] = {'episode_id': episode_id}
         if current_raw and current_raw.get('status') == 'live':
-            log_after.insert(0, {**unseal(uid, current_raw), **_closed_fields(close_reason or 'gap', closed_at or now)})
+            unsealed_current = unseal(uid, current_raw)
+            assert unsealed_current is not None  # current_raw is present.
+            log_after.insert(0, {**unsealed_current, **_closed_fields(close_reason or 'gap', closed_at or now)})
             log_links[LAST_CLOSED] = {'episode_id': current_id}
     episode_log.mutation(log_capture, before=log_before, after=log_after, links=log_links, receipts=segment_receipts)
     return result
