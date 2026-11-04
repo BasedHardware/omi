@@ -46,6 +46,15 @@ INTENTIONAL_BUDGET_CHANGES = {
     # The test regression gate and warm-path walls stay unchanged, so
     # budget_p50 stays 8.
     ("backend-unit-tests.yml", "backend-unit-shard", "timeout-minutes"): "25",
+    # Dart Analyze & Tests: the 30-min job ceiling sat below the suite's
+    # measured wall on ubuntu-latest. Run 41414394162 (PR #24370) elapsed
+    # 30:07 with every step green — the suite printed "All tests passed" at
+    # 29:55 and the cancellation landed in the cache post-steps — and recent
+    # greens sit at 26:54-29:21 (41741944347, 41748601378), so the ceiling,
+    # not the suite, was the flake. 40 restores wedge headroom; budget_p50
+    # stays 17. The same suite under far timezones (dart-tests-kiritimati)
+    # already runs with a 60-min ceiling.
+    ("mobile-app-checks.yml", "analyze-and-test", "timeout-minutes"): "40",
 }
 
 
