@@ -1316,3 +1316,30 @@ def test_an_abandoned_billed_intent_counts_overflow_spend(world, monkeypatch, ro
     before = _overflow_spent()
     stage(store, artifacts, vendor, now=200.0 + ABANDON_SECONDS + 1).run('p1')
     assert _overflow_spent() - before == (unit.duration_seconds if counts else 0)
+
+
+def test_an_abandoned_silent_intent_never_counts_overflow_spend(world, monkeypatch):
+    # Strict VAD found no speech, so the stage answered silence without calling the vendor.
+    _, store = world
+    unit = item('p1', 10)
+    admit(monkeypatch, store, [unit], 'content-p', EN_OVERFLOW)
+    artifacts, vendor = Artifacts(), Vendor()
+    artifacts.fail_persist = True
+    stage(store, artifacts, vendor).run('p1')
+
+    def silent(tx):
+        row = tx.get('jobs', 'p1')
+        row['provider_intent']['measured_vad_speech_seconds'] = 0.0
+        tx.put('jobs', 'p1', row)
+
+    store.run(silent)
+    from utils.batch_pipeline import vendor_route_metrics as metrics
+
+    attempt_audio = metrics.ATTEMPT_AUDIO.labels(provider='modulate', outcome='abandoned')
+    before, before_audio = _overflow_spent(), attempt_audio._value.get()
+    stage(store, artifacts, vendor, now=200.0 + ABANDON_SECONDS + 1).run('p1')
+    assert _overflow_spent() == before
+    # Nothing was sent: neither the vendor audio metric nor the stored attempt bills the clip.
+    assert attempt_audio._value.get() == before_audio
+    abandoned = [a for a in job(store, 'p1').get('provider_attempts') or [] if a.get('outcome') == 'abandoned']
+    assert abandoned and all(a['audio_seconds'] == 0 for a in abandoned)

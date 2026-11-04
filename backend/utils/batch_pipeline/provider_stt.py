@@ -1063,19 +1063,22 @@ class ProviderSttStage:
             return UnitOutcome('done', 'processed' if settled else 'superseded')
         if self.clock() - intent['started_at'] > ABANDON_SECONDS:
             failure = {'stage': 'provider', 'reason': 'abandoned_running'}
+            # No strict-VAD speech means _call_sync answered silence locally: no vendor call, so
+            # nothing was sent or billed (attempt audio, vendor audio metrics and overflow spend).
+            sent = 0.0 if intent.get('measured_vad_speech_seconds') == 0 else item.duration_seconds
             settled = self.protocol.settle(
                 segment_id,
                 intent['token'],
                 self.clock(),
                 failure=failure,
                 attempt_outcome=VendorAttemptOutcome.ABANDONED,
-                audio_seconds=item.duration_seconds,
+                audio_seconds=sent,
                 failover_to=tuple(self._candidates(route)) if failover_enabled() and self._armed() else (),
             )
             if not settled:
                 return UnitOutcome('done', 'superseded')
-            vendor_metrics.attempt(intent['service'], VendorAttemptOutcome.ABANDONED, item.duration_seconds)
-            vendor_metrics.overflow_attempt(route, intent['service'], item.duration_seconds)
+            vendor_metrics.attempt(intent['service'], VendorAttemptOutcome.ABANDONED, sent)
+            vendor_metrics.overflow_attempt(route, intent['service'], sent)
             self._record_attempt(intent['service'], VendorAttemptOutcome.ABANDONED, None)
             if settled == 'failover':
                 self._log('failover', 'abandoned_running')
