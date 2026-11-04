@@ -117,3 +117,25 @@ established: this host had no existing full NCS/Nordic SDK installation. Resolvi
 the simulator guards with `unifdef -UCONFIG_OMI_NATIVE_SIM` reproduced both
 original production files byte for byte; that is a branch check, not an ARM build.
 Physical x86_64 Linux, Intel Macs, Rosetta and 32-bit native_sim were not tested.
+
+## Safe-mode regression
+
+The simulator now also links the production `safe_mode.c` state machine.
+Use `run.py --cache <dedicated-cache> --safe-mode` to test normal startup, the
+`safe-mode.conf` forced-latch overlay, durable SAFE reload, a synthetic completed
+upload via `dfu-finished.conf`, and normal TRIAL → GOOD in separate processes
+sharing the same NVS flash file. The test uptime is two seconds; production is
+60 seconds. The normal nine milestone strings and parser remain unchanged.
+Safe boots instead require `Safe mode initialized: BLE DFU only` and
+`Safe mode feed loop started`, with no SD/codec/microphone startup. SMP callback
+delivery is a stub with the pinned Zephyr signature; no radio/DFU protocol is
+simulated. GPIO, retained hardware RAM, fatal reset and early WDT remain host
+unit/jig checks. See [the bench plan](../../docs/safe-mode.md).
+
+The review regression also builds the production deferred fault device. Normal
+startup must hang inside its `device_init()` until the runner kills that process
+group; SAFE with the same device must feed twice and never invoke its init.
+A separate SAFE build enables an unconditional `app_settings_init()` hang and
+must bypass it. These are selection/control-flow checks. The forced RAM latch
+stands in for prior watchdog resets; Nordic WDT counting and retention remain
+host/jig checks. The final normal trial leaves simulated NVS GOOD for repeat runs.

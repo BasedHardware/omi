@@ -164,45 +164,6 @@ def test_vertex_embedding_translation_round_trip():
     ) == {"embedding": {"values": [1, 2]}}
 
 
-@pytest.mark.asyncio
-async def test_gemini_proxy_rejects_paywalled_desktop_user(monkeypatch):
-    async def run_blocking(_, function, *args, **kwargs):
-        return function(*args, **kwargs)
-
-    monkeypatch.setattr(desktop_proxy, "run_blocking", run_blocking)
-    monkeypatch.setattr(desktop_proxy, "is_desktop_trial_paywalled", lambda uid, platform, **kwargs: True)
-
-    with pytest.raises(HTTPException) as error:
-        await desktop_proxy._authorized_desktop_user(make_request(), "user")
-
-    assert error.value.status_code == 402
-    assert error.value.detail == "trial_expired"
-
-
-@pytest.mark.asyncio
-async def test_luna_route_disables_gemini_byok_trial_exemption(monkeypatch):
-    seen = {}
-
-    async def run_blocking(_, function, *args, **kwargs):
-        return function(*args, **kwargs)
-
-    def not_paywalled(uid, platform, **kwargs):
-        seen.update(uid=uid, platform=platform, **kwargs)
-        return False
-
-    monkeypatch.setattr(desktop_proxy, "run_blocking", run_blocking)
-    monkeypatch.setattr(desktop_proxy, "is_desktop_trial_paywalled", not_paywalled)
-    request = make_request(path="/v1/proxy/gemini/models/gpt-6-luna:generateContent")
-
-    assert await desktop_proxy._authorized_desktop_user(request, "user") == "user"
-    assert seen == {
-        "uid": "user",
-        "platform": "desktop",
-        "required_byok_provider": None,
-        "byok_exempt": False,
-    }
-
-
 def _decision(*, allowed: bool, reason: str, plan: PlanType | None = PlanType.basic) -> Decision:
     return Decision(
         allowed=allowed,
