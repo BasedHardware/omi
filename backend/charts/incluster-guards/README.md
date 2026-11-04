@@ -191,11 +191,13 @@ night hours from becoming a rollback solely because quantiles are undefined. Thr
 trip after the full arming window. A fresh usable reading resets the counter.
 Prometheus warnings and incomplete/old query results count as blind. The v2
 counter also gets an explicit freshness check beyond the original script.
-The v2 duration series can be fresh with no completed observations while v1
-is busy. Its NaN p95 remains blind under the existing policy: zero completed
-requests cannot distinguish an idle v2 endpoint from requests stuck in flight.
-No idle exception or v1-for-v2 latency substitution is applied. Three blind
-readings can therefore restore the rollback cap after the arming window.
+When first-text or admission counts are below 20 and all freshness checks pass,
+`evaluate()` tolerates NaN v2 p95 as LOW_SAMPLE rather than blind. When v1 is
+busy, the v2 duration series can be fresh with no completed observations; its
+NaN p95 remains blind under the existing policy because zero completed requests
+cannot distinguish an idle v2 endpoint from requests stuck in flight. No idle
+exception or v1-for-v2 latency substitution is applied. Three blind readings
+can therefore restore the rollback cap after the arming window.
 
 The serving rollback retains P77's atomic whole-spec test and latency metric:
 JSON Patch tests the **entire observed `/spec`**, sets minReplicas=12, restores

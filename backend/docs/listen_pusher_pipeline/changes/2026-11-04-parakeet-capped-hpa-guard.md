@@ -7,11 +7,15 @@ metric. The ordinary floor schedule still preserves the operator's cap and
 refuses targets above it.
 
 The v2 duration histogram can remain fresh with no completed requests while
-traffic uses v1. Its NaN p95 remains blind under the existing policy; three
-consecutive blind readings still trigger rollback once armed. Zero completions
-cannot distinguish idle v2 from stuck requests, and errors can precede duration
-observations. A safe idle exception needs endpoint-specific in-flight evidence;
-no metric-policy change or v1-for-v2 latency substitution ships in this repair.
+traffic uses v1. Under the existing quiet-window policy, when first-text or
+admission counts are below 20 and all metric freshness checks pass, `evaluate()`
+tolerates NaN v2 p95 as LOW_SAMPLE and does not accumulate blind readings.
+When v1 is busy (counts >= 20), NaN v2 p95 remains blind under the existing
+policy; three consecutive blind readings still trigger rollback once armed.
+Zero completions cannot distinguish idle v2 from stuck requests, and errors
+can precede duration observations. A safe idle exception needs endpoint-specific
+in-flight evidence; no metric-policy change or v1-for-v2 latency substitution
+ships in this repair.
 
 Deployment uses the independent `gcp_incluster_guards.yml` workflow on main,
 pinned to the merged SHA, with environment=prod, enabled=true, dry_run=false.
