@@ -15,7 +15,7 @@ from unittest.mock import Mock
 import pytest
 import pytest_asyncio
 
-from config.batch_pipeline import projection_prefetch_depth
+from config.batch_pipeline import projection_drain_claim_aware_enabled, projection_prefetch_depth
 from config.policy.kill_switches import KILL_SWITCHES
 from database import conversations as conversations_db
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
@@ -467,6 +467,7 @@ def test_prefetch_depth_kill_switch_and_bounds(monkeypatch):
 
 def test_new_switches_are_registered_kill_switches():
     assert KILL_SWITCHES['BATCH_PIPELINE_OWNER_DRAIN_ENABLED'] is True
+    assert KILL_SWITCHES['PROJECTION_DRAIN_CLAIM_AWARE'] is True
     assert KILL_SWITCHES['BATCH_PIPELINE_PROJECTION_INDEX_DEFERRED_ENABLED'] is True
 
 
@@ -871,13 +872,15 @@ async def test_delayed_state_is_bounded_and_close_cancels_retries(monkeypatch, d
     assert not drains.delayed and not drains.queue and not drains.tasks
 
 
-@pytest.mark.parametrize('value', [None, '', 'true', 'false', '0', 'on'])
-def test_claim_aware_is_disabled_only_by_off(monkeypatch, value):
+@pytest.mark.parametrize('mode', ['shadow', 'serve'])
+@pytest.mark.parametrize('value', [None, '', 'true', 'false', '0', 'on', 'unknown', 'off', 'OFF', ' off '])
+def test_claim_aware_is_disabled_only_by_off(monkeypatch, value, mode):
+    monkeypatch.setenv('CAPTURE_COVERAGE_MODE', mode)
     if value is None:
         monkeypatch.delenv('PROJECTION_DRAIN_CLAIM_AWARE', raising=False)
     else:
         monkeypatch.setenv('PROJECTION_DRAIN_CLAIM_AWARE', value)
-    assert projection_drain.claim_aware_enabled()
+    assert projection_drain_claim_aware_enabled() is (value is None or value.strip().lower() != 'off')
 
 
 @pytest.mark.asyncio

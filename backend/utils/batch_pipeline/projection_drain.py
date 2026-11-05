@@ -13,11 +13,11 @@ from __future__ import annotations
 import asyncio
 from collections import deque
 import logging
-import os
 import random
 import time
 from typing import TYPE_CHECKING
 
+from config.batch_pipeline import projection_drain_claim_aware_enabled
 from database.batch_pipeline_projection_claim import projection_claim_held
 from utils.batch_pipeline.metrics import PROJECTION_DRAIN_CLAIM_HELD, PROJECTION_DRAIN_CLAIM_BUSY_BACKOFFS
 from utils.batch_pipeline.scheduler import owner_key
@@ -34,10 +34,6 @@ DRAIN_TURN_SECONDS = 120.0
 # One blocking step: bounds a sync-pool slot and the owner-claim hold.
 DRAIN_STEP_SECONDS = 15.0
 MAX_DELAYED_OWNERS = 1024
-
-
-def claim_aware_enabled() -> bool:
-    return os.environ.get('PROJECTION_DRAIN_CLAIM_AWARE', '').strip().lower() != 'off'
 
 
 class OwnerDrains:
@@ -81,7 +77,7 @@ class OwnerDrains:
         # Productive continuations retain FIFO progress without a new admission delay.
         if (
             not continuation
-            and claim_aware_enabled()
+            and projection_drain_claim_aware_enabled()
             and await run_blocking(
                 sync_executor, projection_claim_held, self.projector.store.store.namespace, owner_key(owner)
             )
@@ -132,10 +128,10 @@ class OwnerDrains:
         if more:
             self.continuations.add(owner)
             self.queue.append(owner)  # Productive turns always continue at the FIFO tail.
-        elif claim_aware_enabled() and stop == 'claim_held':
+        elif projection_drain_claim_aware_enabled() and stop == 'claim_held':
             self.defer(owner)
         elif owner in self.again and owner not in self.queue:
-            if claim_aware_enabled() and stop == 'claim_busy':
+            if projection_drain_claim_aware_enabled() and stop == 'claim_busy':
                 PROJECTION_DRAIN_CLAIM_BUSY_BACKOFFS.inc()
                 self.defer(owner)
             else:
@@ -166,7 +162,7 @@ class OwnerDrains:
                 steps += 1
                 advanced += len(walk.advanced)
                 stop = walk.stop or 'end'
-                if claim_aware_enabled() and stop == 'claim_busy':
+                if projection_drain_claim_aware_enabled() and stop == 'claim_busy':
                     self.stops[owner] = stop
                 if walk.followups:
                     # Owed rows join behind the next follow-up discovery page.

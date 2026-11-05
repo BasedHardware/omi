@@ -573,6 +573,13 @@ def owner_drain_enabled() -> bool:
     return kill_switch('BATCH_PIPELINE_OWNER_DRAIN_ENABLED')
 
 
+def projection_drain_claim_aware_enabled() -> bool:
+    """Default on; only off disables claim-aware owner-drain admission and backoff."""
+    from config.policy import kill_switch
+
+    return kill_switch('PROJECTION_DRAIN_CLAIM_AWARE')
+
+
 def projection_index_deferred_enabled() -> bool:
     """Kill switch: walks converge search/people-stats after the chain, once per conversation."""
     from config.policy import kill_switch
