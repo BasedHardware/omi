@@ -977,3 +977,160 @@ def test_gpu_batch_retry_cap_does_not_reach_cloud_tasks(contracts_module):
     assert 'utils.batch_pipeline.record_seal_repair' in sweeper
     assert 'diarizer.batch_pipeline_runtime' not in sweeper
     assert 'diarizer.batch_pipeline_models' not in sweeper
+
+
+def _third_party_contract(contracts_module, tmp_path, *, dockerfile_text, entrypoint_text, files):
+    (tmp_path / 'entrypoint.py').write_text(entrypoint_text, encoding='utf-8')
+    for name, text in files.items():
+        path = tmp_path / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding='utf-8')
+    dockerfile = tmp_path / 'Dockerfile'
+    dockerfile.write_text(dockerfile_text, encoding='utf-8')
+    return replace(
+        _contract(contracts_module, 'pusher'),
+        dockerfile=dockerfile,
+        target=None,
+        build_context=tmp_path,
+        source_root=tmp_path,
+        entrypoint_source_root=tmp_path,
+        entrypoints=('entrypoint',),
+        dependency_probe_exclusions=frozenset(),
+    )
+
+
+_PYLOCK_DOCKERFILE = (
+    'FROM python:3.11-slim\n'
+    'COPY pylock.worker.toml /app/pylock.worker.toml\n'
+    'RUN pip install --no-cache-dir uv==0.11.13 && uv pip sync --system /app/pylock.worker.toml\n'
+    'WORKDIR /app\n'
+    'COPY entrypoint.py ./\n'
+)
+
+
+def _pylock(*names):
+    return 'lock-version = "1.0"\n' + ''.join(f'\n[[packages]]\nname = "{name}"\nversion = "1.0"\n' for name in names)
+
+
+def test_third_party_closure_rejects_an_import_missing_from_the_image_lock(contracts_module, tmp_path):
+    # The #24490 shape: a reachable `from deepgram import ...` while the worker
+    # lock lacks deepgram-sdk. The full backend lock had it, so unit CI passed.
+    contract = _third_party_contract(
+        contracts_module,
+        tmp_path,
+        dockerfile_text=_PYLOCK_DOCKERFILE,
+        entrypoint_text='import numpy\nfrom deepgram import DeepgramClient\nimport langdetect\n',
+        files={'pylock.worker.toml': _pylock('numpy', 'uv')},
+    )
+
+    errors, installed = contracts_module.third_party_closure_errors(contract)
+
+    assert installed.sources[0].endswith('pylock.worker.toml')
+    assert installed.open_reasons == ()
+    assert len(errors) == 1
+    assert 'deepgram, langdetect' in errors[0]
+    assert 'numpy' not in errors[0].split('(', 1)[0]
+
+
+def test_third_party_closure_maps_import_names_to_distributions(contracts_module, tmp_path):
+    contract = _third_party_contract(
+        contracts_module,
+        tmp_path,
+        dockerfile_text=_PYLOCK_DOCKERFILE,
+        entrypoint_text=(
+            'from deepgram import DeepgramClient\n'
+            'import yaml\n'
+            'from PIL import Image\n'
+            'import google\n'
+            'from google.cloud import firestore, tasks_v2\n'
+            'from google.cloud.exceptions import NotFound\n'
+            'from google.protobuf import json_format\n'
+            'from pyannote.audio import Pipeline\n'
+            'import audioop\n'
+        ),
+        files={
+            'pylock.worker.toml': _pylock(
+                'Deepgram_SDK',
+                'PyYAML',
+                'pillow',
+                'google-cloud-firestore',
+                'google-cloud-tasks',
+                'google-cloud-core',
+                'protobuf',
+                'pyannote.audio',
+            )
+        },
+    )
+
+    errors, _ = contracts_module.third_party_closure_errors(contract)
+
+    assert errors == []
+
+
+def test_third_party_closure_fails_closed_on_an_unmapped_namespace_submodule(contracts_module):
+    assert contracts_module.module_distribution_candidates('google') is None
+    assert contracts_module.module_distribution_candidates('google.cloud') is None
+    # A submodule under a bare namespace must name a real distribution, never
+    # fall back to the namespace and pass.
+    candidates = contracts_module.module_distribution_candidates('google.cloud.unmapped_v1.Thing')
+    assert candidates is not None
+    assert 'google-cloud-unmapped' in candidates
+    assert all(candidate != 'google' for candidate in candidates)
+
+
+def test_third_party_closure_does_not_judge_an_open_dependency_set(contracts_module, tmp_path):
+    # A range-pinned requirements file does not list transitive distributions,
+    # so an absent name may still be installed: report it, never fail on it.
+    contract = _third_party_contract(
+        contracts_module,
+        tmp_path,
+        dockerfile_text=(
+            'FROM python:3.11-slim\n'
+            'WORKDIR /app\n'
+            'COPY requirements.txt .\n'
+            'RUN pip3 install --no-cache-dir -r requirements.txt\n'
+            'COPY entrypoint.py .\n'
+        ),
+        entrypoint_text='import starlette\n',
+        files={'requirements.txt': 'fastapi>=0.100.0\n'},
+    )
+
+    errors, installed = contracts_module.third_party_closure_errors(contract)
+
+    assert errors == []
+    assert installed.open_reasons and 'unpinned fastapi>=0.100.0' in installed.open_reasons[0]
+
+
+def test_third_party_closure_follows_requirement_includes_through_directory_copies(contracts_module, tmp_path):
+    contract = _third_party_contract(
+        contracts_module,
+        tmp_path,
+        dockerfile_text=(
+            'FROM python:3.11-slim AS builder\n'
+            'COPY reqs/ /tmp/reqs/\n'
+            'RUN pip install --no-cache-dir -r /tmp/reqs/job/requirements.txt\n'
+            'FROM python:3.11-slim\n'
+            'COPY --from=builder /opt/venv /opt/venv\n'
+            'WORKDIR /app\n'
+            'COPY entrypoint.py .\n'
+        ),
+        entrypoint_text='import requests\nimport jwt\n',
+        files={
+            'reqs/requirements.txt': 'requests==2.33.0\n# comment\nPyJWT==2.10.1 ; python_version >= "3.9"\n',
+            'reqs/job/requirements.txt': '-r ../requirements.txt\n',
+        },
+    )
+
+    errors, installed = contracts_module.third_party_closure_errors(contract)
+
+    assert installed.open_reasons == ()
+    assert installed.distributions == {'requests', 'pyjwt'}
+    assert errors == []
+
+
+def test_registered_images_have_complete_third_party_closures(contracts_module):
+    errors, notes = contracts_module.check_third_party_closures(contracts_module.load_contracts())
+
+    assert errors == []
+    checked = {'batch-pipeline-worker', 'backend', 'backend-pusher', 'pusher', 'diarizer'}
+    assert not any(note.split(':', 1)[0] in checked for note in notes)

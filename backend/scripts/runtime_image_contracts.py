@@ -7,6 +7,11 @@ truth, stages that exact source surface in a temporary directory, and walks impo
 from each declared entrypoint.  It catches a first-party package omitted from a
 whitelist Dockerfile without building an image.
 
+``check-third-party`` is the offline half of that dependency check: it maps every
+reachable third-party import to a distribution and requires it in the closed lock
+(a pylock, or requirements pinned with ``==``) the image's Dockerfile installs. The
+full backend lock that unit tests use cannot stand in for a per-image lock.
+
 ``smoke`` is intentionally separate: it checks every reachable third-party module
 is installed in an already-built image with no network, then imports isolated
 entrypoints where that is side-effect safe. GPU images use the dependency-presence
@@ -622,7 +627,9 @@ def workflow_contract_errors(contracts: Iterable[ImageContract]) -> list[str]:
     return errors
 
 
-def third_party_dependency_modules(contract: ImageContract) -> tuple[str, ...]:
+def third_party_dependency_modules(
+    contract: ImageContract, *, _trees: dict[Path, ast.Module] | None = None
+) -> tuple[str, ...]:
     """Find reachable third-party import targets without executing application code.
 
     ``from google.cloud import tasks_v2`` records both ``google.cloud`` and
@@ -643,7 +650,11 @@ def third_party_dependency_modules(contract: ImageContract) -> tuple[str, ...]:
         if source is None:
             return
         source_path, _ = source
-        tree = ast.parse(source_path.read_text(encoding="utf-8"), filename=str(source_path))
+        tree = _trees.get(source_path) if _trees is not None else None
+        if tree is None:
+            tree = ast.parse(source_path.read_text(encoding="utf-8"), filename=str(source_path))
+            if _trees is not None:
+                _trees[source_path] = tree
         for imported in _imported_modules(
             tree,
             module,
@@ -705,6 +716,303 @@ def _dependency_probe_code(modules: tuple[str, ...]) -> str:
         "    detail = ('; ' + '; '.join(related)) if related else ''\n"
         "    raise AssertionError('missing installed dependency modules: ' + ', '.join(missing) + detail)\n"
     )
+
+
+# Import name -> distribution, for the third-party closure check, where the
+# distribution's normalized name is not the import path. Dotted keys match the
+# longest import prefix first, so ``google.cloud.firestore`` needs no entry
+# (it normalizes to ``google-cloud-firestore``) while ``google.protobuf``
+# does. ``None`` marks a bare namespace package: it is skipped only when it is
+# the whole import path, so an unmapped submodule under it still fails.
+MODULE_DISTRIBUTIONS: dict[str, str | None] = {
+    "PIL": "pillow",
+    "deepgram": "deepgram-sdk",
+    "dotenv": "python-dotenv",
+    "google": None,
+    "google.cloud": None,
+    "google.cloud.exceptions": "google-cloud-core",
+    "google.oauth2": "google-auth",
+    "google.protobuf": "protobuf",
+    "google.rpc": "googleapis-common-protos",
+    "grpc": "grpcio",
+    "jwt": "pyjwt",
+    "lc3": "lc3py",
+    "markdown_it": "markdown-it-py",
+    "multipart": "python-multipart",
+    "nemo": "nemo-toolkit",
+    "ulid": "python-ulid",
+    "yaml": "pyyaml",
+}
+# Standard library on the images' Python 3.11 but absent from newer local
+# interpreters' ``sys.stdlib_module_names`` (PEP 594 removals).
+IMAGE_STDLIB_MODULES = frozenset({"audioop"})
+# ``google.cloud.tasks_v2`` ships in ``google-cloud-tasks``: an API version
+# suffix is not part of the distribution name.
+_API_VERSION_SUFFIX = re.compile(r"_v\d+(?:(?:alpha|beta|p)\d*)*$")
+# Options of ``pip install`` / ``uv pip sync`` that consume the next token.
+_INSTALLER_VALUE_OPTIONS = frozenset(
+    {
+        "-c", "--constraint", "-i", "--index-url", "--extra-index-url", "-f", "--find-links",
+        "-p", "--python", "-t", "--target", "--prefix", "--root", "--cache-dir", "--trusted-host",
+    }
+)  # fmt: skip
+_REQUIREMENT_NAME = re.compile(r"^([A-Za-z0-9][A-Za-z0-9._-]*)")
+
+
+@dataclass(frozen=True)
+class InstalledDependencies:
+    """Distributions a Dockerfile installs, and whether that set is closed.
+
+    A pylock or a requirements set pinned entirely with ``==`` lists every
+    transitive distribution, so an absent name is really absent from the
+    image. Any range specifier, path install or unresolvable file leaves the
+    set open: a module might arrive transitively, so the check cannot judge it.
+    """
+
+    sources: tuple[str, ...]
+    distributions: frozenset[str]
+    open_reasons: tuple[str, ...]
+
+
+def normalize_distribution(name: str) -> str:
+    """PEP 503 normalization: ``Deepgram_SDK`` and ``deepgram.sdk`` are ``deepgram-sdk``."""
+    return re.sub(r"[-_.]+", "-", name).lower()
+
+
+def _pylock_distributions(path: Path) -> set[str]:
+    import tomllib
+
+    try:
+        payload = tomllib.loads(path.read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError) as exc:
+        raise ContractError(f"cannot read lock {_repository_relative(path)}: {exc}") from exc
+    return {normalize_distribution(package["name"]) for package in payload.get("packages", []) if "name" in package}
+
+
+def _requirement_distributions(path: Path, seen: set[Path] | None = None) -> tuple[set[str], list[str]]:
+    """Names in a requirements file (following ``-r``) and the reasons it is open."""
+    seen = set() if seen is None else seen
+    resolved = path.resolve()
+    if resolved in seen:
+        return set(), []
+    seen.add(resolved)
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise ContractError(f"cannot read requirements {_repository_relative(path)}: {exc}") from exc
+    names: set[str] = set()
+    open_reasons: list[str] = []
+    relative = _repository_relative(path)
+    for raw in text.replace("\\\n", " ").splitlines():
+        line = raw.split(" #", 1)[0].strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith(("-r ", "--requirement ", "-r", "--requirement=")):
+            include = re.sub(r"^(-r|--requirement)[ =]?", "", line).strip()
+            included, reasons = _requirement_distributions(path.parent / include, seen)
+            names |= included
+            open_reasons.extend(reasons)
+            continue
+        if line.startswith("-"):
+            if line.startswith(("-e", "--editable")):
+                open_reasons.append(f"{relative}: editable install {line}")
+            continue
+        match = _REQUIREMENT_NAME.match(line)
+        if match is None or line.startswith((".", "/")):
+            open_reasons.append(f"{relative}: path install {line}")
+            continue
+        names.add(normalize_distribution(match.group(1)))
+        specifier = line[match.end() :].split(";", 1)[0]
+        if "==" not in specifier and " @ " not in line:
+            open_reasons.append(f"{relative}: unpinned {line}")
+    return names, open_reasons
+
+
+def _installer_arguments(command: str) -> tuple[list[str], list[str]] | None:
+    """(requirement files, inline requirements) for one installer shell command."""
+    try:
+        tokens = shlex.split(command)
+    except ValueError:
+        return None
+    for index in range(len(tokens) - 1):
+        if tokens[index : index + 2] == ["pip", "install"] or tokens[index : index + 2] == ["pip3", "install"]:
+            arguments, sync = tokens[index + 2 :], False
+            break
+        if tokens[index : index + 3] == ["uv", "pip", "sync"]:
+            arguments, sync = tokens[index + 3 :], True
+            break
+    else:
+        return None
+    files: list[str] = []
+    inline: list[str] = []
+    position = 0
+    while position < len(arguments):
+        token = arguments[position]
+        if token in {"-r", "--requirement"} and position + 1 < len(arguments):
+            files.append(arguments[position + 1])
+            position += 2
+            continue
+        if token.startswith("--requirement="):
+            files.append(token.split("=", 1)[1])
+        elif token in _INSTALLER_VALUE_OPTIONS:
+            position += 1
+        elif not token.startswith("-"):
+            (files if sync else inline).append(token)
+        position += 1
+    return files, inline
+
+
+def installed_dependencies(contract: ImageContract) -> InstalledDependencies:
+    """Resolve the distributions every installer RUN of the image's build installs.
+
+    Each stage chain is walked in build order so a relative COPY or install
+    path resolves against the WORKDIR in force; an installed file is traced
+    back through the COPY that put it there to its repository source.
+    """
+    stage_names = {stage.name for stage in docker_named_stages(contract.dockerfile) if stage.name}
+    pending: list[str | None] = [contract.target]
+    seen_stages: set[str | None] = set()
+    sources: list[str] = []
+    distributions: set[str] = set()
+    open_reasons: list[str] = []
+    while pending:
+        stage = pending.pop()
+        if stage in seen_stages:
+            continue
+        seen_stages.add(stage)
+        workdir = PurePosixPath("/")
+        copied: list[tuple[PurePosixPath, Path, bool]] = []  # (destination, source, destination is a directory)
+        for line in docker_target_instructions(contract.dockerfile, stage):
+            keyword = line.split(None, 1)[0].upper()
+            if keyword == "WORKDIR":
+                workdir = workdir / line.split(None, 1)[1].strip()
+                continue
+            if keyword == "COPY":
+                tokens = shlex.split(line[5:])
+                from_stage = next((token[len("--from=") :] for token in tokens if token.startswith("--from=")), None)
+                if from_stage is not None:
+                    if from_stage in stage_names:
+                        pending.append(from_stage)
+                    continue
+                tokens = [token for token in tokens if not token.startswith("--")]
+                if len(tokens) < 2:
+                    continue
+                destination = workdir / tokens[-1]
+                into_directory = tokens[-1].endswith("/") or tokens[-1] in {".", "./"} or len(tokens) > 2
+                for source in tokens[:-1]:
+                    source_path = (contract.build_context / source).resolve()
+                    is_directory = into_directory or source_path.is_dir()
+                    copied.append((destination, source_path, is_directory))
+                continue
+            if keyword != "RUN" or not any(installer in line for installer in LOCK_INSTALLERS):
+                continue
+            for command in re.split(r"&&|;|\|\|", line[4:]):
+                parsed = _installer_arguments(command)
+                if parsed is None:
+                    continue
+                files, inline = parsed
+                for requirement in inline:
+                    match = _REQUIREMENT_NAME.match(requirement)
+                    if match is None:
+                        open_reasons.append(f"inline install {requirement}")
+                        continue
+                    distributions.add(normalize_distribution(match.group(1)))
+                    specifier = requirement[match.end() :]
+                    if "==" not in specifier and " @ " not in requirement:
+                        open_reasons.append(f"inline unpinned install {requirement}")
+                for installed in files:
+                    target = workdir / installed
+                    source = None
+                    for destination, source_path, is_directory in reversed(copied):
+                        if is_directory and target.is_relative_to(destination):
+                            candidate = source_path / target.relative_to(destination)
+                            if source_path.is_dir() and candidate.is_file():
+                                source = candidate
+                            elif not source_path.is_dir() and target == destination / source_path.name:
+                                source = source_path
+                        elif not is_directory and target == destination:
+                            source = source_path
+                        if source is not None:
+                            break
+                    if source is None:
+                        open_reasons.append(f"cannot trace installed file {installed} to a COPY source")
+                        continue
+                    source = source.resolve()
+                    sources.append(_repository_relative(source))
+                    if source.suffix == ".toml":
+                        distributions |= _pylock_distributions(source)
+                    else:
+                        names, reasons = _requirement_distributions(source)
+                        distributions |= names
+                        open_reasons.extend(reasons)
+    if not sources and not distributions:
+        open_reasons.append("no dependency installer found")
+    return InstalledDependencies(
+        sources=tuple(dict.fromkeys(sources)),
+        distributions=frozenset(distributions),
+        open_reasons=tuple(dict.fromkeys(open_reasons)),
+    )
+
+
+def module_distribution_candidates(module: str) -> tuple[str, ...] | None:
+    """Distributions that may provide ``module``, longest import prefix first.
+
+    Returns ``None`` when ``module`` is itself a bare namespace package, which
+    no single distribution owns.
+    """
+    parts = module.split(".")
+    if MODULE_DISTRIBUTIONS.get(module, "") is None or module in IMAGE_STDLIB_MODULES:
+        return None
+    candidates: list[str] = []
+    for length in range(len(parts), 0, -1):
+        prefix = ".".join(parts[:length])
+        mapped = MODULE_DISTRIBUTIONS.get(prefix, "")
+        if mapped:
+            candidates.append(normalize_distribution(mapped))
+        elif mapped is not None:
+            candidates.append(normalize_distribution(prefix))
+            unversioned = _API_VERSION_SUFFIX.sub("", prefix)
+            if unversioned != prefix:
+                candidates.append(normalize_distribution(unversioned))
+    return tuple(dict.fromkeys(candidates))
+
+
+def third_party_closure_errors(
+    contract: ImageContract, *, _trees: dict[Path, ast.Module] | None = None
+) -> tuple[list[str], InstalledDependencies]:
+    """Every reachable third-party import must map to a distribution the image installs."""
+    installed = installed_dependencies(contract)
+    if installed.open_reasons:
+        return [], installed
+    missing: list[str] = []
+    for module in third_party_dependency_modules(contract, _trees=_trees):
+        candidates = module_distribution_candidates(module)
+        if candidates is None or any(candidate in installed.distributions for candidate in candidates):
+            continue
+        missing.append(module)
+    if not missing:
+        return [], installed
+    tops = sorted({module.split(".", 1)[0] for module in missing})
+    return [
+        f"{contract.name}: reachable third-party imports {', '.join(tops)} map to no distribution installed by "
+        f"{', '.join(installed.sources)} ({', '.join(missing[:8])}{' ...' if len(missing) > 8 else ''}); "
+        "add the distribution to that lock, or map the import name in MODULE_DISTRIBUTIONS"
+    ], installed
+
+
+def check_third_party_closures(contracts: Iterable[ImageContract]) -> tuple[list[str], list[str]]:
+    """(errors, notes): notes name images whose open dependency set is not judged."""
+    errors: list[str] = []
+    notes: list[str] = []
+    trees: dict[Path, ast.Module] = {}
+    for contract in contracts:
+        contract_errors, installed = third_party_closure_errors(contract, _trees=trees)
+        errors.extend(contract_errors)
+        if installed.open_reasons:
+            notes.append(
+                f"{contract.name}: third-party closure not checked, open dependency set ({installed.open_reasons[0]})"
+            )
+    return errors, notes
 
 
 def contracts_for_dockerfile(
@@ -1059,6 +1367,10 @@ def parse_args() -> argparse.Namespace:
     subparsers.add_parser("check-source", help="check each entrypoint's first-party Docker source closure")
     subparsers.add_parser("check-workflows", help="check registered deployment workflows smoke their image")
     subparsers.add_parser("check-roles", help="check the role -> image -> service map and role-image build stamps")
+    subparsers.add_parser(
+        "check-third-party",
+        help="check each image's reachable third-party imports against the distributions its Dockerfile installs",
+    )
     smoke = subparsers.add_parser("smoke", help="import an already-built image's registered entrypoint")
     smoke.add_argument("--dockerfile", type=Path, required=True)
     smoke.add_argument("--image", required=True)
@@ -1081,8 +1393,9 @@ def main() -> int:
         else:
             dockerfile = None
             contracts = load_contracts(args.registry)
-        if args.command in {"check", "check-source", "check-workflows", "check-roles"}:
+        if args.command in {"check", "check-source", "check-workflows", "check-roles", "check-third-party"}:
             errors = []
+            notes: list[str] = []
             if args.command in {"check", "check-source"}:
                 errors.extend(check_source_closures(contracts))
                 errors.extend(import_smoke_environment_errors(contracts))
@@ -1090,6 +1403,11 @@ def main() -> int:
                 errors.extend(workflow_contract_errors(contracts))
             if args.command in {"check", "check-roles"}:
                 errors.extend(role_map_errors(contracts, args.registry))
+            if args.command == "check-third-party":
+                third_party_errors, notes = check_third_party_closures(contracts)
+                errors.extend(third_party_errors)
+            for note in notes:
+                print(f"note: {note}")
             if errors:
                 print("FAIL: runtime-image contract is incomplete:", file=sys.stderr)
                 for error in errors:
