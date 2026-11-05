@@ -146,3 +146,10 @@ async def test_supervisor_wires_child_counters_to_metrics_endpoint(monkeypatch):
     assert b'privacy_decision_mismatch_total{family="batch",reason="stale_allow"} 1.0' in responses[1].content
     assert runtime.privacy_metrics._directory is None
     assert client.call.call_args.args[0] == 'complete'
+
+
+def test_memo_ineligible_counter_survives_isolated_job_exits():
+    """Luna r1 P2 on #24666: the parent only folds counters named in COUNTERS."""
+    from utils.sync.worker_privacy_metrics import COUNTERS
+
+    assert 'privacy_memo_ineligible' in COUNTERS

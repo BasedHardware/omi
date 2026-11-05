@@ -5,6 +5,7 @@ from collections import Counter as Counts
 from contextlib import contextmanager
 from contextvars import ContextVar
 from functools import wraps
+import inspect
 import logging
 import threading
 import time
@@ -43,6 +44,32 @@ DECISION_MISMATCH = Counter(
 SHADOW_CHECKS = Counter('privacy_shadow_checks_total', 'Privacy shadow comparisons', ['family', 'result'])
 MEMO_REQUESTS = Counter('privacy_memo_requests_total', 'Candidate decision reuse', ['family', 'result'])
 TTL_BOUND_SECONDS = 60.0
+MEMO_INELIGIBLE = Counter(
+    'privacy_memo_ineligible_total',
+    'Batch privacy decisions the attempt memo could not certify, by reason and calling module',
+    ['reason', 'caller'],
+)
+# Bounded caller label: the known assert_batch_write_allowed call sites (git grep, 2026-11-05).
+_INELIGIBLE_CALLERS = frozenset(
+    {
+        'database.batch_pipeline_projection',
+        'database.batch_pipeline_projection_session',
+        'database.batch_pipeline_quarantine_recovery',
+        'database.batch_pipeline_recovery',
+        'database.batch_pipeline_store',
+        'database.batch_voice_evidence',
+        'database.jobstore.postgres_store',
+        'database.outbox_provider_stt',
+        'services.summary_debt_repair',
+        'utils.batch_pipeline.record_seal_repair',
+        'utils.batch_pipeline.retention',
+        'utils.enrichment.custody',
+        'utils.enrichment.redrive',
+        'utils.sync.completed_status',
+        'utils.sync.retired_handle_ack',
+    }
+)
+_PRIVACY_MODULES = frozenset({'database.batch_pipeline_privacy', 'database.privacy_check_metrics'})
 TTL_CACHE = Counter(
     'privacy_ttl_cache_total', '60s-bounded privacy decision reuse (hit, miss, store)', ['family', 'result']
 )
@@ -113,6 +140,30 @@ def ttl_result(family, result):
         TTL_CACHE.labels(_family(family), result).inc()
     except Exception:
         pass
+
+
+def memo_ineligible(reason):
+    """Count why a batch decision skipped the attempt memo, attributed to the first non-privacy frame."""
+    current = frame = None
+    try:
+        reason = reason if reason in {'no_attempt', 'no_transaction', 'snapshots'} else 'other'
+        caller = 'other'
+        current = inspect.currentframe()
+        frame = current.f_back if current is not None else None
+        for _ in range(8):
+            if frame is None:
+                break
+            module = frame.f_globals.get('__name__', '')
+            if module not in _PRIVACY_MODULES:
+                caller = module if module in _INELIGIBLE_CALLERS else 'other'
+                break
+            frame = frame.f_back
+        MEMO_INELIGIBLE.labels(reason, caller).inc()
+    except Exception:
+        pass
+    finally:
+        # Break the frame reference cycle so request frames are freed immediately.
+        del current, frame
 
 
 def memo_result(family, result):
