@@ -119,7 +119,7 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
-      "expression": "((max(time() - omi_batch_pipeline_metrics_refreshed_at_seconds{namespace=\"prod-omi-backend\"}) >= bool 120) or vector(1)) + (count(omi_batch_pipeline_oldest_age_seconds{namespace=\"prod-omi-backend\"} != omi_batch_pipeline_oldest_age_seconds{namespace=\"prod-omi-backend\"}) or vector(0)) + (count(omi_batch_pipeline_retry_age_seconds{namespace=\"prod-omi-backend\"} != omi_batch_pipeline_retry_age_seconds{namespace=\"prod-omi-backend\"}) or vector(0))",
+      "expression": "((max(time() - omi_batch_pipeline_metrics_refreshed_at_seconds{namespace=\"prod-omi-backend\"}) >= bool 120) or vector(1)) + (count(count by (priority) (omi_batch_pipeline_oldest_age_seconds{namespace=\"prod-omi-backend\"} != omi_batch_pipeline_oldest_age_seconds{namespace=\"prod-omi-backend\"})) or vector(0)) + (count(count by (priority) (omi_batch_pipeline_retry_age_seconds{namespace=\"prod-omi-backend\"} != omi_batch_pipeline_retry_age_seconds{namespace=\"prod-omi-backend\"})) or vector(0))",
       "file": "alerts/batch-queue-safety.json",
       "issues": [],
       "metrics": [
