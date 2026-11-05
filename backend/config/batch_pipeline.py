@@ -27,6 +27,14 @@ class Priority(IntEnum):
 FRESH_CAPTURE_LAG_SECONDS = 600.0
 
 
+def projection_source_deleted_enabled() -> bool:
+    """Ship-on no-text settlement for a deleted source without a tombstone or redirect."""
+    return rollout_default_on(
+        'BATCH_PIPELINE_PROJECTION_SOURCE_DELETED_ENABLED',
+        os.getenv('BATCH_PIPELINE_PROJECTION_SOURCE_DELETED_ENABLED', 'true').strip().lower() != 'false',
+    )
+
+
 def projection_hold_recovery_enabled() -> bool:
     """Ship-on hold age gate and automatic redrive; false restores old behavior."""
     return rollout_default_on(

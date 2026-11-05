@@ -29,7 +29,9 @@ def persist_disposition(session, *, quarantined=False, privacy_deleted=False):
             receipt = session.persist_empty(quarantined=True) if quarantined else session.persist_empty(superseded=True)
     except ProjectionReplay as replay:
         return replay.receipt
-    if privacy_deleted:
+    if privacy_deleted and receipt.get('disposition') == 'source_deleted':
+        logger.info('event=batch_projection action=assignment outcome=source_deleted')
+    elif privacy_deleted:
         logger.info(
             'event=batch_projection action=assignment outcome=privacy_terminal fence_reason=conversation_deleted'
         )

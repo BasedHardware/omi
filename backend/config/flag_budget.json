@@ -24,7 +24,7 @@
   },
   "seed_review_by": "2026-11-15",
   "budget": 169,
-  "count": 247,
+  "count": 248,
   "names": {
     "PARAKEET_SHAPE_CANARY_FILE": {"owner": "two-lane lead", "review_by": "2026-12-04"},
     "PARAKEET_LID_MODEL": {"owner": "planscost", "review_by": "2026-11-30"},
@@ -57,6 +57,7 @@
     "BATCH_VENDOR_OVERFLOW_ENTER_SECONDS": {"owner": "overflow / two-lane lead", "review_by": "2026-11-29"},
     "BATCH_VENDOR_OVERFLOW_MIN_READY_UNITS": {"owner": "overflow / two-lane lead", "review_by": "2026-11-29"},
     "BATCH_LEGACY_CAPACITY_FALLBACK_ENABLED": {"owner": "overflow / two-lane lead", "review_by": "2026-11-29"},
+    "BATCH_PIPELINE_PROJECTION_SOURCE_DELETED_ENABLED": {"owner": "cl2-cost / lead2", "review_by": "2026-12-05"},
     "BATCH_PIPELINE_PROJECTION_HOLD_RECOVERY_ENABLED": {"owner": "holdfix / batch rollout lead", "review_by": "2026-11-15"},
     "BATCH_ALLOWANCE_HOLD_RETRY_SECONDS": {"owner": "holdpark / batch rollout lead", "review_by": "2026-11-15"},
     "BATCH_PIPELINE_RECORD_PROTOCOL_READY": {"owner": "two-lane lead", "review_by": "2026-11-15"},
