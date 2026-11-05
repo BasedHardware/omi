@@ -70,12 +70,35 @@ class RecommendationGenerationMismatchError(TaskRecommendationStoreError):
     pass
 
 
+def _normalize_task_datetime(dt: Optional[datetime | str]) -> datetime:
+    if dt is None:
+        return datetime.now(timezone.utc)
+    if isinstance(dt, str):
+        cleaned = dt.strip()
+        if not cleaned:
+            raise ValueError("timestamp string cannot be empty or whitespace")
+        try:
+            parsed = datetime.fromisoformat(cleaned.replace("Z", "+00:00"))
+        except (ValueError, TypeError) as exc:
+            raise ValueError(f"Invalid ISO timestamp string: {dt}") from exc
+        if parsed.tzinfo is None or parsed.utcoffset() is None:
+            return parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
+    if isinstance(dt, datetime):
+        if dt.tzinfo is None or dt.utcoffset() is None:
+            return dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc)
+    raise TypeError("timestamp must be a datetime, ISO timestamp string, or None")
+
+
 def _get_db(firestore_client: Any = None) -> Any:
     return firestore_client or get_firestore_client()
 
 
 def _user_ref(uid: str, *, firestore_client: Any = None):
-    return _get_db(firestore_client).collection('users').document(uid)
+    if not isinstance(uid, str) or not uid.strip():
+        raise ValueError("uid must be a non-empty string")
+    return _get_db(firestore_client).collection('users').document(uid.strip())
 
 
 def _control_ref(uid: str, *, firestore_client: Any = None):
@@ -130,18 +153,26 @@ def _record_malformed_embedded_payload(*, evaluation_id: str, error: ValidationE
 
 
 def _stable_id(prefix: str, *parts: object) -> str:
+    if not isinstance(prefix, str) or not prefix.strip():
+        raise ValueError("prefix must be a non-empty string")
+    for part in parts:
+        if part is None or (isinstance(part, str) and not part.strip()):
+            raise ValueError("identifier parts must not be empty or whitespace")
     raw = '\x1f'.join(str(part) for part in parts).encode('utf-8')
     return f'{prefix}_{hashlib.sha256(raw).hexdigest()[:32]}'
 
 
 def _request_hash(payload: dict[str, Any]) -> str:
+    if not isinstance(payload, dict):
+        raise TypeError("payload must be a dictionary")
     serialized = json.dumps(payload, sort_keys=True, separators=(',', ':'), default=str)
     return hashlib.sha256(serialized.encode('utf-8')).hexdigest()
 
 
 def _cleanup_expired_snapshot_receipts(uid: str, *, now: datetime, firestore_client: Any) -> None:
+    norm_now = _normalize_task_datetime(now)
     collection = _user_ref(uid, firestore_client=firestore_client).collection(SNAPSHOT_RECEIPTS_COLLECTION)
-    for snapshot in collection.where('expires_at', '<=', now).limit(50).stream():
+    for snapshot in collection.where('expires_at', '<=', norm_now).limit(50).stream():
         snapshot.reference.delete()
 
 
@@ -315,7 +346,7 @@ def get_projection(
     uid: str,
     *,
     device_scope: str,
-    now: datetime,
+    now: datetime | str,
     include_expired: bool = False,
     account_generation: int = 0,
     firestore_client: Any = None,
@@ -350,7 +381,8 @@ def get_projection(
     )
     if projection is None:
         return None
-    return projection if include_expired or projection.expires_at > now else None
+    normalized_now = _normalize_task_datetime(now)
+    return projection if include_expired or projection.expires_at > normalized_now else None
 
 
 def _decision_records(raw_records: list[Any], evaluation_id: str) -> list[DecisionRecord]:
@@ -360,6 +392,8 @@ def _decision_records(raw_records: list[Any], evaluation_id: str) -> list[Decisi
     ValidationError and 500 the whole recommendation read. Skip such a record rather than fail the
     batch; unexpected errors still propagate. Sorted by subject_id to match the caller.
     """
+    if not isinstance(raw_records, list):
+        return []
     records: list[DecisionRecord] = []
     for record in raw_records:
         try:
@@ -378,6 +412,10 @@ def get_decisions(
     account_generation: int = 0,
     firestore_client: Any = None,
 ) -> list[DecisionRecord]:
+    if not isinstance(evaluation_id, str) or not evaluation_id.strip():
+        raise ValueError("evaluation_id must be a non-empty string")
+    if not isinstance(device_scope, str) or not device_scope.strip():
+        raise ValueError("device_scope must be a non-empty string")
     client = _get_db(firestore_client)
     ref = (
         _user_ref(uid, firestore_client=client)
@@ -408,7 +446,7 @@ def get_decisions(
 
 
 def _valid_evaluation_projection(
-    raw_projection: Any, evaluation_id: str, now: datetime
+    raw_projection: Any, evaluation_id: str, now: datetime | str
 ) -> Optional[WhatMattersNowProjection]:
     """Build a WhatMattersNowProjection from a stored projection dict, or None if unusable.
 
@@ -423,7 +461,8 @@ def _valid_evaluation_projection(
     except ValidationError as e:
         _record_malformed_embedded_payload(evaluation_id=evaluation_id, error=e)
         return None
-    if projection.evaluation_id != evaluation_id or projection.expires_at <= now:
+    normalized_now = _normalize_task_datetime(now)
+    if projection.evaluation_id != evaluation_id or projection.expires_at <= normalized_now:
         return None
     return projection
 
