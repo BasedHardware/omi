@@ -3,11 +3,20 @@
 from collections import Counter
 from datetime import datetime, timezone
 
+from prometheus_client import Gauge
+
 from google.api_core.exceptions import FailedPrecondition, NotFound
 
 from database import record_projection_rebuild as jobs
 from database._client import get_firestore_client
 from utils.batch_pipeline.record_projection_rebuild import durable_debt_enabled, rebuild
+
+MAX_PER_PASS = 128
+MAX_COLLECTION_MARKERS = 10000
+NO_OBJECTS_MAX_AGE_SECONDS = 7 * 86400
+BACKLOG = Gauge('omi_projection_rebuild_marker_count', 'Bounded marker count; saturated at collection limit plus one')
+OLDEST = Gauge('omi_projection_rebuild_oldest_age_seconds', 'Oldest marker age in the bounded collection scan')
+AT_CAPACITY = Gauge('omi_projection_rebuild_at_capacity', 'Marker collection exceeds its maintenance limit')
 
 
 def run(*, mode='apply', budget, firestore_client=None):
@@ -19,9 +28,24 @@ def run(*, mode='apply', budget, firestore_client=None):
     counts = Counter()
     # One ordered field uses Firestore's automatic single-field index. Rotate
     # refused work to the tail so chronic failures cannot starve later markers.
-    query = client.collection(jobs.COLLECTION).order_by('requested_at').limit(128)
+    query = client.collection(jobs.COLLECTION).order_by('requested_at').limit(MAX_COLLECTION_MARKERS + 1)
     page = list(query.stream(timeout=budget.timeout(), retry=None))
-    for doc in page:
+    now = datetime.now(timezone.utc)
+    ages = {
+        doc.id: max(0.0, (now - created).total_seconds())
+        for doc in page
+        if isinstance(created := getattr(doc, 'create_time', None), datetime)
+    }
+    at_capacity = len(page) > MAX_COLLECTION_MARKERS
+    gauges = {
+        'marker_count': len(page),
+        'oldest_age_seconds': max(ages.values(), default=0),
+        'at_capacity': at_capacity,
+    }
+    BACKLOG.set(len(page))
+    OLDEST.set(gauges['oldest_age_seconds'])
+    AT_CAPACITY.set(at_capacity)
+    for doc in page[:MAX_PER_PASS]:
         budget.check()
         data = doc.to_dict() or {}
         uid, cid = data.get('owner_id'), data.get('conversation_id')
@@ -51,13 +75,14 @@ def run(*, mode='apply', budget, firestore_client=None):
                 raise RuntimeError('projection repair attempt unavailable')
             result = rebuild(uid, cid)
             budget.check()
-            if result is not None:
+            retire_empty = result == 'no_objects' and (ages.get(doc.id, 0) >= NO_OBJECTS_MAX_AGE_SECONDS or at_capacity)
+            if result is True or result is False or retire_empty:
                 doc.reference.delete(
                     option=client.write_option(last_update_time=attempt.update_time),
                     timeout=budget.timeout(),
                     retry=None,
                 )
-                counts['rebuilt' if result else 'owner_gone'] += 1
+                counts['retired_no_objects' if retire_empty else 'rebuilt' if result else 'owner_gone'] += 1
             else:
                 counts['deferred'] += 1
         except (FailedPrecondition, NotFound):
@@ -65,7 +90,12 @@ def run(*, mode='apply', budget, firestore_client=None):
         except Exception:
             budget.check()  # Let the hard deadline unwind the enclosing pass.
             counts['error'] += 1
-    return {'event': 'record_projection_rebuild', 'outcome': 'ok', 'dispositions': dict(counts)}
+    return {
+        'event': 'record_projection_rebuild',
+        'outcome': 'error' if counts['error'] else 'capacity_exceeded' if at_capacity else 'ok',
+        'gauges': gauges,
+        'dispositions': dict(counts),
+    }
 
 
 def run_job():

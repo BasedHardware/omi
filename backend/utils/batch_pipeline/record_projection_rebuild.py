@@ -1,6 +1,7 @@
 """Socket-independent playback metadata discovery; no audio decoding or custody."""
 
 import os
+from typing import Literal
 
 from config import audio_archive
 from database import conversations as conversations_db, conversation_tombstones, record_projection_rebuild as jobs
@@ -60,7 +61,7 @@ def discover(uid, cid, *, strict_raw=False, fallback=None):
     return expected, chunks, files, raw_complete
 
 
-def rebuild(uid: str, cid: str) -> bool | None:
+def rebuild(uid: str, cid: str) -> bool | Literal['no_objects'] | None:
     """Full metadata rebuild with deletion/privacy and prior projection CAS.
 
     None retains debt for incomplete discovery. No PCM or audio object is read,
@@ -74,7 +75,7 @@ def rebuild(uid: str, cid: str) -> bool | None:
             return False
         expected, _, files, _ = discovery
         if not files:
-            return None
+            return 'no_objects'
         try:
             return jobs.apply_projection(
                 uid, cid, {'audio_files': [af.model_dump() for af in files]}, expected_audio_files=expected

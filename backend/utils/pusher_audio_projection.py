@@ -1,5 +1,6 @@
 """Keep the live playback projection fresh without rediscovering its prefix per write."""
 
+import asyncio
 import logging
 import os
 import time
@@ -19,7 +20,7 @@ from utils.batch_pipeline.record_projection_rebuild import (
     discover,
 )
 from utils.observability.fallback import record_fallback
-from utils.executors import run_blocking, storage_executor, db_executor
+from utils.executors import run_blocking, storage_executor, db_executor, start_background_task
 from utils.other.audio_outbox_metrics import record_failure
 from utils.speaker_learning_jobs import schedule_person_voice_learning_retry
 
@@ -29,6 +30,10 @@ CLOSE_RETRY_BUDGET = 2
 REFRESH_SECONDS = 300
 MAX_CONVERSATIONS = 128
 MAX_CHUNKS = 2048
+MAX_MARKER_RETRIES = record_projection_rebuild.MAX_MARKERS_PER_BATCH
+MARKER_CLOSE_SECONDS = 3.0
+MARKER_ATTEMPT_SECONDS = 1.25
+MARKER_WRITES = Counter('omi_pusher_projection_debt_total', 'Best-effort projection marker handoffs', ['outcome'])
 
 
 def enabled() -> bool:
@@ -87,6 +92,11 @@ class PusherAudioProjection:
         self.uid = uid
         self.has_uploaded_paths = False
         self.close_debt: set[str] = set()
+        # Separate metadata-only overflow inventory; never retain PCM receipts
+        # or gate recording completion on optional marker persistence.
+        self.marker_retry: dict[str, int] = {}
+        self.marker_sequence = 0
+        self.marker_task: asyncio.Task | None = None
         self.finished: set[str] = set()
         self.close_retries: dict[str, int] = {}
         self.inventory: dict[str, Inventory | None] = {}
@@ -232,11 +242,11 @@ class PusherAudioProjection:
                 self.close_retries[conv_id] = attempts + 1
                 logger.warning('Close audio projection rebuild deferred exception_type=%s', type(exc).__name__)
                 return False
-            if not await self.defer_rebuild(conv_id):
-                return False
+            queued = await self.defer_rebuild(conv_id)
             self.close_retries.pop(conv_id, None)
             self.inventory.pop(conv_id, None)
-            self.close_debt.discard(conv_id)
+            if queued:
+                self.close_debt.discard(conv_id)
             if len(self.finished) < MAX_CONVERSATIONS:
                 self.finished.add(conv_id)
             record_failure('projection', reason='invalid_argument' if isinstance(exc, InvalidArgument) else 'transient')
@@ -252,9 +262,8 @@ class PusherAudioProjection:
             # optional rediscovery failure cannot turn a clean drain into loss.
             return True
         if applied is None and self.has_uploaded_paths and conv_id in self.close_debt and durable_debt_enabled():
-            if not await self.defer_rebuild(conv_id):
-                return False
-            self.close_debt.discard(conv_id)
+            if await self.defer_rebuild(conv_id):
+                self.close_debt.discard(conv_id)
             if len(self.finished) < MAX_CONVERSATIONS:
                 self.finished.add(conv_id)
         self.close_retries.pop(conv_id, None)
@@ -267,18 +276,64 @@ class PusherAudioProjection:
         return True
 
     async def defer_rebuild(self, conv_id: str) -> bool:
+        """Queue optional metadata without awaiting Firestore on the close path."""
         if not durable_debt_enabled():
             return True
-        try:
-            await run_blocking(db_executor, record_projection_rebuild.mark_due, self.uid, conv_id)
-            return True
-        except Exception as exc:
-            logger.warning('Projection debt persistence deferred exception_type=%s', type(exc).__name__)
-            record_failure('projection', reason='transient')
+        if conv_id not in self.marker_retry and len(self.marker_retry) >= MAX_MARKER_RETRIES - MAX_CONVERSATIONS:
+            MARKER_WRITES.labels(outcome='marker_retry_overflow').inc()
+            logger.error('Projection debt retry inventory full; optional marker handoff refused')
             return False
+        self.marker_sequence += 1
+        self.marker_retry[conv_id] = self.marker_sequence
+        self._start_marker_task()
+        return True
+
+    def _start_marker_task(self) -> None:
+        if self.marker_retry and (self.marker_task is None or self.marker_task.done()):
+            self.marker_task = start_background_task(self._persist_markers(), name='projection-debt-handoff')
+
+    async def _persist_markers(self) -> None:
+        # At most two batched RPCs, including executor queue time. A late SDK
+        # commit is metadata-only, idempotent and has its own one-second timeout.
+        for _ in range(2):
+            pending = dict(self.marker_retry)
+            if not pending:
+                return
+            try:
+                async with asyncio.timeout(MARKER_ATTEMPT_SECONDS):
+                    await run_blocking(db_executor, record_projection_rebuild.mark_many, self.uid, set(pending))
+            except Exception as exc:
+                MARKER_WRITES.labels(outcome='marker_write_failed').inc()
+                logger.warning('Projection marker_write_failed exception_type=%s', type(exc).__name__)
+                continue
+            for cid, sequence in pending.items():
+                if self.marker_retry.get(cid) == sequence:
+                    self.marker_retry.pop(cid, None)
+                    self.close_debt.discard(cid)
+            MARKER_WRITES.labels(outcome='persisted').inc(len(pending))
 
     async def persist_pending(self) -> None:
-        """Final socket handoff; existing producer fences keep live-worker debt due."""
-        for conv_id in list(self.close_debt):
-            if await self.defer_rebuild(conv_id):
-                self.close_debt.discard(conv_id)
+        """Total socket-cleanup budget, independent of the number of debts."""
+        if not durable_debt_enabled():
+            self.close_debt.clear()
+            self.marker_retry.clear()
+            return
+        for cid in self.close_debt:
+            if cid not in self.marker_retry:
+                self.marker_sequence += 1
+                self.marker_retry[cid] = self.marker_sequence
+        self._start_marker_task()
+        if self.marker_task is None:
+            return
+        try:
+            async with asyncio.timeout(MARKER_CLOSE_SECONDS):
+                for attempt in range(2):
+                    await asyncio.shield(self.marker_task)
+                    if not self.marker_retry or attempt == 1:
+                        break
+                    self._start_marker_task()
+        except TimeoutError:
+            MARKER_WRITES.labels(outcome='marker_write_failed').inc()
+            logger.warning('Projection marker_write_failed cleanup_budget_exhausted')
+        # Background work is bounded independently; socket close never waits
+        # for a second round after the total cleanup budget expires.

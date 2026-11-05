@@ -7,10 +7,11 @@ from datetime import datetime, timezone
 from google.cloud import firestore
 
 from database._client import get_firestore_client, run_transactional
-from database.batch_pipeline_privacy import BatchPrivacyBlocked, assert_batch_write_allowed
+from database.batch_pipeline_privacy import BatchPrivacyBlocked, BatchPrivacyReason, assert_batch_write_allowed
 
 COLLECTION = 'record_projection_rebuild_jobs'
 KIND = 'record_projection_rebuild_due'
+MAX_MARKERS_PER_BATCH = 256
 
 
 def marker_id(uid, cid):
@@ -27,6 +28,20 @@ def mark_due(uid, cid, *, firestore_client=None):
         timeout=5,
         retry=None,
     )
+
+
+def mark_many(uid, conversation_ids, *, firestore_client=None):
+    """One bounded cleanup RPC, rather than one timeout per socket obligation."""
+    owners = set(conversation_ids)
+    if not 0 < len(owners) <= MAX_MARKERS_PER_BATCH:
+        raise ValueError('bounded projection marker batch required')
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    batch = client.batch()
+    requested_at = datetime.now(timezone.utc)
+    for cid in owners:
+        ref = client.collection(COLLECTION).document(marker_id(uid, cid))
+        batch.set(ref, {'kind': KIND, 'owner_id': uid, 'conversation_id': cid, 'requested_at': requested_at})
+    batch.commit(timeout=1, retry=None)
 
 
 def apply_projection(uid, cid, payload, *, expected_audio_files, firestore_client=None):
@@ -46,8 +61,14 @@ def apply_projection(uid, cid, payload, *, expected_audio_files, firestore_clien
             return False
         try:
             assert_batch_write_allowed(client, tx, uid, conversation_ids=(cid,))
-        except BatchPrivacyBlocked:
-            return False  # Revocation clears only the maintenance job, never content.
+        except BatchPrivacyBlocked as blocked:
+            if blocked.reason in {
+                BatchPrivacyReason.ACCOUNT_DELETED,
+                BatchPrivacyReason.ACCOUNT_MISSING,
+                BatchPrivacyReason.CONVERSATION_DELETED,
+            }:
+                return False
+            return None  # Migration, generation holds and unknown refusals retain debt without a write.
         if audio_files_revision(row.get('audio_files') or []) != audio_files_revision(expected_audio_files):
             raise AudioFilesChanged('audio projection changed')
         tx.update(ref, {'audio_files': retain_aliases(payload['audio_files'], row.get('audio_files') or [])})

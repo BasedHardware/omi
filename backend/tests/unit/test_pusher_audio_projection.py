@@ -28,6 +28,7 @@ def world(monkeypatch):
     monkeypatch.delenv('PUSHER_AUDIO_FILE_INCREMENTAL_ENABLED', raising=False)
     monkeypatch.delenv('PUSHER_PROJECTION_DEBT_DURABLE_ENABLED', raising=False)
     monkeypatch.setattr(projection.record_projection_rebuild, 'mark_due', MagicMock())
+    monkeypatch.setattr(projection.record_projection_rebuild, 'mark_many', MagicMock())
     monkeypatch.delenv('BUCKET_AUDIO_DERIVED', raising=False)
     monkeypatch.setattr(projection.audio_archive, 'admitted', lambda *_: False)
     monkeypatch.setattr(projection, 'time', SimpleNamespace(monotonic=lambda: clock[0]))
@@ -448,7 +449,8 @@ async def test_close_discovery_errors_are_bounded_and_cannot_abort_custody(world
     assert finish.call_count == (1 if deterministic else 3)
     assert not cache.inventory and not cache.close_retries
     assert not identities
-    projection.record_projection_rebuild.mark_due.assert_called_once_with('u', 'c')
+    await cache.persist_pending()
+    projection.record_projection_rebuild.mark_many.assert_called_once_with('u', {'c'})
 
 
 def test_empty_listing_still_observes_deleted_owner(world):
@@ -607,12 +609,12 @@ async def test_failed_marker_write_keeps_debt_for_eviction_retry(world, monkeypa
     cache = projection.PusherAudioProjection('u')
     cache.refresh('c', [world.add(100)])
     monkeypatch.setattr(cache, 'finish', MagicMock(side_effect=projection.InvalidArgument('private path')))
-    marker = projection.record_projection_rebuild.mark_due
+    marker = projection.record_projection_rebuild.mark_many
     marker.side_effect = [OSError('private path'), None]
-    assert await cache.finish_pending('c', set(), set()) is False
-    assert cache.close_debt == {'c'}
+    # Marker persistence never changes successful recording completion.
+    assert await cache.finish_pending('c', set(), set()) is True
     await cache.persist_pending()
-    assert not cache.close_debt and marker.call_count == 2
+    assert not cache.close_debt and not cache.marker_retry and marker.call_count == 2
 
 
 @pytest.mark.asyncio
@@ -620,12 +622,14 @@ async def test_eviction_and_switch_off_marker_handoff(world, monkeypatch):
     cache = projection.PusherAudioProjection('u')
     cache.refresh('c', [world.add(100)])
     projection.record_projection_rebuild.mark_due.assert_not_called()  # no hot-path writes
+    projection.record_projection_rebuild.mark_many.assert_not_called()
     await cache.persist_pending()
-    projection.record_projection_rebuild.mark_due.assert_called_once_with('u', 'c')
+    projection.record_projection_rebuild.mark_many.assert_called_once_with('u', {'c'})
     cache.refresh('c', [world.add(101)])
     monkeypatch.setenv('PUSHER_PROJECTION_DEBT_DURABLE_ENABLED', 'off')
     await cache.persist_pending()
-    assert projection.record_projection_rebuild.mark_due.call_count == 1
+    projection.record_projection_rebuild.mark_due.assert_not_called()
+    assert projection.record_projection_rebuild.mark_many.call_count == 1
 
 
 @pytest.mark.parametrize('incremental', ['0', '1'])
@@ -647,7 +651,7 @@ def test_socket_independent_rebuild_refuses_deleted_before_storage(world, monkey
     assert not world.lists and not world.writes
 
 
-def test_rebuild_retains_debt_on_incomplete_raw_index(world, monkeypatch):
+def test_rebuild_refuses_incomplete_raw_index_without_metadata_write(world, monkeypatch):
     world.add(100)
     monkeypatch.setattr(full_projection, 'projection_owner_gone', lambda *_: False)
     monkeypatch.setattr(projection.audio_archive, 'admitted', lambda *_: True)
@@ -670,7 +674,8 @@ async def test_incomplete_close_discovery_hands_off_durable_debt(world, monkeypa
     else:
         world.blobs.clear()
     assert await cache.finish_pending('c', set(), set()) is True
-    projection.record_projection_rebuild.mark_due.assert_called_once_with('u', 'c')
+    await cache.persist_pending()
+    projection.record_projection_rebuild.mark_many.assert_called_once_with('u', {'c'})
     assert not cache.close_debt
 
 
@@ -678,4 +683,101 @@ async def test_incomplete_close_discovery_hands_off_durable_debt(world, monkeypa
 async def test_terminal_batch_persists_debt_even_when_close_inventory_is_full(world, monkeypatch):
     monkeypatch.setattr(projection, 'MAX_CONVERSATIONS', 0)
     await test_real_socket_flushes_keep_identity_fresh_and_finalize(world, monkeypatch, True, 'terminal')
-    assert any(call.args == ('u', 'c') for call in projection.record_projection_rebuild.mark_due.call_args_list)
+    assert any('c' in call.args[1] for call in projection.record_projection_rebuild.mark_many.call_args_list)
+
+
+@pytest.mark.asyncio
+async def test_failed_terminal_handoff_outside_full_cache_is_retried_by_real_socket_cleanup(world, monkeypatch):
+    monkeypatch.setattr(projection, 'MAX_CONVERSATIONS', 0)
+    failed = [False]
+
+    def fail_once(*args):
+        if not failed[0]:
+            failed[0] = True
+            raise OSError('synthetic marker outage')
+
+    projection.record_projection_rebuild.mark_many.side_effect = fail_once
+    await test_real_socket_flushes_keep_identity_fresh_and_finalize(world, monkeypatch, True, 'terminal')
+    assert failed[0] and projection.record_projection_rebuild.mark_many.call_count >= 2
+    assert any('c' in call.args[1] for call in projection.record_projection_rebuild.mark_many.call_args_list)
+
+
+@pytest.mark.asyncio
+async def test_cleanup_batches_all_obligations_and_retains_them_on_failure(world):
+    cache = projection.PusherAudioProjection('u')
+    cache.close_debt.update(str(i) for i in range(128))
+    cache.marker_retry['overflow'] = 1
+    expected = cache.close_debt | {'overflow'}
+    write = projection.record_projection_rebuild.mark_many
+    write.side_effect = OSError('synthetic marker outage')
+    await cache.persist_pending()
+    assert cache.close_debt | set(cache.marker_retry) == expected
+    assert all(call.args == ('u', expected) for call in write.call_args_list)
+    write.side_effect = None
+    await cache.persist_pending()
+    assert not cache.close_debt and not cache.marker_retry
+
+
+@pytest.mark.asyncio
+async def test_all_close_markers_share_small_total_deadline(world, monkeypatch):
+    import asyncio
+    import time
+
+    cache = projection.PusherAudioProjection('u')
+    cache.close_debt.update(str(i) for i in range(128))
+    monkeypatch.setattr(projection, 'MARKER_ATTEMPT_SECONDS', 0.02)
+    monkeypatch.setattr(projection, 'MARKER_CLOSE_SECONDS', 0.05)
+
+    async def stuck(*args):
+        await asyncio.sleep(10)
+
+    monkeypatch.setattr(projection, 'run_blocking', stuck)
+    started = time.monotonic()
+    await cache.persist_pending()
+    assert time.monotonic() - started < 0.2
+    assert len(cache.marker_retry) == 128
+    # The independently bounded task also terminates, leaving no socket waiter.
+    await cache.marker_task
+
+
+@pytest.mark.asyncio
+async def test_overflow_inventory_is_bounded_and_reports_failed_handoff(world, monkeypatch):
+    cache = projection.PusherAudioProjection('u')
+    monkeypatch.setattr(projection, 'MAX_MARKER_RETRIES', projection.MAX_CONVERSATIONS + 2)
+    projection.record_projection_rebuild.mark_many.side_effect = OSError()
+    assert await cache.defer_rebuild('one')
+    assert await cache.defer_rebuild('two')
+    assert not await cache.defer_rebuild('three')
+    assert set(cache.marker_retry) == {'one', 'two'}
+    await cache.persist_pending()
+    assert set(cache.marker_retry) == {'one', 'two'}
+
+
+def test_confirmed_empty_cold_discovery_is_distinct_from_privacy_deferral(world, monkeypatch):
+    monkeypatch.setattr(full_projection, 'projection_owner_gone', lambda *_: False)
+    write = MagicMock(side_effect=AssertionError('empty inventory must not write the conversation'))
+    monkeypatch.setattr(projection.record_projection_rebuild, 'apply_projection', write)
+    assert full_projection.rebuild('u', 'c') == 'no_objects'
+    write.assert_not_called()
+    assert not world.writes
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('empty', [False, True])
+async def test_full_overflow_list_preserves_cached_close_debt_until_cleanup(world, monkeypatch, empty):
+    cache = projection.PusherAudioProjection('u')
+    cache.has_uploaded_paths = True
+    cache.close_debt.add('cached')
+    cache.marker_retry.update({str(i): i for i in range(128)})
+    finish = (
+        MagicMock(return_value=None)
+        if empty
+        else MagicMock(side_effect=projection.InvalidArgument('synthetic projection rejection'))
+    )
+    monkeypatch.setattr(cache, 'finish', finish)
+    # Best-effort queue refusal cannot block close or discard the cached owner.
+    assert await cache.finish_pending('cached', set(), set()) is True
+    assert cache.close_debt == {'cached'}
+    await cache.persist_pending()
+    assert not cache.marker_retry and not cache.close_debt
+    assert any('cached' in call.args[1] for call in projection.record_projection_rebuild.mark_many.call_args_list)

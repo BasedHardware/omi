@@ -309,6 +309,16 @@ async def test_projection_close_debt_survives_socket_and_respects_privacy(lifecy
     monkeypatch.setenv('PUSHER_PROJECTION_DEBT_DURABLE_ENABLED', '1')
     monkeypatch.setenv('PUSHER_AUDIO_FILE_INCREMENTAL_ENABLED', '1')
     before = sim.row()
+
+    def retained_objects():
+        bucket = sim.storage.bucket(os.environ['BUCKET_PRIVATE_CLOUD_SYNC'])
+        return {
+            blob.name: (blob.generation, blob.metadata, blob.download_as_bytes())
+            for blob in bucket.list_blobs(prefix=f'chunks/{sim.uid}/{sim.cid}/')
+        }
+
+    retained_before = retained_objects()
+    assert retained_before
     from utils.batch_pipeline import record_projection_rebuild as full_projection
 
     discovery = full_projection.discover(sim.uid, sim.cid, strict_raw=True)
@@ -338,8 +348,7 @@ async def test_projection_close_debt_survives_socket_and_respects_privacy(lifecy
             assert await cache.finish_pending(sim.cid, set(), set()) is False
             assert await cache.finish_pending(sim.cid, set(), set()) is False
             assert await cache.finish_pending(sim.cid, set(), set()) is True
-        else:
-            await cache.persist_pending()
+        await cache.persist_pending()
         assert marker.get().exists
         tombstone = sim.ref.parent.parent.collection('deleted_conversations').document(sim.cid)
         if ending == 'tombstone':
@@ -386,5 +395,6 @@ async def test_projection_close_debt_survives_socket_and_respects_privacy(lifecy
                 assert {k: v for k, v in after.items() if k != 'audio_files'} == before
         # The retained PCM and its metadata are untouched by the repair pass.
         assert live.list_audio_chunks(sim.uid, sim.cid, require_archive=True)
+        assert retained_objects() == retained_before
     finally:
         marker.delete()

@@ -19,7 +19,11 @@ from utils.batch_pipeline import record_seal_cluster_repair as repair
 
 def emit(payload):
     logger = logging.getLogger('record-seal-repair')
-    level = logging.ERROR if payload.get('outcome') == 'error' else logging.INFO
+    level = (
+        logging.ERROR
+        if payload.get('outcome') == 'error'
+        else logging.WARNING if payload.get('outcome') == 'capacity_exceeded' else logging.INFO
+    )
     record = logger.makeRecord(
         logger.name, level, '', 0, json.dumps(payload, sort_keys=True, allow_nan=False), (), None
     )
@@ -46,7 +50,9 @@ def main():
                     try:
                         from utils import record_projection_rebuild
 
-                        emit(record_projection_rebuild.run_job())
+                        report = record_projection_rebuild.run_job()
+                        if report['outcome'] != 'disabled':
+                            emit(report)
                     except Exception:
                         emit({'event': 'record_projection_rebuild', 'outcome': 'error'})
                     emit(repair.run(progress=emit))

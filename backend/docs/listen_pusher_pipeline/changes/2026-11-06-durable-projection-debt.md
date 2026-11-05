@@ -2,14 +2,22 @@
 
 After the bounded close rebuild retries fail, pusher hands playback-only debt
 into `record_projection_rebuild_jobs/{sha256([uid,cid])}` before discarding its
-socket state. Socket cleanup also hands off outstanding debt. Terminal batch
+socket state. Socket cleanup also hands off outstanding debt. Terminal transient/InvalidArgument batch
 projection failures persist by exact owner even if the bounded close cache is full. The marker kind
 is `record_projection_rebuild_due`; its only other fields are owner ID,
 conversation ID and request time. Repeated handoffs coalesce by owner.
-Ordinary flushes add no reads or writes. A failed marker write retains the
-in-memory obligation for another close/cleanup attempt and emits a sanitized
-warning plus the existing projection failure counter. A process kill or a
-persistent Firestore outage can still prevent handoff; this is not a WAL.
+Ordinary flushes add no reads or writes. Terminal marker handoffs enqueue into
+one bounded background task. A separate metadata-only retry inventory preserves
+overflow outside the close cache; marker failure cannot change recording-close
+success. Socket cleanup has one three-second total deadline for batched writes
+and retries, independent of debt count. `marker_write_failed` and bounded-list
+saturation emit sanitized logs and counter outcomes. Temporary privacy holds
+retain markers without a metadata update.
+
+The [owning contract](../../listen_pusher_pipeline.mdx#durable-playback-projection-rebuild-debt)
+defines payloads, ordering, limits, gauges, flag bindings and rollback. Process
+kill, persistent Firestore failure, or saturation can still prevent handoff;
+this marker is not a WAL.
 
 The existing record-seal-repair CronJob runs a separate 60-second pass before
 seal work, selecting at most 128 markers by request time. It uses a fresh,
@@ -30,11 +38,16 @@ before updating only `audio_files`. A deletion or another projection arriving
 during discovery cannot recreate the owner or overwrite a newer projection.
 Raw-index failure cannot count as successful durable repair, including forced
 socket close. Empty close discovery hands off its obligation too. Empty live
-inventory retains the marker for a later pass.
+inventory retains the marker until seven days from Firestore creation, then
+retires as `retired_no_objects`. A 10,000-marker maintenance ceiling also retires
+confirmed empty work under pressure, never useful or privacy-held debt. Per-pass
+work stays capped at 128; the collection scan caps at 10,001. Aggregate logs and
+Prometheus gauges expose bounded count, observed oldest age and capacity state.
+No retirement deletes audio.
 
 `PUSHER_PROJECTION_DEBT_DURABLE_ENABLED` defaults **on**; `0`, `false`, or `off`
 disables both handoff and consumption. Rollback disables the consumer runtime
-first (`recordSealRepair.projectionDebtDurableEnabled=false`), then pusher; existing markers remain inert. Restoring on resumes them.
+first (`recordSealRepair.projectionDebtDurableEnabled=false`), then pusher; existing markers remain inert. Re-enabling the flag resumes retained markers.
 A normal socket close does not probe or clear a preexisting marker: the cold
 consumer clears it after its own full rebuild, avoiding hot-path writes.
 

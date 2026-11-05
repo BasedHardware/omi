@@ -61,12 +61,9 @@ def test_privacy_refusal_never_recreates_or_updates_conversation(client, fence):
     else:
         client.rows[ROW][fence] = True
     before = deepcopy(client.rows)
-    assert (
-        jobs.apply_projection(
-            'u', 'c', {'audio_files': [{'id': 'new'}]}, expected_audio_files=[], firestore_client=client
-        )
-        is False
-    )
+    assert jobs.apply_projection(
+        'u', 'c', {'audio_files': [{'id': 'new'}]}, expected_audio_files=[], firestore_client=client
+    ) is (None if fence == 'e2ee' else False)
     assert client.rows == before
 
 
@@ -95,7 +92,9 @@ def test_consumer_clears_only_observed_marker_and_rotates_failed_work(monkeypatc
     report = consumer.run(budget=SweepBudget(60), firestore_client=client)
     client.collection.assert_called_once_with(jobs.COLLECTION)
     client.collection.return_value.order_by.assert_called_once_with('requested_at')
-    client.collection.return_value.order_by.return_value.limit.assert_called_once_with(128)
+    client.collection.return_value.order_by.return_value.limit.assert_called_once_with(
+        consumer.MAX_COLLECTION_MARKERS + 1
+    )
     assert client.write_option.call_args_list[0].kwargs == {'last_update_time': 'observed'}
     if result is True or result is False:
         ref.delete.assert_called_once()
@@ -148,6 +147,9 @@ def test_marker_is_content_free_and_coalesces_by_owner():
     client = MagicMock()
     jobs.mark_due('u', 'c', firestore_client=client)
     jobs.mark_due('u', 'c', firestore_client=client)
+    assert [call.args for call in client.collection.return_value.document.call_args_list] == [
+        (jobs.marker_id('u', 'c'),)
+    ] * 2
     assert jobs.marker_id('u', 'c') != jobs.marker_id('u', 'other')
     assert client.collection.call_args.args == (jobs.COLLECTION,)
     assert set(client.collection.return_value.document.return_value.set.call_args.args[0]) == {
@@ -158,7 +160,7 @@ def test_marker_is_content_free_and_coalesces_by_owner():
     }
 
 
-def test_budget_exhaustion_keeps_rotated_marker_and_does_not_disable_seal_pass(monkeypatch):
+def test_job_budget_outcome_does_not_disable_seal_pass(monkeypatch):
     from config import record_seal_repair as config
     from utils.batch_pipeline.record_seal_budget import BudgetExhausted
 
@@ -196,3 +198,129 @@ def test_invalid_marker_rotates_without_rebuild_or_deletion(monkeypatch):
     doc.reference.update.assert_called_once()
     doc.reference.delete.assert_not_called()
     rebuild.assert_not_called()
+
+
+@pytest.mark.parametrize('hold', ['migration', 'generation'])
+def test_temporary_privacy_hold_retains_debt_until_it_clears(client, hold):
+    from database.batch_pipeline_privacy import privacy_owner_key
+
+    if hold == 'migration':
+        client.rows[('users', 'u')]['migration_status'] = 'migrating'
+    else:
+        client.rows[('batch_pipeline_privacy', privacy_owner_key('u'))] = {'purging': True}
+    before = deepcopy(client.rows)
+    assert (
+        jobs.apply_projection(
+            'u', 'c', {'audio_files': [{'id': 'new'}]}, expected_audio_files=[], firestore_client=client
+        )
+        is None
+    )
+    assert client.rows == before
+    if hold == 'migration':
+        client.rows[('users', 'u')].pop('migration_status')
+    else:
+        client.rows.pop(('batch_pipeline_privacy', privacy_owner_key('u')))
+    assert (
+        jobs.apply_projection(
+            'u', 'c', {'audio_files': [{'id': 'new'}]}, expected_audio_files=[], firestore_client=client
+        )
+        is True
+    )
+
+
+def test_deadline_rotates_before_discovery_and_never_clears_marker(monkeypatch):
+    from utils.batch_pipeline.record_seal_budget import BudgetExhausted
+
+    client = MagicMock()
+    doc = SimpleNamespace(
+        id=jobs.marker_id('u', 'c'),
+        reference=MagicMock(),
+        update_time='old',
+        to_dict=lambda: {'kind': jobs.KIND, 'owner_id': 'u', 'conversation_id': 'c'},
+    )
+    client.collection.return_value.order_by.return_value.limit.return_value.stream.return_value = [doc]
+
+    def exhaust(*args):
+        doc.reference.update.assert_called_once()
+        raise BudgetExhausted()
+
+    monkeypatch.setattr(consumer, 'rebuild', exhaust)
+    with pytest.raises(BudgetExhausted):
+        consumer.run(budget=SweepBudget(60), firestore_client=client)
+    doc.reference.delete.assert_not_called()
+
+
+@pytest.mark.parametrize('age_days,over_capacity,retired', [(0, False, False), (8, False, True), (0, True, True)])
+def test_confirmed_empty_markers_retire_by_creation_age_or_collection_pressure(
+    monkeypatch, age_days, over_capacity, retired
+):
+    from datetime import datetime, timedelta, timezone
+
+    client = MagicMock()
+    doc = SimpleNamespace(
+        id=jobs.marker_id('u', 'c'),
+        reference=MagicMock(),
+        update_time='observed',
+        create_time=datetime.now(timezone.utc) - timedelta(days=age_days),
+        to_dict=lambda: {'kind': jobs.KIND, 'owner_id': 'u', 'conversation_id': 'c'},
+    )
+    client.collection.return_value.order_by.return_value.limit.return_value.stream.return_value = [doc]
+    monkeypatch.setattr(consumer, 'MAX_COLLECTION_MARKERS', 0 if over_capacity else 10000)
+    monkeypatch.setattr(consumer, 'rebuild', lambda *_: 'no_objects')
+    report = consumer.run(budget=SweepBudget(60), firestore_client=client)
+    assert bool(doc.reference.delete.call_count) is retired
+    assert report['dispositions'] == {'retired_no_objects' if retired else 'deferred': 1}
+    assert report['gauges']['marker_count'] == 1
+    assert report['gauges']['oldest_age_seconds'] >= age_days * 86400
+    assert report['gauges']['at_capacity'] is over_capacity
+
+
+def test_collection_pressure_never_discards_privacy_hold_or_incomplete_discovery(monkeypatch):
+    from datetime import datetime, timedelta, timezone
+
+    client = MagicMock()
+    doc = SimpleNamespace(
+        id=jobs.marker_id('u', 'c'),
+        reference=MagicMock(),
+        update_time='observed',
+        create_time=datetime.now(timezone.utc) - timedelta(days=30),
+        to_dict=lambda: {'kind': jobs.KIND, 'owner_id': 'u', 'conversation_id': 'c'},
+    )
+    client.collection.return_value.order_by.return_value.limit.return_value.stream.return_value = [doc]
+    monkeypatch.setattr(consumer, 'MAX_COLLECTION_MARKERS', 0)
+    monkeypatch.setattr(consumer, 'rebuild', lambda *_: None)
+    assert consumer.run(budget=SweepBudget(60), firestore_client=client)['dispositions'] == {'deferred': 1}
+    doc.reference.delete.assert_not_called()
+
+
+def test_consumer_caps_work_independently_of_collection_scan(monkeypatch):
+    client = MagicMock()
+    docs = [
+        SimpleNamespace(
+            id=jobs.marker_id('u', str(i)),
+            reference=MagicMock(),
+            update_time='observed',
+            to_dict=lambda i=i: {'kind': jobs.KIND, 'owner_id': 'u', 'conversation_id': str(i)},
+        )
+        for i in range(3)
+    ]
+    client.collection.return_value.order_by.return_value.limit.return_value.stream.return_value = docs
+    monkeypatch.setattr(consumer, 'MAX_PER_PASS', 2)
+    rebuild = MagicMock(return_value=True)
+    monkeypatch.setattr(consumer, 'rebuild', rebuild)
+    assert consumer.run(budget=SweepBudget(60), firestore_client=client)['dispositions'] == {'rebuilt': 2}
+    assert rebuild.call_count == 2
+    docs[-1].reference.update.assert_not_called()
+
+
+def test_socket_cleanup_is_one_content_free_bounded_batch():
+    client = MagicMock()
+    jobs.mark_many('u', ['one', 'two', 'one'], firestore_client=client)
+    batch = client.batch.return_value
+    assert batch.set.call_count == 2
+    for call in batch.set.call_args_list:
+        assert set(call.args[1]) == {'kind', 'owner_id', 'conversation_id', 'requested_at'}
+    batch.commit.assert_called_once_with(timeout=1, retry=None)
+    with pytest.raises(ValueError):
+        jobs.mark_many('u', [str(i) for i in range(jobs.MAX_MARKERS_PER_BATCH + 1)], firestore_client=client)
+    assert batch.commit.call_count == 1
