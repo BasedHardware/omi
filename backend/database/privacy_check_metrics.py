@@ -5,8 +5,8 @@ from collections import Counter as Counts
 from contextlib import contextmanager
 from contextvars import ContextVar
 from functools import wraps
+import inspect
 import logging
-import sys
 import threading
 import time
 
@@ -147,7 +147,8 @@ def memo_ineligible(reason):
     try:
         reason = reason if reason in {'no_attempt', 'no_transaction', 'snapshots'} else 'other'
         caller = 'other'
-        frame = sys._getframe(1)
+        current = inspect.currentframe()
+        frame = current.f_back if current is not None else None
         for _ in range(8):
             if frame is None:
                 break
