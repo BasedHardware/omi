@@ -1073,7 +1073,11 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
             try:
                 canonical = conversations_db.resolve_sync_conversation_redirect(uid, conversation_id)
             except Exception as error:
-                # An unreadable redirect is unresolved custody, not a queue-cadence retry: the outbox's
+                from utils.enrichment.consumer import transient_dependency
+
+                if transient_dependency(error):
+                    raise  # A transient Firestore fault keeps the consumer's quick retry.
+                # A persistent resolver failure is unresolved custody, not a queue-cadence retry: the outbox's
                 # redirect_unresolved deferral backs a long-stuck episode off to hourly polls.
                 logger.warning(
                     'event=sync_reprocess outcome=redirect_unresolved exception_type=%s', type(error).__name__

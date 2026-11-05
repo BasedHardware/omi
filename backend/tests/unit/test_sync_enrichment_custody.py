@@ -114,7 +114,7 @@ def test_invalid_redirect_retains_deferred_debt_without_processing(admitted, pip
 
 
 @pytest.mark.parametrize('error', [RuntimeError('synthetic outage'), PermissionDenied('synthetic denial')])
-def test_failing_redirect_resolver_defers_as_unresolved_custody(admitted, pipeline, monkeypatch, error):
+def test_persistently_failing_redirect_resolver_defers_as_unresolved_custody(admitted, pipeline, monkeypatch, error):
     # synceff 2026-11-05 (lead2 861a86): a resolver failure is unresolved custody on the hourly backoff,
     # never an endless queue-cadence retry. The enrichment callback copy is held identical by the parity test.
     rows, tasks = admitted
@@ -122,6 +122,25 @@ def test_failing_redirect_resolver_defers_as_unresolved_custody(admitted, pipeli
     monkeypatch.setattr(pipeline.conversations_db, 'resolve_sync_conversation_redirect', Mock(side_effect=error))
     assert reprocess.run(reprocess.key('u', 'c'), tasks[0]['task_token'], process, now=120) == 'deferred'
     assert rows[reprocess.key('u', 'c')]['deferred_reason'] == 'redirect_unresolved'
+
+
+def test_transient_redirect_resolver_fault_keeps_the_quick_retry(admitted, pipeline, monkeypatch):
+    from google.api_core.exceptions import ServiceUnavailable
+
+    process = callback(pipeline, monkeypatch, {'deleted': True, 'sync_merged_into': 'survivor'})
+    monkeypatch.setattr(
+        pipeline.conversations_db,
+        'resolve_sync_conversation_redirect',
+        Mock(side_effect=ServiceUnavailable('synthetic blip')),
+    )
+    context = {}
+    token = pipeline.PROCESS_CONTEXT.set(context)
+    try:
+        with pytest.raises(ServiceUnavailable):
+            process('u', 'c', 'en')
+    finally:
+        pipeline.PROCESS_CONTEXT.reset(token)
+    assert 'defer_reason' not in context
 
 
 def _stuck_redirect(pipeline, monkeypatch):
