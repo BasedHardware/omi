@@ -28,7 +28,7 @@ FIELDS = (
 )
 CONTENT = ('title', 'bullets', 'lede', 'follow_ups', 'people', 'open_questions', 'provisional_items', 'moments')
 DRIFT_OUTCOMES = frozenset({'match', 'mismatch', 'missing_legacy', 'missing_view'})
-DRAIN_OUTCOMES = frozenset({'drained', 'error', 'lost_lease'})
+DRAIN_OUTCOMES = frozenset({'drained', 'error', 'lost_lease', 'killed'})
 SWEEP_OUTCOMES = frozenset({'redriven', 'error'})
 DRIFT = reuse_or_create(
     Counter, 'omi_episode_view_drift_total', 'Legacy vs log projection digests.', ['field', 'outcome']
@@ -38,6 +38,9 @@ COMPARE_SKIPPED = reuse_or_create(
 )
 SWEEP_OBSERVED = reuse_or_create(
     Gauge, 'omi_episode_drain_sweep_observed_at_seconds', 'Last successful bounded sweep.', []
+)
+FACTS_WITHOUT_TTL = reuse_or_create(
+    Gauge, 'omi_episode_facts_without_active_ttl', 'Facts detected without verified ACTIVE retention.', []
 )
 DRAIN = reuse_or_create(Counter, 'omi_episode_drain_total', 'Drain attempts by bounded outcome.', ['outcome'])
 SWEEP = reuse_or_create(Counter, 'omi_episode_drain_sweep_total', 'Bounded sweep outcomes.', ['outcome'])

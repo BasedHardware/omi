@@ -23,11 +23,23 @@ no outer retries. An aborted serving attempt emits no fact. Capture failures,
 including encryption and oversize payloads, are caught, counted through shared
 `omi_fallback_total{component="sync_dispatch",from="episode_capture",to="legacy"}`
 and dropped; they cannot retry or replace a committed writer's response. The
-post-commit append is synchronous and can add bounded log-attempt latency after
-the serving commit; it never holds that transaction's locks. There is no durable
-outbox guarantee for a crash between commit and append. Any capture drop blocks
-ramp acceptance: roll reads to zero and obtain a fresh compared baseline before
-readmission. A caught-up watermark alone cannot prove a capture gap did not occur.
+post-commit append and policy refresh use a shared, lazy executor with four
+workers and 64 queued items. Submission never waits for capacity. Overflow and
+cancellation are counted drops. Only the small pre-write policy fence remains
+synchronous; geometry compaction is allowlisted copying, without IO/encryption.
+Every detected capture/entry/refresh drop writes a durable `capture_dirty` token,
+clears Home readiness and advances the owner epoch, fencing older publishers.
+Home automatically uses legacy for that owner, including at read percent 100.
+Ordinary publication cannot clear the marker. The next drain performs a full
+bounded reconciliation from current legacy episodes, links and receipt archives,
+removes stale views/links and reprojects current member policy. Only atomic
+publication under the unchanged epoch, gap token and append watermark clears it.
+The full reconciliation scans at most 128 documents (including old projections
+and archives); overflow fails closed on legacy rather than clearing the marker.
+A completely unavailable data plane may also prevent persistence of the marker;
+`invalidation_failed` is an error requiring repair before read readmission.
+There is no durable outbox guarantee for process death between commit and append.
+A caught-up watermark alone cannot prove a process-death gap did not occur.
 
 Input-hook facts use the shared `utils/conversations/episode_attach_key.py:content_key`
 digest, including revision, recorded evidence, ancestry and member flags. Unknown
@@ -92,7 +104,7 @@ a follow-up capacity extension if measured accounts reach this guard.
 | retrying | 30-second retry deadline stamped on failure | next claim or sweep redrive | same histogram with `retrying`, `OmiEpisodeLogRetryingOverdue` |
 
 Member policy edits attempt a separate best-effort read barrier before the
-change and append refresh debt when it finishes. Entry/client/read/release
+change and enqueue background refresh debt when it finishes. Entry/client/read/release
 failures are caught and counted; the original writer runs exactly once and
 retains its own result or exception. Sync/smart-merge transactions register
 post-commit refresh intent, with no log IO in their serving transactions. A killed writer's barrier has a 25-minute deadline; the sweep
@@ -110,9 +122,13 @@ owner to install with the existing metrics scrape.
 ## Switches and read admission
 
 - `EPISODES_LOG_ENABLED`: remote Omi flag-store rule is authoritative; when absent,
-  the env value defaults on unless explicitly off. Remote inactive stops capture,
-  drain, wake/sweep work, sampling and read admission within the existing refresh
-  window (up to 60 seconds). Queued intent rechecks admission after commit. The
+  the env value defaults **false**. Remote inactive stops capture, drain, wakes,
+  sampling and read admission after the cached rule refresh, normally up to about
+  **60 seconds**. Refresh failures retain the last snapshot, so this is not a hard
+  maximum. Already committing work completes; the drain cheaply rechecks the
+  cached rule before publication and defers if it now sees the kill. The TTL
+  safety guard still runs while capture is off. Queued intent rechecks admission
+  after commit. The
   existing flag CLI supports this Firestore key; no deploy is needed to stop it.
 - `EPISODES_HOME_ROWS_ENABLED`: on unless off. Rows are sealed, server-filtered
   wire projections (member IDs, titles, emoji, starts, visibility and floor).
@@ -132,7 +148,7 @@ approved fresh baseline has drained and been compared. A previous backfill
 marker does not cover writes made while capture was off.
 
 A selected user also needs `backfill_complete`, a caught-up cursor, Home rows,
-and no policy barrier. No incomplete user can flip. Direct reads follow view
+no policy barrier and no `capture_dirty` marker. No incomplete user can flip. Direct reads follow view
 redirects and view navigation/membership links; live polling preserves the
 legacy idle-close/conflict handling before choosing a ready view.
 
@@ -196,6 +212,21 @@ close stamps enqueue post-commit member-refresh facts, including a proof-hit who
 episode shape does not change. Home caches expire at the transcription deadline
 and late projection receipts restore the normal cached metadata.
 The phase shadow already on main remains active.
+
+Rollout order is **TTL apply (ops) -> capture on -> drift soak -> read ramp**.
+The separately authorized operator first applies the reviewed retention policy
+with `batch_pipeline_ttl.py --apply` and verifies ACTIVE. This task does not apply it.
+Then enable the remote capture rule using `scripts/omi_flags.py set
+EPISODES_LOG_ENABLED --active --rollout 100 --episode-data-project based-hardware`
+with the normal reason/approval options. The CLI checks ACTIVE TTL in that explicit
+customer-data project before writing the flag; the flag-store project is separate.
+Every runtime fact writer also refuses capture unless a read-only TTL check is
+ACTIVE (cached at most 60 seconds; errors fail closed). The existing scheduler
+runs a periodic guard even with capture off, logging
+`event=episode_log_ttl outcome=facts_without_active_ttl` and publishing
+`omi_episode_facts_without_active_ttl`; the reviewed alert and sync collector
+include that metric. Runtime needs read-only field-policy inspection permission.
+After capture admission, soak drift before starting the 5/25/50/100 read ramp.
 
 After the authorized backend train, inspect each traffic-serving revision's
 `OMI_BACKEND_RELEASE_SHA` and percentage, then a new drain metric/log from that

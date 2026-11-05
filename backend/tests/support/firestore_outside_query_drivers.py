@@ -547,3 +547,22 @@ _driver(
     profile='operational-stalled-enrichment-redrive',
     serving=False,
 )
+
+
+_driver(
+    'utils.episodes.log.reconcile.snapshot',
+    base={'uid': UID},
+    profile='maintenance-episode-gap-reconcile',
+    serving=False,
+)
+_driver(
+    'utils.episodes.log.retention.guard',
+    patchers=(
+        _stub('utils.episodes.log.retention.active', False),
+        lambda client: unittest.mock.patch.object(
+            importlib.import_module('utils.episodes.log.retention'), '_guard_until', {}
+        ),
+    ),
+    profile='maintenance-episode-retention-inspection',
+    serving=False,
+)

@@ -44,6 +44,99 @@ telemetry, cached compose containment, Home policy, composer and label contracts
 review and CI state. This is a dated qualification/forecast record, not a live
 cost meter or a deployment receipt. Re-measure before any production ramp.
 
+## Round-3 review qualification and cost floor/ceiling
+
+Recorded **2026-11-05 01:06:23 UTC**, on the round-3 working tree based on
+`8c8f313abdd37c120caf5196f394cb29807d9600`; [PR #24607](https://github.com/BasedHardware/omi/pull/24607)
+owns the final pushed SHA and CI. This section supersedes the round-2 default-on,
+synchronous append and operator-only capture-drop recovery descriptions below.
+
+Recorded candidate reads now include all fixed-row member geometry. Capture and
+policy-refresh work use the shared lazy four-worker/64-queued bounded executor;
+request handlers never wait for append or refresh. The pre-write policy fence
+remains synchronous. Drops/overflow/cancellation persist `capture_dirty`, clear
+read readiness and advance the epoch. A failed policy entry also retains a
+metadata barrier until the writer finishes or deadline recovery occurs, so a
+repair cannot run ahead of the original writer. A full bounded authoritative
+reconciliation is the only publication that clears a capture gap; it replaces
+stale views/links and leaves legacy records untouched. Capacity failure remains
+on legacy. Facts/checkpoints stay content-free; current speech is hydrated only
+into sealed views. Capture defaults false and requires verified ACTIVE TTL at
+flag-on and runtime (60-second cache); the periodic guard logs and measures facts
+without active TTL even when capture is off. Remote kill is normally about 60s,
+can take longer after refresh failures, and does not cancel a committing publish.
+The drain rechecks its cached admission immediately before publish.
+
+Validation uses synthetic owners only and no GCP tier. Commands run through
+`/Users/dazheng/workspace/omi/bin/omi-heavy`; cloud credential variables are
+removed for the emulator, preflight and guarded push. No merge, deployment,
+production account access or writes, or TTL apply is performed.
+
+- The checked-in acceptance selection completed **2,950 passing cases** using
+  `BACKEND_UNIT_TEST_FILE_LIST=testing/episode_log_acceptance.txt
+  BACKEND_UNIT_FILE_BUDGET_SECONDS=1800 BACKEND_PYTEST_WORKERS=1 bash test.sh`
+  from `backend/`. Subsequent narrow policy-entry fencing and pure-geometry
+  reconciliation fixes are rechecked in the final focused suite/emulator.
+- **156 final focused cases passed** across `test_episode_log_round3.py`, `round2`, worker,
+  review, API, projector, telemetry and `test_omi_flags.py`. It proves Home at
+  100% chooses legacy after capture/entry/refresh/overflow failure and chooses the
+  log after full repair, preserves neighboring fixed members, blocks premature
+  repair of an active original writer, fences old repair epochs, refuses facts
+  before ACTIVE TTL, enforces the flag-on precondition, checks cached TTL/error
+  behavior, emits the missing-retention signal, returns while append/refresh IO
+  is blocked, and uses a real saturated executor to exercise overflow fencing.
+- The loopback Firestore emulator independently passed **14/14 log proofs**,
+  including real candidate projections, full collection/receipt reconciliation,
+  stale-view/link deletion and content-free checkpoints. Command:
+  `firebase emulators:exec --only firestore --project demo-omi-isolated-tests
+  'backend/.venv/bin/python -m pytest -q backend/tests/integration/test_episode_log_emulator.py'`
+  with synthetic offline encryption and `EPISODES_ENABLED=on EPISODES_PERCENT=100`.
+  The earlier combined log+timeline command was **41/42**: all 14 log proofs
+  passed, while legacy `test_simultaneous_late_devices_converge_on_one_closed_episode`
+  exhausted existing lock retries. This repeats the documented legacy contention
+  signal; no retry budgets, concurrency levels or skips were changed. Both owned
+  emulator processes shut down through Firebase after their commands completed.
+- Canonical `PYTHON=.venv/bin/python bash scripts/typecheck.sh` has **zero errors**.
+  The query guard registers real bounded reconciliation/retention query drivers;
+  its focused discovery/runtime selection passed **13 cases**. New queries are
+  unfiltered scans and need no new composite index. Full preflight and normal
+  guarded-push receipts are owned by the final PR qualification.
+
+### Explicit operations floor and historical ceiling
+
+Pricing checked live at **2026-11-05 01:06:23 UTC** on Google's
+[Firestore Standard pricing page](https://cloud.google.com/firestore/pricing).
+The displayed **us-central1 default USD** rates are **$0.03 per 100K reads,
+$0.09 per 100K writes and $0.01 per 100K TTL deletes**. The actual customer
+database location/effective rates were not queried. Keep the existing scenario
+explicit: **26.60M reads, 11.30M writes, 4.90M TTL deletes/day**, not measured fleet
+volumes. Moving the work to the bounded executor does not change its regular
+Firestore document operation counts.
+
+| Scenario cost per day | Current list-rate floor | Historical effective-rate ceiling |
+| --- | ---: | ---: |
+| Reads | $7.98 | $14.364 (at $0.54/M) |
+| Writes | $10.17 | $18.08 (at $1.60/M; $15.82 at $1.40/M) |
+| TTL deletes | $0.49 | $0.49 reference allowance |
+| **Operations** | **$18.64** | **$32.934 maximum ($30.674 lower historical case)** |
+| Same small-payload storage scenario | about $0.02 | about $0.02 |
+| Supplied task/compute allowance | $0–2 | $0–2 |
+| **Comparable modeled total** | **$18.66–20.66** | **$30.69–34.95** |
+
+Thus Luna's **$18.64/day operations floor** and the conservative **$31–35/day
+historical total** describe different rate assumptions applied to the same
+scenario. Neither is a fresh production bill. The historical ratios remain
+traceable to the supplied dated study below. Drop invalidations add two reads
+(deletion authority/owner) and one owner write per event; full repairs add bounded
+legacy/projection/member reads and replacement writes. Their frequency, retry
+amplification, TTL lag, actual view/checkpoint/index bytes, network/ingestion and
+vendor usage remain unmeasured and are additional. ACTIVE periodic guard checks
+use the admin policy surface rather than a document scan; a missing policy adds
+at most one bounded fact-existence query per process per minute.
+
+Rollout order in the runbook and PR is **TTL apply (ops) -> capture on -> drift
+soak -> read ramp**. TTL is only declared, never applied by this round.
+
 ## Round-2 review qualification
 
 Recorded **2026-11-04 23:42:30 UTC**, on the round-2 working tree based on

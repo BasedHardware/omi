@@ -83,3 +83,4 @@ tests/unit/test_sync_reprocess_coalesce.py
 tests/unit/test_sync_silent_failure.py
 
 tests/unit/test_episode_log_round2.py
+tests/unit/test_episode_log_round3.py

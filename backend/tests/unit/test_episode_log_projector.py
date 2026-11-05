@@ -26,6 +26,11 @@ T0 = datetime(2026, 11, 4, tzinfo=timezone.utc)
 UID = 'proto-u'
 
 
+@pytest.fixture(autouse=True)
+def capture_enabled(monkeypatch):
+    monkeypatch.setenv('EPISODES_LOG_ENABLED', 'on')
+
+
 def S(sec: float):
     return T0 + timedelta(seconds=sec)
 

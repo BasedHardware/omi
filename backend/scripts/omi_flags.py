@@ -214,6 +214,17 @@ def cmd_set(args: argparse.Namespace) -> None:
             raise FlagCliError(f'{args.key}: no PostHog row to mirror')
         mirror = (row['id'], posthog_mirror_body(row, rule))
         _print({'posthog_patch': mirror[1]})
+    if args.key == 'EPISODES_LOG_ENABLED' and rule['active']:
+        if not args.episode_data_project:
+            raise FlagCliError('Capture requires --episode-data-project and verified ACTIVE episode_facts TTL')
+        from utils.episodes.log.retention import ttl_active
+
+        try:
+            active = ttl_active(args.episode_data_project, args.episode_data_database)
+        except Exception as error:
+            raise FlagCliError('Could not verify episode_facts TTL; capture flag was not written') from error
+        if not active:
+            raise FlagCliError('episode_facts.expires_at TTL must be ACTIVE before capture on')
     if not args.yes and input('write? [y/N] ').strip().lower() != 'y':
         print('aborted')
         return
@@ -287,6 +298,8 @@ def main(argv: list[str] | None = None) -> int:
     p_set.add_argument('--mirror-posthog', action='store_true')
     p_set.add_argument('--reason', required=True)
     p_set.add_argument('--yes', action='store_true')
+    p_set.add_argument('--episode-data-project', help='Customer data project for the capture TTL precondition')
+    p_set.add_argument('--episode-data-database', default='(default)')
     p_del = sub.add_parser('delete')
     p_del.add_argument('key')
     p_del.add_argument('--reason', required=True)

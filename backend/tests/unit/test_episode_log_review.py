@@ -111,10 +111,9 @@ def test_policy_release_failure_preserves_success_and_failed_writer(client, monk
         edit(UID, 'c', True)
 
 
-def test_unknown_kill_switch_word_keeps_capture_on(client, monkeypatch, caplog):
+def test_unknown_kill_switch_word_keeps_capture_off(client, monkeypatch, caplog):
     monkeypatch.setenv('EPISODES_LOG_ENABLED', 'typo')
-    assert config.enabled(UID)
-    assert 'config_value_unrecognized' in caplog.text
+    assert not config.enabled(UID)
 
 
 def test_both_missing_rows_agree_and_alert_counters_are_primed():
@@ -189,12 +188,17 @@ def test_clock_capacity_never_silently_truncates_visibility_deadlines():
         home_clock({'e': {'conversation_ids': ids}}, {}, {cid: NOW + timedelta(hours=1) for cid in ids}, set(), NOW)
 
 
-def test_disabled_sweep_does_not_construct_a_data_plane_client(client, monkeypatch):
+def test_disabled_sweep_still_runs_read_only_retention_guard(client, monkeypatch):
     monkeypatch.setenv('EPISODES_LOG_ENABLED', 'off')
-    factory = Mock(side_effect=AssertionError('disabled path must have no data plane'))
+    from utils.episodes.log import retention
+
+    factory = Mock(return_value=client)
+    guard = Mock()
+    monkeypatch.setattr(retention, 'guard', guard)
     monkeypatch.setattr(worker, 'get_firestore_client', factory)
     assert worker.sweep() == {'disabled': 1}
-    factory.assert_not_called()
+    factory.assert_called_once()
+    guard.assert_called_once_with(client)
 
 
 def test_remote_read_rule_overrides_env_and_can_rollback_without_deploy(client, monkeypatch):

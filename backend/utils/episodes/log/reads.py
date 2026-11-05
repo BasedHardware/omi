@@ -29,6 +29,7 @@ def ready(uid, *, firestore_client=None, now=None):
         or not row.get('home_rows_ready')
         or row.get('cursor', 0) != row.get('next_seq', 0)
         or row.get('policy_barriers')
+        or row.get('capture_dirty')
     ):
         return None
     now = now or datetime.now(timezone.utc)

@@ -22,7 +22,11 @@ def enabled(uid: str) -> bool:
     from utils import omi_flags
 
     resolved = omi_flags.resolve('EPISODES_LOG_ENABLED', uid)
-    return resolved.enabled if resolved is not None else default_on('EPISODES_LOG_ENABLED')
+    return resolved.enabled if resolved is not None else capture_default()
+
+
+def capture_default() -> bool:
+    return os.getenv('EPISODES_LOG_ENABLED', 'false').strip().lower() in {'1', 'true', 'on', 'yes'}
 
 
 def home_enabled() -> bool:

@@ -65,7 +65,11 @@ def owner_ref(client, uid):
 
 def derive_phase(state, now):
     """Pure job phase from log watermarks and lease facts, never a status field."""
-    if int(state.get('cursor', 0)) >= int(state.get('next_seq', 0)) and not state.get('policy_barriers'):
+    if (
+        int(state.get('cursor', 0)) >= int(state.get('next_seq', 0))
+        and not state.get('policy_barriers')
+        and not state.get('capture_dirty')
+    ):
         return 'idle'
     if state.get('lease_owner') and state.get('lease_until') and state['lease_until'] > now:
         return 'running'
@@ -160,6 +164,9 @@ def append(uid, key, events, *, firestore_client=None, now=None, urgent=False):
     if not config.enabled(uid):
         return None
     client = firestore_client if firestore_client is not None else get_firestore_client()
+    from utils.episodes.log import retention
+
+    retention.require_active(client)
 
     @firestore.transactional
     def commit(transaction):
@@ -178,6 +185,41 @@ def append(uid, key, events, *, firestore_client=None, now=None, urgent=False):
 def state(uid, *, firestore_client=None):
     client = firestore_client if firestore_client is not None else get_firestore_client()
     return owner_ref(client, uid).get().to_dict() or {}
+
+
+def invalidate(uid, *, firestore_client=None, now=None, cid=None, token=None):
+    """A capture gap survives ordinary drains, restarts and concurrent publishers."""
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    now = now or datetime.now(timezone.utc)
+
+    @firestore.transactional
+    def commit(transaction):
+        if not account_allowed(uid, firestore_client=client, transaction=transaction):
+            return
+        ref = owner_ref(client, uid)
+        row = ref.get(transaction=transaction).to_dict() or {}
+        if cid and token:
+            row['policy_barriers'] = {
+                **(row.get('policy_barriers') or {}),
+                token: {'cid': cid, 'entered_at': now, 'deadline_at': now + timedelta(seconds=config.MAX_AGE_SECONDS)},
+            }
+        transaction.set(
+            ref,
+            dict(
+                row,
+                capture_dirty=uuid4().hex,
+                next_seq=int(row.get('next_seq', 0)),
+                cursor=int(row.get('cursor', 0)),
+                home_rows_ready=False,
+                epoch=int(row.get('epoch', 0)) + 1,
+                lease_owner=None,
+                lease_until=None,
+                drain_at=now,
+                scan_at=now,
+            ),
+        )
+
+    return run_transactional(client, commit, attempts=1, initial_transaction=client.transaction(max_attempts=2))
 
 
 def claim(uid, *, firestore_client=None, now=None):
@@ -251,7 +293,21 @@ def checkpoint(uid, *, firestore_client=None):
     return loads(zlib.decompress(base64.b64decode(''.join(chunks))).decode())
 
 
-def publish(uid, claimed, cursor, fold_state, views, links, *, firestore_client=None, now=None, home_clock=None):
+def publish(
+    uid,
+    claimed,
+    cursor,
+    fold_state,
+    views,
+    links,
+    *,
+    firestore_client=None,
+    now=None,
+    home_clock=None,
+    repaired=False,
+    removed_views=(),
+    removed_links=(),
+):
     client = firestore_client if firestore_client is not None else get_firestore_client()
     now = now or datetime.now(timezone.utc)
     home_clock = home_clock or {}
@@ -265,7 +321,7 @@ def publish(uid, claimed, cursor, fold_state, views, links, *, firestore_client=
     )
     if (
         len(parts) > MAX_CHECKPOINT_PARTS
-        or len(views) + len(links) > MAX_PUBLISH_ROWS
+        or len(views) + len(links) + len(removed_views) + len(removed_links) > MAX_PUBLISH_ROWS
         or transaction_bytes > MAX_TRANSACTION_BYTES
     ):
         raise ProjectionCapacity('episode_projection_capacity')
@@ -283,11 +339,21 @@ def publish(uid, claimed, cursor, fold_state, views, links, *, firestore_client=
             or row['lease_until'] <= now
         ):
             raise LostLease('episode_drain_lease_lost')
+        if repaired and (
+            row.get('capture_dirty') != claimed['state'].get('capture_dirty')
+            or row.get('next_seq', 0) != claimed['state'].get('next_seq', 0)
+            or row.get('policy_barriers')
+        ):
+            raise LostLease('episode_reconcile_changed_during_read')
         # Caller already sealed every speech-derived field and Home payload.
         for eid, view in views.items():
             transaction.set(root(client, uid).collection('episode_views').document(eid), view)
         for cid, link in links.items():
             transaction.set(root(client, uid).collection('episode_view_links').document(cid), link)
+        for eid in removed_views:
+            transaction.delete(root(client, uid).collection('episode_views').document(eid))
+        for cid in removed_links:
+            transaction.delete(root(client, uid).collection('episode_view_links').document(cid))
         checkpoints = root(client, uid).collection('episode_log_checkpoint')
         for index, part in enumerate(parts):
             transaction.set(
@@ -302,13 +368,17 @@ def publish(uid, claimed, cursor, fold_state, views, links, *, firestore_client=
             lease_owner=None,
             lease_until=None,
             retry_at=None,
-            home_version=int(row.get('home_version', 0)) + bool(views),
+            home_version=int(row.get('home_version', 0)) + bool(views or removed_views or repaired),
             projected_at=now,
             home_rows_ready=config.home_enabled(),
             home_member_clocks=home_clock.get('members') or {},
             home_valid_until=home_clock.get('deadline_at'),
             home_refresh_cid=home_clock.get('cid'),
         )
+        if repaired:
+            result.pop('capture_dirty', None)
+        if result.get('capture_dirty'):
+            result['home_rows_ready'] = False
         if cursor == row['next_seq']:
             barriers = list((row.get('policy_barriers') or {}).values())
             first = min((value['entered_at'] for value in barriers), default=None)
@@ -322,7 +392,9 @@ def publish(uid, claimed, cursor, fold_state, views, links, *, firestore_client=
             )
         else:
             result.update(drain_at=now, scan_at=now)
-        if cursor == row['next_seq'] and not row.get('policy_barriers'):
+        if result.get('capture_dirty'):
+            result.update(drain_at=now, scan_at=now)
+        elif cursor == row.get('next_seq', 0) and not row.get('policy_barriers'):
             result.pop('scan_at', None)
             result.pop('drain_at', None)
         transaction.set(ref, result)
@@ -399,6 +471,9 @@ def redrive_scan(uid, observed, *, firestore_client=None, now=None):
 def policy_barrier(uid, cid, token, *, entering, firestore_client=None, now=None):
     client = firestore_client if firestore_client is not None else get_firestore_client()
     now = now or datetime.now(timezone.utc)
+    from utils.episodes.log import retention
+
+    retention.require_active(client)
 
     @firestore.transactional
     def commit(transaction):
@@ -423,6 +498,9 @@ def policy_barrier(uid, cid, token, *, entering, firestore_client=None, now=None
 def recover_policy_barriers(uid, *, firestore_client=None, now=None):
     client = firestore_client if firestore_client is not None else get_firestore_client()
     now = now or datetime.now(timezone.utc)
+    from utils.episodes.log import retention
+
+    retention.require_active(client)
 
     @firestore.transactional
     def commit(transaction):
@@ -452,6 +530,9 @@ def recover_policy_barriers(uid, *, firestore_client=None, now=None):
 def finish_backfill(uid, *, firestore_client=None):
     """Marker is in the same sequencer: reads wait until its watermark is drained."""
     client = firestore_client if firestore_client is not None else get_firestore_client()
+    from utils.episodes.log import retention
+
+    retention.require_active(client)
 
     @firestore.transactional
     def commit(transaction):

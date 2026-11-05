@@ -9,6 +9,12 @@ spec:
   groups:
     - name: omi.episodes.log
       rules:
+        - alert: OmiEpisodeFactsWithoutRetention
+          expr: max(omi_episode_facts_without_active_ttl) > 0
+          labels: {severity: warning}
+          annotations:
+            summary: "Episode facts exist without verified ACTIVE TTL"
+            description: "Capture refuses writes. Verify retention through the approved operator path before capture on."
         - alert: OmiEpisodeLogQueuedOverdue
           expr: sum(increase(omi_episode_drain_deadline_total{phase="queued"}[10m])) > 0
           labels: {severity: warning}

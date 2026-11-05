@@ -25,6 +25,9 @@ FIELDS = (
     'state_version',
     'recorded_merged_into',
     'recorded_members',
+    'conversation_ids',
+    'member_activity',
+    'sources',
     'discarded_conversation_ids',
 )
 

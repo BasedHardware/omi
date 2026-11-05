@@ -337,3 +337,18 @@ def untracked_episode_log(monkeypatch):
     from tests.support.episode_log_owners import without_episode_log_owner
 
     without_episode_log_owner(monkeypatch)
+
+
+@pytest.fixture(autouse=True)
+def isolated_episode_capture(monkeypatch):
+    """Unit stores inject TTL and deterministic scheduling; latency proofs override submit."""
+    from concurrent.futures import Future
+    from utils.episodes.log import capture, retention
+
+    def immediate(fn):
+        future = Future()
+        future.set_result(fn())
+        return future
+
+    monkeypatch.setattr(capture, 'submit', immediate)
+    monkeypatch.setattr(retention, 'active', lambda client: True)

@@ -29,7 +29,7 @@ def _decorate(fn, *, client_factory):
         if not cid:
             data = bound.get('conversation_data') or {}
             cid = data.get('id') if isinstance(data, dict) else None
-        from utils.episodes.log.capture import dropped
+        from utils.episodes.log.capture import dropped, dispatch
 
         if not cid:
             return fn(*args, **kwargs)
@@ -37,18 +37,21 @@ def _decorate(fn, *, client_factory):
         try:
             admitted = config.enabled(uid) and config.home_enabled()
         except Exception as error:
-            dropped(error)
+            dropped(error, uid=uid, cid=cid, token=token)
             admitted = False
         if not admitted:
             return fn(*args, **kwargs)
+        client, has_log = None, True
         try:
             client = client_factory()
             has_log = bool(store.state(uid, firestore_client=client))
             if has_log:
                 store.policy_barrier(uid, cid, token, entering=True, firestore_client=client)
         except Exception as error:
-            dropped(error)
-            return fn(*args, **kwargs)
+            # Keep a deadline-stamped fence while the original writer is still
+            # running, even when the ordinary barrier append failed. Otherwise
+            # a repair could race ahead of that writer and clear the gap early.
+            dropped(error, uid=uid, client=client, cid=cid, token=token)
         if not has_log:
             return fn(*args, **kwargs)
         try:
@@ -56,9 +59,16 @@ def _decorate(fn, *, client_factory):
         finally:
             # Even a failed write refreshes current policy before releasing the
             # fence. If this fails the durable barrier keeps reads on legacy.
-            try:
-                store.policy_barrier(uid, cid, token, entering=False, firestore_client=client)
-            except Exception as error:
-                dropped(error)
+            def refresh():
+                try:
+                    refresh_client = client if client is not None else client_factory()
+                    if not config.enabled(uid):
+                        store.invalidate(uid, firestore_client=refresh_client)
+                        return
+                    store.policy_barrier(uid, cid, token, entering=False, firestore_client=refresh_client)
+                except Exception as error:
+                    dropped(error, uid=uid, client=client)
+
+            dispatch(refresh, uid=uid, client=client)
 
     return wrapped

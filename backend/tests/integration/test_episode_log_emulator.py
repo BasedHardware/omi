@@ -16,6 +16,15 @@ NOW = datetime(2026, 11, 4, tzinfo=timezone.utc)
 
 @pytest.fixture
 def db(monkeypatch):
+    from concurrent.futures import Future
+    from utils.episodes.log import capture
+
+    def immediate(fn):
+        future = Future()
+        future.set_result(fn())
+        return future
+
+    monkeypatch.setattr(capture, 'submit', immediate)
     host = os.environ.get('FIRESTORE_EMULATOR_HOST', '')
     if not host.startswith(('127.0.0.1:', 'localhost:')):
         pytest.skip('Requires a loopback Firestore emulator; no cloud fallback')
@@ -101,6 +110,17 @@ def test_fixed_window_fact_capture_uses_real_transactional_batch_get(db):
         'state_version': 1,
     }
     root.collection('episodes').document('fixed').set(episodes.seal(uid, fixed))
+    neighbor = dict(
+        fixed,
+        id='neighbor',
+        started_at=NOW - timedelta(minutes=20),
+        last_activity_at=NOW - timedelta(minutes=10),
+        recorded_end=NOW - timedelta(minutes=10),
+        closed_at=NOW - timedelta(minutes=10),
+        conversation_ids=['neighbor-member'],
+        member_activity={'neighbor-member': NOW - timedelta(minutes=10)},
+    )
+    root.collection('episodes').document('neighbor').set(episodes.seal(uid, neighbor))
     result = episode_timeline.attach_recorded(
         uid,
         'c',
@@ -118,6 +138,8 @@ def test_fixed_window_fact_capture_uses_real_transactional_batch_get(db):
         fold.apply(fact)
     assert cursor == state['next_seq'] and result['id'] == 'fixed'
     assert fold.rows()['fixed']['conversation_ids'] == result['conversation_ids'] == ['c']
+    assert fold.rows()['neighbor']['conversation_ids'] == ['neighbor-member']
+    assert fold.rows()['neighbor']['member_activity'] == neighbor['member_activity']
 
 
 def test_accepted_deletion_fences_a_previously_claimed_worker(db):
@@ -178,7 +200,7 @@ def test_post_commit_capture_failure_preserves_real_composer_write_and_response(
     assert response['title'] == committed['title'] == 'after'
     assert response['state_version'] == committed['state_version'] == 2
     assert list(store.root(client, uid).collection('episode_facts').stream()) == []
-    assert store.state(uid, firestore_client=client) == {}
+    assert store.state(uid, firestore_client=client)['capture_dirty']
 
 
 def test_caught_up_owner_is_absent_from_real_due_query(db):
@@ -237,3 +259,85 @@ def test_conversation_erasure_cannot_leave_content_in_real_facts(db, tombstone):
         fact = snapshot.to_dict()
         assert secret not in decrypt(fact['payload'], uid)
         assert fact['expires_at'] == fact['recorded_at'] + timedelta(days=1)
+
+
+@pytest.mark.parametrize('failure', ['capture', 'policy_entry', 'policy_refresh', 'overflow'])
+def test_dropped_work_real_reconcile_restores_home_and_removes_stale_views(db, monkeypatch, failure):
+    from database import episodes
+    from utils.episodes.log import capture, reads, worker
+    from utils.episodes.log.policy import home_policy_write
+    from unittest.mock import Mock
+
+    client, uid = db
+    monkeypatch.setenv('EPISODES_LOG_READ_PERCENT', '100')
+    root = store.root(client, uid)
+    root.collection('episode_log_state').document('owner').set(
+        {'cursor': 0, 'next_seq': 0, 'home_version': 1, 'backfill_complete': True, 'home_rows_ready': True}
+    )
+    fixed = dict(
+        id='e',
+        status='closed',
+        close_reason='user',
+        state_version=1,
+        started_at=NOW,
+        last_activity_at=NOW + timedelta(minutes=10),
+        closed_at=NOW + timedelta(minutes=10),
+        recorded_end=NOW + timedelta(minutes=10),
+        conversation_ids=['c'],
+        member_activity={'c': NOW + timedelta(minutes=10)},
+    )
+    root.collection('episodes').document('e').set(episodes.seal(uid, dict(fixed, title='Synthetic private title')))
+    root.collection('conversations').document('c').set(
+        dict(
+            status='completed',
+            started_at=NOW,
+            finished_at=NOW + timedelta(minutes=10),
+            discarded=False,
+            structured={'title': 'Current member', 'emoji': '🗒️'},
+        )
+    )
+    root.collection('episode_views').document('removed').set({'id': 'removed'})
+    root.collection('episode_view_links').document('removed').set({'episode_id': 'removed'})
+    assert reads.ready(uid, firestore_client=client)
+    if failure == 'capture':
+        with monkeypatch.context() as local:
+            local.setattr(store, 'append', Mock(side_effect=RuntimeError('synthetic capture failure')))
+            intent = capture.DeferredCapture(client, uid)
+            intent.stage([{'kind': 'member_refresh', 'cid': 'c', 'payload': {}}])
+            intent.flush()
+    elif failure == 'overflow':
+        with monkeypatch.context() as local:
+            local.setattr(capture, 'submit', Mock(side_effect=RuntimeError('queue full')))
+            capture.dispatch(lambda: None, uid=uid, client=client)
+    else:
+        barrier = store.policy_barrier
+
+        def fail_barrier(*args, **kwargs):
+            if kwargs['entering'] == (failure == 'policy_entry'):
+                raise RuntimeError('synthetic barrier failure')
+            return barrier(*args, **kwargs)
+
+        with monkeypatch.context() as local:
+            local.setattr(store, 'policy_barrier', fail_barrier)
+
+            @home_policy_write(firestore_client=lambda: client)
+            def edit(uid, conversation_id):
+                return 'committed'
+
+            assert edit(uid, 'c') == 'committed'
+    assert store.state(uid, firestore_client=client)['capture_dirty']
+    assert reads.ready(uid, firestore_client=client) is None
+    monkeypatch.setattr(worker, 'wake', lambda *a: None)
+    # Failed release retains its entry barrier until the existing recovery deadline.
+    at = datetime.now(timezone.utc) + timedelta(minutes=26)
+    assert worker.drain(uid, firestore_client=client, now=at) == 'drained'
+    assert not store.state(uid, firestore_client=client).get('capture_dirty')
+    assert reads.ready(uid, firestore_client=client, now=at)
+    assert not root.collection('episode_views').document('removed').get().exists
+    assert not root.collection('episode_view_links').document('removed').get().exists
+    _, homes, _ = reads.list_window(uid, NOW, NOW + timedelta(hours=1), firestore_client=client)
+    assert homes[0]['members'][0]['id'] == 'c'
+    assert homes[0]['members'][0]['title'] == 'Current member'
+    from utils.episodes.log.codec import dumps
+
+    assert 'Synthetic private title' not in dumps(store.checkpoint(uid, firestore_client=client))

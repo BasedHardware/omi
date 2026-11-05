@@ -73,60 +73,68 @@ def mark_dirty(uid, cid, row, *, firestore_client=None):
 
 
 def note_dirty(uid, cid, row):
-    try:
-        return mark_dirty(uid, cid, row)
-    except Exception as error:
-        from utils.episodes.log.capture import dropped
+    from utils.episodes.log.capture import dispatch, dropped
 
-        dropped(error)
-        return False
+    def refresh():
+        try:
+            mark_dirty(uid, cid, row)
+        except Exception as error:
+            dropped(error, uid=uid)
+
+    dispatch(refresh, uid=uid, client=None)
 
 
 def note_home_clock(uid, state, *, firestore_client=None, now=None):
-    """Expiry is durable refresh debt, using the same queued phase and lease."""
+    """Expiry falls back immediately; its durable refresh runs off the request."""
     from utils.episodes.log.reads import selected
+    from utils.episodes.log.capture import dispatch, dropped
 
     if not selected(uid):
         return
     cid, at = state.get('home_refresh_cid'), state.get('home_valid_until')
     if not cid or not at:
         return
-    try:
-        deadline = store.append(
-            uid,
-            digest({'home_clock': at, 'cid': cid}),
-            [{'kind': 'member_refresh', 'cid': cid, 'payload': {'clock_at': at}}],
-            firestore_client=firestore_client,
-            now=now,
-            urgent=True,
-        )
-        if deadline is not None:
-            wake(uid, deadline)
-    except Exception as error:
-        from utils.episodes.log.capture import dropped
 
-        dropped(error)
+    def refresh():
+        try:
+            deadline = store.append(
+                uid,
+                digest({'home_clock': at, 'cid': cid}),
+                [{'kind': 'member_refresh', 'cid': cid, 'payload': {'clock_at': at}}],
+                firestore_client=firestore_client,
+                now=now,
+                urgent=True,
+            )
+            if deadline is not None:
+                wake(uid, deadline)
+        except Exception as error:
+            dropped(error, uid=uid, client=firestore_client)
+
+    dispatch(refresh, uid=uid, client=firestore_client)
 
 
 def note_home_refresh(uid, eid, key, *, firestore_client=None):
     from utils.episodes.log.reads import selected
+    from utils.episodes.log.capture import dispatch, dropped
 
     if not selected(uid):
         return
-    try:
-        deadline = store.append(
-            uid,
-            key,
-            [{'kind': 'home_refresh', 'payload': {'eid': eid}}],
-            firestore_client=firestore_client,
-            urgent=True,
-        )
-        if deadline is not None:
-            wake(uid, deadline)
-    except Exception as error:
-        from utils.episodes.log.capture import dropped
 
-        dropped(error)
+    def refresh():
+        try:
+            deadline = store.append(
+                uid,
+                key,
+                [{'kind': 'home_refresh', 'payload': {'eid': eid}}],
+                firestore_client=firestore_client,
+                urgent=True,
+            )
+            if deadline is not None:
+                wake(uid, deadline)
+        except Exception as error:
+            dropped(error, uid=uid, client=firestore_client)
+
+    dispatch(refresh, uid=uid, client=firestore_client)
 
 
 def _legacy(uid, eid, client):
@@ -135,7 +143,12 @@ def _legacy(uid, eid, client):
 
 
 def _comparison_token(state):
-    if not state or state.get('cursor') != state.get('next_seq') or state.get('policy_barriers'):
+    if (
+        not state
+        or state.get('cursor') != state.get('next_seq')
+        or state.get('policy_barriers')
+        or state.get('capture_dirty')
+    ):
         return None
     if state.get('home_valid_until') and state['home_valid_until'] <= datetime.now(timezone.utc):
         return None
@@ -197,10 +210,19 @@ def drain(uid, *, firestore_client=None, now=None):
     metrics.observe_state(prior, phase, now)
     outcome = 'error'
     try:
-        fold = Fold(uid, store.checkpoint(uid, firestore_client=client))
-        before = fold.rows()
-        old_links = dict(fold.links)
-        events, cursor = store.read_batch(uid, claimed, firestore_client=client)
+        repaired = bool(claimed['state'].get('capture_dirty'))
+        removed_views, removed_links = (), ()
+        if repaired:
+            from utils.episodes.log import reconcile
+
+            fold, removed_views, removed_links = reconcile.snapshot(uid, client)
+            before, old_links, events = {}, {}, []
+            cursor = claimed['state'].get('next_seq', 0)
+        else:
+            fold = Fold(uid, store.checkpoint(uid, firestore_client=client))
+            before = fold.rows()
+            old_links = dict(fold.links)
+            events, cursor = store.read_batch(uid, claimed, firestore_client=client)
         changed_members = {event['cid'] for event in events if event['kind'] in {'member', 'member_refresh'}}
         refresh_views = {event['payload']['eid'] for event in events if event['kind'] == 'home_refresh'}
         # A referenced content-only update can leave fold geometry identical.
@@ -266,6 +288,12 @@ def drain(uid, *, firestore_client=None, now=None):
         if config.home_enabled():
             refreshed = {cid for row in active for cid in row.get('conversation_ids') or []}
             clock = home_clock(rows, members, claimed['state'].get('home_member_clocks') or {}, refreshed, now)
+        # Recheck the cached remote rule after folding. A committing transaction
+        # cannot be cancelled by a later flag-store refresh.
+        if not config.enabled(uid):
+            store.retry(uid, claimed, firestore_client=client, now=fixed_now or datetime.now(timezone.utc))
+            outcome = 'killed'
+            return 'disabled'
         result = store.publish(
             uid,
             claimed,
@@ -276,6 +304,9 @@ def drain(uid, *, firestore_client=None, now=None):
             firestore_client=client,
             now=fixed_now or datetime.now(timezone.utc),
             home_clock=clock,
+            repaired=repaired,
+            removed_views=removed_views,
+            removed_links=removed_links,
         )
         metrics.observe_state(claimed['state'], 'running', datetime.now(timezone.utc))
         # Never redrain a committed batch just because an observational read fails.
@@ -307,12 +338,15 @@ def drain(uid, *, firestore_client=None, now=None):
 def sweep(*, firestore_client=None, now=None):
     now = now or datetime.now(timezone.utc)
     from utils import omi_flags
+    from utils.episodes.log import retention
+
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    retention.guard(client)
 
     rule = omi_flags.snapshot().rules.get('EPISODES_LOG_ENABLED')
-    if (rule is not None and not rule.active) or (rule is None and not config.default_on('EPISODES_LOG_ENABLED')):
+    if (rule is not None and not rule.active) or (rule is None and not config.capture_default()):
         metrics.SWEEP_OBSERVED.set(time.time())  # A deliberate kill is not a stale scheduler.
         return {'disabled': 1}
-    client = firestore_client if firestore_client is not None else get_firestore_client()
     outcomes = {'scanned': 0, 'redriven': 0, 'error': 0}
     for uid, state in store.due_owners(now, firestore_client=client):
         outcomes['scanned'] += 1
