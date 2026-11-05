@@ -388,7 +388,7 @@ def projection_page(
         query = query.start_at({'committed_at': after[0]})
     elif after is not None:
         query = query.start_after({'committed_at': after[0], '__name__': collection.document(after[1])})
-    size = max(1, min(limit, 100))
+    size = max(1, min(limit, 300))
     docs = list(query.limit(size).stream())
     # Wrap even when blocked rows remain. Rows inserted behind the cursor are
     # revisited on the next cycle; no durable obligation is skipped or mutated.

@@ -623,6 +623,16 @@ def _pump_bound(raw: str, default: int, maximum: int, minimum: int = 1) -> int:
         return default
 
 
+def serving_sweep_page_rows() -> int:
+    """Bound projection discovery pages; unset restores the existing 100 rows."""
+    return _pump_bound(os.getenv('BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS', '100'), 100, 300, 50)
+
+
+def serving_tick_seconds() -> int:
+    """Bound supervisor sleep independently of the dedicated projection pump."""
+    return _pump_bound(os.getenv('BATCH_PIPELINE_SERVING_TICK_SECONDS', '20'), 20, 60, 5)
+
+
 def projection_pump_enabled() -> bool:
     """Process-role opt-in: only ``true`` starts the otherwise inert pump."""
     from config.policy import kill_switch
