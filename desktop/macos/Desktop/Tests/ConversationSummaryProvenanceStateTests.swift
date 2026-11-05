@@ -78,6 +78,14 @@ final class ConversationSummaryProvenanceStateTests: XCTestCase {
 
   // MARK: - Empty state
 
+  func testTranscriptionWaitDoesNotClaimTranscriptIsAlreadySaved() {
+    let state = State.empty(deferred: false, localSummaryRuntime: nil, isProcessing: false, isTranscribing: true)
+    XCTAssertEqual(state, .pendingTranscription)
+    XCTAssertEqual(state.title, "Transcribing…")
+    XCTAssertFalse(state.message.contains("already saved"))
+    XCTAssertTrue(state.message.contains("being transcribed"))
+  }
+
   func testProcessingWithALocalProjectionIsPendingOnDevice() {
     XCTAssertEqual(
       State.empty(deferred: false, localSummaryRuntime: "local", isProcessing: true),

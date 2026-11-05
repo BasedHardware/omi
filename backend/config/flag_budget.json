@@ -24,8 +24,9 @@
   },
   "seed_review_by": "2026-11-15",
   "budget": 169,
-  "count": 250,
+  "count": 251,
   "names": {
+    "PROJECTION_DRAIN_CLAIM_AWARE": {"owner": "two-lane lead", "review_by": "2026-12-05", "registry": "config/feature-flags.yaml"},
     "BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED": {"owner": "omi-pipeline", "review_by": "2026-12-06", "registry": "config/feature-flags.yaml"},
     "K_REVISION": {"owner": "omi-pipeline", "review_by": "2026-12-06"},
     "PARAKEET_SHAPE_CANARY_FILE": {"owner": "two-lane lead", "review_by": "2026-12-04"},

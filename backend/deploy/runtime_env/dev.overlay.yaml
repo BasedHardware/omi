@@ -16,6 +16,8 @@ overlay:
   gke:
     backend-listen:
       env:
+        HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
+        HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
         # Dev qualification for the David-approved graduation (DEC-BTR-004): open/play/download,
         # changed-source and duplicate-task checks before prod.
         PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
@@ -101,6 +103,8 @@ overlay:
           value: '0'
     pusher:
       env:
+        HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
+        HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
         # Dev qualification for the David-approved graduation (DEC-BTR-004): open/play/download,
         # changed-source and duplicate-task checks before prod.
         PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
@@ -338,6 +342,8 @@ overlay:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
+          HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
+          HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
           # Dev qualification for the David-approved graduation (DEC-BTR-004): open/play/download,
           # changed-source and duplicate-task checks before prod.
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
@@ -409,6 +415,8 @@ overlay:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
+          HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
+          HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
           # Dev qualification for the David-approved graduation (DEC-BTR-004): open/play/download,
           # changed-source and duplicate-task checks before prod.
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
@@ -501,6 +509,8 @@ overlay:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
+          HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
+          HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
           # Dev qualification for the David-approved graduation (DEC-BTR-004): open/play/download,
           # changed-source and duplicate-task checks before prod.
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
@@ -575,6 +585,8 @@ overlay:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
+          HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
+          HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
           # Dev qualification for the David-approved graduation (DEC-BTR-004): open/play/download,
           # changed-source and duplicate-task checks before prod.
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}

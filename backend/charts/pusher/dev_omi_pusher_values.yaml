@@ -116,6 +116,10 @@ envFrom:
 runtimeConfigMapName: dev-omi-backend-config
 
 env:
+  - name: HOME_TRANSCRIPTION_PRESENTATION_GATE
+    value: "true"
+  - name: HOME_TRANSCRIPTION_DEADLINE_SECONDS
+    value: "7200"
   - name: RECORD_SEAL_OVERLAP_TRIM_ENABLED
     value: "true"
   - name: LISTEN_QUIET_FINALIZATION_ENABLED

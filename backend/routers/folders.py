@@ -1,5 +1,7 @@
 import logging
 
+from utils.conversations import transcribing_hold
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import List, Optional
 from pydantic import ValidationError
@@ -158,6 +160,7 @@ def get_folder_conversations(
     conversations = folders_db.get_conversations_in_folder(
         uid, folder_id, limit=limit, offset=offset, include_discarded=include_discarded
     )
+    conversations = [transcribing_hold.project(row) for row in conversations]
     redact_conversations_for_list(conversations)
     # Validate each record individually so one malformed/legacy conversation doesn't fail the whole list
     # with a 500.

@@ -157,7 +157,7 @@ def conversations_db():
     """Load the production query function against a minimal in-memory Firestore seam."""
     # Load the pure policy/registry before the fixture closes the utils import path.
     import config.dream_agent  # noqa: F401
-    from utils.conversations import summary_delivery, lifecycle_clocks, home_titles
+    from utils.conversations import summary_delivery, lifecycle_clocks, home_titles, transcribing_hold
     from database import sync_live_overlap
     from utils.sync import live_overlap
 
@@ -238,6 +238,7 @@ def conversations_db():
         "utils": utils,
         "utils.conversations": utils_conversations,
         "utils.conversations.summary_delivery": summary_delivery,
+        "utils.conversations.transcribing_hold": transcribing_hold,
         "utils.conversations.lifecycle_clocks": lifecycle_clocks,
         "utils.conversations.home_titles": home_titles,
         "utils.llm": utils_llm,
@@ -422,7 +423,9 @@ def test_sources_omitted_preserves_legacy_filter_chain(conversations_db):
     assert firestore.queries[0].filters == [("status", "in", ["processing", "completed"])]
 
 
-def test_hosted_mcp_list_uses_transcript_and_photo_free_projection(conversations_db):
+@pytest.mark.parametrize('gate', ['on', 'off'])
+def test_hosted_mcp_list_uses_transcript_and_photo_free_projection(conversations_db, monkeypatch, gate):
+    monkeypatch.setenv('HOME_TRANSCRIPTION_PRESENTATION_GATE', gate)
     module, pages_module, firestore = conversations_db
     firestore.rows = [
         {
@@ -453,7 +456,19 @@ def test_hosted_mcp_list_uses_transcript_and_photo_free_projection(conversations
     assert "structured.action_items" not in selected_fields
     assert "structured.sections" not in selected_fields
     assert "structured.events" not in selected_fields
-    assert ("select", tuple(module.MCP_CONVERSATION_CARD_FIELD_PATHS)) in firestore.queries[0].events
+    expected_fields = list(module.MCP_CONVERSATION_CARD_FIELD_PATHS)
+    if gate == 'on':
+        expected_fields.extend(
+            [
+                'home_transcription_pending_at',
+                'home_transcription_deadline_at',
+                'record_lane_owner',
+                'record_projection_revision',
+                'record_upload_failed',
+                'finalization_status',
+            ]
+        )
+    assert ("select", tuple(dict.fromkeys(expected_fields))) in firestore.queries[0].events
     transcript_fields = set(module.MCP_CONVERSATION_TRANSCRIPT_FIELD_PATHS)
     assert "transcript_segments" in transcript_fields
     assert "photos" not in transcript_fields
