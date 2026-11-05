@@ -137,6 +137,8 @@ env:
     value: "af,ar,az,be,bn,bs,ca,cy,eu,fa,gl,gu,he,hi,id,kk,kn,ko,mk,ml,mr,ms,no,pa,sq,sr,sw,ta,te,th,tl,tr,ur,vi,zh"
   - name: SERVER_BATCH_ONLY_AUTO_LANGUAGE_PERCENT
     value: "100"
+  - name: BATCH_HELD_DEAD_LETTER_ENABLED
+    value: "true"
   - name: BATCH_PIPELINE_ENABLED
     value: "true"
   - name: FIRST_SUMMARY_DEADLINE_ENABLED
