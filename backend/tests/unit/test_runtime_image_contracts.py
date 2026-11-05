@@ -1284,3 +1284,6 @@ def test_third_party_closure_leaves_patch_sensitive_python_markers_undecided(dep
     assert applies("python_full_version >= '3.10.2'")
     assert not applies("python_full_version >= '3.11.15'")  # depends on the floating patch
     assert not applies("python_full_version < '3.11.4'")
+    assert not applies("python_full_version == '3.11'")  # true only for 3.11.0
+    assert not applies("python_full_version <= '3.11.99'")
+    assert applies("python_full_version != '3.10.4'")

@@ -140,10 +140,15 @@ def marker_applies_to_image(marker: str) -> bool:
         if actual is None:
             undecidable = True
             return "False"
-        if variable == "python_full_version" and len(expected.split(".")) > 2:
+        if variable == "python_full_version":
             # Base tags float on the patch (3.11-slim): decide only comparisons
-            # every 3.11.x answers alike.
-            outcomes = {_compare_versions(f"3.11.{patch}", operator, expected) for patch in (0, 99)}
+            # every 3.11.x answers alike. A comparison against X.Y.Z can only
+            # change answer at Z, so patch 0, Z-1, Z, Z+1 and a large patch
+            # cover every region of the range.
+            parts = expected.split(".")
+            boundary = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else 0
+            patches = {0, 9999, boundary, max(boundary - 1, 0), boundary + 1}
+            outcomes = {_compare_versions(f"3.11.{patch}", operator, expected) for patch in patches}
             if len(outcomes) != 1 or None in outcomes:
                 undecidable = True
                 return "False"
