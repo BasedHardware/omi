@@ -68,7 +68,7 @@ _IMAGE_MARKER_ENVIRONMENT = {
     "platform_machine": "x86_64",
     "platform_python_implementation": "CPython",
     "platform_system": "Linux",
-    "python_full_version": "3.11.15",
+    "python_full_version": "3.11",  # patch floats with the base tag; see marker_applies_to_image
     "python_version": "3.11",
     "sys_platform": "linux",
 }
@@ -108,6 +108,22 @@ def _version_tuple(value: str) -> tuple[int, ...] | None:
     return tuple(int(part) for part in parts) if all(part.isdigit() for part in parts) else None
 
 
+def _compare_versions(actual: str, operator: str, expected: str) -> bool | None:
+    left, right = _version_tuple(actual), _version_tuple(expected)
+    if left is None or right is None:
+        return None
+    width = max(len(left), len(right))
+    left, right = left + (0,) * (width - len(left)), right + (0,) * (width - len(right))
+    return {
+        "==": left == right,
+        "!=": left != right,
+        "<": left < right,
+        "<=": left <= right,
+        ">": left > right,
+        ">=": left >= right,
+    }.get(operator)
+
+
 def marker_applies_to_image(marker: str) -> bool:
     """Evaluate a PEP 508 marker for the images' Linux x86_64 CPython 3.11.
 
@@ -124,6 +140,14 @@ def marker_applies_to_image(marker: str) -> bool:
         if actual is None:
             undecidable = True
             return "False"
+        if variable == "python_full_version" and len(expected.split(".")) > 2:
+            # Base tags float on the patch (3.11-slim): decide only comparisons
+            # every 3.11.x answers alike.
+            outcomes = {_compare_versions(f"3.11.{patch}", operator, expected) for patch in (0, 99)}
+            if len(outcomes) != 1 or None in outcomes:
+                undecidable = True
+                return "False"
+            return str(outcomes.pop())
         if variable.endswith("_version") and operator in {"<", "<=", ">", ">=", "==", "!="}:
             left, right = _version_tuple(actual), _version_tuple(expected)
             if left is None or right is None:
@@ -266,22 +290,33 @@ def installed_dependencies(contract: ImageContract) -> InstalledDependencies:
     back through the COPY that put it there to its repository source.
     """
     stage_names = {stage.name for stage in docker_named_stages(contract.dockerfile) if stage.name}
-    pending: list[str | None] = [contract.target]
-    seen_stages: set[str | None] = set()
+    # (stage, copied environment paths): None credits every install of the
+    # image's own chain; a copied-from stage credits only installs that target
+    # an environment the image copies out of it.
+    pending: list[tuple[str | None, tuple[str, ...] | None]] = [(contract.target, None)]
+    seen_stages: set[tuple[str | None, tuple[str, ...] | None]] = set()
     sources: list[str] = []
     distributions: set[str] = set()
     open_reasons: list[str] = []
     while pending:
-        stage = pending.pop()
-        if stage in seen_stages:
+        stage, environments = pending.pop()
+        if (stage, environments) in seen_stages:
             continue
-        seen_stages.add(stage)
+        seen_stages.add((stage, environments))
         workdir = PurePosixPath("/")
+        active: set[str] = set()  # copied environments activated by ENV PATH / VIRTUAL_ENV
         copied: list[tuple[PurePosixPath, Path, bool]] = []  # (destination, source, destination is a directory)
         for line in docker_target_instructions(contract.dockerfile, stage):
             keyword = line.split(None, 1)[0].upper()
             if keyword == "WORKDIR":
                 workdir = workdir / line.split(None, 1)[1].strip()
+                continue
+            if keyword == "ENV" and environments:
+                active |= {
+                    path
+                    for path in environments
+                    if f"{path}/bin" in line or re.search(rf"VIRTUAL_ENV[= ]+[\"']?{re.escape(path)}\b", line)
+                }
                 continue
             if keyword == "COPY":
                 tokens = shlex.split(line[5:])
@@ -289,13 +324,15 @@ def installed_dependencies(contract: ImageContract) -> InstalledDependencies:
                 if from_stage is not None:
                     # Only an environment copy carries a stage's installed
                     # distributions; a copied binary or asset does not.
-                    copied_sources = [token for token in tokens if not token.startswith("--")][:-1]
-                    carries_environment = any(
-                        "venv" in source or "site-packages" in source or "dist-packages" in source
-                        for source in copied_sources
+                    copied_environments = tuple(
+                        sorted(
+                            source.rstrip("/")
+                            for source in [token for token in tokens if not token.startswith("--")][:-1]
+                            if "venv" in source or "site-packages" in source or "dist-packages" in source
+                        )
                     )
-                    if from_stage in stage_names and carries_environment:
-                        pending.append(from_stage)
+                    if from_stage in stage_names and copied_environments:
+                        pending.append((from_stage, copied_environments))
                     continue
                 tokens = [token for token in tokens if not token.startswith("--")]
                 if len(tokens) < 2:
@@ -313,6 +350,8 @@ def installed_dependencies(contract: ImageContract) -> InstalledDependencies:
                 parsed = _installer_arguments(command)
                 if parsed is None:
                     continue
+                if environments is not None and not (active or any(path in command for path in environments)):
+                    continue  # installs into an interpreter the image does not copy
                 files, inline = parsed
                 for requirement in inline:
                     match = _REQUIREMENT_NAME.match(requirement)
@@ -364,10 +403,10 @@ def module_distribution_candidates(module: str) -> tuple[str, ...] | None:
 
     An explicit ``MODULE_DISTRIBUTIONS`` entry for the longest matching prefix
     is authoritative. Otherwise an ordinary package is owned by its top-level
-    name's distribution, so ``fastapi.FastAPI`` can only be ``fastapi``. Only
-    under a namespace package (a ``None`` entry such as ``google``) do longer
-    prefixes name the distribution, longest first, with an API-version suffix
-    dropped (``google.cloud.tasks_v2`` -> ``google-cloud-tasks``). Returns
+    name's distribution, so ``fastapi.FastAPI`` can only be ``fastapi``. Under
+    a namespace package (a ``None`` entry such as ``google``) only the provider
+    component right below the namespace levels names the distribution, with an
+    API-version suffix dropped (``google.cloud.tasks_v2`` -> ``google-cloud-tasks``). Returns
     ``None`` when ``module`` is itself a bare namespace package, which no
     single distribution owns.
     """
@@ -381,14 +420,19 @@ def module_distribution_candidates(module: str) -> tuple[str, ...] | None:
             return (normalize_distribution(mapped),)
     if MODULE_DISTRIBUTIONS.get(parts[0], "") is not None:
         return (normalize_distribution(parts[0]),)
-    candidates: list[str] = []
-    for prefix in prefixes:
-        if MODULE_DISTRIBUTIONS.get(prefix, "") is None:
-            break  # the namespace levels themselves name no distribution
-        candidates.append(normalize_distribution(prefix))
-        unversioned = _API_VERSION_SUFFIX.sub("", prefix)
-        if unversioned != prefix:
-            candidates.append(normalize_distribution(unversioned))
+    # The provider is the first component below the namespace levels:
+    # google.cloud.tasks_v2.X belongs to google-cloud-tasks(-v2), never to a
+    # distribution named after a deeper submodule.
+    depth = 1
+    while depth < len(parts) and MODULE_DISTRIBUTIONS.get(".".join(parts[: depth + 1]), "") is None:
+        depth += 1
+    if depth >= len(parts):
+        return None
+    provider = ".".join(parts[: depth + 1])
+    candidates = [normalize_distribution(provider)]
+    unversioned = _API_VERSION_SUFFIX.sub("", provider)
+    if unversioned != provider:
+        candidates.append(normalize_distribution(unversioned))
     return tuple(dict.fromkeys(candidates))
 
 

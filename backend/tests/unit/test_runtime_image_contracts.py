@@ -1121,6 +1121,8 @@ def test_third_party_closure_follows_requirement_includes_through_directory_copi
         tmp_path,
         dockerfile_text=(
             'FROM python:3.11-slim AS builder\n'
+            'ENV PATH="/opt/venv/bin:$PATH"\n'
+            'RUN python -m venv /opt/venv\n'
             'COPY reqs/ /tmp/reqs/\n'
             'RUN pip install --no-cache-dir -r /tmp/reqs/job/requirements.txt\n'
             'FROM python:3.11-slim\n'
@@ -1239,3 +1241,46 @@ def test_registered_image_dependency_sets_are_classified(contracts_module, depen
     }
     assert {'batch-pipeline-worker', 'backend', 'backend-api', 'backend-pusher', 'pusher'} <= closed
     assert 'parakeet' not in closed and 'plugins' not in closed
+
+
+def test_third_party_closure_credits_only_installs_into_the_copied_environment(
+    contracts_module, dependencies_module, tmp_path
+):
+    # The backend builder installs uv into the system interpreter before it
+    # activates /opt/venv; only the venv is copied into the image.
+    contract = _third_party_contract(
+        contracts_module,
+        tmp_path,
+        dockerfile_text=(
+            'FROM python:3.11-slim AS builder\n'
+            'RUN python -m venv /opt/venv\n'
+            'RUN python3 -m pip install --no-cache-dir "uv==0.11.13"\n'
+            'ENV PATH="/opt/venv/bin:$PATH"\n'
+            'COPY pylock.worker.toml /tmp/pylock.worker.toml\n'
+            'RUN pip install --no-cache-dir "langdetect==1.0.9"\n'
+            'FROM python:3.11-slim\n'
+            'COPY --from=builder /opt/venv /opt/venv\n'
+            'WORKDIR /app\nCOPY entrypoint.py ./\n'
+        ),
+        entrypoint_text='import langdetect\n',
+        files={'pylock.worker.toml': _pylock('numpy')},
+    )
+
+    installed = dependencies_module.installed_dependencies(contract)
+
+    assert 'uv' not in installed.distributions
+    assert 'langdetect' in installed.distributions
+
+
+def test_third_party_closure_namespace_matches_only_the_provider_component(dependencies_module):
+    candidates = dependencies_module.module_distribution_candidates('google.cloud.tasks_v2.jobs_v1.client.Client')
+    assert candidates == ('google-cloud-tasks-v2', 'google-cloud-tasks')
+    assert dependencies_module.module_distribution_candidates('google.auth.transport.requests') == ('google-auth',)
+
+
+def test_third_party_closure_leaves_patch_sensitive_python_markers_undecided(dependencies_module):
+    applies = dependencies_module.marker_applies_to_image
+    assert applies("python_full_version >= '3.11'")
+    assert applies("python_full_version >= '3.10.2'")
+    assert not applies("python_full_version >= '3.11.15'")  # depends on the floating patch
+    assert not applies("python_full_version < '3.11.4'")
