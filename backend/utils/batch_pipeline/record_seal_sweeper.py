@@ -208,6 +208,8 @@ def sweep(
             if not row:
                 raise ValueError('missing conversation')
             report['classified'] += 1
+            # The refusal clock is meaningful only while audio is unclosed.
+            # Repair/nojob seals may retain a stale stamp; exclude it from all gauges.
             if row.get('record_audio_closed'):
                 counts['already_closed'] += 1
                 continue

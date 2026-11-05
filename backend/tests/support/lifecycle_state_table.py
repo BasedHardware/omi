@@ -372,7 +372,9 @@ STATES = (
             exit=Exit('callback-only', 'database/record_audio.py:seal_record_audio'),
             metric='omi_record_seal_refused_age_seconds',
             alert=Alert('omi-record-seal-refused-age', 'agent'),
-            note='First producer-pending refusal clock, cleared by successful seal after exact-token finish. '
+            note='First producer-pending refusal clock, meaningful only while record_audio_closed is false. '
+            'Normal successful seal after exact-token finish clears it; repair/nojob seals may retain a stale stamp. '
+            'Closed stamped rows are excluded from sweeper classification and refusal count/age gauges. '
             'Age is not a deadline or seal authority. Metrics cover the existing bounded record_pending job page; '
             'the alert is a declaration, not a deployed rule. No-job visibility remains outside phase 1.',
         ),
