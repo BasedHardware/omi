@@ -1,7 +1,7 @@
 """Run the real four FastAPI routes with offline auth/storage dependencies."""
 
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -453,11 +453,24 @@ def test_real_route_cache_separates_effective_read_limits_and_owner(routes, monk
 
 
 def test_transcription_gate_projects_developer_list_and_bypasses_cache(routes, monkeypatch):
-    from tests.unit.test_home_transcribing_hold import capture
-
     client, state, calls, storage = routes
     monkeypatch.setenv('HOME_TRANSCRIPTION_PRESENTATION_GATE', 'on')
-    state.rows = [capture()]
+    now = datetime.now(timezone.utc)
+    # Keep this route/cache contract independent of another test module's heavy
+    # import graph; it needs only the stamped batch presentation fields.
+    state.rows = [
+        {
+            'id': 'capture',
+            'created_at': now,
+            'started_at': now,
+            'finished_at': now,
+            'status': 'completed',
+            'record_lane_owner': 'batch_live_v1',
+            'home_transcription_deadline_at': now + timedelta(hours=2),
+            'structured': {'title': '', 'overview': '', 'category': 'other'},
+            'transcript_segments': [],
+        }
+    ]
     for _ in range(2):
         result = client.get('/v1/dev/user/conversations', headers={'Authorization': 'Bearer synthetic-key'})
         assert result.status_code == 200, result.text
