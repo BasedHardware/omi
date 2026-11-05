@@ -215,6 +215,7 @@ def _scanner(store):
 
 
 def test_release_scan_resumes_from_the_durable_cursor_after_an_instance_restart(monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_HOLD_RECOVERY_ENABLED', 'false')
     # Prod 11-02: an in-memory cursor restarted at page one on every instance
     # start, so 8 of 10 deciles of 16,932 held rows were never examined.
     import database.batch_pipeline_projection_release as release
@@ -241,6 +242,7 @@ def test_release_scan_resumes_from_the_durable_cursor_after_an_instance_restart(
 
 
 def test_release_scan_cursor_failures_never_stop_the_scan(monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_HOLD_RECOVERY_ENABLED', 'false')
     import database.batch_pipeline_projection_release as release
 
     monkeypatch.setattr(release, 'held_page_ids', lambda *a: ['held'])
@@ -249,3 +251,171 @@ def test_release_scan_cursor_failures_never_stop_the_scan(monkeypatch):
     broken.ref.side_effect = RuntimeError('synthetic')
     broken.run.side_effect = RuntimeError('synthetic')
     assert _scanner(broken)(1)['examined'] == 1
+
+
+@pytest.mark.parametrize('summary', ['quarantined', 'persisted'])
+@pytest.mark.parametrize('blocked', [None, 'target', 'attempts', 'privacy', 'operator'])
+def test_persisted_multipart_release_preserves_proven_suffix(monkeypatch, summary, blocked):
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_HOLD_RECOVERY_ENABLED', 'true')
+    held_part = {'state': 'quarantined', 'disposition': 'ambiguous_generation'}
+    suffix = {'state': 'persisted', 'conversation_id': 'proven-suffix', 'audio_required': True}
+    seeded = rows(
+        projection_state='persisted',
+        projection={'state': summary, **({'disposition': 'ambiguous_generation'} if summary == 'quarantined' else {})},
+        projection_parts={'0': held_part, '1': suffix},
+    )
+    if blocked == 'target':
+        seeded[('users', OWNER, 'conversations', TARGET)]['discarded'] = True
+    elif blocked == 'attempts':
+        seeded[('batch_pipeline_prod_results', 'held')]['projection_release_attempts'] = 3
+    elif blocked == 'privacy':
+        seeded[('batch_pipeline_prod_results', 'held')]['projection_privacy_refusal'] = True
+    elif blocked == 'operator':
+        from database.batch_pipeline_projection import OPERATOR_INTENTS
+
+        seeded[('batch_pipeline_prod_jobs', 'held')][next(iter(OPERATOR_INTENTS))] = {'state': 'pending'}
+    client, store = store_for(seeded)
+    assert ProjectionReleaseStore(store).release('held', 500.0) is (blocked is None)
+    if blocked:
+        assert client.rows == seeded
+    else:
+        result = client.rows[('batch_pipeline_prod_results', 'held')]
+        assert result['projection_state'] == 'pending'
+        assert result['projection_parts'] == {'1': suffix}
+        assert result['projection_release_attempts'] == 1
+        assert client.rows[('batch_pipeline_prod_jobs', 'held')]['recovery_state'] is None
+
+
+def test_persisted_release_requires_ambiguous_quarantine_and_enabled_recovery(monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_HOLD_RECOVERY_ENABLED', 'true')
+    for receipt in ({'state': 'ready'}, {'state': 'quarantined', 'disposition': 'other'}):
+        client, store = store_for(rows(projection_state='persisted', projection=receipt))
+        assert not ProjectionReleaseStore(store).release('held', 500.0)
+        assert not client.transactions[-1].updates
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_HOLD_RECOVERY_ENABLED', 'false')
+    client, store = store_for(rows(projection_state='persisted'))
+    assert not ProjectionReleaseStore(store).release('held', 500.0)
+    assert not client.transactions[-1].updates
+
+
+def test_recovery_off_refuses_ready_summary_with_ambiguous_quarantined_part(monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_HOLD_RECOVERY_ENABLED', 'false')
+    seeded = rows(
+        projection={'state': 'ready'},
+        projection_parts={'0': {'state': 'quarantined', 'disposition': 'ambiguous_generation'}},
+    )
+    client, store = store_for(seeded)
+    assert not ProjectionReleaseStore(store).release('held', 500.0)
+    assert client.rows == seeded
+    assert not client.transactions[-1].updates
+
+
+def test_recovery_off_releases_former_summary_shape(monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_HOLD_RECOVERY_ENABLED', 'false')
+    client, store = store_for(rows())
+    assert ProjectionReleaseStore(store).release('held', 500.0)
+    result = client.rows[('batch_pipeline_prod_results', 'held')]
+    assert result['projection_state'] == 'pending'
+    assert result['protocol_version'] == 1
+    assert 'projection_release_version' not in result
+    assert client.rows[('batch_pipeline_prod_jobs', 'held')]['recovery_state'] is None
+
+
+def test_assignment_held_query_is_bounded_and_keyset():
+    from database.batch_pipeline_projection_release import assignment_held_page_ids, RELEASE_PAGE
+
+    query = Mock()
+    for name in ('where', 'order_by', 'limit', 'start_after'):
+        getattr(query, name).return_value = query
+    query.stream.return_value = []
+    client = Mock()
+    client.collection.return_value = query
+    assert assignment_held_page_ids(client, 'ns', 999, 'after') == []
+    client.collection.assert_called_once_with('ns_jobs')
+    assert query.where.call_args_list == [
+        (('state', '==', 'committed'),),
+        (('recovery_state', '==', 'held'),),
+    ]
+    query.order_by.assert_called_once_with('__name__')
+    query.limit.assert_called_once_with(RELEASE_PAGE)
+    query.start_after.assert_called_once_with({'__name__': query.document.return_value})
+
+
+def test_assignment_scan_reaches_persisted_held_job(monkeypatch):
+    import database.batch_pipeline_projection_release as release
+
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_HOLD_RECOVERY_ENABLED', 'true')
+    client, store = store_for(rows(projection_state='persisted'))
+    client.rows[('batch_pipeline_prod_jobs', 'held')]['state'] = 'committed'
+    monkeypatch.setattr(release, 'held_page_ids', lambda *a: [])
+    monkeypatch.setattr(release, 'assignment_held_page_ids', lambda *a: ['held'])
+    counts, _ = release.release_scan_pass(store, limit=2, after_id=None, now=500.0)
+    assert counts == {'released': 1, 'waiting': 0, 'error': 0, 'examined': 1}
+    assert client.rows[('batch_pipeline_prod_results', 'held')]['projection_state'] == 'pending'
+
+
+def test_two_cursors_resume_and_wrap_independently_with_one_row_budget(monkeypatch):
+    import database.batch_pipeline_projection_release as release
+
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_HOLD_RECOVERY_ENABLED', 'true')
+    seen = []
+
+    def page(leg):
+        def fetch(_client, _ns, limit, after):
+            seen.append((leg, after))
+            return [] if after else [leg]
+
+        return fetch
+
+    monkeypatch.setattr(release, 'held_page_ids', page('result'))
+    monkeypatch.setattr(release, 'assignment_held_page_ids', page('job'))
+    monkeypatch.setattr(release.ProjectionReleaseStore, 'release', lambda *a: False)
+    _, store = store_for(rows())
+    for _ in range(6):
+        assert _scanner(store)(1)['examined'] <= 1
+    assert seen == [
+        ('result', None),
+        ('job', None),
+        ('result', 'result'),
+        ('job', 'job'),
+        ('result', None),
+        ('job', None),
+    ]
+
+
+def test_scan_shares_page_and_deadline_budgets(monkeypatch):
+    import database.batch_pipeline_projection_release as release
+
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_HOLD_RECOVERY_ENABLED', 'true')
+    clock = [0.0]
+    monkeypatch.setattr(release.time, 'monotonic', lambda: clock[0])
+    monkeypatch.setattr(release, 'held_page_ids', lambda *a: ['r1', 'r2', 'r3', 'r4'][: a[2]])
+    monkeypatch.setattr(release, 'assignment_held_page_ids', lambda *a: ['j1', 'j2', 'j3', 'j4'][: a[2]])
+    seen = []
+
+    def attempt(_store, segment_id, _now):
+        seen.append(segment_id)
+        clock[0] += 1
+        return False
+
+    monkeypatch.setattr(release.ProjectionReleaseStore, 'release', attempt)
+    client, store = store_for(rows())
+    counts, after = release.release_scan_pass(store, limit=8, after_id=None, now=500, deadline=3)
+    assert counts['examined'] == 3
+    assert seen == ['r1', 'r2', 'j1']
+    assert after == 'r2'
+    assert client.rows[('batch_pipeline_prod_control', release.ASSIGNMENT_RELEASE_CURSOR_KEY)]['after_id'] == 'j1'
+    counts, _ = release.release_scan_pass(store, limit=8, after_id=None, now=500, deadline=3)
+    assert counts['examined'] == 0
+
+
+def test_assignment_cursor_disabled_by_existing_kill_switch(monkeypatch):
+    import database.batch_pipeline_projection_release as release
+
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_HOLD_RECOVERY_ENABLED', 'false')
+    monkeypatch.setattr(release, 'held_page_ids', lambda *a: ['held'])
+    fetch = Mock(side_effect=AssertionError('assignment scan disabled'))
+    monkeypatch.setattr(release, 'assignment_held_page_ids', fetch)
+    _, store = store_for(rows())
+    assert _scanner(store)(1)['released'] == 1
+    fetch.assert_not_called()

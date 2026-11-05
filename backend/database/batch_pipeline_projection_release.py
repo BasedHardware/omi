@@ -79,6 +79,18 @@ class ProjectionReleaseStore:
             entry = self.store.ref('results', segment_id).get(transaction=transaction).to_dict() or {}
             binding = normalized_binding(job['projection_binding']) if job.get('projection_binding') else None
             receipt = entry.get('projection') or {}
+            held_receipt = next(
+                (
+                    part
+                    for part in (
+                        [receipt, *(entry.get('projection_parts') or {}).values()]
+                        if projection_hold_recovery_enabled()
+                        else [receipt]
+                    )
+                    if part.get('state') == 'quarantined' and part.get('disposition') == 'ambiguous_generation'
+                ),
+                None,
+            )
             attempts = entry.get('projection_release_attempts', int(entry.get('projection_redriven_at') is not None))
             if (
                 binding is None
@@ -86,14 +98,14 @@ class ProjectionReleaseStore:
                 or job.get('owner_id') != binding.owner_id
                 or entry.get('owner_key') != owner_key(binding.owner_id)
                 or job.get('recovery_state') != 'held'
-                or entry.get('projection_state') != 'quarantine_held'
-                or receipt.get('state') != 'quarantined'
-                or receipt.get('disposition') != 'ambiguous_generation'
+                or entry.get('projection_state') not in {'quarantine_held', 'persisted'}
+                or (entry.get('projection_state') == 'persisted' and not projection_hold_recovery_enabled())
+                or held_receipt is None
                 or (not projection_hold_recovery_enabled() and entry.get('projection_redriven_at') is not None)
                 or type(attempts) is not int
                 or not 0 <= attempts < MAX_RELEASE_ATTEMPTS
                 or entry.get('projection_privacy_refusal')
-                or not assignment_held_without_recovery(job, entry)
+                or not assignment_held_without_recovery(job, {**entry, 'projection': held_receipt})
                 or (
                     entry.get('projection_parts')
                     and not any(part.get('state') == 'quarantined' for part in entry['projection_parts'].values())
@@ -159,29 +171,43 @@ def held_page_ids(client: Any, namespace: str, limit: int, after_id: str | None)
     return [document.id for document in query.stream()]
 
 
+def assignment_held_page_ids(client: Any, namespace: str, limit: int, after_id: str | None) -> list[str]:
+    collection = client.collection(f'{namespace}_jobs')
+    query = (
+        collection.where('state', '==', 'committed')
+        .where('recovery_state', '==', 'held')
+        .order_by('__name__')
+        .limit(max(1, min(limit, RELEASE_PAGE)))
+    )
+    if after_id is not None:
+        query = query.start_after({'__name__': collection.document(after_id)})
+    return [document.id for document in query.stream()]
+
+
 # Instances restart far more often than one scan wraps. Persist the cursor so a
 # new instance resumes where the last pass stopped instead of at page one. The
 # doc carries no scheduler field, so control-shard queries never select it.
 RELEASE_CURSOR_KEY = 'projection_release_cursor'
+ASSIGNMENT_RELEASE_CURSOR_KEY = 'projection_assignment_release_cursor'
 
 
-def load_release_cursor(store) -> str | None:
+def load_release_cursor(store, *, key=RELEASE_CURSOR_KEY) -> dict:
     try:
-        row = store.ref('control', RELEASE_CURSOR_KEY).get().to_dict() or {}
+        row = store.ref('control', key).get().to_dict() or {}
     except Exception as error:
         logger.warning(
             'event=batch_projection action=release_held action=cursor_load outcome=retry exception_type=%s',
             type(error).__name__,
         )
-        return None
+        return {'after_id': None}
     after = row.get('after_id')
-    return after if isinstance(after, str) and after else None
+    return {**row, 'after_id': after if isinstance(after, str) and after else None}
 
 
-def save_release_cursor(store, after_id: str | None, now: float) -> None:
+def save_release_cursor(store, after_id: str | None, now: float, *, key=RELEASE_CURSOR_KEY, **extra) -> None:
     @firestore.transactional
     def put(transaction):
-        transaction.set(store.ref('control', RELEASE_CURSOR_KEY), {'after_id': after_id, 'updated_at': now})
+        transaction.set(store.ref('control', key), {'after_id': after_id, 'updated_at': now, **extra})
 
     try:
         store.run(put)
@@ -193,13 +219,25 @@ def save_release_cursor(store, after_id: str | None, now: float) -> None:
         )
 
 
-def release_page(store, *, limit: int, after_id: str | None, now: float | None = None, deadline: float | None = None):
+def release_page(
+    store,
+    *,
+    limit: int,
+    after_id: str | None,
+    now: float | None = None,
+    deadline: float | None = None,
+    assignment_held: bool = False,
+):
     """One bounded page of held rows; returns (counts, next_after)."""
     moment = now if now is not None else time.time()
     counts = {'released': 0, 'waiting': 0, 'error': 0, 'examined': 0}
     limit = max(1, min(limit, RELEASE_PAGE))
     try:
-        page = held_page_ids(store.client, store.store.namespace, limit, after_id)
+        page = (
+            assignment_held_page_ids(store.client, store.store.namespace, limit, after_id)
+            if assignment_held
+            else held_page_ids(store.client, store.store.namespace, limit, after_id)
+        )
     except Exception as error:
         # A failed fetch must not lose the cursor the pass chain would keep.
         logger.warning(
@@ -225,9 +263,48 @@ def release_page(store, *, limit: int, after_id: str | None, now: float | None =
 
 
 def release_scan_pass(store, *, limit: int, after_id: str | None, now: float, deadline: float | None = None):
-    """``release_page`` that resumes from, and records, the durable cursor."""
-    start = after_id if after_id is not None else load_release_cursor(store)
-    counts, next_after = release_page(store, limit=limit, after_id=start, now=now, deadline=deadline)
-    if counts['examined'] or next_after != start:
-        save_release_cursor(store, next_after, now)
+    """Two durable discovery cursors share the existing row and time budgets."""
+    start = after_id if after_id is not None else load_release_cursor(store)['after_id']
+    limit = max(1, min(limit, RELEASE_PAGE))
+    enabled = projection_hold_recovery_enabled()
+    assignment = load_release_cursor(store, key=ASSIGNMENT_RELEASE_CURSOR_KEY) if enabled else {}
+    assignment_first = assignment.get('next_first', False) is True
+    legs = [True, False] if assignment_first else [False, True] if enabled else [False]
+    counts = {'released': 0, 'waiting': 0, 'error': 0, 'examined': 0}
+    next_after = start
+    for index, is_assignment in enumerate(legs):
+        first_limit = max(1, limit // 2)
+        page_limit = (first_limit if index == 0 else limit - first_limit) if enabled else limit
+        if page_limit <= 0 or (deadline is not None and time.monotonic() >= deadline):
+            break
+        # Reserve time for the other leg as well as rows. Alternating the first
+        # leg durably also covers a single-row budget or one slow transaction.
+        page_deadline = deadline
+        if index == 0 and enabled and deadline is not None:
+            page_deadline = time.monotonic() + max(0, deadline - time.monotonic()) / 2
+        cursor = assignment.get('after_id') if is_assignment else start
+        page_counts, after = release_page(
+            store,
+            limit=page_limit,
+            after_id=cursor,
+            now=now,
+            deadline=page_deadline,
+            assignment_held=is_assignment,
+        )
+        for key, value in page_counts.items():
+            counts[key] += value
+        if is_assignment:
+            assignment['after_id'] = after
+        else:
+            next_after = after
+            if page_counts['examined'] or after != start:
+                save_release_cursor(store, after, now)
+    if enabled:
+        save_release_cursor(
+            store,
+            assignment.get('after_id'),
+            now,
+            key=ASSIGNMENT_RELEASE_CURSOR_KEY,
+            next_first=not assignment_first,
+        )
     return counts, next_after

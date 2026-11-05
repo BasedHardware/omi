@@ -204,10 +204,9 @@ DEADLINE_ENTRIES = {
     ),
     'visibility:transcribing_hold': (
         entry(
-            'utils/conversations/lifecycle.py',
-            'complete_server_batch_capture',
+            'database/conversation_finalization_jobs.py',
+            '_complete_server_batch_capture_txn',
             'home_transcription_pending_at',
-            inplace=True,  # CAS extra_updates payload; atomic persistence is exercised by test_desktop_batch_only.
         ),
     ),
     'visibility:bridge_pending': (

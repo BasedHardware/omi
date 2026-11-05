@@ -103,3 +103,15 @@ presentation primitive and select its batch receipt fields before transcript
 omission. Speaker-assignment mutations require existing segments, so an empty
 batch placeholder cannot enter that path; its resulting content is outside the
 hold predicate.
+
+## Concurrent atomic completion integration
+
+While this lane was under validation, #24702 moved the completion CAS into
+`database/conversation_finalization_jobs.py:_complete_server_batch_capture_txn`.
+The deadline clocks now commit with that primitive's conversation-and-job
+terminal write. Completed replay, stale generation/lease and privacy fences
+return before the stamp; a successful replay cannot renew the deadline. The
+lifecycle wrapper and finalizer retain the new upstream protocol byte-for-byte.
+The state-table entry and reviewed writer inventory name this actual writer.
+Atomic completion and both recovery/finalize trigger replays are covered without
+reintroducing split terminal writes or changing completed-before-STT ordering.

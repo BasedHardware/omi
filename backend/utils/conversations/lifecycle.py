@@ -11,7 +11,6 @@ from __future__ import annotations
 from utils.observability.sync_phases import sync_phase
 from config.batch_pipeline import live_record_enabled_for, record_capture_eligible
 from config import server_batch
-from config.episodes import home_transcription_deadline_seconds
 from config.policy import resolve_batch_policy
 from database.batch_ramp import ramp_admission_policy
 
@@ -335,28 +334,25 @@ def ensure_processing(uid: str, conversation_id: str) -> bool:
     return admit_processing(uid, conversation_id)
 
 
-def complete_server_batch_capture(uid: str, conversation_id: str, capture: Mapping[str, Any]) -> bool:
-    """Close only a reserved raw capture, after its batch obligation was written."""
-    if not server_batch.owned(capture):
-        return False
-    pending_at = datetime.now(timezone.utc)
-    return conversations_db.claim_conversation_status(
+def complete_server_batch_capture(
+    uid: str,
+    conversation_id: str,
+    capture: Mapping[str, Any],
+    job_id: str,
+    dispatch_generation: int,
+    lease_epoch: int,
+    *,
+    firestore_client: Any = None,
+) -> str:
+    """Atomically close a registered zero-preview capture and its leased job."""
+    return jobs_db.complete_server_batch_capture(
         uid,
         conversation_id,
-        ConversationStatus.processing,
-        ConversationStatus.completed,
-        extra_updates={
-            'home_transcription_pending_at': pending_at,
-            'home_transcription_deadline_at': pending_at + timedelta(seconds=home_transcription_deadline_seconds()),
-        },
-        expected_fields={
-            'record_lane_owner': 'batch_live_v1',
-            'external_data': capture.get('external_data'),
-            'private_cloud_sync_enabled': True,
-            'deleted': False,
-            'is_locked': False,
-            'uses_custom_stt': False,
-        },
+        capture,
+        job_id,
+        dispatch_generation,
+        lease_epoch,
+        firestore_client=firestore_client,
     )
 
 

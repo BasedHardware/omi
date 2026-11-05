@@ -394,11 +394,10 @@ class ProjectionStore:
                         raise ProjectionBlocked('ready sibling binding mismatch')
                     ready.append(self.ref('results', sibling))
             if held:
-                # One page's ready siblings share a completion probe. Settle
-                # their discovery hints together using the read set above;
-                # otherwise they would trickle out one row per later pass.
+                # Ready receipts have completed their follow-ups even when a
+                # sibling is held. Settle their hints without inventing holds.
                 for ref in ready if group_ready else [session.result_ref]:
-                    transaction.update(ref, {'projection_state': 'quarantine_held'})
+                    transaction.update(ref, {'projection_state': 'ready'})
             return held
 
         held = self.run(commit, policy=policy)
