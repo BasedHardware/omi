@@ -35,3 +35,11 @@ ACTION_ITEM_REFRESH_PRESERVE_ENV = 'ACTION_ITEM_REFRESH_PRESERVE_ENABLED'
 def action_item_refresh_preserve_enabled() -> bool:
     """Preserve tasks on automatic refresh only; unset/blank on, unknown off."""
     return _default_on(ACTION_ITEM_REFRESH_PRESERVE_ENV)
+
+
+ACTION_ITEM_REFRESH_REBASE_ENV = 'ACTION_ITEM_REFRESH_REBASE_ENABLED'
+
+
+def action_item_refresh_rebase_enabled() -> bool:
+    """Reconcile once more behind a newer sync revision instead of failing the run; unset/blank on, unknown off."""
+    return _default_on(ACTION_ITEM_REFRESH_REBASE_ENV)

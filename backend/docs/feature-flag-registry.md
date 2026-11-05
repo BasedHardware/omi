@@ -413,6 +413,7 @@ and an explicit empty literal renders as `''`.
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `ACCOUNT_DELETION_GRACE_ENABLED` | Default-on account deletion grace; explicit false restores immediate erasure | backend | env | open | — | — | — | — | keep | keep | — | unowned |
 | `ACTION_ITEMS_LIST_STALE_CLIENT_REFUSE` | Refuse stale action-items list clients | backend | env | open | — | — | 1 | — | keep | keep | — | unowned |
+| `ACTION_ITEM_REFRESH_REBASE_ENABLED` | Default on; when a sync append bumps a conversation's revision during an automatic refresh, reconcile the run's extracted action items once more behind the newer fence instead of failing the run; false restores the revision failure | backend | env | open | — | — | — | — | keep | keep | — | backend |
 | `ACTION_ITEM_REMINDER_REDESIGN_ENABLED` | Default on; explicit reminder validation and source-clock date precision on the existing staged conversation path; false stops new admission and undelivered owned exports | backend | env | closed | — | — | — | — | keep | keep | — | task integration lane owner |
 | `ACTION_ITEM_SOURCE_LINKS_ENABLED` | Default on; shared app/tool create validates supplied conversation sources within the authenticated account | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `ADMIN_KEY_AUTH_ENABLED` | Allow administrator-key authentication | backend | env | open | — | — | — | — | keep | keep | — | unowned |
@@ -952,6 +953,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `ACTION_ITEMS_V2_MODE_SERVE_PERCENT` — Serve cohort percentage; default zero (fail: closed)
 - `ACTION_ITEMS_V2_MODE_SERVE_UID_SHA256S` — Serve cohort digest selector; default empty (fail: closed)
 - `ACTION_ITEM_IDENTITY_PRESERVE_ENABLED` — Keep a task's id and export marker when a conversation reprocess re-extracts the same task, so it is not sent to the user's cloud task app again; Apple Reminders excluded (default on) (fail: open)
+- `ACTION_ITEM_REFRESH_REBASE_ENABLED` — Default on; when a sync append bumps a conversation's revision during an automatic refresh, reconcile the run's extracted action items once more behind the newer fence instead of failing the run; false restores the revision failure (fail: open)
 - `ACTION_ITEM_REMINDER_REDESIGN_ENABLED` — Default on; explicit reminder validation and source-clock date precision on the existing staged conversation path; false stops new admission and undelivered owned exports (fail: closed)
 - `ACTION_ITEM_SOURCE_LINKS_ENABLED` — Default on; shared app/tool create validates supplied conversation sources within the authenticated account (fail: open)
 - `ACTION_ITEM_VALIDITY_MODE` — Context-aware narrow task reference check after V2 selection; default shadow, serving zero percent (fail: closed)

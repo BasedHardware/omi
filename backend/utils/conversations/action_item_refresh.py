@@ -12,7 +12,7 @@ import asyncio
 import logging
 from typing import Any, Callable
 
-from config.action_item_identity import action_item_refresh_preserve_enabled
+from config.action_item_identity import action_item_refresh_preserve_enabled, action_item_refresh_rebase_enabled
 from config.action_item_reminder_policy import action_item_reminder_lifecycle_allows_delivery
 from database import action_item_refresh as refresh_db
 from utils.conversations.action_item_extraction import filter_extracted_items
@@ -42,12 +42,26 @@ def preserve(uid: str, conversation: Any, items: list[dict], trigger: Any, vecto
     if not action_item_refresh_preserve_enabled():
         _emit({'disabled': 1})
         return False
-    result = refresh_db.reconcile(
-        uid,
-        conversation.id,
-        filter_extracted_items(uid, items),
-        expected_revision=getattr(conversation, 'sync_content_revision', None),
-    )
+    extracted = filter_extracted_items(uid, items)
+    expected = getattr(conversation, 'sync_content_revision', None)
+    try:
+        result = refresh_db.reconcile(uid, conversation.id, extracted, expected_revision=expected)
+    except refresh_db.RefreshRevisionChanged as error:
+        current = error.current_revision
+        # A sync append moved the conversation while this run's LLM steps ran. Its persist was already
+        # accepted behind the revision fence, and every revision bump is a content superset whose own wake
+        # reprocesses it. plan() only adds, so reconciling these items behind the newer fence is what the
+        # run would have done had the append landed a moment later. One forward retry; a second move raises.
+        if not (
+            isinstance(expected, int)
+            and isinstance(current, int)
+            and current > expected
+            and action_item_refresh_rebase_enabled()
+        ):
+            raise
+        delta = current - expected
+        logger.info('event=action_item_identity mode=preserve outcome=rebased revision_delta=%d', delta)
+        result = refresh_db.reconcile(uid, conversation.id, extracted, expected_revision=current)
     if result is None:
         return False
     _emit(result['counts'])

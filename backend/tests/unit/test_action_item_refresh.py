@@ -404,3 +404,64 @@ def test_empty_donor_transfer_keeps_first_processing_legacy(world):
     flow.transfer_donor(UID, 'donor', 'survivor')
     assert world.store.rows == before
     assert db.reconcile(UID, 'survivor', [item('New')], expected_revision=1) is None
+
+
+# synceff 2026-11-05: a sync append that bumps the revision mid-run must not discard the run's extraction.
+
+
+def _tasks(world):
+    return sorted(
+        row['description']
+        for path, row in world.store.rows.items()
+        if path[-2] == 'action_items' and path[-1] != 'original'
+    )
+
+
+@pytest.mark.parametrize('trigger', [Trigger.SMART_MERGE, Trigger.SYNC_UPDATE])
+def test_forward_revision_bump_rebases_once_and_adds_each_task_once(world, trigger):
+    world.store.rows[conv_path('survivor')]['sync_content_revision'] = 3  # appends landed after the snapshot (1)
+    world.write(['Send report', 'Book room'], trigger)
+    world.drain()
+    assert _tasks(world) == ['Book room']
+    assert world.store.rows[task_path('original')]['description'] == 'Send report'
+    world.write(['Send report', 'Book room'], trigger)  # a later run at the old snapshot adds nothing more
+    world.drain()
+    assert _tasks(world) == ['Book room']
+
+
+def test_rebase_kill_switch_restores_the_revision_failure(world, monkeypatch):
+    monkeypatch.setenv('ACTION_ITEM_REFRESH_REBASE_ENABLED', 'false')
+    world.store.rows[conv_path('survivor')]['sync_content_revision'] = 2
+    with pytest.raises(db.RefreshRevisionChanged) as raised:
+        world.write(['Book room'])
+    assert isinstance(raised.value, ValueError) and raised.value.current_revision == 2
+    assert _tasks(world) == [] and not world.queue
+
+
+def test_second_revision_move_during_rebase_raises_without_writes(world, monkeypatch):
+    world.store.rows[conv_path('survivor')]['sync_content_revision'] = 2
+    real = db.reconcile
+    calls = []
+
+    def moving(*args, **kwargs):
+        calls.append(kwargs.get('expected_revision'))
+        if len(calls) == 2:  # another append lands between the two transactions
+            world.store.rows[conv_path('survivor')]['sync_content_revision'] = 4
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(db, 'reconcile', moving)
+    with pytest.raises(db.RefreshRevisionChanged) as raised:
+        world.write(['Book room'])
+    assert calls == [1, 2] and raised.value.current_revision == 4
+    assert _tasks(world) == [] and not world.queue
+
+
+@pytest.mark.parametrize('stored', [0, None, 'x'])
+def test_backward_or_unknown_revision_is_not_rebased(world, monkeypatch, stored):
+    world.store.rows[conv_path('survivor')]['sync_content_revision'] = stored
+    calls = []
+    real = db.reconcile
+    monkeypatch.setattr(db, 'reconcile', lambda *a, **k: calls.append(1) or real(*a, **k))
+    with pytest.raises(db.RefreshRevisionChanged):
+        world.write(['Book room'])
+    assert len(calls) == 1 and _tasks(world) == []
