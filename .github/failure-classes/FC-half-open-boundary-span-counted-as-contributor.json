@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-half-open-boundary-span-counted-as-contributor",
+  "violated_contract": "A half-open interval [first, end) over a sequence of spans is composed only of the spans that own at least one of its samples. A span whose exclusive end equals the interval's inclusive start owns none of them and must be invisible to every membership, adjacency and gap check over that interval; a span that owns the sample before an exclusive end still counts. When one endpoint comparison uses the wrong strictness, a boundary span that contributes nothing is pulled into an adjacency check (or a contributing one is dropped), and a window that is entirely inside one accepted send is refused as if it straddled the capture gap next to it. Nothing raises: the window is reported as unprovable and the text is persisted unplaced, with the loss visible only at the exact boundary sample where speech after a pause naturally begins.",
+  "canonical_prevention": "Derive span membership for an interval from one half-open predicate, written once (span contributes iff span_start < end and first < span_end), and reuse it for every check over that interval instead of restating the comparison inline. Pin both boundary samples with named regression cases: the window starting exactly on a span start after a gap maps into that span, the window starting one sample earlier is refused, and the window ending exactly on the gap boundary belongs to the preceding span. A property test that compares the mapper against an independent per-sample oracle must assert the oracle's verdict for refused windows too, not only for mapped ones, so a wrong None is a failure rather than a tolerated refusal.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_send_map_exclusive_end.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/audio_timeline.py",
+    "backend/utils/stt/*.py"
+  ],
+  "status": "open"
+}

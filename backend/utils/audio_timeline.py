@@ -520,7 +520,11 @@ class SendMap:
             provider_from, _, length = span
             if provider_from >= provider_last_sample:
                 break
-            if provider_from + length < provider_first_sample:
+            # The start is inclusive, so a span whose exclusive end is exactly
+            # the start sample contributes nothing to the interval. Skipping it
+            # here (``<=``) keeps a window that begins on the first sample after
+            # a VAD gap inside its own send instead of refusing it as a gap.
+            if provider_from + length <= provider_first_sample:
                 continue
             if previous is not None:
                 if previous[0] + previous[2] != provider_from or previous[1] + previous[2] != span[1]:
