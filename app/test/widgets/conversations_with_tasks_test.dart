@@ -196,4 +196,36 @@ void main() {
     expect(tester.takeException(), isNull);
     semantics.dispose();
   });
+
+  testWidgets('Home rows react to their selected canonical badge and clear it on refresh', (tester) async {
+    var linked = true;
+    final presence = ConversationTaskPresenceProvider(
+        auth: AuthService.forTesting(tokenGateway: _Gateway()),
+        fetch: (ids, current) async => ApiSuccess({for (final id in ids) id: id == 'a' && linked}));
+    addTearDown(presence.dispose);
+    Future<ApiResult<TaskConversationPage>> unused(
+            {required String query,
+            bool includeDiscarded = false,
+            String? folderId,
+            bool? starred,
+            DateTime? startDate,
+            DateTime? endDate,
+            String? cursor,
+            bool Function()? canSend}) async =>
+        const ApiSuccess(TaskConversationPage(items: []));
+    await pump(tester, unused,
+        child: ChangeNotifierProvider.value(
+            value: presence,
+            child: Scaffold(
+                body: ListView(children: [
+              ConversationListItem(conversation: _row('a'), date: DateTime.utc(2020), conversationIdx: 0),
+              ConversationListItem(conversation: _row('b'), date: DateTime.utc(2020), conversationIdx: 1),
+            ]))));
+    await tester.pump(const Duration(milliseconds: 151));
+    expect(find.byKey(const ValueKey('conversation_has_tasks')), findsOneWidget);
+    linked = false;
+    presence.invalidate();
+    await tester.pump(const Duration(milliseconds: 151));
+    expect(find.byKey(const ValueKey('conversation_has_tasks')), findsNothing);
+  });
 }

@@ -49,7 +49,7 @@ on row rebuilds. Filter loads fence superseded requests and account changes;
 
 Local evidence: Flutter 3.44.5/Dart 3.12.2; iPhone 17 Pro simulator/iOS 26.5;
 Python 3.11; isolated `demo-fs-p1` Firestore emulator. The final native flow passed
-with real loopback HTTP, including a 503 fault and deletion refresh. 31 focused
+with real loopback HTTP, including a 503 fault and deletion refresh. 32 focused
 mobile regressions and 31 selected journeys passed. The query/contract batch
 passed 611 tests; the separate compatibility/rate-limit batch passed 149 with one
 pre-existing skip. Three production-query/HTTP emulator cases passed. These

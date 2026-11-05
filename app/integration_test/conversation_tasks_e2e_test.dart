@@ -116,7 +116,12 @@ void main() {
                           )))),
         )));
     await tester.pumpAndSettle();
-    await tester.pump(const Duration(milliseconds: 300));
+    // This badge has no loading animation. Frame settlement alone does not
+    // mean its real HTTP request has completed on a busy simulator host.
+    final badge = find.byKey(const ValueKey('conversation_has_tasks'));
+    for (var attempt = 0; attempt < 200 && badge.evaluate().isEmpty; attempt++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('conversation_has_tasks')), findsOneWidget);
     await capture('home-task-badge');
