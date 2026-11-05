@@ -1004,3 +1004,29 @@ def test_streak_is_capped(rows):
     rows[0][KEY][SUPERSEDE_STREAK_FIELD] = SUPERSEDE_STREAK_CAP
     _superseded_with_a_newer_mark(rows, now=10_000)
     assert rows[0][KEY][SUPERSEDE_STREAK_FIELD] == SUPERSEDE_STREAK_CAP
+
+
+def test_enrichment_early_abort_and_streak_metrics_pass_the_gmp_sync_allowlist():
+    # synceff 2026-11-05: backend-integration has the sidecar, but its keep list hid these two families.
+    import re
+    from pathlib import Path
+
+    import yaml
+
+    config = yaml.safe_load((Path(__file__).parents[2] / 'deploy' / 'cloud_run_gmp_sync.yaml').read_text())
+    rules = config['spec']['endpoints'][0]['metricRelabeling']
+    keep = [row['regex'] for row in rules if row['action'] == 'keep' and row['sourceLabels'] == ['__name__']]
+    for name in (
+        'omi_enrichment_early_abort_total',
+        'omi_enrichment_supersede_streak_bucket',
+        'omi_enrichment_supersede_streak_count',
+        'omi_enrichment_supersede_streak_sum',
+    ):
+        assert any(re.fullmatch(pattern, name) for pattern in keep), name
+    for name in (
+        'omi_enrichment_supersede_streak_other',
+        'enrichment_early_abort_total',
+        'omi_enrichment_early_abort_total_extra',
+        'omi_enrichment_early_abort',
+    ):
+        assert not any(re.fullmatch(pattern, name) for pattern in keep), name
