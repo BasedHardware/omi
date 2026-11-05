@@ -115,13 +115,7 @@ class MonitoredThreadPoolExecutor(ThreadPoolExecutor):
     """ThreadPoolExecutor with active-task tracking and optional backpressure."""
 
     def __init__(
-        self,
-        name: str,
-        *,
-        max_queue_size: int | None = None,
-        wait_on_saturation: bool = False,
-        log_saturation: bool = True,
-        **kwargs: Any,
+        self, name: str, *, max_queue_size: int | None = None, wait_on_saturation: bool = False, **kwargs: Any
     ):
         super().__init__(**kwargs)
         self.name = name
@@ -135,7 +129,6 @@ class MonitoredThreadPoolExecutor(ThreadPoolExecutor):
             # while its semaphore slot is reused by a later submission.
             setattr(self, "_work_queue", self._bounded_queue)
         self.wait_on_saturation = wait_on_saturation
-        self.log_saturation = log_saturation
         max_workers = self._max_workers
         self._submission_slots = (
             threading.BoundedSemaphore(max_workers + max_queue_size) if max_queue_size is not None else None
@@ -151,7 +144,7 @@ class MonitoredThreadPoolExecutor(ThreadPoolExecutor):
     def submit(self, fn: Callable[..., T], /, *args: Any, **kwargs: Any) -> Future[T]:
         slots = self._submission_slots
         if slots is not None and not slots.acquire(blocking=False):
-            if not self.wait_on_saturation and self.log_saturation:
+            if not self.wait_on_saturation:
                 logger.warning(
                     'executor_saturated executor=%s workers=%s queue_capacity=%s',
                     self.name,
