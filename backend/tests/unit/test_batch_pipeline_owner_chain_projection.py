@@ -111,7 +111,6 @@ class ResultLog:
         self.bindings[segment] = binding
         self.jobs[segment] = {
             **asdict(WorkItem(segment, owner, self.clock, 'gs://synthetic/audio', 1, Priority.DEEP)),
-            'projection_binding': asdict(binding),
             'policy_parts': {'projection': self.policy},
             **({} if fresh_capture is None else {'fresh_capture': fresh_capture}),
         }

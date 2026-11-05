@@ -14,9 +14,8 @@ import asyncio
 from collections import deque
 import logging
 import time
-from typing import TYPE_CHECKING, NamedTuple
+from typing import TYPE_CHECKING
 
-from utils.batch_pipeline.correctness_metrics import PROJECTION_HEAD_REQUEUES
 from utils.executors import run_blocking, start_background_task, sync_executor
 
 if TYPE_CHECKING:
@@ -25,18 +24,10 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 # Owners draining at once in one process.
 MAX_OWNER_DRAINS = 8
-# One owner's turn; productive deadline stops get a bounded continuation.
+# One owner's turn; with more rows it re-queues behind every waiting owner.
 DRAIN_TURN_SECONDS = 120.0
-# Then yield behind every waiting owner, even if this chain keeps advancing.
-MAX_HEAD_REQUEUES = 2
 # One blocking step: bounds a sync-pool slot and the owner-claim hold.
 DRAIN_STEP_SECONDS = 15.0
-
-
-class Turn(NamedTuple):
-    more: bool
-    advanced: int
-    stop: str
 
 
 class OwnerDrains:
@@ -46,7 +37,6 @@ class OwnerDrains:
         self.tasks: dict[str, asyncio.Task] = {}
         # Owners requested again while draining: one more turn after this one.
         self.again: set[str] = set()
-        self.head_requeues: dict[str, int] = {}
         self.closed = False
 
     def request(self, owners) -> None:
@@ -73,31 +63,15 @@ class OwnerDrains:
             self.closed = True
             self.queue.clear()
             self.again.clear()
-            self.head_requeues.clear()
             return
-        turn = task.result() if task.exception() is None else Turn(False, 0, 'error')
-        more = turn.more
+        more = task.exception() is None and task.result() is True
         if (more or owner in self.again) and owner not in self.queue:
-            streak = self.head_requeues.get(owner, 0)
-            if (
-                more
-                and turn.advanced > 0
-                and turn.stop in {'turn_deadline', 'deadline', 'step_deadline', 'limit'}
-                and streak < MAX_HEAD_REQUEUES
-            ):
-                self.queue.appendleft(owner)
-                self.head_requeues[owner] = streak + 1
-                PROJECTION_HEAD_REQUEUES.inc()
-            else:
-                self.queue.append(owner)
-                self.head_requeues.pop(owner, None)
-        else:
-            self.head_requeues.pop(owner, None)
+            self.queue.append(owner)  # FIFO: behind every owner already waiting
         self.again.discard(owner)
         self.launch()
 
-    async def run(self, owner: str) -> Turn:
-        """One bounded turn, including whether a productive continuation is due."""
+    async def run(self, owner: str) -> bool:
+        """One turn; True when the chain had more rows when the turn ended."""
         started = time.monotonic()
         deadline = started + DRAIN_TURN_SECONDS
         advanced = steps = 0
@@ -141,4 +115,4 @@ class OwnerDrains:
             stop,
             int((time.monotonic() - started) * 1000),
         )
-        return Turn(more, advanced, stop)
+        return more
