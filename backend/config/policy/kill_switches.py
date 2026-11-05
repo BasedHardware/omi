@@ -11,6 +11,7 @@ KILL_SWITCHES = {
     'BATCH_PIPELINE_LEADER_LEASE_ENABLED': True,
     'BATCH_PIPELINE_RECOVERY_TASKS_ENABLED': True,
     'BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED': True,
+    'BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED': True,
     'BATCH_PIPELINE_OWNER_CHAIN_PROJECTION_ENABLED': True,
     'BATCH_PIPELINE_RECOVERED_MERGE_RELEASE_ENABLED': True,
     'BATCH_PIPELINE_RECOVERY_OWNER_ONLY_ENABLED': True,
@@ -34,12 +35,15 @@ def kill_switch(name: str, *, policy_id: str = 'control', flags=None) -> bool:
         raise ValueError('unregistered live batch switch')
     env = os.environ if flags is None else flags
     value = env.get(name, str(KILL_SWITCHES[name])).strip().lower()
-    if name == 'PARAKEET_WINDOW_STRANDED_DRIFT_SETTLE_ENABLED':
+    if name == 'BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED':
+        enabled = value != 'off'
+    elif name == 'PARAKEET_WINDOW_STRANDED_DRIFT_SETTLE_ENABLED':
         enabled = value not in {'false', '0', 'off'}
     else:
         enabled = value != 'false' if name in DISABLE_ONLY_SWITCHES else value == 'true'
     from config.refactor_switches import default_on
 
-    enabled = default_on(name, enabled, environ=env)
+    if name != 'BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED':
+        enabled = default_on(name, enabled, environ=env)
     logger.info('event=batch_policy_kill_switch policy_id=%s switch=%s enabled=%s count=1', policy_id, name, enabled)
     return enabled

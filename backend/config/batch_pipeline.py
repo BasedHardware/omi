@@ -3,8 +3,10 @@
 from config.refactor_switches import default_off as rollout_default_off, default_on as rollout_default_on
 
 from enum import IntEnum
+import hashlib
 import math
 import os
+import socket
 
 from config.rollout_cohorts import rollout_cohort_members
 from typing import Callable, TypeVar
@@ -513,6 +515,25 @@ def projection_pagination_enabled() -> bool:
     from config.policy import kill_switch
 
     return kill_switch('BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED')
+
+
+def projection_striping_enabled() -> bool:
+    from config.policy import kill_switch
+
+    return kill_switch('BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED')
+
+
+PROJECTION_DISCOVERY_STRIPES = 256
+
+
+def projection_discovery_stripe() -> int:
+    """Stable startup phase; 256 buckets keep collisions low for 30-50 instances.
+
+    Revision separates overlapping rolls; hostname separates instances and pid
+    separates workers. SHA-256 is stable across Python hash randomization.
+    """
+    identity = f'{os.getenv("K_REVISION", "")}:{socket.gethostname()}:{os.getpid()}'
+    return int.from_bytes(hashlib.sha256(identity.encode()).digest()[:8], 'big') % PROJECTION_DISCOVERY_STRIPES
 
 
 def owner_chain_projection_enabled() -> bool:
