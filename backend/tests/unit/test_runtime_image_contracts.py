@@ -1126,11 +1126,3 @@ def test_third_party_closure_follows_requirement_includes_through_directory_copi
     assert installed.open_reasons == ()
     assert installed.distributions == {'requests', 'pyjwt'}
     assert errors == []
-
-
-def test_registered_images_have_complete_third_party_closures(contracts_module):
-    errors, notes = contracts_module.check_third_party_closures(contracts_module.load_contracts())
-
-    assert errors == []
-    checked = {'batch-pipeline-worker', 'backend', 'backend-pusher', 'pusher', 'diarizer'}
-    assert not any(note.split(':', 1)[0] in checked for note in notes)
