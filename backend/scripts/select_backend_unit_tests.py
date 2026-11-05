@@ -689,7 +689,7 @@ def tests_for_changed_paths(changed_paths: list[str], all_tests: list[str]) -> t
         selected.update(test for test in REASON_LABEL_ENUM_TESTS if test in all_tests)
     # The AST inventory also discovers a new writer in a previously unrelated
     # module. Keep the source fallback unchanged while always running its guard.
-    if any(path.startswith(('backend/database/', 'backend/utils/')) and path.endswith('.py') for path in changed_paths):
+    if any(path.startswith('backend/') and path.endswith('.py') for path in changed_paths):
         selected.update(test for test in LIFECYCLE_INVARIANT_TESTS if test in all_tests)
     for path in changed_paths:
         selected.update(test for test in LIFECYCLE_SOURCE_REGRESSION_TESTS.get(path, ()) if test in all_tests)

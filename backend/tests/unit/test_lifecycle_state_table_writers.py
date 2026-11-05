@@ -358,3 +358,103 @@ def test_fair_use_state_literals_have_rows(module):
     assert literal_states((BACKEND / module).read_text(), 'stage') <= {
         row.state for row in STATES if row.machine == 'fair_use'
     }
+
+
+# Runs through the existing lifecycle writer gate locally and in CI.
+def test_terminal_status_writers_match_strict_owner_allowlist():
+    from tests.support.lifecycle_writer_inventory import KNOWN_TERMINAL_WRITERS
+    from tests.support.terminal_writer_inventory import assert_terminal_writers, scan_terminal_writers
+
+    assert_terminal_writers(scan_terminal_writers(BACKEND), KNOWN_TERMINAL_WRITERS)
+
+
+@pytest.mark.parametrize(
+    'statement',
+    [
+        "transaction.update(conversation_ref, {'status': 'completed'})",
+        "conversation_ref.set({'status': 'failed'}, merge=True)",
+        "transaction.set(conversation_ref, dict(status=ConversationStatus.completed.value), merge=True)",
+        "conversation_ref.merge({'status': ConversationStatus.failed})",
+        "conversation_ref.update(status='completed')",
+        "conversations_db.update_conversation(uid, cid, {'status': 'completed'})",
+        "payload = {'status': 'completed'}\n    conversation_ref.set(encode(uid, payload))",
+        "payload = {'status': 'completed'}\n    alias = payload\n    transaction.update(conversation_ref, alias)",
+        "payload = {}\n    payload['status'] = 'failed'\n    conversation_ref.update(payload)",
+        "payload = {}\n    payload.update(status='completed')\n    conversation_ref.update(payload)",
+        "claim_conversation_status(uid, cid, ConversationStatus.processing, ConversationStatus.completed)",
+        "claim_conversation_status(uid, cid, expected_status=ConversationStatus.processing, claimed_status=ConversationStatus.failed)",
+        "claim_conversation_status(uid, cid, expected, target)",
+    ],
+)
+def test_terminal_ratchet_rejects_new_writer(statement):
+    from tests.support.terminal_writer_inventory import assert_terminal_writers, terminal_writer_sites
+
+    actual = terminal_writer_sites('def fourth_writer():\n    ' + statement + '\n', 'routers/surprise.py')
+    assert actual['conversation'] == {('routers/surprise.py', 'fourth_writer')}
+    with pytest.raises(AssertionError, match='TERMINAL-WRITER-OWNER.*new writers'):
+        assert_terminal_writers(actual, {'conversation': {}, 'finalization': {}})
+
+
+def test_terminal_ratchet_rejects_stale_exception():
+    from tests.support.terminal_writer_inventory import assert_terminal_writers
+
+    with pytest.raises(AssertionError, match='stale allowlist entries.*retired'):
+        assert_terminal_writers(
+            {'conversation': set(), 'finalization': set()},
+            {'conversation': {('database/old.py', 'retired'): 'unclassified'}, 'finalization': {}},
+        )
+
+
+@pytest.mark.parametrize('status', ['completed', 'dead_letter'])
+def test_terminal_ratchet_discovers_finalization_writers_in_new_modules(status):
+    from tests.support.terminal_writer_inventory import terminal_writer_sites
+
+    source = f"def surprise():\n    ref = db.collection('conversation_finalization_jobs').document(jid)\n    tx.set(ref, {{'status': '{status}'}}, merge=True)\n"
+    assert terminal_writer_sites(source, 'routers/surprise.py') == {
+        'conversation': set(),
+        'finalization': {('routers/surprise.py', 'surprise')},
+    }
+
+
+def test_terminal_ratchet_ignores_reads_comparisons_and_other_machines():
+    from tests.support.terminal_writer_inventory import terminal_writer_sites
+
+    source = '''
+def inspect(conversation):
+    completed = conversation.get('status') == 'completed'
+    failed = conversation.status == ConversationStatus.failed
+    status = conversation['status']
+    tx.update(task_ref, {'status': 'completed'})
+    return {'status': 'completed' if completed else 'failed'}
+'''
+    assert terminal_writer_sites(source, 'routers/read_only.py') == {'conversation': set(), 'finalization': set()}
+
+
+def test_terminal_ratchet_names_nested_callbacks():
+    from tests.support.terminal_writer_inventory import terminal_writer_sites
+
+    source = "def finish():\n    ref = db.collection('conversations').document(cid)\n    def commit(tx):\n        tx.update(ref, {'status': 'completed'})\n"
+    assert terminal_writer_sites(source, 'database/new.py')['conversation'] == {('database/new.py', 'finish.commit')}
+
+
+def test_terminal_ratchet_is_selected_for_any_backend_source():
+    from scripts.select_backend_unit_tests import tests_for_changed_paths
+
+    path = 'tests/unit/test_lifecycle_state_table_writers.py'
+    for changed in ['backend/routers/surprise.py', 'backend/services/new_writer.py', 'backend/scripts/repair.py']:
+        selected, _ = tests_for_changed_paths([changed], [path])
+        assert path in selected
+
+
+def test_terminal_ratchet_excludes_test_trees_and_scans_new_production_files(tmp_path):
+    from tests.support.terminal_writer_inventory import scan_terminal_writers
+
+    source = "def surprise():\n    conversation_ref.set({'status': 'completed'}, merge=True)\n"
+    for directory in ['tests/unit', 'testing/e2e', '.venv', 'routers']:
+        path = tmp_path / directory / 'surprise.py'
+        path.parent.mkdir(parents=True)
+        path.write_text(source)
+    assert scan_terminal_writers(tmp_path) == {
+        'conversation': {('routers/surprise.py', 'surprise')},
+        'finalization': set(),
+    }
