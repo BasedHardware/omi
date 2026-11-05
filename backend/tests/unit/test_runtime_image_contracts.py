@@ -30,6 +30,16 @@ def contracts_module():
     return _load_contract_module()
 
 
+@pytest.fixture(scope='module')
+def dependencies_module():
+    sys.path.insert(0, str(SCRIPT_PATH.parent))
+    try:
+        import runtime_image_dependencies
+    finally:
+        sys.path.remove(str(SCRIPT_PATH.parent))
+    return runtime_image_dependencies
+
+
 def _contract(contracts_module, name):
     return next(contract for contract in contracts_module.load_contracts() if contract.name == name)
 
@@ -1012,7 +1022,9 @@ def _pylock(*names):
     return 'lock-version = "1.0"\n' + ''.join(f'\n[[packages]]\nname = "{name}"\nversion = "1.0"\n' for name in names)
 
 
-def test_third_party_closure_rejects_an_import_missing_from_the_image_lock(contracts_module, tmp_path):
+def test_third_party_closure_rejects_an_import_missing_from_the_image_lock(
+    contracts_module, dependencies_module, tmp_path
+):
     # The #24490 shape: a reachable `from deepgram import ...` while the worker
     # lock lacks deepgram-sdk. The full backend lock had it, so unit CI passed.
     contract = _third_party_contract(
@@ -1023,7 +1035,7 @@ def test_third_party_closure_rejects_an_import_missing_from_the_image_lock(contr
         files={'pylock.worker.toml': _pylock('numpy', 'uv')},
     )
 
-    errors, installed = contracts_module.third_party_closure_errors(contract)
+    errors, installed = dependencies_module.third_party_closure_errors(contract)
 
     assert installed.sources[0].endswith('pylock.worker.toml')
     assert installed.open_reasons == ()
@@ -1032,7 +1044,7 @@ def test_third_party_closure_rejects_an_import_missing_from_the_image_lock(contr
     assert 'numpy' not in errors[0].split('(', 1)[0]
 
 
-def test_third_party_closure_maps_import_names_to_distributions(contracts_module, tmp_path):
+def test_third_party_closure_maps_import_names_to_distributions(contracts_module, dependencies_module, tmp_path):
     contract = _third_party_contract(
         contracts_module,
         tmp_path,
@@ -1062,23 +1074,23 @@ def test_third_party_closure_maps_import_names_to_distributions(contracts_module
         },
     )
 
-    errors, _ = contracts_module.third_party_closure_errors(contract)
+    errors, _ = dependencies_module.third_party_closure_errors(contract)
 
     assert errors == []
 
 
-def test_third_party_closure_fails_closed_on_an_unmapped_namespace_submodule(contracts_module):
-    assert contracts_module.module_distribution_candidates('google') is None
-    assert contracts_module.module_distribution_candidates('google.cloud') is None
+def test_third_party_closure_fails_closed_on_an_unmapped_namespace_submodule(contracts_module, dependencies_module):
+    assert dependencies_module.module_distribution_candidates('google') is None
+    assert dependencies_module.module_distribution_candidates('google.cloud') is None
     # A submodule under a bare namespace must name a real distribution, never
     # fall back to the namespace and pass.
-    candidates = contracts_module.module_distribution_candidates('google.cloud.unmapped_v1.Thing')
+    candidates = dependencies_module.module_distribution_candidates('google.cloud.unmapped_v1.Thing')
     assert candidates is not None
     assert 'google-cloud-unmapped' in candidates
     assert all(candidate != 'google' for candidate in candidates)
 
 
-def test_third_party_closure_does_not_judge_an_open_dependency_set(contracts_module, tmp_path):
+def test_third_party_closure_does_not_judge_an_open_dependency_set(contracts_module, dependencies_module, tmp_path):
     # A range-pinned requirements file does not list transitive distributions,
     # so an absent name may still be installed: report it, never fail on it.
     contract = _third_party_contract(
@@ -1095,13 +1107,15 @@ def test_third_party_closure_does_not_judge_an_open_dependency_set(contracts_mod
         files={'requirements.txt': 'fastapi>=0.100.0\n'},
     )
 
-    errors, installed = contracts_module.third_party_closure_errors(contract)
+    errors, installed = dependencies_module.third_party_closure_errors(contract)
 
     assert errors == []
     assert installed.open_reasons and 'unpinned fastapi>=0.100.0' in installed.open_reasons[0]
 
 
-def test_third_party_closure_follows_requirement_includes_through_directory_copies(contracts_module, tmp_path):
+def test_third_party_closure_follows_requirement_includes_through_directory_copies(
+    contracts_module, dependencies_module, tmp_path
+):
     contract = _third_party_contract(
         contracts_module,
         tmp_path,
@@ -1125,14 +1139,14 @@ def test_third_party_closure_follows_requirement_includes_through_directory_copi
         },
     )
 
-    errors, installed = contracts_module.third_party_closure_errors(contract)
+    errors, installed = dependencies_module.third_party_closure_errors(contract)
 
     assert installed.open_reasons == ()
     assert installed.distributions == {'requests', 'pyjwt'}
     assert errors == []
 
 
-def test_third_party_closure_leaves_a_hand_pinned_list_open(contracts_module, tmp_path):
+def test_third_party_closure_leaves_a_hand_pinned_list_open(contracts_module, dependencies_module, tmp_path):
     # Every line pinned with == still omits whatever its packages pull in.
     contract = _third_party_contract(
         contracts_module,
@@ -1145,13 +1159,13 @@ def test_third_party_closure_leaves_a_hand_pinned_list_open(contracts_module, tm
         files={'requirements.txt': 'fastapi==0.121.0\n'},
     )
 
-    errors, installed = contracts_module.third_party_closure_errors(contract)
+    errors, installed = dependencies_module.third_party_closure_errors(contract)
 
     assert errors == []
     assert any('pinned by hand' in reason for reason in installed.open_reasons)
 
 
-def test_third_party_closure_ignores_a_stage_copied_only_for_a_binary(contracts_module, tmp_path):
+def test_third_party_closure_ignores_a_stage_copied_only_for_a_binary(contracts_module, dependencies_module, tmp_path):
     contract = _third_party_contract(
         contracts_module,
         tmp_path,
@@ -1169,13 +1183,13 @@ def test_third_party_closure_ignores_a_stage_copied_only_for_a_binary(contracts_
         files={'pylock.tools.toml': _pylock('deepgram-sdk'), 'pylock.worker.toml': _pylock('numpy')},
     )
 
-    errors, installed = contracts_module.third_party_closure_errors(contract)
+    errors, installed = dependencies_module.third_party_closure_errors(contract)
 
     assert 'deepgram-sdk' not in installed.distributions
     assert len(errors) == 1 and 'deepgram' in errors[0]
 
 
-def test_third_party_closure_credits_a_copied_builder_environment(contracts_module, tmp_path):
+def test_third_party_closure_credits_a_copied_builder_environment(contracts_module, dependencies_module, tmp_path):
     contract = _third_party_contract(
         contracts_module,
         tmp_path,
@@ -1191,22 +1205,22 @@ def test_third_party_closure_credits_a_copied_builder_environment(contracts_modu
         files={'pylock.worker.toml': _pylock('deepgram-sdk')},
     )
 
-    assert contracts_module.third_party_closure_errors(contract)[0] == []
+    assert dependencies_module.third_party_closure_errors(contract)[0] == []
 
 
-def test_third_party_closure_explicit_mapping_is_authoritative(contracts_module):
+def test_third_party_closure_explicit_mapping_is_authoritative(contracts_module, dependencies_module):
     # An unrelated distribution named like a longer import path must not
     # satisfy a module whose owner is mapped explicitly or by its top level.
-    assert contracts_module.module_distribution_candidates('deepgram.clients.listen') == ('deepgram-sdk',)
-    assert contracts_module.module_distribution_candidates('fastapi.FastAPI') == ('fastapi',)
-    assert contracts_module.module_distribution_candidates('google.protobuf.json_format') == ('protobuf',)
+    assert dependencies_module.module_distribution_candidates('deepgram.clients.listen') == ('deepgram-sdk',)
+    assert dependencies_module.module_distribution_candidates('fastapi.FastAPI') == ('fastapi',)
+    assert dependencies_module.module_distribution_candidates('google.protobuf.json_format') == ('protobuf',)
     # API-version suffixes are dropped only under namespace packages.
-    assert contracts_module.module_distribution_candidates('mylib_v2.thing') == ('mylib-v2',)
-    assert 'google-cloud-tasks' in contracts_module.module_distribution_candidates('google.cloud.tasks_v2')
+    assert dependencies_module.module_distribution_candidates('mylib_v2.thing') == ('mylib-v2',)
+    assert 'google-cloud-tasks' in dependencies_module.module_distribution_candidates('google.cloud.tasks_v2')
 
 
-def test_third_party_closure_excludes_lock_entries_whose_marker_misses_the_image(contracts_module):
-    applies = contracts_module.marker_applies_to_image
+def test_third_party_closure_excludes_lock_entries_whose_marker_misses_the_image(contracts_module, dependencies_module):
+    applies = dependencies_module.marker_applies_to_image
     assert applies("platform_machine == 'x86_64' and sys_platform == 'linux'")
     assert applies("python_full_version < '3.13' and platform_machine == 'x86_64'")
     assert applies("implementation_name != 'pypy'")
@@ -1215,13 +1229,13 @@ def test_third_party_closure_excludes_lock_entries_whose_marker_misses_the_image
     assert not applies("extra == 'gpu'")  # undecidable here: never credited
 
 
-def test_registered_image_dependency_sets_are_classified(contracts_module):
+def test_registered_image_dependency_sets_are_classified(contracts_module, dependencies_module):
     # The full closure walk runs in the backend-runtime-image-third-party-closure
     # manifest check; this pins which registered images it judges.
     closed = {
         contract.name
         for contract in contracts_module.load_contracts()
-        if not contracts_module.installed_dependencies(contract).open_reasons
+        if not dependencies_module.installed_dependencies(contract).open_reasons
     }
     assert {'batch-pipeline-worker', 'backend', 'backend-api', 'backend-pusher', 'pusher'} <= closed
     assert 'parakeet' not in closed and 'plugins' not in closed
