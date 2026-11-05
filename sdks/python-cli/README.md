@@ -281,8 +281,8 @@ omi
 ├── memory
 │   ├── list [--limit N] [--offset N] [--categories ...]
 │   ├── get <id>
-│   ├── create <content> [--category ...] [--visibility ...] [--tag ...]
-│   ├── update <id> [--content ...] [--category ...] [--visibility ...] [--tag ...]
+│   ├── create <content> | --stdin [--category ...] [--visibility ...] [--tag ...]
+│   ├── update <id> [--content ... | --content-stdin] [--category ...] [--visibility ...] [--tag ...]
 │   └── delete <id> [-y]
 ├── conversation
 │   ├── list [--limit N] [--start-date ...] [--end-date ...] [--include-transcript]
