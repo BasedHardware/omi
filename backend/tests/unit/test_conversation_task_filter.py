@@ -138,6 +138,19 @@ async def test_cursor_is_signed_owner_and_filter_bound():
             await task_conversation_page(uid, request, budget=budget(), **callbacks)
 
 
+@pytest.mark.asyncio
+async def test_expired_cursor_requires_refresh(monkeypatch):
+    callbacks = source([row(i) for i in range(3)], {'0', '1', '2'})
+    request = TaskConversationPageRequest(limit=1)
+    page = await task_conversation_page('owner', request, budget=budget(), **callbacks)
+    now = time.time()
+    monkeypatch.setattr(time, 'time', lambda: now + 3601)
+    with pytest.raises(ValueError):
+        await task_conversation_page(
+            'owner', request.model_copy(update={'cursor': page['next_cursor']}), budget=budget(), **callbacks
+        )
+
+
 class Snapshot:
     def __init__(self, cid, data, exists=True):
         self.id, self.data, self.exists = cid, data, exists

@@ -2,12 +2,11 @@
 
 import asyncio
 import base64
-import hashlib
 import hmac
 import json
 import os
 import time
-from typing import Any, Awaitable, Callable, Optional
+from typing import Any, Awaitable, Callable, Optional, TypedDict
 
 from database.conversations import is_visible_conversation
 from models.conversation_tasks import TaskConversationPageRequest
@@ -24,7 +23,22 @@ class TaskFilterCursorError(ValueError):
     pass
 
 
-def _eligible_rows(candidates, filters):
+class _BrowsePosition(TypedDict):
+    after: str
+
+
+class _SearchPosition(TypedDict):
+    page: int
+    offset: int
+
+
+_Position = _BrowsePosition | _SearchPosition
+_Row = dict[str, Any]
+
+
+def _eligible_rows(
+    candidates: list[tuple[Optional[_Position], Optional[_Row]]], filters: TaskConversationPageRequest
+) -> list[_Row]:
     # The shared visibility owner is decorated with shadow-policy I/O. Keep
     # that existing boundary off the event loop, even for a small raw page.
     return [
@@ -47,19 +61,22 @@ def _sign(payload: bytes) -> bytes:
     return hmac.digest(secret.encode(), b'conversation-task-filter-v1:' + payload, 'sha256')
 
 
-def _encode(position: dict, scope: str) -> str:
+def _encode(position: _Position, scope: str) -> str:
     payload = json.dumps({'v': 1, 'scope': scope, 'position': position, 'issued': int(time.time())}).encode()
     return base64.urlsafe_b64encode(_sign(payload) + payload).decode().rstrip('=')
 
 
-def _decode(token: str, scope: str) -> dict:
+def _decode(token: str, scope: str) -> _Position:
     try:
         packed = base64.b64decode(token + '=' * (-len(token) % 4), altchars=b'-_', validate=True)
         signature, payload = packed[:32], packed[32:]
         if not hmac.compare_digest(signature, _sign(payload)):
             raise ValueError('invalid signature')
         data = json.loads(payload)
-        age = time.time() - data['issued'] if type(data.get('issued')) is int else -1
+        issued = data.get('issued')
+        if type(issued) is not int:
+            raise ValueError('invalid cursor time')
+        age = time.time() - issued
         position = data['position']
         if data.get('v') != 1 or data.get('scope') != scope or not -60 <= age <= 3600:
             raise ValueError('invalid scope/version/expiry')
@@ -68,14 +85,15 @@ def _decode(token: str, scope: str) -> dict:
         if set(position) == {'after'}:
             if not isinstance(position['after'], str) or len(position['after']) > 3000:
                 raise ValueError('invalid browse position')
+            return {'after': position['after']}
         elif set(position) == {'page', 'offset'}:
             if type(position['page']) is not int or not 1 <= position['page'] <= 1_000_000:
                 raise ValueError('invalid search page')
             if type(position['offset']) is not int or not 0 <= position['offset'] <= 250:
                 raise ValueError('invalid search offset')
+            return {'page': position['page'], 'offset': position['offset']}
         else:
             raise ValueError('invalid position shape')
-        return position
     except (KeyError, TypeError, ValueError, AttributeError, UnicodeError) as error:
         raise TaskFilterCursorError('invalid or expired task-filter cursor') from error
 
@@ -85,8 +103,8 @@ async def task_conversation_page(
     filters: TaskConversationPageRequest,
     *,
     budget: ListReadBudget,
-    browse_page: Callable[[Optional[str], str], Awaitable[tuple[list[tuple[str, Optional[dict]]], bool]]],
-    search_page: Callable[[int], Awaitable[dict]],
+    browse_page: Callable[[Optional[str], str], Awaitable[tuple[list[tuple[str, Optional[_Row]]], bool]]],
+    search_page: Callable[[int], Awaitable[dict[str, Any]]],
     presence: Callable[[list[str]], Awaitable[dict[str, bool]]],
 ) -> dict[str, Any]:
     """Filter before pagination, retaining the exact raw position at every stop.
@@ -96,35 +114,37 @@ async def task_conversation_page(
     """
     scope = query_scope({'uid': uid, 'task-filter-v1': filters.model_dump(exclude={'cursor'})})
     searching = bool(filters.query.strip())
-    position = _decode(filters.cursor, scope) if filters.cursor else ({'page': 1, 'offset': 0} if searching else None)
+    position: Optional[_Position] = (
+        _decode(filters.cursor, scope) if filters.cursor else ({'page': 1, 'offset': 0} if searching else None)
+    )
     if position and searching != ('page' in position):
         raise TaskFilterCursorError('invalid task-filter cursor kind')
     initial_position = position
     # Validate configuration before any read, even for an empty initial page.
     _sign(b'')
-    items = []
-    next_position = position
+    items: list[_Row] = []
+    next_position: Optional[_Position] = position
     try:
         while True:
             budget.check()
             if searching:
-                page = position['page'] if position else 1
-                offset = position['offset'] if position else 0
+                page = position['page'] if position and 'page' in position else 1
+                offset = position['offset'] if position and 'offset' in position else 0
                 async with asyncio.timeout(budget.remaining_seconds):
                     result = await search_page(page)
                 source = result.get('items', [])
                 more = result.get('total_pages', page) > page
-                candidates = []
+                candidates: list[tuple[Optional[_Position], Optional[_Row]]] = []
                 for index in range(offset, len(source)):
-                    after = (
+                    after: Optional[_Position] = (
                         {'page': page, 'offset': index + 1}
                         if index + 1 < len(source)
                         else ({'page': page + 1, 'offset': 0} if more else None)
                     )
                     candidates.append((after, source[index]))
-                source_next = {'page': page + 1, 'offset': 0} if more else None
+                source_next: Optional[_Position] = {'page': page + 1, 'offset': 0} if more else None
             else:
-                source, more = await browse_page(position['after'] if position else None, scope)
+                source, more = await browse_page(position['after'] if position and 'after' in position else None, scope)
                 candidates = [({'after': after}, row) for after, row in source]
                 source_next = {'after': source[-1][0]} if source and more else None
             budget.check()
