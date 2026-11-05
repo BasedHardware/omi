@@ -76,6 +76,7 @@ class OwnerDrains:
         deadline = started + DRAIN_TURN_SECONDS
         advanced = steps = 0
         more = False
+        stop = 'end'
         # One read-ahead per turn, so a step boundary does not discard it.
         prefetch = None
         try:
@@ -84,12 +85,14 @@ class OwnerDrains:
                 remaining = deadline - time.monotonic()
                 if steps and remaining <= 0:
                     more = True
+                    stop = 'turn_deadline'
                     break
                 # Every turn takes at least one full step.
                 budget = min(DRAIN_STEP_SECONDS, remaining) if remaining > 0 else DRAIN_STEP_SECONDS
                 walk = await run_blocking(sync_executor, self.projector.drain_step, owner, budget, prefetch=prefetch)
                 steps += 1
                 advanced += len(walk.advanced)
+                stop = walk.stop or 'end'
                 if walk.followups:
                     # Owed rows join behind the next follow-up discovery page.
                     self.projector.owe_followups(walk.followups)
@@ -97,6 +100,7 @@ class OwnerDrains:
                 if not walk.more:
                     break
         except Exception as error:
+            stop = 'error'
             logger.error(
                 'event=batch_projection action=owner_drain outcome=error exception_type=%s', type(error).__name__
             )
@@ -104,10 +108,11 @@ class OwnerDrains:
             if prefetch is not None:
                 prefetch.close()
         logger.info(
-            'event=batch_projection action=owner_drain outcome=turn steps=%d advanced=%d more=%s elapsed_ms=%d',
+            'event=batch_projection action=owner_drain outcome=turn steps=%d advanced=%d more=%s stop=%s elapsed_ms=%d',
             steps,
             advanced,
             str(more).lower(),
+            stop,
             int((time.monotonic() - started) * 1000),
         )
         return more

@@ -215,6 +215,16 @@ def test_unresolved_redirect_defers_and_keeps_the_row(rows, monkeypatch, resolve
     assert KEY in rows[0]
 
 
+def test_transient_fault_in_the_fence_redirect_probe_keeps_the_quick_retry(rows, monkeypatch):
+    from google.api_core.exceptions import ServiceUnavailable
+
+    result, _reads, _resolves, transfers = _fenced_run(
+        rows, monkeypatch, row=REDIRECTED, resolve_error=ServiceUnavailable('synthetic blip')
+    )
+    assert (result.outcome, result.reason) == ('retry', 'dependency_warming')
+    assert transfers == [] and KEY in rows[0]
+
+
 @pytest.mark.parametrize('row', [{'sync_content_revision': 4}, {'deleted': True}, None])
 def test_live_or_plainly_deleted_fenced_row_still_settles_superseded(rows, monkeypatch, row):
     result, reads, resolves, transfers = _fenced_run(rows, monkeypatch, row=row, resolved='survivor')
@@ -945,3 +955,52 @@ async def test_legacy_sync_handler_acks_an_oversized_conversation_with_200(rows,
     redelivery = await batch_pipeline.enrichment_response(payload)
     assert redelivery.status_code == 200
     assert json.loads(redelivery.body) == {'status': 'stale'}
+
+
+# synceff 2026-11-05 (lead2 71492d): the per-row repeat-supersede streak and its histogram.
+
+
+def _streak_count(le):
+    from prometheus_client import REGISTRY
+
+    return REGISTRY.get_sample_value('omi_enrichment_supersede_streak_bucket', {'le': le}) or 0.0
+
+
+def _superseded_with_a_newer_mark(rows, *, now):
+    from utils.enrichment.callback import SyncConversationPersistenceFenced
+
+    def fenced(uid, conversation_id, language):
+        reprocess.mark(uid, conversation_id, language, now=now - 100)  # the append that moved the revision
+        raise SyncConversationPersistenceFenced('synthetic')
+
+    return _deliver(rows, fenced, now=now)
+
+
+def test_consecutive_supersedes_build_a_bounded_streak_and_processed_clears_it(rows):
+    from database.outbox_firestore import SUPERSEDE_STREAK_FIELD
+
+    before = _streak_count('2.0') - _streak_count('1.0')
+    assert _superseded_with_a_newer_mark(rows, now=10_000).reason == 'superseded'
+    assert rows[0][KEY][SUPERSEDE_STREAK_FIELD] == 1
+    assert _superseded_with_a_newer_mark(rows, now=20_000).reason == 'superseded'
+    assert rows[0][KEY][SUPERSEDE_STREAK_FIELD] == 2
+    assert _streak_count('2.0') - _streak_count('1.0') == before + 1  # one observation of streak 2
+    assert _deliver(rows, Mock(return_value=None), now=30_000).reason == 'processed'
+    assert SUPERSEDE_STREAK_FIELD not in (rows[0].get(KEY) or {})
+
+
+def test_revision_race_retry_counts_toward_the_streak(rows):
+    from database.action_item_refresh import RefreshRevisionChanged
+    from database.outbox_firestore import SUPERSEDE_STREAK_FIELD
+
+    result = _deliver(rows, Mock(side_effect=RefreshRevisionChanged()))
+    assert (result.outcome, result.reason) == ('retry', 'persistence_fenced')
+    assert rows[0][KEY][SUPERSEDE_STREAK_FIELD] == 1
+
+
+def test_streak_is_capped(rows):
+    from database.outbox_firestore import SUPERSEDE_STREAK_CAP, SUPERSEDE_STREAK_FIELD
+
+    rows[0][KEY][SUPERSEDE_STREAK_FIELD] = SUPERSEDE_STREAK_CAP
+    _superseded_with_a_newer_mark(rows, now=10_000)
+    assert rows[0][KEY][SUPERSEDE_STREAK_FIELD] == SUPERSEDE_STREAK_CAP

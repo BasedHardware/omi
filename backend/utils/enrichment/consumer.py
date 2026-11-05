@@ -97,6 +97,8 @@ def _fenced_redirect(uid: str, conversation_id: str) -> tuple[str, str | None]:
             return 'superseded', None
         canonical = conversations_db.resolve_sync_conversation_redirect(uid, conversation_id)
     except Exception as error:
+        if _transient_dependency(error):
+            raise  # A transient Firestore fault keeps the consumer's quick retry, not the custody backoff.
         logger.warning('event=sync_reprocess outcome=fence_redirect_unresolved exception_type=%s', type(error).__name__)
         return 'defer', None
     if isinstance(canonical, str) and canonical and canonical != conversation_id:
