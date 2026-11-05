@@ -69,7 +69,7 @@ def delete_batch_object(uid: str, uri: str) -> None:
         pass
 
 
-def register_batch_artifact(
+def _register_batch_artifact(
     store: Any,
     uid: str,
     segment_id: str,
@@ -250,7 +250,7 @@ def register_batch_artifact(
     return artifact_id
 
 
-def expire_completed_segment(store: Any, uid: str, segment_id: str, now: float) -> bool:
+def _expire_completed_segment(store: Any, uid: str, segment_id: str, now: float) -> bool:
     """Arm cleanup only after C has durably checkpointed successful projection."""
     client, namespace = store.client, store.namespace
     completed_at = datetime.fromtimestamp(now, timezone.utc)
@@ -511,3 +511,28 @@ def purge_batch_storage_owner(uid: str, namespace: str) -> None:
             pass
     if list(bucket.list_blobs(prefix=prefix, versions=True, max_results=1)):
         raise RuntimeError('batch owner storage purge did not converge')
+
+
+def register_batch_artifact(
+    store: Any,
+    uid: str,
+    segment_id: str,
+    uri: str,
+    kind: str,
+    expected_generation: int,
+    *,
+    item: Any = None,
+) -> str:
+    """Scoped entry point (lever bpp_attempt_scope, key = uid); see _register_batch_artifact."""
+    from database.batch_privacy_attempt import scoped_privacy_attempt
+
+    with scoped_privacy_attempt(uid):
+        return _register_batch_artifact(store, uid, segment_id, uri, kind, expected_generation, item=item)
+
+
+def expire_completed_segment(store: Any, uid: str, segment_id: str, now: float) -> bool:
+    """Scoped entry point (lever bpp_attempt_scope, key = uid); see _expire_completed_segment."""
+    from database.batch_privacy_attempt import scoped_privacy_attempt
+
+    with scoped_privacy_attempt(uid):
+        return _expire_completed_segment(store, uid, segment_id, now)
