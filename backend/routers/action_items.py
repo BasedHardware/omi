@@ -706,7 +706,9 @@ def search_action_items(
         return {"action_items": []}
 
     action_items = action_items_db.get_action_items_by_ids(uid, action_item_ids)
-    action_items = [item for item in action_items if not item.get('is_locked', False)]
+    action_items = [
+        item for item in action_items if not item.get('deleted', False) and not item.get('is_locked', False)
+    ]
     return {"action_items": _safe_action_item_responses(action_items, uid=uid)}
 
 

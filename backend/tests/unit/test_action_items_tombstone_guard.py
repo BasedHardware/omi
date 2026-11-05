@@ -13,6 +13,7 @@ from routers.action_items import (
     delete_action_item,
     get_action_item,
     get_shared_action_items,
+    search_action_items,
     share_action_items,
     toggle_action_item_completion,
     update_action_item,
@@ -172,3 +173,29 @@ class TestSharedActionItemsTombstoneGuard:
 
         assert exc_info.value.status_code == 404
         assert "deleted or not found" in exc_info.value.detail
+
+
+class TestSearchActionItemsTombstoneGuard:
+    @patch("routers.action_items.search_action_items_by_vector")
+    @patch("routers.action_items.action_items_db")
+    def test_search_action_items_filters_soft_deleted(self, mock_db, mock_vector):
+        mock_vector.return_value = ["task-1", "task-2", "task-3"]
+        mock_db.get_action_items_by_ids.return_value = [
+            {"id": "task-1", "description": "Active task", "completed": False, "deleted": False, "is_locked": False},
+            {
+                "id": "task-2",
+                "description": "Soft-deleted task",
+                "completed": False,
+                "deleted": True,
+                "is_locked": False,
+            },
+            {"id": "task-3", "description": "Locked task", "completed": False, "deleted": False, "is_locked": True},
+        ]
+
+        result = search_action_items(query="test", limit=10, uid="user-123")
+
+        mock_vector.assert_called_once_with("user-123", "test", limit=10)
+        mock_db.get_action_items_by_ids.assert_called_once_with("user-123", ["task-1", "task-2", "task-3"])
+        assert len(result["action_items"]) == 1
+        assert result["action_items"][0].id == "task-1"
+        assert result["action_items"][0].description == "Active task"
