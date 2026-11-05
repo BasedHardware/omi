@@ -117,7 +117,7 @@ def ttl_result(family, result):
 
 def memo_result(family, result):
     try:
-        result = result if result in {'hit', 'miss', 'ineligible'} else 'ineligible'
+        result = result if result in {'hit', 'miss', 'ineligible', 'no_token', 'mint', 'mint_error'} else 'ineligible'
         MEMO_REQUESTS.labels(_family(family), result).inc()
     except Exception:
         pass
