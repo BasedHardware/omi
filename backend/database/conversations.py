@@ -1829,6 +1829,7 @@ def get_conversations(
     date_field: str = 'created_at',
     *,
     metadata_only: bool = False,
+    presentation: bool = False,
     cursor: Optional[str] = None,
     page_envelope: bool = False,
     cursor_page: Optional[Dict[str, Any]] = None,
@@ -1883,6 +1884,7 @@ def get_conversations(
         limit=limit,
         offset=offset,
         include_discarded=include_discarded,
+        presentation=presentation,
         uid=uid,
         cursor=cursor,
         cursor_page=cursor_page,
@@ -2105,9 +2107,11 @@ def get_mcp_conversations_by_id(
     field_paths = list(
         MCP_CONVERSATION_TRANSCRIPT_FIELD_PATHS if include_transcript else MCP_CONVERSATION_CARD_FIELD_PATHS
     )
+    if transcribing_hold.home_transcription_presentation_gate_enabled():
+        field_paths.extend(transcribing_hold.READ_FIELDS)
     if extra_field_paths:
         field_paths.extend(extra_field_paths)
-    docs = client.get_all(doc_refs, field_paths=list(field_paths))
+    docs = client.get_all(doc_refs, field_paths=list(dict.fromkeys(field_paths)))
     conversations_by_id: Dict[str, Dict[str, Any]] = {}
     for doc in docs:
         if not doc.exists:
@@ -2115,7 +2119,7 @@ def get_mcp_conversations_by_id(
         data = document_data_with_revision(doc)
         if data is None:
             continue
-        if not is_visible_conversation(data, include_discarded=include_discarded):
+        if not is_visible_conversation(data, include_discarded=include_discarded, presentation=True):
             continue
         data.setdefault('id', doc.id)
         conversations_by_id[str(data['id'])] = data

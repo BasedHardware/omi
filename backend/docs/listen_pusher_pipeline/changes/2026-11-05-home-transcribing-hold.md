@@ -115,3 +115,14 @@ lifecycle wrapper and finalizer retain the new upstream protocol byte-for-byte.
 The state-table entry and reviewed writer inventory name this actual writer.
 Atomic completion and both recovery/finalize trigger replays are covered without
 reintroducing split terminal writes or changing completed-before-STT ordering.
+
+The phase-1 review also traced the developer transcript-inclusive list, integration
+list, and hosted MCP tools. These product readers opt into the same stamped-row
+visibility exception before pagination and apply the shared pending/overdue title
+projection before serialization. MCP bounded projections include the deadline and
+batch receipt metadata without exposing those fields in tool responses. No worker
+or finalizer reader is opted into presentation state.
+
+Follow-ups remain separate: broad main-list 304 bypass has an unmeasured read-cost
+impact, and historical rows without a stamped deadline are not backfilled. Neither
+follow-up changes the default-on presentation gate or its rollback contract.

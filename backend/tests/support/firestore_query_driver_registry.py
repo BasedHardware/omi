@@ -1166,6 +1166,7 @@ _add(
     DriverEntry(
         'database.conversations.get_conversations',
         base={'uid': UID},
+        domains={'presentation': [False, True]},
         profiles=PHOTO_PROFILES,
         neutrals={
             'limit': _LIMIT,

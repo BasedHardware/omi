@@ -1582,6 +1582,7 @@ def get_conversations(
                 limit + 1,
                 offset,
                 include_discarded=False,
+                presentation=True,
                 statuses=["completed"],
                 start_date=start_date,
                 end_date=end_date,
