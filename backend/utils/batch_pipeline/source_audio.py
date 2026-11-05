@@ -101,11 +101,18 @@ def read_reference(
     blob = client.bucket(ref['bucket']).blob(ref['path'], generation=generation)
     if read_budget is not None:
         read_budget.begin()
-    # Only a generation-pinned listing supplied by the caller can replace the GET.
-    # Legacy/raw listings missing size or custom metadata still need one reload.
+    # Data generation alone does not fence metadata-only updates (sample rate,
+    # encryption/checksum metadata). Only a versioned listing can replace the GET.
     listed = listed_source or {}
     size = listed.get('size')
-    if size is None or source_metadata and 'metadata' not in listed:
+    metageneration = listed.get('metageneration')
+    use_listing = (
+        size is not None
+        and (not source_metadata or 'metadata' in listed)
+        and type(metageneration) is int
+        and metageneration > 0
+    )
+    if not use_listing:
         record_seal_profile.metadata_reload()
         leaf_timings.call(
             'download_metadata',
@@ -130,6 +137,7 @@ def read_reference(
         'download',
         blob.download_as_bytes,
         if_generation_match=generation,
+        **({'if_metageneration_match': metageneration} if use_listing else {}),
         timeout=read_budget.timeout(60) if read_budget is not None else 60,
         retry=None,
     )

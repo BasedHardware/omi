@@ -22,24 +22,31 @@ def reader(raw, *, path='chunks/u/c/100.batch.bin', metadata=None):
     return client, bucket, blob, ref
 
 
-@pytest.mark.parametrize('missing', [None, 'size', 'metadata'])
+@pytest.mark.parametrize('missing', [None, 'size', 'metadata', 'metageneration'])
 def test_listing_skips_only_redundant_metadata_get(missing):
     client, bucket, blob, ref = reader(b'\x01\x00' * 10, metadata={'record_sample_rate': '8000'})
-    listing = {'size': 20, 'metadata': blob.metadata}
+    listing = {'size': 20, 'metadata': dict(blob.metadata), 'metageneration': 3}
     if missing:
         listing.pop(missing)
+    if missing == 'metageneration':
+        blob.metadata = {'record_sample_rate': '16000'}  # Stale unversioned listing must reload.
     profile = record_seal_profile.RowProfile(0)
     with profile.install():
         pcm = source.read_reference(
             client, ref, 'u', 'c', {'synthetic'}, b'x' * 32, source_metadata=True, listed_source=listing
         )
-    assert pcm and ref['sample_rate'] == 8000
-    assert ref['metadata'] == {'record_sample_rate': '8000'}
+    assert pcm and ref['sample_rate'] == (16000 if missing == 'metageneration' else 8000)
+    assert ref['metadata'] == blob.metadata
     assert blob.reload.call_count == (1 if missing else 0)
     if missing:
         blob.reload.assert_called_once_with(if_generation_match=7, timeout=30, retry=None)
     bucket.blob.assert_called_once_with(ref['path'], generation=7)
-    blob.download_as_bytes.assert_called_once_with(if_generation_match=7, timeout=60, retry=None)
+    blob.download_as_bytes.assert_called_once_with(
+        if_generation_match=7,
+        timeout=60,
+        retry=None,
+        **({} if missing else {'if_metageneration_match': 3}),
+    )
     assert profile.chunks == 1 and profile.bytes == 20
     assert profile.metadata_reloads == (1 if missing else 0)
 
@@ -56,7 +63,7 @@ def test_listed_size_still_fences_download(size):
             {'synthetic'},
             b'x' * 32,
             source_metadata=True,
-            listed_source={'size': size, 'metadata': {}},
+            listed_source={'size': size, 'metadata': {}, 'metageneration': 3},
         )
     blob.reload.assert_not_called()
     blob.download_as_bytes.assert_not_called()
@@ -70,7 +77,7 @@ def test_listed_metadata_keeps_decrypt_authentication_and_raw_sha256(monkeypatch
     metadata = {'encrypted': 'true', 'sha256': hashlib.sha256(raw).hexdigest()}
     client, _, blob, ref = reader(encrypted, path='raw-live/u/c/100.enc', metadata=metadata)
     monkeypatch.setattr(source, 'decode_capture', lambda raw, *a: raw)
-    listing = {'size': len(encrypted), 'metadata': metadata}
+    listing = {'size': len(encrypted), 'metadata': metadata, 'metageneration': 3}
     assert (
         source.read_reference(client, ref, 'u', 'c', {'synthetic'}, key, source_metadata=True, listed_source=listing)
         == raw
@@ -96,6 +103,7 @@ def test_listing_to_walk_keeps_identical_references_without_reload(monkeypatch):
         SimpleNamespace(
             name=f'chunks/u/c/{timestamp}.batch.bin',
             generation=7,
+            metageneration=3,
             size=len(pcm),
             metadata={'record_sample_rate': '16000'},
             reload=Mock(),
@@ -115,6 +123,10 @@ def test_listing_to_walk_keeps_identical_references_without_reload(monkeypatch):
         listed_units = list(live.retained_record_units('u', 'c', chunks, client, b'x' * 32))
     assert profile.chunks == 2 and profile.bytes == 64000 and profile.metadata_reloads == 0
     assert all(not blob.reload.called for blob in blobs)
+    for blob in blobs:
+        blob.download_as_bytes.assert_called_once_with(
+            if_generation_match=7, if_metageneration_match=3, timeout=60, retry=None
+        )
     for chunk in chunks:
         chunk.pop('metadata')
     legacy_units = list(live.retained_record_units('u', 'c', chunks, client, b'x' * 32))

@@ -1225,6 +1225,7 @@ def list_audio_chunks(
         if entry is not None:
             if source_metadata and hasattr(blob, 'metadata'):
                 entry['metadata'] = blob.metadata or {}
+                entry['metageneration'] = getattr(blob, 'metageneration', None)
             append_projection_entries(chunks, bucket, blob, uid, entry, deadline, max_count, include_raw)
 
     if regional and regional != private_cloud_sync_bucket:

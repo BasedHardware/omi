@@ -319,3 +319,50 @@ def test_cli_refuses_unsafe_operation_before_cloud_access(cli, monkeypatch, caps
         'apply_seals',
     ):
         getattr(cli, name).assert_not_called()
+
+
+@pytest.mark.parametrize('changed', ['metageneration', 'generation'])
+def test_listed_source_precondition_failure_never_seals(source, monkeypatch, changed):
+    from google.api_core.exceptions import PreconditionFailed
+    from utils.batch_pipeline import live, source_audio
+
+    store, client, artifacts = source
+    pcm = b'\x01\x00' * 16000
+    # Stale 8kHz metadata makes this one-second 16kHz source appear to cover
+    # FINISH (102). Enforce both server-side preconditions before any decoding.
+    current = {'generation': 7, 'metageneration': 3}
+    current[changed] += 1
+
+    def download(**kwargs):
+        for version in ('generation', 'metageneration'):
+            condition = f'if_{version}_match'
+            if condition in kwargs and kwargs[condition] != current[version]:
+                raise PreconditionFailed(f'{version} changed')
+        return pcm
+
+    blob = SimpleNamespace(reload=Mock(), download_as_bytes=Mock(side_effect=download))
+    storage = SimpleNamespace(bucket=lambda _: SimpleNamespace(blob=lambda *a, **kw: blob))
+    chunk = {
+        'path': 'chunks/synthetic/record/100.batch.bin',
+        'bucket': 'synthetic',
+        'generation': 7,
+        'metageneration': 3,
+        'timestamp': 100,
+        'size': len(pcm),
+        'metadata': {'record_sample_rate': '8000'},
+    }
+    monkeypatch.setattr(live, 'private_cloud_sync_bucket', 'synthetic')
+    monkeypatch.setattr(repair, 'list_audio_chunks', lambda *a, **kw: [chunk])
+    monkeypatch.setattr(repair, 'retained_record_units', live.retained_record_units)
+    decode = Mock(wraps=source_audio.decode_source)
+    monkeypatch.setattr(source_audio, 'decode_source', decode)
+    result = repair.plan_seals(store, ['pending'], storage, artifacts)
+    assert result['entries'][0]['disposition'] == 'read_error'
+    assert repair.apply_seals(store, result, result['plan_sha256']) == {'read_error': 1}
+    assert not client.rows[PATH].get('record_audio_closed')
+    assert all(not tx.updates and not tx.sets for tx in client.transactions)
+    blob.download_as_bytes.assert_called_once_with(
+        if_generation_match=7, if_metageneration_match=3, timeout=60, retry=None
+    )
+    blob.reload.assert_not_called()
+    decode.assert_not_called()
