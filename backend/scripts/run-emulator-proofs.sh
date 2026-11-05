@@ -98,7 +98,8 @@ run_proof "enrichment recovery conformance (PL-342/397/398)" \
   "$PYTHON" -m pytest -q -p no:cacheprovider scripts/enrichment_recovery_emulator_test.py
 
 # Real delivery/settlement on old and replacement stores, with virtual budget
-# and heartbeat schedules. All three backends are required for full qualification.
+# and heartbeat schedules. CI requires sim + emulator; local/staging qualification
+# must set OMI_REQUIRE_STORE_BACKENDS=all so Postgres is required too.
 run_proof "enrichment budget and hold-cap conformance (PL-420/421)" \
   env OMI_REQUIRE_STORE_BACKENDS="${OMI_REQUIRE_STORE_BACKENDS:-sim,emulator}" OMI_ENV_STAGE=offline \
   "$PYTHON" -m pytest -q -p no:cacheprovider scripts/enrichment_budget_emulator_test.py
