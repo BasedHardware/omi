@@ -119,10 +119,8 @@ env:
     value: "64"
   - name: PUSHER_ABANDON_EVICTED_TOKENS
     value: "on"
-  # Bound detached overflow cleanup and its real storage work during GCS stalls.
+  # Bound detached abandonment coordinators independently of closed workers.
   - name: PUSHER_MAX_ABANDON_RECORD_DRAINS
-    value: "4"
-  - name: PUSHER_RECORD_STORAGE_WORKERS
     value: "4"
   # Production retirement; false restores the old routes only after GPUs are ready.
   - name: STT_GPU_FLEET_OFF

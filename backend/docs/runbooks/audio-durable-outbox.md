@@ -112,29 +112,19 @@ Refusal removes its local recovery hint, preventing a later producer from
 certifying it while the evicted writer is still running. Slots return only when
 coordinators finish, including metadata retries.
 
-Durable custody and projection share the dedicated
-`PUSHER_RECORD_STORAGE_WORKERS` pool (default/prod 4, clamped 1..8; invalid uses 4).
-Its semaphore admits at most four outstanding submissions, with no extra
-admission queue; cancellation cannot recycle admission before the actual
-executor future settles. Projection waits holding receipts only, then hydrates,
-uploads and refreshes inside one admitted leaf. PCM-bearing custody fails
-saturation before ACK, leaving the client WAL responsible for retry. This avoids
-an unbounded executor queue even when overflow coordination is refused.
+Durable custody, PCM reads, uploads and projection refresh use the original
+shared `storage_executor` (128 workers) and its existing queue behavior. There
+is no separate recording pool, routing override or pool-specific refusal before
+ACK. Socket future tracking shields queued and running storage work from caller
+cancellation and waits for actual settlement before abandonment. The closed-worker
+and coordinator count caps do not establish a PCM byte bound or pod RSS bound.
 
-Each admitted leaf has at most 20 MiB of canonical PCM, independent of the
-64 closed workers and four metadata coordinators: `4 * 20 MiB = 80 MiB`.
-Source read, sliced batch, legacy join, codec and encryption buffers can coexist;
-reserve a conservative eightfold planning allowance (`80 * 8 = 640 MiB`) for
-this work. This allowance is not a measured RSS bound. Live-socket ingress,
-other executors, Python overhead and SDK buffers are additional; the unchanged
-3.5 GiB pod limit still requires a canary p99 measurement. Do not scale the pool
-with the closed-worker cap. The bound covers detached recording work, not
-aggregate live ingress.
-
-Rollback uses abandonment `off` and closed cap `32`; keep storage admission
-bounded. Coordinator cap `0` also refuses all new abandonment coordination. Ship by pusher train with one
-canary at 64; review per-pod memory p99 against the unchanged 3.5 GiB limit,
-capacity/abandoned/abandon_overflow outcomes and repair `upload_pending` before expansion. Do not
+Rollback uses abandonment `off` and closed cap `32`. Coordinator cap `0` also
+refuses all new abandonment coordination. Ship by pusher train with one canary
+at 64 for 15 minutes: socket kills must be <=15/15min and memory p99 must stay
+below 75% of the unchanged 3.5 GiB limit before fleet expansion. Also review
+capacity/abandoned/abandon_overflow outcomes and repair `upload_pending`. These
+production gates have not been measured by the local regression suite. Do not
 raise prod to 128 without a retained-PCM byte budget.
 
 `event=record_closed_finish` uses only closed outcomes: `retained`, `completed`,

@@ -51,7 +51,6 @@ from typing import Any, Callable, Coroutine, Dict, List, ParamSpec, TypeVar, cas
 from prometheus_client import REGISTRY, Gauge
 from config.occasion_conversations import LIFECYCLE_V2_MODE_ENV
 from config.refactor_modes import serving_for
-from config.pusher_record import record_storage_workers
 
 logger = logging.getLogger(__name__)
 _worker_context = threading.local()
@@ -116,13 +115,7 @@ class MonitoredThreadPoolExecutor(ThreadPoolExecutor):
     """ThreadPoolExecutor with active-task tracking and optional backpressure."""
 
     def __init__(
-        self,
-        name: str,
-        *,
-        max_queue_size: int | None = None,
-        wait_on_saturation: bool = False,
-        log_saturation: bool = True,
-        **kwargs: Any,
+        self, name: str, *, max_queue_size: int | None = None, wait_on_saturation: bool = False, **kwargs: Any
     ):
         super().__init__(**kwargs)
         self.name = name
@@ -136,7 +129,6 @@ class MonitoredThreadPoolExecutor(ThreadPoolExecutor):
             # while its semaphore slot is reused by a later submission.
             setattr(self, "_work_queue", self._bounded_queue)
         self.wait_on_saturation = wait_on_saturation
-        self.log_saturation = log_saturation
         max_workers = self._max_workers
         self._submission_slots = (
             threading.BoundedSemaphore(max_workers + max_queue_size) if max_queue_size is not None else None
@@ -152,7 +144,7 @@ class MonitoredThreadPoolExecutor(ThreadPoolExecutor):
     def submit(self, fn: Callable[..., T], /, *args: Any, **kwargs: Any) -> Future[T]:
         slots = self._submission_slots
         if slots is not None and not slots.acquire(blocking=False):
-            if not self.wait_on_saturation and self.log_saturation:
+            if not self.wait_on_saturation:
                 logger.warning(
                     'executor_saturated executor=%s workers=%s queue_capacity=%s',
                     self.name,
@@ -319,17 +311,6 @@ postprocess_executor = MonitoredThreadPoolExecutor(
 )
 cleanup_executor = MonitoredThreadPoolExecutor(name="cleanup", max_workers=4, thread_name_prefix="cleanup")
 storage_executor = MonitoredThreadPoolExecutor(name="storage", max_workers=128, thread_name_prefix="storage")
-# Admit before hydration, not after a PCM-bearing call has joined a queue.
-# Custody rejects saturation without ACK; only receipt-only projections may
-# wait asynchronously for admission. Running calls own slots until done.
-pusher_record_storage_executor = MonitoredThreadPoolExecutor(
-    name='pusher_record_storage',
-    max_workers=record_storage_workers(),
-    max_queue_size=0,
-    wait_on_saturation=False,
-    log_saturation=False,
-    thread_name_prefix='pusher-record-storage',
-)
 # Prompt-list verification may outlive its caller while a provider finishes.
 # Keep both the clip cut and inline STT away from shared feature pools.
 speaker_tag_verify_executor = MonitoredThreadPoolExecutor(
@@ -367,7 +348,6 @@ _ALL_EXECUTORS = [
     postprocess_executor,
     cleanup_executor,
     storage_executor,
-    pusher_record_storage_executor,
     speaker_tag_verify_executor,
     cimd_executor,
     open_loops_executor,
@@ -477,11 +457,8 @@ class ExecutorFutureTracker:
     so a long-lived socket retains neither results nor upload arguments.
     """
 
-    def __init__(self, *pools, executor_overrides=None, receipt_only_functions=()):
+    def __init__(self, *pools):
         self.pools = pools
-        self.executor_overrides = executor_overrides or {}
-        # Only functions whose arguments contain NO PCM may wait for admission.
-        self.receipt_only_functions = receipt_only_functions
         self.pending: set[asyncio.Future] = set()
 
     @contextmanager
@@ -520,9 +497,6 @@ def track_executor_future(executor, future):
 
 async def run_blocking(executor: ThreadPoolExecutor, fn: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> T:
     """Offload *fn* to *executor*, propagating ContextVars."""
-    tracker = _future_tracker.get()
-    if tracker is not None:
-        executor = tracker.executor_overrides.get(executor, executor)
     loop = asyncio.get_running_loop()
     callbacks: list[Callable[[], Coroutine[Any, Any, Any]]] = []
     token = _after_db.set(callbacks) if executor is db_executor else None
@@ -534,9 +508,7 @@ async def run_blocking(executor: ThreadPoolExecutor, fn: Callable[P, T], *args: 
                 future = loop.run_in_executor(executor, call)
                 break
             except ExecutorSaturatedError:
-                if not getattr(executor, 'wait_on_saturation', False) and not (
-                    tracker is not None and fn in tracker.receipt_only_functions
-                ):
+                if not getattr(executor, 'wait_on_saturation', False):
                     raise
                 # Backpressure stays in the async caller, without occupying another worker.
                 await asyncio.sleep(0.05)

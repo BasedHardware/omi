@@ -7,7 +7,7 @@ from collections import Counter
 from functools import lru_cache
 from typing import Callable
 
-from config.pusher_record import abandon_record_drain_cap, record_storage_workers
+from config.pusher_record import abandon_record_drain_cap
 from utils.executors import start_background_task
 from utils.other.audio_outbox import AudioProjection
 
@@ -32,7 +32,6 @@ _abandon_record_drains: set[asyncio.Task] = set()
 def log_closed_record_drain_cap() -> None:
     logger.info('event=record_closed_finish_cap value=%s', MAX_CLOSED_RECORD_DRAINS)
     logger.info('event=record_abandon_cap value=%s', MAX_ABANDON_RECORD_DRAINS)
-    logger.info('event=record_storage_cap value=%s queue=0', record_storage_workers())
 
 
 def abandon_evicted_record_drain(task, barrier, futures) -> bool:

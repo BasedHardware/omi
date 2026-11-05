@@ -1897,8 +1897,18 @@ async def test_capacity_eviction_abandons_after_late_io_and_preserves_raw_custod
     writes = []
     payload = b'\x01\x00' * 160
 
+    commit = pusher.commit_pcm_window
+    custody_threads = []
+
+    def commit_on_shared_storage(*args, **kwargs):
+        custody_threads.append(threading.current_thread().name)
+        assert custody_threads[-1].startswith('storage')
+        return commit(*args, **kwargs)
+
+    monkeypatch.setattr(pusher, 'commit_pcm_window', commit_on_shared_storage)
+
     def late_io(*args, **kwargs):
-        assert threading.current_thread().name.startswith('pusher-record-storage')
+        assert threading.current_thread().name.startswith('storage')
         loop.call_soon_threadsafe(entered.set)
         assert release.wait(10)
         writes.append(stage)
@@ -1931,6 +1941,7 @@ async def test_capacity_eviction_abandons_after_late_io_and_preserves_raw_custod
         # The custody bytes are already durable even though the derivative is stuck.
         receipts = _sent_receipts(sock)
         assert receipts and b''.join(read_pcm('owner', receipt) for receipt in receipts) == payload
+        assert custody_threads
         release.set()
         if kill_switch == 'on' and abandon_cap:
             await asyncio.wait_for(asyncio.gather(*owners), 5)
