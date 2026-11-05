@@ -270,10 +270,12 @@ class WavBytesUtil {
 
   Future<File> createWavByCodec(List<List<int>> frames, {String? filename}) async {
     Uint8List wavBytes;
-    if (codec == BleAudioCodec.pcm8 || codec == BleAudioCodec.pcm16) {
+    if (codec == BleAudioCodec.pcm16) {
       Int16List samples = getPcmSamples(frames);
-      // TODO: try pcm16
-      wavBytes = getUInt8ListBytes(samples, codec == BleAudioCodec.pcm8 ? 8000 : 16000);
+      wavBytes = getUInt8ListBytes(samples, 16000, sampleWidth: 2);
+    } else if (codec == BleAudioCodec.pcm8) {
+      List<int> decodedSamples = frames.expand((f) => f).toList();
+      wavBytes = getUInt8ListBytes(decodedSamples, 8000, sampleWidth: 1);
     } else if (codec == BleAudioCodec.mulaw8 || codec == BleAudioCodec.mulaw16) {
       throw UnimplementedError('mulaw codec not implemented');
       // Int16List samples = getMulawSamples(frames);
@@ -308,11 +310,15 @@ class WavBytesUtil {
     return file;
   }
 
-  static Uint8List getUInt8ListBytes(List<int> audioBytes, int sampleRate) {
+  static Uint8List getUInt8ListBytes(List<int> audioBytes, int sampleRate, {int sampleWidth = 2}) {
     // https://discord.com/channels/1192313062041067520/1231903583717425153/1256187110554341386
     // https://github.com/BasedHardware/omi/blob/main/docs/_developer/Protocol.md
-    Uint8List wavHeader = getWavHeader(audioBytes.length * 2, sampleRate);
-    return Uint8List.fromList(wavHeader + WavBytesUtil.convertToLittleEndianBytes(audioBytes));
+    Uint8List wavHeader = getWavHeader(audioBytes.length * sampleWidth, sampleRate, sampleWidth: sampleWidth);
+    if (sampleWidth == 1) {
+      return Uint8List.fromList(wavHeader + audioBytes);
+    } else {
+      return Uint8List.fromList(wavHeader + WavBytesUtil.convertToLittleEndianBytes(audioBytes));
+    }
   }
 
   // Utility to convert audio data to little-endian format
