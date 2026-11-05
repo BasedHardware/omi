@@ -587,6 +587,13 @@ def _pump_bound(raw: str, default: int, maximum: int) -> int:
         return default
 
 
+def projection_pump_enabled() -> bool:
+    """Process-role opt-in: only ``true`` starts the otherwise inert pump."""
+    from config.policy import kill_switch
+
+    return kill_switch('BATCH_PIPELINE_PROJECTION_PUMP_ENABLED')
+
+
 def projection_pump_tick_seconds() -> int:
     return _pump_bound(os.getenv('BATCH_PIPELINE_PUMP_TICK_SECONDS', '20'), 20, 60)
 

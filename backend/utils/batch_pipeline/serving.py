@@ -16,6 +16,7 @@ from config.batch_pipeline import (
     projection_hold_recovery_enabled,
     serving_metrics_min_refresh_seconds,
     serving_projection_sweep_enabled,
+    projection_pump_enabled,
     projection_pump_sweep_pages,
     projection_pump_tick_seconds,
 )
@@ -367,7 +368,7 @@ def _metrics() -> QueueMetrics:
 
 def start_serving_from_env():
     """Separate drain switch stays on when BATCH_PIPELINE_ENABLED rolls back."""
-    pump_enabled = os.getenv('BATCH_PIPELINE_PROJECTION_PUMP_ENABLED', 'false').strip().lower() == 'true'
+    pump_enabled = projection_pump_enabled()
     if not pump_enabled and os.getenv('BATCH_PIPELINE_SERVING_ENABLED', 'false').strip().lower() != 'true':
         return None
     stop = asyncio.Event()

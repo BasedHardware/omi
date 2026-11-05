@@ -38,6 +38,30 @@ def test_serving_sweep_only_off_disables(monkeypatch, mode, raw, enabled):
     assert config.serving_projection_sweep_enabled() is enabled
 
 
+@pytest.mark.parametrize('mode', ['shadow', 'serve'])
+@pytest.mark.parametrize(
+    'raw,enabled',
+    [
+        (None, False),
+        ('true', True),
+        (' TRUE ', True),
+        ('off', False),
+        ('false', False),
+        ('0', False),
+        ('', False),
+        ('bad', False),
+        ('1', False),
+    ],
+)
+def test_projection_pump_policy_opt_in(monkeypatch, mode, raw, enabled):
+    monkeypatch.setenv('CAPTURE_COVERAGE_MODE', mode)
+    if raw is None:
+        monkeypatch.delenv('BATCH_PIPELINE_PROJECTION_PUMP_ENABLED', raising=False)
+    else:
+        monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_PUMP_ENABLED', raw)
+    assert config.projection_pump_enabled() is enabled
+
+
 @pytest.mark.parametrize('raw,default', [(None, True), ('off', False)])
 def test_serving_sweep_gate_preserves_other_reconcile_work(monkeypatch, raw, default):
     if raw is None:

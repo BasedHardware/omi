@@ -27,7 +27,7 @@
   "count": 253,
   "names": {
     "BATCH_PIPELINE_SERVING_PROJECTION_SWEEP": {"owner": "omi-pipeline / lead2", "review_by": "2026-12-05", "registry": "config/feature-flags.yaml"},
-    "BATCH_PIPELINE_PROJECTION_PUMP_ENABLED": {"owner": "omi-pipeline / lead2", "review_by": "2026-12-05"},
+    "BATCH_PIPELINE_PROJECTION_PUMP_ENABLED": {"owner": "omi-pipeline / lead2", "review_by": "2026-12-05", "registry": "config/feature-flags.yaml"},
     "BATCH_PIPELINE_PUMP_SWEEP_PAGES": {"owner": "omi-pipeline / lead2", "review_by": "2026-12-05"},
     "BATCH_PIPELINE_PUMP_TICK_SECONDS": {"owner": "omi-pipeline / lead2", "review_by": "2026-12-05"},
     "BATCH_PIPELINE_MAX_OWNER_DRAINS": {"owner": "omi-pipeline / lead2", "review_by": "2026-12-05"},

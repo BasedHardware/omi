@@ -192,6 +192,7 @@ def test_helper_kill_switch_budget_entries_match_the_default_on_registry():
         'SERVER_BATCH_UNSUPPORTED_LANGUAGES',
         rollout_name,
         'BATCH_PIPELINE_SERVING_PROJECTION_SWEEP',
+        'BATCH_PIPELINE_PROJECTION_PUMP_ENABLED',
     }
 
     # Keep this inventory check inside the fast-unit CPU budget; the C safe
@@ -200,6 +201,13 @@ def test_helper_kill_switch_budget_entries_match_the_default_on_registry():
         FEATURE_FLAGS_PATH.read_text(encoding='utf-8'), Loader=getattr(yaml, 'CSafeLoader', yaml.SafeLoader)
     )
     flags = {flag['key']: flag for flag in registry['flags']}
+    pump_name = 'BATCH_PIPELINE_PROJECTION_PUMP_ENABLED'
+    assert names[pump_name]['owner'] == 'omi-pipeline / lead2'
+    assert names[pump_name]['review_by'] == '2026-12-05'
+    assert flags[pump_name]['owner'] == 'lead2'
+    assert flags[pump_name]['kind'] == 'env'
+    assert flags[pump_name]['lifecycle'] == 'ops_kill'
+    assert flags[pump_name]['fail'] == 'closed'
     sweep_name = 'BATCH_PIPELINE_SERVING_PROJECTION_SWEEP'
     assert names[sweep_name]['owner'] == 'omi-pipeline / lead2'
     assert names[sweep_name]['review_by'] == '2026-12-05'
