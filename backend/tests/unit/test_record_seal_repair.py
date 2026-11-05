@@ -111,7 +111,8 @@ def test_missing_short_or_nonfinite_tail_refused(source, monkeypatch, units):
 
 def test_archive_listing_must_require_archive_and_fail_closed(source, monkeypatch):
     def unavailable(*args, **kwargs):
-        assert kwargs == {'max_count': 4096, 'require_archive': True}
+        assert kwargs['max_count'] == 4096 and kwargs['require_archive'] is True
+        assert kwargs['source_metadata'] is True and kwargs['client'] is not None
         raise OSError('synthetic private path')
 
     monkeypatch.setattr(repair, 'list_audio_chunks', unavailable)

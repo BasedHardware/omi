@@ -18,6 +18,7 @@ from utils.batch_pipeline.record_barrier import validate_record_tail
 from utils.batch_pipeline.record_producer_proof import producer_tokens_dead
 from utils.batch_pipeline.record_seal_reasons import proof_reason, proof_diagnostics, tail_gap_bucket, TailGapRefusal
 from utils.other.storage import list_audio_chunks
+from utils.batch_pipeline import record_seal_profile
 
 ROW_FIELDS = (
     'record_lane_owner',
@@ -92,16 +93,23 @@ def retained_tail_proof(job, row, storage_client, artifacts, *, check_budget=lam
         conversation_id=cid,
         privacy_generation=job['privacy_generation'],
     )
+    record_seal_profile.enter('list')
     check_budget()
     artifacts.authorize(seed)
     check_budget()
-    chunks = list_audio_chunks(uid, cid, max_count=4096, require_archive=True)
+    chunks = list_audio_chunks(
+        uid, cid, max_count=4096, require_archive=True, client=storage_client, source_metadata=True
+    )
     check_budget()
     key = artifacts.key_for_owner(uid)
-    precheck_record_tail(uid, cid, chunks, storage_client, key, row, job, check_budget=check_budget)
+    record_seal_profile.enter('walk')
+    decoded_tail = {}
+    precheck_record_tail(
+        uid, cid, chunks, storage_client, key, row, job, check_budget=check_budget, decoded_tail=decoded_tail
+    )
     units = []
     options = {'diagnostics': diagnostics} if diagnostics is not None else {}
-    iterator = retained_record_units(uid, cid, chunks, storage_client, key, **options)
+    iterator = retained_record_units(uid, cid, chunks, storage_client, key, decoded_tail=decoded_tail, **options)
     try:
         for unit in iterator:
             check_budget()
@@ -129,7 +137,9 @@ def validate_repair_tail(units, finish, *, diagnostic_end=None):
         raise
 
 
-def precheck_record_tail(uid, cid, chunks, storage_client, key, row, job, *, check_budget=lambda: None):
+def precheck_record_tail(
+    uid, cid, chunks, storage_client, key, row, job, *, check_budget=lambda: None, decoded_tail=None
+):
     """Refusal-only necessary condition; passing still requires the full walk.
 
     A contained final object can end before the union. Under earlier-wins
@@ -139,7 +149,7 @@ def precheck_record_tail(uid, cid, chunks, storage_client, key, row, job, *, che
     if not chunks:
         return
     tail = None
-    iterator = retained_record_units(uid, cid, chunks[-1:], storage_client, key)
+    iterator = retained_record_units(uid, cid, chunks[-1:], storage_client, key, decoded_tail=decoded_tail)
     try:
         for tail in iterator:
             check_budget()

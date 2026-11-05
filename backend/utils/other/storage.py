@@ -1186,6 +1186,8 @@ def list_audio_chunks(
     require_archive: bool = False,
     include_raw: bool = False,
     include_archive: bool = True,
+    client: Any = None,
+    source_metadata: bool = False,
 ) -> List[Dict[str, Any]]:
     """
     List conversation chunks; ``include_archive=False`` selects encoded inventory only.
@@ -1194,7 +1196,8 @@ def list_audio_chunks(
     Returns:
         List of dicts with chunk info: {'timestamp': float, 'path': str, 'size': int}
     """
-    bucket = _get_storage_client().bucket(private_cloud_sync_bucket)
+    client = _get_storage_client() if client is None else client
+    bucket = client.bucket(private_cloud_sync_bucket)
     prefix = f'chunks/{uid}/{conversation_id}/'
     blobs = (
         bucket.list_blobs(prefix=prefix)
@@ -1204,7 +1207,7 @@ def list_audio_chunks(
 
     regional = os.getenv('BUCKET_AUDIO_DERIVED', '').strip()
     if regional and regional != private_cloud_sync_bucket:
-        derived_bucket = _get_storage_client().bucket(regional)
+        derived_bucket = client.bucket(regional)
         derived_blobs = (
             derived_bucket.list_blobs(prefix=prefix)
             if timeout is None
@@ -1220,6 +1223,8 @@ def list_audio_chunks(
             raise TimeoutError('speaker audio listing budget exhausted')
         entry = audio_chunk_entry(blob, source_identity=source_identity, primary_bucket=private_cloud_sync_bucket)
         if entry is not None:
+            if source_metadata and hasattr(blob, 'metadata'):
+                entry['metadata'] = blob.metadata or {}
             append_projection_entries(chunks, bucket, blob, uid, entry, deadline, max_count, include_raw)
 
     if regional and regional != private_cloud_sync_bucket:

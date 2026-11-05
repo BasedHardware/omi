@@ -19,6 +19,7 @@ import sys
 import time
 from typing import Any
 
+from utils.batch_pipeline import record_seal_profile
 from config import record_seal_repair as config
 from config import record_partial as partial_config
 from database.record_partial import finish_partial
@@ -89,6 +90,7 @@ def repair_one(store, storage, artifacts, path, *, flags, inventory, budget, mod
     from utils.batch_pipeline.live import record_identity
     from utils.batch_pipeline.record_seal_sweeper import require_fresh_proof
 
+    record_seal_profile.enter('proof')
     budget.check()
     uid, cid = nojob.conversation_path(path)
     _, job_id = record_identity(uid, cid)
@@ -102,6 +104,7 @@ def repair_one(store, storage, artifacts, path, *, flags, inventory, budget, mod
     if job and not row and config.jobs_enabled():
         from database.record_pending_repair import cancel_missing
 
+        record_seal_profile.enter('apply')
         return cancel_missing(store, uid, cid, now=time.time(), preview=mode == 'plan')
     partial = bool(job.get('partial_coordinator') or config.jobs_enabled() and row.get('record_audio_partial'))
     if partial:
@@ -119,6 +122,7 @@ def repair_one(store, storage, artifacts, path, *, flags, inventory, budget, mod
         if reason_out is not None:
             reason = job.get('partial_reason')
             reason_out['partial_reason'] = reason if reason in partial_config.REASONS else 'tail_lost_or_unproven'
+        record_seal_profile.enter('apply')
         return finish_partial(
             store,
             path,
@@ -162,6 +166,7 @@ def repair_one(store, storage, artifacts, path, *, flags, inventory, budget, mod
         )
     ):
         require_fresh_proof(proof)
+        record_seal_profile.enter('apply')
         partial_result = finish_partial(
             store,
             path,
@@ -187,6 +192,7 @@ def repair_one(store, storage, artifacts, path, *, flags, inventory, budget, mod
         return disposition if disposition in DISPOSITIONS else 'unknown'
     require_fresh_proof(proof)  # Tail downloads can exhaust the five-minute inventory window.
     budget.check()
+    record_seal_profile.enter('apply')
     result = apply(store, plan, plan['plan_sha256'])
     if sum(result.values()) != 1 or len(result) != 1:
         return 'unknown'
@@ -374,6 +380,7 @@ class RowProcess(subprocess.Popen):
 
 def launch_row(path, seconds, mode):
     script = Path(__file__).resolve().parents[2] / 'scripts/record_seal_repair_job.py'
+    started = time.monotonic()
     process = RowProcess(
         [sys.executable, str(script), '--row'],
         stdin=subprocess.PIPE,
@@ -386,7 +393,7 @@ def launch_row(path, seconds, mode):
         stop(process)
         raise RuntimeError('row input pipe unavailable')
     try:
-        payload = json.dumps({'path': path, 'seconds': seconds, 'mode': mode}).encode()
+        payload = json.dumps({'path': path, 'seconds': seconds, 'mode': mode, 'started': started}).encode()
         stdin.write(payload)
         stdin.close()
     except BaseException:
@@ -401,6 +408,72 @@ def stop(process):
     process.kill()
     process.wait()
     process.stdout.close()
+
+
+class RowOutput:
+    """Drain bounded JSON lines without waiting for a live child to close stdout."""
+
+    def __init__(self, process):
+        self.process, self.buffer = process, b''
+        self.result, self.profile = {}, {'stage': 'unknown'}
+        self.oversized = False
+        try:
+            self.fd = process.stdout.fileno()
+            os.set_blocking(self.fd, False)
+        except (AttributeError, OSError):
+            self.fd = None  # In-memory/old child adapters are read after exit only.
+
+    def accept(self, line):
+        try:
+            value = json.loads(line)
+            if not isinstance(value, dict):
+                return
+            if 'disposition' in value:
+                self.result = value
+            stage = value.get('stage')
+            if isinstance(stage, str) and stage in record_seal_profile.STAGES:
+                self.profile['stage'] = stage
+            timings = value.get('stage_ms', {})
+            if isinstance(timings, dict):
+                self.profile['stage_ms'] = {
+                    key: val
+                    for key, val in timings.items()
+                    if key in record_seal_profile.STAGES and type(val) is int and 0 <= val <= 3600000
+                }
+            for key in ('chunks', 'bytes', 'metadata_reloads'):
+                val = value.get(key)
+                if type(val) is int and 0 <= val <= 2**53:
+                    self.profile[key] = val
+        except (ValueError, TypeError):
+            pass
+
+    def drain(self, finished=False):
+        # A row sends only stage transitions and its final result. Bound work and
+        # memory even if an unexpected dependency writes to the private pipe.
+        for _ in range(16):
+            try:
+                data = (
+                    os.read(self.fd, 1025)
+                    if self.fd is not None
+                    else (self.process.stdout.read(1025) if finished else b'')
+                )
+            except BlockingIOError:
+                break
+            if not data:
+                break
+            for part in data.splitlines(keepends=True):
+                self.buffer += part
+                self.oversized |= len(self.buffer.rstrip(b'\n')) > 1024
+                if part.endswith(b'\n'):
+                    if not self.oversized:
+                        self.accept(self.buffer)
+                    self.buffer, self.oversized = b'', False
+                elif self.oversized:
+                    self.buffer = b''
+        if finished and self.buffer:
+            if not self.oversized:
+                self.accept(self.buffer)
+            self.buffer = b''
 
 
 def coordinate(
@@ -422,11 +495,14 @@ def coordinate(
     started = clock()
     deadline = started + run_seconds
     max_age, sealed_age = 0, 0
+    elapsed_by_disposition = Counter()
     try:
         while pending or active:
             now = clock()
             if now >= deadline:
                 counts['deferred'] += len(pending)
+                if pending:
+                    elapsed_by_disposition['deferred'] += 0
                 pending.clear()
             while pending and len(active) < workers and now < deadline:
                 path, age = pending.popleft()
@@ -435,20 +511,22 @@ def coordinate(
                 seconds = min(row_seconds, deadline - now)
                 try:
                     process = launch(path, seconds, mode)
-                    active.append((process, now + seconds, age))
+                    active.append((process, now + seconds, age, now, RowOutput(process)))
                 except Exception:
                     counts['error'] += 1
-            for process, expires, age in active[:]:
+                    elapsed_by_disposition['error'] += max(0, round((clock() - now) * 1000))
+            for process, expires, age, row_started, output in active[:]:
+                finished = process.poll() is not None
+                output.drain(finished)
                 disposition = None
                 reason = 'other'
                 gap = 'negative_or_unknown'
                 blocker = None
                 trimmed = 0
                 partial_reason = 'tail_lost_or_unproven'
-                if process.poll() is not None:
+                if finished:
                     try:
-                        payload = process.stdout.read(1025)
-                        result = json.loads(payload) if len(payload) <= 1024 else {}
+                        result = output.result
                         candidate = result.get('trimmed_divergent_overlaps', 0)
                         trimmed = candidate if type(candidate) is int and 0 <= candidate <= 4096 else 0
                         disposition = result.get('disposition')
@@ -462,13 +540,15 @@ def coordinate(
                         partial_reason = candidate if candidate in partial_config.REASONS else 'tail_lost_or_unproven'
                     except Exception:
                         disposition = 'error'
-                    if process.returncode != 0 or disposition not in DISPOSITIONS:
+                    if process.returncode != 0 or not isinstance(disposition, str) or disposition not in DISPOSITIONS:
                         disposition = 'error'
                 elif clock() >= expires:
                     disposition = 'budget_exhausted'
                 if disposition:
+                    row_elapsed = max(0, round((clock() - row_started) * 1000))
                     stop(process)
-                    active.remove((process, expires, age))
+                    active.remove((process, expires, age, row_started, output))
+                    elapsed_by_disposition[disposition] += row_elapsed
                     counts[disposition] += 1
                     if blocker:
                         blocker_outcomes[f'{blocker}:{disposition}'] += 1
@@ -485,6 +565,8 @@ def coordinate(
                     progress(
                         {
                             'event': 'record_seal_repair_row',
+                            'elapsed_ms': row_elapsed,
+                            **output.profile,
                             'count': 1,
                             **({'blocker': blocker} if blocker else {}),
                             'trimmed_divergent_overlaps': trimmed,
@@ -502,10 +584,11 @@ def coordinate(
             if active:
                 pause(0.05)
     finally:
-        for process, _, _ in active:
+        for process, *_ in active:
             stop(process)
     return {
         'dispositions': dict(sorted(counts.items())),
+        'disposition_elapsed_ms': dict(sorted(elapsed_by_disposition.items())),
         'proof_reasons': dict(sorted(reasons.items())),
         'tail_gap_buckets': dict(sorted(gaps.items())),
         'partial_finishes': dict(sorted(partial_reasons.items())),
@@ -516,18 +599,20 @@ def coordinate(
     }
 
 
-def row_main(payload):
+def row_main(payload, *, progress=lambda _: None):
+    profile = record_seal_profile.RowProfile(payload.get('started', time.monotonic()), progress)
+    profile.enter('clients')
     from utils.batch_pipeline.record_seal_budget import BudgetExhausted, SweepBudget
 
     result = 'error'
     reason = {}
     try:
         if not config.enabled():
-            return {'disposition': 'disabled'}
+            return {'disposition': 'disabled', **profile.snapshot()}
         config.require_runtime()
         if not 0 < payload['seconds'] <= 270 or payload['mode'] not in {'plan', 'apply'}:
             raise ValueError('invalid row controls')
-        with silent_dependencies():
+        with silent_dependencies(), profile.install():
             from database.batch_pipeline_store import FirestoreStore
             from utils.batch_pipeline.artifact_policy import artifacts_for
             from utils.batch_pipeline.record_seal_sweeper import read_pusher_pod_proof
@@ -536,10 +621,12 @@ def row_main(payload):
             budget = SweepBudget(payload['seconds'])
             with budget.interrupt_io():
                 store = FirestoreStore('batch_pipeline_prod')
+                storage = create_storage_client()
+                artifacts = artifacts_for(store, storage_client=storage)
                 result = repair_one(
                     store,
-                    create_storage_client(),
-                    artifacts_for(store),
+                    storage,
+                    artifacts,
                     payload['path'],
                     flags=config.server_flags(),
                     inventory=read_pusher_pod_proof,
@@ -551,7 +638,7 @@ def row_main(payload):
         result = 'budget_exhausted'
     except Exception:
         pass
-    return {'disposition': result, **reason}
+    return {'disposition': result, **reason, **profile.snapshot()}
 
 
 def run(*, progress=lambda _: None):
