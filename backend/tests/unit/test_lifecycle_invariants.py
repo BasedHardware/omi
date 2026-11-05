@@ -290,6 +290,14 @@ def assert_clause(row, clause):
 # KNOWN_GAPS is a reviewed baseline, added below. It is not derived from the
 # assertions at collection time; strict XPASS is a blocking improvement signal.
 KNOWN_GAPS = {
+    ('record_audio:seal_refused', 'automatic_exit'): 'Phase 1 preserves callback-only exact-token finish and seal; '
+    'automatic requeue is phase 4; ANX lcphase1-first-refusal-clock',
+    ('record_audio:seal_refused', 'entry_deadline'): 'First-refusal clock is an age anchor, not a custody deadline; '
+    'phase 4 owns requeue; ANX lcphase1-first-refusal-clock',
+    ('record_audio:seal_refused', 'dwell_metric'): 'Phase 1 emits bounded job-page age/count in the sweeper summary; '
+    'authoritative fleet Gauge including no-job rows remains outside scope; ANX lcphase1-first-refusal-clock',
+    ('record_audio:seal_refused', 'dwell_alert'): 'Phase 1 declares the agent alert identity; committed monitoring '
+    'rule is outside named file scope; ANX lcphase1-first-refusal-clock',
     ('visibility:transcribing_hold', 'dwell_metric'): 'No dedicated transcription presentation dwell gauge; '
     'homegate phase 1; ANX lcinv-lifecycle-invariants',
     ('visibility:transcribing_hold', 'dwell_alert'): 'No dedicated transcription presentation stock alert; '
@@ -509,7 +517,14 @@ def test_required_legacy_machines_are_present():
             'partial_retired',
         },
         'batch_projection': {'pending', 'persisted', 'ready', 'quarantine_held', 'completed', 'erased'},
-        'record_audio': {'capturing', 'abandoned', 'sealed', 'record_upload_failed', 'record_audio_partial'},
+        'record_audio': {
+            'capturing',
+            'seal_refused',
+            'abandoned',
+            'sealed',
+            'record_upload_failed',
+            'record_audio_partial',
+        },
         'summary_debt': {'pending', 'completed'},
         'fair_use': {'warning', 'throttle', 'restrict'},
         'visibility': {'bridge_pending', 'settling_hold', 'transcribing_hold'},

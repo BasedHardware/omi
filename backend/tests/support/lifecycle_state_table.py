@@ -361,7 +361,22 @@ STATES = (
             'The kill switch can disable this conditional exit. When bounded abandon admission is full, '
             'outcome=abandon_overflow leaves the token capturing/fenced with no new coordinator; '
             'the existing process/pod-death repair proof remains its exit. Live tokens never expire by age. '
-            'Dwell visibility remains required',
+            'Refused seals have a separate first-entry clock and bounded job-page visibility in seal_refused; '
+            'general live-producer dwell visibility remains required',
+        ),
+        row(
+            'record_audio',
+            'seal_refused',
+            ('record_seal_refused_at',),
+            entry_writers=(Writer('database/record_audio.py', 'seal_record_audio.commit'),),
+            exit=Exit('callback-only', 'database/record_audio.py:seal_record_audio'),
+            metric='omi_record_seal_refused_age_seconds',
+            alert=Alert('omi-record-seal-refused-age', 'agent'),
+            note='First producer-pending refusal clock, meaningful only while record_audio_closed is false. '
+            'Normal successful seal after exact-token finish clears it; repair/nojob seals may retain a stale stamp. '
+            'Closed stamped rows are excluded from sweeper classification and refusal count/age gauges. '
+            'Age is not a deadline or seal authority. Metrics cover the existing bounded record_pending job page; '
+            'the alert is a declaration, not a deployed rule. No-job visibility remains outside phase 1.',
         ),
         row(
             'record_audio',
