@@ -63,7 +63,7 @@ def saturated(inline_session, monkeypatch):
         return result
 
     async def run(executor, fn, *args, **kwargs):
-        if fn is pusher._project_durable_refs:
+        if fn is pusher.upload_audio_chunks_batch:
             entered.set()
             await release.wait()
         return await real_run(executor, fn, *args, **kwargs)

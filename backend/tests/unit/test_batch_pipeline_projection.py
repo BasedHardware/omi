@@ -728,6 +728,7 @@ def test_supersession_cannot_bypass_privacy_fence(binding):
     'source', ['live', 'donor_only', 'output_only', 'direct_deleted', 'redirect_deleted', 'soft_deleted']
 )
 def test_privacy_disposition_requires_transactional_input_tombstone_proof(binding, source, monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_SOURCE_DELETED_ENABLED', 'false')
     monkeypatch.setenv('OMI_ENV_STAGE', 'local')
     client = StrictFirestore()
     store = ProjectionStore(SimpleNamespace(client=client, namespace='batch_privacy_proof'))

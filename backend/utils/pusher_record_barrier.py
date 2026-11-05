@@ -222,6 +222,9 @@ class PusherRecordBarrier:
 
     def _close_failed(self, conversation_id: str, stage: str) -> bool:
         _record_failure(stage)
+        return self._retry_close(conversation_id)
+
+    def _retry_close(self, conversation_id: str) -> bool:
         attempts = min(self.close_failures.get(conversation_id, 0) + 1, 6)
         if not self.keep_close_pending and (
             attempts >= CLOSE_RETRY_BUDGET
@@ -373,6 +376,14 @@ class PusherRecordBarrier:
             if refused is not None:
                 _SEAL_REFUSAL_COUNTERS[refused].inc()
                 logger.info('event=record_seal_refused reason=%s', refused)
+                if refused == 'producer_pending':
+                    # Another producer still owes audio. Reuse the existing
+                    # close budget/backoff; never certify its tail by retiring
+                    # this retry on the first refused seal.
+                    return self._retry_close(conversation_id)
+                # upload_failed is sticky and requires full-proof repair.
+                # deleted/not_batch_owner have no seal obligation here.
+                # These terminal drain outcomes never assert audio closure.
         except _CloseAdmissionRefused:
             return self._close_admission_refused(conversation_id)
         except Exception:

@@ -1,5 +1,6 @@
 from dataclasses import replace
 import math
+import re
 from pathlib import Path
 
 from prometheus_client import CollectorRegistry
@@ -14,6 +15,14 @@ from utils.batch_pipeline.scheduler import Scheduler
 
 BACKEND = Path(__file__).resolve().parents[2]
 ALERTS = BACKEND / 'charts/monitoring/batch-projection/alerts.yaml'
+
+
+def test_projection_drain_counters_survive_serving_gmp_keep_list():
+    config = yaml.safe_load((BACKEND / 'deploy/cloud_run_gmp_sync.yaml').read_text())
+    rules = config['spec']['endpoints'][0]['metricRelabeling']
+    keep = next(rule['regex'] for rule in rules if rule['action'] == 'keep')
+    for name in ('omi_batch_projection_page_collapsed_rows_total', 'omi_batch_projection_drain_head_requeues_total'):
+        assert re.fullmatch(keep, name)
 
 
 def test_projection_obligation_age_includes_quarantine_and_does_not_refresh_on_error():

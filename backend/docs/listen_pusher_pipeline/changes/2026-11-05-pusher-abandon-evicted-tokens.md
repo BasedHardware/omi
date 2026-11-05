@@ -1,6 +1,6 @@
 # Capacity-evicted recording producers attest stoppage
 
-lead2 ruling `88ba4d`: one PR, pusher train only. See the
+lead2 rulings `88ba4d` and fast follow-up `8fea2c`: pusher train only. See the
 [closed-drain contract](../../listen_pusher_pipeline.mdx#8-websocket-task-supervision).
 
 A cancelled closed worker previously left a live-process producer token pending
@@ -19,31 +19,30 @@ chosen value once. Prod Helm values and the runtime env manifest set 64. The
 production memory limit stays 3.5 GiB; a count cap is not a byte budget or a
 production p99 guarantee. Do not raise production to 128 without a PCM budget.
 
-Ship off-peak through the standard pusher drain/train: one canary pod at 64,
-then expand only after reviewing per-pod memory p99 against the limit,
-`record_closed_finish outcome=capacity`, `outcome=abandoned`, and seal repair's
-`upload_pending`. Roll back with cap 32 and abandonment `off`. This PR performs
-no deployment or production data access.
+Ship off-peak through the standard pusher drain/train: one canary pod at 64
+for 15 minutes. Expand only with socket kills <=15/15min and memory p99 below
+75% of 3.5 GiB. Also review `record_closed_finish outcome=capacity`,
+`outcome=abandoned`, `outcome=abandon_overflow`, and seal repair's `upload_pending`.
+Roll back with cap 32 and abandonment `off`. This change performs no deployment
+or production data access; the canary gates remain unmeasured here.
 
 Regression coverage exercises real pusher WebSocket cleanup with held upload
 and projection threads, raw receipt readback, registration-response cancellation,
 deadline-expired metadata, idempotent exact-token transactions, reconnects,
 admission retry, the kill switch and missing-tail seal refusal.
 
-Luna FIX-FIRST follow-up: overflow owners are bounded independently by
+Overflow owners remain independently bounded by
 `PUSHER_MAX_ABANDON_RECORD_DRAINS` (default/prod 4, clamp 0..16). Full admission
-starts no coordinator and logs `abandon_overflow`; the old durable token stays fenced
+starts no coordinator and logs `abandon_overflow`; the durable token stays fenced
 for process/pod-death repair. Refusal removes its local recovery hint so a later
-successful producer cannot clear it while its storage future is still running. A separate `PUSHER_RECORD_STORAGE_WORKERS` pool
-(default/prod 4, clamp 1..8) admits at most four actual storage submissions,
-including cancelled callers' unfinished work. Projection waiters hold receipts;
-PCM hydration/upload/refresh happens inside the admitted leaf. Custody refuses
-saturation before ACK, preserving client WAL custody. No extra admission queue
-can accumulate PCM while GCS stalls. Completion makes both bounds reusable.
+successful producer cannot clear it while its storage future is still running.
 
-The canonical PCM allowance is `4 * 20 MiB = 80 MiB`; the runbook reserves an
-unmeasured eightfold planning allowance of 640 MiB for transient copies/codecs.
-This bounds detached recording work, not live ingress or total pod RSS. Retain
-the canary memory gate and watch `abandon_overflow` as well as prior outcomes.
+The #24689 dedicated recording pool and its saturation/refusal behavior are
+removed in #24689b per `8fea2c`. Durable recording calls again use the shared
+`storage_executor` (128 workers) and the original separate PCM-read, upload and
+projection-refresh calls. The completion tracker remains: queued and running
+shared-storage futures must settle before abandonment, even after caller
+cancellation. No new pool is sized here. The count caps do not bound retained PCM
+or pod RSS; production memory and socket-kill acceptance require the canary.
 The lifecycle table keeps refused overflow in capturing, with the old exit;
 abandoned dwell/deadline/alert gaps remain strict expected failures.

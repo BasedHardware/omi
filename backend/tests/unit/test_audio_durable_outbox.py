@@ -1244,6 +1244,16 @@ async def test_later_socket_reclears_only_receipt_proven_shutdown_tail(
     inline_session, monkeypatch, committed_before_failure
 ):
     client, path, earlier, projected = inline_session
+    monkeypatch.setattr(pusher, 'BG_DRAIN_TIMEOUT', 0.5)
+    owners = []
+    start = finish_module.start_background_task
+
+    def track(coro, **kwargs):
+        owner = start(coro, **kwargs)
+        owners.append(owner)
+        return owner
+
+    monkeypatch.setattr(finish_module, 'start_background_task', track)
     real_commit = pusher.commit_pcm_window
     first = Socket(_audio_frames('conversation', [b'\x01\x00' * 160]))
     if committed_before_failure:
@@ -1267,10 +1277,20 @@ async def test_later_socket_reclears_only_receipt_proven_shutdown_tail(
     # This is new audio, not a replay of the held window. It can only release
     # the old producer if that exact tail already obtained an immutable receipt.
     second = Socket(_audio_frames('conversation', [b'\x02\x00' * 160], start=2000.0))
-    await pusher._websocket_util_trigger(second, 'owner', 16000, audio_custody=1)
-    assert projected
-    assert client.rows[path]['record_audio_closed'] is committed_before_failure
-    assert set(client.rows[path]['record_upload_sessions']) == (set() if committed_before_failure else {held})
+    try:
+        await pusher._websocket_util_trigger(second, 'owner', 16000, audio_custody=1)
+        assert projected
+        assert client.rows[path]['record_audio_closed'] is committed_before_failure
+        assert set(client.rows[path]['record_upload_sessions']) == (set() if committed_before_failure else {held})
+        if not committed_before_failure:
+            assert later.close_failures and later.close_retry_at
+            assert len(owners) == 1 and not owners[0].done()
+        else:
+            assert not owners
+    finally:
+        for owner in owners:
+            owner.cancel()
+        await asyncio.gather(*owners, return_exceptions=True)
 
 
 @pytest.mark.asyncio
@@ -1877,8 +1897,18 @@ async def test_capacity_eviction_abandons_after_late_io_and_preserves_raw_custod
     writes = []
     payload = b'\x01\x00' * 160
 
+    commit = pusher.commit_pcm_window
+    custody_threads = []
+
+    def commit_on_shared_storage(*args, **kwargs):
+        custody_threads.append(threading.current_thread().name)
+        assert custody_threads[-1].startswith('storage')
+        return commit(*args, **kwargs)
+
+    monkeypatch.setattr(pusher, 'commit_pcm_window', commit_on_shared_storage)
+
     def late_io(*args, **kwargs):
-        assert threading.current_thread().name.startswith('pusher-record-storage')
+        assert threading.current_thread().name.startswith('storage')
         loop.call_soon_threadsafe(entered.set)
         assert release.wait(10)
         writes.append(stage)
@@ -1911,6 +1941,7 @@ async def test_capacity_eviction_abandons_after_late_io_and_preserves_raw_custod
         # The custody bytes are already durable even though the derivative is stuck.
         receipts = _sent_receipts(sock)
         assert receipts and b''.join(read_pcm('owner', receipt) for receipt in receipts) == payload
+        assert custody_threads
         release.set()
         if kill_switch == 'on' and abandon_cap:
             await asyncio.wait_for(asyncio.gather(*owners), 5)

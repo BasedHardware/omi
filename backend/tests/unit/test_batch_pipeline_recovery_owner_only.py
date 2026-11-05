@@ -184,16 +184,27 @@ async def test_periodic_restart_finishes_durable_publication_after_request_failu
         while restarted.followups and restarted.followups.tasks:
             await asyncio.gather(*list(restarted.followups.tasks.values()))
         initial_probes = restarted.complete_content.call_count
-        assert initial_probes == (1 if failure == 'before_assignment' else len(ids))
+        assert initial_probes == 1  # Discovery offers only one receipt per owner.
+        if failure == 'after_assignment':
+            assert [sid for sid in ids if log.results[sid]['projection_state'] == 'ready'] == ids[:1]
+        # Persisted siblings resume on later discovery passes; walk-owed rows
+        # can also finish on the next tick after the pre-assignment failure.
+        for _ in range(len(ids) - 1):
+            if all(log.results[sid]['projection_state'] == 'ready' for sid in ids):
+                break
+            await periodic.reconcile_async(periodic=True, recover_quarantine=True)
+            while restarted.followups and restarted.followups.tasks:
+                await asyncio.gather(*list(restarted.followups.tasks.values()))
+        assert all(log.results[sid]['projection_state'] == 'ready' for sid in ids)
+        assert log.persist_order == ids
+        assert {call.args[0] for call in restarted.complete_content.call_args_list} == set(ids)
+        # Mocked completion leaves ready receipts discoverable. Another pass
+        # must still probe: page coalescing is not process-wide suppression.
+        probes = restarted.complete_content.call_count
         await periodic.reconcile_async(periodic=True, recover_quarantine=True)
         while restarted.followups and restarted.followups.tasks:
             await asyncio.gather(*list(restarted.followups.tasks.values()))
-        assert all(log.results[sid]['projection_state'] == 'ready' for sid in ids)
-        assert log.persist_order == ids
-        # Mocked completion leaves ready receipts discoverable. The first
-        # probe for each unit plus one ready-content probe on the next page
-        # are required; page coalescing is not a process-wide suppression.
-        assert restarted.complete_content.call_count == len(ids) + 1
+        assert restarted.complete_content.call_count == probes + 1
     finally:
         tasks = [
             task for runner in (restarted.drains, restarted.followups) if runner for task in list(runner.tasks.values())

@@ -6,6 +6,9 @@ from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any
 
 from google.cloud import firestore
+from prometheus_client import Counter
+
+from config.batch_pipeline import projection_source_deleted_enabled
 
 from config.firestore_read_levers import lever_enabled
 from database.batch_pipeline_privacy import (
@@ -29,6 +32,12 @@ from utils.sync.capture import chunk_identity
 
 if TYPE_CHECKING:
     from database.batch_pipeline_projection import ProjectionStore
+
+
+SOURCE_DELETED_JOBS = Counter(
+    'omi_batch_pipeline_projection_source_deleted_jobs_total',
+    'Projection jobs settled without content after source deletion without a tombstone or redirect',
+)
 
 
 class ProjectionSession:
@@ -61,6 +70,7 @@ class ProjectionSession:
         self.speaker_scope: str | None = None
         self.total_speech_seconds = 0.0
         self._source_deletion_transaction = None
+        self._source_deleted = False
         self._privacy_refusal_transaction = None
         self._privacy_replay_transaction = None
         self._privacy_fence_ids: set[str] | None = None
@@ -140,7 +150,15 @@ class ProjectionSession:
         # Assigned destinations are outputs, not proof that another part's
         # original input was deleted. They get independent fences below.
         outputs = set(self.job.get('conversation_ids') or []) - set(ids)
-        settling_deletion = privacy_deleted or self.receipt().get('privacy_reason') == 'conversation_deleted'
+        settling_deletion = (
+            privacy_deleted
+            or self.receipt().get('privacy_reason') == 'conversation_deleted'
+            or bool(self.receipt())
+            and any(
+                part.get('disposition') == 'source_deleted'
+                for part in (self.entry.get('projection_parts') or {}).values()
+            )
+        )
 
         def source_tombstoned(error):
             # The guard supplies the exact refused ID, including a survivor
@@ -156,12 +174,34 @@ class ProjectionSession:
                 .exists
             )
 
+        def source_deletion_proven(error):
+            if source_tombstoned(error):
+                return True
+            # Only an original input may use this disposition. A deleted
+            # survivor reached through a redirect retains the old refusal.
+            if not projection_source_deleted_enabled() or error.conversation_id != ids[0]:
+                return False
+            row = (
+                self.client.collection('users')
+                .document(self.binding.owner_id)
+                .collection('conversations')
+                .document(error.conversation_id)
+                .get(transaction=transaction)
+                .to_dict()
+                or {}
+            )
+            target = row.get('sync_merged_into')
+            if not row.get('deleted') or (isinstance(target, str) and target):
+                return False
+            self._source_deleted = True
+            return True
+
         try:
             self.guard(transaction, ids)
         except BatchPrivacyBlocked as error:
             if error.reason != BatchPrivacyReason.CONVERSATION_DELETED or not settling_deletion:
                 raise
-            if not source_tombstoned(error):
+            if not source_deletion_proven(error):
                 raise ProjectionBlocked('privacy disposition requires a source deletion tombstone') from error
             # A no-text deletion receipt may advance the owner chain, but must
             # still pass the account/protection/generation fence. Ordinary
@@ -173,7 +213,7 @@ class ProjectionSession:
                 except BatchPrivacyBlocked as source_error:
                     if source_error.reason != BatchPrivacyReason.CONVERSATION_DELETED:
                         raise
-                    if not source_tombstoned(source_error):
+                    if not source_deletion_proven(source_error):
                         raise ProjectionBlocked(
                             'privacy disposition requires a source deletion tombstone'
                         ) from source_error
@@ -199,6 +239,7 @@ class ProjectionSession:
         self._privacy_refusal_transaction = None
         self._privacy_replay_transaction = None
         self._source_deletion_transaction = None
+        self._source_deleted = False
         self._privacy_fence_ids = set()
         if lever_enabled('batch_privacy_memoize', self.binding.owner_id):
             # A session may survive the pre-check and assignment retries. Only
@@ -313,6 +354,8 @@ class ProjectionSession:
         if self._privacy_refusal_transaction is transaction or self.entry.get('projection_privacy_refusal'):
             raise ProjectionBlocked('privacy hold cannot assign or acknowledge content')
         privacy_replay = self._privacy_replay_transaction is transaction
+        if self._source_deleted and (planned is not None or not privacy_deleted):
+            raise ProjectionBlocked('privacy disposition cannot assign content')
         if privacy_deleted and (
             planned is not None or not superseded or quarantined or self._source_deletion_transaction is not transaction
         ):
@@ -359,6 +402,8 @@ class ProjectionSession:
             receipt.update(disposition='superseded', superseded_speech_seconds=self.speech_seconds)
         if privacy_deleted:
             receipt['privacy_reason'] = 'conversation_deleted'
+            if self._source_deleted:
+                receipt['disposition'] = 'source_deleted'
         if quarantined:
             receipt.update(
                 state='quarantined',
@@ -413,8 +458,15 @@ class ProjectionSession:
                 summary['speech_seconds'] = sum(part.get('speech_seconds', 0.0) for part in parts.values())
                 summary['held_speech_seconds'] = sum(part.get('held_speech_seconds', 0.0) for part in parts.values())
                 summary['obligation_due_at'] = self.entry['committed_at'] + 900
-            if all(part.get('disposition') == 'superseded' for part in parts.values()):
-                summary.update(disposition='superseded', speech_seconds=0.0)
+            if all(part.get('disposition') in {'superseded', 'source_deleted'} for part in parts.values()):
+                summary.update(
+                    disposition=(
+                        'source_deleted'
+                        if any(part.get('disposition') == 'source_deleted' for part in parts.values())
+                        else 'superseded'
+                    ),
+                    speech_seconds=0.0,
+                )
             changes.update(
                 projection=summary,
                 # Proven parts still owe follow-ups after async assignment or
@@ -478,9 +530,10 @@ class ProjectionSession:
         @firestore.transactional
         def commit(transaction):
             self.prepare(transaction, privacy_deleted=privacy_deleted)
-            return self.persist(
+            receipt = self.persist(
                 transaction, superseded=superseded, quarantined=quarantined, privacy_deleted=privacy_deleted
             )
+            return receipt
 
         try:
             return self.store.run(commit, policy=self.policy)

@@ -26,6 +26,12 @@ LABELS = Counter(
 CONFLICT_HOLDS = Counter(
     'omi_batch_pipeline_projection_conflict_holds_total', 'Observed assignment conflict holds', ['subtype']
 )
+PROJECTION_COLLAPSED_ROWS = Counter(
+    'omi_batch_projection_page_collapsed_rows_total', 'Non-head rows deferred by owner page collapse', ['source']
+)
+PROJECTION_HEAD_REQUEUES = Counter(
+    'omi_batch_projection_drain_head_requeues_total', 'Productive bounded owner drain head requeues'
+)
 
 
 def record_conflict_hold(subtype: object) -> None:

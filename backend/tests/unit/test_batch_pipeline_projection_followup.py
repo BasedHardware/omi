@@ -116,6 +116,47 @@ def followup(monkeypatch, owner_claim):
     return SimpleNamespace(**locals())
 
 
+@pytest.mark.parametrize('owners', [('heavy',) * 5, ('heavy', 'light', 'heavy', 'light')])
+def test_followup_page_offers_one_receipt_per_owner_and_rotates(followup, monkeypatch, owners):
+    from dataclasses import replace
+    from utils.batch_pipeline.correctness_metrics import PROJECTION_COLLAPSED_ROWS
+
+    f = followup
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_FOLLOWUP_PAGE_ENABLED', 'true')
+    segments = [f'row-{n}' for n in range(len(owners))]
+    bindings = {}
+    for sid, owner in zip(segments, owners):
+        binding = replace(f.binding, owner_id=owner, segment_ids=(sid,))
+        bindings[sid] = binding
+        f.jobs[sid] = {**f.jobs['head'], 'projection_binding': asdict(binding)}
+        f.receipts[sid] = {**f.receipts['head'], 'state': 'ready'}
+    f.projector.store.read.side_effect = lambda sid: (f.jobs[sid], {'projection': f.receipts[sid]}, bindings[sid])
+    f.runner.discovered = Mock(return_value=segments)
+    before = PROJECTION_COLLAPSED_ROWS.labels('followup')._value.get()
+    first = f.runner.candidates()
+    expected = list(dict.fromkeys(owners))
+    assert first == [segments[owners.index(owner)] for owner in expected]
+    assert PROJECTION_COLLAPSED_ROWS.labels('followup')._value.get() - before == len(owners) - len(expected)
+    f.projector.store.read.assert_not_called()
+    # A ready head can depend on any later receipt: all must be offered in
+    # bounded passes even while every row remains on the same discovery page.
+    seen = set(first)
+    for _ in segments:
+        page = f.runner.candidates()
+        assert len(page) == len(expected)
+        seen.update(page)
+    assert seen == set(segments)
+
+
+def test_followup_rotation_survives_other_pages_of_the_same_heavy_owner(followup, monkeypatch):
+    f = followup
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_FOLLOWUP_PAGE_ENABLED', 'true')
+    for sid in ('a', 'b', 'c', 'd'):
+        f.jobs[sid] = {**f.jobs['head'], 'projection_binding': asdict(f.binding)}
+    f.runner.discovered = Mock(side_effect=[['a', 'b'], ['c', 'd']] * 2)
+    assert [f.runner.candidates() for _ in range(4)] == [['a'], ['c'], ['b'], ['d']]
+
+
 @pytest.mark.asyncio
 async def test_slow_enrichment_does_not_block_later_followup_or_next_serving_pass(followup, monkeypatch):
     f = followup
@@ -782,3 +823,30 @@ async def test_split_rollover_followup_stores_playback_for_every_part(followup):
         None,
     )
     assert calls == [('playback', 'head'), ('playback', 'extra'), ('enrich', 'head')]
+
+
+@pytest.mark.asyncio
+async def test_source_deleted_followup_is_terminal_without_backoff_or_content_work(followup):
+    f = followup
+    f.receipts['head'].update(
+        state='ready',
+        disposition='source_deleted',
+        conversation_id=None,
+        audio_required=False,
+        enrichment_required=False,
+    )
+    f.projector.complete_content.return_value = {
+        'reason_code': 'source_deleted',
+        'new_memories': [],
+        'updated_memories': [],
+    }
+    f.runner.desync = True
+    f.runner.backoff['head'] = (float('inf'), 60)
+    counter = projection_followup.OUTCOMES.labels('source_deleted')._value.get()
+    await f.runner.run('head')
+    assert projection_followup.OUTCOMES.labels('source_deleted')._value.get() == counter + 1
+    assert 'head' not in f.runner.backoff
+    assert 'source_deleted' not in projection_followup.BACKOFF_OUTCOMES
+    f.projector.store.mark_enrichment.assert_not_called()
+    f.projector.store.ready.assert_not_called()
+    f.projector.load_result.assert_not_called()
