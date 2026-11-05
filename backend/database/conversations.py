@@ -3737,6 +3737,7 @@ def update_conversation_segments(
             # not invalidate a current processor. Adoption is fleet-wide, so
             # this fence must not depend on the lineage rollout allowlist.
             update_payload['sync_content_revision'] = (current.get('sync_content_revision') or 0) + 1
+        summary_delivery.rearm_on_revision_change(current, update_payload)
         if score_updates and match_scores.enabled():
             try:
                 score_current = dict(current)

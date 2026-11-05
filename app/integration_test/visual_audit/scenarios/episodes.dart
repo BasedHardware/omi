@@ -144,7 +144,8 @@ final episodeScenarios = <AuditScenario>[
       expect(find.text('Today'), findsOneWidget);
       expect(find.text('Yesterday'), findsOneWidget);
       expect(find.text('Planning Saturday’s trail'), findsOneWidget);
-      expect(find.textContaining('The newest line keeps my label.'), findsNothing);
+      expect(find.byKey(const Key('home_live_episode_preview')), findsOneWidget);
+      expect(find.textContaining('The newest line keeps my label.', findRichText: true), findsOneWidget);
       expect(find.text('Dinner and plans for the weekend'), findsOneWidget);
       expect(find.text('A quick call about the garden'), findsOneWidget);
       await a.shot('Open full Home with its header, Today live episode and Yesterday rows');

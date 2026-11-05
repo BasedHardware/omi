@@ -194,7 +194,7 @@ class EnrichmentConsumer:
     def _deliver(self, claim: Claim, heartbeat: Callable[[], bool]) -> Result:
         from config.summary_guarantee import ADMITTED_OWNER, preserves_admitted
         from database._client import get_firestore_client
-        from database.summary_processing import record_empty_failure
+        from database.summary_processing import record_empty_failure, EmptyFailureOutcome
         from utils.conversations import summary_delivery
         from utils.enrichment import outbox as rows
         from config.action_item_identity import enrichment_revision_race_retry_enabled
@@ -297,10 +297,22 @@ class EnrichmentConsumer:
                 logger.info('event=sync_reprocess outcome=conversation_fenced')
                 superseded = True
         except summary_delivery.SummaryOutputUnavailable:
-            if not context or not record_empty_failure(
-                get_firestore_client(), rows.COLLECTION, claim.row_id, claim.lease_token, claim.wake_token
-            ):
+            if not context:
                 return _callback_pending('empty_output_unrecorded', now)
+            empty_outcome = record_empty_failure(
+                get_firestore_client(), rows.COLLECTION, claim.row_id, claim.lease_token, claim.wake_token
+            )
+            if empty_outcome is EmptyFailureOutcome.STALE:
+                return Result(Outcome.STALE, ConsumerReason.STALE_TOKEN)
+            if empty_outcome is EmptyFailureOutcome.OWNER_MISMATCH:
+                return Result(
+                    Outcome.DEFERRED,
+                    ConsumerReason.NOT_DUE,
+                    available_at=now + rows.LIVE_DEFER_SECONDS,
+                    defer_cause='summary_owner_changed',
+                )
+            if empty_outcome is EmptyFailureOutcome.RETRY:
+                return _callback_pending('empty_output', now)
             record_delivery('summary', 'failed')
             empty_blocked = True
         finally:
