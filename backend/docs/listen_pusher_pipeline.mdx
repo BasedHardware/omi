@@ -9318,3 +9318,11 @@ frames, one automatic notes-only refresh is claimed. A user title prevents both
 the claim and a concurrent refresh commit. An all-rejected pass may still refresh
 late OCR/calendar context, but rejected frame bytes never reach notes. This
 refresh does not run derived memory, app, embedding, or speech-learning jobs.
+
+### Restore-aware discard fence for batch recording obligations
+
+When a live capture is discarded during processing, finalization skips recording registration (
+egister_recording) only when the durable row remains discarded, avoiding retry churn on intentional discards.
+To prevent racing with concurrent user restores before finalization completes, claim_finalization_fanout verifies expected_discarded: if a concurrent restore revived the conversation (discarded: false) before the fanout transaction commits, the claim fails with a lease_conflict.
+The finalizer catches this conflict and retries, re-evaluating the now-restored state so that the recording obligation (
+ecord_pending) is properly registered and retained without losing audio obligations.
