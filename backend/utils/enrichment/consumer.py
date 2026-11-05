@@ -77,6 +77,21 @@ def _transient_dependency(error: BaseException) -> bool:
 transient_dependency = _transient_dependency
 
 
+def _fenced_redirect(uid: str, conversation_id: str) -> str | None:
+    """The canonical conversation a fenced run's row now redirects to, if a merge redirected it mid-run."""
+    from config.sync_reprocess import fence_redirect_transfer_enabled
+    from database import conversations as conversations_db
+
+    if not fence_redirect_transfer_enabled():
+        return None
+    try:
+        canonical = conversations_db.resolve_sync_conversation_redirect(uid, conversation_id)
+    except Exception as error:
+        logger.warning('event=sync_reprocess outcome=fence_redirect_unresolved exception_type=%s', type(error).__name__)
+        return None
+    return canonical if isinstance(canonical, str) and canonical and canonical != conversation_id else None
+
+
 def _cause(error: BaseException) -> str:
     # FirstSummaryCallbackPending carries fixed literals ('redirect target changed'); keep a bounded token.
     return re.sub(r'[^a-z0-9]+', '_', str(error).lower()).strip('_')[:40] or 'unspecified'
@@ -254,9 +269,16 @@ class EnrichmentConsumer:
             logger.info('event=enrichment_consumer outcome=retry reason=persistence_fenced source=action_item_refresh')
             return Result(Outcome.RETRY, RetryReason.PERSISTENCE_FENCED, available_at=now)
         except SyncConversationPersistenceFenced:
-            # #21968: the newer writer owns the conversation and marks its own obligation.
-            logger.info('event=sync_reprocess outcome=conversation_fenced')
-            superseded = True
+            # #21968: the newer writer owns the conversation and marks its own obligation. A merge that
+            # redirected this conversation while it ran is the exception: its custody (first summary, hold)
+            # must move to the canonical conversation, exactly as before_notes' ConversationAbsorbed does.
+            canonical = _fenced_redirect(uid, conversation_id) if context is not None else None
+            if canonical and context is not None:
+                logger.info('event=sync_reprocess outcome=conversation_fenced redirect=transferred')
+                context['redirect_to'] = canonical
+            else:
+                logger.info('event=sync_reprocess outcome=conversation_fenced')
+                superseded = True
         except summary_delivery.SummaryOutputUnavailable:
             if not context or not record_empty_failure(
                 get_firestore_client(), rows.COLLECTION, claim.row_id, claim.lease_token, claim.wake_token
