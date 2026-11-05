@@ -214,7 +214,10 @@ def _assert_batch_write_allowed_memo(
         metrics.memo_result('batch', 'miss' if eligible else 'ineligible')
         if not eligible and _mintable(snapshot):
             metrics.memo_result('batch', 'no_token')
-            schedule_token_mint(client, reference, uid)
+            try:
+                schedule_token_mint(client, reference, uid)
+            except Exception:  # best effort: scheduling must never change or block the decision
+                metrics.memo_result('batch', 'mint_error')
         attempt.forget(key)
         generation = _assert_batch_write_allowed_live(
             client,
@@ -381,8 +384,13 @@ def schedule_token_mint(client, reference, uid: str) -> None:
         _mint_queue.append((time.monotonic() + MINT_DELAY_SECONDS, client, reference))
         if not _mint_thread:
             worker = threading.Thread(target=_mint_worker, name='bpp-token-mint', daemon=True)
+            try:
+                worker.start()
+            except Exception:
+                # Never fail a privacy decision over an optimization; a later call retries.
+                metrics.memo_result('batch', 'mint_error')
+                return
             _mint_thread.append(worker)
-            worker.start()
     _mint_wake.set()
 
 

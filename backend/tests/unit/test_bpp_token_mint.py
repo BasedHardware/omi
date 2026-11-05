@@ -164,3 +164,30 @@ def test_both_mint_write_shapes_pass_the_real_write_fence_validator():
     )
     with pytest.raises(ValueError):
         _validate_authority_write(token_only_create)  # why the create path carries the default state
+
+
+def test_a_worker_that_cannot_start_never_breaks_the_decision_and_is_retried(world, monkeypatch):
+    """Luna r1 P2 on #24658: thread start failure raised through the privacy check and stuck."""
+    db, _, _, _ = world
+    import collections
+    import threading
+
+    monkeypatch.setattr(privacy, 'schedule_token_mint', REAL_SCHEDULE)
+    monkeypatch.setattr(privacy, '_mint_thread', [])
+    monkeypatch.setattr(privacy, '_mint_queue', collections.deque())
+    monkeypatch.setattr(privacy, '_mint_seen', collections.OrderedDict())
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"bpp_generation_memo":100,"bpp_token_mint":100}')
+    starts = []
+
+    def fail_start(self):
+        starts.append(1)
+        raise RuntimeError("can't start new thread")
+
+    monkeypatch.setattr(threading.Thread, 'start', fail_start)
+    with batch_privacy_attempt():
+        assert check(db) == 0  # the live decision still runs and allows
+    assert starts == [1] and privacy._mint_thread == []  # not registered as running
+    privacy._mint_seen.clear()
+    with batch_privacy_attempt():
+        assert check(db) == 0
+    assert starts == [1, 1]  # a later call retries the start
