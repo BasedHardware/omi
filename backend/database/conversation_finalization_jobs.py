@@ -19,6 +19,7 @@ from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 from config import server_batch
+from config.episodes import home_transcription_deadline_seconds
 from config.firestore_read_levers import lever_enabled
 from config.account_cutover import cutover_enforcement_enabled
 from config.listen_quiet_finalization import enabled as quiet_finalization_enabled
@@ -1128,7 +1129,15 @@ def _complete_server_batch_capture_txn(
 
     terminal = {**current, 'status': 'completed'}
     stamp_terminal_decision(terminal, path='lifecycle_terminal')
-    transaction.update(conversation_ref, {'status': 'completed', 'relevance_decision': terminal['relevance_decision']})
+    transaction.update(
+        conversation_ref,
+        {
+            'status': 'completed',
+            'relevance_decision': terminal['relevance_decision'],
+            'home_transcription_pending_at': now,
+            'home_transcription_deadline_at': now + timedelta(seconds=home_transcription_deadline_seconds()),
+        },
+    )
     transaction.update(
         job_ref,
         {

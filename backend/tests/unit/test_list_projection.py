@@ -566,7 +566,11 @@ def test_per_request_proxy_trace_does_not_break_unchanged_poll(store):
     assert client.get('/v1/conversations', headers=headers).status_code == 304
 
 
-def test_real_conversation_route_preserves_locked_allowance_recovery(store, monkeypatch):
+@pytest.mark.parametrize('gate', ['on', 'off'])
+def test_real_conversation_route_preserves_locked_allowance_recovery(store, monkeypatch, gate):
+    # With the presentation kill switch off, writer-version ETags retain their
+    # original contract. The default-on deadline path must bypass them.
+    monkeypatch.setenv('HOME_TRANSCRIPTION_PRESENTATION_GATE', gate)
     store.client.document('users/owner/conversations/locked').set({'is_locked': True, 'status': 'completed'})
     rows = [{'id': 'locked', 'is_locked': True, 'status': 'completed'}]
     calls = []
@@ -611,6 +615,19 @@ def test_real_conversation_route_preserves_locked_allowance_recovery(store, monk
     rows[0]['is_locked'] = False
     fresh = Response()
     assert conversation_routes.get_conversations(response=fresh, **params) == rows
+    if gate == 'on':
+        assert 'etag' not in fresh.headers
+        params['request'] = Request(
+            {
+                'type': 'http',
+                'path': '/v1/conversations',
+                'query_string': b'',
+                'headers': [(b'if-none-match', b'old-writer-version')],
+            }
+        )
+        assert conversation_routes.get_conversations(response=Response(), **params) == rows
+        assert calls == ['source', 'heal'] * 4
+        return
     assert 'etag' in fresh.headers
     conditional = Request(
         {

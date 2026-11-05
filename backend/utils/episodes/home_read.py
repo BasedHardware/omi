@@ -9,6 +9,7 @@ from typing import Any, get_args
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
+from utils.conversations.transcribing_hold import transcription_presentation
 from utils.conversations import phase_shadow
 
 from config.episodes import (
@@ -308,8 +309,7 @@ def project_episode(
             failed = (
                 row.get('finalization_status') == 'dead_letter' or status == 'failed' or row.get('record_upload_failed')
             )
-            title = "Couldn't transcribe" if failed or overdue else 'Transcribing…'
-            status = 'failed' if failed or overdue else 'processing'
+            title, status = transcription_presentation(deadline, failed=bool(failed), now=now)
             # Audio bounds remain truthful even when finalization never filled its clocks.
             for key, value in (
                 ('start', row.get('server_batch_audio_start')),

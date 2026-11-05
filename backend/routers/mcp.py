@@ -56,6 +56,7 @@ from utils.mcp_server.handlers import action_items as mcp_action_item_handlers
 from utils.mcp_server.handlers import conversations as mcp_conversation_handlers
 from utils.mcp_server.handlers import memories as mcp_memory_handlers
 from utils.mcp_server.handlers import other as mcp_other_handlers
+from utils.conversations import transcribing_hold
 from utils.mcp_server.helpers import bounded_transcript_segments, conversation_card, public_transcript_timing
 from utils.mcp_server.registry import TOOL_REQUIRED_SCOPE, spec_for_tool
 import logging
@@ -115,7 +116,7 @@ MCP_REST_SCOPE_EXEMPTIONS = {
 
 # REST detail/list reads project one extra card field beyond the hosted tool
 # reads: the released desktop client consumes apps_results off the card.
-_REST_CONVERSATION_EXTRA_FIELD_PATHS = ["apps_results"]
+_REST_CONVERSATION_EXTRA_FIELD_PATHS = ["apps_results", *transcribing_hold.READ_FIELDS]
 
 # Detail additionally fetches the manual speaker-assignment receipt so the
 # shared prepare-for-read seam can decode it exactly like the legacy full-doc
@@ -604,7 +605,7 @@ def get_conversations(
     # no longer in CategoryEnum) cannot 500 the whole page via response_model coercion.
     valid_conversations = []
     for conv in page:
-        card = conversation_card(conv)
+        card = conversation_card(transcribing_hold.project(conv))
         card["apps_results"] = conv.get("apps_results") or []
         try:
             valid_conversations.append(SimpleConversation.model_validate(card))
@@ -649,7 +650,7 @@ def search_conversations(
 
     # conversation_card() applies redact_conversation_for_list in place, so a
     # locked row reaches the snippet attacher already stripped of transcript.
-    cards = [conversation_card(conv) for conv in conversations]
+    cards = [conversation_card(transcribing_hold.project(conv)) for conv in conversations]
     # Snippets after redaction so locked list rows never leak transcript evidence (#6621).
     conversations = attach_match_snippets_to_conversations(conversations, query)
     for conv, card in zip(conversations, cards):
@@ -697,7 +698,7 @@ def get_conversation_by_id(
         max_chars=MCP_REST_CONVERSATION_MAX_CHARS,
         extra_keys=("speaker_name",),
     )
-    payload = conversation_card(conversation)
+    payload = conversation_card(transcribing_hold.project(conversation))
     payload["apps_results"] = conversation.get("apps_results") or []
     payload["transcript_segments"] = transcript_segments
     payload["truncated"] = truncated

@@ -202,6 +202,13 @@ DEADLINE_ENTRIES = {
             FAIR_USE_THROTTLE_DECAY_ENABLED=True,
         ),
     ),
+    'visibility:transcribing_hold': (
+        entry(
+            'database/conversation_finalization_jobs.py',
+            '_complete_server_batch_capture_txn',
+            'home_transcription_pending_at',
+        ),
+    ),
     'visibility:bridge_pending': (
         entry(
             'utils/sync/assignment.py',
@@ -514,6 +521,15 @@ STATES = (
             deadline='expires_at',
             stamped=True,
             note='600-second nonrenewable visibility bound',
+        ),
+        row(
+            'visibility',
+            'transcribing_hold',
+            ('home_transcription_pending_at', 'home_transcription_deadline_at'),
+            exit=Exit('decay', 'utils/conversations/transcribing_hold.py:project'),
+            deadline='home_transcription_deadline_at',
+            stamped=True,
+            note='Reader-enforced expiry keeps overdue rows visible; no dedicated dwell gauge/alert yet (homegate phase 1).',
         ),
         row(
             'visibility',
