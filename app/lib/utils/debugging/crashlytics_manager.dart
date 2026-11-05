@@ -9,6 +9,7 @@ import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 
 import 'package:omi/utils/build_provenance.dart';
 import 'package:omi/utils/debugging/non_fatal_reporter.dart';
+import 'package:omi/env/outbound_policy.dart';
 
 class CrashlyticsManager {
   static final CrashlyticsManager _instance = CrashlyticsManager._internal();
@@ -22,6 +23,7 @@ class CrashlyticsManager {
 
   static Future<void> init() async {
     if (PhysicalQualification.enabled) return;
+    if (!OutboundPolicy.thirdPartyServicesAllowed) return stopCollection();
     // Disable Crashlytics collection in debug mode
     if (kDebugMode) {
       await FirebaseCrashlytics.instance.setCrashlyticsCollectionEnabled(false);
@@ -32,6 +34,16 @@ class CrashlyticsManager {
     // _ensureFirebaseApp). applyBuildProvenanceKeys no-ops when no Firebase
     // app exists so host tests do not throw [core/no-app].
     await applyBuildProvenanceKeys();
+  }
+
+  /// Turns collection off and deletes reports already stored on the device. Collection off only
+  /// holds reports back: the SDK keeps them and uploads them once collection is enabled again, for
+  /// example on the next launch against Omi's backend. Off persists natively, so reports from
+  /// before Dart starts on the next launch stay on the device too.
+  static Future<void> stopCollection() async {
+    if (PhysicalQualification.enabled || Firebase.apps.isEmpty) return;
+    await FirebaseCrashlytics.instance.setCrashlyticsCollectionEnabled(false);
+    await FirebaseCrashlytics.instance.deleteUnsentReports();
   }
 
   /// Attach git SHA / build number so a Crashlytics issue resolves to a
@@ -56,34 +68,36 @@ class CrashlyticsManager {
   }
 
   void logInfo(String message) {
-    if (PhysicalQualification.enabled) return;
+    if (!_deliverable) return;
     FirebaseCrashlytics.instance.log(message);
   }
 
   void logError(String message) {
-    if (PhysicalQualification.enabled) return;
+    if (!_deliverable) return;
     FirebaseCrashlytics.instance.log('ERROR: $message');
   }
 
   void logWarn(String message) {
-    if (PhysicalQualification.enabled) return;
+    if (!_deliverable) return;
     FirebaseCrashlytics.instance.log('WARN: $message');
   }
 
   void logDebug(String message) {
-    if (PhysicalQualification.enabled) return;
+    if (!_deliverable) return;
     FirebaseCrashlytics.instance.log('DEBUG: $message');
   }
 
   void logVerbose(String message) {
-    if (PhysicalQualification.enabled) return;
+    if (!_deliverable) return;
     FirebaseCrashlytics.instance.log('VERBOSE: $message');
   }
 
   /// No Firebase app means there is no Crashlytics to talk to (host test
   /// lane). Same guard main.dart's zone handler uses; without it the report
   /// throws [core/no-app] and masks the original error.
-  static bool get _deliverable => !PhysicalQualification.enabled && Firebase.apps.isNotEmpty;
+  /// Nor while the app talks to a backend that is not Omi's ([OutboundPolicy]).
+  static bool get _deliverable =>
+      !PhysicalQualification.enabled && OutboundPolicy.thirdPartyServicesAllowed && Firebase.apps.isNotEmpty;
 
   void setUserAttribute(String key, String value) {
     if (!_deliverable) return;

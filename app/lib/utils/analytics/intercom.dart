@@ -5,6 +5,7 @@ import 'package:intercom_flutter/intercom_flutter.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/platform/platform_service.dart';
+import 'package:omi/env/outbound_policy.dart';
 
 class IntercomManager {
   static final IntercomManager _instance = IntercomManager._internal();
@@ -20,14 +21,16 @@ class IntercomManager {
   bool get isIntercomEnabled => _isIntercomEnabled;
 
   bool get _isIntercomEnabled =>
-      PlatformService.isIntercomSupported && (Env.intercomAppId != null && Env.intercomAppId!.isNotEmpty);
+      OutboundPolicy.thirdPartyServicesAllowed &&
+      PlatformService.isIntercomSupported &&
+      (Env.intercomAppId != null && Env.intercomAppId!.isNotEmpty);
 
   factory IntercomManager() {
     return _instance;
   }
 
   Future<void> initIntercom() async {
-    if (Env.intercomAppId == null) return;
+    if (Env.intercomAppId == null || !OutboundPolicy.thirdPartyServicesAllowed) return;
     return PlatformService.executeIfSupportedAsync(
       _isIntercomEnabled,
       () => intercom.initialize(
@@ -36,6 +39,15 @@ class IntercomManager {
         androidApiKey: Env.intercomAndroidApiKey,
       ),
     );
+  }
+
+  /// Ends the Intercom session. Checks only that Intercom exists here, not [OutboundPolicy]: it is
+  /// called right after the policy turned Intercom off.
+  Future<void> logout() async {
+    if (!PlatformService.isIntercomSupported || Env.intercomAppId == null || Env.intercomAppId!.isEmpty) return;
+    try {
+      await intercom.logout();
+    } catch (_) {}
   }
 
   Future displayChargingArticle(String device) async {
