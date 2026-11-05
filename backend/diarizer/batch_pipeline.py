@@ -1105,9 +1105,18 @@ class PipelineWorker:
                         # with a second hypothesis or publish a fabricated silence.
                         reason = 'no_owned_words' if shapes[item.segment_id]['asr_words'] else 'empty_asr'
                         stage = 'asr_recovery'
+                        # Every measured-positive speech band rides the same
+                        # context-bearing retry. Sub-second speech used to fall
+                        # back to byte-identical raw samples, which TDT answers
+                        # with blanks by the same documented start-state
+                        # mechanism the predecessor prefix exists to break, so
+                        # the eligibility boundary is measured speech > 0.
+                        # Measured-zero units keep the raw retry: the strict
+                        # silence contract, not recognition, is their terminal
+                        # authority.
                         retry_samples, retry_offset = (
                             empty_retry_audio(state, self.left_context, self.config.max_padded_seconds)
-                            if safety and state['speech_seconds'] >= 1
+                            if safety and state['speech_seconds'] > 0
                             else (state['samples'], 0.0)
                         )
                         fits_retry = padded_retry_fits(retry_samples, self.config.max_padded_seconds)
