@@ -356,3 +356,5 @@ Dated local validation: [2026-11-04 speaker final pass](validation/2026-11-04-sp
 Resource validation: [2026-11-05 bounds and peak memory](validation/2026-11-05-speaker-final-pass-resources.md).
 
 Artifact lifecycle findings: [2026-11-05 lifecycle and read diagnostics](validation/2026-11-05-speaker-final-pass-artifact-lifecycle.md).
+
+Transient retry validation and rebase: [2026-11-05 dependency custody](validation/2026-11-05-speaker-final-pass-transient-custody.md).
