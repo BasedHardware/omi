@@ -1208,6 +1208,7 @@ _add(
             'cursor': _CURSOR,
             'page_envelope': _PAGE_ENVELOPE,
             'cursor_page': _CURSOR_PAGE,
+            'scan_stats': (None, 'optional rows-read counter filled after the query; no filter effect'),
         },
     )
 )
