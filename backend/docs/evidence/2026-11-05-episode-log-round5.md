@@ -84,3 +84,9 @@ limits and `BACKEND_PYTEST_WORKERS=1`.
   ongoing edits; it is not counted as a successful preflight. Final preflight
   and guarded push run serially against stable files.
 - Final preflight and normal guarded push results recorded after completion.
+
+Current main (`e5f647a7f9c44459fae007835ec31abc499dad85`) was synced into the
+feature branch to resolve the same-line collector conflict, retaining both metric
+families. PR #24607 remains open. Writer coverage was re-audited afterward and
+explicitly includes generic processing-recovery primitives plus main's new
+`notes_identity.claim_late_evidence` writer. Final qualification follows that sync.

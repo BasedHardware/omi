@@ -36,6 +36,8 @@ version fields, and whether a writer changes a Home-selected field.
 | `database/conversations.py` | `update_owner_recognition_diagnostics`, `mark_playback_deferred`, `claim_record_lane_owner`, `record_demand_enrichment_checkpoint`, `link_duplicate_capture`, `reserve_share_email_recipients`, `confirm_share_email_recipients`, `release_share_email_recipients`, `set_postprocessing_status`, `store_conversation_photos` (parent marker) | C; even unrelated-field changes reject conservatively |
 | `database/conversation_mutations.py` | `apply_conversation_sync_mutation` | C |
 | `database/conversation_finalization_jobs.py` | `_apply_snapshot_bound_projection` (shared lifecycle projection primitive), `_dead_letter_finalization_job`, `_terminalize_exhausted_requeued_job_txn`, `_record_meeting_receipt_txn`, `_renew_processing_lease_txn`, `_reacquire_deferred_processing_txn`, `_abandon_byok_finalization_job_txn` | C |
+| `database/conversation_processing_recovery.py` | `_stamp_processing_admission_if_absent_txn`, `_complete_unstampable_orphan_conversation_txn`, `_complete_orphan_conversation_txn` (including public wrappers) | C |
+| `database/notes_identity.py` | `claim_late_evidence` (called by `utils/conversations/late_meeting_notes.py:_claim`); notes identity content otherwise persists through the listed lifecycle writers | C |
 | `database/conversation_terminal_title.py` | `recover_deferred_processing_failure_txn` | C |
 | `database/conversation_quiet_checks.py` | `arm_quiet_check`, `_evaluate_quiet_check` (conversation updates) | C |
 | `database/quiet_check_retirement.py` | `restore_quiet_check_in_transaction` (conversation status) | C |
