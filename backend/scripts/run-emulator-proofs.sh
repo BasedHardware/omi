@@ -97,6 +97,12 @@ run_proof "enrichment recovery conformance (PL-342/397/398)" \
   env OMI_REQUIRE_STORE_BACKENDS="${OMI_REQUIRE_STORE_BACKENDS:-sim,emulator}" OMI_ENV_STAGE=offline \
   "$PYTHON" -m pytest -q -p no:cacheprovider scripts/enrichment_recovery_emulator_test.py
 
+# Real delivery/settlement on old and replacement stores, with virtual budget
+# and heartbeat schedules. All three backends are required for full qualification.
+run_proof "enrichment budget and hold-cap conformance (PL-420/421)" \
+  env OMI_REQUIRE_STORE_BACKENDS="${OMI_REQUIRE_STORE_BACKENDS:-sim,emulator}" OMI_ENV_STAGE=offline \
+  "$PYTHON" -m pytest -q -p no:cacheprovider scripts/enrichment_budget_emulator_test.py
+
 # Daily architecture parity: require both local CI backends rather than letting
 # a missing emulator look green. Local/staging runs require all three stores.
 run_proof "recovery/admission parity PL-057/072/086 (sim + emulator)" \
