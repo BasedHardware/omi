@@ -8,13 +8,20 @@ the original. A receipt exists only after BOTH immutable objects commit.
 
 import hashlib
 import json
+import time
 from dataclasses import asdict, dataclass
 from typing import Any
 
 from utils.other import storage
 from utils.other.raw_audio import CapturePack, decode_capture
-from utils.other.audio_outbox_metrics import CUSTODY_COMMITS, record_failure
+from utils.other.audio_outbox_metrics import (
+    CUSTODY_COMMITS,
+    CUSTODY_COMMIT_TRANSIENT_EXHAUSTED,
+    CUSTODY_COMMIT_TRANSIENT_RETRIES,
+    record_failure,
+)
 from utils.other.audio_frame_table import FRAME_SCHEMA, MAX_MANIFEST_BYTES, validate_frames
+from utils.storage_retry_types import STORAGE_RETRYABLE_TYPES, is_requests_transport_error
 
 
 @dataclass(frozen=True)
@@ -59,6 +66,75 @@ class AudioProjection:
         return self.receipt.sample_rate
 
 
+# Custody-commit availability shed. The four GCS ops inside one commit — the
+# media upload, its generation read, the manifest upload and its generation
+# read — each run a single explicit attempt (``timeout=10, retry=None``) so a
+# custody write stays bounded and never hides behind the SDK's silent retry
+# budget. Single attempts answer a momentary availability failure the same
+# way every storage boundary in this codebase already classifies: the SDK's
+# own availability replay set (``utils.storage_retry_types``, the tuple the
+# storage SDK's default retry replays — 429/500/502/503/504 plus connection
+# resets) and the ``requests`` transport family that carries it. Left
+# un-shedded, one such blip voids the whole window commit: the producer stays
+# unacknowledged, the session fails closed (close 1011 + one traceback at the
+# shutdown tail), and a mid-session failure latches the custody fence so
+# every later window in that session is refused unseen. The shed re-asks the
+# SAME op a bounded number of times behind a short doubling backoff, and each
+# op is strictly faithful to retry: the uploads are content-addressed with
+# create-if-absent preconditions (an attempt that landed answers the retry
+# with ``PreconditionFailed`` and the existing digest acceptance keeps the
+# first immutable generation — no ciphertext rotation, no second billable
+# object, no counter), and the generation reads are read-only. A retry never
+# re-runs a step that already committed: once ``_generation`` pinned the
+# media object, only the manifest side can re-attempt. Exhaustion raises the
+# last transient unchanged so the loud fail-closed boundary keeps its
+# failure, now carrying the shed-exhausted mark that labels the custody
+# failure reason ``transient``. Deterministic refusals (tombstone deletion,
+# identity collision, digest mismatch, quota-free 4xx) and cancels are never
+# absorbed — they propagate on the first attempt exactly as before.
+CUSTODY_COMMIT_TRANSIENT_ATTEMPTS = 3
+CUSTODY_COMMIT_TRANSIENT_BACKOFF_SECONDS = 0.1
+
+
+def _is_commit_availability_blip(error: BaseException) -> bool:
+    """True for a momentary storage failure a re-attempt of the same op answers."""
+
+    return isinstance(error, STORAGE_RETRYABLE_TYPES) or is_requests_transport_error(error)
+
+
+def _commit_op_with_transient_shed(op: str, fn):
+    """Run one custody-commit GCS op behind the bounded availability shed.
+
+    A cold storage HTTP connection (or a load-balancer blip inside the 10s
+    single-attempt window) answers with a member of the availability replay
+    set that the next redial answers where this attempt failed. When the
+    budget drains, the last transient is re-raised marked
+    ``custody_shed_exhausted`` so the commit's failure accounting records the
+    bounded-retry ``transient`` reason instead of the unlabeled default. A
+    cancel or a deterministic refusal is re-raised untouched — the loud
+    first-attempt arm owns that classification.
+    """
+
+    for attempt in range(CUSTODY_COMMIT_TRANSIENT_ATTEMPTS):
+        try:
+            return fn()
+        except Exception as error:
+            if not _is_commit_availability_blip(error):
+                raise
+            CUSTODY_COMMIT_TRANSIENT_RETRIES.labels(op=op).inc()
+            if attempt < CUSTODY_COMMIT_TRANSIENT_ATTEMPTS - 1:
+                backoff = CUSTODY_COMMIT_TRANSIENT_BACKOFF_SECONDS * (2**attempt)
+                time.sleep(backoff)
+            else:
+                CUSTODY_COMMIT_TRANSIENT_EXHAUSTED.labels(op=op).inc()
+                try:
+                    setattr(error, 'custody_shed_exhausted', True)
+                except Exception:
+                    pass
+                raise
+    raise AssertionError('unreachable: the shed loop returns or raises on every attempt')
+
+
 def _generation(blob) -> str:
     blob.reload(timeout=10, retry=None)
     if not blob.generation:
@@ -85,10 +161,15 @@ def commit_capture(
             validate_frames(frames, int(metadata['sample_rate']))
             suffix = '.enc' if protection == 'enhanced' else ''
             metadata['custody_manifest_path'] = f'audio-outbox/{uid}/{name}/{identity}.bin{suffix}'
-        path = storage.archive_capture_bytes(uid, raw, 'raw-live', name, metadata, data_protection_level=protection)
+        path = _commit_op_with_transient_shed(
+            'media_upload',
+            lambda: storage.archive_capture_bytes(
+                uid, raw, 'raw-live', name, metadata, data_protection_level=protection
+            ),
+        )
         bucket = storage.get_private_cloud_sync_bucket()
         blob = bucket.blob(path)
-        generation = _generation(blob)
+        generation = _commit_op_with_transient_shed('media_generation', lambda: _generation(blob))
         digest = hashlib.sha256(raw).hexdigest()
         if (blob.metadata or {}).get('sha256') != digest:
             raise ValueError('audio custody media digest mismatch')
@@ -104,21 +185,24 @@ def commit_capture(
         payload = json.dumps(manifest, sort_keys=True, separators=(',', ':'), allow_nan=False).encode()
         if framed and len(payload) > MAX_MANIFEST_BYTES:
             raise ValueError('frame manifest exceeds reader bound; producer remains unacknowledged')
-        manifest_path = storage.archive_capture_bytes(
-            uid,
-            payload,
-            'audio-outbox',
-            name,
-            {
-                'format': 'audio-custody-manifest-v1',
-                'custody_schema': 'audio_custody_v1',
-                'conversation_id': metadata.get('conversation_id'),
-            },
-            data_protection_level=protection,
-            **({'manifest_identity': identity} if framed else {}),
+        manifest_path = _commit_op_with_transient_shed(
+            'manifest_upload',
+            lambda: storage.archive_capture_bytes(
+                uid,
+                payload,
+                'audio-outbox',
+                name,
+                {
+                    'format': 'audio-custody-manifest-v1',
+                    'custody_schema': 'audio_custody_v1',
+                    'conversation_id': metadata.get('conversation_id'),
+                },
+                data_protection_level=protection,
+                **({'manifest_identity': identity} if framed else {}),
+            ),
         )
         manifest_blob = bucket.blob(manifest_path)
-        manifest_generation = _generation(manifest_blob)
+        manifest_generation = _commit_op_with_transient_shed('manifest_generation', lambda: _generation(manifest_blob))
         # The reader bounds stored bytes before decrypting. Check the actual
         # immutable object's size too, including any encryption envelope.
         if framed and (manifest_blob.size is None or manifest_blob.size > MAX_MANIFEST_BYTES):
@@ -144,8 +228,8 @@ def commit_capture(
         if framed and metadata.get('conversation_id'):
             storage.invalidate_pack_index(bucket, uid, str(metadata['conversation_id']))
         return receipt
-    except Exception:
-        record_failure('commit')
+    except Exception as error:
+        record_failure('commit', reason='transient' if getattr(error, 'custody_shed_exhausted', False) else 'other')
         raise
 
 

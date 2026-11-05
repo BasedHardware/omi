@@ -5,6 +5,22 @@ import time
 from prometheus_client import Counter, Gauge
 
 CUSTODY_COMMITS = Counter('omi_audio_custody_commits_total', 'Immutable media and manifest receipts committed')
+# The custody-commit availability shed: the four GCS ops inside one commit
+# (media upload, media generation read, manifest upload, manifest generation
+# read) re-attempt a bounded number of times when a single attempt answered
+# with the storage SDK's availability replay set. Retries and exhaustions are
+# counted per op so pod-start cold-channel churn stays measurable without
+# touching the loud commit-failure boundary.
+CUSTODY_COMMIT_TRANSIENT_RETRIES = Counter(
+    'omi_audio_custody_commit_transient_retries_total',
+    'Custody-commit GCS ops re-attempted after an availability blip',
+    ['op'],
+)
+CUSTODY_COMMIT_TRANSIENT_EXHAUSTED = Counter(
+    'omi_audio_custody_commit_shed_exhausted_total',
+    'Custody-commit GCS ops whose transient shed budget drained',
+    ['op'],
+)
 CUSTODY_FAILURES = Counter(
     'omi_audio_custody_failures_total', 'Audio custody failures; producer remains unacknowledged', ['stage', 'reason']
 )
@@ -57,3 +73,6 @@ for _stage in (
 ):
     WOULD_DROP.labels(stage=_stage).inc(0)
     BACKPRESSURE.labels(stage=_stage).inc(0)
+for _op in ('media_upload', 'media_generation', 'manifest_upload', 'manifest_generation'):
+    CUSTODY_COMMIT_TRANSIENT_RETRIES.labels(op=_op).inc(0)
+    CUSTODY_COMMIT_TRANSIENT_EXHAUSTED.labels(op=_op).inc(0)
