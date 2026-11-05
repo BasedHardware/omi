@@ -928,3 +928,19 @@ def test_discovery_skips_rows_repair_can_only_refuse(extra, selected):
         SimpleNamespace(collection_group=lambda _: Query(), document=lambda path: path), budget=SweepBudget(60)
     )
     assert bool(rows) is selected
+
+
+@pytest.mark.parametrize('workers', ['1', '16', '48', '64'])
+def test_repair_workers_accept_io_bound_range(monkeypatch, workers):
+    monkeypatch.setenv('RECORD_SEAL_REPAIR_WORKERS', workers)
+    monkeypatch.setenv('RECORD_SEAL_REPAIR_ROW_SECONDS', '270')
+    monkeypatch.setenv('RECORD_SEAL_REPAIR_RUN_SECONDS', '1500')
+    monkeypatch.setenv('RECORD_SEAL_REPAIR_MODE', 'apply')
+    assert config.settings() == (int(workers), 270, 1500, 'apply')
+
+
+@pytest.mark.parametrize('workers', ['0', '65', '128'])
+def test_repair_workers_outside_range_refuse(monkeypatch, workers):
+    monkeypatch.setenv('RECORD_SEAL_REPAIR_WORKERS', workers)
+    with pytest.raises(ValueError, match='invalid repair limits'):
+        config.settings()

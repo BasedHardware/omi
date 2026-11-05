@@ -31,8 +31,8 @@ def test_independent_job_uses_worker_identity_and_has_separate_deadline():
     assert pod['containers'][0]['image'] == worker['containers'][0]['image']
     assert pod['containers'][0]['command'] == ['python', 'scripts/record_seal_repair_job.py']
     env = {e['name']: e.get('value') for e in pod['containers'][0]['env']}
-    # Prod runs repair at 16 workers with the committed policy map (lead2 2026-11-04 3b814c).
-    assert env['RECORD_SEAL_REPAIR_WORKERS'] == '16'
+    # Prod runs repair at 48 I/O-bound workers with the committed policy map (lead2 072b5e, 2026-11-05).
+    assert env['RECORD_SEAL_REPAIR_WORKERS'] == '48'
     assert env['RECORD_SEAL_REPAIR_ROW_SECONDS'] == '270'
     assert env['RECORD_SEAL_REPAIR_ENABLED'] == 'true'
     assert env['RECORD_SEAL_REPAIR_JOBS'] == 'on'
@@ -138,7 +138,7 @@ def test_either_job_keeps_shared_narrow_pod_list_role():
 
 
 def test_invalid_config_and_nonprod_refuse():
-    assert render('--set', 'recordSealRepair.workers=17').returncode != 0
+    assert render('--set', 'recordSealRepair.workers=65').returncode != 0
     assert render('--set', 'recordSealRepair.mode=unknown').returncode != 0
     assert render(namespace='dev-omi-backend').returncode != 0
     for stage in ('dev', 'staging'):
