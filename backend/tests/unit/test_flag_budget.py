@@ -50,6 +50,7 @@ FEATURE_FLAGS_PATH = BACKEND_DIR.parent / 'config' / 'feature-flags.yaml'
 SEED_BUDGET = 170  # 2026-10-25 seed; lower it when the surface shrinks, never raise it.
 HELPER_KILL_SWITCHES = {
     'PROJECTION_DRAIN_CLAIM_AWARE',
+    'BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED',
     'CONVERSATION_OCCASION_RELEVANCE_ENABLED',
     'LATE_AUDIO_SYNC_INTAKE_ENABLED',
     'EPISODE_RECORDED_TIME_ENABLED',
@@ -217,14 +218,15 @@ def test_helper_kill_switch_budget_entries_match_the_default_on_registry():
             assert entry['owner'] == 'two-lane lead'
             assert entry['review_by'] == '2026-12-05'
         else:
-            assert entry['owner'] == 'rollout-meetings / occasion architecture'
-            assert entry['review_by'] == '2026-11-28'
-        assert flag['owner'] == 'dazheng'
+            striped = name == 'BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED'
+            assert entry['owner'] == ('omi-pipeline' if striped else 'rollout-meetings / occasion architecture')
+            assert entry['review_by'] == ('2026-12-06' if striped else '2026-11-28')
+        assert flag['owner'] == ('omi-pipeline' if name == 'BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED' else 'dazheng')
         assert flag['kind'] == 'env'
         assert flag['lifecycle'] == 'ops_kill'
         assert 'backend' in flag['surfaces']
         assert flag['fail'] == 'open'
-        assert flag['summary'].startswith('Default on;')
+        assert flag['summary'].startswith('Default on')
 
 
 def _data(retired=None, **names):

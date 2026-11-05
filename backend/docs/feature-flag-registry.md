@@ -543,6 +543,7 @@ and an explicit empty literal renders as `''`.
 | `BATCH_PIPELINE_PROJECTION_PREDECESSOR_REPLAY_ENABLED` | Default on; a blocked projection successor schedules its owner's missing predecessor through the existing ordered walk | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `BATCH_PIPELINE_PROJECTION_PREFETCH` | Default 4; an owner-chain walk reads the next N rows' successor links, job bindings, result payloads and audio manifests ahead of the chain, and runs the candidate lookup beside context and build | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `BATCH_PIPELINE_PROJECTION_SOURCE_DELETED_ENABLED` | Default on; settle deleted original sources without a tombstone or redirect as source_deleted, without content publication | backend | env | open | — | — | — | — | keep | keep | — | cl2-cost / lead2 |
+| `BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED` | Default on unless off; seed projection discovery at an instance-specific committed_at stripe, then wrap through every row | backend | env | open | — | — | — | — | keep | keep | — | omi-pipeline |
 | `BATCH_PIPELINE_RAMP_EXCLUDE_HEAVY_OWNERS` | Ship-on partial-ramp admission isolation; only off disables; owners over 30 open jobs or six hours pending audio use legacy | backend | env | closed | — | — | — | — | keep | keep | — | dazheng |
 | `BATCH_PIPELINE_RECOVERED_MERGE_RELEASE_ENABLED` | Default on unless false; the post-recovery owner wake commits the recovered unit, then its content's ready siblings, at once past an unready merge head (the unit itself also past the catch-up depth hold), so the same wake's chain walk projects them | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `BATCH_PIPELINE_RECOVERY_DISPATCH_INTERVAL_SECONDS` | Default 5; batch serving dispatches quarantine recovery on its own loop at this interval, on the maintenance leader only | backend | env | closed | — | — | — | — | keep | keep | — | dazheng |
@@ -1108,6 +1109,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `BATCH_PIPELINE_PROJECTION_PREDECESSOR_REPLAY_ENABLED` — Default on; a blocked projection successor schedules its owner's missing predecessor through the existing ordered walk (fail: open)
 - `BATCH_PIPELINE_PROJECTION_PREFETCH` — Default 4; an owner-chain walk reads the next N rows' successor links, job bindings, result payloads and audio manifests ahead of the chain, and runs the candidate lookup beside context and build (fail: open)
 - `BATCH_PIPELINE_PROJECTION_SOURCE_DELETED_ENABLED` — Default on; settle deleted original sources without a tombstone or redirect as source_deleted, without content publication (fail: open)
+- `BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED` — Default on unless off; seed projection discovery at an instance-specific committed_at stripe, then wrap through every row (fail: open)
 - `BATCH_PIPELINE_PROVIDER_STT_SWEEP_MAX_AGE_DAYS` — Maximum durable obligation age for sweep re-wakes; default 14 days; invalid values use 14 (fail: closed)
 - `BATCH_PIPELINE_PUBLISH_CONCURRENCY` — GPU worker post-flight publication concurrency: bounded fenced transitions and one ordered drain per owner per flight; default 4, 1 = legacy serial kill switch, max 16 (fail: closed)
 - `BATCH_PIPELINE_RAMP_EXCLUDE_HEAVY_OWNERS` — Ship-on partial-ramp admission isolation; only off disables; owners over 30 open jobs or six hours pending audio use legacy (fail: closed)
@@ -1467,6 +1469,7 @@ reason:
 
 | Key | Reason | owner | decision | review_by | notes |
 | --- | --- | --- | --- | --- | --- |
+| `K_REVISION` | Cloud Run revision identity for process-local discovery phase, not a behavior flag | — | — | — | — |
 | `DD_TRACE_ENABLED` | Datadog telemetry instrumentation switch, not a product behavior flag | — | — | — | — |
 | `DD_LOGS_ENABLED` | Datadog telemetry log routing switch, not a product behavior flag | — | — | — | — |
 | `OMI_FORCE_CONTEXT_BUCKETS` | Local-only dev override, not shipped remote authority | — | — | — | — |

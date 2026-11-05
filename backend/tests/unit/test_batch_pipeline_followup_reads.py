@@ -55,6 +55,7 @@ class ResultQuery:
 
 @pytest.fixture(autouse=True)
 def head_first_discovery(monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED', 'off')
     # These read budgets pin the head-first pass (desync kill switch). The
     # desync seed adds one 1-row read per process: test_batch_pipeline_followup_desync.py.
     monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_FOLLOWUP_BACKOFF_SECONDS', '0')
