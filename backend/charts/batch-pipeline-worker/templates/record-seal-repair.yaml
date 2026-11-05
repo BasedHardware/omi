@@ -5,8 +5,8 @@
 {{- if not (has .Values.recordSealRepair.mode (list "plan" "apply")) }}
 {{- fail "recordSealRepair.mode must be plan or apply" }}
 {{- end }}
-{{- if or (lt (int .Values.recordSealRepair.workers) 1) (gt (int .Values.recordSealRepair.workers) 16) }}
-{{- fail "recordSealRepair.workers must be 1..16" }}
+{{- if or (lt (int .Values.recordSealRepair.workers) 1) (gt (int .Values.recordSealRepair.workers) 64) }}
+{{- fail "recordSealRepair.workers must be 1..64" }}
 {{- end }}
 apiVersion: batch/v1
 kind: CronJob
@@ -80,7 +80,7 @@ spec:
                 readOnlyRootFilesystem: true
                 capabilities: {drop: [ALL]}
               resources:
-                requests: {cpu: "1", memory: 2Gi}
+                requests: {cpu: "2", memory: 4Gi}
                 limits: {cpu: "4", memory: 8Gi}
               volumeMounts:
                 - {name: tmp, mountPath: /tmp}
