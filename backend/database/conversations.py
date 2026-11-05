@@ -920,7 +920,10 @@ def is_visible_conversation(
         if (
             conversation.get('dream_duplicate_of')
             or bridge_pending.hidden(conversation)
-            or (is_settling_fragment(conversation) and not (presentation and transcribing_hold.applies(conversation)))
+            or (
+                is_settling_fragment(conversation)
+                and not (presentation and transcribing_hold.applies(conversation, stored=True))
+            )
             or conversation.get('discarded')
             or is_completed_rule_discard(conversation)
         ):

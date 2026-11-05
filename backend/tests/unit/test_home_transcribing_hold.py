@@ -298,3 +298,23 @@ def test_cursor_collector_only_releases_short_hold_for_product_reads(monkeypatch
         presentation=presentation,
     )
     assert [item['id'] for item in rows] == (['capture'] if presentation else [])
+
+
+@pytest.mark.parametrize('level', ['standard', 'enhanced'])
+def test_encoded_empty_capture_has_visible_overdue_exit(monkeypatch, level):
+    monkeypatch.setenv('ENCRYPTION_SECRET', 'homegate-hermetic-test-secret')
+    row = capture(
+        data_protection_level=level,
+        started_at=NOW - timedelta(seconds=45),
+        finished_at=NOW - timedelta(seconds=20),
+        home_transcription_deadline_at=NOW - timedelta(seconds=1),
+    )
+    stored = conversations.encode_conversation_for_write('u', row, level=level)
+    assert stored['transcript_segments_compressed']
+    assert not isinstance(stored['transcript_segments'], list)
+    assert not conversations.is_visible_conversation(stored)
+    assert conversations.is_visible_conversation(stored, presentation=True)
+    _install_listing(monkeypatch, {'capture': stored})
+    page = conversations.get_conversations_without_photos('u', limit=1, presentation=True)
+    assert page[0]['transcript_segments'] == []
+    assert transcribing_hold.project(page[0])['structured']['title'] == "Couldn't transcribe"

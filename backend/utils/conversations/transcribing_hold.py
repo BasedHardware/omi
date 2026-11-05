@@ -30,20 +30,25 @@ def transcription_presentation(deadline: datetime, *, failed: bool = False, now:
     return ("Couldn't transcribe", 'failed') if failed or overdue else ('Transcribing…', 'processing')
 
 
-def applies(row: Mapping[str, Any]) -> bool:
+def applies(row: Mapping[str, Any], *, stored: bool = False) -> bool:
     """Only stamped completed batch captures without a transcript or title qualify.
 
     Indexed list reads omit transcript data. The batch projection receipt
     prevents an omitted-but-landed transcript from becoming a placeholder.
     has_content is intentionally ignored: closed raw audio sets it before STT.
+    Raw storage may encode even an empty transcript as bytes or encrypted text.
+    That blob is unknown to visibility, not proof of speech; the batch receipt
+    remains authoritative there. API projection runs after transcript hydration.
     """
+    segments = row.get('transcript_segments')
+    has_transcript = bool(segments) and (not stored or isinstance(segments, (list, tuple)))
     return bool(
         home_transcription_presentation_gate_enabled()
         and getattr(row.get('status'), 'value', row.get('status')) == 'completed'
         and row.get('record_lane_owner') in BATCH_RECORD_OWNERS
         and isinstance(row.get('home_transcription_deadline_at'), datetime)
         and not row.get('record_projection_revision')
-        and not row.get('transcript_segments')
+        and not has_transcript
         and not str(row.get('user_title') or '').strip()
         and not str((row.get('structured') or {}).get('title') or '').strip()
     )
