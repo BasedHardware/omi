@@ -13,11 +13,13 @@ PURPOSE = b'record-seal-repair-cursor-v1'
 
 
 class RepairCursor:
-    def __init__(self, client, secret):
+    def __init__(self, client, secret, *, jobs=False):
         if len(secret) < 32:
             raise ValueError('cursor key required')
         self.cipher = AESGCM(hmac.digest(secret, PURPOSE, 'sha256'))
-        self.ref = client.collection('batch_pipeline_prod_maintenance').document('record_seal_repair_cursor_v1')
+        self.jobs = jobs
+        name = 'record_seal_repair_jobs_cursor_v1' if jobs else 'record_seal_repair_cursor_v1'
+        self.ref = client.collection('batch_pipeline_prod_maintenance').document(name)
 
     def read(self, budget):
         snapshot = self.ref.get(timeout=budget.timeout(), retry=None)
@@ -33,7 +35,12 @@ class RepairCursor:
             return None
         path = value['path']
         parts = path.split('/') if isinstance(path, str) else []
-        if len(parts) < 4 or len(parts) % 2 or parts[-2] != 'conversations' or not all(parts):
+        valid = (
+            (len(parts) == 2 and parts[0] == 'batch_pipeline_prod_jobs')
+            if self.jobs
+            else (len(parts) >= 4 and len(parts) % 2 == 0 and parts[-2] == 'conversations')
+        )
+        if not valid or not all(parts):
             raise ValueError('invalid maintenance frontier')
         if type(value['seconds']) is not int or type(value['nanos']) is not int or not 0 <= value['nanos'] < 10**9:
             raise ValueError('invalid maintenance frontier')

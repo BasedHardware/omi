@@ -55,7 +55,9 @@ def plan_digest(value):
     return hashlib.sha256(json.dumps(value, sort_keys=True, default=encode, separators=(',', ':')).encode()).hexdigest()
 
 
-def seal_refusal(job, row, *, producer_proof=None, producers_stopped=False, repair_upload_failed=False):
+def seal_refusal(
+    job, row, *, producer_proof=None, producers_stopped=False, repair_upload_failed=False, repair_closed=False
+):
     if job.get('state') != 'record_pending' or not job.get('record_content_id'):
         return 'not_pending'
     if row.get('record_lane_owner') not in {'batch_live_v1', 'batch_sync_v1'}:
@@ -68,7 +70,7 @@ def seal_refusal(job, row, *, producer_proof=None, producers_stopped=False, repa
         row['record_upload_sessions'], producer_proof, producers_stopped=producers_stopped
     ):
         return 'upload_pending'
-    if row.get('record_audio_closed'):
+    if row.get('record_audio_closed') and not repair_closed:
         return 'already_closed'
     if row.get('status') != 'completed':
         return 'not_completed'
@@ -174,6 +176,7 @@ def plan_seals(
     producers_stopped=False,
     check_budget=lambda: None,
     repair_upload_failed=False,
+    repair_closed=False,
 ):
     entries = []
     for job_id in sorted(job_ids):
@@ -196,6 +199,7 @@ def plan_seals(
                 producer_proof=producer_proof,
                 producers_stopped=producers_stopped,
                 repair_upload_failed=repair_upload_failed,
+                repair_closed=repair_closed,
             )
             if refusal:
                 entry['disposition'] = refusal
@@ -230,6 +234,7 @@ def plan_seals(
         'producer_proof': producer_proof,
         'producers_stopped': producers_stopped,
         'repair_upload_failed': repair_upload_failed,
+        'repair_closed': repair_closed,
         'overlap_trim_enabled': overlap_trim_enabled(),
     }
     return {**plan, 'plan_sha256': plan_digest(plan)}
@@ -268,6 +273,7 @@ def apply_seals(store, plan, approved_digest, *, check_budget=lambda: None, outc
                 producer_proof=plan['producer_proof'],
                 producers_stopped=plan['producers_stopped'],
                 repair_upload_failed=plan.get('repair_upload_failed', False),
+                repair_closed=plan.get('repair_closed', False),
             )
             if refusal:
                 return refusal

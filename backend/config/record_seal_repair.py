@@ -3,6 +3,16 @@
 import json
 import os
 
+from config import record_partial
+
+# Admission has zero upload grace; use the existing partial proof wait instead.
+JOBS_MIN_AGE_SECONDS = record_partial.WAIT_SECONDS
+MISSING_CONVERSATION_SECONDS = 7 * record_partial.INVENTORY_IDLE_SECONDS
+
+
+def jobs_enabled():
+    return os.getenv('RECORD_SEAL_REPAIR_JOBS', 'on').strip().lower() != 'off'
+
 
 def enabled():
     return os.getenv('RECORD_SEAL_REPAIR_ENABLED', 'true').strip().lower() == 'true'

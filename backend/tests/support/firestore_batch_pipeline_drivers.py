@@ -37,6 +37,24 @@ def entries():
             },
         ),
         DriverEntry(
+            'utils.batch_pipeline.record_seal_cluster_repair.discover_jobs',
+            domains={
+                'after': [
+                    None,
+                    {
+                        'path': 'batch_pipeline_prod_jobs/old',
+                        'finished_at': datetime(2026, 10, 1, tzinfo=timezone.utc),
+                    },
+                ]
+            },
+            neutrals={
+                'budget': (SimpleNamespace(check=lambda: None, timeout=lambda: 10), 'RPC deadline only'),
+                'max_rows': (8, 'in-memory candidate cap only'),
+                'max_scan': (128, 'aggregate scan bound only'),
+                'selected_cursors': (None, 'output-only selected metadata; no filter or ordering change'),
+            },
+        ),
+        DriverEntry(
             'utils.batch_pipeline.record_seal_sweeper.discover_pending',
             domains={'namespace': namespaces},
             neutrals={

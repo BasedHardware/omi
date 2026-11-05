@@ -35,6 +35,7 @@ def test_independent_job_uses_worker_identity_and_has_separate_deadline():
     assert env['RECORD_SEAL_REPAIR_WORKERS'] == '16'
     assert env['RECORD_SEAL_REPAIR_ROW_SECONDS'] == '270'
     assert env['RECORD_SEAL_REPAIR_ENABLED'] == 'true'
+    assert env['RECORD_SEAL_REPAIR_JOBS'] == 'on'
     assert env['RECORD_SEAL_OVERLAP_TRIM_ENABLED'] == 'true'
     assert env['RECORD_SEAL_UPLOAD_FAILED_REPAIR_ENABLED'] == 'true'
     assert env['RECORD_SEAL_REPAIR_MODE'] == 'apply'
@@ -187,3 +188,15 @@ def test_log_metrics_use_only_allowlisted_row_counts_and_numeric_age():
     pattern = json.loads(gap['labelExtractors']['tail_gap_bucket'].split(', ', 1)[1][:-1])
     for private in ('A' * 28, 'private@example.invalid', 'users/private/conversations/private', 'under_1s_private'):
         assert re.search(pattern, json.dumps({'tail_gap_bucket': private})) is None
+
+
+def test_jobs_discovery_rollback_reaches_only_repair_cron():
+    before = documents()
+    after = documents('--set-string', 'recordSealRepair.jobsDiscovery=off')
+    assert before.keys() == after.keys()
+    assert [key for key in before if before[key] != after[key]] == [('CronJob', 'record-seal-repair')]
+    container = after[('CronJob', 'record-seal-repair')]['spec']['jobTemplate']['spec']['template']['spec'][
+        'containers'
+    ][0]
+    env = {entry['name']: entry.get('value') for entry in container['env']}
+    assert env['RECORD_SEAL_REPAIR_JOBS'] == 'off'
