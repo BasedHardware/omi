@@ -1,6 +1,7 @@
 """Bounded serving discovery and supervisor cadence, exercised at runtime seams."""
 
 import asyncio
+import logging
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
@@ -15,12 +16,13 @@ from utils.batch_pipeline import projection, serving
 @pytest.mark.parametrize(
     'name,reader,default,minimum,maximum',
     [
-        ('BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS', config.serving_sweep_page_rows, 100, 50, 300),
-        ('BATCH_PIPELINE_SERVING_TICK_SECONDS', config.serving_tick_seconds, 20, 5, 60),
+        ('BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS', config.serving_sweep_page_rows, 100, 50, 200),
+        ('BATCH_PIPELINE_SERVING_TICK_SECONDS', config.serving_tick_seconds, 20, 10, 60),
     ],
 )
 @pytest.mark.parametrize('raw', [None, '', 'bad', '2.5', 'nan', 'inf', '-1', '0', '5', '50', '200', '300', '999'])
 def test_serving_numeric_bounds(monkeypatch, name, reader, default, minimum, maximum, raw):
+    monkeypatch.delenv('BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS', raising=False)
     if raw is None:
         monkeypatch.delenv(name, raising=False)
     else:
@@ -29,13 +31,41 @@ def test_serving_numeric_bounds(monkeypatch, name, reader, default, minimum, max
     assert reader() == expected
 
 
+@pytest.mark.parametrize(
+    'page,tick,effective', [('100', '20', 20), ('200', '20', 20), ('200', '10', 10), ('200', '5', 10), ('999', '0', 10)]
+)
+def test_serving_combined_budget_preserves_page_and_warns_once(monkeypatch, caplog, page, tick, effective):
+    monkeypatch.setenv('BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS', page)
+    monkeypatch.setenv('BATCH_PIPELINE_SERVING_TICK_SECONDS', tick)
+    monkeypatch.setattr(config, '_serving_budget_warned', False)
+    rows = config.serving_sweep_page_rows()
+    with caplog.at_level(logging.WARNING, logger=config.__name__):
+        assert config.serving_tick_seconds() == config.serving_tick_seconds() == effective
+    assert config.serving_sweep_page_rows() == rows
+    assert rows / effective <= 20
+    warnings = [record for record in caplog.records if 'action=read_budget' in record.message]
+    assert len(warnings) == int(int(tick) < rows / 20)
+    if warnings:
+        assert f'effective_page_rows={rows} effective_tick_seconds={effective}' in warnings[0].message
+
+
+def test_combined_budget_raises_tick_instead_of_reducing_page(monkeypatch, caplog):
+    # Exercise the budget independently of today's tighter individual clamps.
+    monkeypatch.setattr(config, 'serving_sweep_page_rows', lambda: 250)
+    monkeypatch.setenv('BATCH_PIPELINE_SERVING_TICK_SECONDS', '10')
+    monkeypatch.setattr(config, '_serving_budget_warned', False)
+    with caplog.at_level(logging.WARNING, logger=config.__name__):
+        assert config.serving_tick_seconds() == 12.5
+    assert 'effective_page_rows=250 effective_tick_seconds=12.5' in caplog.text
+
+
 @pytest.mark.parametrize('pending_page', [False, True])
 @pytest.mark.parametrize(
     'raw,limit,expected',
     [
         (None, None, 100),
         ('200', None, 200),
-        ('999', None, 300),
+        ('999', None, 200),
         ('0', None, 50),
         ('bad', None, 100),
         (None, 200, 100),
@@ -64,7 +94,7 @@ def test_sweep_uses_configured_cap_for_assignment_and_finish(monkeypatch, pendin
     assert result == {'completed': 0, 'waiting': 0, 'blocked': 0, 'error': 0}
 
 
-@pytest.mark.parametrize('raw,expected', [(None, 100), ('200', 200), ('300', 300)])
+@pytest.mark.parametrize('raw,expected', [(None, 100), ('200', 200), ('300', 200)])
 def test_sweep_page_size_reaches_database_query(monkeypatch, raw, expected):
     if raw is None:
         monkeypatch.delenv('BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS', raising=False)
@@ -83,11 +113,11 @@ def test_sweep_page_size_reaches_database_query(monkeypatch, raw, expected):
     assert query.calls == [(None, expected), (None, expected)]
     # The database ceiling stays bounded even for callers bypassing config.
     projection_page(query, 'synthetic', limit=999)
-    assert query.calls[-1] == (None, 300)
+    assert query.calls[-1] == (None, 200)
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('raw,expected', [(None, 20), ('10', 10), ('5', 5), ('0', 5), ('999', 60), ('bad', 20)])
+@pytest.mark.parametrize('raw,expected', [(None, 20), ('10', 10), ('5', 10), ('0', 10), ('999', 60), ('bad', 20)])
 async def test_supervisor_uses_configured_tick(monkeypatch, raw, expected):
     monkeypatch.setenv('BATCH_PIPELINE_SERVING_ENABLED', 'true')
     monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_PUMP_ENABLED', 'false')
