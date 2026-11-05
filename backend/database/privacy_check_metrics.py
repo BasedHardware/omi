@@ -144,6 +144,7 @@ def ttl_result(family, result):
 
 def memo_ineligible(reason):
     """Count why a batch decision skipped the attempt memo, attributed to the first non-privacy frame."""
+    current = frame = None
     try:
         reason = reason if reason in {'no_attempt', 'no_transaction', 'snapshots'} else 'other'
         caller = 'other'
@@ -160,6 +161,9 @@ def memo_ineligible(reason):
         MEMO_INELIGIBLE.labels(reason, caller).inc()
     except Exception:
         pass
+    finally:
+        # Break the frame reference cycle so request frames are freed immediately.
+        del current, frame
 
 
 def memo_result(family, result):

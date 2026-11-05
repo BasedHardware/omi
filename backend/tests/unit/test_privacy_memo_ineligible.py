@@ -54,3 +54,27 @@ def test_metric_failure_never_changes_the_decision(monkeypatch):
     monkeypatch.setattr(metrics.MEMO_INELIGIBLE, 'labels', lambda *a: (_ for _ in ()).throw(RuntimeError('boom')))
     db = _db()
     assert privacy.assert_batch_write_allowed(db, db.transaction(), UID, conversation_ids=['c']) == 0
+
+
+def test_attribution_does_not_leave_a_frame_cycle(monkeypatch):
+    """Luna r1 P2 on #24666: retaining the current frame would keep caller frames alive until cyclic GC."""
+    import gc
+    import weakref
+
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', json.dumps({'bpp_generation_memo': 100}))
+
+    class Marker:
+        pass
+
+    def caller():
+        local = Marker()
+        ref = weakref.ref(local)
+        metrics.memo_ineligible('no_attempt')
+        return ref
+
+    gc.disable()
+    try:
+        ref = caller()
+        assert ref() is None  # freed by refcounting alone, no cycle
+    finally:
+        gc.enable()
