@@ -18,6 +18,13 @@ from utils.batch_pipeline.contracts import Priority, WORK_OUTCOMES
 from utils.observability.reasons import AdmissionHoldReason, ReasonFamily, reason_label
 from utils.lifecycle_metrics import PhaseMetrics
 
+PROJECTION_DRAIN_CLAIM_HELD = Counter(
+    'omi_batch_projection_drains_skipped_total', 'Owner drain admissions deferred because the fleet claim is held'
+)
+PROJECTION_DRAIN_CLAIM_BUSY_BACKOFFS = Counter(
+    'omi_batch_projection_claim_busy_backoffs_total', 'Owner drain turns deferred after losing the fleet claim race'
+)
+
 LABELS = {Priority.FRESH: 'fresh', Priority.RECENT: 'recent', Priority.DEEP: 'deep'}
 AGE_TARGETS = {Priority.FRESH: 30, Priority.RECENT: 300, Priority.DEEP: 3600}
 PARK_REASONS = frozenset({'privacy', 'pool_duration', 'pool_unit_kind', 'shared_live_policy'})

@@ -13,8 +13,9 @@ from copy import deepcopy
 from unittest.mock import Mock
 
 import pytest
+import pytest_asyncio
 
-from config.batch_pipeline import projection_prefetch_depth
+from config.batch_pipeline import projection_drain_claim_aware_enabled, projection_prefetch_depth
 from config.policy.kill_switches import KILL_SWITCHES
 from database import conversations as conversations_db
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
@@ -29,6 +30,7 @@ from utils.batch_pipeline.serving import Serving
 from utils.sync.assignment import assign_in_transaction
 
 SWITCHES = (
+    'PROJECTION_DRAIN_CLAIM_AWARE',
     'BATCH_PIPELINE_OWNER_DRAIN_ENABLED',
     'BATCH_PIPELINE_PROJECTION_PREFETCH',
     'BATCH_PIPELINE_PROJECTION_INDEX_DEFERRED_ENABLED',
@@ -66,6 +68,9 @@ class Claims:
 @pytest.fixture(autouse=True)
 def claims(monkeypatch):
     state = Claims()
+    monkeypatch.setattr(
+        projection_drain, 'projection_claim_held', lambda namespace, key: key in state.busy or key in state.held
+    )
     monkeypatch.setattr(projection, 'projection_claim', state.claim)
     monkeypatch.setattr(projection_followup, 'projection_claim', state.claim)
     for name in SWITCHES:
@@ -462,6 +467,7 @@ def test_prefetch_depth_kill_switch_and_bounds(monkeypatch):
 
 def test_new_switches_are_registered_kill_switches():
     assert KILL_SWITCHES['BATCH_PIPELINE_OWNER_DRAIN_ENABLED'] is True
+    assert KILL_SWITCHES['PROJECTION_DRAIN_CLAIM_AWARE'] is True
     assert KILL_SWITCHES['BATCH_PIPELINE_PROJECTION_INDEX_DEFERRED_ENABLED'] is True
 
 
@@ -765,3 +771,162 @@ async def test_drain_turn_log_carries_the_last_step_stop(monkeypatch, claims, ca
     with caplog.at_level(logging.INFO, logger=projection_drain.logger.name):
         await projection_drain.OwnerDrains(projector).run(BURST)
     assert any(' advanced=0 ' in r.getMessage() and ' stop=claim_busy ' in r.getMessage() for r in caplog.records)
+
+
+@pytest_asyncio.fixture
+async def drain_timers(monkeypatch):
+    """Advance only drain retry timers, without wall-clock sleeps."""
+    timers = []
+
+    def later(delay, callback):
+        handle = Mock()
+        timers.append((delay, callback, handle))
+        return handle
+
+    monkeypatch.setattr(asyncio.get_running_loop(), 'call_later', later)
+    return timers
+
+
+@pytest.mark.asyncio
+async def test_claim_held_defers_admission_and_retries_after_release(monkeypatch, claims, drain_timers):
+    log = ResultLog()
+    ids = chain(log, BURST, 'a', 3)
+    projector = projector_for(log)
+    drains = projector.drains = projection_drain.OwnerDrains(projector)
+    claims.busy.add(owner_key(BURST))
+    prefetch = Mock(wraps=projector.chain_prefetch)
+    projector.chain_prefetch = prefetch
+    drains.request([BURST])
+    await settle(projector)
+    assert not drains.queue and not drains.tasks and BURST in drains.delayed
+    assert not log.persist_order
+    prefetch.assert_not_called()
+    drains.request([BURST] * 20)  # discovery cannot bypass the delay
+    assert len(drain_timers) == 1
+    delay, retry, _ = drain_timers.pop()
+    assert 5 <= delay <= 15
+    claims.busy.clear()
+    retry()
+    await settle(projector)
+    assert log.persist_order == ids and not drains.delayed
+
+
+@pytest.mark.asyncio
+async def test_claim_busy_again_request_backs_off_and_retries(monkeypatch, claims, drain_timers):
+    # Admission saw a free key; another walker won SET NX before our step.
+    monkeypatch.setattr(projection_drain, 'projection_claim_held', lambda *args: False)
+    log = ResultLog()
+    ids = chain(log, BURST, 'a', 3)
+    projector = projector_for(log)
+    drains = projector.drains = projection_drain.OwnerDrains(projector)
+    claims.busy.add(owner_key(BURST))
+    projector.chain_prefetch = Mock(wraps=projector.chain_prefetch)
+    from utils.batch_pipeline.metrics import PROJECTION_DRAIN_CLAIM_BUSY_BACKOFFS
+
+    before = PROJECTION_DRAIN_CLAIM_BUSY_BACKOFFS._value.get()
+    drains.request([BURST])
+    drains.request([BURST])  # a fresh request arrived during the active turn
+    await settle(projector)
+    assert BURST in drains.delayed and not log.persist_order
+    projector.chain_prefetch.assert_called_once_with(BURST)  # lazy construction remains unchanged
+    assert PROJECTION_DRAIN_CLAIM_BUSY_BACKOFFS._value.get() == before + 1
+    delay, retry, _ = drain_timers.pop()
+    assert 5 <= delay <= 15
+    claims.busy.clear()
+    retry()
+    await settle(projector)
+    assert log.persist_order == ids
+
+
+@pytest.mark.asyncio
+async def test_claim_aware_off_preserves_admission_prefetch_and_no_busy_retry(monkeypatch, claims, drain_timers):
+    monkeypatch.setenv('PROJECTION_DRAIN_CLAIM_AWARE', 'off')
+    peek = Mock(side_effect=AssertionError('off must not peek'))
+    monkeypatch.setattr(projection_drain, 'projection_claim_held', peek)
+    log = ResultLog()
+    chain(log, BURST, 'a', 3)
+    projector = projector_for(log)
+    drains = projector.drains = projection_drain.OwnerDrains(projector)
+    claims.busy.add(owner_key(BURST))
+    projector.chain_prefetch = Mock(wraps=projector.chain_prefetch)
+    drains.request([BURST])
+    await settle(projector)
+    peek.assert_not_called()
+    projector.chain_prefetch.assert_called_once_with(BURST)
+    assert not drains.delayed and not drain_timers and not drains.queue
+
+
+@pytest.mark.asyncio
+async def test_delayed_state_is_bounded_and_close_cancels_retries(monkeypatch, drain_timers):
+    monkeypatch.setattr(projection_drain, 'MAX_DELAYED_OWNERS', 1)
+    drains = projection_drain.OwnerDrains(projector_for(ResultLog()))
+    drains.defer('first')
+    drains.defer('second')
+    assert list(drains.delayed) == ['first'] and not drains.queue
+    assert list(drains.projector.drain_requests) == ['second']
+    _, retry, handle = drain_timers[0]
+    drains.close()
+    handle.cancel.assert_called_once()
+    retry()  # even a callback already dispatched at shutdown cannot resurrect work
+    drains.request(['third'])
+    assert not drains.delayed and not drains.queue and not drains.tasks
+
+
+@pytest.mark.parametrize('mode', ['shadow', 'serve'])
+@pytest.mark.parametrize('value', [None, '', 'true', 'false', '0', 'on', 'unknown', 'off', 'OFF', ' off '])
+def test_claim_aware_is_disabled_only_by_off(monkeypatch, value, mode):
+    monkeypatch.setenv('CAPTURE_COVERAGE_MODE', mode)
+    if value is None:
+        monkeypatch.delenv('PROJECTION_DRAIN_CLAIM_AWARE', raising=False)
+    else:
+        monkeypatch.setenv('PROJECTION_DRAIN_CLAIM_AWARE', value)
+    assert projection_drain_claim_aware_enabled() is (value is None or value.strip().lower() != 'off')
+
+
+@pytest.mark.asyncio
+async def test_peek_outage_still_admits_and_drains_owner(monkeypatch):
+    from database import batch_pipeline_projection_claim as claim_db
+
+    monkeypatch.setattr(claim_db, '_redis_client', Mock(side_effect=RuntimeError('synthetic outage')))
+    monkeypatch.setattr(projection_drain, 'projection_claim_held', claim_db.projection_claim_held)
+    log = ResultLog()
+    ids = chain(log, BURST, 'a', 3)
+    projector = projector_for(log)
+    projector.drains = projection_drain.OwnerDrains(projector)
+    projector.drains.request([BURST])
+    await settle(projector)
+    assert log.persist_order == ids and not projector.drains.delayed
+
+
+@pytest.mark.asyncio
+async def test_claim_busy_without_again_keeps_existing_sweep_retry_behavior(monkeypatch, claims, drain_timers):
+    monkeypatch.setattr(projection_drain, 'projection_claim_held', lambda *args: False)
+    log = ResultLog()
+    chain(log, BURST, 'a', 3)
+    projector = projector_for(log)
+    projector.drains = projection_drain.OwnerDrains(projector)
+    claims.busy.add(owner_key(BURST))
+    projector.drains.request([BURST])
+    await settle(projector)
+    assert not projector.drains.delayed and not drain_timers
+    assert not log.persist_order  # durable rows are still discovered by the sweep
+
+
+@pytest.mark.asyncio
+async def test_productive_continuation_never_peeks_or_backs_off(monkeypatch, drain_timers):
+    log = ResultLog()
+    ids = chain(log, BURST, 'a', 5)
+    projector = projector_for(log)
+    drains = projector.drains = projection_drain.OwnerDrains(projector)
+    monkeypatch.setattr(projection, 'OWNER_DRAIN_STEP_ROWS', 2)
+    ticks = itertools.count(0.0, 10_000.0)
+    monkeypatch.setattr(projection_drain, 'time', Mock(monotonic=lambda: next(ticks)))
+    # Only initial admission may peek. Another peer could hold a claim between
+    # turns, but productive continuations must still enter the ordinary FIFO.
+    peek = Mock(side_effect=[False, AssertionError('continuation must not peek')])
+    monkeypatch.setattr(projection_drain, 'projection_claim_held', peek)
+    drains.request([BURST])
+    await settle(projector)
+    assert log.persist_order == ids
+    peek.assert_called_once()
+    assert not drain_timers and not drains.continuations

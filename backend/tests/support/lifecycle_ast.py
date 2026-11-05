@@ -56,6 +56,8 @@ FIELDS = frozenset(
         'composed_fingerprint',
         'recorded_merged_into',
         'sync_bridge_pending',
+        'home_transcription_pending_at',
+        'home_transcription_deadline_at',
     }
 )
 UNKNOWN = object()

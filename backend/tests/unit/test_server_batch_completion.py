@@ -5,7 +5,7 @@ suite; StrictFirestore deliberately does not approximate those boundaries.
 """
 
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock
 
 import pytest
@@ -60,7 +60,10 @@ def complete(db, admitted=None, generation=2, epoch=4):
     )
 
 
-def test_atomic_terminal_preserves_relevance_and_replay_does_not_repeat_delta(monkeypatch):
+@pytest.mark.parametrize('gate,seconds', [('on', 7200), ('off', 600)])
+def test_atomic_terminal_preserves_relevance_and_replay_does_not_repeat_delta(monkeypatch, gate, seconds):
+    monkeypatch.setenv('HOME_TRANSCRIPTION_PRESENTATION_GATE', gate)
+    monkeypatch.setenv('HOME_TRANSCRIPTION_DEADLINE_SECONDS', str(seconds))
     prior = {'verdict': 'keep', 'decided_by': 'user', 'reason': 'restored', 'trigger': 'user_restore'}
     row = {**capture(), 'relevance_decision': prior}
     db = StrictFirestore({ROW: row, JOB_ROW: job()})
@@ -70,6 +73,9 @@ def test_atomic_terminal_preserves_relevance_and_replay_does_not_repeat_delta(mo
     assert db.rows[ROW]['status'] == db.rows[JOB_ROW]['status'] == 'completed'
     assert db.rows[ROW]['relevance_decision'] == prior
     assert db.rows[ROW]['transcript_segments'] == []
+    assert db.rows[ROW]['home_transcription_pending_at'] == NOW
+    deadline = NOW + timedelta(seconds=seconds)
+    assert db.rows[ROW]['home_transcription_deadline_at'] == deadline
     terminal = db.rows[JOB_ROW]
     assert terminal['fanout_status'] == 'completed'
     assert terminal['fanout_lease_epoch'] == 4
@@ -78,6 +84,7 @@ def test_atomic_terminal_preserves_relevance_and_replay_does_not_repeat_delta(mo
     assert terminal['fanout_key'] == 'conversation:capture:finalization:3'
     assert complete(db) == 'completed'
     assert not db.transactions[-1].has_written
+    assert db.rows[ROW]['home_transcription_deadline_at'] == deadline
     delta.assert_called_once_with(db.transactions[0], None, job(), leased=-1, completed=1, success=1)
     assert jobs._mark_finalization_completed_txn(
         db.transaction(), db.collection(jobs.FINALIZATION_JOBS_COLLECTION).document(JOB), 2, 4, NOW

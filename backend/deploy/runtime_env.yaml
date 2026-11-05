@@ -325,6 +325,12 @@ environments:
           BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
           BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
+          HOME_TRANSCRIPTION_PRESENTATION_GATE:
+            value: 'true'
+            category: ops_kill
+          HOME_TRANSCRIPTION_DEADLINE_SECONDS:
+            value: '7200'
+            category: config
           BATCH_PIPELINE_UID_ALLOWLIST:
             value: ''
           HOSTED_TRANSLATION_API_URL:
@@ -439,6 +445,12 @@ environments:
           CONVERSATION_RELEVANCE_JEV_PERCENT:
             category: ops_kill
             value: '0'
+          HOME_TRANSCRIPTION_PRESENTATION_GATE:
+            value: 'true'
+            category: ops_kill
+          HOME_TRANSCRIPTION_DEADLINE_SECONDS:
+            value: '7200'
+            category: config
           OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
           TRANSCRIPTION_SHADOW_ENABLED: {value: 'true', category: rollout}
           TRANSCRIPTION_SHADOW_KILL_SWITCH: {value: 'false', category: rollout}
@@ -993,6 +1005,12 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            HOME_TRANSCRIPTION_PRESENTATION_GATE:
+              value: 'true'
+              category: ops_kill
+            HOME_TRANSCRIPTION_DEADLINE_SECONDS:
+              value: '7200'
+              category: config
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
@@ -1284,6 +1302,12 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            HOME_TRANSCRIPTION_PRESENTATION_GATE:
+              value: 'true'
+              category: ops_kill
+            HOME_TRANSCRIPTION_DEADLINE_SECONDS:
+              value: '7200'
+              category: config
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             TRANSCRIPTION_SHADOW_ENABLED: {value: 'false', category: rollout}
             TRANSCRIPTION_SHADOW_KILL_SWITCH: {value: 'false', category: rollout}
@@ -1570,6 +1594,12 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            HOME_TRANSCRIPTION_PRESENTATION_GATE:
+              value: 'true'
+              category: ops_kill
+            HOME_TRANSCRIPTION_DEADLINE_SECONDS:
+              value: '7200'
+              category: config
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
@@ -1807,6 +1837,12 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            HOME_TRANSCRIPTION_PRESENTATION_GATE:
+              value: 'true'
+              category: ops_kill
+            HOME_TRANSCRIPTION_DEADLINE_SECONDS:
+              value: '7200'
+              category: config
             BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED:
               value: 'false'
               category: ops_kill
@@ -2443,6 +2479,12 @@ environments:
           BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
           BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
           BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
+          HOME_TRANSCRIPTION_PRESENTATION_GATE:
+            value: 'true'
+            category: ops_kill
+          HOME_TRANSCRIPTION_DEADLINE_SECONDS:
+            value: '7200'
+            category: config
           BATCH_FINAL_PASS_ENABLED:
             config_map:
               name: prod-omi-backend-config
@@ -2665,6 +2707,12 @@ environments:
           CONVERSATION_RELEVANCE_JEV_PERCENT:
             category: ops_kill
             value: '100'
+          HOME_TRANSCRIPTION_PRESENTATION_GATE:
+            value: 'true'
+            category: ops_kill
+          HOME_TRANSCRIPTION_DEADLINE_SECONDS:
+            value: '7200'
+            category: config
           BATCH_FINAL_PASS_ENABLED:
             config_map:
               name: prod-omi-backend-config
@@ -3243,6 +3291,12 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            HOME_TRANSCRIPTION_PRESENTATION_GATE:
+              value: 'true'
+              category: ops_kill
+            HOME_TRANSCRIPTION_DEADLINE_SECONDS:
+              value: '7200'
+              category: config
             BATCH_FINAL_PASS_ENABLED:
               value: 'true'
               category: ops_kill
@@ -3665,6 +3719,12 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            HOME_TRANSCRIPTION_PRESENTATION_GATE:
+              value: 'true'
+              category: ops_kill
+            HOME_TRANSCRIPTION_DEADLINE_SECONDS:
+              value: '7200'
+              category: config
             BATCH_FINAL_PASS_ENABLED:
               value: 'true'
               category: ops_kill
@@ -4084,6 +4144,12 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            HOME_TRANSCRIPTION_PRESENTATION_GATE:
+              value: 'true'
+              category: ops_kill
+            HOME_TRANSCRIPTION_DEADLINE_SECONDS:
+              value: '7200'
+              category: config
             BATCH_FINAL_PASS_ENABLED:
               value: 'true'
               category: ops_kill
@@ -4434,6 +4500,12 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'on', category: rollout}
+            HOME_TRANSCRIPTION_PRESENTATION_GATE:
+              value: 'true'
+              category: ops_kill
+            HOME_TRANSCRIPTION_DEADLINE_SECONDS:
+              value: '7200'
+              category: config
             BATCH_FINAL_PASS_ENABLED:
               value: 'true'
               category: ops_kill

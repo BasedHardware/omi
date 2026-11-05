@@ -621,6 +621,18 @@ FIELD_SITES = {
                 'status',
             ),
         ),
+        (
+            '_complete_server_batch_capture_txn',
+            'home_transcription_deadline_at',
+            'now + timedelta(seconds=home_transcription_deadline_seconds())',
+            ('home_transcription_deadline_at', 'home_transcription_pending_at', 'relevance_decision', 'status'),
+        ),
+        (
+            '_complete_server_batch_capture_txn',
+            'home_transcription_pending_at',
+            'now',
+            ('home_transcription_deadline_at', 'home_transcription_pending_at', 'relevance_decision', 'status'),
+        ),
         # Zero-preview server-batch transaction: job terminal, conversation
         # terminal/relevance update, and the relevance input snapshot.
         (
@@ -642,7 +654,12 @@ FIELD_SITES = {
                 'updated_at',
             ),
         ),
-        ('_complete_server_batch_capture_txn', 'status', "'completed'", ('relevance_decision', 'status')),
+        (
+            '_complete_server_batch_capture_txn',
+            'status',
+            "'completed'",
+            ('home_transcription_deadline_at', 'home_transcription_pending_at', 'relevance_decision', 'status'),
+        ),
         ('_complete_server_batch_capture_txn', 'status', "'completed'", ('status',)),
         (
             '_create_or_get_finalization_intent_txn',
@@ -2855,19 +2872,7 @@ FIELD_SITES = {
     ],
     'utils/episodes/home_read.py': [
         ('project_episode', 'status', "'completed'", ('status',)),
-        (
-            'project_episode',
-            'status',
-            "status; literal aliases=[('status', ('failed', 'processing'))]",
-            (
-                'emoji',
-                'finished_at',
-                'id',
-                'started_at',
-                'status',
-                'title',
-            ),
-        ),
+        ('project_episode', 'status', 'status', ('emoji', 'finished_at', 'id', 'started_at', 'status', 'title')),
     ],
     'utils/episodes/service.py': [
         ('_close', 'status', "'dropped'", ('status',)),
@@ -3910,4 +3915,7 @@ FIELD_SITES = {
     ],
     'utils/workers/consumer.py': [('http_response', 'status', 'result.outcome.value', ('reason', 'status'))],
     'utils/workers/retry.py': [('retry_response', 'status', "'retry'", ('reason', 'status'))],
+    'utils/conversations/transcribing_hold.py': [
+        ('project', 'status', "'completed' if status == 'failed' else status", ('status', 'structured'))
+    ],
 }

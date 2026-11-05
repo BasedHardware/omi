@@ -49,6 +49,7 @@ BUDGET_PATH = BACKEND_DIR / 'config' / 'flag_budget.json'
 FEATURE_FLAGS_PATH = BACKEND_DIR.parent / 'config' / 'feature-flags.yaml'
 SEED_BUDGET = 170  # 2026-10-25 seed; lower it when the surface shrinks, never raise it.
 HELPER_KILL_SWITCHES = {
+    'PROJECTION_DRAIN_CLAIM_AWARE',
     'CONVERSATION_OCCASION_RELEVANCE_ENABLED',
     'LATE_AUDIO_SYNC_INTAKE_ENABLED',
     'EPISODE_RECORDED_TIME_ENABLED',
@@ -231,9 +232,13 @@ def test_helper_kill_switch_budget_entries_match_the_default_on_registry():
         entry = names[name]
         flag = flags[name]
         assert entry['registry'] == 'config/feature-flags.yaml'
-        assert entry['owner'] == 'rollout-meetings / occasion architecture'
+        if name == 'PROJECTION_DRAIN_CLAIM_AWARE':
+            assert entry['owner'] == 'two-lane lead'
+            assert entry['review_by'] == '2026-12-05'
+        else:
+            assert entry['owner'] == 'rollout-meetings / occasion architecture'
+            assert entry['review_by'] == '2026-11-28'
         assert flag['owner'] == 'dazheng'
-        assert entry['review_by'] == '2026-11-28'
         assert flag['kind'] == 'env'
         assert flag['lifecycle'] == 'ops_kill'
         assert 'backend' in flag['surfaces']

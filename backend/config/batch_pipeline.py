@@ -606,6 +606,13 @@ def max_owner_drains() -> int:
     return _pump_bound(os.getenv('BATCH_PIPELINE_MAX_OWNER_DRAINS', '8'), 8, 16)
 
 
+def projection_drain_claim_aware_enabled() -> bool:
+    """Default on; only off disables claim-aware owner-drain admission and backoff."""
+    from config.policy import kill_switch
+
+    return kill_switch('PROJECTION_DRAIN_CLAIM_AWARE')
+
+
 def projection_index_deferred_enabled() -> bool:
     """Kill switch: walks converge search/people-stats after the chain, once per conversation."""
     from config.policy import kill_switch

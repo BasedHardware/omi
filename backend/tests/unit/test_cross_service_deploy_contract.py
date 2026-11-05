@@ -417,7 +417,8 @@ def test_constant_named_env_reads_are_resolved(results: Results) -> None:
     )
 
 
-def test_default_on_wrapper_resolves_constant_env_key(tmp_path: Path) -> None:
+@pytest.mark.parametrize('helper', ['_default_on', 'default_on', 'modes_default_on', 'rollout_default_on'])
+def test_default_on_wrapper_resolves_constant_env_key(tmp_path: Path, helper: str) -> None:
     rel = 'backend/config/synthetic_wrapped_switch.py'
     source = OverlaySource(
         tmp_path,
@@ -426,10 +427,10 @@ def test_default_on_wrapper_resolves_constant_env_key(tmp_path: Path) -> None:
                 "import os\n"
                 "SWITCH_ENV = 'SYNTHETIC_WRAPPED_SWITCH_ENABLED'\n"
                 "UNREAD_ENV = 'SYNTHETIC_UNREAD_SWITCH_ENABLED'\n"
-                "def _default_on(name):\n"
+                f"def {helper}(name):\n"
                 "    return os.getenv(name, 'true').lower() not in {'false', '0', 'off'}\n"
                 "def enabled():\n"
-                "    return _default_on(SWITCH_ENV)\n"
+                f"    return {helper}(SWITCH_ENV)\n"
                 "def unrelated():\n"
                 "    return lookup(UNREAD_ENV)\n"
             )
