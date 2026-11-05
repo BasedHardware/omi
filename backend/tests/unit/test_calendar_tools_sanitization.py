@@ -514,7 +514,8 @@ class TestCalendarToolsSanitization(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(expected, await call())
 
     def setUp(self):
-        # Every case also checks the server log, tracebacks included.
+        # Checks the server log, tracebacks included.
+        # assertLogs detaches this handler, so cases using it check their own capture.
         logs = io.StringIO()
         handler = logging.StreamHandler(logs)
         handler.setFormatter(logging.Formatter())
@@ -597,7 +598,9 @@ class TestCalendarToolsSanitization(unittest.IsolatedAsyncioTestCase):
             ):
                 result = await call()
             self.assertNotIn(self.SENSITIVE, result)
-            self.assertIn(f"{logged}: code=", "\n".join(logs.output))
+            output = "\n".join(logs.output)
+            self.assertIn(f"{logged}: code=", output)
+            self.assertNotIn(self.SENSITIVE, output)
 
     async def test_google_api_and_network_failures_log_without_exception_text(self):
         current = {"id": "evt_123", "summary": "Standup", "attendees": []}
