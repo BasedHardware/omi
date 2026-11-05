@@ -20,7 +20,9 @@ replacement, live segment append, and smart-merge absorb). Redirect-only bumps
 in assignment, smart-merge donor tombstones, and merge-ancestry repointing
 remain terminal. Minimal redrive copies the revision without advancing it.
 Smart merge uses its already-read survivor snapshot before the write codec;
-this keeps the counter, transcript revision, and deadline atomic.
+this keeps the counter, transcript revision, and deadline atomic. The
+smart-merge query review pin is refreshed: the hook mutates the payload only,
+and existing discarded-barrier query drivers still cover every query.
 
 The existing bounded debt repair transaction uses the conversation's current
 eligibility to reopen its exhausted enrichment outbox and reset that outbox's
