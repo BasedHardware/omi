@@ -41,7 +41,7 @@ from config.sync_reprocess import settle_seconds
 from utils.sync import processing_hold
 from config.repeat_work import revision_reuse
 from database._client import get_firestore_client
-from database.summary_processing import record_empty_failure, EMPTY_BLOCKED_REASON
+from database.summary_processing import record_empty_failure, EMPTY_BLOCKED_REASON, EmptyFailureOutcome
 
 Row: TypeAlias = dict[str, Any]
 ResultT = TypeVar('ResultT')
@@ -705,12 +705,18 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
                 raise
             held_reason = HELD_DOCUMENT_SIZE_LIMIT
         except summary_delivery.SummaryOutputUnavailable:
-            if not process_context or not record_empty_failure(
-                get_firestore_client(), COLLECTION, document_id, owner, task_token
-            ):
+            if not process_context:
                 raise
-            record_delivery('summary', 'failed')
-            empty_blocked = True
+            empty_outcome = record_empty_failure(get_firestore_client(), COLLECTION, document_id, owner, task_token)
+            if empty_outcome is EmptyFailureOutcome.STALE:
+                return 'stale'
+            if empty_outcome is EmptyFailureOutcome.RETRY:
+                raise
+            if empty_outcome is EmptyFailureOutcome.OWNER_MISMATCH:
+                process_context.update(defer_reason='summary_owner_changed', defer_until=current + LIVE_DEFER_SECONDS)
+            else:
+                record_delivery('summary', 'failed')
+                empty_blocked = True
         finally:
             ADMITTED_OWNER.reset(admitted_token)
             summary_delivery.REPAIR_CONTEXT.reset(context_token)

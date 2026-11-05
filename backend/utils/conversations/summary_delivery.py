@@ -92,6 +92,30 @@ def present(structured: Any) -> bool:
     return False
 
 
+def rearm_on_revision_change(existing: Row, write: Row, *, now: float | None = None) -> None:
+    """Recompute exhausted debt inside the transaction that advances transcript content.
+
+    Use the pipeline's existing revision, not wall-clock updates or a replay of
+    the same transcript. Keeping this transition with the content write also
+    recovers exhausted rows created before this escape hatch existed.
+    """
+    revision = write.get('sync_content_revision')
+    if (
+        existing.get('summary_blocked_reason') != 'empty_output_exhausted'
+        or not isinstance(revision, int)
+        or revision <= (existing.get('sync_content_revision') or 0)
+        or existing.get('summary_completed_at')
+        or existing.get('summary_output_present')
+    ):
+        return
+    current = time.time() if now is None else now
+    write.update(
+        summary_blocked_reason=None,
+        summary_empty_failures=0,
+        summary_due_at=current + deadline_seconds(),
+    )
+
+
 def prepare(data: Row, uid: str, *, now: float | None = None) -> None:
     """Called on plaintext inside the existing write codec: zero reads."""
     if not enabled(uid) or 'structured' not in data:

@@ -30,6 +30,7 @@ from utils.conversations.size_limit import (
     projected_document_bytes,
     projected_size_bucket,
 )
+from utils.conversations.summary_delivery import rearm_on_revision_change
 from utils.observability.fallback import record_fallback
 from utils.sync.size_telemetry import (
     finish_size_attempt,
@@ -993,6 +994,8 @@ def assign_in_transaction(
         # Read all occupied day buckets before the first write.
         index.read(extent)
         result.update(write_span(result, arrival_at=incoming.get('arrival_at')))
+        if survivors or transfers:
+            rearm_on_revision_change(current or {}, result)
         payload = encode(result)
         payload.pop('photos', None)
         if current is not None:

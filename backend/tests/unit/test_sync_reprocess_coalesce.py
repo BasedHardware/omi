@@ -39,13 +39,15 @@ def state(monkeypatch):
     monkeypatch.setattr(enrichment_scan, 'finish', lambda *_: None)
 
     def empty_failure(_client, _collection, document_id, owner, token):
+        from database.summary_processing import EmptyFailureOutcome
+
         row = rows[document_id]
         assert row['owner'] == owner and row['task_token'] == token
         row['summary_empty_failures'] = min(3, row.get('summary_empty_failures', 0) + 1)
         if row['summary_empty_failures'] == 3:
             row.update(dormant=True, due_at=None, lease_until=0, summary_blocked_reason='empty_output_exhausted')
-            return True
-        return False
+            return EmptyFailureOutcome.BLOCKED
+        return EmptyFailureOutcome.RETRY
 
     # Actual multi-document failure persistence is exercised by the emulator.
     monkeypatch.setattr(reprocess, 'record_empty_failure', empty_failure)
@@ -871,6 +873,22 @@ def test_empty_kept_output_has_a_terminal_budget_and_cannot_be_remarked(state, m
     process = Mock()
     assert reprocess.run(key, token, process, now=1000) == 'stale'
     process.assert_not_called()
+
+
+def test_legacy_empty_output_owner_race_defers_without_spending_attempts(state, monkeypatch):
+    from database.summary_processing import EmptyFailureOutcome
+
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
+    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', 'u')
+    monkeypatch.setattr(reprocess, 'record_empty_failure', lambda *_: EmptyFailureOutcome.OWNER_MISMATCH)
+    rows, tasks = state
+    reprocess.mark('u', 'c', 'en', now=0)
+    key, token = reprocess.key('u', 'c'), tasks[0]['task_token']
+    rows[key].update(summary_empty_failures=2)
+    assert reprocess.run(key, token, lambda *_: SimpleNamespace(structured={}), now=120) == 'deferred'
+    assert rows[key]['deferred_reason'] == 'summary_owner_changed'
+    assert rows[key]['summary_empty_failures'] == 2
+    assert rows[key]['lease_until'] == 0 and rows[key]['task_token'] != token
 
 
 def test_revision_changed_before_repair_claim_keeps_same_version_debt(state, monkeypatch):
