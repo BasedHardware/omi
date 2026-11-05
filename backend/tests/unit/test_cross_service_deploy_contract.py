@@ -411,6 +411,10 @@ def test_prod_service_url_in_dev_fails(results: Results) -> None:
 def test_constant_named_env_reads_are_resolved(results: Results) -> None:
     # Read through SMART_MERGE_FLATTEN_ENV; a literal-only scanner would call this kill switch dead.
     assert 'CONVERSATION_SMART_MERGE_FLATTEN_ENABLED' in results.baseline.readers.all_reads
+    assert (
+        'backend/config/batch_conversation_speakers.py'
+        in results.baseline.readers.all_reads['BATCH_FINAL_PASS_ENABLED'].modules
+    )
 
 
 @pytest.mark.parametrize('helper', ['_default_on', 'default_on', 'modes_default_on', 'rollout_default_on'])

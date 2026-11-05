@@ -53,7 +53,7 @@ def align_projection_words(words, payload, segment_id):
 
 def split_result(item, payload):
     duration = float(payload['audio_seconds'])
-    if not 0 < duration <= 7200 or abs(duration - item.duration_seconds) > 0.1:
+    if not 0 < duration <= 7200 or abs(duration - item.duration_seconds) > 0.1 + 1 / 16000 + 1e-9:
         raise ValueError('result audio duration differs from admitted capture')
     words = bounded_projection_words(payload['words'], duration)
     if 'speech_spans' in payload or item.requires_compute_admission:

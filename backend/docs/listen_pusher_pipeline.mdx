@@ -6,6 +6,13 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
+`BATCH_FINAL_PASS_ENABLED` defaults on; production binds it explicitly on Cloud
+Run backend/sync/sync-backfill/integration and via the shared ConfigMap on GKE
+backend-listen/Pusher and installed sync workers. Direct and queued final passes
+share one conversation/unit-membership obligation; direct terminal settlement
+follows canonical persistence. Live or closed claims permit manual overlays but
+no second automatic pass. See the [serving and rollback contract](runbooks/batch-conversation-speakers.md#rollback-on-every-serving-runtime).
+
 Prerecorded Modulate STT/LID and Parakeet v1/v2 POST boundaries count attempted
 audio payload bytes in `omi_prerecorded_vendor_payload_bytes_total` with fixed
 provider/endpoint labels. Retries count each attempt; breaker refusals count none.

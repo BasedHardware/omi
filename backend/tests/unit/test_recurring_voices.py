@@ -211,6 +211,25 @@ def test_kill_switch_and_percent_are_nested_under_batch_admission(monkeypatch):
     assert not flags.recurring_enabled_for('u', batch)
 
 
+def test_resolved_batch_binding_keeps_admission_without_reopening_audio_units(monkeypatch):
+    from types import SimpleNamespace
+
+    resolved = [SimpleNamespace(speaker_id_scope='final:batch:conversation:c1', provider_speaker=None)]
+    assert flags.recurring_enabled_for('u', resolved)
+    assert not flags.final_pass_enabled_for('u', resolved)
+    for name, value in [
+        ('BATCH_FINAL_PASS_ENABLED', 'false'),
+        ('BATCH_FINAL_PASS_PERCENT', '0'),
+        ('BATCH_FINAL_PASS_PERCENT', 'nan'),
+        ('SPEAKER_RECURRING_VOICES_ENABLED', 'false'),
+        ('SPEAKER_RECURRING_PERCENT', '0'),
+        ('BATCH_CONVERSATION_SPEAKERS_ENABLED', 'false'),
+    ]:
+        with monkeypatch.context() as current:
+            current.setenv(name, value)
+            assert not flags.recurring_enabled_for('u', resolved)
+
+
 def test_near_misses_are_suggestions_never_names():
     near = (np.array(VOICE) * 0.45 + np.array(OTHER) * np.sqrt(1 - 0.45**2)).tolist()
     assert p.near_misses(VOICE, {'near': near, 'owner': OWNER, 'user': VOICE}) == [

@@ -249,7 +249,7 @@ def _recent_conversation(uid: str, conversation_id: str, now: float) -> bool:
         return False
 
 
-def _dispatch_binding(
+def dispatch_binding(
     *, backfill: bool = False, effects_only: bool = False, recent: bool = False
 ) -> dict[str, str] | None:
     if enrichment_config.route() == 'enrichment_queue':
@@ -502,10 +502,10 @@ def mark_update(
                 task_due_at=row['due_at'],
                 lease_until=0,
                 dispatch=(new_dispatch() if new_dispatch else None)
-                or _dispatch_binding(backfill=backfill, effects_only=effects_only, recent=bool(recent)),
+                or dispatch_binding(backfill=backfill, effects_only=effects_only, recent=bool(recent)),
             )
         elif old.get('dormant'):
-            row['dispatch'] = _dispatch_binding(backfill=backfill, effects_only=effects_only, recent=bool(recent))
+            row['dispatch'] = dispatch_binding(backfill=backfill, effects_only=effects_only, recent=bool(recent))
         elif not valid_dispatch_binding(row.get('dispatch')):
             row['dispatch'] = None
         wake = old is None
@@ -940,7 +940,7 @@ def sweep(
             ):
                 if recent is None:
                     recent = _recent_conversation(row['uid'], row['conversation_id'], current)
-                desired = _dispatch_binding(recent=recent)
+                desired = dispatch_binding(recent=recent)
                 previous = row['dispatch']
                 if (
                     desired is not None
@@ -971,7 +971,7 @@ def sweep(
             if not expired and row.get('wake_check_after', 0) > current:
                 return old, ('skipped', None)
             if not injected and not valid_effects_binding(row):
-                binding = _dispatch_binding(
+                binding = dispatch_binding(
                     backfill=row.get('summary_lane') == 'backfill' and not first_summary_pending(row),
                     effects_only=bool(row.get('effects_only')),
                     recent=(
@@ -1123,7 +1123,7 @@ def mark_effects(uid: str, conversation_id: str, language: str, *, immediate: bo
 
 
 def _effects_binding() -> dict[str, str]:
-    binding = _dispatch_binding(backfill=summary_delivery.lane({}) == 'backfill', effects_only=True)
+    binding = dispatch_binding(backfill=summary_delivery.lane({}) == 'backfill', effects_only=True)
     if binding is not None:
         return binding
     # Listen/pusher already have the durable finalization queue, identity and

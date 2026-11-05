@@ -14,9 +14,7 @@ sweep. A provider unit is admitted exactly once, so a second ``enqueue`` of an o
 
 from __future__ import annotations
 
-import random
 import re
-import time
 import uuid
 from typing import Any, Callable, Literal, Mapping
 
@@ -118,28 +116,9 @@ class FirestoreProviderSttOutbox:
         return (client or self._client()).collection(self._collection or collection_name()).document(row_id)
 
     def _mutate(self, row_id: str, operation: Callable[[Row | None], tuple[Row | None, Any]]) -> Any:
-        """Optimistic CAS on one document, as the enrichment outbox does (fenced by update time)."""
-        from google.api_core.exceptions import AlreadyExists, FailedPrecondition, NotFound
-        from google.cloud import firestore
+        from database.outbox_cas import mutate
 
-        ref = self._ref(row_id)
-        for attempt in range(10):
-            snapshot = ref.get()
-            old = snapshot.to_dict() if snapshot.exists else None
-            new, result = operation(old)
-            if new == old:
-                return result
-            try:
-                if old is None:
-                    ref.create(new)
-                else:
-                    ref.update(new, option=firestore.LastUpdateOption(snapshot.update_time))
-                return result
-            except (AlreadyExists, FailedPrecondition, NotFound):
-                if attempt == 9:
-                    raise
-                time.sleep(random.uniform(0.005, min(0.2, 0.01 * 2**attempt)))
-        raise AssertionError('provider-stt outbox CAS must return or raise within its retry budget')
+        return mutate(self._ref(row_id), operation)
 
     def _wake(self, row: Mapping[str, Any]) -> None:
         self._create_wake(row['segment_id'], row['task_token'], float(row['due_at']))

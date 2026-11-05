@@ -47,6 +47,44 @@ _EXPECTED_DEPLOYABLE_CAPABILITIES: dict[tuple[str, str], frozenset[str]] = {
 # Summary acceptance must agree on every finalization host.
 FINALIZATION_GATE_FLAGS = ('CLIENT_SUMMARIES_AT_CAP_ENABLED',)
 
+BATCH_FINAL_PASS_FLAG = 'BATCH_FINAL_PASS_ENABLED'
+BATCH_FINAL_PASS_HOSTS = (
+    ('gke', 'backend-listen'),
+    ('gke', 'pusher'),
+    ('cloud_run', 'backend'),
+    ('cloud_run', 'backend-sync'),
+    ('cloud_run', 'backend-sync-backfill'),
+    ('cloud_run', 'backend-integration'),
+)
+
+
+def validate_batch_final_pass_hosts(env: str, config: ConfigDict) -> list[ValidationError]:
+    """Independent serving roster: deleting a binding cannot hide a runtime."""
+    if env != 'prod':
+        return []
+    errors, values = [], set()
+    gke = config.get('gke', {})
+    config_map = gke.get('config_map', {})
+    flag = BATCH_FINAL_PASS_FLAG
+    for platform, name in BATCH_FINAL_PASS_HOSTS:
+        services = gke if platform == 'gke' else config.get('cloud_run', {}).get('services', {})
+        entry = services.get(name, {}).get('env', {}).get(flag, {})
+        value = entry.get('value')
+        if platform == 'gke':
+            expected = {'name': config_map.get('name'), 'key': flag}
+            if entry.get('config_map') != expected or not expected['name']:
+                errors.append(ValidationError(f'{platform}/{name}', f'{flag} must use the shared ConfigMap'))
+            source = config_map.get('entries', {}).get(flag, {})
+            value = source.get('value') if source.get('source') == 'literal' else None
+        if value not in {'true', 'false'}:
+            errors.append(ValidationError(f'{platform}/{name}', f'{flag} needs an explicit true/false binding'))
+        else:
+            values.add(value)
+    if len(values) > 1:
+        errors.append(ValidationError('batch_final_pass', f'{flag} must agree across all production hosts'))
+    return errors
+
+
 # The runtime resolves these flags with strip().casefold() against the truthy
 # set {'1','true','yes','on'}; anything else — including '' — is silently False.
 # Admission therefore only accepts that truthy set and its falsy counterparts,
@@ -321,11 +359,14 @@ def validate_speaker_embedding_hosts(env: str, env_config: ConfigDict) -> list[V
 
 
 __all__ = [
+    'BATCH_FINAL_PASS_FLAG',
+    'BATCH_FINAL_PASS_HOSTS',
     'CANONICAL_MEMORY_MUTATION_CAPABILITY',
     'CONVERSATION_FINALIZATION_CAPABILITY',
     'FINALIZATION_GATE_FLAGS',
     'SPEAKER_EMBEDDING_ENV',
     'SPEAKER_EMBEDDING_HOSTS',
     'validate_conversation_finalization_capabilities',
+    'validate_batch_final_pass_hosts',
     'validate_speaker_embedding_hosts',
 ]

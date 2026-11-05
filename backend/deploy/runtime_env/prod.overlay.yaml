@@ -47,6 +47,9 @@ overlay:
       env:
         HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
         HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
+        BATCH_FINAL_PASS_ENABLED:
+          config_map: {name: prod-omi-backend-config, key: BATCH_FINAL_PASS_ENABLED}
+          category: ops_kill
         # Graduation of the David-approved on-demand playback (DEC-BTR-004): build playback
         # artifacts on open/play/download only. Kill switch: set false.
         STT_GPU_FLEET_OFF: {value: 'true', category: ops_kill}
@@ -272,6 +275,9 @@ overlay:
       env:
         HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
         HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
+        BATCH_FINAL_PASS_ENABLED:
+          config_map: {name: prod-omi-backend-config, key: BATCH_FINAL_PASS_ENABLED}
+          category: ops_kill
         PUSHER_MAX_CLOSED_RECORD_DRAINS: {value: '64', category: rollout}
         PUSHER_ABANDON_EVICTED_TOKENS: {value: 'on', category: ops_kill}
         PUSHER_MAX_ABANDON_RECORD_DRAINS: {value: '4', category: rollout}
@@ -407,6 +413,7 @@ overlay:
           category: rollout
     config_map:
       entries:
+        BATCH_FINAL_PASS_ENABLED: {source: literal, value: 'true'}
         STT_SERVICE_MODELS:
           value: parakeet-window,modulate-velma-2,soniox
           source: literal
@@ -537,6 +544,7 @@ overlay:
         env:
           HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
+          BATCH_FINAL_PASS_ENABLED: {value: 'true', category: ops_kill}
           # Plan C3 prod activation: new sr- obligations bind to /v2/enrichment/run on the enrichment queue,
           # served by backend-integration. Rows keep the binding they were created with, so the kill switch
           # ENRICHMENT_ROUTE=sync_handler never strands work (the old /v2/sync-jobs/run binding stays accepted).
@@ -904,6 +912,7 @@ overlay:
         env:
           HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
+          BATCH_FINAL_PASS_ENABLED: {value: 'true', category: ops_kill}
           # Standing batch vendor route table (lead2 863cd6, David 49b7e4/065da8): compact JSON of
           # backend/deploy/batch-pipeline/vendor_route_table.prod.json (en-overflow-1104b), pinned by
           # tests/unit/test_batch_vendor_route_table_prod.py. Fresh English overflows to Modulate past
@@ -1314,6 +1323,7 @@ overlay:
         env:
           HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
+          BATCH_FINAL_PASS_ENABLED: {value: 'true', category: ops_kill}
           # Standing batch vendor route table (lead2 863cd6, David 49b7e4/065da8): compact JSON of
           # backend/deploy/batch-pipeline/vendor_route_table.prod.json (en-overflow-1104b), pinned by
           # tests/unit/test_batch_vendor_route_table_prod.py. Fresh English overflows to Modulate past
@@ -1685,6 +1695,7 @@ overlay:
         env:
           HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
+          BATCH_FINAL_PASS_ENABLED: {value: 'true', category: ops_kill}
           # Standing batch vendor route table (lead2 863cd6, David 49b7e4/065da8): compact JSON of
           # backend/deploy/batch-pipeline/vendor_route_table.prod.json (en-overflow-1104b), pinned by
           # tests/unit/test_batch_vendor_route_table_prod.py. Fresh English overflows to Modulate past

@@ -36,7 +36,7 @@ def store(monkeypatch):
     monkeypatch.setattr(outbox, 'owns_runtime', lambda: True)
     monkeypatch.setattr(
         outbox,
-        '_dispatch_binding',
+        'dispatch_binding',
         lambda **_: {
             'queue': 'synthetic',
             'handler': 'https://worker.invalid/v2/enrichment/run',

@@ -219,6 +219,7 @@ recordSealRepair:
   # Retained for evening overlap and rollback; lead overrides false for the first peak.
   suspend: true
   runtimeEnabled: true
+  jobsDiscovery: "on"
   mode: apply
   workers: 8
   rowSeconds: 270

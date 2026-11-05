@@ -118,5 +118,32 @@
     "labelExtractors": {
       "reason": "REGEXP_EXTRACT(jsonPayload.message, \"\\\"partial_reason\\\": \\\"(tail_lagging|budget_limit|tail_lost_or_unproven)\\\"\")"
     }
+  },
+  {
+    "name": "omi_record_seal_repair_blocker_outcomes",
+    "description": "Proof-gated pending repair outcomes by closed blocker and disposition.",
+    "filter": "resource.type=\"k8s_container\" AND resource.labels.namespace_name=\"prod-omi-backend\" AND resource.labels.container_name=\"repair\" AND jsonPayload.logger=\"record-seal-repair\" AND jsonPayload.message:\"\\\"event\\\": \\\"record_seal_repair_row\\\"\" AND jsonPayload.message:\"\\\"blocker\\\"\"",
+    "metricDescriptor": {
+      "metricKind": "DELTA",
+      "valueType": "INT64",
+      "unit": "1",
+      "labels": [
+        {
+          "key": "disposition",
+          "valueType": "STRING",
+          "description": "Closed repair outcome."
+        },
+        {
+          "key": "blocker",
+          "valueType": "STRING",
+          "description": "Closed pending blocker class."
+        }
+      ]
+    },
+    "valueExtractor": "REGEXP_EXTRACT(jsonPayload.message, \"\\\"count\\\": ([0-9]+)\")",
+    "labelExtractors": {
+      "disposition": "REGEXP_EXTRACT(jsonPayload.message, \"\\\"disposition\\\": \\\"([a-z_]+)\\\"\")",
+      "blocker": "REGEXP_EXTRACT(jsonPayload.message, \"\\\"blocker\\\": \\\"(partial_barrier|producer_pending_tokens|upload_failed|already_closed_job_pending|conversation_missing|seal_eligible)\\\"\")"
+    }
   }
 ]
