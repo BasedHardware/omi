@@ -45,7 +45,7 @@ resolver and must retain the constraints on a subsequent live finalization.
 No GPU model or listen change is required by this fix.
 Verify each traffic-bearing revision's release SHA; then verify the current batch
 cohort's cross-unit speaker counts, named-owner/person attribution, manual edits,
-abstentions and enrichment latency before expanding batch admission. Existing
+abstentions and enrichment latency after the immediate 100% serving step. This runbook has no ramp; batch admission is the separate existing policy and is not changed here. Existing
 `omi_conversation_speaker_resolution_total` and its reason/coverage logs measure
 resolver completion; they do not prove human attribution accuracy. Qualify real
 audio separately through the authorized staging fixtures; synthetic tests prove
