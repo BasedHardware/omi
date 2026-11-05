@@ -2,7 +2,12 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/schema.dart';
+import 'package:omi/providers/action_items_provider.dart';
+import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/conversation_task_presence_provider.dart';
 import 'package:omi/services/auth/auth_token_result.dart';
 import 'package:omi/services/auth_service.dart';
@@ -18,6 +23,47 @@ class TaskFilterGateway implements AuthTokenGateway {
 }
 
 void main() {
+  setUp(() async {
+    SharedPreferences.setMockInitialValues({});
+    await SharedPreferencesUtil.init();
+  });
+
+  testWidgets('production task refresh and conversation notifications invalidate bound badges', (tester) async {
+    final tasks = ActionItemsProvider(
+        getActionItems: (
+                {limit = 100,
+                offset = 0,
+                completed,
+                conversationId,
+                startDate,
+                endDate,
+                dueStartDate,
+                dueEndDate}) async =>
+            const ActionItemsResponse(actionItems: [], hasMore: false));
+    final conversations = ConversationProvider(
+        conversationListFetcher: () async => (items: <ServerConversation>[], ok: true), isSignedIn: () => true);
+    var linked = true;
+    final presence = ConversationTaskPresenceProvider(
+        auth: AuthService.forTesting(tokenGateway: TaskFilterGateway()),
+        fetch: (ids, current) async => ApiSuccess({for (final id in ids) id: linked}));
+    presence.bind(conversations, tasks);
+    addTearDown(presence.dispose);
+    addTearDown(tasks.dispose);
+    addTearDown(conversations.dispose);
+    await tasks.ensureLoaded();
+    presence.request('a');
+    await tester.pump(const Duration(milliseconds: 151));
+    expect(presence.presence('a'), isTrue);
+    linked = false;
+    await tasks.forceRefreshActionItems();
+    await tester.pump(const Duration(milliseconds: 151));
+    expect(presence.presence('a'), isFalse);
+    linked = true;
+    conversations.clearUserData();
+    await tester.pump(const Duration(milliseconds: 151));
+    expect(presence.presence('a'), isTrue);
+  });
+
   testWidgets('visible requests batch; canonical mutations replace both true and false', (tester) async {
     final gateway = TaskFilterGateway();
     final auth = AuthService.forTesting(tokenGateway: gateway);

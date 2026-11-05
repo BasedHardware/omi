@@ -45,6 +45,7 @@ void main() {
     Env.overrideApiBaseUrl(base);
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
+    OmiColors.active = OmiColors.forBrightness(Brightness.dark);
     final client = http.Client();
     addTearDown(client.close);
     Future<http.Response> send(ApiRequest r) =>
@@ -67,6 +68,7 @@ void main() {
           ChangeNotifierProvider.value(value: presence),
         ],
         child: MaterialApp(
+          debugShowCheckedModeBanner: false,
           theme: buildOmiTheme(brightness: Brightness.dark),
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,

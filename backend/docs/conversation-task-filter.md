@@ -36,10 +36,22 @@ on row rebuilds. Filter loads fence superseded requests and account changes;
   FastAPI HTTP/serialization integration with synthetic authentication.
 - [x] Widget/API/provider regressions: failure/retry, empty continuation,
   superseded responses, account switch, task changes, large text and semantic badge.
-- [ ] Native simulator acceptance using the production widgets, APIs and local
+- [x] Native simulator acceptance using the production widgets, APIs and local
   routes below, including Home position restoration.
-- [ ] Query/contract guards, affected mobile journeys, final diff review and
-  required CI for the submitted commit. Keep the PR draft until these pass.
+- [x] Query/contract guards and all 31 selected mobile journeys.
+- [x] Final source review, including current canonical authority, cursor progress,
+  redaction, async offload, account revocation and released-client compatibility.
+- [ ] Final repository preflight and required CI for the submitted commit. Keep
+  the PR draft until these pass.
+
+Local evidence: Flutter 3.44.5/Dart 3.12.2; iPhone 17 Pro simulator/iOS 26.5;
+Python 3.11; isolated `demo-fs-p1` Firestore emulator. The final native flow passed
+with real loopback HTTP, including a 503 fault and deletion refresh. 31 focused
+mobile regressions and 31 selected journeys passed. The query/contract batch
+passed 611 tests; the separate compatibility/rate-limit batch passed 149 with one
+pre-existing skip. Three production-query/HTTP emulator cases passed. These
+batches overlap; their counts are not a unique-test total. Analyzer reports only
+the existing private-return-type info in `main.dart`; new sources have no errors.
 
 The shared HTTP stale-error guards and regressions are reused from #24182
 (`e53adc5fd0`, `6fc6816804`), preserving current main's newer streaming behavior.
