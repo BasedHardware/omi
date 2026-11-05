@@ -14,6 +14,8 @@ import pytest
 
 from tests.support.lifecycle_ast import builders, constant_names, fields_for, literal_key, payload_sites
 from tests.support.lifecycle_state_table import FIELD_BUILDERS, FIELD_SITES, STATES
+from tests.support.lifecycle_writer_inventory import KNOWN_TERMINAL_WRITERS
+from tests.support.terminal_writer_inventory import terminal_candidate_modules
 
 BACKEND = Path(__file__).resolve().parents[2]
 UNIQUE_FIELDS = frozenset(
@@ -360,12 +362,32 @@ def test_fair_use_state_literals_have_rows(module):
     }
 
 
-# Runs through the existing lifecycle writer gate locally and in CI.
-def test_terminal_status_writers_match_strict_owner_allowlist():
-    from tests.support.lifecycle_writer_inventory import KNOWN_TERMINAL_WRITERS
-    from tests.support.terminal_writer_inventory import assert_terminal_writers, scan_terminal_writers
+# One module per test keeps the full inventory in the normal fast unit lane,
+# without suppressing its CPU guard. Retired modules are included explicitly.
+@pytest.mark.parametrize(
+    'module',
+    sorted(
+        set(terminal_candidate_modules(BACKEND))
+        | {module for sites in KNOWN_TERMINAL_WRITERS.values() for module, _function in sites}
+    ),
+)
+def test_terminal_status_writers_match_strict_owner_allowlist(module):
+    from tests.support.terminal_writer_inventory import assert_terminal_writers, terminal_writer_sites
 
-    assert_terminal_writers(scan_terminal_writers(BACKEND), KNOWN_TERMINAL_WRITERS)
+    path = BACKEND / module
+    actual = (
+        terminal_writer_sites(path.read_text(), module)
+        if path.exists()
+        else {
+            'conversation': set(),
+            'finalization': set(),
+        }
+    )
+    expected = {
+        machine: {site: tag for site, tag in sites.items() if site[0] == module}
+        for machine, sites in KNOWN_TERMINAL_WRITERS.items()
+    }
+    assert_terminal_writers(actual, expected)
 
 
 @pytest.mark.parametrize(

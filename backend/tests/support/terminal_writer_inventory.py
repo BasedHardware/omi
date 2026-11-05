@@ -362,8 +362,8 @@ def terminal_writer_sites(source, module):
     return found
 
 
-def scan_terminal_writers(backend):
-    found = {machine: set() for machine in TERMINAL_STATUSES}
+def terminal_candidate_modules(backend):
+    """Cheap source prefilter shared by the full scan and per-file CI checks."""
     for directory, children, files in os.walk(backend):
         children[:] = sorted(
             name
@@ -385,8 +385,14 @@ def scan_terminal_writers(backend):
                 r'''(?:['"]status['"]|status\s*=|\.status\s*=|claim_conversation_status)''', source
             ):
                 continue
-            for machine, sites in terminal_writer_sites(source, path.relative_to(backend).as_posix()).items():
-                found[machine].update(sites)
+            yield path.relative_to(backend).as_posix()
+
+
+def scan_terminal_writers(backend):
+    found = {machine: set() for machine in TERMINAL_STATUSES}
+    for module in terminal_candidate_modules(backend):
+        for machine, sites in terminal_writer_sites((backend / module).read_text(), module).items():
+            found[machine].update(sites)
     return found
 
 
