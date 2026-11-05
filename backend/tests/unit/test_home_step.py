@@ -24,6 +24,8 @@ def row(**updates):
 
 
 def minimum(title='Mm-hmm.', **updates):
+    """A stand-in title on a row that still owes its summary."""
+    updates.setdefault('summary_due_at', NOW.timestamp())
     return row(structured={'title': title, 'overview': '', 'title_provenance': 'server_minimum'}, **updates)
 
 
@@ -46,6 +48,26 @@ def minimum(title='Mm-hmm.', **updates):
 )
 def test_classify(data, expected):
     assert home_step.classify(data) == expected
+
+
+def test_restamped_finished_title_is_ready_not_processing_forever():
+    """GLM P1 on #24732: neutralize re-stamps server_minimum on read for finished rows."""
+    finished = minimum('Thank you.', summary_due_at=None)
+    assert home_step.classify(finished) == 'ready'
+    delivered = minimum('Thank you.', summary_completed_at=NOW.timestamp())
+    assert home_step.classify(delivered) == 'ready'
+    output = minimum('Thank you.', summary_output_present=True)
+    assert home_step.classify(output) == 'ready'
+    projected = home_titles.neutralize_minimum_title(
+        row(
+            started_at=NOW - timedelta(seconds=40),
+            finished_at=NOW,
+            transcript_segments=[{'text': 'Thank you.'}],
+            structured={'title': 'Thank you.', 'overview': 'A short thanks.'},
+        )
+    )
+    assert projected['structured']['title_provenance'] == 'server_minimum'
+    assert home_step.classify(projected) == 'ready'
 
 
 def test_empty_blocked_minimum_is_noise():

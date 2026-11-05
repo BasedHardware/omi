@@ -22,6 +22,7 @@ from typing import Any
 from config.episodes import home_step_projection_enabled
 from utils.conversations import transcribing_hold
 from utils.conversations.fragment_visibility import is_completed_below_floor, is_user_curated
+from utils.conversations.home_titles import summary_owed
 from utils.conversations.summary_delivery import EMPTY_BLOCKED_REASONS
 
 READY = 'ready'
@@ -69,7 +70,9 @@ def classify(row: Mapping[str, Any]) -> str | None:
     provisional = structured.get('title_provenance') == 'server_minimum'
     if is_completed_below_floor(row) or (provisional and row.get('summary_blocked_reason') in EMPTY_BLOCKED_REASONS):
         return NOISE
-    if provisional:
+    if provisional and summary_owed(row):
+        # Read projections re-stamp server_minimum on finished rows whose generated
+        # title echoes the transcript, so provenance alone never proves pending work.
         return WRITING_NOTES
     if not title and not str(structured.get('overview') or '').strip() and not row.get('transcript_segments'):
         # A capture whose speech has not landed; unstamped legacy rows have no deadline.
