@@ -166,6 +166,9 @@ def _assert_batch_write_allowed_memo(
     attempt = current_attempt()
     if attempt is None or transaction is None or snapshots is not None:
         metrics.memo_result('batch', 'ineligible')
+        metrics.memo_ineligible(
+            'no_attempt' if attempt is None else 'no_transaction' if transaction is None else 'snapshots'
+        )
         return _assert_batch_write_allowed_live(
             client,
             transaction,
