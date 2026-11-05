@@ -161,6 +161,15 @@ def test_action_item_revision_race_kill_switch_restores_the_failure(rows, monkey
     assert isinstance(raised.value, ValueError) and str(raised.value) == 'refresh conversation revision changed'
 
 
+def test_enrichment_delivery_activates_early_abort_only_during_its_callback(rows):
+    from utils.enrichment import early_abort
+
+    seen = []
+    result = _deliver(rows, Mock(side_effect=lambda *_: seen.append(early_abort.ACTIVE.get())))
+    assert (result.outcome, result.reason) == ('done', 'processed')
+    assert seen == [True] and early_abort.ACTIVE.get() is False
+
+
 def test_open_live_target_defers_with_a_new_wake(rows, monkeypatch):
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')

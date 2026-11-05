@@ -98,6 +98,7 @@ from utils.conversations.duplicate_capture import link_duplicate_captures
 from utils.conversations.sync_hold_completion import complete_explicit, defer_held_budget_denial
 from utils.conversations.merge_before_processing import before_notes, ConversationAbsorbed
 from utils.enrichment.admission import SyncConversationPersistenceFenced
+from utils.enrichment import early_abort
 from utils.conversations.processing_trigger import PROCESSING_MODES, ProcessingTrigger, is_recovery_trigger
 from utils.conversations.recovery import (
     RECOVERY_QUIET_MINIMUM_MAX_WORDS,
@@ -2608,7 +2609,6 @@ def process_conversation(
     first_party_only: bool = False,
     derived_effects_transcript_sha256: str | None = None,
     finalization_fence: tuple[str, int, int] | None = None,
-    revision_checkpoint: Callable[[str], None] | None = None,
 ) -> Conversation:
     """Process using trigger policy and stored user-kept authority.
 
@@ -2792,6 +2792,7 @@ def process_conversation(
         nonlocal recovery_minimum_fallback
         recovery_minimum_fallback = True
 
+    revision_checkpoint = early_abort.checkpoint_for(uid, conversation)
     structured, discarded = _get_structured(
         uid,
         language_code,
