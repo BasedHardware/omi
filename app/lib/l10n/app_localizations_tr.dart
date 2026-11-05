@@ -580,6 +580,27 @@ class AppLocalizationsTr extends AppLocalizations {
   String get doubleTapAction => 'Çift Dokunma İşlemi';
 
   @override
+  String get singlePress => 'Single Press';
+
+  @override
+  String get triplePress => 'Triple Press';
+
+  @override
+  String get longPress => 'Long Press';
+
+  @override
+  String get singlePressAction => 'Single Press Action';
+
+  @override
+  String get triplePressAction => 'Triple Press Action';
+
+  @override
+  String get turnOnOff => 'Aç / Kapat';
+
+  @override
+  String get triplePressSubtitle => 'Requires updated firmware';
+
+  @override
   String get endAndProcess => 'Konuşmayı Sonlandır ve İşle';
 
   @override

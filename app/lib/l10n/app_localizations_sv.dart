@@ -580,6 +580,27 @@ class AppLocalizationsSv extends AppLocalizations {
   String get doubleTapAction => 'Dubbeltrycksåtgärd';
 
   @override
+  String get singlePress => 'Single Press';
+
+  @override
+  String get triplePress => 'Triple Press';
+
+  @override
+  String get longPress => 'Long Press';
+
+  @override
+  String get singlePressAction => 'Single Press Action';
+
+  @override
+  String get triplePressAction => 'Triple Press Action';
+
+  @override
+  String get turnOnOff => 'Slå på / Stäng av';
+
+  @override
+  String get triplePressSubtitle => 'Requires updated firmware';
+
+  @override
   String get endAndProcess => 'Avsluta och bearbeta konversation';
 
   @override

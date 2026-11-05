@@ -759,6 +759,34 @@
     "@doubleTapAction": {
         "description": "Double tap action setting"
     },
+    "singlePress": "Single Press",
+    "@singlePress": {
+        "description": "Single press action label"
+    },
+    "triplePress": "Triple Press",
+    "@triplePress": {
+        "description": "Triple press action label"
+    },
+    "longPress": "Long Press",
+    "@longPress": {
+        "description": "Long press action label"
+    },
+    "singlePressAction": "Single Press Action",
+    "@singlePressAction": {
+        "description": "Single press action setting"
+    },
+    "triplePressAction": "Triple Press Action",
+    "@triplePressAction": {
+        "description": "Triple press action setting"
+    },
+    "turnOnOff": "Turn On / Turn Off",
+    "@turnOnOff": {
+        "description": "Combined label for turning the device on or off"
+    },
+    "triplePressSubtitle": "Requires updated firmware",
+    "@triplePressSubtitle": {
+        "description": "Subtitle noting firmware requirement for triple press"
+    },
     "endAndProcess": "End & Process Conversation",
     "@endAndProcess": {
         "description": "End and process action"
