@@ -2563,6 +2563,13 @@ FIELD_SITES = {
         ('prepare', 'summary_due_at', "data['summary_first_pending_at'] + deadline_seconds()", ('summary_due_at',)),
         ('prepare', 'summary_first_pending_at', 'current', ('summary_first_pending_at',)),
         ('prepare', 'summary_first_pending_at', 'current', ('summary_first_pending_at',)),
+        ('rearm_on_revision_change', 'summary_due_at', 'None', ('summary_blocked_reason', 'summary_due_at')),
+        (
+            'rearm_on_revision_change',
+            'summary_due_at',
+            'current + deadline_seconds()',
+            ('summary_blocked_reason', 'summary_due_at', 'summary_empty_failures', 'summary_empty_rearms'),
+        ),
     ],
     'utils/conversations/transcript_for_llm.py': [
         ('render_cluster_transcript', 'status', "'resolved' if resolution_available else 'unavailable'", ('status',))

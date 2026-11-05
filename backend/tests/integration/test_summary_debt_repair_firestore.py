@@ -243,7 +243,7 @@ def test_empty_output_budget_atomically_removes_terminal_debt_and_preserves_cont
 
 
 def test_empty_failure_never_clears_a_previously_committed_good_overview(debt_store):
-    from database.summary_processing import record_empty_failure
+    from database.summary_processing import record_empty_failure, EmptyFailureOutcome
 
     client, uid, tasks, ref, row = debt_store
     reprocess.mark(uid, 'c', 'en', now=100)
@@ -261,7 +261,7 @@ def test_empty_failure_never_clears_a_previously_committed_good_overview(debt_st
         }
     )
     before = ref.get().to_dict()
-    assert record_empty_failure(client, reprocess.COLLECTION, key, 'worker', token)
+    assert record_empty_failure(client, reprocess.COLLECTION, key, 'worker', token) is EmptyFailureOutcome.BLOCKED
     assert ref.get().to_dict() == before
     assert outbox.get().to_dict()['summary_seen']
     reprocess.mark(uid, 'c', 'en', now=300)
@@ -269,7 +269,7 @@ def test_empty_failure_never_clears_a_previously_committed_good_overview(debt_st
 
 
 def test_empty_failure_from_replaced_owner_or_token_does_not_record_or_block(debt_store):
-    from database.summary_processing import record_empty_failure
+    from database.summary_processing import record_empty_failure, EmptyFailureOutcome
 
     client, uid, tasks, ref, row = debt_store
     reprocess.mark(uid, 'c', 'en', now=100)
@@ -278,12 +278,17 @@ def test_empty_failure_from_replaced_owner_or_token_does_not_record_or_block(deb
     token = outbox.get().to_dict()['task_token']
     outbox.update({'owner': 'replacement'})
     before = outbox.get().to_dict()
-    assert not record_empty_failure(client, reprocess.COLLECTION, key, 'old-worker', token)
-    assert not record_empty_failure(client, reprocess.COLLECTION, key, 'replacement', 'old-token')
+    assert record_empty_failure(client, reprocess.COLLECTION, key, 'old-worker', token) is EmptyFailureOutcome.STALE
+    assert (
+        record_empty_failure(client, reprocess.COLLECTION, key, 'replacement', 'old-token') is EmptyFailureOutcome.STALE
+    )
     assert outbox.get().to_dict() == before and ref.get().to_dict() == row
     outbox.update({'summary_empty_failures': 2})
     before = outbox.get().to_dict()
     ref.update({'summary_processing_owner': 'new-conversation-owner'})
-    assert not record_empty_failure(client, reprocess.COLLECTION, key, 'replacement', token)
-    assert outbox.get().to_dict() == before
+    assert (
+        record_empty_failure(client, reprocess.COLLECTION, key, 'replacement', token)
+        is EmptyFailureOutcome.OWNER_MISMATCH
+    )
+    assert outbox.get().to_dict() == {**before, 'summary_empty_outcome': 'owner_mismatch'}
     assert ref.get().to_dict()['summary_due_at'] == row['summary_due_at']
