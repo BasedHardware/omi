@@ -35,6 +35,7 @@ from database.outbox import Claim, OutboxKind, Outcome
 from utils.observability.reasons import ConsumerReason, RetryReason
 from utils.workers.consumer import Result, Role
 from utils.sync import processing_hold
+from utils.enrichment import early_abort
 
 logger = logging.getLogger(__name__)
 
@@ -212,7 +213,11 @@ class EnrichmentConsumer:
         )
         try:
             with _beating(heartbeat, self.heartbeat_seconds, context) as lost:
-                output = self._callback()(uid, conversation_id, language)
+                abort_token = early_abort.ACTIVE.set(True)
+                try:
+                    output = self._callback()(uid, conversation_id, language)
+                finally:
+                    early_abort.ACTIVE.reset(abort_token)
                 if summary_policy:
                     summary_seen = output is not None and summary_delivery.present(
                         summary_delivery.field(output, 'structured')
