@@ -19,12 +19,15 @@ from utils.other.audio_outbox import AudioReceipt
 from database import conversations as db
 from database.audio_timeline import span_blob_metadata
 from utils import pusher_audio_projection as projection
+from utils.batch_pipeline import record_projection_rebuild as full_projection
 from utils.other import storage
 
 
 @pytest.fixture
 def world(monkeypatch):
     monkeypatch.delenv('PUSHER_AUDIO_FILE_INCREMENTAL_ENABLED', raising=False)
+    monkeypatch.delenv('PUSHER_PROJECTION_DEBT_DURABLE_ENABLED', raising=False)
+    monkeypatch.setattr(projection.record_projection_rebuild, 'mark_due', MagicMock())
     monkeypatch.delenv('BUCKET_AUDIO_DERIVED', raising=False)
     monkeypatch.setattr(projection.audio_archive, 'admitted', lambda *_: False)
     monkeypatch.setattr(projection, 'time', SimpleNamespace(monotonic=lambda: clock[0]))
@@ -445,6 +448,7 @@ async def test_close_discovery_errors_are_bounded_and_cannot_abort_custody(world
     assert finish.call_count == (1 if deterministic else 3)
     assert not cache.inventory and not cache.close_retries
     assert not identities
+    projection.record_projection_rebuild.mark_due.assert_called_once_with('u', 'c')
 
 
 def test_empty_listing_still_observes_deleted_owner(world):
@@ -596,3 +600,82 @@ def test_closing_flush_counts_as_final_discovery_without_second_listing(world):
     cache.refresh('c', [world.add(101)])  # Later audio reopens the obligation.
     assert cache.close_debt == {'c'}
     assert cache.finish('c') is True
+
+
+@pytest.mark.asyncio
+async def test_failed_marker_write_keeps_debt_for_eviction_retry(world, monkeypatch):
+    cache = projection.PusherAudioProjection('u')
+    cache.refresh('c', [world.add(100)])
+    monkeypatch.setattr(cache, 'finish', MagicMock(side_effect=projection.InvalidArgument('private path')))
+    marker = projection.record_projection_rebuild.mark_due
+    marker.side_effect = [OSError('private path'), None]
+    assert await cache.finish_pending('c', set(), set()) is False
+    assert cache.close_debt == {'c'}
+    await cache.persist_pending()
+    assert not cache.close_debt and marker.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_eviction_and_switch_off_marker_handoff(world, monkeypatch):
+    cache = projection.PusherAudioProjection('u')
+    cache.refresh('c', [world.add(100)])
+    projection.record_projection_rebuild.mark_due.assert_not_called()  # no hot-path writes
+    await cache.persist_pending()
+    projection.record_projection_rebuild.mark_due.assert_called_once_with('u', 'c')
+    cache.refresh('c', [world.add(101)])
+    monkeypatch.setenv('PUSHER_PROJECTION_DEBT_DURABLE_ENABLED', 'off')
+    await cache.persist_pending()
+    assert projection.record_projection_rebuild.mark_due.call_count == 1
+
+
+@pytest.mark.parametrize('incremental', ['0', '1'])
+def test_socket_independent_rebuild_always_uses_full_discovery_and_privacy_writer(world, monkeypatch, incremental):
+    world.add(100)
+    monkeypatch.setenv('PUSHER_AUDIO_FILE_INCREMENTAL_ENABLED', incremental)
+    monkeypatch.setattr(full_projection, 'projection_owner_gone', lambda *_: False)
+    write = MagicMock(side_effect=db.update_conversation)
+    monkeypatch.setattr(projection.record_projection_rebuild, 'apply_projection', write)
+    assert full_projection.rebuild('u', 'c') is True
+    assert len(world.lists) == 1
+    assert write.call_args.kwargs['expected_audio_files'] == []
+    projection.record_projection_rebuild.mark_due.assert_not_called()
+
+
+def test_socket_independent_rebuild_refuses_deleted_before_storage(world, monkeypatch):
+    monkeypatch.setattr(full_projection, 'projection_owner_gone', lambda *_: True)
+    assert full_projection.rebuild('u', 'c') is False
+    assert not world.lists and not world.writes
+
+
+def test_rebuild_retains_debt_on_incomplete_raw_index(world, monkeypatch):
+    world.add(100)
+    monkeypatch.setattr(full_projection, 'projection_owner_gone', lambda *_: False)
+    monkeypatch.setattr(projection.audio_archive, 'admitted', lambda *_: True)
+    monkeypatch.setattr(storage, 'list_packs', MagicMock(side_effect=OSError()))
+    with pytest.raises(OSError):
+        full_projection.rebuild('u', 'c')
+    assert not world.writes
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('incomplete', ['raw_index', 'empty'])
+async def test_incomplete_close_discovery_hands_off_durable_debt(world, monkeypatch, incomplete):
+    cache = projection.PusherAudioProjection('u')
+    cache.refresh('c', [world.add(100)])
+    if incomplete == 'raw_index':
+        monkeypatch.setattr(projection.audio_archive, 'admitted', lambda *_: True)
+        monkeypatch.setattr(storage, 'list_packs', MagicMock(side_effect=OSError()))
+        assert await cache.finish_pending('c', set(), set()) is False
+        assert await cache.finish_pending('c', set(), set()) is False
+    else:
+        world.blobs.clear()
+    assert await cache.finish_pending('c', set(), set()) is True
+    projection.record_projection_rebuild.mark_due.assert_called_once_with('u', 'c')
+    assert not cache.close_debt
+
+
+@pytest.mark.asyncio
+async def test_terminal_batch_persists_debt_even_when_close_inventory_is_full(world, monkeypatch):
+    monkeypatch.setattr(projection, 'MAX_CONVERSATIONS', 0)
+    await test_real_socket_flushes_keep_identity_fresh_and_finalize(world, monkeypatch, True, 'terminal')
+    assert any(call.args == ('u', 'c') for call in projection.record_projection_rebuild.mark_due.call_args_list)

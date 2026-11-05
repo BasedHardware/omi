@@ -53,6 +53,7 @@ spec:
               image: "{{ required "image.repository required" .Values.image.repository }}@{{ required "image.digest required" .Values.image.digest }}"
               command: [python, scripts/record_seal_repair_job.py]
               env:
+                - {name: PUSHER_PROJECTION_DEBT_DURABLE_ENABLED, value: {{ .Values.recordSealRepair.projectionDebtDurableEnabled | quote }}}
                 - {name: RECORD_SEAL_REPAIR_JOBS, value: {{ .Values.recordSealRepair.jobsDiscovery | quote }}}
                 - {name: RECORD_SEAL_REPAIR_ENABLED, value: {{ .Values.recordSealRepair.runtimeEnabled | quote }}}
                 - {name: RECORD_AUDIO_PARTIAL_ENABLED, value: {{ .Values.recordSealRules.partialEnabled | quote }}}

@@ -10,6 +10,7 @@ from types import SimpleNamespace
 import pytest
 from google.api_core.exceptions import Aborted
 
+from database.conversations import create_audio_files_from_chunks
 from database import record_audio
 from database import conversation_finalization_jobs as finalization_jobs
 from testing.lifecycle_sim.faults import BoundaryFault, InjectedLifecycleFault
@@ -290,3 +291,100 @@ async def test_server_batch_completion_ordering(lifecycle_sim, closed):
             row['status'] != 'completed' or (row.get('record_audio_closed') and not row.get('record_upload_sessions')),
             'conversation completed while audio was open and its upload session remained pending',
         )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('ending', ['exhaustion', 'eviction', 'tombstone', 'missing', 'late_tombstone', 'marker_race'])
+async def test_projection_close_debt_survives_socket_and_respects_privacy(lifecycle_sim, monkeypatch, ending):
+    from database import record_projection_rebuild as jobs
+    from utils import pusher_audio_projection as projection
+    from utils import record_projection_rebuild as consumer
+    from utils.batch_pipeline.record_seal_budget import SweepBudget
+
+    sim = lifecycle_sim
+    sim.seed(sessions={'live': True})
+    # Earlier summary scenarios install an empty playback leaf globally. This
+    # scenario must exercise the real grouping implementation captured at import.
+    monkeypatch.setattr(processing.conversations_db, 'create_audio_files_from_chunks', create_audio_files_from_chunks)
+    monkeypatch.setenv('PUSHER_PROJECTION_DEBT_DURABLE_ENABLED', '1')
+    monkeypatch.setenv('PUSHER_AUDIO_FILE_INCREMENTAL_ENABLED', '1')
+    before = sim.row()
+    from utils.batch_pipeline import record_projection_rebuild as full_projection
+
+    discovery = full_projection.discover(sim.uid, sim.cid, strict_raw=True)
+    assert discovery is not None and discovery[2], discovery
+    failures = []
+    original_rebuild = consumer.rebuild
+
+    def checked_rebuild(*args):
+        try:
+            return original_rebuild(*args)
+        except Exception as error:
+            failures.append(repr(error))
+            raise
+
+    monkeypatch.setattr(consumer, 'rebuild', checked_rebuild)
+    cache = projection.PusherAudioProjection(sim.uid)
+    cache.has_uploaded_paths = True
+    cache.close_debt.add(sim.cid)
+    marker = sim.stack.firestore.collection(jobs.COLLECTION).document(jobs.marker_id(sim.uid, sim.cid))
+    try:
+        if ending == 'exhaustion':
+
+            def fail(*_):
+                raise OSError('synthetic projection failure')
+
+            monkeypatch.setattr(cache, 'finish', fail)
+            assert await cache.finish_pending(sim.cid, set(), set()) is False
+            assert await cache.finish_pending(sim.cid, set(), set()) is False
+            assert await cache.finish_pending(sim.cid, set(), set()) is True
+        else:
+            await cache.persist_pending()
+        assert marker.get().exists
+        tombstone = sim.ref.parent.parent.collection('deleted_conversations').document(sim.cid)
+        if ending == 'tombstone':
+            tombstone.set({'deleted': True})
+        elif ending == 'missing':
+            sim.ref.delete()
+        elif ending == 'late_tombstone':
+            apply = jobs.apply_projection
+
+            def race(*args, **kwargs):
+                tombstone.set({'deleted': True})
+                return apply(*args, **kwargs)
+
+            monkeypatch.setattr(jobs, 'apply_projection', race)
+        elif ending == 'marker_race':
+            rebuild = consumer.rebuild
+
+            def race(*args):
+                result = rebuild(*args)
+                jobs.mark_due(*args, firestore_client=sim.stack.firestore)
+                return result
+
+            monkeypatch.setattr(consumer, 'rebuild', race)
+        report = consumer.run(budget=SweepBudget(30), firestore_client=sim.stack.firestore)
+        if ending in {'exhaustion', 'eviction', 'marker_race'}:
+            # Existing live producer fences prevent retirement of debt published
+            # while a retained worker can still upload. This is a synthetic
+            # fixture transition, never a consumer token/seal mutation.
+            assert marker.get().exists
+            assert sim.row()['record_upload_sessions'] == {'live': True}
+            sim.ref.update({'record_upload_sessions': {}})
+            before['record_upload_sessions'] = {}
+            report = consumer.run(budget=SweepBudget(30), firestore_client=sim.stack.firestore)
+        assert not failures
+        assert marker.get().exists is (ending == 'marker_race'), report
+        if ending == 'missing':
+            assert not sim.ref.get().exists
+        else:
+            after = sim.row()
+            if ending in {'tombstone', 'late_tombstone'}:
+                assert after == before
+            else:
+                assert after.get('audio_files')
+                assert {k: v for k, v in after.items() if k != 'audio_files'} == before
+        # The retained PCM and its metadata are untouched by the repair pass.
+        assert live.list_audio_chunks(sim.uid, sim.cid, require_archive=True)
+    finally:
+        marker.delete()

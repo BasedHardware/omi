@@ -200,3 +200,12 @@ def test_jobs_discovery_rollback_reaches_only_repair_cron():
     ][0]
     env = {entry['name']: entry.get('value') for entry in container['env']}
     assert env['RECORD_SEAL_REPAIR_JOBS'] == 'off'
+
+
+def test_projection_debt_kill_switch_reaches_cron_without_disabling_seal_repair():
+    for setting in ('true', 'false'):
+        docs = documents('--set', f'recordSealRepair.projectionDebtDurableEnabled={setting}')
+        pod = docs[('CronJob', 'record-seal-repair')]['spec']['jobTemplate']['spec']['template']['spec']
+        env = {e['name']: e.get('value') for e in pod['containers'][0]['env']}
+        assert env['PUSHER_PROJECTION_DEBT_DURABLE_ENABLED'] == setting
+        assert env['RECORD_SEAL_REPAIR_ENABLED'] == 'true'

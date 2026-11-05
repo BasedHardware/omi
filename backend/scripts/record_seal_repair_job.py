@@ -43,6 +43,12 @@ def main():
                     output.write(json.dumps(repair.row_main(payload)) + '\n')  # Private child IPC, closed outcome only.
                     output.flush()
                 elif not sys.argv[1:]:
+                    try:
+                        from utils import record_projection_rebuild
+
+                        emit(record_projection_rebuild.run_job())
+                    except Exception:
+                        emit({'event': 'record_projection_rebuild', 'outcome': 'error'})
                     emit(repair.run(progress=emit))
                 else:
                     raise ValueError('invalid arguments')

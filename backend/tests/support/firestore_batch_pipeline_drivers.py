@@ -2,13 +2,26 @@
 
 from datetime import datetime, timezone
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from tests.support.firestore_query_drivers import DriverEntry, CoveredByEntry, ref_collection
+
+
+def _projection_debt_on(client):
+    from utils import record_projection_rebuild
+
+    return patch.object(record_projection_rebuild, 'durable_debt_enabled', lambda: True)
 
 
 def entries():
     namespaces = ['batch_pipeline_prod', 'batch_pipeline_dev']
     return (
+        DriverEntry(
+            'utils.record_projection_rebuild.run',
+            domains={'mode': ['apply', 'plan']},
+            neutrals={'budget': (SimpleNamespace(check=lambda: None, timeout=lambda: 10), 'RPC deadline only')},
+            patchers=(_projection_debt_on,),
+        ),
         DriverEntry(
             'database.record_seal_worker.pending_page',
             domains={'namespace': namespaces, 'after': [None, (datetime(2026, 10, 1, tzinfo=timezone.utc), 'pending')]},
