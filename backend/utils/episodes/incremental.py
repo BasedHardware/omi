@@ -443,7 +443,7 @@ def render_f_transcript(segments: Sequence[Mapping[str, Any]]) -> str:
     """Variant F rendering: time order, ``You`` for the owner, a name or voice label otherwise,
     consecutive lines from one label merged. Matches the offline F run's ``render``."""
     rows = sorted(
-        (s for s in segments if isinstance(s, Mapping) and str(s.get('text') or '').strip()),
+        (s for s in segments if str(s.get('text') or '').strip()),
         key=lambda s: float(s.get('start') or 0.0),
     )
     lines: list[list[str]] = []

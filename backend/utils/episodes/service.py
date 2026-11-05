@@ -587,7 +587,7 @@ def _attach_once(
         if owner or late:
             uncertain = None if late else f_join.uncertain(uid, owner, conversation_id, source, started_at)
             placed = attach_recorded(uid, conversation_id, {'source': source}, started_at, started_at, c)
-            if uncertain is not None:
+            if uncertain is not None and owner is not None:
                 f_join.mark_pending(
                     uid, owner, placed, conversation_id, uncertain, _pending(placed), c.firestore_client
                 )
