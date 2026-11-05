@@ -296,7 +296,6 @@ def test_arrivals_that_keep_every_page_full_cannot_starve_rows_older_than_the_se
         if {f'r{i:03d}' for i in range(100)} <= seen:
             break
     assert {f'r{i:03d}' for i in range(100)} <= seen  # rows older than the seed were reached
-    assert followups.wrap_at == 1200.0  # re-armed for the next cycle
 
 
 def test_every_cycle_is_bounded_so_a_backed_off_row_is_revisited_under_a_full_tail(monkeypatch, clock):
@@ -351,3 +350,77 @@ def test_a_tie_group_at_the_mark_is_never_cut_mid_group(monkeypatch, clock):
     for _ in range(6):
         seen.update(followups.discovered())
     assert seen == set(rows)
+
+
+@pytest.mark.parametrize('seed', range(12))
+def test_invariant_every_row_committed_by_a_pass_mark_is_offered_within_that_pass(monkeypatch, clock, seed):
+    """Property: with a full tail, tie groups, backoff and overflow resets, each pass offers
+    every row committed at or before its mark (backed-off rows count as offered: they were
+    reached), and a backed-off row is offered again once its backoff expires."""
+    import random
+
+    rng = random.Random(seed)
+    monkeypatch.setenv(KNOB, '900')
+    now = [1000.0]
+    rows = {}
+
+    def commit(count, tie=False):
+        stamp = now[0]
+        for _ in range(count):
+            key = f'k{len(rows):05d}'
+            rows[key] = {'projection_state': 'persisted', 'committed_at': stamp if tie else stamp + rng.random()}
+        now[0] += 1.0
+
+    commit(rng.randrange(50, 400))
+    commit(rng.randrange(100, 260), tie=True)  # a tie group larger than a page
+    followups, _ = runner(rows, monkeypatch, fraction=rng.random(), now=None)
+    followups.projector.clock = lambda: now[0]
+    seeded_at = []
+    real_seed = followups.seed_offset
+
+    def spy():
+        real_seed()
+        seeded_at.append(followups.discovery.after)
+
+    followups.seed_offset = spy
+    blocked = {key for key in rows if rng.random() < 0.05}
+    reached, retried = set(), set()
+    owed, passes = None, 0
+    for step in range(400):
+        before_mark = followups.wrap_at
+        page_from_head = followups.discovery.after is None
+        page = followups.discovered()
+        if followups.wrap_at != before_mark or (page_from_head and step):
+            # A pass began on this page. The pass that just ended must have reached every row it owed.
+            if owed is not None:
+                owed &= set(rows) | reached  # rows completed by peers simply left
+                assert owed <= reached, sorted(owed - reached)[:5]
+                passes += 1
+            mark = followups.wrap_at
+            # A seeded first pass owes only rows from its seed onward; the next pass starts at the head.
+            start = seeded_at[0] if step == 0 and seeded_at and seeded_at[0] else None
+            owed = {
+                k
+                for k, r in rows.items()
+                if mark is not None and r['committed_at'] <= mark and (start is None or (r['committed_at'], k) > start)
+            }
+            reached = set()
+        reached.update(page)
+        # Rows in backoff were reached too (filtered at the offer); count them.
+        reached.update(k for k in followups.backoff if followups.backoff[k][0] > clock.now)
+        for key in page:
+            if key in blocked:
+                if key in followups.backoff:
+                    retried.add(key)
+                followups.note(key, 'blocked')
+            else:
+                followups.note(key, 'completed')
+                del rows[key]  # completion leaves persisted/ready
+        clock.now += 20.0
+        # A tail that keeps every page full: one page of arrivals per page read.
+        commit(100, tie=rng.random() < 0.2)
+        if rng.random() < 0.03:
+            followups.discovery.after = None  # schedule() overflow restart: this pass is cut short
+            owed = None  # its rows are owed by the next pass, which starts at the head
+    assert passes >= 3, passes
+    assert retried, 'a backed-off row was never offered again'

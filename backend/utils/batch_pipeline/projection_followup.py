@@ -92,8 +92,7 @@ class ProjectionFollowups:
         self.backoff_ceiling = projection_followup_backoff_seconds()
         self.backoff: dict[str, tuple[float, float]] = {}
         self.seeded = self.backoff_ceiling <= 0
-        # High-water mark of the current pass (commit time when it began): the
-        # pass wraps to the head once its cursor reaches later commits.
+        # The current pass's mark (projector clock when it began); see begin_pass.
         self.wrap_at: float | None = None
 
     def seed_offset(self):
@@ -154,43 +153,43 @@ class ProjectionFollowups:
         page = None
         if not self.seeded:
             held = self.discovery.after
-            self.seed_offset()
+            self.seed_offset()  # a seeded pass starts mid-backlog with its mark set
             if self.discovery.after is not None and held is None:
                 page = self.discovery.next(limit=100)
                 if not page:
                     # A seed past the newest row (clock skew): wrap to the head now, not a tick later.
                     page = None
         if page is None:
+            self.begin_pass()
             page = self.discovery.next(limit=100)
-        if self.backoff_ceiling > 0:
-            self.bound_cycle()
+        self.end_pass_past_mark()
         return [sid for sid in page if not self.backed_off(sid)]
 
-    def bound_cycle(self):
-        """Every pass ends at the commits it started with, then wraps to the head.
+    # Desync coverage invariant (backoff > 0): every row committed at or before
+    # a pass's mark is offered within that pass, ties at the mark included.
+    # A pass begins at the head (or at the seed) with mark = projector clock,
+    # and ends at the keyset page's own wrap or once its cursor is strictly
+    # past the mark. So a tail that keeps every page full cannot extend a pass,
+    # and a row skipped in backoff is offered again by a later bounded pass.
 
-        Re-armed on every wrap: a tail that keeps every page full can neither
-        starve rows older than the seed nor leave a row it skipped in backoff
-        behind the cursor. Each cycle revisits every row committed before it began.
-        """
+    def begin_pass(self):
+        """A page fetched from the head (or with no mark yet) starts a pass: mark it now."""
+        if self.backoff_ceiling > 0 and (self.discovery.after is None or self.wrap_at is None):
+            self.wrap_at = self.clock_now()
+
+    def end_pass_past_mark(self):
         after = self.discovery.after
-        if after is None:
-            self.wrap_at = self.clock_now()  # wrapped on its own: next cycle's high-water
-        elif self.wrap_at is None:
-            # No mark yet (seed skipped or failed, or a cursor discovery already held):
-            # bound the current pass from now on.
-            self.wrap_at = self.clock_now()
-        elif after[0] > self.wrap_at:
-            # Strictly past the mark: a tie group at exactly the mark is finished
-            # first (ties order by key and the cursor stays on that timestamp).
+        if self.backoff_ceiling <= 0 or after is None or self.wrap_at is None:
+            return
+        if after[0] > self.wrap_at:
+            # Strictly past: ties at the mark order by key and finish first.
             self.discovery.after = None
-            self.wrap_at = self.clock_now()
 
     def clock_now(self) -> float | None:
         try:
             return float(self.projector.clock())
         except Exception:
-            return None  # unbounded cycle, as before
+            return None  # no mark: this pass ends only at the page's own wrap, as before
 
     def candidates(self):
         if projection_followup_page_enabled():
