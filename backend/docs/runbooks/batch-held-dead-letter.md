@@ -50,7 +50,11 @@ finalization dead-letter tools remain outside this change.
 `omi_batch_held_expired_total` counts committed expiry transitions;
 `omi_batch_held_expired_units` is all retained dead stock for this explicit new
 reason, and `omi_batch_held_expired_observed_at_seconds` timestamps successful
-stock samples. The agent-tier `omi-batch-held-expired-volume` rule alerts on
+stock samples. The three exact metric families are pinned in both dev/prod
+Cloud Run exporter releases (main and sync/integration), because serving
+maintenance emits them on CPU hosts. Ship those metrics-egress declarations
+with the alert through the existing release path; no live egress or alert
+delivery was qualified here. The agent-tier `omi-batch-held-expired-volume` rule alerts on
 fresh stock >100 or >10 expirations in 30 minutes for five minutes. Unrelated
 legacy dead rows do not count, and this rule never pages. These are initial
 operator thresholds, not production-calibrated measurements. Inspect worker

@@ -2183,6 +2183,7 @@ def test_held_dead_letter_volume_is_agent_only_and_uses_reasoned_stock_plus_uniq
         assert nodes['C']['expr'] == '(time() - max(omi_batch_held_expired_observed_at_seconds)) or vector(1e9)'
         assert nodes['D']['expression'] == '($A > 100 && $C < 900) || $B > 10'
         assert rule['labels']['tier'] == rule['labels']['audience'] == 'agent'
+        assert rule['notification_settings']['mute_time_intervals'] == ['omi-tier-silent']
         assert rule['for'] == '5m' and not rule['isPaused']
         assert 'legacy' in rule['annotations']['scope']
         assert 'Never delete' in rule['annotations']['safe_next_action']
