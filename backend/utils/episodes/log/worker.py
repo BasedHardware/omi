@@ -18,7 +18,7 @@ from database._client import get_firestore_client
 from utils import cloud_tasks
 from utils.episodes import home_read
 from utils.episodes.metrics import bounded_label
-from utils.episodes.log import metrics
+from utils.episodes.log import metrics, reconcile
 from utils.episodes.log.codec import dumps, digest, loads
 from utils.episodes.log.fold import Fold
 from utils.episodes.log.clock import home_clock
@@ -214,8 +214,6 @@ def drain(uid, *, firestore_client=None, now=None):
         removed_views, removed_links = (), ()
         source_versions = None
         if repaired:
-            from utils.episodes.log import reconcile
-
             fold, removed_views, removed_links, source_versions = reconcile.snapshot(uid, client)
             before, old_links, events = {}, {}, []
             cursor = claimed['state'].get('next_seq', 0)

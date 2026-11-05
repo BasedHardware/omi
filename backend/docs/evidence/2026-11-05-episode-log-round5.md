@@ -94,3 +94,10 @@ feature branch to resolve the same-line collector conflict, retaining both metri
 families. PR #24607 remains open. Writer coverage was re-audited afterward and
 explicitly includes generic processing-recovery primitives plus main's new
 `notes_identity.claim_late_evidence` writer. Final qualification follows that sync.
+
+The first normal push also passed all 70 checks (793.61 seconds), then correctly
+stopped on one canonical Pyright error: the repair-only conditional import of
+`reconcile` was possibly unbound at the later member-read branch. The import is
+now explicit at module scope. The full canonical `backend/scripts/typecheck.sh`
+returns **zero errors**, and all **152 focused cases** pass again. The normal
+push is retried with all hooks, selection, timeouts and credential removal intact.
