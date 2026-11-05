@@ -56,6 +56,13 @@ def early_abort_enabled() -> bool:
     return kill_switch_on('ENRICHMENT_EARLY_ABORT_ENABLED')
 
 
+def fence_redirect_transfer_enabled() -> bool:
+    """Kill switch: a persist-fenced enrichment run whose row a merge redirected transfers custody, not discards."""
+    from config.refactor_modes import default_on as kill_switch_on
+
+    return kill_switch_on('ENRICHMENT_FENCE_REDIRECT_TRANSFER_ENABLED')
+
+
 def dedupe_enabled() -> bool:
     return _enabled('CONVERSATION_LLM_INPUT_DEDUPE_ENABLED', default=True)
 
