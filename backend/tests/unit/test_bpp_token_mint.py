@@ -187,7 +187,7 @@ def test_a_worker_that_cannot_start_never_breaks_the_decision_and_is_retried(wor
     with batch_privacy_attempt():
         assert check(db) == 0  # the live decision still runs and allows
     assert starts == [1] and privacy._mint_thread == []  # not registered as running
-    privacy._mint_seen.clear()
+    assert not privacy._mint_queue and not privacy._mint_seen  # nothing stranded (Luna r2 P2)
     with batch_privacy_attempt():
         assert check(db) == 0
-    assert starts == [1, 1]  # a later call retries the start
+    assert starts == [1, 1]  # the same owner retries the start, no manual reset

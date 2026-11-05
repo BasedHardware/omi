@@ -378,19 +378,21 @@ def schedule_token_mint(client, reference, uid: str) -> None:
     with _mint_lock:
         if reference.path in _mint_seen or len(_mint_queue) >= _MINT_MAX_PENDING:
             return
-        _mint_seen[reference.path] = True
-        while len(_mint_seen) > 100_000:
-            _mint_seen.popitem(last=False)
-        _mint_queue.append((time.monotonic() + MINT_DELAY_SECONDS, client, reference))
+        # Start (or confirm) the worker BEFORE recording anything: a failed start must
+        # leave no queued item or dedupe entry behind, so a later call retries cleanly.
         if not _mint_thread:
             worker = threading.Thread(target=_mint_worker, name='bpp-token-mint', daemon=True)
             try:
                 worker.start()
             except Exception:
-                # Never fail a privacy decision over an optimization; a later call retries.
+                # Never fail a privacy decision over an optimization.
                 metrics.memo_result('batch', 'mint_error')
                 return
             _mint_thread.append(worker)
+        _mint_seen[reference.path] = True
+        while len(_mint_seen) > 100_000:
+            _mint_seen.popitem(last=False)
+        _mint_queue.append((time.monotonic() + MINT_DELAY_SECONDS, client, reference))
     _mint_wake.set()
 
 
