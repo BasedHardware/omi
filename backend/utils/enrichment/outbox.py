@@ -7,6 +7,7 @@ exhausted tasks in bounded batches, including a crash between mark and enqueue.
 
 from __future__ import annotations
 from utils.observability.delivery import record_delivery
+from utils.observability.sweep_age import skip_ancient
 from utils.observability.fallback import record_fallback
 
 import hashlib
@@ -447,6 +448,10 @@ def mark_update(
         # Timestamp every durable obligation, even before rollout. Neither an
         # append nor a retry owns the original acceptance time.
         row['first_pending_at'] = current if old and old.get('dormant') else row.get('first_pending_at', current)
+        # New coalesced work must not inherit an ancient obligation's sweep admission age.
+        row['latest_pending_at'] = (
+            current if old and old.get('dormant') else max(row.get('latest_pending_at', current), current)
+        )
         if snapshot_summary and (not old or old.get('dormant') or row.get('first_summary_policy') is None):
             if candidate is None:
                 candidate = resolve_stage_policy(
@@ -848,6 +853,17 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
     return 'superseded' if superseded else 'processed'
 
 
+def _skip_ancient_fresh(row: Row, *, now: float) -> bool:
+    queue = enrichment_config.fresh_queue()
+    dispatch = row.get('dispatch')
+    return bool(
+        queue
+        and isinstance(dispatch, dict)
+        and dispatch.get('queue') == queue
+        and skip_ancient(row, 'enrichment-fresh', now=now)
+    )
+
+
 def sweep(
     *,
     now: float | None = None,
@@ -922,6 +938,8 @@ def sweep(
             nonlocal recent
             if old is None or old.get('dormant') or old.get('lease_until', 0) > current:
                 return old, ('skipped', None)
+            if _skip_ancient_fresh(old, now=current):
+                return old, ('skipped', None)
             row = dict(old)
             promoted = False
             # A valid old wake can wait hours behind historical enrichment.
@@ -985,6 +1003,8 @@ def sweep(
                 # Claim and fence the repaired binding in the same CAS. Any old
                 # task delivery becomes stale; valid backfill bindings stay put.
                 row.update(dispatch=binding, task_token=uuid.uuid4().hex, task_due_at=current)
+            if _skip_ancient_fresh(row, now=current):
+                return old, ('skipped', None)
             if expired:
                 # Fence the old holder (invariant 1) and retire its delivery: its task already ran.
                 row.update(owner=None, lease_until=0, task_token=uuid.uuid4().hex, task_due_at=current)
@@ -1007,11 +1027,19 @@ def sweep(
             return update
 
         try:
+            # Privacy/deletion owns retirement, even when an ancient row would otherwise be held.
+            if discard is not None and discard(snapshot.id):
+                counts['discarded'] += 1
+                continue
             if not injected:
                 from utils.enrichment.age_gate import park_if_expired
 
                 if park_if_expired(snapshot.id, None, now=current, client=bound):
                     continue
+            # The existing privacy/parking policies take precedence; gate only remaining open debt.
+            candidate = getattr(snapshot, 'to_dict', lambda: {})() or {}
+            if _skip_ancient_fresh(candidate, now=current):
+                continue
             status, row = mutate(snapshot.id, repair)
             if status == 'expired' and 'expired' in counts:
                 counts['expired'] += 1
@@ -1040,9 +1068,6 @@ def sweep(
                 row = mutate(snapshot.id, replace)
             if status == 'unbound':
                 UNBOUND.labels(action='repair').inc()
-            if row is not None and discard is not None and discard(snapshot.id):
-                counts['discarded'] += 1
-                row = None
             if row is not None:
                 try:
                     enqueue(row)

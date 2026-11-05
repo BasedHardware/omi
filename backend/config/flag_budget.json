@@ -24,8 +24,11 @@
   },
   "seed_review_by": "2026-11-15",
   "budget": 169,
-  "count": 251,
+  "count": 254,
   "names": {
+    "BATCH_PIPELINE_ENRICHMENT_FRESH_SWEEP_MAX_AGE_DAYS": {"owner": "omi-pipeline", "review_by": "2026-11-30"},
+    "BATCH_PIPELINE_PROVIDER_STT_SWEEP_MAX_AGE_DAYS": {"owner": "omi-pipeline", "review_by": "2026-11-30"},
+    "BATCH_PIPELINE_SWEEP_AGE_GATE": {"owner": "omi-pipeline", "review_by": "2026-11-30"},
     "PROJECTION_DRAIN_CLAIM_AWARE": {"owner": "two-lane lead", "review_by": "2026-12-05", "registry": "config/feature-flags.yaml"},
     "BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED": {"owner": "omi-pipeline", "review_by": "2026-12-06", "registry": "config/feature-flags.yaml"},
     "K_REVISION": {"owner": "omi-pipeline", "review_by": "2026-12-06"},
