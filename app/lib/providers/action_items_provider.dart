@@ -1450,7 +1450,11 @@ class ActionItemsProvider extends ChangeNotifier {
   /// Returns true only when the server deleted every row; rejected rows are already back.
   Future<bool> deleteActionItems(List<ActionItemWithMetadata> items) async {
     if (items.isEmpty) return true;
-    final result = await _deleteItemsInBulk(items);
+    // The batch endpoint refuses the whole request (402) if any task is locked, where a
+    // single delete refused only that task. Leave locked tasks in place so the rest still go.
+    final deletable = items.where((item) => !item.isLocked).toList();
+    if (deletable.isEmpty) return false;
+    final result = await _deleteItemsInBulk(deletable);
     return !result.stale && result.deleted?.length == items.length;
   }
 

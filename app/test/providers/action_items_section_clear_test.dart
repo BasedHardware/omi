@@ -91,6 +91,29 @@ void main() {
     expect(p.actionItems.map((item) => item.id).toSet(), {'b', 'c'});
   });
 
+  test('a locked task stays put and the rest of the section is still deleted', () async {
+    // The batch endpoint rejects a whole request containing a locked task (402); a single
+    // delete rejected only that task. Locked tasks are left out of the batch.
+    const locked = ActionItemWithMetadata(id: 'locked', description: 'locked', completed: true, isLocked: true);
+    final p = await provider([_item('a', completed: true), locked, _item('b', completed: true), _item('c')]);
+
+    expect(await p.deleteActionItems(p.actionItems.where((item) => item.completed).toList()), isFalse);
+
+    expect(bulkCalls.map((ids) => ids.toSet()), [
+      {'a', 'b'}
+    ]);
+    expect(p.actionItems.map((item) => item.id).toSet(), {'locked', 'c'});
+  });
+
+  test('a section of only locked tasks sends nothing', () async {
+    const locked = ActionItemWithMetadata(id: 'locked', description: 'locked', completed: true, isLocked: true);
+    final p = await provider([locked, _item('c')]);
+
+    expect(await p.deleteActionItems([locked]), isFalse);
+    expect(bulkCalls, isEmpty);
+    expect(singleDeletes, isEmpty);
+  });
+
   test('an empty section is a no-op', () async {
     final p = await provider([_item('c')]);
 
