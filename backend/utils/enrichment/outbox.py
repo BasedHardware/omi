@@ -1031,15 +1031,15 @@ def sweep(
             if discard is not None and discard(snapshot.id):
                 counts['discarded'] += 1
                 continue
-            # Skip before the independent historical-parking policy can mutate this row.
-            candidate = getattr(snapshot, 'to_dict', lambda: {})() or {}
-            if _skip_ancient_fresh(candidate, now=current):
-                continue
             if not injected:
                 from utils.enrichment.age_gate import park_if_expired
 
                 if park_if_expired(snapshot.id, None, now=current, client=bound):
                     continue
+            # The existing privacy/parking policies take precedence; gate only remaining open debt.
+            candidate = getattr(snapshot, 'to_dict', lambda: {})() or {}
+            if _skip_ancient_fresh(candidate, now=current):
+                continue
             status, row = mutate(snapshot.id, repair)
             if status == 'expired' and 'expired' in counts:
                 counts['expired'] += 1

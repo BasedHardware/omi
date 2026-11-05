@@ -29,7 +29,7 @@ def skip_ancient(row, queue: str, *, now: float) -> bool:
             if isinstance(value, datetime):
                 value = (value if value.tzinfo else value.replace(tzinfo=timezone.utc)).timestamp()
             # Unknown metadata cannot prove that an obligation is ancient.
-            if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value <= 0:
                 return False
             timestamps.append(value)
         except (ValueError, OverflowError):

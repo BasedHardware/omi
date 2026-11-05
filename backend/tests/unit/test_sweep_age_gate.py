@@ -25,9 +25,10 @@ def test_only_off_disables_gate(monkeypatch, raw):
     assert sweep_age.enabled()
 
 
-@pytest.mark.parametrize('value', [None, 'bad', True, float('nan'), float('inf')])
-def test_unknown_age_keeps_wake(value):
-    assert not skip_ancient({'created_at': value}, 'provider-stt', now=2_000_000)
+@pytest.mark.parametrize('queue,field', [('provider-stt', 'created_at'), ('enrichment-fresh', 'first_pending_at')])
+@pytest.mark.parametrize('value', [None, 'bad', True, 0, -1, float('nan'), float('inf')])
+def test_unknown_age_keeps_wake(queue, field, value):
+    assert not skip_ancient({field: value}, queue, now=2_000_000)
 
 
 @pytest.mark.parametrize(
@@ -59,7 +60,7 @@ def test_enrichment_sweep_skips_without_mutation(state, sweep_query, monkeypatch
         assert rows == original
 
 
-def test_ancient_fresh_sweep_precedes_existing_parking(state, sweep_query, monkeypatch):
+def test_existing_parking_precedes_ancient_fresh_sweep(state, sweep_query, monkeypatch):
     rows, tasks = state
     monkeypatch.setenv('ENRICHMENT_FRESH_TASKS_QUEUE', 'enrichment-fresh')
     monkeypatch.setenv('BATCH_PIPELINE_SWEEP_AGE_GATE', 'on')
@@ -71,7 +72,12 @@ def test_ancient_fresh_sweep_precedes_existing_parking(state, sweep_query, monke
     monkeypatch.setenv('ENRICHMENT_MAX_AGE_HOURS', '72')
     sweep_query.stream.side_effect = lambda: [SimpleNamespace(id=key, to_dict=lambda: deepcopy(rows[key]))]
     assert outbox.sweep(now=2_000_000) == {'repaired': 0, 'error': 0}
-    assert rows == original and not tasks
+    parked = rows[key]
+    assert parked['age_gate_parked'] and parked['dormant'] and parked['due_at'] is None
+    assert parked['deferred_reason'] == 'age_gate_72h' and not tasks
+    assert parked['first_pending_at'] == original[key]['first_pending_at']
+    assert parked['version'] == original[key]['version']
+    assert parked['uid'] == original[key]['uid']
 
 
 def test_other_enrichment_queues_keep_old_behavior(state, sweep_query, monkeypatch):
