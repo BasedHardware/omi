@@ -2175,7 +2175,10 @@ def test_held_dead_letter_volume_is_agent_only_and_uses_reasoned_stock_plus_uniq
     for export_name, rules in _all_rule_exports().items():
         rule = rules['omi-batch-held-expired-volume']
         nodes = {node['refId']: node['model'] for node in rule['data']}
-        assert nodes['A']['expr'] == 'max(omi_batch_held_expired_units) or vector(0)', export_name
+        assert nodes['A']['expr'] == (
+            'max(omi_batch_held_expired_units and '
+            '(time() - omi_batch_held_expired_observed_at_seconds < 900)) or vector(0)'
+        ), export_name
         assert nodes['B']['expr'] == 'sum(increase(omi_batch_held_expired_total[30m])) or vector(0)'
         assert nodes['C']['expr'] == '(time() - max(omi_batch_held_expired_observed_at_seconds)) or vector(1e9)'
         assert nodes['D']['expression'] == '($A > 100 && $C < 900) || $B > 10'
