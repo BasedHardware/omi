@@ -37,6 +37,7 @@ void main() {
           expect(Uri.parse(request.url).path, endsWith('/v1/conversations/with-tasks/page'));
           expect(jsonDecode(request.body), {
             'query': 'invoice',
+            'include_discarded': false,
             'folder_id': 'work',
             'starred': true,
             'start_date': '2026-01-01T00:00:00.000Z',

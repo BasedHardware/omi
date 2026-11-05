@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/http/api/conversation_tasks.dart';
 import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
 import 'package:omi/providers/conversation_task_presence_provider.dart';
@@ -18,6 +19,7 @@ import 'package:omi/widgets/calendar_date_picker_sheet.dart';
 
 typedef TaskConversationFetcher = Future<ApiResult<TaskConversationPage>> Function({
   required String query,
+  bool includeDiscarded,
   String? folderId,
   bool? starred,
   DateTime? startDate,
@@ -119,6 +121,7 @@ class _ConversationsWithTasksPageState extends State<ConversationsWithTasksPage>
       final fetch = widget.fetch ?? getConversationsWithTasks;
       final result = await fetch(
         query: _query.text.trim(),
+        includeDiscarded: SharedPreferencesUtil().showDiscardedMemories,
         folderId: _folder,
         starred: _starred ? true : null,
         startDate: _start,

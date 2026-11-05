@@ -46,6 +46,7 @@ Future<ApiResult<Map<String, bool>>> getConversationTaskPresence(
 
 Future<ApiResult<TaskConversationPage>> getConversationsWithTasks({
   String query = '',
+  bool includeDiscarded = false,
   String? folderId,
   bool? starred,
   DateTime? startDate,
@@ -60,6 +61,7 @@ Future<ApiResult<TaskConversationPage>> getConversationsWithTasks({
         method: 'POST',
         body: jsonEncode({
           'query': query,
+          'include_discarded': includeDiscarded,
           'folder_id': folderId,
           'starred': starred,
           'start_date': startDate?.toUtc().toIso8601String(),

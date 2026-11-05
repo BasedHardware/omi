@@ -54,6 +54,13 @@ void main() {
     presence.request('a');
     await tester.pump(const Duration(milliseconds: 151));
     expect(presence.presence('a'), isTrue);
+    final revision = presence.taskRevision;
+    tasks.startSelection();
+    tasks.endSelection();
+    conversations.enterSelectionMode();
+    conversations.exitSelectionMode();
+    await tester.pump(const Duration(milliseconds: 151));
+    expect(presence.taskRevision, revision, reason: 'selection must not trigger metadata network reads');
     linked = false;
     await tasks.forceRefreshActionItems();
     await tester.pump(const Duration(milliseconds: 151));

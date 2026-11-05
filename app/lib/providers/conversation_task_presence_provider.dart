@@ -37,8 +37,8 @@ class ConversationTaskPresenceProvider extends ChangeNotifier {
   bool _disposed = false;
   ConversationProvider? _conversations;
   ActionItemsProvider? _tasks;
-  int? _conversationFingerprint;
-  bool _wasFetching = false;
+  Object? _conversationKey;
+  Object? _taskKey;
 
   bool? presence(String id) => _presence[id];
 
@@ -46,23 +46,53 @@ class ConversationTaskPresenceProvider extends ChangeNotifier {
     if (!identical(_conversations, conversations)) {
       _conversations?.removeListener(_conversationChanged);
       _conversations = conversations..addListener(_conversationChanged);
+      _conversationKey = _conversationInputs(conversations);
     }
     if (!identical(_tasks, tasks)) {
-      _tasks?.removeListener(invalidate);
-      _tasks = tasks..addListener(invalidate);
+      _tasks?.removeListener(_tasksChanged);
+      _tasks = tasks..addListener(_tasksChanged);
+      _taskKey = _taskInputs(tasks);
     }
   }
 
+  Object _conversationInputs(ConversationProvider source) => (
+        source.conversations,
+        source.conversations.length,
+        source.searchedConversations,
+        source.searchedConversations.length,
+        source.processingConversations,
+        source.processingConversations.length,
+        source.isFetchingConversations,
+      );
+
+  Object _taskInputs(ActionItemsProvider source) => (
+        source.apiViewState,
+        source.actionItems.length,
+        source.isLoading,
+        source.isFetching,
+      );
+
   void _conversationChanged() {
-    final source = _conversations!;
-    final fingerprint = Object.hashAll([
-      for (final row in [...source.conversations, ...source.searchedConversations])
-        Object.hash(row.id, row.isLocked, row.status),
-    ]);
-    final fetching = source.isFetchingConversations;
-    if (fingerprint != _conversationFingerprint || (_wasFetching && !fetching)) invalidate();
-    _conversationFingerprint = fingerprint;
-    _wasFetching = fetching;
+    final conversations = _conversations!;
+    final key = (
+      conversations.conversations,
+      conversations.conversations.length,
+      conversations.searchedConversations,
+      conversations.searchedConversations.length,
+      conversations.processingConversations,
+      conversations.processingConversations.length,
+      conversations.isFetchingConversations,
+    );
+    if (key == _conversationKey) return;
+    _conversationKey = key;
+    invalidate();
+  }
+
+  void _tasksChanged() {
+    final key = _taskInputs(_tasks!);
+    if (key == _taskKey) return;
+    _taskKey = key;
+    invalidate();
   }
 
   void request(String id) {
@@ -146,7 +176,7 @@ class ConversationTaskPresenceProvider extends ChangeNotifier {
     _timer?.cancel();
     _session?.cancel();
     _conversations?.removeListener(_conversationChanged);
-    _tasks?.removeListener(invalidate);
+    _tasks?.removeListener(_tasksChanged);
     super.dispose();
   }
 }

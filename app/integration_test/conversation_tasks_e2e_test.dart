@@ -81,9 +81,18 @@ void main() {
                         onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
                             builder: (_) => ConversationsWithTasksPage(
                                 auth: auth,
-                                fetch: ({required query, folderId, starred, startDate, endDate, cursor, canSend}) =>
+                                fetch: (
+                                        {required query,
+                                        includeDiscarded = false,
+                                        folderId,
+                                        starred,
+                                        startDate,
+                                        endDate,
+                                        cursor,
+                                        canSend}) =>
                                     getConversationsWithTasks(
                                         query: query,
+                                        includeDiscarded: includeDiscarded,
                                         folderId: folderId,
                                         starred: starred,
                                         startDate: startDate,

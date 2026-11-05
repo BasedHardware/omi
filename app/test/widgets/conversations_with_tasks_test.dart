@@ -64,6 +64,7 @@ void main() {
     final cursors = <String?>[];
     Future<ApiResult<TaskConversationPage>> fetch(
         {required String query,
+        bool includeDiscarded = false,
         String? folderId,
         bool? starred,
         DateTime? startDate,
@@ -91,17 +92,19 @@ void main() {
   });
 
   testWidgets('query plus starred is server-side and superseded responses cannot repaint', (tester) async {
+    SharedPreferencesUtil().showDiscardedMemories = true;
     final pending = <Completer<ApiResult<TaskConversationPage>>>[];
-    final requests = <(String, bool?)>[];
+    final requests = <(String, bool?, bool)>[];
     Future<ApiResult<TaskConversationPage>> fetch(
         {required String query,
+        bool includeDiscarded = false,
         String? folderId,
         bool? starred,
         DateTime? startDate,
         DateTime? endDate,
         String? cursor,
         bool Function()? canSend}) {
-      requests.add((query, starred));
+      requests.add((query, starred, includeDiscarded));
       final result = Completer<ApiResult<TaskConversationPage>>();
       pending.add(result);
       return result.future;
@@ -111,7 +114,7 @@ void main() {
     await tester.enterText(find.byType(TextField), 'invoice');
     await tester.tap(find.byKey(const ValueKey('tasks_filter_starred')));
     await tester.pump(const Duration(milliseconds: 251));
-    expect(requests.last, ('invoice', true));
+    expect(requests.last, ('invoice', true, true));
     pending.last.complete(ApiSuccess(TaskConversationPage(items: [_row('current')])));
     await tester.pump();
     pending.first.complete(ApiSuccess(TaskConversationPage(items: [_row('stale')])));
@@ -128,6 +131,7 @@ void main() {
     final pending = <Completer<ApiResult<TaskConversationPage>>>[];
     Future<ApiResult<TaskConversationPage>> fetch(
         {required String query,
+        bool includeDiscarded = false,
         String? folderId,
         bool? starred,
         DateTime? startDate,
@@ -166,6 +170,7 @@ void main() {
     final semantics = tester.ensureSemantics();
     Future<ApiResult<TaskConversationPage>> unused(
             {required String query,
+            bool includeDiscarded = false,
             String? folderId,
             bool? starred,
             DateTime? startDate,

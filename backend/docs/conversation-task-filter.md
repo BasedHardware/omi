@@ -5,6 +5,7 @@
 Home rows use a compact accessible badge. Search → Has tasks opens a separate
 server-backed browse page; Back restores the existing Home/search state. Query,
 date, folder and starred controls intersect before result pagination.
+The existing Show Discarded Conversations preference is forwarded to the server.
 
 “Has tasks” means at least one **current, undeleted canonical action item** whose
 `conversation_id` is this conversation. Completed and manually linked items count.
@@ -24,6 +25,8 @@ No new composite-index deployment is required; runtime query guards verify this.
 
 The mobile presence reader batches mounted row IDs (max 100 retained), invalidates
 on existing task/conversation notifications, and fences account/revision changes.
+Cheap selected keys ignore task selection, ordinary capture ticks and other
+unrelated notifications; listeners never fingerprint a whole history per tick.
 A failed read remains unknown and waits for refresh/mutation, rather than spinning
 on row rebuilds. Filter loads fence superseded requests and account changes;
 400 cursor rejection retries from the beginning with the current filters.
