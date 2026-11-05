@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-referral-pocket-layout.png",
+      "platform": "mobile-ios",
+      "description": "Referral page in the Pocket layout for a preview-cohort owner: scannable QR of the referral link, two-line title, milestone timeline card, pinned Share button and close control. iPhone 17 Pro simulator against the local backend with the preview cohort set.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "002-mobile-ios-referral-pocket-reopen.png",
+      "platform": "mobile-ios",
+      "description": "Same page after closing and reopening it from Settings a third time; the same link and layout load each time.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    }
+  ]
+}
