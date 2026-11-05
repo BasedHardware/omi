@@ -32,7 +32,8 @@ def cancel_missing(store, uid, cid, *, now, preview=False):
             return 'state_changed'
         enqueued = job.get('enqueued_at')
         if (
-            type(enqueued) not in {int, float}
+            not isinstance(enqueued, (int, float))
+            or isinstance(enqueued, bool)
             or not math.isfinite(enqueued)
             or now - enqueued < config.MISSING_CONVERSATION_SECONDS
         ):

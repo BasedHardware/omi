@@ -335,11 +335,11 @@ def discover_jobs(client, *, budget, after=None, max_rows=8, max_scan=128, selec
         cursor = {'path': doc.reference.path, 'finished_at': horizon}
         job = doc.to_dict() or {}
         uid, cid, enqueued = job.get('owner_id'), job.get('conversation_id'), job.get('enqueued_at')
-        if not all(isinstance(value, str) and value and '/' not in value for value in (uid, cid)):
+        if not isinstance(uid, str) or not uid or '/' in uid or not isinstance(cid, str) or not cid or '/' in cid:
             continue
         if doc.id != record_identity(uid, cid)[1] or not job.get('record_content_id'):
             continue
-        if type(enqueued) not in {int, float} or not math.isfinite(enqueued):
+        if not isinstance(enqueued, (int, float)) or isinstance(enqueued, bool) or not math.isfinite(enqueued):
             continue
         age = horizon.timestamp() - enqueued
         if age < config.JOBS_MIN_AGE_SECONDS:
@@ -620,6 +620,6 @@ def run(*, progress=lambda _: None):
         with silent_dependencies(), budget.interrupt_io():
             if last_attempted:
                 frontier.write(last_attempted, budget)
-            if last_job_attempted:
+            if last_job_attempted and jobs_frontier is not None:
                 jobs_frontier.write(last_job_attempted, budget)
     return {'event': 'record_seal_repair', 'outcome': 'ok', 'mode': mode, 'discovery_saturated': saturated, **report}
