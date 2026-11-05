@@ -30,7 +30,8 @@ struct ConversationProcessingBanner: View {
     }
   }
 
-  static func offersReprocess(conversation: ServerConversation, phase: ConversationProcessingPhase) -> Bool {
+  nonisolated static func offersReprocess(conversation: ServerConversation, phase: ConversationProcessingPhase) -> Bool
+  {
     phase == .stalled && !conversation.deferred && conversation.displayState == .processing
   }
 
