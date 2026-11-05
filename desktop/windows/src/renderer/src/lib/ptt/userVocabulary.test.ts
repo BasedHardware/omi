@@ -19,6 +19,7 @@ import {
   getUserVocabulary,
   refreshUserVocabulary,
   resetUserVocabulary,
+  setUserVocabulary,
   whenUserVocabularySettled
 } from './userVocabulary'
 
@@ -103,6 +104,31 @@ describe('resetUserVocabulary — sign-out', () => {
     await whenUserVocabularySettled()
     expect(getUserVocabulary()).toEqual(['Figma'])
     resetUserVocabulary()
+    expect(getUserVocabulary()).toEqual([])
+  })
+})
+
+describe('setUserVocabulary — a save from Settings', () => {
+  it('serves the saved list on the next turn without a refetch', () => {
+    setUserVocabulary(['Omi', 'Callie'])
+    expect(getUserVocabulary()).toEqual(['Omi', 'Callie'])
+    expect(get).not.toHaveBeenCalled()
+  })
+
+  it('wins over a fetch that was in flight before the save', async () => {
+    let land: (v: unknown) => void = () => {}
+    get.mockReturnValue(new Promise((r) => (land = r)))
+    refreshUserVocabulary()
+    setUserVocabulary(['Callie'])
+    land({ data: { vocabulary: ['stale'] } })
+    await new Promise((r) => setTimeout(r, 0))
+    expect(getUserVocabulary()).toEqual(['Callie'])
+  })
+
+  it('does nothing while signed out', () => {
+    currentUser!.uid = ''
+    setUserVocabulary(['Omi'])
+    currentUser!.uid = 'u1'
     expect(getUserVocabulary()).toEqual([])
   })
 })
