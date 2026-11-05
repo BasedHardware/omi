@@ -137,7 +137,8 @@ spec:
             - {name: BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED, value: {{ .Values.worker.correctnessMetricsEnabled | quote }}}
             - {name: BATCH_PIPELINE_HEAD_PRIORITY_ENABLED, value: {{ .Values.worker.headPriorityEnabled | quote }}}
             # Pump flights per GPU: claim and publication overlap the exclusive chain; "1" is the serial kill switch.
-            - {name: BATCH_PIPELINE_WORKER_PIPELINE_DEPTH, value: {{ .Values.worker.pipelineDepth | default 2 | quote }}}
+            # An instance may pin its own depth (the T4 fallback stays at 2); otherwise worker.pipelineDepth.
+            - {name: BATCH_PIPELINE_WORKER_PIPELINE_DEPTH, value: {{ ternary .instance.pipelineDepth (.Values.worker.pipelineDepth | default 2) (hasKey .instance "pipelineDepth") | quote }}}
             # Pump processes sharing this pod's GPU; "1" is the single-process kill switch.
             - {name: BATCH_PIPELINE_WORKER_PROCESSES, value: {{ $processes | quote }}}
             - {name: BATCH_PIPELINE_WORKER_IO_CONCURRENCY, value: {{ .Values.worker.ioConcurrency | default 5 | quote }}}
