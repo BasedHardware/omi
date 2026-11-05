@@ -62,7 +62,7 @@ def scanner(monkeypatch, rows, stripe):
     return ProjectionDiscovery(store, states=('pending',)), query
 
 
-@pytest.mark.parametrize('stripe', [0, 1, 64, 128, 255])
+@pytest.mark.parametrize('stripe', [0, 1, 1024, 2048, 4095])
 @pytest.mark.parametrize('limit', [1, 17, 100])
 def test_striped_cycle_visits_every_row_exactly_once_including_timestamp_ties(monkeypatch, stripe, limit):
     rows = {f'r{i:03d}': {'committed_at': 1000.0 + i // 2, 'projection_state': 'pending'} for i in range(512)}
@@ -71,24 +71,35 @@ def test_striped_cycle_visits_every_row_exactly_once_including_timestamp_ties(mo
     while len(seen) < 2 * len(rows):
         seen.extend(scan.next(limit))
     ordered = sorted(rows)
-    rotated = ordered[2 * stripe :] + ordered[: 2 * stripe]
+    first = 2 * ((stripe + 15) // 16)
+    rotated = ordered[first:] + ordered[:first]
     assert seen[: len(rows)] == seen[len(rows) : 2 * len(rows)] == rotated
     assert query.calls[0] == (None, 1)  # one scoped startup head read
-    assert query.calls[1] == ((1000.0 + stripe,), limit)
+    assert query.calls[1] == ((1000.0 + stripe / 16,), limit)
 
 
-def test_instance_hash_is_stable_and_spreads_start_points(monkeypatch):
-    monkeypatch.setenv('K_REVISION', 'synthetic-revision')
-    monkeypatch.setattr(batch_pipeline.os, 'getpid', lambda: 7)
-    rows = {f'r{i:03d}': {'committed_at': 1000.0 + i, 'projection_state': 'pending'} for i in range(256)}
-    starts = []
-    for host in ('synthetic-a', 'synthetic-b'):
-        monkeypatch.setattr(batch_pipeline.socket, 'gethostname', lambda: host)
-        stripe = batch_pipeline.projection_discovery_stripe()
-        assert stripe == batch_pipeline.projection_discovery_stripe()
-        scan, _ = scanner(monkeypatch, rows, stripe)
-        starts.append(scan.next(1)[0])
-    assert starts[0] != starts[1]
+def test_process_entropy_is_sampled_and_logged_once_per_process(monkeypatch, caplog):
+    monkeypatch.setenv('K_REVISION', 'same-revision-across-replicas')
+    entropy = Mock(side_effect=[11, 22])
+    monkeypatch.setattr(batch_pipeline.secrets, 'randbits', entropy)
+    batch_pipeline.projection_discovery_stripe.cache_clear()
+    try:
+        with caplog.at_level('INFO', logger=batch_pipeline.__name__):
+            first = ProjectionDiscovery(Mock()).stripe
+            assert ProjectionDiscovery(Mock()).stripe == first
+            assert entropy.call_count == 1
+            # Simulate another process with identical revision/hostname/PID,
+            # injecting a fresh seed rather than relying on probabilistic tests.
+            batch_pipeline.projection_discovery_stripe.cache_clear()
+            second = ProjectionDiscovery(Mock()).stripe
+            assert ProjectionDiscovery(Mock()).stripe == second
+        assert first != second
+        assert 0 <= first < 4096 and 0 <= second < 4096
+        assert entropy.call_count == 2
+        assert caplog.text.count('event=batch_projection_discovery action=start') == 2
+        assert caplog.text.count('stripes=4096') == 2
+    finally:
+        batch_pipeline.projection_discovery_stripe.cache_clear()
 
 
 @pytest.mark.parametrize('raw', ['', 'on', 'false', 'garbage', 'off', ' OFF '])
@@ -103,7 +114,7 @@ def test_only_off_disables_striping(monkeypatch, raw, mode):
 @pytest.mark.parametrize('count', [0, 1, 3])
 def test_empty_short_or_stale_collection_returns_head_without_tick_delay(monkeypatch, count):
     rows = {f'r{i}': {'committed_at': 1000.0, 'projection_state': 'pending'} for i in range(count)}
-    scan, _ = scanner(monkeypatch, rows, 255)
+    scan, _ = scanner(monkeypatch, rows, 4095)
     assert scan.next() == sorted(rows)
     assert scan.next() == sorted(rows)
 
@@ -132,9 +143,3 @@ def test_existing_followup_seed_is_preserved(monkeypatch):
     scan.after = (1200.0, '')
     assert scan.next() == []
     assert query.calls == [((1200.0,), 100)]
-
-
-def test_startup_logs_chosen_stripe(monkeypatch, caplog):
-    with caplog.at_level('INFO', logger=projection_discovery.__name__):
-        scanner(monkeypatch, {}, 128)
-    assert 'event=batch_projection_discovery action=start stripe=128 stripes=256' in caplog.text

@@ -1,6 +1,5 @@
 """Independent bounded discovery cursors for assignment and durable follow-ups."""
 
-import logging
 import time
 
 from config.batch_pipeline import (
@@ -9,8 +8,6 @@ from config.batch_pipeline import (
     projection_pagination_enabled,
     projection_striping_enabled,
 )
-
-logger = logging.getLogger(__name__)
 
 
 class ProjectionDiscovery:
@@ -21,11 +18,6 @@ class ProjectionDiscovery:
         self.states = states
         self.stripe = projection_discovery_stripe()
         self.seeded = False
-        logger.info(
-            'event=batch_projection_discovery action=start stripe=%d stripes=%d',
-            self.stripe,
-            PROJECTION_DISCOVERY_STRIPES,
-        )
 
     def next(self, limit: int = 100) -> list[str]:
         scope = {} if self.states is None else {'states': self.states}

@@ -3,10 +3,12 @@
 from config.refactor_switches import default_off as rollout_default_off, default_on as rollout_default_on
 
 from enum import IntEnum
+from functools import lru_cache
 import hashlib
+import logging
 import math
 import os
-import socket
+import secrets
 
 from config.rollout_cohorts import rollout_cohort_members
 from typing import Callable, TypeVar
@@ -523,17 +525,22 @@ def projection_striping_enabled() -> bool:
     return kill_switch('BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED')
 
 
-PROJECTION_DISCOVERY_STRIPES = 256
+PROJECTION_DISCOVERY_STRIPES = 4096
 
 
+@lru_cache(maxsize=1)
 def projection_discovery_stripe() -> int:
-    """Stable startup phase; 256 buckets keep collisions low for 30-50 instances.
+    """Choose and log one process-local random phase, without network I/O.
 
-    Revision separates overlapping rolls; hostname separates instances and pid
-    separates workers. SHA-256 is stable across Python hash randomization.
+    Replicas may share hostname/PID. Fresh entropy separates them; 4096 buckets
+    reduce collisions at 30-50 instances. Restarts may choose a different phase.
     """
-    identity = f'{os.getenv("K_REVISION", "")}:{socket.gethostname()}:{os.getpid()}'
-    return int.from_bytes(hashlib.sha256(identity.encode()).digest()[:8], 'big') % PROJECTION_DISCOVERY_STRIPES
+    identity = f'{os.getenv("K_REVISION", "")}:{secrets.randbits(128)}'
+    stripe = int.from_bytes(hashlib.sha256(identity.encode()).digest()[:8], 'big') % PROJECTION_DISCOVERY_STRIPES
+    logging.getLogger(__name__).info(
+        'event=batch_projection_discovery action=start stripe=%d stripes=%d', stripe, PROJECTION_DISCOVERY_STRIPES
+    )
+    return stripe
 
 
 def owner_chain_projection_enabled() -> bool:
