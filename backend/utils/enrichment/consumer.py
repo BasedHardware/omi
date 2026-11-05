@@ -77,19 +77,31 @@ def _transient_dependency(error: BaseException) -> bool:
 transient_dependency = _transient_dependency
 
 
-def _fenced_redirect(uid: str, conversation_id: str) -> str | None:
-    """The canonical conversation a fenced run's row now redirects to, if a merge redirected it mid-run."""
+def _fenced_redirect(uid: str, conversation_id: str) -> tuple[str, str | None]:
+    """How a fenced run with custody settles: ('superseded', None), ('transfer', canonical) or ('defer', None).
+
+    Mirrors the callback's entry rule: a row a merge redirected moves its custody to the canonical conversation,
+    and a redirect that cannot be resolved (broken topology, a failed read) keeps the row deferred, never retired.
+    A live row or a plain user deletion stays superseded.
+    """
     from config.sync_reprocess import fence_redirect_transfer_enabled
     from database import conversations as conversations_db
 
     if not fence_redirect_transfer_enabled():
-        return None
+        return 'superseded', None
     try:
+        row = conversations_db.get_conversation_raw_snapshot(
+            uid, conversation_id, field_paths=['deleted', 'sync_merged_into']
+        )
+        if not row or not (row.get('deleted') and row.get('sync_merged_into')):
+            return 'superseded', None
         canonical = conversations_db.resolve_sync_conversation_redirect(uid, conversation_id)
     except Exception as error:
         logger.warning('event=sync_reprocess outcome=fence_redirect_unresolved exception_type=%s', type(error).__name__)
-        return None
-    return canonical if isinstance(canonical, str) and canonical and canonical != conversation_id else None
+        return 'defer', None
+    if isinstance(canonical, str) and canonical and canonical != conversation_id:
+        return 'transfer', canonical
+    return 'defer', None
 
 
 def _cause(error: BaseException) -> str:
@@ -272,10 +284,13 @@ class EnrichmentConsumer:
             # #21968: the newer writer owns the conversation and marks its own obligation. A merge that
             # redirected this conversation while it ran is the exception: its custody (first summary, hold)
             # must move to the canonical conversation, exactly as before_notes' ConversationAbsorbed does.
-            canonical = _fenced_redirect(uid, conversation_id) if context is not None else None
-            if canonical and context is not None:
+            action, canonical = _fenced_redirect(uid, conversation_id) if context is not None else ('superseded', None)
+            if context is not None and action == 'transfer':
                 logger.info('event=sync_reprocess outcome=conversation_fenced redirect=transferred')
                 context['redirect_to'] = canonical
+            elif context is not None and action == 'defer':
+                logger.info('event=sync_reprocess outcome=conversation_fenced redirect=unresolved')
+                context['defer_reason'] = 'redirect_unresolved'
             else:
                 logger.info('event=sync_reprocess outcome=conversation_fenced')
                 superseded = True

@@ -170,7 +170,7 @@ def test_enrichment_delivery_activates_early_abort_only_during_its_callback(rows
     assert seen == [True] and early_abort.ACTIVE.get() is False
 
 
-def _fenced_run(rows, monkeypatch, *, resolved, first_summary=True):
+def _fenced_run(rows, monkeypatch, *, row, resolved=None, resolve_error=None, first_summary=True):
     # synceff 2026-11-05: a merge redirected the conversation while the run's LLM steps ran, so the persist fenced.
     from database import conversations as conversations_db
     from utils.enrichment import custody
@@ -179,40 +179,62 @@ def _fenced_run(rows, monkeypatch, *, resolved, first_summary=True):
     if first_summary:
         monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
         monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
-    resolves, transfers = [], []
+    reads, resolves, transfers = [], [], []
+
+    def resolve(uid, cid, **_):
+        resolves.append(cid)
+        if resolve_error is not None:
+            raise resolve_error
+        return resolved
+
     monkeypatch.setattr(
-        conversations_db, 'resolve_sync_conversation_redirect', lambda uid, cid, **_: resolves.append(cid) or resolved
+        conversations_db, 'get_conversation_raw_snapshot', lambda uid, cid, **kw: reads.append(cid) or row
     )
+    monkeypatch.setattr(conversations_db, 'resolve_sync_conversation_redirect', resolve)
     monkeypatch.setattr(custody, 'transfer_redirect', lambda *args, **kwargs: transfers.append(args[3]))
     result = _deliver(rows, Mock(side_effect=SyncConversationPersistenceFenced('synthetic')))
-    return result, resolves, transfers
+    return result, reads, resolves, transfers
+
+
+REDIRECTED = {'deleted': True, 'sync_merged_into': 'survivor'}
 
 
 def test_fenced_run_redirected_mid_run_transfers_custody_to_the_survivor(rows, monkeypatch):
     monkeypatch.delenv('ENRICHMENT_FENCE_REDIRECT_TRANSFER_ENABLED', raising=False)
-    result, resolves, transfers = _fenced_run(rows, monkeypatch, resolved='survivor')
+    result, reads, resolves, transfers = _fenced_run(rows, monkeypatch, row=REDIRECTED, resolved='survivor')
     assert (result.outcome, result.reason) == ('stale', 'redirected')
-    assert resolves == ['c'] and transfers == ['survivor']
+    assert reads == ['c'] and resolves == ['c'] and transfers == ['survivor']
 
 
-@pytest.mark.parametrize('resolved', ['c', None])
-def test_fenced_run_without_a_redirect_still_settles_superseded(rows, monkeypatch, resolved):
-    result, resolves, transfers = _fenced_run(rows, monkeypatch, resolved=resolved)
+@pytest.mark.parametrize('resolved,error', [(None, None), ('c', None), (None, RuntimeError('synthetic outage'))])
+def test_unresolved_redirect_defers_and_keeps_the_row(rows, monkeypatch, resolved, error):
+    result, _reads, _resolves, transfers = _fenced_run(
+        rows, monkeypatch, row=REDIRECTED, resolved=resolved, resolve_error=error
+    )
+    assert result.outcome == 'deferred' and transfers == []
+    assert KEY in rows[0]
+
+
+@pytest.mark.parametrize('row', [{'sync_content_revision': 4}, {'deleted': True}, None])
+def test_live_or_plainly_deleted_fenced_row_still_settles_superseded(rows, monkeypatch, row):
+    result, reads, resolves, transfers = _fenced_run(rows, monkeypatch, row=row, resolved='survivor')
     assert (result.outcome, result.reason) == ('discarded', 'superseded')
-    assert resolves == ['c'] and transfers == []
+    assert reads == ['c'] and resolves == [] and transfers == []
 
 
 def test_fence_redirect_kill_switch_keeps_the_superseded_settle(rows, monkeypatch):
     monkeypatch.setenv('ENRICHMENT_FENCE_REDIRECT_TRANSFER_ENABLED', 'false')
-    result, resolves, transfers = _fenced_run(rows, monkeypatch, resolved='survivor')
+    result, reads, resolves, transfers = _fenced_run(rows, monkeypatch, row=REDIRECTED, resolved='survivor')
     assert (result.outcome, result.reason) == ('discarded', 'superseded')
-    assert resolves == [] and transfers == []
+    assert reads == [] and resolves == [] and transfers == []
 
 
-def test_fence_without_custody_context_reads_no_redirect(rows, monkeypatch):
-    result, resolves, transfers = _fenced_run(rows, monkeypatch, resolved='survivor', first_summary=False)
+def test_fence_without_custody_context_reads_nothing(rows, monkeypatch):
+    result, reads, resolves, transfers = _fenced_run(
+        rows, monkeypatch, row=REDIRECTED, resolved='survivor', first_summary=False
+    )
     assert (result.outcome, result.reason) == ('discarded', 'superseded')
-    assert resolves == [] and transfers == []
+    assert reads == [] and resolves == [] and transfers == []
 
 
 def test_open_live_target_defers_with_a_new_wake(rows, monkeypatch):
