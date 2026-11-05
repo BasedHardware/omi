@@ -290,7 +290,7 @@ def projection_ref():
 
 async def test_stalled_storage_bounds_overflow_coordinators_and_actual_pcm_work(records, monkeypatch, caplog):
     """More closures than both caps: waiters hold receipts, not queued PCM."""
-    workers, cap, count = 2, 1, 8
+    workers, cap, count = 3, 1, 8
     pool = executors.MonitoredThreadPoolExecutor(
         name='test_record_stall', max_workers=workers, max_queue_size=0, log_saturation=False
     )
@@ -385,13 +385,14 @@ async def test_stalled_storage_bounds_overflow_coordinators_and_actual_pcm_work(
         assert await later.finish_recording('record')
         assert len(records.rows[PATH]['record_upload_sessions']) == count
         assert not records.rows[PATH]['record_audio_closed']
-        assert tracker.pending or trackers[1].pending  # GCS still stalled.
+        assert trackers[2].pending  # A refused overflow producer is still writing.
         # PCM-bearing custody calls fail immediately, never join a waiter/queue.
         with trackers[-1].scope(), pytest.raises(executors.ExecutorSaturatedError):
             await executors.run_blocking(executors.storage_executor, lambda pcm: None, bytearray(320))
         assert pool._work_queue.qsize() == 0 and materialized == workers
         release.set()
         await asyncio.wait_for(asyncio.gather(tasks[0], *owners), 5)
+        await asyncio.wait_for(asyncio.gather(*(tracker.wait() for tracker in trackers)), 5)
         await asyncio.sleep(0)
         assert not finish._abandon_record_drains
         assert pool.active_count == 0
