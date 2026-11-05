@@ -135,7 +135,7 @@ Heavy: `bash app/tool/perf_device_run.sh` ([never-uninstall guide](tool/perf/REA
 - Firebase Auth; browser flows: [mobile auth](docs/mobile-browser-auth.md).
 
 ### Request Headers
-See `lib/backend/http/shared.dart`. Gated features show on TestFlight unless they move money: `backend/config/app_channel.py`.
+Gated features show read-only on TestFlight by default; never money, entitlements or data: `backend/config/app_channel.py`.
 
 ### API Base URLs
 - Dev: configured in `.dev.env` → `Env.apiBaseUrl`
