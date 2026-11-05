@@ -193,6 +193,15 @@ def entries():
             neutrals={'limit': (10, 'bounded page size')},
         ),
         DriverEntry(
+            'database.batch_pipeline_quarantine_recovery.dead_held_candidates',
+            domains={'namespace': namespaces, 'after_id': [None, 'held-09']},
+            neutrals={'limit': (32, 'bounded page size')},
+        ),
+        DriverEntry(
+            'database.batch_pipeline_quarantine_recovery.held_expired_stock',
+            domains={'namespace': namespaces},
+        ),
+        DriverEntry(
             'database.batch_pipeline_quarantine_recovery.held_candidates',
             domains={'namespace': namespaces, 'after_id': [None, 'held-09']},
             neutrals={'limit': (32, 'bounded page size')},
