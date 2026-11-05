@@ -120,7 +120,9 @@ MEMBER_FIELDS = [
 ]
 
 
-def read_members(uid: str, rows: list[dict[str, Any]], *, firestore_client: Any = None) -> dict[str, dict[str, Any]]:
+def read_members(
+    uid: str, rows: list[dict[str, Any]], *, firestore_client: Any = None, source_versions: dict | None = None
+) -> dict[str, dict[str, Any]]:
     client = firestore_client if firestore_client is not None else get_firestore_client()
     root = client.collection('users').document(uid).collection('conversations')
     all_ids: list[str] = []
@@ -132,6 +134,10 @@ def read_members(uid: str, rows: list[dict[str, Any]], *, firestore_client: Any 
     for offset in range(0, len(ids), episodes.MEMBERSHIP_BATCH_LIMIT):
         refs = [root.document(cid) for cid in ids[offset : offset + episodes.MEMBERSHIP_BATCH_LIMIT]]
         for snapshot in client.get_all(refs, field_paths=MEMBER_FIELDS):
+            if source_versions is not None:
+                # Include absent/hidden/unreadable members: creation or a policy
+                # change can alter the projection just as an ordinary edit can.
+                source_versions[snapshot.reference.path] = snapshot.update_time
             if snapshot.exists:
                 members[snapshot.id] = dict(snapshot.to_dict() or {}, id=snapshot.id)
     return {

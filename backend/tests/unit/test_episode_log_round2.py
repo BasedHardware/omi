@@ -210,7 +210,7 @@ def test_remote_capture_kill_overrides_env_and_rechecks_after_serving_commit(cli
     def edit(transaction):
         intent = store.prepare(transaction, client, UID)
         transaction.set(ref, {'deleted': True})
-        intent.stage([{'kind': 'member_refresh', 'cid': 'c', 'payload': {}}])
+        assert intent is None  # Global kill installs no post-commit observer.
 
     edit(client.transaction())
     assert client.rows[ref.path] == {'deleted': True}

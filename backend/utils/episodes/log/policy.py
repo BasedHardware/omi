@@ -63,7 +63,6 @@ def _decorate(fn, *, client_factory):
                 try:
                     refresh_client = client if client is not None else client_factory()
                     if not config.enabled(uid):
-                        store.invalidate(uid, firestore_client=refresh_client)
                         return
                     store.policy_barrier(uid, cid, token, entering=False, firestore_client=refresh_client)
                 except Exception as error:

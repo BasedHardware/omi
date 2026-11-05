@@ -455,3 +455,184 @@ def test_reconcile_source_proof_rejects_all_committed_source_changes(db, change)
         )
     assert store.state(uid, firestore_client=client)['capture_dirty']
     assert not root.collection('episode_log_checkpoint').document('fold').get().exists
+
+
+@pytest.mark.parametrize('writer', ['assignment', 'smart_merge'])
+def test_queued_member_writer_after_repair_read_rejects_publish_and_home_uses_legacy(db, monkeypatch, writer):
+    from concurrent.futures import Future
+    from unittest.mock import Mock
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from database import episodes, smart_merge
+    from routers import episodes as api
+    from utils.episodes import home_read
+    from utils.episodes.log import capture, reads, reconcile, worker
+    from utils.other import endpoints
+    from utils.sync.assignment import assign_in_transaction
+
+    client, uid = db
+    monkeypatch.setenv('EPISODES_LOG_READ_PERCENT', '100')
+    monkeypatch.setenv('EPISODES_RECORDED_TIME_ENABLED', 'off')
+    monkeypatch.setenv('CONVERSATION_SMART_MERGE_FLATTEN_ENABLED', 'off')
+    monkeypatch.setattr(worker, 'wake', lambda *a: None)
+    root = store.root(client, uid)
+    store.owner_ref(client, uid).set(
+        dict(cursor=0, next_seq=0, home_version=1, backfill_complete=True, home_rows_ready=True)
+    )
+    root.collection('episodes').document('e').set(
+        episodes.seal(
+            uid,
+            dict(
+                id='e',
+                status='closed',
+                close_reason='user',
+                state_version=1,
+                started_at=NOW,
+                last_activity_at=NOW + timedelta(minutes=2),
+                conversation_ids=['c', 'd'],
+            ),
+        )
+    )
+    for cid, minute in [('c', 0), ('d', 1)]:
+        root.collection('conversations').document(cid).set(
+            dict(
+                id=cid,
+                status='completed',
+                discarded=False,
+                source='omi',
+                data_protection_level='standard',
+                created_at=NOW + timedelta(minutes=minute),
+                started_at=NOW + timedelta(minutes=minute),
+                finished_at=NOW + timedelta(minutes=minute + 1),
+                structured={'title': f'before {cid}'},
+                transcript_segments=[],
+            )
+        )
+    store.invalidate(uid, firestore_client=client)
+    queued = []
+    monkeypatch.setattr(capture, 'submit', lambda fn: queued.append(fn) or Future())
+    original = home_read.read_members
+
+    def read_then_commit(*args, **kwargs):
+        members = original(*args, **kwargs)
+        assert kwargs['source_versions'][root.collection('conversations').document('c').path]
+        prior = store.state(uid, firestore_client=client)
+        if writer == 'assignment':
+            incoming = dict(
+                id='chunk',
+                source='omi',
+                data_protection_level='standard',
+                status='completed',
+                discarded=False,
+                started_at=NOW + timedelta(minutes=2),
+                finished_at=NOW + timedelta(minutes=3),
+                transcript_segments=[dict(id='s', text='Synthetic appended speech', start=0.0, end=60.0, speaker_id=0)],
+            )
+
+            @firestore.transactional
+            def assign(transaction):
+                return assign_in_transaction(
+                    transaction,
+                    root,
+                    incoming,
+                    target_id='c',
+                    decode=lambda row: row,
+                    encode=lambda row: row,
+                    invalidate=lambda row: None,
+                )
+
+            result, created, _ = assign(client.transaction())
+            assert result['id'] == 'c' and not created
+        else:
+
+            def plan(*args):
+                return (
+                    None,
+                    {'structured': {'title': 'after smart merge'}, 'smart_merge': {'role': 'survivor', 'revision': 1}},
+                    {'deleted': True, 'sync_merged_into': 'c'},
+                    {},
+                )
+
+            result = smart_merge.absorb_conversation(
+                uid,
+                'c',
+                'd',
+                expected_revision=0,
+                plan=plan,
+                firestore_client=client,
+            )
+            assert result.outcome == 'absorbed'
+        assert len(queued) == 1
+        assert store.state(uid, firestore_client=client) == prior  # No owner watermark change.
+        return members
+
+    monkeypatch.setattr(home_read, 'read_members', read_then_commit)
+    at = datetime.now(timezone.utc)
+    assert worker.drain(uid, firestore_client=client, now=at) == 'lost_lease'
+    assert store.state(uid, firestore_client=client)['capture_dirty']
+    assert not root.collection('episode_views').document('e').get().exists
+    assert not root.collection('episode_log_checkpoint').document('fold').get().exists
+    monkeypatch.setattr(home_read, 'read_members', original)
+    # Exercise actual Home routing at full admission while member_refresh is queued.
+    monkeypatch.setattr(api, '_admitted', lambda *a: True)
+    ready = reads.ready
+    monkeypatch.setattr(reads, 'ready', lambda uid: ready(uid, firestore_client=client))
+    legacy, log = Mock(return_value=([], None)), Mock(return_value=([], [], None))
+    monkeypatch.setattr(api.home_read, 'list_episode_window', legacy)
+    monkeypatch.setattr(api.home_read, 'project_episodes', lambda *a: [])
+    monkeypatch.setattr(reads, 'list_window', log)
+    monkeypatch.setattr(worker, 'sample_read', lambda *a: None)
+    app = FastAPI()
+    app.include_router(api.router)
+    app.dependency_overrides[endpoints.get_current_user_uid] = lambda: uid
+    http = TestClient(app)
+    params = {'from': NOW.isoformat(), 'to': NOW.isoformat()}
+    assert http.get('/v1/episodes', params=params).status_code == 200
+    assert legacy.called and not log.called
+    queued.pop()()
+    assert store.state(uid, firestore_client=client)['next_seq'] == 1
+    assert ready(uid, firestore_client=client) is None
+    assert worker.drain(uid, firestore_client=client, now=at + timedelta(minutes=11)) == 'drained'
+    assert not store.state(uid, firestore_client=client).get('capture_dirty')
+    legacy.reset_mock()
+    assert http.get('/v1/episodes', params=params).status_code == 200
+    assert log.called and not legacy.called
+
+
+@pytest.mark.parametrize('change', ['edit', 'delete', 'create_missing', 'hidden_policy'])
+def test_repair_member_versions_reject_direct_writes_without_capture(db, change):
+    from utils.episodes.log import reconcile
+
+    client, uid = db
+    root = store.root(client, uid)
+    member = root.collection('conversations').document('c')
+    if change != 'create_missing':
+        member.set({'structured': {'title': 'before'}, 'deleted': change == 'hidden_policy'})
+    store.invalidate(uid, firestore_client=client)
+    at = datetime.now(timezone.utc)
+    claimed = store.claim(uid, firestore_client=client, now=at)
+    fold, removed_views, removed_links, proof = reconcile.snapshot(uid, client)
+    reconcile.read_members(uid, [{'conversation_ids': ['c']}], client, proof)
+    if change == 'delete':
+        member.delete()
+    elif change == 'create_missing':
+        member.set({'structured': {'title': 'created'}})
+    else:
+        member.update({'structured.title': 'after', 'deleted': False})
+    with pytest.raises(store.LostLease, match='source_changed'):
+        store.publish(
+            uid,
+            claimed,
+            0,
+            fold.checkpoint(),
+            {},
+            {},
+            firestore_client=client,
+            now=at,
+            repaired=True,
+            removed_views=removed_views,
+            removed_links=removed_links,
+            source_versions=proof,
+        )
+    assert store.state(uid, firestore_client=client)['capture_dirty']
+    assert not root.collection('episode_log_checkpoint').document('fold').get().exists

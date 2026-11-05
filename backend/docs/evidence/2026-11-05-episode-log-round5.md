@@ -1,0 +1,86 @@
+# Episode log round 5: projected-member proof and inert capture kill
+
+Measured locally on m5-mbp, 2026-11-05 for BasedHardware/omi PR #24607,
+`lane/epbatch2`, starting from `a9ebc518c61c9488cbeb290a877fd9fd86a6adbc`.
+These are hermetic and synthetic loopback-emulator results. No GCP tier, human
+cloud credentials, production reads/writes, merge, deployment or TTL apply.
+
+## Repair proof
+
+The exact Home member snapshots now contribute document paths and SDK
+`update_time` to the repair proof. Missing, hidden and unreadable members remain
+in the proof. The publication transaction reads those paths with `get_all`,
+compares SDK versions, and only then stages checkpoint/views and clears dirty.
+Conversation insertion at a missing path, deletion, recreation or any field
+mutation rejects stale repair; later writers serialize against those reads.
+No writer-specific watermark bump or timely capture delivery is required.
+
+The [writer coverage inventory](../episode-repair-writers.md) names storage
+entrypoints, including assignment canonical/donor/ancestor/replacement branches,
+smart merge, lifecycle/finalization, user/privacy edits, batch/recovery,
+maintenance and generic adapters. The full table is also copied into the PR
+body for review. Projection targets remain epoch/lease-fenced by their single
+publication writer.
+
+Repair's conversation reads share the 128-source-document recheck budget with
+episodes, links and receipt archives. Overflow is rejected before member reads.
+The initial episode/source/old-projection scan stays bounded at 128; including
+member reads the initial repair is bounded at 256 documents. Publication's
+source recheck remains at most 128 document versions plus empty-query minimum
+charges. Ordinary drains and customer serving transactions add no proof reads.
+
+## Capture off
+
+Global capture admission now precedes installing a commit observer, submitting
+to the executor, executing an accepted callback, flushing an old intent (including
+stage errors), and handling drops/cancellation. Off mode submits zero callbacks
+and writes zero capture/invalidation markers, including under saturation or
+submit failure. A policy release no longer invalidates in its disabled branch.
+Serving mutations still commit their original data/result.
+
+`capture_possible()` can refresh the control-plane flag store, even while off.
+This contains no customer data. Cached remote flag propagation and already
+committing operations retain the runbook's stated limits.
+
+## Qualification
+
+Qualification test commands and final preflight use `/Users/dazheng/workspace/omi/bin/omi-heavy run --` with
+`GOOGLE_APPLICATION_CREDENTIALS` and every `CLOUDSDK_*` variable removed.
+Unit files run separately through `backend/test.sh` with its existing timing
+limits and `BACKEND_PYTEST_WORKERS=1`.
+
+- Focused selection: the same nine round-4 log suites plus
+  `tests/unit/test_episode_log_round5.py`: **151 passed**, including round-2/3/4
+  regressions and the policy-entry race.
+- Acceptance: the exact selection recorded in the
+  [round-4 evidence](2026-11-05-episode-log-round4.md), plus the new round-5 file.
+  **2,967 passed** in the broad run; the final focused run additionally passes
+  the added disabled-policy-release and source-growth cases (12 round-5 cases total).
+- Same 17 round-3/4 CI regression files: **127 passed**.
+- `npx --no-install firebase emulators:exec --only firestore --project
+  demo-omi-isolated-tests 'backend/.venv/bin/python -m pytest -q
+  backend/tests/integration/test_episode_log_emulator.py'`: **25/25 passed**.
+  Real assignment and smart-merge transactions commit between repair member read
+  and publication while `member_refresh` stays queued and the owner is unchanged.
+  Both reject publication, retain dirty/checkpoint state, and use the actual
+  legacy Home route at 100% read admission. Delivery alone cannot clear dirty;
+  fresh repair restores log routing. Four further cases cover uncaptured member
+  edit/delete, missing-member creation and hidden-member policy changes.
+- Combined log + `test_recorded_episode_timeline_emulator.py`: **52 passed,
+  1 failed**. The unchanged legacy
+  `test_concurrent_live_and_recorded_attachments_preserve_timeline` exhausted
+  transaction attempts after `409 Transaction lock timeout`, as also observed
+  in round 4. All 25 log proofs pass. Combined suite is not green. Retry budgets,
+  proof concurrency and skips were unchanged; owned emulator processes stopped.
+- Initial combined invocation used an incorrect timeline filename and collected
+  no tests; the corrected invocation above is the measured combined result.
+- Initial unit smoke found the round-4 fake client lacked collection support;
+  proof prefix construction now uses the already-known UID namespace without a
+  redundant client lookup. All retained round-4 cases pass in the focused suite.
+- The initial PR-body validation discovered a synthetic merge conflict with
+  current `origin/main` in the sync collector regex: main added the privacy
+  memo-ineligible counter on the same line as this branch's episode metrics.
+  The branch now retains both. That exploratory parallel run also detected
+  ongoing edits; it is not counted as a successful preflight. Final preflight
+  and guarded push run serially against stable files.
+- Final preflight and normal guarded push results recorded after completion.

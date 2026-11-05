@@ -34,7 +34,7 @@ Keeping this rare fence synchronous prevents readiness from remaining true when
 the executor cannot accept the invalidation either. Geometry compaction is
 allowlisted copying, without IO/encryption.
 
-Every detected capture/entry/refresh drop writes a durable `capture_dirty` token,
+While capture is admitted, every detected capture/entry/refresh drop writes a durable `capture_dirty` token,
 clears Home readiness and advances the owner epoch, fencing older publishers.
 Home automatically uses legacy for that owner, including at read percent 100.
 Ordinary publication cannot clear the marker. The next drain performs a full
@@ -42,15 +42,22 @@ bounded reconciliation from current legacy episodes, links and receipt archives,
 removes stale views/links and reprojects current member policy. Only atomic
 publication under the unchanged epoch, gap token, append watermark and source
 versions clears it. Reconciliation records each source document's Firestore
-`update_time`, including receipt archives, then re-queries the bounded source
-collections inside the publication transaction before staging writes. Inserts,
+`update_time`, including receipt archives and every conversation snapshot used
+to project Home (even absent, hidden or unreadable members), then re-queries the
+bounded source collections and batch-reads those conversation versions inside
+the publication transaction before staging writes. Inserts,
 deletes and edits by a committed writer with still-queued capture reject stale
 repair. Transactional source reads serialize publication against later writes.
-This is option (b): zero added reads or field writes on the serving path; the
-extra source reads/locks occur only during gap repair. A rejected repair retains
+The [writer inventory](../episode-repair-writers.md) lists each storage entrypoint
+and how the proof covers it, including queued assignment and smart merge.
+This is option (b): no extra customer-data reads or field writes on the serving
+path; source proof reads/locks occur only during gap repair. Global capture
+admission can refresh the control-plane flag store; this is not customer data. A rejected repair retains
 the dirty token and legacy Home routing until a successful full reconciliation.
-The initial full reconciliation scans at most 128 documents (including old
-projections and archives); the transactional recheck reads at most 128 source
+The initial episode/source/projection scan reads at most 128 documents.
+Projected conversations share a separate 128-document source-proof budget with
+episodes, links and archives; including old projections, the initial repair
+reads at most 256 documents. The transactional recheck reads at most 128 source
 documents again (plus minimum query charges for empty collections); overflow fails closed on legacy rather than clearing the marker.
 A completely unavailable data plane may also prevent persistence of the marker;
 `invalidation_failed` is an error requiring repair before read readmission.
@@ -144,8 +151,12 @@ owner to install with the existing metrics scrape.
   maximum. Already committing work completes; the drain cheaply rechecks the
   cached rule before publication and defers if it now sees the kill. The TTL
   safety guard checks global capture admission before any customer-data probe;
-  capture off performs zero episode-fact queries. Queued intent rechecks admission
-  after commit. The
+  capture off performs zero customer-data queries or writes for capture, installs
+  no commit observer, submits no executor work, and writes no invalidation marker
+  on saturation, submit failure or cancellation. Already accepted jobs recheck
+  admission before execution; commit observers and staged-error flushes recheck
+  too. `capture_possible()` may refresh the control-plane flag store while off
+  (no customer data). The
   existing flag CLI supports this Firestore key; no deploy is needed to stop it.
 - `EPISODES_HOME_ROWS_ENABLED`: on unless off. Rows are sealed, server-filtered
   wire projections (member IDs, titles, emoji, starts, visibility and floor).

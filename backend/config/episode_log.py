@@ -42,7 +42,10 @@ def read_cohort(uid: str) -> bool:
 
 
 def capture_possible() -> bool:
-    """Global sweep/TTL admission, without a customer-data query."""
+    """Global capture/sweep/TTL admission, without a customer-data query.
+
+    snapshot() may refresh the control-plane flag store, including when off.
+    """
     from utils import omi_flags
 
     rule = omi_flags.snapshot().rules.get('EPISODES_LOG_ENABLED')

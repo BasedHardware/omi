@@ -37,8 +37,30 @@ def versions(documents):
 def verify(uid, client, expected, transaction):
     # These reads MUST be inside the transaction that clears capture_dirty.
     # Firestore serializes later writers against these source reads as well.
-    if expected is None or versions(source_documents(uid, client, transaction=transaction)) != expected:
+    current = versions(source_documents(uid, client, transaction=transaction))
+    if expected is not None:
+        prefix = f'users/{uid}/conversations/'
+        if current != {path: version for path, version in expected.items() if not path.startswith(prefix)}:
+            # Reject source growth before member reads, retaining the shared
+            # source-proof read bound even when new episodes were inserted.
+            raise store.LostLease('episode_reconcile_source_changed_during_read')
+        refs = [client.document(path) for path in expected if path.startswith(prefix)]
+        # get_all retains missing documents (update_time=None). Read versions in
+        # the publication transaction, never from a later nontransactional read.
+        if refs:
+            current.update(versions(client.get_all(refs, field_paths=[], transaction=transaction)))
+    if expected is None or current != expected:
         raise store.LostLease('episode_reconcile_source_changed_during_read')
+
+
+def read_members(uid, rows, client, proof):
+    """Use the exact projected snapshots, within the shared repair read budget."""
+    from utils.episodes import home_read
+
+    ids = {cid for row in rows for cid in row.get('conversation_ids') or []}
+    if len(proof) + len(ids) > store.MAX_PUBLISH_ROWS:
+        raise store.ProjectionCapacity('episode_reconcile_capacity')
+    return home_read.read_members(uid, rows, firestore_client=client, source_versions=proof)
 
 
 def snapshot(uid, client):

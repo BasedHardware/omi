@@ -128,7 +128,7 @@ class Capture:
 
 
 def prepare(transaction, client, uid):
-    # Recording intent is IO-free. Remote admission is checked after commit.
+    # Admission may refresh control-plane flags; intent reads no customer data.
     from utils.episodes.log.capture import prepare_capture
 
     return prepare_capture(transaction, client, uid)
@@ -552,7 +552,7 @@ def finish_backfill(uid, *, firestore_client=None):
 
 
 def prepare_member_change(transaction, user_ref):
-    """Register an IO-free post-commit refresh for sync/smart-merge writers."""
+    """Register a post-commit refresh; setup reads no customer data."""
     capture = prepare(transaction, getattr(transaction, '_client', None), user_ref.id) if user_ref is not None else None
     if capture is not None:
         capture.existing_only = True
