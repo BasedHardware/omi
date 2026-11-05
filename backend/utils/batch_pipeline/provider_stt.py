@@ -255,6 +255,7 @@ class ProviderSttStore:
         *,
         table_version: str = 'builtin',
         measured_vad_speech_seconds: float | None = None,
+        vendor_skipped: bool = False,
     ):
         """CAS pending -> running, minting attempt N. Returns the job if running (ours or a prior
         intent), else None. Raises ``AttemptRefused`` when the paid-once bounds forbid the mint."""
@@ -291,6 +292,10 @@ class ProviderSttStore:
             }
             if measurements:
                 job['provider_intent']['measured_vad_speech_seconds'] = max(measurements)
+            if vendor_skipped:
+                # Strict VAD found no speech spans: the stage answers silence locally and never
+                # calls the vendor. Reconciliation settles an abandoned intent as that silence.
+                job['provider_intent']['vendor_skipped'] = True
             tx.put('jobs', segment_id, job)
             return job
 
@@ -484,6 +489,16 @@ _SONIOX_OUTCOMES = {
     'invalid_response': VendorAttemptOutcome.INVALID_RESPONSE,
     'error': VendorAttemptOutcome.ERROR_5XX,
 }
+
+
+def _vendor_skipped(intent: dict) -> bool:
+    """True when the stage answered this intent's unit as local silence without a vendor call.
+
+    New intents carry ``vendor_skipped``. An intent minted by an older worker has only the
+    strict-VAD measurement: spans are validated with ``start < end``, so 0 measured speech
+    seconds means no spans, the same condition ``_call_sync`` uses to skip the vendor.
+    """
+    return bool(intent.get('vendor_skipped')) or intent.get('measured_vad_speech_seconds') == 0
 
 
 def _speech_seconds(inspected: tuple | None) -> float | None:
@@ -858,6 +873,8 @@ class ProviderSttStage:
                 self.clock(),
                 service,
                 measured_vad_speech_seconds=_speech_seconds(inspected) if failure is None else None,
+                # Same condition _call_sync uses to answer silence without a vendor call.
+                vendor_skipped=failure is None and inspected is not None and not inspected[2],
             )
         except AttemptRefused:
             # Read-to-mint race on the attempt list; never mint past the bounds. Re-evaluate later.
@@ -1061,6 +1078,8 @@ class ProviderSttStage:
                 # A billed result saved before a failed settle is still overflow spend.
                 vendor_metrics.overflow_attempt(route, intent['service'], 0.0 if silence else item.duration_seconds)
             return UnitOutcome('done', 'processed' if settled else 'superseded')
+        if self.clock() - intent['started_at'] > ABANDON_SECONDS and _vendor_skipped(intent):
+            return self._settle_skipped_silence(segment_id, intent, item, route)
         if self.clock() - intent['started_at'] > ABANDON_SECONDS:
             failure = {'stage': 'provider', 'reason': 'abandoned_running'}
             # No strict-VAD speech means _call_sync answered silence locally: no vendor call, so
@@ -1086,6 +1105,38 @@ class ProviderSttStage:
             self._log('failed_held', 'abandoned_running')
             return UnitOutcome('done', 'processed', provider_reason='provider_failed')
         return UnitOutcome('deferred', 'lease_held', intent['started_at'] + ABANDON_SECONDS)
+
+    def _settle_skipped_silence(self, segment_id: str, intent: dict, item: WorkItem, route: SttRoute) -> UnitOutcome:
+        """An abandoned intent whose strict VAD found no speech never reached the vendor.
+
+        Its result is the same local silence the first delivery computed before its save failed:
+        persist and settle that silence under the intent's token. It is not an ABANDONED vendor
+        attempt, so it records no health failure (a burst cannot open a healthy vendor's breaker)
+        and bills no audio.
+        """
+        stage = 'persist'
+        try:
+            payload = silence_payload(item.duration_seconds)
+            uri = self.artifacts.persist_recovery_result(item, payload, intent['token'])
+            stage = 'settle'
+            settled = self.protocol.settle(
+                segment_id,
+                intent['token'],
+                self.clock(),
+                uri,
+                outcome=result_outcome(payload),
+                attempt_outcome=VendorAttemptOutcome.SILENCE,
+                audio_seconds=0.0,
+            )
+        except BatchPrivacyBlocked:
+            raise
+        except Exception as error:
+            log_result_held('provider', stage, exception_type=type(error).__name__)
+            return UnitOutcome('retry', 'dependency_warming', provider_reason=route.provider_reason)
+        if settled:
+            vendor_metrics.attempt(intent['service'], VendorAttemptOutcome.SILENCE, 0.0)
+        self._log('settled' if settled else 'superseded', 'skipped_silence')
+        return UnitOutcome('done', 'processed' if settled else 'superseded', provider_reason=route.provider_reason)
 
     @staticmethod
     def _log(outcome: str, reason: str) -> None:
