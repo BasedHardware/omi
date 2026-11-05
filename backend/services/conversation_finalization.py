@@ -844,8 +844,10 @@ def get_listen_finalization_tasks_max_attempts_for_worker() -> int:
 def _publish_job_metrics(*, firestore_client: Any = None) -> None:
     from database._client import get_firestore_client
     from database.lifecycle_metrics_queries import blocked_byok
+    from utils.lifecycle_pair_census import observe
 
     now = time.time()
+    observe(client=firestore_client, now=now)
     _byok_phase_metrics.refresh(
         now, lambda: blocked_byok(firestore_client if firestore_client is not None else get_firestore_client(), now)
     )

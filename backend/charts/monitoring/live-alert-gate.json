@@ -62,6 +62,12 @@
     "omi-finalization-byok-dwell-page",
     "omi-finalization-byok-dwell-page-stale",
     "omi-finalization-byok-dwell-page-blind",
-    "omi-finalization-dead-letter-stock"
+    "omi-finalization-dead-letter-stock",
+    "omi-finalization-pair-drift",
+    "omi-finalization-pair-stock",
+    "omi-finalization-pair-drift-stale",
+    "omi-finalization-pair-drift-blind",
+    "omi-enrichment-summary-repair-stock",
+    "omi-enrichment-repair-stock-stale"
   ]
 }

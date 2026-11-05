@@ -81,7 +81,7 @@ def test_lifecycle_alerts_share_existing_egress_trigger_and_gate_import():
     assert "'backend/charts/monitoring/live-alert-gate.json'" in workflow
     rules = json.loads((MONITORING / 'alerts/resilience.json').read_text())
     lifecycle = {rule['uid']: rule for rule in rules if rule['annotations'].get('evidence_date') == '2026-11-04'}
-    assert len(lifecycle) == 13
+    assert len(lifecycle) == 19
     gate = set(json.loads((MONITORING / 'live-alert-gate.json').read_text())['uids'])
     assert set(lifecycle) <= gate
     importer = (REPO / 'backend/scripts/verify_pusher_live_alert_route.py').read_text()
@@ -202,6 +202,8 @@ SYNC_NAMESPACES = ('backend-sync', 'backend-sync-backfill', 'backend-integration
 # family from the backend/desktop-backend/notifications-job namespaces, and
 # mirror the change into both <env>_omi_cloud_run_metrics_exporter.yaml files.
 CLOUD_RUN_EXPORTER_PREFIXES = [
+    'prometheus.googleapis.com/omi_finalization_pair_',
+    'prometheus.googleapis.com/omi_enrichment_summary_repair_',
     'prometheus.googleapis.com/omi_batch_record_pending_',
     'prometheus.googleapis.com/omi_record_seal_nojob_',
     'prometheus.googleapis.com/omi_enrichment_obligation_',
@@ -258,6 +260,8 @@ CLOUD_RUN_SYNC_EXPORTER_FILTER = (
 # consumer, read from GMP by the rightsizing runbook) alone re-created ~13k live
 # series per backend-sync instance generation through this release.
 CLOUD_RUN_SYNC_EXPORTER_PREFIXES = [
+    'prometheus.googleapis.com/omi_finalization_pair_',
+    'prometheus.googleapis.com/omi_enrichment_summary_repair_',
     'prometheus.googleapis.com/omi_batch_record_pending_',
     'prometheus.googleapis.com/omi_record_seal_nojob_',
     'prometheus.googleapis.com/omi_enrichment_obligation_',

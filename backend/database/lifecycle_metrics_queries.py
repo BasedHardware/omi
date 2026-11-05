@@ -150,3 +150,9 @@ def blocked_byok(client, now):
             len(page) == PAGE_LIMIT,
         )
     }
+
+
+def enrichment_summary_repair(client):
+    query = _where(_where(client.collection('sync_reprocess_outbox'), 'summary_repair', '==', True), 'due_at', '>=', 0)
+    count = int(query.limit(101).count().get(timeout=10, retry=None)[0][0].value)
+    return {'all': (0, count, count == 101)}

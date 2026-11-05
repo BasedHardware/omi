@@ -684,7 +684,7 @@ LISTEN_FINALIZATION_OLDEST_NONTERMINAL_AGE_SECONDS = Gauge(
 
 LISTEN_FINALIZATION_OLDEST_BLOCKED_BYOK_AGE_SECONDS = Gauge(
     'listen_finalization_oldest_blocked_byok_age_seconds',
-    'Global age since created_at of the oldest BYOK-blocked job; no blocked-status entry timestamp is recorded; '
+    'Legacy global age since created_at; recent state-entry dwell is exported by omi_finalization_byok; '
     'replicated per process, aggregate with max() not sum()',
     registry=None,
 )
