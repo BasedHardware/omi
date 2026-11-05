@@ -81,7 +81,11 @@ def routing_on(uid: str | None) -> bool:
 DEFAULT_TARGETS = (
     Target('parakeet-window', 'parakeet', 0.02),
     Target('modulate-velma-2', 'modulate', 0.055, ramp_percent=0),
-    Target('soniox', 'soniox', 0.0754),
+    # Soniox bills open connections (idle/silence included), not audio: $0.103/conn-h x a measured 3.2 conn-h
+    # per audio-h (24h and 7d, 2026-11-05) = ~$0.33/audio-h. The old 0.0754 implied 0.73 conn-h/audio-h and
+    # under-priced Soniox ~4x in routing and cost estimates. Re-measure with omi_soniox_connected_seconds_total
+    # / omi_live_stt_audio_seconds_total{provider="soniox"}, and check against the vendor gauge omi_soniox_month_spend_usd.
+    Target('soniox', 'soniox', 0.33),
 )
 DEFAULT_IDS = {target.family: target.id for target in DEFAULT_TARGETS}
 

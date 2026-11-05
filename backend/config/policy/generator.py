@@ -25,7 +25,7 @@ BATCH_FACTOR_DOMAINS: dict[str, tuple[Hashable, ...]] = {
 
 _DEFAULT_SERVICE_MODELS: tuple[str, ...] = ('modulate-velma-2', 'soniox', 'dg-nova-3', 'parakeet')
 _ROUTING_TARGETS_DEFAULTS = ''
-_ROUTING_TARGETS_SONIOX = '[{"id":"soniox","family":"soniox","cost_per_audio_hour":0.0754,"ramp_percent":50}]'
+_ROUTING_TARGETS_SONIOX = '[{"id":"soniox","family":"soniox","cost_per_audio_hour":0.33,"ramp_percent":50}]'
 
 LISTEN_FACTOR_DOMAINS: dict[str, tuple[Hashable, ...]] = {
     'routing_mode_raw': ('off', 'shadow', 'on', 'invalid'),

@@ -277,7 +277,7 @@ serves only the permitted unregistered tails, while a fault falls back to the
 filtered configured order and must not be hidden by a misleading healthy proposal.
 
 The registry defaults to `parakeet-window` ($0.02/audio-hour),
-`modulate-velma-2` ($0.055), and `soniox` ($0.0754). These are routing estimates,
+`modulate-velma-2` ($0.055), and `soniox` ($0.33: $0.103/conn-h x 3.2 conn-h per audio-h; Soniox bills open connections). These are routing estimates,
 not billing measurements. `STT_ROUTING_TARGETS_JSON` replaces the entire list
 (maximum 16 entries). Fields are `id`, `family`, `cost_per_audio_hour`,
 `ramp_percent` (default 100), `languages` (optional restriction), `features`
@@ -559,7 +559,7 @@ Keep the current family enabled in `STT_SERVICE_MODELS`, its credential in
   {"id":"modulate-next","family":"modulate","cost_per_audio_hour":0.05,
    "ramp_percent":5,"endpoint":"wss://new-modulate.example/stream"},
   {"id":"modulate-velma-2","family":"modulate","cost_per_audio_hour":0.055},
-  {"id":"soniox","family":"soniox","cost_per_audio_hour":0.0754}
+  {"id":"soniox","family":"soniox","cost_per_audio_hour":0.33}
 ]
 ```
 

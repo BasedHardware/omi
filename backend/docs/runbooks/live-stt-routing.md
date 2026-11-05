@@ -663,8 +663,10 @@ intervals, distinguishing `interval_text` from `unproven`. Overlap is evidence o
 original-interval text, not a completeness or correctness claim. Starts from sessions
 that leave before lease completion remain censored; these metrics are not an
 invoice or a transcript-quality score. For a synthetic one-hour Soniox
-remainder, the declared $0.0754/audio-hour rate implies $0.0754 without a
-lease versus at most $0.001257 for 60 paid audio seconds, followed by cheap
+remainder, the declared $0.33/audio-hour rate (Soniox bills connection-hours:
+$0.103/conn-h x a measured 3.2 conn-h per audio-hour, 2026-11-05; the old
+$0.0754 under-priced it ~4x) implies $0.33 without a
+lease versus at most $0.0055 for 60 paid audio seconds, followed by cheap
 processing. Billing increments and costs of genuine later transport failures
 are separate. Existing production counters do not join deadline causes to
 successor duration; do not claim historical savings from them.
