@@ -87,6 +87,9 @@ class SweepReadStore:
     def run(self, body):
         return body(self)
 
+    def probe(self, table, key):
+        return self.get(table, key)
+
     def get(self, table, key):
         if table == 'jobs':
             ref = self.client.collection(f'{self.namespace}_jobs').document(key)
@@ -189,7 +192,7 @@ def sweep(
         now = time.time()
         for job_id in job_ids:
             budget.check()
-            job = store.run(lambda tx: tx.get('jobs', job_id))
+            job = store.probe('jobs', job_id)
             budget.check()
             if job.get('state') != 'record_pending':
                 counts['not_pending'] += 1
@@ -198,7 +201,7 @@ def sweep(
             uid, cid = job.get('owner_id'), job.get('conversation_id')
             if any(not isinstance(v, str) or not v or '/' in v for v in (uid, cid)):
                 raise ValueError('malformed job')
-            row = store.run(lambda tx: tx.get('conversations', f'{uid}/{cid}'))
+            row = store.probe('conversations', f'{uid}/{cid}')
             budget.check()
             if not row:
                 raise ValueError('missing conversation')

@@ -145,7 +145,7 @@ def plan_backfill(
                     return row, None, reason
                 return row, registration(tx, uid, cid, row, server_flags), None
 
-            row, job, reason = store.run(read)
+            row, job, reason = store.run(read, operation='batch_seal_register')
             if reason:
                 entry['disposition'] = reason
             else:

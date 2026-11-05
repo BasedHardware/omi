@@ -181,13 +181,13 @@ def plan_seals(
         entry = {'job_id': job_id, 'disposition': 'unavailable'}
         diagnostics = {}
         try:
-            job = _job_state(store.run(lambda tx: tx.get('jobs', job_id)))
+            job = _job_state(store.probe('jobs', job_id))
             check_budget()
             uid, cid = job.get('owner_id'), job.get('conversation_id')
             if not uid or not cid or '/' in uid or '/' in cid:
                 entries.append(entry)
                 continue
-            row = store.run(lambda tx: tx.get('conversations', f'{uid}/{cid}'))
+            row = store.probe('conversations', f'{uid}/{cid}')
             check_budget()
             entry.update(job=job, row=seal_row_state(row))
             refusal = seal_refusal(

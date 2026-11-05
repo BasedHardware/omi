@@ -29,7 +29,7 @@ def continuation_refusal(store, pending):
             return 'state_changed'
         return None
 
-    return store.run(read)
+    return store.run(read, operation='batch_partial_precheck')
 
 
 def finish_partial(store, path, *, reason, proof, now, register=None, preview=False):

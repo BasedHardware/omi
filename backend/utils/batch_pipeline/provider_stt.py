@@ -245,7 +245,7 @@ class ProviderSttStore:
         self.fence = RecoveryStore(store)
 
     def read(self, segment_id: str) -> dict:
-        return self.store.run(lambda tx: self.fence.checked(tx, segment_id)[0])
+        return self.store.run(lambda tx: self.fence.checked(tx, segment_id)[0], operation='batch_provider_fence')
 
     def start(
         self,

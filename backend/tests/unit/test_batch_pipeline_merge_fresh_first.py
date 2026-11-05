@@ -214,7 +214,7 @@ class _InTransactionFreshQuery(MemoryTransaction):
 
 
 class _ProbeOutsideStore(MemoryStore):
-    def run(self, body):
+    def run(self, body, *, operation=None):
         with self.lock:
             snapshot = deepcopy(self.rows)
             result = body(_InTransactionFreshQuery(snapshot))
@@ -379,7 +379,7 @@ def test_serving_pass_re_offers_held_owners_after_projection():
 class _FencedFreshStore(MemoryStore):
     """Privacy flush refuses any transaction that would commit segment ``f``."""
 
-    def run(self, body):
+    def run(self, body, *, operation=None):
         with self.lock:
             snapshot = deepcopy(self.rows)
             result = body(MemoryTransaction(snapshot))
@@ -464,7 +464,7 @@ def test_the_marker_page_rotates_through_every_held_owner():
 class _FencedHeadStore(MemoryStore):
     """Privacy flush refuses any transaction that would commit segment ``c0``."""
 
-    def run(self, body):
+    def run(self, body, *, operation=None):
         with self.lock:
             snapshot = deepcopy(self.rows)
             result = body(MemoryTransaction(snapshot))

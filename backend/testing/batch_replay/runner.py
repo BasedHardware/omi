@@ -38,7 +38,7 @@ class ResultTransactionLog:
     Retry/contention are not simulated.
     """
 
-    def run(self, operation):
+    def run(self, body, *, operation: str | None = None):
         if getattr(self, '_result_transaction', None) is not None:
             raise RuntimeError('nested replay result transaction is unsupported')
         database = fixed_transaction_fixture().StrictFirestore(
@@ -46,7 +46,7 @@ class ResultTransactionLog:
         )
         self._result_transaction = database
         try:
-            result = operation(database.transaction())
+            result = body(database.transaction())
         finally:
             self._result_transaction = None
         # Failed callbacks cannot publish their private partial mutations.

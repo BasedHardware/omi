@@ -51,4 +51,4 @@ def reap_one(store: Store, key: str, now: datetime) -> bool:
         tx.put('artifacts', key, row)
         return True
 
-    return store.run(commit)
+    return store.run(commit, operation='batch_artifact_stage')

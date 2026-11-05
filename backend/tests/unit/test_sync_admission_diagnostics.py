@@ -74,7 +74,7 @@ async def test_record_wait_reason_retains_custody_without_alias(monkeypatch, cap
                 original_run = store.run
                 calls = 0
 
-                def fail_alias(body):
+                def fail_alias(body, *, operation=None):
                     nonlocal calls
                     calls += 1
                     if calls == 2:

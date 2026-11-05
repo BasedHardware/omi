@@ -248,7 +248,7 @@ def test_admission_tags_every_released_row_and_leaves_others_untagged():
                 rows.setdefault((collection, key), {}).update(value)
 
         class Store:
-            def run(self, fn):
+            def run(self, fn, *, operation=None):
                 return fn(Tx())
 
         items = [

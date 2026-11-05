@@ -94,7 +94,8 @@ class Serving:
     def complete(self, result: WorkResult, token: str) -> bool:
         accepted = self.queue().complete(result, token, time.time())
         if accepted:
-            job = self.store.run(lambda tx: tx.get('jobs', result.segment_id))
+            # Advisory owner discovery: the ordered drain re-verifies every fence.
+            job = self.store.probe('jobs', result.segment_id)
             if job:
                 self.drain_owner(job['owner_id'])
         return accepted
@@ -265,7 +266,7 @@ class Serving:
         self.queue().recover(time.time())
         owners = set()
         for segment in self.store.due('result_ready', time.time(), 100):
-            job = self.store.run(lambda tx: tx.get('jobs', segment))
+            job = self.store.probe('jobs', segment)
             if job and job['owner_id'] not in owners:
                 owners.add(job['owner_id'])
                 try:

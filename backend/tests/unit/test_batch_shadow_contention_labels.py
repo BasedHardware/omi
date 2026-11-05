@@ -54,8 +54,9 @@ def test_shadow_lifecycle_labels_the_actual_retry_consumer(repository, operation
         'batch_shadow_finish',
         'batch_shadow_reap',
     ]
-    repository.store.run(lambda transaction: None)
-    assert operation_log[-1] == 'batch_pipeline_store'
+    # The anonymous default is retired: an unlabeled run is refused fail-closed.
+    with pytest.raises(ValueError, match='static store operation label required'):
+        repository.store.run(lambda transaction: None)
     assert all('synthetic' not in label for label in operation_log)
 
 
@@ -63,8 +64,10 @@ def test_shadow_scope_restores_the_serving_pull_label(repository, operation_log)
     with storage.pull_operation('pull', 'scheduler_00'):
         repository.offer('synthetic-worker')
         repository.store.run(lambda transaction: None)
-    repository.store.run(lambda transaction: None)
-    assert operation_log == ['batch_shadow_offer', 'batch_pull shard=scheduler_00', 'batch_pipeline_store']
+    # Outside every scope the ambient label is None: an unlabeled run is refused.
+    with pytest.raises(ValueError, match='static store operation label required'):
+        repository.store.run(lambda transaction: None)
+    assert operation_log == ['batch_shadow_offer', 'batch_pull shard=scheduler_00']
 
 
 def test_retry_failure_restores_the_next_transaction_label(repository, monkeypatch):
@@ -85,8 +88,11 @@ def test_retry_failure_restores_the_next_transaction_label(repository, monkeypat
         return original(*args, **kwargs)
 
     monkeypatch.setattr(storage, 'run_with_transaction_contention_retry', succeeding)
-    repository.store.run(lambda transaction: None)
-    assert seen == ['batch_shadow_offer', 'batch_pipeline_store']
+    # The failed attempt left no ambient scope behind: the next run is refused
+    # as unlabeled rather than inheriting a stale caller label.
+    with pytest.raises(ValueError, match='static store operation label required'):
+        repository.store.run(lambda transaction: None)
+    assert seen == ['batch_shadow_offer']
 
 
 @pytest.mark.parametrize('untrusted', ['synthetic-owner', 'take owner=synthetic', 'take\nprivate', 'unknown'])

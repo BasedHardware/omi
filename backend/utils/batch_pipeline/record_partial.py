@@ -206,9 +206,7 @@ async def drain_partial(store, pending, current, client, artifacts, units_reader
         await prepare_run(store, pending, current, barrier, client, artifacts, units_reader, now)
         return {'outcome': 'partial'}
     content = page_content(run)
-    ledger = await run_blocking(
-        db_executor, store.run, lambda tx: tx.get('content', f"{pending['owner_id']}/{content}")
-    )
+    ledger = await run_blocking(db_executor, store.probe, 'content', f"{pending['owner_id']}/{content}")
     if ledger and ledger.get('status') != 'completed':
         event('waiting', late=run['generation'] > 1)
         return {'outcome': 'partial'}

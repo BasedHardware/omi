@@ -252,6 +252,16 @@ class PostgresStore:
                     last = exc
         raise JobStoreContentionExhausted('job store transaction kept conflicting') from last
 
+    def probe(self, table: str, key: str) -> dict:
+        """Advisory point read outside any transaction ({} if missing).
+
+        Mirrors FirestoreStore.probe: the acting transaction re-verifies
+        every fence it acts on, so this read takes no row lock.
+        """
+        self.require_table(table)
+        with self._read_conn() as conn:
+            return self.read_doc(conn, table, key)
+
     def due(self, state: str, now: float, limit: int = 100) -> list[str]:
         if state not in _DUE_FIELDS:
             raise ValueError('only recoverable states may be scanned')

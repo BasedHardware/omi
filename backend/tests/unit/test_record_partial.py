@@ -94,7 +94,9 @@ def finish(source, **kwargs):
 
 
 def pending(source):
-    return source[0].run(lambda tx: tx.get('jobs', record_identity('synthetic', 'record')[1]))
+    return source[0].run(
+        lambda tx: tx.get('jobs', record_identity('synthetic', 'record')[1]), operation='batch_test_probe'
+    )
 
 
 def test_partial_is_distinct_from_complete_and_api_exposes_it(source):
@@ -363,7 +365,7 @@ def test_real_repair_skips_unchanged_partial_inventory_but_rearms_upload_revisio
     job_id = record_identity('synthetic', 'record')[1]
     job = pending(source)
     job.update(state=state, partial_run={'retired_at': NOW, 'coverage': [{'start': 1600000, 'end': 1616000}]})
-    source[0].run(lambda tx: tx.put('jobs', job_id, job))
+    source[0].run(lambda tx: tx.put('jobs', job_id, job), operation='batch_test_probe')
     before = deepcopy(source[1].rows)
     inventory = Mock(return_value=source[2])
 
@@ -402,7 +404,9 @@ def set_byok(source):
     policy = replace(
         BatchUnitPolicy.from_dict(job['policy']), stt_route='provider', provider_reason='byok', provider_service='byok'
     )
-    source[0].run(lambda tx: tx.put('jobs', job['segment_id'], {**job, 'policy': policy.to_dict()}))
+    source[0].run(
+        lambda tx: tx.put('jobs', job['segment_id'], {**job, 'policy': policy.to_dict()}), operation='batch_test_probe'
+    )
 
 
 def test_initial_partial_refuses_and_counts_recorded_byok(source):
@@ -490,7 +494,9 @@ async def test_completed_coordinator_polls_hourly_and_retires_after_24h_without_
     await audio.drain()
     await audio.drain()
     content = record_partial.page_content(pending(source)['partial_run'])
-    source[0].run(lambda tx: tx.put('content', 'synthetic/' + content, {'status': 'completed'}))
+    source[0].run(
+        lambda tx: tx.put('content', 'synthetic/' + content, {'status': 'completed'}), operation='batch_test_probe'
+    )
     await audio.drain()
     assert pending(source)['available_at'] == NOW + 3600
     await audio.drain(now=NOW + 3599)
@@ -763,7 +769,9 @@ async def test_real_staging_admission_worker_late_audio_and_serial_receipts(sour
     before = len(jobs)
     await audio.drain()  # ledger owns the in-flight page, no duplicate enqueue
     assert len([p for p in source[1].rows if p[0] == 'batch_pipeline_dev_jobs']) == before + 1
-    store.run(lambda tx: tx.put('content', 'synthetic/' + content, {'status': 'completed'}))
+    store.run(
+        lambda tx: tx.put('content', 'synthetic/' + content, {'status': 'completed'}), operation='batch_test_probe'
+    )
     await audio.drain()
     assert pending(source)['partial_run']['complete']
     assert source[1].rows[ROW]['record_audio_partial']['applied_generation'] == 1
@@ -849,7 +857,9 @@ async def test_over_cap_rows_use_real_worker_bounds_and_two_pages(source, audio)
     run = pending(source)['partial_run']
     store = source[0]
     content = record_partial.page_content(run)
-    store.run(lambda tx: tx.put('content', 'synthetic/' + content, {'status': 'completed'}))
+    store.run(
+        lambda tx: tx.put('content', 'synthetic/' + content, {'status': 'completed'}), operation='batch_test_probe'
+    )
     await audio.drain()
     assert pending(source)['partial_run']['page'] == 1
     await audio.drain()

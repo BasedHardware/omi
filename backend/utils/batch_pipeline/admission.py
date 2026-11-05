@@ -111,7 +111,7 @@ async def authorize(store, leases: list[dict], *, now: float | None = None, budg
                 intake = tx.get('intakes', binding.get('job_id', 'missing'))
                 return job, binding, intake
 
-            snapshot = await stage('read', store.run, read)
+            snapshot = await stage('read', store.run, read, operation='batch_admission_read')
             if snapshot is None:
                 retries[segment] = 30
                 continue
@@ -198,7 +198,7 @@ async def authorize(store, leases: list[dict], *, now: float | None = None, budg
                 tx.put('jobs', segment, latest)
                 return True
 
-            if await stage('seal', store.run, seal):
+            if await stage('seal', store.run, seal, operation='batch_admission_seal'):
                 allowed.append(segment)
                 retries.pop(segment, None)
             else:

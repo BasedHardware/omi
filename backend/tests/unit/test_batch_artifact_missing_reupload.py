@@ -233,7 +233,10 @@ async def test_whole_upload_repairs_only_absent_unit_then_replays_without_stagin
 
 def evidence_store(intake):
     tx = SimpleNamespace(get=lambda table, key: deepcopy(intake) if (table, key) == ('intakes', 'job') else None)
-    return SimpleNamespace(run=lambda read: read(tx))
+    return SimpleNamespace(
+        run=lambda read, operation=None: read(tx),
+        probe=lambda table, key: deepcopy(intake) if (table, key) == ('intakes', 'job') and intake is not None else {},
+    )
 
 
 BINDING = SimpleNamespace(job_id='job')

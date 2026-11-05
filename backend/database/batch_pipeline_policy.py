@@ -228,7 +228,7 @@ def load_stage_policy(store, segment_id, stage, *, server_flags=PROCESS_ENVIRONM
         )
         return job, policy
 
-    job, policy = store.run(commit)
+    job, policy = store.run(commit, operation='batch_stage_policy_load')
     record_policy_observations(observations)
     return job, policy
 
@@ -266,7 +266,7 @@ def refresh_disabled_recovery(store, segment_id, owner_id):
         tx.put('jobs', segment_id, job)
         return job, fresh
 
-    refreshed = store.run(commit)
+    refreshed = store.run(commit, operation='batch_recovery_policy_refresh')
     if refreshed is not None:
         logger.info('event=batch_recovery_policy outcome=refreshed policy_id=%s', fresh.policy_id)
     return refreshed
@@ -291,7 +291,7 @@ def load_job_policy(store, segment_id: str):
         policy = policy_in_transaction(tx, job, candidates=candidates)
         return job, policy, missing
 
-    job, policy, fallback = store.run(commit)
+    job, policy, fallback = store.run(commit, operation='batch_job_policy_load')
     if fallback:
         from config.policy.telemetry import record_policy_source
 

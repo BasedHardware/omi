@@ -184,7 +184,7 @@ async def recover_quarantine(body: RedriveRequest, request: Request):
     if not service.recovery:
         # Contract (d): a switched-off target answers 409, never 503 (fast 5xx throttles the queue).
         return retry_response(RetryReason.KILL_SWITCH_OFF)
-    job = await run_blocking(db_executor, service.store.run, lambda tx: tx.get('jobs', body.segment_id))
+    job = await run_blocking(db_executor, service.store.probe, 'jobs', body.segment_id)
     if not job:
         return {'status': 'held'}
     started = time.monotonic()

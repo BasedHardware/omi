@@ -52,7 +52,7 @@ class SnapshotStore(MemoryStore):
         super().__init__()
         self.counts = Counter()
 
-    def run(self, body):
+    def run(self, body, *, operation=None):
         with self.lock:
             self.counts['transactions'] += 1
             tx = SnapshotTransaction(self.rows, self.counts)

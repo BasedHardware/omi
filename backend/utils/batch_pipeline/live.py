@@ -141,7 +141,7 @@ def register_recording(
     if transaction is not None:
         return commit(transaction)
     assert store is not None
-    return store.run(commit)
+    return store.run(commit, operation='batch_live_record_register')
 
 
 def retained_record_units(
@@ -423,7 +423,7 @@ async def drain_recordings(store, *, provider_outbox_factory=None) -> bool:
     busy_owners = set()
 
     async def drain_one(segment):
-        pending = await run_blocking(db_executor, store.run, lambda tx: tx.get('jobs', segment))
+        pending = await run_blocking(db_executor, store.probe, 'jobs', segment)
         if pending.get('state') != 'record_pending':
             return
         owner = pending.get('owner_id')
@@ -470,7 +470,7 @@ async def drain_recordings(store, *, provider_outbox_factory=None) -> bool:
                 latest['available_at'] = max(latest.get('available_at', 0), time.time() + delay)
                 tx.put('jobs', segment, latest)
 
-        await run_blocking(db_executor, store.run, defer)
+        await run_blocking(db_executor, store.run, defer, operation='batch_live_defer')
 
     async def worker():
         # next() has no await: each selected row belongs to one local worker.

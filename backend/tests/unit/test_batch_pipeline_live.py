@@ -117,6 +117,7 @@ async def test_drain_joins_workers_before_propagating_store_failure(monkeypatch,
     store.rows['jobs', 'bad'] = {'owner_id': 'synthetic-bad', 'state': 'record_pending', 'available_at': 0}
     store.rows['jobs', 'slow'] = {'owner_id': 'synthetic-slow', 'state': 'record_pending', 'available_at': 0}
     original_run = store.run
+    original_probe = store.probe
     slow, release, failed = asyncio.Event(), asyncio.Event(), asyncio.Event()
     slow_workers = []
 
@@ -127,8 +128,15 @@ async def test_drain_joins_workers_before_propagating_store_failure(monkeypatch,
 
     monkeypatch.setattr(live, 'run_blocking', run_blocking)
 
-    def run(body):
-        result = original_run(body)
+    def run(body, *, operation=None):
+        result = original_run(body, operation=operation)
+        if isinstance(result, dict) and result.get('broken'):
+            failed.set()
+            raise RuntimeError('synthetic store failure')
+        return result
+
+    def probe(table, key):
+        result = original_probe(table, key)
         if isinstance(result, dict) and result.get('broken'):
             failed.set()
             raise RuntimeError('synthetic store failure')
@@ -136,6 +144,7 @@ async def test_drain_joins_workers_before_propagating_store_failure(monkeypatch,
 
     store.rows['jobs', 'bad']['broken'] = True
     monkeypatch.setattr(store, 'run', run)
+    monkeypatch.setattr(store, 'probe', probe)
 
     async def admit(store, pending):
         slow_workers.append(asyncio.current_task())

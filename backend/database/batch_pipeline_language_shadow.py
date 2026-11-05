@@ -55,7 +55,7 @@ class LanguageShadowStore:
             return True
 
         try:
-            return self.store.run(claim)
+            return self.store.run(claim, operation='batch_language_shadow_claim')
         except Exception:
             return False
 
@@ -75,7 +75,7 @@ class LanguageShadowStore:
             )
             return True
 
-        return self.store.run(check)
+        return self.store.run(check, operation='batch_language_shadow_authorize')
 
     def release(self, item):
         key = hashlib.sha256(f'{item.owner_id}\0{item.segment_id}'.encode()).hexdigest()
@@ -93,4 +93,4 @@ class LanguageShadowStore:
                     },
                 )
 
-        self.store.run(finish)
+        self.store.run(finish, operation='batch_language_shadow_release')

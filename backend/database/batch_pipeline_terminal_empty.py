@@ -148,7 +148,7 @@ class TerminalEmptyStore:
             tx.put('jobs', sid, job)
             return job
 
-        result = self.store.run(commit)
+        result = self.store.run(commit, operation='batch_terminal_empty_prepare')
         record_policy_observations(observations)
         return result
 
@@ -197,7 +197,7 @@ class TerminalEmptyStore:
             tx.put('jobs', sid, job)
             return True, job['duration_seconds'], outcome
 
-        changed, seconds, outcome = self.store.run(commit)
+        changed, seconds, outcome = self.store.run(commit, operation='batch_terminal_empty_complete')
         if changed and seconds:
             record_correctness(
                 'no_recoverable_speech' if outcome == 'no_recoverable_speech' else 'recovered', seconds=seconds

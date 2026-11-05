@@ -62,9 +62,9 @@ class LabeledStore(MemoryStore):
         super().__init__()
         self.labels = []
 
-    def run(self, body):
-        self.labels.append(current_operation())
-        return super().run(body)
+    def run(self, body, *, operation=None):
+        self.labels.append(operation if operation is not None else current_operation())
+        return super().run(body, operation=operation)
 
 
 class RecordingTransaction(MemoryTransaction):
@@ -88,7 +88,7 @@ class RecordingStore(MemoryStore):
         self.max_writes = 0
         self.max_job_writes = 0
 
-    def run(self, body):
+    def run(self, body, *, operation=None):
         with self.lock:
             snapshot = deepcopy(self.rows)
             tx = RecordingTransaction(snapshot)
@@ -142,13 +142,13 @@ def test_fifo_link_migration_cap_swallows_two_max_bundles():
 def test_store_operation_sets_and_resets_the_label():
     with store_operation('batch_probe'):
         assert current_operation() == 'batch_probe'
-    assert current_operation() == 'batch_pipeline_store'
+    assert current_operation() is None
 
 
 def test_store_operation_resets_the_label_when_the_body_raises():
     with pytest.raises(RuntimeError), store_operation('batch_probe'):
         raise RuntimeError('boom')
-    assert current_operation() == 'batch_pipeline_store'
+    assert current_operation() is None
 
 
 def test_store_operation_nests_and_restores_in_order():
@@ -156,7 +156,7 @@ def test_store_operation_nests_and_restores_in_order():
         with store_operation('batch_inner'):
             assert current_operation() == 'batch_inner'
         assert current_operation() == 'batch_outer'
-    assert current_operation() == 'batch_pipeline_store'
+    assert current_operation() is None
 
 
 def test_store_operation_nested_exception_restores_both_labels():
@@ -164,7 +164,7 @@ def test_store_operation_nested_exception_restores_both_labels():
         with pytest.raises(RuntimeError), store_operation('batch_inner'):
             raise RuntimeError('boom')
         assert current_operation() == 'batch_outer'
-    assert current_operation() == 'batch_pipeline_store'
+    assert current_operation() is None
 
 
 @pytest.mark.parametrize('bad', ['', 'Upper', 'with space', 'dash-dash', 'x' * 65])
@@ -1919,7 +1919,7 @@ def test_converted_chain_drains_in_one_multi_lease_transaction(monkeypatch):
 def test_store_operation_accepts_registry_style_numeric_labels():
     with store_operation('batch_v2_probe'):
         assert current_operation() == 'batch_v2_probe'
-    assert current_operation() == 'batch_pipeline_store'
+    assert current_operation() is None
 
 
 def test_absorbed_queue_leases_absorbed_units_in_the_same_multi_lease_batch(monkeypatch):

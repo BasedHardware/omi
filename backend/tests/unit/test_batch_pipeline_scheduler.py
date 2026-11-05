@@ -86,12 +86,16 @@ class MemoryStore:
         self.rows = {}
         self.lock = RLock()
 
-    def run(self, body):
+    def run(self, body, *, operation=None):
         with self.lock:
             snapshot = deepcopy(self.rows)
             result = body(MemoryTransaction(snapshot))
             self.rows = snapshot
             return result
+
+    def probe(self, table, key):
+        with self.lock:
+            return deepcopy(self.rows.get((table, key), {}))
 
     def due(self, state, now, limit):
         field = 'lease_until' if state == 'leased' else 'available_at'

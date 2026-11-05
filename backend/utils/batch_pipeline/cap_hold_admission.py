@@ -64,7 +64,7 @@ def handoff_projected(uid: str, batch_job_id: str, *, store: Any = None) -> bool
         ledger = tx.get('content', f"{uid}/{intake['content_id']}") or {}
         return ledger.get('status') == 'completed' and is_valid_completed_sync_content_result(ledger.get('result'))
 
-    return bool(store.run(read))
+    return bool(store.run(read, operation='batch_cap_hold_check'))
 
 
 def eligible(row: Mapping[str, Any]) -> bool:

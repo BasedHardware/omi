@@ -170,7 +170,10 @@ async def test_record_endpoint_awaits_coordinator_instead_of_sync_wrapper(monkey
     from routers import batch_pipeline as router
 
     recovery = SimpleNamespace(recover=Mock(), recover_async=AsyncMock(return_value='failed_held'))
-    store = SimpleNamespace(run=lambda operation: {'owner_id': 'synthetic-owner'})
+    store = SimpleNamespace(
+        run=lambda operation, *, operation_label=None: {'owner_id': 'synthetic-owner'},
+        probe=lambda table, key: {'owner_id': 'synthetic-owner'},
+    )
     service = SimpleNamespace(recovery=recovery, store=store)
     body = SimpleNamespace(service=lambda: service, segment_id='synthetic-unit')
 
@@ -211,6 +214,7 @@ async def test_shadow_endpoint_awaits_coordinator_instead_of_sync_wrapper(monkey
     artifacts = Mock()
     monkeypatch.setattr('utils.batch_pipeline.artifact_policy.artifacts_for', lambda _: artifacts)
     service = SimpleNamespace(store=Mock())
+    service.store.probe.return_value = {}
     body = SimpleNamespace(service=lambda: service, segment_id='synthetic-unit')
 
     async def blocking(_, function, *arguments, **kwargs):

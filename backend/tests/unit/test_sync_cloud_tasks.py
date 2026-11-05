@@ -4247,7 +4247,8 @@ async def test_byok_upload_enters_batch_admission_like_any_upload(monkeypatch):
     module, saved_modules, _, BytesIO, _, _ = _load_sync_router_for_fast_path()
     transaction, store = MagicMock(), MagicMock()
     transaction.get.return_value = {}
-    store.run.side_effect = lambda body: body(transaction)
+    store.run.side_effect = lambda body, operation=None: body(transaction)
+    store.probe.return_value = {}
     monkeypatch.setattr(_batch_intake, 'FirestoreStore', lambda *_: store)
     module.has_byok_keys = MagicMock(return_value=True)
     authorize = MagicMock(side_effect=RuntimeError('synthetic staging stop'))

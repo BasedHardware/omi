@@ -223,14 +223,13 @@ async def test_maintenance_does_not_reread_blocked_result_ready_jobs_every_sweep
     for segment in ('a2', 'a3'):
         queue.complete(WorkResult(segment, 'gs://r'), leases[segment].token, time.time())
     owner_reads = []
-    original = store.run
+    original = store.probe
 
-    def run(body):
-        if 'owner_of' in getattr(body, '__qualname__', ''):
-            owner_reads.append(body)
-        return original(body)
+    def probe(table, key):
+        owner_reads.append((table, key))
+        return original(table, key)
 
-    store.run = run
+    store.probe = probe
     calls = count_commit_calls(pump)
     for _ in range(3):
         pump._last_recovery = float('-inf')

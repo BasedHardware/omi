@@ -126,7 +126,7 @@ class SpeechRedriveStore:
                 job['measured_held_vad_speech_seconds'] = measured
                 tx.put('jobs', segment_id, job)
 
-        self.store.run(commit)
+        self.store.run(commit, operation='batch_speech_redrive_census')
 
     @staticmethod
     def terminal(job, existing, now):
@@ -250,7 +250,7 @@ class SpeechRedriveStore:
             tx.put('jobs', segment_id, job)
             return job
 
-        result = self.store.run(commit)
+        result = self.store.run(commit, operation='batch_speech_redrive_prepare')
         record_policy_observations(observations)
         return result
 
@@ -284,7 +284,7 @@ class SpeechRedriveStore:
             tx.put('jobs', segment_id, job)
             return True
 
-        return self.store.run(commit)
+        return self.store.run(commit, operation='batch_speech_redrive_start')
 
     def observe_vad(self, segment_id, token, plan_digest, seconds):
         """Retain measured evidence even when a prepared call is budget-held."""
@@ -302,7 +302,7 @@ class SpeechRedriveStore:
             tx.put('jobs', segment_id, job)
             return True
 
-        return self.store.run(commit)
+        return self.store.run(commit, operation='batch_speech_redrive_observe_vad')
 
     def settle(
         self,
@@ -365,4 +365,4 @@ class SpeechRedriveStore:
             tx.put('jobs', segment_id, job)
             return True
 
-        return self.store.run(commit)
+        return self.store.run(commit, operation='batch_speech_redrive_settle')

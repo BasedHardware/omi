@@ -24,6 +24,7 @@ from database.firestore_transaction_retry import run_with_transaction_contention
 from database.batch_pipeline_transaction_labels import (
     current_operation,
     pull_operation as pull_operation,
+    require_operation_label,
 )
 from utils.sync.stage import collection_name
 
@@ -38,6 +39,40 @@ T = TypeVar('T')
 logger = logging.getLogger(__name__)
 
 
+def document_ref(client: Any, namespace: str, table: str, key: str):
+    """The single document address for a batch table key.
+
+    Shared by the transactional view and the non-transactional probe so the
+    two read paths cannot drift apart on table layout.
+    """
+    if table == 'conversations':
+        uid, conversation_id = key.split('/', 1)
+        return client.collection('users').document(uid).collection('conversations').document(conversation_id)
+    if table == 'content':
+        uid, content_id = key.split('/', 1)
+        return (
+            client.collection('users')
+            .document(uid)
+            .collection(collection_name('sync_content_ledger'))
+            .document(content_id)
+        )
+    return client.collection(f'{namespace}_{table}').document(key)
+
+
+def probe_document(client: Any, namespace: str, table: str, key: str) -> dict:
+    """One strongly consistent point read outside any transaction.
+
+    Advisory callers on hot documents gain nothing from the transactional
+    ladder: a read-only body still joins a read set that aborts on every
+    concurrent write to the probed document. Missing documents read as
+    ``{}``, the same contract as ``Transaction.get``.
+    """
+    snapshot = document_ref(client, namespace, table, key).get()
+    if not snapshot.exists:
+        return {}
+    return snapshot.to_dict() or {}
+
+
 class Transaction(Protocol):
     def get(self, table: str, key: str) -> dict: ...
     def put(self, table: str, key: str, value: dict) -> None: ...
@@ -50,7 +85,8 @@ class Transaction(Protocol):
 
 
 class Store(Protocol):
-    def run(self, body: Callable[[Transaction], T]) -> T: ...
+    def run(self, body: Callable[[Transaction], T], *, operation: str | None = None) -> T: ...
+    def probe(self, table: str, key: str) -> dict: ...
     def due(self, state: str, now: float, limit: int) -> list[str]: ...
     def oldest(self, priority: int, *, ready_only: bool) -> float | None: ...
     def oldest_retry(self, priority: int) -> float | None: ...
@@ -80,18 +116,7 @@ class FirestoreTransaction:
         self.external: dict[Any, tuple[Any, dict]] = {}
 
     def _ref(self, table: str, key: str):
-        if table == 'conversations':
-            uid, conversation_id = key.split('/', 1)
-            return self.client.collection('users').document(uid).collection('conversations').document(conversation_id)
-        if table == 'content':
-            uid, content_id = key.split('/', 1)
-            return (
-                self.client.collection('users')
-                .document(uid)
-                .collection(collection_name('sync_content_ledger'))
-                .document(content_id)
-            )
-        return self.client.collection(f'{self.namespace}_{table}').document(key)
+        return document_ref(self.client, self.namespace, table, key)
 
     def get(self, table: str, key: str) -> dict:
         address = (table, key)
@@ -228,7 +253,16 @@ class FirestoreStore:
         self._require_stage()
         return self._client if self._client is not None else get_data_plane_firestore_client()
 
-    def run(self, body):
+    def run(self, body, *, operation: str | None = None):
+        """One lease-fenced batch transaction under a static caller label.
+
+        The label resolves from the explicit ``operation=`` or the ambient
+        ``store_operation`` context; with neither, the call is refused before
+        any client is touched. The anonymous ``batch_pipeline_store`` default
+        let dozens of unrelated call sites blend into one unattributable
+        ``outcome=exhausted`` storm.
+        """
+        label = require_operation_label(operation if operation is not None else current_operation())
         client = self.client
 
         @firestore.transactional
@@ -245,8 +279,16 @@ class FirestoreStore:
         return run_with_transaction_contention_retry(
             lambda: client.transaction(max_attempts=1),
             commit,
-            operation_name=current_operation(),
+            operation_name=label,
         )
+
+    def probe(self, table: str, key: str) -> dict:
+        """Strongly consistent single-document read outside any transaction.
+
+        Advisory only: every decision that writes still re-verifies its
+        fences inside the ``run`` transaction that acts on the document.
+        """
+        return probe_document(self.client, self.namespace, table, key)
 
     def due(self, state: str, now: float, limit: int = 100) -> list[str]:
         return due(self.client, self.namespace, state, now, limit)

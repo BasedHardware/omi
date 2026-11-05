@@ -1049,7 +1049,7 @@ class Scheduler:
                         return outcome
 
                     try:
-                        outcome = self.store.run(commit)
+                        outcome = self.store.run(commit, operation='batch_recover')
                         record_policy_observations(observations)
                     except BatchPrivacyBlocked:
                         self.store.quarantine_fenced(segment_id, now)

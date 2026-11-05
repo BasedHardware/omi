@@ -148,7 +148,7 @@ def test_retried_stage_claim_keeps_candidate_and_adopts_a_committed_winner(unit,
         calls.append(stage)
         return resolve(uid, stage)
 
-    def retry(body):
+    def retry(body, *, operation=None):
         body(SimTransaction(store))  # Discard the aborted attempt's buffered writes.
         monkeypatch.setenv('BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED', 'false')
         if competing_writer:

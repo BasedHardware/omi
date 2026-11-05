@@ -91,7 +91,7 @@ def running(repository, name='one', *, duration=300, guarded=False, worker_speec
 
 
 def row(repository, segment):
-    return repository.store.run(lambda tx: tx.get('shadow_jobs', segment))
+    return repository.store.run(lambda tx: tx.get('shadow_jobs', segment), operation='batch_test_probe')
 
 
 @pytest.mark.parametrize(
@@ -407,7 +407,8 @@ def test_second_provider_recovers_held_padded_empty_when_terminal_flag_off(repos
                 'language': 'en',
                 'worker_empty_evidence': {'padded_retry': 'empty', 'version': 1},
             },
-        )
+        ),
+        operation='batch_test_probe',
     )
     spans = [{'start': 0.0, 'end': 300.0}]
     first = Mock(side_effect=MultilingualEmpty(300, spans))
@@ -541,19 +542,23 @@ def test_projection_attempt_is_once_and_has_a_distributed_hourly_cap(repository)
     repository.store.run(
         lambda tx: tx.put(
             'shadow_jobs', item.segment_id, {**tx.get('shadow_jobs', item.segment_id), 'state': 'running'}
-        )
+        ),
+        operation='batch_test_probe',
     )
     assert repository.projection_input(item.segment_id)['shadow'] is True
     assert repository.projection_input(item.segment_id) is None
-    budget = repository.store.run(lambda tx: tx.get('shadow_spend', 'projection-2'))
+    budget = repository.store.run(lambda tx: tx.get('shadow_spend', 'projection-2'), operation='batch_test_probe')
     assert budget['units'] == 1 and budget['expires_at'].timestamp() == 7200 + 2 * 86400
     next_item = running(repository, 'another')
     repository.store.run(
         lambda tx: tx.put(
             'shadow_jobs', next_item.segment_id, {**tx.get('shadow_jobs', next_item.segment_id), 'state': 'running'}
-        )
+        ),
+        operation='batch_test_probe',
     )
-    repository.store.run(lambda tx: tx.put('shadow_spend', 'projection-2', {**budget, 'units': 200}))
+    repository.store.run(
+        lambda tx: tx.put('shadow_spend', 'projection-2', {**budget, 'units': 200}), operation='batch_test_probe'
+    )
     repository.offer('over-budget-worker')
     assert repository.reserve('synthetic-owner', 'over-budget', 'deep') is None
     denied = row(repository, identity('synthetic-owner', 'over-budget'))
@@ -639,7 +644,7 @@ def test_recovery_projection_uses_existing_reservation_once(repository):
     assert repository.start_recovery(item.segment_id)
     assert repository.projection_input(item.segment_id)['state'] == 'recovering'
     assert repository.projection_input(item.segment_id) is None
-    budget = repository.store.run(lambda tx: tx.get('shadow_spend', 'projection-2'))
+    budget = repository.store.run(lambda tx: tx.get('shadow_spend', 'projection-2'), operation='batch_test_probe')
     assert budget['units'] == 1
 
 

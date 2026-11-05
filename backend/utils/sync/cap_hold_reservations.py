@@ -191,7 +191,7 @@ def batch_status(uid: str, batch_job_id: str) -> str:
         return 'pending'
 
     try:
-        return store.run(read)
+        return store.run(read, operation='batch_cap_hold_status')
     except Exception as error:
         logger.warning('event=cap_hold_reservation outcome=status_unavailable exception_type=%s', type(error).__name__)
         return 'pending'

@@ -134,7 +134,7 @@ class _NoHeadWaitQueries(MemoryTransaction):
 class _StrictStore(MemoryStore):
     probes = 0
 
-    def run(self, body):
+    def run(self, body, *, operation=None):
         with self.lock:
             snapshot = deepcopy(self.rows)
             result = body(_NoHeadWaitQueries(snapshot))
@@ -284,7 +284,7 @@ class _OwnerFencedStore(MemoryStore):
 
     fenced = False
 
-    def run(self, body):
+    def run(self, body, *, operation=None):
         with self.lock:
             snapshot = deepcopy(self.rows)
             result = body(MemoryTransaction(snapshot))
@@ -346,7 +346,7 @@ _MissingIndex.calls = 0
 
 
 class _MissingTransactionIndexStore(MemoryStore):
-    def run(self, body):
+    def run(self, body, *, operation=None):
         with self.lock:
             snapshot = deepcopy(self.rows)
             result = body(_MissingIndex(snapshot))

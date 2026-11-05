@@ -44,4 +44,4 @@ def record_recognizer(store, segment_id, token, intent, provider, outcome, words
         tx.put('jobs', segment_id, job)
         return True
 
-    return store.run(commit)
+    return store.run(commit, operation='batch_recognizer_receipt')

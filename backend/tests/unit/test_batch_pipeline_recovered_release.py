@@ -153,12 +153,13 @@ def test_a_fenced_release_commit_drops_the_row_and_returns_the_strict_result(mon
     release = merge.release_set('b')
     calls, original = [], store.run
 
-    def run(body):
+    def run(body, *, operation=None):
         calls.append(body)
-        # Calls: strict commit, release pre-read, then the release commit.
-        if len(calls) == 3:
+        # Calls: strict commit, then the release commit — the release
+        # pre-read probes outside the ladder and is not a run call here.
+        if len(calls) == 2:
             raise BatchPrivacyBlocked('account_deleted')
-        return original(body)
+        return original(body, operation=operation)
 
     monkeypatch.setattr(store, 'run', run)
     assert merge.commit_next('heavy', 501, release=release) is None

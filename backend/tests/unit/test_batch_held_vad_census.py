@@ -178,7 +178,8 @@ def test_shadow_settlement_never_erases_speech(repository, outcome, vad):
             'shadow_jobs',
             item.segment_id,
             {**tx.get('shadow_jobs', item.segment_id), 'measured_held_vad_speech_seconds': 2},
-        )
+        ),
+        operation='batch_test_probe',
     )
     repository.finish(item.segment_id, outcome, speech=0, vad=vad)
     final = shadow_row(repository, item.segment_id)
@@ -194,7 +195,8 @@ def test_shadow_handoff_preserves_an_existing_higher_measurement(repository):
             'shadow_jobs',
             item.segment_id,
             {**tx.get('shadow_jobs', item.segment_id), 'state': 'running', 'measured_held_vad_speech_seconds': 2},
-        )
+        ),
+        operation='batch_test_probe',
     )
     assert repository.handoff(
         item.segment_id, ValidationFailureWork(item.segment_id, 'vad_windows', 'unsupported_language', 0)
@@ -289,7 +291,8 @@ def test_ordinary_shadow_cpu_zero_stays_held(repository):
             'shadow_jobs',
             item.segment_id,
             {**tx.get('shadow_jobs', item.segment_id), 'measured_held_vad_speech_seconds': 2},
-        )
+        ),
+        operation='batch_test_probe',
     )
     provider = Mock()
     assert (

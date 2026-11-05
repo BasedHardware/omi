@@ -78,15 +78,15 @@ def test_real_store_transactions_100_to_24_and_retry_scope_reset(monkeypatch, re
     store = storage.FirestoreStore('batch_pipeline_dev', firestore_client=db)
     with batch_privacy_attempt() as attempt:
         for _ in range(20):
-            assert store.run(lambda view: view.check_privacy(UID, ['source'], 7)) == 7
+            assert store.run(lambda view: view.check_privacy(UID, ['source'], 7), operation='batch_test_probe') == 7
         assert len(db.transactions) == 20
         assert len(reads) == 24
         assert Counter(reads)[TOKEN_PATH] == 20
         attempt.reset()
-        assert store.run(lambda view: view.check_privacy(UID, ['source'], 7)) == 7
+        assert store.run(lambda view: view.check_privacy(UID, ['source'], 7), operation='batch_test_probe') == 7
         assert len(reads) == 29
     with batch_privacy_attempt():
-        assert store.run(lambda view: view.check_privacy(UID, ['source'], 7)) == 7
+        assert store.run(lambda view: view.check_privacy(UID, ['source'], 7), operation='batch_test_probe') == 7
     assert len(reads) == 34
     assert current_attempt() is None
 
@@ -263,7 +263,7 @@ def test_real_sdk_transaction_retry_revalidates_token_and_denies(monkeypatch, re
     monkeypatch.setattr(transaction, '_commit', commit)
     with batch_privacy_attempt():
         with pytest.raises(privacy.BatchPrivacyBlocked, match='conversation_deleted'):
-            store.run(lambda view: view.check_privacy(UID, ['source'], 7))
+            store.run(lambda view: view.check_privacy(UID, ['source'], 7), operation='batch_test_probe')
     assert len(commits) == 1
     assert Counter(reads)[TOKEN_PATH] == 2
 
@@ -298,7 +298,7 @@ def test_outer_contention_retry_uses_fresh_transaction_and_revalidates_token(mon
     )
     with batch_privacy_attempt():
         with pytest.raises(privacy.BatchPrivacyBlocked, match='conversation_deleted'):
-            store.run(lambda view: view.check_privacy(UID, ['source'], 7))
+            store.run(lambda view: view.check_privacy(UID, ['source'], 7), operation='batch_test_probe')
     assert len(commits) == 1
     assert len(db.transactions) == 2 and db.transactions[0] is not db.transactions[1]
     assert Counter(reads)[TOKEN_PATH] == 2
@@ -517,7 +517,7 @@ def test_real_store_transaction_retries_revalidate_token_and_deny(monkeypatch, r
     monkeypatch.setattr(db, 'transaction', transaction)
     with batch_privacy_attempt():
         with pytest.raises(privacy.BatchPrivacyBlocked, match='conversation_deleted'):
-            store.run(lambda view: view.check_privacy(UID, ['source'], 7))
+            store.run(lambda view: view.check_privacy(UID, ['source'], 7), operation='batch_test_probe')
     assert len(commits) == 1
     assert len(db.transactions) == (2 if outer_retry else 1)
     assert Counter(reads)[TOKEN_PATH] == 2
@@ -551,7 +551,7 @@ async def test_serving_attempt_second_commit_reads_only_token_and_mutations_bloc
             attempts.append(attempt)
             job = {'owner_id': UID, 'conversation_id': 'source', 'privacy_generation': 7}
             reads.clear()
-            store.run(lambda tx: tx.put('jobs', 'first', job))
+            store.run(lambda tx: tx.put('jobs', 'first', job), operation='batch_test_probe')
             assert len(reads) == 5  # Full walk on the first commit of each tick.
             if mutation:
                 db.rows[TOKEN_PATH]['memo_token'] = 'b' * 32
@@ -563,11 +563,11 @@ async def test_serving_attempt_second_commit_reads_only_token_and_mutations_bloc
             if mutation:
                 reason = 'conversation_deleted' if mutation == 'deletion' else 'recording_privacy_changed'
                 with pytest.raises(privacy.BatchPrivacyBlocked, match=reason):
-                    store.run(lambda tx: tx.put('jobs', 'second', job))
+                    store.run(lambda tx: tx.put('jobs', 'second', job), operation='batch_test_probe')
                 assert ('batch_pipeline_dev_jobs', 'second') not in db.rows
                 assert reads[0] == TOKEN_PATH
             else:
-                store.run(lambda tx: tx.put('jobs', 'second', job))
+                store.run(lambda tx: tx.put('jobs', 'second', job), operation='batch_test_probe')
                 assert reads == [TOKEN_PATH]  # Real transaction-bound token read.
                 assert db.rows[('batch_pipeline_dev_jobs', 'second')] == job
         except BaseException as error:

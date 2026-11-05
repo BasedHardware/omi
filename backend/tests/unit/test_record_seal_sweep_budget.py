@@ -207,17 +207,17 @@ def test_runtime_composition_uses_plain_reads_and_keeps_the_seal_transaction(sou
 def test_phase_timings_identify_serial_tail_cost(source, proof, monkeypatch):
     eligible(source)
     clock = [0.0]
-    original = source[0].run
+    original = source[0].probe
 
-    def read(body):
+    def read(table, key):
         clock[0] += 1
-        return original(body)
+        return original(table, key)
 
     def tail(*_, **kwargs):
         clock[0] += 20
         yield (100, 2, [{'generation': 1, 'pcm_sha256': 'proof'}])
 
-    monkeypatch.setattr(source[0], 'run', read)
+    monkeypatch.setattr(source[0], 'probe', read)
     monkeypatch.setattr(repair, 'retained_record_units', tail)
     events = []
     assert (

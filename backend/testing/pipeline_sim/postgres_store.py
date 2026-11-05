@@ -167,7 +167,7 @@ class PgSimStore(SimStore):
         return self.pg.projection_successor(owner_key, previous)
 
     # -- transactions -----------------------------------------------------------------------------------
-    def run(self, body: Callable[[Any], T]) -> T:  # type: ignore[override]
+    def run(self, body: Callable[[Any], T], *, operation: str | None = None) -> T:  # type: ignore[override]
         self.transactions += 1
         holder: dict[str, PostgresTransaction] = {}
 

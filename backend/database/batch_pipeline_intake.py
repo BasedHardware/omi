@@ -223,4 +223,4 @@ def cache_completed(store: Store, uid: str, content_id: str, job_id: str, intake
         )
         return True
 
-    return store.run(commit)
+    return store.run(commit, operation='batch_content_ledger_accept')

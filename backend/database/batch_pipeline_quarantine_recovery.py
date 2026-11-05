@@ -146,7 +146,7 @@ class RecoveryStore:
                 tx.put('jobs', segment_id, job)
             return job if job.get('recovery_state') in {'prepared', 'running'} else None
 
-        return self.store.run(commit)
+        return self.store.run(commit, operation='batch_recovery_prepare')
 
     def claim_wake(self, segment_id, token, now, lease_seconds, *, queue='', expected_seq=0):
         """Reserve the next delivery wake for a prepared intent.
@@ -178,7 +178,7 @@ class RecoveryStore:
             tx.put('jobs', segment_id, job)
             return current + 1
 
-        return self.store.run(commit)
+        return self.store.run(commit, operation='batch_recovery_claim_wake')
 
     def extend_wake(self, segment_id, token, seq, now, lease_seconds, *, probe_error=False):
         """Keep wake ``seq`` leased because its task still exists (or custody is unknown)."""
@@ -201,7 +201,7 @@ class RecoveryStore:
             tx.put('jobs', segment_id, job)
             return True
 
-        return self.store.run(commit)
+        return self.store.run(commit, operation='batch_recovery_extend_wake')
 
     def shorten_wake(self, segment_id, seq, now, rewake_seconds):
         """Re-arm sooner after wake ``seq`` was delivered (or failed to enqueue)
@@ -227,7 +227,7 @@ class RecoveryStore:
             tx.put('jobs', segment_id, job)
             return True
 
-        return self.store.run(commit)
+        return self.store.run(commit, operation='batch_recovery_shorten_wake')
 
     def start(
         self, segment_id, token, now, *, provider="legacy_sync", operator_paid_attempt=False, local_silence=False
@@ -266,7 +266,7 @@ class RecoveryStore:
             tx.put('jobs', segment_id, job)
             return True
 
-        return self.store.run(commit)
+        return self.store.run(commit, operation='batch_recovery_start')
 
     def observe_vad(self, segment_id, token, seconds):
         """A prepared intent can retain measured evidence without authorizing STT."""
@@ -286,7 +286,7 @@ class RecoveryStore:
                 tx.put('jobs', segment_id, job)
             return True
 
-        return self.store.run(commit)
+        return self.store.run(commit, operation='batch_recovery_observe_vad')
 
     def retry_missing_result(self, segment_id, token, now):
         """Requeue a words-without-object intent once; fence every old writer.
@@ -336,7 +336,7 @@ class RecoveryStore:
             tx.put('jobs', segment_id, job)
             return 'requeued'
 
-        return self.store.run(commit)
+        return self.store.run(commit, operation='batch_recovery_retry_missing_result')
 
     def hold_duration_limit(self, segment_id, token, now, *, audio_uri, audio_seconds):
         """Retain an impossible independent recovery without starting a paid intent."""
@@ -376,7 +376,7 @@ class RecoveryStore:
             tx.put('jobs', segment_id, job)
             return True
 
-        return self.store.run(commit)
+        return self.store.run(commit, operation='batch_recovery_hold_duration_limit')
 
     def hold_invalid_manifest(self, segment_id, token, now, *, audio_uri, refusal_reason='invalid_retained_manifest'):
         """Retain a unit whose stored manifest can never materialize, without a paid intent.
@@ -407,7 +407,7 @@ class RecoveryStore:
             tx.put('jobs', segment_id, job)
             return True
 
-        return self.store.run(commit)
+        return self.store.run(commit, operation='batch_recovery_hold_invalid_manifest')
 
     def start_duration_limited(self, segment_id, token, now, *, audio_uri, audio_seconds, operator_paid_attempt=False):
         """Operator take-over of a duration-limited intent: refusal -> running.
@@ -459,7 +459,7 @@ class RecoveryStore:
             tx.put('jobs', segment_id, job)
             return True
 
-        return self.store.run(commit)
+        return self.store.run(commit, operation='batch_recovery_start_duration_limited')
 
     def retry_paid_takeover(self, segment_id, token, now):
         """One explicit operator retry, with a new token fencing late writers."""
@@ -493,7 +493,7 @@ class RecoveryStore:
             tx.put('jobs', segment_id, job)
             return next_token
 
-        return self.store.run(commit)
+        return self.store.run(commit, operation='batch_recovery_paid_takeover')
 
     def settle(
         self,
@@ -570,7 +570,7 @@ class RecoveryStore:
             tx.put('jobs', segment_id, job)
             return True, job['duration_seconds'] if result_uri is not None else 0
 
-        changed, seconds = self.store.run(commit)
+        changed, seconds = self.store.run(commit, operation='batch_recovery_settle')
         if changed and seconds:
             record_correctness(
                 'no_recoverable_speech' if outcome == 'no_recoverable_speech' else 'recovered', seconds=seconds
@@ -706,7 +706,7 @@ class SilenceDispositionStore(RecoveryStore):
                 tx.put('jobs', segment_id, job)
             return job
 
-        result = self.store.run(commit)
+        result = self.store.run(commit, operation='batch_recovery_silence_prepare')
         record_policy_observations(observations)
         return result
 
@@ -762,4 +762,4 @@ class SilenceDispositionStore(RecoveryStore):
             tx.put('jobs', segment_id, job)
             return True
 
-        return self.store.run(commit)
+        return self.store.run(commit, operation='batch_recovery_silence_complete')

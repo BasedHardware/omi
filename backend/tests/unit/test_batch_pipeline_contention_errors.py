@@ -214,7 +214,7 @@ def test_batch_store_retries_with_fresh_single_attempt_transactions(monkeypatch)
     store = batch_pipeline_store.FirestoreStore('batch_pipeline_dev', firestore_client=client)
     body_calls = []
 
-    assert store.run(lambda tx: body_calls.append(tx) or True) is True
+    assert store.run(lambda tx: body_calls.append(tx) or True, operation='batch_test_probe') is True
     assert len(body_calls) == 2
     assert [tx._max_attempts for tx in transactions] == [1, 1]
     assert [tx.commits for tx in transactions] == [1, 1]
@@ -229,7 +229,7 @@ def test_batch_store_kill_switch_restores_single_legacy_attempt(monkeypatch):
     store = batch_pipeline_store.FirestoreStore('batch_pipeline_dev', firestore_client=client)
 
     with pytest.raises(ValueError) as caught:
-        store.run(lambda _tx: True)
+        store.run(lambda _tx: True, operation='batch_test_probe')
 
     assert isinstance(caught.value.__cause__, Aborted)
     client.transaction.assert_called_once_with()

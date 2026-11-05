@@ -95,7 +95,7 @@ class LeaderLease:
             return token
 
         try:
-            token = self.store.run(body)
+            token = self.store.run(body, operation='batch_leader_lease')
         except Exception as error:
             logger.warning(
                 'event=batch_leader_lease role=%s outcome=fail_open exception_type=%s',

@@ -364,7 +364,7 @@ def durable_status(store, uid: str, job_id: str) -> dict | None:
             'poll_after_ms': 0 if completed or failed else 3000,
         }
 
-    return store.run(read)
+    return store.run(read, operation='batch_intake_status')
 
 
 def start_response(status: dict) -> JSONResponse:
@@ -418,7 +418,7 @@ async def accept_upload(
         store = await run_blocking(
             db_executor, lambda: shadow_from_env(FirestoreStore(f'batch_pipeline_{current_stage()}'))
         )
-        previous = await run_blocking(db_executor, store.run, lambda tx: tx.get('content', f'{uid}/{content_id}'))
+        previous = await run_blocking(db_executor, store.probe, 'content', f'{uid}/{content_id}')
         refused = await _repair_prior_upload(
             store,
             previous,
@@ -467,7 +467,12 @@ async def accept_upload(
                     raise
                 # Re-prove in one transaction that every denial is a deletion;
                 # any other denial raises here and keeps the 409.
-                total = await run_blocking(db_executor, store.run, lambda tx: _only_deleted_total(tx, uid, content_id))
+                total = await run_blocking(
+                    db_executor,
+                    store.run,
+                    lambda tx: _only_deleted_total(tx, uid, content_id),
+                    operation='batch_intake_deleted_proof',
+                )
                 if total is None:
                     raise error
                 logger.info('event=batch_intake outcome=conversation_deleted_terminal')
@@ -1040,7 +1045,8 @@ def repair_upload_owner_matches(uid: str, content_id: str, job_id: str) -> bool:
     this lookup cannot grant a fresh owner, processing, completion or a write.
     """
     store = shadow_from_env(FirestoreStore(f'batch_pipeline_{current_stage()}'))
-    return store.run(lambda tx: _repair_owner_matches(tx.get('content', f'{uid}/{content_id}'), job_id))
+    row = store.probe('content', f'{uid}/{content_id}')
+    return _repair_owner_matches(row, job_id)
 
 
 def get_durable_job_status(job_id: str, uid: str, *, artifact_retry: bool = False) -> dict | None:

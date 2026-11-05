@@ -111,7 +111,7 @@ class OrderedMerge:
             if mark.get('held') and (force or not depth or _awaiting_projection(tx, tx.get('owners', key)) < depth):
                 tx.put('merge_holds', key, {**mark, 'held': False})
 
-        self.store.run(clear)
+        self.store.run(clear, operation='batch_merge_hold_release')
 
     def marked_page(self, limit: int = 50) -> list[tuple[str, str | None]]:
         """The next page of durable hold markers; the cursor rotates so every
@@ -154,7 +154,7 @@ class OrderedMerge:
 
         A recovery wake passes this to ``commit_next(release=...)``. Only rows
         still pending and ready are ever committed from it."""
-        job = self.store.run(lambda tx: tx.get('jobs', segment_id))
+        job = self.store.probe('jobs', segment_id)
         siblings = (job.get('projection_binding') or {}).get('segment_ids') or []
         return [segment_id, *[sid for sid in siblings if sid != segment_id][:RELEASE_SIBLINGS_MAX]]
 
@@ -162,7 +162,7 @@ class OrderedMerge:
         """Drop release rows that are not this owner's pending, ready rows; return the first that is."""
         while release:
             segment = release[0]
-            job = self.store.run(lambda tx: tx.get('jobs', segment))
+            job = self.store.probe('jobs', segment)
             if job.get('owner_key') == key and job.get('merge_pending') and job.get('state') == 'result_ready':
                 return segment
             release.pop(0)
@@ -475,4 +475,4 @@ class OrderedMerge:
 
     def committed_result(self, segment_id: str) -> dict:
         """Idempotent re-read after a lost commit reply; no external side effects."""
-        return self.store.run(lambda tx: tx.get('results', segment_id))
+        return self.store.probe('results', segment_id)

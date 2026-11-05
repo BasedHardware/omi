@@ -321,7 +321,8 @@ def test_private_projection_runs_real_planner_and_only_writes_shadow_metadata(re
     repository.store.run(
         lambda tx: tx.put(
             'shadow_jobs', work.segment_id, {**tx.get('shadow_jobs', work.segment_id), 'state': 'running'}
-        )
+        ),
+        operation='batch_test_probe',
     )
     monkeypatch.setattr(router.WorkerRequest, 'service', lambda self: SimpleNamespace(store=repository.store))
     actual = shadow_projection.plan

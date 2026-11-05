@@ -116,7 +116,15 @@ def test_plan_read_error_aborts_all_seals(source, proof, monkeypatch):
 
 
 def test_row_read_error_aborts_before_plan(source, proof, monkeypatch):
-    monkeypatch.setattr(source[0], 'run', Mock(side_effect=OSError('sensitive')))
+    # The classification read is a probe; the row read (second probe) fails.
+    original_probe = source[0].probe
+
+    def failing_row_probe(table, key):
+        if table == 'conversations':
+            raise OSError('sensitive')
+        return original_probe(table, key)
+
+    monkeypatch.setattr(source[0], 'probe', failing_row_probe)
     assert run(source, proof())['outcome'] == 'error'
     assert not source[1].transactions
 
@@ -125,7 +133,12 @@ def test_discovery_and_seal_caps_are_hard(proof, monkeypatch):
     job = {'state': 'record_pending', 'owner_id': 'synthetic', 'conversation_id': 'record'}
     row = {'record_upload_sessions': {'token': {'pod': 'old', 'process_started_at': 900}}}
     tx = SimpleNamespace(get=lambda table, _: job if table == 'jobs' else row)
-    store = SimpleNamespace(run=lambda body: body(tx), client=object(), namespace='batch_pipeline_prod')
+    store = SimpleNamespace(
+        run=lambda body, operation=None: body(tx),
+        probe=lambda table, key: job if table == 'jobs' else row,
+        client=object(),
+        namespace='batch_pipeline_prod',
+    )
     plan = Mock(return_value={'entries': [], 'plan_sha256': 'digest'})
     apply = Mock(return_value={'sealed': 64})
     monkeypatch.setattr(repair, 'plan_seals', plan)

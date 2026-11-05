@@ -88,12 +88,12 @@ def repair_one(store, storage, artifacts, path, *, flags, inventory, budget, mod
     budget.check()
     uid, cid = nojob.conversation_path(path)
     _, job_id = record_identity(uid, cid)
-    job = store.run(lambda tx: tx.get('jobs', job_id))
+    job = store.probe('jobs', job_id)
     budget.check()
     if job.get('partial_coordinator'):
         # Partial rows stay open, including after coordinator retirement. Only
         # a changed barrier needs fresh producer proof and transactional rearm.
-        row = store.run(lambda tx: tx.get('conversations', f'{uid}/{cid}'))
+        row = store.probe('conversations', f'{uid}/{cid}')
         budget.check()
         if partial_config.partial_barrier(row):
             return 'already_partial'

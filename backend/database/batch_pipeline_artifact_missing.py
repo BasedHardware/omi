@@ -83,7 +83,7 @@ class ArtifactMissingStore:
                     raise ProjectionBlocked('idle missing GPU upload required')
             return binding, jobs, missing
 
-        return self.store.run(read)
+        return self.store.run(read, operation='batch_artifact_missing_evidence')
 
     def restore_reupload(self, uid, content_id, snapshots, uris, now):
         """Reclaim only missing inputs, retaining owner, dedupe and charge checkpoints.
@@ -154,7 +154,7 @@ class ArtifactMissingStore:
             tx.put('content', f'{uid}/{content_id}', ledger)
             return binding.job_id
 
-        return self.store.run(commit)
+        return self.store.run(commit, operation='batch_artifact_missing_restore')
 
     def apply(self, segment_id, snapshot, evidence, plan_digest, now):
         """CAS the exact idle held unit and its content/privacy fences.
@@ -226,4 +226,4 @@ class ArtifactMissingStore:
             tx.put('content', f'{binding.owner_id}/{binding.content_id}', ledger)
             return True
 
-        return self.store.run(commit)
+        return self.store.run(commit, operation='batch_artifact_missing_apply')

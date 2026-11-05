@@ -715,9 +715,7 @@ class Pump:
         async def owner_of(segment: str) -> str | None:
             if self.publish_concurrency > 1 and segment in self._segment_owners:
                 return self._segment_owners[segment]
-            job = await self._run_blocking(
-                'maintenance', db_executor, self.scheduler.store.run, lambda tx: tx.get('jobs', segment)
-            )
+            job = await self._run_blocking('maintenance', db_executor, self.scheduler.store.probe, 'jobs', segment)
             owner_id = job.get('owner_id') if job else None
             if owner_id:
                 self._remember_owner(segment, owner_id)

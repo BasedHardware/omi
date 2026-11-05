@@ -47,4 +47,4 @@ def load_reference(store, uid, unit, conversation_id):
             ProjectionPolicy.from_dict((job.get('policy_parts') or {}).get('projection', {})),
         )
 
-    return store.run(read)
+    return store.run(read, operation='batch_final_pass_plan')

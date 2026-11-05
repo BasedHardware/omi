@@ -23,9 +23,8 @@ class LockedStore:
         self._store = store
         self._lock = Lock()
 
-    def run(self, body):
-        with self._lock:
-            return self._store.run(body)
+    def run(self, body, *, operation=None):
+        return self._store.run(body, operation=operation)
 
     def __getattr__(self, name):
         attribute = getattr(self._store, name)

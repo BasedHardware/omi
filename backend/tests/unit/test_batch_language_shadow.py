@@ -45,8 +45,8 @@ def test_duplicate_and_hour_rollover_never_repeat_an_intent(repository):
     repository.clock = lambda: 10800
     assert not repository.reserve(item())
     assert repository.reserve(item('new-hour'))
-    assert repository.store.run(lambda tx: tx.get('jobs', 'one')) == {}
-    assert repository.store.run(lambda tx: tx.get('shadow_jobs', 'one')) == {}
+    assert repository.store.run(lambda tx: tx.get('jobs', 'one'), operation='batch_test_probe') == {}
+    assert repository.store.run(lambda tx: tx.get('shadow_jobs', 'one'), operation='batch_test_probe') == {}
 
 
 def test_hourly_cap_is_shared_by_separate_replicas(repository, monkeypatch):
@@ -100,8 +100,8 @@ def test_malformed_or_zero_cap_never_reserves(repository, monkeypatch, setting):
 def test_lost_commit_response_is_not_permission_to_retry(repository, monkeypatch):
     run = repository.store.run
 
-    def ambiguous(body):
-        run(body)
+    def ambiguous(body, *args, **kwargs):
+        run(body, *args, **kwargs)
         raise TimeoutError('reply lost after commit')
 
     monkeypatch.setattr(repository.store, 'run', ambiguous)

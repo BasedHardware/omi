@@ -224,15 +224,15 @@ class ShadowStoreDouble:
         address = (f'{self.namespace}_{table}', key)
         self.client.rows[address] = (deepcopy(value), self.client.generation())
 
-    def run(self, body):
+    def run(self, body, *, operation=None):
         # ``shadow_operation`` labels are prefixed; refuse on the bare
         # operation name the store API uses. The injection lands after the
         # bounded retry budget, exactly what callers observe in production.
-        operation = current_operation().removeprefix('batch_shadow_')
-        if operation in self._refuse:
-            raise FirestoreContentionExhausted(f'Firestore transaction contention exhausted for {operation}')
+        bare = ((operation if operation is not None else current_operation()) or '').removeprefix('batch_shadow_')
+        if bare in self._refuse:
+            raise FirestoreContentionExhausted(f'Firestore transaction contention exhausted for {bare}')
         transaction = _CASDoubleTransaction(self)
-        self.transactions.append((operation, transaction))
+        self.transactions.append((bare, transaction))
         result = body(transaction)
         transaction.flush()
         return result

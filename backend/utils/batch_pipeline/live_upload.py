@@ -242,7 +242,7 @@ async def registered_record_response(
             if reason or legacy_mode is not LegacySyncMode.ON:
                 # A prior batch content receipt must drain before new-custody
                 # eligibility, even if this conversation has no owner marker.
-                prior = await run_blocking(db_executor, store.run, lambda tx: tx.get('content', f'{uid}/{content_id}'))
+                prior = await run_blocking(db_executor, store.probe, 'content', f'{uid}/{content_id}')
                 if prior.get('dispatch_protocol') == 'batch_v1':
                     return RecordUploadRoute.BATCH
             legacy_owner = bool(reason) or await _legacy_takes_new_owner(policy, legacy_mode, uid, row.get('language'))
@@ -294,7 +294,7 @@ async def registered_record_response(
         return prior, jobs
 
     try:
-        prior, jobs = await run_blocking(db_executor, store.run, read)
+        prior, jobs = await run_blocking(db_executor, store.run, read, operation='batch_live_receipt_read')
     except BatchPrivacyBlocked:
         return JSONResponse(
             status_code=409,
@@ -335,7 +335,7 @@ async def registered_record_response(
             return True
 
         failure_reason = RecordUploadWait.ALIAS_WRITE_FAILED
-        if not await run_blocking(db_executor, store.run, alias):
+        if not await run_blocking(db_executor, store.run, alias, operation='batch_live_alias_write'):
             return _pending(RecordUploadWait.ALIAS_CONFLICT)
         failure_reason = RecordUploadWait.RECEIPT_STATUS_READ_FAILED
         status = await run_blocking(db_executor, durable_status, store, uid, 'bp_' + content)

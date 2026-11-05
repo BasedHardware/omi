@@ -387,8 +387,8 @@ class _LedgerStore:
     def __init__(self, intakes, content):
         self.docs = {'intakes': intakes, 'content': content}
 
-    def run(self, operation):
-        return operation(SimpleNamespace(get=lambda collection, key: self.docs[collection].get(key)))
+    def run(self, body, *, operation=None):
+        return body(SimpleNamespace(get=lambda collection, key: self.docs[collection].get(key)))
 
 
 _COMPLETED = {'new_memories': [], 'updated_memories': [], 'total_segments': 1, 'failed_segments': 0, 'errors': []}

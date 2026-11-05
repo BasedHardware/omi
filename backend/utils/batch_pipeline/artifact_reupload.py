@@ -49,7 +49,7 @@ def _repair_evidence(store, binding, snapshots, intake_context):
     lineage fields are discarded, and no unit is probed again. A legacy intake
     has neither, so it holds with phone custody and its audio intact.
     """
-    intake = store.run(lambda tx: tx.get('intakes', binding.job_id)) or {}
+    intake = store.probe('intakes', binding.job_id)
     record = intake.get('repair_lineage')
     if record is None:
         raise _hold('legacy_lineage_unproven')

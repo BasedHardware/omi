@@ -237,7 +237,7 @@ def test_real_sdk_retry_reloads_every_fence(monkeypatch, reads, scope, change, r
             view.check_privacy(UID, ['source'], 0)
             view.check_privacy(UID, ['source'], 0)
 
-        run = lambda: store.run(body)
+        run = lambda: store.run(body, operation='batch_test_probe')
     with pytest.raises(BatchPrivacyBlocked, match=reason):
         run()
     assert len(commits) == 1  # Second attempt denies before it can commit.

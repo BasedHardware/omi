@@ -198,12 +198,15 @@ class SimStore:
         self.observers: list[Callable[[tuple[str, str], dict, dict], None]] = []
 
     # -- Store protocol -------------------------------------------------
-    def run(self, body: Callable[[SimTransaction], T]) -> T:
+    def run(self, body: Callable[[SimTransaction], T], *, operation: str | None = None) -> T:
         self.transactions += 1
         tx = SimTransaction(self)
         result = body(tx)
         tx.flush()
         return result
+
+    def probe(self, table: str, key: str) -> dict:
+        return deepcopy(self.rows.get((table, key), {}))
 
     def due(self, state: str, now: float, limit: int = 100) -> list[str]:
         if state not in _DUE_FIELDS:

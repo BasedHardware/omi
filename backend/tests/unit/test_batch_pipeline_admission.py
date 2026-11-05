@@ -74,15 +74,15 @@ async def test_deadline_preserves_partial_receipt_and_current_client_contract(mo
     release, finished = threading.Event(), threading.Event()
     calls = []
 
-    def slow_second_read(fn):
+    def slow_second_read(fn, *args, **kwargs):
         calls.append(fn.__name__)
         if len(calls) == 3:
             try:
                 release.wait(2)
-                return original_run(fn)
+                return original_run(fn, *args, **kwargs)
             finally:
                 finished.set()
-        return original_run(fn)
+        return original_run(fn, *args, **kwargs)
 
     monkeypatch.setattr(store, 'run', slow_second_read)
     monkeypatch.setattr(admission, 'AUTHORIZE_SECONDS', 0.1)
@@ -152,7 +152,11 @@ async def test_dependency_returning_after_deadline_cannot_grant(monkeypatch, slo
         monkeypatch.setattr(
             store,
             'run',
-            lambda fn: after_deadline(lambda: original_run(fn)) if fn.__name__ == 'seal' else original_run(fn),
+            lambda fn, *args, **kwargs: (
+                after_deadline(lambda: original_run(fn, *args, **kwargs))
+                if fn.__name__ == 'seal'
+                else original_run(fn, *args, **kwargs)
+            ),
         )
     receipt = await admission.authorize(store, tokens(lease), now=1)
     assert crossed == [slow_stage]

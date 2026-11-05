@@ -84,8 +84,8 @@ class LostAckStore(MemoryStore):
         super().__init__()
         self.lose_next = False
 
-    def run(self, body):
-        result = super().run(body)
+    def run(self, body, *, operation=None):
+        result = super().run(body, operation=operation)
         if self.lose_next:
             self.lose_next = False
             raise RuntimeError('commit acknowledgement lost')
@@ -114,10 +114,10 @@ def test_overlapping_acquires_on_one_lease_never_leave_a_stall():
             super().__init__()
             self.inside = threading.Event()
 
-        def run(self, body):
+        def run(self, body, *, operation=None):
             self.inside.set()
             time.sleep(0.01)  # Hold the transaction so the other thread overlaps.
-            return super().run(body)
+            return super().run(body, operation=operation)
 
     store, clock = SlowStore(), Clock()
     lease = LeaderLease(store, SERVING_MAINTENANCE, ttl_seconds=60, clock=clock)

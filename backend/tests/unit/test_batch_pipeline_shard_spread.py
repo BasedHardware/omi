@@ -73,12 +73,12 @@ def test_failed_pull_keeps_only_expiring_claim_and_never_loses_job(monkeypatch):
 
 
 def test_static_contention_operation_scope_restores_after_error():
-    assert store_module.current_operation() == 'batch_pipeline_store'
+    assert store_module.current_operation() is None
     with pytest.raises(ValueError, match='synthetic'):
         with store_module.pull_operation('pull', 'scheduler_03'):
             assert store_module.current_operation() == 'batch_pull shard=scheduler_03'
             raise ValueError('synthetic')
-    assert store_module.current_operation() == 'batch_pipeline_store'
+    assert store_module.current_operation() is None
     with pytest.raises(ValueError, match='static'):
         with store_module.pull_operation('pull', 'uid-shaped-key'):
             pass
@@ -171,7 +171,7 @@ class SpreadMemoryStore(MemoryStore):
             self._puller_views[self.current_puller] = view
         return view
 
-    def run(self, body):
+    def run(self, body, *, operation=None):
         from database.firestore_transaction_retry import FirestoreContentionExhausted
 
         attempted = []

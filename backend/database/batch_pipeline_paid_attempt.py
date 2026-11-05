@@ -19,4 +19,4 @@ def mark_spent(store, sid, token, intent, now):
             tx.put('jobs', sid, job)
         return True
 
-    return store.run(commit)
+    return store.run(commit, operation='batch_paid_attempt_settle')
