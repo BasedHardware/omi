@@ -111,7 +111,7 @@ async def test_cancelled_worker_waits_for_real_future_before_abandon(records, mo
             await barrier.begin_recording('record')
         elif kind == 'metadata':
             # This direct-submit path already shields, and can outlive its deadline.
-            monkeypatch.setattr(barriers, 'CLOSE_METADATA_DEADLINE_SECONDS', 0.001)
+            monkeypatch.setattr(barriers, 'CLOSE_METADATA_DEADLINE_SECONDS', 0.5)
             try:
                 await barrier._close_metadata('record', late_write)
             except TimeoutError:

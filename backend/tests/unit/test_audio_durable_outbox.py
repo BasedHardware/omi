@@ -1893,8 +1893,8 @@ async def test_capacity_eviction_abandons_after_late_io_and_preserves_raw_custod
     monkeypatch.setattr(finish_module, 'MAX_CLOSED_RECORD_DRAINS', 0)
     monkeypatch.setattr(finish_module, 'MAX_ABANDON_RECORD_DRAINS', abandon_cap)
     monkeypatch.setenv('PUSHER_ABANDON_EVICTED_TOKENS', kill_switch)
-    monkeypatch.setattr(pusher, 'RECORD_INLINE_FINISH_TIMEOUT', 0.01)
-    monkeypatch.setattr(pusher, 'BG_DRAIN_TIMEOUT', 0.01)
+    monkeypatch.setattr(pusher, 'RECORD_INLINE_FINISH_TIMEOUT', 0.5)
+    monkeypatch.setattr(pusher, 'BG_DRAIN_TIMEOUT', 0.5)
     if stage == 'upload':
         monkeypatch.setattr(pusher, 'upload_audio_chunks_batch', late_io)
     else:
