@@ -18,6 +18,7 @@ from prometheus_client import Counter, Histogram
 
 from models.transcript_segment import TranscriptSegment
 from utils.conversations.final_pass_errors import error_details
+from utils.conversations.final_pass_dependencies import transient_cause
 from utils.conversations.final_pass_assignment import assign_words, name_centroids, skip_single_speaker
 
 OUTCOMES = Counter('omi_transcription_final_pass_total', 'Pyannote final-pass outcomes', ['outcome', 'lane'])
@@ -147,6 +148,8 @@ def run_final_pass(
             ),
         }
     except Exception as error:
+        if lane == 'batch' and transient_cause(error) is not None:
+            raise  # The batch adapter owns durable retry custody and counting.
         reason = 'timeout' if isinstance(error, (TimeoutError, httpx.TimeoutException)) else 'service'
         details = error_details(error)
         logging.getLogger(__name__).warning(

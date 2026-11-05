@@ -303,6 +303,7 @@ class BatchFinalPassOutcome(StrEnum):
     REQUEUE = 'failed_requeue'
     SLOT_EXHAUSTED = 'skipped_slot_exhausted'
     RETRY_EXHAUSTED = 'skipped_retry_exhausted'
+    FAILED_DEPENDENCY = 'failed_dependency'
     SKIPPED_NO_CHANGES = 'skipped_no_changes'
     TOO_LONG = 'failed_too_long'
     READ_BUDGET = 'failed_read_budget'

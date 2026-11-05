@@ -26,8 +26,8 @@ def read_snapshot(store, body, budget):
         result = body(FirestoreTransaction(client, store.namespace, transaction, read_budget=budget))
         budget.timeout(10)
         return result
-    except DeadlineExceeded:
-        raise ArtifactReadLimit('artifact read deadline') from None
+    except DeadlineExceeded as error:
+        raise ArtifactReadLimit('artifact read deadline') from error
     finally:
         try:
             # There are no writes to commit. Release the snapshot while time

@@ -189,4 +189,5 @@ def test_replay_reports_read_costs_on_success_and_each_deadline_phase(multi_unit
             tuple(outcome[k] for k in ('read_wall_seconds', 'read_bytes', 'read_reserved_bytes', 'read_objects'))
             == expected
         )
-    assert outcome['outcome'] == ('success' if failure is None else 'failed_read_budget'), outcome
+    assert outcome['outcome'] == ('success' if failure is None else 'deferred_transient'), outcome
+    assert outcome['requeue_calls'] == (0 if failure is None else 1)

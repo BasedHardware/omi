@@ -236,7 +236,7 @@ def test_staged_pcm_and_projection_ids_with_speech_spans(lane, sync_on, record_o
     assert segments[0].id == str(uuid5(NAMESPACE_URL, f'batch:{part_id}:0'))
 
 
-@pytest.mark.parametrize('refusal', ['missing', 'expired', 'privacy', 'read_bytes', 'read_objects', 'read_time'])
+@pytest.mark.parametrize('refusal', ['missing', 'expired', 'privacy', 'read_bytes', 'read_objects'])
 def test_incomplete_coverage_keeps_all_resolver_labels(lane, monkeypatch, refusal):
     original = batch.load_reference
 
@@ -260,8 +260,6 @@ def test_incomplete_coverage_keeps_all_resolver_labels(lane, monkeypatch, refusa
                 read_budget.reserve(read_budget.max_bytes)
             elif refusal == 'read_objects':
                 read_budget.objects = read_budget.max_objects
-            elif refusal == 'read_time':
-                read_budget.deadline = time.monotonic() - 1
         return original_fetch(item, read_budget=read_budget)
 
     monkeypatch.setattr(lane.artifacts, 'fetch_audio', fetch)

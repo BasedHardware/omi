@@ -23,6 +23,7 @@ from tests.unit.test_batch_final_pass import (  # noqa: F401
     lane,
     prod_shaped,
     reference_store,
+    retry_state,
     run_prod,
     wav,
 )
@@ -232,7 +233,7 @@ def test_real_artifact_composition_bounds_pre_and_post_download_privacy(sdk_refe
     assert all(timeout <= 0.25 for _, timeout in sdk_reference.calls)
 
 
-def test_reference_deadline_is_terminal_without_trying_remaining_units(prod_shaped, sdk_reference, monkeypatch):
+def test_reference_deadline_defers_without_trying_remaining_units(prod_shaped, sdk_reference, retry_state, monkeypatch):
     sdk_reference.state.stall = 'batch_pipeline_dev_jobs/'
     template = prod_shaped.conversation.transcript_segments[0]
     prod_shaped.conversation.transcript_segments.append(
@@ -241,7 +242,7 @@ def test_reference_deadline_is_terminal_without_trying_remaining_units(prod_shap
     monkeypatch.setattr(batch, 'FirestoreStore', lambda *_: sdk_reference.store)
     monkeypatch.setattr(batch, 'load_reference', references.load_reference)
     result = run_prod(prod_shaped)
-    assert (result['outcome'], result['reason']) == ('failed_read_budget', 'artifact read deadline')
+    assert (result['outcome'], result['exception_type']) == ('deferred_transient', 'DeadlineExceeded')
     assert result['failing_unit'] == 'unit-a'
     assert sum(kind.startswith('batch_pipeline_dev_jobs/') for kind, _ in sdk_reference.calls) == 1
     assert not prod_shaped.gpu

@@ -40,6 +40,7 @@ from utils.batch_pipeline.projection_parts import split_result, bounded_projecti
 from utils.batch_pipeline.projection_segments import projection_segments
 from utils.conversations.final_pass_assignment import assign_words
 from utils.conversations.final_pass_errors import error_details
+from utils.conversations.final_pass_dependencies import transient_cause
 from utils.conversations.final_pass_pyannote import run_final_pass, OUTCOMES, OWNER_DELTA
 from utils.manual_speaker_assignments import manual_owner_reserved
 from utils.observability.fallback import record_fallback
@@ -218,7 +219,7 @@ def _references(store, uid, conversation, units, read_budget, diagnostics):
                 error_details(error)['reason'],
                 error_details(error)['location'],
             )
-            if isinstance(error, ArtifactReadLimit):
+            if transient_cause(error) is not None or isinstance(error, ArtifactReadLimit):
                 raise
             if isinstance(error, ReferenceUnavailable) and error.reason == 'no_job':
                 absent.append(error)
@@ -386,10 +387,37 @@ def _decode_units(uid, conversation, references, store, artifacts, read_budget, 
             raise failure from error
 
 
+def _defer(uid, conversation, requeue, outcome, **details):
+    try:
+        if requeue is None:
+            raise RuntimeError('retry_custody_required')
+        queued = requeue(uid, conversation.id, conversation.language or 'en')
+        if queued is not None and not queued['outcome'].startswith('deferred_'):
+            return queued  # A closed obligation cannot reopen or count again.
+    except Exception as error:
+        _fallback('failed_requeue', **error_details(error))
+        raise  # Never acknowledge a dependency failure without durable custody.
+    record_fallback(
+        component='stt_selection',
+        from_mode='batch_final_pass',
+        to_mode='speaker_final_pass_retry',
+        reason='recovery_budget' if outcome == 'deferred_slot_busy' else 'unavailable',
+        outcome='degraded',
+    )
+    logger.info(
+        'event=batch_final_pass outcome=%s exception_type=%s reason=%s location=%s',
+        outcome,
+        details.get('exception_type', ''),
+        details.get('reason', 'speaker_final_pass_outbox'),
+        details.get('location', ''),
+    )
+    return {'outcome': outcome, **details}
+
+
 def run_batch_final_pass(uid, conversation, receipt, *, load_prints, apply, requeue):
     """One terminal metric per invocation that runs or fails custody, never per segment.
 
-    Non-cohort calls and durable slot deferrals are outside that contract. A
+    Non-cohort calls and durable deferrals are outside that contract. A
     deferral records fallback telemetry; its later admitted retry owns the result.
     """
     if not final_pass_enabled_for(uid, conversation.transcript_segments):
@@ -397,27 +425,20 @@ def run_batch_final_pass(uid, conversation, receipt, *, load_prints, apply, requ
     if not _SLOTS.acquire(blocking=False):
         # The processing boundary supplies a dedicated, capped speaker-only
         # obligation. Retry deliveries settle their own existing obligation.
-        try:
-            if requeue is None:
-                raise RuntimeError('retry_custody_required')
-            queued = requeue(uid, conversation.id, conversation.language or 'en')
-            if queued is not None and queued.get('outcome') != 'deferred_slot_busy':
-                return queued
-        except Exception as error:
-            _fallback('failed_requeue', **error_details(error))
-            raise  # Do not acknowledge delivery when durable custody failed.
-        record_fallback(
-            component='stt_selection',
-            from_mode='batch_final_pass',
-            to_mode='speaker_final_pass_retry',
-            reason='recovery_budget',
-            outcome='degraded',
-        )
-        logger.info('event=batch_final_pass outcome=deferred_slot_busy reason=speaker_final_pass_outbox')
-        return {'outcome': 'deferred_slot_busy'}
+        return _defer(uid, conversation, requeue, 'deferred_slot_busy')
     try:
         return _run(uid, conversation, receipt, load_prints, apply)
     except Exception as error:
+        transient = transient_cause(error)
+        if transient is not None:
+            return _defer(
+                uid,
+                conversation,
+                requeue,
+                'deferred_transient',
+                **error_details(transient),
+                failing_unit=getattr(error, 'failing_unit', None),
+            )
         outcome = (
             error.outcome
             if isinstance(error, ReferenceUnavailable)

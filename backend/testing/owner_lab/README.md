@@ -248,6 +248,17 @@ cannot count it again. Ineligible calls and durable deferrals remain outside
 the terminal counter contract. The replay suppresses Prometheus writes inside
 `reproduce()`, including counters, histograms and lazy label children.
 
+Retryable Firestore/GCS failures now produce `deferred_transient` from initial
+passes and retries: unavailable, deadline, aborted, internal-server and quota
+errors, connection resets and read timeouts. The shared batch diarizer adapter
+propagates typed transients to the same boundary; legacy lanes retain their
+existing fallback. Explicit wrapped causes remain classifiable without parsing
+provider messages. Elapsed read deadlines defer; object/byte and unit/audio caps
+stay terminal. Permanent reload errors close as `failed_dependency`. The same
+four-claim outbox closes persistent transients once as `skipped_retry_exhausted`.
+No SDK retry loop or semaphore wait is added. The read-only lab captures retry
+requests as `requeue_calls` without publishing an outbox row or task.
+
 The whole-pass shared-unit skip remains the precision-first default. No partial
 processing or recurring learning occurs when any reference is shared or
 unsettled. `omi_transcription_final_pass_total{lane="batch",

@@ -8,6 +8,7 @@ import time
 from config.batch_conversation_speakers import batch_unit_scope
 from database.batch_final_pass_retry import FinalPassRetries
 from utils.observability.fallback import record_fallback
+from utils.conversations.final_pass_dependencies import transient_cause
 
 logger = logging.getLogger(__name__)
 
@@ -146,11 +147,16 @@ def consume(key, token, *, now=None):
     try:
         result = run_only(claim['uid'], claim['conversation_id'], claim['scope_key'])
     except Exception as error:
-        result = {'outcome': 'deferred_dependency', **error_details(error)}
+        transient = transient_cause(error)
+        result = {
+            'outcome': 'deferred_transient' if transient is not None else 'failed_dependency',
+            **error_details(transient or error),
+        }
         logger.warning(
-            'event=batch_final_pass_retry outcome=dependency_failed exception_type=%s reason=%s',
+            'event=batch_final_pass_retry outcome=dependency_failed exception_type=%s reason=%s location=%s',
             result['exception_type'],
             result['reason'],
+            result['location'],
         )
     settled = store.settle(key, claim, result['outcome'], now=max(now, _now()))
     if settled is None:

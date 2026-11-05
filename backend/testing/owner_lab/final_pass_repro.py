@@ -233,7 +233,7 @@ def reproduce(uid, conversation, receipt, *, diarizer='stub', load_prints=None, 
     from utils.conversations.speaker_resolution import apply_speaker_resolution, load_voiceprints_for_resolution
     from utils.stt.diarization_turns import exclusive_from_activity
 
-    captured = {'apply_calls': 0, 'learn_calls': 0}
+    captured = {'apply_calls': 0, 'learn_calls': 0, 'requeue_calls': 0}
     read_wall_seconds = 0.0
     read_budget = None
     coverage = set()
@@ -293,6 +293,9 @@ def reproduce(uid, conversation, receipt, *, diarizer='stub', load_prints=None, 
         captured['learn_calls'] += 1
         return {}  # Observe the attempted learning; publish no profile.
 
+    def capture_requeue(*args):
+        captured['requeue_calls'] += 1  # No outbox/Cloud Tasks write in the lab.
+
     class ProjectionDiarizer:
         backend = 'projection_stub'
 
@@ -327,7 +330,7 @@ def reproduce(uid, conversation, receipt, *, diarizer='stub', load_prints=None, 
             receipt,
             load_prints=load_prints or load_voiceprints_for_resolution,
             apply=capture_apply,
-            requeue=deny_write,
+            requeue=capture_requeue,
         )
     changed = sum(
         before[s.id] != (s.speaker_id_scope, s.speaker_id, s.is_user, s.person_id, s.recurring_voice_id)
