@@ -175,6 +175,8 @@ List<_ConversationListRow> _buildConversationListRows({
   required Map<DateTime, List<LocalRecording>> recordingsByDate,
   // Locked rows keep their index in the server's list, which the builder reads back.
   Map<DateTime, List<int>> heldByDate = const {},
+  Set<DateTime> collapsedDates = const {},
+  Set<String> preservedConversationIds = const {},
 }) {
   final rows = <_ConversationListRow>[];
   var hasRenderedDate = false;
@@ -183,6 +185,7 @@ List<_ConversationListRow> _buildConversationListRows({
     final date = dates[dateIndex];
     final conversations = conversationsByDate[date] ?? const <ServerConversation>[];
     final recordings = recordingsByDate[date] ?? const <LocalRecording>[];
+    final collapsed = collapsedDates.contains(date);
     final entries = buildConversationGroupEntries(conversations: conversations, recordings: recordings);
     final conversationIndexes = <String, int>{
       for (var index = 0; index < conversations.length; index++) conversations[index].id: index,
@@ -212,6 +215,7 @@ List<_ConversationListRow> _buildConversationListRows({
     for (final entry in entries) {
       final conversation = entry.conversation;
       final recording = entry.recording;
+      if (collapsed && conversation != null && !preservedConversationIds.contains(conversation.id)) continue;
       if (conversation != null) {
         rows.add((
           kind: _ConversationListRowKind.conversation,
@@ -244,14 +248,16 @@ List<_ConversationListRow> _buildConversationListRows({
       ));
     }
 
-    rows.add((
-      kind: _ConversationListRowKind.groupSpacer,
-      date: date,
-      isFirst: false,
-      conversation: null,
-      recording: null,
-      conversationIndex: -1,
-    ));
+    if (!collapsed) {
+      rows.add((
+        kind: _ConversationListRowKind.groupSpacer,
+        date: date,
+        isFirst: false,
+        conversation: null,
+        recording: null,
+        conversationIndex: -1,
+      ));
+    }
     hasRenderedDate = true;
   }
 
@@ -317,6 +323,7 @@ class _ConversationsPageState extends State<ConversationsPage>
   final ScrollController _scrollController = ScrollController();
   final GlobalKey<HomeDailyRecapsState> _recapsKey = GlobalKey<HomeDailyRecapsState>();
   String? _loadMoreFilterKey;
+  final Set<DateTime> _collapsedConversationDays = {};
   String? _lastLoadMoreRequestKey;
   bool _isBootstrapping = true;
   bool _initialOverlayPending = false;
@@ -792,6 +799,11 @@ class _ConversationsPageState extends State<ConversationsPage>
         final mergedDates = <DateTime>{...conversationsByDate.keys, ...recordingsByDate.keys, ...heldByDate.keys}
             .toList()
           ..sort((a, b) => b.compareTo(a));
+        final hasCollapsedDays = mergedDates.any(_collapsedConversationDays.contains);
+        final isSearchPage = convoProvider.previousQuery.isNotEmpty || convoProvider.selectedSpeakerId != null;
+        final canLoadMore = isSearchPage
+            ? convoProvider.totalSearchPages > convoProvider.currentSearchPage
+            : convoProvider.hasMoreConversations;
         // Episodes beta, default view: background conversations live in the day's recap, not on Home.
         final hidingBackground = episodesOn && showRecordings && !convoProvider.isSelectionModeActive;
         final builtRows = _buildConversationListRows(
@@ -799,6 +811,11 @@ class _ConversationsPageState extends State<ConversationsPage>
           conversationsByDate: hidingBackground ? _withoutBackground(conversationsByDate) : conversationsByDate,
           recordingsByDate: recordingsByDate,
           heldByDate: heldByDate,
+          collapsedDates: _collapsedConversationDays,
+          preservedConversationIds: {
+            ...projectedProcessingIds,
+            ...snapshot.processingConversations.map((conversation) => conversation.id),
+          },
         );
         final withLive =
             episodeLive ? _withTodayRow(builtRows, DateTime.now(), _ConversationListRowKind.liveEpisode) : builtRows;
@@ -975,6 +992,15 @@ class _ConversationsPageState extends State<ConversationsPage>
                         return _buildLoadMoreShimmer();
                       }
                       // widget.loadMoreMemories(); // CALL this only when visible
+                      if (hasCollapsedDays) {
+                        if (!canLoadMore) return const SizedBox(height: 20);
+                        return Center(
+                          child: TextButton(
+                            onPressed: () => _requestMoreIfNeeded(context.read<ConversationProvider>()),
+                            child: Text(context.l10n.showMore),
+                          ),
+                        );
+                      }
                       return VisibilityDetector(
                         key: const Key('conversations-key'),
                         onVisibilityChanged: (visibilityInfo) {
@@ -998,10 +1024,16 @@ class _ConversationsPageState extends State<ConversationsPage>
                           more: row.conversationIndex == heldRecordings.length - 1 ? heldMore : 0,
                         );
                       case _ConversationListRowKind.dateHeader:
+                        final day = DateUtils.dateOnly(row.date);
+                        final collapsed = _collapsedConversationDays.contains(day);
                         return DateListItem(
                           key: ValueKey('date_${row.date.toIso8601String()}'),
                           date: row.date,
                           isFirst: row.isFirst,
+                          collapsed: collapsed,
+                          onToggle: () => setState(() {
+                            if (!_collapsedConversationDays.add(day)) _collapsedConversationDays.remove(day);
+                          }),
                         );
                       case _ConversationListRowKind.liveEpisode:
                         return Column(

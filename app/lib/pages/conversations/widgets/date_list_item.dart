@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/ui/ui.dart';
 
 /// A day group header in the conversation list: "Today", "Yesterday", "Wed, Sep 23", and the year
@@ -7,19 +8,47 @@ import 'package:omi/ui/ui.dart';
 class DateListItem extends StatelessWidget {
   final bool isFirst;
   final DateTime date;
+  final bool collapsed;
+  final VoidCallback? onToggle;
 
-  const DateListItem({super.key, required this.date, required this.isFirst});
+  const DateListItem({
+    super.key,
+    required this.date,
+    required this.isFirst,
+    this.collapsed = false,
+    this.onToggle,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: EdgeInsets.fromLTRB(20, isFirst ? 4 : 10, 16, 0),
-      child: Semantics(
-        header: true,
-        child: Text(
-          OmiDateFormat.of(context).dayHeader(date),
-          style: OmiType.body.copyWith(fontWeight: FontWeight.w600),
-        ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Semantics(
+              header: true,
+              child: Text(
+                OmiDateFormat.of(context).dayHeader(date),
+                style: OmiType.body.copyWith(fontWeight: FontWeight.w600),
+              ),
+            ),
+          ),
+          if (onToggle != null)
+            Semantics(
+              expanded: !collapsed,
+              child: IconButton(
+                key: ValueKey('collapse_day_${DateUtils.dateOnly(date).toIso8601String()}'),
+                visualDensity: VisualDensity.standard,
+                constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+                padding: EdgeInsets.zero,
+                tooltip: '${OmiDateFormat.of(context).dayHeader(date)}: '
+                    '${collapsed ? AppLocalizations.of(context).expand : AppLocalizations.of(context).collapseAction}',
+                onPressed: onToggle,
+                icon: Icon(collapsed ? Icons.expand_more : Icons.expand_less, size: 20),
+              ),
+            ),
+        ],
       ),
     );
   }
