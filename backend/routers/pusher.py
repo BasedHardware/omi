@@ -24,7 +24,13 @@ from config.audio_outbox import enabled as audio_outbox_enabled
 from utils.pusher_audio_projection import PusherAudioProjection, projection_owner_gone
 from utils.pusher_record_barrier import PusherRecordBarrier
 from utils.pusher_receive_metrics import SocketObservation, observe_work
-from utils.pusher_record_finish import ProjectionQueueWaitTimeout, RecordProjectionQueue, retain_closed_record_drain
+from utils.pusher_record_finish import (
+    ProjectionQueueWaitTimeout,
+    RecordProjectionQueue,
+    retain_closed_record_drain,
+    abandon_evicted_record_drain,
+    log_closed_record_drain_cap,
+)
 
 from fastapi import APIRouter
 from fastapi.websockets import WebSocketDisconnect, WebSocket
@@ -63,7 +69,14 @@ from utils.app_integrations import (
     trigger_realtime_integrations,
     trigger_realtime_audio_bytes,
 )
-from utils.executors import db_executor, storage_executor, run_blocking, start_background_task
+from utils.executors import (
+    db_executor,
+    storage_executor,
+    record_barrier_executor,
+    run_blocking,
+    start_background_task,
+    ExecutorFutureTracker,
+)
 from utils.episodes.live import on_session_end as flush_episode_moment
 from utils.async_tasks import (
     supervise_tasks,
@@ -431,6 +444,8 @@ async def _run_websocket_util_trigger(
     audio_bytes_event = asyncio.Event()  # Signals when items are added for instant wake
     audio_budget = ByteBudget(BUFFERED_AUDIO_MAX_BYTES)
     durable_audio = audio_outbox_enabled()
+    log_closed_record_drain_cap()
+    record_futures = ExecutorFutureTracker(storage_executor, record_barrier_executor)
     framed_audio = durable_audio and audio_timeline_v2 and sample_rate == 16000 and framed_pack(uid)
     # The bounded lane holds generation-pinned references, never the only PCM.
     # A crash after commit but before queue.put is recoverable via raw-live's
@@ -1736,7 +1751,10 @@ async def _run_websocket_util_trigger(
             has_record_debt = (
                 record_barrier.upload_sessions or record_barrier.pending_clears or record_barrier.close_failures
             )
-            if (has_record_debt or record_barrier.close_retry_at) and retain_closed_record_drain(private_worker):
+            if (has_record_debt or record_barrier.close_retry_at) and retain_closed_record_drain(
+                private_worker,
+                on_capacity=lambda: abandon_evicted_record_drain(private_worker, record_barrier, record_futures),
+            ):
                 bg_main_tasks.remove(private_worker)
         else:
             with observe_work('drain'):
@@ -1744,13 +1762,14 @@ async def _run_websocket_util_trigger(
 
     try:
         PUSHER_ACTIVE_WS_CONNECTIONS.inc()
-        receive_task = create_named_task(receive_tasks(), name=f"ws:{uid}:receive")
-        bg_main_tasks = [
-            create_named_task(process_speaker_sample_queue(), name=f"ws:{uid}:speaker_samples"),
-            create_named_task(process_private_cloud_queue(), name=f"ws:{uid}:private_cloud"),
-            create_named_task(process_transcript_queue(), name=f"ws:{uid}:transcripts"),
-            create_named_task(process_audio_bytes_queue(), name=f"ws:{uid}:audio_bytes"),
-        ]
+        with record_futures.scope():
+            receive_task = create_named_task(receive_tasks(), name=f"ws:{uid}:receive")
+            bg_main_tasks = [
+                create_named_task(process_speaker_sample_queue(), name=f"ws:{uid}:speaker_samples"),
+                create_named_task(process_private_cloud_queue(), name=f"ws:{uid}:private_cloud"),
+                create_named_task(process_transcript_queue(), name=f"ws:{uid}:transcripts"),
+                create_named_task(process_audio_bytes_queue(), name=f"ws:{uid}:audio_bytes"),
+            ]
 
         exit_result = await supervise_tasks(
             receive_task=receive_task,

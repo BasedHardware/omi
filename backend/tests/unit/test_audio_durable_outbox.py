@@ -1862,6 +1862,68 @@ async def test_closed_drain_capacity_and_early_shutdown_keep_tokens(inline_sessi
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('stage', ['upload', 'projection'])
+@pytest.mark.parametrize('kill_switch', ['on', 'off'])
+async def test_capacity_eviction_abandons_after_late_io_and_preserves_raw_custody(
+    inline_session, monkeypatch, stage, kill_switch
+):
+    client, path, barrier, projected = inline_session
+    entered = asyncio.Event()
+    release = threading.Event()
+    loop = asyncio.get_running_loop()
+    owners = []
+    start = finish_module.start_background_task
+    writes = []
+    payload = b'\x01\x00' * 160
+
+    def late_io(*args, **kwargs):
+        loop.call_soon_threadsafe(entered.set)
+        assert release.wait(10)
+        writes.append(stage)
+        return [] if stage == 'upload' else True
+
+    def track(coro, **kwargs):
+        owner = start(coro, **kwargs)
+        owners.append(owner)
+        return owner
+
+    monkeypatch.setattr(finish_module, 'start_background_task', track)
+    monkeypatch.setattr(finish_module, 'MAX_CLOSED_RECORD_DRAINS', 0)
+    monkeypatch.setenv('PUSHER_ABANDON_EVICTED_TOKENS', kill_switch)
+    monkeypatch.setattr(pusher, 'RECORD_INLINE_FINISH_TIMEOUT', 0.01)
+    monkeypatch.setattr(pusher, 'BG_DRAIN_TIMEOUT', 0.01)
+    if stage == 'upload':
+        monkeypatch.setattr(pusher, 'upload_audio_chunks_batch', late_io)
+    else:
+        monkeypatch.setattr(pusher_audio_projection.PusherAudioProjection, 'refresh', late_io)
+    sock = Socket(_audio_frames('conversation', [payload]))
+    handler = asyncio.create_task(pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1))
+    try:
+        await asyncio.wait_for(entered.wait(), 5)
+        await asyncio.wait_for(handler, 5)
+        assert writes == []
+        token = barrier.upload_sessions['conversation']
+        assert 'abandoned_at' not in client.rows[path]['record_upload_sessions'][token]
+        assert not client.rows[path]['record_audio_closed']
+        # The custody bytes are already durable even though the derivative is stuck.
+        receipts = _sent_receipts(sock)
+        assert receipts and b''.join(read_pcm('owner', receipt) for receipt in receipts) == payload
+        release.set()
+        if kill_switch == 'on':
+            await asyncio.wait_for(asyncio.gather(*owners), 5)
+            assert 'abandoned_at' in client.rows[path]['record_upload_sessions'][token]
+            assert not barrier_module._process_record_tokens().tokens
+        else:
+            assert not owners
+            assert 'abandoned_at' not in client.rows[path]['record_upload_sessions'][token]
+        assert not client.rows[path]['record_audio_closed']
+    finally:
+        release.set()
+        await asyncio.wait_for(handler, 5)
+        await asyncio.gather(*owners, return_exceptions=True)
+
+
+@pytest.mark.asyncio
 async def test_projection_queue_counts_only_successful_enqueues(remote):
     receipt = commit_pcm('owner', b'\x01\x00' * 160, 'conversation', 1000, 16000, 'root', 0)
     ref = audio_outbox.AudioProjection(receipt, 1000, 0, 160)
