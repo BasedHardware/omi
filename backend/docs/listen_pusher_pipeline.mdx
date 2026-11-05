@@ -2614,6 +2614,17 @@ integration endpoint and records `fanout_status=completed` only after the
 call returns. Lease recovery retries the same key, so a crash after an
 integration call cannot silently drop fanout or create an unkeyed duplicate.
 
+Zero-preview server-batch captures use a narrower boundary after successful
+`register_recording`: one transaction completes the processing conversation
+(with terminal relevance), fanout handoff and finalization job, including the
+terminal projection deltas. Dispatch generation, lease epoch, job binding and
+revision, capture ownership/marker and privacy are checked from transactional
+reads before writes. Same-generation redelivery reuses the committed terminal
+without repeating projection deltas. Quiet-check retirement, people-cache
+invalidation and enabled search synchronization run after commit. This does
+not change the completed-before-external-fanout ordering for normal processing.
+See [the atomic completion note](listen_pusher_pipeline/changes/2026-11-05-atomic-server-batch-completion.md).
+
 ```mermaid
 sequenceDiagram
     participant Client

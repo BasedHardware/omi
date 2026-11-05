@@ -322,6 +322,7 @@ def test_production_terminal_assessment_call_sites_are_pinned():
 
     root = Path(__file__).resolve().parents[2]
     expected = {
+        'database/conversation_finalization_jobs.py': 1,
         'database/conversations.py': 2,
         'database/conversation_merge_jobs.py': 1,
         'database/conversation_terminal_title.py': 1,
