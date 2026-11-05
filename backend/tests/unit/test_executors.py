@@ -220,7 +220,6 @@ def test_get_executor_metrics_returns_all_pools():
         'postprocess',
         'cleanup',
         'storage',
-        'pusher_record_storage',
         'speaker_tag_verify',
         'cimd',
         'open_loops',
@@ -665,3 +664,45 @@ def test_shutdown_cancels_deferred_payloads_without_retrying_on_a_closed_pool():
     finally:
         release.set()
         pool.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_tracked_storage_queue_survives_caller_cancellation_until_settlement():
+    """Abandon proof includes queued shared-storage work, not just running leaves."""
+    from utils.executors import ExecutorFutureTracker
+
+    entered = asyncio.Event()
+    release = threading.Event()
+    loop = asyncio.get_running_loop()
+    writes = []
+
+    def held_write():
+        loop.call_soon_threadsafe(entered.set)
+        assert release.wait(10)
+        writes.append('running')
+
+    with ThreadPoolExecutor(max_workers=1, thread_name_prefix='storage-test') as pool:
+        tracker = ExecutorFutureTracker(pool)
+        with tracker.scope():
+            running = asyncio.create_task(run_blocking(pool, held_write))
+            queued = asyncio.create_task(run_blocking(pool, lambda: writes.append('queued')))
+        waiter = None
+        try:
+            await asyncio.wait_for(entered.wait(), 5)
+            await asyncio.sleep(0)
+            assert len(tracker.pending) == 2
+            running.cancel()
+            queued.cancel()
+            await asyncio.gather(running, queued, return_exceptions=True)
+            waiter = asyncio.create_task(tracker.wait())
+            await asyncio.sleep(0)
+            assert not waiter.done() and writes == []
+            release.set()
+            await asyncio.wait_for(waiter, 5)
+            assert writes == ['running', 'queued']
+            assert not tracker.pending
+        finally:
+            release.set()
+            await asyncio.gather(running, queued, return_exceptions=True)
+            if waiter is not None:
+                await asyncio.wait_for(waiter, 5)
