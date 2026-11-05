@@ -263,20 +263,39 @@ def test_exhausted_batch_store_contention_names_the_tables_never_the_keys(monkey
         tx.cache[('conversations', 'uid-secret/conv-secret')] = {}
         tx.writes[('jobs', 'segment-secret')] = {}
         tx.patches[('conversations', 'uid-secret/conv-secret')] = {}
+        # A scheduler query reads through the raw transaction, never the cache.
+        tx.direct_reads.add('jobs_query')
         return True
 
     with caplog.at_level('WARNING', logger=batch_pipeline_store.logger.name):
         with pytest.raises(firestore_transaction_retry.FirestoreContentionExhausted) as caught:
             store.run(body)
 
-    assert caught.value.store_tables == 'read=conversations,owners wrote=conversations,jobs'
+    assert caught.value.store_tables == 'read=conversations,jobs_query,owners wrote=conversations,jobs,privacy_fence'
     line = next(r.getMessage() for r in caplog.records if 'event=batch_store_contention' in r.getMessage())
-    assert 'read_tables=conversations,owners' in line and 'write_tables=conversations,jobs' in line
+    assert 'read_tables=conversations,jobs_query,owners' in line
+    assert 'write_tables=conversations,jobs,privacy_fence' in line
     assert 'secret' not in line and 'secret' not in caught.value.store_tables
 
 
-def test_contention_tables_reports_none_and_external_writes():
+def test_contention_tables_reports_none_and_external_writes_sorted():
     view = batch_pipeline_store.FirestoreTransaction(Mock(), 'batch_pipeline_dev', Mock())
     assert batch_pipeline_store.contention_tables(view) == ('none', 'none')
     view.external[object()] = (object(), {})
-    assert batch_pipeline_store.contention_tables(view) == ('none', 'external')
+    view.writes[('jobs', 'segment')] = {}
+    assert batch_pipeline_store.contention_tables(view) == ('none', 'external,jobs')
+
+
+def test_direct_transaction_reads_are_named(monkeypatch):
+    # Queries and privacy checks read through the raw transaction, not the view cache.
+    monkeypatch.setattr(batch_pipeline_store, 'first_pending', lambda *a, **k: None)
+    monkeypatch.setattr(batch_pipeline_store, 'service_frontier', lambda *a, **k: 0.0)
+    monkeypatch.setattr(batch_pipeline_store, 'assert_batch_write_allowed', lambda *a, **k: 1)
+    monkeypatch.setattr(batch_pipeline_store, 'lever_enabled', lambda *a, **k: False)
+    view = batch_pipeline_store.FirestoreTransaction(Mock(), 'batch_pipeline_dev', Mock())
+    batch_pipeline_store._note_direct_reads(view)
+    assert batch_pipeline_store.contention_tables(view) == ('none', 'none')
+    view.first_pending('owner')
+    view.service_frontier(0)
+    view.check_privacy('uid')
+    assert batch_pipeline_store.contention_tables(view) == ('control_query,jobs_query,privacy', 'none')

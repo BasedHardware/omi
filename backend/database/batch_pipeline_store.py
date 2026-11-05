@@ -68,12 +68,41 @@ class Store(Protocol):
     def held_merge_owners(self, limit: int, *, after: str | None = None) -> list[tuple[str, str | None]]: ...
 
 
+# Reads that bypass the view cache and go through the raw transaction, by kind.
+_DIRECT_READ_KINDS = {
+    'first_pending': 'jobs_query',
+    'first_ready_pending': 'jobs_query',
+    'ready_predecessor': 'jobs_query',
+    'service_frontier': 'control_query',
+    'check_privacy': 'privacy',
+}
+
+
+def _note_direct_reads(view: 'FirestoreTransaction') -> None:
+    """Record, per attempt, which kinds of direct reads ran, so contention logs can name them.
+
+    Wraps the bound methods on this one view; the class methods stay untouched.
+    """
+    for name, kind in _DIRECT_READ_KINDS.items():
+        method = getattr(view, name)
+
+        def noted(*args, _method=method, _kind=kind, **kwargs):
+            view.direct_reads.add(_kind)
+            return _method(*args, **kwargs)
+
+        setattr(view, name, noted)
+
+
 def contention_tables(view: 'FirestoreTransaction') -> tuple[str, str]:
     """Sorted table names a transaction attempt read and wrote. Table names only, never keys."""
-    read = sorted({table for table, _ in view.cache})
-    wrote = sorted({table for table, _ in (*view.writes, *view.patches)})
+    read = sorted({table for table, _ in view.cache} | view.direct_reads)
+    wrote = {table for table, _ in (*view.writes, *view.patches)}
     if view.external:
-        wrote.append('external')
+        wrote.add('external')
+    if any(table == 'conversations' for table, _ in view.patches):
+        # The commit-boundary privacy fence writes one token per owner for conversation patches.
+        wrote.add('privacy_fence')
+    wrote = sorted(wrote)
     return ','.join(read) or 'none', ','.join(wrote) or 'none'
 
 
@@ -87,6 +116,9 @@ class FirestoreTransaction:
         self.patches: dict[tuple[str, str], dict] = {}
         # Documents outside the batch tables that join this transaction (the provider-STT outbox row).
         self.external: dict[Any, tuple[Any, dict]] = {}
+        # Reads that go through the raw transaction instead of the cache (queries, privacy state):
+        # their kind only, so contention logs can name them.
+        self.direct_reads: set[str] = set()
 
     def _ref(self, table: str, key: str):
         if table == 'conversations':
@@ -223,6 +255,7 @@ class FirestoreStore:
         @firestore.transactional
         def commit(transaction):
             view = FirestoreTransaction(client, self.namespace, transaction)
+            _note_direct_reads(view)
             last_view[:] = [view]
             result = body(view)
             view.flush()
