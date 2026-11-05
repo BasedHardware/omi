@@ -203,6 +203,15 @@ def shard_spread_enabled() -> bool:
     return os.getenv('BATCH_SHARD_SPREAD_ENABLED', 'true').strip().lower() != 'false'
 
 
+def skip_unchanged_control_write_enabled() -> bool:
+    """Admission skips rewriting its scheduler control shard when the append left it unchanged.
+
+    Every admission and every pull wrote the same 64 shared shards; an identical rewrite only
+    turned concurrent admissions and pulls into commit conflicts. False restores the write.
+    """
+    return os.getenv('BATCH_SKIP_UNCHANGED_CONTROL_WRITE_ENABLED', 'true').strip().lower() != 'false'
+
+
 def pull_multi_lease_enabled() -> bool:
     return os.getenv('BATCH_PULL_MULTI_LEASE_ENABLED', 'true').strip().lower() != 'false'
 
