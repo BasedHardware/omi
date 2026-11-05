@@ -162,6 +162,21 @@ def test_sync_fence_is_deferred_and_original_error_survives(observed):
     assert observed == [('sync', 'deferred')]
 
 
+def test_action_item_revision_race_is_deferred_not_failed(observed):
+    from database.action_item_refresh import RefreshRevisionChanged
+
+    error = RefreshRevisionChanged()
+
+    @delivery.observe_sync_failures
+    def raced():
+        raise error
+
+    with pytest.raises(RefreshRevisionChanged) as caught:
+        raced()
+    assert caught.value is error
+    assert observed == [('sync', 'deferred')]
+
+
 def test_sync_decode_failure_has_one_failed_terminal(observed):
     error = ValueError('synthetic')
 

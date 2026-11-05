@@ -141,6 +141,26 @@ def test_lifecycle_fence_settles_as_superseded(rows):
     assert KEY not in rows[0]
 
 
+def test_action_item_revision_race_retries_and_keeps_the_row(rows, monkeypatch):
+    # synceff 2026-11-05: a sync write moved the revision during the run, so the action-item refresh refused
+    # stale extraction. That race is a retry that keeps the row and its wake, not error/unexpected.
+    from database.action_item_refresh import RefreshRevisionChanged
+
+    monkeypatch.delenv('ENRICHMENT_REVISION_RACE_RETRY_ENABLED', raising=False)
+    result = _deliver(rows, Mock(side_effect=RefreshRevisionChanged()))
+    assert (result.outcome, result.reason) == ('retry', 'persistence_fenced')
+    assert KEY in rows[0]
+
+
+def test_action_item_revision_race_kill_switch_restores_the_failure(rows, monkeypatch):
+    from database.action_item_refresh import RefreshRevisionChanged
+
+    monkeypatch.setenv('ENRICHMENT_REVISION_RACE_RETRY_ENABLED', 'false')
+    with pytest.raises(RefreshRevisionChanged) as raised:
+        _deliver(rows, Mock(side_effect=RefreshRevisionChanged()))
+    assert isinstance(raised.value, ValueError) and str(raised.value) == 'refresh conversation revision changed'
+
+
 def test_open_live_target_defers_with_a_new_wake(rows, monkeypatch):
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
