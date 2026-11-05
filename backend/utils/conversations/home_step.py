@@ -60,7 +60,11 @@ def classify(row: Mapping[str, Any]) -> str | None:
             failed=bool(row.get('record_upload_failed') or row.get('finalization_status') == 'dead_letter'),
         )
         return FAILED if presented == 'failed' else TRANSCRIBING
-    if row.get('finalization_status') == 'dead_letter' or row.get('summary_retryable') or row.get('record_upload_failed'):
+    if (
+        row.get('finalization_status') == 'dead_letter'
+        or row.get('summary_retryable')
+        or row.get('record_upload_failed')
+    ):
         return FAILED
     provisional = structured.get('title_provenance') == 'server_minimum'
     if is_completed_below_floor(row) or (provisional and row.get('summary_blocked_reason') in EMPTY_BLOCKED_REASONS):
