@@ -5,6 +5,7 @@ import time
 
 from google.cloud import firestore
 
+from config import record_seal_rules
 from database._client import get_firestore_client, run_transactional
 
 
@@ -35,13 +36,18 @@ def seal_record_audio(uid: str, conversation_id: str, *, firestore_client=None) 
         if row.get('record_upload_failed'):
             return 'upload_failed'
         if row.get('record_upload_sessions'):
+            if record_seal_rules.refused_stamp_enabled() and row.get('record_seal_refused_at') is None:
+                tx.update(ref, {'record_seal_refused_at': time.time()})
             return 'producer_pending'
         if row.get('record_audio_partial'):
             # A clean late producer certifies its drain, never an earlier
             # missing tail. Repair refreshes the separate partial barrier.
             return None
-        if not row.get('record_audio_closed'):
-            tx.update(ref, {'record_audio_closed': True})
+        if not row.get('record_audio_closed') or row.get('record_seal_refused_at') is not None:
+            patch = {'record_audio_closed': True}
+            if row.get('record_seal_refused_at') is not None:
+                patch['record_seal_refused_at'] = None
+            tx.update(ref, patch)
         return None
 
     return run_transactional(client, commit, transient=True)

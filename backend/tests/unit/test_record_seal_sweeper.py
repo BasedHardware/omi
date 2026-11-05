@@ -288,3 +288,23 @@ def test_cli_import_failure_emits_only_generic_summary(monkeypatch, capsys):
     assert out.err == '' and len(out.out.splitlines()) == 1
     assert json.loads(json.loads(out.out)['message']) == {'event': 'record_seal_sweep', 'outcome': 'error'}
     assert 'example.invalid' not in out.out and 'private/object' not in out.out and 'AbC012' not in out.out
+
+
+@pytest.mark.parametrize('enabled', [True, False])
+def test_refused_age_and_count_preserve_bare_token_skip(source, proof, monkeypatch, enabled):
+    monkeypatch.setenv('RECORD_SEAL_REFUSED_STAMP_ENABLED', str(enabled).lower())
+    source[1].rows[PATH].update(record_seal_refused_at=900.25, record_upload_sessions={'old': True})
+    report = run(source, proof())
+    assert report['omi_record_seal_refused_count'] == int(enabled)
+    assert report['omi_record_seal_refused_age_seconds'] == (99 if enabled else 0)
+    assert report['bare_token_skips'] == 1
+    assert report['dispositions'] == {'bare_token': 1}
+    assert not any(tx.updates for tx in source[1].transactions)
+
+
+@pytest.mark.parametrize('stamp', [None, True, '900', float('nan'), float('inf')])
+def test_invalid_refused_clock_is_not_measured(source, proof, stamp):
+    source[1].rows[PATH].update(record_seal_refused_at=stamp, record_upload_sessions={'old': True})
+    report = run(source, proof())
+    assert report['omi_record_seal_refused_count'] == 0
+    assert report['omi_record_seal_refused_age_seconds'] == 0

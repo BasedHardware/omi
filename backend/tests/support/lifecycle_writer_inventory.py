@@ -1733,6 +1733,8 @@ FIELD_SITES = {
             ('record_audio_closed', 'record_upload_failed', 'record_upload_revision'),
         ),
         ('seal_record_audio.commit', 'record_audio_closed', 'True', ('record_audio_closed',)),
+        ('seal_record_audio.commit', 'record_seal_refused_at', 'None', ('record_seal_refused_at',)),
+        ('seal_record_audio.commit', 'record_seal_refused_at', 'time.time()', ('record_seal_refused_at',)),
         (
             'set_record_upload_pending.commit',
             'record_audio_closed',

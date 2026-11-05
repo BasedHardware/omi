@@ -8,6 +8,7 @@ import shutil
 from types import SimpleNamespace
 
 import pytest
+import httpx
 from google.api_core.exceptions import Aborted
 
 from database import record_audio
@@ -17,7 +18,7 @@ from testing.lifecycle_sim.harness import LifecycleSim
 from tests.support.lifecycle_state_table import durable_titling_rearm
 from testing.listen_pusher_stack.run import Stack, _wait_for_port
 from utils.batch_pipeline import live
-from utils.batch_pipeline import record_producer_proof
+from utils.batch_pipeline import record_producer_proof, record_seal_sweeper
 from utils.conversations.phase import ConversationPhase
 from utils.conversations import process_conversation as processing
 from utils.enrichment import outbox
@@ -219,6 +220,48 @@ async def test_open_sessions_dead_producer_sealed_within_budget(lifecycle_sim, m
         sim.age(61)
     assert sim.row().get('record_audio_closed'), 'dead-producer capture missed seal budget'
     assert sim.phase in {ConversationPhase.TRANSCRIBED, ConversationPhase.COMPLETE, ConversationPhase.SETTLED}
+
+
+@pytest.mark.asyncio
+async def test_refusal_clock_survives_pod_death_and_reconnect(lifecycle_sim, monkeypatch):
+    sim = lifecycle_sim
+    sim.seed()
+    await sim.start_pusher_with_live_token()
+    assert sim.register()
+    sim.age()
+    async with httpx.AsyncClient(trust_env=False, timeout=10) as client:
+        response = await client.post(
+            f'http://127.0.0.1:{sim.stack.pusher_port}/__lifecycle/seal',
+            json={'uid': sim.uid, 'conversation_id': sim.cid},
+        )
+    assert response.status_code == 200 and response.json() == {'refusal': 'producer_pending'}
+    first = sim.row()['record_seal_refused_at']
+    tokens = sim.row()['record_upload_sessions']
+    sim.kill_pusher()
+    assert sim.row()['record_seal_refused_at'] == first
+    # Fresh process retries through the same database helper and durable row.
+    await sim.start_pusher_with_live_token()
+    async with httpx.AsyncClient(trust_env=False, timeout=10) as client:
+        response = await client.post(
+            f'http://127.0.0.1:{sim.stack.pusher_port}/__lifecycle/seal',
+            json={'uid': sim.uid, 'conversation_id': sim.cid},
+        )
+    assert response.status_code == 200 and response.json() == {'refusal': 'producer_pending'}
+    assert sim.row()['record_seal_refused_at'] == first
+    monkeypatch.setattr(record_seal_sweeper, 'time', SimpleNamespace(time=lambda: first + 61))
+    report = sim.sweep(live_producer=True)
+    assert report['omi_record_seal_refused_count'] == 1
+    assert report['omi_record_seal_refused_age_seconds'] >= 60
+    assert all(sim.row()['record_upload_sessions'].get(token) == value for token, value in tokens.items())
+    # Only exact-token successful drains release custody; the clock grants no authority.
+    for token in sim.row()['record_upload_sessions']:
+        assert record_audio.set_record_upload_pending(
+            sim.uid, sim.cid, token, False, firestore_client=sim.stack.firestore
+        )
+    assert sim.seal() is None
+    assert sim.row()['record_audio_closed']
+    assert sim.row()['record_seal_refused_at'] is None
+    sim.kill_pusher()
 
 
 @pytest.mark.asyncio
