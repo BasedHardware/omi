@@ -11,6 +11,7 @@ from __future__ import annotations
 from utils.observability.sync_phases import sync_phase
 from config.batch_pipeline import live_record_enabled_for, record_capture_eligible
 from config import server_batch
+from config.episodes import home_transcription_deadline_seconds
 from config.policy import resolve_batch_policy
 from database.batch_ramp import ramp_admission_policy
 
@@ -338,11 +339,16 @@ def complete_server_batch_capture(uid: str, conversation_id: str, capture: Mappi
     """Close only a reserved raw capture, after its batch obligation was written."""
     if not server_batch.owned(capture):
         return False
+    pending_at = datetime.now(timezone.utc)
     return conversations_db.claim_conversation_status(
         uid,
         conversation_id,
         ConversationStatus.processing,
         ConversationStatus.completed,
+        extra_updates={
+            'home_transcription_pending_at': pending_at,
+            'home_transcription_deadline_at': pending_at + timedelta(seconds=home_transcription_deadline_seconds()),
+        },
         expected_fields={
             'record_lane_owner': 'batch_live_v1',
             'external_data': capture.get('external_data'),

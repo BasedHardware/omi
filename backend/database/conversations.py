@@ -66,6 +66,7 @@ from utils.manual_speaker_assignments import (
     remap_absorbed_receipt,
 )
 from utils.conversations.home_titles import apply_user_title, project_home
+from utils.conversations import transcribing_hold
 from database.mcp_read_queries import MCP_CONVERSATION_CARD_FIELD_PATHS, MCP_CONVERSATION_TRANSCRIPT_FIELD_PATHS
 from database.quiet_check_retirement import restore_quiet_check_in_transaction, stop_quiet_check_for_conversation
 from ._client import db, delete_collection_recursive, get_firestore_client, run_transactional
@@ -917,7 +918,7 @@ def is_visible_conversation(conversation: Optional[Mapping[str, Any]], *, includ
         if (
             conversation.get('dream_duplicate_of')
             or bridge_pending.hidden(conversation)
-            or is_settling_fragment(conversation)
+            or (is_settling_fragment(conversation) and not transcribing_hold.applies(conversation))
             or conversation.get('discarded')
             or is_completed_rule_discard(conversation)
         ):
@@ -2012,6 +2013,7 @@ def get_conversations_without_photos(
                 'episode_id',
                 'finalization_status',
                 *SETTLING_FIELDS,
+                *transcribing_hold.READ_FIELDS,
             }
         )
         conversations_ref = conversations_ref.select(sorted(fields))

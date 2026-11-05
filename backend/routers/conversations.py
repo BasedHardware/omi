@@ -31,6 +31,8 @@ from database.legal_holds import destructive_operation_gate
 from utils.other.account_gate_http import account_gate_busy_http_exception
 from database.firestore_read_metrics import FirestoreReadSite
 from utils.list_version_check import ListVersionCheck
+from config.episodes import home_transcription_presentation_gate_enabled
+from utils.conversations import transcribing_hold
 from utils.conversations.list_filters import aware_datetime, reject_oversized_filter
 from database.vector_db import (
     delete_action_item_vector,
@@ -996,7 +998,9 @@ def get_conversations(
     from utils.episodes import home_membership
 
     held_request = home_membership.held_for(request)
-    version_check = ListVersionCheck.start(None if held_request else request, uid, 'conversations')
+    # Reader-enforced expiry changes the body without a writer-version bump.
+    time_dependent = home_transcription_presentation_gate_enabled()
+    version_check = ListVersionCheck.start(None if held_request or time_dependent else request, uid, 'conversations')
     if version_check.not_modified is not None:
         return version_check.not_modified
 
@@ -1029,6 +1033,7 @@ def get_conversations(
         ),
     )
     _heal_locked_conversations_if_eligible(uid, conversations)
+    conversations = [transcribing_hold.project(row) for row in conversations]
     redact_conversations_for_list(conversations)
     if budget.truncated and response is not None:
         response.headers[OMI_LIST_TRUNCATED_HEADER] = OMI_LIST_TRUNCATED_VALUE
@@ -1038,7 +1043,7 @@ def get_conversations(
     version_check.finish(
         response,
         truncated=budget.truncated,
-        cacheable=not held_request and not any(row.get('is_locked') for row in conversations),
+        cacheable=not held_request and not time_dependent and not any(row.get('is_locked') for row in conversations),
     )
     return conversations
 
@@ -1161,7 +1166,7 @@ def get_conversation_by_id(
             response.headers['X-Translation-Status'] = translation_status
             if next_cursor is not None:
                 response.headers['X-Translation-Cursor'] = next_cursor
-    return conversation
+    return transcribing_hold.project(conversation)
 
 
 @router.patch(
@@ -2115,7 +2120,7 @@ def get_shared_conversation_by_id(conversation_id: str):
     visibility = conversation.get('visibility', ConversationVisibility.private)
     if not visibility or visibility == ConversationVisibility.private:
         raise HTTPException(status_code=404, detail="Conversation is private")
-    conversation = deserialize_conversation(conversation)
+    conversation = deserialize_conversation(transcribing_hold.project(conversation))
 
     # Fetch people data for speaker names
     person_ids = conversation.get_person_ids()

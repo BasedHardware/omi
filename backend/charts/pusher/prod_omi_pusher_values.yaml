@@ -114,6 +114,10 @@ envFrom:
 runtimeConfigMapName: prod-omi-backend-config
 
 env:
+  - name: HOME_TRANSCRIPTION_PRESENTATION_GATE
+    value: "true"
+  - name: HOME_TRANSCRIPTION_DEADLINE_SECONDS
+    value: "7200"
   # lead2 88ba4d: pusher train, canary one pod before fleet expansion.
   - name: PUSHER_MAX_CLOSED_RECORD_DRAINS
     value: "64"

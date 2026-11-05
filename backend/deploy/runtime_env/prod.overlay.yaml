@@ -45,6 +45,8 @@ overlay:
       values_file: backend/charts/parakeet/prod_omi_parakeet_lid_values.yaml
     backend-listen:
       env:
+        HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
+        HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
         # Graduation of the David-approved on-demand playback (DEC-BTR-004): build playback
         # artifacts on open/play/download only. Kill switch: set false.
         STT_GPU_FLEET_OFF: {value: 'true', category: ops_kill}
@@ -268,6 +270,8 @@ overlay:
           category: rollout
     pusher:
       env:
+        HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
+        HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
         PUSHER_MAX_CLOSED_RECORD_DRAINS: {value: '64', category: rollout}
         PUSHER_ABANDON_EVICTED_TOKENS: {value: 'on', category: ops_kill}
         PUSHER_MAX_ABANDON_RECORD_DRAINS: {value: '4', category: rollout}
@@ -531,6 +535,8 @@ overlay:
             secret: MCP_OAUTH_CLIENTS_JSON
             version: latest
         env:
+          HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
+          HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
           # Plan C3 prod activation: new sr- obligations bind to /v2/enrichment/run on the enrichment queue,
           # served by backend-integration. Rows keep the binding they were created with, so the kill switch
           # ENRICHMENT_ROUTE=sync_handler never strands work (the old /v2/sync-jobs/run binding stays accepted).
@@ -896,6 +902,8 @@ overlay:
             secret: DREAM_AGENT_FEEDBACK_SALT
             version: latest
         env:
+          HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
+          HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
           # Standing batch vendor route table (lead2 863cd6, David 49b7e4/065da8): compact JSON of
           # backend/deploy/batch-pipeline/vendor_route_table.prod.json (en-overflow-1104b), pinned by
           # tests/unit/test_batch_vendor_route_table_prod.py. Fresh English overflows to Modulate past
@@ -1304,6 +1312,8 @@ overlay:
         - SYNC_REPROCESS_COALESCE_ENABLED
         - REPEAT_WORK_REVISION_ENABLED
         env:
+          HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
+          HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
           # Standing batch vendor route table (lead2 863cd6, David 49b7e4/065da8): compact JSON of
           # backend/deploy/batch-pipeline/vendor_route_table.prod.json (en-overflow-1104b), pinned by
           # tests/unit/test_batch_vendor_route_table_prod.py. Fresh English overflows to Modulate past
@@ -1673,6 +1683,8 @@ overlay:
         - CONVERSATION_LLM_INPUT_DEDUPE_ENABLED
         - REPEAT_WORK_REVISION_ENABLED
         env:
+          HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
+          HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
           # Standing batch vendor route table (lead2 863cd6, David 49b7e4/065da8): compact JSON of
           # backend/deploy/batch-pipeline/vendor_route_table.prod.json (en-overflow-1104b), pinned by
           # tests/unit/test_batch_vendor_route_table_prod.py. Fresh English overflows to Modulate past

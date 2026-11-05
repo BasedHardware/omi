@@ -100,6 +100,10 @@ envFrom:
 privateEnv: {}
 
 env:
+  - name: HOME_TRANSCRIPTION_PRESENTATION_GATE
+    value: "true"
+  - name: HOME_TRANSCRIPTION_DEADLINE_SECONDS
+    value: "7200"
   - name: LISTEN_PREVIEW_BATCH_CUSTODY_ENABLED
     value: "true"
   # Production retirement; false restores the old routes only after GPUs are ready.

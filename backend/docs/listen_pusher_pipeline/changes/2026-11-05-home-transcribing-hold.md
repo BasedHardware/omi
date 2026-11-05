@@ -1,0 +1,82 @@
+# Home transcription presentation gate, phase 1
+
+Desktop server-batch completion intentionally precedes transcript replacement.
+Home could therefore expose a completed raw recording without a transcript or
+title, then reshape it when batch results arrived. Phase 1 preserves that
+ordering (lead2 ruling `04d9b7`; early completion ruling `f1e35a`) and changes
+only presentation. The one-writer completion/finalization redesign is phase 2.
+
+The completion CAS stamps `home_transcription_pending_at` and
+`home_transcription_deadline_at` atomically with `status=completed`. A rejected
+CAS writes neither clock; retries of the completed row cannot renew them.
+`HOME_TRANSCRIPTION_DEADLINE_SECONDS` defaults to **7200 seconds**, matching the
+existing batch timeliness SLA and Episodes transcription deadline. Invalid,
+blank or nonpositive values use 7200. A setting change affects new completions,
+never an existing row's deadline.
+
+`HOME_TRANSCRIPTION_PRESENTATION_GATE` defaults **on**. A stamped, batch-owned,
+completed row with no transcript, user title or structured title, and no batch
+projection receipt, renders `processing` / `Transcribing…` at the main list,
+main detail, shared detail and developer detail API exits. MCP REST detail
+uses the same title mapping (its existing wire model has no status field). Indexed main lists
+carry the deadline and batch projection receipt without downloading transcripts.
+`has_content` is not a transcription receipt: the raw audio writer sets it too.
+The labels share the Episodes Home mapping. Expiry (inclusive), dead letter or
+upload failure changes the title to `Couldn't transcribe`. On conversation APIs
+this recovery exit uses `completed`, so the ordinary failed-status filter cannot
+hide it; Episodes retains its existing `failed` member wire mapping.
+
+The default visibility predicate lets these stamped rows through the provisional
+settling hold, including after expiry. Deletion, discard, duplicate and bridge
+visibility fences remain authoritative. No read writes status, custody, title or
+a deadline. Shared database hydration remains authoritative for lifecycle jobs;
+`replace_record`, `SERVER_RECOVERY`, `CLIENT_FINALIZE`, orphan sweep and the
+finalizer's reservation/completion ordering are unchanged. Existing unstamped
+rows are unchanged; this PR does not backfill them.
+
+Writer-version conditional list responses are disabled while this lever is on:
+deadline decay changes a response even without a write/version bump. Otherwise
+a 304 could freeze `Transcribing…` indefinitely. Turning the lever off restores
+the prior conditional-list behavior as well as stored conversation status/title.
+
+Rollback: set `HOME_TRANSCRIPTION_PRESENTATION_GATE=off` on the serving services;
+there is no data migration to undo. Clock stamping remains enabled so a later
+re-enable uses the original durable deadline. Dev/prod runtime overlays declare
+the lever on and the deadline 7200 for the main API/finalization services;
+staging inherits prod. The separate chat-oriented desktop-backend does not mount conversation routes
+and keeps its existing deployment manifest. No environment was
+deployed by this change.
+
+`visibility:transcribing_hold` declares its atomic entry clocks and reader-enforced
+decay exit in the lifecycle table. **Declared gaps:** no dedicated authoritative
+presentation dwell/stock gauge or alert. Both are explicit strict-xfail clauses,
+tracked by ANX `card:homegate` / `card:lcinv-lifecycle-invariants`; the existing
+batch timeliness alarm is not claimed as a measurement of this presentation
+state. This phase adds no metric producer or alert deployment.
+
+Verification covers the hermetic API wire path, CAS fences/nonrenewal, indexed
+visibility, populated rows, lever rollback and unchanged batch/finalizer replays.
+No production cohort, frequency of flash, vendor latency distribution, API read
+cost, deployed flag state or real-device rendering was measured. No GCP access,
+merge or deploy is part of this PR.
+
+Contract: [Home transcription presentation](../../listen_pusher_pipeline.mdx#home-transcription-presentation).
+
+## Scope audit
+
+The supplied scope report was checked against `origin/main` at
+`cba5d6e47d2991dcbc9d5d96e68318de2f088920`: completion remains at
+`utils/conversations/lifecycle.py:337-354`, with the caller at
+`utils/conversations/finalizer.py:275-305`; list visibility is
+`database/conversations.py:905-925`; Episodes labels/deadline are at
+`utils/episodes/home_read.py:305-320` and
+`database/episode_batch_pending.py:26-38`. `replace_record` still requires
+completed storage (`utils/batch_pipeline/live_projection.py:27-28`).
+
+Of the cited source blobs, `database/batch_pipeline_projection.py` has advanced
+since the report's `015fe4f` base: `ProjectionStore.mark_enrichment` now handles
+rollover output IDs, still committing the enrichment obligation/receipt before
+its wake (`:248-310`). It is untouched here. The report's
+`routers/websocket.py` path does not exist on this base; its tentative websocket
+claim is unverified and is not an acceptance claim for this change. Client
+fallback behavior is at `app/lib/utils/conversations/conversation_title.dart:47-60`.

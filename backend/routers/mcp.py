@@ -56,6 +56,7 @@ from utils.mcp_server.handlers import action_items as mcp_action_item_handlers
 from utils.mcp_server.handlers import conversations as mcp_conversation_handlers
 from utils.mcp_server.handlers import memories as mcp_memory_handlers
 from utils.mcp_server.handlers import other as mcp_other_handlers
+from utils.conversations import transcribing_hold
 from utils.mcp_server.helpers import bounded_transcript_segments, conversation_card, public_transcript_timing
 from utils.mcp_server.registry import TOOL_REQUIRED_SCOPE, spec_for_tool
 import logging
@@ -123,6 +124,12 @@ _REST_CONVERSATION_EXTRA_FIELD_PATHS = ["apps_results"]
 _REST_CONVERSATION_DETAIL_EXTRA_FIELD_PATHS = _REST_CONVERSATION_EXTRA_FIELD_PATHS + [
     "manual_speaker_assignments",
     "manual_speaker_assignments_compressed",
+    *transcribing_hold.READ_FIELDS,
+    "status",
+    "record_projection_revision",
+    "record_upload_failed",
+    "finalization_status",
+    "user_title",
 ]
 
 
@@ -697,7 +704,7 @@ def get_conversation_by_id(
         max_chars=MCP_REST_CONVERSATION_MAX_CHARS,
         extra_keys=("speaker_name",),
     )
-    payload = conversation_card(conversation)
+    payload = conversation_card(transcribing_hold.project(conversation))
     payload["apps_results"] = conversation.get("apps_results") or []
     payload["transcript_segments"] = transcript_segments
     payload["truncated"] = truncated
