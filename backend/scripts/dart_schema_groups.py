@@ -6,6 +6,10 @@ from typing import Any
 
 def additional_schema_groups(output_dir: Path) -> dict[str, dict[str, Any]]:
     return {
+        'referrals': {
+            'output': output_dir / 'referrals_wire.g.dart',
+            'schemas': ('ReferralLinkResponse', 'CampaignSnapshotResponse', 'CampaignAttributionResponse'),
+        },
         'recording_speakers': {
             'output': output_dir / 'recording_speakers_wire.g.dart',
             'schemas': (

@@ -31,6 +31,12 @@ INTENTIONAL_BUDGET_CHANGES = {
     # 39634604539 attempt 1), cancelling a healthy cold job after every real
     # step passed. 50 restores wedge headroom; budget_p50 stays 19.
     ("mobile-app-checks.yml", "ios-compile-check", "timeout-minutes"): "50",
+    # Dart Analyze & Tests: the 30-min ceiling sat below the measured suite
+    # path — main's healthy runs took 27-29.6 min (run 41736391155: 29:36 for
+    # 8207 tests) — so run 41693050609 was cancelled at the cap with all 7842
+    # executed tests passing and ~360 unexecuted, failing Mobile Release
+    # Eligibility downstream. 40 restores wedge headroom; budget_p50 stays 17.
+    ("mobile-app-checks.yml", "analyze-and-test", "timeout-minutes"): "40",
     # Backend unit shard: the 15-min job ceiling includes runner setup, but
     # the step regression budget excludes it, leaving 180s for setup.
     # Setup measured 73-92s typical, 227s worst (run 39741901310 attempt 2:

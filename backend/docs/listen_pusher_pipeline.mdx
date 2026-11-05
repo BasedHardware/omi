@@ -3185,6 +3185,7 @@ sequenceDiagram
     Backend->>Firestore: Persist MANUAL decisions and generation atomically
     Backend-->>Client: Acknowledge saved assignment
     Client->>Backend: speaker_assigned notification with acknowledged segment_ids
+    Note over Client: assign_type: "not_a_person" (media exclusion) sends no person_id<br/>and must never queue a voice sample
     Backend->>Backend: Validate receipt and queue best-effort sample (opcode 105)
     Backend->>Pusher: Forward speaker sample request
 
@@ -3449,8 +3450,30 @@ cards. Their negative answers write `rejection: {kind, person_id}` on the receip
 `not_person` earns `AUTO_CORRECTED` once per conversation, `not_a_person`
 stores an ignored-voice marker (`ignored_voices`, newest 200) — and the voice is
 filtered from live matching, resolution, and prompt selection until a newer
-positive decision wins. A segment's `speaker_label_source` projects provenance:
+positive decision wins. The live capture sheet's media exclusion
+(`PATCH /v1/conversations/{id}/segments/assign-bulk` with
+`assign_type: "not_a_person"`) writes the same receipt decision and the same
+ignored-voice marker (fenced by the assignment generation), never queues a
+voice sample, and stays reversible: a later person/user assignment replaces it.
+Marker reconciliation is shared by every writer (`utils/ignored_voice_markers.py`):
+the live sheet, the reject route, and card answers all record and retire through
+the same helpers, retirement is fenced by the assignment generation (a delayed
+older clear cannot remove a newer decision's marker), and a post-commit marker
+persistence failure fails open with shared fallback telemetry
+(`omi_fallback_total{component="speaker_assignments"}`).
+A segment's `speaker_label_source` projects provenance:
 `manual`/`carried` under a winning decision, `auto` for match-only evidence.
+The `Conversation` payload carries `excluded_speakers`: the receipt's
+still-winning whole-voice `not_a_person` voices (`models/speaker_exclusion.py`,
+the same walker the marker helpers use). Clients reconcile live exclusions
+against it rather than against label projections: a range-only positive is
+`segment_only` and leaves the exclusion standing, while a selected-segment
+bulk assign retires it even though only its segments project a manual label —
+identical projections the receipt alone distinguishes. Absent (`null`) on
+conversations with no manual speaker decision — never otherwise: a receipt
+whose exclusions were all superseded projects an authoritative empty list so
+clients distinguish "no exclusions" from "server without the projection", and
+it is never part of the integration contract.
 
 The same transaction keeps each person's `label_evidence` tally
 (`models/person_confidence.py`, `utils/person_evidence.py`): hand labels, card confirms and picks,
@@ -9232,3 +9255,29 @@ paid recompose; discard, visible notes drift and explicit regeneration remain
 repair triggers. Summaries and speaker labels remain prompt inputs, and the full
 fingerprint still owns leases and composed-state validation. See the
 [change note](listen_pusher_pipeline/changes/2026-11-04-episode-compose-settle.md).
+
+### Provisional identities from meeting notes
+
+The rich notes call receives approved screenshots (at most four), screen moments,
+the OCR digest, and matched calendar context. Frame tile names do not become
+roster entries. The notes model can retain a non-owner name and the email shown
+on the same card without requiring transcript or email-local-part overlap.
+Recent people context includes names, exact aliases and emails within its existing
+character cap, including meetings with no counterpart on the roster.
+
+The completed-note transaction upserts the model's human participants as
+unverified people and stores its numeric speaker bindings with public source
+`auto` and internal match source `notes_inferred`. Only exact email, display name
+or stored alias resolves an existing person; this path never merges first names.
+It creates no speech samples, voice embeddings, or learning obligations. A later
+notes call may rewrite these bindings. Current manual receipts (including
+unassignments and rejections) win in the commit transaction. Rejecting a notes
+label retracts the identifiers that note added; dismissal also removes those
+identifiers and hides the provisional person.
+
+The existing 20-second client evidence pass and 25-second configured server wait
+are unchanged. When an adjudication marker arrives after a note saved without
+frames, one automatic notes-only refresh is claimed. A user title prevents both
+the claim and a concurrent refresh commit. An all-rejected pass may still refresh
+late OCR/calendar context, but rejected frame bytes never reach notes. This
+refresh does not run derived memory, app, embedding, or speech-learning jobs.

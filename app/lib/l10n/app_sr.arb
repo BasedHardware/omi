@@ -2378,11 +2378,8 @@
     "@firmwareUsbWarning": {
         "description": "Warning about USB connection during firmware update"
     },
-    "firmwareBatteryAbove15": "Батерија изнад 15%",
-    "@firmwareBatteryAbove15": {
-        "description": "Firmware update step title about battery level"
-    },
-    "firmwareEnsureBattery": "Уверите се да ваш уређај има 15% батерије.",
+    "firmwareBatteryRequirement": "Батерија изнад 30%",
+    "firmwareEnsureBattery": "Уверите се да ваш уређај има 30% батерије.",
     "@firmwareEnsureBattery": {
         "description": "Description for battery requirement during firmware update"
     },
@@ -10771,7 +10768,8 @@
     "firmwareUpdateFailedTitle": "Ажурирање није успело",
     "firmwareUpdateFailedMessage": "Ажурирање није завршено. Уређај је и даље на тренутном фирмверу и безбедан је за употребу. Држите га напуњеним и близу телефона, па покушајте поново.",
     "firmwareDownloadFailedMessage": "Ажурирање није могло да се преузме и уређај није промењен. Проверите интернет везу, па покушајте поново.",
-    "firmwareBatteryTooLow": "Батерија је на {level}%. Пре ажурирања напуните уређај на најмање 15%.",
+    "firmwareBatteryUnavailable": "Ниво батерије још није доступан. Сачекајте тренутак и поново се повежите ако се то не промени.",
+    "firmwareBatteryTooLow": "Батерија је на {level}%. Пре ажурирања напуните уређај на најмање 30%.",
     "startUpdate": "Започни ажурирање",
     "otaNotSupported": "Овај фирмвер не може да се ажурира преко Wi-Fi мреже.",
     "otaConnectFailed": "Повезивање са уређајем {deviceName} није успело. Држите га укљученим и близу, па покушајте поново.",
@@ -11529,6 +11527,9 @@
     "paywallTrialSaveAmount": "Uštedite {amount}",
     "paywallTrialCta": "Započnite za {price}",
     "paywallTrialCancelNote": "Otkažite bilo kada. Bez naknada, bez penala.",
+    "paywallMonthlyFallbackTitle": "Још нисте спремни за целу годину?",
+    "paywallMonthlyFallbackTrialBody": "Почните са месечним планом. Истих {days} дана бесплатно, затим {price} месечно. Откажите било када.",
+    "paywallMonthlyFallbackTrialCta": "Испробајте месечни бесплатно",
     "paywallTrialStarted": "Vaša {days}-dnevna besplatna proba Omi Pro je počela.",
     "paywallCancelAnytime": "Откажите било када.",
     "connectAnAgent": "Повежите агента",
@@ -11954,5 +11955,241 @@
     "speakerSelectionChanged": "Говорник се променио. Поново изаберите редове.",
     "speakerRenameIssue": "{reason, select, limit{Снимак је превелик. Изаберите мање редова у једном разговору.} partial{Неки редови су сачувани. Изаберите преостале и покушајте поново.} other{Неки редови су сачувани. Изаберите преостале и покушајте поново.}}",
     "speakerRecordingCoverage": "{state, select, scope{Други редови овог гласа (обухват снимка није потврђен)} other{{count, plural, =1{Преименовано је 1 редова само у доступним разговорима.} other{Преименовано је {count} редова само у доступним разговорима.}}}}",
-    "episodeFinishingUp": "Завршавање…"
+    "episodeFinishingUp": "Завршавање…",
+    "buildAndShareApp": "Направи и дели своју прилагођену апликацију",
+    "@buildAndShareApp": {
+        "description": "Create app button subtitle"
+    },
+    "membersAndCounting": "8000+ чланова и наставља се.",
+    "@membersAndCounting": {
+        "description": "Discord member count"
+    },
+    "privacyIntro": "На Omi, посвећени смо заштити ваше приватности. Ова страница вам омогућава да контролишете како се ваши подаци чувају и користе.",
+    "@privacyIntro": {
+        "description": "Data privacy page introduction"
+    },
+    "dataProtectionDesc": "Ваши подаци су подразумевано заштићени јаким шифровањем. Прегледајте своја подешавања и будуће опције приватности испод.",
+    "@dataProtectionDesc": {
+        "description": "Data protection section description"
+    },
+    "transcriptionConfig": "Конфигуриши STT добављача",
+    "@transcriptionConfig": {
+        "description": "Transcription configuration subtitle"
+    },
+    "importDataConfig": "Увези податке из других извора",
+    "@importDataConfig": {
+        "description": "Import data details subtitle"
+    },
+    "understandingSubtitle": "Речи разумене из твоих разговора.",
+    "@understandingSubtitle": {
+        "description": "Understanding stat subtitle"
+    },
+    "rememberingSubtitle": "Чињенице и детаљи запамћени за тебе.",
+    "@rememberingSubtitle": {
+        "description": "Remembering stat subtitle"
+    },
+    "debugLogsDesc": "Помаже у дијагностицирању проблема",
+    "deleteKnowledgeGraphMessage": "Ово ће обрисати све изведене податке графа знања (чворове и конекције). Ваше оригиналне успомене остају безбедне. Граф ће бити обновљен током времена или при следећем захтеву.",
+    "deleteKnowledgeGraphDesc": "Очисти све чворове и конекције",
+    "enhanceTranscriptAccuracyDesc": "Како се наш модел побољшава, можемо пружити боље резултате преписа за твоје снимке.",
+    "bestInClassTranscription": "Најбоље препознавање говора без постављања",
+    "optimizedForConversation": "Оптимизовано за разговор",
+    "highAccuracy": "Висока тачност",
+    "privacyFirst": "Приватност прво",
+    "keepGoing": "Настави, чиниш одличан посао",
+    "@keepGoing": {
+        "description": "Encouragement text during a multi-step process"
+    },
+    "personalGrowthJourney": "Твој путь личног развоја са AI који слуша сваку твоју реч.",
+    "@personalGrowthJourney": {
+        "description": "Subtitle describing Omi on auth screen"
+    },
+    "firmwareBatteryAbove15": "Батерија изнад 15%",
+    "@firmwareBatteryAbove15": {
+        "description": "Firmware update step title about battery level"
+    },
+    "configureSttProvider": "Конфигуриши STT провајдера",
+    "@configureSttProvider": {
+        "description": "Description for transcription settings"
+    },
+    "@deleteKnowledgeGraphMessage": {
+        "description": "Dialog message explaining delete knowledge graph action"
+    },
+    "clearAllNodesAndConnections": "Очисти све чворове и везе",
+    "@clearAllNodesAndConnections": {
+        "description": "Description for delete knowledge graph"
+    },
+    "welcomeToOmiDescription": "Добродошли у Omi! Твој AI пратилац је спреман да те помогне са разговорима, задацима и још много чега.",
+    "@welcomeToOmiDescription": {
+        "description": "Welcome message on completion screen"
+    },
+    "conversationsProcessedAutomatically": "Разговори се обрађују аутоматски",
+    "@conversationsProcessedAutomatically": {
+        "description": "Tip about automatic conversation processing"
+    },
+    "getInsightsInstantly": "Добити увиде и резимеа мгновено",
+    "@getInsightsInstantly": {
+        "description": "Tip about instant insights feature"
+    },
+    "dailyScoreDescription": "Оцена која те помаже да боље\nфокусираш се на извршење.",
+    "@dailyScoreDescription": {
+        "description": "Description text for daily score widget"
+    },
+    "startConversation": "Почни разговор и нека магија почне",
+    "@startConversation": {
+        "description": "Empty state subtitle when connected"
+    },
+    "wearableAiCompanion": "Носиви AI пратилац",
+    "@wearableAiCompanion": {
+        "description": "Widget subtitle for device promotion"
+    },
+    "organizeAndControlMemories": "Организуј и контролиши своје меморије",
+    "@organizeAndControlMemories": {
+        "description": "Subtitle for memory management dialog"
+    },
+    "setAllMemoriesToPrivate": "Постави све меморије на приватну видљивост",
+    "@setAllMemoriesToPrivate": {
+        "description": "Description for making all memories private"
+    },
+    "setAllMemoriesToPublic": "Постави све меморије на јавну видљивост",
+    "@setAllMemoriesToPublic": {
+        "description": "Description for making all memories public"
+    },
+    "selectPreferredLanguageForBestExperience": "Изаберите префериран језик за најбољи Omi искуство",
+    "enableFeaturesForBestExperience": "Омогућите функције за најбоље Omi искуство на вашем уређају.",
+    "deliveryTimeDescription": "Када желите да примите ваш дневни резиме",
+    "@deliveryTimeDescription": {
+        "description": "Delivery time description"
+    },
+    "configureSTTProvider": "Конфигуришите STT провајдера",
+    "setConversationEndDescription": "Поставите када разговори аутоматски завршавају",
+    "clearNodesDescription": "Очистите све чворове и веза",
+    "deleteKnowledgeGraphWarning": "Ово ће обрисати све изведене податке графа знања. Ваше оригиналне успомене остају безбедне.",
+    "createAndShareYourApp": "Направите и делите своју апликацију",
+    "@createAndShareYourApp": {
+        "description": "Subtitle for create app option"
+    },
+    "e2eeDescription": "Криптировање од краја до краја је золни стандард за приватност. Када је омогућено, ваши подаци су криптовани на вашем уређају пре него што буду послати нашим серверима. То значи да нико, чак ни Omi, не може приступити вашем садржају.",
+    "@e2eeDescription": {
+        "description": "Description of E2EE encryption explaining its benefits"
+    },
+    "secureEncryptionDescription": "Ваши подаци су криптовани са кључем јединственим за вас на нашим серверима, смештеним на Google Cloud. То значи да ваш сирови садржај није приступачан никоме, укључујући Omi особље или Google, директно из базе podataka.",
+    "@secureEncryptionDescription": {
+        "description": "Description of secure encryption explaining how data is protected"
+    },
+    "e2eeCardDescription": "Омогућите за максималну безбедност где само вас можете приступити вашим подацима. Додирни да сазнаш више.",
+    "@e2eeCardDescription": {
+        "description": "Description for E2EE card explaining its benefit"
+    },
+    "yourOmiUnleashed": "Твој Omi, ослобођен. Иди без ограничења за бесконачне могућности.",
+    "@yourOmiUnleashed": {
+        "description": "Marketing text for unlimited plan"
+    },
+    "privacyIntroText": "У Omi, озбиљно узимамо вашу приватност. Желимо да будемо транспарентни у вези са подаците које скупљамо и како их користимо да унапредимо наш производ за вас. Ево шта требате знати:",
+    "@privacyIntroText": {
+        "description": "Privacy page - privacyIntroText"
+    },
+    "commitmentText": "Обавезани смо да користимо податке које скупљамо само да направимо Omi бољи производ за вас. Ваша приватност и поверење су од крајње важности за нас.",
+    "@commitmentText": {
+        "description": "Privacy page - commitmentText"
+    },
+    "thankYouText": "Хвала вам што сте драгоцени корисник Omi. Ако имате неке питање или забринутости, слободно нас контактирајте на team@basedhardware.com.",
+    "@thankYouText": {
+        "description": "Privacy page - thankYouText"
+    },
+    "knowledgeGraphDeleteDescription": "Ово ће обрисати све изведене податке графа знања (чворове и конексије). Ваша оригинална меморија остаће безбедна. Граф ће бити обновљен течајом времена или при следећем захтеву.",
+    "@knowledgeGraphDeleteDescription": {
+        "description": "Developer settings - knowledgeGraphDeleteDescription"
+    },
+    "howPeopleWorks": "Када се особа направи, можете да идете на транскрипцију разговора и доделите јој одговарајуће сегменте, на тај начин Omi ће бити способна да препозна и њихов говор!",
+    "@howPeopleWorks": {
+        "description": "Explanation of how people/speech recognition works"
+    },
+    "buildAndShareYourCustomApp": "Направите и поделите своју прилагођену апликацију",
+    "@buildAndShareYourCustomApp": {
+        "description": "Subtitle for create app button"
+    },
+    "@processingProgress": {
+        "description": "Progress label showing current/total items",
+        "placeholders": {
+            "current": {
+                "type": "int"
+            },
+            "total": {
+                "type": "int"
+            }
+        }
+    },
+    "onboardingChooseYourPreference": "Одаберите своју преференцу",
+    "@onboardingChooseYourPreference": {
+        "description": "Onboarding step description for language selection"
+    },
+    "onboardingGrantRequiredAccess": "Дајте потребан приступ",
+    "@onboardingGrantRequiredAccess": {
+        "description": "Onboarding step description for permissions"
+    },
+    "apiEnvironmentDescription": "Одабери са којим backend-ом да се повежеш",
+    "@apiEnvironmentDescription": {
+        "description": "Subtitle for the API environment switcher"
+    },
+    "phoneCallsUpsellFeature4": "Твоји позиви су приватни и безбедни",
+    "@phoneCallsUpsellFeature4": {
+        "description": "Phone calls upsell feature 4"
+    },
+    "omisStorageDesc": "Када твој Omi није повезан са твојим телефоном, снимци аудио се чувају локално на уграђеној меморији. Никада не губиш снимак.",
+    "@omisStorageDesc": {
+        "description": "Description of device storage in sync info sheet"
+    },
+    "permissionsSetupDescription": "Омогући неколико дозвола да Omi может радити своју магију.",
+    "@permissionsSetupDescription": {
+        "description": "Subtitle for the permissions interstitial screen"
+    },
+    "architectSubtitle": "Напредни AI — хиљаде разговора + агентна аутоматизација",
+    "syncCardProgressOf": "{current} од {total}",
+    "newestFirst": "Прво најновије",
+    "backgroundModeNote": "Засад ради само са Omi уређајима и непрекидно се побољшава.",
+    "alwaysInContext": "Увек у контексту",
+    "conversationsNotCapturedCount": "Није снимљено ({count})",
+    "memoryAllowUse": "Дозволи употребу",
+    "memoryDontUse": "Не користи",
+    "speakerTagPromptSubtitle": "Брза провера гласова из последња два дана",
+    "transcriptionsPendingCount": "Транскрипције на чекању {count}",
+    "captureRecoveryBanner": "Omi не шаље звук — додирните за поновно повезивање",
+    "capturePendantDisconnectedDetail": "Привезак је изгубио везу са овим телефоном. Omi ће се сам поново повезати кад је привезак укључен и у близини. Све снимљено до сада је безбедно.",
+    "pinPersonSubtitle": "Задржи особу {name} и очекуј је у својим разговорима",
+    "pinPersonHonestLine": "Omi пита пре него што упари сличне гласове.",
+    "speakerTagPromptHintConfirm": "Да повећава поузданост особе {name}.",
+    "localCopiesSection": "Локалне копије",
+    "capturePendantDisconnectedShort": "Omi ће се сам поново повезати",
+    "forYou": "За вас",
+    "stopThese": "Заустави ово",
+    "meetingActionItemsTitle": "Ставке за рад",
+    "addToTasks": "Додај у задатке",
+    "showInTranscript": "Прикажи транскрипт",
+    "tentativeTaskDueDate": "Рок око {date}",
+    "tentativeTaskDueDateSemantics": "Оквирни рок {date}",
+    "openTask": "Отвори задатак",
+    "completeTask": "Заврши задатак",
+    "reopenTask": "Поново отвори задатак",
+    "addingToTasks": "Додаје се у задатке",
+    "taskAddedToTasks": "Задатак је креиран",
+    "completedStatus": "Завршено",
+    "notCompletedStatus": "На чекању",
+    "referralAffiliate": "Партнерски програм",
+    "referralCampaignTerms": "Пријатељи добијају 10% попуста на Omi уређаје. Куповине прва 2 различита пријатеља откључавају 2 месеца Pro, куповине следећа 3 различита пријатеља још 3. До 5 пријатеља и укупно 5 месеци.",
+    "referralMilestone": "{months} месеци Pro · {count}/{target} куповина",
+    "referralClaim": "Преузми награду",
+    "referralClaimed": "Преузето {months} месеци Pro",
+    "referralRewardPending": "Награда се чува до краја плаћене претплате.",
+    "referralCampaignTitle": "Препоручите Omi. Добијте Pro бесплатно.",
+    "referralCampaignSubtitle": "Њима 10% попуста на Omi. Теби до 5 месеци Pro.",
+    "referralShareInvite": "Подели позивницу",
+    "referralYourRewards": "Твоје награде",
+    "referralRewardFirstTitle": "2 месеца Pro",
+    "referralRewardFirstDetail": "Када 2 пријатеља купе Omi",
+    "referralRewardSecondTitle": "Још 3 месеца",
+    "referralRewardSecondDetail": "Када још 3 пријатеља купе",
+    "referralClaimShort": "Преузми",
+    "paymentDeclinedTitle": "Ваша картица је одбијена",
+    "paymentDeclinedMessage": "Ажурирајте картицу да бисте вратили {plan}"
 }

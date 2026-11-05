@@ -126,6 +126,7 @@ APP_CLIENT_PREFIXES = (
     '/v2/sync-capture-manifest',
     '/v2/sync-local-files',
     '/v2/tts',
+    '/v2/users/me/referral/campaign',
     '/v2/voice-message',
     '/v2/voice-messages',
     '/v3/memories',

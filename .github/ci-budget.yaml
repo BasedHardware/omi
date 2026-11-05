@@ -3962,13 +3962,8 @@
     "desktop_codemagic_failure_recovery.yml": {
       "name": "Desktop Release Recovery Required",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "2026-11-04 (David): manual workflow_dispatch only. The check_run trigger started ~100 runs per main SHA (every check completion) and buried real runs in head_sha lookups; runs drop to operator dispatches.",
       "triggers": {
-        "check_run": {
-          "types": [
-            "completed"
-          ]
-        },
         "workflow_dispatch": {
           "inputs": {
             "build_id": {

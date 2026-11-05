@@ -120,6 +120,8 @@ def test_recovery_is_scoped_to_the_owning_object():
         'organization': 'Org',
         'role': 'Role',
         'source': 'transcript',
+        'alias': None,
+        'speaker_bindings': [],
         'is_ai_agent': False,
         'evidence': 'Zoom tile',
     }

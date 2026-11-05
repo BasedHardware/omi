@@ -97,6 +97,8 @@ from utils.conversations.duration import conversation_duration_seconds
 from utils.conversations.duplicate_capture import link_duplicate_captures
 from utils.conversations.sync_hold_completion import complete_explicit, defer_held_budget_denial
 from utils.conversations.merge_before_processing import before_notes, ConversationAbsorbed
+from utils.enrichment.admission import SyncConversationPersistenceFenced
+from utils.enrichment import early_abort
 from utils.conversations.processing_trigger import PROCESSING_MODES, ProcessingTrigger, is_recovery_trigger
 from utils.conversations.recovery import (
     RECOVERY_QUIET_MINIMUM_MAX_WORDS,
@@ -384,6 +386,7 @@ def _get_structured(
     open_loop_out: Optional[dict[str, Any]] = None,
     meeting_context_override: Optional[CalendarMeetingContext] = None,
     finalization_fence: tuple[str, int, int] | None = None,
+    revision_checkpoint: Optional[Callable[[str], None]] = None,
 ) -> Tuple[Structured, bool]:
     try:
         if is_recovery_trigger(trigger) and not recovery_transcript_decoded:
@@ -649,6 +652,9 @@ def _get_structured(
         if decision.discard:
             return Structured(emoji=random.choice(['🧠', '🎉'])), True
 
+        if revision_checkpoint is not None:
+            # A newer sync revision owns this conversation; stop before the notes agent (the dominant LLM call).
+            revision_checkpoint('pre_notes')
         before_notes(uid, main_conv, trigger, finalization_fence=finalization_fence)
 
         conv_started_at = cast(datetime, main_conv.started_at)
@@ -703,12 +709,15 @@ def _get_structured(
             )
         validate_structured_source_segment_ids(structured, transcript_segment_ids)
         return structured, False
-    except ConversationAbsorbed:
+    except (ConversationAbsorbed, SyncConversationPersistenceFenced):
         raise
     except Exception as e:
         if funded_processing.enabled(uid, 'batch') and _is_funded_budget_denial(e):
             raise
         raise conversation_processing_http_exception(e) from e
+
+
+get_structured = _get_structured
 
 
 def _get_conversation_obj(
@@ -2783,6 +2792,7 @@ def process_conversation(
         nonlocal recovery_minimum_fallback
         recovery_minimum_fallback = True
 
+    revision_checkpoint = early_abort.checkpoint_for(uid, conversation)
     structured, discarded = _get_structured(
         uid,
         language_code,
@@ -2799,7 +2809,12 @@ def process_conversation(
         open_loop_out=open_loop_sink,
         meeting_context_override=meeting_context_override,
         finalization_fence=finalization_fence,
+        revision_checkpoint=revision_checkpoint,
     )
+    if revision_checkpoint is not None:
+        # The notes agent ran for minutes; a sync write that landed meanwhile makes the persist fence refuse
+        # this result anyway. Stop before the persist and the apps/memories LLM work it would trigger.
+        revision_checkpoint('pre_persist')
     if recovery_minimum_fallback:
         sys.stdout.write(
             json.dumps(
@@ -2892,6 +2907,9 @@ def process_conversation(
         # Rollback keeps generating normally; clear server-only checkpoints in
         # this existing write so they cannot describe replacement outputs.
         payload.update({NOTES_HASH: None, NOTES_OUTPUT_HASH: None, L1_HASH: None})
+    notes_identity = getattr(structured, '_notes_identity', None)
+    if notes_identity is not None and not conversation.discarded:
+        payload['_notes_identity'] = notes_identity
     if relevance is not None:
         # Server-side audit record, deliberately outside the client wire model.
         payload[RELEVANCE_DECISION_FIELD] = relevance.as_record()

@@ -35,6 +35,7 @@ from database.outbox import Claim, OutboxKind, Outcome
 from utils.observability.reasons import ConsumerReason, RetryReason
 from utils.workers.consumer import Result, Role
 from utils.sync import processing_hold
+from utils.enrichment import early_abort
 
 logger = logging.getLogger(__name__)
 
@@ -167,6 +168,8 @@ class EnrichmentConsumer:
         from database.summary_processing import record_empty_failure
         from utils.conversations import summary_delivery
         from utils.enrichment import outbox as rows
+        from config.action_item_identity import enrichment_revision_race_retry_enabled
+        from database.action_item_refresh import RefreshRevisionChanged
         from utils.enrichment.callback import SyncConversationPersistenceFenced
 
         now = time.time()
@@ -210,7 +213,11 @@ class EnrichmentConsumer:
         )
         try:
             with _beating(heartbeat, self.heartbeat_seconds, context) as lost:
-                output = self._callback()(uid, conversation_id, language)
+                abort_token = early_abort.ACTIVE.set(True)
+                try:
+                    output = self._callback()(uid, conversation_id, language)
+                finally:
+                    early_abort.ACTIVE.reset(abort_token)
                 if summary_policy:
                     summary_seen = output is not None and summary_delivery.present(
                         summary_delivery.field(output, 'structured')
@@ -238,6 +245,14 @@ class EnrichmentConsumer:
             return Result(Outcome.RETRY, RetryReason.DEPENDENCY_WARMING, available_at=now)
         except summary_delivery.SummaryRepairSuperseded as error:
             superseded, retry_revision = True, error.retry_revision
+        except RefreshRevisionChanged:
+            # A sync write moved the conversation's revision while this run's LLM steps ran, so the action-item
+            # refresh refused stale extraction. That is a correct race, not an unexpected failure. Keep the row
+            # and its wake (not every revision bumper arms one) and rerun on the current revision.
+            if not enrichment_revision_race_retry_enabled():
+                raise
+            logger.info('event=enrichment_consumer outcome=retry reason=persistence_fenced source=action_item_refresh')
+            return Result(Outcome.RETRY, RetryReason.PERSISTENCE_FENCED, available_at=now)
         except SyncConversationPersistenceFenced:
             # #21968: the newer writer owns the conversation and marks its own obligation.
             logger.info('event=sync_reprocess outcome=conversation_fenced')

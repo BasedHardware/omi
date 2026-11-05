@@ -374,6 +374,12 @@ FIELD_SITES = {
             ('resolution_reason', 'status', 'updated_at'),
         ),
         (
+            'claim_candidate_integration_dispatch.apply',
+            'status',
+            "'suppressed'",
+            ('resolution_reason', 'status', 'updated_at'),
+        ),
+        (
             'complete_candidate_integration_dispatch.apply',
             'status',
             "'completed'",
@@ -417,6 +423,12 @@ FIELD_SITES = {
             'status',
             "'dead_letter'",
             ('dead_letter_reason', 'last_error_text', 'lease_token', 'status', 'updated_at'),
+        ),
+        (
+            'note_candidate_integration_provider_attempt.apply',
+            'status',
+            "'suppressed'",
+            ('resolution_reason', 'status', 'updated_at'),
         ),
     ],
     'database/candidates.py': [
@@ -1738,6 +1750,9 @@ FIELD_SITES = {
         )
     ],
     'database/redis_db.py': [('set_migration_status', 'status', 'status', ('status',))],
+    'database/referral_campaign.py': [
+        ('claim_months.apply', 'status', "'active'", ('campaign_id', 'ends_at', 'starts_at', 'status'))
+    ],
     'database/review_memory_hygiene.py': [
         (
             'record_change.apply',
@@ -2513,6 +2528,22 @@ FIELD_SITES = {
                 'terminal_outcome',
             ),
         )
+    ],
+    'utils/conversations/late_meeting_notes.py': [
+        (
+            'refresh_notes_after_evidence',
+            'status',
+            "'completed'",
+            (
+                '_notes_evidence_reprocess',
+                '_notes_identity',
+                'id',
+                'status',
+                'structured',
+                'sync_content_revision',
+                'transcript_segments',
+            ),
+        ),
     ],
     'utils/conversations/minimum_derived.py': [
         ('waive_short_clip_summary_debt', 'summary_due_at', 'None', ('summary_due_at',))
@@ -3575,6 +3606,14 @@ FIELD_SITES = {
     'utils/pusher_record_barrier.py': [
         ('PusherRecordBarrier.__init__', 'record_upload_failed', 'False', ('record_upload_failed',)),
         ('PusherRecordBarrier.hold_recording', 'record_upload_failed', 'True', ('record_upload_failed',)),
+    ],
+    'utils/referral_campaign.py': [
+        (
+            'effective_subscription_payload',
+            'status',
+            "'active'",
+            ('cancel_at_period_end', 'current_period_end', 'current_period_start', 'plan', 'status'),
+        )
     ],
     'utils/referrals.py': [
         (

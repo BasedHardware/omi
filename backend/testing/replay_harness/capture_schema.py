@@ -6,6 +6,7 @@
 `corpus.json` is always a seed blob. Tier C `blobs/*.enc` contain unmodified
 production ciphertext. The owner token in corpus.json must be replaced in memory
 from the private UID file at replay time, before deriving keys or checking AAD.
+The corpus owner_sha256 pins that UID independently of the salted owner token.
 """
 
 from datetime import datetime, timezone

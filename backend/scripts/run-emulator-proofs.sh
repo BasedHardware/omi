@@ -78,6 +78,11 @@ run_proof "record replay (capture, admission, titling and scoped receipts)" \
   "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_replay_harness_firestore.py \
   tests/integration/test_replay_harness_titling_firestore.py
 
+# The committed 120-transition privacy smoke plus mutation controls; the full
+# qualification corpus stays on the explicit heavy-lane Make target.
+run_proof "privacy cache replay (120-transition smoke and catch proofs)" \
+  "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_replay_harness_privacy_firestore.py
+
 # Job-store conformance (legacy-retire lane 12): sim + Firestore emulator legs here; the Postgres leg
 # skips in CI (no Postgres service, decision S6) and is proven locally/staging.
 # Includes PL-141/142/143 scheduler pull ownership, expiry and abort/restart recovery.

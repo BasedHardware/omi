@@ -11,6 +11,8 @@ import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/gen/apps_wire.g.dart' as wire;
 import 'package:omi/backend/schema/gen/misc_wire.g.dart' as misc_wire;
 import 'package:omi/env/env.dart';
+import 'package:omi/services/auth/auth_token_result.dart';
+import 'package:omi/services/auth_service.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
@@ -787,21 +789,33 @@ Future<bool> deleteApiKeyServer(String appId, String keyId) async {
   }
 }
 
-Future<bool> migrateAppOwnerId(String oldId, String sourceToken) async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/apps/migrate-owner?old_id=$oldId',
-    headers: {'Content-Type': 'application/json'},
-    body: jsonEncode({'source_token': sourceToken}),
-    method: 'POST',
-  );
+Future<bool> migrateAppOwnerId(
+  String oldId,
+  String sourceToken, {
+  required AuthSessionSnapshot destination,
+  AuthService? authService,
+  Future<http.StreamedResponse> Function(http.Request request)? sendStreaming,
+}) async {
+  final service = authService ?? AuthService.instance;
   try {
-    if (response == null || response.statusCode != 200) return false;
-    log('migrateAppOwnerId: ${response.body}');
+    final streamed = await makeRawApiCall(
+      url: '${Env.apiBaseUrl}v1/apps/migrate-owner?old_id=${Uri.encodeQueryComponent(oldId)}',
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'source_token': sourceToken}),
+      method: 'POST',
+      sessionSnapshot: destination,
+      authService: service,
+      sendStreaming: sendStreaming,
+    );
+    final response = await http.Response.fromStream(streamed);
+    if (!service.isSessionSnapshotCurrent(destination) || response.statusCode != 200) return false;
     final data = wire.GeneratedAppMigrationResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
     return data.status == 'ok';
   } catch (e, stackTrace) {
-    Logger.debug(e.toString());
-    PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
+    if (service.isSessionSnapshotCurrent(destination)) {
+      Logger.debug(e.toString());
+      PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
+    }
     return false;
   }
 }

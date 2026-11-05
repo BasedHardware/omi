@@ -4,6 +4,7 @@ from typing import Any, ClassVar, Dict, List, Literal, Optional, Tuple, Type
 
 from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
 
+from models.task_due import ReminderIntent
 from models.conversation_emoji import fallback_emoji
 from models.conversation_enums import CategoryEnum
 from models.structured import ActionItem, Event, Insight, MeetingType, Participant, Section, Structured
@@ -81,6 +82,7 @@ def _keep_usable_content(data: Any, element_models: Dict[str, Type[BaseModel]]) 
 
 
 class ExtractedActionItem(BaseModel):
+    reminder_intent: Optional[ReminderIntent] = None
     description: str = Field(description="The action item to be completed")
     due_at: Optional[datetime] = Field(default=None, description="When the action item is due")
     capture_kind: Optional[Literal['explicit_command', 'clear_commitment', 'direct_request', 'inferred_next_step']] = (
@@ -131,6 +133,7 @@ class ExtractedActionItem(BaseModel):
     def to_action_item(self) -> ActionItem:
         return ActionItem(
             description=self.description,
+            reminder_intent=self.reminder_intent.model_dump(mode='python') if self.reminder_intent else None,
             due_at=self.due_at,
             capture_kind=self.capture_kind,
             capture_confidence=self.capture_confidence,
@@ -263,9 +266,21 @@ class ExtractedParticipant(BaseModel):
     organization: Optional[str] = Field(default=None, description="Participant's organization when known")
     role: Optional[str] = Field(default=None, description="Participant's role or relationship when known")
     is_ai_agent: bool = Field(default=False, description='True for AI notetakers and assistants, never people')
-    source: Literal['roster', 'transcript'] = Field(
-        description="Whether meeting metadata ('roster') or only the conversation evidences this participant"
+    alias: Optional[str] = Field(
+        default=None, description='Short alias explicitly asserted for this person; never derive it'
     )
+    speaker_bindings: List[int] = Field(
+        default_factory=list,
+        description='Exact numeric spk keys the notes model binds to this non-owner participant; omit when uncertain',
+    )
+    source: str = Field(description="Identity evidence source: roster, transcript, screen, or background")
+
+    @field_validator('speaker_bindings', mode='before')
+    @classmethod
+    def keep_numeric_bindings(cls, value):
+        if not isinstance(value, list):
+            return []
+        return list(dict.fromkeys(v for v in value if type(v) is int and v >= 0))[:8]
 
     def to_participant(self) -> Participant:
         return Participant(
@@ -275,6 +290,8 @@ class ExtractedParticipant(BaseModel):
             role=self.role,
             is_ai_agent=self.is_ai_agent,
             source=self.source,
+            alias=self.alias,
+            speaker_bindings=self.speaker_bindings,
         )
 
 
@@ -372,7 +389,7 @@ class RichStructuredExtraction(StructuredExtraction):
     )
     participants: List[ExtractedParticipant] = Field(
         default_factory=list,
-        description='People and AI agents evidenced by the meeting roster or the transcript; never the account owner',
+        description='People and AI agents evidenced by the supplied notes context, including screen evidence; never the account owner',
     )
     salience: Optional[Salience] = Field(default=None, description=SALIENCE_DESCRIPTION)
     insights: List[ExtractedInsight] = Field(

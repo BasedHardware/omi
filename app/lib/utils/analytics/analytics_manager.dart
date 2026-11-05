@@ -251,12 +251,11 @@ class AnalyticsManager {
     if (_adapter == null && Env.posthogApiKey != null) {
       _adapter = PostHogAnalyticsAdapter(
         apiKey: Env.posthogApiKey!,
-        personPropertiesForFlags: () => {'\$email': _preferences.email},
         omiFlags: () async => switch (await const OmiFlagsApi().getClientFlags()) {
           ApiSuccess(:final data) => {
               for (final f in data) f.key: (enabled: f.enabled, variant: f.variant, payloadJson: f.payloadJson),
             },
-          // Any failure keeps every key on PostHog; the adapter treats null as "no Omi answer".
+          // Failed refreshes keep this account's last Omi answers; missing keys use caller defaults.
           ApiFailure() => null,
         },
       );
@@ -589,7 +588,7 @@ class AnalyticsManager {
     _setUserPropertiesBatch({'\$name': _preferences.fullName, '\$email': _preferences.email});
   }
 
-  /// Off-path refresh allows the adapter's four-second request to settle.
+  /// Off-path refresh updates the account's Omi flag snapshot.
   Future<bool> refreshBooleanFeatureFlag(String key) async =>
       await _readFlag((a) async {
         await a.reloadFeatureFlags();

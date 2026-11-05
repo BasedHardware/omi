@@ -1265,7 +1265,7 @@ checks:
     command: ["python3", ".github/scripts/test_desktop_codemagic_failure_recovery.py"]
     triggers: [".github/scripts/desktop-codemagic-failure-recovery.py", ".github/scripts/desktop-codemagic-recovery-profiles.json", ".github/scripts/test_desktop_codemagic_failure_recovery.py", ".github/workflows/desktop_codemagic_failure_recovery.yml", "desktop/macos/scripts/rehearse-desktop-release.sh", "desktop/macos/scripts/smoke-signed-desktop-artifact.sh", "desktop/macos/scripts/agent-runtime-payload.sh", "desktop/macos/tests/test-signed-artifact-smoke.sh", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "failed desktop Codemagic builds must emit a credential-safe exact-build recovery capsule and prescribe a manual rehearsal only for locally reproducible gates"
+    reason: "an operator-dispatched recovery run (build_id of a failed desktop Codemagic build) must emit a credential-safe exact-build recovery capsule and prescribe a manual rehearsal only for locally reproducible gates"
   - id: desktop-release-rehearsal-contract
     command: ["bash", "desktop/macos/tests/test-desktop-release-rehearsal.sh"]
     triggers: ["desktop/macos/scripts/rehearse-desktop-release.sh", "desktop/macos/tests/test-desktop-release-rehearsal.sh", ".github/checks-manifest.yaml"]
