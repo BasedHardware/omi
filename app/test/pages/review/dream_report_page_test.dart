@@ -92,6 +92,34 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('a live report labels each edit by its own outcome', (tester) async {
+    final run = _runJson('mixed');
+    Map<String, dynamic> edit(String label, String outcome) => {
+          'kind': 'spelling',
+          'target_label': label,
+          'before': 'a',
+          'after': 'b',
+          'reason': 'Synthetic',
+          'evidence_count': 1,
+          'outcome': outcome,
+        };
+    run['edits'] = [edit('Applied one', 'applied'), edit('Held back', 'suggest_only')];
+    final live = DreamReport.fromJson({
+      'mode': 'on',
+      'passes_today': 1,
+      'passes_limit': 4,
+      'manual_runs_today': 0,
+      'manual_runs_limit': 3,
+      'queued_changes': 0,
+      'runs': [run],
+    });
+    await tester.pumpWidget(_app(DreamReportPage(loadReport: () async => ApiSuccess(live))));
+    await tester.pumpAndSettle();
+    expect(find.text('FIXED'), findsOneWidget);
+    expect(find.text('WOULD FIX'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   group('wire parsing', () {
     test('keeps well-formed runs and drops a run without an id or timestamp', () {
       final report = _report(runs: [

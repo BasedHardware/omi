@@ -1,3 +1,10 @@
+// The conversations list page: paged list with filter-keyed load-more state,
+// plus the capture-status surfaces stacked above it (processing card, held
+// audio, on-device queue banners).
+//
+// The page stays alive across tab switches (AutomaticKeepAliveClientMixin), so
+// scroll position and pagination survive background sync mutations; load-more
+// state is keyed by the active filter and resets deliberately on filter change.
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -11,9 +18,7 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/held_audio/held_audio_views.dart';
-import 'package:omi/pages/on_device/on_device_queue_banner.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
-import 'package:omi/pages/conversations/widgets/capture_continuity_dogfood_banner.dart';
 import 'package:omi/pages/review/widgets/review_entry_card.dart';
 import 'package:omi/pages/episodes/episode_presentation.dart';
 import 'live_episode_visibility.dart';
@@ -37,12 +42,13 @@ import 'package:omi/pages/conversations/background_conversations.dart';
 import 'package:omi/pages/conversations/widgets/processing_conversation_row.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
 import 'package:omi/pages/conversations/widgets/date_list_item.dart';
-import 'package:omi/pages/conversations/widgets/noise_fold_line.dart';
 import 'package:omi/pages/conversations/widgets/empty_conversations.dart';
 import 'package:omi/pages/conversations/widgets/recording_list_item.dart';
 import 'package:omi/pages/home/widgets/home_daily_recaps.dart';
 import 'package:omi/pages/home/widgets/home_daily_recaps_setting.dart';
-import 'package:omi/pages/settings/widgets/yearly_switch.dart';
+import 'package:omi/models/subscription.dart';
+import 'package:omi/pages/home/widgets/payment_issue_row.dart';
+import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
@@ -65,7 +71,7 @@ enum _ConversationListRowKind {
   processing,
   conversation,
   recording,
-  noiseFold,
+  heldRecording,
   groupSpacer,
 }
 
@@ -97,7 +103,6 @@ typedef _ConversationPageSnapshot = ({
   int conversationIdentitySignature,
   int processingIdentitySignature,
   int recordingIdentitySignature,
-  int noiseFoldSignature,
   int pendingDeleteCount,
   HomeEmptyExplanation homeEmptyExplanation,
 });
@@ -159,11 +164,6 @@ _ConversationPageSnapshot _conversationPageSnapshot(
     conversationIdentitySignature: _identitySignature(conversations.conversations),
     processingIdentitySignature: _identitySignature(conversations.processingConversations),
     recordingIdentitySignature: _identitySignature(recordings.recordings),
-    noiseFoldSignature: Object.hash(
-      identityHashCode(conversations.foldedNoiseCounts),
-      Object.hashAll(conversations.foldedNoiseByDate.keys),
-      Object.hashAllUnordered(conversations.revealedNoiseDates),
-    ),
     pendingDeleteCount: conversations.memoriesToDelete.length,
     homeEmptyExplanation: conversations.homeEmptyExplanation,
   );
@@ -173,32 +173,22 @@ List<_ConversationListRow> _buildConversationListRows({
   required List<DateTime> dates,
   required Map<DateTime, List<ServerConversation>> conversationsByDate,
   required Map<DateTime, List<LocalRecording>> recordingsByDate,
-  Map<DateTime, int> foldedNoiseCounts = const {},
-  Map<DateTime, List<ServerConversation>> foldedNoiseByDate = const {},
-  Set<DateTime> revealedNoiseDates = const {},
+  // Locked rows keep their index in the server's list, which the builder reads back.
+  Map<DateTime, List<int>> heldByDate = const {},
 }) {
   final rows = <_ConversationListRow>[];
   var hasRenderedDate = false;
 
   for (var dateIndex = 0; dateIndex < dates.length; dateIndex++) {
     final date = dates[dateIndex];
-    final folded = foldedNoiseByDate[date] ?? const <ServerConversation>[];
-    final shown = conversationsByDate[date] ?? const <ServerConversation>[];
-    // Revealed clips take their place in the day's timeline, not a pile at its end.
-    final conversations = revealedNoiseDates.contains(date) && folded.isNotEmpty
-        ? ([
-            ...shown,
-            for (final c in folded)
-              if (c.isFoldedNoise && !shown.any((s) => s.id == c.id)) c,
-            // omi-perf-allow: sort-in-build -- one revealed day's rows, only while that day is revealed
-          ]..sort((x, y) => y.createdAt.compareTo(x.createdAt)))
-        : shown;
+    final conversations = conversationsByDate[date] ?? const <ServerConversation>[];
     final recordings = recordingsByDate[date] ?? const <LocalRecording>[];
     final entries = buildConversationGroupEntries(conversations: conversations, recordings: recordings);
     final conversationIndexes = <String, int>{
       for (var index = 0; index < conversations.length; index++) conversations[index].id: index,
     };
-    if (entries.isEmpty) continue;
+    final held = heldByDate[date] ?? const <int>[];
+    if (entries.isEmpty && held.isEmpty) continue;
 
     if (!hasRenderedDate) {
       rows.add((
@@ -243,15 +233,14 @@ List<_ConversationListRow> _buildConversationListRows({
       }
     }
 
-    final foldedCount = foldedNoiseCounts[date] ?? folded.length;
-    if (foldedCount > 0) {
+    for (final index in held) {
       rows.add((
-        kind: _ConversationListRowKind.noiseFold,
+        kind: _ConversationListRowKind.heldRecording,
         date: date,
         isFirst: false,
         conversation: null,
         recording: null,
-        conversationIndex: foldedCount,
+        conversationIndex: index,
       ));
     }
 
@@ -789,20 +778,27 @@ class _ConversationsPageState extends State<ConversationsPage>
                 .map((row) => row.id));
           }
         }
-        final mergedDates = <DateTime>{...conversationsByDate.keys, ...recordingsByDate.keys}.toList()
+        // Only the default view: a search or folder shows what it matched.
+        final usage = context.watch<UsageProvider?>()?.subscription;
+        final heldRecordings = showRecordings && !convoProvider.isSelectionModeActive
+            ? lockedHeldRecordings(usage?.heldAudio, usage?.processingBacklog)
+            : const <HeldAudioRecording>[];
+        final heldMore = (usage?.heldAudio?.count ?? 0) - heldRecordings.length;
+        final heldByDate = <DateTime, List<int>>{};
+        for (final (index, recording) in heldRecordings.indexed) {
+          final started = DateTime.fromMillisecondsSinceEpoch(recording.startedAt * 1000);
+          (heldByDate[DateUtils.dateOnly(started)] ??= []).add(index);
+        }
+        final mergedDates = <DateTime>{...conversationsByDate.keys, ...recordingsByDate.keys, ...heldByDate.keys}
+            .toList()
           ..sort((a, b) => b.compareTo(a));
         // Episodes beta, default view: background conversations live in the day's recap, not on Home.
-        final hidingBackground = episodesOn && defaultHome;
-        final folding = defaultHome;
+        final hidingBackground = episodesOn && showRecordings && !convoProvider.isSelectionModeActive;
         final builtRows = _buildConversationListRows(
           dates: mergedDates,
           conversationsByDate: hidingBackground ? _withoutBackground(conversationsByDate) : conversationsByDate,
           recordingsByDate: recordingsByDate,
-          // Only the plain default view folds: a search, folder, selection or "show discarded"
-          // list shows exactly what it matched.
-          foldedNoiseCounts: folding ? convoProvider.foldedNoiseCounts : const {},
-          foldedNoiseByDate: folding ? convoProvider.foldedNoiseByDate : const {},
-          revealedNoiseDates: folding ? convoProvider.revealedNoiseDates : const {},
+          heldByDate: heldByDate,
         );
         final withLive =
             episodeLive ? _withTodayRow(builtRows, DateTime.now(), _ConversationListRowKind.liveEpisode) : builtRows;
@@ -877,7 +873,8 @@ class _ConversationsPageState extends State<ConversationsPage>
               SliverToBoxAdapter(
                 child: ConversationCaptureWidget(showsCall: true, deferStreamingToEpisode: episodeLive),
               ),
-              const SliverToBoxAdapter(child: CaptureContinuityDogfoodBanner()),
+              // A declined renewal the user can still pay: one row, Update opens Stripe's billing portal.
+              const SliverToBoxAdapter(child: PaymentIssueRow()),
               const SliverToBoxAdapter(child: SpeechProfileCardWidget()),
               const SliverToBoxAdapter(child: UpdateFirmwareCardWidget()),
               // Review absorbs the voice prompts; the old card shows only while Review is off.
@@ -893,10 +890,6 @@ class _ConversationsPageState extends State<ConversationsPage>
                           : HomeDailyRecaps(key: _recapsKey, load: widget.loadRecaps!),
                 ),
               ),
-              // Phone-local recordings stay with their conversations. Device catch-up lives on Device.
-              const SliverToBoxAdapter(child: OnDeviceQueueBanner()),
-              const SliverToBoxAdapter(child: HeldAudioHomeSection()),
-              const SliverToBoxAdapter(child: YearlySwitchHomeRow()),
               // With no list yet, the live episode opens Today itself.
               if (episodeLive && builtRows.isEmpty)
                 SliverToBoxAdapter(
@@ -997,12 +990,12 @@ class _ConversationsPageState extends State<ConversationsPage>
                     switch (row.kind) {
                       case _ConversationListRowKind.topSpacer:
                         return const SizedBox(height: 10);
-                      case _ConversationListRowKind.noiseFold:
-                        return NoiseFoldLine(
-                          key: ValueKey('noise_fold_${row.date.toIso8601String()}'),
-                          count: row.conversationIndex,
-                          revealed: convoProvider.revealedNoiseDates.contains(row.date),
-                          onTap: () => convoProvider.toggleFoldedNoise(row.date),
+                      case _ConversationListRowKind.heldRecording:
+                        final held = heldRecordings[row.conversationIndex];
+                        return HeldRecordingLockedRow(
+                          key: ValueKey('held_${held.id}'),
+                          recording: held,
+                          more: row.conversationIndex == heldRecordings.length - 1 ? heldMore : 0,
                         );
                       case _ConversationListRowKind.dateHeader:
                         return DateListItem(

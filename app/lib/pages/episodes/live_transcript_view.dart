@@ -17,7 +17,6 @@ import 'package:omi/pages/conversation_capturing/capture_recovery_status.dart';
 import 'package:omi/pages/conversation_capturing/widgets/speaker_suggestion_chip.dart';
 import 'package:omi/pages/conversation_detail/widgets/name_speaker_sheet.dart';
 import 'package:omi/pages/episodes/live_preview_transcript.dart';
-import 'package:omi/pages/held_audio/held_audio_views.dart';
 import 'package:omi/pages/settings/transcription_settings_page.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
@@ -123,7 +122,6 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
         return Column(
           children: [
             const CaptureRecoveryStatus(),
-            const HeldAudioLiveBanner(),
             if (provider.localSttFailure case final failure?)
               LocalSttRecoveryNotice(
                 failure: failure,
@@ -468,6 +466,15 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
       suggestion: suggestion,
       defaultApplyToSpeaker: true,
       wholeRecording: true,
+      onNotAPerson: () => provider.assignSpeakerToConversation(
+          speakerId,
+          '',
+          '',
+          [
+            for (final segment in provider.segments)
+              if (segment.speakerId == speakerId) segment.id,
+          ],
+          notAPerson: true),
       onSpeakerAssigned: (speakerId, personId, personName, segmentIds, applyToSpeaker) async {
         final identity = provider.speakerAssignmentIdentity;
         var reported = false;

@@ -39,6 +39,7 @@ from utils.batch_pipeline.projection_privacy import PRIVACY_HELD, settle_refusal
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, BatchPrivacyReason
 from utils.batch_pipeline.projection_index import ProjectionIndex
 from database import conversations as conversations_db
+from utils.batch_pipeline.projection_walk_stop import walk_block_stop
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem, projection_speech_spans
 from utils.batch_pipeline import artifact_missing
 from utils.batch_pipeline.errors import error_site_field
@@ -111,6 +112,8 @@ class Walk(NamedTuple):
     advanced: list[str]
     # Stopped at its time or row bound with the chain still continuing.
     more: bool = False
+    # Closed, log-safe token naming why the walk stopped (WALK_STOPS, or blocked_<token>).
+    stop: str = ''
 
 
 def error_type(error: BaseException) -> str:
@@ -405,13 +408,16 @@ class Projector:
         store: FirestoreStore,
         load_result: Callable[[WorkItem, str], dict],
         *,
+        projection_store=None,
+        assign_conversation: Callable | None = None,
         publish: Callable = publish_client_completion,
         playback: Callable | None = None,
         fetch_audio: Callable[[WorkItem], bytes] | None = None,
         clock: Callable[[], float] = time.time,
         require_lineage_fence: bool = False,
     ):
-        self.store = ProjectionStore(store)
+        self.store = projection_store if projection_store is not None else ProjectionStore(store)
+        self.assign_conversation = assign_conversation
         self.load_result, self.publish, self.playback, self.clock = load_result, publish, playback, clock
         self.fetch_audio = fetch_audio
         self.require_lineage_fence = require_lineage_fence
@@ -723,7 +729,8 @@ class Projector:
         A ``deadline`` (a ``time.monotonic`` instant) or ``max_pages`` chains
         full pages back to back — checked only between pages, so a pass
         overruns its deadline by at most one page — while neither bound keeps
-        the legacy single-page contract. ``units`` counts held documents
+        the legacy single-page contract. ``pages`` counts the pages fetched by
+        this call; ``units`` counts held documents
         examined; ``reads`` is what the caller should charge its read budget:
         one read per examined document plus, per attempted upload, 5 reads per
         sibling and 7 (the code-derived worst case of prepare_accounting plus
@@ -734,8 +741,7 @@ class Projector:
         interval. The upload dedupe spans the whole pass — across budget stops
         too — and resets only when a short page wraps the cursor.
         """
-        counts = {'partial': 0, 'waiting': 0, 'error': 0, 'units': 0, 'reads': 0, 'more': 0}
-        pages = 0
+        counts = {'partial': 0, 'waiting': 0, 'error': 0, 'units': 0, 'reads': 0, 'more': 0, 'pages': 0}
         while True:
             try:
                 page = held_candidates(self.store.client, self.store.store.namespace, limit, after_id=self.held_after)
@@ -752,7 +758,7 @@ class Projector:
             counts['units'] += len(page)
             counts['reads'] += len(page)
             counts['more'] = 1 if full else 0
-            pages += 1
+            counts['pages'] += 1
             for _, job in page:
                 try:
                     binding = normalized_binding(job['projection_binding'])
@@ -775,7 +781,7 @@ class Projector:
                 return counts
             if deadline is not None and time.monotonic() >= deadline:
                 return counts
-            if max_pages is not None and pages >= max_pages:
+            if max_pages is not None and counts['pages'] >= max_pages:
                 return counts
 
     def release_held_scan(self, limit: int | None = None) -> dict[str, int]:
@@ -1019,7 +1025,7 @@ class Projector:
                         receipt = session.persist_empty()
                     else:
                         try:
-                            assigned = conversations_db.assign_sync_conversation(
+                            assigned = (self.assign_conversation or conversations_db.assign_sync_conversation)(
                                 binding.owner_id,
                                 incoming,
                                 target_id=context.target_id,
@@ -1249,9 +1255,10 @@ class Projector:
         if walk.more and owner_drain_enabled():
             self.request_drain(owner_id)
         logger.info(
-            'event=batch_projection action=owner_chain outcome=summary advanced=%d followups=%d',
+            'event=batch_projection action=owner_chain outcome=summary advanced=%d followups=%d stop=%s',
             len(walk.advanced),
             len(walk.followups),
+            walk.stop or 'end',
         )
         return walk.followups
 
@@ -1313,7 +1320,7 @@ class Projector:
                 acquired = stack.enter_context(projection_claim(self.store.store.namespace, owner_key(owner_id)))
                 if not acquired:
                     logger.info('event=batch_projection action=owner_chain outcome=claim_busy')
-                    return Walk([], [])
+                    return Walk([], [], stop='claim_busy')
             if prefetch is None and budget_seconds > 0:
                 prefetch = self.chain_prefetch(owner_id)
                 if prefetch is not None:
@@ -1373,18 +1380,24 @@ class Projector:
             group[segment_id] = None
             return True
 
+        stop = 'end'
         try:
             previous = self.store.projection_watermark(key)
         except Exception as error:
             if seed is not None:
                 owe(*seed)
             failed(error)
-            return Walk(list(dict.fromkeys(sid for group in groups.values() for sid in group)), advanced)
+            return Walk(
+                list(dict.fromkeys(sid for group in groups.values() for sid in group)), advanced, stop='watermark_error'
+            )
         if seed is not None and previous == seed[0] and not owe(*seed):
-            return Walk(list(dict.fromkeys(sid for group in groups.values() for sid in group)), advanced)
+            return Walk(
+                list(dict.fromkeys(sid for group in groups.values() for sid in group)), advanced, stop='owe_error'
+            )
         for _ in range(max(1, limit)):
             if time.monotonic() >= deadline:
                 more = True
+                stop = 'deadline'
                 break
             try:
                 segment_id = None
@@ -1398,6 +1411,7 @@ class Projector:
                     row = self.store.ref('results', segment_id).get().to_dict() or {}
             except Exception as error:
                 failed(error)
+                stop = 'read_error'
                 break
             if segment_id is None:
                 break
@@ -1414,6 +1428,7 @@ class Projector:
                         # Still loading at the step deadline: the next step
                         # resumes here instead of holding this pool slot.
                         more = True
+                        stop = 'prefetch_wait'
                         break
                 inputs = prefetched if isinstance(prefetched, Prefetched) and row else None
                 if inputs is not None:
@@ -1439,20 +1454,28 @@ class Projector:
                     self._project_read(segment_id, job, entry, binding, hint=hint, claimed=drain)
             except StepDeadline:
                 more = True  # a partial multipart; the next step resumes it
+                stop = 'step_deadline'
                 break
-            except (ProjectionBlocked, BatchPrivacyBlocked):
+            except BatchPrivacyBlocked:
+                stop = 'privacy_blocked'
+                break
+            except ProjectionBlocked as error:
+                stop = walk_block_stop(error, projection_block_reason(error))
                 break
             except Exception as error:
                 failed(error)
                 if binding is None or not self.resolve_failing_head(segment_id, job, entry, binding, error):
+                    stop = 'head_error'
                     break
                 # Held (or already terminal): continue iff the chain advanced.
                 try:
                     watermark = self.store.projection_watermark(key)
                 except Exception as watermark_error:
                     failed(watermark_error)
+                    stop = 'watermark_error'
                     break
                 if watermark != segment_id:
+                    stop = 'hold_not_landed'
                     break  # the hold did not land; the sweep retries this head
                 previous = segment_id
                 advanced.append(segment_id)
@@ -1464,8 +1487,10 @@ class Projector:
                 if policy.async_projection:
                     owe(segment_id, binding)
                 failed(error)
+                stop = 'watermark_error'
                 break
             if watermark != segment_id:
+                stop = 'not_advanced'
                 break  # Busy claim or partial multipart: the sweep retries it.
             previous = segment_id
             advanced.append(segment_id)
@@ -1473,12 +1498,14 @@ class Projector:
                 if segment_id == recovered:
                     first = binding.content_id
                 if not privacy_held and not owe(segment_id, binding):
+                    stop = 'owe_error'
                     break
         else:
             more = True
+            stop = 'limit'
         ordered = [groups.pop(first)] if first is not None else []
         followups = list(dict.fromkeys(sid for group in ordered + list(groups.values()) for sid in group))
-        return Walk(followups, advanced, more)
+        return Walk(followups, advanced, more, stop)
 
     def sweep(self, limit: int = 100) -> dict[str, int]:
         """Bounded durable-log recovery; no in-memory callback is an outbox."""

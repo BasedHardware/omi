@@ -551,6 +551,16 @@
             "title": "Description",
             "type": "string"
           },
+          "due": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaskDue"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "due_at": {
             "anyOf": [
               {
@@ -604,6 +614,26 @@
               }
             ],
             "title": "Ownership Confidence"
+          },
+          "reminder_intent": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReminderIntent"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reminder_origin": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReminderOrigin"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "source_segment_ids": {
             "items": {
@@ -688,6 +718,16 @@
             "minLength": 1,
             "title": "Description",
             "type": "string"
+          },
+          "due": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaskDue"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "due_at": {
             "anyOf": [
@@ -939,9 +979,31 @@
             ],
             "title": "Created At"
           },
+          "creation_receipt": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Creation Receipt"
+          },
           "description": {
             "title": "Description",
             "type": "string"
+          },
+          "due": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaskDue"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "due_at": {
             "anyOf": [
@@ -1073,6 +1135,16 @@
             ],
             "title": "Recurrence Rule"
           },
+          "reminder_origin": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReminderOrigin"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "sort_order": {
             "default": 0,
             "title": "Sort Order",
@@ -1193,6 +1265,16 @@
               }
             ],
             "title": "Description"
+          },
+          "due": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaskDue"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "due_at": {
             "anyOf": [
@@ -6276,6 +6358,116 @@
         "title": "CalendarOnboardingStatusResponse",
         "type": "object"
       },
+      "CampaignAttributionResponse": {
+        "properties": {
+          "campaign_id": {
+            "title": "Campaign Id",
+            "type": "string"
+          },
+          "checkout_url": {
+            "title": "Checkout Url",
+            "type": "string"
+          },
+          "discount_percent": {
+            "title": "Discount Percent",
+            "type": "integer"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "campaign_id",
+          "state",
+          "checkout_url",
+          "discount_percent"
+        ],
+        "title": "CampaignAttributionResponse",
+        "type": "object"
+      },
+      "CampaignSnapshotResponse": {
+        "properties": {
+          "campaign_id": {
+            "title": "Campaign Id",
+            "type": "string"
+          },
+          "claimable_months": {
+            "title": "Claimable Months",
+            "type": "integer"
+          },
+          "claimed_months": {
+            "title": "Claimed Months",
+            "type": "integer"
+          },
+          "earned_months": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Earned Months"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "milestone_progress": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Milestone Progress"
+          },
+          "qualified_purchases": {
+            "title": "Qualified Purchases",
+            "type": "integer"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "referral_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Referral Url"
+          },
+          "reward_status": {
+            "title": "Reward Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "campaign_id",
+          "enabled",
+          "qualified_purchases",
+          "claimed_months",
+          "claimable_months",
+          "reward_status"
+        ],
+        "title": "CampaignSnapshotResponse",
+        "type": "object"
+      },
       "CancelSubscriptionRequest": {
         "properties": {
           "reason": {
@@ -6751,6 +6943,18 @@
             "title": "Created At",
             "type": "string"
           },
+          "creation_receipt": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Creation Receipt"
+          },
           "evidence_refs": {
             "items": {
               "$ref": "#/components/schemas/EvidenceRef"
@@ -6800,6 +7004,16 @@
           },
           "proposed_action": {
             "$ref": "#/components/schemas/CandidateAction"
+          },
+          "reminder_origin": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReminderOrigin"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "resolution_reason": {
             "anyOf": [
@@ -6943,6 +7157,18 @@
             "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
             "title": "Candidate Id",
             "type": "string"
+          },
+          "creation_receipt": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Creation Receipt"
           },
           "newly_resolved": {
             "title": "Newly Resolved",
@@ -9321,6 +9547,18 @@
               }
             ]
           },
+          "capture_timezone": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capture Timezone"
+          },
           "client_device_id": {
             "anyOf": [
               {
@@ -9425,6 +9663,20 @@
               }
             ],
             "title": "Episode Id"
+          },
+          "excluded_speakers": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Excluded Speakers"
           },
           "external_data": {
             "anyOf": [
@@ -10719,6 +10971,18 @@
               }
             ]
           },
+          "capture_timezone": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capture Timezone"
+          },
           "client_device_id": {
             "anyOf": [
               {
@@ -10823,6 +11087,20 @@
               }
             ],
             "title": "Episode Id"
+          },
+          "excluded_speakers": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Excluded Speakers"
           },
           "external_data": {
             "anyOf": [
@@ -24885,6 +25163,18 @@
       },
       "Participant": {
         "properties": {
+          "alias": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Short alias explicitly asserted for this person; never derive it",
+            "title": "Alias"
+          },
           "email": {
             "anyOf": [
               {
@@ -24959,6 +25249,14 @@
             ],
             "title": "Source",
             "type": "string"
+          },
+          "speaker_bindings": {
+            "description": "Exact numeric spk keys the notes model binds to this non-owner participant; omit when uncertain",
+            "items": {
+              "type": "integer"
+            },
+            "title": "Speaker Bindings",
+            "type": "array"
           }
         },
         "required": [
@@ -25044,6 +25342,28 @@
           }
         },
         "title": "PaymentCheckoutSessionResponse",
+        "type": "object"
+      },
+      "PaymentIssue": {
+        "description": "A paid plan whose renewal charge failed and can still be paid.\n\nSet only while the stored Stripe subscription is past_due or unpaid with an\nopen invoice. The fix is a Stripe-hosted page the client opens through\nPOST /v1/payments/customer-portal; this response carries no payment URL.",
+        "properties": {
+          "plan": {
+            "$ref": "#/components/schemas/PlanType"
+          },
+          "status": {
+            "enum": [
+              "past_due",
+              "unpaid"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "plan"
+        ],
+        "title": "PaymentIssue",
         "type": "object"
       },
       "PaymentMethodStatusResponse": {
@@ -25965,6 +26285,16 @@
           "insights_gained_used": {
             "title": "Insights Gained Used",
             "type": "integer"
+          },
+          "payment_issue": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PaymentIssue"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "phone_call_quota": {
             "anyOf": [
@@ -28481,6 +28811,100 @@
           "release_channel"
         ],
         "title": "ReleaseChannel",
+        "type": "object"
+      },
+      "ReminderIntent": {
+        "additionalProperties": false,
+        "description": "Model annotation, validated against exact source turns before admission.",
+        "properties": {
+          "due_expression": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due Expression"
+          },
+          "kind": {
+            "enum": [
+              "explicit_reminder",
+              "quoted",
+              "hypothetical",
+              "current_session",
+              "status",
+              "waiting_on"
+            ],
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "ReminderIntent",
+        "type": "object"
+      },
+      "ReminderOrigin": {
+        "additionalProperties": false,
+        "properties": {
+          "extracted_at": {
+            "format": "date-time",
+            "title": "Extracted At",
+            "type": "string"
+          },
+          "input_revision": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Input Revision",
+            "type": "string"
+          },
+          "policy_revision": {
+            "const": "explicit-reminders-v1",
+            "default": "explicit-reminders-v1",
+            "title": "Policy Revision",
+            "type": "string"
+          },
+          "review_reason": {
+            "anyOf": [
+              {
+                "const": "owner_unresolved",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Reason"
+          },
+          "source_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source At"
+          },
+          "speaker_evidence_revision": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Speaker Evidence Revision",
+            "type": "string"
+          }
+        },
+        "required": [
+          "input_revision",
+          "speaker_evidence_revision",
+          "extracted_at"
+        ],
+        "title": "ReminderOrigin",
         "type": "object"
       },
       "ReorderFoldersRequest": {
@@ -31245,6 +31669,21 @@
               }
             ],
             "title": "Due At"
+          },
+          "due_certainty": {
+            "anyOf": [
+              {
+                "enum": [
+                  "confirmed",
+                  "tentative"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due Certainty"
           },
           "owner_name": {
             "anyOf": [
@@ -34128,7 +34567,7 @@
             "type": "string"
           },
           "participants": {
-            "description": "People and AI agents evidenced by the meeting roster or the transcript; never the account owner",
+            "description": "People and AI agents evidenced by the supplied notes context, including screen evidence; never the account owner",
             "items": {
               "$ref": "#/components/schemas/Participant"
             },
@@ -35284,6 +35723,16 @@
             "title": "Proposed Action",
             "type": "string"
           },
+          "reminder_origin": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReminderOrigin"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "source_surface": {
             "maxLength": 64,
             "minLength": 1,
@@ -35399,6 +35848,16 @@
               }
             ],
             "title": "Description"
+          },
+          "due": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaskDue"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "due_at": {
             "anyOf": [
@@ -35552,6 +36011,16 @@
             "title": "Proposed Action",
             "type": "string"
           },
+          "reminder_origin": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReminderOrigin"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "source_surface": {
             "maxLength": 64,
             "minLength": 1,
@@ -35653,6 +36122,16 @@
             "title": "Proposed Action",
             "type": "string"
           },
+          "reminder_origin": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReminderOrigin"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "source_surface": {
             "maxLength": 64,
             "minLength": 1,
@@ -35702,6 +36181,16 @@
             "minLength": 1,
             "title": "Description",
             "type": "string"
+          },
+          "due": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaskDue"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "due_at": {
             "anyOf": [
@@ -35773,6 +36262,101 @@
           "description"
         ],
         "title": "TaskCreatePayload",
+        "type": "object"
+      },
+      "TaskDue": {
+        "additionalProperties": false,
+        "properties": {
+          "date": {
+            "anyOf": [
+              {
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date"
+          },
+          "expression": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expression"
+          },
+          "instant": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instant"
+          },
+          "kind": {
+            "enum": [
+              "none",
+              "date",
+              "instant",
+              "unresolved"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "timezone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timezone"
+          },
+          "year_basis": {
+            "anyOf": [
+              {
+                "enum": [
+                  "spoken",
+                  "source_relative",
+                  "next_future_occurrence"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year Basis"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "TaskDue",
         "type": "object"
       },
       "TaskGoalLinkImport": {
@@ -36384,6 +36968,16 @@
             "title": "Proposed Action",
             "type": "string"
           },
+          "reminder_origin": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReminderOrigin"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "source_surface": {
             "maxLength": 64,
             "minLength": 1,
@@ -36484,6 +37078,16 @@
             "default": "update",
             "title": "Proposed Action",
             "type": "string"
+          },
+          "reminder_origin": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReminderOrigin"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "source_surface": {
             "maxLength": 64,
@@ -38784,6 +39388,16 @@
             "title": "Insights Gained Used",
             "type": "integer"
           },
+          "payment_issue": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PaymentIssue"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "phone_call_quota": {
             "anyOf": [
               {
@@ -39535,6 +40149,16 @@
             "default": "create",
             "title": "Proposed Action",
             "type": "string"
+          },
+          "reminder_origin": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReminderOrigin"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "source_surface": {
             "maxLength": 64,
@@ -84618,6 +85242,7 @@
     },
     "/v2/firmware/latest": {
       "get": {
+        "description": "Return the newest eligible update using stable device rollout cohorts.\n\ndevice_id is the hex SHA-256 of the device's normalized DIS serial, never the\nraw serial. Omit it when no serial is available; unidentified clients cannot\nreceive partial rollouts. Blocked releases are never offered.",
         "operationId": "get_latest_version_v2_firmware_latest_get",
         "parameters": [
           {
@@ -84654,6 +85279,22 @@
             "schema": {
               "title": "Manufacturer Name",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "device_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Device Id"
             }
           }
         ],
@@ -84740,7 +85381,7 @@
     },
     "/v2/firmware/version": {
       "get": {
-        "description": "Return the OTA metadata for a specific published firmware version of a device.\n\nComplements /v2/firmware/stable by making any individual published build addressable, e.g. to pin\nor roll a device back to a known-good earlier version, or for QA/support to flash a named build.",
+        "description": "Return the OTA metadata for a specific published firmware version of a device.\n\nComplements /v2/firmware/stable by making any individual published build addressable, e.g. to pin\nor roll a device back to a known-good earlier version, or for QA/support to flash a named build.\nExplicit requests ignore rollout_percent for support/reverts, but blocked releases return 404.",
         "operationId": "get_firmware_version_v2_firmware_version_get",
         "parameters": [
           {
@@ -86615,6 +87256,166 @@
         "summary": "Tts Synthesize",
         "tags": [
           "tts"
+        ]
+      }
+    },
+    "/v2/users/me/referral/campaign": {
+      "get": {
+        "operationId": "get_campaign_v2_users_me_referral_campaign_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CampaignSnapshotResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Campaign",
+        "tags": [
+          "referrals"
+        ]
+      }
+    },
+    "/v2/users/me/referral/campaign/attribution": {
+      "post": {
+        "operationId": "attribute_campaign_v2_users_me_referral_campaign_attribution_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReferralClaimRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CampaignAttributionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Attribute Campaign",
+        "tags": [
+          "referrals"
+        ]
+      }
+    },
+    "/v2/users/me/referral/campaign/claim": {
+      "post": {
+        "operationId": "claim_campaign_v2_users_me_referral_campaign_claim_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CampaignSnapshotResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Claim Campaign",
+        "tags": [
+          "referrals"
         ]
       }
     },

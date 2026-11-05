@@ -39,7 +39,7 @@ class ChatChannelEndpoint {
 /// and the kill switch); this only decides whether to show the entry and which addresses to open.
 ///
 /// The link-proof response carries `deep_link` and `address` when the server is configured.
-/// The PostHog flag payload is only the fallback, and it still names the provider used to mint:
+/// The Omi flag payload is only the fallback, and it still names the provider used to mint:
 /// `{"telegram": {"provider": "telegram", "address": "<bot username>"},
 /// "imessage": {"provider": "<provider>", "address": "+1..."}, "whatsapp": {...}}`. A channel without an address
 /// is not offered. Fail-closed: no analytics identity, a slow read or a malformed payload all mean
@@ -55,7 +55,7 @@ class ChatAppsConfig {
 
   ChatChannelEndpoint? endpoint(ChatChannel channel) => enabled ? endpoints[channel] : null;
 
-  /// Parses a flag payload, which PostHog returns as a decoded map or as a JSON string.
+  /// Parses a flag payload, which the store returns as a decoded map or as a JSON string.
   static ChatAppsConfig fromPayload({required bool enabled, Object? payload}) {
     if (!enabled) return off;
     Object? value = payload;
@@ -88,8 +88,9 @@ class ChatAppsConfig {
 }
 
 abstract final class ChatAppsGate {
-  /// PostHog flag key (project 302298). Registered in `config/feature-flags.yaml`.
+  /// Omi flag keys. The separate key protects unreleased channel endpoints.
   static const enabledFlag = 'mobile-chat-apps';
+  static const allChannelsFlag = _PrivateChatChannels.enabledFlag;
 
   /// Debug builds only: `--dart-define=OMI_CHAT_APPS_CONFIG='<payload json>'` turns the surface on
   /// with that payload. `kDebugMode` excludes every store build.
@@ -103,18 +104,25 @@ abstract final class ChatAppsGate {
       return ChatAppsConfig.fromPayload(enabled: true, payload: _debugPayload);
     }
     try {
-      final enabled = await (readFlag ?? AnalyticsManager().isFeatureEnabled)(
-        enabledFlag,
-      );
-      if (!enabled) return ChatAppsConfig.off;
-      return ChatAppsConfig.fromPayload(
-        enabled: true,
-        payload: await (readPayload ?? AnalyticsManager().getFeatureFlagPayload)(
-          enabledFlag,
-        ),
-      );
+      final flag = readFlag ?? AnalyticsManager().isFeatureEnabled;
+      final payload = readPayload ?? AnalyticsManager().getFeatureFlagPayload;
+      if (!await flag(enabledFlag)) return ChatAppsConfig.off;
+      final allChannels = await flag(allChannelsFlag);
+      final key = allChannels ? allChannelsFlag : enabledFlag;
+      final config = ChatAppsConfig.fromPayload(enabled: true, payload: await payload(key));
+      // The public key can never expose private channels, even with a bad payload.
+      return allChannels
+          ? config
+          : ChatAppsConfig(enabled: config.enabled, endpoints: {
+              if (config.endpoints[ChatChannel.telegram] case final endpoint?) ChatChannel.telegram: endpoint,
+            });
     } catch (_) {
       return ChatAppsConfig.off;
     }
   }
+}
+
+/// Permanent private-channel boundary; the public key exposes only Telegram.
+abstract final class _PrivateChatChannels {
+  static const enabledFlag = 'mobile-chat-apps-all-channels';
 }

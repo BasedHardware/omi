@@ -20,7 +20,7 @@ from config.firestore_read_levers import lever_enabled
 from database._client import get_data_plane_firestore_client
 from database.batch_pipeline_privacy import assert_batch_write_allowed, BatchPrivacyMemo
 from database.batch_pipeline_recovery import quarantine_fenced
-from database.firestore_transaction_retry import run_with_transaction_contention_retry
+from database.firestore_transaction_retry import FirestoreContentionExhausted, run_with_transaction_contention_retry
 from database.batch_pipeline_transaction_labels import (
     current_operation,
     pull_operation as pull_operation,
@@ -68,6 +68,44 @@ class Store(Protocol):
     def held_merge_owners(self, limit: int, *, after: str | None = None) -> list[tuple[str, str | None]]: ...
 
 
+# Reads that bypass the view cache and go through the raw transaction, by kind.
+_DIRECT_READ_KINDS = {
+    'first_pending': 'jobs_query',
+    'first_ready_pending': 'jobs_query',
+    'ready_predecessor': 'jobs_query',
+    'service_frontier': 'control_query',
+    'check_privacy': 'privacy',
+}
+
+
+def _note_direct_reads(view: 'FirestoreTransaction') -> None:
+    """Record, per attempt, which kinds of direct reads ran, so contention logs can name them.
+
+    Wraps the bound methods on this one view; the class methods stay untouched.
+    """
+    for name, kind in _DIRECT_READ_KINDS.items():
+        method = getattr(view, name)
+
+        def noted(*args, _method=method, _kind=kind, **kwargs):
+            view.direct_reads.add(_kind)
+            return _method(*args, **kwargs)
+
+        setattr(view, name, noted)
+
+
+def contention_tables(view: 'FirestoreTransaction') -> tuple[str, str]:
+    """Sorted table names a transaction attempt read and wrote. Table names only, never keys."""
+    read = sorted({table for table, _ in view.cache} | view.direct_reads)
+    wrote = {table for table, _ in (*view.writes, *view.patches)}
+    if view.external:
+        wrote.add('external')
+    if any(table == 'conversations' for table, _ in view.patches):
+        # The commit-boundary privacy fence writes one token per owner for conversation patches.
+        wrote.add('privacy_fence')
+    wrote = sorted(wrote)
+    return ','.join(read) or 'none', ','.join(wrote) or 'none'
+
+
 class FirestoreTransaction:
     def __init__(self, client: Any, namespace: str, transaction: Any):
         self.client = client
@@ -78,6 +116,9 @@ class FirestoreTransaction:
         self.patches: dict[tuple[str, str], dict] = {}
         # Documents outside the batch tables that join this transaction (the provider-STT outbox row).
         self.external: dict[Any, tuple[Any, dict]] = {}
+        # Reads that go through the raw transaction instead of the cache (queries, privacy state):
+        # their kind only, so contention logs can name them.
+        self.direct_reads: set[str] = set()
 
     def _ref(self, table: str, key: str):
         if table == 'conversations':
@@ -209,10 +250,13 @@ class FirestoreStore:
 
     def run(self, body):
         client = self.client
+        last_view: list[FirestoreTransaction] = []
 
         @firestore.transactional
         def commit(transaction):
             view = FirestoreTransaction(client, self.namespace, transaction)
+            _note_direct_reads(view)
+            last_view[:] = [view]
             result = body(view)
             view.flush()
             return result
@@ -221,11 +265,26 @@ class FirestoreStore:
             return commit(client.transaction())
         # The outer budget owns fresh transaction IDs and all retries. The
         # SDK's same-ID commit loop would multiply the contention window.
-        return run_with_transaction_contention_retry(
-            lambda: client.transaction(max_attempts=1),
-            commit,
-            operation_name=current_operation(),
-        )
+        operation = current_operation()
+        try:
+            return run_with_transaction_contention_retry(
+                lambda: client.transaction(max_attempts=1),
+                commit,
+                operation_name=operation,
+            )
+        except FirestoreContentionExhausted as error:
+            # Name the document kinds the last attempt read and wrote, never keys,
+            # so the contended document is visible without exposing owners.
+            read, wrote = contention_tables(last_view[0]) if last_view else ('none', 'none')
+            error.store_tables = f'read={read} wrote={wrote}'  # type: ignore[attr-defined]
+            logger.warning(
+                'event=batch_store_contention operation=%s reason=%s read_tables=%s write_tables=%s',
+                operation,
+                error.reason,
+                read,
+                wrote,
+            )
+            raise
 
     def due(self, state: str, now: float, limit: int = 100) -> list[str]:
         return due(self.client, self.namespace, state, now, limit)
@@ -312,12 +371,16 @@ def projection_page(
     __name__ breaks committed_at ties (including siblings committed together).
     Cursor values are discovery hints, never authorization or ordering fences.
     ``states`` narrows the same ``in`` filter to a subset of the drain states.
+    A seed cursor ``(committed_at, '')`` starts at that time, before every key
+    (the follow-up desync offset); keys are never empty.
     """
     if not states or not set(states) <= set(PROJECTION_OBLIGATION_STATES):
         raise ValueError('projection discovery states must be drain states')
     collection = client.collection(f'{namespace}_results')
     query = collection.where('projection_state', 'in', list(states)).order_by('committed_at').order_by('__name__')
-    if after is not None:
+    if after is not None and after[1] == '':
+        query = query.start_at({'committed_at': after[0]})
+    elif after is not None:
         query = query.start_after({'committed_at': after[0], '__name__': collection.document(after[1])})
     size = max(1, min(limit, 100))
     docs = list(query.limit(size).stream())

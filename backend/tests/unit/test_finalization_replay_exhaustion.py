@@ -10,7 +10,7 @@ from database import conversation_finalization_jobs as jobs
 from services import conversation_finalization as service
 from models.account_cutover import AccountCutoverRecord, AccountCutoverState
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
-from utils.conversations import lifecycle
+from utils.conversations import lifecycle, typesense_index
 
 NOW = datetime(2026, 10, 31, tzinfo=timezone.utc)
 JOB_PATH = (jobs.FINALIZATION_JOBS_COLLECTION, 'synthetic-job')
@@ -88,6 +88,15 @@ def test_stale_replay_terminalizes_only_exhausted_budget(store, status, attempts
         'finalization_status': 'dead_letter',
         'structured': {'title': 'Synthetic transcript.', 'overview': ''},
         'summary_retryable': True,
+        # The discard-detection audit stamps an explicit policy keep on the
+        # dead-letter terminal; the verdict itself stays keep.
+        'relevance_decision': {
+            'verdict': 'keep',
+            'decided_by': 'policy',
+            'reason': 'dead_letter_default',
+            'trigger': 'dead_letter',
+            'rules_version': 4,
+        },
     }
     jobs.stop_quiet_checks_for_job.assert_called_once()
     # It cannot mint another Cloud Task or write another attention item.
@@ -255,6 +264,78 @@ def test_real_reconciler_claim_path_retires_without_enqueue(store, monkeypatch):
     assert store.rows[JOB_PATH]['status'] == 'dead_letter'
     enqueue.assert_not_called()
     recorded.assert_called_once_with(JOB_PATH[-1], firestore_client=store)
+
+
+@pytest.fixture
+def exhausted_requeue(store, monkeypatch):
+    store.rows[JOB_PATH].update(
+        status='queued', attempt_count=5, budget_requeue_count=1, last_failure_code='donor_cleanup_deferred'
+    )
+    monkeypatch.setattr(service, 'replay_enabled', lambda: True)
+    monkeypatch.setattr(service, 'is_listen_finalization_dispatch_enabled', lambda: True)
+    monkeypatch.setattr(service, 'is_listen_finalization_tasks_configured', lambda: True)
+    monkeypatch.setattr(service, 'get_listen_finalization_tasks_max_attempts', lambda: 5)
+    monkeypatch.setattr(jobs, 'recover_stranded_byok_jobs', lambda **_: {'blocked': 0, 'errors': 0})
+    monkeypatch.setattr(jobs, 'get_finalization_replay_oldest_overdue_age_seconds', lambda **_: 0)
+    monkeypatch.setattr(
+        jobs,
+        'get_finalization_replay_candidates',
+        lambda **_: [deepcopy(store.rows[JOB_PATH]) | {'job_id': JOB_PATH[-1]}],
+    )
+    monkeypatch.setattr(service, '_publish_job_metrics', Mock())
+    enqueue = Mock()
+    monkeypatch.setattr(service, 'enqueue_listen_finalization_job', enqueue)
+    return enqueue
+
+
+@pytest.mark.parametrize(
+    ('failure_code', 'row_code'),
+    [(code, 'processing_failed') for code in sorted(service.SMART_MERGE_INCOMPLETE_CODES)]
+    + [('worker_failed', 'final_attempt_failed'), ('invalid_job', 'final_attempt_failed')],
+)
+def test_delivery_independent_terminal_folds_failure_and_keeps_usable_transcript_retryable(
+    store, monkeypatch, exhausted_requeue, failure_code, row_code
+):
+    store.rows[JOB_PATH]['last_failure_code'] = failure_code
+    before = deepcopy(store.rows[ROW_PATH])
+    monkeypatch.setattr(service, '_record_dead_letter', Mock())
+
+    assert service.reconcile_listen_finalization_jobs(firestore_client=store)['terminalized'] == 1
+
+    assert store.rows[JOB_PATH]['last_failure_code'] == row_code
+    assert store.rows[ROW_PATH]['summary_retryable'] is True
+    assert store.rows[ROW_PATH]['status'] == 'completed'
+    for key in ('transcript_segments', 'audio_files', 'photos', 'custom_field'):
+        assert store.rows[ROW_PATH][key] == before[key]
+    exhausted_requeue.assert_not_called()
+
+
+def test_delivery_independent_terminal_runs_shared_post_commit_effects_once(store, monkeypatch, exhausted_requeue):
+    terminal_metric = Mock()
+    client_metric = Mock()
+
+    def sync_after_commit(*_):
+        assert store.rows[JOB_PATH]['status'] == 'dead_letter'
+
+    index_sync = Mock(side_effect=sync_after_commit)
+    monkeypatch.setattr(service, 'record_capture_finalization_terminal', terminal_metric)
+    monkeypatch.setattr(service, 'record_conversation_finalization_client_terminal', client_metric)
+    monkeypatch.setattr(typesense_index, 'sync_conversation_index_after_write', index_sync)
+    before = service.LISTEN_FINALIZATION_DEAD_LETTER_TOTAL._value.get()
+
+    assert service.reconcile_listen_finalization_jobs(firestore_client=store)['terminalized'] == 1
+
+    terminal_metric.assert_called_once_with('failure', store.rows[JOB_PATH]['created_at'])
+    client_metric.assert_called_once()
+    index_sync.assert_called_once_with(ROW_PATH[1], ROW_PATH[-1])
+    jobs.stop_quiet_checks_for_job.assert_called_once_with(JOB_PATH[-1], firestore_client=store)
+    assert service.LISTEN_FINALIZATION_DEAD_LETTER_TOTAL._value.get() == before + 1
+    # Discovery may race the terminal write; the transaction refuses a repeat.
+    assert service.reconcile_listen_finalization_jobs(firestore_client=store)['terminalized'] == 0
+    terminal_metric.assert_called_once()
+    index_sync.assert_called_once()
+    jobs.stop_quiet_checks_for_job.assert_called_once()
+    exhausted_requeue.assert_not_called()
 
 
 @pytest.fixture

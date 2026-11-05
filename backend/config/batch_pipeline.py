@@ -203,8 +203,28 @@ def shard_spread_enabled() -> bool:
     return os.getenv('BATCH_SHARD_SPREAD_ENABLED', 'true').strip().lower() != 'false'
 
 
+def skip_unchanged_control_write_enabled() -> bool:
+    """Admission skips rewriting its scheduler control shard when the append left it unchanged.
+
+    Every admission and every pull wrote the same 64 shared shards; an identical rewrite only
+    turned concurrent admissions and pulls into commit conflicts. False restores the write.
+    """
+    return os.getenv('BATCH_SKIP_UNCHANGED_CONTROL_WRITE_ENABLED', 'true').strip().lower() != 'false'
+
+
 def pull_multi_lease_enabled() -> bool:
     return os.getenv('BATCH_PULL_MULTI_LEASE_ENABLED', 'true').strip().lower() != 'false'
+
+
+def pull_busy_borrow_enabled() -> bool:
+    """Ship-on: a pump's non-first lanes take backfill while every fresh shard is claimed.
+
+    A claimed fresh shard is being served by its claimant, so a second lane that
+    found only claimed fresh shards may lease recent/deep work instead of idling.
+    Each pump's first lane keeps strict fresh-first. ``false`` restores strict
+    fresh-first on every lane.
+    """
+    return os.getenv('BATCH_PULL_BUSY_BORROW_ENABLED', 'true').strip().lower() != 'false'
 
 
 def scheduler_control_key(hashed_owner: str) -> str:
@@ -588,6 +608,42 @@ def projection_prefetch_depth() -> int:
     except ValueError:
         return PROJECTION_PREFETCH_DEFAULT
     return value if 0 <= value <= PROJECTION_PREFETCH_MAX else PROJECTION_PREFETCH_DEFAULT
+
+
+PROJECTION_FOLLOWUP_SLOTS_DEFAULT = 4
+PROJECTION_FOLLOWUP_SLOTS_MAX = 16
+
+
+def projection_followup_slots(default: int = PROJECTION_FOLLOWUP_SLOTS_DEFAULT) -> int:
+    """Concurrent async follow-ups per serving process; unset, malformed or out-of-range keeps ``default``."""
+    raw = os.getenv('BATCH_PIPELINE_PROJECTION_FOLLOWUP_SLOTS', '').strip()
+    try:
+        value = int(raw) if raw else default
+    except ValueError:
+        return default
+    return value if 1 <= value <= PROJECTION_FOLLOWUP_SLOTS_MAX else default
+
+
+PROJECTION_FOLLOWUP_BACKOFF_DEFAULT = 900.0
+PROJECTION_FOLLOWUP_BACKOFF_MAX = 3600.0
+
+
+def projection_followup_backoff_seconds() -> float:
+    """Ship-on follow-up desync: per-process discovery offset plus bounded backoff; ``0`` is the kill switch.
+
+    The value is the longest one process skips an unchanged blocked/failed row
+    in its own discovery. ``0`` restores head-first discovery with no backoff.
+    Malformed or out-of-range values keep the default.
+    """
+    try:
+        value = float(
+            os.getenv('BATCH_PIPELINE_PROJECTION_FOLLOWUP_BACKOFF_SECONDS', str(PROJECTION_FOLLOWUP_BACKOFF_DEFAULT))
+        )
+    except ValueError:
+        return PROJECTION_FOLLOWUP_BACKOFF_DEFAULT
+    if not math.isfinite(value) or not 0 <= value <= PROJECTION_FOLLOWUP_BACKOFF_MAX:
+        return PROJECTION_FOLLOWUP_BACKOFF_DEFAULT
+    return value
 
 
 WORKER_PIPELINE_DEPTH_DEFAULT = 2

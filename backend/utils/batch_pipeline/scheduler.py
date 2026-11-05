@@ -15,9 +15,11 @@ from config.batch_pipeline import (
     FRESH_CAPTURE_LAG_SECONDS,
     SCHEDULER_SHARDS,
     control_candidate_fanout,
+    pull_busy_borrow_enabled,
     pull_multi_lease_enabled,
     scheduler_control_key,
     shard_spread_enabled,
+    skip_unchanged_control_write_enabled,
 )
 from config.policy import resolve_batch_policy
 from config.stt_cap_dispatch import offline_admission_enabled as cap_dispatch_enabled
@@ -77,7 +79,11 @@ def _append(tx: Transaction, control: dict, job: dict) -> None:
     job['next'] = ''
     tx.put('queues', queue_key, queue)
     activate(tx, control, job['priority'], job['available_at'])
-    tx.put('control', scheduler_control_key(job['owner_key']), control)
+    control_key = scheduler_control_key(job['owner_key'])
+    # An owner already in the ring, on an active shard with no pull backoff to clear, leaves
+    # the shard identical; rewriting it only conflicts with every pull and admission on it.
+    if not skip_unchanged_control_write_enabled() or control != tx.get('control', control_key):
+        tx.put('control', control_key, control)
 
 
 def _pool_allows(job: dict, max_seconds: float, shared_gpu: bool) -> bool:
@@ -293,7 +299,14 @@ class Scheduler:
         tx.put('owners', key, owner)
         return True
 
-    def pull(self, now: float, limit: int = 1, *, capacity: PoolCapacity | None = None) -> list[LeasedWork]:
+    def pull(
+        self,
+        now: float,
+        limit: int = 1,
+        *,
+        capacity: PoolCapacity | None = None,
+        borrow_when_fresh_busy: bool = False,
+    ) -> list[LeasedWork]:
         if not 1 <= limit <= 32:
             raise ValueError('pull limit must be in [1, 32]')
         with self._contention_lock:
@@ -317,6 +330,9 @@ class Scheduler:
         # One shard transaction may lease several units from the ring it has
         # already read; the kill switch restores one lease per transaction.
         multi = pull_multi_lease_enabled() and shared_gpu_id is None
+        # Only a dedicated-batch lane may borrow past claimed fresh shards; a
+        # shared live GPU takes one short item and stays strictly fresh-first.
+        borrow = borrow_when_fresh_busy and shared_gpu_id is None and pull_busy_borrow_enabled()
         while len(result) < limit:
             remaining = limit - len(result) if multi else 1
             try:
@@ -327,6 +343,7 @@ class Scheduler:
                     shared_gpu_id=shared_gpu_id,
                     max_fresh=remaining,
                     max_backfill=min(remaining, backfill_budget),
+                    borrow_when_fresh_busy=borrow,
                 )
             except Exception as error:
                 if isinstance(error, FirestoreContentionExhausted):
@@ -387,6 +404,7 @@ class Scheduler:
         shared_gpu_id: str | None = None,
         max_fresh: int = 1,
         max_backfill: int = 1,
+        borrow_when_fresh_busy: bool = False,
     ) -> list[LeasedWork]:
         for priority in Priority:
             if priority != Priority.FRESH and not allow_backfill:
@@ -455,10 +473,14 @@ class Scheduler:
                     continue
             else:
                 return []
-            if busy:
+            if busy and not borrow_when_fresh_busy:
                 # Busy higher-priority work is still pending. Do not borrow
                 # backfill capacity while another puller owns its shard.
                 return []
+            # A borrowing lane found every eligible shard of this priority
+            # claimed: each claimant is serving that work right now, so this
+            # lane leases the next priority instead of idling. The pump's
+            # first lane never borrows, which keeps fresh-first per pump.
         return []
 
     def _pull_shard(self, now, shard, priority, max_seconds, shared_gpu_id, max_leases=1):

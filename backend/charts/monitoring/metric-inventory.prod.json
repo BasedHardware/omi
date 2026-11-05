@@ -2310,6 +2310,7 @@
     "omi_audio_custody_failures_total",
     "omi_audio_custody_last_risk_timestamp_seconds",
     "omi_audio_custody_would_drop_total",
+    "omi_batch_pipeline_vendor_overflow_audio_seconds_total",
     "omi_batch_record_pending_count",
     "omi_batch_record_pending_new_oldest_age_seconds",
     "omi_batch_record_pending_observed_at_seconds",

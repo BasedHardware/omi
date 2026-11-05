@@ -21,6 +21,7 @@ class _Capture {
   String? query;
   DateTime? start;
   DateTime? end;
+  bool includeNoise = false;
   int calls = 0;
 }
 
@@ -37,11 +38,12 @@ class _CapturingSource extends GlobalSearchSource {
 
   @override
   Future<ConversationSearchResult> conversations(String query,
-      {String? speakerId, DateTime? startDate, DateTime? endDate}) async {
+      {String? speakerId, DateTime? startDate, DateTime? endDate, bool includeNoise = false}) async {
     conversationCapture
       ..query = query
       ..start = startDate
-      ..end = endDate;
+      ..end = endDate
+      ..includeNoise = includeNoise;
     conversationCapture.calls++;
     return ConversationSearchResult(
         items: rows, currentPage: 1, totalPages: 1, outcome: ConversationSearchResultOutcome.success);
@@ -79,8 +81,12 @@ class _CapturingSource extends GlobalSearchSource {
   }
 }
 
-ServerConversation _conversation(String id, String title, DateTime started) => ServerConversation.fromJson({
+ServerConversation _conversation(String id, String title, DateTime started,
+        {bool discarded = false, String? contentKind}) =>
+    ServerConversation.fromJson({
       'id': id,
+      'discarded': discarded,
+      if (contentKind != null) 'content_kind': contentKind,
       'created_at': started.toUtc().toIso8601String(),
       'started_at': started.toUtc().toIso8601String(),
       'finished_at': started.add(const Duration(minutes: 10)).toUtc().toIso8601String(),
@@ -279,5 +285,24 @@ void main() {
 
     expect(find.byType(DayConversationsPage), findsOneWidget);
     expect(find.byKey(const ValueKey('global_search_date_filter')), findsNothing);
+  });
+
+  testWidgets('the short clips filter asks for discarded rows and shows only the noise among them', (tester) async {
+    final source = _CapturingSource()
+      ..rows = [
+        _conversation('n1', 'Clip', DateTime(2026, 9, 12, 9), discarded: true, contentKind: 'noise'),
+        _conversation('d1', 'Discarded talk', DateTime(2026, 9, 12, 10), discarded: true),
+      ];
+    await _pumpSearch(tester, source, initialQuery: 'clip');
+    await tester.pump();
+    await tester.pumpAndSettle();
+    expect(source.conversationCapture.includeNoise, isFalse);
+
+    await tester.tap(find.byKey(const ValueKey('global_search_noise_filter')));
+    await tester.pump();
+    await tester.pumpAndSettle();
+    expect(source.conversationCapture.includeNoise, isTrue);
+    expect(find.text('Clip'), findsOneWidget);
+    expect(find.text('Discarded talk'), findsNothing);
   });
 }

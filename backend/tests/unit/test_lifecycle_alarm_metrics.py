@@ -246,3 +246,58 @@ def test_repair_stock_is_capped_and_excludes_settled_receipts():
         )
     )
     assert queries.enrichment_summary_repair(client) == {'all': (0, 0, False)}
+
+
+@pytest.mark.parametrize(
+    'rows, expected',
+    [
+        ([], (0, 0, False)),
+        (
+            [
+                {'state': 'record_pending', 'enqueued_at': 'NOW-7201'},
+                {'state': 'record_pending', 'enqueued_at': 'NOW-3'},
+            ],
+            None,
+        ),
+        ([{'state': 'record_pending', 'enqueued_at': 'NOW-8000'}] * 999, None),
+        ([{'state': 'record_pending', 'enqueued_at': 'NOW-8000'}] * 1000, None),
+        ([{'state': 'record_pending', 'enqueued_at': 'NOW-8000'}] * 6000, None),
+        (
+            [
+                {'state': 'record_pending', 'enqueued_at': 'NOW-259200'},
+                {'state': 'record_pending', 'enqueued_at': 'NOW+50'},
+            ],
+            None,
+        ),
+    ],
+)
+def test_record_pending_head_lever_matches_the_full_page_with_one_document_read(monkeypatch, rows, expected):
+    now = COHORT_START + 20_000
+    resolved = [
+        {**row, 'enqueued_at': now + int(row['enqueued_at'][3:])} if isinstance(row.get('enqueued_at'), str) else row
+        for row in rows
+    ]
+    monkeypatch.delenv('FIRESTORE_READ_LEVERS', raising=False)
+    legacy_client = Client(batch_pipeline_prod_jobs=entries(resolved))
+    legacy = queries.record_pending(legacy_client, 'batch_pipeline_prod', now)
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"lifecycle_record_pending_head":100}')
+    head_client = Client(batch_pipeline_prod_jobs=entries(resolved))
+    head = queries.record_pending(head_client, 'batch_pipeline_prod', now)
+    assert head == legacy
+    if expected is not None:
+        assert head == {'record_pending': expected}
+    assert [read.cap for read in head_client.reads] == [1]
+
+
+def test_record_pending_head_lever_cohorts_per_replica(monkeypatch):
+    from config.firestore_read_levers import lever_enabled
+
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"lifecycle_record_pending_head":50}')
+    seen = set()
+    for i in range(40):
+        monkeypatch.setenv('HOSTNAME', f'backend-integration-{i}')
+        seen.add(lever_enabled('lifecycle_record_pending_head', queries._replica_key('batch_pipeline_prod')))
+    assert seen == {True, False}  # a percentage splits replicas instead of the whole fleet
+    monkeypatch.delenv('HOSTNAME')
+    monkeypatch.delenv('K_REVISION', raising=False)
+    assert queries._replica_key('batch_pipeline_prod') == 'batch_pipeline_prod'

@@ -16,6 +16,7 @@ from google.cloud import firestore
 from database.legal_holds import external_write_fence
 from database.people_generation import bump_people_generation
 from database import speaker_learning_jobs as learning_jobs, recurring_voice_assignments, recurring_voices
+from database.notes_identity import identifier_retraction
 from utils.observability.recurring_voices import profile_event
 from utils.observability.fallback import record_fallback
 from utils.owner_voice_evidence import retract_owner_contributions
@@ -116,6 +117,15 @@ def persist_assignment_effects(
         save_other_voice_profiles=save_other,
         source_conversation_ids=donor_ids,
     )
+    if rejection:
+        inferred_people = {
+            s.get('person_id')
+            for s in relabeled
+            if s.get('speaker_match_source') == 'notes_inferred' and s.get('person_id')
+        }
+        for pid in inferred_people:
+            if isinstance(pid, str) and docs.get(pid):
+                updates.setdefault(pid, {}).update(identifier_retraction(docs[pid], conversation_id))
     owner_update = retract_owner_contributions(user_doc, donor_ids, resolved, now)
     pool_changes = {}
     # Retraction is mandatory even when new enrollment/use is killed off.

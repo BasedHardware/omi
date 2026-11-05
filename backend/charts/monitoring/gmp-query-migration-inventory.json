@@ -106,7 +106,20 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
-      "expression": "((max(time() - omi_batch_pipeline_metrics_refreshed_at_seconds{namespace=\"prod-omi-backend\"}) >= bool 120) or vector(1)) + (count(omi_batch_pipeline_oldest_age_seconds{namespace=\"prod-omi-backend\"} != omi_batch_pipeline_oldest_age_seconds{namespace=\"prod-omi-backend\"}) or vector(0)) + (count(omi_batch_pipeline_retry_age_seconds{namespace=\"prod-omi-backend\"} != omi_batch_pipeline_retry_age_seconds{namespace=\"prod-omi-backend\"}) or vector(0))",
+      "expression": "(sum(increase(omi_batch_pipeline_vendor_overflow_audio_seconds_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill|backend-integration\",route=\"modulate\"}[24h])) / 3600 * 0.06) or vector(0)",
+      "file": "alerts/backend-sync.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_vendor_overflow_audio_seconds_total"
+      ],
+      "owner_title": "Batch Modulate overflow - spend over $50/day",
+      "owner_uid": "omi-batch-vendor-overflow-spend",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "((max(time() - omi_batch_pipeline_metrics_refreshed_at_seconds{namespace=\"prod-omi-backend\"}) >= bool 120) or vector(1)) + (count(count by (priority) (omi_batch_pipeline_oldest_age_seconds{namespace=\"prod-omi-backend\"} != omi_batch_pipeline_oldest_age_seconds{namespace=\"prod-omi-backend\"})) or vector(0)) + (count(count by (priority) (omi_batch_pipeline_retry_age_seconds{namespace=\"prod-omi-backend\"} != omi_batch_pipeline_retry_age_seconds{namespace=\"prod-omi-backend\"})) or vector(0))",
       "file": "alerts/batch-queue-safety.json",
       "issues": [],
       "metrics": [
@@ -3697,7 +3710,7 @@
   ],
   "counts": {
     "explicit_bridge": 25,
-    "query_consumers": 245
+    "query_consumers": 246
   },
   "schema_version": 1,
   "source": "repository, not live Grafana export"

@@ -52,8 +52,8 @@ void main() {
                 child: MemoryItem(memory: memory, provider: provider, showDismissible: false, onTap: (_, __, ___) {}))),
       ),
     ));
-    expect(find.text('Pending'), findsOneWidget);
-    expect(find.text('View Usage'), findsOneWidget);
+    expect(find.text('Pending'), findsNothing);
+    expect(find.text('Upgrade'), findsOneWidget);
     expect(find.byIcon(Icons.lock_outline), findsNothing);
     expect(find.bySemanticsLabel('OK'), findsNothing);
     final preview = tester.getRect(find.byType(OmiLockedPreview));
@@ -113,7 +113,7 @@ void main() {
           final destination =
               (routes.pushed.last as MaterialPageRoute).builder(tester.element(find.byType(MemoryItem)));
           expect(destination, isA<UsagePage>());
-          expect((destination as UsagePage).showUpgradeDialog, isFalse);
+          expect((destination as UsagePage).showUpgradeDialog, isTrue);
           expect(find.byType(MemoryEditSheet), findsNothing);
           expect(find.byType(SelectableText), findsNothing);
           expect(find.bySemanticsLabel('Private held memory'), findsNothing);

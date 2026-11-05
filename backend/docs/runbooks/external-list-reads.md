@@ -22,7 +22,7 @@ The original env levers default **on**. The polling controls below default **off
 | `OMI_DEV_CONVERSATION_LIST_BUDGET_ENABLED` | Restore unbudgeted Developer conversation offsets and omit new guidance/truncation headers. |
 | `OMI_STAGED_TASK_PROMOTE_EMPTY_CACHE_ENABLED` | Restore control + full projection for every staged promote poll. |
 
-Full behavior rollback also disables the four round-2 levers documented in the linked runbook. No deployment/env values are changed by this PR.
+Full behavior rollback also disables the four round-2 levers documented in the linked runbook. Deployment state: the adaptive polling cache is enabled for 5% of API keys on the Cloud Run backend (#24623, 2026-11-04); enrolled fast pollers can receive list data up to the disclosed 60/120/300s old after a write.
 Cache keys include budget lever states, so switching either budget off cannot replay its headers/results.
 No mandatory data migration, extra serving-path Firestore write, index, rate-limit, boost, or daily ladder change is required. The optional task-completion backfill is separately authorized and never runs from a GET.
 The existing memory keyset paths and the existing Developer memory/action-item budgets stay in place.

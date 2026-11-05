@@ -31,6 +31,12 @@ INTENTIONAL_BUDGET_CHANGES = {
     # 39634604539 attempt 1), cancelling a healthy cold job after every real
     # step passed. 50 restores wedge headroom; budget_p50 stays 19.
     ("mobile-app-checks.yml", "ios-compile-check", "timeout-minutes"): "50",
+    # Dart Analyze & Tests: the 30-min ceiling sat below the measured suite
+    # path — main's healthy runs took 27-29.6 min (run 41736391155: 29:36 for
+    # 8207 tests) — so run 41693050609 was cancelled at the cap with all 7842
+    # executed tests passing and ~360 unexecuted, failing Mobile Release
+    # Eligibility downstream. 40 restores wedge headroom; budget_p50 stays 17.
+    ("mobile-app-checks.yml", "analyze-and-test", "timeout-minutes"): "40",
     # Backend unit shard: the 15-min job ceiling includes runner setup, but
     # the step regression budget excludes it, leaving 180s for setup.
     # Setup measured 73-92s typical, 227s worst (run 39741901310 attempt 2:
@@ -62,6 +68,15 @@ INTENTIONAL_BUDGET_CHANGES = {
     ("backend-hermetic-e2e.yml", "listen-pusher-stack-gauntlet", "timeout-minutes"): "25",
     ("backend-hermetic-e2e.yml", "sync-cloud-tasks-stack-gauntlet", "timeout-minutes"): "25",
     ("backend-hermetic-e2e.yml", "replay-harness-phase0a-gauntlet", "timeout-minutes"): "25",
+    # Linux package smoke: the apt runtime-deps step budget is 20m (cold
+    # cache on a degraded mirror measured ~40-45 KB/s pool throughput in
+    # jobs 120062237675 and 120074210159 — ~14.4 min of pure download), and
+    # a cold run also pays ~70s setup plus ~5m packaging/smoke. At the old
+    # 20m ceiling the cold path was cancelled mid-packaging, and a cancelled
+    # job never saves the apt cache (save-always: false), so every retry
+    # stayed cold. 30m fits the cold path; warm runs still finish in ~7m,
+    # so budget_p50 stays 7.
+    ("desktop-windows-ci.yml", "build-linux", "timeout-minutes"): "30",
 }
 
 

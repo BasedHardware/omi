@@ -32,6 +32,7 @@ from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock
 
+from utils.conversations.relevance_rules import RULES_VERSION
 from database import conversation_finalization_jobs as jobs
 from database import conversation_terminal_title as terminal_title
 from services import conversation_finalization as service
@@ -364,6 +365,14 @@ def test_stranded_job_and_its_processing_conversation_reach_one_atomic_terminal(
             'status': 'completed',
             'finalization_status': 'dead_letter',
             'structured': {'title': 'Recording', 'overview': ''},
+            'discarded': False,
+            'relevance_decision': {
+                'verdict': 'keep',
+                'decided_by': 'policy',
+                'reason': 'byok_abandoned_default',
+                'trigger': 'byok_abandoned',
+                'rules_version': RULES_VERSION,
+            },
         },
     )
     # Firestore requires every transactional read before the first write.
@@ -380,7 +389,9 @@ def test_abandoned_conversation_gets_its_first_sentence_title_and_keeps_a_real_o
     kept = _bound_conversation({'structured': {'title': 'Existing', 'overview': 'x'}})
     transaction = _OrderedTransaction()
     _abandon(transaction, _Ref('job-1', _stranded_job()), kept, projection=_Collection())
-    assert transaction.updates[1] == (kept, {'status': 'completed', 'finalization_status': 'dead_letter'})
+    assert transaction.updates[1][0] is kept
+    assert transaction.updates[1][1]['status'] == 'completed'
+    assert transaction.updates[1][1]['relevance_decision']['reason'] == 'byok_abandoned_default'
 
 
 def test_abandonment_at_the_document_limit_still_closes_the_conversation_without_growth():
@@ -393,7 +404,9 @@ def test_abandonment_at_the_document_limit_still_closes_the_conversation_without
     disposition = _abandon(transaction, _Ref('job-1', _stranded_job()), near_limit, projection=_Collection())
 
     assert disposition == {'status': 'abandoned', 'conversation_outcome': 'closed'}
-    assert transaction.updates[1] == (near_limit, {'status': 'completed', 'finalization_status': 'dead_letter'})
+    assert transaction.updates[1][0] is near_limit
+    assert transaction.updates[1][1]['status'] == 'completed'
+    assert transaction.updates[1][1]['relevance_decision']['reason'] == 'byok_abandoned_default'
 
 
 def test_terminal_moves_the_projection_shard_deltas():

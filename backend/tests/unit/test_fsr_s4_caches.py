@@ -489,7 +489,7 @@ def test_real_users_endpoints_read_count_with_auth(env, monkeypatch, route, enab
     monkeypatch.setattr(auth, '_recover_locked_content_if_request', lambda *args: None)
     monkeypatch.setattr(auth, '_enforce_cutover_http_if_request', lambda *args: None)
     monkeypatch.setattr(router, 'is_marketplace_reviewer', lambda uid: False)
-    monkeypatch.setattr(router, 'reconcile_basic_plan_with_stripe', lambda uid, sub: sub)
+    monkeypatch.setattr(router, 'reconcile_basic_plan_with_stripe', lambda uid, sub, **kwargs: sub)
     monkeypatch.setattr(router, 'get_paid_plan_definitions', lambda: [])
     monkeypatch.setattr(router, 'should_hide_subscription_ui', lambda *args: False)
     monkeypatch.setattr(

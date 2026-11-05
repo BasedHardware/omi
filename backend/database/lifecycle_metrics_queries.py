@@ -1,6 +1,10 @@
 """Indexed, capped reads for lifecycle alarms. No identity leaves these functions."""
 
+import os
+
 from google.cloud.firestore_v1 import FieldFilter
+
+from config.firestore_read_levers import lever_enabled
 
 from utils.lifecycle_metrics import PAGE_LIMIT, COHORT_SECONDS, COHORT_START, cohort_age
 
@@ -9,18 +13,35 @@ def _where(query, field, op, value):
     return query.where(filter=FieldFilter(field, op, value))
 
 
+def _replica_key(namespace):
+    # Cohort per serving replica so a percentage is a real canary; one namespace
+    # key would put the whole fleet in or out together (Luna r1 on #24639).
+    # Same identity as fsr_read_cache.serving_config_key, inlined so this module's
+    # import closure (batch images) does not grow.
+    host = os.getenv('HOSTNAME')
+    if host:
+        return host
+    revision, instance = os.getenv('K_REVISION'), os.getenv('INSTANCE_ID') or os.getenv('GAE_INSTANCE')
+    return f'{revision}:{instance}' if revision and instance else namespace
+
+
 def record_pending(client, namespace, now):
     stock = _where(client.collection(f'{namespace}_jobs'), 'state', '==', 'record_pending')
-    query = (
-        _where(stock, 'enqueued_at', '>=', max(COHORT_START, now - COHORT_SECONDS))
-        .order_by('enqueued_at')
-        .limit(PAGE_LIMIT)
-    )
-    rows = [doc.to_dict() for doc in query.stream(timeout=10, retry=None)]
+    cohort = _where(stock, 'enqueued_at', '>=', max(COHORT_START, now - COHORT_SECONDS)).order_by('enqueued_at')
+    if lever_enabled('lifecycle_record_pending_head', _replica_key(namespace)):
+        # The page is ordered oldest first from the cohort's lower bound, so its
+        # first row alone determines cohort_age. A capped count reproduces the
+        # full-page flag. ~1,000 document reads per tick become 1 plus the
+        # aggregation's index-entry charge (1 read per 1,000 entries).
+        rows = [doc.to_dict() for doc in cohort.limit(1).stream(timeout=10, retry=None)]
+        full = int(cohort.limit(PAGE_LIMIT).count().get(timeout=10, retry=None)[0][0].value) >= PAGE_LIMIT
+    else:
+        rows = [doc.to_dict() for doc in cohort.limit(PAGE_LIMIT).stream(timeout=10, retry=None)]
+        full = len(rows) == PAGE_LIMIT
     # The capped aggregate crosses the stock alert threshold without loading
     # thousands of job documents or scanning terminal history in the client.
     count = int(stock.limit(5001).count().get(timeout=10, retry=None)[0][0].value)
-    return {'record_pending': (cohort_age(rows, 'enqueued_at', now), count, len(rows) == PAGE_LIMIT or count == 5001)}
+    return {'record_pending': (cohort_age(rows, 'enqueued_at', now), count, full or count == 5001)}
 
 
 def nojob(client, namespace):

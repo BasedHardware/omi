@@ -294,8 +294,12 @@ async def test_finish_page_checks_pinned_sync_policy_before_any_side_effect(foll
 
 
 @pytest.mark.asyncio
-async def test_unchanged_ready_receipt_retries_when_external_sibling_unblocks(followup):
+async def test_unchanged_ready_receipt_retries_when_external_sibling_unblocks(followup, monkeypatch):
+    # Immediate retry is the kill-switch path; desync retries after a bounded
+    # backoff (test_batch_pipeline_followup_desync.py).
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_FOLLOWUP_BACKOFF_SECONDS', '0')
     f = followup
+    f.runner.backoff_ceiling, f.runner.seeded = 0, True
     f.receipts['head']['state'] = 'ready'
     f.projector.store.store.projection_pending.return_value = ['head']
     sibling_ready = False
@@ -585,6 +589,8 @@ async def test_followup_deadline_cancels_stuck_step_refills_and_retries_same_rec
     from utils.sync import bridge
 
     f = followup
+    # Kill-switch path: the timed-out row is rediscovered on the very next pass.
+    f.runner.backoff_ceiling, f.runner.seeded = 0, True
     f.binding = replace(f.binding, native_record=False)
     f.projector.store.read.side_effect = lambda sid: (f.jobs[sid], {'projection': f.receipts[sid]}, f.binding)
     monkeypatch.setattr(projection_followup, 'MAX_FOLLOWUPS', 1)

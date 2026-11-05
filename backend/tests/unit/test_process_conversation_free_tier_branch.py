@@ -222,7 +222,8 @@ def _build_fakes() -> dict[str, ModuleType]:
     add('utils.memory.rejected_memory_feedback', AutoMockModule('utils.memory.rejected_memory_feedback'))
 
     task_intelligence = ModuleType('utils.task_intelligence')
-    task_intelligence.__path__ = []  # type: ignore[attr-defined]
+    # Keep pure policy modules importable while persistence adapters stay stubbed.
+    task_intelligence.__path__ = [str(_BACKEND / 'utils' / 'task_intelligence')]  # type: ignore[attr-defined]
     add('utils.task_intelligence', task_intelligence)
     capture = AutoMockModule('utils.task_intelligence.conversation_capture')
     capture.capture_enabled = MagicMock(return_value=False)
@@ -238,6 +239,13 @@ def _build_fakes() -> dict[str, ModuleType]:
     # The finalizer's smart-merge step is off by default; its own tests drive it.
     smart_merge = add('utils.conversations.smart_merge', AutoMockModule('utils.conversations.smart_merge'))
     smart_merge.smart_merge_step = AsyncMock(return_value=False)
+    # The finalizer classifies a donor-resume failure with the real exception
+    # class and closed code set (isinstance must never see a mock).
+    from utils.conversations.smart_merge import _INCOMPLETE_CODES, SmartMergeIncomplete, _incomplete_cause
+
+    smart_merge.SmartMergeIncomplete = SmartMergeIncomplete
+    smart_merge._INCOMPLETE_CODES = _INCOMPLETE_CODES
+    smart_merge._incomplete_cause = _incomplete_cause
     add('utils.log_sanitizer', AutoMockModule('utils.log_sanitizer'))
     add('utils.retrieval.frame_request_authority', AutoMockModule('utils.retrieval.frame_request_authority'))
     services_pkg = ModuleType('services')

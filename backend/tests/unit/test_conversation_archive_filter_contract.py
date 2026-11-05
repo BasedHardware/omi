@@ -174,6 +174,9 @@ def conversations_db():
     firestore_module.Query = SimpleNamespace(DESCENDING="DESCENDING")
     firestore_v1_module = ModuleType("google.cloud.firestore_v1")
     firestore_v1_module.FieldFilter = _FieldFilter
+    # database.conversations → notes_identity → person_aliases imports
+    # ``transactional`` at module level alongside FieldFilter.
+    firestore_v1_module.transactional = _decorator
     exceptions_module = ModuleType("google.api_core.exceptions")
     exceptions_module.AlreadyExists = type("AlreadyExists", (Exception,), {})
     exceptions_module.Conflict = type("Conflict", (Exception,), {})
@@ -244,6 +247,11 @@ def conversations_db():
         # filtering never calls it; keep the contract isolated from its graph.
         "utils.person_evidence": AutoMockModule("utils.person_evidence"),
         "utils.owner_voice_evidence": AutoMockModule("utils.owner_voice_evidence"),
+        "utils.speaker_learning_policy": AutoMockModule("utils.speaker_learning_policy"),
+        # The stub-fed database.person_aliases copy imports this at module load;
+        # a fresh registration of its prometheus Counters collides with the
+        # real module's registration across fixture setups.
+        "utils.observability.people_scans": AutoMockModule("utils.observability.people_scans"),
         "utils.observability.speaker_identification": AutoMockModule("utils.observability.speaker_identification"),
         "utils.observability.speaker_learning_jobs": AutoMockModule("utils.observability.speaker_learning_jobs"),
         "utils.observability.fallback": AutoMockModule("utils.observability.fallback"),

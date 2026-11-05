@@ -117,8 +117,8 @@ def test_batch_queue_safety_has_a_two_hour_page_and_a_separate_incomplete_scan_p
         expr = blind['data'][0]['model']['expr']
         assert expr == (
             f'((max(time() - omi_batch_pipeline_metrics_refreshed_at_seconds{selector}) >= bool 120) or vector(1))'
-            f' + (count(omi_batch_pipeline_oldest_age_seconds{selector} != omi_batch_pipeline_oldest_age_seconds{selector}) or vector(0))'
-            f' + (count(omi_batch_pipeline_retry_age_seconds{selector} != omi_batch_pipeline_retry_age_seconds{selector}) or vector(0))'
+            f' + (count(count by (priority) (omi_batch_pipeline_oldest_age_seconds{selector} != omi_batch_pipeline_oldest_age_seconds{selector})) or vector(0))'
+            f' + (count(count by (priority) (omi_batch_pipeline_retry_age_seconds{selector} != omi_batch_pipeline_retry_age_seconds{selector})) or vector(0))'
         )
         for rule in (late, blind):
             assert rule['for'] == '5m'

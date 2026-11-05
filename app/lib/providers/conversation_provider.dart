@@ -13,7 +13,6 @@ import 'package:flutter/widgets.dart' show AppLifecycleState, WidgetsBinding;
 
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/http/api/users.dart';
-import 'package:omi/providers/conversation_noise_fold.dart';
 import 'package:omi/backend/http/api_fallback.dart';
 import 'package:omi/backend/http/api_presentation.dart';
 import 'package:omi/backend/http/api_result.dart';
@@ -85,16 +84,14 @@ Map<DateTime, List<ServerConversation>> groupSearchResultsPreservingRank(Iterabl
   return grouped;
 }
 
-class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
+class ConversationProvider extends ChangeNotifier {
   List<ServerConversation> conversations = [];
   List<ServerConversation> searchedConversations = [];
-  @override
   Map<DateTime, List<ServerConversation>> groupedConversations = {};
 
   bool isLoadingConversations = false;
   bool _isLoadingConversationList = false;
   bool _isLoadingConversationSearch = false;
-  @override
   bool showDiscardedConversations = false;
 
   HomeEmptyExplanation homeEmptyExplanation = HomeEmptyExplanation.none;
@@ -176,6 +173,17 @@ class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
   int _sessionGeneration = 0;
   int _conversationFetchRevision = 0;
   int _conversationLoadingRevision = 0;
+
+  /// Bumped whenever transcript speaker identities are edited in place
+  /// (applySpeakerPromptIdentities). The in-place segment mutations change no
+  /// conversation container identity, so downstream cheap change
+  /// fingerprints (conversation detail's projection comparator) fold this in
+  /// to notice them without re-encoding the transcript.
+  int _speakerIdentityRevision = 0;
+
+  /// Revision of the last in-place speaker-identity edit; see
+  /// [_speakerIdentityRevision].
+  int get speakerIdentityRevision => _speakerIdentityRevision;
   static const int _maxInitialFetchRetries = 4;
   // After the fast backoff budget is spent we keep retrying on a slow fixed
   // interval rather than giving up — otherwise a prolonged outage latches the
@@ -347,7 +355,6 @@ class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
   }
 
   void clearUserData() {
-    resetFoldedNoise();
     for (final watcher in _mergeWatchers.values) {
       watcher.cancel();
     }
@@ -645,7 +652,6 @@ class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
   void toggleDiscardConversations() {
     showDiscardedConversations = !showDiscardedConversations;
     SharedPreferencesUtil().showDiscardedMemories = showDiscardedConversations;
-    resetFoldedNoise();
 
     // Clear grouped conversations to show shimmer effect while loading
     groupedConversations = {};
@@ -654,7 +660,7 @@ class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
     if (hasActiveSearch) {
       searchConversations(previousQuery, showShimmer: true);
     } else {
-      fetchConversations().then((_) => refreshFoldedNoiseCounts());
+      fetchConversations();
     }
 
     PlatformManager.instance.analytics.showDiscardedMemoriesToggled(showDiscardedConversations);
@@ -1149,7 +1155,6 @@ class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
     _cancelInitialFetchRetry();
     final fetched = await fetchConversations();
     if (!fetched || !_isSignedIn()) return;
-    unawaited(refreshFoldedNoiseCounts());
     if (checkDailySummaries) await checkHasDailySummaries();
   }
 
@@ -1416,7 +1421,6 @@ class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
     }
     setLoadingConversations(false);
     notifyListeners();
-    unawaited(refreshFoldedNoiseCounts());
     return true;
   }
 
@@ -1438,6 +1442,7 @@ class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
         identity.id: identity
     };
     final rows = [...conversations, ...searchedConversations, ...groupedConversations.values.expand((group) => group)];
+    var applied = false;
     for (final row in rows) {
       if (row.id != result.conversationId) continue;
       for (final segment in row.transcriptSegments) {
@@ -1446,8 +1451,12 @@ class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
         segment.isUser = identity.isUser;
         segment.personId = identity.personId;
         segment.speakerLabelSource = 'manual';
+        applied = true;
       }
     }
+    // In-place segment edits change no container identity: bump the revision
+    // so cheap downstream fingerprints (conversation detail) still notify.
+    if (applied) _speakerIdentityRevision++;
     notifyListeners();
   }
 
@@ -1609,7 +1618,6 @@ class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
     _pendingDeleteTimers.remove(conversation.id)?.cancel();
     _pendingDeleteTimers[conversation.id] = Timer(pendingDeleteWindow, () => commitPendingDelete(conversation.id));
     conversations.removeWhere((element) => element.id == conversation.id);
-    dropFromFoldedNoise(conversation.id);
     for (final group in groupedConversations.values) {
       group.removeWhere((e) => e.id == conversation.id);
     }

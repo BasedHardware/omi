@@ -201,12 +201,12 @@ void main() {
     }
   });
 
-  testWidgets('a too-large refusal names itself and offers Delete, not a guaranteed-fail Retry', (tester) async {
+  testWidgets('a too-large refusal names itself and offers no guaranteed-fail Retry', (tester) async {
     await pumpRow(tester, makeWal(WalStatus.uploadRejected)..uploadRejectionReason = WalUploadRejection.tooLarge);
 
     expect(find.text('Too large'), findsOneWidget);
     expect(find.text('Try Again'), findsNothing, reason: 'the same bytes are the same size');
-    expect(find.text('Delete'), findsOneWidget);
+    expect(find.text('Delete'), findsNothing, reason: 'a refusal is removed by swiping the row, after confirmation');
   });
 
   testWidgets('an invalid-date refusal offers no manual Retry', (tester) async {
@@ -215,10 +215,11 @@ void main() {
 
     expect(find.text('Invalid recording date'), findsOneWidget);
     expect(find.text('Try Again'), findsNothing, reason: 'Omi owns automatic refusal recovery');
-    expect(find.text('Delete'), findsOneWidget);
+    expect(find.text('Delete'), findsNothing, reason: 'a refusal is removed by swiping the row, after confirmation');
   });
 
-  testWidgets('a too-large refusal offers Delete even while the failed-sync banner points at its row', (tester) async {
+  testWidgets('a too-large refusal stays without Retry even while the failed-sync banner points at its row',
+      (tester) async {
     // The row's own upload hit the 413: the row carries the bounded token and
     // is also the provider's failedWal. The banner state must not put a
     // guaranteed-fail Retry back on the row.
@@ -234,7 +235,7 @@ void main() {
     expect(failed.failedWal?.id, wal.id);
     expect(find.text('Too large'), findsOneWidget, reason: 'the refusal label outranks the generic Failed banner');
     expect(find.text('Try Again'), findsNothing, reason: 'the same bytes are the same size');
-    expect(find.text('Delete'), findsOneWidget);
+    expect(find.text('Delete'), findsNothing, reason: 'a refusal is removed by swiping the row, after confirmation');
   });
 }
 

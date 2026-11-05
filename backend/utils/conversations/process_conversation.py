@@ -1,3 +1,13 @@
+"""Synchronous enrichment coordinator for a completed conversation: structuring,
+summary, memories, action items, and app/goal triggers.
+
+A ProcessingTrigger (default CAPTURE_END) selects the PROCESSING_MODES row that
+fixes run-now, reprocess, first-open bypass and relevance policy, and expensive child
+work fans out to the named executor lanes instead of running inline. The managed
+vs custom-STT credit gates sit here so one path cannot bill the wrong budget
+(backend/utils/conversations/ARCHITECTURE.md).
+"""
+
 from utils import funded_processing
 from utils.sync import processing_hold
 from utils.conversations.summary_delivery import PROCESS_CONTEXT
@@ -80,12 +90,15 @@ from utils.conversations.minimum_derived import is_server_minimum
 from utils.llm.output_language import normalize_language, resolve_output_language
 from utils.conversations.deterministic_minimum import (
     build_deterministic_minimum_structured,
+    build_deferred_structured,
     deterministic_minimum_title,
 )
 from utils.conversations.duration import conversation_duration_seconds
 from utils.conversations.duplicate_capture import link_duplicate_captures
 from utils.conversations.sync_hold_completion import complete_explicit, defer_held_budget_denial
 from utils.conversations.merge_before_processing import before_notes, ConversationAbsorbed
+from utils.enrichment.admission import SyncConversationPersistenceFenced
+from utils.enrichment import early_abort
 from utils.conversations.processing_trigger import PROCESSING_MODES, ProcessingTrigger, is_recovery_trigger
 from utils.conversations.recovery import (
     RECOVERY_QUIET_MINIMUM_MAX_WORDS,
@@ -373,6 +386,7 @@ def _get_structured(
     open_loop_out: Optional[dict[str, Any]] = None,
     meeting_context_override: Optional[CalendarMeetingContext] = None,
     finalization_fence: tuple[str, int, int] | None = None,
+    revision_checkpoint: Optional[Callable[[str], None]] = None,
 ) -> Tuple[Structured, bool]:
     try:
         if is_recovery_trigger(trigger) and not recovery_transcript_decoded:
@@ -444,6 +458,10 @@ def _get_structured(
             conversation.source == ConversationSource.workflow
             or conversation.source == ConversationSource.external_integration
         ):
+            if relevance_observer is not None:
+                # Text integrations bypass transcript relevance intentionally;
+                # record that authorized policy instead of an empty verdict.
+                relevance_observer(RelevanceDecision('keep', 'policy', 'external_text_default', trigger))
             ext_conv = conversation
             started_at = cast(datetime, ext_conv.started_at)
             if ext_conv.text_source == ExternalIntegrationConversationSource.audio:
@@ -634,6 +652,9 @@ def _get_structured(
         if decision.discard:
             return Structured(emoji=random.choice(['🧠', '🎉'])), True
 
+        if revision_checkpoint is not None:
+            # A newer sync revision owns this conversation; stop before the notes agent (the dominant LLM call).
+            revision_checkpoint('pre_notes')
         before_notes(uid, main_conv, trigger, finalization_fence=finalization_fence)
 
         conv_started_at = cast(datetime, main_conv.started_at)
@@ -688,12 +709,15 @@ def _get_structured(
             )
         validate_structured_source_segment_ids(structured, transcript_segment_ids)
         return structured, False
-    except ConversationAbsorbed:
+    except (ConversationAbsorbed, SyncConversationPersistenceFenced):
         raise
     except Exception as e:
         if funded_processing.enabled(uid, 'batch') and _is_funded_budget_denial(e):
             raise
         raise conversation_processing_http_exception(e) from e
+
+
+get_structured = _get_structured
 
 
 def _get_conversation_obj(
@@ -2225,24 +2249,6 @@ def _update_personas_async(uid: str):  # type: ignore[reportUnusedFunction]  # r
         logger.info(f"[PERSONAS] Finished persona updates in background thread for uid={uid}")
 
 
-def _build_deferred_structured(
-    conversation: Union[Conversation, CreateConversation, ExternalIntegrationCreateConversation],
-) -> Structured:
-    """A cheap, no-LLM placeholder Structured for a lazily-deferred conversation. The title is
-    the first few words of the transcript so the conversation list stays usable until the user
-    opens it (which triggers the real enrichment). A non-empty title is required — an empty one
-    marks the conversation discarded in `_get_conversation_obj`."""
-    text = ''
-    for seg in list(getattr(conversation, 'transcript_segments', None) or []):
-        seg_text = (getattr(seg, 'text', '') or '').strip()
-        if seg_text:
-            text = seg_text
-            break
-    words = text.split()
-    title = ' '.join(words[:8]).strip() if words else ''
-    return Structured(title=title or 'Recording')
-
-
 def _attach_client_projection(conversation: Conversation, client_projection: ClientProcessing | None) -> None:
     """Stamp a validated display projection on the server-authored conversation.
 
@@ -2279,7 +2285,7 @@ def _store_budget_waiting(uid, conversation, *, client_projection=None):
     initial = _is_ingress_create(conversation)
     estimate = defer_estimate(conversation)
     # Model-free title only; preserve every transcript and external text field.
-    structured = _build_deferred_structured(conversation)
+    structured = build_deferred_structured(conversation)
     result = _get_conversation_obj(uid, structured, conversation, relevance_discarded=False)
     effective_projection = (
         client_projection
@@ -2325,7 +2331,7 @@ def _store_deferred_conversation(
             uid, getattr(conversation, 'started_at', None), getattr(conversation, 'finished_at', None)
         ),
     )
-    structured = _build_deferred_structured(conversation)
+    structured = build_deferred_structured(conversation)
     conversation = _get_conversation_obj(uid, structured, conversation)
     _attach_client_projection(conversation, client_projection)
     conversation.deferred = True
@@ -2786,6 +2792,7 @@ def process_conversation(
         nonlocal recovery_minimum_fallback
         recovery_minimum_fallback = True
 
+    revision_checkpoint = early_abort.checkpoint_for(uid, conversation)
     structured, discarded = _get_structured(
         uid,
         language_code,
@@ -2802,7 +2809,12 @@ def process_conversation(
         open_loop_out=open_loop_sink,
         meeting_context_override=meeting_context_override,
         finalization_fence=finalization_fence,
+        revision_checkpoint=revision_checkpoint,
     )
+    if revision_checkpoint is not None:
+        # The notes agent ran for minutes; a sync write that landed meanwhile makes the persist fence refuse
+        # this result anyway. Stop before the persist and the apps/memories LLM work it would trigger.
+        revision_checkpoint('pre_persist')
     if recovery_minimum_fallback:
         sys.stdout.write(
             json.dumps(
@@ -2895,6 +2907,9 @@ def process_conversation(
         # Rollback keeps generating normally; clear server-only checkpoints in
         # this existing write so they cannot describe replacement outputs.
         payload.update({NOTES_HASH: None, NOTES_OUTPUT_HASH: None, L1_HASH: None})
+    notes_identity = getattr(structured, '_notes_identity', None)
+    if notes_identity is not None and not conversation.discarded:
+        payload['_notes_identity'] = notes_identity
     if relevance is not None:
         # Server-side audit record, deliberately outside the client wire model.
         payload[RELEVANCE_DECISION_FIELD] = relevance.as_record()

@@ -394,7 +394,7 @@ void main() {
         home: OnTheWayPage(pendingWork: PendingWorkStore()),
       ),
     ));
-    expect(find.textContaining('catching up'), findsOneWidget);
+    expect(find.byKey(const Key('on_the_way_days')), findsOneWidget);
     final l = AppLocalizations.of(tester.element(find.byType(OnTheWayPage)));
 
     await tester.runAsync(() => coordinator.wake(WakeTrigger.startup));

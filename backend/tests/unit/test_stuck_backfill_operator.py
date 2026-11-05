@@ -138,6 +138,7 @@ def test_t2_preview_plan_pins_adjustable_100_dollar_default(operator):
     )
     assert preview['thresholds'] == {'seconds': 60, 'words': 100}
     assert preview['max_modeled_usd'] == 100.0
+    assert operator.parse_time(preview['cutoff']).isoformat() == preview['cutoff']
 
 
 def test_reconciled_actual_over_cap_disables_run(operator, runtime):
@@ -185,3 +186,121 @@ def test_completed_but_budget_deferred_row_is_not_operator_success(operator, run
         operator.wait_job(
             client, plan('substantive', 1), 'digest', item, {'job_id': 'job', 'dispatch_generation': 1}, 1
         )
+
+
+@pytest.mark.parametrize('suffix', ['Z', '+00:00'])
+def test_parse_time_accepts_plan_cutoff_without_losing_nanoseconds(operator, suffix):
+    stamp = operator.parse_time('2026-10-22T02:17:14.123456789' + suffix)
+    assert stamp.rfc3339() == '2026-10-22T02:17:14.123456789Z'
+
+
+@pytest.mark.parametrize('failures', [1, 3, 4])
+def test_noise_contention_backoff_and_journal(operator, runtime, monkeypatch, capsys, failures):
+    from google.api_core.exceptions import Aborted
+
+    client, args, ref, reserve = runtime
+    sleep = Mock()
+    monkeypatch.setattr(operator.time, 'sleep', sleep)
+
+    # Exercise the actual lifecycle/database close and SDK transactional wrapper.
+    # No writes are applied: this fake fails at the SDK commit boundary.
+    class ContendedTransaction:
+        _read_only = False
+        _max_attempts = 5
+        _id = None
+
+        def _clean_up(self):
+            self._id = None
+
+        def _begin(self, retry_id=None):
+            self._id = retry_id or b'fake-transaction'
+
+        def _commit(self):
+            raise Aborted('concurrent writer')
+
+        def _rollback(self):
+            pass
+
+    client.transaction = Mock(side_effect=lambda: ContendedTransaction())
+    monkeypatch.setattr(operator.db, '_close_txn', lambda *_: None)
+    real_close = operator.lifecycle.close_stuck_backfill_noise
+    attempts = 0
+
+    def close(*args, **kwargs):
+        nonlocal attempts
+        attempts += 1
+        if attempts <= failures:
+            return real_close(*args, **kwargs)
+        return 'closed'
+
+    monkeypatch.setattr(operator.lifecycle, 'close_stuck_backfill_noise', close)
+    cohort = plan('noise', 2)
+    operator.apply(client, cohort, 'digest', args)
+    receipt = json.loads((args.receipts_dir / 'batch-00001.private.json').read_text())
+    assert receipt['complete'] and receipt['actual_spend_usd'] == 0.0
+    assert reserve.call_count == 2  # retries never reserve another admission
+    assert [call.args[0] for call in sleep.call_args_list] == [5, 10, 15][: min(failures, 3)]
+    entry = receipt['entries'][0]
+    if failures == 4:
+        assert receipt['counts'] == {'reserved': 1, 'skipped_close_contention': 1}
+        assert entry['kind'] == 'skipped_close_contention'
+        assert 'closed_revision' not in entry  # restore must ignore this entry
+        assert entry['revision'] == cohort['rows'][0]['revision']
+    else:
+        assert receipt['counts'] == {'reserved': 1, 'noise': 1}
+        assert entry['closed_revision'] == 'closed'
+    ref.update.assert_not_called()  # contention does not disable the cohort
+    assert attempts == min(failures + 1, 4) + 1  # next row still runs
+    operator.apply(client, cohort, 'digest', args)
+    assert attempts == min(failures + 1, 4) + 1  # completed journal is resumable
+    output = capsys.readouterr().out
+    assert 'private-owner' not in output and 'private-conversation' not in output
+
+
+@pytest.mark.parametrize('error', [ValueError('bad cutoff'), RuntimeError('permission denied')])
+def test_non_contention_errors_stop_without_retry(operator, runtime, monkeypatch, error):
+    client, args, ref, _ = runtime
+    close = Mock(side_effect=error)
+    monkeypatch.setattr(operator.lifecycle, 'close_stuck_backfill_noise', close)
+    with pytest.raises(type(error), match=str(error)):
+        operator.apply(client, plan('noise', 1), 'digest', args)
+    assert close.call_count == 1
+    ref.update.assert_called_once_with({'enabled': False})
+    receipt = json.loads((args.receipts_dir / 'batch-00001.private.json').read_text())
+    assert not receipt['complete'] and receipt['entries'] == []
+
+
+def test_stop_json_includes_error_and_cause(operator, monkeypatch, capsys):
+    from google.api_core.exceptions import Aborted
+
+    def fail():
+        try:
+            raise Aborted('concurrent writer')
+        except Aborted as cause:
+            raise ValueError('Failed to commit transaction in 5 attempts.') from cause
+
+    monkeypatch.setattr(operator, 'main', fail)
+    with pytest.raises(SystemExit) as stopped:
+        operator.cli()
+    assert stopped.value.code == 1
+    details = json.loads(capsys.readouterr().err)
+    assert details['error_type'] == 'ValueError'
+    assert details['error_message'] == 'Failed to commit transaction in 5 attempts.'
+    assert details['cause_type'] == 'Aborted'
+    assert 'concurrent writer' in details['cause_message']
+
+
+def test_skip_is_durable_before_later_row_stops(operator, runtime, monkeypatch):
+    from google.api_core.exceptions import Aborted
+
+    client, args, ref, _ = runtime
+    args.batch_size = 2
+    close = Mock(side_effect=[Aborted('hot row')] * 4 + [ValueError('invalid next row')])
+    monkeypatch.setattr(operator.lifecycle, 'close_stuck_backfill_noise', close)
+    with pytest.raises(ValueError, match='invalid next row'):
+        operator.apply(client, plan('noise', 2), 'digest', args)
+    receipt = json.loads((args.receipts_dir / 'batch-00001.private.json').read_text())
+    assert not receipt['complete']
+    assert len(receipt['entries']) == 1
+    assert receipt['entries'][0]['kind'] == 'skipped_close_contention'
+    assert 'closed_revision' not in receipt['entries'][0]

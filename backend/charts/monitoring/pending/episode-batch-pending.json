@@ -1,0 +1,134 @@
+[
+  {
+    "uid": "omi-episode-batch-pending-overdue",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Batch timeliness",
+    "title": "Home observed batch members past their transcription deadline",
+    "condition": "E",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_episode_batch_pending_overdue_reads_total[15m]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A > 0",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "D",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "E",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "E"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "D",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "E",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-11-02T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "0s",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "summary": "Home read a batch member still lacking a transcript projection after its 2h deadline (target: 30m).",
+      "scope": "Read-observed counter, no member or user labels. Counts observations, not unique members; idle timelines are covered by the existing batch timeliness alarms.",
+      "user_impact": "Home shows Couldn't transcribe instead of an indefinitely pending or blank completed member.",
+      "verification": "Check batch timeliness metrics and finalization dead-letter counts; a later successful projection restores normal member metadata.",
+      "safe_next_action": "Use the batch recovery runbook; preserve retained audio. EPISODE_BATCH_CLOSE_ATTACH_ENABLED=false stops new early attachments only.",
+      "runbook": "backend/charts/monitoring/batch-projection/README.md",
+      "threshold": "$A > 0",
+      "evaluated_bad": "Synthetic: an unprojected member is read more than 2h after attachment.",
+      "evaluated_good": "Synthetic: pending member younger than 2h or a projected member."
+    },
+    "labels": {
+      "alert_identity": "omi-episode-batch-pending-overdue",
+      "component": "batch-pipeline",
+      "impact": "product",
+      "severity": "info",
+      "instatus_component": "speech-processing",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
+  }
+]
