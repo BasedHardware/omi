@@ -297,4 +297,24 @@ def test_arrivals_that_keep_every_page_full_cannot_starve_rows_older_than_the_se
         if {f'r{i:03d}' for i in range(100)} <= seen:
             break
     assert {f'r{i:03d}' for i in range(100)} <= seen  # rows older than the seed were reached
-    assert followups.wrap_at is None
+    assert followups.wrap_at == 1200.0  # re-armed for the next cycle
+
+
+def test_every_cycle_is_bounded_so_a_backed_off_row_is_revisited_under_a_full_tail(monkeypatch, clock):
+    rows = backlog(150)  # committed 1000..1149
+    now = [1150.0]
+    followups, _ = runner(rows, monkeypatch, fraction=0.0, now=None)
+    followups.projector.clock = lambda: now[0]
+    for _ in range(3):
+        followups.note('r010', 'blocked')  # 240 s: still skipped on the first two head passes
+    revisited, n = False, 0
+    while n < 40 and not revisited:
+        page = followups.discovered()
+        clock.now += 30.0  # 30 s per pass: the backoff expires after ~8 passes
+        revisited = 'r010' in page
+        # 150 new rows per pass keep every page full forever.
+        for i in range(150):
+            rows[f'n{n:02d}-{i:03d}'] = {'projection_state': 'persisted', 'committed_at': now[0] + i * 0.01}
+        now[0] += 10.0
+        n += 1
+    assert revisited

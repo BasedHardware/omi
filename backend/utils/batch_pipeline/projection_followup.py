@@ -92,9 +92,8 @@ class ProjectionFollowups:
         self.backoff_ceiling = projection_followup_backoff_seconds()
         self.backoff: dict[str, tuple[float, float]] = {}
         self.seeded = self.backoff_ceiling <= 0
-        # Commit time at seeding: the seeded pass wraps to the head once its
-        # cursor reaches rows committed after it, so new arrivals that keep
-        # every page full cannot starve the rows older than the seed.
+        # High-water mark of the current pass (commit time when it began): the
+        # pass wraps to the head once its cursor reaches later commits.
         self.wrap_at: float | None = None
 
     def seed_offset(self):
@@ -163,15 +162,29 @@ class ProjectionFollowups:
                     page = None
         if page is None:
             page = self.discovery.next(limit=100)
-        if self.wrap_at is not None:
-            after = self.discovery.after
-            if after is None:
-                self.wrap_at = None  # wrapped on its own
-            elif after[0] >= self.wrap_at:
-                # High-water mark: the seeded pass reached post-seed commits. Wrap now.
-                self.discovery.after = None
-                self.wrap_at = None
+        if self.backoff_ceiling > 0:
+            self.bound_cycle()
         return [sid for sid in page if not self.backed_off(sid)]
+
+    def bound_cycle(self):
+        """Every pass ends at the commits it started with, then wraps to the head.
+
+        Re-armed on every wrap: a tail that keeps every page full can neither
+        starve rows older than the seed nor leave a row it skipped in backoff
+        behind the cursor. Each cycle revisits every row committed before it began.
+        """
+        after = self.discovery.after
+        if after is None:
+            self.wrap_at = self.clock_now()  # wrapped on its own: next cycle's high-water
+        elif self.wrap_at is not None and after[0] >= self.wrap_at:
+            self.discovery.after = None
+            self.wrap_at = self.clock_now()
+
+    def clock_now(self) -> float | None:
+        try:
+            return float(self.projector.clock())
+        except Exception:
+            return None  # unbounded cycle, as before
 
     def candidates(self):
         if projection_followup_page_enabled():
