@@ -348,6 +348,9 @@ STATES = (
             'record_audio',
             'sealed',
             ('record_audio_closed',),
+            # Bounded stock coverage for the no-job subset only, not all sealed captures.
+            metric='omi_record_seal_nojob_count',
+            alert=Alert('omi-record-nojob-stock', 'agent'),
             note='No job: manual digest-gated nojob recovery is not an automatic exit; freshtitles fix, no PR yet',
         ),
         row(
