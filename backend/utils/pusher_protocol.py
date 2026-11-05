@@ -78,10 +78,25 @@ def append_bounded(
     *,
     byte_budget: Optional[ByteBudget] = None,
     size_of: Optional[Any] = None,
+    drop_on_full: bool = False,
 ) -> bool:
+    """Append to a bounded queue, dropping the lane's own oldest item when full.
+
+    ``drop_on_full=True`` selects the fire-and-forget degradation for
+    enrichment queues (audio-app triggers, developer audio webhooks): instead
+    of escalating to the custody ``AudioBackpressure`` raise, the queue evicts
+    its oldest item, releases that item's budget reservation and counts the
+    drop, then stores the new item. The return value stays ``True`` exactly
+    when an eviction happened, so the call site can log the drop. Custody
+    queues never pass the flag and keep the strict raise.
+    """
     dropped = len(queue) == queue.maxlen
     if dropped:
-        if audio_outbox_enabled() and (byte_budget is not None or 'audio' in queue_name or 'private' in queue_name):
+        if (
+            not drop_on_full
+            and audio_outbox_enabled()
+            and (byte_budget is not None or 'audio' in queue_name or 'private' in queue_name)
+        ):
             raise AudioBackpressure('pusher_queue', item)
         removed = queue.popleft()
         removed_size = size_of(removed) if size_of else 0
@@ -92,9 +107,19 @@ def append_bounded(
     return dropped
 
 
-def extend_bounded(buffer: bytearray, data: bytes, queue_name: str, byte_budget: ByteBudget) -> bool:
+def extend_bounded(
+    buffer: bytearray, data: bytes, queue_name: str, byte_budget: ByteBudget, *, drop_on_full: bool = False
+) -> bool:
+    """Extend a budgeted buffer, dropping the input when the budget is gone.
+
+    ``drop_on_full=True`` selects the fire-and-forget degradation for
+    enrichment buffers: a failed reservation drops this input (counted, buffer
+    untouched, no budget consumed) instead of escalating to the custody
+    ``AudioBackpressure`` raise. The caller owns the drop log. The capture
+    buffer never passes the flag — custody stays fail-closed.
+    """
     if not byte_budget.reserve(len(data)):
-        if audio_outbox_enabled():
+        if not drop_on_full and audio_outbox_enabled():
             raise AudioBackpressure('pusher_budget', data)
         record_queue_drop(queue_name, len(data))
         return False

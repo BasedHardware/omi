@@ -638,6 +638,12 @@ async def _run_websocket_util_trigger(
     private_cloud_queue: deque[PrivateCloudChunk] = deque(maxlen=PRIVATE_CLOUD_QUEUE_MAX_SIZE)
     audio_bytes_event = asyncio.Event()  # Signals when items are added for instant wake
     audio_budget = ByteBudget(BUFFERED_AUDIO_MAX_BYTES)
+    # The audio-app trigger and developer-webhook lanes are fire-and-forget
+    # enrichment: they price their bytes against their own budget so a stalled
+    # consumer can never consume the reservation the custody capture lane
+    # needs for its next window, and their saturation degrades by dropping
+    # the lane's own oldest item instead of ending the session.
+    trigger_budget = ByteBudget(BUFFERED_AUDIO_MAX_BYTES)
     durable_audio = audio_outbox_enabled()
     framed_audio = durable_audio and audio_timeline_v2 and sample_rate == 16000 and framed_pack(uid)
     # The bounded lane holds generation-pinned references, never the only PCM.
@@ -1363,7 +1369,7 @@ async def _run_websocket_util_trigger(
                 except Exception as e:
                     logger.error(f"Error processing audio bytes: {e} {uid}")
                 finally:
-                    audio_budget.release(len(item['data']))
+                    trigger_budget.release(len(item['data']))
 
     async def wind_down_on_pod_drain() -> None:
         """End this session when the pod starts draining.
@@ -1817,9 +1823,15 @@ async def _run_websocket_util_trigger(
                 # Only accumulate audio buffers if there's a consumer (app trigger or webhook)
                 # Without this guard, buffers grow ~16KB/s indefinitely for users with no audio apps
                 if has_audio_apps_enabled:
-                    extend_bounded(trigger_audiobuffer, audio_data, 'audio_app_buffer', audio_budget)
+                    if not extend_bounded(
+                        trigger_audiobuffer, audio_data, 'audio_app_buffer', trigger_budget, drop_on_full=True
+                    ):
+                        logger.warning(f"Dropped audio-app trigger bytes under trigger budget saturation {uid}")
                 if audio_bytes_webhook_delay_seconds is not None:
-                    extend_bounded(audiobuffer, audio_data, 'audio_webhook_buffer', audio_budget)
+                    if not extend_bounded(
+                        audiobuffer, audio_data, 'audio_webhook_buffer', trigger_budget, drop_on_full=True
+                    ):
+                        logger.warning(f"Dropped webhook trigger bytes under trigger budget saturation {uid}")
 
                 # Private cloud sync - queue chunks for background processing.
                 # Durable custody buffers the accepted stream the same way
@@ -1874,7 +1886,7 @@ async def _run_websocket_util_trigger(
                 ):
                     if len(audio_bytes_queue) >= AUDIO_BYTES_QUEUE_WARN_SIZE:
                         logger.warning(f"Warning: audio_bytes_queue size {len(audio_bytes_queue)} {uid}")
-                    append_bounded(
+                    if append_bounded(
                         audio_bytes_queue,
                         {
                             'type': 'app',
@@ -1882,9 +1894,11 @@ async def _run_websocket_util_trigger(
                             'data': trigger_audiobuffer.copy(),
                         },
                         'audio_bytes',
-                        byte_budget=audio_budget,
+                        byte_budget=trigger_budget,
                         size_of=lambda item: len(item['data']),
-                    )
+                        drop_on_full=True,
+                    ):
+                        logger.warning(f"Dropped oldest audio-app trigger item under queue saturation {uid}")
                     audio_bytes_event.set()  # Wake consumer immediately
                     trigger_audiobuffer = bytearray()
                 if (
@@ -1893,7 +1907,7 @@ async def _run_websocket_util_trigger(
                 ):
                     if len(audio_bytes_queue) >= AUDIO_BYTES_QUEUE_WARN_SIZE:
                         logger.warning(f"Warning: audio_bytes_queue size {len(audio_bytes_queue)} {uid}")
-                    append_bounded(
+                    if append_bounded(
                         audio_bytes_queue,
                         {
                             'type': 'webhook',
@@ -1901,9 +1915,11 @@ async def _run_websocket_util_trigger(
                             'data': audiobuffer.copy(),
                         },
                         'audio_bytes',
-                        byte_budget=audio_budget,
+                        byte_budget=trigger_budget,
                         size_of=lambda item: len(item['data']),
-                    )
+                        drop_on_full=True,
+                    ):
+                        logger.warning(f"Dropped oldest webhook trigger item under queue saturation {uid}")
                     audio_bytes_event.set()  # Wake consumer immediately
                     audiobuffer = bytearray()
                 return
