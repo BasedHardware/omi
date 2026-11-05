@@ -13,9 +13,14 @@ from __future__ import annotations
 import asyncio
 from collections import deque
 import logging
+import os
+import random
 import time
 from typing import TYPE_CHECKING
 
+from database.batch_pipeline_projection_claim import projection_claim_held
+from utils.batch_pipeline.metrics import PROJECTION_DRAIN_CLAIM_HELD, PROJECTION_DRAIN_CLAIM_BUSY_BACKOFFS
+from utils.batch_pipeline.scheduler import owner_key
 from utils.executors import run_blocking, start_background_task, sync_executor
 
 if TYPE_CHECKING:
@@ -28,6 +33,11 @@ MAX_OWNER_DRAINS = 8
 DRAIN_TURN_SECONDS = 120.0
 # One blocking step: bounds a sync-pool slot and the owner-claim hold.
 DRAIN_STEP_SECONDS = 15.0
+MAX_DELAYED_OWNERS = 1024
+
+
+def claim_aware_enabled() -> bool:
+    return os.environ.get('PROJECTION_DRAIN_CLAIM_AWARE', '').strip().lower() != 'off'
 
 
 class OwnerDrains:
@@ -37,10 +47,18 @@ class OwnerDrains:
         self.tasks: dict[str, asyncio.Task] = {}
         # Owners requested again while draining: one more turn after this one.
         self.again: set[str] = set()
+        self.delayed: dict[str, asyncio.TimerHandle] = {}
+        self.continuations: set[str] = set()
+        # Only active admissions/turns write this bounded stop state.
+        self.stops: dict[str, str] = {}
         self.closed = False
 
     def request(self, owners) -> None:
+        if self.closed:
+            return
         for owner in owners:
+            if owner in self.delayed:
+                continue
             if owner in self.tasks:
                 self.again.add(owner)
             elif owner not in self.queue:
@@ -51,22 +69,77 @@ class OwnerDrains:
         while self.queue and len(self.tasks) < MAX_OWNER_DRAINS and not self.closed:
             owner = self.queue.popleft()
             self.projector.draining.add(owner)
-            task = start_background_task(self.run(owner), name='batch_projection_owner_drain')
+            continuation = owner in self.continuations
+            self.continuations.discard(owner)
+            task = start_background_task(
+                self.admit_and_run(owner, continuation=continuation), name='batch_projection_owner_drain'
+            )
             self.tasks[owner] = task
             task.add_done_callback(lambda done, owner=owner: self.finished(owner, done))
+
+    async def admit_and_run(self, owner: str, *, continuation: bool = False) -> bool:
+        # Productive continuations retain FIFO progress without a new admission delay.
+        if (
+            not continuation
+            and claim_aware_enabled()
+            and await run_blocking(
+                sync_executor, projection_claim_held, self.projector.store.store.namespace, owner_key(owner)
+            )
+        ):
+            PROJECTION_DRAIN_CLAIM_HELD.inc()
+            self.stops[owner] = 'claim_held'
+            return False
+        return await self.run(owner)
+
+    def defer(self, owner: str) -> None:
+        if owner in self.delayed or self.closed:
+            return
+        if len(self.delayed) >= MAX_DELAYED_OWNERS:
+            # Return overflow intent to the next serving pass; no extra timers,
+            # immediate busy loop, or delay for productive FIFO continuations.
+            self.projector.request_drain(owner)
+            return
+
+        def retry():
+            self.delayed.pop(owner, None)
+            self.request([owner])
+
+        self.delayed[owner] = asyncio.get_running_loop().call_later(random.uniform(5.0, 15.0), retry)
+
+    def close(self) -> None:
+        self.closed = True
+        self.queue.clear()
+        self.again.clear()
+        self.stops.clear()
+        self.continuations.clear()
+        for handle in self.delayed.values():
+            handle.cancel()
+        self.delayed.clear()
+        for task in self.tasks.values():
+            task.cancel()
 
     def finished(self, owner: str, task: asyncio.Task) -> None:
         self.tasks.pop(owner, None)
         self.projector.draining.discard(owner)
         if task.cancelled():
             # Global background-task shutdown: do not start another turn.
-            self.closed = True
-            self.queue.clear()
-            self.again.clear()
+            self.close()
+            return
+        stop = self.stops.pop(owner, None)
+        if self.closed:
             return
         more = task.exception() is None and task.result() is True
-        if (more or owner in self.again) and owner not in self.queue:
-            self.queue.append(owner)  # FIFO: behind every owner already waiting
+        if more:
+            self.continuations.add(owner)
+            self.queue.append(owner)  # Productive turns always continue at the FIFO tail.
+        elif claim_aware_enabled() and stop == 'claim_held':
+            self.defer(owner)
+        elif owner in self.again and owner not in self.queue:
+            if claim_aware_enabled() and stop == 'claim_busy':
+                PROJECTION_DRAIN_CLAIM_BUSY_BACKOFFS.inc()
+                self.defer(owner)
+            else:
+                self.queue.append(owner)
         self.again.discard(owner)
         self.launch()
 
@@ -93,6 +166,8 @@ class OwnerDrains:
                 steps += 1
                 advanced += len(walk.advanced)
                 stop = walk.stop or 'end'
+                if claim_aware_enabled() and stop == 'claim_busy':
+                    self.stops[owner] = stop
                 if walk.followups:
                     # Owed rows join behind the next follow-up discovery page.
                     self.projector.owe_followups(walk.followups)
