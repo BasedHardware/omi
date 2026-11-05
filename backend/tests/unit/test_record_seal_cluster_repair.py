@@ -163,7 +163,10 @@ def test_native_and_dependency_diagnostics_never_reach_cli_output(tmp_path):
         'raise SystemExit(entry["main"]())\n'
     )
     result = subprocess.run(
-        [sys.executable, str(script)], capture_output=True, text=True, env={**os.environ, 'OMI_LOG_FORMAT': 'json'}
+        [sys.executable, str(script)],
+        capture_output=True,
+        text=True,
+        env={**os.environ, 'OMI_LOG_FORMAT': 'json', 'PUSHER_PROJECTION_DEBT_DURABLE_ENABLED': 'off'},
     )
     assert result.returncode == 0 and not result.stderr
     assert private not in result.stdout

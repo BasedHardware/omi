@@ -220,6 +220,7 @@ recordSealRepair:
   suspend: true
   runtimeEnabled: true
   jobsDiscovery: "on"
+  projectionDebtDurableEnabled: true
   mode: apply
   workers: 8
   rowSeconds: 270

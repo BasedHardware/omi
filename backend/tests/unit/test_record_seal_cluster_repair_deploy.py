@@ -200,3 +200,39 @@ def test_jobs_discovery_rollback_reaches_only_repair_cron():
     ][0]
     env = {entry['name']: entry.get('value') for entry in container['env']}
     assert env['RECORD_SEAL_REPAIR_JOBS'] == 'off'
+
+
+def test_projection_debt_kill_switch_reaches_cron_without_disabling_seal_repair():
+    for setting in ('true', 'false'):
+        docs = documents('--set', f'recordSealRepair.projectionDebtDurableEnabled={setting}')
+        pod = docs[('CronJob', 'record-seal-repair')]['spec']['jobTemplate']['spec']['template']['spec']
+        env = {e['name']: e.get('value') for e in pod['containers'][0]['env']}
+        assert env['PUSHER_PROJECTION_DEBT_DURABLE_ENABLED'] == setting
+        assert env['RECORD_SEAL_REPAIR_ENABLED'] == 'true'
+
+
+def test_pusher_flag_can_arrive_unshadowed_from_existing_runtime_configmap():
+    backend = Path(__file__).resolve().parents[2]
+    result = subprocess.run(
+        [
+            'helm',
+            'template',
+            'projection-debt-test',
+            str(backend / 'charts/pusher'),
+            '-f',
+            str(backend / 'charts/pusher/prod_omi_pusher_values.yaml'),
+            '--set-string',
+            'image.tag=synthetic',
+            '--set-string',
+            'image.digest=',
+            '--set-string',
+            'runtimeConfigMapName=projection-debt-test-config',
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    deployment = next(doc for doc in yaml.safe_load_all(result.stdout) if doc and doc['kind'] == 'Deployment')
+    container = deployment['spec']['template']['spec']['containers'][0]
+    assert {'configMapRef': {'name': 'projection-debt-test-config'}} in container['envFrom']
+    assert not any(item['name'] == 'PUSHER_PROJECTION_DEBT_DURABLE_ENABLED' for item in container.get('env', []))

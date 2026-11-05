@@ -21,7 +21,8 @@ from typing import Any, Awaitable, Callable, Deque, Dict, List, Optional, Tuple,
 from utils.pusher_audio_window import append_window_run, v2_overlap_conflict, AUDIO_TIMELINE_CONTINUITY_TOLERANCE
 from config.audio_custody import framed_pack
 from config.audio_outbox import enabled as audio_outbox_enabled
-from utils.pusher_audio_projection import PusherAudioProjection, projection_owner_gone
+from utils.pusher_audio_projection import PusherAudioProjection
+from utils.batch_pipeline.record_projection_rebuild import projection_owner_gone
 from utils.pusher_record_barrier import PusherRecordBarrier
 from utils.pusher_receive_metrics import SocketObservation, observe_work
 from utils.pusher_record_finish import (
@@ -545,6 +546,7 @@ async def _run_websocket_util_trigger(
                 logger.warning('Durable audio projection conflict; archive receipt retained')
             except InvalidArgument as exc:
                 audio_projection.inventory.pop(conv_id, None)
+                await audio_projection.defer_rebuild(conv_id)
                 # Custody and its generation-pinned manifest remain durable.
                 # Retrying a deterministic projection rejection cannot repair
                 # the payload, and a sticky custody failure would strand it.
@@ -629,6 +631,9 @@ async def _run_websocket_util_trigger(
             # counting toward the bounded retry map.
             projection_retries.pop(conv_id, None)
             audio_projection.inventory.pop(conv_id, None)
+            # The close-debt cache may be full. Persist terminal projection debt
+            # by its exact owner rather than relying on that bounded inventory.
+            await audio_projection.defer_rebuild(conv_id)
             await record_barrier.fail_recording(conv_id)
             record_failure('projection', reason='transient')
             record_fallback(
@@ -1822,6 +1827,7 @@ async def _run_websocket_util_trigger(
 
         all_to_cancel = [t for t in bg_main_tasks if not t.done()]
         await drain_tasks(all_to_cancel, timeout=5.0, label="pusher_cleanup", cancel=True)
+        await audio_projection.persist_pending()
 
         if application_failed and observation.reason == 'peer':
             observation.reason = 'application_error'
