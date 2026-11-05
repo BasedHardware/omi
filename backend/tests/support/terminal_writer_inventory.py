@@ -30,6 +30,25 @@ def terminal_writer_sites(source, module):
             parents[child] = node
             pending.append(child)
     definitions = {node.name: node for node in nodes if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))}
+    aliases = {
+        alias.asname: alias.name
+        for node in nodes
+        if isinstance(node, ast.ImportFrom)
+        for alias in node.names
+        if alias.asname
+    }
+    cas_aliases = {'claim_conversation_status'} | {
+        name for name, original in aliases.items() if original == 'claim_conversation_status'
+    }
+    cas_aliases.update(
+        target.id
+        for node in nodes
+        if isinstance(node, ast.Assign)
+        and isinstance(node.value, ast.Name)
+        and node.value.id == 'claim_conversation_status'
+        for target in node.targets
+        if isinstance(target, ast.Name)
+    )
     found = {machine: set() for machine in TERMINAL_STATUSES}
 
     def owner(node):
@@ -64,7 +83,7 @@ def terminal_writer_sites(source, module):
             if root is not tree:
                 result.update({name: list(values) for name, values in bindings(root).items()})
             for item in local_nodes(root):
-                if isinstance(item, (ast.Assign, ast.AnnAssign)):
+                if isinstance(item, (ast.Assign, ast.AnnAssign, ast.AugAssign)):
                     for target in item.targets if isinstance(item, ast.Assign) else [item.target]:
                         if isinstance(target, ast.Name):
                             result.setdefault(target.id, []).append(item.value)
@@ -101,6 +120,9 @@ def terminal_writer_sites(source, module):
                 for key, value in zip(node.keys, node.values):
                     if key is None:  # **payload preserves its top-level status.
                         visit(value)
+            elif isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
+                visit(node.left)
+                visit(node.right)
             elif isinstance(node, ast.DictComp):
                 if isinstance(node.value, ast.Subscript):
                     visit(node.value.value)
@@ -125,47 +147,68 @@ def terminal_writer_sites(source, module):
         return tuple(seen)
 
     @lru_cache(maxsize=None)
-    def machine_for(target):
-        seen = set()
-        evidence = []
-
-        def visit(node):
-            if node in seen:
-                return
-            seen.add(node)
-            if isinstance(node, ast.Name):
-                evidence.append(node.id)
-                for value in bindings(node).get(node.id, ()):
-                    visit(value)
-            elif isinstance(node, ast.Constant) and isinstance(node.value, str):
-                evidence.append(node.value)
-            elif isinstance(node, ast.Call):
-                evidence.append(ast.unparse(node.func))
-                for arg in node.args:
-                    visit(arg)
-                if isinstance(node.func, ast.Attribute):
-                    visit(node.func.value)
-                elif isinstance(node.func, ast.Name) and node.func.id in definitions:
-                    for item in local_nodes(definitions[node.func.id]):
-                        if isinstance(item, ast.Return) and item.value is not None:
-                            visit(item.value)
-            elif isinstance(node, (ast.List, ast.Tuple, ast.ListComp)):
-                for child in ast.iter_child_nodes(node):
-                    visit(child)
-            elif isinstance(node, ast.comprehension):
-                visit(node.iter)
-            elif isinstance(node, ast.Attribute):
-                evidence.append(node.attr)
-                visit(node.value)
-
-        visit(target)
-        evidence = ' '.join(evidence).lower()
-        if 'finalization_job' in evidence or (
-            'job_ref' in evidence and module == 'database/conversation_finalization_jobs.py'
-        ):
-            return 'finalization'
-        if 'conversation' in evidence:
-            return 'conversation'
+    def machine_for(target, seen=frozenset()):
+        if target in seen:
+            return None
+        seen = seen | {target}
+        if isinstance(target, ast.Name):
+            values = [
+                value
+                for value in bindings(target).get(target.id, ())
+                if not isinstance(value, (ast.Assign, ast.AnnAssign, ast.AugAssign))
+                and not (
+                    isinstance(value, ast.Call)
+                    and isinstance(value.func, ast.Attribute)
+                    and value.func.attr in {'update', 'setdefault'}
+                )
+            ]
+            if values:
+                return next((machine for value in values if (machine := machine_for(value, seen))), None)
+            if target.id == 'conversation_ref':
+                return 'conversation'
+            if target.id in {'job_ref', 'jobs_collection'} and module == 'database/conversation_finalization_jobs.py':
+                return 'finalization'
+        elif isinstance(target, ast.Call):
+            if isinstance(target.func, ast.Attribute):
+                if target.func.attr == 'collection' and target.args:
+                    collections = strings(target.args[0])
+                    if 'conversations' in collections or ast.unparse(target.args[0]) == 'conversations_collection':
+                        return 'conversation'
+                    if 'conversation_finalization_jobs' in collections:
+                        return 'finalization'
+                    # The nearest collection owns the document. A photos,
+                    # receipts or frame child is not a conversation document.
+                    return None
+                if target.func.attr == 'document':
+                    return machine_for(target.func.value, seen)
+                if 'conversation_ref' in target.func.attr:
+                    return 'conversation'
+            elif isinstance(target.func, ast.Name):
+                if target.func.id in definitions:
+                    return next(
+                        (
+                            machine
+                            for item in local_nodes(definitions[target.func.id])
+                            if isinstance(item, ast.Return)
+                            and item.value is not None
+                            and (machine := machine_for(item.value, seen))
+                        ),
+                        None,
+                    )
+                if 'conversation_ref' in target.func.id:
+                    return 'conversation'
+                if target.func.id == '_job_ref' and module == 'database/conversation_finalization_jobs.py':
+                    return 'finalization'
+                if target.func.id == 'zip':
+                    return next((machine for item in target.args if (machine := machine_for(item, seen))), None)
+        elif isinstance(target, ast.IfExp):
+            return machine_for(target.body, seen) or machine_for(target.orelse, seen)
+        elif isinstance(target, (ast.List, ast.Tuple)):
+            return next((machine for item in target.elts if (machine := machine_for(item, seen))), None)
+        elif isinstance(target, ast.ListComp):
+            return machine_for(target.elt, seen)
+        elif isinstance(target, ast.Subscript):
+            return machine_for(target.value, seen)
         return None
 
     @lru_cache(maxsize=None)
@@ -213,7 +256,7 @@ def terminal_writer_sites(source, module):
         if not isinstance(node, ast.Call):
             continue
         name = node.func.id if isinstance(node.func, ast.Name) else getattr(node.func, 'attr', '')
-        if name == 'claim_conversation_status':
+        if name in cas_aliases:
             claimed = next((k.value for k in node.keywords if k.arg == 'claimed_status'), None)
             if claimed is None and len(node.args) >= 4:
                 claimed = node.args[3]
@@ -234,8 +277,10 @@ def terminal_writer_sites(source, module):
         seam = name in seams or (
             name == 'run_blocking' and any(isinstance(arg, ast.Attribute) and arg.attr in seams for arg in node.args)
         )
-        if seam and node.args:
-            expanded = expand(node.args[-1])
+        if seam and (node.args or node.keywords):
+            expanded = set()
+            for argument in [*node.args, *(keyword.value for keyword in node.keywords)]:
+                expanded.update(expand(argument))
             for item in expanded:
                 if any(
                     'status' in strings(key) and strings(value) & TERMINAL_STATUSES['conversation']
@@ -272,6 +317,18 @@ def terminal_writer_sites(source, module):
         opaque = machine == 'conversation' and (
             any(isinstance(item, ast.Name) and item.id in {'conversation_data', 'claimed_status'} for item in expanded)
             or any('status' in strings(key) and not strings(value) for item in expanded for key, value in pairs(item))
+        )
+        # Full-document creates/sets and dynamic plan payloads can carry status
+        # from a different module. A dictionary comprehension with unknown keys
+        # can restore status too. Keep those seams conservative.
+        whole_document = name in {'set', 'create', 'add'} and isinstance(payload, (ast.Name, ast.Attribute, ast.Call))
+        opaque = opaque or (
+            machine == 'conversation'
+            and (
+                whole_document
+                or any(isinstance(item, ast.Attribute) and item.attr == 'payload' for item in expanded)
+                or any(isinstance(item, ast.DictComp) for item in expanded)
+            )
         )
         imported_patch = any(
             isinstance(item, ast.Call)
@@ -318,12 +375,15 @@ def scan_terminal_writers(backend):
                 continue
             path = Path(directory) / name
             source = path.read_text()
-            if not re.search(
+            conversation_storage = 'conversations' in source and re.search(r'\.(?:set|create|update|merge)\(', source)
+            if not conversation_storage and not re.search(
                 r'''(?:['"](?:completed|failed|dead_letter)['"]|ConversationStatus\.(?:completed|failed)|claim_conversation_status|conversation_data)''',
                 source,
             ):
                 continue
-            if not re.search(r'''(?:['"]status['"]|status\s*=|\.status\s*=|claim_conversation_status)''', source):
+            if not conversation_storage and not re.search(
+                r'''(?:['"]status['"]|status\s*=|\.status\s*=|claim_conversation_status)''', source
+            ):
                 continue
             for machine, sites in terminal_writer_sites(source, path.relative_to(backend).as_posix()).items():
                 found[machine].update(sites)

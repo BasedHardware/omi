@@ -3926,6 +3926,15 @@ FIELD_SITES = {
 # Unclassified sites remain visible pending the typed-outcome redesign.
 KNOWN_TERMINAL_WRITERS = {
     'conversation': {
+        ('database/conversation_finalization_jobs.py', '_apply_snapshot_bound_projection'): 'unclassified',
+        ('database/conversation_recorded_time.py', 'create_if_absent.create'): 'unclassified',
+        ('database/conversations.py', 'release_share_email_recipients'): 'unclassified',
+        ('database/review_transcript_changes.py', 'record_change.build.write'): 'unclassified',
+        ('database/review_transcript_changes.py', 'set_undone.build.write'): 'unclassified',
+        ('database/screen_frames.py', 'bump_conversation_screen_frames_revision'): 'unclassified',
+        ('database/screen_frames.py', 'mark_conversation_screen_frames_adjudicated'): 'unclassified',
+        ('database/stuck_backfill.py', '_restore_txn'): 'unclassified',
+        ('utils/sync/assignment.py', 'assign_in_transaction'): 'unclassified',
         (
             'database/conversation_finalization_jobs.py',
             '_abandon_byok_finalization_job_txn',

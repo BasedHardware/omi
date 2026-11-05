@@ -376,6 +376,10 @@ def test_terminal_status_writers_match_strict_owner_allowlist():
         "transaction.set(conversation_ref, dict(status=ConversationStatus.completed.value), merge=True)",
         "conversation_ref.merge({'status': ConversationStatus.failed})",
         "conversation_ref.update(status='completed')",
+        "conversations_db.update_conversation(uid, cid, update_data={'status': 'completed'})",
+        "payload = base | {'status': 'completed'}\n    conversation_ref.update(payload)",
+        "payload = {}\n    payload |= {'status': 'completed'}\n    conversation_ref.update(payload)",
+        "claim = claim_conversation_status\n    claim(uid, cid, expected, ConversationStatus.completed)",
         "conversations_db.update_conversation(uid, cid, {'status': 'completed'})",
         "payload = {'status': 'completed'}\n    conversation_ref.set(encode(uid, payload))",
         "payload = {'status': 'completed'}\n    alias = payload\n    transaction.update(conversation_ref, alias)",
@@ -441,9 +445,18 @@ def test_terminal_ratchet_is_selected_for_any_backend_source():
     from scripts.select_backend_unit_tests import tests_for_changed_paths
 
     path = 'tests/unit/test_lifecycle_state_table_writers.py'
-    for changed in ['backend/routers/surprise.py', 'backend/services/new_writer.py', 'backend/scripts/repair.py']:
+    for changed in [
+        'backend/routers/surprise.py',
+        'backend/services/new_writer.py',
+        'backend/scripts/repair.py',
+        'backend/utils/workers/consumer.py',
+    ]:
         selected, _ = tests_for_changed_paths([changed], [path])
         assert path in selected
+    available = [path, 'tests/unit/test_workers_consumer_contract.py', 'tests/unit/test_unrelated.py']
+    selected, _ = tests_for_changed_paths(['backend/utils/workers/consumer.py'], available)
+    assert path in selected
+    assert 'tests/unit/test_unrelated.py' not in selected
 
 
 def test_terminal_ratchet_excludes_test_trees_and_scans_new_production_files(tmp_path):
@@ -458,3 +471,36 @@ def test_terminal_ratchet_excludes_test_trees_and_scans_new_production_files(tmp
         'conversation': {('routers/surprise.py', 'surprise')},
         'finalization': set(),
     }
+
+
+@pytest.mark.parametrize('field', ['fanout_status', 'finalization_status'])
+def test_terminal_ratchet_requires_exact_status_key(field):
+    from tests.support.terminal_writer_inventory import terminal_writer_sites
+
+    source = f"def finish():\n    job_ref.update({{'{field}': 'completed'}})\n    conversation_ref.update({{'{field}': 'completed'}})\n"
+    assert terminal_writer_sites(source, 'database/conversation_finalization_jobs.py') == {
+        'conversation': set(),
+        'finalization': set(),
+    }
+
+
+@pytest.mark.parametrize(
+    'statement',
+    [
+        'tx.create(ref, data)',
+        'tx.set(ref, accepted.payload)',
+        "tx.update(ref, {**{key: saved['value'] for key, saved in prior.items()}})",
+    ],
+)
+def test_terminal_ratchet_inventories_opaque_conversation_payloads(statement):
+    from tests.support.terminal_writer_inventory import terminal_writer_sites
+
+    source = "def finish(data):\n    ref = db.collection('conversations').document(cid)\n    " + statement + '\n'
+    assert terminal_writer_sites(source, 'database/new.py')['conversation'] == {('database/new.py', 'finish')}
+
+
+def test_terminal_ratchet_does_not_confuse_conversation_children_with_the_parent():
+    from tests.support.terminal_writer_inventory import terminal_writer_sites
+
+    source = "def write():\n    ref = db.collection('conversations').document(cid).collection('photos').document(pid)\n    ref.set({'status': 'completed'})\n"
+    assert terminal_writer_sites(source, 'database/new.py') == {'conversation': set(), 'finalization': set()}
