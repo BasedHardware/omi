@@ -274,6 +274,10 @@ overlay:
         BATCH_FINAL_PASS_ENABLED:
           config_map: {name: prod-omi-backend-config, key: BATCH_FINAL_PASS_ENABLED}
           category: ops_kill
+        PUSHER_MAX_CLOSED_RECORD_DRAINS: {value: '64', category: rollout}
+        PUSHER_ABANDON_EVICTED_TOKENS: {value: 'on', category: ops_kill}
+        PUSHER_MAX_ABANDON_RECORD_DRAINS: {value: '4', category: rollout}
+        PUSHER_RECORD_STORAGE_WORKERS: {value: '4', category: rollout}
         HOSTED_LID_API_URL: {value: '', category: service_discovery}  # held empty until prod-omi-parakeet-lid passes acceptance (cpu-language-id.md step 4)
         # Graduation of the David-approved on-demand playback (DEC-BTR-004): build playback
         # artifacts on open/play/download only. Kill switch: set false.

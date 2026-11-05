@@ -84,7 +84,8 @@ loss has issued no audio or coverage custody ACK for that uncommitted window.
 After a record socket closes, inline finish waits up to 20 seconds for its
 projection. The existing socket drain gets another 30 seconds. If durable work
 still remains, pusher transfers that same worker to a tracked process owner
-(at most 32 closed drains per process). No projection is restarted or certified
+(`PUSHER_MAX_CLOSED_RECORD_DRAINS`, default 32, clamped 8..128; prod values 64).
+No projection is restarted or certified
 by the transfer. Queue accounting and close checks are per conversation;
 a later recording on the socket cannot keep the earlier close waiting for
 the whole socket queue to empty. Each pass consumes a bounded queue snapshot.
@@ -93,13 +94,51 @@ Transient close metadata errors keep retrying at the drain's one-second cadence,
 including after the old three-attempt limit. Permanent projection/tail failures
 retain their producer token. A `producer_pending` seal refusal means another
 producer remains; the successfully drained caller has already released its own
-token. At closed-drain capacity, cleanup cancels the worker as before and leaves
-the immutable receipts and token for repair. SIGTERM cancels tracked drain owners
-and their workers; no cancellation or timer releases a token. Repair still needs
-the existing pod-death proof after process exit.
+token. At closed-drain capacity, cleanup cancels the worker as before. With
+`PUSHER_ABANDON_EVICTED_TOKENS` on (anything except `off`), one of at most four tracked coordinators
+waits for the worker and every socket storage/barrier executor future, then marks
+each exact owned token `abandoned_at` and forgets its recovery hint. The immutable
+receipts and token remain for repair. Inherited pending clears from another socket are excluded because its writer settlement is not proven by this eviction. Admission refusal/failure retries with
+bounded exponential jitter while the process lives. Abandonment proves stoppage,
+never tail durability: repair still requires archive discovery, retained-tail
+validation and its privacy transaction gate. A reconnect's new token stays live,
+and normal clears cannot remove abandoned tokens. SIGTERM cancels tracked drain
+owners and workers; process death retains the existing pod-death proof fallback.
+Overflow coordination is independently bounded by
+`PUSHER_MAX_ABANDON_RECORD_DRAINS` (default/prod 4, clamped 0..16; invalid uses 4).
+At capacity, no new coordinator starts: `outcome=abandon_overflow` leaves the
+durable token fenced for the existing process/pod-death proof.
+Refusal removes its local recovery hint, preventing a later producer from
+certifying it while the evicted writer is still running. Slots return only when
+coordinators finish, including metadata retries.
+
+Durable custody and projection share the dedicated
+`PUSHER_RECORD_STORAGE_WORKERS` pool (default/prod 4, clamped 1..8; invalid uses 4).
+Its semaphore admits at most four outstanding submissions, with no extra
+admission queue; cancellation cannot recycle admission before the actual
+executor future settles. Projection waits holding receipts only, then hydrates,
+uploads and refreshes inside one admitted leaf. PCM-bearing custody fails
+saturation before ACK, leaving the client WAL responsible for retry. This avoids
+an unbounded executor queue even when overflow coordination is refused.
+
+Each admitted leaf has at most 20 MiB of canonical PCM, independent of the
+64 closed workers and four metadata coordinators: `4 * 20 MiB = 80 MiB`.
+Source read, sliced batch, legacy join, codec and encryption buffers can coexist;
+reserve a conservative eightfold planning allowance (`80 * 8 = 640 MiB`) for
+this work. This allowance is not a measured RSS bound. Live-socket ingress,
+other executors, Python overhead and SDK buffers are additional; the unchanged
+3.5 GiB pod limit still requires a canary p99 measurement. Do not scale the pool
+with the closed-worker cap. The bound covers detached recording work, not
+aggregate live ingress.
+
+Rollback uses abandonment `off` and closed cap `32`; keep storage admission
+bounded. Coordinator cap `0` also refuses all new abandonment coordination. Ship by pusher train with one
+canary at 64; review per-pod memory p99 against the unchanged 3.5 GiB limit,
+capacity/abandoned/abandon_overflow outcomes and repair `upload_pending` before expansion. Do not
+raise prod to 128 without a retained-PCM byte budget.
 
 `event=record_closed_finish` uses only closed outcomes: `retained`, `completed`,
-`failed`, `cancelled`, `capacity`. `completed` means the drain settled, not that
+`failed`, `cancelled`, `capacity`, `abandoned`, `abandon_overflow`. `completed` means the drain settled, not that
 every seal succeeded; projection failures and seal refusals retain their existing
 failure/refusal events. These events contain no recording or producer identity.
 
