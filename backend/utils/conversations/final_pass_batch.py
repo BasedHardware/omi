@@ -12,6 +12,8 @@ import threading
 import time
 import wave
 from collections import Counter as Counts
+from collections.abc import Iterator
+from dataclasses import dataclass
 from contextvars import ContextVar
 from contextlib import contextmanager
 from prometheus_client import Counter
@@ -49,10 +51,10 @@ from utils.sync.stage import current_stage
 logger = logging.getLogger(__name__)
 
 _SLOTS = threading.BoundedSemaphore(1)
-# Audio and metadata admission share a two-hour budget. Charge at least one
-# second per registered unit, including tiny fragments, to bound IO fan-out.
+# Two hours at a conservative 15 seconds/unit: 20x the producer's 300-second
+# target fragmentation. This is an admission limit, not a minimum unit duration.
 MAX_AUDIO_SECONDS = 7200
-MAX_UNITS = MAX_AUDIO_SECONDS
+MAX_UNITS = MAX_AUDIO_SECONDS // 15
 _RECORD_TERMINAL = ContextVar('batch_final_pass_terminal', default=True)
 _IDENTITY_ONLY = ContextVar('batch_final_pass_identity_only', default=False)
 UNIT_SKIPS = Counter(
@@ -163,32 +165,48 @@ class IncompleteCoverage(ValueError):
     pass
 
 
-def _assemble(units):
-    units = sorted(units, key=lambda unit: unit[0].capture_at)
-    origin, pcm, words, checks = units[0][0].capture_at, bytearray(), [], []
-    for item, audio, local_words, validate in units:
-        position = round((item.capture_at - origin) * 16000) * 2
+@dataclass
+class UnitStream:
+    origin: float
+    capacity: int
+    units: Iterator[tuple]
+    read_budget: ArtifactReadBudget
+
+
+def _assemble(stream):
+    stream.read_budget.timeout(60)
+    # Metadata is small and sorted before decoding. Only one decoded unit lives
+    # alongside this buffer; the returned read-only view never copies it.
+    pcm = memoryview(bytearray(stream.capacity))
+    used, words, checks = 0, [], []
+    for item, audio, local_words, validate in stream.units:
+        stream.read_budget.timeout(60)
+        position = round((item.capture_at - stream.origin) * 16000) * 2
         end = position + len(audio)
-        if end > MAX_AUDIO_SECONDS * 32000:
+        if end > len(pcm):
             raise OverflowError('audio timeline too long')
-        # Overlapping staged units must agree; different device captures cannot
-        # both claim one conversation timeline. Never replace either silently.
-        overlap = max(0, min(len(pcm) - position, len(audio)))
-        if overlap and pcm[position : position + overlap] != audio[:overlap]:
+        overlap = max(0, min(used - position, len(audio)))
+        source = memoryview(audio)
+        if overlap and pcm[position : position + overlap] != source[:overlap]:
             raise IncompleteCoverage('conflicting capture clocks')
-        pcm.extend(b'\0' * max(0, position - len(pcm)))
-        pcm.extend(audio[overlap:])
-        words.extend({**w, 'timestamp': [t + position / 32000 for t in w['timestamp']]} for w in local_words)
+        pcm[position + overlap : end] = source[overlap:]
+        used = max(used, end)
+        for word in local_words:
+            word['timestamp'][0] += position / 32000
+            word['timestamp'][1] += position / 32000
+        words.extend(local_words)
         checks.append(validate)
-    return bytes(pcm), words, checks
+        del source, audio, local_words
+    stream.read_budget.timeout(60)
+    return pcm[:used].toreadonly(), words, checks
 
 
 def _references(store, uid, conversation, units, read_budget, diagnostics):
     references, errors, shared, absent = {}, [], [], []
     for unit in units:
-        read_budget.timeout(60)
+        read_budget.timeout(3)
         try:
-            reference = load_reference(store, uid, unit, conversation.id)
+            reference = load_reference(store, uid, unit, conversation.id, read_budget=read_budget)
             if reference is None:
                 raise IncompleteCoverage('no_job')
             references[unit] = reference
@@ -200,6 +218,8 @@ def _references(store, uid, conversation, units, read_budget, diagnostics):
                 error_details(error)['reason'],
                 error_details(error)['location'],
             )
+            if isinstance(error, ArtifactReadLimit):
+                raise
             if isinstance(error, ReferenceUnavailable) and error.reason == 'no_job':
                 absent.append(error)
                 for segment in conversation.transcript_segments:
@@ -210,6 +230,7 @@ def _references(store, uid, conversation, units, read_budget, diagnostics):
             errors.append(error)
             if isinstance(error, ReferenceUnavailable) and error.outcome == 'skipped_shared_unit':
                 shared.append(error)
+    read_budget.timeout(3)
     if shared:
         UNIT_SKIPS.labels(reason='shared_unit').inc(len(shared))
         UNIT_SKIPS.labels(reason='blocked_by_shared_unit').inc(len(units) - len(shared) - len(absent))
@@ -226,19 +247,41 @@ def _references(store, uid, conversation, units, read_budget, diagnostics):
     return references
 
 
-def _units(uid, conversation, read_budget, *, diagnostics=None):
+def _units(uid, conversation, read_budget, *, deadline, diagnostics=None):
     diagnostics = {} if diagnostics is None else diagnostics
     units = sorted(
         {scope.removeprefix('final:batch:') for s in conversation.transcript_segments if (scope := batch_unit_scope(s))}
     )
+    # Bound candidate lookups, including unproved/no-job scopes, before any IO.
+    if len(units) > MAX_UNITS:
+        raise OverflowError('unit limit')
+    read_budget.timeout(3)
     store = FirestoreStore(f'batch_pipeline_{current_stage()}')
     artifacts = artifacts_for(store)
     references = _references(store, uid, conversation, units, read_budget, diagnostics)
-    if (
-        len(references) > MAX_UNITS
-        or sum(max(1, ref[0].duration_seconds) for ref in references.values()) > MAX_AUDIO_SECONDS
-    ):
+    if sum(max(1, ref[0].duration_seconds) for ref in references.values()) > MAX_AUDIO_SECONDS:
         raise OverflowError('audio too long')
+    if not references:
+        raise IncompleteCoverage('no units')
+    references = dict(sorted(references.items(), key=lambda pair: pair[1][0].capture_at))
+    origin = next(iter(references.values()))[0].capture_at
+    timeline_end = max(ref[0].capture_at - origin + ref[0].duration_seconds for ref in references.values())
+    # Include decode tolerance and capture-clock sample rounding; actual PCM
+    # still must fit the strict two-hour timeline in the assembler.
+    if timeline_end > MAX_AUDIO_SECONDS + 0.1 + 2 / 16000 + 1e-9:
+        raise OverflowError('audio timeline too long')
+    # Decoded durations may exceed rounded metadata by 0.1 seconds + one
+    # sample. Reserve that tolerance once; expose only actual decoded frames.
+    capacity = min(MAX_AUDIO_SECONDS * 32000, math.ceil((timeline_end + 0.1) * 16000 + 1) * 2)
+    return UnitStream(
+        origin,
+        capacity,
+        _decode_units(uid, conversation, references, store, artifacts, read_budget, deadline, diagnostics),
+        read_budget,
+    )
+
+
+def _decode_units(uid, conversation, references, store, artifacts, read_budget, deadline, diagnostics):
     total_bytes = 0
     for unit, reference in references.items():
         read_budget.timeout(60)
@@ -313,12 +356,20 @@ def _units(uid, conversation, read_budget, *, diagnostics=None):
 
             def validate(unit=unit, reference=reference):
                 try:
-                    return load_reference(store, uid, unit, conversation.id) == reference
+                    return (
+                        load_reference(
+                            store, uid, unit, conversation.id, read_budget=ArtifactReadBudget(deadline, 0, 0)
+                        )
+                        == reference
+                    )
                 except Exception as error:
                     error.failing_unit = unit
                     raise
 
             yield item, pcm, words, validate
+            # Release the suspended generator's references before fetching the
+            # next artifact. The assembler has already retained the word objects.
+            del pcm, payload, parts, words, local, mapped, output
         except Exception as error:
             error.failing_unit = unit
             details = error_details(error)
@@ -389,24 +440,18 @@ def run_batch_final_pass(uid, conversation, receipt, *, load_prints, apply, requ
 
 def _run(uid, conversation, receipt, load_prints, apply):
     deadline = time.monotonic() + 600
-    # Independent of playback/speaker-reader defaults: up to two hours of PCM
-    # Three objects per minimum charged second permits small registered units
-    # (result, staged audio, retained source). Byte/time limits remain independent.
+    # Independent byte/time bounds and three artifacts per admitted unit
+    # (result, staged audio, retained source). Reference RPCs share the deadline.
     read_budget = ArtifactReadBudget(min(deadline, time.monotonic() + 180), 320 * 1024 * 1024, 3 * MAX_UNITS)
     diagnostics = {}
-    units = list(_units(uid, conversation, read_budget, diagnostics=diagnostics))
-    read_budget.timeout(60)
-    if not units:
-        raise IncompleteCoverage('no units')
-    pcm, words, checks = _assemble(units)
+    stream = _units(uid, conversation, read_budget, deadline=deadline, diagnostics=diagnostics)
+    pcm, words, checks = _assemble(stream)
     stored = {s.id: s for s in conversation.transcript_segments}
-    words = [
-        {**w, 'speaker': (stored[w['segment_id']].speaker_id_scope, stored[w['segment_id']].speaker_id)}
-        for w in words
-        if w['segment_id'] in stored
-    ]
     covered = {s.id for s in conversation.transcript_segments if batch_unit_scope(s) and s.end > s.start}
-    words = [w for w in words if w['segment_id'] in covered]
+    words[:] = (w for w in words if w['segment_id'] in covered)
+    for word in words:
+        segment = stored[word['segment_id']]
+        word['speaker'] = (segment.speaker_id_scope, segment.speaker_id)
     missing = covered - {w['segment_id'] for w in words}
     coverage = {'required': len(covered), 'placed': len(covered - missing), 'unplaced': len(missing)}
     coverage_reasons = dict(Counts(diagnostics.get(sid, 'projection_segment_missing') for sid in missing))

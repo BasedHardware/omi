@@ -6,6 +6,7 @@ No dataset is bundled. Run as a module from backend; inputs are private files.
 from __future__ import annotations
 
 import argparse
+from dataclasses import replace
 from contextlib import contextmanager, ExitStack, redirect_stdout
 import io
 import json
@@ -246,13 +247,20 @@ def reproduce(uid, conversation, receipt, *, diarizer='stub', load_prints=None, 
     required = {s.id for s in conversation.transcript_segments if batch_unit_scope(s) and s.end > s.start}
 
     def units(*args, **kwargs):
-        for item, pcm, words, check in original_units(*args, **kwargs):
-            coverage.update(w['segment_id'] for w in words)
-            yield item, pcm, words, check
+        stream = original_units(*args, **kwargs)
+
+        def capture():
+            for item, pcm, words, check in stream.units:
+                coverage.update(w['segment_id'] for w in words)
+                yield item, pcm, words, check
+                del pcm, words
+
+        return replace(stream, units=capture())
 
     def assemble(*args):
+        nonlocal projection_words
         pcm, words, checks = original_assemble(*args)
-        projection_words[:] = words
+        projection_words = words
         return pcm, words, checks
 
     def capture_apply(*args, **kwargs):

@@ -107,10 +107,11 @@ def contention_tables(view: 'FirestoreTransaction') -> tuple[str, str]:
 
 
 class FirestoreTransaction:
-    def __init__(self, client: Any, namespace: str, transaction: Any):
+    def __init__(self, client: Any, namespace: str, transaction: Any, *, read_budget=None):
         self.client = client
         self.namespace = namespace
         self.transaction = transaction
+        self.read_budget = read_budget
         self.cache: dict[tuple[str, str], dict] = {}
         self.writes: dict[tuple[str, str], dict] = {}
         self.patches: dict[tuple[str, str], dict] = {}
@@ -137,7 +138,10 @@ class FirestoreTransaction:
     def get(self, table: str, key: str) -> dict:
         address = (table, key)
         if address not in self.cache:
-            snapshot = self._ref(table, key).get(transaction=self.transaction)
+            options = {}
+            if self.read_budget is not None:
+                options = dict(timeout=self.read_budget.timeout(10), retry=None)
+            snapshot = self._ref(table, key).get(transaction=self.transaction, **options)
             self.cache[address] = (snapshot.to_dict() or {}) if snapshot.exists else {}
         return deepcopy({**self.writes.get(address, self.cache[address]), **self.patches.get(address, {})})
 
@@ -179,8 +183,10 @@ class FirestoreTransaction:
         if lever_enabled('batch_privacy_memoize', uid):
             # FirestoreStore.run creates this view anew on every callback retry.
             if not hasattr(self, '_privacy_memo'):
-                self._privacy_memo = BatchPrivacyMemo(self.client, self.transaction)
+                self._privacy_memo = BatchPrivacyMemo(self.client, self.transaction, read_budget=self.read_budget)
             options['memo'] = self._privacy_memo
+        if self.read_budget is not None:
+            options['read_budget'] = self.read_budget
         return assert_batch_write_allowed(
             self.client,
             self.transaction,
@@ -247,6 +253,13 @@ class FirestoreStore:
     def client(self):
         self._require_stage()
         return self._client if self._client is not None else get_data_plane_firestore_client()
+
+    def read(self, body, *, read_budget):
+        # A single consistent read-only snapshot, with no SDK/contention retry
+        # loop or unbounded transaction lifecycle RPC outside the caller budget.
+        from database.batch_pipeline_reads import read_snapshot
+
+        return read_snapshot(self, body, read_budget)
 
     def run(self, body):
         client = self.client

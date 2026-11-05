@@ -104,7 +104,7 @@ def lane(monkeypatch):
     monkeypatch.setattr(stage, 'load_voiceprints_for_resolution', lambda *a, **kw: {'user': np.array([1.0, 0.0])})
     monkeypatch.setattr(batch, 'FirestoreStore', lambda *_: object())
 
-    def reference(store, uid, unit, cid):
+    def reference(store, uid, unit, cid, **kwargs):
         reads.append(unit)
         return items[unit], 'gs://fake/result#1', binding, ProjectionPolicy()
 
@@ -202,8 +202,8 @@ def test_staged_pcm_and_projection_ids_with_speech_spans(lane, sync_on, record_o
     # The reference loader closes over the original fixture binding, so replace it.
     original_reference = batch.load_reference
 
-    def reference(*args):
-        item, uri, _, _ = original_reference(*args)
+    def reference(*args, **kwargs):
+        item, uri, _, _ = original_reference(*args, **kwargs)
         return item, uri, lane.binding, ProjectionPolicy(authoritative_labels=True)
 
     with pytest.MonkeyPatch.context() as patch:
@@ -240,13 +240,13 @@ def test_staged_pcm_and_projection_ids_with_speech_spans(lane, sync_on, record_o
 def test_incomplete_coverage_keeps_all_resolver_labels(lane, monkeypatch, refusal):
     original = batch.load_reference
 
-    def reference(*args):
+    def reference(*args, **kwargs):
         if args[2] == 'unit-b':
             if refusal in ('missing', 'expired'):
                 return None
             if refusal == 'privacy':
                 raise BatchPrivacyBlocked('synthetic privacy fence')
-        return original(*args)
+        return original(*args, **kwargs)
 
     monkeypatch.setattr(batch, 'load_reference', reference)
     original_fetch = lane.artifacts.fetch_audio
@@ -307,7 +307,9 @@ def test_diarizer_error_falls_back_to_current_resolver(lane, monkeypatch):
 
 def test_revocation_during_gpu_does_not_publish(lane, monkeypatch):
     original = batch.load_reference
-    monkeypatch.setattr(batch, 'load_reference', lambda *args: None if lane.gpu else original(*args))
+    monkeypatch.setattr(
+        batch, 'load_reference', lambda *args, **kwargs: None if lane.gpu else original(*args, **kwargs)
+    )
     assert all(s.person_id == 'resolver-person' for s in resolve(lane))
     assert lane.gpu and lane.fallbacks
 
@@ -385,7 +387,11 @@ def reference_store(lane, monkeypatch):
             'uri': uri,
             'cleanup_after': datetime.now(timezone.utc) + timedelta(hours=1),
         }
-    return FirestoreStore(ns, firestore_client=client), client
+    store = FirestoreStore(ns, firestore_client=client)
+    # StrictFirestore models transaction ordering, not transport lifecycle.
+    # Deadline/transport options are exercised with the real SDK below.
+    monkeypatch.setattr(store, 'read', lambda body, **kw: store.run(body))
+    return store, client
 
 
 def test_reference_is_read_only_and_requires_bound_owner_and_conversation(reference_store):
@@ -744,7 +750,7 @@ def prod_shaped(monkeypatch):
         fallbacks=fallbacks,
     )
 
-    def reference(store, uid, unit, cid):
+    def reference(store, uid, unit, cid, **kwargs):
         reads.append(unit)
         return items[unit], 'gs://fake/result#1', lane.binding, ProjectionPolicy(authoritative_labels=True)
 
@@ -896,7 +902,7 @@ def test_multipart_unit_uses_original_part_ids_and_offsets(prod_shaped, monkeypa
     monkeypatch.setattr(
         batch,
         'load_reference',
-        lambda *a: (
+        lambda *a, **kw: (
             lane.items['unit-a'],
             'gs://fake/result#1',
             lane.binding,
@@ -1284,7 +1290,7 @@ def test_owner_lab_reproduce_does_not_change_default_registry(prod_shaped, monke
     monkeypatch.setattr(batch, 'record_fallback', record_fallback)
     monkeypatch.setattr(final, 'record_fallback', record_fallback)
     if outcome != 'success':
-        monkeypatch.setattr(batch, 'load_reference', lambda *a: None)
+        monkeypatch.setattr(batch, 'load_reference', lambda *a, **kw: None)
 
     def snapshot():
         return {
@@ -1346,7 +1352,7 @@ def test_shared_units_count_one_conversation_and_each_omitted_unit(prod_shaped, 
         segment.id, segment.speaker_id_scope = unit + '-segment', 'final:batch:' + unit
         lane.conversation.transcript_segments.append(segment)
 
-    def reference(store, uid, unit, cid):
+    def reference(store, uid, unit, cid, **kwargs):
         if unit != 'unit-c':
             raise references.ReferenceUnavailable('skipped_shared_unit')
         return (

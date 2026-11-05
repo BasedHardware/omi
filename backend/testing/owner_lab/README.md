@@ -252,14 +252,34 @@ unproved scopes: they count as omitted segments, never as registered units or
 audio to fetch. If no registered unit remains, the result is a specific
 coverage failure. Expired, merged and shared-unit dispositions are retained.
 
-There is no 128-unit conversation limit. Partial retained recordings can produce
-many short units (`missing_units` splits source holes; 300 seconds is a maximum,
-not a minimum). The two-hour budget charges `max(1, duration_seconds)` per
-registered unit, bounding both aggregate audio and fan-out to at most 7,200
-units. The artifact-object ceiling is three times that charge ceiling (result,
-staged audio and retained source); the independent 320 MiB, 180-second read and
-two-hour assembled-timeline limits still apply. This is an explicit minimum
-resource charge, not an assertion that every stored unit lasts a second.
+There is no 128-unit conversation limit. Admission permits at most 480 distinct
+candidate batch-unit scopes, checked before any reference or artifact read.
+This is two hours at an average 15 seconds per unit, allowing 20 times the
+fragmentation of the producer's 300-second target. It is a resource admission
+bound, not a minimum duration assertion: smaller fragments remain valid inside
+it. Non-batch lanes do not consume the cap; unknown/no-job candidate IDs do,
+because proving their absence itself costs a lookup. Excess candidates report
+`failed_too_long` with reason `unit limit` before IO. Registered audio still
+charges `max(1, duration_seconds)` against two hours; the artifact-object ceiling
+is 1,440 (three per admitted unit). Independent 320 MiB, 180-second read and
+two-hour assembled-timeline limits remain.
+
+Reference snapshots are read-only and single-attempt. Begin, document reads
+(including privacy/memo reads), and cleanup use the remaining monotonic budget;
+each read RPC has a 10-second ceiling with SDK retries disabled. Cleanup uses
+at most one remaining second; an expired read-only snapshot expires server-side
+without holding a worker. Reference budget failures stop lookup immediately.
+Post-diarization revalidation uses the remaining overall 600-second deadline.
+
+Reconstruction sorts only metadata, preallocates one PCM timeline (including
+existing decode-rounding tolerance), and consumes one unit at a time. It drops
+consumed unit PCM and adjusts word clocks/labels on the same dictionaries.
+The diarizer receives a read-only memoryview trimmed to the decoded timeline;
+HTTP uploads use 64 KiB byte chunks and restart that iterator on retry.
+The maximum-size synthetic stress test covers 480 units, two hours of canonical
+16 kHz PCM16 and 21,600 words, with a 288 MiB tracemalloc ceiling for the real
+reconstruction/assembly/final-pass path. That bound excludes process baseline,
+real VAD/model working memory and external transports; it is not a pod-RSS cap.
 
 `bounded_projection_words` preserves all validated words; EOF tolerance can turn
 a word into a point, which provides no voice evidence. Point-only stored
@@ -273,3 +293,5 @@ conversation speaker resolution unavailable. Shared units still skip the
 whole pass before reading audio. Complete success rate excludes partial passes.
 
 Dated local validation: [2026-11-04 speaker final pass](validation/2026-11-04-speaker-final-pass.md).
+
+Resource validation: [2026-11-05 bounds and peak memory](validation/2026-11-05-speaker-final-pass-resources.md).

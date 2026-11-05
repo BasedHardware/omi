@@ -12,7 +12,19 @@ from utils.stt.speaker_match import mean_embedding
 
 
 class DiarizerBackend(Protocol):
-    def diarize(self, pcm: bytes, *, deadline: float, segments, vectors, resolution) -> DiarizationResult: ...
+    def diarize(
+        self, pcm: bytes | bytearray | memoryview, *, deadline: float, segments, vectors, resolution
+    ) -> DiarizationResult: ...
+
+
+def _pcm_chunks(pcm, deadline):
+    view = memoryview(pcm)
+    for offset in range(0, len(view), 65536):
+        if time.monotonic() >= deadline:
+            raise TimeoutError
+        yield bytes(view[offset : offset + 65536])
+    if time.monotonic() >= deadline:
+        raise TimeoutError
 
 
 class HttpDiarizer:
@@ -25,6 +37,10 @@ class HttpDiarizer:
         url = os.getenv(variable, '').rstrip('/')
         if not url:
             raise ValueError('diarizer_unconfigured')
+        buffered = isinstance(pcm, (memoryview, bytearray))
+        headers = {'Content-Type': 'audio/pcm'}
+        if buffered:
+            headers['Content-Length'] = str(len(pcm))
         attempts_left = 2
         while True:
             remaining = deadline - time.monotonic()
@@ -35,8 +51,10 @@ class HttpDiarizer:
             try:
                 response = httpx.post(
                     url + '/v2/diarization',
-                    content=pcm,
-                    headers={'Content-Type': 'audio/pcm'},
+                    # httpx treats a naked memoryview as an iterable of ints.
+                    # Stream bounded byte chunks, restarting on each retry.
+                    content=_pcm_chunks(pcm, deadline) if buffered else pcm,
+                    headers=headers,
                     timeout=httpx.Timeout(remaining, connect=min(5, remaining)),
                 )
                 response.raise_for_status()

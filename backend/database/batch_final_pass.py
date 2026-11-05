@@ -19,7 +19,7 @@ class ReferenceUnavailable(ValueError):
         super().__init__(self.reason)
 
 
-def load_reference(store, uid, unit, conversation_id):
+def load_reference(store, uid, unit, conversation_id, *, read_budget=None):
     def read(tx):
         def unavailable(reason):
             raise ReferenceUnavailable('failed_incomplete_coverage', reason)
@@ -85,4 +85,4 @@ def load_reference(store, uid, unit, conversation_id):
             ProjectionPolicy.from_dict((job.get('policy_parts') or {}).get('projection', {})),
         )
 
-    return store.run(read)
+    return store.run(read) if read_budget is None else store.read(read, read_budget=read_budget)
