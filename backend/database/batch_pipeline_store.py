@@ -20,7 +20,7 @@ from config.firestore_read_levers import lever_enabled
 from database._client import get_data_plane_firestore_client
 from database.batch_pipeline_privacy import assert_batch_write_allowed, BatchPrivacyMemo
 from database.batch_pipeline_recovery import quarantine_fenced
-from database.firestore_transaction_retry import run_with_transaction_contention_retry
+from database.firestore_transaction_retry import FirestoreContentionExhausted, run_with_transaction_contention_retry
 from database.batch_pipeline_transaction_labels import (
     current_operation,
     pull_operation as pull_operation,
@@ -66,6 +66,15 @@ class Store(Protocol):
     def longest_ready_pending(self, owner_key: str) -> dict | None: ...
     def fresh_pending(self, owner_key: str, limit: int) -> list[dict]: ...
     def held_merge_owners(self, limit: int, *, after: str | None = None) -> list[tuple[str, str | None]]: ...
+
+
+def contention_tables(view: 'FirestoreTransaction') -> tuple[str, str]:
+    """Sorted table names a transaction attempt read and wrote. Table names only, never keys."""
+    read = sorted({table for table, _ in view.cache})
+    wrote = sorted({table for table, _ in (*view.writes, *view.patches)})
+    if view.external:
+        wrote.append('external')
+    return ','.join(read) or 'none', ','.join(wrote) or 'none'
 
 
 class FirestoreTransaction:
@@ -209,10 +218,12 @@ class FirestoreStore:
 
     def run(self, body):
         client = self.client
+        last_view: list[FirestoreTransaction] = []
 
         @firestore.transactional
         def commit(transaction):
             view = FirestoreTransaction(client, self.namespace, transaction)
+            last_view[:] = [view]
             result = body(view)
             view.flush()
             return result
@@ -221,11 +232,26 @@ class FirestoreStore:
             return commit(client.transaction())
         # The outer budget owns fresh transaction IDs and all retries. The
         # SDK's same-ID commit loop would multiply the contention window.
-        return run_with_transaction_contention_retry(
-            lambda: client.transaction(max_attempts=1),
-            commit,
-            operation_name=current_operation(),
-        )
+        operation = current_operation()
+        try:
+            return run_with_transaction_contention_retry(
+                lambda: client.transaction(max_attempts=1),
+                commit,
+                operation_name=operation,
+            )
+        except FirestoreContentionExhausted as error:
+            # Name the document kinds the last attempt read and wrote, never keys,
+            # so the contended document is visible without exposing owners.
+            read, wrote = contention_tables(last_view[0]) if last_view else ('none', 'none')
+            error.store_tables = f'read={read} wrote={wrote}'  # type: ignore[attr-defined]
+            logger.warning(
+                'event=batch_store_contention operation=%s reason=%s read_tables=%s write_tables=%s',
+                operation,
+                error.reason,
+                read,
+                wrote,
+            )
+            raise
 
     def due(self, state: str, now: float, limit: int = 100) -> list[str]:
         return due(self.client, self.namespace, state, now, limit)

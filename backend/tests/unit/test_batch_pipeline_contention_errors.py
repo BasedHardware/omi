@@ -234,3 +234,49 @@ def test_batch_store_kill_switch_restores_single_legacy_attempt(monkeypatch):
     assert isinstance(caught.value.__cause__, Aborted)
     client.transaction.assert_called_once_with()
     assert transaction.commits == 5
+
+
+def test_exhausted_batch_store_contention_names_the_tables_never_the_keys(monkeypatch, caplog):
+    # The admission drain logged only "FirestoreContentionExhausted": nothing said which
+    # shared document (owner scheduler row, conversation, ledger) kept aborting the commit.
+    monkeypatch.delenv('BATCH_PIPELINE_CONTENTION_RETRY_ENABLED', raising=False)
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    actual = batch_pipeline_store.run_with_transaction_contention_retry
+    monkeypatch.setattr(
+        batch_pipeline_store,
+        'run_with_transaction_contention_retry',
+        lambda *args, **kwargs: actual(*args, **kwargs, sleep=lambda _: None),
+    )
+    monkeypatch.setattr(batch_pipeline_store.FirestoreTransaction, 'flush', lambda self: None)
+
+    def new_transaction(max_attempts=5):
+        transaction = AlwaysAbortedTransaction()
+        transaction._max_attempts = max_attempts
+        return transaction
+
+    client = Mock()
+    client.transaction.side_effect = new_transaction
+    store = batch_pipeline_store.FirestoreStore('batch_pipeline_dev', firestore_client=client)
+
+    def body(tx):
+        tx.cache[('owners', 'owner-secret')] = {}
+        tx.cache[('conversations', 'uid-secret/conv-secret')] = {}
+        tx.writes[('jobs', 'segment-secret')] = {}
+        tx.patches[('conversations', 'uid-secret/conv-secret')] = {}
+        return True
+
+    with caplog.at_level('WARNING', logger=batch_pipeline_store.logger.name):
+        with pytest.raises(firestore_transaction_retry.FirestoreContentionExhausted) as caught:
+            store.run(body)
+
+    assert caught.value.store_tables == 'read=conversations,owners wrote=conversations,jobs'
+    line = next(r.getMessage() for r in caplog.records if 'event=batch_store_contention' in r.getMessage())
+    assert 'read_tables=conversations,owners' in line and 'write_tables=conversations,jobs' in line
+    assert 'secret' not in line and 'secret' not in caught.value.store_tables
+
+
+def test_contention_tables_reports_none_and_external_writes():
+    view = batch_pipeline_store.FirestoreTransaction(Mock(), 'batch_pipeline_dev', Mock())
+    assert batch_pipeline_store.contention_tables(view) == ('none', 'none')
+    view.external[object()] = (object(), {})
+    assert batch_pipeline_store.contention_tables(view) == ('none', 'external')
