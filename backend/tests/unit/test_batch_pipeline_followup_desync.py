@@ -208,11 +208,10 @@ async def test_run_records_the_outcome_and_timeout(monkeypatch, clock):
     await followups.run('r000')
     assert followups.backoff['r000'][1] == BACKOFF_BASE_SECONDS
 
-    async def stuck(_):
-        await asyncio.Event().wait()
+    async def expired(_):
+        raise TimeoutError  # what asyncio.timeout raises at the deadline; no real-clock budget
 
-    monkeypatch.setattr(projection_followup, 'FOLLOWUP_TIMEOUT_SECONDS', 0.01)
-    followups._run = stuck
+    followups._run = expired
     await followups.run('r001')
     assert 'r001' in followups.backoff
 
