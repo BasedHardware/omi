@@ -1,6 +1,7 @@
 """Presentation-only replacement of transcript-echo minimum titles."""
 
 from datetime import datetime
+from collections.abc import Mapping
 from typing import Any, Callable, Optional
 
 from config.episodes import home_neutral_minimum_titles_enabled
@@ -22,7 +23,7 @@ def apply_user_title(row: dict[str, Any], user_title: str | None) -> None:
 SUMMARY_DEBT_FIELDS = ('summary_due_at', 'summary_completed_at', 'summary_output_present')
 
 
-def summary_owed(row: dict[str, Any]) -> bool:
+def summary_owed(row: Mapping[str, Any]) -> bool:
     """The pipeline still owes this row a summary, so its stored title is provisional."""
     return (
         row.get('summary_due_at') is not None
