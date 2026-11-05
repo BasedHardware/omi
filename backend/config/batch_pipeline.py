@@ -623,6 +623,40 @@ def _pump_bound(raw: str, default: int, maximum: int, minimum: int = 1) -> int:
         return default
 
 
+def serving_sweep_page_rows() -> int:
+    """Bound projection discovery pages; unset restores the existing 100 rows."""
+    return _pump_bound(os.getenv('BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS', '100'), 100, 200, 50)
+
+
+_serving_budget_warned = False
+_SERVING_BUDGET_WARNING_LOCK = threading.Lock()
+
+
+def _serving_effective_tick(page_rows: int, requested_tick: int) -> float:
+    """Never reduce discovery pages to meet the 20 rows/s supervisor budget."""
+    global _serving_budget_warned
+    budget_tick = page_rows / 20
+    effective_tick = max(10, requested_tick, budget_tick)
+    if requested_tick < budget_tick:
+        with _SERVING_BUDGET_WARNING_LOCK:
+            if not _serving_budget_warned:
+                _serving_budget_warned = True
+                logging.getLogger(__name__).warning(
+                    'event=batch_serving_config action=read_budget requested_tick_seconds=%d '
+                    'effective_page_rows=%d effective_tick_seconds=%g max_rows_per_second=20',
+                    requested_tick,
+                    page_rows,
+                    effective_tick,
+                )
+    return effective_tick
+
+
+def serving_tick_seconds() -> float:
+    """Clamp sleep to 10-60 s and enforce the combined serving discovery budget."""
+    requested_tick = _pump_bound(os.getenv('BATCH_PIPELINE_SERVING_TICK_SECONDS', '20'), 20, 60, 0)
+    return _serving_effective_tick(serving_sweep_page_rows(), requested_tick)
+
+
 def projection_pump_enabled() -> bool:
     """Process-role opt-in: only ``true`` starts the otherwise inert pump."""
     from config.policy import kill_switch

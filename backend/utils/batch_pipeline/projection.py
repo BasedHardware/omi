@@ -26,6 +26,7 @@ from config.batch_pipeline import (
     projection_prefetch_depth,
     projection_hold_recovery_enabled,
     sweep_owner_chain_enabled,
+    serving_sweep_page_rows,
 )
 from database.batch_pipeline_projection import ProjectionBlocked, ProjectionReplay, ProjectionStore
 from database.batch_pipeline_projection_protocol import ProjectionGenerationAmbiguous
@@ -1511,14 +1512,15 @@ class Projector:
         followups = list(dict.fromkeys(sid for group in ordered + list(groups.values()) for sid in group))
         return Walk(followups, advanced, more, stop)
 
-    def sweep(self, limit: int = 100) -> dict[str, int]:
+    def sweep(self, limit: int | None = None) -> dict[str, int]:
         """Bounded durable-log recovery; no in-memory callback is an outbox."""
         from database.batch_pipeline_privacy import BatchPrivacyBlocked
 
         counts = {'completed': 0, 'waiting': 0, 'blocked': 0, 'error': 0}
         contention = False
         self.has_async_followups = False
-        size = max(1, min(limit, 100))
+        page_rows = serving_sweep_page_rows()
+        size = page_rows if limit is None else max(1, min(limit, page_rows))
         pending_page = projection_pending_page_enabled()
         chain = sweep_owner_chain_enabled()
         # The owner drain walks chains continuously; the sweep only discovers
