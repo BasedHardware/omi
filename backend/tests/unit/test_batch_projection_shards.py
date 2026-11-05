@@ -1,0 +1,671 @@
+"""Owner-hash projection shards, the shard pump and the blocked-head deadline.
+
+Leases and wakes run against fakeredis (real Lua). The pump and serving
+wiring use small fakes; chain walks use the owner-chain ``ResultLog`` model.
+"""
+
+import asyncio
+from collections import Counter
+from unittest.mock import Mock
+
+import fakeredis
+import pytest
+from google.api_core import exceptions as api_exceptions  # noqa: F401 (parity with chain tests)
+
+from database.batch_pipeline_projection import ProjectionBlocked
+from tests.unit.test_batch_pipeline_owner_chain_projection import BURST, ResultLog, chain
+from utils.batch_pipeline import projection, projection_shard_pump, projection_shards
+from utils.batch_pipeline.projection_shard_pump import ShardPump
+from utils.batch_pipeline.projection_shards import BACKLOG, FRESH, ProjectionShards, Wake, share, shard_of
+from utils.batch_pipeline.scheduler import owner_key
+from utils.batch_pipeline.serving import Serving
+
+ENV = (
+    'BATCH_PROJECTION_SHARDS_ENABLED',
+    'BATCH_PROJECTION_BLOCKED_HEAD_DEADLINE_ENABLED',
+    'BATCH_PROJECTION_HEAD_DEADLINE_SECONDS',
+    'BATCH_PROJECTION_BACKLOG_RESERVE',
+    'BATCH_PIPELINE_MAX_OWNER_DRAINS',
+)
+
+
+@pytest.fixture(autouse=True)
+def clean_env(monkeypatch):
+    for name in ENV:
+        monkeypatch.delenv(name, raising=False)
+
+
+@pytest.fixture
+def server():
+    return fakeredis.FakeServer()
+
+
+def make(server, *, count=8, member=True, clock=lambda: 1000.0):
+    client = fakeredis.FakeRedis(server=server)
+    return ProjectionShards('ns', count=count, member=member, client=lambda: client, clock=clock)
+
+
+def owner_in_shard(shard: int, count: int, prefix='owner') -> str:
+    for n in range(10_000):
+        owner = f'{prefix}-{n}'
+        if shard_of(owner_key(owner), count) == shard:
+            return owner
+    raise AssertionError('no owner for shard')
+
+
+# --- leases -----------------------------------------------------------------
+
+
+def test_shard_of_is_stable_and_bounded():
+    keys = [owner_key(f'u{n}') for n in range(500)]
+    shards = [shard_of(key, 64) for key in keys]
+    assert all(0 <= s < 64 for s in shards)
+    assert shards == [shard_of(key, 64) for key in keys]
+    assert len(set(shards)) > 50  # spreads
+    assert share(64, 35) == 2 and share(64, 0) == 64 and share(8, 3) == 3
+
+
+def test_members_cover_every_shard_exactly_once_and_balance(server):
+    members = [make(server, count=16) for _ in range(5)]
+    for _ in range(3):
+        for member in members:
+            assert member.refresh()
+    held = [s for member in members for s in member.held]
+    assert sorted(held) == list(range(16))
+    assert max(len(m.held) for m in members) <= share(16, 5)
+    assert all(m.unheld == set() for m in members[-1:])
+    assert all(m.active for m in members)
+
+
+def test_a_released_member_hands_its_shards_to_the_others(server):
+    members = [make(server, count=12) for _ in range(3)]
+    for _ in range(2):
+        for member in members:
+            member.refresh()
+    gone = members.pop()
+    released = set(gone.held)
+    assert released
+    gone.release()
+    assert not gone.active and gone.held == set()
+    for _ in range(3):
+        for member in members:
+            member.refresh()
+    held = [s for member in members for s in member.held]
+    assert sorted(held) == list(range(12))
+
+
+def test_a_joining_member_takes_a_share_without_gaps(server):
+    first = make(server, count=8)
+    first.refresh()
+    assert first.held == set(range(8))
+    second = make(server, count=8)
+    for _ in range(6):
+        second.refresh()
+        first.refresh()
+        assert len(first.held | second.held) + len(first.unheld) >= 8
+    assert sorted(first.held | second.held) == list(range(8))
+    assert not first.held & second.held
+    assert len(second.held) >= 3
+
+
+def test_non_member_holds_nothing_and_releases_old_leases(server):
+    member = make(server, count=4)
+    member.refresh()
+    observer = make(server, count=4, member=False)
+    observer.refresh()
+    assert observer.held == set() and observer.unheld == set()
+    assert observer.covered(owner_key('anyone'))
+
+
+def test_redis_failure_fails_open_to_inactive():
+    def broken():
+        raise ConnectionError('down')
+
+    shards = ProjectionShards('ns', count=4, client=broken)
+    assert shards.refresh() is False
+    assert not shards.active and shards.held == set() and shards.unheld == set(range(4))
+    assert shards.push('o', owner_key('o'), FRESH, 1.0) is False
+    assert shards.take(FRESH, 10, shards=[0]) == []
+
+
+# --- wakes ------------------------------------------------------------------
+
+
+def test_fresh_wakes_come_newest_first_and_backlog_oldest_first(server):
+    shards = make(server, count=1)
+    shards.refresh()
+    for owner, score in (('a', 10.0), ('b', 30.0), ('c', 20.0)):
+        shards.push(owner, owner_key(owner), FRESH, score)
+        shards.push(owner, owner_key(owner), BACKLOG, score)
+    assert [w.owner_id for w in shards.take(FRESH, 10)] == ['b', 'c', 'a']
+    assert [w.owner_id for w in shards.take(BACKLOG, 10)] == ['a', 'c', 'b']
+    # Fresh keeps the newest capture, backlog the oldest commit.
+    shards.push('a', owner_key('a'), FRESH, 40.0)
+    shards.push('a', owner_key('a'), BACKLOG, 50.0)
+    assert shards.take(FRESH, 1)[0].owner_id == 'a'
+    assert shards.take(BACKLOG, 1)[0].owner_id == 'a'
+
+
+def test_settle_keeps_a_wake_pushed_after_it_was_taken(server):
+    shards = make(server, count=1)
+    shards.refresh()
+    shards.push('a', owner_key('a'), BACKLOG, 5.0)
+    taken = shards.take(BACKLOG, 10)[0]
+    shards.push('a', owner_key('a'), BACKLOG, 9.0)  # same score kept (lt), newer push
+    assert shards.settle(taken) is False
+    assert [w.owner_id for w in shards.take(BACKLOG, 10)] == ['a']
+    assert shards.settle(shards.take(BACKLOG, 10)[0]) is True
+    assert shards.take(BACKLOG, 10) == []
+
+
+def test_take_interleaves_held_shards(server):
+    shards = make(server, count=2)
+    shards.refresh()
+    for n in range(3):
+        for shard in (0, 1):
+            owner = owner_in_shard(shard, 2, prefix=f's{shard}n{n}')
+            shards.push(owner, owner_key(owner), BACKLOG, float(n))
+    lanes = [w.shard for w in shards.take(BACKLOG, 3)]
+    assert lanes[:2] in ([0, 1], [1, 0])
+    assert Counter(lanes) == {0: 3, 1: 3}
+
+
+# --- pump -------------------------------------------------------------------
+
+
+class FakeDrains:
+    def __init__(self, limit=4):
+        self.limit = limit
+        self.tasks: dict = {}
+        self.queue: list = []
+        self.delayed: dict = {}
+        self.requested: list[str] = []
+        self.on_idle = None
+
+    @property
+    def free_slots(self):
+        return max(0, self.limit - len(self.tasks) - len(self.queue))
+
+    def busy(self, owner):
+        return owner in self.tasks or owner in self.queue or owner in self.delayed
+
+    def request(self, owners):
+        for owner in owners:
+            self.requested.append(owner)
+            self.tasks[owner] = True
+
+    def finish(self, owner, stop):
+        self.tasks.pop(owner, None)
+        self.on_idle(owner, stop)
+
+
+class FakeProjector:
+    def __init__(self, drains):
+        self.drains = drains
+        self.draining: set[str] = set()
+        self.drain_requests: dict = {}
+        self.local: list[str] = []
+
+    def ensure_drains(self):
+        return self.drains
+
+    @property
+    def owes_drains(self):
+        return bool(self.drain_requests)
+
+    def start_drains(self):
+        self.drains.request(list(self.drain_requests))
+        self.drain_requests = {}
+
+    def request_local_drain(self, owner):
+        self.local.append(owner)
+
+
+@pytest.fixture
+def blocking_inline(monkeypatch):
+    async def inline(executor, fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    monkeypatch.setattr(projection_shard_pump, 'run_blocking', inline)
+
+
+def pump_for(server, *, limit=4, count=1):
+    shards = make(server, count=count)
+    drains = FakeDrains(limit)
+    pump = ShardPump(FakeProjector(drains), shards)
+    return pump, shards, drains
+
+
+def test_route_keeps_local_drains_when_inactive_or_unheld(server):
+    pump, shards, _ = pump_for(server, count=4)
+    assert pump.route('o') is True  # never refreshed: inactive
+    observer = make(server, count=4, member=False)
+    observer.refresh()  # nobody holds anything
+    pump.shards = observer
+    assert pump.route('o') is True
+    holder = make(server, count=4)
+    holder.refresh()
+    observer.refresh()
+    assert pump.route('o') is False  # pushed to the holder's backlog lane
+    assert [w.owner_id for w in holder.take(BACKLOG, 10)] == ['o']
+
+
+def test_tick_takes_fresh_first_and_keeps_a_backlog_reserve(server, blocking_inline, monkeypatch):
+    monkeypatch.setenv('BATCH_PROJECTION_BACKLOG_RESERVE', '1')
+    pump, shards, drains = pump_for(server, limit=3)
+    for owner, score in (('f1', 3.0), ('f2', 2.0), ('f3', 1.0)):
+        shards.push(owner, owner_key(owner), FRESH, score)
+    shards.push('b1', owner_key('b1'), BACKLOG, 1.0)
+    assert asyncio.run(pump.tick()) == 3
+    assert drains.requested == ['f1', 'f2', 'b1']
+
+
+def test_reserve_returns_to_fresh_when_no_backlog_waits(server, blocking_inline, monkeypatch):
+    monkeypatch.setenv('BATCH_PROJECTION_BACKLOG_RESERVE', '2')
+    pump, shards, drains = pump_for(server, limit=3)
+    for owner, score in (('f1', 3.0), ('f2', 2.0), ('f3', 1.0)):
+        shards.push(owner, owner_key(owner), FRESH, score)
+    assert asyncio.run(pump.tick()) == 3
+    assert drains.requested == ['f1', 'f2', 'f3']
+
+
+def test_end_settles_the_wake_and_a_stuck_owner_cools_down(server, blocking_inline):
+    pump, shards, drains = pump_for(server, limit=2)
+    now = [100.0]
+    pump.monotonic = lambda: now[0]
+    shards.push('done', owner_key('done'), FRESH, 2.0)
+    shards.push('stuck', owner_key('stuck'), FRESH, 1.0)
+    asyncio.run(pump.tick())
+    drains.finish('done', 'end')
+    drains.finish('stuck', 'blocked_other')
+    asyncio.run(pump.tick())
+    assert shards.take(FRESH, 10) == []
+    # The stuck wake waits in backlog at its retry time, not at the lane head.
+    (deferred,) = shards.take(BACKLOG, 10)
+    assert deferred.owner_id == 'stuck' and deferred.score > 1000.0
+    assert drains.requested == ['done', 'stuck']  # stuck is cooling, not retaken
+    now[0] += projection_shard_pump.STUCK_RETRY_SECONDS * 1.3
+    asyncio.run(pump.tick())
+    assert drains.requested == ['done', 'stuck', 'stuck']
+
+
+def test_stuck_owners_cannot_fill_the_take_page(server, blocking_inline, monkeypatch):
+    monkeypatch.setattr(projection_shard_pump, 'MAX_TAKE', 4)
+    pump, shards, drains = pump_for(server, limit=2)
+    stuck = [f'stuck-{n}' for n in range(6)]
+    for n, owner in enumerate(stuck):
+        shards.push(owner, owner_key(owner), BACKLOG, float(n))
+    shards.push('due', owner_key('due'), BACKLOG, 500.0)
+    for _ in range(3):
+        asyncio.run(pump.tick())
+        for owner in list(drains.tasks):
+            drains.finish(owner, 'blocked_other')
+    asyncio.run(pump.tick())
+    assert 'due' in drains.requested
+    assert drains.requested.count('due') == 1
+
+
+def test_claim_busy_cools_without_losing_lane_position(server, blocking_inline):
+    pump, shards, drains = pump_for(server, limit=1)
+    shards.push('a', owner_key('a'), FRESH, 5.0)
+    asyncio.run(pump.tick())
+    drains.finish('a', 'claim_busy')
+    asyncio.run(pump.tick())
+    assert [(w.owner_id, w.score) for w in shards.take(FRESH, 10)] == [('a', 5.0)]
+
+
+def test_defer_keeps_a_wake_that_was_pushed_since_the_take(server):
+    shards = make(server, count=1)
+    assert shards.refresh()
+    shards.push('a', owner_key('a'), FRESH, 5.0)
+    (wake,) = shards.take(FRESH, 10)
+    shards.push('a', owner_key('a'), FRESH, 6.0)
+    assert shards.defer(wake, 9999.0) is False
+    assert [w.score for w in shards.take(FRESH, 10)] == [6.0]
+    (wake,) = shards.take(FRESH, 10)
+    assert shards.defer(wake, 9999.0) is True
+    assert shards.take(FRESH, 10) == []
+    assert [(w.owner_id, w.score) for w in shards.take(BACKLOG, 10)] == [('a', 9999.0)]
+
+
+def test_a_wake_pushed_during_the_drain_survives_the_settle(server, blocking_inline):
+    pump, shards, drains = pump_for(server, limit=1)
+    shards.push('a', owner_key('a'), FRESH, 1.0)
+    asyncio.run(pump.tick())
+    shards.push('a', owner_key('a'), FRESH, 1.0)  # another commit while draining
+    drains.finish('a', 'end')
+    asyncio.run(pump.tick())
+    assert drains.requested == ['a', 'a']
+
+
+def test_owner_in_both_lanes_drains_once_and_settles_both(server, blocking_inline):
+    pump, shards, drains = pump_for(server, limit=4)
+    shards.push('a', owner_key('a'), FRESH, 1.0)
+    shards.push('a', owner_key('a'), BACKLOG, 1.0)
+    asyncio.run(pump.tick())
+    assert drains.requested == ['a']
+    drains.finish('a', 'end')
+    asyncio.run(pump.tick())
+    assert shards.take(FRESH, 10) == [] and shards.take(BACKLOG, 10) == []
+
+
+def test_commit_wakes_pick_the_lane_from_capture_age(server, monkeypatch):
+    monkeypatch.setattr(projection_shard_pump, 'FRESH_CAPTURE_SECONDS', 3600.0)
+    pump, shards, _ = pump_for(server)
+    shards.refresh()
+    pump.committed('new', [{'capture_at': 1000.0 - 60, 'committed_at': 1000.0}])
+    pump.committed('old', [{'capture_at': 1000.0 - 7200, 'committed_at': 999.0}])
+    assert [w.owner_id for w in shards.take(FRESH, 10)] == ['new']
+    assert [w.owner_id for w in shards.take(BACKLOG, 10)] == ['old']
+
+
+def test_backstop_routes_owners_once_and_falls_back_locally_for_unheld(server):
+    holder = make(server, count=2)
+    holder.refresh()
+    holder.release()  # nobody holds shard leases now
+    member = make(server, count=2)
+    member.refresh()
+    lone = owner_in_shard(0, 2, prefix='lone')
+    rows = [('s1', lone, 1.0, None), ('s2', lone, 2.0, None), ('s3', 'x', 3.0, None)]
+
+    class Store:
+        def projection_page_owners(self, *, limit, after, states):
+            assert states == ('pending',)
+            if after is not None:
+                return [], None  # the tail: nothing committed lately
+            return rows, None
+
+    real = projection.Projector(Mock(), Mock())
+    real.store = Mock()
+    real.store.store = Store()
+    pump = ShardPump(real, member)
+    counts = pump.backstop()
+    assert counts == {'pages': 1, 'rows': 3, 'owners': 2, 'wrapped': 1, 'tail_rows': 0, 'tail_owners': 0}
+    assert sorted(w.owner_id for w in member.take(BACKLOG, 10)) == sorted({lone, 'x'})
+    # Unheld shards drain where they were found.
+    observer = make(server, count=2, member=False)
+    member.release()
+    observer.refresh()
+    real.drain_requests.clear()
+    ShardPump(real, observer).backstop()
+    assert set(real.drain_requests) == {lone, 'x'}
+
+
+def test_tail_discovery_wakes_gpu_commits_fresh_and_follows_the_newest_row(server):
+    member = make(server, count=1)
+    member.refresh()
+    calls = []
+    pages = {
+        (940.0, ''): ([('s1', 'gpu-fresh', 995.0, 990.0), ('s2', 'gpu-old', 996.0, 1000.0 - 7 * 3600)], None),
+        (986.0, ''): ([], None),
+    }
+
+    class Store:
+        def projection_page_owners(self, *, limit, after, states):
+            calls.append(after)
+            if after is None:
+                return [], None  # the whole-log backstop
+            return pages[after]
+
+    real = projection.Projector(Mock(), Mock(), clock=lambda: 1000.0)
+    real.store = Mock()
+    real.store.store = Store()
+    pump = ShardPump(real, member)
+    counts = pump.backstop()
+    assert counts['tail_rows'] == 2 and counts['tail_owners'] == 2
+    assert [w.owner_id for w in member.take(FRESH, 10)] == ['gpu-fresh']
+    assert [(w.owner_id, w.score) for w in member.take(BACKLOG, 10)] == [('gpu-old', 996.0)]
+    # Caught up: the next pass starts just before the newest row seen.
+    assert real.tail_after == (996.0 - projection_shard_pump.TAIL_SLACK_SECONDS, '')
+    pump.backstop()
+    assert calls == [(940.0, ''), None, (986.0, ''), None]
+
+
+def test_a_failed_take_turns_the_process_back_to_the_sweep(server):
+    shards = make(server, count=2)
+    assert shards.refresh() and shards.active
+    shards._client = lambda: (_ for _ in ()).throw(ConnectionError('down'))
+    assert shards.take(FRESH, 10) == []
+    assert not shards.active
+
+
+def test_kill_switches_disengage_the_pump(server, monkeypatch):
+    pump, shards, _ = pump_for(server)
+    shards.refresh()
+    assert pump.engaged
+    monkeypatch.setenv('BATCH_PIPELINE_OWNER_DRAIN_ENABLED', 'false')
+    assert not pump.engaged
+    assert pump.route('o') is True
+
+
+def test_a_settle_never_resets_the_push_sequence(server):
+    shards = make(server, count=1)
+    shards.refresh()
+    shards.push('a', owner_key('a'), FRESH, 1.0)
+    (first,) = shards.take(FRESH, 10)
+    (stale,) = shards.take(FRESH, 10)  # a second take of the same push
+    assert shards.settle(first)
+    shards.push('a', owner_key('a'), FRESH, 2.0)  # new work after the settle
+    assert not shards.settle(stale)
+    assert [w.owner_id for w in shards.take(FRESH, 10)] == ['a']
+
+
+def test_commits_on_an_unheld_shard_drain_locally(server):
+    pump, shards, _ = pump_for(server, count=2)
+    shards.refresh()
+    shards.held = {0}
+    shards.unheld = {1}
+    lone = owner_in_shard(1, 2, prefix='lone')
+    pump.committed(lone, [{'capture_at': 990.0, 'committed_at': 999.0}])
+    assert pump.projector.local == [lone]
+
+
+# --- serving wiring -----------------------------------------------------------
+
+
+class Pump:
+    def __init__(self, active):
+        self.engaged = active
+        self.backstops = 0
+        self.commits = []
+
+    def backstop(self):
+        self.backstops += 1
+
+    def committed(self, owner, entries):
+        self.commits.append((owner, len(entries)))
+
+
+def serving_with(pump, *, leads):
+    service = Serving(Mock(), projector=Mock(), shard_pump=pump)
+    service._leads = lambda periodic: leads
+    service._maintain = lambda **kw: None
+    service.merge = Mock(held_owners=set())
+    return service
+
+
+def test_sharded_reconcile_skips_the_sweep_and_only_the_leader_backstops():
+    pump = Pump(active=True)
+    follower = serving_with(pump, leads=False)
+    follower.reconcile(periodic=True)
+    follower.projector.sweep.assert_not_called()
+    assert pump.backstops == 0 and follower.projector.has_async_followups is True
+    leader = serving_with(pump, leads=True)
+    leader.reconcile(periodic=True)
+    leader.projector.sweep.assert_not_called()
+    leader.projector.sweep_finish_only.assert_called_once()
+    assert pump.backstops == 1
+
+
+def test_inactive_shards_keep_the_legacy_sweep():
+    service = serving_with(Pump(active=False), leads=False)
+    service.reconcile(periodic=True)
+    service.projector.sweep.assert_called_once()
+    service = serving_with(None, leads=True)
+    service.reconcile(periodic=True)
+    service.projector.sweep.assert_called_once()
+
+
+def test_drain_owner_pushes_one_wake_for_its_commits():
+    pump = Pump(active=True)
+    service = serving_with(pump, leads=False)
+    entries = iter([{'capture_at': 1.0}, {'capture_at': 2.0}, None])
+    service.merge.commit_next = lambda owner, now, release=None: next(entries)
+    service.drain_owner('owner-1')
+    assert pump.commits == [('owner-1', 2)]
+    service.merge.commit_next = lambda owner, now, release=None: None
+    service.drain_owner('owner-2')
+    assert pump.commits == [('owner-1', 2)]
+
+
+# --- blocked-head deadline ----------------------------------------------------
+
+
+def blocked_session(log, ids, message, *, refusals):
+    real = log.session
+    attempts = {'n': 0}
+
+    def session(sid, *args, **kwargs):
+        if sid == ids[0]:
+            attempts['n'] += 1
+            if attempts['n'] <= refusals:
+                raise ProjectionBlocked(message)
+        return real(sid, *args, **kwargs)
+
+    log.session = session
+
+
+def walker(log):
+    projector = projection.Projector(log, Mock(), clock=lambda: 1000.0)
+    projector.store = log
+    return projector
+
+
+def test_blocked_head_waits_forever_with_the_switch_off():
+    log = ResultLog()
+    ids = chain(log, BURST, 'a', 2)
+    blocked_session(log, ids, 'validated VAD speech accounting required', refusals=10**6)
+    projector = walker(log)
+    projector.project_owner(BURST)
+    assert log.results[ids[0]]['projection_state'] == 'pending'
+    assert 'projection_blocked_since' not in log.results[ids[0]]
+
+
+def test_eligible_blocked_head_is_held_after_the_deadline(monkeypatch):
+    monkeypatch.setenv('BATCH_PROJECTION_BLOCKED_HEAD_DEADLINE_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PROJECTION_HEAD_DEADLINE_SECONDS', '3600')
+    log = ResultLog()
+    ids = chain(log, BURST, 'a', 2)
+    # Refusals: the first pass, the in-bound second pass, the past-bound assignment.
+    blocked_session(log, ids, 'validated VAD speech accounting required', refusals=3)
+    projector = walker(log)
+    projector.project_owner(BURST)
+    assert log.results[ids[0]]['projection_state'] == 'pending'
+    assert log.results[ids[0]]['projection_blocked_since'] == 1000.0
+    projector.project_owner(BURST)
+    assert log.results[ids[0]]['projection_state'] == 'pending'
+    assert log.results[ids[0]]['projection_block_type'] == 'ProjectionBlocked:other'
+    log.results[ids[0]]['projection_blocked_since'] = 1000.0 - 3601
+    projector.project_owner(BURST)
+    assert log.results[ids[0]]['projection_state'] == 'quarantine_held'
+    assert log.projection_watermark(owner_key(BURST)) == ids[-1]
+
+
+def test_a_stamp_from_another_failure_restarts_the_blocked_clock(monkeypatch):
+    monkeypatch.setenv('BATCH_PROJECTION_BLOCKED_HEAD_DEADLINE_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PROJECTION_HEAD_DEADLINE_SECONDS', '3600')
+    log = ResultLog()
+    ids = chain(log, BURST, 'a', 2)
+    blocked_session(log, ids, 'recovery result requires recovery handoff', refusals=10**6)
+    # A transient error stamped this head long ago; the refusal is new.
+    log.results[ids[0]].update(projection_blocked_since=0.0, projection_block_type='TimeoutError')
+    projector = walker(log)
+    projector.project_owner(BURST)
+    row = log.results[ids[0]]
+    assert row['projection_state'] == 'pending'
+    assert row['projection_blocked_since'] == 1000.0
+    assert row['projection_block_type'] == 'ProjectionBlocked:other'
+
+
+def test_a_walk_past_a_held_head_reports_the_chain_end(monkeypatch):
+    monkeypatch.setenv('BATCH_PROJECTION_BLOCKED_HEAD_DEADLINE_ENABLED', 'true')
+    log = ResultLog()
+    ids = chain(log, BURST, 'a', 2)
+    blocked_session(
+        log, ids, 'validated VAD speech accounting required', refusals=1
+    )  # The test session refuses; the real refusal is in assignment.
+    log.results[ids[0]].update(projection_blocked_since=1000.0 - 86401, projection_block_type='ProjectionBlocked:other')
+    from contextlib import contextmanager
+
+    @contextmanager
+    def claim(namespace, key):
+        yield True
+
+    monkeypatch.setattr(projection, 'projection_claim', claim)
+    walk = walker(log).drain_step(BURST, 60.0)
+    assert log.results[ids[0]]['projection_state'] == 'quarantine_held'
+    assert walk.advanced == ids and walk.stop == 'end'
+
+
+@pytest.mark.parametrize(
+    'message',
+    [
+        'projection assignment claim busy',
+        'shadow publication forbidden',
+        'authenticated intake manifest loader required',
+    ],
+)
+def test_ineligible_blocked_heads_never_take_the_deadline(monkeypatch, message):
+    monkeypatch.setenv('BATCH_PROJECTION_BLOCKED_HEAD_DEADLINE_ENABLED', 'true')
+    log = ResultLog()
+    ids = chain(log, BURST, 'a', 1)
+    blocked_session(log, ids, message, refusals=10**6)
+    log.results[ids[0]].update(projection_blocked_since=0.0, projection_block_type='ProjectionBlocked:other')
+    walker(log).project_owner(BURST)
+    assert log.results[ids[0]]['projection_state'] == 'pending'
+
+
+def test_eligibility_uses_closed_reasons_and_exact_messages():
+    from database.batch_pipeline_projection_protocol import ProjectionPredecessorPending
+
+    reasoned = ProjectionBlocked('anything')
+    reasoned.block_reason = 'invalid_recording_clock'
+    assert projection.blocked_head_deadline_eligible(reasoned)
+    assert projection.blocked_head_deadline_eligible(ProjectionBlocked('terminal empty recovery evidence required'))
+    assert not projection.blocked_head_deadline_eligible(ProjectionBlocked('projection assignment claim busy'))
+    assert not projection.blocked_head_deadline_eligible(
+        ProjectionPredecessorPending('validated VAD speech accounting required')
+    )
+
+
+def test_head_deadline_is_configurable_and_bounded(monkeypatch):
+    entry = {'projection_blocked_since': 0.0}
+    assert not projection.head_retry_bound_exceeded(entry, 24 * 3600.0)
+    assert projection.head_retry_bound_exceeded(entry, 24 * 3600.0 + 1)
+    monkeypatch.setenv('BATCH_PROJECTION_HEAD_DEADLINE_SECONDS', '7200')
+    assert projection.head_retry_bound_exceeded(entry, 7201)
+    monkeypatch.setenv('BATCH_PROJECTION_HEAD_DEADLINE_SECONDS', '60')  # below the floor: default
+    assert not projection.head_retry_bound_exceeded(entry, 7201)
+    assert not projection.head_retry_bound_exceeded({'projection_blocked_since': True}, 10**9)
+
+
+def test_a_drain_task_that_raised_never_reports_the_chain_end(monkeypatch):
+    from utils.batch_pipeline import projection_drain
+
+    def boom(namespace, key):
+        raise RuntimeError('admission failed')
+
+    monkeypatch.setattr(projection_drain, 'projection_claim_held', boom)
+    projector = Mock()
+    projector.draining = set()
+    drains = projection_drain.OwnerDrains(projector)
+    seen = []
+    drains.on_idle = lambda owner, stop: seen.append((owner, stop))
+
+    async def go():
+        drains.request(['a'])
+        await asyncio.gather(*drains.tasks.values(), return_exceptions=True)
+        await asyncio.sleep(0)
+
+    asyncio.run(go())
+    assert seen == [('a', 'error')]

@@ -199,6 +199,22 @@ def entries():
             neutrals={'limit': (100, 'bounded page size only')},
         ),
         DriverEntry(
+            'database.batch_pipeline_store.projection_page_owners',
+            domains={
+                'namespace': namespaces,
+                'after': [None, (2.0, 'result-100'), (2.0, '')],
+                'states': [('pending',), ('pending', 'persisted', 'ready')],
+            },
+            neutrals={'limit': (100, 'bounded page size only')},
+        ),
+        CoveredByEntry(
+            'database.batch_pipeline_store.FirestoreStore.projection_page_owners',
+            covered_by=('database.batch_pipeline_store.projection_page_owners',),
+            reason='store adapter forwards namespace, page bound, cursor and states unchanged',
+            expect_observed=False,
+            body_digest='d25e6dabd5431fc92214567a023c2348de2ca5c62ff4738b3b930d42d10526ed',
+        ),
+        DriverEntry(
             'database.batch_pipeline_store.projection_successor',
             base={'owner_key': 'owner-hash'},
             domains={'namespace': namespaces, 'previous': [None, 'segment-head']},
