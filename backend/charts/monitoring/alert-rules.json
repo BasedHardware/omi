@@ -28814,6 +28814,7 @@
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
       "summary": "Held batch dead letters exceed the retained-stock or new-expiry volume threshold.",
       "user_impact": "Recorded audio remains retained but these units have no published transcript.",
       "scope": "Stock is only state=dead with reason held_expired, a new explicit cohort; legacy unrelated dead rows never count. Rate counts unique CAS expirations over 30 minutes. Stock requires a sample younger than 15 minutes. Agent tier only. Each replica stock sample is filtered by its own timestamp before max aggregation, so another replica cannot refresh stale stock.",
@@ -28840,9 +28841,9 @@
       "group_by": [
         "alertname"
       ],
-      "group_wait": "30s",
-      "group_interval": "5m",
-      "repeat_interval": "4h",
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
       "mute_time_intervals": [
         "omi-tier-silent"
       ]

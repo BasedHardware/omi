@@ -60,3 +60,28 @@ def test_two_forced_requeues_append_once_in_real_firestore(lane):
         results = list(workers.map(lambda _: recovery.requeue_quarantined(sid, 11), range(2)))
     assert sorted(results) == [False, True]
     assert [v.item.segment_id for v in lane.queue.pull(12, 2)] == [sid]
+
+
+def test_expired_row_survives_rollback_using_only_legacy_dead_redrive(lane, monkeypatch):
+    batch = lane.seed()
+    sid = batch.ids[0]
+    ref = lane.client.collection(f'{lane.store.namespace}_jobs').document(sid)
+    assert lane.queue.fail(sid, batch.leases[sid].token, 10, quarantine=True)
+    age_job_row(ref, 10 * 86400)
+    assert RecoveryStore(lane.store).expire_held(sid, 86400) == 'expired'
+    expired = ref.get().to_dict()
+    assert expired['merge_pending'] is True
+    monkeypatch.setenv('BATCH_HELD_DEAD_LETTER_ENABLED', 'false')
+    # Simulate the old service: no held requeue route or nightly helper is called.
+    with ThreadPoolExecutor(max_workers=2) as workers:
+        results = list(workers.map(lambda _: lane.queue.redrive_dead(sid, 86401), range(2)))
+    assert sorted(results) == [False, True]
+    restored = ref.get().to_dict()
+    for key in ('audio_uri', 'attempt', 'held_deadline_at', 'dead_letter_reason', 'held_expired_at'):
+        assert restored[key] == expired[key]
+    leases = lane.queue.pull(86402, 2)
+    assert [v.item.segment_id for v in leases] == [sid]
+    result = WorkResult(sid, 'gs://synthetic/rollback-result')
+    assert not lane.queue.complete(result, batch.leases[sid].token, 86403)
+    assert lane.queue.complete(result, leases[0].token, 86403)
+    assert lane.merge.commit_next(batch.binding.owner_id, 86404)['segment_id'] == sid

@@ -9,17 +9,23 @@ sweep; capture/enqueue age is never used to expire old stock immediately.
 `BATCH_HELD_DEAD_LETTER_ENABLED` is default **on**. False stops new stamps
 and automatic held maintenance without changing legacy quarantine writes.
 The private requeue endpoint remains available. Rollback: set this flag false
-on the serving and worker roles; revert the PR to remove the code. Already
-expired rows remain visible, reasoned and recoverable; no backward data rewrite
-is needed. Deployment declarations are source only; this change does not deploy.
+on the serving and worker roles; revert the PR to remove the code. Expiry sets
+`merge_pending=true` in the same transaction as `state=dead`, so the existing
+`POST /v2/batch-pipeline/redrive-dead` route (`Scheduler.redrive_dead`) accepts
+these rows even after the new route and nightly helper are reverted. It retains
+`dead_letter_reason=held_expired`, `held_deadline_at` and `held_expired_at`.
+No backward data rewrite or pre-revert drain is needed for these rows. The
+rolled-back service requires an authorized operator to invoke its existing
+re-drive; it does not run the new nightly pass. Deployment declarations are
+source only; this change does not deploy.
 
 The existing serving maintenance leader scans 32 held rows every five minutes,
 with a durable document-key cursor. The transaction rechecks content ownership,
 privacy generation, dormant held state, no result (including the result receipt),
 no worker token, and an expired lease. Active recovery/operator intents block it.
 Eligible expired rows become `state=dead`, `dead_letter_reason=held_expired`,
-with `held_expired_at`; they retain their encrypted source references, intent
-and attempt history and all other fields. No storage call, TTL, audio deletion,
+with `held_expired_at` and `merge_pending=true` for legacy re-drive. They retain
+their encrypted source references, intent and attempt history and all other fields. No storage call, TTL, audio deletion,
 conversation-status write or privacy-fence change occurs.
 
 A nightly UTC pass re-attempts only `dead(held_expired)` rows expired before

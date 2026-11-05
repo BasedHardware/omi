@@ -37,6 +37,7 @@ def test_expiry_backfills_full_window_then_cas_expires_without_audio_or_ttl_muta
         **original,
         'held_deadline_at': 100 + HELD_DEAD_LETTER_SECONDS,
         'state': 'dead',
+        'merge_pending': True,
         'dead_letter_reason': 'held_expired',
         'held_expired_at': 100 + HELD_DEAD_LETTER_SECONDS,
     }
@@ -47,7 +48,7 @@ def test_expiry_backfills_full_window_then_cas_expires_without_audio_or_ttl_muta
     assert _held_status([row(client)]) == ('processing', 'batch_unit_held')
 
 
-@pytest.mark.parametrize('dead', [False, True])
+@pytest.mark.parametrize('dead', [False, 'legacy', 'rollback_compatible'])
 def test_requeue_idempotent_and_usable_with_flag_off_retains_attempt_and_audio_history(setup, monkeypatch, dead):
     client, store, _, _, _, _ = setup
     job = row(client)
@@ -58,7 +59,7 @@ def test_requeue_idempotent_and_usable_with_flag_off_retains_attempt_and_audio_h
         held_deadline_at=20,
     )
     if dead:
-        job.update(state='dead', dead_letter_reason='held_expired', held_expired_at=20)
+        job.update(state='dead', dead_letter_reason='held_expired', held_expired_at=20, merge_pending=dead != 'legacy')
     original = deepcopy(job)
     # Keep the strict document fake off query paths; the emulator covers a cold DRR ring.
     client.rows['batch_pipeline_prod_control', scheduler_control_key(job['owner_key'])] = {'p0_active': True}
@@ -72,6 +73,30 @@ def test_requeue_idempotent_and_usable_with_flag_off_retains_attempt_and_audio_h
         assert row(client)[key] == original[key]
     assert row(client)['state'] == 'ready' and row(client)['merge_pending'] is True
     assert row(client)['token'] == '' and row(client)['lease_until'] == 0
+
+
+def test_expired_row_requeues_through_unchanged_legacy_redrive_with_flag_off(setup, monkeypatch):
+    client, store, _, artifacts, _, _ = setup
+    job = row(client)
+    job.update(held_deadline_at=20, attempt=5)
+    original = deepcopy(job)
+    assert RecoveryStore(store).expire_held('bad', 30) == 'expired'
+    assert row(client)['merge_pending'] is True
+    client.rows['batch_pipeline_prod_control', scheduler_control_key(job['owner_key'])] = {'p0_active': True}
+    monkeypatch.setenv('BATCH_HELD_DEAD_LETTER_ENABLED', 'false')
+    # Only the unchanged, pre-feature path is available after a code rollback.
+    queue = Scheduler(store)
+    assert queue.redrive_dead('bad', 31)
+    after = deepcopy(client.rows)
+    assert not queue.redrive_dead('bad', 32)
+    assert client.rows == after
+    restored = row(client)
+    assert restored['state'] == 'ready' and restored['merge_pending'] is True
+    assert restored['dead_letter_reason'] == 'held_expired'
+    assert restored['held_deadline_at'] == 20 and restored['held_expired_at'] == 30
+    for key in ('attempt', 'audio_uri', 'projection_binding', 'privacy_generation'):
+        assert restored[key] == original[key]
+    assert not artifacts.mock_calls
 
 
 @pytest.mark.parametrize(
@@ -101,6 +126,15 @@ def test_expiry_and_requeue_fence_matrix_is_read_only(setup, patch):
     recovery = RecoveryStore(store)
     assert recovery.expire_held('bad', 30) == 'held'
     assert not recovery.requeue_quarantined('bad', 30)
+    assert client.rows == before
+
+
+@pytest.mark.parametrize('patch', [{'token': 'live'}, {'lease_until': 31}, {'result': {'result_uri': 'synthetic'}}])
+def test_pending_dead_letter_still_requires_dormant_requeue_fences(setup, patch):
+    client, store, _, _, _, _ = setup
+    row(client).update(state='dead', dead_letter_reason='held_expired', merge_pending=True, **patch)
+    before = deepcopy(client.rows)
+    assert not RecoveryStore(store).requeue_quarantined('bad', 30)
     assert client.rows == before
 
 

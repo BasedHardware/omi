@@ -215,7 +215,12 @@ FIELD_SITES = {
             "'prepared'",
             ('plan_digest', 'prepared_at', 'privacy_generation', 'state', 'token'),
         ),
-        ('expire_held_in_transaction', 'state', "'dead'", ('dead_letter_reason', 'held_expired_at', 'state')),
+        (
+            'expire_held_in_transaction',
+            'state',
+            "'dead'",
+            ('dead_letter_reason', 'held_expired_at', 'merge_pending', 'state'),
+        ),
     ],
     'database/batch_pipeline_recovery.py': [
         (

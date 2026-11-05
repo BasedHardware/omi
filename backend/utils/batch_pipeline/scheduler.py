@@ -939,9 +939,8 @@ class Scheduler:
     @staticmethod
     def held_requeue_eligible(tx: Transaction, job: dict, now: float, *, allow_dead=True) -> bool:
         """Dormant worker holds only; never reopen an active paid/operator intent."""
-        state_ok = job.get('state') == 'quarantined' or (
-            allow_dead and job.get('state') == 'dead' and job.get('dead_letter_reason') == 'held_expired'
-        )
+        held_dead = allow_dead and job.get('state') == 'dead' and job.get('dead_letter_reason') == 'held_expired'
+        state_ok = job.get('state') == 'quarantined' or held_dead
         lease_until = job.get('lease_until', 0)
         if (
             not state_ok
@@ -951,7 +950,9 @@ class Scheduler:
             or (job.get('stt_route') or {}).get('stt_route') == 'provider'
             or job.get('recovery_state') not in {'held', 'failed_held'}
             or job.get('result')
-            or job.get('merge_pending') is not False
+            # Expiry retains the legacy dead re-drive contract. Also accept
+            # earlier held-expired rows written with merge_pending=False.
+            or not (job.get('merge_pending') is False or (held_dead and job.get('merge_pending') is True))
             or job.get('token')
             or isinstance(lease_until, bool)
             or not isinstance(lease_until, (int, float))

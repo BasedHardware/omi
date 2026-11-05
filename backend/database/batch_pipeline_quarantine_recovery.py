@@ -635,7 +635,9 @@ def expire_held_in_transaction(tx, job, now):
         return 'held'  # Malformed metadata is not permission to expire custody.
     if deadline > now:
         return 'held'
-    job.update(state='dead', dead_letter_reason='held_expired', held_expired_at=now)
+    # The pre-existing redrive_dead route requires merge_pending. Preserve that
+    # recovery contract even if this feature is disabled or its code reverted.
+    job.update(state='dead', merge_pending=True, dead_letter_reason='held_expired', held_expired_at=now)
     tx.put('jobs', job['segment_id'], job)
     return 'expired'
 
