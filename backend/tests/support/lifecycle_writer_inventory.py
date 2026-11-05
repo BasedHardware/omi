@@ -1679,6 +1679,7 @@ FIELD_SITES = {
         ),
     ],
     'database/record_audio.py': [
+        ('abandon_record_upload_session.commit', 'record_upload_sessions', 'sessions', ('record_upload_sessions',)),
         (
             'mark_record_upload_failed.commit',
             'record_audio_closed',
