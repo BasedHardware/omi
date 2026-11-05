@@ -283,3 +283,18 @@ def test_seed_never_moves_a_cursor_discovery_already_holds(monkeypatch):
     followups.discovery.after = (1007.0, 'r007')
     assert followups.discovered() == ['r008', 'r009']
     assert [call for call in query.calls if call[1] == 1] == []
+
+
+def test_arrivals_that_keep_every_page_full_cannot_starve_rows_older_than_the_seed(monkeypatch):
+    rows = backlog(200)  # committed 1000..1199
+    followups, _ = runner(rows, monkeypatch, fraction=0.5, now=1200.0)  # seed at 1100, high-water 1200
+    seen = set()
+    for n in range(12):
+        seen.update(followups.discovered())
+        # 150 new rows land after every page: the tail never runs short of a full page.
+        for i in range(150):
+            rows[f'n{n:02d}-{i:03d}'] = {'projection_state': 'persisted', 'committed_at': 1200.0 + n * 150 + i}
+        if {f'r{i:03d}' for i in range(100)} <= seen:
+            break
+    assert {f'r{i:03d}' for i in range(100)} <= seen  # rows older than the seed were reached
+    assert followups.wrap_at is None

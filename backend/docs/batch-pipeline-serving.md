@@ -1274,8 +1274,10 @@ the kill switch; negative, NaN or above 3600 keeps 900):
 - **Offset.** A process's first discovery page starts at a hashed point between
   the oldest persisted/ready commit and now. The hash covers host, pid and
   start time, and the seed costs one 1-row read. The page still
-  wraps to the head at its end, so one cycle visits every row. A failed seed
-  read falls back to head-first.
+  wraps to the head at its end, and it also wraps as soon as its cursor reaches
+  rows committed after the seed was taken (a high-water mark). Arrivals that
+  keep every page full therefore cannot starve rows older than the seed. A
+  failed seed read falls back to head-first.
 - **Backoff.** A row this process saw `blocked`, `retry`, `timeout`,
   `incomplete` (content not finishable yet) or `claim_busy` is skipped in this
   process's discovery. The skip is 60 s, doubling per repeat up to the ceiling.

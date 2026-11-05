@@ -92,6 +92,10 @@ class ProjectionFollowups:
         self.backoff_ceiling = projection_followup_backoff_seconds()
         self.backoff: dict[str, tuple[float, float]] = {}
         self.seeded = self.backoff_ceiling <= 0
+        # Commit time at seeding: the seeded pass wraps to the head once its
+        # cursor reaches rows committed after it, so new arrivals that keep
+        # every page full cannot starve the rows older than the seed.
+        self.wrap_at: float | None = None
 
     def seed_offset(self):
         """Start this process's first pass at a hashed point between the oldest receipt and now.
@@ -116,6 +120,7 @@ class ProjectionFollowups:
         if oldest is None or not oldest < now:
             return
         self.discovery.after = (oldest + instance_fraction() * (now - oldest), '')
+        self.wrap_at = now
         OUTCOMES.labels('seeded').inc()
 
     def backed_off(self, segment) -> bool:
@@ -158,6 +163,14 @@ class ProjectionFollowups:
                     page = None
         if page is None:
             page = self.discovery.next(limit=100)
+        if self.wrap_at is not None:
+            after = self.discovery.after
+            if after is None:
+                self.wrap_at = None  # wrapped on its own
+            elif after[0] >= self.wrap_at:
+                # High-water mark: the seeded pass reached post-seed commits. Wrap now.
+                self.discovery.after = None
+                self.wrap_at = None
         return [sid for sid in page if not self.backed_off(sid)]
 
     def candidates(self):
