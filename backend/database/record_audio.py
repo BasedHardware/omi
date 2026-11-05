@@ -44,7 +44,7 @@ def seal_record_audio(uid: str, conversation_id: str, *, firestore_client=None) 
             # missing tail. Repair refreshes the separate partial barrier.
             return None
         if not row.get('record_audio_closed') or row.get('record_seal_refused_at') is not None:
-            patch = {'record_audio_closed': True}
+            patch: dict[str, bool | None] = {'record_audio_closed': True}
             if row.get('record_seal_refused_at') is not None:
                 patch['record_seal_refused_at'] = None
             tx.update(ref, patch)
