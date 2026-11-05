@@ -418,12 +418,6 @@ KNOWN_GAPS = {
     ('record_audio:sealed', 'automatic_exit'): 'record_audio:sealed: missing independent automatic exit; No job: '
     'manual digest-gated nojob recovery is not an automatic exit; '
     'freshtitles fix, no PR yet; ANX lcinv-lifecycle-invariants',
-    ('record_audio:sealed', 'dwell_alert'): 'record_audio:sealed: missing committed dwell/stock alert; No job: '
-    'manual digest-gated nojob recovery is not an automatic exit; '
-    'freshtitles fix, no PR yet; ANX lcinv-lifecycle-invariants',
-    ('record_audio:sealed', 'dwell_metric'): 'record_audio:sealed: missing authoritative dwell/stock gauge; No job: '
-    'manual digest-gated nojob recovery is not an automatic exit; '
-    'freshtitles fix, no PR yet; ANX lcinv-lifecycle-invariants',
     ('record_audio:sealed', 'entry_deadline'): 'record_audio:sealed: missing deadline stamped at entry; No job: '
     'manual digest-gated nojob recovery is not an automatic exit; '
     'freshtitles fix, no PR yet; ANX lcinv-lifecycle-invariants',
