@@ -288,7 +288,7 @@ async def test_degraded_failure_persistence_uses_shared_fallback(records, monkey
         ({'deleted': True}, 'deleted'),
     ],
 )
-async def test_refused_seal_reason_is_counted_without_writes_or_identifiers(records, caplog, patch, reason):
+async def test_refused_seal_reason_is_counted_without_identifiers(records, caplog, patch, reason):
     records.rows[PATH].update(patch)
     assert seal_record_audio('uid-at', 'record', firestore_client=records) == reason
     before = RECORD_SEAL_REFUSED.labels(reason=reason)._value.get()
@@ -303,7 +303,11 @@ async def test_refused_seal_reason_is_counted_without_writes_or_identifiers(reco
         assert not barrier.close_failures and not barrier.close_retry_at
     assert RECORD_SEAL_REFUSED.labels(reason=reason)._value.get() == before + 1
     assert [r.getMessage() for r in caplog.records] == [f'event=record_seal_refused reason={reason}']
-    assert all(not tx.updates for tx in records.transactions)
+    if reason == 'producer_pending':
+        assert records.rows[PATH]['record_seal_refused_at'] > 0
+        assert sum(len(tx.updates) for tx in records.transactions) == 1
+    else:
+        assert all(not tx.updates for tx in records.transactions)
 
 
 def test_seal_refusal_vocabulary_is_closed():
@@ -568,3 +572,55 @@ async def test_producer_pending_durable_close_preserves_existing_capped_backoff(
         clock[0] = barrier.close_retry_at['record']
     assert records.rows[PATH]['record_upload_sessions'] == {'other': True}
     assert not records.rows[PATH].get('record_audio_closed')
+
+
+def test_first_refusal_clock_is_stable_and_success_clears_atomically(records, monkeypatch):
+    row = records.rows[PATH]
+    row.update(status='in_progress', record_upload_sessions={'old': True})
+    monkeypatch.setattr(record_audio_db, 'time', SimpleNamespace(time=lambda: 100))
+    assert seal_record_audio('uid-at', 'record', firestore_client=records) == 'producer_pending'
+    monkeypatch.setattr(record_audio_db, 'time', SimpleNamespace(time=lambda: 200))
+    assert seal_record_audio('uid-at', 'record', firestore_client=records) == 'producer_pending'
+    assert row['record_seal_refused_at'] == 100
+    assert not records.transactions[-1].updates
+    assert set_record_upload_pending('uid-at', 'record', 'old', False, firestore_client=records)
+    assert seal_record_audio('uid-at', 'record', firestore_client=records) is None
+    assert row['record_audio_closed'] and row['record_seal_refused_at'] is None
+    assert [payload for _, payload in records.transactions[-1].updates] == [
+        {'record_audio_closed': True, 'record_seal_refused_at': None}
+    ]
+
+
+def test_refusal_stamp_kill_switch_preserves_old_no_write_contract(records, monkeypatch):
+    monkeypatch.setenv('RECORD_SEAL_REFUSED_STAMP_ENABLED', 'false')
+    records.rows[PATH]['record_upload_sessions'] = {'old': True}
+    assert seal_record_audio('uid-at', 'record', firestore_client=records) == 'producer_pending'
+    assert all(not tx.updates for tx in records.transactions)
+
+
+async def test_legacy_retry_exhaustion_keeps_durable_first_refusal(records):
+    records.rows[PATH]['record_upload_sessions'] = {'old': True}
+    barrier = PusherRecordBarrier('uid-at')
+    for attempt in range(3):
+        barrier.close_retry_at['record'] = 0
+        assert await barrier.finish_recording('record') is (attempt == 2)
+    assert records.rows[PATH]['record_seal_refused_at'] > 0
+    assert records.rows[PATH]['record_upload_sessions'] == {'old': True}
+
+
+@pytest.mark.parametrize('closed', [False, True])
+def test_existing_refusal_clears_even_with_switch_off_and_does_not_rewrite(records, monkeypatch, closed):
+    monkeypatch.setenv('RECORD_SEAL_REFUSED_STAMP_ENABLED', 'false')
+    records.rows[PATH].update(record_seal_refused_at=100, record_audio_closed=closed)
+    assert seal_record_audio('uid-at', 'record', firestore_client=records) is None
+    assert records.rows[PATH]['record_seal_refused_at'] is None
+    assert seal_record_audio('uid-at', 'record', firestore_client=records) is None
+    assert not records.transactions[-1].updates
+
+
+def test_partial_audio_does_not_clear_refusal_clock(records):
+    records.rows[PATH].update(record_seal_refused_at=100, record_audio_partial=True)
+    assert seal_record_audio('uid-at', 'record', firestore_client=records) is None
+    assert records.rows[PATH]['record_seal_refused_at'] == 100
+    assert not records.rows[PATH].get('record_audio_closed')
+    assert not records.transactions[-1].updates

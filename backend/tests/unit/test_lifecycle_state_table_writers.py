@@ -20,6 +20,7 @@ from tests.support.terminal_writer_inventory import terminal_candidate_modules
 BACKEND = Path(__file__).resolve().parents[2]
 UNIQUE_FIELDS = frozenset(
     {
+        'record_seal_refused_at',
         'record_audio_closed',
         'record_upload_sessions',
         'record_upload_failed',

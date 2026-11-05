@@ -44,6 +44,7 @@ FIELDS = frozenset(
         'state',
         'stage',
         'projection_state',
+        'record_seal_refused_at',
         'record_audio_closed',
         'record_upload_sessions',
         'record_upload_failed',

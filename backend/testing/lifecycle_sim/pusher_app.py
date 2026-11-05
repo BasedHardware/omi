@@ -21,6 +21,8 @@ _network_guard.__enter__()
 
 from testing.listen_pusher_stack.pusher_app import app  # noqa: E402
 from utils.pusher_record_barrier import PusherRecordBarrier  # noqa: E402
+from database import record_audio  # noqa: E402
+from utils.executors import db_executor, run_blocking  # noqa: E402
 
 _live_barriers: dict[str, PusherRecordBarrier] = {}
 
@@ -37,3 +39,11 @@ async def begin(payload: BeginCapture):
     except CaptureRefused as error:
         raise HTTPException(400, str(error)) from error
     return {'pending': True}
+
+
+@app.post('/__lifecycle/seal')
+async def seal(payload: BeginCapture):
+    # Exercise the real refusal transaction in the child whose lifetime the
+    # simulator controls, rather than borrowing the parent's process memory.
+    refusal = await run_blocking(db_executor, record_audio.seal_record_audio, payload.uid, payload.conversation_id)
+    return {'refusal': refusal}
