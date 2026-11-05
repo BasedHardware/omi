@@ -257,7 +257,7 @@ async def test_inherited_pending_clear_never_abandons_another_sockets_running_wr
         await asyncio.gather(old_task, later_task, *owners, return_exceptions=True)
 
 
-@pytest.mark.parametrize('value,abandon,workers', [(None, 4, 4), ('bad', 4, 4), ('0', 0, 1), ('999', 16, 8)])
+@pytest.mark.parametrize('value,abandon,workers', [(None, 4, 8), ('bad', 4, 8), ('0', 0, 1), ('999', 16, 8)])
 def test_overflow_and_storage_bounds_are_conservative_and_clamped(monkeypatch, value, abandon, workers):
     for name in ('PUSHER_MAX_ABANDON_RECORD_DRAINS', 'PUSHER_RECORD_STORAGE_WORKERS'):
         if value is None:

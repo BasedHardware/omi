@@ -123,7 +123,7 @@ env:
   - name: PUSHER_MAX_ABANDON_RECORD_DRAINS
     value: "4"
   - name: PUSHER_RECORD_STORAGE_WORKERS
-    value: "4"
+    value: "8"
   # Production retirement; false restores the old routes only after GPUs are ready.
   - name: STT_GPU_FLEET_OFF
     value: "true"

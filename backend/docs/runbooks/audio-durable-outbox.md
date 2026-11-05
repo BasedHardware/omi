@@ -113,8 +113,8 @@ certifying it while the evicted writer is still running. Slots return only when
 coordinators finish, including metadata retries.
 
 Durable custody and projection share the dedicated
-`PUSHER_RECORD_STORAGE_WORKERS` pool (default/prod 4, clamped 1..8; invalid uses 4).
-Its semaphore admits at most four outstanding submissions, with no extra
+`PUSHER_RECORD_STORAGE_WORKERS` pool (default/prod 8, clamped 1..8; invalid uses 8).
+Its semaphore admits at most eight outstanding submissions, with no extra
 admission queue; cancellation cannot recycle admission before the actual
 executor future settles. Projection waits holding receipts only, then hydrates,
 uploads and refreshes inside one admitted leaf. PCM-bearing custody fails
@@ -122,9 +122,9 @@ saturation before ACK, leaving the client WAL responsible for retry. This avoids
 an unbounded executor queue even when overflow coordination is refused.
 
 Each admitted leaf has at most 20 MiB of canonical PCM, independent of the
-64 closed workers and four metadata coordinators: `4 * 20 MiB = 80 MiB`.
+64 closed workers and four metadata coordinators: `8 * 20 MiB = 160 MiB`.
 Source read, sliced batch, legacy join, codec and encryption buffers can coexist;
-reserve a conservative eightfold planning allowance (`80 * 8 = 640 MiB`) for
+reserve a conservative eightfold planning allowance (`160 * 8 = 1280 MiB`) for
 this work. This allowance is not a measured RSS bound. Live-socket ingress,
 other executors, Python overhead and SDK buffers are additional; the unchanged
 3.5 GiB pod limit still requires a canary p99 measurement. Do not scale the pool

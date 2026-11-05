@@ -13,7 +13,7 @@ def abandon_record_drain_cap() -> int:
 
 def record_storage_workers() -> int:
     try:
-        value = int(os.getenv('PUSHER_RECORD_STORAGE_WORKERS', '4'))
+        value = int(os.getenv('PUSHER_RECORD_STORAGE_WORKERS', '8'))
     except ValueError:
-        value = 4
+        value = 8
     return max(1, min(8, value))

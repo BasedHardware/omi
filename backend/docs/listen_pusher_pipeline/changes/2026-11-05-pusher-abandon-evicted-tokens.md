@@ -35,14 +35,14 @@ Luna FIX-FIRST follow-up: overflow owners are bounded independently by
 starts no coordinator and logs `abandon_overflow`; the old durable token stays fenced
 for process/pod-death repair. Refusal removes its local recovery hint so a later
 successful producer cannot clear it while its storage future is still running. A separate `PUSHER_RECORD_STORAGE_WORKERS` pool
-(default/prod 4, clamp 1..8) admits at most four actual storage submissions,
+(default/prod 8, clamp 1..8) admits at most eight actual storage submissions,
 including cancelled callers' unfinished work. Projection waiters hold receipts;
 PCM hydration/upload/refresh happens inside the admitted leaf. Custody refuses
 saturation before ACK, preserving client WAL custody. No extra admission queue
 can accumulate PCM while GCS stalls. Completion makes both bounds reusable.
 
-The canonical PCM allowance is `4 * 20 MiB = 80 MiB`; the runbook reserves an
-unmeasured eightfold planning allowance of 640 MiB for transient copies/codecs.
+The canonical PCM allowance is `8 * 20 MiB = 160 MiB`; the runbook reserves an
+unmeasured eightfold planning allowance of 1280 MiB for transient copies/codecs.
 This bounds detached recording work, not live ingress or total pod RSS. Retain
 the canary memory gate and watch `abandon_overflow` as well as prior outcomes.
 The lifecycle table keeps refused overflow in capturing, with the old exit;

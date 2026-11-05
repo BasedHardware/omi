@@ -2665,7 +2665,7 @@ environments:
             value: 'on'
             category: ops_kill
           PUSHER_MAX_ABANDON_RECORD_DRAINS: {value: '4', category: rollout}
-          PUSHER_RECORD_STORAGE_WORKERS: {value: '4', category: rollout}
+          PUSHER_RECORD_STORAGE_WORKERS: {value: '8', category: rollout}
           STT_GPU_FLEET_OFF:
             value: 'true'
             category: ops_kill
