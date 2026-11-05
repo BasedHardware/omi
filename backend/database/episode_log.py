@@ -307,6 +307,7 @@ def publish(
     repaired=False,
     removed_views=(),
     removed_links=(),
+    source_versions=None,
 ):
     client = firestore_client if firestore_client is not None else get_firestore_client()
     now = now or datetime.now(timezone.utc)
@@ -345,6 +346,10 @@ def publish(
             or row.get('policy_barriers')
         ):
             raise LostLease('episode_reconcile_changed_during_read')
+        if repaired:
+            from utils.episodes.log import reconcile
+
+            reconcile.verify(uid, client, source_versions, transaction)
         # Caller already sealed every speech-derived field and Home payload.
         for eid, view in views.items():
             transaction.set(root(client, uid).collection('episode_views').document(eid), view)

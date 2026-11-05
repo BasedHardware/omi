@@ -39,3 +39,11 @@ def read_cohort(uid: str) -> bool:
     except ValueError:
         return False
     return enabled(uid) and home_enabled() and 0 <= percent <= 100 and uid_bucket(uid, 'episodes-log-v1') < percent
+
+
+def capture_possible() -> bool:
+    """Global sweep/TTL admission, without a customer-data query."""
+    from utils import omi_flags
+
+    rule = omi_flags.snapshot().rules.get('EPISODES_LOG_ENABLED')
+    return rule.active if rule is not None else capture_default()

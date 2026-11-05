@@ -341,3 +341,117 @@ def test_dropped_work_real_reconcile_restores_home_and_removes_stale_views(db, m
     from utils.episodes.log.codec import dumps
 
     assert 'Synthetic private title' not in dumps(store.checkpoint(uid, firestore_client=client))
+
+
+def test_queued_close_after_reconcile_read_keeps_home_legacy_until_recapture(db, monkeypatch):
+    from concurrent.futures import Future
+    from unittest.mock import Mock
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from database import episodes
+    from routers import episodes as api
+    from utils.episodes.log import capture, reads, reconcile, worker
+    from utils.other import endpoints
+
+    client, uid = db
+    monkeypatch.setenv('EPISODES_LOG_READ_PERCENT', '100')
+    monkeypatch.setenv('EPISODES_RECORDED_TIME_ENABLED', 'off')
+    root = store.root(client, uid)
+    store.owner_ref(client, uid).set(
+        dict(cursor=0, next_seq=0, home_version=1, backfill_complete=True, home_rows_ready=True)
+    )
+    ref = root.collection('episodes').document('e')
+    ref.set(
+        episodes.seal(
+            uid, dict(id='e', status='live', state_version=1, started_at=NOW, last_activity_at=NOW, conversation_ids=[])
+        )
+    )
+    store.invalidate(uid, firestore_client=client)
+    queued = []
+    monkeypatch.setattr(capture, 'submit', lambda fn: queued.append(fn) or Future())
+    monkeypatch.setattr(worker, 'wake', lambda *a: None)
+    original = reconcile.snapshot
+
+    def snapshot_then_close(*args):
+        snapshot = original(*args)
+        assert episodes.close_episode(uid, 'e', 'user', closed_at=NOW, firestore_client=client)['status'] == 'closed'
+        assert len(queued) == 1
+        assert store.state(uid, firestore_client=client)['next_seq'] == 0
+        return snapshot
+
+    monkeypatch.setattr(reconcile, 'snapshot', snapshot_then_close)
+    at = datetime.now(timezone.utc)
+    assert worker.drain(uid, firestore_client=client, now=at) == 'lost_lease'
+    assert store.state(uid, firestore_client=client)['capture_dirty']
+    assert not root.collection('episode_views').document('e').get().exists
+
+    # Actual Home routing remains on legacy at 100% reads during the queue gap.
+    monkeypatch.setattr(api, '_admitted', lambda *a: True)
+    ready = reads.ready
+    monkeypatch.setattr(reads, 'ready', lambda uid: ready(uid, firestore_client=client))
+    legacy, log = Mock(return_value=([], None)), Mock(return_value=([], [], None))
+    monkeypatch.setattr(api.home_read, 'list_episode_window', legacy)
+    monkeypatch.setattr(api.home_read, 'project_episodes', lambda *a: [])
+    monkeypatch.setattr(reads, 'list_window', log)
+    monkeypatch.setattr(worker, 'sample_read', lambda *a: None)
+    app = FastAPI()
+    app.include_router(api.router)
+    app.dependency_overrides[endpoints.get_current_user_uid] = lambda: uid
+    http = TestClient(app)
+    params = {'from': NOW.isoformat(), 'to': NOW.isoformat()}
+    assert http.get('/v1/episodes', params=params).status_code == 200
+    assert legacy.called and not log.called
+    queued.pop()()
+    assert store.state(uid, firestore_client=client)['next_seq'] == 1
+    assert ready(uid, firestore_client=client) is None  # Delivery alone cannot clear the gap.
+    monkeypatch.setattr(reconcile, 'snapshot', original)
+    assert worker.drain(uid, firestore_client=client, now=at + timedelta(minutes=11)) == 'drained'
+    assert not store.state(uid, firestore_client=client).get('capture_dirty')
+    assert episodes.unseal(uid, root.collection('episode_views').document('e').get().to_dict())['status'] == 'closed'
+    legacy.reset_mock()
+    assert http.get('/v1/episodes', params=params).status_code == 200
+    assert log.called and not legacy.called
+
+
+@pytest.mark.parametrize('change', ['edit', 'insert', 'delete', 'archive'])
+def test_reconcile_source_proof_rejects_all_committed_source_changes(db, change):
+    from utils.episodes.log import reconcile
+
+    client, uid = db
+    root = store.root(client, uid)
+    link = root.collection('episode_links').document('c')
+    link.set({'episode_id': 'e'})
+    receipt = root.collection('episode_segment_receipts').document('c')
+    receipt.set({'ids': ['head'], 'shards': 1})
+    archive = receipt.collection('s').document('0')
+    archive.set({'ids': ['archived']})
+    store.invalidate(uid, firestore_client=client)
+    at = datetime.now(timezone.utc)
+    claimed = store.claim(uid, firestore_client=client, now=at)
+    fold, removed_views, removed_links, proof = reconcile.snapshot(uid, client)
+    assert set(fold.receipts['c']) == {'head', 'archived'}
+    if change == 'edit':
+        link.update({'episode_id': 'new'})
+    elif change == 'insert':
+        root.collection('episode_links').document('new').set({'episode_id': 'new'})
+    elif change == 'delete':
+        link.delete()
+    else:
+        archive.update({'ids': ['new']})
+    with pytest.raises(store.LostLease, match='source_changed'):
+        store.publish(
+            uid,
+            claimed,
+            0,
+            fold.checkpoint(),
+            {},
+            {},
+            firestore_client=client,
+            now=at,
+            repaired=True,
+            removed_views=removed_views,
+            removed_links=removed_links,
+            source_versions=proof,
+        )
+    assert store.state(uid, firestore_client=client)['capture_dirty']
+    assert not root.collection('episode_log_checkpoint').document('fold').get().exists

@@ -191,7 +191,7 @@ def test_clock_capacity_never_silently_truncates_visibility_deadlines():
         home_clock({'e': {'conversation_ids': ids}}, {}, {cid: NOW + timedelta(hours=1) for cid in ids}, set(), NOW)
 
 
-def test_disabled_sweep_still_runs_read_only_retention_guard(client, monkeypatch):
+def test_disabled_sweep_skips_data_client_and_retention_guard(client, monkeypatch):
     monkeypatch.setenv('EPISODES_LOG_ENABLED', 'off')
     from utils.episodes.log import retention
 
@@ -200,8 +200,8 @@ def test_disabled_sweep_still_runs_read_only_retention_guard(client, monkeypatch
     monkeypatch.setattr(retention, 'guard', guard)
     monkeypatch.setattr(worker, 'get_firestore_client', factory)
     assert worker.sweep() == {'disabled': 1}
-    factory.assert_called_once()
-    guard.assert_called_once_with(client)
+    factory.assert_not_called()
+    guard.assert_not_called()
 
 
 def test_remote_read_rule_overrides_env_and_can_rollback_without_deploy(client, monkeypatch):

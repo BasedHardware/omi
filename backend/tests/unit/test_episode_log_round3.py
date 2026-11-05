@@ -132,7 +132,8 @@ def test_dropped_work_home_100_uses_legacy_until_full_repair(client, monkeypatch
     store.publish(UID, claim, 0, {}, {}, {}, firestore_client=client, now=dirty['drain_at'])
     assert store.state(UID, firestore_client=client)['capture_dirty']
     # Full reconciliation only; emulator tests exercise its real collection reads.
-    monkeypatch.setattr(reconcile, 'snapshot', lambda *a: (Fold(UID), (), ()))
+    monkeypatch.setattr(reconcile, 'snapshot', lambda *a: (Fold(UID), (), (), {}))
+    monkeypatch.setattr(reconcile, 'verify', lambda *a: None)
     monkeypatch.setattr(worker, 'wake', lambda *a: None)
     at = store.state(UID, firestore_client=client)['drain_at'] + timedelta(minutes=26)
     assert worker.drain(UID, firestore_client=client, now=at) == 'drained'
@@ -243,6 +244,7 @@ def test_ttl_check_is_cached_and_unknown_fails_closed(monkeypatch):
 
 
 def test_periodic_guard_logs_and_measures_facts_without_ttl(monkeypatch, caplog):
+    monkeypatch.setenv('EPISODES_LOG_ENABLED', 'on')
     from utils.episodes.log.metrics import FACTS_WITHOUT_TTL
 
     monkeypatch.setattr(retention, '_guard_until', {})

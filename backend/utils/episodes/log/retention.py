@@ -50,7 +50,11 @@ def require_active(client):
 
 
 def guard(client):
-    """Periodic sweep guard runs even while capture is off; bounded to one/minute."""
+    """No data probe while capture is off; admitted probes run at most once/minute."""
+    from config import episode_log as config
+
+    if not config.capture_possible():
+        return
     key = (getattr(client, 'project', None), getattr(client, '_database', '(default)'))
     now = time.monotonic()
     with _lock:

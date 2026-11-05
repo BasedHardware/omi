@@ -25,17 +25,33 @@ including encryption and oversize payloads, are caught, counted through shared
 and dropped; they cannot retry or replace a committed writer's response. The
 post-commit append and policy refresh use a shared, lazy executor with four
 workers and 64 queued items. Submission never waits for capacity. Overflow and
-cancellation are counted drops. Only the small pre-write policy fence remains
-synchronous; geometry compaction is allowlisted copying, without IO/encryption.
+cancellation are counted drops. The small pre-write policy fence and overflow
+invalidation remain synchronous. Invalidation reads the account-deletion marker and owner, writes
+one owner document, and has at most two SDK commit attempts with no outer retry.
+It occurs only on submission failure (normally saturation of all four running
+workers plus 64 queued captures) or cancellation; accepted capture stays async.
+Keeping this rare fence synchronous prevents readiness from remaining true when
+the executor cannot accept the invalidation either. Geometry compaction is
+allowlisted copying, without IO/encryption.
+
 Every detected capture/entry/refresh drop writes a durable `capture_dirty` token,
 clears Home readiness and advances the owner epoch, fencing older publishers.
 Home automatically uses legacy for that owner, including at read percent 100.
 Ordinary publication cannot clear the marker. The next drain performs a full
 bounded reconciliation from current legacy episodes, links and receipt archives,
 removes stale views/links and reprojects current member policy. Only atomic
-publication under the unchanged epoch, gap token and append watermark clears it.
-The full reconciliation scans at most 128 documents (including old projections
-and archives); overflow fails closed on legacy rather than clearing the marker.
+publication under the unchanged epoch, gap token, append watermark and source
+versions clears it. Reconciliation records each source document's Firestore
+`update_time`, including receipt archives, then re-queries the bounded source
+collections inside the publication transaction before staging writes. Inserts,
+deletes and edits by a committed writer with still-queued capture reject stale
+repair. Transactional source reads serialize publication against later writes.
+This is option (b): zero added reads or field writes on the serving path; the
+extra source reads/locks occur only during gap repair. A rejected repair retains
+the dirty token and legacy Home routing until a successful full reconciliation.
+The initial full reconciliation scans at most 128 documents (including old
+projections and archives); the transactional recheck reads at most 128 source
+documents again (plus minimum query charges for empty collections); overflow fails closed on legacy rather than clearing the marker.
 A completely unavailable data plane may also prevent persistence of the marker;
 `invalidation_failed` is an error requiring repair before read readmission.
 There is no durable outbox guarantee for process death between commit and append.
@@ -127,7 +143,8 @@ owner to install with the existing metrics scrape.
   **60 seconds**. Refresh failures retain the last snapshot, so this is not a hard
   maximum. Already committing work completes; the drain cheaply rechecks the
   cached rule before publication and defers if it now sees the kill. The TTL
-  safety guard still runs while capture is off. Queued intent rechecks admission
+  safety guard checks global capture admission before any customer-data probe;
+  capture off performs zero episode-fact queries. Queued intent rechecks admission
   after commit. The
   existing flag CLI supports this Firestore key; no deploy is needed to stop it.
 - `EPISODES_HOME_ROWS_ENABLED`: on unless off. Rows are sealed, server-filtered
@@ -222,7 +239,7 @@ with the normal reason/approval options. The CLI checks ACTIVE TTL in that expli
 customer-data project before writing the flag; the flag-store project is separate.
 Every runtime fact writer also refuses capture unless a read-only TTL check is
 ACTIVE (cached at most 60 seconds; errors fail closed). The existing scheduler
-runs a periodic guard even with capture off, logging
+runs a periodic guard while capture is admitted, logging
 `event=episode_log_ttl outcome=facts_without_active_ttl` and publishing
 `omi_episode_facts_without_active_ttl`; the reviewed alert and sync collector
 include that metric. Runtime needs read-only field-policy inspection permission.

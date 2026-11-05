@@ -212,10 +212,11 @@ def drain(uid, *, firestore_client=None, now=None):
     try:
         repaired = bool(claimed['state'].get('capture_dirty'))
         removed_views, removed_links = (), ()
+        source_versions = None
         if repaired:
             from utils.episodes.log import reconcile
 
-            fold, removed_views, removed_links = reconcile.snapshot(uid, client)
+            fold, removed_views, removed_links, source_versions = reconcile.snapshot(uid, client)
             before, old_links, events = {}, {}, []
             cursor = claimed['state'].get('next_seq', 0)
         else:
@@ -307,6 +308,7 @@ def drain(uid, *, firestore_client=None, now=None):
             repaired=repaired,
             removed_views=removed_views,
             removed_links=removed_links,
+            source_versions=source_versions,
         )
         metrics.observe_state(claimed['state'], 'running', datetime.now(timezone.utc))
         # Never redrain a committed batch just because an observational read fails.
@@ -337,16 +339,13 @@ def drain(uid, *, firestore_client=None, now=None):
 
 def sweep(*, firestore_client=None, now=None):
     now = now or datetime.now(timezone.utc)
-    from utils import omi_flags
     from utils.episodes.log import retention
 
-    client = firestore_client if firestore_client is not None else get_firestore_client()
-    retention.guard(client)
-
-    rule = omi_flags.snapshot().rules.get('EPISODES_LOG_ENABLED')
-    if (rule is not None and not rule.active) or (rule is None and not config.capture_default()):
+    if not config.capture_possible():
         metrics.SWEEP_OBSERVED.set(time.time())  # A deliberate kill is not a stale scheduler.
         return {'disabled': 1}
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    retention.guard(client)
     outcomes = {'scanned': 0, 'redriven': 0, 'error': 0}
     for uid, state in store.due_owners(now, firestore_client=client):
         outcomes['scanned'] += 1

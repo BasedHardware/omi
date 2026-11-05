@@ -556,8 +556,16 @@ _driver(
     serving=False,
 )
 _driver(
+    'utils.episodes.log.reconcile.source_documents',
+    base={'uid': UID},
+    neutrals={'transaction': (None, 'transaction binding does not change source query shape')},
+    profile='maintenance-episode-gap-source-proof',
+    serving=False,
+)
+_driver(
     'utils.episodes.log.retention.guard',
     patchers=(
+        _stub('config.episode_log.capture_possible', True),
         _stub('utils.episodes.log.retention.active', False),
         lambda client: unittest.mock.patch.object(
             importlib.import_module('utils.episodes.log.retention'), '_guard_until', {}
