@@ -24,7 +24,7 @@
   },
   "seed_review_by": "2026-11-15",
   "budget": 169,
-  "count": 245,
+  "count": 247,
   "names": {
     "PARAKEET_SHAPE_CANARY_FILE": {"owner": "two-lane lead", "review_by": "2026-12-04"},
     "PARAKEET_LID_MODEL": {"owner": "planscost", "review_by": "2026-11-30"},
@@ -98,6 +98,8 @@
     "BATCH_PIPELINE_PADDED_SECONDS": {"seeded": "2026-10-25"},
     "BATCH_PIPELINE_POOL_KIND": {"seeded": "2026-10-25"},
     "BATCH_PIPELINE_PROJECTION_PREFETCH": {"seeded": "2026-10-25"},
+    "BATCH_PIPELINE_PROJECTION_FOLLOWUP_BACKOFF_SECONDS": {"owner": "cl2-gpueff", "review_by": "2026-12-05"},
+    "BATCH_PIPELINE_PROJECTION_FOLLOWUP_SLOTS": {"owner": "cl2-gpueff", "review_by": "2026-12-05"},
     "BATCH_PIPELINE_PUBLISH_CONCURRENCY": {"seeded": "2026-10-25"},
     "BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED": {"seeded": "2026-10-25"},
     "BATCH_PIPELINE_RECOVERY_DISPATCH_BATCH_SIZE": {"seeded": "2026-10-25"},

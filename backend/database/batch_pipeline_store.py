@@ -371,12 +371,16 @@ def projection_page(
     __name__ breaks committed_at ties (including siblings committed together).
     Cursor values are discovery hints, never authorization or ordering fences.
     ``states`` narrows the same ``in`` filter to a subset of the drain states.
+    A seed cursor ``(committed_at, '')`` starts at that time, before every key
+    (the follow-up desync offset); keys are never empty.
     """
     if not states or not set(states) <= set(PROJECTION_OBLIGATION_STATES):
         raise ValueError('projection discovery states must be drain states')
     collection = client.collection(f'{namespace}_results')
     query = collection.where('projection_state', 'in', list(states)).order_by('committed_at').order_by('__name__')
-    if after is not None:
+    if after is not None and after[1] == '':
+        query = query.start_at({'committed_at': after[0]})
+    elif after is not None:
         query = query.start_after({'committed_at': after[0], '__name__': collection.document(after[1])})
     size = max(1, min(limit, 100))
     docs = list(query.limit(size).stream())
