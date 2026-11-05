@@ -28,7 +28,8 @@ from models.recording_speakers import (
 
 from fastapi import BackgroundTasks, APIRouter, Depends, Header, HTTPException, Query
 
-from config.episodes import APP_CHANNEL_HEADER, app_channel, client_channel_admitted, episodes_enabled_for
+from config.app_channel import APP_CHANNEL_HEADER, app_channel
+from config.episodes import client_channel_admitted, episodes_enabled_for
 from utils.episodes import home_read
 from models.episode import (
     EpisodeListResponse,

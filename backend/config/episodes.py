@@ -44,6 +44,7 @@ import os
 from config.refactor_modes import default_on as modes_default_on
 from config.refactor_switches import default_on as rollout_default_on
 
+from config.app_channel import APP_CHANNELS, app_channel
 from config.jev_decisions import percentage, uid_bucket
 
 EPISODES_ENABLED_ENV = 'EPISODES_ENABLED'
@@ -59,8 +60,6 @@ EPISODE_CARRY_ON_SESSION_END_ENV = 'EPISODE_CARRY_ON_SESSION_END'
 EPISODE_MOMENT_OUTPUT_VALIDATOR_ENV = 'EPISODE_MOMENT_OUTPUT_VALIDATOR'
 EPISODE_COMPOSER_ENV = 'EPISODE_COMPOSER'
 EPISODE_COMPOSE_SETTLE_ENABLED_ENV = 'EPISODE_COMPOSE_SETTLE_ENABLED'
-APP_CHANNEL_HEADER = 'X-Omi-App-Channel'
-APP_CHANNELS = frozenset({'beta', 'store'})
 _DEFAULT_CLIENT_CHANNELS = frozenset({'beta'})
 _COHORT_SALT = 'episodes-v1'
 _ON = frozenset({'true', 'on', '1', 'yes'})
@@ -83,12 +82,6 @@ def episodes_enabled_for(uid: str) -> bool:
     if uid in allowlist:
         return True
     return uid_bucket(uid, _COHORT_SALT) < percentage(EPISODES_PERCENT_ENV, default=100.0)
-
-
-def app_channel(raw: str | None) -> str:
-    """The request's ``X-Omi-App-Channel`` as a bounded label: ``beta``, ``store`` or ``unknown``."""
-    value = (raw or '').strip().lower()
-    return value if value in APP_CHANNELS else 'unknown'
 
 
 def episodes_client_channels() -> frozenset[str]:
