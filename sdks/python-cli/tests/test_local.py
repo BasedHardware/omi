@@ -77,6 +77,37 @@ def test_local_configure_escapes_markup_like_profile_name(config_path: Path, cli
     assert cfg.load().get_profile(tricky).local_api_url == FAKE_LOCAL_URL
 
 
+@pytest.mark.parametrize("bad_url", ["ftp://127.0.0.1:47778", "http://", "not-a-url", "https:///nohost"])
+def test_local_configure_rejects_invalid_url(config_path: Path, cli_runner, bad_url: str) -> None:
+    result = cli_runner.invoke(app, ["local", "configure", "--url", bad_url, "--token", FAKE_LOCAL_TOKEN])
+    assert result.exit_code == 1
+    assert cfg.load().get_profile("default").local_api_url is None
+
+
+@pytest.mark.parametrize("bad_token", ["", "   "])
+def test_local_configure_rejects_empty_token(config_path: Path, cli_runner, bad_token: str) -> None:
+    result = cli_runner.invoke(app, ["local", "configure", "--url", FAKE_LOCAL_URL, "--token", bad_token])
+    assert result.exit_code == 1
+    assert cfg.load().get_profile("default").local_token is None
+
+
+def test_local_configure_strips_surrounding_whitespace(config_path: Path, cli_runner) -> None:
+    result = cli_runner.invoke(
+        app,
+        ["--json", "local", "configure", "--url", "  " + FAKE_LOCAL_URL + "/  ", "--token", "  tok  "],
+    )
+    assert result.exit_code == 0, result.output
+    profile = cfg.load().get_profile("default")
+    assert profile.local_api_url == FAKE_LOCAL_URL
+    assert profile.local_token == "tok"
+
+
+@pytest.mark.parametrize("bad_url", ["ftp://127.0.0.1:47778", "http://"])
+def test_local_client_rejects_invalid_scheme(bad_url: str) -> None:
+    with pytest.raises(CliError):
+        LocalOmiClient(api_url=bad_url, token=FAKE_LOCAL_TOKEN)
+
+
 def test_local_status_without_config_is_json(config_path: Path, cli_runner) -> None:
     result = cli_runner.invoke(app, ["--json", "local", "status"])
 
