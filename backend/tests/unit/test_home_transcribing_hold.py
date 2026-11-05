@@ -279,3 +279,22 @@ def test_mcp_list_requests_presentation_receipts_and_projects_title(monkeypatch)
     result = mcp.get_conversations(Response(), uid='u')
     assert result[0].structured.title == 'Transcribing…'
     assert set(transcribing_hold.READ_FIELDS) <= set(fields)
+
+
+@pytest.mark.parametrize('presentation', [False, True])
+def test_cursor_collector_only_releases_short_hold_for_product_reads(monkeypatch, presentation):
+    from tests.unit.test_sync_donor_tombstone_visibility import _ListingDoc, _ListingQuery
+
+    anchor = _ListingDoc('anchor', capture(id='anchor'))
+    row = capture(started_at=NOW - timedelta(seconds=45), finished_at=NOW - timedelta(seconds=20))
+    doc = _ListingDoc('capture', row)
+    monkeypatch.setattr(conversations, 'document_data_with_revision', lambda snapshot: snapshot.to_dict())
+    rows, _ = conversations._collect_cursor_conversation_page(
+        _ListingQuery([anchor, doc]),
+        limit=1,
+        include_discarded=False,
+        budget=None,
+        bookmark=anchor,
+        presentation=presentation,
+    )
+    assert [item['id'] for item in rows] == (['capture'] if presentation else [])
