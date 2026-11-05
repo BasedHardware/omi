@@ -74,14 +74,9 @@ def batch_unit_scope(segment) -> str | None:
     return scope if scope.startswith(prefix) and 0 < len(unit) <= 128 and ':' not in unit and '/' not in unit else None
 
 
-def final_pass_enabled_for(uid: str, segments) -> bool:
-    """Reuse the transcription-final-pass hash assignment; no new batch admission."""
-    if (
-        not uid
-        or not enabled(segments)
-        or not any(batch_unit_scope(s) for s in segments)
-        or not default_on('BATCH_FINAL_PASS_ENABLED')
-    ):
+def _final_pass_admitted(uid: str, segments) -> bool:
+    """Shared rollout admission, including already resolved batch conversations."""
+    if not uid or not enabled(segments) or not default_on('BATCH_FINAL_PASS_ENABLED'):
         return False
     try:
         percent = float(os.getenv('BATCH_FINAL_PASS_PERCENT', '100'))
@@ -92,9 +87,14 @@ def final_pass_enabled_for(uid: str, segments) -> bool:
         return False
 
 
+def final_pass_enabled_for(uid: str, segments) -> bool:
+    """Audio reconstruction additionally requires an original batch unit."""
+    return _final_pass_admitted(uid, segments) and any(batch_unit_scope(s) for s in segments)
+
+
 def recurring_enabled_for(uid: str, segments) -> bool:
     """Default-on private learning; reuse the final-pass UID hash, nested admission."""
-    if not final_pass_enabled_for(uid, segments) or not default_on('SPEAKER_RECURRING_VOICES_ENABLED'):
+    if not _final_pass_admitted(uid, segments) or not default_on('SPEAKER_RECURRING_VOICES_ENABLED'):
         return False
     try:
         percent = float(os.getenv('SPEAKER_RECURRING_PERCENT', '100'))

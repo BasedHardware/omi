@@ -10,15 +10,15 @@ from google.api_core.exceptions import (
     TooManyRequests,
 )
 import httpx
-import requests
 
+from database.storage_transport_errors import TLS_ERRORS, TRANSIENT_ERRORS
 from utils.batch_pipeline.artifact_reads import ArtifactReadLimit
 from utils.stt.http_errors import has_tls_cause, retryable_http_error
 
 
 def transient_cause(error):
     """Inspect explicit causes; nested TLS vetoes retry without message parsing."""
-    if has_tls_cause(error, (requests.exceptions.SSLError,)):
+    if has_tls_cause(error, TLS_ERRORS):
         return None
     seen = set()
     while error is not None and id(error) not in seen:
@@ -43,12 +43,8 @@ def transient_cause(error):
                 TimeoutError,
                 httpx.TimeoutException,
                 httpx.NetworkError,
-                requests.exceptions.Timeout,
+                *TRANSIENT_ERRORS,
             ),
-        ):
-            return error
-        elif isinstance(error, requests.exceptions.ConnectionError) and not isinstance(
-            error, requests.exceptions.SSLError
         ):
             return error
         elif isinstance(error, OSError) and error.errno in {
