@@ -54,7 +54,7 @@ async def test_abandon_transaction_is_exact_idempotent_and_cannot_be_recleared(r
     assert sum(len(tx.updates) for tx in records.transactions) == writes
     # A reconnect with an old recovery snapshot cannot certify an abandoned tail.
     assert not record_audio.set_record_upload_pending('uid-at', 'record', old_token, False)
-    assert await new.finish_recording('record')
+    assert not await new.finish_recording('record')
     assert records.rows[PATH]['record_upload_sessions'] == {old_token: marked}
     assert new_token != old_token
     assert not records.rows[PATH]['record_audio_closed']
@@ -382,7 +382,7 @@ async def test_stalled_storage_bounds_overflow_coordinators_and_actual_pcm_work(
         # producer whose real storage future is still blocked.
         later = barriers.PusherRecordBarrier('uid-at')
         await later.begin_recording('record')
-        assert await later.finish_recording('record')
+        assert not await later.finish_recording('record')
         assert len(records.rows[PATH]['record_upload_sessions']) == count
         assert not records.rows[PATH]['record_audio_closed']
         assert trackers[2].pending  # A refused overflow producer is still writing.
