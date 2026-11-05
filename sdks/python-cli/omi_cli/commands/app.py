@@ -200,7 +200,7 @@ def send_event(
     except (httpx.InvalidURL, ValueError) as exc:
         raise UsageError(
             f"Invalid --to URL: {to!r}",
-            detail=f"{exc}. Pass a full http(s) URL with a valid host and port, e.g. https://example.com/webhook",
+            detail="Pass a full http(s) URL with a valid host and port, e.g. https://example.com/webhook",
         ) from exc
     headers = {"Content-Type": event.content_type}
     # Same precedence as the backend: the key the event carries, else a fresh one.
