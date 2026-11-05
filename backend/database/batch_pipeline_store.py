@@ -254,13 +254,6 @@ class FirestoreStore:
         self._require_stage()
         return self._client if self._client is not None else get_data_plane_firestore_client()
 
-    def read(self, body, *, read_budget):
-        # A single consistent read-only snapshot, with no SDK/contention retry
-        # loop or unbounded transaction lifecycle RPC outside the caller budget.
-        from database.batch_pipeline_reads import read_snapshot
-
-        return read_snapshot(self, body, read_budget)
-
     def run(self, body):
         client = self.client
         last_view: list[FirestoreTransaction] = []

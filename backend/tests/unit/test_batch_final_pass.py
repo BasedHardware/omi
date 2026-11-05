@@ -388,7 +388,16 @@ def reference_store(lane, monkeypatch):
     store = FirestoreStore(ns, firestore_client=client)
     # StrictFirestore models transaction ordering, not transport lifecycle.
     # Deadline/transport options are exercised with the real SDK below.
-    monkeypatch.setattr(store, 'read', lambda body, **kw: store.run(body))
+    from database import batch_pipeline_reads
+
+    snapshot = batch_pipeline_reads.read_snapshot
+
+    def read_snapshot(selected_store, body, budget):
+        if selected_store is store:
+            return store.run(body)
+        return snapshot(selected_store, body, budget)
+
+    monkeypatch.setattr(batch_pipeline_reads, 'read_snapshot', read_snapshot)
     return store, client
 
 

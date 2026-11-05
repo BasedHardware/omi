@@ -490,7 +490,9 @@ def batch_artifact_authorize(store: Any, item: Any, *, snapshots: dict | None = 
         return ProtectionContext(user.get('data_protection_level', 'enhanced'), generation)
 
     if read_budget is not None:
-        return store.read(lambda tx: authorize(tx.transaction), read_budget=read_budget)
+        from database.batch_pipeline_reads import read_snapshot
+
+        return read_snapshot(store, lambda tx: authorize(tx.transaction), read_budget)
     return firestore.transactional(authorize)(store.client.transaction())
 
 

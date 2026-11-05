@@ -7,9 +7,15 @@ from config.refactor_modes import default_on
 from config.policy.batch import COHORT_SALTS, cohort_bucket
 
 BATCH_CONVERSATION_SPEAKERS_ENV = 'BATCH_CONVERSATION_SPEAKERS_ENABLED'
+BATCH_FINAL_PASS_ENV = 'BATCH_FINAL_PASS_ENABLED'
 BATCH_CONVERSATION_SCOPE = 'final:batch:conversation:'
 SYNC_OFF_CENTROIDS_ENV = 'BATCH_SYNC_OFF_CENTROIDS_ENABLED'
 VENDOR_SPEAKER_TURNS_ENV = 'BATCH_VENDOR_SPEAKER_TURNS_ENABLED'
+
+
+def _default_on(name: str) -> bool:
+    """Keep the shared parser and expose constant-named kill-switch reads to deployment checks."""
+    return default_on(name)
 
 
 def sync_off_enabled() -> bool:
@@ -76,7 +82,7 @@ def batch_unit_scope(segment) -> str | None:
 
 def _final_pass_admitted(uid: str, segments) -> bool:
     """Shared rollout admission, including already resolved batch conversations."""
-    if not uid or not enabled(segments) or not default_on('BATCH_FINAL_PASS_ENABLED'):
+    if not uid or not enabled(segments) or not _default_on(BATCH_FINAL_PASS_ENV):
         return False
     try:
         percent = float(os.getenv('BATCH_FINAL_PASS_PERCENT', '100'))

@@ -57,6 +57,8 @@ def test_empty_part_list_preserves_coverage_failure_instead_of_unbound_cleanup(p
 
 @pytest.mark.parametrize('raise_in_body', [False, True])
 def test_real_sdk_snapshot_is_cleared_after_success_or_refusal(sdk_reference, raise_in_body):
+    from database.batch_pipeline_reads import read_snapshot
+
     snapshots = []
 
     def read(tx):
@@ -68,8 +70,8 @@ def test_real_sdk_snapshot_is_cleared_after_success_or_refusal(sdk_reference, ra
 
     if raise_in_body:
         with pytest.raises(ValueError, match='unit_duration'):
-            sdk_reference.store.read(read, read_budget=ArtifactReadBudget(101, 0, 0))
+            read_snapshot(sdk_reference.store, read, ArtifactReadBudget(101, 0, 0))
     else:
-        assert sdk_reference.store.read(read, read_budget=ArtifactReadBudget(101, 0, 0)) == 'read-only-result'
+        assert read_snapshot(sdk_reference.store, read, ArtifactReadBudget(101, 0, 0)) == 'read-only-result'
     assert snapshots[0].id is None and not snapshots[0].in_progress
     assert [kind for kind, _ in sdk_reference.calls] == ['begin', 'rollback']

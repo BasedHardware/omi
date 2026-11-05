@@ -93,4 +93,10 @@ def load_reference(store, uid, unit, conversation_id, *, read_budget=None):
             ProjectionPolicy.from_dict((job.get('policy_parts') or {}).get('projection', {})),
         )
 
-    return store.run(read) if read_budget is None else store.read(read, read_budget=read_budget)
+    if read_budget is None:
+        return store.run(read)
+    # Budgeted SDK snapshots are a Firestore adapter detail, not an addition to
+    # the Store protocol shared with Postgres and the pipeline simulators.
+    from database.batch_pipeline_reads import read_snapshot
+
+    return read_snapshot(store, read, read_budget)

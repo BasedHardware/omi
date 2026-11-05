@@ -122,7 +122,16 @@ def multi_unit(prod_shaped, monkeypatch):
     store = FirestoreStore(ns, firestore_client=client)
     # This fixture proves snapshot contents/ordering; SDK deadlines have their
     # own real-client/fake-transport tests.
-    monkeypatch.setattr(store, 'read', lambda body, **kw: store.run(body))
+    from database import batch_pipeline_reads
+
+    snapshot = batch_pipeline_reads.read_snapshot
+
+    def read_snapshot(selected_store, body, budget):
+        if selected_store is store:
+            return store.run(body)
+        return snapshot(selected_store, body, budget)
+
+    monkeypatch.setattr(batch_pipeline_reads, 'read_snapshot', read_snapshot)
     timer = Histogram('owner_lab_repro_artifact_seconds', 'Synthetic artifact read', ['kind'])
 
     def fetch(item, *, read_budget):
