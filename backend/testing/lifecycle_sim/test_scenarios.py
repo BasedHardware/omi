@@ -460,6 +460,15 @@ def test_empty_projection_retirement_rechecks_producer_fence(lifecycle_sim, monk
     if ending in {'aged_fenced', 'pressure_fenced', 'tail'}:
         row['record_upload_sessions'] = {'live': True}
     ref.set(row)
+    # CI shares this collection with earlier stack scenarios. Include a clear
+    # peer locally too, so the test cannot assume aggregate counts belong only
+    # to its fenced owner. Only clear candidates may be pressure-evicted.
+    peer_cid = cid + '-peer'
+    peer_ref = sim.ref.parent.document(peer_cid)
+    peer_row = {**row, 'id': peer_cid, 'record_upload_sessions': {}}
+    peer_ref.set(peer_row)
+    peer_marker = sim.stack.firestore.collection(jobs.COLLECTION).document(jobs.marker_id(sim.uid, peer_cid))
+    jobs.mark_due(sim.uid, peer_cid, firestore_client=sim.stack.firestore)
     marker = sim.stack.firestore.collection(jobs.COLLECTION).document(jobs.marker_id(sim.uid, cid))
     jobs.mark_due(sim.uid, cid, firestore_client=sim.stack.firestore)
     observed = marker.get()
@@ -469,11 +478,25 @@ def test_empty_projection_retirement_rechecks_producer_fence(lifecycle_sim, monk
     # the unit contract separately supplies an actual eight-day-old snapshot.
     monkeypatch.setattr(consumer, 'NO_OBJECTS_MAX_AGE_SECONDS', 0)
     if ending == 'pressure_fenced':
-        monkeypatch.setattr(consumer, 'MAX_COLLECTION_MARKERS', 0)
+        marker_count = len(list(sim.stack.firestore.collection(jobs.COLLECTION).stream()))
+        assert 2 <= marker_count <= consumer.MAX_PER_PASS
+        monkeypatch.setattr(consumer, 'MAX_COLLECTION_MARKERS', marker_count - 1)
     rebuild = consumer.rebuild
+    retire = jobs.retire_empty
+    decisions = []
+
+    def checked_retirement(uid, conversation_id, **kwargs):
+        result = retire(uid, conversation_id, **kwargs)
+        if (uid, conversation_id) == (sim.uid, cid):
+            decisions.append(result)
+        return result
+
+    monkeypatch.setattr(jobs, 'retire_empty', checked_retirement)
 
     def after_discovery(uid, conversation_id):
         result = rebuild(uid, conversation_id)
+        if (uid, conversation_id) != (sim.uid, cid):
+            return result
         assert result == 'no_objects'
         if ending == 'late_fence':
             assert record_audio.set_record_upload_pending(
@@ -488,20 +511,22 @@ def test_empty_projection_retirement_rechecks_producer_fence(lifecycle_sim, monk
         with monkeypatch.context() as first:
             first.setattr(consumer, 'rebuild', after_discovery)
             report = consumer.run(budget=SweepBudget(30), firestore_client=sim.stack.firestore)
+        assert not peer_marker.get().exists
+        assert peer_ref.get().to_dict() == peer_row
         if ending == 'aged_clear':
             assert not marker.get().exists and ref.get().to_dict() == row
-            assert report['dispositions'] == {'retired_no_objects': 1}
+            assert decisions == ['retired_no_objects']
             return
         assert marker.get().exists
         assert marker.get().update_time != observed.update_time
         if ending == 'marker_race':
-            assert report['dispositions'] == {'changed': 1}
+            assert decisions == ['changed']
         else:
-            assert report['dispositions'] == {'producer_fenced': 1}
+            assert decisions == ['producer_fenced']
             assert ref.get().to_dict()['record_upload_sessions']
         if ending == 'pressure_fenced':
-            assert report['gauges']['pressure_blocked'] is True
-            assert report['gauges']['pressure_fenced_count'] == 1
+            assert report['gauges']['pressure_blocked'] is False  # The clear peer was evicted.
+            assert report['gauges']['pressure_fenced_count'] >= 1
         if ending == 'tail':
             # Only the synthetic producer fixture publishes this late object.
             # The consumer must still own a marker after its earlier empty pass.
@@ -524,3 +549,5 @@ def test_empty_projection_retirement_rechecks_producer_fence(lifecycle_sim, monk
     finally:
         marker.delete()
         ref.delete()
+        peer_marker.delete()
+        peer_ref.delete()
