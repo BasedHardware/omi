@@ -116,7 +116,7 @@ MCP_REST_SCOPE_EXEMPTIONS = {
 
 # REST detail/list reads project one extra card field beyond the hosted tool
 # reads: the released desktop client consumes apps_results off the card.
-_REST_CONVERSATION_EXTRA_FIELD_PATHS = ["apps_results"]
+_REST_CONVERSATION_EXTRA_FIELD_PATHS = ["apps_results", *transcribing_hold.READ_FIELDS]
 
 # Detail additionally fetches the manual speaker-assignment receipt so the
 # shared prepare-for-read seam can decode it exactly like the legacy full-doc
@@ -124,12 +124,6 @@ _REST_CONVERSATION_EXTRA_FIELD_PATHS = ["apps_results"]
 _REST_CONVERSATION_DETAIL_EXTRA_FIELD_PATHS = _REST_CONVERSATION_EXTRA_FIELD_PATHS + [
     "manual_speaker_assignments",
     "manual_speaker_assignments_compressed",
-    *transcribing_hold.READ_FIELDS,
-    "status",
-    "record_projection_revision",
-    "record_upload_failed",
-    "finalization_status",
-    "user_title",
 ]
 
 
@@ -611,7 +605,7 @@ def get_conversations(
     # no longer in CategoryEnum) cannot 500 the whole page via response_model coercion.
     valid_conversations = []
     for conv in page:
-        card = conversation_card(conv)
+        card = conversation_card(transcribing_hold.project(conv))
         card["apps_results"] = conv.get("apps_results") or []
         try:
             valid_conversations.append(SimpleConversation.model_validate(card))
@@ -656,7 +650,7 @@ def search_conversations(
 
     # conversation_card() applies redact_conversation_for_list in place, so a
     # locked row reaches the snippet attacher already stripped of transcript.
-    cards = [conversation_card(conv) for conv in conversations]
+    cards = [conversation_card(transcribing_hold.project(conv)) for conv in conversations]
     # Snippets after redaction so locked list rows never leak transcript evidence (#6621).
     conversations = attach_match_snippets_to_conversations(conversations, query)
     for conv, card in zip(conversations, cards):

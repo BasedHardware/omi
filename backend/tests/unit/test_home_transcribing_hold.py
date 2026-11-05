@@ -104,8 +104,9 @@ def test_home_collector_keeps_even_short_pending_and_overdue_rows(monkeypatch, o
         home_transcription_deadline_at=NOW + timedelta(seconds=-1 if overdue else 7200),
     )
     _install_listing(monkeypatch, {'capture': row})
-    assert conversations.is_visible_conversation(row)
-    page = conversations.get_conversations_without_photos('u', limit=1, offset=0)
+    assert not conversations.is_visible_conversation(row)
+    assert conversations.is_visible_conversation(row, presentation=True)
+    page = conversations.get_conversations_without_photos('u', limit=1, offset=0, presentation=True)
     assert [r['id'] for r in page] == ['capture']
     assert page[0]['status'] == 'completed'  # Workers use this same authoritative reader.
     wire = transcribing_hold.project(page[0])
@@ -241,3 +242,40 @@ def test_stamped_capture_remains_completed_for_batch_replacement():
     assert result['transcript_segments'][0]['text'] == 'Synthetic speech.'
     assert transcribing_hold.project(result) is result
     assert result['home_transcription_deadline_at'] == raw['home_transcription_deadline_at']
+
+
+def test_star_replacement_retains_transcribing_presentation(api, monkeypatch):
+    client, _ = api
+    monkeypatch.setattr(routes.conversations_db, 'set_conversation_starred', lambda *a: None)
+    response = client.patch('/v1/conversations/capture/starred?starred=true')
+    assert response.status_code == 200, response.text
+    assert response.json()['conversation']['structured']['title'] == 'Transcribing…'
+    assert response.json()['conversation']['status'] == 'processing'
+
+
+def test_folder_list_projects_the_same_title(monkeypatch):
+    from routers import folders
+
+    monkeypatch.setattr(folders.folders_db, 'get_folder', lambda *a: {'id': 'folder'})
+    monkeypatch.setattr(folders.folders_db, 'get_conversations_in_folder', lambda *a, **k: [capture()])
+    result = folders.get_folder_conversations('folder', limit=10, offset=0, include_discarded=False, uid='u')
+    assert result[0].structured.title == 'Transcribing…'
+    assert result[0].status.value == 'processing'
+
+
+def test_mcp_list_requests_presentation_receipts_and_projects_title(monkeypatch):
+    from routers import mcp
+    from starlette.responses import Response
+
+    fields = []
+
+    def page(*a, **k):
+        fields.extend(k['extra_field_paths'])
+        return [capture()], None
+
+    monkeypatch.setattr(mcp.mcp_conversation_handlers, 'conversation_cards_page_core', page)
+    monkeypatch.setattr(mcp, 'rest_datetime_window', lambda *a: (None, None, None))
+    monkeypatch.setattr(mcp, 'localize_timestamps', lambda row, zone: row)
+    result = mcp.get_conversations(Response(), uid='u')
+    assert result[0].structured.title == 'Transcribing…'
+    assert set(transcribing_hold.READ_FIELDS) <= set(fields)

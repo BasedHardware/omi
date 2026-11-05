@@ -12,7 +12,16 @@ from typing import Any
 from config.episodes import home_transcription_presentation_gate_enabled
 from utils.conversations.fragment_visibility import BATCH_RECORD_OWNERS
 
-READ_FIELDS = ('home_transcription_pending_at', 'home_transcription_deadline_at', 'record_lane_owner')
+READ_FIELDS = (
+    'home_transcription_pending_at',
+    'home_transcription_deadline_at',
+    'record_lane_owner',
+    'status',
+    'record_projection_revision',
+    'record_upload_failed',
+    'finalization_status',
+    'user_title',
+)
 
 
 def transcription_presentation(deadline: datetime, *, failed: bool = False, now: datetime | None = None):

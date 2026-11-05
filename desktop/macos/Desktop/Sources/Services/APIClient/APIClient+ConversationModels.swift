@@ -483,6 +483,11 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     if isLocked {
       return .locked
     }
+    // This is a bounded server transcription wait, not a running summary job.
+    // Keep its explicit title and do not offer the summary stall's Reprocess.
+    if status == .processing && structured.title == "Transcribing…" && transcriptSegments.isEmpty && !deferred {
+      return .titled(structured.title)
+    }
     switch status {
     case .inProgress, .processing, .merging:
       // A deferred row wears `processing` on the wire only so the client

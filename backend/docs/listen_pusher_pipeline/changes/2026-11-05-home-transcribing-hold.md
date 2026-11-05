@@ -17,8 +17,9 @@ never an existing row's deadline.
 `HOME_TRANSCRIPTION_PRESENTATION_GATE` defaults **on**. A stamped, batch-owned,
 completed row with no transcript, user title or structured title, and no batch
 projection receipt, renders `processing` / `Transcribing…` at the main list,
-main detail, shared detail and developer detail API exits. MCP REST detail
-uses the same title mapping (its existing wire model has no status field). Indexed main lists
+main detail, shared/developer detail, search, folder/developer lists and star
+replacement API exits. Developer and MCP schemas
+use the same title mapping (their existing wire models have no status field). Indexed main lists
 carry the deadline and batch projection receipt without downloading transcripts.
 `has_content` is not a transcription receipt: the raw audio writer sets it too.
 The labels share the Episodes Home mapping. Expiry (inclusive), dead letter or
@@ -26,8 +27,8 @@ upload failure changes the title to `Couldn't transcribe`. On conversation APIs
 this recovery exit uses `completed`, so the ordinary failed-status filter cannot
 hide it; Episodes retains its existing `failed` member wire mapping.
 
-The default visibility predicate lets these stamped rows through the provisional
-settling hold, including after expiry. Deletion, discard, duplicate and bridge
+Home list/detail opt into the stamped-row exception in the shared visibility
+predicate, including after expiry. Job readers keep the default settling hold. Deletion, discard, duplicate and bridge
 visibility fences remain authoritative. No read writes status, custody, title or
 a deadline. Shared database hydration remains authoritative for lifecycle jobs;
 `replace_record`, `SERVER_RECOVERY`, `CLIENT_FINALIZE`, orphan sweep and the
@@ -36,8 +37,8 @@ rows are unchanged; this PR does not backfill them.
 
 Writer-version conditional list responses are disabled while this lever is on:
 deadline decay changes a response even without a write/version bump. Otherwise
-a 304 could freeze `Transcribing…` indefinitely. Turning the lever off restores
-the prior conditional-list behavior as well as stored conversation status/title.
+a 304 could freeze `Transcribing…` indefinitely. Developer conversation list body caching is also bypassed while enabled.
+Turning the lever off restores the prior conditional-list behavior as well as stored conversation status/title.
 
 Rollback: set `HOME_TRANSCRIPTION_PRESENTATION_GATE=off` on the serving services;
 there is no data migration to undo. Clock stamping remains enabled so a later
@@ -80,3 +81,22 @@ its wake (`:248-310`). It is untouched here. The report's
 `routers/websocket.py` path does not exist on this base; its tentative websocket
 claim is unverified and is not an acceptance claim for this change. Client
 fallback behavior is at `app/lib/utils/conversations/conversation_title.dart:47-60`.
+
+## Consumer review
+
+Required Grok review found that macOS maps all `processing` wire rows to the
+summary-progress UI, discarding their supplied title and offering Reprocess at
+600 seconds. The narrow client projection now honors the server's exact
+`Transcribing…` title for an empty, non-deferred processing row, retaining the
+wire status while bypassing the summary-stall affordance. Ordinary processing,
+deferred, locked and populated rows retain their existing interpretation. This
+requires the macOS source change to ship as well; no installed artifact or live
+client rollout was measured here. The regression exercises the production model.
+
+The review also caught the shared-visibility exception reaching jobs, and missing
+list/star projections. Home reads now opt in explicitly; authoritative job
+visibility is unchanged. Search, folder, developer and MCP list exits share the
+presentation primitive and select its batch receipt fields before transcript
+omission. Speaker-assignment mutations require existing segments, so an empty
+batch placeholder cannot enter that path; its resulting content is outside the
+hold predicate.

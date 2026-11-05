@@ -96,6 +96,16 @@ final class ConversationDisplayStateTests: XCTestCase {
 
   // MARK: - Processing
 
+  func test_serverTranscriptionHold_preservesTitleWithoutSummaryStallReprocess() {
+    let conv = makeConversation(title: "Transcribing…", status: .processing)
+    XCTAssertEqual(conv.status, .processing)
+    XCTAssertEqual(conv.displayState, .titled("Transcribing…"))
+    XCTAssertEqual(conv.displayTitle, "Transcribing…")
+    XCTAssertFalse(conv.canReprocess)
+    XCTAssertEqual(makeConversation(title: "Other title", status: .processing).displayState, .processing)
+    XCTAssertEqual(makeConversation(title: "Transcribing…", status: .processing, isLocked: true).displayState, .locked)
+  }
+
   func test_inProgressStatus_returnsProcessing() {
     let conv = makeConversation(status: .inProgress)
     XCTAssertEqual(conv.displayState, .processing)

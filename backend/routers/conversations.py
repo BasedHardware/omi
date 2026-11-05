@@ -1021,6 +1021,7 @@ def get_conversations(
         starred=starred,
         budget=budget,
         list_fields_only=True,
+        presentation=True,
     )
 
     conversations = home_membership.project_list(
@@ -1148,7 +1149,7 @@ def get_conversation_by_id(
     show_discarded = True if include_discarded is None else include_discarded
     if hidden_from_default_detail(conversation) and include_discarded is not True:
         raise HTTPException(status_code=404, detail="Conversation not found")
-    if not conversations_db.is_visible_conversation(conversation, include_discarded=show_discarded):
+    if not conversations_db.is_visible_conversation(conversation, include_discarded=show_discarded, presentation=True):
         raise HTTPException(status_code=404, detail="Conversation not found")
     # A desktop conversation stored raw (deferred) for a freemium/Neo user is
     # enriched on first open. Other conversations are returned unchanged.
@@ -2092,7 +2093,10 @@ def set_conversation_starred(conversation_id: str, starred: bool, uid: str = Dep
     logger.info(f'update_conversation_starred {conversation_id} {starred} {uid}')
     _get_valid_conversation_by_id(uid, conversation_id)
     conversations_db.set_conversation_starred(uid, conversation_id, starred)
-    return {"status": "Ok", "conversation": _get_valid_conversation_by_id(uid, conversation_id)}
+    return {
+        "status": "Ok",
+        "conversation": transcribing_hold.project(_get_valid_conversation_by_id(uid, conversation_id)),
+    }
 
 
 @router.get(
@@ -2201,6 +2205,7 @@ async def _search_exact_conversation_reference(
     ]
     if exact_page != 1:
         conversations = []
+    conversations = [transcribing_hold.project(row) for row in conversations]
     redact_conversations_for_list(conversations)
     return {
         'items': conversations[:exact_per_page],
@@ -2250,6 +2255,7 @@ async def _browse_speaker_conversations(
         raise HTTPException(
             status_code=503, detail="Saved conversation access could not be restored. Please retry."
         ) from error
+    browse_results['items'] = [transcribing_hold.project(row) for row in browse_results['items']]
     redact_conversations_for_list(browse_results['items'])
     finish_list_budget(response, budget)
     return browse_results
@@ -2369,6 +2375,7 @@ async def search_conversations_endpoint(
     # clears segments on locked rows.
     if (search_request.query or '').strip():
         conversations = attach_match_snippets_to_conversations(conversations, search_request.query)
+    conversations = [transcribing_hold.project(row) for row in conversations]
     redact_conversations_for_list(conversations)
     search_results['items'] = conversations
     # Recompute total_pages from the effective (clamped) pagination the search actually ran with, not the

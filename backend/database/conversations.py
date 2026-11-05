@@ -903,7 +903,9 @@ def is_soft_deleted(conversation: Optional[Mapping[str, Any]]) -> bool:
 
 
 @phase_shadow.compare('home_visibility')
-def is_visible_conversation(conversation: Optional[Mapping[str, Any]], *, include_discarded: bool = False) -> bool:
+def is_visible_conversation(
+    conversation: Optional[Mapping[str, Any]], *, include_discarded: bool = False, presentation: bool = False
+) -> bool:
     """Whether a stored conversation may be put in front of a user or downstream job."""
     if not conversation:
         return False
@@ -918,7 +920,7 @@ def is_visible_conversation(conversation: Optional[Mapping[str, Any]], *, includ
         if (
             conversation.get('dream_duplicate_of')
             or bridge_pending.hidden(conversation)
-            or (is_settling_fragment(conversation) and not transcribing_hold.applies(conversation))
+            or (is_settling_fragment(conversation) and not (presentation and transcribing_hold.applies(conversation)))
             or conversation.get('discarded')
             or is_completed_rule_discard(conversation)
         ):
@@ -963,7 +965,9 @@ def _with_conversation_cursor_envelope(func):
     return wrapper
 
 
-def _collect_cursor_conversation_page(conversations_ref, *, limit, include_discarded, budget, bookmark):
+def _collect_cursor_conversation_page(
+    conversations_ref, *, limit, include_discarded, budget, bookmark, presentation=False
+):
     """Bound the scan by page size plus the existing hidden-row allowance."""
     conversations = []
     last_doc = None
@@ -978,7 +982,7 @@ def _collect_cursor_conversation_page(conversations_ref, *, limit, include_disca
                 last_doc = doc
                 conversation = document_data_with_revision(doc)
                 if conversation is None or not is_visible_conversation(
-                    conversation, include_discarded=include_discarded
+                    conversation, include_discarded=include_discarded, presentation=presentation
                 ):
                     skipped += 1
                     continue
@@ -1003,6 +1007,7 @@ def _collect_visible_conversation_page(
     cursor_page: Optional[Dict[str, Any]] = None,
     cursor_filters: Optional[Dict[str, Any]] = None,
     sort_field: str = 'created_at',
+    presentation: bool = False,
 ) -> List[Dict[str, Any]]:
     """Page visible rows.
 
@@ -1052,6 +1057,7 @@ def _collect_visible_conversation_page(
                 limit=limit,
                 include_discarded=include_discarded,
                 budget=budget,
+                presentation=presentation,
                 bookmark=BookmarkDict({sort_field: stamp, '__name__': doc_id}),
             )
             return finish(conversations)
@@ -1064,7 +1070,7 @@ def _collect_visible_conversation_page(
                 last_doc = doc
                 conversation = document_data_with_revision(doc)
                 if conversation is None or not is_visible_conversation(
-                    conversation, include_discarded=include_discarded
+                    conversation, include_discarded=include_discarded, presentation=presentation
                 ):
                     continue
                 if skipped_visible < offset:
@@ -1092,7 +1098,9 @@ def _collect_visible_conversation_page(
             fetched += 1
             last_doc = doc
             conversation = document_data_with_revision(doc)
-            if conversation is None or not is_visible_conversation(conversation, include_discarded=False):
+            if conversation is None or not is_visible_conversation(
+                conversation, include_discarded=False, presentation=presentation
+            ):
                 continue
             conversations.append(conversation)
     except ListReadBudgetExhausted:
@@ -1117,7 +1125,9 @@ def _collect_visible_conversation_page(
                 refill_reads += 1
                 last_doc = doc
                 conversation = document_data_with_revision(doc)
-                if conversation is None or not is_visible_conversation(conversation, include_discarded=False):
+                if conversation is None or not is_visible_conversation(
+                    conversation, include_discarded=False, presentation=presentation
+                ):
                     continue
                 conversations.append(conversation)
                 if len(conversations) >= limit:
@@ -1974,6 +1984,7 @@ def get_conversations_without_photos(
     budget: Optional[ListReadBudget] = None,
     list_fields_only: bool = False,
     *,
+    presentation: bool = False,
     cursor: Optional[str] = None,
     page_envelope: bool = False,
     cursor_page: Optional[Dict[str, Any]] = None,
@@ -2055,6 +2066,7 @@ def get_conversations_without_photos(
         limit=limit,
         offset=offset,
         include_discarded=include_discarded,
+        presentation=presentation,
         budget=budget,
         uid=uid,
         cursor=cursor,
