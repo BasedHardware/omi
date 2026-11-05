@@ -9,12 +9,22 @@ from __future__ import annotations
 
 import asyncio
 from collections import deque
+import hashlib
 import logging
+import os
+import socket
+import time
 from typing import TYPE_CHECKING
+
+from prometheus_client import Counter
 
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_privacy_attempt import with_batch_privacy_attempt
-from config.batch_pipeline import projection_followup_page_enabled
+from config.batch_pipeline import (
+    projection_followup_backoff_seconds,
+    projection_followup_page_enabled,
+    projection_followup_slots,
+)
 from config.policy import ProjectionPolicy
 from database.batch_pipeline_projection import ProjectionBlocked, ProjectionReplay
 from database.batch_pipeline_store import PROJECTION_FINISH_STATES
@@ -29,7 +39,32 @@ if TYPE_CHECKING:
     from utils.batch_pipeline.projection import Projector
 
 logger = logging.getLogger(__name__)
+# Default slot count; BATCH_PIPELINE_PROJECTION_FOLLOWUP_SLOTS tunes it per process.
 MAX_FOLLOWUPS = 4
+# Desync (BATCH_PIPELINE_PROJECTION_FOLLOWUP_BACKOFF_SECONDS > 0): a process that
+# saw a row blocked, failed, timed out or claimed elsewhere skips it in its own
+# discovery for BACKOFF_BASE_SECONDS, doubling per repeat up to the configured
+# ceiling. Process memory only: the durable row is never skipped by anyone else,
+# targeted/owed wakes bypass it, and a restart forgets it.
+BACKOFF_BASE_SECONDS = 60.0
+
+
+def instance_fraction() -> float:
+    """Stable per-process point in [0, 1) from host, pid and process start time."""
+    key = f'{socket.gethostname()}:{os.getpid()}:{_STARTED_NS}'
+    return int.from_bytes(hashlib.sha256(key.encode()).digest()[:8], 'big') / 2**64
+
+
+_STARTED_NS = time.time_ns()
+# Patchable: backoff is process-local monotonic time.
+_monotonic = time.monotonic
+MAX_BACKOFF_ROWS = 20_000
+BACKOFF_OUTCOMES = frozenset({'blocked', 'retry', 'timeout', 'claim_busy', 'incomplete'})
+OUTCOMES = Counter(
+    'omi_batch_pipeline_projection_followup_outcomes_total',
+    'Async projection follow-up attempts and discovery skips by outcome',
+    ['outcome'],
+)
 # Walk-owed rows held between discovery passes. Dropped rows stay durable and
 # are rediscovered; the bound only caps memory.
 MAX_OWED = 256
@@ -54,6 +89,76 @@ class ProjectionFollowups:
         self.page = 0
         self.pages: dict[str, int] = {}
         self.completion_attempts: set[tuple[int, ProjectionBinding]] = set()
+        self.backoff_ceiling = projection_followup_backoff_seconds()
+        self.backoff: dict[str, tuple[float, float]] = {}
+        self.seeded = self.backoff_ceiling <= 0
+
+    def seed_offset(self):
+        """Start this process's first pass at a hashed point between the oldest receipt and now.
+
+        Every process otherwise pages the same global head in lockstep after a
+        roll. The cursor is a discovery hint only: the page wraps to the head at
+        its end, so one full cycle still visits every row.
+        """
+        self.seeded = True
+        if self.discovery.after is not None:
+            return  # Never move a cursor discovery already holds.
+        try:
+            _, head = self.projector.store.store.projection_page(limit=1, states=PROJECTION_FINISH_STATES)
+            oldest = float(head[0]) if head else None
+            # committed_at is stamped with the projector's clock.
+            now = float(self.projector.clock())
+        except Exception as error:  # fail open: head-first discovery as before
+            logger.warning(
+                'event=batch_projection_followup action=seed outcome=error exception_type=%s', error_type(error)
+            )
+            return
+        if oldest is None or not oldest < now:
+            return
+        self.discovery.after = (oldest + instance_fraction() * (now - oldest), '')
+        OUTCOMES.labels('seeded').inc()
+
+    def backed_off(self, segment) -> bool:
+        entry = self.backoff.get(segment)
+        if entry is None:
+            return False
+        if entry[0] <= _monotonic():
+            return False
+        OUTCOMES.labels('backoff_skipped').inc()
+        return True
+
+    def note(self, segment, outcome):
+        OUTCOMES.labels(outcome).inc()
+        if self.backoff_ceiling <= 0:
+            return
+        if outcome not in BACKOFF_OUTCOMES:
+            self.backoff.pop(segment, None)
+            return
+        previous = self.backoff.pop(segment, (0.0, 0.0))[1]
+        # A row claimed by another process is progress elsewhere: never escalate it.
+        delay = max(BACKOFF_BASE_SECONDS, previous if outcome == 'claim_busy' else previous * 2)
+        delay = min(delay, self.backoff_ceiling)
+        self.backoff[segment] = (_monotonic() + delay, delay)
+        if len(self.backoff) > MAX_BACKOFF_ROWS:
+            # Dropping an entry only retries that row sooner.
+            now = _monotonic()
+            self.backoff = {sid: e for sid, e in self.backoff.items() if e[0] > now}
+            while len(self.backoff) > MAX_BACKOFF_ROWS:
+                self.backoff.pop(next(iter(self.backoff)))
+
+    def discovered(self):
+        page = None
+        if not self.seeded:
+            held = self.discovery.after
+            self.seed_offset()
+            if self.discovery.after is not None and held is None:
+                page = self.discovery.next(limit=100)
+                if not page:
+                    # A seed past the newest row (clock skew): wrap to the head now, not a tick later.
+                    page = None
+        if page is None:
+            page = self.discovery.next(limit=100)
+        return [sid for sid in page if not self.backed_off(sid)]
 
     def candidates(self):
         if projection_followup_page_enabled():
@@ -64,7 +169,7 @@ class ProjectionFollowups:
             # unblock them without changing this result's version.
             self.discovery.states = PROJECTION_FINISH_STATES
             candidates = []
-            for sid in self.discovery.next(limit=100):
+            for sid in self.discovered():
                 job = self.projector.store.ref('jobs', sid).get().to_dict() or {}
                 raw = (job.get('policy_parts') or {}).get('projection')
                 if raw is None:
@@ -79,7 +184,7 @@ class ProjectionFollowups:
         # Assignment failures/partial multipart output must not consume the
         # follow-up slots ahead of rows that have actually persisted.
         candidates = []
-        for sid in self.discovery.next(limit=100):
+        for sid in self.discovered():
             if not (store.ref('results', sid).get().to_dict() or {}).get('projection'):
                 continue
             policy = ProjectionPolicy.from_dict(store.read(sid)[0]['policy_parts']['projection'])
@@ -161,7 +266,7 @@ class ProjectionFollowups:
 
     def launch(self):
         self.launch_targeted()
-        while self.pending and len(self.tasks) < MAX_FOLLOWUPS and not self.closed:
+        while self.pending and len(self.tasks) < projection_followup_slots(MAX_FOLLOWUPS) and not self.closed:
             segment = self.pending.popleft()
             task = start_background_task(self.run(segment), name='batch_projection_followup')
             self.tasks[segment] = task
@@ -173,7 +278,7 @@ class ProjectionFollowups:
             task.add_done_callback(lambda done, sid=segment: self.finished(sid, done, targeted=False))
 
     def launch_targeted(self):
-        while self.targeted_pending and len(self.tasks) < MAX_FOLLOWUPS and not self.closed:
+        while self.targeted_pending and len(self.tasks) < projection_followup_slots(MAX_FOLLOWUPS) and not self.closed:
             segment = self.targeted_pending.popleft()
             if segment in self.tasks:
                 continue
@@ -222,9 +327,11 @@ class ProjectionFollowups:
             # row remains eligible for a later sweep, including a lost reply
             # after a side effect committed. Receipt transactions fence retries.
             async with asyncio.timeout(FOLLOWUP_TIMEOUT_SECONDS):
-                await self._run(segment)
+                outcome = await self._run(segment)
         except TimeoutError:
             logger.warning('event=batch_projection_followup outcome=timeout')
+            outcome = 'timeout'
+        self.note(segment, outcome)
 
     async def _run(self, segment):
         # This is a segment claim, never the owner's assignment claim. Redis
@@ -238,12 +345,12 @@ class ProjectionFollowups:
             acquired = await run_blocking(db_executor, claim.__enter__)
             entered = True
             if not acquired:
-                return
+                return 'claim_busy'
             job, entry, binding = await run_blocking(db_executor, self.read_persisted, segment)
             if projection_followup_page_enabled():
                 policy = ProjectionPolicy.from_dict(job['policy_parts']['projection'])
                 if not policy.async_projection:
-                    return  # The synchronous sweep owns these receipts.
+                    return 'sync_owned'  # The synchronous sweep owns these receipts.
             was_ready = entry['projection']['state'] == 'ready' and all(
                 part.get('state') == 'ready' for part in (entry.get('projection_parts') or {}).values()
             )
@@ -260,24 +367,29 @@ class ProjectionFollowups:
             coalesce = projection_followup_page_enabled() and was_ready and page != 0
             if coalesce:
                 if key in self.completion_attempts:
-                    return
+                    return 'coalesced'
                 self.completion_attempts.add(key)
             try:
-                await run_blocking(postprocess_executor, self.projector.complete_content, segment, binding)
+                result = await run_blocking(postprocess_executor, self.projector.complete_content, segment, binding)
             except BaseException:
                 # Failure/cancellation is not a readiness result. Another
                 # sibling in this page may immediately retry the probe.
                 if coalesce:
                     self.completion_attempts.discard(key)
                 raise
+            # None: the content is not finishable yet (a sibling is still owed or
+            # a partial holds). The sibling's own follow-up probes completion.
+            return 'completed' if result is not None else 'incomplete'
         except (ProjectionBlocked, BatchPrivacyBlocked):
             logger.info('event=batch_projection_followup outcome=blocked')
+            return 'blocked'
         except Exception as error:
             logger.error(
                 'event=batch_projection_followup outcome=retry exception_type=%s%s',
                 error_type(error),
                 error_site_field(error),
             )
+            return 'retry'
         finally:
             if entered:
                 # Cleanup must not hold a follow-up slot if Redis/the DB pool

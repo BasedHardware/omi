@@ -53,6 +53,13 @@ class ResultQuery:
         return [SimpleNamespace(id=key, to_dict=lambda key=key: dict(self.rows[key])) for _, key in rows]
 
 
+@pytest.fixture(autouse=True)
+def head_first_discovery(monkeypatch):
+    # These read budgets pin the head-first pass (desync kill switch). The
+    # desync seed adds one 1-row read per process: test_batch_pipeline_followup_desync.py.
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_FOLLOWUP_BACKOFF_SECONDS', '0')
+
+
 def scanner(rows):
     query = ResultQuery(rows)
     store = Mock()

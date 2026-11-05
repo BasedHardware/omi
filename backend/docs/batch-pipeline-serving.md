@@ -1259,6 +1259,37 @@ below have their own switches; all three off is the pre-drain behaviour):
   advanced= more= elapsed_ms=` per turn, and `action=owner_chain
   outcome=claim_busy`.
 
+### Follow-up desync (2026-11-05)
+
+Every serving process runs its own async follow-up discovery over the same
+`(projection_state, committed_at, __name__)` page. After a roll, all processes
+started at the head together and walked it in lockstep. Each retried the same
+unchanged blocked receipts and skipped rows that a peer had just claimed. On
+2026-11-05 the persisted/ready backlog grew past 45k over SLA while CPU stayed
+near 45 % (`data/run-2026-11-04-gpueff/projection-backlog-2026-11-05.md` in
+the workspace).
+
+`BATCH_PIPELINE_PROJECTION_FOLLOWUP_BACKOFF_SECONDS` (default `900`; `0` is
+the kill switch; negative, NaN or above 3600 keeps 900):
+- **Offset.** A process's first discovery page starts at a hashed point between
+  the oldest persisted/ready commit and now. The hash covers host, pid and
+  start time, and the seed costs one 1-row read. The page still
+  wraps to the head at its end, so one cycle visits every row. A failed seed
+  read falls back to head-first.
+- **Backoff.** A row this process saw `blocked`, `retry`, `timeout`,
+  `incomplete` (content not finishable yet) or `claim_busy` is skipped in this
+  process's discovery. The skip is 60 s, doubling per repeat up to the ceiling.
+  `claim_busy` never escalates, and any other outcome clears the entry. The skip
+  lives in process memory only (at most 20,000 rows; dropping an entry only
+  retries sooner). Targeted and owed wakes bypass it, and other processes do
+  not see it. The durable row and its fences are unchanged.
+- **Counter.** `omi_batch_pipeline_projection_followup_outcomes_total{outcome}`
+  counts `completed`, `incomplete`, `blocked`, `retry`, `timeout`,
+  `claim_busy`, `coalesced`, `sync_owned`, `backoff_skipped` and `seeded`.
+
+`BATCH_PIPELINE_PROJECTION_FOLLOWUP_SLOTS` (default `4`, range 1–16; unset or
+out-of-range keeps 4) sets the concurrent follow-ups per process.
+
 `BATCH_PIPELINE_PROJECTION_PREFETCH` (default `4`; `0` is the kill switch;
 malformed or above 8 keeps 4). A budgeted walk reads the next N rows ahead on
 `storage_executor`: their successor links, job bindings, result payloads and
