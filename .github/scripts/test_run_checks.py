@@ -892,7 +892,7 @@ esac
                 path.chmod(0o755)
 
             env = os.environ.copy()
-            env["PATH"] = f"{fake_bin}:/usr/bin:/bin"
+            env["PATH"] = f"{fake_bin}:{os.environ.get('PATH', '/usr/bin:/bin')}"
             # The stub supervisor ignores --cleanup-path and run.sh execs it, so keep mktemp in the sandbox.
             env["TMPDIR"] = str(root)
             result = subprocess.run(["bash", str(runner)], text=True, capture_output=True, env=env, check=False)
@@ -901,6 +901,15 @@ esac
             captured = capture.read_text(encoding="utf-8")
             self.assertIn("uv run --no-project", captured)
             self.assertIn("--cleanup-path", captured)
+
+    def test_firestore_contention_runner_preserves_host_path_for_nixos(self) -> None:
+        """Verify fake_bin is prepended to host PATH so coreutils like dirname remain resolvable on NixOS."""
+        fake_bin = Path("/tmp/fake-bin")
+        custom_path = "/run/current-system/sw/bin:/custom/bin"
+        with patch.dict(os.environ, {"PATH": custom_path}):
+            constructed = f"{fake_bin}:{os.environ.get('PATH', '/usr/bin:/bin')}"
+            self.assertTrue(constructed.startswith(f"{fake_bin}:"))
+            self.assertIn(custom_path, constructed)
 
     def test_trigger_matching_selects_only_relevant_checks(self) -> None:
         manifest = load_manifest(MANIFEST_PATH)
