@@ -72,7 +72,8 @@ cadence instead of inside a lane between flights. Publication is unchanged: the 
 ordered merge remains the per-owner ordering authority across lanes, exactly as
 it already is across replicas and the serving reconciler. `1` restores the serial
 pump. A waiting lane may hold one already-claimed flight ahead of later fresh
-arrivals, so fresh work can wait up to one extra chain.
+arrivals, so fresh work can wait up to depth - 1 extra chains (two in prod at depth 3; the T4
+fallback sibling keeps `t4Fallback.pipelineDepth` 2).
 
 ### Worker processes per GPU
 

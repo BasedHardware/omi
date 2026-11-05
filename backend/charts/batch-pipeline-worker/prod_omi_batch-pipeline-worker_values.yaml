@@ -63,6 +63,13 @@ worker:
   # g2-standard-8 node with daemons). The T4 fallback stays at t4Fallback.processes 1.
   # Kill switch / rollback: processes: 1 (values-only Helm roll).
   processes: 2
+  # Three pump lanes per process (cl2-gpueff 2026-11-05, queue v3 #2): after the claim-ceiling
+  # lift (#24626) the fleet is bound by per-lane claim/publish latency, not GPU-lock time; more
+  # lanes overlap more claims per GPU. Dev L4 bench under a 3.2 s simulated claim: 2 processes x 2
+  # lanes 124.7 vs x 4 lanes 180 audio-h/GPU-h. One step to 3 first to watch shard-claim contention.
+  # Decoded memory stays inside each process's shared 1800 audio-second prepare budget and the
+  # 7200 audio-second bound. Kill switch / rollback: pipelineDepth 2.
+  pipelineDepth: 3
   servingMetricsMinRefreshSeconds: 60
   # Matches the prod backend hosts (deploy contract reader-split invariant):
   # window allocation 100, replica recovery explicitly off, and the
