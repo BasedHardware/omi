@@ -108,7 +108,7 @@ enum Tests {
         var fragmentWrap = AudioStats(); fragmentWrap.consume(Data([1, 0, 255, 1])); fragmentWrap.consume(Data([2, 0, 1, 1]))
         check(!fragmentWrap.valid, "No invented fragment wrap")
 
-        for command in [Command.scan, .session, .audio] {
+        for command in [Command.scan, .session, .audio, .imageState, .imageUpload] {
             var progress = Progress(command: command)
             check(progress.outcome(.deadline) == .bluetoothOff, "Adapter never became ready")
             progress.permissionPending = true
@@ -150,7 +150,150 @@ enum Tests {
         let checkedJSON = try JSONSerialization.jsonObject(with: JSONEncoder().encode(checkedReceipt)) as! [String: Any]
         let checkedIdentity = checkedJSON["identity"] as! [String: Any]
         check(checkedIdentity["checked"] as? Bool == true && checkedIdentity["status"] as? String == "matched", "Checked identity visible in receipt")
+        try smpChecks()
         print("PASS: \(checks) pure Swift checks; no CoreBluetooth linked or initialized")
+    }
+    static func mustThrow(_ message: String, _ action: () throws -> Void) {
+        do { try action(); fatalError(message) } catch { checks += 1 }
+    }
+    static func syntheticImage(protected: Bool = false) -> Data {
+        var b = [UInt8](repeating: 0, count: 32)
+        b.replaceSubrange(0..<4, with: [0x3d, 0xb8, 0xf3, 0x96])
+        b[8] = 32; b[10] = protected ? 8 : 0; b[12] = 4
+        b += [1, 2, 3, 4]
+        if protected { b += [8, 0x69, 8, 0, 0x50, 0, 0, 0] }
+        b += [7, 0x69, 40, 0, 0x10, 0, 32, 0] + Array(UInt8(0)..<UInt8(32))
+        return Data(b)
+    }
+    static func smpChecks() throws {
+        let h = SMPHeader(op: 2, length: 0x1234, group: 0x0102, sequence: 0xfe, id: 1)
+        check(h.encoded() == Data([0x0a, 0, 0x12, 0x34, 1, 2, 0xfe, 1]), "SMP v2 header big endian")
+        let decodedHeader = try SMPHeader.decode(h.encoded())
+        check(decodedHeader == h, "SMP header decode")
+        for bad in [Data(), Data([0, 0, 0, 0, 0, 1, 0, 0]), Data([0x08, 1, 0, 0, 0, 1, 0, 0]), Data([0x10, 0, 0, 0, 0, 1, 0, 0])] {
+            mustThrow("Accepted invalid header") { _ = try SMPHeader.decode(bad) }
+        }
+        let hash = Data(UInt8(0)..<UInt8(32))
+        let state: CBOR = .map(["images": .array([.map([
+            "image": .uint(0), "slot": .uint(1), "version": .text("1.2.3.4"), "hash": .bytes(hash),
+            "bootable": .bool(true), "pending": .bool(true), "confirmed": .bool(false),
+            "active": .bool(false), "permanent": .bool(false),
+        ])]), "splitStatus": .uint(0)])
+        for v in [state, .map(["rc": .negative(-2)]), .map(["err": .map(["group": .uint(1), "rc": .uint(7)])]),
+                  .map(["off": .uint(65536)]), .map(["bootloader": .text("MCUboot")]), .map(["r": .text("echo")]),
+                  .array([.uint(23), .uint(24), .uint(255), .uint(256), .uint(65535), .uint(UInt64.max), .negative(Int64.min), .text("é"), .bytes(Data())])] {
+            let decoded = try CBOR.decode(v.encoded())
+            check(decoded == v, "McuMgr-shaped CBOR round trip")
+        }
+        // Zephyr's zcbor commonly emits indefinite containers, including nested image lists.
+        let indefinite = Data([0xbf]) + CBOR.text("images").encoded() + Data([0x9f, 0xbf])
+            + CBOR.text("slot").encoded() + Data([1, 0xff, 0xff, 0xff])
+        let decodedIndefinite = try CBOR.decode(indefinite)
+        check(decodedIndefinite == .map(["images": .array([.map(["slot": .uint(1)])])]), "Indefinite map/array response")
+        for bad in [Data([0xbf]), Data([0x61, 0xff]), Data([0xa1, 0x61, 0x78]), Data([0x80, 0]), Data([0x5b, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff]), Data([0xa2, 0x61, 0x61, 0, 0x61, 0x61, 1])] {
+            mustThrow("Accepted malformed CBOR") { _ = try CBOR.decode(bad) }
+        }
+        let json = try JSONSerialization.jsonObject(with: JSONEncoder().encode(state)) as! [String: Any]
+        let slots = json["images"] as! [[String: Any]]
+        check(slots[0]["hash"] as? String == hex(hash) && slots[0]["pending"] as? Bool == true, "Receipt retains hex hash and flags")
+        for protected in [false, true] {
+            let parsedHash = try imageHash(syntheticImage(protected: protected))
+            check(parsedHash == hash, "Parse MCUboot SHA256 with optional protected TLVs")
+        }
+        for size in 0..<syntheticImage().count {
+            mustThrow("Accepted truncated image") { _ = try imageHash(syntheticImage().prefix(size)) }
+        }
+        var badImage = syntheticImage(); badImage[40] = 0x11
+        mustThrow("Accepted missing SHA256") { _ = try imageHash(badImage) }
+        badImage = syntheticImage(); badImage[42] = 31
+        mustThrow("Accepted short SHA256") { _ = try imageHash(badImage) }
+        let image = try UploadImage(data: syntheticImage() + Data(repeating: 0xff, count: 12000))
+        for maximum in [20, 64, 244, 247, 512, 2475, 3000] {
+            for offset in [0, 24, 256, image.data.count - 1] {
+                let chunk = try uploadChunk(image: image, sha: hash, offset: offset, maximumWrite: maximum)
+                guard case .bytes(let bytes) = chunk["data"] else { fatalError("Missing chunk data") }
+                let total = 8 + chunk.encoded().count
+                check(total <= 2475 && !bytes.isEmpty, "Chunk fits netbuf including header")
+                check(total <= (maximum > 2475 ? 2475 : (2475 / maximum) * maximum), "Chunk respects write-sized reassembly budget")
+                check(bytes == image.data.subdata(in: offset..<(offset + bytes.count)), "Exact upload bytes")
+                check((chunk["sha"] != nil) == (offset == 0) && (chunk["image"] != nil) == (offset == 0), "First chunk metadata only")
+            }
+        }
+        mustThrow("Accepted zero write length") { _ = try uploadChunk(image: image, sha: hash, offset: 0, maximumWrite: 0) }
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: false)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let output = root.appendingPathComponent("new.json").path, input = root.appendingPathComponent("image.bin").path
+        try image.data.write(to: URL(fileURLWithPath: input))
+        let unreadable = root.appendingPathComponent("unreadable.bin")
+        try image.data.write(to: unreadable)
+        try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: unreadable.path)
+        let base = ["--seconds", "120", "--output", output]
+        let upload = ["image-upload"] + base
+        rejected(upload + ["--mode", "test"])
+        rejected(upload + ["--file", input])
+        rejected(upload + ["--file", root.appendingPathComponent("absent.bin").path, "--mode", "test"])
+        rejected(upload + ["--file", root.path, "--mode", "test"])
+        rejected(upload + ["--file", unreadable.path, "--mode", "test"])
+        rejected(upload + ["--file", input, "--mode", "other"])
+        rejected(upload + ["--file", input, "--mode", "test", "--no-reset", "--no-reset"])
+        rejected(["image-state"] + base + ["--mode", "test"])
+        rejected(["image-state"] + base + ["--no-reset"])
+        rejected(["image-state"] + base + ["--expect-serial", "synthetic"])
+        rejected(["scan"] + base + ["--file", input])
+        let options = try Options.parse(upload + ["--file", input, "--mode", "test"])
+        for mode in ["test", "confirm"] {
+            for noReset in [false, true] {
+                let opts = try Options.parse(upload + ["--file", input, "--mode", mode] + (noReset ? ["--no-reset"] : []))
+                var plan = SMPPlan(options: opts, sha: hash)
+                var names: [String] = [], mark: CBOR?
+                while let request = try plan.request(maximumWrite: 244) {
+                    names.append(request.name)
+                    var body: CBOR = .map([:])
+                    if plan.step == .upload {
+                        guard case .bytes(let bytes) = request.body["data"] else { fatalError("Missing data") }
+                        body = .map(["off": .uint(UInt64(plan.offset + bytes.count))])
+                    }
+                    if plan.step == .mark { mark = request.body }
+                    let response = SMPHeader(op: request.header.op + 1, length: UInt16(body.encoded().count), group: request.header.group, sequence: request.header.sequence, id: request.header.id).encoded() + body.encoded()
+                    let decoded = try request.response(response)
+                    try request.checkError(decoded)
+                    // Every byte boundary, including a split header, must reassemble exactly once.
+                    for split in 1..<response.count {
+                        var receiver = SMPReassembler()
+                        let first = try receiver.consume(response.prefix(split))
+                        let second = try receiver.consume(response.suffix(response.count - split))
+                        check(first == nil && second == response, "Fragmented SMP response")
+                    }
+                    try plan.accept(decoded)
+                }
+                check(names.first == "initial-image-state" && names.contains("marked-image-state"), "State before upload and after mark")
+                check(names.contains("reset") == !noReset && names.contains("post-reset-image-state") == !noReset, "Reset followed by state observation unless suppressed")
+                check(mark?["hash"] == .bytes(image.hash) && mark?["confirm"] == .bool(mode == "confirm"), "Mark uses TLV hash and explicit mode")
+            }
+        }
+        var plan = SMPPlan(options: options, sha: hash)
+        let request = try plan.request(maximumWrite: 244)!
+        for body: CBOR in [.map(["rc": .negative(-1)]), .map(["err": .map(["group": .uint(1), "rc": .uint(9)])])] {
+            do { try request.checkError(body); fatalError("Accepted SMP error") }
+            catch { check(String(describing: error).contains("group=1 id=0 rc="), "Failure detail identifies request and rc") }
+        }
+        try request.checkError(.map(["rc": .uint(0)]))
+        mustThrow("Accepted mismatched response") { _ = try request.response(h.encoded()) }
+        try plan.accept(.map([:]))
+        mustThrow("Accepted stalled offset") { try plan.accept(.map(["off": .uint(0)])) }
+        mustThrow("Accepted missing offset") { try plan.accept(.map([:])) }
+        mustThrow("Accepted unbounded offset") { try plan.accept(.map(["off": .uint(UInt64.max)])) }
+        try plan.accept(.map(["off": .uint(10)]))
+        let resumed = try plan.request(maximumWrite: 244)!
+        check(resumed.body["off"] == .uint(10), "Next chunk uses server offset")
+        var statePlan = SMPPlan(options: try Options.parse(["image-state"] + base), sha: Data())
+        var stateNames: [String] = []
+        while let req = try statePlan.request(maximumWrite: 20) { stateNames.append(req.name); try statePlan.accept(.map([:])) }
+        check(stateNames == ["bootloader-info", "initial-image-state", "echo"], "Image-state command order")
+        try Data("preserve".utf8).write(to: URL(fileURLWithPath: output))
+        rejected(upload + ["--file", input, "--mode", "confirm"])
+        rejected(["image-state"] + base)
     }
     static func tryParse(_ args: [String]) -> Bool { (try? Options.parse(args)) != nil }
 }

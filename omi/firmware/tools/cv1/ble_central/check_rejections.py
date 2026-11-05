@@ -2,6 +2,7 @@
 """Run only pre-Bluetooth refusal paths of an already built executable."""
 import json
 import subprocess
+import struct
 import sys
 import tempfile
 from pathlib import Path
@@ -33,10 +34,33 @@ def main(executable):
             assert '--expect-serial' in result.stderr.splitlines()[0] and not fresh.exists()
         run(['session', '--seconds', 'nan', '--output', str(fresh)], 2)
         assert not fresh.exists()
+        # Synthetic MCUboot container: only offline argument validation uses it.
+        image = root / 'synthetic.bin'
+        header = bytearray(32)
+        struct.pack_into('<I', header, 0, 0x96f3b83d)
+        struct.pack_into('<H', header, 8, 32)
+        image.write_bytes(header + struct.pack('<HHHH', 0x6907, 40, 0x10, 32) + bytes(range(32)))
+        unreadable = root / 'unreadable.bin'
+        unreadable.write_bytes(image.read_bytes())
+        unreadable.chmod(0)
+        image_flags = ['--file', str(image), '--mode', 'test']
+        for command, flags in [
+            ('image-upload', ['--mode', 'test']),
+            ('image-upload', ['--file', str(image)]),
+            ('image-upload', ['--file', str(root / 'absent.bin'), '--mode', 'test']),
+            ('image-upload', ['--file', str(root), '--mode', 'confirm']),
+            ('image-upload', ['--file', str(unreadable), '--mode', 'test']),
+            ('image-upload', ['--file', str(image), '--mode', 'invalid']),
+            ('image-upload', image_flags + ['--no-reset', '--no-reset']),
+            ('image-state', ['--no-reset']), ('image-state', ['--mode', 'test']),
+            ('image-state', expected), ('scan', image_flags),
+        ]:
+            run([command, '--seconds', '1', '--output', str(fresh)] + flags, 2)
+            assert not fresh.exists()
         existing = root / 'existing.json'
         existing.write_text('preserve me')
-        for command in ['scan', 'session', 'audio']:
-            run([command, '--seconds', '1', '--output', str(existing)] + (expected if command == 'audio' else []), 2)
+        for command in ['scan', 'session', 'audio', 'image-state', 'image-upload']:
+            run([command, '--seconds', '1', '--output', str(existing)] + (expected if command == 'audio' else image_flags if command == 'image-upload' else []), 2)
             assert existing.read_text() == 'preserve me'
         link = root / 'link.json'
         link.symlink_to(fresh)

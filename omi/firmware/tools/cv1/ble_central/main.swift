@@ -1,5 +1,6 @@
 import AppKit
 import CoreBluetooth
+import CryptoKit
 import Darwin
 import Foundation
 
@@ -64,10 +65,23 @@ final class Central: NSObject, NSApplicationDelegate, CBCentralManagerDelegate, 
     var cleanupEnd: DispatchWorkItem?
     var captureDeadline: TimeInterval?
     var unsubscriptionRequested = false, disconnectRequested = false
+    var smpCharacteristic: CBCharacteristic?
+    var smpPlan: SMPPlan
+    var smpPending: SMPRequest?
+    var smpOutgoing = Data()
+    var smpIncoming = SMPReassembler()
+    var smpFinishing = false, waitingForReset = false
     var stopped = false
 
     init(options: Options, receipt: Receipt, writer: ReceiptWriter, audioFile: FileHandle?) {
+        let sha = options.upload.map { Data(SHA256.hash(data: $0.data)) } ?? Data()
+        smpPlan = SMPPlan(options: options, sha: sha)
         self.options = options; self.receipt = receipt; self.writer = writer; self.audioFile = audioFile
+        if let upload = options.upload {
+            self.receipt.uploadMode = options.mode
+            self.receipt.uploadFileSHA256 = hex(sha)
+            self.receipt.uploadImageHash = hex(upload.hash)
+        }
     }
     func phase(_ phase: Phase) { receipt.progress.phase = phase }
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -101,6 +115,10 @@ final class Central: NSObject, NSApplicationDelegate, CBCentralManagerDelegate, 
             if let audioCharacteristic, audioCharacteristic.isNotifying, !unsubscriptionRequested {
                 unsubscriptionRequested = true
                 target.setNotifyValue(false, for: audioCharacteristic)
+            }
+            if let smpCharacteristic, smpCharacteristic.isNotifying, !unsubscriptionRequested {
+                unsubscriptionRequested = true
+                target.setNotifyValue(false, for: smpCharacteristic)
             }
             requestDisconnect(target)
         }
@@ -154,12 +172,20 @@ final class Central: NSObject, NSApplicationDelegate, CBCentralManagerDelegate, 
             maximumWriteWithResponse: peripheral.maximumWriteValueLength(for: .withResponse),
             maximumWriteWithoutResponse: peripheral.maximumWriteValueLength(for: .withoutResponse)))
         readQueue = []; pendingRead = nil; audioCharacteristic = nil
-        peripheral.discoverServices(nil)
+        smpCharacteristic = nil
+        peripheral.discoverServices(options.command.isSMP ? [CBUUID(string: UUIDs.smpService)] : nil)
     }
     func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
         guard !stopped else { return }
         guard error == nil, let services = peripheral.services, !services.isEmpty else { stop(.gatt, "Service discovery failed"); return }
         receipt.connections[connectionNumber - 1].services = services.map { $0.uuid.uuidString }.sorted()
+        if options.command.isSMP {
+            guard let service = services.first(where: { $0.uuid == CBUUID(string: UUIDs.smpService) }) else {
+                stop(.gatt, "SMP service absent"); return
+            }
+            peripheral.discoverCharacteristics([CBUUID(string: UUIDs.smpData)], for: service)
+            return
+        }
         // Enumerate all service UUIDs, but only discover characteristics in the read/notify allowlist.
         let wanted = services.filter { [UUIDs.information, UUIDs.featuresService, UUIDs.diagnosticsService, UUIDs.audioService].contains($0.uuid.uuidString) }
         discoveryRemaining = wanted.count
@@ -171,6 +197,17 @@ final class Central: NSObject, NSApplicationDelegate, CBCentralManagerDelegate, 
     func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
         guard !stopped else { return }
         guard error == nil else { stop(.gatt, "Characteristic discovery failed"); return }
+        if options.command.isSMP {
+            guard service.uuid == CBUUID(string: UUIDs.smpService),
+                  let c = service.characteristics?.first(where: { $0.uuid == CBUUID(string: UUIDs.smpData) }),
+                  c.properties.contains([.writeWithoutResponse, .notify]) else {
+                stop(.gatt, "SMP write-without-response + notify characteristic absent"); return
+            }
+            smpCharacteristic = c
+            unsubscriptionRequested = false
+            peripheral.setNotifyValue(true, for: c)
+            return
+        }
         for characteristic in service.characteristics ?? [] {
             let uuid = characteristic.uuid.uuidString
             let serviceUUID = service.uuid.uuidString
@@ -234,6 +271,30 @@ final class Central: NSObject, NSApplicationDelegate, CBCentralManagerDelegate, 
     }
     func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
         guard !stopped else { return }
+        if characteristic === smpCharacteristic {
+            guard error == nil, let data = characteristic.value else { stop(.gatt, "SMP notification failed"); return }
+            do {
+                guard let frame = try smpIncoming.consume(data) else { return }
+                let header = try SMPHeader.decode(frame)
+                let body = try CBOR.decode(Data(frame.dropFirst(8)))
+                receipt.smp.append(SMPEvent(at: now(), direction: "response", name: smpPending?.name ?? "unsolicited",
+                                            header: header, body: body))
+                guard let pending = smpPending, smpOutgoing.isEmpty else { throw InputError.invalid("Unsolicited or premature SMP response") }
+                _ = try pending.response(frame)
+                try pending.checkError(body)
+                let wasReset = smpPlan.step == .reset
+                let wasPostState = smpPlan.step == .postState
+                try smpPlan.accept(body)
+                smpPending = nil
+                if wasPostState { receipt.postResetStateRead = true }
+                if wasReset {
+                    waitingForReset = true // Require the device's disconnect; do not manufacture reset evidence.
+                    return
+                }
+                try sendSMP(peripheral)
+            } catch { stop(.gatt, String(describing: error)) }
+            return
+        }
         if characteristic === audioCharacteristic && receipt.progress.phase == .audio {
             if let limit = captureDeadline, ProcessInfo.processInfo.systemUptime >= limit { endCapture(peripheral); return }
             guard error == nil, let data = characteristic.value else { stop(.audio, "Audio notification failed"); return }
@@ -269,7 +330,20 @@ final class Central: NSObject, NSApplicationDelegate, CBCentralManagerDelegate, 
         readNext(peripheral)
     }
     func peripheral(_ peripheral: CBPeripheral, didUpdateNotificationStateFor characteristic: CBCharacteristic, error: Error?) {
-        guard !stopped, characteristic === audioCharacteristic else { return }
+        guard !stopped else { return }
+        if characteristic === smpCharacteristic {
+            guard error == nil else { stop(.gatt, "SMP notification state change failed"); return }
+            if smpFinishing && !characteristic.isNotifying {
+                receipt.unsubscriptionAcknowledged = true
+                receipt.progress.sessionComplete = true
+                disconnectFinal(peripheral)
+            } else if characteristic.isNotifying && smpPending == nil && !waitingForReset {
+                receipt.subscriptionAcknowledged = true
+                do { try sendSMP(peripheral) } catch { stop(.gatt, String(describing: error)) }
+            } else { stop(.gatt, "Unexpected SMP subscription state") }
+            return
+        }
+        guard characteristic === audioCharacteristic else { return }
         guard error == nil else { stop(.audio, "Notification state change failed"); return }
         if receipt.progress.phase == .subscribing {
             guard characteristic.isNotifying else { stop(.audio, "Subscription was not enabled"); return }
@@ -288,6 +362,31 @@ final class Central: NSObject, NSApplicationDelegate, CBCentralManagerDelegate, 
             disconnectFinal(peripheral)
         }
     }
+    func sendSMP(_ peripheral: CBPeripheral) throws {
+        guard smpPending == nil else { throw InputError.invalid("SMP request already outstanding") }
+        observeLengths(peripheral)
+        guard let request = try smpPlan.request(maximumWrite: peripheral.maximumWriteValueLength(for: .withoutResponse)) else {
+            smpFinishing = true
+            unsubscriptionRequested = true
+            peripheral.setNotifyValue(false, for: smpCharacteristic!)
+            return
+        }
+        smpPending = request; smpOutgoing = request.frame
+        receipt.smp.append(SMPEvent(at: now(), direction: "request", name: request.name, header: request.header, body: request.summary))
+        if smpPlan.step == .reset { receipt.resetRequested = true }
+        flushSMP(peripheral)
+    }
+    func flushSMP(_ peripheral: CBPeripheral) {
+        guard !stopped, let characteristic = smpCharacteristic else { return }
+        let maximum = peripheral.maximumWriteValueLength(for: .withoutResponse)
+        guard maximum > 0 else { stop(.gatt, "Invalid SMP maximum write length"); return }
+        while peripheral.canSendWriteWithoutResponse && !smpOutgoing.isEmpty {
+            let fragment = Data(smpOutgoing.prefix(maximum))
+            smpOutgoing.removeFirst(fragment.count)
+            peripheral.writeValue(fragment, for: characteristic, type: .withoutResponse)
+        }
+    }
+    func peripheralIsReady(toSendWriteWithoutResponse peripheral: CBPeripheral) { flushSMP(peripheral) }
     func endCapture(_ peripheral: CBPeripheral) {
         guard receipt.progress.phase == .audio, let characteristic = audioCharacteristic else { return }
         phase(.unsubscribing)
@@ -310,7 +409,16 @@ final class Central: NSObject, NSApplicationDelegate, CBCentralManagerDelegate, 
     func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
         guard !stopped else { return }
         receipt.disconnectsAcknowledged += 1
-        if receipt.progress.phase == .disconnectForReconnect && error == nil {
+        if waitingForReset {
+            waitingForReset = false
+            disconnectRequested = false
+            phase(.reconnecting)
+            // One reset reconnect, no retry or alternate target. Reset response has already passed.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+                guard let self, !self.stopped else { return }
+                central.connect(peripheral, options: nil)
+            }
+        } else if receipt.progress.phase == .disconnectForReconnect && error == nil {
             disconnectRequested = false
             phase(.reconnecting)
             central.connect(peripheral, options: nil) // The sole reconnect; never retry a failure.
@@ -348,6 +456,6 @@ do {
     withExtendedLifetime((central, signals)) { app.run() }
     central.stop(.interrupted, "Application run loop ended")
 } catch {
-    stderr("\(error)\nUsage: CV1BLECentral scan|session|audio --seconds N --output NEW.json [--name-prefix Omi] [--expect-serial VALUE] [--keep-audio NEW.bin]\naudio requires --expect-serial VALUE")
+    stderr("\(error)\nUsage: CV1BLECentral scan|session|audio|image-state|image-upload --seconds N --output NEW.json [--name-prefix Omi] [--expect-serial VALUE] [--keep-audio NEW.bin]\naudio requires --expect-serial VALUE; image-upload requires --file F.bin --mode test|confirm [--no-reset]")
     exit(2) // Invalid invocations/file collisions never initialize CoreBluetooth.
 }
