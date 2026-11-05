@@ -24,8 +24,9 @@
   },
   "seed_review_by": "2026-11-15",
   "budget": 169,
-  "count": 248,
+  "count": 249,
   "names": {
+    "PROJECTION_DRAIN_CLAIM_AWARE": {"owner": "two-lane lead", "review_by": "2026-12-05", "registry": "config/feature-flags.yaml"},
     "PARAKEET_SHAPE_CANARY_FILE": {"owner": "two-lane lead", "review_by": "2026-12-04"},
     "PARAKEET_LID_MODEL": {"owner": "planscost", "review_by": "2026-11-30"},
     "PARAKEET_LID_ONLY": {"owner": "planscost", "review_by": "2026-11-30"},

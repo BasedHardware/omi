@@ -9318,3 +9318,12 @@ frames, one automatic notes-only refresh is claimed. A user title prevents both
 the claim and a concurrent refresh commit. An all-rejected pass may still refresh
 late OCR/calendar context, but rejected frame bytes never reach notes. This
 refresh does not run derived memory, app, embedding, or speech-learning jobs.
+
+
+## Batch projection drain admission
+
+`PROJECTION_DRAIN_CLAIM_AWARE` defaults on; only `off` disables it. Initial
+owner-drain admissions use a read-only Redis claim GET and fail open on errors.
+Claim-busy re-requests through `again` back off 5–15 seconds; productive
+`more=True` continuations retain immediate FIFO progress without the peek.
+The advisory claim and transactional ordering fences remain unchanged.
