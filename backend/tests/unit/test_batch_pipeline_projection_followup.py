@@ -116,6 +116,51 @@ def followup(monkeypatch, owner_claim):
     return SimpleNamespace(**locals())
 
 
+@pytest.mark.parametrize('page_enabled', ['true', 'false'])
+@pytest.mark.parametrize('owners', [('heavy',) * 5, ('heavy', 'light', 'heavy', 'light')])
+def test_followup_page_offers_one_receipt_per_owner_and_rotates(followup, monkeypatch, page_enabled, owners):
+    from dataclasses import replace
+    from utils.batch_pipeline.correctness_metrics import PROJECTION_COLLAPSED_ROWS
+
+    f = followup
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_FOLLOWUP_PAGE_ENABLED', page_enabled)
+    segments = [f'row-{n}' for n in range(len(owners))]
+    bindings = {}
+    for sid, owner in zip(segments, owners):
+        binding = replace(f.binding, owner_id=owner, segment_ids=(sid,))
+        bindings[sid] = binding
+        f.jobs[sid] = {**f.jobs['head'], 'projection_binding': asdict(binding)}
+        f.receipts[sid] = {**f.receipts['head'], 'state': 'ready'}
+    f.projector.store.read.side_effect = lambda sid: (f.jobs[sid], {'projection': f.receipts[sid]}, bindings[sid])
+    f.runner.discovered = Mock(return_value=segments)
+    before = PROJECTION_COLLAPSED_ROWS.labels('followup')._value.get()
+    first = f.runner.candidates()
+    expected = list(dict.fromkeys(owners))
+    assert first == [segments[owners.index(owner)] for owner in expected]
+    assert PROJECTION_COLLAPSED_ROWS.labels('followup')._value.get() - before == len(owners) - len(expected)
+    if page_enabled == 'true':
+        f.projector.store.read.assert_not_called()
+    else:
+        assert [call.args[0] for call in f.projector.store.read.call_args_list] == first
+    # A ready head can depend on any later receipt: all must be offered in
+    # bounded passes even while every row remains on the same discovery page.
+    seen = set(first)
+    for _ in segments:
+        page = f.runner.candidates()
+        assert len(page) == len(expected)
+        seen.update(page)
+    assert seen == set(segments)
+
+
+def test_followup_rotation_survives_other_pages_of_the_same_heavy_owner(followup, monkeypatch):
+    f = followup
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_FOLLOWUP_PAGE_ENABLED', 'true')
+    for sid in ('a', 'b', 'c', 'd'):
+        f.jobs[sid] = {**f.jobs['head'], 'projection_binding': asdict(f.binding)}
+    f.runner.discovered = Mock(side_effect=[['a', 'b'], ['c', 'd']] * 2)
+    assert [f.runner.candidates() for _ in range(4)] == [['a'], ['c'], ['b'], ['d']]
+
+
 @pytest.mark.asyncio
 async def test_slow_enrichment_does_not_block_later_followup_or_next_serving_pass(followup, monkeypatch):
     f = followup

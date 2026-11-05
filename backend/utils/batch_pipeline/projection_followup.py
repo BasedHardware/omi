@@ -34,7 +34,8 @@ from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem
 from utils.batch_pipeline.projection import error_site_field, error_type, projection_phase
 from utils.batch_pipeline.scheduler import owner_key
 from utils.executors import db_executor, postprocess_executor, run_blocking, start_background_task
-from utils.batch_pipeline.projection_discovery import ProjectionDiscovery
+from utils.batch_pipeline.projection_discovery import ProjectionDiscovery, owner_page
+from utils.batch_pipeline.correctness_metrics import PROJECTION_COLLAPSED_ROWS
 
 if TYPE_CHECKING:
     from utils.batch_pipeline.projection import Projector
@@ -99,6 +100,10 @@ class ProjectionFollowups:
         self.seeded = not self.desync
         # The current pass's mark (projector clock when it began); see begin_pass.
         self.wrap_at: float | None = None
+        # Bounded rotation for each owner's slice of a discovery page, keyed
+        # by its first segment. A ready receipt may wait on a later sibling;
+        # slices on other pages must not reset this page's sibling rotation.
+        self.page_after: dict[str, str] = {}
 
     def seed_offset(self):
         """Start this process's first pass at a hashed point between the oldest receipt and now.
@@ -198,16 +203,29 @@ class ProjectionFollowups:
             return _wall()
 
     def candidates(self):
+        self.discovery.states = PROJECTION_FINISH_STATES if projection_followup_page_enabled() else None
+        page = []
+        for owner, rows in owner_page(self.projector.store, self.discovered()):
+            ids = [sid for sid, _ in rows]
+            key = ids[0]
+            after = self.page_after.get(key)
+            offset = (ids.index(after) + 1) % len(rows) if after in ids else 0
+            sid, job = rows[offset]
+            page.append((sid, job))
+            PROJECTION_COLLAPSED_ROWS.labels('followup').inc(len(rows) - 1)
+            if owner:
+                self.page_after.pop(key, None)
+                self.page_after[key] = sid
+                if len(self.page_after) > MAX_BACKOFF_ROWS:
+                    self.page_after.pop(next(iter(self.page_after)))
         if projection_followup_page_enabled():
             # The query is already the durable receipt hint. Do not refetch
             # each result twice just to choose work. Filter pinned sync policy
             # before queueing so it cannot delay async recovery/owed rows.
             # Keep retrying unchanged receipts: a sibling or destination can
             # unblock them without changing this result's version.
-            self.discovery.states = PROJECTION_FINISH_STATES
             candidates = []
-            for sid in self.discovered():
-                job = self.projector.store.ref('jobs', sid).get().to_dict() or {}
+            for sid, job in page:
                 raw = (job.get('policy_parts') or {}).get('projection')
                 if raw is None:
                     # Legacy unpinned policy follows the same privacy-aware
@@ -216,12 +234,11 @@ class ProjectionFollowups:
                 if ProjectionPolicy.from_dict(raw).async_projection:
                     candidates.append(sid)
             return candidates
-        self.discovery.states = None
         store = self.projector.store
         # Assignment failures/partial multipart output must not consume the
         # follow-up slots ahead of rows that have actually persisted.
         candidates = []
-        for sid in self.discovered():
+        for sid, _ in page:
             if not (store.ref('results', sid).get().to_dict() or {}).get('projection'):
                 continue
             policy = ProjectionPolicy.from_dict(store.read(sid)[0]['policy_parts']['projection'])

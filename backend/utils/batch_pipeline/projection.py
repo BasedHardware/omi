@@ -33,7 +33,7 @@ from database.batch_pipeline_projection_protocol import ProjectionPredecessorPen
 from database.batch_pipeline_projection_protocol import normalized_binding
 from database.batch_pipeline_quarantine_recovery import held_candidates
 from database.batch_pipeline_store import PROJECTION_ASSIGNMENT_STATES, PROJECTION_FINISH_STATES, FirestoreStore
-from utils.batch_pipeline.projection_discovery import ProjectionDiscovery
+from utils.batch_pipeline.projection_discovery import ProjectionDiscovery, owner_page
 from utils.batch_pipeline.projection_disposition import persist_disposition, mirror_assignment
 from utils.batch_pipeline.projection_privacy import PRIVACY_HELD, settle_refusals
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, BatchPrivacyReason
@@ -43,7 +43,7 @@ from utils.batch_pipeline.projection_walk_stop import walk_block_stop
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem, projection_speech_spans
 from utils.batch_pipeline import artifact_missing
 from utils.batch_pipeline.errors import error_site_field
-from utils.batch_pipeline.correctness_metrics import record_labels
+from utils.batch_pipeline.correctness_metrics import record_labels, PROJECTION_COLLAPSED_ROWS
 from utils.batch_pipeline.recovery_disposition import result_outcome
 from utils.batch_pipeline.projection_hold_policy import quarantines_assignment_conflict, log_conflict_hold
 from database.batch_pipeline_projection_claim import projection_claim
@@ -1523,7 +1523,7 @@ class Projector:
         discovery = self.assignment_discovery if pending_page else self.discovery
         # At most one walk per owner per sweep. Page rows a walk already
         # persisted are skipped unread and left out of ``counts``: the
-        # sweep_chain summary owns them. Every other row is attempted as before.
+        # sweep_chain summary owns them. Drains receive one head per owner.
         # ``touched`` rows were assigned or finished this sweep; the finish page
         # does not repeat them.
         walked: set[str] = set()
@@ -1534,7 +1534,19 @@ class Projector:
         handed: set[str] = set()
         # The shared budget starts with the first walk, not the page.
         chain_deadline: float | None = None
-        for segment_id in discovery.next(limit=size):
+        page = discovery.next(limit=size)
+        collapsed_owners: set[str] = set()
+        if drain:
+            heads = []
+            for owner, rows in owner_page(self.store, page):
+                heads.append(rows[0][0])
+                collapsed = len(rows) - 1
+                counts['waiting'] += collapsed
+                PROJECTION_COLLAPSED_ROWS.labels('sweep').inc(collapsed)
+                if owner and collapsed:
+                    collapsed_owners.add(owner)
+            page = heads
+        for segment_id in page:
             if segment_id in chained:
                 continue
             binding = None
@@ -1646,6 +1658,8 @@ class Projector:
                             'event=batch_projection action=sweep_chain outcome=error exception_type=%s',
                             error_type(error),
                         )
+        for owner in collapsed_owners - handed - self.draining:
+            self.request_drain(owner)
         if pending_page:
             contention = self._sweep_finish(size, counts, touched | chained) or contention
         if contention:
