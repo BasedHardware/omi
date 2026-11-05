@@ -122,7 +122,7 @@ def owner_rows(log, owner):
 
 @pytest.mark.asyncio
 async def test_heavy_owners_cannot_starve_a_light_owner(monkeypatch, claims):
-    """One slot, one two-row step per turn: owners take FIFO turns, in chain order."""
+    """Productive continuations stay bounded even with a single drain slot."""
     monkeypatch.setattr(projection_drain, 'MAX_OWNER_DRAINS', 1)
     monkeypatch.setattr(projection, 'OWNER_DRAIN_STEP_ROWS', 2)
     # Each read jumps past any turn deadline, so every turn is exactly one step.
@@ -139,9 +139,8 @@ async def test_heavy_owners_cannot_starve_a_light_owner(monkeypatch, claims):
     assert owner_rows(log, 'heavy-1') == heavy_1
     assert owner_rows(log, 'heavy-2') == heavy_2
     assert owner_rows(log, 'light') == light
-    # Turns rotate (H1, H2, L, H1, H2, L): the light owner finishes in its
-    # second turn, after 8 heavy rows instead of all 24.
-    assert log.persist_order.index(light[-1]) == 10
+    # Each heavy owner gets at most three two-row turns before yielding.
+    assert log.persist_order.index(light[-1]) == 14
     assert claims.overlaps == 0 and not projector.draining
 
 
@@ -199,6 +198,63 @@ def test_sweep_leaves_page_rows_of_a_handed_off_owner_to_the_drain():
     assert list(projector.drain_requests) == [BURST, 'other']
     # Rows left to the drain still count as waiting, not vanish from the summary.
     assert counts == {'completed': 0, 'waiting': 7, 'blocked': 0, 'error': 0}
+
+
+@pytest.mark.parametrize('owners', [(('heavy', 80),), (('heavy', 5), ('light', 2))])
+def test_page_collapse_reads_and_attempts_only_one_head_per_owner(owners):
+    from utils.batch_pipeline.correctness_metrics import PROJECTION_COLLAPSED_ROWS
+
+    log = ResultLog()
+    heads = [chain(log, owner, owner, count)[0] for owner, count in owners]
+    projector = projector_for(log)
+    read = Mock(wraps=log.read)
+    log.read = read
+    projector.request_drain = Mock(wraps=projector.request_drain)
+    before = PROJECTION_COLLAPSED_ROWS.labels('sweep')._value.get()
+    counts = projector.sweep()
+    assert [call.args[0] for call in read.call_args_list] == heads
+    assert log.persist_order == heads
+    assert [call.args[0] for call in projector.request_drain.call_args_list] == [owner for owner, _ in owners]
+    assert counts == {'completed': 0, 'waiting': sum(count for _, count in owners), 'blocked': 0, 'error': 0}
+    assert PROJECTION_COLLAPSED_ROWS.labels('sweep')._value.get() - before == sum(n - 1 for _, n in owners)
+
+
+@pytest.mark.parametrize('stop', ['turn_deadline', 'deadline', 'step_deadline', 'limit'])
+def test_productive_budget_turns_requeue_at_head_only_up_to_bound(stop):
+    from utils.batch_pipeline.correctness_metrics import PROJECTION_HEAD_REQUEUES
+
+    drains = projection_drain.OwnerDrains(projector_for(ResultLog()))
+    drains.launch = Mock()
+    drains.queue.append('light')
+    done = Mock()
+    done.cancelled.return_value = False
+    done.exception.return_value = None
+    done.result.return_value = projection_drain.Turn(True, 1, stop)
+    before = PROJECTION_HEAD_REQUEUES._value.get()
+    for _ in range(projection_drain.MAX_HEAD_REQUEUES):
+        drains.finished('heavy', done)
+        assert list(drains.queue) == ['heavy', 'light']
+        drains.queue.popleft()
+    drains.finished('heavy', done)
+    assert list(drains.queue) == ['light', 'heavy']
+    assert not drains.head_requeues
+    assert PROJECTION_HEAD_REQUEUES._value.get() - before == projection_drain.MAX_HEAD_REQUEUES
+
+
+@pytest.mark.parametrize('advanced,stop', [(0, 'turn_deadline'), (0, 'claim_busy'), (2, 'blocked_privacy')])
+def test_unproductive_or_blocked_turns_keep_fifo(advanced, stop):
+    drains = projection_drain.OwnerDrains(projector_for(ResultLog()))
+    drains.launch = Mock()
+    drains.queue.append('light')
+    drains.head_requeues['heavy'] = 1
+    drains.again.add('heavy')
+    done = Mock()
+    done.cancelled.return_value = False
+    done.exception.return_value = None
+    done.result.return_value = projection_drain.Turn(stop == 'turn_deadline', advanced, stop)
+    drains.finished('heavy', done)
+    assert list(drains.queue) == ['light', 'heavy']
+    assert not drains.head_requeues and not drains.again
 
 
 def test_an_owner_queued_from_an_earlier_pass_still_gets_page_progress():
@@ -755,8 +811,8 @@ async def test_drain_turn_log_carries_the_last_step_stop(monkeypatch, claims, ca
     chain(log, BURST, 'a', 3)
     projector = projector_for(log)
     with caplog.at_level(logging.INFO, logger=projection_drain.logger.name):
-        more = await projection_drain.OwnerDrains(projector).run(BURST)
-    assert more is False
+        turn = await projection_drain.OwnerDrains(projector).run(BURST)
+    assert turn == projection_drain.Turn(False, 3, 'end')
     turns = [r.getMessage() for r in caplog.records if 'action=owner_drain outcome=turn' in r.getMessage()]
     assert turns and ' stop=end ' in turns[-1] and 'event=batch_projection ' in turns[-1]
 

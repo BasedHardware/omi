@@ -2,7 +2,36 @@
 
 from unittest.mock import Mock
 
-from utils.batch_pipeline.projection_discovery import ProjectionDiscovery
+from utils.batch_pipeline.projection_discovery import ProjectionDiscovery, owner_page
+
+
+def test_owner_page_groups_before_attempts_and_keeps_missing_or_failed_hints_independent():
+    store = Mock()
+    jobs = {
+        'head': {'projection_binding': {'owner_id': 'owner'}},
+        'tail': {'projection_binding': {'owner_id': 'owner'}},
+        'other': {'projection_binding': {'owner_id': 'other'}},
+        'missing': {},
+        'malformed': {'projection_binding': 'invalid'},
+    }
+
+    def ref(table, sid):
+        assert table == 'jobs'
+        if sid == 'failed':
+            raise RuntimeError('synthetic hint unavailable')
+        return Mock(get=lambda: Mock(to_dict=lambda: jobs[sid]))
+
+    store.ref.side_effect = ref
+    page = owner_page(store, ['head', 'other', 'tail', 'missing', 'malformed', 'failed'])
+    assert [(owner, [sid for sid, _ in rows]) for owner, rows in page] == [
+        ('owner', ['head', 'tail']),
+        ('other', ['other']),
+        (None, ['missing']),
+        (None, ['malformed']),
+        (None, ['failed']),
+    ]
+    assert store.ref.call_count == 6
+    store.read.assert_not_called()
 
 
 def test_default_on_independent_scans_wrap_and_kill_switch_restores_first_page(monkeypatch):
