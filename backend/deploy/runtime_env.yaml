@@ -2660,6 +2660,12 @@ environments:
           CONVERSATION_RELEVANCE_JEV_PERCENT:
             category: ops_kill
             value: '100'
+          PUSHER_MAX_CLOSED_RECORD_DRAINS: {value: '64', category: rollout}
+          PUSHER_ABANDON_EVICTED_TOKENS:
+            value: 'on'
+            category: ops_kill
+          PUSHER_MAX_ABANDON_RECORD_DRAINS: {value: '4', category: rollout}
+          PUSHER_RECORD_STORAGE_WORKERS: {value: '4', category: rollout}
           STT_GPU_FLEET_OFF:
             value: 'true'
             category: ops_kill

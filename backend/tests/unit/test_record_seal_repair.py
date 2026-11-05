@@ -217,6 +217,24 @@ def test_producer_proof_change_or_new_token_requires_fresh_plan(source, monkeypa
     assert repair.apply_seals(store, old, old['plan_sha256']) == {'state_changed': 1}
 
 
+@pytest.mark.parametrize('durable_tail', [False, True])
+def test_abandoned_live_pod_still_requires_retained_tail_proof(source, monkeypatch, durable_tail):
+    store, client, artifacts = source
+    client.rows[PATH]['record_upload_sessions'] = {
+        'old': {'pod': 'live', 'process_started_at': 900, 'abandoned_at': 950}
+    }
+    if not durable_tail:
+        monkeypatch.setattr(repair, 'retained_record_units', lambda *a, **kw: iter([(100, 1, [])]))
+    result = repair.plan_seals(store, ['pending'], object(), artifacts)
+    disposition = 'eligible' if durable_tail else 'proof_refused'
+    assert result['entries'][0]['disposition'] == disposition
+    assert repair.apply_seals(store, result, result['plan_sha256']) == {
+        'sealed' if durable_tail else 'proof_refused': 1
+    }
+    assert bool(client.rows[PATH].get('record_audio_closed')) == durable_tail
+    assert bool(client.rows[PATH]['record_upload_sessions']) != durable_tail
+
+
 def test_private_exact_id_input_refuses_scans_duplicates_and_unbounded_lists(tmp_path):
     path = Path(__file__).resolve().parents[2] / 'scripts' / 'repair_record_audio_seals.py'
     spec = importlib.util.spec_from_file_location('repair_seals_cli', path)

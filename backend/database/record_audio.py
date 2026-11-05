@@ -1,6 +1,7 @@
 """Transactional record-audio closure and cross-session upload custody metadata."""
 
 from typing import Literal
+import time
 
 from google.cloud import firestore
 
@@ -80,7 +81,36 @@ def set_record_upload_pending(
                 },
             )
         elif session in sessions:
+            if isinstance(sessions[session], dict) and 'abandoned_at' in sessions[session]:
+                return False  # Only repair's retained-tail proof may release this fence.
             sessions.pop(session)
+            tx.update(ref, {'record_upload_sessions': sessions})
+        return True
+
+    return run_transactional(client, commit, transient=True)
+
+
+def abandon_record_upload_session(uid: str, conversation_id: str, session: str, *, firestore_client=None) -> bool:
+    """Attest that one producer stopped, never that its tail was projected.
+
+    The caller must first stop its tasks and settle all in-flight executor work.
+    Preserve the token for repair's archive/tail proof; never recreate a row or
+    affect a reconnect's different token. Retries preserve the first attestation.
+    """
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    ref = client.collection('users').document(uid).collection('conversations').document(conversation_id)
+
+    @firestore.transactional
+    def commit(tx):
+        row = ref.get(transaction=tx).to_dict()
+        if not row or row.get('deleted'):
+            return False
+        sessions = dict(row.get('record_upload_sessions') or {})
+        producer = sessions.get(session)
+        if not isinstance(producer, dict):
+            return False  # Absent/legacy tokens cannot acquire an invented identity.
+        if 'abandoned_at' not in producer:
+            sessions[session] = {**producer, 'abandoned_at': time.time()}
             tx.update(ref, {'record_upload_sessions': sessions})
         return True
 

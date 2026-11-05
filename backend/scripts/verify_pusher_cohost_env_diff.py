@@ -381,6 +381,11 @@ PUSHER_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     # Pusher retains its cloud/BYOK credential; listen has no managed cloud key.
     "prod": frozenset(
         {
+            # Only pusher owns closed recording workers and their eviction proof.
+            "PUSHER_MAX_CLOSED_RECORD_DRAINS",
+            "PUSHER_ABANDON_EVICTED_TOKENS",
+            "PUSHER_MAX_ABANDON_RECORD_DRAINS",
+            "PUSHER_RECORD_STORAGE_WORKERS",
             # Late identity retries are scheduled only by prod pusher audio drain.
             "OWNER_IDENTITY_RETRY_COALESCE_ENABLED",
             # Pusher alone writes PCM chunk batches (upload_audio_chunks_batch).

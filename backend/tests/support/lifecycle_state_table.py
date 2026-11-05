@@ -25,6 +25,9 @@ class Writer:
 class Exit:
     kind: str
     cite: str
+    # Conditional automatic transitions coexist with a live producer's normal
+    # callback exit. They do not make all live tokens eligible for expiration.
+    automatic_writers: tuple[Writer, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -229,12 +232,17 @@ def row(
     quiescent=False,
     deadline_exemption='',
     exit_exemption='',
+    entry_writers=None,
 ):
     entries = DEADLINE_ENTRIES.get(f'{machine}:{state}', ())
     entered_by = (
-        tuple(dict.fromkeys(Writer(path.module, path.function) for path in entries))
-        if entries
-        else writers(machine, *fields)
+        entry_writers
+        if entry_writers is not None
+        else (
+            tuple(dict.fromkeys(Writer(path.module, path.function) for path in entries))
+            if entries
+            else writers(machine, *fields)
+        )
     )
     return State(
         machine,
@@ -264,6 +272,7 @@ LEASE = Exit('lease', 'utils/batch_pipeline/scheduler.py:Scheduler.recover')
 DECAY = Exit('decay', 'utils/fair_use.py:normalize_expired_restriction_state')
 SUMMARY = Exit('sweeper', 'services/summary_debt_repair.py:tick')
 RECORD_REPAIR = Exit('sweeper', 'utils/batch_pipeline/record_seal_worker.py:Worker.tick')
+ABANDON_RECORD_PRODUCER = Writer('database/record_audio.py', 'abandon_record_upload_session.commit')
 PHASE_FIELDS = (
     'status',
     'finalization_status',
@@ -331,10 +340,36 @@ STATES = (
             'record_audio',
             'capturing',
             ('record_upload_sessions',),
-            exit=Exit('callback-only', 'database/record_audio.py:set_record_upload_pending'),
+            exit=Exit(
+                'callback-only',
+                'database/record_audio.py:set_record_upload_pending',
+                automatic_writers=(ABANDON_RECORD_PRODUCER,),
+            ),
             deadline_exemption='No producer TTL: live custody is cleared only by exact-token finish; lead2 9d457c / 4bf62d',
             exit_exemption='Interactive live custody awaits exact-token finish, not automatic expiration; 4bf62d',
-            note='Live producer custody; dwell visibility remains required even though age cannot clear its token',
+            note='Live producer custody; exact-token finish remains the normal exit. Capacity eviction automatically '
+            'transitions only the evicted socket\'s owned tokens to abandoned, after its worker and all executor '
+            'futures settle (utils/pusher_record_finish.py:abandon_evicted_record_drain; '
+            'utils/pusher_record_barrier.py:PusherRecordBarrier.abandon_recordings). '
+            'The kill switch can disable this conditional exit. When bounded abandon admission is full, '
+            'outcome=abandon_overflow leaves the token capturing/fenced with no new coordinator; '
+            'the existing process/pod-death repair proof remains its exit. Live tokens never expire by age. '
+            'Dwell visibility remains required',
+        ),
+        row(
+            'record_audio',
+            'abandoned',
+            ('record_upload_sessions',),
+            entry_writers=(ABANDON_RECORD_PRODUCER,),
+            exit=Exit('sweeper', 'utils/batch_pipeline/record_seal_sweeper.py:sweep'),
+            note='Conditional per-token view: a conversation can also have live reconnect tokens. '
+            'Producer token gains abandoned_at, not a successful-drain clear. '
+            'record_producer_proof.producer_tokens_dead accepts finite abandoned_at >= process_started_at; '
+            'seal repair still requires archive discovery, retained-tail/finish proof and the privacy transaction '
+            'before clearing the exact producer map and sealing. abandoned_at is an age anchor, not a deadline. '
+            'The 30-second metadata admission deadline and bounded 1-60 second retry backoff are attempt bounds, '
+            'not an end-to-end exit deadline; waiting for worker/future settlement and durable-tail repair is unbounded. '
+            'outcome=abandoned is an event, not an authoritative dwell gauge or alert; those remain declared gaps',
         ),
         row(
             'record_audio_orphan',
