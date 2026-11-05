@@ -65,14 +65,23 @@ class FinalPassRetries:
 
     def claim(self, key, token, *, now):
         def acquire(old):
-            if not old or old['outcome'] or old['token'] != token or old['lease_until'] > now:
+            if not old or old['token'] != token or old['lease_until'] > now:
                 return old, ('stale', None)
+            if old['outcome']:
+                return old, ('terminal', old) if old.get('terminal_pending') else ('stale', None)
             if old['due_at'] > now:
                 row = {**old, 'token': uuid.uuid4().hex}
                 return row, ('early', row)
             if old['attempts'] >= MAX_ATTEMPTS:
-                row = {**old, 'outcome': 'skipped_retry_exhausted', 'lease': None, 'lease_until': 0}
-                for field in ('due_at', 'repair_after', 'uid', 'conversation_id', 'dispatch'):
+                row = {
+                    **old,
+                    'outcome': 'skipped_retry_exhausted',
+                    'lease': None,
+                    'lease_until': 0,
+                    'terminal_pending': True,
+                    'repair_after': now + REPAIR_SECONDS,
+                }
+                for field in ('due_at', 'uid', 'conversation_id', 'dispatch'):
                     row.pop(field, None)
                 return row, ('exhausted', row)
             row = {
@@ -100,21 +109,39 @@ class FinalPassRetries:
                 due = now + backoff(old['attempts'])
                 row.update(token=uuid.uuid4().hex, due_at=due, repair_after=due + REPAIR_SECONDS)
             else:
-                row.update(outcome=terminal)
-                for field in ('due_at', 'repair_after', 'uid', 'conversation_id', 'dispatch'):
+                # Keep a content-free reporting obligation until a fenced
+                # reporter takes it. A lost settlement reply must not strand it.
+                row.update(outcome=terminal, terminal_pending=True, repair_after=now + REPAIR_SECONDS)
+                for field in ('due_at', 'uid', 'conversation_id', 'dispatch'):
                     row.pop(field, None)
             return row, row
 
         return self._mutate(key, finish)
 
+    def take_terminal(self, key, token):
+        def take(old):
+            if not old or old['token'] != token or not old.get('outcome') or not old.get('terminal_pending'):
+                return old, False
+            row = {**old}
+            for field in ('terminal_pending', 'repair_after', 'due_at'):
+                row.pop(field, None)
+            return row, True
+
+        return self._mutate(key, take)
+
     def due(self, *, now, limit=100):
-        # A single-field range uses Firestore's automatic index. Closed receipts
-        # have no repair_after, so they cannot pin the bounded repair page.
+        # A single-field range uses Firestore's automatic index. Reported
+        # terminal receipts have no repair_after and cannot pin discovery.
         return list(self._collection().where('repair_after', '<=', now).order_by('repair_after').limit(limit).stream())
 
     def repair(self, key, token, *, now, wake_exists=False):
         def rearm(old):
-            if not old or old['outcome'] or old['token'] != token or old['repair_after'] > now:
+            if (
+                not old
+                or (old['outcome'] and not old.get('terminal_pending'))
+                or old['token'] != token
+                or old['repair_after'] > now
+            ):
                 return old, None
             if old['lease_until'] > now or (wake_exists and not old['lease']):
                 return {**old, 'repair_after': max(now + REPAIR_SECONDS, old['lease_until'])}, None

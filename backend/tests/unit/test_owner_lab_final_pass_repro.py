@@ -66,7 +66,20 @@ def test_already_buffered_redis_pipeline_cannot_write():
 
 
 @pytest.mark.parametrize(
-    'metric', ['omi_transcription_final_pass_total', 'omi_transcription_final_pass_unit_skips_total']
+    'metric',
+    [
+        'omi_transcription_final_pass_total',
+        'omi_transcription_final_pass_unit_skips_total',
+        'omi_transcription_final_pass_agreement_bucket',
+        'omi_transcription_final_pass_agreement_sum',
+        'omi_transcription_final_pass_agreement_count',
+        'omi_transcription_final_pass_latency_seconds_bucket',
+        'omi_transcription_final_pass_latency_seconds_sum',
+        'omi_transcription_final_pass_latency_seconds_count',
+        'omi_transcription_final_pass_owner_delta_ratio_bucket',
+        'omi_transcription_final_pass_owner_delta_ratio_sum',
+        'omi_transcription_final_pass_owner_delta_ratio_count',
+    ],
 )
 def test_sync_scrape_keeps_batch_final_pass_terminal_metric(metric):
     import re
@@ -79,6 +92,22 @@ def test_sync_scrape_keeps_batch_final_pass_terminal_metric(metric):
         values = [metric if label == '__name__' else '' for label in rule['sourceLabels']]
         matches = re.fullmatch(rule['regex'], ';'.join(values)) is not None
         assert not ((rule['action'] == 'keep' and not matches) or (rule['action'] == 'drop' and matches))
+
+
+def test_final_pass_gate_inventory_includes_source_backed_metric_names():
+    import json
+    from pathlib import Path
+
+    inventory = json.loads(
+        (Path(__file__).resolve().parents[2] / 'charts/monitoring/metric-inventory.prod.json').read_text()
+    )
+    expected = {
+        'omi_transcription_final_pass_owner_delta_ratio_bucket',
+        'omi_transcription_final_pass_owner_delta_ratio_sum',
+        'omi_transcription_final_pass_owner_delta_ratio_count',
+        'omi_transcription_final_pass_unit_skips_total',
+    }
+    assert expected <= set(inventory['metrics']) | set(inventory['declared_metrics'])
 
 
 def test_readonly_redis_pipeline_is_not_changed_by_the_fence():

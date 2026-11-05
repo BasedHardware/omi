@@ -13,10 +13,13 @@ import httpx
 import requests
 
 from utils.batch_pipeline.artifact_reads import ArtifactReadLimit
+from utils.stt.http_errors import has_tls_cause, retryable_http_error
 
 
 def transient_cause(error):
-    """Inspect explicit causes only; never parse provider/user error messages."""
+    """Inspect explicit causes; nested TLS vetoes retry without message parsing."""
+    if has_tls_cause(error, (requests.exceptions.SSLError,)):
+        return None
     seen = set()
     while error is not None and id(error) not in seen:
         seen.add(id(error))
@@ -26,6 +29,8 @@ def transient_cause(error):
                 return None
             if error.__cause__ is None:
                 return error
+        elif isinstance(error, httpx.HTTPStatusError):
+            return error if retryable_http_error(error) else None
         elif isinstance(
             error,
             (

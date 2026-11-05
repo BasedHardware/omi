@@ -123,12 +123,16 @@ stable segment IDs survive application under `final:batch:conversation:<id>`.
 Every failure, including incompatible embedding output, emits `record_fallback`
 and retains current resolver labels. There is
 one nonwaiting process slot, a 600-second deadline, a 7200-second PCM ceiling
-(`failed_too_long`), and a 128-unit limit. This invocation has its own read budget:
-180 seconds, 320 MiB of encrypted objects and 512 object reads, including result,
+(`failed_too_long`), and a 480-unit limit checked before reference reads. This
+supports two hours at a conservative 15-second average unit length (ordinary
+units target 300 seconds). This invocation has its own read budget:
+180 seconds, 320 MiB of encrypted objects and 1440 object reads, including result,
 audio and nested manifest sources. It is independent of the playback reader's
 30-second/64-MiB defaults. Reads stop before exceeding a byte/object limit and
-refuse results arriving after the deadline; exhausted budgets emit
-`failed_read_budget`, other coverage failures `failed_incomplete_coverage`.
+refuse results arriving after the deadline. Elapsed read deadlines defer into
+the four-claim speaker-only outbox; structural object/byte caps emit
+`failed_read_budget`. Other structural coverage failures emit
+`failed_incomplete_coverage`.
 Budget reservations are Redis-atomic and charge attempts (including retries) before
 GPU work: `BATCH_FINAL_PASS_DAILY_AUDIO_HOURS=1200`,
 `BATCH_FINAL_PASS_HOURLY_AUDIO_HOURS=50`, `BATCH_FINAL_PASS_HOURLY_REQUESTS=1000`.
@@ -138,6 +142,12 @@ new admission. Per-unit diarization remains in place, so inference cost is addit
 Use `omi_transcription_final_pass_total{lane="batch"}` outcomes, final-pass agreement
 and latency with the same lane label, owner-parity delta, processing p95 enrichment
 latency, and `omi_diarization_v2_queue_depth` for ramp decisions. The lead sets
+the observation window before expansion. The sync GMP keep-list retains all
+`_bucket`, `_sum` and `_count` series for `omi_transcription_final_pass_agreement`,
+`omi_transcription_final_pass_latency_seconds` and
+`omi_transcription_final_pass_owner_delta_ratio`. Source-backed names absent
+from the historical metric capture are listed in the inventory's
+`declared_metrics`; declaration alone does not prove live export. The lead sets
 10%, then 50%, then 100%, expanding only after each cohort has a full observation
 window with clean fallback rate, owner-parity delta, p95 enrichment latency and
 diarizer-batch queue depth. GPU planning: admitted audio-hours/day × 0.03–0.042 =

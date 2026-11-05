@@ -232,6 +232,15 @@ once with `skipped_slot_exhausted`; other exhausted retries use
 lost wakes in the dedicated collection. Existing queued tasks keep their token;
 repair checks advance separately so queued work cannot pin discovery.
 
+Transient claim/settlement storage failures acknowledge the task with
+`deferred_custody`, without an immediate wake or a terminal count. The existing
+durable-row sweeper rearms pending rows or expired leases after recovery; the
+enrichment queue's unlimited transport retries do not drive this recovery.
+An ambiguous committed claim retains its attempt. Terminal settlement leaves a
+content-free reporting receipt until a fenced reporter takes it, so a lost
+settlement reply can recover reporting without repeating inference. Duplicate
+reporters cannot count the same receipt twice.
+
 For four ordinary on-time claims, backoffs total at most 675 seconds (11m15s). That is not a
 wall-clock delivery guarantee: queue backlog, outages and 15-minute crashed
 leases (including repair wakes) can deliver a retry after results cleanup. A late retry remains
@@ -256,6 +265,9 @@ existing fallback. Explicit wrapped causes remain classifiable without parsing
 provider messages. Elapsed read deadlines defer; object/byte and unit/audio caps
 stay terminal. Permanent reload errors close as `failed_dependency`. The same
 four-claim outbox closes persistent transients once as `skipped_retry_exhausted`.
+HTTP 408, 429 and 5xx responses follow that transient path after the diarizer's
+single immediate retry. Other 4xx and nested TLS verification errors remain
+terminal; TLS errors receive no immediate retry.
 No SDK retry loop or semaphore wait is added. The read-only lab captures retry
 requests as `requeue_calls` without publishing an outbox row or task.
 

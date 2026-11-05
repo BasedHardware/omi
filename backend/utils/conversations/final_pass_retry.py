@@ -9,6 +9,7 @@ from config.batch_conversation_speakers import batch_unit_scope
 from database.batch_final_pass_retry import FinalPassRetries
 from utils.observability.fallback import record_fallback
 from utils.conversations.final_pass_dependencies import transient_cause
+from utils.conversations.final_pass_errors import error_details
 
 logger = logging.getLogger(__name__)
 
@@ -129,19 +130,55 @@ def _terminal(result):
         batch._fallback(**result)
 
 
+def _custody_unavailable(error, phase):
+    # The named task is only a wake. Acknowledge it without another write/wake;
+    # the existing durable row remains pending or leased for sweep repair.
+    details = error_details(transient_cause(error) or error)
+    logger.warning(
+        'event=batch_final_pass_retry outcome=deferred_custody phase=%s exception_type=%s reason=%s location=%s',
+        phase,
+        details['exception_type'],
+        details['reason'],
+        details['location'],
+    )
+    record_fallback(
+        component='stt_selection',
+        from_mode='speaker_final_pass_retry',
+        to_mode='speaker_retry_sweep',
+        reason='unavailable',
+        outcome='degraded',
+    )
+    return {'outcome': 'deferred_custody', 'phase': phase, **details}
+
+
+def _report_terminal(store, key, row, result):
+    try:
+        taken = store.take_terminal(key, row['token'])
+    except Exception as error:
+        if transient_cause(error) is None:
+            raise
+        return _custody_unavailable(error, 'terminal_report')
+    if not taken:
+        return {'outcome': 'stale'}
+    _terminal(result)
+    return result
+
+
 def consume(key, token, *, now=None):
     """Claim/settle one wake. Duplicate tokens and live leases do no model work."""
-    from utils.conversations.final_pass_errors import error_details
-
     now = _now() if now is None else now
-    store = _store()
-    state, claim = store.claim(key, token, now=now)
+    try:
+        store = _store()
+        state, claim = store.claim(key, token, now=now)
+    except Exception as error:
+        if transient_cause(error) is None:
+            raise
+        return _custody_unavailable(error, 'claim')
     if state == 'early':
         _try_wake(key, claim)
         return {'outcome': 'deferred_not_due'}
-    if state == 'exhausted':
-        _terminal({'outcome': claim['outcome']})
-        return {'outcome': claim['outcome']}
+    if state in {'exhausted', 'terminal'}:
+        return _report_terminal(store, key, claim, {'outcome': claim['outcome']})
     if state != 'claimed':
         return {'outcome': 'stale'}
     try:
@@ -158,14 +195,19 @@ def consume(key, token, *, now=None):
             result['reason'],
             result['location'],
         )
-    settled = store.settle(key, claim, result['outcome'], now=max(now, _now()))
+    try:
+        settled = store.settle(key, claim, result['outcome'], now=max(now, _now()))
+    except Exception as error:
+        if transient_cause(error) is None:
+            raise
+        return _custody_unavailable(error, 'settle')
     if settled is None:
         return {'outcome': 'stale'}
     if not settled['outcome']:
         _try_wake(key, settled)
     else:
         result = {**result, 'outcome': settled['outcome']}
-        _terminal(result)
+        return _report_terminal(store, key, settled, result)
     return result
 
 

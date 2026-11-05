@@ -9,6 +9,7 @@ import httpx
 from models.diarization import DiarizationResult, OMI_EMBEDDING_SPACE
 from utils.stt.diarization_turns import exclusive_from_activity, overlap_regions
 from utils.stt.speaker_match import mean_embedding
+from utils.stt.http_errors import retryable_http_error
 
 
 class DiarizerBackend(Protocol):
@@ -61,7 +62,7 @@ class HttpDiarizer:
             except (httpx.TransportError, httpx.HTTPStatusError) as error:
                 # Inference is stateless and idempotent; one retry covers a batch
                 # pod disappearing mid-request (node preemption, HPA scale-down).
-                transient = isinstance(error, httpx.TransportError) or error.response.status_code >= 500
+                transient = retryable_http_error(error)
                 if not transient or attempts_left == 1:
                     raise
                 attempts_left -= 1
