@@ -11,8 +11,10 @@ restores the former result-state admission gate. Target restorability, the
 three-release attempt cap, privacy refusal and operator-intent fences still apply;
 proven multipart suffixes and their follow-ups survive release.
 
-`hold_for_quarantine` now settles ready siblings' discovery hints to `ready`;
-a sibling's quarantine does not make a completed receipt held. Existing ghost
+`hold_for_quarantine` now settles ready siblings' discovery hints to `ready`
+when `BATCH_PIPELINE_PROJECTION_FOLLOWUP_PAGE_ENABLED` is on (the default); when
+it is off, only the current row's hint is settled. A sibling's quarantine does
+not make a completed receipt held. Existing ghost
 hints can be repaired separately with
 `backend/scripts/reconcile_batch_projection_ghost_holds.py`. The script defaults
 to `--dry-run`, requires an explicit project/namespace, prints aggregate counts

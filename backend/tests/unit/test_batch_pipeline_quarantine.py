@@ -186,11 +186,13 @@ def test_quarantine_hold_settles_ready_sibling_hints_in_one_transaction(monkeypa
     monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
     monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_FOLLOWUP_PAGE_ENABLED', enabled)
     client, store, binding = ready_sibling_fixture()
+    for sid in ('good', 'other'):
+        client.rows[('batch_pipeline_dev_results', sid)]['projection_state'] = 'persisted'
     before = deepcopy(client.rows)
     assert store.hold_for_quarantine('good', binding, 100)
     assert client.rows[('batch_pipeline_dev_results', 'good')]['projection_state'] == 'ready'
     other = client.rows[('batch_pipeline_dev_results', 'other')]
-    assert other['projection_state'] == 'ready'
+    assert other['projection_state'] == ('ready' if enabled == 'true' else 'persisted')
     for sid in binding.segment_ids:
         assert client.rows[('batch_pipeline_dev_jobs', sid)] == before[('batch_pipeline_dev_jobs', sid)]
     assert other['projection'] == before[('batch_pipeline_dev_results', 'other')]['projection']
