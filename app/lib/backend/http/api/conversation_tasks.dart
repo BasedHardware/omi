@@ -1,3 +1,5 @@
+// Read-only task membership and cursor-page transport. Invalid responses stay
+// typed failures; no task text or speculative empty-success fallback is exposed.
 import 'dart:convert';
 
 import 'package:omi/backend/http/api_result.dart';

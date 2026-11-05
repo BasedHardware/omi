@@ -12,6 +12,7 @@ from typing import Any, Awaitable, Callable, Optional
 from database.conversations import is_visible_conversation
 from models.conversation_tasks import TaskConversationPageRequest
 from utils.conversation_page_cursor import query_scope
+from utils.executors import db_executor, run_blocking
 from utils.other.list_budget import ListReadBudget, ListReadBudgetExhausted
 
 
@@ -21,6 +22,22 @@ class TaskFilterUnavailable(Exception):
 
 class TaskFilterCursorError(ValueError):
     pass
+
+
+def _eligible_rows(candidates, filters):
+    # The shared visibility owner is decorated with shadow-policy I/O. Keep
+    # that existing boundary off the event loop, even for a small raw page.
+    return [
+        row
+        for _, row in candidates
+        if row
+        and row.get('id')
+        and is_visible_conversation(row, include_discarded=filters.include_discarded)
+        and not row.get('is_locked')
+        and row.get('status') in ('processing', 'completed')
+        and (not filters.folder_id or row.get('folder_id') == filters.folder_id)
+        and (filters.starred is None or bool(row.get('starred')) == filters.starred)
+    ]
 
 
 def _sign(payload: bytes) -> bytes:
@@ -111,17 +128,7 @@ async def task_conversation_page(
                 candidates = [({'after': after}, row) for after, row in source]
                 source_next = {'after': source[-1][0]} if source and more else None
             budget.check()
-            eligible = [
-                row
-                for _, row in candidates
-                if row
-                and row.get('id')
-                and is_visible_conversation(row, include_discarded=filters.include_discarded)
-                and not row.get('is_locked')
-                and row.get('status') in ('processing', 'completed')
-                and (not filters.folder_id or row.get('folder_id') == filters.folder_id)
-                and (filters.starred is None or bool(row.get('starred')) == filters.starred)
-            ]
+            eligible = await run_blocking(db_executor, _eligible_rows, candidates, filters)
             linked = await presence(list(dict.fromkeys(row['id'] for row in eligible))) if eligible else {}
             eligible_ids = {row['id'] for row in eligible}
             for after, row in candidates:

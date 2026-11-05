@@ -1,3 +1,5 @@
+// Bounded canonical task badges for mounted conversation rows. Account changes
+// revoke old reads; failures remain unknown until refresh or a task mutation.
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';

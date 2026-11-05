@@ -1,3 +1,4 @@
+// Badge-reader batching, lifecycle invalidation and account isolation regressions.
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';

@@ -1,3 +1,4 @@
+// Production task-filter widgets: stale reads, retry, lifecycle and Android semantics.
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -70,8 +71,9 @@ void main() {
         String? cursor,
         bool Function()? canSend}) async {
       cursors.add(cursor);
-      if (cursors.length == 1)
+      if (cursors.length == 1) {
         return const ApiSuccess(TaskConversationPage(items: [], nextCursor: 'older', partial: true));
+      }
       if (cursors.length == 2) return const ApiFailure(ApiProblem(ApiProblemKind.server));
       return ApiSuccess(TaskConversationPage(items: [_row('older')]));
     }
