@@ -54,6 +54,11 @@ class QueueMetrics:
         self._refresh_due = 0.0
         self._refresh_lock = threading.Lock()
         self.capacity_sampling = capacity_sampling
+        self.projection_pump_last_tick = Gauge(
+            'omi_batch_projection_pump_last_tick_seconds',
+            'Unix timestamp of the last completed projection pump tick, including failed ticks; zero before first tick',
+            registry=registry,
+        )
         self.projection_age = Gauge(
             'omi_batch_projection_obligation_oldest_age_seconds',
             'Oldest unfinished committed projection age, including held content; alarm above 900s',

@@ -20,6 +20,8 @@ KILL_SWITCHES = {
     'BATCH_PIPELINE_PROJECTION_PENDING_PAGE_ENABLED': True,
     'BATCH_PIPELINE_PROJECTION_FOLLOWUP_PAGE_ENABLED': True,
     'BATCH_PIPELINE_OWNER_DRAIN_ENABLED': True,
+    'BATCH_PIPELINE_SERVING_PROJECTION_SWEEP': True,
+    'BATCH_PIPELINE_PROJECTION_PUMP_ENABLED': False,
     'PROJECTION_DRAIN_CLAIM_AWARE': True,
     'BATCH_PIPELINE_PROJECTION_INDEX_DEFERRED_ENABLED': True,
     'PARAKEET_WINDOW_STRANDED_DRIFT_SETTLE_ENABLED': True,
@@ -36,7 +38,11 @@ def kill_switch(name: str, *, policy_id: str = 'control', flags=None) -> bool:
         raise ValueError('unregistered live batch switch')
     env = os.environ if flags is None else flags
     value = env.get(name, str(KILL_SWITCHES[name])).strip().lower()
-    if name in {'BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED', 'PROJECTION_DRAIN_CLAIM_AWARE'}:
+    if name in {
+        'BATCH_PIPELINE_SERVING_PROJECTION_SWEEP',
+        'BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED',
+        'PROJECTION_DRAIN_CLAIM_AWARE',
+    }:
         enabled = value != 'off'
     elif name == 'PARAKEET_WINDOW_STRANDED_DRIFT_SETTLE_ENABLED':
         enabled = value not in {'false', '0', 'off'}
@@ -44,7 +50,14 @@ def kill_switch(name: str, *, policy_id: str = 'control', flags=None) -> bool:
         enabled = value != 'false' if name in DISABLE_ONLY_SWITCHES else value == 'true'
     from config.refactor_switches import default_on
 
-    if name not in {'BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED', 'PROJECTION_DRAIN_CLAIM_AWARE'}:
+    # Preserve the explicit off-only controls and true-only pump selector
+    # in every parser mode.
+    if name not in {
+        'BATCH_PIPELINE_SERVING_PROJECTION_SWEEP',
+        'BATCH_PIPELINE_PROJECTION_PUMP_ENABLED',
+        'BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED',
+        'PROJECTION_DRAIN_CLAIM_AWARE',
+    }:
         enabled = default_on(name, enabled, environ=env)
     logger.info('event=batch_policy_kill_switch policy_id=%s switch=%s enabled=%s count=1', policy_id, name, enabled)
     return enabled
