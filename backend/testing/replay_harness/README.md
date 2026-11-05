@@ -30,6 +30,59 @@ production frequency. Whether retries exhaust depends on scheduling and host loa
 `admission-drain-contention` usually stops on `FirestoreContentionExhausted` but can admit cleanly. CI
 accepts only those two outcomes for it; repeat it locally before reading a single run as a fix.
 
+## Replay a service's runtime config
+
+Pass `--runtime-env <service>[:<env>]` to `run`, or `RUNTIME_ENV=backend` to
+`make replay-harness`, `make replay-privacy-full` and `make replay-gate`.
+The environment defaults to `prod`; `dev` is also supported. This renders the
+**repository's declared deploy inputs offline**, without reading production or
+claiming they match a running revision. Unknown services/environments fail closed.
+Cloud Run services use `deploy/compose_runtime_env.py` (base plus overlay);
+GKE workloads use the drift checker's workload registry and exact `helm template`
+invocation with their checked-in chart values. GKE requires Helm on PATH. No
+live private overrides, ConfigMaps, Secret Manager payloads or ambient env inputs
+are fetched or resolved. Indirect `envFrom` sources are dropped as whole sources.
+
+Only literal scalar entries matching `FSR_*`, `FIRESTORE_READ_*`, `*_PERCENT`,
+`*_TTL_SECONDS` or `*_ENABLED` can be applied. Credential/secret/token, identity,
+project, endpoint/URL/URI, host/port/emulator/socket, bucket/database and path/file
+names are denied even under those prefixes. Entries marked secret, credential,
+auth, identity or service discovery, and all secret refs and `env_var` bindings
+(including bindings with defaults) are dropped. Rendering runs in a separate
+process with only PATH/TMPDIR/SYSTEMROOT inherited. A differing binding for any
+setting owned by the hermetic environment refuses the run; an equal binding
+preserves that setting. Values outside this policy never enter reports or error
+messages. Each case report and gate worker outcome records only:
+
+```json
+{"runtime_env":{"service":"backend","env":"prod","applied_keys":["FSR_SUBSCRIPTION_TTL_SECONDS"],"dropped_count":1}}
+```
+
+The key list/count above is illustrative. `dropped_count` includes nonallowlisted,
+secret and indirect entries (one count per unresolved GKE `envFrom` source).
+With no selector the existing code-default replay behavior is preserved.
+
+```bash
+unset GOOGLE_APPLICATION_CREDENTIALS CLOUDSDK_CONFIG CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE
+export PATH=/opt/homebrew/opt/openjdk@21/bin:$PATH
+/Users/dazheng/workspace/omi/bin/omi-heavy run -- \
+  node_modules/.bin/firebase emulators:exec --only firestore --project demo-omi-isolated-tests \
+  'make replay-privacy-full RUNTIME_ENV=backend OUTPUT=/Volumes/Ephemeral/scratch/privacy-runtime'
+```
+
+Gate workers render REF and BASE separately using **each side's archived
+composition code and inputs**, including retries. The fixed adapter never copies
+its checkout's runtime settings into either side. A config-only TTL fix therefore
+produces a normal `fixed` classification when BASE reproduces the expected stop
+and REF passes. `runtime_env` is recorded per outcome because values can differ
+between the two sides even when their applied key names are identical.
+
+The privacy stage still explicitly enables its test levers with shadow off to
+exercise staleness. Runtime TTLs reach the real helpers unchanged; no TTL override
+is needed. `PRIVACY_TTL_OVERRIDE_S` remains an explicit test monkeypatch and takes
+precedence when supplied. Privacy replay does not certify live rollout enablement, and it
+checks the checked-in config at the tested source, not the live traffic-serving revision.
+
 ## Add a case
 
 One directory per case: `manifest.json` (schema version 1, validated by `manifest.py`), `corpus.json`, and

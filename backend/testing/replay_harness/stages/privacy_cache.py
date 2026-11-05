@@ -133,10 +133,11 @@ def clock_and_cache(environment, fault, events, *, ttl_override_s=None):
 
 
 class PrivacyCacheDriver:
-    def __init__(self, *, ttl_override_s=None):
+    def __init__(self, *, ttl_override_s=None, runtime_env=None):
         if ttl_override_s is not None and (type(ttl_override_s) is not int or not 1 <= ttl_override_s <= 86400):
             raise ValueError('test TTL override must be an integer in [1, 86400]')
         self.ttl_override_s = ttl_override_s
+        self.runtime_env = runtime_env
 
     async def run(self, case, environment=None):
         from database.privacy_check_metrics import with_session_census
@@ -187,7 +188,7 @@ class PrivacyCacheDriver:
         from testing.replay_harness.env import replay_environment
 
         events = Counter()
-        with replay_environment() as environment:
+        with replay_environment(self.runtime_env) as environment:
             patches, redis = clock_and_cache(environment, row['fault'], events, ttl_override_s=self.ttl_override_s)
             with patches, batch_privacy_attempt():
                 uid, read, write, truth = scenario(row, environment)

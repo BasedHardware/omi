@@ -168,3 +168,64 @@ worker.main()
                 timeout=5,
             )
         assert error.value.code == 404
+
+
+def test_config_only_privacy_fix_is_rendered_from_each_archive(tmp_path):
+    clone = tmp_path / 'config-clone'
+    subprocess.run(['git', 'clone', '--shared', '--no-checkout', '--quiet', str(ROOT), str(clone)], check=True)
+    candidate = git(clone, 'rev-parse', 'HEAD').decode()
+    git(clone, 'read-tree', candidate)
+    path = 'backend/deploy/runtime_env/_base.yaml'
+    source = git(clone, 'show', f'{candidate}:{path}')
+    # Only backend's single subscription TTL differs. The generated manifest
+    # stays identical, proving the archive's composition inputs are authoritative.
+    start = source.index(b'      backend:\n', source.index(b'  cloud_run:\n'))
+    end = source.index(b'      backend-sync:\n', start)
+    needle = b"FSR_SUBSCRIPTION_TTL_SECONDS:\n            value: '55'"
+    assert source[start:end].count(needle) == 1
+    patched = source[:start] + source[start:end].replace(needle, needle.replace(b"'55'", b"'60'")) + source[end:]
+    blob = git(clone, 'hash-object', '-w', '--stdin', data=patched).decode()
+    git(clone, 'update-index', '--cacheinfo', f'100644,{blob},{path}')
+    tree = git(clone, 'write-tree').decode()
+    base = git(
+        clone,
+        '-c',
+        'user.name=Replay proof',
+        '-c',
+        'user.email=replay@example.invalid',
+        'commit-tree',
+        tree,
+        '-p',
+        candidate,
+        data=b'Config-only 60s baseline proof\n',
+    ).decode()
+    assert git(clone, 'diff-tree', '--no-commit-id', '--name-only', '-r', candidate, base).decode() == path
+    directory = tmp_path / 'privacy-config-case'
+    shutil.copytree(FIXTURES / 'privacy-transitions-smoke', directory)
+    corpus = {
+        'privacy_cache': {
+            'transitions': [{'family': 'subscription', 'kind': 'byok_enable', 'fault': 'drop_invalidation'}]
+        }
+    }
+    corpus_path = directory / 'corpus.json'
+    corpus_path.write_text(json.dumps(corpus))
+    manifest = json.loads((directory / 'manifest.json').read_text())
+    manifest['stages']['privacy_cache'] = {
+        'expect_stop_stage': 'privacy_cache',
+        'expect_reason': 'privacy_cache:staleness_bound_exceeded',
+        'min_verified_transitions': 0,
+    }
+    manifest['gate'] = {'fixed_by_ref': True}
+    manifest['seed_blob_sha256'] = [hashlib.sha256(corpus_path.read_bytes()).hexdigest()]
+    (directory / 'manifest.json').write_text(json.dumps(manifest))
+    output = tmp_path / 'config-only-gate'
+    assert gate(clone, [directory], candidate, base, output, runtime_env='backend') == 0
+    result = json.loads((output / 'gate.json').read_text())
+    assert result['verdict'] == 'PASS' and result['cases'][0]['classification'] == 'fixed'
+    row = result['cases'][0]
+    before, after = row['baseline']['outcomes'][0], row['candidate']['outcomes'][0]
+    assert before['runtime_env'] == after['runtime_env']  # Names only; values never reported.
+    assert before['stages'][0]['details']['mismatches'] == 1
+    assert after['stages'][0]['details']['mismatches'] == 0
+    assert after['stages'][0]['details']['bound_margin_s_by_family']['subscription'] == 5
+    assert set(output.iterdir()) == {output / name for name in ('gate.json', 'gate.md', 'identity.key')}

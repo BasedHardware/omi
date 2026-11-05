@@ -244,7 +244,7 @@ def markdown(result):
     return '\n'.join(rows) + '\n'
 
 
-def run_side(backend, cases, repeats, timeout=1800, grace=10, worker=None, *, decryption_files=None):
+def run_side(backend, cases, repeats, timeout=1800, grace=10, worker=None, *, decryption_files=None, runtime_env=None):
     worker = worker or Path(__file__).with_name('gate_worker.py')
     environment = {
         key: os.environ[key] for key in ('PATH', 'TMPDIR', 'SYSTEMROOT', 'FIRESTORE_EMULATOR_HOST') if key in os.environ
@@ -255,6 +255,8 @@ def run_side(backend, cases, repeats, timeout=1800, grace=10, worker=None, *, de
         if path is not None
         for argument in ('--' + name.replace('_', '-'), str(Path(path).resolve()))
     ]
+    if runtime_env is not None:
+        options.extend(['--runtime-env', runtime_env])
     report = backend.parent / 'outcomes.json'
     scratch = Path('/Volumes/Ephemeral/scratch')
     with tempfile.TemporaryDirectory(
@@ -315,6 +317,7 @@ def gate(
     secret_file=None,
     uid_file=None,
     consent_file=None,
+    runtime_env=None,
 ):
     if type(repeats) is not int or repeats < 1:
         raise ValueError('repeats must be positive')
@@ -341,6 +344,8 @@ def gate(
     for name in ('gate.json', 'gate.md'):
         (output / name).unlink(missing_ok=True)
     worker_options = {'decryption_files': decryption_files} if credentials else {}
+    if runtime_env is not None:
+        worker_options['runtime_env'] = runtime_env
     reports = {}
     for label in ('baseline', 'candidate'):
         with backend_snapshot(repo, refs[label], output, label) as backend:
@@ -394,6 +399,7 @@ def main(argv=None):
     parser.add_argument(
         '--worker-timeout', type=float, default=1800, help='seconds per worker side before cooperative cleanup'
     )
+    parser.add_argument('--runtime-env', help='render service[:prod|dev] separately from each archived tree')
     add_arguments(parser)
     args = parser.parse_args(argv)
     try:
@@ -406,6 +412,7 @@ def main(argv=None):
             args.repeats,
             args.regression_only,
             args.worker_timeout,
+            runtime_env=args.runtime_env,
             **file_options(args),
         )
     except Exception as error:
