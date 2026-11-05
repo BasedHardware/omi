@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'package:file_picker/file_picker.dart';
@@ -9,6 +8,7 @@ import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/env/backend_url_override.dart';
 import 'package:omi/pages/home/widgets/home_daily_recaps_setting.dart';
 import 'package:omi/pages/settings/developer_firmware_flash_page.dart';
 import 'package:omi/pages/settings/developer_mcp_section.dart';
@@ -410,7 +410,10 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                   const SizedBox(height: OmiSpacing.xxl),
                   const DeveloperMcpSection(),
                   const SizedBox(height: OmiSpacing.xxl),
-                  if (!kReleaseMode) ...[_buildCustomBackendUrl(provider), const SizedBox(height: OmiSpacing.xxl)],
+                  if (BackendUrlOverride.isSupported) ...[
+                    _buildCustomBackendUrl(provider),
+                    const SizedBox(height: OmiSpacing.xxl),
+                  ],
                   _buildWebhooks(provider),
                   const SizedBox(height: OmiSpacing.xxl),
                   _buildExperimental(provider),
