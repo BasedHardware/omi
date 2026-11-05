@@ -1006,13 +1006,22 @@ def test_slot_deferral_persistence_failure_propagates(prod_shaped, retry_state, 
     assert sum(batch_outcome_counts().values()) - sum(before.values()) == 1
 
 
+def _retry_counter_snapshot():
+    return {}  # The retry fixture supplies its synthetic durable store.
+
+
 def batch_outcome_counts():
-    return {
+    counts = {
         tuple(sample.labels.items()): sample.value
         for metric in batch.OUTCOMES.collect()
         for sample in metric.samples
         if sample.name.endswith('_total') and sample.labels['lane'] == 'batch'
     }
+    for shard in _retry_counter_snapshot().values():
+        for outcome, value in shard.items():
+            labels = (('lane', 'batch'), ('outcome', outcome))
+            counts[labels] = counts.get(labels, 0) + value
+    return counts
 
 
 @pytest.mark.parametrize('failure', ['none', 'unassigned', 'budget', 'diarizer'])

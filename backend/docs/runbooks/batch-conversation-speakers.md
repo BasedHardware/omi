@@ -88,7 +88,8 @@ After the current resolver and speaker-evidence projection, before summary gener
 `BATCH_FINAL_PASS_PERCENT` defaults to 100 and uses the existing transcription-final-pass
 UID hash bucket. This knob is independent of the retiring shadow/legacy-sync flags.
 Persisted `final:batch:` authority reaches it during normal enrichment with either
-sync setting; bounded identity-only retries do not run it. Only the retained,
+sync setting; dedicated speaker-only retries run this pass with identity-only
+persistence, without rerunning enrichment. Only the retained,
 private recurring profiles described below may be learned after revalidation.
 
 The adapter reads each unit's encrypted, generation-pinned staged audio and result,
@@ -99,14 +100,83 @@ place a unit. It does not assemble conversation `audio_files` or compare lossy p
 encodes with staged PCM. Native-record staging manifests still materialize their own
 pinned sources and slices, with their original PCM digest checks.
 
-All unit artifacts and every conversation segment must be accounted for before any
-label changes. Missing, expired, privacy-fenced or unplaceable units, conflicting
-overlapping capture clocks, and exhausted read budgets leave **all** resolver labels
-unchanged. Mixed-speaker segments and diarizer gap words individually abstain after
-a complete input assembly. Artifact privacy generation and deletion fences apply
-before/after reads; references and expiry are rechecked after inference. Staged
-audio/results retain their cleanup deadlines; the separate recurring-profile
-write follows successful revalidation as described below.
+Coverage is per positive-duration, batch-backed segment. Other lanes, point-only
+segments and manual labels keep their existing authority. When some required
+segments lack reconstructable evidence, covered segments may receive revalidated
+updates; unplaced segments keep their labels. This reports `partial_coverage`,
+includes `coverage` and `coverage_reasons`, leaves conversation-wide speaker
+resolution unavailable, and performs no recurring learning. No reconstructable
+words means no updates. Mixed-speaker segments and diarizer gap words also abstain
+individually, with `failed_unassigned_words` if any remain; covered segments may
+already have changed, and recurring learning is suppressed.
+
+Expired, merged, shared or privacy-fenced references, conflicting overlapping
+capture clocks, and read-budget failures refuse the whole invocation before
+application. Shared-unit refusal is deliberately whole-pass, even if other units
+are usable. Artifact privacy generation and deletion fences apply before/after
+reads; references and expiry are rechecked after inference. Staged audio/results
+retain their cleanup deadlines. Point words preserve transcript text but never
+contribute voice evidence.
+
+### Reading final-pass outcomes
+
+`omi_transcription_final_pass_total{lane="batch",outcome=...}` records terminal
+initial-pass outcomes. Dedicated retries record
+`omi_transcription_final_pass_retry_terminal_total{outcome=...}` instead: each
+idempotent obligation closes atomically with its durable counter increment. A
+lost Firestore reply or process failure cannot lose or duplicate that count. The
+existing maintenance sweep refreshes 16 fixed counter shards every two minutes,
+including when no rows are due. Scrapes read only the process cache. Replicas
+mirror the same cumulative totals: deduplicate with `max by (outcome)` before
+computing increases, never sum the mirrors. Retry delivery does not also increment
+the initial-pass counter. Together these record one terminal outcome per admitted
+conversation obligation. `skipped_ineligible` calls are
+outside the cohort and terminal counts. Durable `deferred_*` results are
+nonterminal; inspect the subsequent speaker-only retry outcome rather than
+treating a deferral as a failed or successful conversation.
+
+For a one-hour outcome dashboard, add the initial per-instance increases and the
+deduplicated durable retry increase. The `or` retains both streams because only
+the initial stream has a `lane` label; the outer sum combines them by outcome:
+
+```promql
+sum by (outcome) (
+  increase(omi_transcription_final_pass_total{lane="batch"}[1h])
+  or
+  increase((max by (outcome) (
+    omi_transcription_final_pass_retry_terminal_total
+  ))[1h:2m])
+)
+```
+
+Gate on fresh durable observations too:
+`time() - max(omi_transcription_final_pass_retry_terminal_observed_at_seconds)`.
+Missing or older-than-six-minute observations are unknown, not zero retries or
+success. Restart the full rollout observation window after deploying this metric
+change; historical closed receipts are not backfilled. Terminal logs are
+best-effort diagnostics; the durable aggregate is authoritative for retries.
+
+| Outcome / code-owned reason | Meaning and operator action |
+| --- | --- |
+| `partial_coverage` | Some batch-backed segments were updated; unplaced segments retain labels. No recurring learning. Inspect `coverage_reasons` for missing jobs, changed projection IDs/text or point-word evidence. |
+| `skipped_expired` | A required staged artifact expired or was cleaned. No updates; retries never extend retention. |
+| `artifact_cleaned` (reason, not an outcome) | Cleanup tombstone: `expires_at` is the metadata TTL, not an audio lease. Appears under `skipped_expired`, including when that TTL is still in the future. Do not restore or accept deleted audio from the receipt. |
+| `skipped_merged` | Projection receipts refer to another conversation after merge/split. No updates; do not infer ownership from current transcript offsets. |
+| `skipped_shared_unit` | A staged unit includes receipts for another conversation. Whole-pass refusal protects its audio. The unit-skip counter separately measures affected units. |
+| `deferred_transient` | Retryable Firestore/GCS/transport failure, elapsed artifact read deadline, or HTTP 408/429/5xx. Uses the bounded speaker-only outbox; other 4xx, TLS errors and structural caps stay terminal. |
+| `deferred_custody` | The wake was acknowledged during a transient claim/settlement/reporting failure. The durable-row sweeper repairs it after recovery; it is not another inference attempt or terminal outcome. |
+| `skipped_retry_exhausted` | The four-claim retry cap was reached without a terminal speaker result. Duplicate wakes cannot reopen the obligation. Slot-only exhaustion uses `skipped_slot_exhausted`. |
+
+For read-only local diagnosis, use
+[`testing/owner_lab/final_pass_repro.py`](../../testing/owner_lab/final_pass_repro.py),
+which runs the real staged-unit reconstruction and final-pass path. The
+[owner-lab instructions](../../testing/owner_lab/README.md#batch-speaker-final-pass-repro)
+describe `0600` UID/secret/selection files, the write fence, stub versus HTTP
+diarization and JSONL output. The stub checks plumbing, not diarization quality;
+the harness captures application/learning/requeue calls and bypasses spend
+admission. Inspect `read_wall_seconds`, `read_bytes` and `read_objects` alongside
+coverage and code-owned exception locations; full private-cloud-sync audio is
+not an equivalent reproduction.
 
 Ordinary staged audio and results are scheduled for cleanup **24h after successful
 projection**, for both sync settings (`retention.expire_completed_segment`). This is
@@ -120,8 +190,9 @@ the 24h window and every pinned source must remain available.
 five-second evidence floor, thresholds, margin and joint owner arbitration. A manual
 owner reserves the identity. Manual receipts and
 stable segment IDs survive application under `final:batch:conversation:<id>`.
-Every failure, including incompatible embedding output, emits `record_fallback`
-and retains current resolver labels. There is
+Whole-pass refusals, including incompatible embedding output, emit
+`record_fallback` and retain all current resolver labels. Partial application
+preserves unsupported segments as described above. There is
 one nonwaiting process slot, a 600-second deadline, a 7200-second PCM ceiling
 (`failed_too_long`), and a 480-unit limit checked before reference reads. This
 supports two hours at a conservative 15-second average unit length (ordinary
@@ -139,7 +210,7 @@ GPU work: `BATCH_FINAL_PASS_DAILY_AUDIO_HOURS=1200`,
 Invalid budgets or Redis failure refuse the pass. These are capacity limits, not
 new admission. Per-unit diarization remains in place, so inference cost is additive.
 
-Use `omi_transcription_final_pass_total{lane="batch"}` outcomes, final-pass agreement
+Use the combined initial/durable-retry outcomes above, final-pass agreement
 and latency with the same lane label, owner-parity delta, processing p95 enrichment
 latency, and `omi_diarization_v2_queue_depth` for ramp decisions. The lead sets
 the observation window before expansion. The sync GMP keep-list retains all

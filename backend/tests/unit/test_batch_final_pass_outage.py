@@ -122,6 +122,43 @@ def test_lost_terminal_settlement_reply_repairs_reporting_without_repeating_infe
     assert sum(batch_outcome_counts().values()) - sum(before.values()) == 1
 
 
+@pytest.mark.parametrize(
+    'factory', [api.ServiceUnavailable, api.DeadlineExceeded, api.Aborted, api.InternalServerError]
+)
+def test_committed_terminal_report_with_lost_reply_is_eventually_counted_once(ready, monkeypatch, factory):
+    retry.enqueue(UID, ready.lane.conversation)
+    key, token = next_wake(ready.state)
+    take = ready.state.store.take_terminal
+    before = batch_outcome_counts()
+
+    def lost_reply(*args, **kwargs):
+        assert take(*args, **kwargs)
+        raise factory('PRIVATE lost terminal-report reply after commit')
+
+    monkeypatch.setattr(ready.state.store, 'take_terminal', lost_reply)
+    assert retry.consume(key, token)['outcome'] == 'deferred_custody'
+    assert len(ready.lane.gpu) == len(ready.writes) == 1
+    monkeypatch.setattr(ready.state.store, 'take_terminal', take)
+    ready.state.clock[0] += 2000
+    retry.sweep(now=ready.state.clock[0])
+    if ready.state.rows[key].get('terminal_pending'):
+        key, token = next_wake(ready.state)
+        retry.consume(key, token)
+    assert retry.consume(key, token)['outcome'] == 'stale'
+    retry.sweep(now=ready.state.clock[0] + 2000)
+    assert sum(batch_outcome_counts().values()) - sum(before.values()) == 1
+    assert len(ready.lane.gpu) == len(ready.writes) == 1
+    from utils.observability.speaker_retry_terminal import TERMINALS
+
+    exported = [
+        sample.value
+        for family in TERMINALS.collect()
+        for sample in family.samples
+        if sample.name.endswith('_total') and sample.labels['outcome'] == 'success'
+    ]
+    assert exported == [1]  # Recovery exports the committed metric, not a second report.
+
+
 def test_lost_claim_replies_cannot_reset_four_claim_cap(ready, monkeypatch):
     retry.enqueue(UID, ready.lane.conversation)
     claim = ready.state.store.claim

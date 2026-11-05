@@ -9,6 +9,7 @@ from database.outbox_cas import mutate
 MAX_ATTEMPTS = 4
 LEASE_SECONDS = 900
 REPAIR_SECONDS = 120
+COUNTER_SHARDS = 16
 
 
 def backoff(attempt):
@@ -17,6 +18,25 @@ def backoff(attempt):
 
 def obligation_key(uid, conversation_id, scope_key):
     return hashlib.sha256(f'{uid}\0{conversation_id}\0{scope_key}'.encode()).hexdigest()
+
+
+def terminal_plan(old, counts, token):
+    """One atomic receipt/counter plan; no process-local metric side effects."""
+    if not old or old['token'] != token or not old.get('outcome') or not old.get('terminal_pending'):
+        return None
+    from utils.observability.reasons import BatchFinalPassOutcome, ReasonFamily, reason_label
+
+    row, counts = dict(old), dict(counts)
+    for field in ('terminal_pending', 'repair_after', 'due_at'):
+        row.pop(field, None)
+    if old['outcome'] != 'skipped_ineligible':
+        outcome = (
+            'success'
+            if old['outcome'] == 'success'
+            else reason_label(ReasonFamily.BATCH_FINAL_PASS, old['outcome'], BatchFinalPassOutcome)
+        )
+        counts[outcome] = counts.get(outcome, 0) + 1
+    return row, counts
 
 
 class FinalPassRetries:
@@ -118,16 +138,44 @@ class FinalPassRetries:
 
         return self._mutate(key, finish)
 
-    def take_terminal(self, key, token):
-        def take(old):
-            if not old or old['token'] != token or not old.get('outcome') or not old.get('terminal_pending'):
-                return old, False
-            row = {**old}
-            for field in ('terminal_pending', 'repair_after', 'due_at'):
-                row.pop(field, None)
-            return row, True
+    def _counter_collection(self):
+        return self._client().collection(self._collection().id + '_terminal_counters')
 
-        return self._mutate(key, take)
+    def take_terminal(self, key, token):
+        # The metric and its idempotency receipt commit together. An ambiguous
+        # reply can lose a log line, but never the durable terminal count.
+        from google.cloud import firestore
+
+        receipt = self._collection().document(key)
+        counter = self._counter_collection().document(str(int(key[:2], 16) % COUNTER_SHARDS))
+
+        @firestore.transactional
+        def report(transaction):
+            old = receipt.get(transaction=transaction, retry=None, timeout=3).to_dict()
+            if not old or old['token'] != token or not old.get('terminal_pending'):
+                return False
+            counts = counter.get(transaction=transaction, retry=None, timeout=3).to_dict() or {}
+            plan = terminal_plan(old, counts, token)
+            if plan is None:
+                return False
+            row, counts = plan
+            transaction.set(receipt, row)
+            transaction.set(counter, counts)
+            return True
+
+        return report(self._client().transaction(max_attempts=1))
+
+    def terminal_counts(self):
+        # Fixed-size read, even after all completed receipts leave the repair
+        # index. Scrapes never perform Firestore IO.
+        references = [self._counter_collection().document(str(i)) for i in range(COUNTER_SHARDS)]
+        counts = {
+            snapshot.id: snapshot.to_dict() or {}
+            for snapshot in self._client().get_all(references, retry=None, timeout=3)
+        }
+        if set(counts) != set(map(str, range(COUNTER_SHARDS))):
+            raise ValueError('retry_counter_snapshot_incomplete')
+        return counts
 
     def due(self, *, now, limit=100):
         # A single-field range uses Firestore's automatic index. Reported

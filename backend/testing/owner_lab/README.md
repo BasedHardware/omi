@@ -196,7 +196,9 @@ retains its existing transaction path.
 
 Mixed lanes are supported only for positive-duration segments with batch-unit
 evidence. Other lanes and point-only segments are preserved. Missing required
-batch segments fail closed; expired artifacts and receipts for another
+batch segments keep their labels while provable covered segments can update,
+reporting `partial_coverage` without recurring learning; no reconstructable words
+means no updates. Expired artifacts and receipts for another
 conversation report `skipped_expired` and `skipped_merged`. Retention starts
 at completed projection, after enrichment is queued; reading never extends it.
 
@@ -237,9 +239,11 @@ Transient claim/settlement storage failures acknowledge the task with
 durable-row sweeper rearms pending rows or expired leases after recovery; the
 enrichment queue's unlimited transport retries do not drive this recovery.
 An ambiguous committed claim retains its attempt. Terminal settlement leaves a
-content-free reporting receipt until a fenced reporter takes it, so a lost
-settlement reply can recover reporting without repeating inference. Duplicate
-reporters cannot count the same receipt twice.
+content-free reporting receipt. Reporting atomically increments a durable counter
+and closes that receipt, so an ambiguous commit cannot lose or repeat a count.
+The maintenance sweep refreshes the cached durable totals even with no due rows;
+Prometheus scrapes perform no database reads. Replica mirrors use `max`, not
+`sum`; see the [operator queries](../../docs/runbooks/batch-conversation-speakers.md#reading-final-pass-outcomes).
 
 For four ordinary on-time claims, backoffs total at most 675 seconds (11m15s). That is not a
 wall-clock delivery guarantee: queue backlog, outages and 15-minute crashed
@@ -252,8 +256,8 @@ persistence transaction. Retried inference abstains from recurring-profile
 learning: that learner stamps the conversation and would invalidate the identity
 CAS. Normal admitted passes retain recurring learning. A changed revision defers
 within the same cap. The
-consumer records a terminal result only after settlement; duplicate deliveries
-cannot count it again. Ineligible calls and durable deferrals remain outside
+consumer records a durable terminal count only after settlement; duplicate
+deliveries cannot count it again. Ineligible calls and durable deferrals remain outside
 the terminal counter contract. The replay suppresses Prometheus writes inside
 `reproduce()`, including counters, histograms and lazy label children.
 

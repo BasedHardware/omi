@@ -124,10 +124,12 @@ def _terminal(result):
     if result['outcome'] == 'skipped_ineligible':
         return
     if result['outcome'] == 'success':
-        batch.count_terminal('success')
         logger.info('event=batch_final_pass outcome=success reason=speaker_retry')
     else:
-        batch._fallback(**result)
+        # The outcome is already durable. Logging/fallback telemetry must not
+        # also increment the initial-pass process-local outcome counter.
+        with batch.terminal_metrics(False):
+            batch._fallback(**result)
 
 
 def _custody_unavailable(error, phase):
@@ -213,6 +215,17 @@ def consume(key, token, *, now=None):
 
 def sweep(*, now):
     store = _store()
+    from utils.observability.speaker_retry_terminal import TERMINALS
+
+    # Refresh even when no rows are due: a terminal commit with a lost reply
+    # has already left the repair index but its aggregate is still durable.
+    try:
+        TERMINALS.publish(store.terminal_counts(), observed_at=now)
+    except Exception as error:
+        # Failed observation stays stale and must not prevent custody repair.
+        logger.warning(
+            'event=batch_final_pass_retry outcome=counter_refresh_failed exception_type=%s', type(error).__name__
+        )
     count = 0
     for snapshot in store.due(now=now):
         observed = snapshot.to_dict()

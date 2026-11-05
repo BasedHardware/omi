@@ -70,6 +70,8 @@ def test_already_buffered_redis_pipeline_cannot_write():
     [
         'omi_transcription_final_pass_total',
         'omi_transcription_final_pass_unit_skips_total',
+        'omi_transcription_final_pass_retry_terminal_total',
+        'omi_transcription_final_pass_retry_terminal_observed_at_seconds',
         'omi_transcription_final_pass_agreement_bucket',
         'omi_transcription_final_pass_agreement_sum',
         'omi_transcription_final_pass_agreement_count',
@@ -106,6 +108,8 @@ def test_final_pass_gate_inventory_includes_source_backed_metric_names():
         'omi_transcription_final_pass_owner_delta_ratio_sum',
         'omi_transcription_final_pass_owner_delta_ratio_count',
         'omi_transcription_final_pass_unit_skips_total',
+        'omi_transcription_final_pass_retry_terminal_total',
+        'omi_transcription_final_pass_retry_terminal_observed_at_seconds',
     }
     assert expected <= set(inventory['metrics']) | set(inventory['declared_metrics'])
 
