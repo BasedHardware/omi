@@ -78,36 +78,37 @@ describe('ChatMessages copy button', () => {
   )
 })
 
-describe('ChatMessages [overlay] — pending spinner', () => {
-  it('shows the standalone spinning Omi mark (not a bubble) while the reply is pending', () => {
-    const { container } = render(
-      <ChatMessages messages={[user('hi'), assistant('')]} sending={true} variant="overlay" />
-    )
-    const spinner = screen.getByRole('status', { name: 'Omi is thinking' })
-    expect(spinner.querySelector('svg.omi-thinking-spin')).not.toBeNull()
-    // The loader is NOT itself a message bubble: only the user turn is a bubble,
-    // the pending assistant turn is the standalone spinner.
-    expect(container.querySelectorAll('[class*="group/msg"]').length).toBe(1)
-  })
+describe('ChatMessages — pending spinner (main + overlay)', () => {
+  it.each(['overlay', 'main'] as const)(
+    'shows the standalone spinning Omi mark (not a bubble) while the reply is pending [%s]',
+    (variant) => {
+      const { container } = render(
+        <ChatMessages messages={[user('hi'), assistant('')]} sending={true} variant={variant} />
+      )
+      const spinner = screen.getByRole('status', { name: 'Omi is thinking' })
+      expect(spinner.querySelector('svg.omi-thinking-spin')).not.toBeNull()
+      // The loader is NOT itself a message bubble: only the user turn is a bubble,
+      // the pending assistant turn is the standalone spinner.
+      expect(container.querySelectorAll('[class*="group/msg"]').length).toBe(1)
+    }
+  )
 
-  it('swaps the spinner for a bubble once the reply has content', () => {
-    const { container } = render(
-      <ChatMessages
-        messages={[user('hi'), assistant('here is your answer')]}
-        sending={true}
-        variant="overlay"
-      />
-    )
-    expect(screen.queryByRole('status', { name: 'Omi is thinking' })).toBeNull()
-    // Both turns are now bubbles (the assistant bubble carries bubble-in for the
-    // pop-in); the loader is gone.
-    expect(container.querySelectorAll('[class*="group/msg"]').length).toBe(2)
-  })
-
-  it('does not use the bar spinner in the main window (keeps its own indicator)', () => {
-    render(<ChatMessages messages={[user('hi'), assistant('')]} sending={true} variant="main" />)
-    expect(screen.queryByRole('status', { name: 'Omi is thinking' })).toBeNull()
-  })
+  it.each(['overlay', 'main'] as const)(
+    'swaps the spinner for a bubble once the reply has content [%s]',
+    (variant) => {
+      const { container } = render(
+        <ChatMessages
+          messages={[user('hi'), assistant('here is your answer')]}
+          sending={true}
+          variant={variant}
+        />
+      )
+      expect(screen.queryByRole('status', { name: 'Omi is thinking' })).toBeNull()
+      // Both turns are now bubbles (the assistant bubble carries bubble-in for the
+      // pop-in); the loader is gone.
+      expect(container.querySelectorAll('[class*="group/msg"]').length).toBe(2)
+    }
+  )
 })
 
 const image = {
@@ -165,7 +166,7 @@ describe.each(['main', 'overlay'] as const)('ChatMessages [%s] — attachments',
 
 // Shared-thread agent cards (B4, INV-CHAT-1): an assistant message carrying an
 // agentSpawn / agentCompletion block renders as a card, not a text bubble.
-const spawnCard = (): ChatMsg => ({
+const spawnCard = (provider?: string): ChatMsg => ({
   id: 'spawn-1',
   role: 'assistant',
   content: '',
@@ -174,6 +175,7 @@ const spawnCard = (): ChatMsg => ({
       type: 'agentSpawn',
       id: 'spawn-1',
       pillId: 'pill-1',
+      ...(provider ? { provider } : {}),
       sessionId: 'sess_1',
       runId: 'run_1',
       title: 'Build the report',
@@ -209,6 +211,25 @@ describe('ChatMessages — shared-thread agent cards (B4)', () => {
     expect(screen.getByText('Running')).not.toBeNull()
     // A card is not a copyable text bubble.
     expect(screen.queryByRole('button', { name: 'Copy message' })).toBeNull()
+  })
+
+  // Quick win: the card used to show a generic Bot icon for every provider —
+  // the block now carries the resolved adapter id, so a recognized provider
+  // shows its real brand mark instead.
+  it('shows the provider brand mark instead of the generic Bot icon when the block carries one', () => {
+    const { container } = render(
+      <ChatMessages messages={[spawnCard('hermes')]} sending={false} variant="main" />
+    )
+    // BrandImage (PNG-backed marks like hermes) renders an <img>; the Bot
+    // fallback is an inline lucide <svg>, never an <img>.
+    expect(container.querySelector('img')).not.toBeNull()
+  })
+
+  it('falls back to the generic Bot icon when the block carries no provider', () => {
+    const { container } = render(
+      <ChatMessages messages={[spawnCard()]} sending={false} variant="main" />
+    )
+    expect(container.querySelector('img')).toBeNull()
   })
 
   it('renders the completion card with a status label and its output', () => {

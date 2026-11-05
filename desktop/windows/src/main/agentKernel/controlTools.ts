@@ -912,6 +912,11 @@ export async function handleAgentControlToolCall(
               producingChatId: producingSurface.chatId,
               producingSurfaceKind: producingSurface.surfaceKind,
               pillId: visiblePillExternalRefId ?? null,
+              // The resolved adapter, not the narrower `parsed.provider` selector
+              // (which only ever carries 'openclaw'/'hermes') — this covers all
+              // five adapters so the card's brand mark isn't gapped for acp/codex/
+              // pi-mono spawns.
+              provider: adapterId,
               title: cardTitle,
               objective: parsed.objective
             })
