@@ -87,8 +87,16 @@ def test_cohort_registry_and_live_switch_contract():
     for key in KILL_SWITCHES:
         assert by_key[key]['lifecycle'] == 'ops_kill'
         assert kill_switch(key, flags={})
-        disabled = 'off' if key == 'PROJECTION_DRAIN_CLAIM_AWARE' else 'false'
-        assert not kill_switch(key, flags={key: disabled})
+        assert not kill_switch(
+            key,
+            flags={
+                key: (
+                    'off'
+                    if key in {'BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED', 'PROJECTION_DRAIN_CLAIM_AWARE'}
+                    else 'false'
+                )
+            },
+        )
     assert 'nested' in by_key['BATCH_LIVE_STT_RETIRE_PERCENT']['notes'].lower()
     with pytest.raises(ValueError):
         kill_switch('BATCH_PIPELINE_ENABLED')
