@@ -222,13 +222,21 @@ func connect(ctx context.Context, adapter *bluetooth.Adapter, deviceID string) (
 		case <-errCh:
 		case <-time.After(2 * time.Second):
 		}
-		// last resort: try Address.Set (works when ID is a parseable address)
-		addr.Set(deviceID)
+		select {
+		case addr = <-found:
+		default:
+			// last resort: try Address.Set (works when ID is a parseable address)
+			addr.Set(deviceID)
+		}
 	case err := <-errCh:
 		if err != nil {
 			return bluetooth.Device{}, fmt.Errorf("omidevice: scan for connect: %w", err)
 		}
-		return bluetooth.Device{}, fmt.Errorf("omidevice: device %q not found", deviceID)
+		select {
+		case addr = <-found:
+		default:
+			return bluetooth.Device{}, fmt.Errorf("omidevice: device %q not found", deviceID)
+		}
 	}
 
 	dev, err := adapter.Connect(addr, bluetooth.ConnectionParams{})
