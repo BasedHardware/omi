@@ -7,6 +7,8 @@ import pytest
 from scripts import backfill_episode_log as cli
 from utils.episodes.log.codec import dumps
 
+pytestmark = pytest.mark.usefixtures('isolated_episode_capture')
+
 
 def test_cli_defaults_to_dry_run_without_constructing_a_client(tmp_path, monkeypatch, capsys):
     data = tmp_path / 'synthetic.json'

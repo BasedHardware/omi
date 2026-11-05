@@ -15,6 +15,9 @@ from utils.episodes.log.codec import loads
 from utils.episodes.log.policy import home_policy_write
 from utils.encryption import decrypt
 
+pytestmark = pytest.mark.usefixtures('isolated_episode_capture')
+
+
 NOW = datetime(2026, 11, 5, tzinfo=timezone.utc)
 UID = 'round2-synthetic'
 

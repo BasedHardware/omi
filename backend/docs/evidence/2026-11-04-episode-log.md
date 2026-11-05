@@ -102,6 +102,21 @@ production account access or writes, or TTL apply is performed.
   unfiltered scans and need no new composite index. Full preflight and normal
   guarded-push receipts are owned by the final PR qualification.
 
+### CI test-isolation follow-up
+
+The first guarded push at `fc3f0a42059d53952dd46f7d4889603ffeac9554`
+passed the canonical emulator, but full CI found a test-harness regression:
+the new autouse scheduling fixture imported `utils.episodes` into legacy unit
+suites that intentionally replace `utils` with a narrow stub. The fixture now
+requires explicit opt-in through episode-log module marks or the existing
+`untracked_episode_log` fixture. Production code is unchanged by this follow-up.
+The exact **17 CI-reported files passed all 127 cases** through isolated
+`backend/test.sh` processes after the fix. The expanded log-focused selection
+(including backfill CLI tests) passed **158 cases**. The complete acceptance
+selection was then rerun with the scoped fixture and passed **2,951 cases**,
+including the extra active-writer fencing regression. Final current-head CI remains
+owned by the PR; the initial failed run is retained as evidence rather than hidden.
+
 ### Explicit operations floor and historical ceiling
 
 Pricing checked live at **2026-11-05 01:06:23 UTC** on Google's

@@ -15,6 +15,9 @@ from utils.episodes.log.policy import home_policy_write
 from utils.encryption import decrypt
 from tests.unit.episode_log_support.oracle import Oracle
 
+pytestmark = pytest.mark.usefixtures('isolated_episode_capture')
+
+
 NOW = datetime(2026, 11, 4, tzinfo=timezone.utc)
 UID = 'review-user'
 

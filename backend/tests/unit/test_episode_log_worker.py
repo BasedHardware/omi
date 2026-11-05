@@ -19,6 +19,9 @@ from utils.episodes.log.fold import Fold
 from utils.episodes.log.key import gate_digest
 from utils.episodes.log.backfill import convert
 
+pytestmark = pytest.mark.usefixtures('isolated_episode_capture')
+
+
 NOW = datetime(2026, 11, 4, tzinfo=timezone.utc)
 UID = 'log-unit-user'
 

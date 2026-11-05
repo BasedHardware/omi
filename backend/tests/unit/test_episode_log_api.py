@@ -1,5 +1,7 @@
 """The real HTTP route contracts for the shadow read adapter, using synthetic state."""
 
+import pytest
+
 from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock
 
@@ -12,6 +14,9 @@ from database import episode_log as store
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.episodes.log.clock import home_clock
 from config.episodes import CLOSE_GAP_SECONDS
+
+pytestmark = pytest.mark.usefixtures('isolated_episode_capture')
+
 
 NOW = datetime(2026, 11, 4, tzinfo=timezone.utc)
 

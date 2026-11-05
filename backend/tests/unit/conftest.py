@@ -332,14 +332,14 @@ def empty_rollout_cohorts(monkeypatch):
 
 
 @pytest.fixture
-def untracked_episode_log(monkeypatch):
+def untracked_episode_log(monkeypatch, isolated_episode_capture):
     """Opt in only for partial legacy stores with no episode-log owner namespace."""
     from tests.support.episode_log_owners import without_episode_log_owner
 
     without_episode_log_owner(monkeypatch)
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture
 def isolated_episode_capture(monkeypatch):
     """Unit stores inject TTL and deterministic scheduling; latency proofs override submit."""
     from concurrent.futures import Future

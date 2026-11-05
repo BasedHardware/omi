@@ -6,6 +6,9 @@ from pathlib import Path
 import pytest
 import yaml
 
+pytestmark = pytest.mark.usefixtures('isolated_episode_capture')
+
+
 BACKEND = Path(__file__).resolve().parents[2]
 
 

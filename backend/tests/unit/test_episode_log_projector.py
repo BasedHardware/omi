@@ -22,6 +22,9 @@ from utils.episodes.log.fold import Fold
 from database import episode_log as fact_store
 from tests.unit.episode_log_support.oracle import Oracle
 
+pytestmark = pytest.mark.usefixtures('isolated_episode_capture')
+
+
 T0 = datetime(2026, 11, 4, tzinfo=timezone.utc)
 UID = 'proto-u'
 
