@@ -580,9 +580,9 @@ def serving_projection_sweep_enabled() -> bool:
     return kill_switch('BATCH_PIPELINE_SERVING_PROJECTION_SWEEP')
 
 
-def _pump_bound(raw: str, default: int, maximum: int) -> int:
+def _pump_bound(raw: str, default: int, maximum: int, minimum: int = 1) -> int:
     try:
-        return max(1, min(int(raw), maximum))
+        return max(minimum, min(int(raw), maximum))
     except ValueError:
         return default
 
@@ -595,15 +595,15 @@ def projection_pump_enabled() -> bool:
 
 
 def projection_pump_tick_seconds() -> int:
-    return _pump_bound(os.getenv('BATCH_PIPELINE_PUMP_TICK_SECONDS', '20'), 20, 60)
+    return _pump_bound(os.getenv('BATCH_PIPELINE_PUMP_TICK_SECONDS', '20'), 20, 60, 2)
 
 
 def projection_pump_sweep_pages() -> int:
-    return _pump_bound(os.getenv('BATCH_PIPELINE_PUMP_SWEEP_PAGES', '1'), 1, 10)
+    return _pump_bound(os.getenv('BATCH_PIPELINE_PUMP_SWEEP_PAGES', '1'), 1, 4)
 
 
 def max_owner_drains() -> int:
-    return _pump_bound(os.getenv('BATCH_PIPELINE_MAX_OWNER_DRAINS', '8'), 8, 32)
+    return _pump_bound(os.getenv('BATCH_PIPELINE_MAX_OWNER_DRAINS', '8'), 8, 16)
 
 
 def projection_index_deferred_enabled() -> bool:

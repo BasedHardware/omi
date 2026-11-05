@@ -376,6 +376,7 @@ def start_serving_from_env():
     async def projection_pump():
         # Dedicated instances only discover and drain owners. They never enter
         # reconcile or either leader-leased maintenance/recovery path.
+        metrics = _metrics()
         while not stop.is_set():
             started = time.monotonic()
             sweeps = owners_requested = 0
@@ -387,6 +388,10 @@ def start_serving_from_env():
                 for _ in range(projection_pump_sweep_pages()):
                     await run_blocking(sync_executor, projector.sweep)
                     sweeps += 1
+                    if projector.has_async_followups or getattr(projector, 'owes_followups', False) is True:
+                        await projector.start_followups(())
+                    if getattr(projector, 'owes_index', False) is True:
+                        projector.schedule_index_flush()
                 if projector.owes_drains:
                     with projector.handoff:
                         owners_requested = len(projector.drain_requests)
@@ -396,6 +401,7 @@ def start_serving_from_env():
                     'event=batch_projection_pump outcome=retry exception_type=%s', type(error).__name__
                 )
             finally:
+                metrics.projection_pump_last_tick.set(time.time())
                 logging.getLogger(__name__).info(
                     'event=batch_projection_pump outcome=tick sweeps=%d owners_requested=%d elapsed_seconds=%.3f',
                     sweeps,
