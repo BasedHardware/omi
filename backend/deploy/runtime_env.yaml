@@ -4420,9 +4420,6 @@ environments:
             ENRICHMENT_MAX_AGE_HOURS:
               value: '72'
               category: ops_kill
-            ENRICHMENT_DELIVERY_BUDGET_SECONDS:
-              value: '30'
-              category: ops_kill
             ENRICHMENT_FRESH_TASKS_QUEUE:
               value: enrichment-fresh
               category: reliability

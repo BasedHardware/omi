@@ -1683,10 +1683,6 @@ overlay:
           ENRICHMENT_ROUTE: {value: enrichment_queue, category: rollout}
           ENRICHMENT_TASKS_QUEUE: {value: enrichment, category: reliability}
           ENRICHMENT_MAX_AGE_HOURS: {value: "72", category: ops_kill}
-          # 2026-11-05 lead2 ruling 806655 (cl2-synceff): answer the delivery-budget 409 after 30 s instead of
-          # 300 s. The worker keeps its heartbeated lease and settles on its own; the queue retry meets the
-          # lease and is consumed BUSY. Rollback: drop this key (route default 300); 0 restores the 600 s middleware cut.
-          ENRICHMENT_DELIVERY_BUDGET_SECONDS: {value: "30", category: ops_kill}
           ENRICHMENT_FRESH_TASKS_QUEUE: {value: enrichment-fresh, category: reliability}
           ENRICHMENT_TASKS_HANDLER_URL: {value: 'https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run', category: reliability}
           ENRICHMENT_TASKS_OIDC_AUDIENCE: {value: 'https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run', category: service_auth}
