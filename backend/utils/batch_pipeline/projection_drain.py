@@ -16,6 +16,7 @@ import logging
 import time
 from typing import TYPE_CHECKING
 
+from config.batch_pipeline import max_owner_drains
 from utils.executors import run_blocking, start_background_task, sync_executor
 
 if TYPE_CHECKING:
@@ -23,7 +24,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 # Owners draining at once in one process.
-MAX_OWNER_DRAINS = 8
+MAX_OWNER_DRAINS = max_owner_drains()
 # One owner's turn; with more rows it re-queues behind every waiting owner.
 DRAIN_TURN_SECONDS = 120.0
 # One blocking step: bounds a sync-pool slot and the owner-claim hold.

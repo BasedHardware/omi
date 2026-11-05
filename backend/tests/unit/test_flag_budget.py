@@ -188,7 +188,11 @@ def test_helper_kill_switch_budget_entries_match_the_default_on_registry():
     # This rollout is explicitly registered although config/server_batch.py is
     # outside the pipeline scanner's scope. Keep helper kill switches separate.
     rollout_name = 'SERVER_BATCH_ONLY_WEB_PERCENT'
-    assert helper_names == HELPER_KILL_SWITCHES | {'SERVER_BATCH_UNSUPPORTED_LANGUAGES', rollout_name}
+    assert helper_names == HELPER_KILL_SWITCHES | {
+        'SERVER_BATCH_UNSUPPORTED_LANGUAGES',
+        rollout_name,
+        'BATCH_PIPELINE_SERVING_PROJECTION_SWEEP',
+    }
 
     # Keep this inventory check inside the fast-unit CPU budget; the C safe
     # loader has the same safe semantics and parses the full registry faster.
@@ -196,6 +200,13 @@ def test_helper_kill_switch_budget_entries_match_the_default_on_registry():
         FEATURE_FLAGS_PATH.read_text(encoding='utf-8'), Loader=getattr(yaml, 'CSafeLoader', yaml.SafeLoader)
     )
     flags = {flag['key']: flag for flag in registry['flags']}
+    sweep_name = 'BATCH_PIPELINE_SERVING_PROJECTION_SWEEP'
+    assert names[sweep_name]['owner'] == 'omi-pipeline / lead2'
+    assert names[sweep_name]['review_by'] == '2026-12-05'
+    assert flags[sweep_name]['owner'] == 'lead2'
+    assert flags[sweep_name]['kind'] == 'env'
+    assert flags[sweep_name]['lifecycle'] == 'ops_kill'
+    assert flags[sweep_name]['fail'] == 'open'
     unsupported = names['SERVER_BATCH_UNSUPPORTED_LANGUAGES']
     assert unsupported['owner'] == 'planscost'
     assert unsupported['review_by'] == '2026-11-30'

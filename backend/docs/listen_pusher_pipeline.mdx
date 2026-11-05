@@ -9299,3 +9299,21 @@ frames, one automatic notes-only refresh is claimed. A user title prevents both
 the claim and a concurrent refresh commit. An all-rejected pass may still refresh
 late OCR/calendar context, but rejected frame bytes never reach notes. This
 refresh does not run derived memory, app, embedding, or speech-learning jobs.
+
+### Dedicated projection pump
+
+`BATCH_PIPELINE_PROJECTION_PUMP_ENABLED` defaults to `false`; only `true`
+selects one projection-only loop in place of the serving runtime's three loops,
+even when `BATCH_PIPELINE_SERVING_ENABLED` is unset/false. It uses the same
+stage/store/artifact construction and never calls reconcile, maintenance or
+recovery dispatch. `BATCH_PIPELINE_PUMP_SWEEP_PAGES` defaults to 1 (clamped
+1-10) and `BATCH_PIPELINE_PUMP_TICK_SECONDS` to 20 seconds (clamped 1-60).
+Malformed numeric values use those defaults. Each tick sweeps pages through
+`sync_executor`, starts owed owner drains on the event loop and sleeps.
+
+`BATCH_PIPELINE_SERVING_PROJECTION_SWEEP` defaults on; only `off` skips the
+serving reconcile sweep. Owner wakes, held drains, metrics refresh, maintenance
+and recovery dispatch keep their existing behavior. The pump ignores this
+serving-only switch. `BATCH_PIPELINE_MAX_OWNER_DRAINS` sets the process's
+owner drain capacity at import (default 8, clamped 1-32; malformed uses 8).
+[Change and ramp](listen_pusher_pipeline/changes/2026-11-05-projection-pump.md).

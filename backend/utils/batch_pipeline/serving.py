@@ -15,6 +15,9 @@ from config.batch_pipeline import (
     recovery_dispatch_interval_seconds,
     projection_hold_recovery_enabled,
     serving_metrics_min_refresh_seconds,
+    serving_projection_sweep_enabled,
+    projection_pump_sweep_pages,
+    projection_pump_tick_seconds,
 )
 from database.outbox import OutboxKind, outbox_for
 from database.batch_privacy_attempt import with_batch_privacy_attempt
@@ -189,7 +192,7 @@ class Serving:
         # Projection and the local gauges stay per instance: projection is
         # throughput (ordered and fenced in its own transactions) and every
         # instance exports its own queue sample.
-        if self.projector:
+        if self.projector and serving_projection_sweep_enabled():
             self.projector.sweep()
         # Catch-up rows this instance held for projection depth may now fit.
         for held_owner in list(self.merge.held_owners):
@@ -364,9 +367,41 @@ def _metrics() -> QueueMetrics:
 
 def start_serving_from_env():
     """Separate drain switch stays on when BATCH_PIPELINE_ENABLED rolls back."""
-    if os.getenv('BATCH_PIPELINE_SERVING_ENABLED', 'false').strip().lower() != 'true':
+    pump_enabled = os.getenv('BATCH_PIPELINE_PROJECTION_PUMP_ENABLED', 'false').strip().lower() == 'true'
+    if not pump_enabled and os.getenv('BATCH_PIPELINE_SERVING_ENABLED', 'false').strip().lower() != 'true':
         return None
     stop = asyncio.Event()
+
+    async def projection_pump():
+        # Dedicated instances only discover and drain owners. They never enter
+        # reconcile or either leader-leased maintenance/recovery path.
+        while not stop.is_set():
+            started = time.monotonic()
+            sweeps = owners_requested = 0
+            try:
+                service = await run_blocking(sync_executor, serving_for_stage, current_stage())
+                for _ in range(projection_pump_sweep_pages()):
+                    await run_blocking(sync_executor, service.projector.sweep)
+                    sweeps += 1
+                if service.projector.owes_drains:
+                    with service.projector.handoff:
+                        owners_requested = len(service.projector.drain_requests)
+                    service.projector.start_drains()
+            except Exception as error:
+                logging.getLogger(__name__).error(
+                    'event=batch_projection_pump outcome=retry exception_type=%s', type(error).__name__
+                )
+            finally:
+                logging.getLogger(__name__).info(
+                    'event=batch_projection_pump outcome=tick sweeps=%d owners_requested=%d elapsed_seconds=%.3f',
+                    sweeps,
+                    owners_requested,
+                    time.monotonic() - started,
+                )
+            try:
+                await asyncio.wait_for(stop.wait(), timeout=projection_pump_tick_seconds())
+            except asyncio.TimeoutError:
+                pass
 
     async def supervise():
         while not stop.is_set():
@@ -427,9 +462,14 @@ def start_serving_from_env():
                 pass
 
     async def run():
-        await asyncio.gather(supervise(), drain(), dispatch_recovery())
+        if pump_enabled:
+            await projection_pump()
+        else:
+            await asyncio.gather(supervise(), drain(), dispatch_recovery())
 
-    return stop, start_background_task(run(), name='batch_pipeline_serving')
+    return stop, start_background_task(
+        run(), name='batch_projection_pump' if pump_enabled else 'batch_pipeline_serving'
+    )
 
 
 async def stop_serving(runtime):

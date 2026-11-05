@@ -573,6 +573,32 @@ def owner_drain_enabled() -> bool:
     return kill_switch('BATCH_PIPELINE_OWNER_DRAIN_ENABLED')
 
 
+def serving_projection_sweep_enabled() -> bool:
+    """Only ``off`` disables serving-instance discovery; owner wakes still run."""
+    from config.policy import kill_switch
+
+    return kill_switch('BATCH_PIPELINE_SERVING_PROJECTION_SWEEP')
+
+
+def _pump_bound(raw: str, default: int, maximum: int) -> int:
+    try:
+        return max(1, min(int(raw), maximum))
+    except ValueError:
+        return default
+
+
+def projection_pump_tick_seconds() -> int:
+    return _pump_bound(os.getenv('BATCH_PIPELINE_PUMP_TICK_SECONDS', '20'), 20, 60)
+
+
+def projection_pump_sweep_pages() -> int:
+    return _pump_bound(os.getenv('BATCH_PIPELINE_PUMP_SWEEP_PAGES', '1'), 1, 10)
+
+
+def max_owner_drains() -> int:
+    return _pump_bound(os.getenv('BATCH_PIPELINE_MAX_OWNER_DRAINS', '8'), 8, 32)
+
+
 def projection_index_deferred_enabled() -> bool:
     """Kill switch: walks converge search/people-stats after the chain, once per conversation."""
     from config.policy import kill_switch

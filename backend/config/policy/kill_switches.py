@@ -19,6 +19,7 @@ KILL_SWITCHES = {
     'BATCH_PIPELINE_PROJECTION_PENDING_PAGE_ENABLED': True,
     'BATCH_PIPELINE_PROJECTION_FOLLOWUP_PAGE_ENABLED': True,
     'BATCH_PIPELINE_OWNER_DRAIN_ENABLED': True,
+    'BATCH_PIPELINE_SERVING_PROJECTION_SWEEP': True,
     'BATCH_PIPELINE_PROJECTION_INDEX_DEFERRED_ENABLED': True,
     'PARAKEET_WINDOW_STRANDED_DRIFT_SETTLE_ENABLED': True,
     'BATCH_PIPELINE_HELD_TERMINAL_STATUS_ENABLED': True,
@@ -34,12 +35,17 @@ def kill_switch(name: str, *, policy_id: str = 'control', flags=None) -> bool:
         raise ValueError('unregistered live batch switch')
     env = os.environ if flags is None else flags
     value = env.get(name, str(KILL_SWITCHES[name])).strip().lower()
-    if name == 'PARAKEET_WINDOW_STRANDED_DRIFT_SETTLE_ENABLED':
+    if name == 'BATCH_PIPELINE_SERVING_PROJECTION_SWEEP':
+        enabled = value != 'off'
+    elif name == 'PARAKEET_WINDOW_STRANDED_DRIFT_SETTLE_ENABLED':
         enabled = value not in {'false', '0', 'off'}
     else:
         enabled = value != 'false' if name in DISABLE_ONLY_SWITCHES else value == 'true'
     from config.refactor_switches import default_on
 
-    enabled = default_on(name, enabled, environ=env)
+    # This instance selector deliberately accepts only "off", even during the
+    # shared boolean-parser migration; false/0/malformed keep today's sweep.
+    if name != 'BATCH_PIPELINE_SERVING_PROJECTION_SWEEP':
+        enabled = default_on(name, enabled, environ=env)
     logger.info('event=batch_policy_kill_switch policy_id=%s switch=%s enabled=%s count=1', policy_id, name, enabled)
     return enabled
