@@ -12,6 +12,8 @@ import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/devices.dart';
+import 'package:omi/services/devices/connectors/device_connection.dart';
+import 'package:omi/services/wals/wal.dart';
 import 'package:omi/utils/firmware_update_battery.dart';
 import 'package:omi/utils/analytics/analytics_adapter.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
@@ -24,6 +26,19 @@ class _TestConnectivityPlatform extends ConnectivityPlatform {
 
   @override
   Stream<List<ConnectivityResult>> get onConnectivityChanged => const Stream.empty();
+}
+
+class _RetryInfoDevice extends BtDevice {
+  _RetryInfoDevice() : super(id: 'retry-pendant', name: 'Omi', type: DeviceType.omi, rssi: -40);
+
+  String resolvedFirmware = '';
+  int reads = 0;
+
+  @override
+  Future<BtDevice> getDeviceInfo(DeviceConnection? conn) async {
+    reads++;
+    return copyWith(firmwareRevision: resolvedFirmware);
+  }
 }
 
 void main() {
@@ -40,6 +55,40 @@ void main() {
   });
 
   tearDown(AnalyticsManager.resetForTesting);
+
+  for (final firmware in ['1.0.2', '3.0.16', '3.0.21']) {
+    test('empty firmware retries device info and updates WAL routing when $firmware resolves', () async {
+      final provider = DeviceProvider();
+      addTearDown(provider.dispose);
+      final device = _RetryInfoDevice();
+      provider.connectedDevice = device;
+      provider.pairedDevice = device.copyWith(firmwareRevision: '');
+      final syncs = ServiceManager.instance().wal.getSyncs();
+      addTearDown(() => syncs.setDevice(null));
+      syncs.setDevice(device, firmwareVersion: '');
+
+      await provider.getDeviceInfo();
+      expect(device.reads, 1, reason: 'an empty read must not be cached as known');
+      expect(provider.pairedDevice?.firmwareRevision, isEmpty);
+      device.resolvedFirmware = firmware;
+      await provider.getDeviceInfo();
+      expect(device.reads, 2);
+      expect(provider.pairedDevice?.firmwareRevision, firmware);
+      await provider.getDeviceInfo();
+      expect(device.reads, 2, reason: 'a successful read keeps the existing cache behavior');
+
+      final phantom = Wal(
+          timerStart: 1704067200,
+          codec: BleAudioCodec.opus,
+          seconds: 60,
+          status: WalStatus.miss,
+          storage: WalStorage.sdcard,
+          device: device.id,
+          fileNum: 1);
+      syncs.sdcard.testWals = [phantom];
+      expect(await syncs.getMissingWals(), firmware == '3.0.21' ? isNot(contains(phantom)) : contains(phantom));
+    });
+  }
 
   test('onboarding connection emits Device Connected exactly once', () async {
     final analytics = _TestAnalyticsAdapter();
