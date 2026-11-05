@@ -27,13 +27,8 @@ class SDCardWalSyncImpl implements SDCardWalSync {
 
   // A device rejection is terminal for this connection, including later auto-sync wakes.
   int? _readRejectedStatus;
-  bool get _usesLegacySdcard {
-    final firmware = _device?.firmwareRevision;
-    return firmware != null &&
-        firmware.isNotEmpty &&
-        firmware != 'Unknown' &&
-        !RingProtocol.isRingBufferFirmware(firmware);
-  }
+  // WalSyncs keeps unknown firmware detached; this layer only refuses confirmed ring firmware.
+  bool get _usesLegacySdcard => !RingProtocol.isRingBufferFirmware(_device?.firmwareRevision);
 
   String get _readRejection =>
       'SD read rejected by device: status=0x${_readRejectedStatus!.toRadixString(16).padLeft(2, '0')}';
@@ -1002,7 +997,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
   void setDevice(BtDevice? device) async {
     _device = device;
     _readRejectedStatus = null;
-    if (device == null || !_usesLegacySdcard) {
+    if (!_usesLegacySdcard) {
       _wals = [];
       listener.onWalUpdated();
       return;
