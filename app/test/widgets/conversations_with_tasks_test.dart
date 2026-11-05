@@ -197,6 +197,56 @@ void main() {
     semantics.dispose();
   });
 
+  testWidgets('access refusal clears cached rows and retry restarts the current filter', (tester) async {
+    var calls = 0;
+    Future<ApiResult<TaskConversationPage>> fetch(
+        {required String query,
+        bool includeDiscarded = false,
+        String? folderId,
+        bool? starred,
+        DateTime? startDate,
+        DateTime? endDate,
+        String? cursor,
+        bool Function()? canSend}) async {
+      if (++calls == 2) return const ApiFailure(ApiProblem(ApiProblemKind.forbidden, statusCode: 403));
+      return ApiSuccess(TaskConversationPage(items: [_row(calls == 1 ? 'old' : 'fresh')]));
+    }
+
+    await pump(tester, fetch);
+    expect(find.text('Conversation old'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('tasks_filter_refresh')));
+    await tester.pump();
+    expect(find.text('Conversation old'), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('tasks_filter_retry')));
+    await tester.pump();
+    expect(find.text('Conversation fresh'), findsOneWidget);
+  });
+
+  testWidgets('owner replacement followed by a failed request cannot retain old rows', (tester) async {
+    final gateway = _Gateway();
+    final auth = AuthService.forTesting(tokenGateway: gateway);
+    final pending = Completer<ApiResult<TaskConversationPage>>();
+    var calls = 0;
+    Future<ApiResult<TaskConversationPage>> fetch(
+            {required String query,
+            bool includeDiscarded = false,
+            String? folderId,
+            bool? starred,
+            DateTime? startDate,
+            DateTime? endDate,
+            String? cursor,
+            bool Function()? canSend}) =>
+        ++calls == 1 ? Future.value(ApiSuccess(TaskConversationPage(items: [_row('old')]))) : pending.future;
+    await pump(tester, fetch, auth: auth);
+    await tester.tap(find.byKey(const ValueKey('tasks_filter_refresh')));
+    await tester.pump();
+    gateway.user = const AuthUserSnapshot(uid: 'replacement');
+    // Exercise the error boundary even before the auth-state event is delivered.
+    pending.completeError(TimeoutException('synthetic read timeout'));
+    await tester.pump();
+    expect(find.text('Conversation old'), findsNothing);
+  });
+
   testWidgets('Home rows react to their selected canonical badge and clear it on refresh', (tester) async {
     var linked = true;
     final presence = ConversationTaskPresenceProvider(

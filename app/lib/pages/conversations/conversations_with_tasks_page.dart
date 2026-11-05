@@ -154,11 +154,36 @@ class _ConversationsWithTasksPageState extends State<ConversationsWithTasksPage>
             _cursor = data.nextCursor;
           });
         case ApiFailure(:final problem):
-          if (problem.statusCode == 400) _retryReset = true;
-          setState(() => _failed = true);
+          final hideProtectedRows = switch (problem.kind) {
+            ApiProblemKind.authTerminal ||
+            ApiProblemKind.forbidden ||
+            ApiProblemKind.paymentRequired ||
+            ApiProblemKind.notFound ||
+            ApiProblemKind.unprocessable ||
+            ApiProblemKind.rejected =>
+              true,
+            _ => false,
+          };
+          setState(() {
+            _failed = true;
+            if (hideProtectedRows) {
+              _rows = [];
+              _cursor = null;
+              _retryReset = true;
+            }
+          });
       }
     } catch (_) {
-      if (mounted && generation == _generation) setState(() => _failed = true);
+      if (mounted && generation == _generation) {
+        setState(() {
+          _failed = true;
+          if (owner == null || !_auth.isSessionSnapshotCurrent(owner)) {
+            _rows = [];
+            _cursor = null;
+            _retryReset = true;
+          }
+        });
+      }
     } finally {
       if (mounted && generation == _generation) setState(() => _loading = false);
     }

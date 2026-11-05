@@ -46,24 +46,28 @@ def main():
                 for dependency in route.dependant.dependencies:
                     app.dependency_overrides[dependency.call] = lambda: uid
         failing = False
+        failure_status = 503
 
         @app.middleware('http')
         async def fault(request, call_next):
             if failing and request.url.path.startswith('/v1/conversations/'):
-                return JSONResponse({'detail': 'synthetic availability failure'}, status_code=503)
+                return JSONResponse({'detail': 'synthetic read failure'}, status_code=failure_status)
             return await call_next(request)
 
         @app.post('/fixture/reset')
         def reset():
-            nonlocal failing
+            nonlocal failing, failure_status
             failing = False
+            failure_status = 503
             seed(client, uid)
             return {'ok': True}
 
         @app.post('/fixture/failure')
         async def failure(request: Request):
-            nonlocal failing
-            failing = (await request.json()).get('fail') is True
+            nonlocal failing, failure_status
+            control = await request.json()
+            failing = control.get('fail') is True
+            failure_status = 403 if control.get('status') == 403 else 503
             return {'ok': True}
 
         @app.post('/fixture/delete-first-task')

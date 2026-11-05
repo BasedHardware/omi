@@ -152,6 +152,16 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('tasks_filter_retry')));
     await tester.pumpAndSettle();
     expect(find.text('Notes 54'), findsOneWidget);
+    await client.post(Uri.parse('${base}fixture/failure'),
+        body: '{"fail":true,"status":403}', headers: {'content-type': 'application/json'});
+    await tester.tap(find.byKey(const ValueKey('tasks_filter_refresh')));
+    await tester.pumpAndSettle();
+    expect(find.text('Notes 54'), findsNothing, reason: 'access refusal must hide cached protected rows');
+    await client.post(Uri.parse('${base}fixture/failure'),
+        body: '{"fail":false}', headers: {'content-type': 'application/json'});
+    await tester.tap(find.byKey(const ValueKey('tasks_filter_retry')));
+    await tester.pumpAndSettle();
+    expect(find.text('Notes 54'), findsOneWidget);
     await client.post(Uri.parse('${base}fixture/delete-first-task'));
     presence.invalidate();
     await tester.pump(const Duration(milliseconds: 500));
