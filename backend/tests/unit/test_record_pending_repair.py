@@ -445,3 +445,19 @@ def test_blocker_log_metric_has_closed_labels_and_cloud_run_keep_coverage():
     gmp = yaml.safe_load((backend / 'deploy/cloud_run_gmp_sidecar.yaml').read_text())
     keep = gmp['spec']['endpoints'][0]['metricRelabeling'][0]['regex']
     assert re.fullmatch(keep, counter['name'])
+
+
+def test_no_initial_conversation_slots_preserve_unattempted_frontier():
+    from tests.unit.test_record_seal_cluster_repair import CursorClient
+
+    stamp = datetime.fromtimestamp(100, timezone.utc)
+    docs = [
+        SimpleNamespace(
+            reference=SimpleNamespace(path=f'users/synthetic/conversations/{i}'), to_dict=lambda: {'finished_at': stamp}
+        )
+        for i in range(4)
+    ]
+    client = CursorClient(docs)
+    after = {'path': docs[0].reference.path, 'finished_at': stamp}
+    rows, _, cursor = cluster.discover(client, budget=SweepBudget(60), after=after, advance_rows=0)
+    assert len(rows) == 3 and cursor == after

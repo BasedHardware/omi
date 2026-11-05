@@ -220,7 +220,7 @@ def discover(
     # Freeze each pass's upper finish boundary. Continuous newer inflow must
     # not prevent wrap and indefinitely starve the oldest refused rows.
     horizon = (after or {}).get('horizon') or datetime.now(timezone.utc)
-    resume = None
+    resume = after
     while scanned < max_scan and len(rows) < max_rows:
         budget.check()
         query = (
@@ -579,7 +579,7 @@ def run(*, progress=lambda _: None):
                 client,
                 budget=budget,
                 after=frontier.read(budget),
-                advance_rows=max(1, workers - len(job_rows)),
+                advance_rows=workers - len(job_rows),
                 max_rows=MAX_ROWS - len(job_rows),
                 max_scan=MAX_SCAN - (128 if jobs_frontier else 0),
                 selected_cursors=selected_cursors,
