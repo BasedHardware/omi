@@ -30,12 +30,17 @@ The firmware source is the authority for device behavior in this table (`omi/fir
 
 | Interaction | What happens |
 |-------------|--------------|
-| **Single tap** | Sends a BLE button event to the app. The app maps it to voice-question mode: tap to start asking, tap again to send. |
-| **Double tap** | Sends a BLE button event. The app's action is configurable in **Settings → Device Settings** (end & save conversation is the default). |
+| **Single tap** | Sends a BLE button event to the app. Runs the action set in **Settings → Device Settings** (Ask a Question by default: tap to start asking, tap again to send). |
+| **Double tap** | Sends a BLE button event. Runs the configured action (Mute/Unmute by default). |
+| **Triple tap** | Sends a BLE button event. Runs the configured action (End Conversation by default). |
 | **Hold 3 seconds** | Device powers off (short haptic pulse, LEDs off). |
 | **Any press while off** | Powers the device on. Don't hold it. A 3-second hold after waking turns the device straight back off. |
 
 There is no power switch and no push-to-talk mode: a long hold always means power off.
+
+Each tap gesture can run Ask a Question, Mute/Unmute, End Conversation, Star Conversation, or Do Nothing. An explicitly saved double-tap choice keeps its earlier value (0 = end conversation, 1 = ask a question, 2 = star conversation); only the unset default changed from end conversation to mute/unmute. The long-press power-off gesture is fixed in firmware.
+
+Taps must be shorter than 300 ms and separated by less than 350 ms to count as one gesture. Single and double taps are reported once that window closes, triple taps on the third release. The recogniser lives in `omi/firmware/common/button_gesture.c` and is host-tested by `omi/firmware/common/test/run.sh`.
 
 | LED | Meaning |
 |-----|---------|
@@ -94,7 +99,9 @@ Replies arrive as notifications on the command characteristic. A one-byte notifi
 | `5` | Offset is past the end of the file |
 | `6` | Invalid command |
 
-Helper scripts for discovery, listing, downloading, decoding, and deleting live in [`omi/firmware/scripts/devkit/`](https://github.com/BasedHardware/omi/tree/main/omi/firmware/scripts/devkit). Button events over the button characteristic are `1` single tap, `2` double tap, and `5` release. A long press powers the device off and is not reported.
+Helper scripts for discovery, listing, downloading, decoding, and deleting live in [`omi/firmware/scripts/devkit/`](https://github.com/BasedHardware/omi/tree/main/omi/firmware/scripts/devkit). Button events over the button characteristic are `1` single tap, `2` double tap, `6` triple tap, and `5` release (follows every tap gesture, and any hold shorter than the power-off long press). A long press powers the device off and is not reported. Codes `3` (long press) and `4` (button pressed down) are reserved for older firmware and are no longer emitted.
+
+A new app still accepts older firmware's hold-to-talk events (`3`, then `5` on release). Older firmware cannot produce a triple-tap event. An older app paired with the new firmware no longer receives `3`/`4`, loses that legacy hold-to-talk path, and cannot use the triple-tap action (`6`), so coordinate app and firmware rollout. Host tests verify the event sequence and the single/double-tap reporting window; they do not establish real-device timing, so verify the BLE packets, long-press power-off, and legacy/new app combinations on hardware.
 
 ## Getting a DevKit 2
 

@@ -11,6 +11,7 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/pages/conversations/auto_sync_page.dart';
 import 'package:omi/pages/conversations/on_the_way_page.dart';
+import 'package:omi/pages/settings/device/device_button_gesture_rows.dart';
 import 'package:omi/pages/settings/device/device_catching_up_card.dart';
 import 'package:omi/services/pending_work/pending_work_store.dart';
 import 'package:omi/pages/conversations/sync_page.dart';
@@ -77,6 +78,10 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   static const Duration _findDeviceRequestTimeout = Duration(seconds: 30);
 
   CaptureProvider? _captureProvider;
+
+  // One cached instance, so page rebuilds skip the gesture rows (see DeviceButtonGestureRows).
+  int _buttonGestureRevision = 0;
+  Widget _buttonGestureRows = const DeviceButtonGestureRows();
 
   PendingWorkStore get _pendingWork => widget.pendingWork ?? PendingWorkStore.instance;
 
@@ -203,23 +208,6 @@ class _DeviceSettingsState extends State<DeviceSettings> {
         _updateMicGain(value);
       },
     );
-  }
-
-  String _doubleTapActionLabel(int action) {
-    switch (action) {
-      case 1:
-        return context.l10n.deviceOnboardingMuteUnmute;
-      case 2:
-        return context.l10n.starConversation;
-      default:
-        return context.l10n.endConversation;
-    }
-  }
-
-  Future<void> _pickDoubleTapAction() async {
-    final action = await showDoubleTapActionSheet(context, current: SharedPreferencesUtil().doubleTapAction);
-    if (action == null || !mounted) return;
-    setState(() => SharedPreferencesUtil().doubleTapAction = action);
   }
 
   Future<void> _findDevice(DeviceProvider provider) async {
@@ -411,17 +399,40 @@ class _DeviceSettingsState extends State<DeviceSettings> {
 
   // Sections.
 
+  // Device-info refreshes rebuild this page (e.g. pairedDevice becomes BtDevice.empty() for a
+  // pendant that was never saved), and a rebuilt OmiSettingsRow relays out and repaints its whole
+  // group. The group reads only what is keyed here, so reuse it while that is unchanged.
+  Object? _customizationInputs;
+  Widget? _customizationGroupCache;
+
+  Widget _cachedCustomizationGroup(BtDevice? device, DeviceProvider provider) {
+    final (isOmi, supportsFind) = _customizationDeviceTraits(device);
+    final inputs = (
+      isOmi,
+      supportsFind,
+      provider,
+      Localizations.localeOf(context),
+      _isFindingDevice,
+      _omiButtonActionsEnabled,
+      _buttonGestureRows,
+      (_isDimRatioLoaded, _hasDimmingFeature, _dimRatio),
+      (_isMicGainLoaded, _hasMicGainFeature, _micGain),
+    );
+    if (_customizationGroupCache == null || inputs != _customizationInputs) {
+      _customizationInputs = inputs;
+      _customizationGroupCache = _customizationGroup(device, provider);
+    }
+    return _customizationGroupCache!;
+  }
+
+  (bool, bool) _customizationDeviceTraits(BtDevice? device) {
+    final isOmi = device?.type == DeviceType.omi;
+    return (isOmi, isOmi && !FirmwareUpdateBuildPolicy.current.isOpenGlassDevice(device));
+  }
+
   Widget _customizationGroup(BtDevice? device, DeviceProvider provider) {
     final l10n = context.l10n;
-    final isOmi = device?.type == DeviceType.omi;
-    final supportsFind = isOmi && !FirmwareUpdateBuildPolicy.current.isOpenGlassDevice(device);
-    final doubleTapRow = OmiSettingsRow(
-      leading: const FaIcon(FontAwesomeIcons.handPointer),
-      title: l10n.doubleTap,
-      value: _doubleTapActionLabel(SharedPreferencesUtil().doubleTapAction),
-      onTap: _pickDoubleTapAction,
-      showChevron: true,
-    );
+    final (isOmi, supportsFind) = _customizationDeviceTraits(device);
     return OmiSettingsGroup(
       header: l10n.customizationSection,
       children: [
@@ -450,10 +461,9 @@ class _DeviceSettingsState extends State<DeviceSettings> {
               }
             },
           ),
-          // Double tap is only configurable while Omi button actions are enabled.
-          if (_omiButtonActionsEnabled) doubleTapRow,
+          if (_omiButtonActionsEnabled) _buttonGestureRows,
         ] else
-          doubleTapRow,
+          _buttonGestureRows,
         if (_isDimRatioLoaded && _hasDimmingFeature == true)
           OmiSettingsRow(
             leading: const FaIcon(FontAwesomeIcons.lightbulb),
@@ -495,7 +505,12 @@ class _DeviceSettingsState extends State<DeviceSettings> {
           OmiSettingsRow(
             leading: const FaIcon(FontAwesomeIcons.graduationCap),
             title: l10n.deviceTutorial,
-            onTap: () => routeToPage(context, const InteractiveDeviceOnboardingWrapper(allowExit: true)),
+            onTap: () async {
+              await routeToPage(context, const InteractiveDeviceOnboardingWrapper(allowExit: true));
+              // The tutorial can save a double-tap action; show it.
+              if (!mounted) return;
+              setState(() => _buttonGestureRows = DeviceButtonGestureRows(revision: ++_buttonGestureRevision));
+            },
           ),
         // Ray-Ban Meta: on-demand photo capture. The Meta AI app manages its firmware, so the
         // update rows are hidden for it.
@@ -653,7 +668,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
             gap,
           ],
           if (provider.isConnected)
-            _customizationGroup(paired ?? connected, provider)
+            _cachedCustomizationGroup(paired ?? connected, provider)
           else
             const DeviceDisconnectedCard(),
           gap,
