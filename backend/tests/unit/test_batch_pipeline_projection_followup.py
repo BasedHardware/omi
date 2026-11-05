@@ -782,3 +782,30 @@ async def test_split_rollover_followup_stores_playback_for_every_part(followup):
         None,
     )
     assert calls == [('playback', 'head'), ('playback', 'extra'), ('enrich', 'head')]
+
+
+@pytest.mark.asyncio
+async def test_source_deleted_followup_is_terminal_without_backoff_or_content_work(followup):
+    f = followup
+    f.receipts['head'].update(
+        state='ready',
+        disposition='source_deleted',
+        conversation_id=None,
+        audio_required=False,
+        enrichment_required=False,
+    )
+    f.projector.complete_content.return_value = {
+        'reason_code': 'source_deleted',
+        'new_memories': [],
+        'updated_memories': [],
+    }
+    f.runner.desync = True
+    f.runner.backoff['head'] = (float('inf'), 60)
+    counter = projection_followup.OUTCOMES.labels('source_deleted')._value.get()
+    await f.runner.run('head')
+    assert projection_followup.OUTCOMES.labels('source_deleted')._value.get() == counter + 1
+    assert 'head' not in f.runner.backoff
+    assert 'source_deleted' not in projection_followup.BACKOFF_OUTCOMES
+    f.projector.store.mark_enrichment.assert_not_called()
+    f.projector.store.ready.assert_not_called()
+    f.projector.load_result.assert_not_called()

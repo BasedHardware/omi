@@ -416,6 +416,8 @@ class ProjectionFollowups:
                 raise
             # None: the content is not finishable yet (a sibling is still owed or
             # a partial holds). The sibling's own follow-up probes completion.
+            if result is not None and result.get('reason_code') == 'source_deleted':
+                return 'source_deleted'
             return 'completed' if result is not None else 'incomplete'
         except (ProjectionBlocked, BatchPrivacyBlocked):
             logger.info('event=batch_projection_followup outcome=blocked')

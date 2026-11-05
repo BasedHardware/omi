@@ -552,7 +552,11 @@ class ProjectionStore:
                 and not updated
                 and any(receipt.get('privacy_reason') == 'conversation_deleted' for receipt in receipts)
             ):
-                result['reason_code'] = 'conversation_deleted'
+                result['reason_code'] = (
+                    'source_deleted'
+                    if any(receipt.get('disposition') == 'source_deleted' for receipt in receipts)
+                    else 'conversation_deleted'
+                )
             if session.ledger.get('status') == 'completed':
                 old = session.ledger.get('result')
                 if not isinstance(old, dict) or not is_valid_completed_sync_content_result(old):
