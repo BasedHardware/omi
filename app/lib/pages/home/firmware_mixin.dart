@@ -31,10 +31,6 @@ enum FirmwareUpdateFailure {
   install,
 }
 
-/// The lowest battery an Omi firmware update may start at. Enforced in code, not left to a
-/// checklist.
-const int kFirmwareUpdateMinBattery = 15;
-
 mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
   FirmwareUpdateBuildPolicy get firmwareUpdatePolicy => FirmwareUpdateBuildPolicy.current;
 
@@ -298,12 +294,14 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
     required String firmwareRevision,
     required String hardwareRevision,
     required String manufacturerName,
+    String? serialNumber,
   }) async {
     latestFirmwareDetails = await getLatestFirmwareVersion(
       deviceModelNumber: deviceModelNumber,
       firmwareRevision: firmwareRevision,
       hardwareRevision: hardwareRevision,
       manufacturerName: manufacturerName,
+      serialNumber: serialNumber,
     );
     if (latestFirmwareDetails['ota_update_steps'] != null) {
       otaUpdateSteps = List<String>.from(latestFirmwareDetails['ota_update_steps']);

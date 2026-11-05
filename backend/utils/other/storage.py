@@ -1,3 +1,12 @@
+"""GCS object storage: capture audio chunks with semaphored fan-out, speech
+profile samples, playback artifacts, and the per-user deletion sweep.
+
+The owner-scoped write gate is the one boundary that keeps every write under its
+owning user's prefix, and the local dev harness swaps in a filesystem adapter,
+so deployed code must not assume real bucket semantics
+(backend/utils/other/ARCHITECTURE.md).
+"""
+
 from utils.observability.sync_phases import sync_phase
 import datetime
 import hashlib

@@ -1484,10 +1484,14 @@ def test_sync_scrape_retains_exporter_and_direct_sentinel_consumers():
     shared = yaml.safe_load((root / 'backend/deploy/cloud_run_gmp_sidecar.yaml').read_text())
     # RunMonitoring name becomes native GMP job; direct shadow mappings pin it.
     assert config['metadata']['name'] == shared['metadata']['name']
-    assert shared['spec']['endpoints'][0]['interval'] == '30s'
+    assert shared['spec']['endpoints'][0]['interval'] == '60s'
     assert shared['spec']['endpoints'][0]['metricRelabeling'][0]['regex'] == (
         'omi_.*|omi_listen_server_batch_suppression_total|conversation_llm_input_dedupe_.*'
+        '|privacy_(checks|check_calls|check_reads|decision_mismatch|shadow_checks|memo_requests|ttl_cache)_total'
     )
+    # The privacy shadow kill switch reads these from Cloud Run (cl2-infracost 2026-11-04).
+    for name in ('privacy_decision_mismatch_total', 'privacy_shadow_checks_total', 'privacy_ttl_cache_total'):
+        assert re.fullmatch(shared['spec']['endpoints'][0]['metricRelabeling'][0]['regex'], name)
     assert re.fullmatch(
         shared['spec']['endpoints'][0]['metricRelabeling'][0]['regex'], 'omi_listen_preview_batch_custody_total'
     )

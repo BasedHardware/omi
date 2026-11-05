@@ -2,6 +2,41 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.566",
+      "date": "2026-11-05",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.565",
+      "date": "2026-11-04",
+      "changes": [
+        "Meeting-note Action items retain metadata in cache, show owners, context, and confirmed or tentative due dates, support adding, completing, reopening, and finding linked tasks, and start with Try with Apps collapsed."
+      ]
+    },
+    {
+      "version": "0.12.564",
+      "date": "2026-11-04",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.563",
+      "date": "2026-11-04",
+      "changes": [
+        "Conversations waiting for a plan now show a quiet Waiting badge instead of an amber Saved and waiting one."
+      ]
+    },
+    {
+      "version": "0.12.562",
+      "date": "2026-11-04",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
       "version": "0.12.561",
       "date": "2026-11-04",
       "changes": [

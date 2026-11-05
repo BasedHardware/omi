@@ -19,7 +19,7 @@ import 'package:omi/pages/conversations/conversation_action_analytics.dart';
 import 'package:omi/pages/conversations/conversation_actions.dart';
 import 'package:omi/pages/on_device/on_device_provenance_section.dart';
 import 'package:omi/pages/paywall/value_moment_paywall.dart';
-import 'package:omi/pages/settings/usage_page.dart';
+import 'package:omi/pages/held_audio/held_audio_views.dart';
 import 'package:omi/pages/held_audio/processing_backlog_view.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
@@ -234,7 +234,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
   Future<void> _open(BuildContext context, ConversationProvider provider) async {
     if (widget.conversation.isLocked) {
       if (!context.read<UsageProvider>().showSubscriptionUI) return;
-      routeToPage(context, const UsagePage());
+      openHeldAudioPlans(context);
       return;
     }
     if (widget.homeEpisode case final episode?) {
@@ -507,8 +507,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
     // A run frosts its rows together under one action.
     if (!widget.conversation.isLocked || widget.inLockedRun) return content;
     return OmiLockedPreview(
-      status: context.l10n.statusPending,
-      label: context.l10n.viewUsage,
+      label: context.l10n.upgrade,
       onPressed: onTap,
       child: content,
     );
@@ -960,7 +959,7 @@ class LockedConversationRun extends StatelessWidget {
       return;
     }
     if (!context.read<UsageProvider>().showSubscriptionUI) return;
-    routeToPage(context, const UsagePage());
+    openHeldAudioPlans(context);
   }
 
   @override
@@ -971,8 +970,7 @@ class LockedConversationRun extends StatelessWidget {
         key: const Key('locked_conversation_run'),
         // Each row keeps its own long-press menu, swipe-to-delete and selection handling.
         interactive: true,
-        status: context.l10n.statusPending,
-        label: context.l10n.viewUsage,
+        label: context.l10n.upgrade,
         onPressed: () => _openUsage(context),
         child: Column(
           mainAxisSize: MainAxisSize.min,

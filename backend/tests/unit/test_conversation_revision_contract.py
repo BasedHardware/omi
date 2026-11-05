@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from copy import deepcopy
+import pytest
 from tests.support.transcript_correction_store import install_store, target_updates, read
 
 import database.conversations as conversations_db
@@ -47,6 +48,9 @@ class _ConversationRef:
 class _DocumentPath:
     def __init__(self, ref):
         self.ref = ref
+        # The recurring-voice privacy fence reads user.id off the users/{uid}
+        # reference during processing writes.
+        self.id = 'user-1'
 
     def collection(self, _name):
         return self
@@ -101,6 +105,59 @@ class _PhotoConversationRef(_ConversationRef):
     def collection(self, name):
         assert name == 'photos'
         return self.photos
+
+
+@pytest.mark.parametrize(
+    'writer', ['upsert_conversation_with_lifecycle', 'create_conversation_if_absent_with_lifecycle']
+)
+@pytest.mark.parametrize(
+    'segments', [[], [{'speaker_id_scope': 'stream:1', 'speaker': 'SPEAKER_0', 'text': 'Fixture'}]]
+)
+def test_scope_index_provenance_is_stamped_only_on_actual_creation(monkeypatch, writer, segments):
+    ref = _ConversationRef(_Snapshot(None, exists=False))
+    monkeypatch.setattr(conversations_db, 'db', _Firestore(ref))
+    monkeypatch.setattr(conversations_db.firestore, 'transactional', lambda function: function)
+    getattr(conversations_db, writer)(
+        'user-1',
+        {'id': 'conversation-1', 'transcript_segments': segments, 'data_protection_level': 'standard'},
+    )
+    written = ref.create_calls[0] if ref.create_calls else ref.set_calls[0][0]
+    assert written['recording_speaker_scopes'] == (['stream:1'] if segments else [])
+    assert written['recording_speaker_scopes_at_creation'] is True
+
+
+@pytest.mark.parametrize('existing_marker', [None, True])
+def test_existing_upsert_cannot_promote_or_overwrite_scope_creation_provenance(monkeypatch, existing_marker):
+    existing = {'id': 'conversation-1', 'data_protection_level': 'standard'}
+    if existing_marker is not None:
+        existing['recording_speaker_scopes_at_creation'] = existing_marker
+    ref = _ConversationRef(_Snapshot(existing))
+    monkeypatch.setattr(conversations_db, 'db', _Firestore(ref))
+    monkeypatch.setattr(conversations_db.firestore, 'transactional', lambda function: function)
+    conversations_db.upsert_conversation_with_lifecycle(
+        'user-1',
+        {
+            'id': 'conversation-1',
+            'transcript_segments': [],
+            'recording_speaker_scopes_at_creation': not bool(existing_marker),
+            'data_protection_level': 'standard',
+        },
+    )
+    written, options = ref.set_calls[0]
+    assert options == {'merge': True}
+    assert written['recording_speaker_scopes'] == []
+    assert 'recording_speaker_scopes_at_creation' not in written
+
+
+def test_create_without_transcript_index_has_no_creation_proof(monkeypatch):
+    ref = _ConversationRef(_Snapshot(None, exists=False))
+    monkeypatch.setattr(conversations_db, 'db', _Firestore(ref))
+    monkeypatch.setattr(conversations_db.firestore, 'transactional', lambda function: function)
+    conversations_db.create_conversation_if_absent_with_lifecycle(
+        'user-1',
+        {'id': 'conversation-1', 'recording_speaker_scopes_at_creation': True, 'data_protection_level': 'standard'},
+    )
+    assert 'recording_speaker_scopes_at_creation' not in ref.create_calls[0]
 
 
 def test_document_update_time_is_exposed_as_server_revision():

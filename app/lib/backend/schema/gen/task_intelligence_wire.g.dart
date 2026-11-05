@@ -96,7 +96,9 @@ class GeneratedActionItemResponse {
   final DateTime? completedAt;
   final String? conversationId;
   final DateTime? createdAt;
+  final Map<String, dynamic>? creationReceipt;
   final String description;
+  final GeneratedTaskDue? due;
   final DateTime? dueAt;
   final double? dueConfidence;
   final DateTime? exportDate;
@@ -111,6 +113,7 @@ class GeneratedActionItemResponse {
   final List<GeneratedEvidenceRef>? provenance;
   final String? recurrenceParentId;
   final String? recurrenceRule;
+  final GeneratedReminderOrigin? reminderOrigin;
   final int sortOrder;
   final String source;
   final String status;
@@ -125,7 +128,9 @@ class GeneratedActionItemResponse {
     this.completedAt,
     this.conversationId,
     this.createdAt,
+    this.creationReceipt,
     required this.description,
+    this.due,
     this.dueAt,
     this.dueConfidence,
     this.exportDate,
@@ -140,6 +145,7 @@ class GeneratedActionItemResponse {
     this.provenance,
     this.recurrenceParentId,
     this.recurrenceRule,
+    this.reminderOrigin,
     this.sortOrder = 0,
     this.source = "legacy",
     this.status = "active",
@@ -156,7 +162,9 @@ class GeneratedActionItemResponse {
       completedAt: _readFieldValue<DateTime>(_readField(json, const ["completed_at"]), "completed_at", _readDateTime, requiredField: false, nullable: true),
       conversationId: _readFieldValue<String>(_readField(json, const ["conversation_id"]), "conversation_id", _readString, requiredField: false, nullable: true),
       createdAt: _readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: false, nullable: true),
+      creationReceipt: _readFieldValue<Map<String, dynamic>>(_readField(json, const ["creation_receipt"]), "creation_receipt", _readMap, requiredField: false, nullable: true),
       description: _required(_readFieldValue<String>(_readField(json, const ["description"]), "description", _readString, requiredField: true, nullable: false), "description"),
+      due: _readFieldValue<GeneratedTaskDue>(_readField(json, const ["due"]), "due", (value) => _readObject(value, GeneratedTaskDue.fromJson), requiredField: false, nullable: true),
       dueAt: _readFieldValue<DateTime>(_readField(json, const ["due_at"]), "due_at", _readDateTime, requiredField: false, nullable: true),
       dueConfidence: _readFieldValue<double>(_readField(json, const ["due_confidence"]), "due_confidence", _readDouble, requiredField: false, nullable: true),
       exportDate: _readFieldValue<DateTime>(_readField(json, const ["export_date"]), "export_date", _readDateTime, requiredField: false, nullable: true),
@@ -171,6 +179,7 @@ class GeneratedActionItemResponse {
       provenance: _readFieldValue<List<GeneratedEvidenceRef>>(_readField(json, const ["provenance"]), "provenance", (value) => _readObjectList(value, GeneratedEvidenceRef.fromJson), requiredField: false, nullable: true),
       recurrenceParentId: _readFieldValue<String>(_readField(json, const ["recurrence_parent_id"]), "recurrence_parent_id", _readString, requiredField: false, nullable: true),
       recurrenceRule: _readFieldValue<String>(_readField(json, const ["recurrence_rule"]), "recurrence_rule", _readString, requiredField: false, nullable: true),
+      reminderOrigin: _readFieldValue<GeneratedReminderOrigin>(_readField(json, const ["reminder_origin"]), "reminder_origin", (value) => _readObject(value, GeneratedReminderOrigin.fromJson), requiredField: false, nullable: true),
       sortOrder: _required(_readFieldValue<int>(_readField(json, const ["sort_order"]), "sort_order", _readInt, requiredField: false, nullable: false, defaultValue: 0), "sort_order"),
       source: _required(_readFieldValue<String>(_readField(json, const ["source"]), "source", _readString, requiredField: false, nullable: false, defaultValue: "legacy"), "source"),
       status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: false, nullable: false, defaultValue: "active"), "status"),
@@ -188,7 +197,9 @@ class GeneratedActionItemResponse {
       'completed_at': completedAt?.toUtc().toIso8601String(),
       'conversation_id': conversationId,
       'created_at': createdAt?.toUtc().toIso8601String(),
+      'creation_receipt': creationReceipt,
       'description': description,
+      'due': due?.toJson(),
       'due_at': dueAt?.toUtc().toIso8601String(),
       'due_confidence': dueConfidence,
       'export_date': exportDate?.toUtc().toIso8601String(),
@@ -203,6 +214,7 @@ class GeneratedActionItemResponse {
       'provenance': provenance?.map((value) => value.toJson()).toList(),
       'recurrence_parent_id': recurrenceParentId,
       'recurrence_rule': recurrenceRule,
+      'reminder_origin': reminderOrigin?.toJson(),
       'sort_order': sortOrder,
       'source': source,
       'status': status,
@@ -214,8 +226,93 @@ class GeneratedActionItemResponse {
   }
 }
 
+class GeneratedTaskDue {
+  final String? date;
+  final String? expression;
+  final DateTime? instant;
+  final String kind;
+  final String? reason;
+  final String? timezone;
+  final String? yearBasis;
+
+  const GeneratedTaskDue({
+    this.date,
+    this.expression,
+    this.instant,
+    required this.kind,
+    this.reason,
+    this.timezone,
+    this.yearBasis,
+  });
+
+  factory GeneratedTaskDue.fromJson(Map<String, dynamic> json) {
+    return GeneratedTaskDue(
+      date: _readFieldValue<String>(_readField(json, const ["date"]), "date", _readString, requiredField: false, nullable: true),
+      expression: _readFieldValue<String>(_readField(json, const ["expression"]), "expression", _readString, requiredField: false, nullable: true),
+      instant: _readFieldValue<DateTime>(_readField(json, const ["instant"]), "instant", _readDateTime, requiredField: false, nullable: true),
+      kind: _required(_readFieldValue<String>(_readField(json, const ["kind"]), "kind", _readString, requiredField: true, nullable: false), "kind"),
+      reason: _readFieldValue<String>(_readField(json, const ["reason"]), "reason", _readString, requiredField: false, nullable: true),
+      timezone: _readFieldValue<String>(_readField(json, const ["timezone"]), "timezone", _readString, requiredField: false, nullable: true),
+      yearBasis: _readFieldValue<String>(_readField(json, const ["year_basis"]), "year_basis", _readString, requiredField: false, nullable: true),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'date': date,
+      'expression': expression,
+      'instant': instant?.toUtc().toIso8601String(),
+      'kind': kind,
+      'reason': reason,
+      'timezone': timezone,
+      'year_basis': yearBasis,
+    };
+  }
+}
+
+class GeneratedReminderOrigin {
+  final DateTime extractedAt;
+  final String inputRevision;
+  final String policyRevision;
+  final String? reviewReason;
+  final DateTime? sourceAt;
+  final String speakerEvidenceRevision;
+
+  const GeneratedReminderOrigin({
+    required this.extractedAt,
+    required this.inputRevision,
+    this.policyRevision = "explicit-reminders-v1",
+    this.reviewReason,
+    this.sourceAt,
+    required this.speakerEvidenceRevision,
+  });
+
+  factory GeneratedReminderOrigin.fromJson(Map<String, dynamic> json) {
+    return GeneratedReminderOrigin(
+      extractedAt: _required(_readFieldValue<DateTime>(_readField(json, const ["extracted_at"]), "extracted_at", _readDateTime, requiredField: true, nullable: false), "extracted_at"),
+      inputRevision: _required(_readFieldValue<String>(_readField(json, const ["input_revision"]), "input_revision", _readString, requiredField: true, nullable: false), "input_revision"),
+      policyRevision: _required(_readFieldValue<String>(_readField(json, const ["policy_revision"]), "policy_revision", _readString, requiredField: false, nullable: false, defaultValue: "explicit-reminders-v1"), "policy_revision"),
+      reviewReason: _readFieldValue<String>(_readField(json, const ["review_reason"]), "review_reason", _readString, requiredField: false, nullable: true),
+      sourceAt: _readFieldValue<DateTime>(_readField(json, const ["source_at"]), "source_at", _readDateTime, requiredField: false, nullable: true),
+      speakerEvidenceRevision: _required(_readFieldValue<String>(_readField(json, const ["speaker_evidence_revision"]), "speaker_evidence_revision", _readString, requiredField: true, nullable: false), "speaker_evidence_revision"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'extracted_at': extractedAt.toUtc().toIso8601String(),
+      'input_revision': inputRevision,
+      'policy_revision': policyRevision,
+      'review_reason': reviewReason,
+      'source_at': sourceAt?.toUtc().toIso8601String(),
+      'speaker_evidence_revision': speakerEvidenceRevision,
+    };
+  }
+}
+
 class GeneratedTaskCreatePayload {
   final String description;
+  final GeneratedTaskDue? due;
   final DateTime? dueAt;
   final double? dueConfidence;
   final String owner;
@@ -225,6 +322,7 @@ class GeneratedTaskCreatePayload {
 
   const GeneratedTaskCreatePayload({
     required this.description,
+    this.due,
     this.dueAt,
     this.dueConfidence,
     this.owner = "unknown",
@@ -236,6 +334,7 @@ class GeneratedTaskCreatePayload {
   factory GeneratedTaskCreatePayload.fromJson(Map<String, dynamic> json) {
     return GeneratedTaskCreatePayload(
       description: _required(_readFieldValue<String>(_readField(json, const ["description"]), "description", _readString, requiredField: true, nullable: false), "description"),
+      due: _readFieldValue<GeneratedTaskDue>(_readField(json, const ["due"]), "due", (value) => _readObject(value, GeneratedTaskDue.fromJson), requiredField: false, nullable: true),
       dueAt: _readFieldValue<DateTime>(_readField(json, const ["due_at"]), "due_at", _readDateTime, requiredField: false, nullable: true),
       dueConfidence: _readFieldValue<double>(_readField(json, const ["due_confidence"]), "due_confidence", _readDouble, requiredField: false, nullable: true),
       owner: _required(_readFieldValue<String>(_readField(json, const ["owner"]), "owner", _readString, requiredField: false, nullable: false, defaultValue: "unknown"), "owner"),
@@ -248,6 +347,7 @@ class GeneratedTaskCreatePayload {
   Map<String, dynamic> toJson() {
     return {
       'description': description,
+      'due': due?.toJson(),
       'due_at': dueAt?.toUtc().toIso8601String(),
       'due_confidence': dueConfidence,
       'owner': owner,
@@ -260,6 +360,7 @@ class GeneratedTaskCreatePayload {
 
 class GeneratedTaskChangePayload {
   final String? description;
+  final GeneratedTaskDue? due;
   final DateTime? dueAt;
   final double? dueConfidence;
   final String? owner;
@@ -271,6 +372,7 @@ class GeneratedTaskChangePayload {
 
   const GeneratedTaskChangePayload({
     this.description,
+    this.due,
     this.dueAt,
     this.dueConfidence,
     this.owner,
@@ -284,6 +386,7 @@ class GeneratedTaskChangePayload {
   factory GeneratedTaskChangePayload.fromJson(Map<String, dynamic> json) {
     return GeneratedTaskChangePayload(
       description: _readFieldValue<String>(_readField(json, const ["description"]), "description", _readString, requiredField: false, nullable: true),
+      due: _readFieldValue<GeneratedTaskDue>(_readField(json, const ["due"]), "due", (value) => _readObject(value, GeneratedTaskDue.fromJson), requiredField: false, nullable: true),
       dueAt: _readFieldValue<DateTime>(_readField(json, const ["due_at"]), "due_at", _readDateTime, requiredField: false, nullable: true),
       dueConfidence: _readFieldValue<double>(_readField(json, const ["due_confidence"]), "due_confidence", _readDouble, requiredField: false, nullable: true),
       owner: _readFieldValue<String>(_readField(json, const ["owner"]), "owner", _readString, requiredField: false, nullable: true),
@@ -298,6 +401,7 @@ class GeneratedTaskChangePayload {
   Map<String, dynamic> toJson() {
     return {
       'description': description,
+      'due': due?.toJson(),
       'due_at': dueAt?.toUtc().toIso8601String(),
       'due_confidence': dueConfidence,
       'owner': owner,
@@ -384,12 +488,14 @@ class GeneratedCandidateRecord {
   final double captureConfidence;
   final GeneratedCandidateCompatibilityMetadata? compatibility;
   final DateTime createdAt;
+  final Map<String, dynamic>? creationReceipt;
   final List<GeneratedEvidenceRef> evidenceRefs;
   final DateTime? expiresAt;
   final String? goalId;
   final String idempotencyKey;
   final double ownershipConfidence;
   final String proposedAction;
+  final GeneratedReminderOrigin? reminderOrigin;
   final String? resolutionReason;
   final DateTime? resolvedAt;
   final String? resultTaskId;
@@ -408,12 +514,14 @@ class GeneratedCandidateRecord {
     required this.captureConfidence,
     this.compatibility,
     required this.createdAt,
+    this.creationReceipt,
     required this.evidenceRefs,
     this.expiresAt,
     this.goalId,
     required this.idempotencyKey,
     required this.ownershipConfidence,
     required this.proposedAction,
+    this.reminderOrigin,
     this.resolutionReason,
     this.resolvedAt,
     this.resultTaskId,
@@ -434,12 +542,14 @@ class GeneratedCandidateRecord {
       captureConfidence: _required(_readFieldValue<double>(_readField(json, const ["capture_confidence"]), "capture_confidence", _readDouble, requiredField: true, nullable: false), "capture_confidence"),
       compatibility: _readFieldValue<GeneratedCandidateCompatibilityMetadata>(_readField(json, const ["compatibility"]), "compatibility", (value) => _readObject(value, GeneratedCandidateCompatibilityMetadata.fromJson), requiredField: false, nullable: true),
       createdAt: _required(_readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: true, nullable: false), "created_at"),
+      creationReceipt: _readFieldValue<Map<String, dynamic>>(_readField(json, const ["creation_receipt"]), "creation_receipt", _readMap, requiredField: false, nullable: true),
       evidenceRefs: _required(_readFieldValue<List<GeneratedEvidenceRef>>(_readField(json, const ["evidence_refs"]), "evidence_refs", (value) => _readObjectList(value, GeneratedEvidenceRef.fromJson), requiredField: true, nullable: false), "evidence_refs"),
       expiresAt: _readFieldValue<DateTime>(_readField(json, const ["expires_at"]), "expires_at", _readDateTime, requiredField: false, nullable: true),
       goalId: _readFieldValue<String>(_readField(json, const ["goal_id"]), "goal_id", _readString, requiredField: false, nullable: true),
       idempotencyKey: _required(_readFieldValue<String>(_readField(json, const ["idempotency_key"]), "idempotency_key", _readString, requiredField: true, nullable: false), "idempotency_key"),
       ownershipConfidence: _required(_readFieldValue<double>(_readField(json, const ["ownership_confidence"]), "ownership_confidence", _readDouble, requiredField: true, nullable: false), "ownership_confidence"),
       proposedAction: _required(_readFieldValue<String>(_readField(json, const ["proposed_action"]), "proposed_action", _readString, requiredField: true, nullable: false), "proposed_action"),
+      reminderOrigin: _readFieldValue<GeneratedReminderOrigin>(_readField(json, const ["reminder_origin"]), "reminder_origin", (value) => _readObject(value, GeneratedReminderOrigin.fromJson), requiredField: false, nullable: true),
       resolutionReason: _readFieldValue<String>(_readField(json, const ["resolution_reason"]), "resolution_reason", _readString, requiredField: false, nullable: true),
       resolvedAt: _readFieldValue<DateTime>(_readField(json, const ["resolved_at"]), "resolved_at", _readDateTime, requiredField: false, nullable: true),
       resultTaskId: _readFieldValue<String>(_readField(json, const ["result_task_id"]), "result_task_id", _readString, requiredField: false, nullable: true),
@@ -461,12 +571,14 @@ class GeneratedCandidateRecord {
       'capture_confidence': captureConfidence,
       'compatibility': compatibility?.toJson(),
       'created_at': createdAt.toUtc().toIso8601String(),
+      'creation_receipt': creationReceipt,
       'evidence_refs': evidenceRefs.map((value) => value.toJson()).toList(),
       'expires_at': expiresAt?.toUtc().toIso8601String(),
       'goal_id': goalId,
       'idempotency_key': idempotencyKey,
       'ownership_confidence': ownershipConfidence,
       'proposed_action': proposedAction,
+      'reminder_origin': reminderOrigin?.toJson(),
       'resolution_reason': resolutionReason,
       'resolved_at': resolvedAt?.toUtc().toIso8601String(),
       'result_task_id': resultTaskId,
@@ -508,6 +620,7 @@ class GeneratedCandidateListResponse {
 
 class GeneratedCandidateResolutionReceipt {
   final String candidateId;
+  final Map<String, dynamic>? creationReceipt;
   final bool newlyResolved;
   final String receiptId;
   final DateTime resolvedAt;
@@ -517,6 +630,7 @@ class GeneratedCandidateResolutionReceipt {
 
   const GeneratedCandidateResolutionReceipt({
     required this.candidateId,
+    this.creationReceipt,
     required this.newlyResolved,
     required this.receiptId,
     required this.resolvedAt,
@@ -528,6 +642,7 @@ class GeneratedCandidateResolutionReceipt {
   factory GeneratedCandidateResolutionReceipt.fromJson(Map<String, dynamic> json) {
     return GeneratedCandidateResolutionReceipt(
       candidateId: _required(_readFieldValue<String>(_readField(json, const ["candidate_id"]), "candidate_id", _readString, requiredField: true, nullable: false), "candidate_id"),
+      creationReceipt: _readFieldValue<Map<String, dynamic>>(_readField(json, const ["creation_receipt"]), "creation_receipt", _readMap, requiredField: false, nullable: true),
       newlyResolved: _required(_readFieldValue<bool>(_readField(json, const ["newly_resolved"]), "newly_resolved", _readBool, requiredField: true, nullable: false), "newly_resolved"),
       receiptId: _required(_readFieldValue<String>(_readField(json, const ["receipt_id"]), "receipt_id", _readString, requiredField: true, nullable: false), "receipt_id"),
       resolvedAt: _required(_readFieldValue<DateTime>(_readField(json, const ["resolved_at"]), "resolved_at", _readDateTime, requiredField: true, nullable: false), "resolved_at"),
@@ -540,6 +655,7 @@ class GeneratedCandidateResolutionReceipt {
   Map<String, dynamic> toJson() {
     return {
       'candidate_id': candidateId,
+      'creation_receipt': creationReceipt,
       'newly_resolved': newlyResolved,
       'receipt_id': receiptId,
       'resolved_at': resolvedAt.toUtc().toIso8601String(),
@@ -607,6 +723,7 @@ class GeneratedTaskCreateCandidate {
   final String? goalId;
   final double ownershipConfidence;
   final String proposedAction;
+  final GeneratedReminderOrigin? reminderOrigin;
   final String sourceSurface;
   final String subjectKind;
   final GeneratedTaskCreatePayload taskChange;
@@ -619,6 +736,7 @@ class GeneratedTaskCreateCandidate {
     this.goalId,
     required this.ownershipConfidence,
     this.proposedAction = "create",
+    this.reminderOrigin,
     required this.sourceSurface,
     this.subjectKind = "task",
     required this.taskChange,
@@ -633,6 +751,7 @@ class GeneratedTaskCreateCandidate {
       goalId: _readFieldValue<String>(_readField(json, const ["goal_id"]), "goal_id", _readString, requiredField: false, nullable: true),
       ownershipConfidence: _required(_readFieldValue<double>(_readField(json, const ["ownership_confidence"]), "ownership_confidence", _readDouble, requiredField: true, nullable: false), "ownership_confidence"),
       proposedAction: _required(_readFieldValue<String>(_readField(json, const ["proposed_action"]), "proposed_action", _readString, requiredField: false, nullable: false, defaultValue: "create"), "proposed_action"),
+      reminderOrigin: _readFieldValue<GeneratedReminderOrigin>(_readField(json, const ["reminder_origin"]), "reminder_origin", (value) => _readObject(value, GeneratedReminderOrigin.fromJson), requiredField: false, nullable: true),
       sourceSurface: _required(_readFieldValue<String>(_readField(json, const ["source_surface"]), "source_surface", _readString, requiredField: true, nullable: false), "source_surface"),
       subjectKind: _required(_readFieldValue<String>(_readField(json, const ["subject_kind"]), "subject_kind", _readString, requiredField: false, nullable: false, defaultValue: "task"), "subject_kind"),
       taskChange: _required(_readFieldValue<GeneratedTaskCreatePayload>(_readField(json, const ["task_change"]), "task_change", (value) => _readObject(value, GeneratedTaskCreatePayload.fromJson), requiredField: true, nullable: false), "task_change"),
@@ -648,6 +767,7 @@ class GeneratedTaskCreateCandidate {
       'goal_id': goalId,
       'ownership_confidence': ownershipConfidence,
       'proposed_action': proposedAction,
+      'reminder_origin': reminderOrigin?.toJson(),
       'source_surface': sourceSurface,
       'subject_kind': subjectKind,
       'task_change': taskChange.toJson(),
@@ -663,6 +783,7 @@ class GeneratedTaskUpdateCandidate {
   final String? goalId;
   final double ownershipConfidence;
   final String proposedAction;
+  final GeneratedReminderOrigin? reminderOrigin;
   final String sourceSurface;
   final String subjectKind;
   final GeneratedTaskChangePayload taskChange;
@@ -676,6 +797,7 @@ class GeneratedTaskUpdateCandidate {
     this.goalId,
     required this.ownershipConfidence,
     this.proposedAction = "update",
+    this.reminderOrigin,
     required this.sourceSurface,
     this.subjectKind = "task",
     required this.taskChange,
@@ -691,6 +813,7 @@ class GeneratedTaskUpdateCandidate {
       goalId: _readFieldValue<String>(_readField(json, const ["goal_id"]), "goal_id", _readString, requiredField: false, nullable: true),
       ownershipConfidence: _required(_readFieldValue<double>(_readField(json, const ["ownership_confidence"]), "ownership_confidence", _readDouble, requiredField: true, nullable: false), "ownership_confidence"),
       proposedAction: _required(_readFieldValue<String>(_readField(json, const ["proposed_action"]), "proposed_action", _readString, requiredField: false, nullable: false, defaultValue: "update"), "proposed_action"),
+      reminderOrigin: _readFieldValue<GeneratedReminderOrigin>(_readField(json, const ["reminder_origin"]), "reminder_origin", (value) => _readObject(value, GeneratedReminderOrigin.fromJson), requiredField: false, nullable: true),
       sourceSurface: _required(_readFieldValue<String>(_readField(json, const ["source_surface"]), "source_surface", _readString, requiredField: true, nullable: false), "source_surface"),
       subjectKind: _required(_readFieldValue<String>(_readField(json, const ["subject_kind"]), "subject_kind", _readString, requiredField: false, nullable: false, defaultValue: "task"), "subject_kind"),
       taskChange: _required(_readFieldValue<GeneratedTaskChangePayload>(_readField(json, const ["task_change"]), "task_change", (value) => _readObject(value, GeneratedTaskChangePayload.fromJson), requiredField: true, nullable: false), "task_change"),
@@ -707,6 +830,7 @@ class GeneratedTaskUpdateCandidate {
       'goal_id': goalId,
       'ownership_confidence': ownershipConfidence,
       'proposed_action': proposedAction,
+      'reminder_origin': reminderOrigin?.toJson(),
       'source_surface': sourceSurface,
       'subject_kind': subjectKind,
       'task_change': taskChange.toJson(),
@@ -723,6 +847,7 @@ class GeneratedTaskCompleteCandidate {
   final String? goalId;
   final double ownershipConfidence;
   final String proposedAction;
+  final GeneratedReminderOrigin? reminderOrigin;
   final String sourceSurface;
   final String subjectKind;
   final GeneratedTaskChangePayload taskChange;
@@ -736,6 +861,7 @@ class GeneratedTaskCompleteCandidate {
     this.goalId,
     required this.ownershipConfidence,
     this.proposedAction = "complete",
+    this.reminderOrigin,
     required this.sourceSurface,
     this.subjectKind = "task",
     required this.taskChange,
@@ -751,6 +877,7 @@ class GeneratedTaskCompleteCandidate {
       goalId: _readFieldValue<String>(_readField(json, const ["goal_id"]), "goal_id", _readString, requiredField: false, nullable: true),
       ownershipConfidence: _required(_readFieldValue<double>(_readField(json, const ["ownership_confidence"]), "ownership_confidence", _readDouble, requiredField: true, nullable: false), "ownership_confidence"),
       proposedAction: _required(_readFieldValue<String>(_readField(json, const ["proposed_action"]), "proposed_action", _readString, requiredField: false, nullable: false, defaultValue: "complete"), "proposed_action"),
+      reminderOrigin: _readFieldValue<GeneratedReminderOrigin>(_readField(json, const ["reminder_origin"]), "reminder_origin", (value) => _readObject(value, GeneratedReminderOrigin.fromJson), requiredField: false, nullable: true),
       sourceSurface: _required(_readFieldValue<String>(_readField(json, const ["source_surface"]), "source_surface", _readString, requiredField: true, nullable: false), "source_surface"),
       subjectKind: _required(_readFieldValue<String>(_readField(json, const ["subject_kind"]), "subject_kind", _readString, requiredField: false, nullable: false, defaultValue: "task"), "subject_kind"),
       taskChange: _required(_readFieldValue<GeneratedTaskChangePayload>(_readField(json, const ["task_change"]), "task_change", (value) => _readObject(value, GeneratedTaskChangePayload.fromJson), requiredField: true, nullable: false), "task_change"),
@@ -767,6 +894,7 @@ class GeneratedTaskCompleteCandidate {
       'goal_id': goalId,
       'ownership_confidence': ownershipConfidence,
       'proposed_action': proposedAction,
+      'reminder_origin': reminderOrigin?.toJson(),
       'source_surface': sourceSurface,
       'subject_kind': subjectKind,
       'task_change': taskChange.toJson(),
@@ -783,6 +911,7 @@ class GeneratedTaskCancelCandidate {
   final String? goalId;
   final double ownershipConfidence;
   final String proposedAction;
+  final GeneratedReminderOrigin? reminderOrigin;
   final String sourceSurface;
   final String subjectKind;
   final GeneratedTaskChangePayload taskChange;
@@ -796,6 +925,7 @@ class GeneratedTaskCancelCandidate {
     this.goalId,
     required this.ownershipConfidence,
     this.proposedAction = "cancel",
+    this.reminderOrigin,
     required this.sourceSurface,
     this.subjectKind = "task",
     required this.taskChange,
@@ -811,6 +941,7 @@ class GeneratedTaskCancelCandidate {
       goalId: _readFieldValue<String>(_readField(json, const ["goal_id"]), "goal_id", _readString, requiredField: false, nullable: true),
       ownershipConfidence: _required(_readFieldValue<double>(_readField(json, const ["ownership_confidence"]), "ownership_confidence", _readDouble, requiredField: true, nullable: false), "ownership_confidence"),
       proposedAction: _required(_readFieldValue<String>(_readField(json, const ["proposed_action"]), "proposed_action", _readString, requiredField: false, nullable: false, defaultValue: "cancel"), "proposed_action"),
+      reminderOrigin: _readFieldValue<GeneratedReminderOrigin>(_readField(json, const ["reminder_origin"]), "reminder_origin", (value) => _readObject(value, GeneratedReminderOrigin.fromJson), requiredField: false, nullable: true),
       sourceSurface: _required(_readFieldValue<String>(_readField(json, const ["source_surface"]), "source_surface", _readString, requiredField: true, nullable: false), "source_surface"),
       subjectKind: _required(_readFieldValue<String>(_readField(json, const ["subject_kind"]), "subject_kind", _readString, requiredField: false, nullable: false, defaultValue: "task"), "subject_kind"),
       taskChange: _required(_readFieldValue<GeneratedTaskChangePayload>(_readField(json, const ["task_change"]), "task_change", (value) => _readObject(value, GeneratedTaskChangePayload.fromJson), requiredField: true, nullable: false), "task_change"),
@@ -827,6 +958,7 @@ class GeneratedTaskCancelCandidate {
       'goal_id': goalId,
       'ownership_confidence': ownershipConfidence,
       'proposed_action': proposedAction,
+      'reminder_origin': reminderOrigin?.toJson(),
       'source_surface': sourceSurface,
       'subject_kind': subjectKind,
       'task_change': taskChange.toJson(),
@@ -843,6 +975,7 @@ class GeneratedTaskSupersedeCandidate {
   final String? goalId;
   final double ownershipConfidence;
   final String proposedAction;
+  final GeneratedReminderOrigin? reminderOrigin;
   final String sourceSurface;
   final String subjectKind;
   final GeneratedTaskChangePayload taskChange;
@@ -856,6 +989,7 @@ class GeneratedTaskSupersedeCandidate {
     this.goalId,
     required this.ownershipConfidence,
     this.proposedAction = "supersede",
+    this.reminderOrigin,
     required this.sourceSurface,
     this.subjectKind = "task",
     required this.taskChange,
@@ -871,6 +1005,7 @@ class GeneratedTaskSupersedeCandidate {
       goalId: _readFieldValue<String>(_readField(json, const ["goal_id"]), "goal_id", _readString, requiredField: false, nullable: true),
       ownershipConfidence: _required(_readFieldValue<double>(_readField(json, const ["ownership_confidence"]), "ownership_confidence", _readDouble, requiredField: true, nullable: false), "ownership_confidence"),
       proposedAction: _required(_readFieldValue<String>(_readField(json, const ["proposed_action"]), "proposed_action", _readString, requiredField: false, nullable: false, defaultValue: "supersede"), "proposed_action"),
+      reminderOrigin: _readFieldValue<GeneratedReminderOrigin>(_readField(json, const ["reminder_origin"]), "reminder_origin", (value) => _readObject(value, GeneratedReminderOrigin.fromJson), requiredField: false, nullable: true),
       sourceSurface: _required(_readFieldValue<String>(_readField(json, const ["source_surface"]), "source_surface", _readString, requiredField: true, nullable: false), "source_surface"),
       subjectKind: _required(_readFieldValue<String>(_readField(json, const ["subject_kind"]), "subject_kind", _readString, requiredField: false, nullable: false, defaultValue: "task"), "subject_kind"),
       taskChange: _required(_readFieldValue<GeneratedTaskChangePayload>(_readField(json, const ["task_change"]), "task_change", (value) => _readObject(value, GeneratedTaskChangePayload.fromJson), requiredField: true, nullable: false), "task_change"),
@@ -887,6 +1022,7 @@ class GeneratedTaskSupersedeCandidate {
       'goal_id': goalId,
       'ownership_confidence': ownershipConfidence,
       'proposed_action': proposedAction,
+      'reminder_origin': reminderOrigin?.toJson(),
       'source_surface': sourceSurface,
       'subject_kind': subjectKind,
       'task_change': taskChange.toJson(),
@@ -1315,6 +1451,7 @@ class GeneratedWorkstreamCreateCandidate {
   final String? goalId;
   final double ownershipConfidence;
   final String proposedAction;
+  final GeneratedReminderOrigin? reminderOrigin;
   final String sourceSurface;
   final String subjectKind;
   final String? workstreamId;
@@ -1327,6 +1464,7 @@ class GeneratedWorkstreamCreateCandidate {
     this.goalId,
     required this.ownershipConfidence,
     this.proposedAction = "create",
+    this.reminderOrigin,
     required this.sourceSurface,
     this.subjectKind = "workstream",
     this.workstreamId,
@@ -1341,6 +1479,7 @@ class GeneratedWorkstreamCreateCandidate {
       goalId: _readFieldValue<String>(_readField(json, const ["goal_id"]), "goal_id", _readString, requiredField: false, nullable: true),
       ownershipConfidence: _required(_readFieldValue<double>(_readField(json, const ["ownership_confidence"]), "ownership_confidence", _readDouble, requiredField: true, nullable: false), "ownership_confidence"),
       proposedAction: _required(_readFieldValue<String>(_readField(json, const ["proposed_action"]), "proposed_action", _readString, requiredField: false, nullable: false, defaultValue: "create"), "proposed_action"),
+      reminderOrigin: _readFieldValue<GeneratedReminderOrigin>(_readField(json, const ["reminder_origin"]), "reminder_origin", (value) => _readObject(value, GeneratedReminderOrigin.fromJson), requiredField: false, nullable: true),
       sourceSurface: _required(_readFieldValue<String>(_readField(json, const ["source_surface"]), "source_surface", _readString, requiredField: true, nullable: false), "source_surface"),
       subjectKind: _required(_readFieldValue<String>(_readField(json, const ["subject_kind"]), "subject_kind", _readString, requiredField: false, nullable: false, defaultValue: "workstream"), "subject_kind"),
       workstreamId: _readFieldValue<String>(_readField(json, const ["workstream_id"]), "workstream_id", _readString, requiredField: false, nullable: true),
@@ -1356,6 +1495,7 @@ class GeneratedWorkstreamCreateCandidate {
       'goal_id': goalId,
       'ownership_confidence': ownershipConfidence,
       'proposed_action': proposedAction,
+      'reminder_origin': reminderOrigin?.toJson(),
       'source_surface': sourceSurface,
       'subject_kind': subjectKind,
       'workstream_id': workstreamId,

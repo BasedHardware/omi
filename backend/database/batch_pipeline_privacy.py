@@ -4,17 +4,26 @@ All reads precede caller writes and use the customer-data transaction. The
 hashed generation survives recursive account wipes and contains no content.
 """
 
+from collections import OrderedDict, deque
 from collections.abc import Iterable
 import hashlib
+import threading
+import time
+from uuid import uuid4
 from enum import Enum
 from typing import Any
 
 from config.firestore_read_levers import lever_enabled
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
-from database.batch_privacy_attempt import current_attempt, token_version
+from database.batch_privacy_attempt import SCHEMA_FIELD, TOKEN_FIELD, TOKEN_SCHEMA, current_attempt, token_version
 from database import privacy_check_metrics as metrics
+from database.privacy_ttl_cache import BoundedTTLCache, enabled as ttl_enabled, is_missing
 
 PRIVACY_COLLECTION = 'batch_pipeline_privacy'
+# Token-validated generations shared across task attempts in this process
+# (lever bpp_decision_cache). Keys hold the client object itself, so planes and
+# recycled ids never mix; entries expire 60s after the authority walk started.
+PROCESS_DECISIONS = BoundedTTLCache()
 
 
 class BatchPrivacyReason(str, Enum):
@@ -173,6 +182,8 @@ def _assert_batch_write_allowed_memo(
     # Retain the client object itself, preventing id reuse and cross-plane hits.
     key = (client, uid, ids)
     reference = client.collection(PRIVACY_COLLECTION).document(privacy_owner_key(uid))
+    process_on = ttl_enabled('bpp_decision_cache', uid)
+    started = PROCESS_DECISIONS.clock()
     try:
         # Never use the transaction-scoped WQ12 snapshot memo for this read.
         # Every authorizing transaction enrolls the token in its conflict set.
@@ -184,10 +195,29 @@ def _assert_batch_write_allowed_memo(
         version = token_version(snapshot)
         eligible = version is not None
         generation = attempt.get(key, version) if eligible else None
+        if generation is None and eligible and process_on:
+            # Process-wide reuse across attempts (lever bpp_decision_cache), at most
+            # 60s old, and still certified by THIS transaction's token read: any
+            # authority write since the cached walk rotated the token in the same
+            # commit (database.batch_privacy_write_fence), so a changed token misses
+            # and a concurrent writer aborts this transaction at commit.
+            cached, _age = PROCESS_DECISIONS.get(key)
+            if not is_missing(cached) and cached[0] == version:
+                generation = cached[1]
+                metrics.ttl_result('batch', 'hit')
+                attempt.put(key, version, generation)
+            else:
+                metrics.ttl_result('batch', 'miss')
         if generation is not None and (expected_generation is None or generation == expected_generation):
             metrics.memo_result('batch', 'hit')
             return generation
         metrics.memo_result('batch', 'miss' if eligible else 'ineligible')
+        if not eligible and _mintable(snapshot):
+            metrics.memo_result('batch', 'no_token')
+            try:
+                schedule_token_mint(client, reference, uid)
+            except Exception:  # best effort: scheduling must never change or block the decision
+                metrics.memo_result('batch', 'mint_error')
         attempt.forget(key)
         generation = _assert_batch_write_allowed_live(
             client,
@@ -200,10 +230,13 @@ def _assert_batch_write_allowed_memo(
         )
         if eligible:
             attempt.put(key, version, generation)
+            if process_on and PROCESS_DECISIONS.put(key, (version, generation), started=started):
+                metrics.ttl_result('batch', 'store')
         return generation
     except BaseException:
         # Neither a partial authority walk nor a failed token read is reusable.
         attempt.forget(key)
+        PROCESS_DECISIONS.forget(key)
         raise
 
 
@@ -314,6 +347,103 @@ def _assert_batch_write_allowed_live(
             conversation_id, redirected = target, True
         verified.update(chain)
     return generation
+
+
+# --- lazy memo-token mint (lever bpp_token_mint) -------------------------------------------------
+# 86% of batch decisions were memo-ineligible on 2026-11-05 because the owner's privacy document had
+# no memo token: tokens were only ever written by authority writes. Minting one makes later decisions
+# certifiable by the (exact, in-transaction) token. The mint writes ONLY the token fields through the
+# installed write fence, never generation/blocked/purging, and runs after a delay so the authorizing
+# transaction that observed the gap commits first; a collision costs that transaction one retry.
+MINT_DELAY_SECONDS = 2.0
+_MINT_MAX_PENDING = 10_000
+_mint_lock = threading.Lock()
+_mint_seen: OrderedDict = OrderedDict()
+_mint_queue: deque = deque()
+_mint_wake = threading.Event()
+_mint_thread: list = []
+
+
+def _mintable(snapshot) -> bool:
+    """No usable token, and nothing that must keep the owner ineligible."""
+    data = (snapshot.to_dict() or {}) if snapshot.exists else {}
+    if any(data.get(field) for field in ('blocked', 'purging', 'memo_blocked')):
+        return False
+    return not (isinstance(data.get(TOKEN_FIELD), str) and data.get(SCHEMA_FIELD) == TOKEN_SCHEMA)
+
+
+def schedule_token_mint(client, reference, uid: str) -> None:
+    if not lever_enabled('bpp_token_mint', uid):
+        return
+    with _mint_lock:
+        if reference.path in _mint_seen or len(_mint_queue) >= _MINT_MAX_PENDING:
+            return
+        # Start (or confirm) the worker BEFORE recording anything: a failed start must
+        # leave no queued item or dedupe entry behind, so a later call retries cleanly.
+        if not _mint_thread:
+            worker = threading.Thread(target=_mint_worker, name='bpp-token-mint', daemon=True)
+            try:
+                worker.start()
+            except Exception:
+                # Never fail a privacy decision over an optimization.
+                metrics.memo_result('batch', 'mint_error')
+                return
+            _mint_thread.append(worker)
+        _mint_seen[reference.path] = True
+        while len(_mint_seen) > 100_000:
+            _mint_seen.popitem(last=False)
+        _mint_queue.append((time.monotonic() + MINT_DELAY_SECONDS, client, reference))
+    _mint_wake.set()
+
+
+def mint_token(client, reference) -> bool:
+    """Transactionally add a token to an owner that has none; True when one was written.
+
+    Re-reads inside the transaction and writes nothing when the owner is blocked,
+    purging or memo_blocked, or already carries a token (an authority writer won the
+    race). Writes ONLY the token fields as a masked update when the document exists. When
+    it never existed, it creates it with the token plus the defaults every reader already
+    applies to a missing document (generation 0, not blocked, not purging). The installed write
+    fence appends its own rotation in the same commit.
+    """
+    from google.cloud import firestore
+
+    fields = {TOKEN_FIELD: uuid4().hex, SCHEMA_FIELD: TOKEN_SCHEMA}
+
+    @firestore.transactional
+    def mint(transaction) -> bool:
+        snapshot = reference.get(transaction=transaction)
+        if not _mintable(snapshot):
+            return False
+        if snapshot.exists:
+            transaction.update(reference, fields)
+        else:
+            # The write fence rejects a privacy-document replacement that omits the
+            # authority state; these are the defaults every reader applies to a
+            # missing document, so the decision is unchanged.
+            transaction.create(reference, {'generation': 0, 'blocked': False, 'purging': False, **fields})
+        return True
+
+    return mint(client.transaction())
+
+
+def _mint_worker() -> None:
+    while True:
+        with _mint_lock:
+            item = _mint_queue.popleft() if _mint_queue else None
+        if item is None:
+            _mint_wake.wait(5)
+            _mint_wake.clear()
+            continue
+        due, client, reference = item
+        delay = due - time.monotonic()
+        if delay > 0:
+            time.sleep(delay)
+        try:
+            if mint_token(client, reference):
+                metrics.memo_result('batch', 'mint')
+        except Exception:
+            metrics.memo_result('batch', 'mint_error')
 
 
 def advance_privacy_generation(client: Any, uid: str, *, blocked: bool) -> int:

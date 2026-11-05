@@ -16,6 +16,7 @@ from google.cloud import firestore
 from database.legal_holds import external_write_fence
 from database.people_generation import bump_people_generation
 from database import speaker_learning_jobs as learning_jobs, recurring_voice_assignments, recurring_voices
+from database.notes_identity import identifier_retraction
 from utils.observability.recurring_voices import profile_event
 from utils.observability.fallback import record_fallback
 from utils.owner_voice_evidence import retract_owner_contributions
@@ -116,6 +117,15 @@ def persist_assignment_effects(
         save_other_voice_profiles=save_other,
         source_conversation_ids=donor_ids,
     )
+    if rejection:
+        inferred_people = {
+            s.get('person_id')
+            for s in relabeled
+            if s.get('speaker_match_source') == 'notes_inferred' and s.get('person_id')
+        }
+        for pid in inferred_people:
+            if isinstance(pid, str) and docs.get(pid):
+                updates.setdefault(pid, {}).update(identifier_retraction(docs[pid], conversation_id))
     owner_update = retract_owner_contributions(user_doc, donor_ids, resolved, now)
     pool_changes = {}
     # Retraction is mandatory even when new enrollment/use is killed off.
@@ -189,3 +199,74 @@ def persist_assignment_effects(
         transaction.update(people[pid][0], update)
         bump_people_generation(transaction, people[pid][0])
     return removed, relabeled
+
+
+def owner_confirmation_updates(
+    current, owner_confirmation, segment_only, selected_speaker_id, owner_segment_ids, selected_segment_ids, is_user
+):
+    owner_updates = {}
+    if owner_confirmation is not None:
+        # Read-only conversation consumers do not depend on prompt models.
+        # Load the authorization contract only for the explicit excerpt path.
+        from utils.speaker_tag_prompts.owner_confirmation import (
+            FIELD as OWNER_CONFIRMATION_FIELD,
+            StaleOwnerConfirmation,
+            validate_binding as validate_owner_confirmation,
+        )
+
+        binding = validate_owner_confirmation(
+            current,
+            owner_confirmation['prompt_id'],
+            owner_confirmation['evidence_id'],
+            selected_segment_ids,
+            require_played=True,
+        )
+        if not segment_only or selected_speaker_id != binding['speaker_id'] or owner_segment_ids:
+            raise StaleOwnerConfirmation('Owner excerpt cannot authorize whole-voice assignment or learning')
+        owner_updates[OWNER_CONFIRMATION_FIELD] = dict(binding, answered='yes' if is_user else 'no')
+    return owner_updates
+
+
+def record_shadow_correction(current, resolved, logger):
+    if any(s.get('speaker_grouping_shadow') for s in current.get('transcript_segments') or []):
+        try:
+            from utils.conversations.speaker_grouping_shadow import record_correction
+
+            record_correction(current, resolved)
+        except Exception as error:
+            # A committed user correction cannot fail because optional telemetry
+            # is unavailable (including its lazy import).
+            from utils.observability.fallback import record_fallback
+
+            record_fallback(
+                component='other',
+                from_mode='speaker_grouping',
+                to_mode='incumbent',
+                reason='other',
+                outcome='recovered',
+                log=logger,
+            )
+            logger.warning(
+                'event=speaker_grouping_correction outcome=unavailable exception_type=%s', type(error).__name__
+            )
+
+
+def record_assignment_commit(uid, result, logger):
+    """Best-effort observation must never turn a committed label into a failed outcome."""
+    from database.people_stats_cache import invalidate_people_stats_cache
+    from utils.observability.speaker_identification import record_speaker_review
+
+    current, resolved, _, before = result
+    if not resolved:
+        return
+    observations = (
+        lambda: invalidate_people_stats_cache(uid),
+        lambda: record_shadow_correction(current, resolved, logger),
+        lambda: record_speaker_review(uid, current['id'], before, current['transcript_segments']),
+        lambda: learning_jobs.record_speaker_learning_job_events(current.pop(learning_jobs.JOB_EVENTS_KEY, ())),
+    )
+    for observe in observations:
+        try:
+            observe()
+        except Exception:
+            record_fallback(component='other', from_mode='other', to_mode='none', reason='other', outcome='degraded')

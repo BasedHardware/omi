@@ -140,7 +140,8 @@ class _Block extends StatelessWidget {
   }
 }
 
-/// One row on Recent changes: the change, where it happened, and what can be done about it.
+/// One row on Recent changes: the change's title, and Undo (or Redo) for it. Tapping the row opens
+/// every place the change landed.
 class RecentChangeRow extends StatelessWidget {
   const RecentChangeRow({
     super.key,
@@ -148,7 +149,6 @@ class RecentChangeRow extends StatelessWidget {
     required this.busy,
     required this.onOpen,
     required this.onToggleAll,
-    this.onOpenTask,
   });
 
   final RecentChangeGroup group;
@@ -157,111 +157,43 @@ class RecentChangeRow extends StatelessWidget {
 
   /// Undoes every active change in the group, or redoes them all once all are undone.
   final VoidCallback onToggleAll;
-  final VoidCallback? onOpenTask;
 
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final dates = OmiDateFormat.of(context);
     final latest = group.latest;
     final undone = group.allUndone;
     final multiple = group.changes.length > 1;
-    final places = group.placeCount;
-    final before = group.before;
-    final after = group.after;
-    final hasDiff = before != null || after != null;
-
-    final String meta;
-    if (group.section == RecentChangeSection.terms && (multiple || places > 1)) {
-      meta = [l10n.reviewChangeConversationCount(group.conversationCount), l10n.reviewChangePlaceCount(places)]
-          .join(' · ');
-    } else {
-      meta = [
-        if (recentChangeSourceTitle(latest) case final title?) title,
-        dates.date(recentChangeSourceTime(latest)),
-      ].join(' · ');
-    }
-    final note = recentChangeNote(latest);
-
-    final actions = <Widget>[
-      if (group.section == RecentChangeSection.terms && places > 1)
-        OmiButton.tertiary(
-          key: ValueKey('recent_change_show_all_${group.latest.changeId}'),
-          label: l10n.reviewChangeShowAll(places),
-          size: OmiButtonSize.compact,
-          onPressed: onOpen,
-        )
-      else if (group.section == RecentChangeSection.tasks && onOpenTask != null)
-        OmiButton.tertiary(
-          key: ValueKey('recent_change_view_task_${group.latest.changeId}'),
-          label: l10n.reviewChangeViewTask,
-          size: OmiButtonSize.compact,
-          onPressed: onOpenTask,
-        )
-      else if (group.section != RecentChangeSection.terms)
-        OmiButton.tertiary(
-          key: ValueKey('recent_change_evidence_${group.latest.changeId}'),
-          label: l10n.reviewChangeSeeEvidence,
-          size: OmiButtonSize.compact,
-          onPressed: onOpen,
-        ),
-      OmiButton.tertiary(
-        key: ValueKey('recent_change_toggle_${group.latest.changeId}'),
-        label: undone ? l10n.redo : (multiple && group.active.length > 1 ? l10n.reviewChangeUndoAll : l10n.undo),
-        size: OmiButtonSize.compact,
-        isLoading: busy,
-        onPressed: busy ? null : onToggleAll,
-      ),
-    ];
 
     return Material(
       color: OmiColors.surface1,
       borderRadius: OmiRadius.lgAll,
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        key: ValueKey('recent_change_${group.latest.changeId}'),
+        key: ValueKey('recent_change_${latest.changeId}'),
         onTap: onOpen,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(OmiSpacing.md, 14, OmiSpacing.xs, OmiSpacing.xxs),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+          padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.xs, OmiSpacing.xs, OmiSpacing.xs),
+          child: Row(
             children: [
-              Padding(
-                padding: const EdgeInsets.only(right: OmiSpacing.xs),
-                child: hasDiff
-                    ? RecentChangeDiff(before: before, after: after, section: group.section, dimmed: undone)
-                    : Text(latest.title,
-                        style: OmiType.subhead.copyWith(
-                          fontWeight: FontWeight.w600,
-                          decoration: undone ? TextDecoration.lineThrough : null,
-                        )),
+              Expanded(
+                child: Text(
+                  latest.title,
+                  style: OmiType.subhead.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: undone ? OmiColors.textSecondary : null,
+                    decoration: undone ? TextDecoration.lineThrough : null,
+                  ),
+                ),
               ),
-              if (!hasDiff && latest.snippet != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: OmiSpacing.xs, right: OmiSpacing.xs),
-                  child: Text(latest.snippet!, style: OmiType.footnote),
-                ),
-              if (meta.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: OmiSpacing.xs, right: OmiSpacing.xs),
-                  child: Text(meta,
-                      key: const Key('recent_change_meta'),
-                      style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
-                ),
-              if (undone)
-                Padding(
-                  padding: const EdgeInsets.only(top: OmiSpacing.xxs, right: OmiSpacing.xs),
-                  child: Text(l10n.reviewChangeUndone, style: OmiType.footnote),
-                )
-              else if (note != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: OmiSpacing.xxs, right: OmiSpacing.xs),
-                  child: Text(note,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: OmiType.footnote.copyWith(color: OmiColors.textTertiary)),
-                ),
-              Wrap(alignment: WrapAlignment.end, children: actions),
+              OmiButton.tertiary(
+                key: ValueKey('recent_change_toggle_${latest.changeId}'),
+                label:
+                    undone ? l10n.redo : (multiple && group.active.length > 1 ? l10n.reviewChangeUndoAll : l10n.undo),
+                size: OmiButtonSize.compact,
+                isLoading: busy,
+                onPressed: busy ? null : onToggleAll,
+              ),
             ],
           ),
         ),

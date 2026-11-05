@@ -1,3 +1,12 @@
+"""Chat surface: /v2/messages agentic chat with SSE streaming, voice-message
+transcription, chat files, ratings, shares, and device-tool result intake.
+
+The route's real responsibility is stream discipline -- setup/first-event
+deadlines, heartbeats, the typed failure protocol for opted-in clients, and
+bounded provider retries -- while prompt assembly and tool loops live in
+utils.chat_turn (backend/docs/chat-system.md).
+"""
+
 from utils.chat_turn import (
     run_chat_turn,
     TurnOptions,

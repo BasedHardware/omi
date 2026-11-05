@@ -74,7 +74,7 @@ async def test_drain_bounds_concurrency_and_passes_slow_partial(monkeypatch, cap
             slow.set()
             full.set()
             release.set()
-            await task
+            await asyncio.wait_for(task, timeout=1)
     events = [r.getMessage() for r in caplog.records if 'event=batch_drain_pass' in r.getMessage()]
     assert len(events) == 1
     assert 'row_count=10 partial_count=1 seconds=' in events[0]
@@ -263,7 +263,9 @@ async def test_record_drain_defers_only_still_pending_rows(monkeypatch, outcome,
     row = store.rows['jobs', 'synthetic']
     assert row['state'] == ('ready' if outcome == 'admitted' else 'record_pending')
     delay = live.INVENTORY_POLL_SECONDS if partial_complete and outcome != 'value_error' else 60
-    expected = 0 if outcome == 'admitted' else max(2000 if outcome == 'already_deferred' else 0, 1000 + delay)
+    # An admitted row keeps only the selection lease; admission owns it from here.
+    lease = 1000 + live.record_drain_lease_seconds()
+    expected = lease if outcome == 'admitted' else max(2000 if outcome == 'already_deferred' else 0, 1000 + delay)
     assert row['available_at'] == expected
 
 
@@ -290,15 +292,102 @@ async def test_full_privacy_fenced_page_keeps_idle_wait_without_writing_fenced_r
         store.rows['jobs', pending['segment_id']]['state'] = 'ready'
 
     monkeypatch.setattr(live, 'admit_recording', admission)
+    monkeypatch.setattr(live.time, 'time', lambda: 1000)
     assert await live.drain_recordings(store) is False
     for row in store.rows.values():
-        assert row['available_at'] == 0
+        # The selection lease is the only write; a fenced row is not deferred again.
+        assert row['available_at'] == 1000 + live.record_drain_lease_seconds()
         assert row['state'] == ('record_pending' if row['fenced'] else 'ready')
+
+
+@pytest.mark.asyncio
+async def test_concurrent_replicas_admit_each_selected_row_once(monkeypatch):
+    from utils.batch_pipeline import live
+
+    monkeypatch.setenv('RECORD_DRAIN_CONCURRENCY', '4')
+    store = MemoryStore()
+    for i in range(8):
+        store.rows['jobs', str(i)] = {
+            'owner_id': f'synthetic-{i}',
+            'segment_id': str(i),
+            'state': 'record_pending',
+            'available_at': 0,
+        }
+    admitted = []
+
+    async def admission(store, pending):
+        admitted.append(pending['segment_id'])
+        await asyncio.sleep(0.01)
+        raise ValueError('retained capture tail not durable yet')
+
+    monkeypatch.setattr(live, 'admit_recording', admission)
+    # Three replicas select the same page before any admission finishes.
+    await asyncio.gather(*(live.drain_recordings(store) for _ in range(3)))
+    assert sorted(admitted) == [str(i) for i in range(8)]
+    now = live.time.time()
+    for row in store.rows.values():
+        # A failed admission releases its own lease to the ordinary 60 s retry.
+        assert now < row['available_at'] <= now + 61
+
+
+@pytest.mark.asyncio
+async def test_drain_skips_a_row_leased_by_another_replica(monkeypatch):
+    from utils.batch_pipeline import live
+
+    store = MemoryStore()
+    store.rows['jobs', 'synthetic'] = {'owner_id': 'synthetic', 'state': 'record_pending', 'available_at': 0}
+    original_run = store.run
+    calls = 0
+
+    def run(body):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            # Another replica's claim commits between selection and our claim.
+            store.rows['jobs', 'synthetic']['available_at'] = live.time.time() + 900
+        return original_run(body)
+
+    async def admission(store, pending):
+        raise AssertionError('leased row must not be admitted twice')
+
+    monkeypatch.setattr(store, 'run', run)
+    monkeypatch.setattr(live, 'admit_recording', admission)
+    await live.drain_recordings(store)
+    assert store.rows['jobs', 'synthetic']['state'] == 'record_pending'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'error,reason',
+    [
+        (ValueError('retained capture tail not durable yet'), 'reason=retained_capture_tail_not_durable_yet'),
+        (ValueError("invalid literal for int() with base 10: 'synthetic-private'"), 'reason=other'),
+        (ValueError('synthetic private account name'), 'reason=other'),
+        (RuntimeError('synthetic-private'), 'reason=-'),
+    ],
+)
+async def test_retry_log_names_only_static_value_error_reasons(monkeypatch, caplog, error, reason):
+    from utils.batch_pipeline import live
+
+    store = MemoryStore()
+    store.rows['jobs', 'synthetic'] = {'owner_id': 'synthetic', 'state': 'record_pending', 'available_at': 0}
+
+    async def admission(store, pending):
+        raise error
+
+    monkeypatch.setattr(live, 'admit_recording', admission)
+    with caplog.at_level('WARNING', logger=live.__name__):
+        await live.drain_recordings(store)
+    assert reason in caplog.text
+    assert 'synthetic-private' not in caplog.text and 'account_name' not in caplog.text
 
 
 @pytest.fixture(autouse=True)
 def protocol_ready(monkeypatch):
     monkeypatch.setenv('BATCH_PIPELINE_RECORD_PROTOCOL_READY', 'true')
+    # Paging/privacy fixtures share an owner; drain those rows serially.
+    # Parallel-admission tests explicitly choose their own worker count.
+    monkeypatch.setenv('RECORD_DRAIN_CONCURRENCY', '1')
 
 
 def recording(**changes):
@@ -787,3 +876,41 @@ def test_ambiguous_annotated_sentence_preserves_text_and_abstains_instead_of_gue
     assert segment['id'] == 'old' and segment['text'] == 'Synthetic speech.'
     assert segment['speaker_match_source'] == 'batch_abstention' and not segment['is_user']
     assert segment['translations'] == old['transcript_segments'][0]['translations']
+
+
+@pytest.mark.asyncio
+async def test_privacy_fenced_claim_does_not_stop_the_worker(monkeypatch):
+    from utils.batch_pipeline import live
+    from database.batch_pipeline_privacy import BatchPrivacyBlocked
+
+    monkeypatch.setenv('RECORD_DRAIN_CONCURRENCY', '1')
+    monkeypatch.setenv('RECORD_DRAIN_BATCH', '2')
+    monkeypatch.setattr(live.random, 'shuffle', lambda segments: segments.sort())
+    store = MemoryStore()
+    for segment in ('a-fenced', 'b-ok'):
+        store.rows['jobs', segment] = {
+            'owner_id': f'synthetic-{segment}',
+            'segment_id': segment,
+            'state': 'record_pending',
+            'available_at': 0,
+        }
+    original_run = store.run
+    calls = []
+
+    def run(body):
+        calls.append(1)
+        if len(calls) == 2:  # the fenced row's claim transaction
+            raise BatchPrivacyBlocked('synthetic privacy fence')
+        return original_run(body)
+
+    admitted = []
+
+    async def admission(store, pending):
+        admitted.append(pending['segment_id'])
+        store.rows['jobs', pending['segment_id']]['state'] = 'ready'
+
+    monkeypatch.setattr(store, 'run', run)
+    monkeypatch.setattr(live, 'admit_recording', admission)
+    assert await live.drain_recordings(store) is False
+    assert admitted == ['b-ok']
+    assert store.rows['jobs', 'a-fenced']['available_at'] == 0

@@ -55,6 +55,21 @@ borrowedNodePools:
   enabled: false
   pools: [parakeet-pool, parakeet-pool-b, parakeet-pool-v2]
 worker:
+  # Two pump processes share each L4 (cl2-gpueff 2026-11-04, data/run-2026-11-04-gpueff
+  # in omi-workspace): prod is claim-path bound (GPU util 16%, ~1.6 units per
+  # 3.2s pull), so a second independent pump doubles concurrent claims per GPU.
+  # Dev L4 bench 1p 112.6 -> 2p 172.8 audio-h/GPU-h, 11.8 of 23 GB VRAM, same
+  # words/speakers. Pod sizing comes from processResources."2" (fits the
+  # g2-standard-8 node with daemons). The T4 fallback stays at t4Fallback.processes 1.
+  # Kill switch / rollback: processes: 1 (values-only Helm roll).
+  processes: 2
+  servingMetricsMinRefreshSeconds: 60
+  # Matches the prod backend hosts (deploy contract reader-split invariant):
+  # window allocation 100, replica recovery explicitly off, and the
+  # independently-approved language recovery activation.
+  parakeetWindowAllocationPercent: '100'
+  parakeetWindowReplicaRecoveryEnabled: 'false'
+  independentLanguageRecoveryEnabled: true
   # Control-loop defaults; rollback independently with 64 / false / 2 / {}.
   controlCandidateFanout: 16
   admissionParallelCalls: true
@@ -81,3 +96,25 @@ worker:
   headPriorityEnabled: true
   workerSilenceDispositionEnabled: true
   correctnessMetricsEnabled: true
+# Seal repair runs in prod (lead2 2026-11-04 3b814c; omi-b3 c089a2). Committed here so a CI worker roll
+# keeps it on: the chart default (suspend: true, empty serverFlags) re-suspended repair on every roll.
+# serverFlags is the complete serving-role policy env (empty or invalid refuses IO). UID allowlists stay out of
+# git on purpose: batch is 100% and the final-pass allowlist only scopes one account's repair-time policy.
+# Rollback: recordSealRepair.suspend: true.
+recordSealRepair:
+  suspend: false
+  mode: apply
+  rowSeconds: 270
+  workers: 16
+  serverFlags:
+    K_SERVICE: backend
+    BATCH_PIPELINE_ENABLED: 'true'
+    BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: 'false'
+    BATCH_PIPELINE_PERCENT: '100'
+    BATCH_LIVE_STT_RETIRE_PERCENT: '0'
+    TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE: 'true'
+    TRANSCRIPTION_FINAL_PASS_DIARIZER: pyannote_shadow
+    TRANSCRIPTION_FINAL_PASS_PERCENT: '5'
+# recordSealWorker.serverFlags stays at the chart default {} (worker IO refused, as in live release r71). Running the
+# worker AND repair with IO would let both pick the same pending row: the transactional seal prevents a double seal,
+# but both would do the proof and audio reads (Luna r1 P2 on #24643). Enable one IO path at a time after measuring.

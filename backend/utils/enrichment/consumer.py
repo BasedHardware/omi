@@ -72,6 +72,10 @@ def _transient_dependency(error: BaseException) -> bool:
     return False
 
 
+# Public name for the age-gate route's dependency-fault check.
+transient_dependency = _transient_dependency
+
+
 def _cause(error: BaseException) -> str:
     # FirstSummaryCallbackPending carries fixed literals ('redirect target changed'); keep a bounded token.
     return re.sub(r'[^a-z0-9]+', '_', str(error).lower()).strip('_')[:40] or 'unspecified'
@@ -163,6 +167,8 @@ class EnrichmentConsumer:
         from database.summary_processing import record_empty_failure
         from utils.conversations import summary_delivery
         from utils.enrichment import outbox as rows
+        from config.action_item_identity import enrichment_revision_race_retry_enabled
+        from database.action_item_refresh import RefreshRevisionChanged
         from utils.enrichment.callback import SyncConversationPersistenceFenced
 
         now = time.time()
@@ -234,6 +240,14 @@ class EnrichmentConsumer:
             return Result(Outcome.RETRY, RetryReason.DEPENDENCY_WARMING, available_at=now)
         except summary_delivery.SummaryRepairSuperseded as error:
             superseded, retry_revision = True, error.retry_revision
+        except RefreshRevisionChanged:
+            # A sync write moved the conversation's revision while this run's LLM steps ran, so the action-item
+            # refresh refused stale extraction. That is a correct race, not an unexpected failure. Keep the row
+            # and its wake (not every revision bumper arms one) and rerun on the current revision.
+            if not enrichment_revision_race_retry_enabled():
+                raise
+            logger.info('event=enrichment_consumer outcome=retry reason=persistence_fenced source=action_item_refresh')
+            return Result(Outcome.RETRY, RetryReason.PERSISTENCE_FENCED, available_at=now)
         except SyncConversationPersistenceFenced:
             # #21968: the newer writer owns the conversation and marks its own obligation.
             logger.info('event=sync_reprocess outcome=conversation_fenced')

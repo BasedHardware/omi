@@ -36,7 +36,8 @@ from config.policy.batch import resolve_batch_policy
 from database import batch_pipeline_intake
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from testing.pipeline_sim.store import CustomerData, SimStore
-from utils.batch_pipeline import provider_stt, route_selection
+from config.batch_pipeline_vendor_overflow import overflow_enabled
+from utils.batch_pipeline import gpu_overflow, provider_stt, route_selection
 from utils.batch_pipeline import vendor_health as health_module
 from utils.batch_pipeline import vendor_route_metrics as vendor_metrics
 from utils.batch_pipeline.contracts import Priority, ProjectionBinding, WorkItem, WorkResult
@@ -213,6 +214,7 @@ class DrillWorld:
         queue_rate: float = 10.0,
         armed: bool = True,
         seed: int = 7,
+        overflow: bool = False,
     ):
         self.monkeypatch = monkeypatch
         self.clock = _Clock()
@@ -268,6 +270,19 @@ class DrillWorld:
             health=self.health,
         )
         self.merge = OrderedMerge(self.store)
+        # GPU-saturation overflow at admission, as intake wires it for fresh units: the real
+        # sampler over this store's own admissible-fresh reads, on drill time, read synchronously.
+        self.overflow = (
+            gpu_overflow.GpuOverflow(
+                gpu_overflow._fresh_sample(self.store.oldest_admissible_ready, self.store.ready_for_capacity),
+                clock=self.clock.time,
+                monotonic=self.clock.time,
+                submit=lambda fn: fn(),
+            )
+            if overflow
+            else None
+        )
+        self.overflow_answers: list[tuple[float, bool]] = []
 
     # -- environment ------------------------------------------------------------------------------
 
@@ -375,7 +390,12 @@ class DrillWorld:
                 record_lane_owner='batch_live_v1', private_cloud_sync_enabled=True
             )
         decision = route_selection.select_route(
-            language, byok=False, uid=owner_id, batch_percent=100.0, vendor_eligible=True
+            language,
+            byok=False,
+            uid=owner_id,
+            batch_percent=100.0,
+            vendor_eligible=True,
+            gpu_saturated=self._gpu_saturated if self.overflow is not None else None,
         )
         route = decision.route
         provider = route.stt_route == 'provider'
@@ -412,6 +432,11 @@ class DrillWorld:
         self.units[segment_id] = Unit(segment_id, owner_id, language, item.capture_at, duration, now, decision.selected)
         if provider:
             self._push_abs(now + 2.0, 'deliver', (segment_id,))
+
+    def _gpu_saturated(self) -> bool:
+        answer = overflow_enabled() and self.overflow.saturated()
+        self.overflow_answers.append((self.clock.elapsed(), answer))
+        return answer
 
     # -- provider-stt queue (Cloud Tasks model) ----------------------------------------------------
 

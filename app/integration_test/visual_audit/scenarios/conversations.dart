@@ -117,8 +117,8 @@ final conversationsScenarios = <AuditScenario>[
       await a.pump(const ConversationsPage(requestInitialLoad: false), providers: _listProviders(items));
       expect(find.byType(ConversationListItem), findsNWidgets(4));
       expect(find.byType(LockedConversationRun), findsOneWidget);
-      expect(find.text('Pending'), findsOneWidget);
-      expect(find.text('View Usage'), findsOneWidget);
+      expect(find.text('Pending'), findsNothing, reason: 'David, 11-02: the frosted card carries no Pending text');
+      expect(find.text('Upgrade'), findsOneWidget);
       expect(find.byIcon(Icons.lock_outline), findsNothing);
       expect(find.byIcon(Icons.hourglass_empty), findsOneWidget);
       await a.shot('Conversation list with saved-content waiting previews');

@@ -495,7 +495,7 @@ def test_backend_integration_deploy_pins_mcp_serving_capacity():
     # backend-sync DOES carry --cpu=2 (#21668): its 6-8Gi memory requires >=2
     # CPU on Cloud Run, and 1-CPU deploys of 8Gi are rejected outright.
     # 2026-10-24 costcut mirror: backend now pins its OWN live shape (prod-scoped
-    # 8Gi/2 CPU/20/3/100) instead of inheriting it revision-to-revision; --cpu=2
+    # margin-20 4Gi/2 CPU/20/3/100) instead of inheriting it; --cpu=2
     # is legitimate there for the same #21668 pairing, but every
     # integration-specific flag below still must not leak onto it.
     integration_flags = _deploy_backend_stack_step_flags('deploy-backend-integration')
@@ -525,7 +525,7 @@ def test_backend_integration_deploy_pins_mcp_serving_capacity():
     assert '--cpu=2' in sync_flags
     # Backend's own prod shape (dev branch empty: dev keeps inheriting).
     assert (
-        "${{ inputs.runtime_env == 'prod' && '--cpu=2 --memory=8Gi --concurrency=20"
+        "${{ inputs.runtime_env == 'prod' && '--cpu=2 --memory=4Gi --concurrency=20"
         " --min-instances=3 --max-instances=100' || '' }}"
     ) in backend_flags
 
@@ -727,7 +727,7 @@ def test_staged_desktop_production_controls_render_without_runtime_checkout(tmp_
     assert result.stdout == ''
     workflow_outputs = renderer_output.read_text(encoding='utf-8')
     assert (
-        'firestore_read_env_vars<<__BACKEND_RUNTIME_ENV_firestore_read_env_vars__\nFIRESTORE_READ_LEVERS={"action_items_page":100\\,"backfill_task_reads":100\\,"batch_privacy_memoize":0\\,"bpp_generation_memo":100\\,"candidates_page":100\\,"canonical_statuses_dedupe":100\\,"conversation_list_cursor":100\\,"deletion_marker_cache":100\\,"finjob_candidate_queries":5\\,"historical_scan_memo":100\\,"ledger_purge_coalesce":100\\,"mcp_conversation_cards_cache":100\\,"memory_list_index_window":0\\,"people_scan_dedupe":5\\,"queue_age_sample_budget":100\\,"request_read_dedupe":100\\,"serving_config_cache":100\\,"singleton_loops":100\\,"subscription_cache":100\\,"sync_snapshot_resolve_cache":5\\,"usage_month_cache":0\\,"usage_month_total":0}\n'
+        'firestore_read_env_vars<<__BACKEND_RUNTIME_ENV_firestore_read_env_vars__\nFIRESTORE_READ_LEVERS={"action_items_page":100\\,"action_items_ttl120":100\\,"backfill_task_reads":100\\,"batch_privacy_memoize":0\\,"bpp_decision_cache":0\\,"bpp_generation_memo":100\\,"candidates_page":100\\,"canonical_statuses_dedupe":100\\,"conversation_list_cursor":100\\,"deletion_marker_cache":100\\,"finjob_candidate_queries":100\\,"historical_scan_memo":100\\,"ledger_purge_coalesce":100\\,"lifecycle_record_pending_head":5\\,"mcp_conversation_cards_cache":100\\,"memory_list_index_window":100\\,"people_scan_dedupe":100\\,"privacy_checks_shadow":0\\,"privacy_ttl60":0\\,"queue_age_sample_budget":100\\,"request_read_dedupe":100\\,"serving_config_cache":100\\,"singleton_loops":100\\,"subscription_cache":100\\,"sync_snapshot_resolve_cache":100\\,"usage_month_cache":0\\,"usage_month_total":0}\n'
         in workflow_outputs
     )
     assert workflow_outputs.endswith('__BACKEND_RUNTIME_ENV_firestore_read_env_vars__\n')
@@ -1332,25 +1332,30 @@ def test_firestore_train_preserves_monthly_reader_scope_and_cloud_run_overrides(
     assert set(cloud_run) == {'backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'}
     expected = {
         'action_items_page': 100,
+        'action_items_ttl120': 100,
         'backfill_task_reads': 100,
         'batch_privacy_memoize': 0,
+        'bpp_decision_cache': 0,
         'bpp_generation_memo': 100,
         'candidates_page': 100,
         'canonical_statuses_dedupe': 100,
         'conversation_list_cursor': 100,
         'deletion_marker_cache': 100,
-        'finjob_candidate_queries': 5,
+        'finjob_candidate_queries': 100,
         'historical_scan_memo': 100,
         'ledger_purge_coalesce': 100,
+        'lifecycle_record_pending_head': 5,
         'mcp_conversation_cards_cache': 100,
-        'memory_list_index_window': 0,
-        'people_scan_dedupe': 5,
+        'memory_list_index_window': 100,
+        'people_scan_dedupe': 100,
+        'privacy_checks_shadow': 0,
+        'privacy_ttl60': 0,
         'queue_age_sample_budget': 100,
         'request_read_dedupe': 100,
         'serving_config_cache': 100,
         'singleton_loops': 100,
         'subscription_cache': 100,
-        'sync_snapshot_resolve_cache': 5,
+        'sync_snapshot_resolve_cache': 100,
         'usage_month_cache': 0,
         'usage_month_total': 0,
     }

@@ -52,6 +52,11 @@ KNOWN_LEVERS = frozenset(
         'sync_snapshot_resolve_cache',
         'conversation_list_cursor',  # conversations:_collect_visible_conversation_page
         'finjob_candidate_queries',  # conversation_finalization_jobs:{scan_in_progress,get_abandoned_byok,get_stale_processing}
+        'bpp_decision_cache',  # batch privacy: token-validated generation reuse across attempts, <= 60s
+        'bpp_token_mint',  # batch privacy: lazily mint memo tokens so decisions become memo-eligible
+        'privacy_ttl60',  # legal-hold fence, tombstone and deletion-marker decisions reused <= 60s, no token read
+        'action_items_ttl120',  # action_items_cache: 120s default reuse under action_items_page
+        'lifecycle_record_pending_head',  # lifecycle_metrics_queries:record_pending head(1)+count, key=serving replica
     }
 )
 

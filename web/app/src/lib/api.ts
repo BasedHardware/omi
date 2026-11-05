@@ -495,10 +495,11 @@ export async function toggleActionItemCompleted(
 export async function updateActionItemDueDate(
   id: string,
   due_at: string | null,
+  due?: ActionItem['due'],
 ): Promise<void> {
   await fetchWithAuth(`/v1/action-items/${id}`, {
     method: 'PATCH',
-    body: JSON.stringify({ due_at }),
+    body: JSON.stringify({ due_at, ...(due === undefined ? {} : { due }) }),
   });
 }
 

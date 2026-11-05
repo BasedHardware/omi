@@ -7,6 +7,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from database import conversations as db
+from utils.observability import speaker_identification
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestoreCollection
 from tests.unit.test_manual_speaker_assignments import world, read
 
@@ -109,7 +110,7 @@ def test_automatic_review_is_emitted_after_commit_and_not_on_retry(world, monkey
         assert saved['person_id'] == 'new' and saved['speaker_match_source'] is None
         observed.append(before[0].get('speaker_match_source'))
 
-    monkeypatch.setattr(db, 'record_speaker_review', observe)
+    monkeypatch.setattr(speaker_identification, 'record_speaker_review', observe)
     db.assign_conversation_speaker('u', 'c', person_id='new', segment_ids=['s1'])
     db.assign_conversation_speaker('u', 'c', person_id='new', segment_ids=['s1'])
     assert observed == ['sync_embedding', None]
@@ -120,7 +121,7 @@ def test_blocked_manual_write_never_emits_review(world, monkeypatch, field, erro
     store, path, _ = world
     store.rows[path][field] = True
     observed = []
-    monkeypatch.setattr(db, 'record_speaker_review', lambda *args: observed.append(args))
+    monkeypatch.setattr(speaker_identification, 'record_speaker_review', lambda *args: observed.append(args))
     with pytest.raises(error):
         db.assign_conversation_speaker('u', 'c', person_id='new', segment_ids=['s1'])
     assert observed == []

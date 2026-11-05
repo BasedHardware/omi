@@ -20,6 +20,13 @@ from database.action_items_cache import bump_action_items_list_version
 from database.action_item_refresh_policy import LIMIT, RECEIPT, plan
 
 
+class RefreshRevisionChanged(ValueError):
+    """The conversation's sync content revision moved after the caller's snapshot; no task writes ran."""
+
+    def __init__(self) -> None:
+        super().__init__('refresh conversation revision changed')
+
+
 class RefreshConversationUnavailable(ValueError):
     """The transaction rejected a stale target before any task writes."""
 
@@ -57,7 +64,7 @@ def reconcile(
             successor = conversation.get('sync_merged_into') if conversation else None
             raise RefreshConversationUnavailable(successor if isinstance(successor, str) and successor else None)
         if donor_id is None and conversation.get('sync_content_revision') != expected_revision:
-            raise ValueError('refresh conversation revision changed')
+            raise RefreshRevisionChanged()
         control = typed_doc(user.collection('task_intelligence_control').document('state').get(transaction=transaction))
         generation = int(control.get('account_generation', 0))
         if conversation.get(RECEIPT) and conversation[RECEIPT].get('generation') != generation:

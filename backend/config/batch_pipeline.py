@@ -207,6 +207,17 @@ def pull_multi_lease_enabled() -> bool:
     return os.getenv('BATCH_PULL_MULTI_LEASE_ENABLED', 'true').strip().lower() != 'false'
 
 
+def pull_busy_borrow_enabled() -> bool:
+    """Ship-on: a pump's non-first lanes take backfill while every fresh shard is claimed.
+
+    A claimed fresh shard is being served by its claimant, so a second lane that
+    found only claimed fresh shards may lease recent/deep work instead of idling.
+    Each pump's first lane keeps strict fresh-first. ``false`` restores strict
+    fresh-first on every lane.
+    """
+    return os.getenv('BATCH_PULL_BUSY_BORROW_ENABLED', 'true').strip().lower() != 'false'
+
+
 def scheduler_control_key(hashed_owner: str) -> str:
     """Pure shard identity shared by scheduling and privacy cleanup."""
     return f'scheduler_{int(hashed_owner[:8], 16) % SCHEDULER_SHARDS:02d}'

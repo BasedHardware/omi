@@ -1,4 +1,5 @@
 import re
+import hashlib
 from typing import Optional, Tuple, List, Dict
 
 from fastapi import APIRouter, HTTPException
@@ -112,8 +113,41 @@ def _get_release_prefix(device: DeviceModel) -> str:
     return "Friend"
 
 
+def _release_is_eligible(kv: Dict, device_id: Optional[str], *, ignore_rollout_percent: bool = False) -> bool:
+    """Stable nested cohorts. Missing policy preserves published-release behavior.
+
+    Unidentified clients can receive legacy or 100% releases, never partial cohorts.
+    Invalid explicit policies fail closed so a typo cannot expand a rollout.
+    Explicit version requests ignore rollout_percent, but always honor blocked.
+    """
+    blocked = str(kv.get('blocked', 'false')).strip().lower()
+    if blocked != 'false':
+        return False
+    if ignore_rollout_percent:
+        return True
+    raw_percent = str(kv.get('rollout_percent', '100')).strip()
+    if not re.fullmatch(r'[0-9]+', raw_percent):
+        return False
+    percent = int(raw_percent)
+    if not 0 <= percent <= 100:
+        return False
+    if percent == 100:
+        return True
+    if percent == 0 or not device_id or not device_id.strip():
+        return False
+    # Hash only the identifier, not the release, so expanding the percentage
+    # retains existing members and successive releases share the same cohort.
+    bucket = int.from_bytes(hashlib.sha256(device_id.encode('utf-8')).digest()[:8], 'big') % 100
+    return bucket < percent
+
+
 def _find_candidate_releases(
-    releases: List[Dict], release_prefix: str, current_firmware_tuple: Optional[Tuple[int, ...]] = None
+    releases: List[Dict],
+    release_prefix: str,
+    current_firmware_tuple: Optional[Tuple[int, ...]] = None,
+    device_id: Optional[str] = None,
+    *,
+    ignore_rollout_percent: bool = False,
 ) -> List[Dict]:
     """Filter releases matching the device prefix.
 
@@ -138,6 +172,8 @@ def _find_candidate_releases(
             continue
 
         kv = extract_key_value_pairs(release.get("body"))
+        if not _release_is_eligible(kv, device_id, ignore_rollout_percent=ignore_rollout_percent):
+            continue
 
         release_firmware_version_str = kv.get("release_firmware_version")
         if not release_firmware_version_str:
@@ -175,8 +211,9 @@ def _find_release_by_version(
     filtering, sorts newest-published first (matching get_stable/get_latest) so the result is
     deterministic if two releases ever advertise the same version, then matches the exact target. An
     unparseable stored version simply won't equal the (already-validated) target, so it is skipped.
+    Ignores rollout_percent for support/reverts; blocked releases remain unavailable.
     """
-    candidates = _find_candidate_releases(releases, release_prefix)
+    candidates = _find_candidate_releases(releases, release_prefix, ignore_rollout_percent=True)
     candidates.sort(key=lambda r: r.get("published_at", ""), reverse=True)
     for release in candidates:
         kv = extract_key_value_pairs(release.get("body"))
@@ -229,7 +266,19 @@ def _extract_firmware_response(device: DeviceModel, release: Dict) -> Dict:
 
 
 @router.get("/v2/firmware/latest", response_model=FirmwareVersionResponse)
-async def get_latest_version(device_model: str, firmware_revision: str, hardware_revision: str, manufacturer_name: str):
+async def get_latest_version(
+    device_model: str,
+    firmware_revision: str,
+    hardware_revision: str,
+    manufacturer_name: str,
+    device_id: Optional[str] = None,
+):
+    """Return the newest eligible update using stable device rollout cohorts.
+
+    device_id is the hex SHA-256 of the device's normalized DIS serial, never the
+    raw serial. Omit it when no serial is available; unidentified clients cannot
+    receive partial rollouts. Blocked releases are never offered.
+    """
     device = _get_device_by_model_number(device_model)
     if not device:
         raise HTTPException(status_code=404, detail="Device not found")
@@ -250,7 +299,7 @@ async def get_latest_version(device_model: str, firmware_revision: str, hardware
         raise HTTPException(status_code=404, detail="No releases found for the repository")
 
     release_prefix = _get_release_prefix(device)
-    candidates = _find_candidate_releases(releases, release_prefix, current_firmware_tuple)
+    candidates = _find_candidate_releases(releases, release_prefix, current_firmware_tuple, device_id)
 
     if not candidates:
         raise HTTPException(status_code=404, detail="No suitable firmware update found for your device version.")
@@ -289,6 +338,7 @@ async def get_firmware_version(device_model: str, version: str):
 
     Complements /v2/firmware/stable by making any individual published build addressable, e.g. to pin
     or roll a device back to a known-good earlier version, or for QA/support to flash a named build.
+    Explicit requests ignore rollout_percent for support/reverts, but blocked releases return 404.
     """
     device = _get_device_by_model_number(device_model)
     if not device:

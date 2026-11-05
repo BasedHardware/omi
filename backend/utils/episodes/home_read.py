@@ -109,6 +109,10 @@ MEMBER_FIELDS = [
     'photos',
     'starred',
     'folder_user_set',
+    'episode_transcription_pending_at',
+    'episode_transcription_deadline_at',
+    'server_batch_audio_start',
+    'server_batch_audio_end',
     *SETTLING_FIELDS,
 ]
 
@@ -266,6 +270,7 @@ def project_episode(
     by_id = members if members is not None else _read_members(uid, [episode])
     retained: list[dict[str, Any]] = []
     hidden = 0
+    now = datetime.now(timezone.utc)
     for cid in dict.fromkeys(episode.get('conversation_ids') or []):
         row = by_id.get(cid)
         if row is None:
@@ -274,8 +279,13 @@ def project_episode(
             phase_shadow.observe('episode_member', row, False, episode=episode)
             hidden += 1
             continue
+        # A transcription-failed member stays projected with its "Couldn't
+        # transcribe" wire status so the user keeps the bounded recovery exit;
+        # the size-ceiling terminal's failed-status visibility exclusion does
+        # not apply to this episode member surface.
+        visibility_row = {**row, 'status': 'completed'} if row.get('status') == 'failed' else row
         if (
-            not conversations.is_visible_conversation(row, include_discarded=not list_row)
+            not conversations.is_visible_conversation(visibility_row, include_discarded=not list_row)
             or row.get('dream_duplicate_of')
             or conversations.bridge_pending.hidden(row)
             or is_relevance_discarded(row)
@@ -288,14 +298,38 @@ def project_episode(
 
         row = neutralize_minimum_title(row)
         structured: dict[str, Any] = row.get('structured') or {}
+        title = structured.get('title') or ''
+        status = row.get('status') or 'completed'
+        started = row.get('started_at') or row.get('created_at') or episode['started_at']
+        finished = row.get('finished_at')
+        deadline = utc(row.get('episode_transcription_deadline_at'))
+        if deadline is not None and not row.get('record_projection_revision'):
+            overdue = now >= deadline
+            failed = (
+                row.get('finalization_status') == 'dead_letter' or status == 'failed' or row.get('record_upload_failed')
+            )
+            title = "Couldn't transcribe" if failed or overdue else 'Transcribing…'
+            status = 'failed' if failed or overdue else 'processing'
+            # Audio bounds remain truthful even when finalization never filled its clocks.
+            for key, value in (
+                ('start', row.get('server_batch_audio_start')),
+                ('end', row.get('server_batch_audio_end')),
+            ):
+                if isinstance(value, (int, float)) and not isinstance(value, bool):
+                    if key == 'start':
+                        started = datetime.fromtimestamp(value, timezone.utc)
+                    else:
+                        finished = datetime.fromtimestamp(value, timezone.utc)
+            if overdue:
+                episode_metrics.record_batch_pending_overdue()
         retained.append(
             {
                 'id': cid,
-                'title': structured.get('title') or '',
+                'title': title,
                 'emoji': structured.get('emoji') or '',
-                'started_at': row.get('started_at') or row.get('created_at') or episode['started_at'],
-                'finished_at': row.get('finished_at'),
-                'status': row.get('status') or 'completed',
+                'started_at': started,
+                'finished_at': finished,
+                'status': status,
             }
         )
     if list_row:
