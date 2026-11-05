@@ -598,7 +598,7 @@ and an explicit empty literal renders as `''`.
 | `OMI_MCP_MEMORY_LIST_BUDGET_ENABLED` | Default on unless false; Single mixed-view MCP REST memory scan with shared request deadline and document budget | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `OMI_MEMORY_INCREMENTAL_INDEX_WINDOWS_ENABLED` | Default on unless false; historical memory metadata expansions seek after snapshots instead of rereading prefixes | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `OMI_REFERRAL_CAMPAIGN_ENABLED` | Default off; Pocket-match hardware referrals and milestone Pro rewards | backend | env | closed | — | — | — | — | keep | keep | — | kodjima33 |
-| `OMI_REFERRAL_CAMPAIGN_PREVIEW_UIDS` | Default empty; comma-separated team uids that see the real referral campaign snapshot while the campaign is off | backend | env | closed | — | — | — | — | keep | keep | — | kodjima33 |
+| `OMI_REFERRAL_CAMPAIGN_PREVIEW_UIDS` | Default empty; comma-separated team uids that see the real referral campaign snapshot while the campaign is off | backend | env | closed | — | — | viUv7GtdoHXbK1UBCDlPuTDuPgJ2,kiTPO8XwMlOpFpb4x1diyMg213j2,UZXlf0K6KlNbPmkNwPH73krNwhj1 | — | keep | keep | — | kodjima33 |
 | `OMI_ROLLOUT_MEMBERSHIP_SHARED_CACHE_ENABLED` | Default on; share encrypted cohort observations across replicas within the existing sixty-second source lease | backend | env | closed | — | — | — | — | keep | keep | — | dazheng |
 | `OMI_STAGED_PROMOTE_LONG_TTL_ENABLED` | Default on unless false; one-hour write-invalidated promote empty TTL; false restores 90 seconds | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `OMI_STAGED_TASK_PROMOTE_EMPTY_CACHE_ENABLED` | Default on unless false; Cache empty staged promote projections for one hour (90 seconds with long-TTL kill switch disabled) with UID generation and write-version fences | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
@@ -1242,7 +1242,6 @@ their code default (`fail` tells you which way a missing value resolves).
 - `OMI_MESSAGING_KILL_SWITCH_DOC` — Optional Firestore channel switch document, cached at most 60 seconds; missing/read failure denies. Unset uses env admission only. (fail: closed)
 - `OMI_MESSAGING_RETENTION_DAYS` — Hourly messaging maintenance retains done inbox markers and unknown identities for 30 days by default; minimum seven; does not send. (fail: closed)
 - `OMI_REFERRAL_CAMPAIGN_ENABLED` — Default off; Pocket-match hardware referrals and milestone Pro rewards (fail: closed)
-- `OMI_REFERRAL_CAMPAIGN_PREVIEW_UIDS` — Default empty; comma-separated team uids that see the real referral campaign snapshot while the campaign is off (fail: closed)
 - `OMI_ROLLOUT_MEMBERSHIP_SHARED_CACHE_ENABLED` — Default on; share encrypted cohort observations across replicas within the existing sixty-second source lease (fail: closed)
 - `OMI_STAGED_PROMOTE_LONG_TTL_ENABLED` — Default on unless false; one-hour write-invalidated promote empty TTL; false restores 90 seconds (fail: open)
 - `OMI_STAGED_TASK_PROMOTE_EMPTY_CACHE_ENABLED` — Default on unless false; Cache empty staged promote projections for one hour (90 seconds with long-TTL kill switch disabled) with UID generation and write-version fences (fail: open)
