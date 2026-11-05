@@ -1070,7 +1070,15 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
     context = PROCESS_CONTEXT.get()
     if conversation_data and conversation_data.get('deleted') and conversation_data.get('sync_merged_into'):
         if context is not None:
-            canonical = conversations_db.resolve_sync_conversation_redirect(uid, conversation_id)
+            try:
+                canonical = conversations_db.resolve_sync_conversation_redirect(uid, conversation_id)
+            except Exception as error:
+                # An unreadable redirect is unresolved custody, not a queue-cadence retry: the outbox's
+                # redirect_unresolved deferral backs a long-stuck episode off to hourly polls.
+                logger.warning(
+                    'event=sync_reprocess outcome=redirect_unresolved exception_type=%s', type(error).__name__
+                )
+                canonical = None
             # The outbox transfers custody atomically before acknowledging this donor.
             context['redirect_to' if canonical else 'defer_reason'] = canonical or 'redirect_unresolved'
             return sync_result('deferred')
