@@ -16,6 +16,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from contextvars import ContextVar
 from contextlib import contextmanager
+from typing import Required, TypedDict
 from prometheus_client import Counter
 from datetime import datetime, timezone
 
@@ -138,7 +139,20 @@ def _reserve_budget(seconds):
         return False
 
 
-def _fallback(outcome, **details):
+class FinalPassResult(TypedDict, total=False):
+    outcome: Required[str]
+    reason: str
+    exception_type: str
+    location: str
+    failing_unit: str | None
+    coverage: dict[str, int]
+    coverage_reasons: dict[str, int]
+    changed_segments: int
+    speaker_count: int
+    covered_segments: int
+
+
+def record_final_pass_failure(outcome: str, **details) -> FinalPassResult:
     count_terminal(outcome)
     logger.info(
         'event=batch_final_pass outcome=%s exception_type=%s reason=%s location=%s',
@@ -159,11 +173,17 @@ def _fallback(outcome, **details):
         outcome='degraded',
     )
 
-    return {'outcome': outcome, **details}
+    return FinalPassResult(outcome=outcome, **details)
 
 
 class IncompleteCoverage(ValueError):
     pass
+
+
+@dataclass
+class UnitFailureContext:
+    # Keep diagnostic ownership separate from third-party exception objects.
+    unit: str | None = None
 
 
 @dataclass
@@ -202,7 +222,7 @@ def _assemble(stream):
     return pcm[:used].toreadonly(), words, checks
 
 
-def _references(store, uid, conversation, units, read_budget, diagnostics):
+def _references(store, uid, conversation, units, read_budget, diagnostics, failure_context: UnitFailureContext):
     references, errors, shared, absent = {}, [], [], []
     for unit in units:
         read_budget.timeout(3)
@@ -212,7 +232,6 @@ def _references(store, uid, conversation, units, read_budget, diagnostics):
                 raise IncompleteCoverage('no_job')
             references[unit] = reference
         except Exception as error:
-            error.failing_unit = unit
             logger.warning(
                 'event=batch_final_pass outcome=unit_unavailable exception_type=%s reason=%s location=%s',
                 error_details(error)['exception_type'],
@@ -220,36 +239,41 @@ def _references(store, uid, conversation, units, read_budget, diagnostics):
                 error_details(error)['location'],
             )
             if transient_cause(error) is not None or isinstance(error, ArtifactReadLimit):
+                failure_context.unit = unit
                 raise
             if isinstance(error, ReferenceUnavailable) and error.reason == 'no_job':
-                absent.append(error)
+                absent.append((unit, error))
                 for segment in conversation.transcript_segments:
                     scope = batch_unit_scope(segment)
                     if scope and scope.removeprefix('final:batch:') == unit:
                         diagnostics[segment.id] = 'no_job'
                 continue
-            errors.append(error)
+            errors.append((unit, error))
             if isinstance(error, ReferenceUnavailable) and error.outcome == 'skipped_shared_unit':
-                shared.append(error)
+                shared.append((unit, error))
     read_budget.timeout(3)
     if shared:
         UNIT_SKIPS.labels(reason='shared_unit').inc(len(shared))
         UNIT_SKIPS.labels(reason='blocked_by_shared_unit').inc(len(units) - len(shared) - len(absent))
-        raise shared[0]
+        failure_context.unit, error = shared[0]
+        raise error
     if errors:
-        error = errors[0]
+        failure_context.unit, error = errors[0]
         if isinstance(error, (OverflowError, ArtifactReadLimit, IncompleteCoverage, ReferenceUnavailable)):
             raise error
         failure = IncompleteCoverage('unit unavailable')
-        failure.failing_unit = error.failing_unit
         raise failure from error
     if not references and absent:
-        raise absent[0]
+        failure_context.unit, error = absent[0]
+        raise error
     return references
 
 
-def _units(uid, conversation, read_budget, *, deadline, diagnostics=None):
+def _units(
+    uid, conversation, read_budget, *, deadline, diagnostics=None, failure_context: UnitFailureContext | None = None
+):
     diagnostics = {} if diagnostics is None else diagnostics
+    failure_context = UnitFailureContext() if failure_context is None else failure_context
     units = sorted(
         {scope.removeprefix('final:batch:') for s in conversation.transcript_segments if (scope := batch_unit_scope(s))}
     )
@@ -259,7 +283,7 @@ def _units(uid, conversation, read_budget, *, deadline, diagnostics=None):
     read_budget.timeout(3)
     store = FirestoreStore(f'batch_pipeline_{current_stage()}')
     artifacts = artifacts_for(store)
-    references = _references(store, uid, conversation, units, read_budget, diagnostics)
+    references = _references(store, uid, conversation, units, read_budget, diagnostics, failure_context)
     if sum(max(1, ref[0].duration_seconds) for ref in references.values()) > MAX_AUDIO_SECONDS:
         raise OverflowError('audio too long')
     if not references:
@@ -277,12 +301,24 @@ def _units(uid, conversation, read_budget, *, deadline, diagnostics=None):
     return UnitStream(
         origin,
         capacity,
-        _decode_units(uid, conversation, references, store, artifacts, read_budget, deadline, diagnostics),
+        _decode_units(
+            uid, conversation, references, store, artifacts, read_budget, deadline, diagnostics, failure_context
+        ),
         read_budget,
     )
 
 
-def _decode_units(uid, conversation, references, store, artifacts, read_budget, deadline, diagnostics):
+def _decode_units(
+    uid,
+    conversation,
+    references,
+    store,
+    artifacts,
+    read_budget,
+    deadline,
+    diagnostics,
+    failure_context: UnitFailureContext,
+):
     total_bytes = 0
     for unit, reference in references.items():
         read_budget.timeout(60)
@@ -306,6 +342,7 @@ def _decode_units(uid, conversation, references, store, artifacts, read_budget, 
                 projection_speech_spans(payload, item.duration_seconds)
             parts = [(item, payload)] if binding.record_origin else split_result(item, payload)
             reconstructed = {}
+            local, mapped, output = None, None, None
             for part, output in parts:
                 segments = projection_segments(part, binding, output, batch_segment_id=unit, policy=policy)
                 reconstructed.update((s.id, s) for s in segments)
@@ -363,8 +400,8 @@ def _decode_units(uid, conversation, references, store, artifacts, read_budget, 
                         )
                         == reference
                     )
-                except Exception as error:
-                    error.failing_unit = unit
+                except Exception:
+                    failure_context.unit = unit
                     raise
 
             yield item, pcm, words, validate
@@ -372,7 +409,7 @@ def _decode_units(uid, conversation, references, store, artifacts, read_budget, 
             # next artifact. The assembler has already retained the word objects.
             del pcm, payload, parts, words, local, mapped, output
         except Exception as error:
-            error.failing_unit = unit
+            failure_context.unit = unit
             details = error_details(error)
             logger.warning(
                 'event=batch_final_pass outcome=unit_unavailable exception_type=%s reason=%s location=%s',
@@ -383,11 +420,10 @@ def _decode_units(uid, conversation, references, store, artifacts, read_budget, 
             if isinstance(error, (OverflowError, ArtifactReadLimit, IncompleteCoverage, ReferenceUnavailable)):
                 raise
             failure = IncompleteCoverage('unit unavailable')
-            failure.failing_unit = unit
             raise failure from error
 
 
-def _defer(uid, conversation, requeue, outcome, **details):
+def _defer(uid, conversation, requeue, outcome: str, **details) -> FinalPassResult:
     try:
         if requeue is None:
             raise RuntimeError('retry_custody_required')
@@ -395,7 +431,7 @@ def _defer(uid, conversation, requeue, outcome, **details):
         if queued is not None and not queued['outcome'].startswith('deferred_'):
             return queued  # A closed obligation cannot reopen or count again.
     except Exception as error:
-        _fallback('failed_requeue', **error_details(error))
+        record_final_pass_failure('failed_requeue', **error_details(error))
         raise  # Never acknowledge a dependency failure without durable custody.
     record_fallback(
         component='stt_selection',
@@ -411,10 +447,10 @@ def _defer(uid, conversation, requeue, outcome, **details):
         details.get('reason', 'speaker_final_pass_outbox'),
         details.get('location', ''),
     )
-    return {'outcome': outcome, **details}
+    return FinalPassResult(outcome=outcome, **details)
 
 
-def run_batch_final_pass(uid, conversation, receipt, *, load_prints, apply, requeue):
+def run_batch_final_pass(uid, conversation, receipt, *, load_prints, apply, requeue) -> FinalPassResult:
     """One terminal metric per invocation that runs or fails custody, never per segment.
 
     Non-cohort calls and durable deferrals are outside that contract. A
@@ -426,8 +462,9 @@ def run_batch_final_pass(uid, conversation, receipt, *, load_prints, apply, requ
         # The processing boundary supplies a dedicated, capped speaker-only
         # obligation. Retry deliveries settle their own existing obligation.
         return _defer(uid, conversation, requeue, 'deferred_slot_busy')
+    failure_context = UnitFailureContext()
     try:
-        return _run(uid, conversation, receipt, load_prints, apply)
+        return _run(uid, conversation, receipt, load_prints, apply, failure_context)
     except Exception as error:
         transient = transient_cause(error)
         if transient is not None:
@@ -437,7 +474,7 @@ def run_batch_final_pass(uid, conversation, receipt, *, load_prints, apply, requ
                 requeue,
                 'deferred_transient',
                 **error_details(transient),
-                failing_unit=getattr(error, 'failing_unit', None),
+                failing_unit=failure_context.unit,
             )
         outcome = (
             error.outcome
@@ -452,20 +489,22 @@ def run_batch_final_pass(uid, conversation, receipt, *, load_prints, apply, requ
                 )
             )
         )
-        return _fallback(
-            outcome, **error_details(error.__cause__ or error), failing_unit=getattr(error, 'failing_unit', None)
+        return record_final_pass_failure(
+            outcome, **error_details(error.__cause__ or error), failing_unit=failure_context.unit
         )
     finally:
         _SLOTS.release()
 
 
-def _run(uid, conversation, receipt, load_prints, apply):
+def _run(uid, conversation, receipt, load_prints, apply, failure_context: UnitFailureContext) -> FinalPassResult:
     deadline = time.monotonic() + 600
     # Independent byte/time bounds and three artifacts per admitted unit
     # (result, staged audio, retained source). Reference RPCs share the deadline.
     read_budget = ArtifactReadBudget(min(deadline, time.monotonic() + 180), 320 * 1024 * 1024, 3 * MAX_UNITS)
     diagnostics = {}
-    stream = _units(uid, conversation, read_budget, deadline=deadline, diagnostics=diagnostics)
+    stream = _units(
+        uid, conversation, read_budget, deadline=deadline, diagnostics=diagnostics, failure_context=failure_context
+    )
     pcm, words, checks = _assemble(stream)
     stored = {s.id: s for s in conversation.transcript_segments}
     covered = {s.id for s in conversation.transcript_segments if batch_unit_scope(s) and s.end > s.start}
@@ -478,11 +517,11 @@ def _run(uid, conversation, receipt, load_prints, apply):
     coverage_reasons = dict(Counts(diagnostics.get(sid, 'projection_segment_missing') for sid in missing))
     if not words:
         if not covered:
-            return _fallback(
+            return record_final_pass_failure(
                 'skipped_no_changes', reason='projection_point_words', coverage=coverage, coverage_reasons={}
             )
         reason = next(iter(coverage_reasons), 'projection_unassigned_words')
-        return _fallback(
+        return record_final_pass_failure(
             'failed_incomplete_coverage', reason=reason, coverage=coverage, coverage_reasons=coverage_reasons
         )
     updates = {}
@@ -523,14 +562,14 @@ def _run(uid, conversation, receipt, load_prints, apply):
         record_outcome=False,
     )
     if passed is None:
-        return _fallback(
+        return record_final_pass_failure(
             'skipped_budget' if outcome.get('reason') == 'diarizer_attempt_budget' else 'failed_batch_audio',
             **{key: outcome[key] for key in ('exception_type', 'reason', 'location') if key in outcome},
         )
     if outcome.get('naming_outcome') == 'incompatible_space':
-        return _fallback('failed_incompatible_space')
+        return record_final_pass_failure('failed_incompatible_space')
     if not all(check() for check in checks) or not final_pass_enabled_for(uid, conversation.transcript_segments):
-        return _fallback('failed_revoked')
+        return record_final_pass_failure('failed_revoked')
     labels_by_voice = {s.speaker: s for s in passed if s.speaker is not None}
     by_segment = {}
     for word in outcome['assignments']:
@@ -571,7 +610,7 @@ def _run(uid, conversation, receipt, load_prints, apply):
         if any(s.id == sid and s.speaker_label_source != 'manual' for s in conversation.transcript_segments)
     }
     if not updates:
-        return _fallback('failed_unassigned_words' if unassigned else 'skipped_no_changes')
+        return record_final_pass_failure('failed_unassigned_words' if unassigned else 'skipped_no_changes')
     candidate = conversation.model_copy(deep=True)
     apply(
         candidate,
@@ -666,7 +705,7 @@ def _run(uid, conversation, receipt, load_prints, apply):
     )
 
     if unassigned:
-        return _fallback(
+        return record_final_pass_failure(
             'failed_unassigned_words',
             changed_segments=len(updates),
             speaker_count=len(voice_ids),
@@ -674,7 +713,7 @@ def _run(uid, conversation, receipt, load_prints, apply):
             coverage_reasons=coverage_reasons,
         )
     if missing:
-        return _fallback(
+        return record_final_pass_failure(
             'partial_coverage',
             reason='projection_coverage_partial',
             coverage=coverage,

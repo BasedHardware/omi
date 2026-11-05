@@ -30,9 +30,9 @@ def _store():
 
 
 def _binding():
-    from utils.enrichment.outbox import _dispatch_binding
+    from utils.enrichment.outbox import dispatch_binding
 
-    return _dispatch_binding()
+    return dispatch_binding()
 
 
 def _wake(key, row):
@@ -180,7 +180,7 @@ def _terminal(result):
         # The outcome is already durable. Logging/fallback telemetry must not
         # also increment the initial-pass process-local outcome counter.
         with batch.terminal_metrics(False):
-            batch._fallback(**result)
+            batch.record_final_pass_failure(**result)
 
 
 def _custody_unavailable(error, phase):

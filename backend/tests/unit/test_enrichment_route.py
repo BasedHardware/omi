@@ -389,15 +389,15 @@ def test_stale_and_busy_wakes_are_consumed(rows, client):
 
 
 def test_new_rows_bind_to_the_enrichment_queue_only_when_routed(rows, monkeypatch):
-    assert reprocess._dispatch_binding()['handler'].endswith('/v2/sync-jobs/run')
+    assert reprocess.dispatch_binding()['handler'].endswith('/v2/sync-jobs/run')
     monkeypatch.setenv('ENRICHMENT_ROUTE', 'enrichment_queue')
     monkeypatch.setenv('ENRICHMENT_TASKS_QUEUE', 'enrichment')
     monkeypatch.setenv('ENRICHMENT_TASKS_HANDLER_URL', 'https://workers.invalid/v2/enrichment/run')
-    binding = reprocess._dispatch_binding()
+    binding = reprocess.dispatch_binding()
     assert binding['queue'] == 'enrichment' and binding['handler'].endswith('/v2/enrichment/run')
     assert reprocess.valid_dispatch_binding(binding)
     monkeypatch.delenv('ENRICHMENT_TASKS_QUEUE')
-    assert reprocess._dispatch_binding()['handler'].endswith('/v2/sync-jobs/run')  # incomplete: fall back, counted
+    assert reprocess.dispatch_binding()['handler'].endswith('/v2/sync-jobs/run')  # incomplete: fall back, counted
 
 
 @pytest.fixture

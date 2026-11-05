@@ -105,6 +105,10 @@ def error_details(error):
         frame = frame.tb_next
     return {
         'exception_type': type(error).__name__,
-        'reason': _ALIASES.get(message, message if message in _REASONS | REFERENCE_REASONS else 'unclassified'),
+        'reason': (
+            _ALIASES.get(message, message if message in _REASONS | REFERENCE_REASONS else 'unclassified')
+            if message is not None
+            else 'unclassified'
+        ),
         'location': location,
     }

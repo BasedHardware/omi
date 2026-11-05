@@ -115,7 +115,7 @@ async def run_enrichment_task(request: Request, _retry_count: int = Depends(veri
     except ValueError:
         payload = None
     task = _task(payload)
-    if task is None:
+    if payload is None or task is None:
         return JSONResponse(status_code=400, content={'status': 'invalid_enrichment_task'})
     if payload['kind'] == 'batch_final_pass':
         from utils.conversations.final_pass_retry import consume as consume_speaker_pass

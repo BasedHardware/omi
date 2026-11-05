@@ -4,11 +4,12 @@ from threading import Lock
 
 from prometheus_client import REGISTRY
 from prometheus_client.core import CounterMetricFamily, GaugeMetricFamily
+from prometheus_client.registry import Collector
 
 from utils.observability.reasons import BatchFinalPassOutcome
 
 
-class RetryTerminals:
+class RetryTerminals(Collector):
     def __init__(self):
         self._lock = Lock()
         self._shards = {}

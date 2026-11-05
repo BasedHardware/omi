@@ -9,9 +9,19 @@ from database.batch_pipeline_store import FirestoreTransaction
 from utils.batch_pipeline.artifact_reads import ArtifactReadLimit
 
 
+class ReadOnlySnapshot(firestore.Transaction):
+    """Public lifecycle access for the SDK's budgeted, manually begun snapshot."""
+
+    def bind_snapshot(self, transaction_id: bytes) -> None:
+        self._id = transaction_id
+
+    def clear_snapshot(self) -> None:
+        self._clean_up()
+
+
 def read_snapshot(store, body, budget):
     client = store.client
-    transaction = firestore.Transaction(client, max_attempts=1, read_only=True)
+    transaction = ReadOnlySnapshot(client, max_attempts=1, read_only=True)
     try:
         # The SDK transactional decorator does not expose timeout/retry options
         # for begin/commit/rollback. Bound these RPCs explicitly; the SDK's read
@@ -22,7 +32,7 @@ def read_snapshot(store, body, budget):
             timeout=budget.timeout(10),
             retry=None,
         )
-        transaction._id = response.transaction
+        transaction.bind_snapshot(response.transaction)
         result = body(FirestoreTransaction(client, store.namespace, transaction, read_budget=budget))
         budget.timeout(10)
         return result
@@ -45,4 +55,4 @@ def read_snapshot(store, body, budget):
                 except GoogleAPICallError:
                     pass
         finally:
-            transaction._clean_up()
+            transaction.clear_snapshot()

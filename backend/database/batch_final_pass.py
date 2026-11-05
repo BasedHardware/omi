@@ -2,6 +2,7 @@
 
 import hashlib
 from datetime import datetime, timezone
+from typing import NoReturn
 
 from config.policy import ProjectionPolicy
 from utils.batch_pipeline.contracts import WorkItem, ProjectionBinding
@@ -21,7 +22,7 @@ class ReferenceUnavailable(ValueError):
 
 def load_reference(store, uid, unit, conversation_id, *, read_budget=None):
     def read(tx):
-        def unavailable(reason):
+        def unavailable(reason: str) -> NoReturn:
             raise ReferenceUnavailable('failed_incomplete_coverage', reason)
 
         job = tx.get('jobs', unit)
