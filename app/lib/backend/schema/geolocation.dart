@@ -5,8 +5,6 @@
 import 'package:omi/backend/schema/gen/conversation_wire.g.dart' as wire;
 
 class Geolocation {
-  // TODO: location should be the place the memory starts
-
   int id = 0;
 
   double? latitude;
@@ -41,7 +39,9 @@ class Geolocation {
       longitude: generated.longitude,
       altitude: generated.altitude,
       accuracy: generated.accuracy,
-      time: generated.capturedAt?.toUtc() ?? (json['time'] == null ? null : DateTime.parse(json['time']).toUtc()),
+      time:
+          generated.capturedAt?.toUtc() ??
+          (json['time'] == null ? null : DateTime.parse(json['time']).toUtc()),
       captureSource: generated.captureSource,
       // google_place_id server
       googlePlaceId: generated.googlePlaceId,
@@ -70,7 +70,9 @@ class Geolocation {
     final lat = latitude;
     final lon = longitude;
     if (lat == null || lon == null) {
-      throw StateError('Cannot serialize geolocation without latitude and longitude');
+      throw StateError(
+        'Cannot serialize geolocation without latitude and longitude',
+      );
     }
     return wire.GeneratedGeolocation(
       latitude: lat,
