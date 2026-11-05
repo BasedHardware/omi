@@ -51,6 +51,11 @@ class HeldDeadLetter:
                 outcome = self.recovery.expire_held(sid, now)
             except (BatchPrivacyBlocked, ProjectionBlocked):
                 continue  # Revocation/content-owner loss never authorizes a transition.
+            except Exception as error:
+                logger.warning(
+                    'event=batch_held_dead_letter action=expire outcome=retry exception_type=%s', type(error).__name__
+                )
+                continue  # One malformed/unreadable row cannot pin the page forever.
             if outcome == 'expired':
                 counts['expired'] += 1
                 self._record('expired')
@@ -75,6 +80,12 @@ class HeldDeadLetter:
                 try:
                     changed = self.recovery.requeue_quarantined(sid, now, dead_before=day * 86400)
                 except (BatchPrivacyBlocked, ProjectionBlocked):
+                    continue
+                except Exception as error:
+                    logger.warning(
+                        'event=batch_held_dead_letter action=requeue outcome=retry exception_type=%s',
+                        type(error).__name__,
+                    )
                     continue
                 if changed:
                     counts['requeued'] += 1

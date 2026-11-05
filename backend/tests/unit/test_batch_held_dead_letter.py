@@ -284,3 +284,34 @@ def test_nightly_rechecks_dead_age_inside_transaction_instead_of_trusting_scan_s
     assert client.rows == before
     row(client).update(state='quarantined', held_expired_at=29)
     assert not recovery.requeue_quarantined('bad', 32, dead_before=30)
+
+
+@pytest.mark.parametrize('lease', [None, False, 'expired', float('nan'), float('inf')])
+def test_unknown_lease_metadata_is_not_evidence_of_expiry(setup, lease):
+    client, store, _, _, _, _ = setup
+    row(client).update(lease_until=lease, held_deadline_at=20)
+    recovery = RecoveryStore(store)
+    assert recovery.expire_held('bad', 30) == 'held'
+    assert not recovery.requeue_quarantined('bad', 30)
+    assert row(client)['state'] == 'quarantined'
+
+
+def test_one_unreadable_row_does_not_pin_expiry_or_nightly_pages(monkeypatch, caplog):
+    store = model_store(monkeypatch, 2)
+    original = RecoveryStore.checked
+
+    def unreadable(self, tx, sid):
+        if sid == 'held-000':
+            raise RuntimeError('synthetic row read failure')
+        return original(self, tx, sid)
+
+    monkeypatch.setattr(RecoveryStore, 'checked', unreadable)
+    runner = sweep.HeldDeadLetter(store)
+    assert runner.tick(86400) == {'expired': 1, 'requeued': 0}
+    assert store.rows['jobs', 'held-000']['state'] == 'quarantined'
+    # A corrupt old dead row is also skipped without blocking the next key.
+    store.rows['jobs', 'held-000'].update(state='dead', dead_letter_reason='held_expired', held_expired_at=86400)
+    assert runner.tick(172800) == {'expired': 0, 'requeued': 1}
+    assert store.rows['jobs', 'held-001']['state'] == 'ready'
+    assert 'action=expire outcome=retry exception_type=RuntimeError' in caplog.text
+    assert 'action=requeue outcome=retry exception_type=RuntimeError' in caplog.text

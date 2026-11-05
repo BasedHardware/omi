@@ -942,6 +942,7 @@ class Scheduler:
         state_ok = job.get('state') == 'quarantined' or (
             allow_dead and job.get('state') == 'dead' and job.get('dead_letter_reason') == 'held_expired'
         )
+        lease_until = job.get('lease_until', 0)
         if (
             not state_ok
             or job.get('quarantine_reason') != 'worker_failed'
@@ -952,7 +953,10 @@ class Scheduler:
             or job.get('result')
             or job.get('merge_pending') is not False
             or job.get('token')
-            or job.get('lease_until', 0) > now
+            or isinstance(lease_until, bool)
+            or not isinstance(lease_until, (int, float))
+            or not math.isfinite(lease_until)
+            or lease_until > now
         ):
             return False
         recovery = job.get('recovery') or {}
