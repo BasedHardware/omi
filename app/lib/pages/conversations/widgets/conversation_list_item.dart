@@ -372,10 +372,14 @@ class _ConversationListItemState extends State<ConversationListItem> {
 
   @override
   Widget build(BuildContext context) {
-    final taskPresence = context.watch<ConversationTaskPresenceProvider?>();
-    if (!widget.conversation.isLocked && widget.hasLinkedTasks == null) taskPresence?.request(widget.conversation.id);
-    _hasLinkedTasks = !widget.conversation.isLocked &&
-        (widget.hasLinkedTasks ?? taskPresence?.presence(widget.conversation.id) ?? false);
+    bool? linked = widget.hasLinkedTasks;
+    if (!widget.conversation.isLocked && linked == null) {
+      context.read<ConversationTaskPresenceProvider?>()?.request(widget.conversation.id);
+      linked = context.select<ConversationTaskPresenceProvider?, bool?>(
+        (source) => source?.presence(widget.conversation.id),
+      );
+    }
+    _hasLinkedTasks = !widget.conversation.isLocked && linked == true;
     // Is new conversation
     DateTime memorizedAt = widget.conversation.createdAt;
     if (widget.conversation.finishedAt != null && widget.conversation.finishedAt!.isAfter(memorizedAt)) {
