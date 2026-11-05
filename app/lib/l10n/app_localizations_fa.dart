@@ -15360,4 +15360,10 @@ class AppLocalizationsFa extends AppLocalizations {
   String paymentDeclinedMessage(Object plan) {
     return 'برای بازگرداندن $plan کارت را به‌روزرسانی کنید';
   }
+
+  @override
+  String get hasLinkedTasksLabel => 'دارای کارهای مرتبط';
+
+  @override
+  String get hasTasksFilter => 'دارای کار';
 }

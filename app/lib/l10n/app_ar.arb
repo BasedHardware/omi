@@ -4634,5 +4634,7 @@
     "referralRewardSecondDetail": "عندما يشتري 3 أصدقاء آخرين",
     "referralClaimShort": "استلام",
     "paymentDeclinedTitle": "تم رفض بطاقتك",
-    "paymentDeclinedMessage": "حدّث بطاقتك لاستعادة {plan}"
+    "paymentDeclinedMessage": "حدّث بطاقتك لاستعادة {plan}",
+    "hasLinkedTasksLabel": "توجد مهام مرتبطة",
+    "hasTasksFilter": "بها مهام"
 }

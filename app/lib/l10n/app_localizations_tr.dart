@@ -15378,4 +15378,10 @@ class AppLocalizationsTr extends AppLocalizations {
   String paymentDeclinedMessage(Object plan) {
     return '$plan planınızı geri almak için kartınızı güncelleyin';
   }
+
+  @override
+  String get hasLinkedTasksLabel => 'Bağlı görevleri var';
+
+  @override
+  String get hasTasksFilter => 'Görev içerenler';
 }

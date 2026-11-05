@@ -15393,4 +15393,10 @@ class AppLocalizationsBs extends AppLocalizations {
   String paymentDeclinedMessage(Object plan) {
     return 'Ažuriraj karticu da vratiš $plan';
   }
+
+  @override
+  String get hasLinkedTasksLabel => 'Ima povezane zadatke';
+
+  @override
+  String get hasTasksFilter => 'Sa zadacima';
 }

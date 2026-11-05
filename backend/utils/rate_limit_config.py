@@ -213,6 +213,9 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     "goals:extract": (30, 3600),
     # Search
     "conversations:search": (60, 3600),
+    # Batches only mounted rows (at most 100 IDs); canonical membership is
+    # short-lived/version-cached and contains no task content.
+    "conversations:task-presence": (120, 3600),
     # Expensive background ops
     "knowledge_graph:rebuild": (2, 3600),
     # Return-only SSOT extract for desktop onboarding / local graph writers

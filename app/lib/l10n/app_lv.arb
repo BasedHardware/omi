@@ -4634,5 +4634,7 @@
     "referralRewardSecondDetail": "Kad vēl 3 draugi nopērk",
     "referralClaimShort": "Saņemt",
     "paymentDeclinedTitle": "Jūsu karte tika noraidīta",
-    "paymentDeclinedMessage": "Atjauniniet karti, lai atgūtu {plan}"
+    "paymentDeclinedMessage": "Atjauniniet karti, lai atgūtu {plan}",
+    "hasLinkedTasksLabel": "Ir saistīti uzdevumi",
+    "hasTasksFilter": "Ar uzdevumiem"
 }

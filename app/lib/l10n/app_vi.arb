@@ -4634,5 +4634,7 @@
     "referralRewardSecondDetail": "Khi thêm 3 bạn bè mua",
     "referralClaimShort": "Nhận",
     "paymentDeclinedTitle": "Thẻ của bạn đã bị từ chối",
-    "paymentDeclinedMessage": "Cập nhật thẻ để dùng lại {plan}"
+    "paymentDeclinedMessage": "Cập nhật thẻ để dùng lại {plan}",
+    "hasLinkedTasksLabel": "Có nhiệm vụ được liên kết",
+    "hasTasksFilter": "Có nhiệm vụ"
 }

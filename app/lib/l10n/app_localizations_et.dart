@@ -15358,4 +15358,10 @@ class AppLocalizationsEt extends AppLocalizations {
   String paymentDeclinedMessage(Object plan) {
     return 'Uuenda kaarti, et $plan tagasi saada';
   }
+
+  @override
+  String get hasLinkedTasksLabel => 'Sisaldab seotud ülesandeid';
+
+  @override
+  String get hasTasksFilter => 'Ülesannetega';
 }

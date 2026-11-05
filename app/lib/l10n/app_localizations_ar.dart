@@ -15274,4 +15274,10 @@ class AppLocalizationsAr extends AppLocalizations {
   String paymentDeclinedMessage(Object plan) {
     return 'حدّث بطاقتك لاستعادة $plan';
   }
+
+  @override
+  String get hasLinkedTasksLabel => 'توجد مهام مرتبطة';
+
+  @override
+  String get hasTasksFilter => 'بها مهام';
 }

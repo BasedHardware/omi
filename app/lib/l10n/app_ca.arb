@@ -4634,5 +4634,7 @@
     "referralRewardSecondDetail": "Quan 3 amics més comprin",
     "referralClaimShort": "Reclama",
     "paymentDeclinedTitle": "La teva targeta ha estat rebutjada",
-    "paymentDeclinedMessage": "Actualitza-la per recuperar {plan}"
+    "paymentDeclinedMessage": "Actualitza-la per recuperar {plan}",
+    "hasLinkedTasksLabel": "Té tasques vinculades",
+    "hasTasksFilter": "Amb tasques"
 }

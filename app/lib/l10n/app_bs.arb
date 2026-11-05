@@ -12191,5 +12191,7 @@
     "referralRewardSecondDetail": "Kad još 3 prijatelja kupe",
     "referralClaimShort": "Preuzmi",
     "paymentDeclinedTitle": "Tvoja kartica je odbijena",
-    "paymentDeclinedMessage": "Ažuriraj karticu da vratiš {plan}"
+    "paymentDeclinedMessage": "Ažuriraj karticu da vratiš {plan}",
+    "hasLinkedTasksLabel": "Ima povezane zadatke",
+    "hasTasksFilter": "Sa zadacima"
 }

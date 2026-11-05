@@ -15399,4 +15399,10 @@ class AppLocalizationsBe extends AppLocalizations {
   String paymentDeclinedMessage(Object plan) {
     return 'Абнавіце картку, каб вярнуць $plan';
   }
+
+  @override
+  String get hasLinkedTasksLabel => 'Ёсць звязаныя задачы';
+
+  @override
+  String get hasTasksFilter => 'З задачамі';
 }

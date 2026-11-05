@@ -26996,6 +26996,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Update it to get {plan} back'**
   String paymentDeclinedMessage(Object plan);
+
+  /// Accessible conversation-row badge: at least one current canonical task is linked
+  ///
+  /// In en, this message translates to:
+  /// **'Has linked tasks'**
+  String get hasLinkedTasksLabel;
+
+  /// Conversation search and browse filter: only conversations with current linked tasks
+  ///
+  /// In en, this message translates to:
+  /// **'Has tasks'**
+  String get hasTasksFilter;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

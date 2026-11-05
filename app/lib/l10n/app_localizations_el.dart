@@ -15467,4 +15467,10 @@ class AppLocalizationsEl extends AppLocalizations {
   String paymentDeclinedMessage(Object plan) {
     return 'Ενημερώστε την κάρτα για να αποκτήσετε ξανά το $plan';
   }
+
+  @override
+  String get hasLinkedTasksLabel => 'Έχει συνδεδεμένες εργασίες';
+
+  @override
+  String get hasTasksFilter => 'Με εργασίες';
 }

@@ -15381,4 +15381,10 @@ class AppLocalizationsId extends AppLocalizations {
   String paymentDeclinedMessage(Object plan) {
     return 'Perbarui kartu untuk mendapatkan kembali $plan';
   }
+
+  @override
+  String get hasLinkedTasksLabel => 'Memiliki tugas tertaut';
+
+  @override
+  String get hasTasksFilter => 'Dengan tugas';
 }

@@ -4669,5 +4669,7 @@
     "referralRewardSecondDetail": "Когда ещё 3 друга купят",
     "referralClaimShort": "Получить",
     "paymentDeclinedTitle": "Ваша карта отклонена",
-    "paymentDeclinedMessage": "Обновите карту, чтобы вернуть {plan}"
+    "paymentDeclinedMessage": "Обновите карту, чтобы вернуть {plan}",
+    "hasLinkedTasksLabel": "Есть связанные задачи",
+    "hasTasksFilter": "С задачами"
 }

@@ -15146,4 +15146,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String paymentDeclinedMessage(Object plan) {
     return '$plan을 다시 이용하려면 카드를 업데이트하세요';
   }
+
+  @override
+  String get hasLinkedTasksLabel => '연결된 작업 있음';
+
+  @override
+  String get hasTasksFilter => '작업 있음';
 }

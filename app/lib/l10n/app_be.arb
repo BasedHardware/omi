@@ -12191,5 +12191,7 @@
     "referralRewardSecondDetail": "Калі яшчэ 3 сябры купяць",
     "referralClaimShort": "Атрымаць",
     "paymentDeclinedTitle": "Вашу картку адхілілі",
-    "paymentDeclinedMessage": "Абнавіце картку, каб вярнуць {plan}"
+    "paymentDeclinedMessage": "Абнавіце картку, каб вярнуць {plan}",
+    "hasLinkedTasksLabel": "Ёсць звязаныя задачы",
+    "hasTasksFilter": "З задачамі"
 }

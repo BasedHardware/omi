@@ -12191,5 +12191,7 @@
     "referralRewardSecondDetail": "جب مزید 3 دوست خریدیں",
     "referralClaimShort": "حاصل کریں",
     "paymentDeclinedTitle": "آپ کا کارڈ مسترد ہو گیا",
-    "paymentDeclinedMessage": "{plan} واپس حاصل کرنے کے لیے کارڈ اپ ڈیٹ کریں"
+    "paymentDeclinedMessage": "{plan} واپس حاصل کرنے کے لیے کارڈ اپ ڈیٹ کریں",
+    "hasLinkedTasksLabel": "منسلک کام موجود ہیں",
+    "hasTasksFilter": "کام والے"
 }

@@ -15409,4 +15409,10 @@ class AppLocalizationsEs extends AppLocalizations {
   String paymentDeclinedMessage(Object plan) {
     return 'Actualízala para recuperar $plan';
   }
+
+  @override
+  String get hasLinkedTasksLabel => 'Tiene tareas vinculadas';
+
+  @override
+  String get hasTasksFilter => 'Con tareas';
 }

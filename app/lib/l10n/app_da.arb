@@ -4676,5 +4676,7 @@
     "referralRewardSecondDetail": "Når 3 venner mere køber",
     "referralClaimShort": "Indløs",
     "paymentDeclinedTitle": "Dit kort blev afvist",
-    "paymentDeclinedMessage": "Opdater kortet for at få {plan} tilbage"
+    "paymentDeclinedMessage": "Opdater kortet for at få {plan} tilbage",
+    "hasLinkedTasksLabel": "Har tilknyttede opgaver",
+    "hasTasksFilter": "Med opgaver"
 }

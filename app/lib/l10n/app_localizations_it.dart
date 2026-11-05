@@ -15444,4 +15444,10 @@ class AppLocalizationsIt extends AppLocalizations {
   String paymentDeclinedMessage(Object plan) {
     return 'Aggiornala per riavere $plan';
   }
+
+  @override
+  String get hasLinkedTasksLabel => 'Contiene attività collegate';
+
+  @override
+  String get hasTasksFilter => 'Con attività';
 }

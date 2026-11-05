@@ -4634,5 +4634,7 @@
     "referralRewardSecondDetail": "Keď si kúpia ďalší 3 priatelia",
     "referralClaimShort": "Získať",
     "paymentDeclinedTitle": "Vaša karta bola zamietnutá",
-    "paymentDeclinedMessage": "Aktualizujte kartu a obnovte {plan}"
+    "paymentDeclinedMessage": "Aktualizujte kartu a obnovte {plan}",
+    "hasLinkedTasksLabel": "Má prepojené úlohy",
+    "hasTasksFilter": "S úlohami"
 }

@@ -15292,4 +15292,10 @@ class AppLocalizationsTh extends AppLocalizations {
   String paymentDeclinedMessage(Object plan) {
     return 'อัปเดตบัตรเพื่อกลับมาใช้ $plan';
   }
+
+  @override
+  String get hasLinkedTasksLabel => 'มีงานที่เชื่อมโยง';
+
+  @override
+  String get hasTasksFilter => 'มีงาน';
 }

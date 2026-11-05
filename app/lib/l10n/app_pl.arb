@@ -4669,5 +4669,7 @@
     "referralRewardSecondDetail": "Gdy kupi 3 kolejnych znajomych",
     "referralClaimShort": "Odbierz",
     "paymentDeclinedTitle": "Twoja karta została odrzucona",
-    "paymentDeclinedMessage": "Zaktualizuj kartę, aby odzyskać {plan}"
+    "paymentDeclinedMessage": "Zaktualizuj kartę, aby odzyskać {plan}",
+    "hasLinkedTasksLabel": "Zawiera powiązane zadania",
+    "hasTasksFilter": "Z zadaniami"
 }

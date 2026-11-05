@@ -15428,4 +15428,10 @@ class AppLocalizationsTe extends AppLocalizations {
   String paymentDeclinedMessage(Object plan) {
     return '$plan తిరిగి పొందడానికి కార్డును అప్‌డేట్ చేయండి';
   }
+
+  @override
+  String get hasLinkedTasksLabel => 'లింక్ చేసిన పనులు ఉన్నాయి';
+
+  @override
+  String get hasTasksFilter => 'పనులు ఉన్నాయి';
 }

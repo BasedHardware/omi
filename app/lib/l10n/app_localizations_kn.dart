@@ -15416,4 +15416,10 @@ class AppLocalizationsKn extends AppLocalizations {
   String paymentDeclinedMessage(Object plan) {
     return '$plan ಮರಳಿ ಪಡೆಯಲು ಕಾರ್ಡ್ ನವೀಕರಿಸಿ';
   }
+
+  @override
+  String get hasLinkedTasksLabel => 'ಲಿಂಕ್ ಮಾಡಿದ ಕಾರ್ಯಗಳಿವೆ';
+
+  @override
+  String get hasTasksFilter => 'ಕಾರ್ಯಗಳಿವೆ';
 }

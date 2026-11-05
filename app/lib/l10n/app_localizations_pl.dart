@@ -15408,4 +15408,10 @@ class AppLocalizationsPl extends AppLocalizations {
   String paymentDeclinedMessage(Object plan) {
     return 'Zaktualizuj kartę, aby odzyskać $plan';
   }
+
+  @override
+  String get hasLinkedTasksLabel => 'Zawiera powiązane zadania';
+
+  @override
+  String get hasTasksFilter => 'Z zadaniami';
 }

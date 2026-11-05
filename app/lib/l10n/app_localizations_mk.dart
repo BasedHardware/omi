@@ -15430,4 +15430,10 @@ class AppLocalizationsMk extends AppLocalizations {
   String paymentDeclinedMessage(Object plan) {
     return 'Ажурирајте ја картичката за да го вратите $plan';
   }
+
+  @override
+  String get hasLinkedTasksLabel => 'Има поврзани задачи';
+
+  @override
+  String get hasTasksFilter => 'Со задачи';
 }

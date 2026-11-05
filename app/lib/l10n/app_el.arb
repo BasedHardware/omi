@@ -4634,5 +4634,7 @@
     "referralRewardSecondDetail": "Όταν αγοράσουν 3 ακόμη φίλοι",
     "referralClaimShort": "Λήψη",
     "paymentDeclinedTitle": "Η κάρτα σας απορρίφθηκε",
-    "paymentDeclinedMessage": "Ενημερώστε την κάρτα για να αποκτήσετε ξανά το {plan}"
+    "paymentDeclinedMessage": "Ενημερώστε την κάρτα για να αποκτήσετε ξανά το {plan}",
+    "hasLinkedTasksLabel": "Έχει συνδεδεμένες εργασίες",
+    "hasTasksFilter": "Με εργασίες"
 }

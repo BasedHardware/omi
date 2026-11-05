@@ -12191,5 +12191,7 @@
     "referralRewardSecondDetail": "Kapag bumili ang 3 pang kaibigan",
     "referralClaimShort": "Kunin",
     "paymentDeclinedTitle": "Tinanggihan ang iyong card",
-    "paymentDeclinedMessage": "I-update ang card para maibalik ang {plan}"
+    "paymentDeclinedMessage": "I-update ang card para maibalik ang {plan}",
+    "hasLinkedTasksLabel": "May mga naka-link na gawain",
+    "hasTasksFilter": "May mga gawain"
 }

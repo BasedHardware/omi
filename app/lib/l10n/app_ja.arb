@@ -4634,5 +4634,7 @@
     "referralRewardSecondDetail": "さらに友達3人が購入したら",
     "referralClaimShort": "受け取る",
     "paymentDeclinedTitle": "カードが拒否されました",
-    "paymentDeclinedMessage": "{plan}を再開するにはカードを更新してください"
+    "paymentDeclinedMessage": "{plan}を再開するにはカードを更新してください",
+    "hasLinkedTasksLabel": "関連するタスクあり",
+    "hasTasksFilter": "タスクあり"
 }

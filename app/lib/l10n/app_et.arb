@@ -4634,5 +4634,7 @@
     "referralRewardSecondDetail": "Kui veel 3 sõpra ostavad",
     "referralClaimShort": "Lunasta",
     "paymentDeclinedTitle": "Sinu kaart lükati tagasi",
-    "paymentDeclinedMessage": "Uuenda kaarti, et {plan} tagasi saada"
+    "paymentDeclinedMessage": "Uuenda kaarti, et {plan} tagasi saada",
+    "hasLinkedTasksLabel": "Sisaldab seotud ülesandeid",
+    "hasTasksFilter": "Ülesannetega"
 }

@@ -4634,5 +4634,7 @@
     "referralRewardSecondDetail": "Când încă 3 prieteni cumpără",
     "referralClaimShort": "Revendică",
     "paymentDeclinedTitle": "Cardul dvs. a fost refuzat",
-    "paymentDeclinedMessage": "Actualizați cardul pentru a recupera {plan}"
+    "paymentDeclinedMessage": "Actualizați cardul pentru a recupera {plan}",
+    "hasLinkedTasksLabel": "Are sarcini asociate",
+    "hasTasksFilter": "Cu sarcini"
 }

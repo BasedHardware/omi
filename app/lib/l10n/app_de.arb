@@ -4634,5 +4634,7 @@
     "referralRewardSecondDetail": "Wenn 3 weitere Freunde kaufen",
     "referralClaimShort": "Einlösen",
     "paymentDeclinedTitle": "Ihre Karte wurde abgelehnt",
-    "paymentDeclinedMessage": "Karte aktualisieren, um {plan} zurückzubekommen"
+    "paymentDeclinedMessage": "Karte aktualisieren, um {plan} zurückzubekommen",
+    "hasLinkedTasksLabel": "Hat verknüpfte Aufgaben",
+    "hasTasksFilter": "Mit Aufgaben"
 }

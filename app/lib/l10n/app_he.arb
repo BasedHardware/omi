@@ -12191,5 +12191,7 @@
     "referralRewardSecondDetail": "כשעוד 3 חברים קונים",
     "referralClaimShort": "קבלה",
     "paymentDeclinedTitle": "הכרטיס שלך נדחה",
-    "paymentDeclinedMessage": "עדכנו את הכרטיס כדי לקבל שוב את {plan}"
+    "paymentDeclinedMessage": "עדכנו את הכרטיס כדי לקבל שוב את {plan}",
+    "hasLinkedTasksLabel": "כולל משימות מקושרות",
+    "hasTasksFilter": "עם משימות"
 }

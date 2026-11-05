@@ -4634,5 +4634,7 @@
     "referralRewardSecondDetail": "친구 3명이 더 구매하면",
     "referralClaimShort": "받기",
     "paymentDeclinedTitle": "카드가 거절되었습니다",
-    "paymentDeclinedMessage": "{plan}을 다시 이용하려면 카드를 업데이트하세요"
+    "paymentDeclinedMessage": "{plan}을 다시 이용하려면 카드를 업데이트하세요",
+    "hasLinkedTasksLabel": "연결된 작업 있음",
+    "hasTasksFilter": "작업 있음"
 }

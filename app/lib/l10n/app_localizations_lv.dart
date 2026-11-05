@@ -15399,4 +15399,10 @@ class AppLocalizationsLv extends AppLocalizations {
   String paymentDeclinedMessage(Object plan) {
     return 'Atjauniniet karti, lai atgūtu $plan';
   }
+
+  @override
+  String get hasLinkedTasksLabel => 'Ir saistīti uzdevumi';
+
+  @override
+  String get hasTasksFilter => 'Ar uzdevumiem';
 }

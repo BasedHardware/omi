@@ -15417,4 +15417,10 @@ class AppLocalizationsBg extends AppLocalizations {
   String paymentDeclinedMessage(Object plan) {
     return 'Обновете картата, за да възстановите $plan';
   }
+
+  @override
+  String get hasLinkedTasksLabel => 'Има свързани задачи';
+
+  @override
+  String get hasTasksFilter => 'Със задачи';
 }

@@ -15397,4 +15397,10 @@ class AppLocalizationsUk extends AppLocalizations {
   String paymentDeclinedMessage(Object plan) {
     return 'Оновіть картку, щоб повернути $plan';
   }
+
+  @override
+  String get hasLinkedTasksLabel => 'Є пов’язані завдання';
+
+  @override
+  String get hasTasksFilter => 'Із завданнями';
 }

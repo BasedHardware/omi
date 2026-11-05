@@ -15429,4 +15429,10 @@ class AppLocalizationsRo extends AppLocalizations {
   String paymentDeclinedMessage(Object plan) {
     return 'Actualizați cardul pentru a recupera $plan';
   }
+
+  @override
+  String get hasLinkedTasksLabel => 'Are sarcini asociate';
+
+  @override
+  String get hasTasksFilter => 'Cu sarcini';
 }

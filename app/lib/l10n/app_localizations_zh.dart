@@ -15116,4 +15116,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String paymentDeclinedMessage(Object plan) {
     return '更新银行卡以恢复使用 $plan';
   }
+
+  @override
+  String get hasLinkedTasksLabel => '包含关联任务';
+
+  @override
+  String get hasTasksFilter => '有任务';
 }

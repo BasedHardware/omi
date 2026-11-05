@@ -4669,5 +4669,7 @@
     "referralRewardSecondDetail": "3 arkadaşın daha aldığında",
     "referralClaimShort": "Al",
     "paymentDeclinedTitle": "Kartınız reddedildi",
-    "paymentDeclinedMessage": "{plan} planınızı geri almak için kartınızı güncelleyin"
+    "paymentDeclinedMessage": "{plan} planınızı geri almak için kartınızı güncelleyin",
+    "hasLinkedTasksLabel": "Bağlı görevleri var",
+    "hasTasksFilter": "Görev içerenler"
 }

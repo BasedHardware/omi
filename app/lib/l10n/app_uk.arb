@@ -4634,5 +4634,7 @@
     "referralRewardSecondDetail": "Коли ще 3 друзі куплять",
     "referralClaimShort": "Отримати",
     "paymentDeclinedTitle": "Вашу картку відхилено",
-    "paymentDeclinedMessage": "Оновіть картку, щоб повернути {plan}"
+    "paymentDeclinedMessage": "Оновіть картку, щоб повернути {plan}",
+    "hasLinkedTasksLabel": "Є пов’язані завдання",
+    "hasTasksFilter": "Із завданнями"
 }

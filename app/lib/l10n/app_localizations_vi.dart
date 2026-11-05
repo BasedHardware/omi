@@ -15368,4 +15368,10 @@ class AppLocalizationsVi extends AppLocalizations {
   String paymentDeclinedMessage(Object plan) {
     return 'Cập nhật thẻ để dùng lại $plan';
   }
+
+  @override
+  String get hasLinkedTasksLabel => 'Có nhiệm vụ được liên kết';
+
+  @override
+  String get hasTasksFilter => 'Có nhiệm vụ';
 }

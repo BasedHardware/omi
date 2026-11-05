@@ -12191,5 +12191,7 @@
     "referralRewardSecondDetail": "आणखी 3 मित्रांनी घेतल्यावर",
     "referralClaimShort": "मिळवा",
     "paymentDeclinedTitle": "तुमचे कार्ड नाकारले गेले",
-    "paymentDeclinedMessage": "{plan} परत मिळवण्यासाठी कार्ड अपडेट करा"
+    "paymentDeclinedMessage": "{plan} परत मिळवण्यासाठी कार्ड अपडेट करा",
+    "hasLinkedTasksLabel": "जोडलेली कार्ये आहेत",
+    "hasTasksFilter": "कार्ये असलेले"
 }

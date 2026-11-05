@@ -15252,4 +15252,10 @@ class AppLocalizationsHe extends AppLocalizations {
   String paymentDeclinedMessage(Object plan) {
     return 'עדכנו את הכרטיס כדי לקבל שוב את $plan';
   }
+
+  @override
+  String get hasLinkedTasksLabel => 'כולל משימות מקושרות';
+
+  @override
+  String get hasTasksFilter => 'עם משימות';
 }

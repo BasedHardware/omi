@@ -4634,5 +4634,7 @@
     "referralRewardSecondDetail": "Apabila 3 lagi rakan membeli",
     "referralClaimShort": "Tuntut",
     "paymentDeclinedTitle": "Kad anda ditolak",
-    "paymentDeclinedMessage": "Kemas kini kad untuk mendapatkan semula {plan}"
+    "paymentDeclinedMessage": "Kemas kini kad untuk mendapatkan semula {plan}",
+    "hasLinkedTasksLabel": "Mempunyai tugas dipautkan",
+    "hasTasksFilter": "Dengan tugas"
 }

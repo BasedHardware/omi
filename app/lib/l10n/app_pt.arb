@@ -4669,5 +4669,7 @@
     "referralRewardSecondDetail": "Quando mais 3 amigos comprarem",
     "referralClaimShort": "Resgatar",
     "paymentDeclinedTitle": "Seu cartão foi recusado",
-    "paymentDeclinedMessage": "Atualize o cartão para recuperar {plan}"
+    "paymentDeclinedMessage": "Atualize o cartão para recuperar {plan}",
+    "hasLinkedTasksLabel": "Tem tarefas vinculadas",
+    "hasTasksFilter": "Com tarefas"
 }

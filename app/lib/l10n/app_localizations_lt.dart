@@ -15387,4 +15387,10 @@ class AppLocalizationsLt extends AppLocalizations {
   String paymentDeclinedMessage(Object plan) {
     return 'Atnaujinkite kortelę, kad vėl naudotumėte $plan';
   }
+
+  @override
+  String get hasLinkedTasksLabel => 'Yra susietų užduočių';
+
+  @override
+  String get hasTasksFilter => 'Su užduotimis';
 }

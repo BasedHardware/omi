@@ -15393,4 +15393,10 @@ class AppLocalizationsSl extends AppLocalizations {
   String paymentDeclinedMessage(Object plan) {
     return 'Posodobite kartico, da znova dobite $plan';
   }
+
+  @override
+  String get hasLinkedTasksLabel => 'Ima povezane naloge';
+
+  @override
+  String get hasTasksFilter => 'Z nalogami';
 }

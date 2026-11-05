@@ -12191,5 +12191,7 @@
     "referralRewardSecondDetail": "Кога уште 3 пријатели ќе купат",
     "referralClaimShort": "Преземи",
     "paymentDeclinedTitle": "Вашата картичка е одбиена",
-    "paymentDeclinedMessage": "Ажурирајте ја картичката за да го вратите {plan}"
+    "paymentDeclinedMessage": "Ажурирајте ја картичката за да го вратите {plan}",
+    "hasLinkedTasksLabel": "Има поврзани задачи",
+    "hasTasksFilter": "Со задачи"
 }

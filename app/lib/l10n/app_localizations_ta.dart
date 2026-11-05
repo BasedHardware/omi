@@ -15468,4 +15468,10 @@ class AppLocalizationsTa extends AppLocalizations {
   String paymentDeclinedMessage(Object plan) {
     return '$plan மீண்டும் பெற கார்டைப் புதுப்பிக்கவும்';
   }
+
+  @override
+  String get hasLinkedTasksLabel => 'இணைக்கப்பட்ட பணிகள் உள்ளன';
+
+  @override
+  String get hasTasksFilter => 'பணிகள் உள்ளவை';
 }

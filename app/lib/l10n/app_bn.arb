@@ -12191,5 +12191,7 @@
     "referralRewardSecondDetail": "যখন আরও 3 জন বন্ধু কিনবে",
     "referralClaimShort": "নিন",
     "paymentDeclinedTitle": "আপনার কার্ড প্রত্যাখ্যাত হয়েছে",
-    "paymentDeclinedMessage": "আবার {plan} পেতে কার্ডটি আপডেট করুন"
+    "paymentDeclinedMessage": "আবার {plan} পেতে কার্ডটি আপডেট করুন",
+    "hasLinkedTasksLabel": "সংযুক্ত কাজ আছে",
+    "hasTasksFilter": "কাজ আছে"
 }

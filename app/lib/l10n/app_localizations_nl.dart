@@ -15404,4 +15404,10 @@ class AppLocalizationsNl extends AppLocalizations {
   String paymentDeclinedMessage(Object plan) {
     return 'Werk je kaart bij om $plan terug te krijgen';
   }
+
+  @override
+  String get hasLinkedTasksLabel => 'Bevat gekoppelde taken';
+
+  @override
+  String get hasTasksFilter => 'Met taken';
 }

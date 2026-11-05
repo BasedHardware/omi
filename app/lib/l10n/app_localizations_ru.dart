@@ -15413,4 +15413,10 @@ class AppLocalizationsRu extends AppLocalizations {
   String paymentDeclinedMessage(Object plan) {
     return 'Обновите карту, чтобы вернуть $plan';
   }
+
+  @override
+  String get hasLinkedTasksLabel => 'Есть связанные задачи';
+
+  @override
+  String get hasTasksFilter => 'С задачами';
 }

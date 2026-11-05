@@ -15363,4 +15363,10 @@ class AppLocalizationsCs extends AppLocalizations {
   String paymentDeclinedMessage(Object plan) {
     return 'Aktualizujte kartu a obnovte $plan';
   }
+
+  @override
+  String get hasLinkedTasksLabel => 'Má propojené úkoly';
+
+  @override
+  String get hasTasksFilter => 'S úkoly';
 }

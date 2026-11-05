@@ -15442,4 +15442,10 @@ class AppLocalizationsCa extends AppLocalizations {
   String paymentDeclinedMessage(Object plan) {
     return 'Actualitza-la per recuperar $plan';
   }
+
+  @override
+  String get hasLinkedTasksLabel => 'Té tasques vinculades';
+
+  @override
+  String get hasTasksFilter => 'Amb tasques';
 }

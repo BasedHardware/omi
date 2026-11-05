@@ -12191,5 +12191,7 @@
     "referralRewardSecondDetail": "மேலும் 3 நண்பர்கள் வாங்கும்போது",
     "referralClaimShort": "பெறுக",
     "paymentDeclinedTitle": "உங்கள் கார்டு நிராகரிக்கப்பட்டது",
-    "paymentDeclinedMessage": "{plan} மீண்டும் பெற கார்டைப் புதுப்பிக்கவும்"
+    "paymentDeclinedMessage": "{plan} மீண்டும் பெற கார்டைப் புதுப்பிக்கவும்",
+    "hasLinkedTasksLabel": "இணைக்கப்பட்ட பணிகள் உள்ளன",
+    "hasTasksFilter": "பணிகள் உள்ளவை"
 }

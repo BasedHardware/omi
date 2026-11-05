@@ -15139,4 +15139,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String paymentDeclinedMessage(Object plan) {
     return '$planを再開するにはカードを更新してください';
   }
+
+  @override
+  String get hasLinkedTasksLabel => '関連するタスクあり';
+
+  @override
+  String get hasTasksFilter => 'タスクあり';
 }

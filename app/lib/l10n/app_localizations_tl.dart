@@ -15487,4 +15487,10 @@ class AppLocalizationsTl extends AppLocalizations {
   String paymentDeclinedMessage(Object plan) {
     return 'I-update ang card para maibalik ang $plan';
   }
+
+  @override
+  String get hasLinkedTasksLabel => 'May mga naka-link na gawain';
+
+  @override
+  String get hasTasksFilter => 'May mga gawain';
 }

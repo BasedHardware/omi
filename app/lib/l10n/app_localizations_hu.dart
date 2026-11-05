@@ -15424,4 +15424,10 @@ class AppLocalizationsHu extends AppLocalizations {
   String paymentDeclinedMessage(Object plan) {
     return 'Frissítse a kártyát a(z) $plan visszaállításához';
   }
+
+  @override
+  String get hasLinkedTasksLabel => 'Kapcsolódó feladatokat tartalmaz';
+
+  @override
+  String get hasTasksFilter => 'Feladatokkal';
 }

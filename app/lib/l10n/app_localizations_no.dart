@@ -15369,4 +15369,10 @@ class AppLocalizationsNo extends AppLocalizations {
   String paymentDeclinedMessage(Object plan) {
     return 'Oppdater kortet for å få $plan tilbake';
   }
+
+  @override
+  String get hasLinkedTasksLabel => 'Har tilknyttede oppgaver';
+
+  @override
+  String get hasTasksFilter => 'Med oppgaver';
 }

@@ -15370,4 +15370,10 @@ class AppLocalizationsFi extends AppLocalizations {
   String paymentDeclinedMessage(Object plan) {
     return 'Päivitä kortti saadaksesi $plan takaisin';
   }
+
+  @override
+  String get hasLinkedTasksLabel => 'Sisältää liitettyjä tehtäviä';
+
+  @override
+  String get hasTasksFilter => 'Tehtäviä sisältävät';
 }

@@ -15403,4 +15403,10 @@ class AppLocalizationsMs extends AppLocalizations {
   String paymentDeclinedMessage(Object plan) {
     return 'Kemas kini kad untuk mendapatkan semula $plan';
   }
+
+  @override
+  String get hasLinkedTasksLabel => 'Mempunyai tugas dipautkan';
+
+  @override
+  String get hasTasksFilter => 'Dengan tugas';
 }

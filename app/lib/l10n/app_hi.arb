@@ -4634,5 +4634,7 @@
     "referralRewardSecondDetail": "जब 3 और दोस्त खरीदें",
     "referralClaimShort": "पाएं",
     "paymentDeclinedTitle": "आपका कार्ड अस्वीकार हो गया",
-    "paymentDeclinedMessage": "{plan} वापस पाने के लिए कार्ड अपडेट करें"
+    "paymentDeclinedMessage": "{plan} वापस पाने के लिए कार्ड अपडेट करें",
+    "hasLinkedTasksLabel": "लिंक किए गए कार्य हैं",
+    "hasTasksFilter": "कार्य वाले"
 }

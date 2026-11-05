@@ -15348,4 +15348,10 @@ class AppLocalizationsHi extends AppLocalizations {
   String paymentDeclinedMessage(Object plan) {
     return '$plan वापस पाने के लिए कार्ड अपडेट करें';
   }
+
+  @override
+  String get hasLinkedTasksLabel => 'लिंक किए गए कार्य हैं';
+
+  @override
+  String get hasTasksFilter => 'कार्य वाले';
 }

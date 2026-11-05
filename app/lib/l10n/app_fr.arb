@@ -4669,5 +4669,7 @@
     "referralRewardSecondDetail": "Quand 3 amis de plus achètent",
     "referralClaimShort": "Réclamer",
     "paymentDeclinedTitle": "Votre carte a été refusée",
-    "paymentDeclinedMessage": "Mettez-la à jour pour retrouver {plan}"
+    "paymentDeclinedMessage": "Mettez-la à jour pour retrouver {plan}",
+    "hasLinkedTasksLabel": "Contient des tâches liées",
+    "hasTasksFilter": "Avec des tâches"
 }

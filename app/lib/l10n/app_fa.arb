@@ -12191,5 +12191,7 @@
     "referralRewardSecondDetail": "وقتی ۳ دوست دیگر بخرند",
     "referralClaimShort": "دریافت",
     "paymentDeclinedTitle": "کارت شما رد شد",
-    "paymentDeclinedMessage": "برای بازگرداندن {plan} کارت را به‌روزرسانی کنید"
+    "paymentDeclinedMessage": "برای بازگرداندن {plan} کارت را به‌روزرسانی کنید",
+    "hasLinkedTasksLabel": "دارای کارهای مرتبط",
+    "hasTasksFilter": "دارای کار"
 }

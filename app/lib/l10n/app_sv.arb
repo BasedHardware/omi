@@ -4634,5 +4634,7 @@
     "referralRewardSecondDetail": "När 3 vänner till köper",
     "referralClaimShort": "Hämta",
     "paymentDeclinedTitle": "Ditt kort nekades",
-    "paymentDeclinedMessage": "Uppdatera kortet för att få tillbaka {plan}"
+    "paymentDeclinedMessage": "Uppdatera kortet för att få tillbaka {plan}",
+    "hasLinkedTasksLabel": "Har länkade uppgifter",
+    "hasTasksFilter": "Med uppgifter"
 }

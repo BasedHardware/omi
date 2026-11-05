@@ -12191,5 +12191,7 @@
     "referralRewardSecondDetail": "Ko kupijo še 3 prijatelji",
     "referralClaimShort": "Prevzemi",
     "paymentDeclinedTitle": "Vaša kartica je bila zavrnjena",
-    "paymentDeclinedMessage": "Posodobite kartico, da znova dobite {plan}"
+    "paymentDeclinedMessage": "Posodobite kartico, da znova dobite {plan}",
+    "hasLinkedTasksLabel": "Ima povezane naloge",
+    "hasTasksFilter": "Z nalogami"
 }

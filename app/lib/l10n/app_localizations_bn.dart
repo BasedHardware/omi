@@ -15360,4 +15360,10 @@ class AppLocalizationsBn extends AppLocalizations {
   String paymentDeclinedMessage(Object plan) {
     return 'আবার $plan পেতে কার্ডটি আপডেট করুন';
   }
+
+  @override
+  String get hasLinkedTasksLabel => 'সংযুক্ত কাজ আছে';
+
+  @override
+  String get hasTasksFilter => 'কাজ আছে';
 }

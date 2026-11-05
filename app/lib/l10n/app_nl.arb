@@ -4634,5 +4634,7 @@
     "referralRewardSecondDetail": "Als nog 3 vrienden kopen",
     "referralClaimShort": "Claimen",
     "paymentDeclinedTitle": "Uw kaart is geweigerd",
-    "paymentDeclinedMessage": "Werk je kaart bij om {plan} terug te krijgen"
+    "paymentDeclinedMessage": "Werk je kaart bij om {plan} terug te krijgen",
+    "hasLinkedTasksLabel": "Bevat gekoppelde taken",
+    "hasTasksFilter": "Met taken"
 }
