@@ -1,18 +1,20 @@
 """Row-local, counts-only telemetry. Inactive outside the isolated repair child."""
 
+from __future__ import annotations
+
 from contextlib import contextmanager
 from contextvars import ContextVar
 import time
 
 STAGES = ('startup', 'clients', 'proof', 'list', 'walk', 'apply')
-_current = ContextVar('record_seal_profile', default=None)
+_current: ContextVar[RowProfile | None] = ContextVar('record_seal_profile', default=None)
 
 
 class RowProfile:
     def __init__(self, started, progress=lambda _: None, clock=time.monotonic):
         self.clock, self.progress = clock, progress
         self.stage, self.since = 'startup', started
-        self.timings = dict.fromkeys(STAGES, 0)
+        self.timings: dict[str, float] = dict.fromkeys(STAGES, 0)
         self.chunks = self.bytes = self.metadata_reloads = 0
 
     def snapshot(self):

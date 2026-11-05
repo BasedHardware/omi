@@ -415,7 +415,8 @@ class RowOutput:
 
     def __init__(self, process):
         self.process, self.buffer = process, b''
-        self.result, self.profile = {}, {'stage': 'unknown'}
+        self.result: dict[str, Any] = {}
+        self.profile: dict[str, Any] = {'stage': 'unknown'}
         self.oversized = False
         try:
             self.fd = process.stdout.fileno()
