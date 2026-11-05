@@ -14858,6 +14858,22 @@ class AppLocalizationsMs extends AppLocalizations {
   String get episodeWritingNotes => 'Menulis nota…';
 
   @override
+  String get homeStepTranscribing => 'Sedang mentranskrip…';
+
+  @override
+  String get homeCouldntProcess => 'Tidak dapat diproses';
+
+  @override
+  String homeRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count rakaman',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get episodeWritingNotesDetail => 'Menyiapkan transkrip dahulu. Anda boleh meninggalkan halaman ini.';
 
   @override

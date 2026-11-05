@@ -14849,6 +14849,23 @@ class AppLocalizationsPt extends AppLocalizations {
   String get episodeWritingNotes => 'Escrevendo notas…';
 
   @override
+  String get homeStepTranscribing => 'Transcrevendo…';
+
+  @override
+  String get homeCouldntProcess => 'Não foi possível processar';
+
+  @override
+  String homeRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count gravações',
+      one: '$count gravação',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get episodeWritingNotesDetail => 'Primeiro terminamos a transcrição. Você pode sair desta página.';
 
   @override

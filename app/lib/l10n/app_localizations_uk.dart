@@ -14852,6 +14852,25 @@ class AppLocalizationsUk extends AppLocalizations {
   String get episodeWritingNotes => 'Пишемо нотатки…';
 
   @override
+  String get homeStepTranscribing => 'Транскрибуємо…';
+
+  @override
+  String get homeCouldntProcess => 'Не вдалося обробити';
+
+  @override
+  String homeRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count запису',
+      many: '$count записів',
+      few: '$count записи',
+      one: '$count запис',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get episodeWritingNotesDetail => 'Спочатку завершуємо транскрипцію. Можете залишити цю сторінку.';
 
   @override

@@ -250,7 +250,7 @@ void main() {
       );
       await tester.pump();
       await tester.pump();
-      expect(find.text('Finishing up…'), findsOneWidget);
+      expect(find.text('Processing…'), findsOneWidget);
       expect(find.text(a.structured.title), findsNothing);
       expect(find.text(b.structured.title), findsNothing);
       final paints = tester.allWidgets.where((w) => w.key == const Key('home_processing_row')).length;

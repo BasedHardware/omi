@@ -14609,6 +14609,22 @@ class AppLocalizationsJa extends AppLocalizations {
   String get episodeWritingNotes => 'メモを作成中…';
 
   @override
+  String get homeStepTranscribing => '文字起こし中…';
+
+  @override
+  String get homeCouldntProcess => '処理できませんでした';
+
+  @override
+  String homeRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count件の録音',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get episodeWritingNotesDetail => '先に文字起こしを仕上げています。このページを離れても大丈夫です。';
 
   @override

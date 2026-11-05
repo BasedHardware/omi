@@ -14833,6 +14833,23 @@ class AppLocalizationsUr extends AppLocalizations {
   String get episodeWritingNotes => 'نوٹس لکھے جا رہے ہیں…';
 
   @override
+  String get homeStepTranscribing => 'ٹرانسکرائب ہو رہا ہے…';
+
+  @override
+  String get homeCouldntProcess => 'پروسیس نہیں ہو سکا';
+
+  @override
+  String homeRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ریکارڈنگز',
+      one: '$count ریکارڈنگ',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get episodeWritingNotesDetail => 'پہلے ٹرانسکرپٹ مکمل کر رہے ہیں۔ آپ یہ صفحہ چھوڑ سکتے ہیں۔';
 
   @override

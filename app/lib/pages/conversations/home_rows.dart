@@ -3,10 +3,25 @@ import 'package:omi/backend/schema/episode.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/utils/conversations/home_member_fallback.dart';
 
+/// What a Home row that is not finished yet is waiting on, least advanced first.
+/// A run of such rows shows its least advanced step; [failed] runs never merge with
+/// in-progress runs.
+enum HomeStep { transcribing, writingNotes, failed }
+
 /// A display row only: neither episodes nor conversations are mutated or persisted.
 class HomeRow {
-  const HomeRow(this.conversation, {this.episode, this.episodeConversationIds = const {}, this.isProcessing = false});
+  const HomeRow(this.conversation,
+      {this.episode, this.episodeConversationIds = const {}, this.isProcessing = false, this.step, this.count = 1});
   final bool isProcessing;
+
+  /// Set on every processing row; null on finished rows.
+  final HomeStep? step;
+
+  /// How many recordings this row stands for.
+  final int count;
+
+  HomeRow withStep(HomeStep step) => HomeRow(conversation,
+      episode: episode, episodeConversationIds: episodeConversationIds, isProcessing: true, step: step, count: count);
   final Set<String> episodeConversationIds;
   final ServerConversation conversation;
   final Episode? episode;
@@ -107,6 +122,8 @@ List<HomeRow> buildHomeRows(List<ServerConversation> conversations, List<Episode
         episodeConversationIds: episode.conversationIds.toSet(),
         episode: episode,
         isProcessing: true,
+        step: _leastAdvanced(pending.map((c) => homeStepOf(c) ?? HomeStep.writingNotes)),
+        count: retainedIds.length,
       ));
       continue;
     }
@@ -118,8 +135,8 @@ List<HomeRow> buildHomeRows(List<ServerConversation> conversations, List<Episode
     }
     if (members.isEmpty) continue;
     if (!episode.composed && members.any(awaitingHomeTranscript)) {
-      rows.add(
-          _processingRun(members, (members.length > 1 ? finishingTitle : processingTitle) ?? '', episode: episode));
+      rows.add(_processingRun(members, (members.length > 1 ? finishingTitle : processingTitle) ?? '',
+          episode: episode, step: HomeStep.transcribing));
       continue;
     }
     if (members.length == 1) {
@@ -141,6 +158,8 @@ List<HomeRow> buildHomeRows(List<ServerConversation> conversations, List<Episode
         episodeConversationIds: episode.conversationIds.toSet(),
         episode: episode.copyWith(members: members),
         isProcessing: true,
+        step: HomeStep.writingNotes,
+        count: members.length,
       ));
       continue;
     }
@@ -167,53 +186,127 @@ List<HomeRow> buildHomeRows(List<ServerConversation> conversations, List<Episode
   ]);
   rows.sort((a, b) => b.startedAt.compareTo(a.startedAt));
   if (!groupAwaitingTranscript) return rows;
-  final grouped = <HomeRow>[];
-  var run = <ServerConversation>[];
+  // Noise (no speech worth a row) never shows on Home; search and direct links still reach it.
+  rows.removeWhere((row) => row.episode == null && isHomeNoise(row.conversation));
+  return foldProcessingRuns(rows, processingTitle: processingTitle ?? '');
+}
+
+/// Home shows finished conversations, and every unbroken run of unfinished ones as a
+/// single Processing row (one per day). A run's step is its least advanced member's.
+/// Failed rows form their own runs, so a failure never hides behind "Processing".
+/// Every member stays reachable from the run's page; nothing is dropped.
+List<HomeRow> foldProcessingRuns(List<HomeRow> rows, {required String processingTitle}) {
+  final folded = <HomeRow>[];
+  var run = <HomeRow>[];
   void flush() {
-    if (run.isNotEmpty) grouped.add(_processingRun(run, processingTitle ?? ''));
+    if (run.isEmpty) return;
+    final first = run.length == 1 ? run.first : null;
+    if (first != null && first.isProcessing && first.episode != null) {
+      folded.add(first);
+    } else {
+      final members = <ServerConversation>[];
+      final seen = <String>{};
+      final ids = <String>{};
+      for (final row in run) {
+        ids.addAll(row.episodeConversationIds);
+        final source = row.episode?.members.isNotEmpty == true ? row.episode!.members : [row.conversation];
+        for (final member in source) {
+          if (seen.add(member.id)) members.add(member);
+        }
+        if (row.episode == null) ids.add(row.conversation.id);
+      }
+      members.sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
+      folded.add(_processingRun(members, processingTitle,
+          step: _leastAdvanced(run.map((r) => r.step ?? HomeStep.writingNotes)), ids: ids));
+    }
     run = [];
   }
 
   for (final row in rows) {
-    final c = row.conversation;
-    final contiguous = run.isEmpty ||
-        (run.last.startedAt ?? run.last.createdAt).difference(c.finishedAt ?? c.startedAt ?? c.createdAt) <=
-            const Duration(minutes: 2);
-    if (row.episode == null && awaitingHomeTranscript(c)) {
-      if (!contiguous) flush();
-      run.add(c);
-    } else {
+    final step = row.step ?? (row.isProcessing ? HomeStep.writingNotes : homeStepOf(row.conversation));
+    if (step == null) {
       flush();
-      grouped.add(row);
+      folded.add(row);
+      continue;
     }
+    final current = row.step == step ? row : row.withStep(step);
+    if (run.isNotEmpty && (!_sameRunKind(run.last.step!, step) || run.last.day != row.day)) flush();
+    run.add(current);
   }
   flush();
-  return grouped;
+  return folded;
 }
 
-HomeRow _processingRun(List<ServerConversation> members, String title, {Episode? episode}) {
+bool _sameRunKind(HomeStep a, HomeStep b) => (a == HomeStep.failed) == (b == HomeStep.failed);
+
+HomeStep _leastAdvanced(Iterable<HomeStep> steps) =>
+    steps.fold(HomeStep.failed, (least, step) => step.index < least.index ? step : least);
+
+/// The step a conversation row is waiting on, or null when it is finished and may show
+/// as its own Home row. The server's `home_step` wins; older servers fall back to the
+/// row's status, an empty capture, or a stand-in title.
+HomeStep? homeStepOf(ServerConversation c) {
+  if (c.isLocked || c.discarded || c.deleted || c.clientProcessing != null || c.processingDeferred) return null;
+  switch (c.homeStep) {
+    case 'transcribing':
+      return HomeStep.transcribing;
+    case 'writing_notes':
+      return HomeStep.writingNotes;
+    case 'failed':
+      return HomeStep.failed;
+    case 'ready':
+    case 'noise':
+      return null;
+  }
+  if (c.status == ConversationStatus.failed) return HomeStep.failed;
+  if (c.status == ConversationStatus.processing || c.status == ConversationStatus.merging) {
+    // A server-batch capture still waiting for speech; otherwise the notes are being written.
+    return c.structured.title == _serverTranscribingTitle || c.structured.title.trim().isEmpty
+        ? HomeStep.transcribing
+        : HomeStep.writingNotes;
+  }
+  if (c.status != ConversationStatus.completed) return null;
+  if (awaitingHomeTranscript(c)) return HomeStep.transcribing;
+  if (c.summaryRetryable) return HomeStep.failed;
+  if (c.structured.hasProvisionalTitle) return HomeStep.writingNotes;
+  return null;
+}
+
+/// Server-classified noise: a finished row with nothing worth showing on Home.
+bool isHomeNoise(ServerConversation c) => c.homeStep == 'noise' && !c.isLocked;
+
+/// backend `transcribing_hold.transcription_presentation`; read only when `home_step` is absent.
+const _serverTranscribingTitle = 'Transcribing…';
+
+HomeRow _processingRun(List<ServerConversation> members, String title,
+    {Episode? episode, HomeStep step = HomeStep.transcribing, Set<String>? ids}) {
   final start = members.map((c) => c.startedAt ?? c.createdAt).reduce((a, b) => a.isBefore(b) ? a : b);
   final end = members.map((c) => c.finishedAt ?? c.startedAt ?? c.createdAt).reduce((a, b) => a.isAfter(b) ? a : b);
-  final ids = members.map((c) => c.id).toSet();
+  final memberIds = {...members.map((c) => c.id), ...?ids};
   final parent = episode?.copyWith(members: members) ??
       Episode(
         id: '',
         live: false,
         startedAt: start,
         lastActivityAt: end,
-        conversationIds: ids.toList(),
+        conversationIds: memberIds.toList(),
         members: members,
         title: title,
       );
   return HomeRow(
       ServerConversation(
-        id: episode == null ? 'processing-run:${members.last.id}' : 'episode:${episode.id}',
+        // A lone row keeps its own id, so its Home slot and key stay stable as it finishes.
+        id: episode != null
+            ? 'episode:${episode.id}'
+            : (members.length == 1 ? members.single.id : 'processing-run:${members.last.id}'),
         createdAt: start,
         startedAt: start,
         finishedAt: end,
         structured: Structured(title, ''),
       ),
       episode: parent,
-      episodeConversationIds: episode?.conversationIds.toSet() ?? ids,
-      isProcessing: true);
+      episodeConversationIds: episode?.conversationIds.toSet() ?? memberIds,
+      isProcessing: true,
+      step: step,
+      count: members.length);
 }

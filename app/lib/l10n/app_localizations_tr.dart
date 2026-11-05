@@ -14834,6 +14834,22 @@ class AppLocalizationsTr extends AppLocalizations {
   String get episodeWritingNotes => 'Notlar yazılıyor…';
 
   @override
+  String get homeStepTranscribing => 'Metne dökülüyor…';
+
+  @override
+  String get homeCouldntProcess => 'İşlenemedi';
+
+  @override
+  String homeRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count kayıt',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get episodeWritingNotesDetail => 'Önce döküm tamamlanıyor. Bu sayfadan çıkabilirsiniz.';
 
   @override

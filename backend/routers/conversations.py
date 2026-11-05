@@ -32,7 +32,7 @@ from utils.other.account_gate_http import account_gate_busy_http_exception
 from database.firestore_read_metrics import FirestoreReadSite
 from utils.list_version_check import ListVersionCheck
 from config.episodes import home_transcription_presentation_gate_enabled
-from utils.conversations import transcribing_hold
+from utils.conversations import home_step, transcribing_hold
 from utils.conversations.list_filters import aware_datetime, reject_oversized_filter
 from database.vector_db import (
     delete_action_item_vector,
@@ -1034,7 +1034,7 @@ def get_conversations(
         ),
     )
     _heal_locked_conversations_if_eligible(uid, conversations)
-    conversations = [transcribing_hold.project(row) for row in conversations]
+    conversations = [transcribing_hold.project(home_step.project(row)) for row in conversations]
     redact_conversations_for_list(conversations)
     if budget.truncated and response is not None:
         response.headers[OMI_LIST_TRUNCATED_HEADER] = OMI_LIST_TRUNCATED_VALUE

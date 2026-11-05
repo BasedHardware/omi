@@ -14880,6 +14880,23 @@ class AppLocalizationsHu extends AppLocalizations {
   String get episodeWritingNotes => 'Jegyzetek írása…';
 
   @override
+  String get homeStepTranscribing => 'Átírás folyamatban…';
+
+  @override
+  String get homeCouldntProcess => 'Nem sikerült feldolgozni';
+
+  @override
+  String homeRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count felvétel',
+      one: '1 felvétel',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get episodeWritingNotesDetail => 'Először befejezzük az átiratot. Elhagyhatod ezt az oldalt.';
 
   @override

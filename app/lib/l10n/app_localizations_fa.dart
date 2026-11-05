@@ -14816,6 +14816,22 @@ class AppLocalizationsFa extends AppLocalizations {
   String get episodeWritingNotes => 'در حال نوشتن یادداشت‌ها…';
 
   @override
+  String get homeStepTranscribing => 'در حال رونویسی…';
+
+  @override
+  String get homeCouldntProcess => 'پردازش نشد';
+
+  @override
+  String homeRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ضبط',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get episodeWritingNotesDetail => 'اول متن را کامل می‌کنیم. می‌توانید این صفحه را ترک کنید.';
 
   @override

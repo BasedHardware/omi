@@ -14828,6 +14828,24 @@ class AppLocalizationsSr extends AppLocalizations {
   String get episodeWritingNotes => 'Пишемо белешке…';
 
   @override
+  String get homeStepTranscribing => 'Транскрибујемо…';
+
+  @override
+  String get homeCouldntProcess => 'Обрада није успела';
+
+  @override
+  String homeRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count снимака',
+      few: '$count снимка',
+      one: '$count снимак',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get episodeWritingNotesDetail => 'Прво завршавамо транскрипт. Можете напустити ову страницу.';
 
   @override

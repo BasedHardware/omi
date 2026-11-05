@@ -14920,6 +14920,23 @@ class AppLocalizationsEl extends AppLocalizations {
   String get episodeWritingNotes => 'Γράφονται οι σημειώσεις…';
 
   @override
+  String get homeStepTranscribing => 'Μεταγραφή…';
+
+  @override
+  String get homeCouldntProcess => 'Δεν ήταν δυνατή η επεξεργασία';
+
+  @override
+  String homeRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count εγγραφές',
+      one: '$count εγγραφή',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get episodeWritingNotesDetail => 'Πρώτα ολοκληρώνεται η απομαγνητοφώνηση. Μπορείς να φύγεις από τη σελίδα.';
 
   @override

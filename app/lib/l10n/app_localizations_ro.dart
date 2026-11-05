@@ -14884,6 +14884,24 @@ class AppLocalizationsRo extends AppLocalizations {
   String get episodeWritingNotes => 'Scriem notițele…';
 
   @override
+  String get homeStepTranscribing => 'Se transcrie…';
+
+  @override
+  String get homeCouldntProcess => 'Nu s-a putut procesa';
+
+  @override
+  String homeRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count de înregistrări',
+      few: '$count înregistrări',
+      one: '$count înregistrare',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get episodeWritingNotesDetail => 'Mai întâi terminăm transcrierea. Poți părăsi această pagină.';
 
   @override

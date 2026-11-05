@@ -14814,6 +14814,23 @@ class AppLocalizationsEt extends AppLocalizations {
   String get episodeWritingNotes => 'Kirjutame märkmeid…';
 
   @override
+  String get homeStepTranscribing => 'Transkribeerime…';
+
+  @override
+  String get homeCouldntProcess => 'Ei õnnestunud töödelda';
+
+  @override
+  String homeRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count salvestust',
+      one: '$count salvestus',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get episodeWritingNotesDetail => 'Kõigepealt lõpetame transkriptsiooni. Võid sellelt lehelt lahkuda.';
 
   @override

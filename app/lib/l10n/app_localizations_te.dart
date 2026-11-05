@@ -14884,6 +14884,23 @@ class AppLocalizationsTe extends AppLocalizations {
   String get episodeWritingNotes => 'నోట్స్ రాస్తున్నాం…';
 
   @override
+  String get homeStepTranscribing => 'ట్రాన్స్‌క్రైబ్ చేస్తున్నాం…';
+
+  @override
+  String get homeCouldntProcess => 'ప్రాసెస్ చేయలేకపోయాం';
+
+  @override
+  String homeRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count రికార్డింగ్‌లు',
+      one: '$count రికార్డింగ్',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get episodeWritingNotesDetail => 'ముందు ట్రాన్స్‌క్రిప్ట్ పూర్తి చేస్తున్నాం. మీరు ఈ పేజీ వదిలి వెళ్లవచ్చు.';
 
   @override
