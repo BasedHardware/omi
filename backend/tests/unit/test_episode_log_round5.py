@@ -15,14 +15,24 @@ from utils.episodes import home_read
 from utils.episodes.log import capture, reconcile, worker
 
 
-@pytest.mark.parametrize('remote', [None, False])
+@pytest.mark.parametrize('remote', [None, False, 'zero_rollout', 'denied_uid'])
 @pytest.mark.parametrize('failure', ['saturated', 'submit_failed'])
 def test_capture_off_never_sets_up_submits_or_writes(monkeypatch, remote, failure):
     monkeypatch.setenv('EPISODES_ENABLED', 'on')
     monkeypatch.setenv('EPISODES_PERCENT', '100')
-    monkeypatch.setenv('EPISODES_LOG_ENABLED', 'on' if remote is False else 'off')
-    rules = {} if remote is None else {'EPISODES_LOG_ENABLED': SimpleNamespace(active=False)}
+    monkeypatch.setenv('EPISODES_LOG_ENABLED', 'off' if remote is None else 'on')
+    rule = omi_flags.FlagRule.from_doc(
+        'EPISODES_LOG_ENABLED',
+        {
+            'active': remote is not False,
+            'rollout_percentage': 0 if remote == 'zero_rollout' else 100,
+            'deny_uids': ['synthetic'] if remote == 'denied_uid' else [],
+        },
+    )
+    rules = {} if remote is None else {'EPISODES_LOG_ENABLED': rule}
     monkeypatch.setattr(omi_flags, 'snapshot', lambda: SimpleNamespace(rules=rules))
+    assert config.capture_possible() == (remote in ('zero_rollout', 'denied_uid'))
+    assert not config.enabled('synthetic')
     submit = Mock(side_effect=RuntimeError(failure))
     invalidate, append, job = Mock(), Mock(), Mock()
     monkeypatch.setattr(capture, 'submit', submit)
@@ -46,7 +56,11 @@ def test_capture_off_never_sets_up_submits_or_writes(monkeypatch, remote, failur
     worker.note_dirty('synthetic', 'c', {'status': 'completed'})
     capture.dropped(RuntimeError(failure), uid='synthetic', client=client)
     intent = capture.DeferredCapture(client, 'synthetic')
-    intent.stage_error = RuntimeError('staged before kill')
+    intent.stage([{'kind': 'unsupported', 'payload': {}}])
+    assert isinstance(intent.stage_error, ValueError)
+    intent.flush()
+    intent.stage_error = None
+    intent.stage([{'kind': 'member_refresh', 'cid': 'c', 'payload': {}}])
     intent.flush()
     assert client.rows == {ref.path: {'status': 'completed'}}
     assert len(client.transactions) == 1
@@ -54,10 +68,11 @@ def test_capture_off_never_sets_up_submits_or_writes(monkeypatch, remote, failur
         mock.assert_not_called()
 
 
-def test_capture_kill_after_setup_or_submission_is_inert(monkeypatch):
+@pytest.mark.parametrize('gate', ['global', 'user'])
+def test_capture_kill_after_setup_or_submission_is_inert(monkeypatch, gate):
     enabled = True
-    monkeypatch.setattr(config, 'capture_possible', lambda: enabled)
-    monkeypatch.setattr(config, 'episodes_enabled_for', lambda uid: True)
+    monkeypatch.setattr(config, 'capture_possible', lambda: enabled if gate == 'global' else True)
+    monkeypatch.setattr(config, 'enabled', lambda uid: enabled if gate == 'user' else True)
     queued, future = [], Future()
     monkeypatch.setattr(capture, 'submit', lambda fn: queued.append(fn) or future)
     invalidate, job = Mock(), Mock()
@@ -160,10 +175,11 @@ def test_source_growth_rejects_before_spending_member_read_budget(monkeypatch):
     client.get_all.assert_not_called()
 
 
-def test_disabled_retry_clears_aborted_intent_before_readmission(monkeypatch):
+@pytest.mark.parametrize('gate', ['global', 'user'])
+def test_disabled_retry_clears_aborted_intent_before_readmission(monkeypatch, gate):
     enabled = True
-    monkeypatch.setattr(config, 'capture_possible', lambda: enabled)
-    monkeypatch.setattr(config, 'episodes_enabled_for', lambda uid: True)
+    monkeypatch.setattr(config, 'capture_possible', lambda: enabled if gate == 'global' else True)
+    monkeypatch.setattr(config, 'enabled', lambda uid: enabled if gate == 'user' else True)
     submit = Mock()
     monkeypatch.setattr(capture, 'submit', submit)
     client = StrictFirestore()

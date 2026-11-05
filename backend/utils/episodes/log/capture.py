@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 def dropped(error, *, uid=None, client=None, cid=None, token=None):
-    if not config.capture_possible():
+    if not config.capture_possible() or (uid is not None and not config.enabled(uid)):
         return
     from utils.observability.fallback import record_fallback
 
@@ -48,11 +48,11 @@ def submit(fn):
 
 def dispatch(fn, *, uid, client):
     """No capacity wait. Overflow/cancellation is counted and durably fenced."""
-    if not config.capture_possible():
+    if not config.capture_possible() or not config.enabled(uid):
         return
 
     def admitted():
-        if config.capture_possible():
+        if config.capture_possible() and config.enabled(uid):
             fn()
 
     try:
@@ -80,7 +80,7 @@ class DeferredCapture:
             self.stage_error = error  # No IO or marker transaction inside serving.
 
     def flush(self):
-        if not config.capture_possible():
+        if not config.capture_possible() or not config.enabled(self.uid):
             return
         from database import episode_log as store
 
@@ -88,8 +88,6 @@ class DeferredCapture:
             dropped(self.stage_error, uid=self.uid, client=self.client)
         elif self.events:
             try:
-                if not config.enabled(self.uid):
-                    return
                 if self.existing_only and not store.state(self.uid, firestore_client=self.client):
                     return
                 store.append(self.uid, uuid4().hex, self.events, firestore_client=self.client)
@@ -102,9 +100,9 @@ def prepare_capture(transaction, client, uid):
         # SDK retries reuse this transaction. A disabled attempt must discard
         # an earlier aborted attempt's intent, even if capture returns before commit.
         transaction._episode_capture = None
-        # Global admission may refresh the control-plane flag cache. It never
-        # reads customer data; per-UID admission is still checked after commit.
-        if not config.capture_possible() or not config.episodes_enabled_for(uid):
+        # Admission may refresh the control-plane flag cache, without customer
+        # data reads. Recheck per-UID admission at every deferred boundary.
+        if not config.capture_possible() or not config.enabled(uid):
             return None
         capture = DeferredCapture(client, uid)
         if not hasattr(transaction, '_episode_capture_commit'):
@@ -114,7 +112,12 @@ def prepare_capture(transaction, client, uid):
                 result = original(*args, **kwargs)
                 try:
                     intent = transaction._episode_capture
-                    if config.capture_possible() and intent is not None and (intent.events or intent.stage_error):
+                    if (
+                        config.capture_possible()
+                        and config.enabled(uid)
+                        and intent is not None
+                        and (intent.events or intent.stage_error)
+                    ):
                         dispatch(intent.flush, uid=uid, client=client)
                 except Exception as error:
                     dropped(error, uid=uid, client=client)

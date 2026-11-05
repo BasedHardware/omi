@@ -1,4 +1,4 @@
-# Episode repair source-writer coverage (round 5)
+# Episode repair source-writer coverage (round 6)
 
 Audited 2026-11-05 for BasedHardware/omi PR #24607. Paths below are relative to
 `backend/`. This inventories storage writers, including generic adapters and
@@ -31,7 +31,7 @@ version fields, and whether a writer changes a Home-selected field.
 | `utils/sync/assignment.py` | `assign_in_transaction`: record replacement; canonical create/update; donors; flattened ancestors; rollover parts | C; queued `member_refresh` emulator proof |
 | `database/smart_merge.py` | `absorb_conversation` (survivor/donor/ancestors), `record_decision`, `claim_survivor_refresh`, `release_survivor_refresh`, `checkpoint_survivor_processing`, `complete_survivor_refresh`, `delegate_survivor_refresh` | C; queued absorb emulator proof |
 | `database/conversations.py` | `upsert_conversation_with_lifecycle`, `persist_processing_result_with_lifecycle`, `update_conversation`, `transition_conversation_status`, `claim_conversation_status`, `update_conversation_finished_at`, `promote_final_pass_if_current`, `complete_sync_processing_hold` | C |
-| `database/conversations.py` | `update_conversation_title`, `update_conversation_summary`, `update_conversation_segments`, `bind_client_processing`, `materialize_translation`, `migrate_conversations_level_batch` | C |
+| `database/conversations.py` | `update_conversation_title`, `update_conversation_summary`, `update_conversation_segments`, `assign_conversation_speaker`, `bind_client_processing`, `materialize_translation`, `migrate_conversations_level_batch` | C |
 | `database/conversations.py` | `delete_conversation`, `set_conversation_as_discarded`, `rule_discard_outcome`, `restore_conversation_from_discarded`, `set_conversation_starred`, `set_conversation_visibility`, `publish_conversation_visibility_if_private`, `set_conversation_visibility_if_unchanged` | C |
 | `database/conversations.py` | `update_owner_recognition_diagnostics`, `mark_playback_deferred`, `claim_record_lane_owner`, `record_demand_enrichment_checkpoint`, `link_duplicate_capture`, `reserve_share_email_recipients`, `confirm_share_email_recipients`, `release_share_email_recipients`, `set_postprocessing_status`, `store_conversation_photos` (parent marker) | C; even unrelated-field changes reject conservatively |
 | `database/conversation_mutations.py` | `apply_conversation_sync_mutation` | C |
@@ -46,6 +46,7 @@ version fields, and whether a writer changes a Home-selected field.
 | `database/recording_sessions.py` | `_create_or_get_recording_session_txn` (binding), `tombstone_and_delete_empty_conversation` | C |
 | `database/listen_continuations.py` | `calendar_continuity_row`, `resolve_live_continuation` (external-data hydration) | C |
 | `database/server_batch_audio.py` | `note_server_batch_audio`, `close_server_batch_audio`, `note_server_batch_audio_received`, `claim_server_batch_lane` | C |
+| `database/sync_bridges.py` | `mark_sync_bridge_cleaned` | C; no Home-projected fields change; document-version proof still applies |
 | `database/record_audio.py` | `seal_record_audio`, `set_record_upload_pending`, `mark_record_upload_failed` | C |
 | `database/record_partial.py` | `finish_partial`, `update_run` | C |
 | `database/batch_pipeline_store.py` | `FirestoreTransaction.flush` (conversation table and external refs); `database/batch_pipeline_intake.py:admit` routes record-lane patches here | C |
@@ -61,6 +62,7 @@ version fields, and whether a writer changes a Home-selected field.
 | `database/frame_requests.py` | `attach_frame_request_to_conversation` (parent photo marker) | C |
 | `database/screen_frames.py` | `bump_conversation_screen_frames_revision`, `mark_conversation_screen_frames_adjudicated`, `set_conversation_screenshot_sharing_enabled` | C |
 | `database/review_changes.py` | `record_agent_change`, `set_undone` (generic entity patch/restore can target conversations) | C |
+| `database/chat_edits.py` | `restore`, `apply_update` (conversation targets) | C |
 | `database/review_transcript_changes.py` | `record_change`, `set_undone`; `edit_user_segment` delegates to record | C |
 | `database/review_overlay_merge.py` | `transfer` (destination overlay and source duplicate marker) | C |
 | `database/owner_confirmation.py` | `record` | C |
