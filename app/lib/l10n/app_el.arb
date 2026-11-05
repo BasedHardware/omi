@@ -4632,5 +4632,7 @@
     "referralRewardFirstDetail": "Όταν 2 φίλοι αγοράσουν Omi",
     "referralRewardSecondTitle": "3 ακόμη μήνες",
     "referralRewardSecondDetail": "Όταν αγοράσουν 3 ακόμη φίλοι",
-    "referralClaimShort": "Λήψη"
+    "referralClaimShort": "Λήψη",
+    "paymentDeclinedTitle": "Η κάρτα σας απορρίφθηκε",
+    "paymentDeclinedMessage": "Ενημερώστε την κάρτα για να αποκτήσετε ξανά το {plan}"
 }

@@ -15361,4 +15361,12 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get referralClaimShort => 'Løs inn';
+
+  @override
+  String get paymentDeclinedTitle => 'Kortet ditt ble avvist';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return 'Oppdater kortet for å få $plan tilbake';
+  }
 }

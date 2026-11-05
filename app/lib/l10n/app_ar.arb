@@ -4632,5 +4632,7 @@
     "referralRewardFirstDetail": "عندما يشتري صديقان Omi",
     "referralRewardSecondTitle": "3 أشهر إضافية",
     "referralRewardSecondDetail": "عندما يشتري 3 أصدقاء آخرين",
-    "referralClaimShort": "استلام"
+    "referralClaimShort": "استلام",
+    "paymentDeclinedTitle": "تم رفض بطاقتك",
+    "paymentDeclinedMessage": "حدّث بطاقتك لاستعادة {plan}"
 }

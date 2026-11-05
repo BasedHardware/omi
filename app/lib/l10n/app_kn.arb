@@ -12189,5 +12189,7 @@
     "referralRewardFirstDetail": "2 ಸ್ನೇಹಿತರು Omi ಖರೀದಿಸಿದಾಗ",
     "referralRewardSecondTitle": "ಇನ್ನೂ 3 ತಿಂಗಳು",
     "referralRewardSecondDetail": "ಇನ್ನೂ 3 ಸ್ನೇಹಿತರು ಖರೀದಿಸಿದಾಗ",
-    "referralClaimShort": "ಪಡೆಯಿರಿ"
+    "referralClaimShort": "ಪಡೆಯಿರಿ",
+    "paymentDeclinedTitle": "ನಿಮ್ಮ ಕಾರ್ಡ್ ನಿರಾಕರಿಸಲಾಗಿದೆ",
+    "paymentDeclinedMessage": "{plan} ಮರಳಿ ಪಡೆಯಲು ಕಾರ್ಡ್ ನವೀಕರಿಸಿ"
 }

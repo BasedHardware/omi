@@ -4674,5 +4674,7 @@
     "referralRewardFirstDetail": "Når 2 venner køber Omi",
     "referralRewardSecondTitle": "3 måneder mere",
     "referralRewardSecondDetail": "Når 3 venner mere køber",
-    "referralClaimShort": "Indløs"
+    "referralClaimShort": "Indløs",
+    "paymentDeclinedTitle": "Dit kort blev afvist",
+    "paymentDeclinedMessage": "Opdater kortet for at få {plan} tilbage"
 }

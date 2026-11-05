@@ -15422,4 +15422,12 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get referralClaimShort => 'Преземи';
+
+  @override
+  String get paymentDeclinedTitle => 'Вашата картичка е одбиена';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return 'Ажурирајте ја картичката за да го вратите $plan';
+  }
 }

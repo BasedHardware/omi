@@ -15351,4 +15351,12 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get referralClaimShort => 'Získať';
+
+  @override
+  String get paymentDeclinedTitle => 'Vaša karta bola zamietnutá';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return 'Aktualizujte kartu a obnovte $plan';
+  }
 }

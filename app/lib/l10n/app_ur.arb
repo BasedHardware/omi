@@ -12189,5 +12189,7 @@
     "referralRewardFirstDetail": "جب 2 دوست Omi خریدیں",
     "referralRewardSecondTitle": "مزید 3 ماہ",
     "referralRewardSecondDetail": "جب مزید 3 دوست خریدیں",
-    "referralClaimShort": "حاصل کریں"
+    "referralClaimShort": "حاصل کریں",
+    "paymentDeclinedTitle": "آپ کا کارڈ مسترد ہو گیا",
+    "paymentDeclinedMessage": "{plan} واپس حاصل کرنے کے لیے کارڈ اپ ڈیٹ کریں"
 }

@@ -12189,5 +12189,7 @@
     "referralRewardFirstDetail": "2 मित्रांनी Omi घेतल्यावर",
     "referralRewardSecondTitle": "आणखी 3 महिने",
     "referralRewardSecondDetail": "आणखी 3 मित्रांनी घेतल्यावर",
-    "referralClaimShort": "मिळवा"
+    "referralClaimShort": "मिळवा",
+    "paymentDeclinedTitle": "तुमचे कार्ड नाकारले गेले",
+    "paymentDeclinedMessage": "{plan} परत मिळवण्यासाठी कार्ड अपडेट करा"
 }

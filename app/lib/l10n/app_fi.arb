@@ -4632,5 +4632,7 @@
     "referralRewardFirstDetail": "Kun 2 ystävää ostaa Omin",
     "referralRewardSecondTitle": "3 kuukautta lisää",
     "referralRewardSecondDetail": "Kun 3 ystävää lisää ostaa",
-    "referralClaimShort": "Lunasta"
+    "referralClaimShort": "Lunasta",
+    "paymentDeclinedTitle": "Korttisi hylättiin",
+    "paymentDeclinedMessage": "Päivitä kortti saadaksesi {plan} takaisin"
 }

@@ -4632,5 +4632,7 @@
     "referralRewardFirstDetail": "เมื่อเพื่อน 2 คนซื้อ Omi",
     "referralRewardSecondTitle": "อีก 3 เดือน",
     "referralRewardSecondDetail": "เมื่อเพื่อนอีก 3 คนซื้อ",
-    "referralClaimShort": "รับ"
+    "referralClaimShort": "รับ",
+    "paymentDeclinedTitle": "บัตรของคุณถูกปฏิเสธ",
+    "paymentDeclinedMessage": "อัปเดตบัตรเพื่อกลับมาใช้ {plan}"
 }

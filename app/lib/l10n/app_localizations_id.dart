@@ -15373,4 +15373,12 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get referralClaimShort => 'Klaim';
+
+  @override
+  String get paymentDeclinedTitle => 'Kartu Anda ditolak';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return 'Perbarui kartu untuk mendapatkan kembali $plan';
+  }
 }

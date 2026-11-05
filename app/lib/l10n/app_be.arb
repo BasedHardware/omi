@@ -12189,5 +12189,7 @@
     "referralRewardFirstDetail": "Калі 2 сябры купяць Omi",
     "referralRewardSecondTitle": "Яшчэ 3 месяцы",
     "referralRewardSecondDetail": "Калі яшчэ 3 сябры купяць",
-    "referralClaimShort": "Атрымаць"
+    "referralClaimShort": "Атрымаць",
+    "paymentDeclinedTitle": "Вашу картку адхілілі",
+    "paymentDeclinedMessage": "Абнавіце картку, каб вярнуць {plan}"
 }

@@ -15352,4 +15352,12 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get referralClaimShort => 'دریافت';
+
+  @override
+  String get paymentDeclinedTitle => 'کارت شما رد شد';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return 'برای بازگرداندن $plan کارت را به‌روزرسانی کنید';
+  }
 }

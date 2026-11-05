@@ -15362,4 +15362,12 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get referralClaimShort => 'Lunasta';
+
+  @override
+  String get paymentDeclinedTitle => 'Korttisi hylättiin';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return 'Päivitä kortti saadaksesi $plan takaisin';
+  }
 }

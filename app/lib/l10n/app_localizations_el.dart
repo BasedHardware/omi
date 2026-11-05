@@ -15459,4 +15459,12 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get referralClaimShort => 'Λήψη';
+
+  @override
+  String get paymentDeclinedTitle => 'Η κάρτα σας απορρίφθηκε';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return 'Ενημερώστε την κάρτα για να αποκτήσετε ξανά το $plan';
+  }
 }

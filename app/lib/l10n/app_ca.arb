@@ -4632,5 +4632,7 @@
     "referralRewardFirstDetail": "Quan 2 amics comprin Omi",
     "referralRewardSecondTitle": "3 mesos més",
     "referralRewardSecondDetail": "Quan 3 amics més comprin",
-    "referralClaimShort": "Reclama"
+    "referralClaimShort": "Reclama",
+    "paymentDeclinedTitle": "La teva targeta ha estat rebutjada",
+    "paymentDeclinedMessage": "Actualitza-la per recuperar {plan}"
 }

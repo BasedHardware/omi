@@ -4632,5 +4632,7 @@
     "referralRewardFirstDetail": "Când 2 prieteni cumpără Omi",
     "referralRewardSecondTitle": "Încă 3 luni",
     "referralRewardSecondDetail": "Când încă 3 prieteni cumpără",
-    "referralClaimShort": "Revendică"
+    "referralClaimShort": "Revendică",
+    "paymentDeclinedTitle": "Cardul dvs. a fost refuzat",
+    "paymentDeclinedMessage": "Actualizați cardul pentru a recupera {plan}"
 }

@@ -4632,5 +4632,7 @@
     "referralRewardFirstDetail": "2 位好友购买 Omi 后",
     "referralRewardSecondTitle": "再得 3 个月",
     "referralRewardSecondDetail": "再有 3 位好友购买后",
-    "referralClaimShort": "领取"
+    "referralClaimShort": "领取",
+    "paymentDeclinedTitle": "您的银行卡被拒绝",
+    "paymentDeclinedMessage": "更新银行卡以恢复使用 {plan}"
 }

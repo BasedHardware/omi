@@ -12189,5 +12189,7 @@
     "referralRewardFirstDetail": "2 நண்பர்கள் Omi வாங்கும்போது",
     "referralRewardSecondTitle": "மேலும் 3 மாதங்கள்",
     "referralRewardSecondDetail": "மேலும் 3 நண்பர்கள் வாங்கும்போது",
-    "referralClaimShort": "பெறுக"
+    "referralClaimShort": "பெறுக",
+    "paymentDeclinedTitle": "உங்கள் கார்டு நிராகரிக்கப்பட்டது",
+    "paymentDeclinedMessage": "{plan} மீண்டும் பெற கார்டைப் புதுப்பிக்கவும்"
 }

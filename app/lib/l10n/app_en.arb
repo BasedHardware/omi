@@ -18746,5 +18746,13 @@
     "referralClaimShort": "Claim",
     "@referralClaimShort": {
         "description": "Short pill button to claim an earned referral reward"
+    },
+    "paymentDeclinedTitle": "Your card was declined",
+    "@paymentDeclinedTitle": {
+        "description": "Home row title when the renewal charge for the user's plan failed"
+    },
+    "paymentDeclinedMessage": "Update it to get {plan} back",
+    "@paymentDeclinedMessage": {
+        "description": "Home row line under 'Your card was declined'. it = the card; plan = a product name such as Omi Pro"
     }
 }

@@ -15340,4 +15340,12 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get referralClaimShort => 'पाएं';
+
+  @override
+  String get paymentDeclinedTitle => 'आपका कार्ड अस्वीकार हो गया';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return '$plan वापस पाने के लिए कार्ड अपडेट करें';
+  }
 }

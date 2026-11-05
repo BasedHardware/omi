@@ -15420,4 +15420,12 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get referralClaimShort => 'పొందండి';
+
+  @override
+  String get paymentDeclinedTitle => 'మీ కార్డ్ తిరస్కరించబడింది';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return '$plan తిరిగి పొందడానికి కార్డును అప్‌డేట్ చేయండి';
+  }
 }

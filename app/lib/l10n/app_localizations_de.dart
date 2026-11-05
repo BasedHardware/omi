@@ -15471,4 +15471,12 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get referralClaimShort => 'Einlösen';
+
+  @override
+  String get paymentDeclinedTitle => 'Ihre Karte wurde abgelehnt';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return 'Karte aktualisieren, um $plan zurückzubekommen';
+  }
 }

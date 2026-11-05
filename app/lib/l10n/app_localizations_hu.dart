@@ -15416,4 +15416,12 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get referralClaimShort => 'Beváltás';
+
+  @override
+  String get paymentDeclinedTitle => 'A kártyáját elutasították';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return 'Frissítse a kártyát a(z) $plan visszaállításához';
+  }
 }

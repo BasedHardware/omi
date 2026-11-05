@@ -4667,5 +4667,7 @@
     "referralRewardFirstDetail": "Gdy 2 znajomych kupi Omi",
     "referralRewardSecondTitle": "Kolejne 3 miesiące",
     "referralRewardSecondDetail": "Gdy kupi 3 kolejnych znajomych",
-    "referralClaimShort": "Odbierz"
+    "referralClaimShort": "Odbierz",
+    "paymentDeclinedTitle": "Twoja karta została odrzucona",
+    "paymentDeclinedMessage": "Zaktualizuj kartę, aby odzyskać {plan}"
 }

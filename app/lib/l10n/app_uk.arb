@@ -4632,5 +4632,7 @@
     "referralRewardFirstDetail": "Коли 2 друзі куплять Omi",
     "referralRewardSecondTitle": "Ще 3 місяці",
     "referralRewardSecondDetail": "Коли ще 3 друзі куплять",
-    "referralClaimShort": "Отримати"
+    "referralClaimShort": "Отримати",
+    "paymentDeclinedTitle": "Вашу картку відхилено",
+    "paymentDeclinedMessage": "Оновіть картку, щоб повернути {plan}"
 }

@@ -15409,4 +15409,12 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get referralClaimShort => 'Вземи';
+
+  @override
+  String get paymentDeclinedTitle => 'Картата ви беше отхвърлена';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return 'Обновете картата, за да възстановите $plan';
+  }
 }

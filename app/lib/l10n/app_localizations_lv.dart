@@ -15391,4 +15391,12 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get referralClaimShort => 'Saņemt';
+
+  @override
+  String get paymentDeclinedTitle => 'Jūsu karte tika noraidīta';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return 'Atjauniniet karti, lai atgūtu $plan';
+  }
 }

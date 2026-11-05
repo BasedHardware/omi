@@ -4632,5 +4632,7 @@
     "referralRewardFirstDetail": "Når 2 venner kjøper Omi",
     "referralRewardSecondTitle": "3 måneder til",
     "referralRewardSecondDetail": "Når 3 venner til kjøper",
-    "referralClaimShort": "Løs inn"
+    "referralClaimShort": "Løs inn",
+    "paymentDeclinedTitle": "Kortet ditt ble avvist",
+    "paymentDeclinedMessage": "Oppdater kortet for å få {plan} tilbake"
 }

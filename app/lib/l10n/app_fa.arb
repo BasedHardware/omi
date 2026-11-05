@@ -12189,5 +12189,7 @@
     "referralRewardFirstDetail": "وقتی ۲ دوست Omi بخرند",
     "referralRewardSecondTitle": "۳ ماه دیگر",
     "referralRewardSecondDetail": "وقتی ۳ دوست دیگر بخرند",
-    "referralClaimShort": "دریافت"
+    "referralClaimShort": "دریافت",
+    "paymentDeclinedTitle": "کارت شما رد شد",
+    "paymentDeclinedMessage": "برای بازگرداندن {plan} کارت را به‌روزرسانی کنید"
 }

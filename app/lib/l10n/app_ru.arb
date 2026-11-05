@@ -4667,5 +4667,7 @@
     "referralRewardFirstDetail": "Когда 2 друга купят Omi",
     "referralRewardSecondTitle": "Ещё 3 месяца",
     "referralRewardSecondDetail": "Когда ещё 3 друга купят",
-    "referralClaimShort": "Получить"
+    "referralClaimShort": "Получить",
+    "paymentDeclinedTitle": "Ваша карта отклонена",
+    "paymentDeclinedMessage": "Обновите карту, чтобы вернуть {plan}"
 }

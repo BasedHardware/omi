@@ -15389,4 +15389,12 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get referralClaimShort => 'Отримати';
+
+  @override
+  String get paymentDeclinedTitle => 'Вашу картку відхилено';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return 'Оновіть картку, щоб повернути $plan';
+  }
 }

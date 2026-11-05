@@ -4632,5 +4632,7 @@
     "referralRewardFirstDetail": "जब 2 दोस्त Omi खरीदें",
     "referralRewardSecondTitle": "3 और महीने",
     "referralRewardSecondDetail": "जब 3 और दोस्त खरीदें",
-    "referralClaimShort": "पाएं"
+    "referralClaimShort": "पाएं",
+    "paymentDeclinedTitle": "आपका कार्ड अस्वीकार हो गया",
+    "paymentDeclinedMessage": "{plan} वापस पाने के लिए कार्ड अपडेट करें"
 }

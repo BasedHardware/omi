@@ -15266,4 +15266,12 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get referralClaimShort => 'استلام';
+
+  @override
+  String get paymentDeclinedTitle => 'تم رفض بطاقتك';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return 'حدّث بطاقتك لاستعادة $plan';
+  }
 }

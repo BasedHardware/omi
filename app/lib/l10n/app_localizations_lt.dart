@@ -15379,4 +15379,12 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get referralClaimShort => 'Atsiimti';
+
+  @override
+  String get paymentDeclinedTitle => 'Jūsų kortelė atmesta';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return 'Atnaujinkite kortelę, kad vėl naudotumėte $plan';
+  }
 }

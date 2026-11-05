@@ -4632,5 +4632,7 @@
     "referralRewardFirstDetail": "Kai 2 draugai nusipirks Omi",
     "referralRewardSecondTitle": "Dar 3 mėnesiai",
     "referralRewardSecondDetail": "Kai nusipirks dar 3 draugai",
-    "referralClaimShort": "Atsiimti"
+    "referralClaimShort": "Atsiimti",
+    "paymentDeclinedTitle": "Jūsų kortelė atmesta",
+    "paymentDeclinedMessage": "Atnaujinkite kortelę, kad vėl naudotumėte {plan}"
 }

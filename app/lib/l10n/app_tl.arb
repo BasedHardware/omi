@@ -12189,5 +12189,7 @@
     "referralRewardFirstDetail": "Kapag bumili ng Omi ang 2 kaibigan",
     "referralRewardSecondTitle": "3 pang buwan",
     "referralRewardSecondDetail": "Kapag bumili ang 3 pang kaibigan",
-    "referralClaimShort": "Kunin"
+    "referralClaimShort": "Kunin",
+    "paymentDeclinedTitle": "Tinanggihan ang iyong card",
+    "paymentDeclinedMessage": "I-update ang card para maibalik ang {plan}"
 }

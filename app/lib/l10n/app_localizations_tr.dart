@@ -15370,4 +15370,12 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get referralClaimShort => 'Al';
+
+  @override
+  String get paymentDeclinedTitle => 'Kartınız reddedildi';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return '$plan planınızı geri almak için kartınızı güncelleyin';
+  }
 }

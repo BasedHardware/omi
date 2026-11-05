@@ -15131,4 +15131,12 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get referralClaimShort => '受け取る';
+
+  @override
+  String get paymentDeclinedTitle => 'カードが拒否されました';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return '$planを再開するにはカードを更新してください';
+  }
 }

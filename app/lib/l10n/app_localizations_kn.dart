@@ -15408,4 +15408,12 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get referralClaimShort => 'ಪಡೆಯಿರಿ';
+
+  @override
+  String get paymentDeclinedTitle => 'ನಿಮ್ಮ ಕಾರ್ಡ್ ನಿರಾಕರಿಸಲಾಗಿದೆ';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return '$plan ಮರಳಿ ಪಡೆಯಲು ಕಾರ್ಡ್ ನವೀಕರಿಸಿ';
+  }
 }

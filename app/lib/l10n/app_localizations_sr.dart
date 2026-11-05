@@ -15364,4 +15364,12 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get referralClaimShort => 'Преузми';
+
+  @override
+  String get paymentDeclinedTitle => 'Ваша картица је одбијена';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return 'Ажурирајте картицу да бисте вратили $plan';
+  }
 }

@@ -4632,5 +4632,7 @@
     "referralRewardFirstDetail": "Khi 2 bạn bè mua Omi",
     "referralRewardSecondTitle": "Thêm 3 tháng",
     "referralRewardSecondDetail": "Khi thêm 3 bạn bè mua",
-    "referralClaimShort": "Nhận"
+    "referralClaimShort": "Nhận",
+    "paymentDeclinedTitle": "Thẻ của bạn đã bị từ chối",
+    "paymentDeclinedMessage": "Cập nhật thẻ để dùng lại {plan}"
 }

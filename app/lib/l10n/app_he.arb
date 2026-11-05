@@ -12189,5 +12189,7 @@
     "referralRewardFirstDetail": "כש-2 חברים קונים Omi",
     "referralRewardSecondTitle": "עוד 3 חודשים",
     "referralRewardSecondDetail": "כשעוד 3 חברים קונים",
-    "referralClaimShort": "קבלה"
+    "referralClaimShort": "קבלה",
+    "paymentDeclinedTitle": "הכרטיס שלך נדחה",
+    "paymentDeclinedMessage": "עדכנו את הכרטיס כדי לקבל שוב את {plan}"
 }

@@ -15284,4 +15284,12 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get referralClaimShort => 'รับ';
+
+  @override
+  String get paymentDeclinedTitle => 'บัตรของคุณถูกปฏิเสธ';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return 'อัปเดตบัตรเพื่อกลับมาใช้ $plan';
+  }
 }

@@ -15393,4 +15393,12 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get referralClaimShort => 'Preuzmi';
+
+  @override
+  String get paymentDeclinedTitle => 'Vaša kartica je odbijena';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return 'Ažurirajte karticu kako biste vratili $plan';
+  }
 }

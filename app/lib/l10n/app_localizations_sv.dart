@@ -15366,4 +15366,12 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get referralClaimShort => 'Hämta';
+
+  @override
+  String get paymentDeclinedTitle => 'Ditt kort nekades';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return 'Uppdatera kortet för att få tillbaka $plan';
+  }
 }

@@ -4632,5 +4632,7 @@
     "referralRewardFirstDetail": "Когато 2 приятели купят Omi",
     "referralRewardSecondTitle": "Още 3 месеца",
     "referralRewardSecondDetail": "Когато още 3 приятели купят",
-    "referralClaimShort": "Вземи"
+    "referralClaimShort": "Вземи",
+    "paymentDeclinedTitle": "Картата ви беше отхвърлена",
+    "paymentDeclinedMessage": "Обновете картата, за да възстановите {plan}"
 }

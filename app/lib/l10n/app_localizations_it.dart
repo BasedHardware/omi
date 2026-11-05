@@ -15436,4 +15436,12 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get referralClaimShort => 'Riscatta';
+
+  @override
+  String get paymentDeclinedTitle => 'La tua carta è stata rifiutata';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return 'Aggiornala per riavere $plan';
+  }
 }

@@ -98,6 +98,7 @@ There are exactly two ways out, and they mean different things.
 
 - Every tappable control is at least **44×44 pt** (48 dp on Android is fine), including the label
   next to a checkbox (`OmiCheckboxRow`).
+- A compact pill action uses `OmiButton(size: OmiButtonSize.compact, pill: true)` with `OmiRadius.pillAll`.
 - A button label is a verb in Title Case ("Save", "Delete Task", "Try Again"). A button that is
   busy keeps its size and shows a spinner in place of or beside its label.
 - A disabled control looks disabled. A Send that cannot send is not white.

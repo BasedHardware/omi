@@ -15395,4 +15395,12 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get referralClaimShort => 'Tuntut';
+
+  @override
+  String get paymentDeclinedTitle => 'Kad anda ditolak';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return 'Kemas kini kad untuk mendapatkan semula $plan';
+  }
 }

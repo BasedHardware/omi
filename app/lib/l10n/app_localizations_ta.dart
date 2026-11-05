@@ -15460,4 +15460,12 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get referralClaimShort => 'பெறுக';
+
+  @override
+  String get paymentDeclinedTitle => 'உங்கள் கார்டு நிராகரிக்கப்பட்டது';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return '$plan மீண்டும் பெற கார்டைப் புதுப்பிக்கவும்';
+  }
 }

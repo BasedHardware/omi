@@ -4632,5 +4632,7 @@
     "referralRewardFirstDetail": "När 2 vänner köper Omi",
     "referralRewardSecondTitle": "3 månader till",
     "referralRewardSecondDetail": "När 3 vänner till köper",
-    "referralClaimShort": "Hämta"
+    "referralClaimShort": "Hämta",
+    "paymentDeclinedTitle": "Ditt kort nekades",
+    "paymentDeclinedMessage": "Uppdatera kortet för att få tillbaka {plan}"
 }

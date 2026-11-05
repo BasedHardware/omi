@@ -15405,4 +15405,12 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get referralClaimShort => 'Получить';
+
+  @override
+  String get paymentDeclinedTitle => 'Ваша карта отклонена';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return 'Обновите карту, чтобы вернуть $plan';
+  }
 }

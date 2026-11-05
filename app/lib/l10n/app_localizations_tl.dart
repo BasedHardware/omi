@@ -15479,4 +15479,12 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get referralClaimShort => 'Kunin';
+
+  @override
+  String get paymentDeclinedTitle => 'Tinanggihan ang iyong card';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return 'I-update ang card para maibalik ang $plan';
+  }
 }

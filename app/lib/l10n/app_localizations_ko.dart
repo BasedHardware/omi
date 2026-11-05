@@ -15138,4 +15138,12 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get referralClaimShort => '받기';
+
+  @override
+  String get paymentDeclinedTitle => '카드가 거절되었습니다';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return '$plan을 다시 이용하려면 카드를 업데이트하세요';
+  }
 }

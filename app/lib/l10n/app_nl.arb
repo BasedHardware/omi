@@ -4632,5 +4632,7 @@
     "referralRewardFirstDetail": "Als 2 vrienden Omi kopen",
     "referralRewardSecondTitle": "Nog 3 maanden",
     "referralRewardSecondDetail": "Als nog 3 vrienden kopen",
-    "referralClaimShort": "Claimen"
+    "referralClaimShort": "Claimen",
+    "paymentDeclinedTitle": "Uw kaart is geweigerd",
+    "paymentDeclinedMessage": "Werk je kaart bij om {plan} terug te krijgen"
 }

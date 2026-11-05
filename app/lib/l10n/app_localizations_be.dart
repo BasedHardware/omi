@@ -15391,4 +15391,12 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get referralClaimShort => 'Атрымаць';
+
+  @override
+  String get paymentDeclinedTitle => 'Вашу картку адхілілі';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return 'Абнавіце картку, каб вярнуць $plan';
+  }
 }

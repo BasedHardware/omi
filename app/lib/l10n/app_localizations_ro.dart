@@ -15421,4 +15421,12 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get referralClaimShort => 'Revendică';
+
+  @override
+  String get paymentDeclinedTitle => 'Cardul dvs. a fost refuzat';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return 'Actualizați cardul pentru a recupera $plan';
+  }
 }

@@ -4632,5 +4632,7 @@
     "referralRewardFirstDetail": "Quando 2 amici acquistano Omi",
     "referralRewardSecondTitle": "Altri 3 mesi",
     "referralRewardSecondDetail": "Quando altri 3 amici acquistano",
-    "referralClaimShort": "Riscatta"
+    "referralClaimShort": "Riscatta",
+    "paymentDeclinedTitle": "La tua carta è stata rifiutata",
+    "paymentDeclinedMessage": "Aggiornala per riavere {plan}"
 }

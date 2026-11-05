@@ -4632,5 +4632,7 @@
     "referralRewardFirstDetail": "友達2人がOmiを購入したら",
     "referralRewardSecondTitle": "さらに3か月",
     "referralRewardSecondDetail": "さらに友達3人が購入したら",
-    "referralClaimShort": "受け取る"
+    "referralClaimShort": "受け取る",
+    "paymentDeclinedTitle": "カードが拒否されました",
+    "paymentDeclinedMessage": "{plan}を再開するにはカードを更新してください"
 }

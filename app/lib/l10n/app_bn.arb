@@ -12189,5 +12189,7 @@
     "referralRewardFirstDetail": "যখন 2 জন বন্ধু Omi কিনবে",
     "referralRewardSecondTitle": "আরও 3 মাস",
     "referralRewardSecondDetail": "যখন আরও 3 জন বন্ধু কিনবে",
-    "referralClaimShort": "নিন"
+    "referralClaimShort": "নিন",
+    "paymentDeclinedTitle": "আপনার কার্ড প্রত্যাখ্যাত হয়েছে",
+    "paymentDeclinedMessage": "আবার {plan} পেতে কার্ডটি আপডেট করুন"
 }

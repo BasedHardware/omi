@@ -4667,5 +4667,7 @@
     "referralRewardFirstDetail": "Saat 2 teman membeli Omi",
     "referralRewardSecondTitle": "3 bulan lagi",
     "referralRewardSecondDetail": "Saat 3 teman lagi membeli",
-    "referralClaimShort": "Klaim"
+    "referralClaimShort": "Klaim",
+    "paymentDeclinedTitle": "Kartu Anda ditolak",
+    "paymentDeclinedMessage": "Perbarui kartu untuk mendapatkan kembali {plan}"
 }

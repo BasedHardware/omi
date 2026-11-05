@@ -12189,5 +12189,7 @@
     "referralRewardFirstDetail": "Када 2 пријатеља купе Omi",
     "referralRewardSecondTitle": "Још 3 месеца",
     "referralRewardSecondDetail": "Када још 3 пријатеља купе",
-    "referralClaimShort": "Преузми"
+    "referralClaimShort": "Преузми",
+    "paymentDeclinedTitle": "Ваша картица је одбијена",
+    "paymentDeclinedMessage": "Ажурирајте картицу да бисте вратили {plan}"
 }

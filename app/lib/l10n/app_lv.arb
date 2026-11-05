@@ -4632,5 +4632,7 @@
     "referralRewardFirstDetail": "Kad 2 draugi nopērk Omi",
     "referralRewardSecondTitle": "Vēl 3 mēneši",
     "referralRewardSecondDetail": "Kad vēl 3 draugi nopērk",
-    "referralClaimShort": "Saņemt"
+    "referralClaimShort": "Saņemt",
+    "paymentDeclinedTitle": "Jūsu karte tika noraidīta",
+    "paymentDeclinedMessage": "Atjauniniet karti, lai atgūtu {plan}"
 }

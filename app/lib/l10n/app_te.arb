@@ -12189,5 +12189,7 @@
     "referralRewardFirstDetail": "2 స్నేహితులు Omi కొన్నప్పుడు",
     "referralRewardSecondTitle": "మరో 3 నెలలు",
     "referralRewardSecondDetail": "మరో 3 స్నేహితులు కొన్నప్పుడు",
-    "referralClaimShort": "పొందండి"
+    "referralClaimShort": "పొందండి",
+    "paymentDeclinedTitle": "మీ కార్డ్ తిరస్కరించబడింది",
+    "paymentDeclinedMessage": "{plan} తిరిగి పొందడానికి కార్డును అప్‌డేట్ చేయండి"
 }

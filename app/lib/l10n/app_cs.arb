@@ -4632,5 +4632,7 @@
     "referralRewardFirstDetail": "Když si 2 přátelé koupí Omi",
     "referralRewardSecondTitle": "Další 3 měsíce",
     "referralRewardSecondDetail": "Když si koupí další 3 přátelé",
-    "referralClaimShort": "Získat"
+    "referralClaimShort": "Získat",
+    "paymentDeclinedTitle": "Vaše karta byla zamítnuta",
+    "paymentDeclinedMessage": "Aktualizujte kartu a obnovte {plan}"
 }

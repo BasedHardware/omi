@@ -15434,4 +15434,12 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get referralClaimShort => 'Reclama';
+
+  @override
+  String get paymentDeclinedTitle => 'La teva targeta ha estat rebutjada';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return 'Actualitza-la per recuperar $plan';
+  }
 }

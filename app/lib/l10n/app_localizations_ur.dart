@@ -15369,4 +15369,12 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get referralClaimShort => 'حاصل کریں';
+
+  @override
+  String get paymentDeclinedTitle => 'آپ کا کارڈ مسترد ہو گیا';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return '$plan واپس حاصل کرنے کے لیے کارڈ اپ ڈیٹ کریں';
+  }
 }
