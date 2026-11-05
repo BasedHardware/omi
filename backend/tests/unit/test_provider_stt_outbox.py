@@ -42,19 +42,31 @@ class Doc:
 
 
 class Query:
-    def __init__(self, store, name, filters=(), limit=None):
+    def __init__(self, store, name, filters=(), limit=None, after=None):
         self.store, self.name, self.filters, self._limit = store, name, filters, limit
+        self.after = after
 
     def where(self, *, filter):
-        return Query(self.store, self.name, (*self.filters, filter), self._limit)
+        return Query(self.store, self.name, (*self.filters, filter), self._limit, self.after)
 
     def limit(self, n):
-        return Query(self.store, self.name, self.filters, n)
+        return Query(self.store, self.name, self.filters, n, self.after)
+
+    def order_by(self, field):
+        assert field == '__name__'
+        return self
+
+    def start_after(self, snapshot):
+        return Query(self.store, self.name, self.filters, self._limit, snapshot.id)
 
     def stream(self):
         out = []
         for (name, key), row in sorted(self.store.rows.items()):
-            if name == self.name and all(row.get(f.field_path) == f.value for f in self.filters):
+            if (
+                name == self.name
+                and (self.after is None or key > self.after)
+                and all(row.get(f.field_path) == f.value for f in self.filters)
+            ):
                 out.append(SimpleNamespace(id=key, to_dict=lambda row=row: dict(row)))
         return out[: self._limit]
 
@@ -260,3 +272,32 @@ def test_ancient_sweep_keeps_existing_privacy_discard(box, monkeypatch):
     assert counts.discarded == 1 and counts.rewoken == 0
     assert row(box)['closed_reason'] == 'privacy_blocked'
     assert not box.woken and counter._value.get() == before
+
+
+def test_sweep_advances_past_ancient_page_and_wraps(box, monkeypatch):
+    from copy import deepcopy
+
+    monkeypatch.setenv('BATCH_PIPELINE_SWEEP_AGE_GATE', 'on')
+    now = 2_000_000.0
+    collection = 'batch_pipeline_test_provider_stt_outbox'
+    ids = [f'{i:064x}' for i in range(4)]
+    for key in ids:
+        box.outbox.enqueue(key, OWNER, {'segment_id': key}, 100, now=100 if key != ids[-1] else now - 3600)
+    ancient = {key: deepcopy(box.client.rows[(collection, key)]) for key in ids[:-1]}
+    box.woken.clear()  # Simulate every original wake being lost.
+    assert box.outbox.sweep(now=now, limit=3).rewoken == 0
+    assert box.outbox.sweep(now=now, limit=3).rewoken == 1
+    assert box.woken == [box.client.rows[(collection, ids[-1])]['task_token']]
+    assert {key: box.client.rows[(collection, key)] for key in ids[:-1]} == ancient
+    # A row inserted behind the cursor is reached after the short page wraps.
+    box.client.rows[(collection, ids[0])]['created_at'] = now - 3600
+    assert box.outbox.sweep(now=now, limit=3).rewoken == 1
+
+
+def test_sweep_cursor_wraps_an_exactly_full_last_page(box, monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_SWEEP_AGE_GATE', 'on')
+    enqueue(box, now=100)
+    assert box.outbox.sweep(now=2_000_000, limit=1).rewoken == 0
+    assert box.outbox._sweep_cursor is not None
+    assert box.outbox.sweep(now=2_000_000, limit=1).rewoken == 0
+    assert box.outbox._sweep_cursor is None

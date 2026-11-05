@@ -448,6 +448,10 @@ def mark_update(
         # Timestamp every durable obligation, even before rollout. Neither an
         # append nor a retry owns the original acceptance time.
         row['first_pending_at'] = current if old and old.get('dormant') else row.get('first_pending_at', current)
+        # New coalesced work must not inherit an ancient obligation's sweep admission age.
+        row['latest_pending_at'] = (
+            current if old and old.get('dormant') else max(row.get('latest_pending_at', current), current)
+        )
         if snapshot_summary and (not old or old.get('dormant') or row.get('first_summary_policy') is None):
             if candidate is None:
                 candidate = resolve_stage_policy(
@@ -1023,6 +1027,10 @@ def sweep(
             return update
 
         try:
+            # Privacy/deletion owns retirement, even when an ancient row would otherwise be held.
+            if discard is not None and discard(snapshot.id):
+                counts['discarded'] += 1
+                continue
             # Skip before the independent historical-parking policy can mutate this row.
             candidate = getattr(snapshot, 'to_dict', lambda: {})() or {}
             if _skip_ancient_fresh(candidate, now=current):
@@ -1060,9 +1068,6 @@ def sweep(
                 row = mutate(snapshot.id, replace)
             if status == 'unbound':
                 UNBOUND.labels(action='repair').inc()
-            if row is not None and discard is not None and discard(snapshot.id):
-                counts['discarded'] += 1
-                row = None
             if row is not None:
                 try:
                     enqueue(row)

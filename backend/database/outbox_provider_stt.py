@@ -18,6 +18,7 @@ import re
 import uuid
 from typing import Any, Callable, Literal, Mapping
 
+from config.policy import sweep_age
 from database.outbox import Claim, EnqueueResult, OutboxKind, Outcome, SweepCounts
 from utils.observability.sweep_age import skip_ancient
 
@@ -104,6 +105,7 @@ class FirestoreProviderSttOutbox:
         self._privacy_blocked = privacy_blocked
         self._create_wake = create_wake or _default_wake
         self._collection = collection
+        self._sweep_cursor: Any = None  # The production factory caches this instance across maintenance ticks.
 
     # --- plumbing -------------------------------------------------------------------------------
     def _client(self) -> Any:
@@ -308,7 +310,17 @@ class FirestoreProviderSttOutbox:
             .where(filter=FieldFilter('state', '==', OPEN))
             .limit(max(1, min(limit, 500)))
         )
-        for snapshot in query.stream():
+        # The state single-field index already includes document-ID ordering. Advance even over
+        # age-skipped rows, without writing them; a short/empty page wraps the next bounded pass.
+        paged = sweep_age.enabled()
+        if paged:
+            query = query.order_by('__name__')
+            if self._sweep_cursor is not None:
+                query = query.start_after(self._sweep_cursor)
+        page = list(query.stream())
+        if paged:
+            self._sweep_cursor = page[-1] if len(page) == max(1, min(limit, 500)) else None
+        for snapshot in page:
             row = snapshot.to_dict() or {}
             try:
                 if self._blocked(snapshot.id, row['owner_id']):

@@ -137,3 +137,51 @@ def test_off_restores_existing_parking_policy(state, sweep_query, monkeypatch):
     sweep_query.stream.side_effect = lambda: [SimpleNamespace(id=key, to_dict=lambda: deepcopy(rows[key]))]
     assert outbox.sweep(now=2_000_000) == {'repaired': 0, 'error': 0}
     assert rows[key]['age_gate_parked'] and not tasks
+
+
+def test_new_mark_on_ancient_open_fresh_row_is_rewoken(state, sweep_query, monkeypatch):
+    rows, tasks = state
+    monkeypatch.setenv('BATCH_PIPELINE_SWEEP_AGE_GATE', 'on')
+    monkeypatch.setenv('ENRICHMENT_FRESH_TASKS_QUEUE', 'enrichment-fresh')
+    now = 2_000_000.0
+    outbox.mark('u', 'c', 'en', now=100)
+    key = outbox.key('u', 'c')
+    rows[key]['dispatch']['queue'] = 'enrichment-fresh'
+    first_pending = rows[key]['first_pending_at']
+    outbox.mark('u', 'c', 'en', now=now - 3600)
+    outbox.mark('u', 'c', 'en', now=now - 7200)  # Delayed older append cannot regress the age.
+    assert rows[key]['first_pending_at'] == first_pending
+    assert rows[key]['latest_pending_at'] == now - 3600
+    tasks.clear()  # The coalesced mark's previous named task was lost.
+    sweep_query.stream.side_effect = lambda: [SimpleNamespace(id=key, to_dict=lambda: deepcopy(rows[key]))]
+    counter = SKIPPED.labels(queue='enrichment-fresh', reason='max_age')
+    before = counter._value.get()
+    assert outbox.sweep(now=now) == {'repaired': 1, 'error': 0}
+    assert len(tasks) == 1 and counter._value.get() == before
+
+
+def test_ancient_fresh_sweep_runs_privacy_retirement_before_age_skip(state, sweep_query, monkeypatch):
+    rows, tasks = state
+    monkeypatch.setenv('BATCH_PIPELINE_SWEEP_AGE_GATE', 'on')
+    monkeypatch.setenv('ENRICHMENT_FRESH_TASKS_QUEUE', 'enrichment-fresh')
+    outbox.mark('u', 'c', 'en', now=100)
+    key = outbox.key('u', 'c')
+    rows[key]['dispatch']['queue'] = 'enrichment-fresh'
+    tasks.clear()
+    sweep_query.stream.side_effect = lambda: [SimpleNamespace(id=key, to_dict=lambda: deepcopy(rows[key]))]
+    counter = SKIPPED.labels(queue='enrichment-fresh', reason='max_age')
+    before = counter._value.get()
+
+    from database.outbox_firestore import FirestoreEnrichmentOutbox
+    from unittest.mock import Mock
+
+    probe = Mock(return_value=True)
+    adapter = FirestoreEnrichmentOutbox(privacy_blocked=probe)
+    assert outbox.sweep(now=2_000_000, discard=adapter._blocked) == {
+        'repaired': 0,
+        'error': 0,
+        'discarded': 1,
+        'expired': 0,
+    }
+    assert not rows and not tasks and counter._value.get() == before
+    probe.assert_called_once_with('u', {'conversation_id': 'c'})
