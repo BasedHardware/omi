@@ -12,27 +12,43 @@
  */
 #define RTC_UTC_DATETIME_STRLEN 20
 
+#define RTC_MIN_VALID_EPOCH 1700000000U
+#define RTC_TIMESTAMP_UPTIME_FLAG 0x80000000U
+
 /**
  * @brief Initialize application timekeeping.
  *
- * Restores RTC from persisted settings if available.
+ * Restores a diagnostic clock from persisted settings if available. Restoration
+ * never establishes trusted recording time.
  */
 void init_rtc(void);
 
 /**
  * @brief Get current UTC epoch seconds.
  *
- * @return UTC epoch seconds, or 0 if the clock is not yet synchronized.
+ * May be a stale restored epoch; use rtc_get_record_timestamp() for recordings.
+ * @return Diagnostic epoch seconds, or 0 if no time base is available.
  */
 uint32_t get_utc_time(void);
 
 /**
- * @brief Check whether UTC time is valid/synchronized.
+ * @brief Check whether an epoch time base is available (restored or synced).
+ * This is not a trust signal. Do not use it to choose recording timestamps.
  */
 bool rtc_is_valid(void);
 
+/** @brief True only after a phone time sync in this boot, never after restore. */
+bool rtc_is_trusted(void);
+
 /**
- * @brief Set/synchronize UTC epoch seconds.
+ * @brief Recording timestamp: trusted epoch or bit-31 flagged seconds since boot.
+ * Always returns a timestamp, including before any sync. The low 31 bits of a
+ * flagged timestamp are uptime, never UTC. Trust and epoch are sampled together.
+ */
+uint32_t rtc_get_record_timestamp(void);
+
+/**
+ * @brief Set UTC epoch seconds from a phone sync and establish trust.
  *
  * Persists a base value to settings and uses monotonic uptime to produce a
  * stable increasing time while running.
@@ -40,21 +56,23 @@ bool rtc_is_valid(void);
 int rtc_set_utc_time(uint64_t utc_epoch_s);
 
 /**
- * @brief Set/synchronize UTC epoch in milliseconds.
+ * @brief Restore a diagnostic epoch in milliseconds without establishing trust.
+ * Used by the IMU boot adjustment; power loss/wrap makes it unsuitable as proof
+ * of wall-clock recording time.
  *
  * @param utc_epoch_ms UTC epoch milliseconds since 1970-01-01.
  */
-int rtc_set_utc_time_ms(uint64_t utc_epoch_ms);
+int rtc_restore_utc_time_ms(uint64_t utc_epoch_ms);
 
 /**
- * @brief Get UTC epoch milliseconds.
+ * @brief Get diagnostic epoch milliseconds (may be restored and stale).
  *
- * @return UTC epoch milliseconds, or 0 if unsynchronized.
+ * @return Diagnostic epoch milliseconds, or 0 if no time base is available.
  */
 uint64_t rtc_get_utc_time_ms(void);
 
 /**
- * @brief Convenience helper to format the current UTC time.
+ * @brief Format diagnostic time; a restored value is not trusted recording time.
  *
  * @return 0 on success, -ENODATA if unsynchronized, otherwise negative errno.
  */

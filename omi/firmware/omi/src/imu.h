@@ -16,7 +16,8 @@ void lsm6dsl_time_prepare_for_system_off(void);
  * @brief On boot, adjust UTC epoch using IMU timestamp delta.
  *
  * If a valid base was stored before system_off, reads current IMU timestamp and
- * adds the elapsed time to the persisted UTC epoch via rtc_set_utc_time().
+ * adds the elapsed time to the diagnostic epoch via rtc_restore_utc_time_ms().
+ * This estimate never establishes trusted recording time; a phone sync is required.
  *
  * @return 1 if an adjustment was applied, 0 if not applicable, negative errno on failure.
  */

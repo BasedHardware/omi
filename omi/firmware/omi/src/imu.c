@@ -307,9 +307,9 @@ int lsm6dsl_time_boot_adjust_rtc(void)
         return 0;
     }
 
-    err = rtc_set_utc_time_ms(new_epoch_ms);
+    err = rtc_restore_utc_time_ms(new_epoch_ms);
     if (err) {
-        LOG_WRN("boot adjust: rtc_set_utc_time_ms failed (err %d)", err);
+        LOG_WRN("boot adjust: rtc_restore_utc_time_ms failed (err %d)", err);
         return err;
     }
 
