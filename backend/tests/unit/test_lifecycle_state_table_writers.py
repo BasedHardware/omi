@@ -526,3 +526,85 @@ def test_terminal_ratchet_does_not_confuse_conversation_children_with_the_parent
 
     source = "def write():\n    ref = db.collection('conversations').document(cid).collection('photos').document(pid)\n    ref.set({'status': 'completed'})\n"
     assert terminal_writer_sites(source, 'database/new.py') == {'conversation': set(), 'finalization': set()}
+
+
+_ENUM_IMPORT_FORMS = [
+    ('from models.conversation_enums import ConversationStatus as CS', 'CS.{status}'),
+    ('from models.conversation_enums import ConversationStatus as CS', 'CS.{status}.value'),
+    ('from models.conversation_enums import ConversationStatus as CS', "CS['{status}']"),
+    ('from models.conversation_enums import ConversationStatus as CS', "CS['{status}'].value"),
+    ('import models.conversation_enums as m', 'm.ConversationStatus.{status}'),
+    ('import models.conversation_enums as m', 'm.ConversationStatus.{status}.value'),
+    ('import models.conversation_enums as m', "m.ConversationStatus['{status}']"),
+    ('import models.conversation_enums', 'models.conversation_enums.ConversationStatus.{status}.value'),
+    ('import models', 'models.conversation_enums.ConversationStatus.{status}'),
+    ('from models import conversation_enums as m', 'm.ConversationStatus.{status}'),
+    ('from models.conversation_enums import ConversationStatus as CS\nAlias = CS', 'Alias.{status}.value'),
+]
+
+
+@pytest.mark.parametrize('imports,expression', _ENUM_IMPORT_FORMS)
+@pytest.mark.parametrize('status', ['completed', 'failed'])
+@pytest.mark.parametrize('method', ['update', 'set', 'merge', 'claim'])
+def test_terminal_enum_aliases_reach_discovery_and_the_strict_ratchet(tmp_path, imports, expression, status, method):
+    from tests.support.terminal_writer_inventory import assert_terminal_writers, scan_terminal_writers
+
+    value = expression.format(status=status)
+    statement = (
+        f'claim_conversation_status(uid, cid, expected, {value})'
+        if method == 'claim'
+        else f"ref.{method}({{'status': {value}}})"
+    )
+    source = f'{imports}\ndef surprise(ref):\n    {statement}\n'
+    # A reference supplied by a caller, with no collection literal and no
+    # canonical ConversationStatus.completed spelling, must remain in scope.
+    path = tmp_path / 'routers' / 'surprise.py'
+    path.parent.mkdir()
+    path.write_text(source)
+    actual = scan_terminal_writers(tmp_path)
+    assert actual == {'conversation': {('routers/surprise.py', 'surprise')}, 'finalization': set()}
+    with pytest.raises(AssertionError, match='TERMINAL-WRITER-OWNER.*new writers'):
+        assert_terminal_writers(actual, {'conversation': {}, 'finalization': {}})
+
+
+@pytest.mark.parametrize('imports,expression', _ENUM_IMPORT_FORMS)
+@pytest.mark.parametrize('status', ['processing', 'in_progress'])
+@pytest.mark.parametrize('method', ['update', 'set', 'merge', 'claim'])
+def test_nonterminal_enum_aliases_do_not_invent_terminal_writers(tmp_path, imports, expression, status, method):
+    from tests.support.terminal_writer_inventory import scan_terminal_writers
+
+    value = expression.format(status=status)
+    statement = (
+        f'claim_conversation_status(uid, cid, expected, {value})'
+        if method == 'claim'
+        else f"ref.{method}({{'status': {value}}})"
+    )
+    path = tmp_path / 'read_or_nonterminal.py'
+    path.write_text(f'{imports}\ndef write(ref):\n    {statement}\n')
+    assert scan_terminal_writers(tmp_path) == {'conversation': set(), 'finalization': set()}
+
+
+@pytest.mark.parametrize('imports,expression', _ENUM_IMPORT_FORMS)
+def test_terminal_enum_alias_reads_and_comparisons_are_not_writers(tmp_path, imports, expression):
+    from tests.support.terminal_writer_inventory import scan_terminal_writers
+
+    value = expression.format(status='completed')
+    path = tmp_path / 'read_only.py'
+    path.write_text(f"{imports}\ndef inspect(ref):\n    terminal = {value}\n    return ref.get('status') == terminal\n")
+    assert scan_terminal_writers(tmp_path) == {'conversation': set(), 'finalization': set()}
+
+
+@pytest.mark.parametrize('status', ['completed', 'failed', 'processing', 'in_progress'])
+@pytest.mark.parametrize('method', ['update', 'set', 'merge', 'claim'])
+def test_string_status_payloads_need_no_collection_literal(tmp_path, status, method):
+    from tests.support.terminal_writer_inventory import scan_terminal_writers
+
+    statement = (
+        f'claim_conversation_status(uid, cid, expected, {status!r})'
+        if method == 'claim'
+        else f"conversation_ref.{method}({{'status': {status!r}}})"
+    )
+    path = tmp_path / 'writer.py'
+    path.write_text(f'def write(conversation_ref):\n    {statement}\n')
+    expected = {('writer.py', 'write')} if status in {'completed', 'failed'} else set()
+    assert scan_terminal_writers(tmp_path) == {'conversation': expected, 'finalization': set()}

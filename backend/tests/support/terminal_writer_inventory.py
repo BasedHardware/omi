@@ -49,6 +49,19 @@ def terminal_writer_sites(source, module):
         for target in node.targets
         if isinstance(target, ast.Name)
     )
+    enum_names = {'ConversationStatus'}
+    module_names = set()
+    for node in nodes:
+        if isinstance(node, ast.ImportFrom):
+            for alias in node.names:
+                if alias.name == 'ConversationStatus':
+                    enum_names.add(alias.asname or alias.name)
+                else:
+                    module_names.add(alias.asname or alias.name)
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                module_names.add(alias.asname or alias.name)
+
     found = {machine: set() for machine in TERMINAL_STATUSES}
 
     def owner(node):
@@ -211,6 +224,49 @@ def terminal_writer_sites(source, module):
             return machine_for(target.value, seen)
         return None
 
+    def dotted_name(node):
+        if isinstance(node, ast.Name):
+            return node.id
+        if isinstance(node, ast.Attribute):
+            parent = dotted_name(node.value)
+            return f'{parent}.{node.attr}' if parent else None
+        return None
+
+    def conversation_status_class(node, seen=frozenset()):
+        if node is None or node in seen:
+            return False
+        seen = seen | {node}
+        name = dotted_name(node)
+        if name in enum_names:
+            return True
+        if isinstance(node, ast.Attribute) and node.attr == 'ConversationStatus':
+            parent = dotted_name(node.value)
+            if parent and any(parent == name or parent.startswith(f'{name}.') for name in module_names):
+                return True
+        if isinstance(node, ast.Name):
+            return any(conversation_status_class(value, seen) for value in bindings(node).get(node.id, ()))
+        return False
+
+    @lru_cache(maxsize=None)
+    def enum_values(node, seen=frozenset()):
+        """Resolve enum imports, qualification, member lookup and .value without IO."""
+        if node is None or node in seen:
+            return set()
+        seen = seen | {node}
+        if isinstance(node, ast.Attribute):
+            if node.attr == 'value':
+                return enum_values(node.value, seen)
+            if conversation_status_class(node.value):
+                return {node.attr}
+        if isinstance(node, ast.Subscript) and conversation_status_class(node.value):
+            if isinstance(node.slice, ast.Constant) and isinstance(node.slice.value, str):
+                return {node.slice.value}
+        if isinstance(node, ast.Name):
+            return set().union(*(enum_values(value, seen) for value in bindings(node).get(node.id, ())))
+        if isinstance(node, ast.IfExp):
+            return enum_values(node.body, seen) | enum_values(node.orelse, seen)
+        return set()
+
     @lru_cache(maxsize=None)
     def strings(node, seen=frozenset()):
         if node is None or node in seen:
@@ -222,11 +278,8 @@ def terminal_writer_sites(source, module):
             return set().union(*(strings(value, seen) for value in bindings(node).get(node.id, ())))
         if isinstance(node, ast.IfExp):
             return strings(node.body, seen) | strings(node.orelse, seen)
-        if isinstance(node, ast.Attribute):
-            if node.attr == 'value':
-                return strings(node.value, seen)
-            if isinstance(node.value, ast.Name) and node.value.id == 'ConversationStatus':
-                return {node.attr}
+        if isinstance(node, (ast.Attribute, ast.Subscript)):
+            return enum_values(node)
         return set()
 
     def pairs(node):
@@ -357,7 +410,7 @@ def terminal_writer_sites(source, module):
     for node in nodes:
         for key, value in pairs(node):
             if 'status' in strings(key) and strings(value) & TERMINAL_STATUSES['conversation']:
-                if any(isinstance(item, ast.Name) and item.id == 'ConversationStatus' for item in ast.walk(value)):
+                if enum_values(value) & TERMINAL_STATUSES['conversation']:
                     add('conversation', node)
     return found
 
@@ -376,11 +429,9 @@ def terminal_candidate_modules(backend):
             path = Path(directory) / name
             source = path.read_text()
             conversation_storage = 'conversations' in source and re.search(r'\.(?:set|create|update|merge)\(', source)
-            if not conversation_storage and not re.search(
-                r'''(?:['"](?:completed|failed|dead_letter)['"]|ConversationStatus\.(?:completed|failed)|claim_conversation_status|conversation_data)''',
-                source,
-            ):
-                continue
+            # Do not prefilter on terminal value spelling: import aliases and
+            # module qualification can hide every enum member literal. Select
+            # status payload syntax first, then resolve values in the AST.
             if not conversation_storage and not re.search(
                 r'''(?:['"]status['"]|status\s*=|\.status\s*=|claim_conversation_status)''', source
             ):
