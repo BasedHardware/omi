@@ -462,3 +462,32 @@ def test_a_failing_projector_clock_still_bounds_the_pass(monkeypatch, clock):
         if revisited:
             break
     assert revisited
+
+
+@pytest.mark.parametrize('backoff', ['0', '900', 'junk', None])
+@pytest.mark.parametrize('pagination', ['true', 'false'])
+@pytest.mark.parametrize('page', ['true', 'false'])
+def test_config_matrix_takes_the_bounded_path_or_exactly_the_legacy_path(monkeypatch, clock, backoff, pagination, page):
+    if backoff is None:
+        monkeypatch.delenv(KNOB, raising=False)
+    else:
+        monkeypatch.setenv(KNOB, backoff)
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED', pagination)
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_FOLLOWUP_PAGE_ENABLED', page)
+    rows = backlog(250)
+    followups, query = runner(rows, monkeypatch, fraction=0.5, now=1250.0)
+    bounded = backoff != '0' and pagination == 'true'  # 'junk' and unset keep the 900 default
+    assert followups.desync is bounded
+    first = followups.discovered()
+    followups.note(first[0], 'blocked')
+    second = followups.discovered()
+    seed_reads = [call for call in query.calls if call[1] == 1]
+    if bounded:
+        assert seed_reads == [(None, 1)] and first[0] == 'r125'  # seeded mid-backlog
+        assert followups.wrap_at is not None and first[0] in followups.backoff
+    else:
+        # Legacy: head-first, no seed read, no backoff, no pass mark, immediate retry.
+        assert seed_reads == [] and first[0] == 'r000'
+        assert followups.backoff == {} and followups.wrap_at is None
+        if pagination == 'false':
+            assert second[0] == 'r000'  # every page is the head, as before
