@@ -716,9 +716,10 @@ def _close(
         return None  # Speech won the race with a lazy reader's stale idle decision.
     merged = {**(unseal(uid, raw) or {}), **extra, **_closed_fields(reason, closed_at)}
     # Finalize arrival is bookkeeping. Recorded ownership ends at retained member evidence.
+    # A detached member (``extra`` rewrites membership) no longer extends this episode's window.
     ends = []
     hidden = set(raw.get('discarded_conversation_ids') or []) | set(raw.get('duplicate_conversation_ids') or [])
-    for cid in raw.get('conversation_ids') or []:
+    for cid in merged.get('conversation_ids') or []:
         member = (
             client.collection('users')
             .document(uid)
@@ -735,10 +736,10 @@ def _close(
         ):
             continue
         span = conversation_span(member)
-        end = span.recorded_end if span else (raw.get('member_activity') or {}).get(cid)
+        end = span.recorded_end if span else (merged.get('member_activity') or {}).get(cid)
         if isinstance(end, datetime):
             ends.append(end)
-    end = max(ends, default=raw.get('last_activity_at') or raw['started_at'])
+    end = max(ends, default=merged.get('last_activity_at') or raw['started_at'])
     end = max(raw['started_at'], _bounded_activity(raw, end))
     if timeline_enabled:
         rows = episode_timeline.recorded_candidates(

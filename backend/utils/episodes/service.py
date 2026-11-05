@@ -62,6 +62,8 @@ from config.episodes import (
     MAX_EPISODE_SECONDS,
     MOMENT_MIN_INTERVAL_SECONDS,
     MOMENT_MIN_WORDS,
+    MOVED_ON_THRESHOLD,
+    F_JOIN_VARIANT,
     episode_hard_cap_across_conversations_enabled,
     episode_output_language_pinned,
     episodes_enabled_for,
@@ -73,7 +75,7 @@ from database import episodes as episodes_db
 from database import notifications as notification_db
 from database import users as users_db
 from database.auth import get_user_name
-from utils.episodes import moment_render, boundary_runtime
+from utils.episodes import moment_render, boundary_runtime, f_join
 from utils.episodes import output_language as episode_language
 from utils.llm.output_language import dominant_segment_language, languages_match
 from utils.episodes import client_gate, composer, incremental, metrics, policy, recovery
@@ -408,8 +410,20 @@ def _close(
             carried_items.extend(transferred)
         metrics.record_episode_closed(reason)
         metrics.record_provisional_outcomes({'dropped': dropped})
+        _record_closed_size(uid, closed)
         composer.schedule(uid, str(episode['id']), collaborators=c)  # Members still processing reschedule it.
     return closed
+
+
+def _record_closed_size(uid: str, closed: Mapping[str, Any]) -> None:
+    """Episode size by join-variant arm: the F ramp's size and episodes-per-user guardrails."""
+    try:
+        start, end = policy.utc(closed.get('started_at')), policy.utc(closed.get('closed_at'))
+        span = (end - start).total_seconds() / 60 if start and end else None
+        arm = 'f' if f_join.admitted(uid) else 'control'
+        metrics.record_closed_size(arm, len(closed.get('conversation_ids') or []), span)
+    except Exception:
+        pass
 
 
 def _pending(episode: Optional[Mapping[str, Any]]) -> dict[str, dict[str, Any]]:
@@ -583,7 +597,10 @@ def _attach_once(
         owner = episode_owning_recorded_time(uid, started_at, firestore_client=c.firestore_client)
         late = is_late((started_at, ended_at or started_at), now)
         if owner or late:
+            uncertain = _f_join_uncertain(uid, owner, conversation_id, source, started_at) if not late else None
             placed = attach_recorded(uid, conversation_id, {'source': source}, started_at, started_at, c)
+            if uncertain is not None:
+                _mark_f_pending(uid, owner, placed, conversation_id, uncertain, c)
             if owner and not policy.is_live(owner) and not late:
                 resumed = episode_timeline.resume_recorded(
                     uid,
@@ -660,6 +677,114 @@ def _attach_once(
     return 'pending' if decision.action == policy.ASK else 'joined'
 
 
+def _f_join_uncertain(
+    uid: str, owner: Optional[Mapping[str, Any]], conversation_id: str, source: Optional[str], started_at: datetime
+) -> Optional[policy.Boundary]:
+    """An F-cohort join to a live owner 2 to 30 minutes after its last speech; None keeps today's join.
+
+    Gaps under the continue gap, overlaps and closes keep today's rules (variant F's evaluated scope).
+    """
+    if not owner or not policy.is_live(owner) or not f_join.admitted(uid):
+        return None
+    facts = policy.MomentFacts(
+        conversation_id=conversation_id,
+        source=source,
+        started_at=started_at,
+        ended_at=started_at,
+        calendar_identity=None,
+        speakers=frozenset(),
+    )
+    decision = policy.boundary(owner, facts)
+    if decision.action != policy.ASK or (decision.gap_seconds or 0.0) < CONTINUE_GAP_SECONDS:
+        return None
+    return decision
+
+
+def _mark_f_pending(
+    uid: str,
+    owner: Mapping[str, Any],
+    placed: Mapping[str, Any],
+    conversation_id: str,
+    decision: policy.Boundary,
+    c: Collaborators,
+) -> None:
+    """Join now by time (Home hides it under the live row); its first moment asks Jev with variant F.
+
+    Fail-open: a lost compare-and-swap leaves today's time-only join in place.
+    """
+    if str(placed.get('id')) != str(owner.get('id')) or not policy.is_live(placed):
+        return
+    try:
+        episodes_db.commit_moment(
+            uid,
+            expected_episode_id=str(placed['id']),
+            expected_version=placed.get('state_version'),
+            updates={
+                'pending_boundary': {
+                    **_pending(placed),
+                    conversation_id: {
+                        'gap_seconds': decision.gap_seconds or 0.0,
+                        'source_changed': decision.source_changed,
+                        'variant': F_JOIN_VARIANT,
+                    },
+                }
+            },
+            firestore_client=c.firestore_client,
+        )
+        metrics.record_boundary('f_pending')
+    except Exception as error:
+        metrics.record_boundary('f_pending_conflict')
+        logger.warning('event=episode_f_join outcome=pending_failed exception_type=%s', type(error).__name__)
+
+
+def _f_previous_transcript(uid: str, episode: Mapping[str, Any], conversation_id: str, c: Collaborators) -> str:
+    """The member immediately before the candidate (latest activity), rendered as variant F saw it."""
+    activity = episode.get('member_activity') or {}
+    members = [cid for cid in episode.get('conversation_ids') or [] if cid != conversation_id]
+    if not members:
+        return ''
+    order = {cid: i for i, cid in enumerate(members)}
+    epoch = datetime.min.replace(tzinfo=timezone.utc)
+    previous = max(members, key=lambda cid: (policy.utc(activity.get(cid)) or epoch, order[cid]))
+    row = conversations_db.get_conversation(uid, previous, firestore_client=c.firestore_client) or {}
+    segments = [s for s in row.get('transcript_segments') or [] if isinstance(s, Mapping)]
+    return incremental.render_f_transcript(_named_segments(uid, segments, c))
+
+
+def _settle_f(
+    uid: str,
+    episode: Mapping[str, Any],
+    moment: MomentInput,
+    pending: Mapping[str, Any],
+    named: Sequence[Mapping[str, Any]],
+    c: Collaborators,
+) -> policy.Boundary:
+    """Variant F's answer for a marked join; any failure keeps today's join (continue)."""
+    gap = float(pending.get('gap_seconds') or 0.0)
+    source_changed = bool(pending.get('source_changed'))
+    keep = policy.Boundary(policy.CONTINUE, gap_seconds=gap, source_changed=source_changed)
+    if not f_join.admitted(uid):
+        metrics.record_boundary('f_disabled')
+        return keep
+    try:
+        previous = _f_previous_transcript(uid, episode, moment.conversation_id, c)
+    except Exception as error:
+        logger.warning('event=episode_f_join outcome=previous_failed exception_type=%s', type(error).__name__)
+        metrics.record_boundary('f_no_answer')
+        return keep
+    state = incremental.f_boundary_state(previous, incremental.render_f_transcript(named))
+    p_same = incremental.ask_same_occasion_f(state, ask=c.ask)
+    if p_same is None:
+        metrics.record_boundary('f_no_answer')
+        return keep
+    if p_same < MOVED_ON_THRESHOLD:
+        metrics.record_boundary('f_close')
+        reason = 'source_change' if source_changed else 'moved_on'
+        return policy.Boundary('close', reason, gap_seconds=gap, source_changed=source_changed)
+    metrics.record_boundary('f_continue')
+    return keep
+
+
 @conversation_scope
 def record_moment(
     uid: str,
@@ -698,13 +823,18 @@ def _settle_boundary(
     text: str,
     c: Collaborators,
     now: datetime,
+    named: Sequence[Mapping[str, Any]] = (),
 ):
     """Settle provisional joins and keep continuing members with their original owner."""
     decision = boundary_runtime.decision(
         uid, episode, facts, policy.boundary(episode, facts), firestore_client=c.firestore_client
     )
     pending = _pending(episode).get(moment.conversation_id)
-    if episode and pending is not None and decision.action == policy.CONTINUE:
+    if episode and pending is not None and pending.get('variant') == F_JOIN_VARIANT:
+        # A recorded-time join marked for variant F settles only with F; never the legacy prompt.
+        if decision.action == policy.CONTINUE:
+            decision = _settle_f(uid, episode, moment, pending, named, c)
+    elif episode and pending is not None and decision.action == policy.CONTINUE:
         # It joined provisionally at its first words; with its text in hand, settle it now.
         decision = policy.Boundary(
             policy.ASK,
@@ -869,7 +999,7 @@ def _record_moment_once(
     if closed is None and not member_episode_id:
         previous_episode_id = episode.get('id') if episode else None
         hard_cap_previous = dict(episode) if episode else None
-        settled = _settle_boundary(uid, episode, moment, facts, text.text, c, now)
+        settled = _settle_boundary(uid, episode, moment, facts, text.text, c, now, named)
         if isinstance(settled, str):
             return settled
         episode, pending, carried_items, successor_started_at, carry_previous_state = settled

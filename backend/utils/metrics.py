@@ -543,6 +543,7 @@ JEV_DECISION_LABELS = {
             'capture_resummary',
             'conversation_smart_merge',
             'episode_boundary',
+            'episode_boundary_f',
         }
     ),
     'outcome': frozenset(

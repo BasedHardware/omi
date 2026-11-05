@@ -232,6 +232,37 @@ COMPOSER_MIN_SECTION_SECONDS = 60
 MOVED_ON_THRESHOLD = 0.2
 JEV_LANE = 'episode_boundary'
 JEV_TIMEOUT_SECONDS = 2.5
+
+# --------------------------------------------------------------------------- episode join variant F
+
+# Variant F settles an uncertain recorded-time join (a live owner 2 to 30 minutes after its last speech)
+# with Jev over the previous member's transcript and the new speech, no summary or time features.
+# The cohort is the Omi flag store rule ``episode_f_join`` (``utils/episodes/f_join.py``): ramp and
+# kill it at runtime with ``scripts/omi_flags.py``. Without a rule the env ``EPISODE_F_JOIN_PERCENT``
+# (default 0) buckets uids. ``EPISODE_F_JOIN_ENABLED`` (unset is on; off/false/0/no) overrides both.
+EPISODE_F_JOIN_ENABLED_ENV = 'EPISODE_F_JOIN_ENABLED'
+EPISODE_F_JOIN_PERCENT_ENV = 'EPISODE_F_JOIN_PERCENT'
+F_JOIN_FLAG_KEY = 'episode_f_join'
+F_JOIN_VARIANT = 'f'
+F_JOIN_JEV_LANE = 'episode_boundary_f'
+F_JOIN_PREVIOUS_CHARS = 12_000
+F_JOIN_NEW_CHARS = 8_000
+# The gateway's own provider deadline (JEV_GATEWAY_REQUEST_MS, 2.5 s) is authoritative; the client
+# waits just past it so a slow provider surfaces as a gateway timeout. One attempt, as today.
+F_JOIN_TIMEOUT_SECONDS = 3.0
+F_JOIN_SALT = 'episode-f-join-v1'
+_OFF = frozenset({'false', 'off', '0', 'no'})
+
+
+def f_join_enabled() -> bool:
+    return os.getenv(EPISODE_F_JOIN_ENABLED_ENV, '').strip().lower() not in _OFF
+
+
+def f_join_env_admitted(uid: str) -> bool:
+    """The env fallback cohort: a stable salted uid bucket below the percent; invalid admits nobody."""
+    return bool(uid) and uid_bucket(uid, F_JOIN_SALT) < percentage(EPISODE_F_JOIN_PERCENT_ENV, default=0.0)
+
+
 # Without a Jev answer, a source change or a gap this long still closes.
 
 # --------------------------------------------------------------------------- compact state budget
