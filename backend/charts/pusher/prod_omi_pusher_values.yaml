@@ -263,6 +263,11 @@ env:
         key: POSTHOG_PROJECT_API_KEY
   - name: ACTION_ITEM_REFRESH_PRESERVE_ENABLED
     value: "true"
+  - name: BATCH_FINAL_PASS_ENABLED
+    valueFrom:
+      configMapKeyRef:
+        name: prod-omi-backend-config
+        key: BATCH_FINAL_PASS_ENABLED
   - name: CONVERSATION_SMART_MERGE_FLATTEN_ENABLED
     value: "true"
   - name: CAPTURE_GROUP_CONTAINMENT_MODE

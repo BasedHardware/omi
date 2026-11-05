@@ -73,7 +73,7 @@ def pipeline(monkeypatch):
     monkeypatch.setattr(finalizer, '_maybe_start_shadow', lambda *args: None)
     monkeypatch.setattr(pc, 'is_release_probe_uid', lambda uid: False)
     monkeypatch.setattr(pc, '_enrich_meeting_context', lambda *args: None)
-    monkeypatch.setattr(pc, 'resolve_speakers_for_processing', lambda *args: False)
+    monkeypatch.setattr(pc, 'resolve_speakers_for_processing', lambda *args, **kwargs: False)
     monkeypatch.setattr(pc.notification_db, 'get_user_time_zone', lambda uid: 'UTC')
     monkeypatch.setattr(pc.users_db, 'get_user_language_preference', lambda uid: 'en')
     monkeypatch.setattr(pc.redis_db, 'get_user_preferred_app', lambda uid: None)
@@ -154,6 +154,25 @@ async def _run_and_verify(pipeline):
     )
     assert remaining == []
     return json.loads(response.body), counters
+
+
+@pytest.mark.asyncio
+async def test_speaker_obligation_settles_after_canonical_persistence(pipeline, monkeypatch):
+    observed = []
+
+    def resolve(uid, conversation, *, on_persist):
+        assert pipeline.store.rows[CONVERSATION_PATH]['status'] == 'processing'
+
+        def settled(current):
+            observed.append((current, pipeline.store.rows[CONVERSATION_PATH]['status']))
+
+        on_persist(settled)
+        return True
+
+    monkeypatch.setattr(pc, 'resolve_speakers_for_processing', resolve)
+    _seed(pipeline, transcript=[{'text': 'hmm', 'start': 0, 'end': 1, 'speaker': 'SPEAKER_00', 'is_user': False}])
+    await _run_and_verify(pipeline)
+    assert observed == [(True, 'completed')]
 
 
 @pytest.mark.asyncio
@@ -428,7 +447,7 @@ async def test_rule_discard_keeps_stored_speaker_metadata_with_its_transcript(pi
     stored = {'status': 'capture', 'version': 1, 'participant_speaker_ids': [7]}
     transcript = [{'text': 'hmm', 'start': 0, 'end': 1, 'speaker': 'SPEAKER_07', 'speaker_id': 7, 'is_user': False}]
 
-    def resolve(uid, conversation):
+    def resolve(uid, conversation, **kwargs):
         conversation.speaker_resolution = ConversationSpeakers(
             status='resolved', participant_speaker_ids=[7, 100, 101, 102]
         )

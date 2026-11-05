@@ -5,7 +5,7 @@ import logging
 import math
 import time
 
-from config.batch_conversation_speakers import batch_unit_scope
+from config.batch_conversation_speakers import batch_unit_scope, final_pass_enabled_for
 from database.batch_final_pass_retry import FinalPassRetries
 from utils.observability.fallback import record_fallback
 from utils.conversations.final_pass_dependencies import transient_cause
@@ -80,6 +80,57 @@ def enqueue(uid, conversation):
     if created:
         _try_wake(key, row)
     return {'outcome': row['outcome'] or 'deferred_slot_busy'}
+
+
+def resolve_direct(uid, conversation, *, resolve, on_persist):
+    """One serving obligation shared by synchronous and queued attempts.
+
+    Terminal direct results settle only after the caller's canonical persist.
+    A crashed caller retains leased custody for the existing sweeper.
+    """
+    from utils.conversations import final_pass_batch as batch
+
+    if not final_pass_enabled_for(uid, conversation.transcript_segments):
+        return resolve(uid, conversation)
+    store = _store()
+    # Failure before a confirmed durable claim must fail the processing call;
+    # it cannot acknowledge speaker work without custody.
+    key, state, claim = store.start_direct(uid, conversation.id, scope_key(conversation), _binding(), now=_now())
+    if state in {'terminal', 'exhausted'}:
+        _report_terminal(store, key, claim, {'outcome': claim['outcome']})
+    if state != 'claimed':
+        # Preserve the existing automatic authority while still reading and
+        # applying fresh manual overrides. No second resolver/diarizer pass.
+        return resolve(uid, conversation, skip_automatic=True, final_pass_runner=lambda *a, **kw: None)
+
+    result, finished = {'outcome': 'deferred_receipt_unavailable'}, False
+
+    def finish(persisted):
+        nonlocal finished
+        if finished:
+            return
+        finished = True
+        settled_result = result if persisted else {'outcome': 'deferred_revision_changed'}
+        try:
+            return _settle_claim(store, key, claim, settled_result, now=_now())
+        except Exception as error:
+            # Canonical persistence may already have committed. Never replay
+            # full enrichment because only speaker settlement is unavailable.
+            return _custody_unavailable(error, 'direct_settle')
+
+    on_persist(finish)
+
+    def run(uid, conversation, receipt, *, load_prints, apply, requeue):
+        nonlocal result
+        with batch.terminal_metrics(False):
+            result = batch.run_batch_final_pass(
+                uid, conversation, receipt, load_prints=load_prints, apply=apply, requeue=lambda *a: None
+            )
+        if result['outcome'].startswith('deferred_'):
+            finish(True)  # No terminal application to await; schedule bounded retry.
+        return result
+
+    return resolve(uid, conversation, final_pass_runner=run)
 
 
 def run_only(uid, conversation_id, expected_scope):
@@ -197,6 +248,10 @@ def consume(key, token, *, now=None):
             result['reason'],
             result['location'],
         )
+    return _settle_claim(store, key, claim, result, now=now)
+
+
+def _settle_claim(store, key, claim, result, *, now):
     try:
         settled = store.settle(key, claim, result['outcome'], now=max(now, _now()))
     except Exception as error:

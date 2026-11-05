@@ -1316,25 +1316,16 @@ def test_owner_lab_reproduce_does_not_change_default_registry(prod_shaped, monke
     assert snapshot() != before
 
 
-def test_enrichment_resolver_passes_retry_custody_to_batch(lane, monkeypatch):
-    received = []
-
+def test_enrichment_resolver_passes_retry_custody_to_batch(lane, retry_state):
     from utils.conversations import processing_speakers
-    from utils.conversations import final_pass_retry as retry
 
-    enqueued = []
-    monkeypatch.setattr(retry, 'enqueue', lambda uid, c: enqueued.append((uid, c)))
-    original = batch.run_batch_final_pass
-
-    def run(*args, **kwargs):
-        received.append(kwargs['requeue'])
-        return original(*args, **kwargs)
-
-    monkeypatch.setattr(batch, 'run_batch_final_pass', run)
-    assert processing_speakers.resolve_speakers_for_processing(UID, lane.conversation)
-    assert len(received) == 1 and lane.gpu
-    received[0](UID, lane.conversation.id, 'en')
-    assert enqueued == [(UID, lane.conversation)]
+    persisted = []
+    assert processing_speakers.resolve_speakers_for_processing(UID, lane.conversation, on_persist=persisted.append)
+    row = next(iter(retry_state.rows.values()))
+    assert row['outcome'] is None and row['lease'] and lane.gpu
+    assert not retry_state.store.terminal_counts()
+    persisted[0](True)
+    assert sum(row.get('success', 0) for row in retry_state.store.terminal_counts().values()) == 1
 
 
 def test_missing_retry_custody_never_silently_drops_busy_pass(prod_shaped, monkeypatch):

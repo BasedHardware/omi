@@ -2659,12 +2659,17 @@ def process_conversation(
             except Exception:
                 return
 
+    final_pass_settlements: list[Callable[[bool], None]] = []
+
     def report_persistence(
         current: bool,
         *,
         completed: Conversation | None = None,
         derived_effects: DerivedEffectsDisposition = DerivedEffectsDisposition.RUN,
     ) -> None:
+        for settle in final_pass_settlements:
+            settle(current)
+        final_pass_settlements.clear()
         if current and completed is not None:
             record_capture_loss(completed)
             _observe_owner_recognition_completion(completed)
@@ -2772,7 +2777,11 @@ def process_conversation(
         meeting_context_override = _enrich_meeting_context(uid, conversation)
     # Everything below reads speaker_id as one voice; capture only guarantees that per piece.
     with identity_pass(None if already_observed else 'first'):
-        speaker_receipt_applied = False if silent_backfill else resolve_speakers_for_processing(uid, conversation)
+        speaker_receipt_applied = (
+            False
+            if silent_backfill
+            else resolve_speakers_for_processing(uid, conversation, on_persist=final_pass_settlements.append)
+        )
     if speaker_receipt_observer is not None:
         speaker_receipt_observer(speaker_receipt_applied)
 

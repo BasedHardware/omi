@@ -4,7 +4,7 @@ Enrichment calls the existing stored-audio speaker resolver before summarization
 For transcripts with `final:batch:` provenance (including retained
 `provider_speaker` scopes after resolution), `BATCH_CONVERSATION_SPEAKERS_ENABLED`
 defaults on. The existing batch admission cohort determines which new records
-reach this path. The optional whole pass adds a nested GPU cohort, described below; it makes no ASR call.
+reach this path. The whole pass serves at 100% within that existing batch authority; it makes no ASR call.
 Retained-audio conversations use the existing audio/cache path. For sync-off
 records, [ADR-0004](../adr/0004-sync-off-speaker-centroids.md) approves temporary
 encrypted centroids under the additional default-on
@@ -92,6 +92,16 @@ sync setting; dedicated speaker-only retries run this pass with identity-only
 persistence, without rerunning enrichment. Only the retained,
 private recurring profiles described below may be learned after revalidation.
 
+Serving direct attempts and speaker-only retries claim the same content-free
+Firestore obligation, keyed by conversation and immutable unit/segment membership.
+A direct replay may claim a pending retry before its scheduled wake, but a live
+lease or closed receipt suppresses another automatic resolver/diarizer pass (fresh
+manual overrides still apply). Direct terminal outcomes settle only after canonical
+conversation persistence succeeds. Failed persistence defers speaker-only work;
+interrupted direct custody repairs after a one-hour lease, versus 15 minutes for a
+retry. The initial direct claim does not spend the four subsequent retry claims;
+direct replays of a pending obligation do. No attempt resets the cap.
+
 The adapter reads each unit's encrypted, generation-pinned staged audio and result,
 placing that PCM and its words by the job's `capture_at`. It reconstructs exactly the
 projection IDs: record origin keeps the original unit, WAL uses `split_result` and
@@ -120,24 +130,25 @@ contribute voice evidence.
 
 ### Reading final-pass outcomes
 
-`omi_transcription_final_pass_total{lane="batch",outcome=...}` records terminal
-initial-pass outcomes. Dedicated retries record
-`omi_transcription_final_pass_retry_terminal_total{outcome=...}` instead: each
+Managed serving direct attempts and dedicated retries both record
+`omi_transcription_final_pass_retry_terminal_total{outcome=...}` (the metric name
+is retained for compatibility). `omi_transcription_final_pass_total{lane="batch",outcome=...}`
+remains the raw/unmanaged and pre-migration terminal stream. Each managed
 idempotent obligation closes atomically with its durable counter increment. A
 lost Firestore reply or process failure cannot lose or duplicate that count. The
 existing maintenance sweep refreshes 16 fixed counter shards every two minutes,
 including when no rows are due. Scrapes read only the process cache. Replicas
 mirror the same cumulative totals: deduplicate with `max by (outcome)` before
-computing increases, never sum the mirrors. Retry delivery does not also increment
-the initial-pass counter. Together these record one terminal outcome per admitted
-conversation obligation. `skipped_ineligible` calls are
-outside the cohort and terminal counts. Durable `deferred_*` results are
+computing increases, never sum the mirrors. Managed direct/retry delivery does not
+also increment the raw counter. These record one terminal outcome per admitted
+conversation/unit-membership obligation. `skipped_ineligible` calls are
+outside admission and terminal counts. Durable `deferred_*` results are
 nonterminal; inspect the subsequent speaker-only retry outcome rather than
 treating a deferral as a failed or successful conversation.
 
-For a one-hour outcome dashboard, add the initial per-instance increases and the
-deduplicated durable retry increase. The `or` retains both streams because only
-the initial stream has a `lane` label; the outer sum combines them by outcome:
+For a one-hour dashboard spanning the migration, add the raw per-instance
+increases and the deduplicated durable increase. The `or` retains both streams
+because only the raw stream has a `lane` label; the outer sum combines by outcome:
 
 ```promql
 sum by (outcome) (
@@ -154,7 +165,7 @@ Gate on fresh durable observations too:
 Missing or older-than-six-minute observations are unknown, not zero retries or
 success. Restart the full rollout observation window after deploying this metric
 change; historical closed receipts are not backfilled. Terminal logs are
-best-effort diagnostics; the durable aggregate is authoritative for retries.
+best-effort diagnostics; the durable aggregate is authoritative for managed direct and retry attempts.
 
 | Outcome / code-owned reason | Meaning and operator action |
 | --- | --- |
@@ -210,23 +221,52 @@ GPU work: `BATCH_FINAL_PASS_DAILY_AUDIO_HOURS=1200`,
 Invalid budgets or Redis failure refuse the pass. These are capacity limits, not
 new admission. Per-unit diarization remains in place, so inference cost is additive.
 
-Use the combined initial/durable-retry outcomes above, final-pass agreement
-and latency with the same lane label, owner-parity delta, processing p95 enrichment
-latency, and `omi_diarization_v2_queue_depth` for ramp decisions. The lead sets
-the observation window before expansion. The sync GMP keep-list retains all
-`_bucket`, `_sum` and `_count` series for `omi_transcription_final_pass_agreement`,
+Serve at **100% immediately** on release. There is no staged cohort or expansion
+step. Keep the existing `BATCH_FINAL_PASS_ENABLED=true` binding explicit on every
+production processing runtime. Observe combined terminal outcomes, final-pass
+agreement and latency, owner-parity delta, processing p95 enrichment latency and
+`omi_diarization_v2_queue_depth`. The sync GMP keep-list retains `_bucket`, `_sum`
+and `_count` for `omi_transcription_final_pass_agreement`,
 `omi_transcription_final_pass_latency_seconds` and
-`omi_transcription_final_pass_owner_delta_ratio`. Source-backed names absent
-from the historical metric capture are listed in the inventory's
-`declared_metrics`; declaration alone does not prove live export. The lead sets
-10%, then 50%, then 100%, expanding only after each cohort has a full observation
-window with clean fallback rate, owner-parity delta, p95 enrichment latency and
-diarizer-batch queue depth. GPU planning: admitted audio-hours/day × 0.03–0.042 =
-GPU-hours/day; at the default 1200-hour daily ceiling this adds about 36–50.4
-GPU-hours/day. This is compute time, excluding any pool floor/idle allocation.
-Rollback with `BATCH_FINAL_PASS_ENABLED=false` (or percent zero); already-published
-labels persist. The lead owns deployment and expansion; this PR changes no runtime
-configuration or capacity.
+`omi_transcription_final_pass_owner_delta_ratio`. The inventory's `declared_metrics`
+are source-backed names, not proof of live export.
+
+The serving operator records release identity and serving time, then publishes the
+**GPU-hours/day readout two hours after serving** in the
+[owning readout record](../operational/batch-speaker-serving-readout.md).
+Link that dated measurement when reporting cost; do not copy its changing numbers
+into this runbook. A local test or source declaration is not serving evidence.
+
+### Rollback on every serving runtime
+
+Set **`BATCH_FINAL_PASS_ENABLED=false`** everywhere below. Already-published labels
+persist. No cohort change or percentage ramp is part of this rollback.
+
+1. Change the production source of truth in `deploy/runtime_env/prod.overlay.yaml`:
+   the shared `gke.config_map.entries.BATCH_FINAL_PASS_ENABLED` literal and all four
+   Cloud Run service literals. Regenerate `deploy/runtime_env.yaml` with
+   `deploy/compose_runtime_env.py` and run `scripts/pre-deploy-check.sh` so later
+   deployments retain the rollback. Admission rejects missing or disagreeing bindings.
+2. Update Cloud Run **backend, backend-sync, backend-sync-backfill and
+   backend-integration**, including any serving tagged/canary revisions. Verify
+   `BATCH_FINAL_PASS_ENABLED=false` on every revision receiving traffic, not just
+   the newest service template. New revisions must be ready and traffic moved
+   off enabled revisions before rollback is complete.
+3. Update the **prod-omi-backend-config ConfigMap** in every serving namespace and
+   cluster. Then rollout-restart **backend-listen and every Pusher deployment**
+   (including pools/canaries). If the dedicated **sync-backfill-worker** is installed,
+   update its `runtimeConfigMapName` target too and restart that deployment. Its
+   pipeline subprocess inherits this explicit ConfigMap flag. ConfigMap updates
+   alone do not change running process environments.
+4. Wait for old pods/revisions and in-flight passes to drain; verify the flag is
+   false in each replacement container's process environment and each traffic-
+   serving Cloud Run revision. The independent host-roster admission check and
+   rendered-chart tests cover configuration; only these live checks prove rollback.
+
+Desktop-only services and the GPU batch-pipeline worker do not execute this pass.
+The outbox dependency stays out of that GPU worker's source closure. Pusher's
+finalizer reaches the shared claim/settlement boundary through
+`process_conversation`; its existing finalization lock remains in force.
 
 ## Recurring voices (ADR-0008)
 
@@ -260,15 +300,14 @@ expiry is 30 days and maximum evidence age 90 days. Age checks immediately
 refuse expired evidence; TTL removes sealed documents asynchronously. Profile
 counts are capped at 25 per user, with at most three new candidates per pass.
 
-The rollout lead owns any temporary cohort hold, expansion and before/after
-read. Use stable UID-hash on/off cohorts on the same release and full observation
-windows; export aggregate counters/events with cohort attribution at collection
-time (never put user or voice IDs in Prometheus labels). Read together:
+The serving operator reads precision on the immediate 100% release over comparable
+observation windows; there is no cohort hold or expansion step. Export aggregate
+counters/events without putting user or voice IDs in Prometheus labels. Read together:
 
 - `omi_final_pass_identity_speech_seconds_total{identity="owner|person|recurring|unnamed"}`:
   compare each identity's fraction of word-time speech, alongside total exposure.
-- `Speaker Identity Confirmed`: corrected / (accepted + corrected), by cohort;
-  a rising corrected share blocks expansion even if named speech improves.
+- `Speaker Identity Confirmed`: corrected / (accepted + corrected), by release/window;
+  a rising corrected share calls for rollback even if named speech improves.
 - Recurring-origin `omi_speaker_tag_prompts_served_total` and
   `omi_speaker_tag_prompt_answers_total`: answer/served and accept/reject/skip
   shares over the same window. Existing identify copy and paid eligibility apply.
@@ -279,10 +318,9 @@ time (never put user or voice IDs in Prometheus labels). Read together:
   does not establish precision; a user answer is the confirmation signal.
 
 Current counters contain no cohort dimension. `Batch Speaker Identity Mix`
-records the four word-time totals, speaker count and `recurring_cohort=on|off`
-without transcript text, vectors or voice IDs. Join product events by the
-existing user identity and the same stable UID hash for card/confirmation
-cohorts. Compare equal observation windows; fleet-wide counter totals alone
-cannot prove a cohort effect.
-The lead expands only after these precision checks and retention verification,
-with review by 2026-11-17. No production read, deploy or ramp is part of this PR.
+retains its existing `recurring_cohort=on|off` field, the four word-time totals and
+speaker count without transcript text, vectors or voice IDs. This telemetry field
+does not introduce a serving cohort. Compare equal observation windows alongside
+confirmation signals and retention verification; fleet-wide totals alone do not
+prove precision. The serving operator owns the T+2h readout linked above. No
+production read or deployment was performed for this code change.

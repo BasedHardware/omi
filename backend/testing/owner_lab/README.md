@@ -218,14 +218,19 @@ The pass cannot yet trim their audio with sufficient ownership precision.
 Recurring centroids must have at least one word assigned to an updated segment
 in this conversation; the recurring-profile evidence thresholds still apply.
 
-Slot admission never waits in the shared postprocess pool. A busy call creates
-its own content-free obligation in
+Slot admission never waits in the shared postprocess pool. Serving direct attempts
+claim the same durable content-free obligation as retries before automatic resolution.
+A successful direct replay closes it only after canonical persistence, so an old
+queued wake cannot infer or count again. Manual overrides remain refreshable on
+closed/live obligations. Busy attempts release custody and schedule speaker-only
+work in
 `batch_pipeline_<stage>_speaker_final_pass_outbox`. Named Cloud Tasks (`bfp-...`)
 use the existing enrichment/sync task bindings, with the distinct
 `batch_final_pass` kind. This does not mark `sync_reprocess_outbox` or rerun
 notes, memories, integrations, or full enrichment.
 
-One immutable unit/segment membership has at most four retry claims, with
+The initial direct attempt leaves four subsequent claims available per immutable
+unit/segment membership. Direct replays of pending work also spend that cap, with
 exponential backoff (30/60/120/240 seconds, multiplied by random 0.5–1.5 jitter).
 Duplicate wakes are fenced by token and lease. Attempts survive expired leases,
 and closed receipts cannot reopen or reset the cap. Sustained contention closes
@@ -246,8 +251,8 @@ Prometheus scrapes perform no database reads. Replica mirrors use `max`, not
 `sum`; see the [operator queries](../../docs/runbooks/batch-conversation-speakers.md#reading-final-pass-outcomes).
 
 For four ordinary on-time claims, backoffs total at most 675 seconds (11m15s). That is not a
-wall-clock delivery guarantee: queue backlog, outages and 15-minute crashed
-leases (including repair wakes) can deliver a retry after results cleanup. A late retry remains
+wall-clock delivery guarantee: queue backlog, outages, a crashed one-hour direct
+lease or 15-minute retry leases (including repair wakes) can deliver work after cleanup. A late retry remains
 `skipped_expired`, closes the obligation once, and never extends retention.
 
 The retry reloads the current conversation and manual receipt, runs only
@@ -277,8 +282,9 @@ requests as `requeue_calls` without publishing an outbox row or task.
 
 The whole-pass shared-unit skip remains the precision-first default. No partial
 processing or recurring learning occurs when any reference is shared or
-unsettled. `omi_transcription_final_pass_total{lane="batch",
-outcome="skipped_shared_unit"}` counts one conversation attempt.
+unsettled. The shared durable terminal counter records `skipped_shared_unit` once per managed
+conversation/unit-membership obligation; raw unmanaged calls use
+`omi_transcription_final_pass_total{lane="batch",outcome="skipped_shared_unit"}`.
 `omi_transcription_final_pass_unit_skips_total` counts each omitted unit with
 code-owned reasons: `shared_unit` for rejected references, and
 `blocked_by_shared_unit` for the other units omitted with that conversation.

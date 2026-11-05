@@ -293,6 +293,11 @@ env:
     value: "phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y"
   - name: ACTION_ITEM_REFRESH_PRESERVE_ENABLED
     value: "true"
+  - name: BATCH_FINAL_PASS_ENABLED
+    valueFrom:
+      configMapKeyRef:
+        name: prod-omi-backend-config
+        key: BATCH_FINAL_PASS_ENABLED
   - name: CONVERSATION_SMART_MERGE_FLATTEN_ENABLED
     value: "true"
   - name: SYNC_FINALIZE_TARGET_RECOVERY_ENABLED

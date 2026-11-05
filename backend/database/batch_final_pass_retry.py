@@ -8,6 +8,7 @@ from database.outbox_cas import mutate
 
 MAX_ATTEMPTS = 4
 LEASE_SECONDS = 900
+DIRECT_LEASE_SECONDS = 3600
 REPAIR_SECONDS = 120
 COUNTER_SHARDS = 16
 
@@ -37,6 +38,36 @@ def terminal_plan(old, counts, token):
         )
         counts[outcome] = counts.get(outcome, 0) + 1
     return row, counts
+
+
+def claim_plan(old, token, *, now, direct=False):
+    if not old or old['token'] != token or old['lease_until'] > now:
+        return old, ('stale', None)
+    if old['outcome']:
+        return old, ('terminal', old) if old.get('terminal_pending') else ('stale', None)
+    if not direct and old['due_at'] > now:
+        row = {**old, 'token': uuid.uuid4().hex}
+        return row, ('early', row)
+    if old['attempts'] >= MAX_ATTEMPTS:
+        row = {
+            **old,
+            'outcome': 'skipped_retry_exhausted',
+            'lease': None,
+            'lease_until': 0,
+            'terminal_pending': True,
+            'repair_after': now + REPAIR_SECONDS,
+        }
+        for field in ('due_at', 'uid', 'conversation_id', 'dispatch'):
+            row.pop(field, None)
+        return row, ('exhausted', row)
+    row = {
+        **old,
+        'attempts': old['attempts'] + 1,
+        'lease': uuid.uuid4().hex,
+        'lease_until': now + (DIRECT_LEASE_SECONDS if direct else LEASE_SECONDS),
+        'repair_after': now + (DIRECT_LEASE_SECONDS if direct else LEASE_SECONDS),
+    }
+    return row, ('claimed', row)
 
 
 class FinalPassRetries:
@@ -83,37 +114,34 @@ class FinalPassRetries:
         row, created = self._mutate(key, create)
         return key, row, created
 
-    def claim(self, key, token, *, now):
-        def acquire(old):
-            if not old or old['token'] != token or old['lease_until'] > now:
-                return old, ('stale', None)
-            if old['outcome']:
-                return old, ('terminal', old) if old.get('terminal_pending') else ('stale', None)
-            if old['due_at'] > now:
-                row = {**old, 'token': uuid.uuid4().hex}
-                return row, ('early', row)
-            if old['attempts'] >= MAX_ATTEMPTS:
-                row = {
-                    **old,
-                    'outcome': 'skipped_retry_exhausted',
-                    'lease': None,
-                    'lease_until': 0,
-                    'terminal_pending': True,
-                    'repair_after': now + REPAIR_SECONDS,
-                }
-                for field in ('due_at', 'uid', 'conversation_id', 'dispatch'):
-                    row.pop(field, None)
-                return row, ('exhausted', row)
-            row = {
-                **old,
-                'attempts': old['attempts'] + 1,
-                'lease': uuid.uuid4().hex,
-                'lease_until': now + LEASE_SECONDS,
-                'repair_after': now + LEASE_SECONDS,
-            }
+    def start_direct(self, uid, conversation_id, scope_key, dispatch, *, now):
+        key = obligation_key(uid, conversation_id, scope_key)
+
+        def start(old):
+            if old:
+                return claim_plan(old, old['token'], now=now, direct=True)
+            # The first synchronous attempt does not spend one of the four
+            # subsequent claims. Hold custody through canonical persistence.
+            row = dict(
+                uid=uid,
+                conversation_id=conversation_id,
+                scope_key=scope_key,
+                dispatch=dispatch,
+                due_at=now,
+                repair_after=now + DIRECT_LEASE_SECONDS,
+                attempts=0,
+                token=uuid.uuid4().hex,
+                lease_until=now + DIRECT_LEASE_SECONDS,
+                lease=uuid.uuid4().hex,
+                outcome=None,
+            )
             return row, ('claimed', row)
 
-        return self._mutate(key, acquire)
+        state, row = self._mutate(key, start)
+        return key, state, row
+
+    def claim(self, key, token, *, now):
+        return self._mutate(key, lambda old: claim_plan(old, token, now=now))
 
     def settle(self, key, claim, outcome, *, now):
         def finish(old):
