@@ -545,6 +545,7 @@ and an explicit empty literal renders as `''`.
 | `BATCH_PIPELINE_PROJECTION_PREFETCH` | Default 4; an owner-chain walk reads the next N rows' successor links, job bindings, result payloads and audio manifests ahead of the chain, and runs the candidate lookup beside context and build | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `BATCH_PIPELINE_PROJECTION_PUMP_ENABLED` | Default false; true selects a dedicated projection-only pump instead of the three serving loops, independently of BATCH_PIPELINE_SERVING_ENABLED | backend | env | closed | — | — | — | — | keep | keep | — | lead2 |
 | `BATCH_PIPELINE_PROJECTION_SOURCE_DELETED_ENABLED` | Default on; settle deleted original sources without a tombstone or redirect as source_deleted, without content publication | backend | env | open | — | — | — | — | keep | keep | — | cl2-cost / lead2 |
+| `BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED` | Default on unless off; seed projection discovery at an instance-specific committed_at stripe, then wrap through every row | backend | env | open | — | — | — | — | keep | keep | — | omi-pipeline |
 | `BATCH_PIPELINE_PUMP_SWEEP_PAGES` | Default 1; projection pump sweep pages per tick, clamped to 1-4; malformed keeps 1 | backend | env | closed | — | — | — | — | keep | keep | — | lead2 |
 | `BATCH_PIPELINE_PUMP_TICK_SECONDS` | Default 20 seconds; projection pump tick sleep, clamped to 2-60; malformed keeps 20 | backend | env | closed | — | — | — | — | keep | keep | — | lead2 |
 | `BATCH_PIPELINE_RAMP_EXCLUDE_HEAVY_OWNERS` | Ship-on partial-ramp admission isolation; only off disables; owners over 30 open jobs or six hours pending audio use legacy | backend | env | closed | — | — | — | — | keep | keep | — | dazheng |
@@ -1111,6 +1112,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `BATCH_PIPELINE_PROJECTION_PREFETCH` — Default 4; an owner-chain walk reads the next N rows' successor links, job bindings, result payloads and audio manifests ahead of the chain, and runs the candidate lookup beside context and build (fail: open)
 - `BATCH_PIPELINE_PROJECTION_PUMP_ENABLED` — Default false; true selects a dedicated projection-only pump instead of the three serving loops, independently of BATCH_PIPELINE_SERVING_ENABLED (fail: closed)
 - `BATCH_PIPELINE_PROJECTION_SOURCE_DELETED_ENABLED` — Default on; settle deleted original sources without a tombstone or redirect as source_deleted, without content publication (fail: open)
+- `BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED` — Default on unless off; seed projection discovery at an instance-specific committed_at stripe, then wrap through every row (fail: open)
 - `BATCH_PIPELINE_PUBLISH_CONCURRENCY` — GPU worker post-flight publication concurrency: bounded fenced transitions and one ordered drain per owner per flight; default 4, 1 = legacy serial kill switch, max 16 (fail: closed)
 - `BATCH_PIPELINE_PUMP_SWEEP_PAGES` — Default 1; projection pump sweep pages per tick, clamped to 1-4; malformed keeps 1 (fail: closed)
 - `BATCH_PIPELINE_PUMP_TICK_SECONDS` — Default 20 seconds; projection pump tick sleep, clamped to 2-60; malformed keeps 20 (fail: closed)
@@ -1471,6 +1473,7 @@ reason:
 
 | Key | Reason | owner | decision | review_by | notes |
 | --- | --- | --- | --- | --- | --- |
+| `K_REVISION` | Cloud Run revision identity for process-local discovery phase, not a behavior flag | — | — | — | — |
 | `DD_TRACE_ENABLED` | Datadog telemetry instrumentation switch, not a product behavior flag | — | — | — | — |
 | `DD_LOGS_ENABLED` | Datadog telemetry log routing switch, not a product behavior flag | — | — | — | — |
 | `OMI_FORCE_CONTEXT_BUCKETS` | Local-only dev override, not shipped remote authority | — | — | — | — |

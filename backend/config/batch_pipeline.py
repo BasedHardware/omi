@@ -3,8 +3,12 @@
 from config.refactor_switches import default_off as rollout_default_off, default_on as rollout_default_on
 
 from enum import IntEnum
+import hashlib
+import logging
 import math
 import os
+import secrets
+import threading
 
 from config.rollout_cohorts import rollout_cohort_members
 from typing import Callable, TypeVar
@@ -513,6 +517,38 @@ def projection_pagination_enabled() -> bool:
     from config.policy import kill_switch
 
     return kill_switch('BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED')
+
+
+def projection_striping_enabled() -> bool:
+    from config.policy import kill_switch
+
+    return kill_switch('BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED')
+
+
+PROJECTION_DISCOVERY_STRIPES = 4096
+_projection_discovery_stripe_value: int | None = None
+_PROJECTION_DISCOVERY_LOCK = threading.Lock()
+
+
+def projection_discovery_stripe() -> int:
+    """Choose and log one process-local random phase, without network I/O.
+
+    Replicas may share hostname/PID. Fresh entropy separates them; 4096 buckets
+    reduce collisions at 30-50 instances. Restarts may choose a different phase.
+    """
+    global _projection_discovery_stripe_value
+    with _PROJECTION_DISCOVERY_LOCK:
+        if _projection_discovery_stripe_value is None:
+            identity = f'{os.getenv("K_REVISION", "")}:{secrets.randbits(128)}'
+            _projection_discovery_stripe_value = (
+                int.from_bytes(hashlib.sha256(identity.encode()).digest()[:8], 'big') % PROJECTION_DISCOVERY_STRIPES
+            )
+            logging.getLogger(__name__).info(
+                'event=batch_projection_discovery action=start stripe=%d stripes=%d',
+                _projection_discovery_stripe_value,
+                PROJECTION_DISCOVERY_STRIPES,
+            )
+        return _projection_discovery_stripe_value
 
 
 def owner_chain_projection_enabled() -> bool:

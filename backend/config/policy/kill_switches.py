@@ -11,6 +11,7 @@ KILL_SWITCHES = {
     'BATCH_PIPELINE_LEADER_LEASE_ENABLED': True,
     'BATCH_PIPELINE_RECOVERY_TASKS_ENABLED': True,
     'BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED': True,
+    'BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED': True,
     'BATCH_PIPELINE_OWNER_CHAIN_PROJECTION_ENABLED': True,
     'BATCH_PIPELINE_RECOVERED_MERGE_RELEASE_ENABLED': True,
     'BATCH_PIPELINE_RECOVERY_OWNER_ONLY_ENABLED': True,
@@ -37,7 +38,11 @@ def kill_switch(name: str, *, policy_id: str = 'control', flags=None) -> bool:
         raise ValueError('unregistered live batch switch')
     env = os.environ if flags is None else flags
     value = env.get(name, str(KILL_SWITCHES[name])).strip().lower()
-    if name in {'BATCH_PIPELINE_SERVING_PROJECTION_SWEEP', 'PROJECTION_DRAIN_CLAIM_AWARE'}:
+    if name in {
+        'BATCH_PIPELINE_SERVING_PROJECTION_SWEEP',
+        'BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED',
+        'PROJECTION_DRAIN_CLAIM_AWARE',
+    }:
         enabled = value != 'off'
     elif name == 'PARAKEET_WINDOW_STRANDED_DRIFT_SETTLE_ENABLED':
         enabled = value not in {'false', '0', 'off'}
@@ -45,11 +50,12 @@ def kill_switch(name: str, *, policy_id: str = 'control', flags=None) -> bool:
         enabled = value != 'false' if name in DISABLE_ONLY_SWITCHES else value == 'true'
     from config.refactor_switches import default_on
 
-    # Role selectors and claim-aware drains retain their explicit token grammar
-    # in every parser mode: sweep/claim controls are off-only, pump is true-only.
+    # Preserve the explicit off-only controls and true-only pump selector
+    # in every parser mode.
     if name not in {
         'BATCH_PIPELINE_SERVING_PROJECTION_SWEEP',
         'BATCH_PIPELINE_PROJECTION_PUMP_ENABLED',
+        'BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED',
         'PROJECTION_DRAIN_CLAIM_AWARE',
     }:
         enabled = default_on(name, enabled, environ=env)

@@ -282,6 +282,8 @@ def _store(monkeypatch, sample):
 
 
 SAMPLE = {
+    'drain_oldest': None,
+    'held_oldest': {'quarantine_held': NOW - 200_000, 'assignment_held': NOW - 100_000, 'record_pending': None},
     'new_oldest': {
         'uncommitted': None,
         'quarantined': NOW - 9000,
@@ -333,6 +335,7 @@ def test_failed_sample_keeps_values_and_freshness(monkeypatch):
     assert registry.get_sample_value('omi_batch_timeliness_observed_at_seconds') == NOW
     assert registry.get_sample_value('omi_batch_timeliness_new_over_sla_units', {'leg': 'quarantined'}) == 1
     assert registry.get_sample_value('omi_batch_timeliness_samples_total', {'outcome': 'error'}) == 1
+    assert registry.get_sample_value('omi_batch_held_oldest_age_seconds', {'leg': 'quarantine_held'}) == 200_000
 
 
 def test_kill_switch_skips_firestore_and_counts_disabled(monkeypatch):
@@ -367,3 +370,64 @@ def test_rules_page_on_new_delivery_breach_and_keep_diagnostics_agent_tier():
         else:
             assert rule['labels']['tier'] == 'agent'
             assert rule['notification_settings']['mute_time_intervals'] == ['omi-tier-silent']
+
+
+def test_held_stock_age_has_no_epoch_or_24h_cohort_cutoff(monkeypatch):
+    # The oldest row is before the timeliness epoch and far older than the lifecycle 24h cohort.
+    old = EPOCH - 3 * 86400
+    sample = _sample(
+        jobs=[
+            {'state': 'record_pending', 'enqueued_at': old},
+            {'state': 'record_pending', 'enqueued_at': NOW - 60},
+            {'state': 'committed', 'recovery_state': 'held', 'enqueued_at': old + 10},
+            {'state': 'committed', 'recovery_state': 'recovered', 'enqueued_at': old - 10},
+        ],
+        results=[
+            {'projection_state': 'quarantine_held', 'committed_at': old + 20},
+            {'projection_state': 'completed', 'committed_at': old - 20},
+        ],
+    )
+    assert sample['held_oldest'] == {
+        'record_pending': old,
+        'assignment_held': old + 10,
+        'quarantine_held': old + 20,
+    }
+    registry = CollectorRegistry()
+    metrics = QueueMetrics(registry)
+    store = _store(monkeypatch, sample)
+    metrics.refresh_timeliness(store, NOW)
+    for leg, started in sample['held_oldest'].items():
+        assert registry.get_sample_value('omi_batch_held_oldest_age_seconds', {'leg': leg}) == NOW - started
+    # A subsequent empty stock must clear old series, rather than leave a latched age.
+    sample['held_oldest'] = dict.fromkeys(sample['held_oldest'])
+    metrics.refresh_timeliness(store, NOW + 301)
+    for leg in sample['held_oldest']:
+        assert registry.get_sample_value('omi_batch_held_oldest_age_seconds', {'leg': leg}) == 0
+
+
+def test_held_oldest_does_not_depend_on_stock_size_or_first_input_row():
+    old = EPOCH - 2 * 86400
+    sample = _sample(
+        jobs=[
+            *({'state': 'record_pending', 'enqueued_at': NOW - i} for i in range(1200)),
+            {'state': 'record_pending', 'enqueued_at': old},
+        ]
+    )
+    assert sample['held_oldest']['record_pending'] == old
+    assert sample['held_oldest']['assignment_held'] is None
+    assert sample['held_oldest']['quarantine_held'] is None
+
+
+def test_drain_age_excludes_held_only_stock_but_includes_pre_epoch_pending(monkeypatch):
+    held = {'projection_state': 'quarantine_held', 'committed_at': EPOCH - 86400}
+    assert _sample(results=[held])['drain_oldest'] is None
+    sample = _sample(results=[held, {'projection_state': 'pending', 'committed_at': EPOCH - 3600}])
+    assert sample['drain_oldest'] == EPOCH - 3600
+    registry = CollectorRegistry()
+    metrics = QueueMetrics(registry)
+    store = _store(monkeypatch, sample)
+    metrics.refresh_timeliness(store, NOW)
+    assert registry.get_sample_value('omi_batch_projection_drain_oldest_age_seconds') == NOW - EPOCH + 3600
+    sample['drain_oldest'] = None
+    metrics.refresh_timeliness(store, NOW + 301)
+    assert registry.get_sample_value('omi_batch_projection_drain_oldest_age_seconds') == 0
