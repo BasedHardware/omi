@@ -334,23 +334,25 @@ def ensure_processing(uid: str, conversation_id: str) -> bool:
     return admit_processing(uid, conversation_id)
 
 
-def complete_server_batch_capture(uid: str, conversation_id: str, capture: Mapping[str, Any]) -> bool:
-    """Close only a reserved raw capture, after its batch obligation was written."""
-    if not server_batch.owned(capture):
-        return False
-    return conversations_db.claim_conversation_status(
+def complete_server_batch_capture(
+    uid: str,
+    conversation_id: str,
+    capture: Mapping[str, Any],
+    job_id: str,
+    dispatch_generation: int,
+    lease_epoch: int,
+    *,
+    firestore_client: Any = None,
+) -> str:
+    """Atomically close a registered zero-preview capture and its leased job."""
+    return jobs_db.complete_server_batch_capture(
         uid,
         conversation_id,
-        ConversationStatus.processing,
-        ConversationStatus.completed,
-        expected_fields={
-            'record_lane_owner': 'batch_live_v1',
-            'external_data': capture.get('external_data'),
-            'private_cloud_sync_enabled': True,
-            'deleted': False,
-            'is_locked': False,
-            'uses_custom_stt': False,
-        },
+        capture,
+        job_id,
+        dispatch_generation,
+        lease_epoch,
+        firestore_client=firestore_client,
     )
 
 

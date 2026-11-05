@@ -621,6 +621,29 @@ FIELD_SITES = {
                 'status',
             ),
         ),
+        # Zero-preview server-batch transaction: job terminal, conversation
+        # terminal/relevance update, and the relevance input snapshot.
+        (
+            '_complete_server_batch_capture_txn',
+            'status',
+            "'completed'",
+            (
+                'completed_at',
+                'fanout_completed_at',
+                'fanout_key',
+                'fanout_lease_epoch',
+                'fanout_status',
+                'finalization_outcome',
+                'last_failure_code',
+                'lease_expires_at',
+                'reconcile_after_at',
+                'status',
+                'terminal_outcome',
+                'updated_at',
+            ),
+        ),
+        ('_complete_server_batch_capture_txn', 'status', "'completed'", ('relevance_decision', 'status')),
+        ('_complete_server_batch_capture_txn', 'status', "'completed'", ('status',)),
         (
             '_create_or_get_finalization_intent_txn',
             'finalization_status',

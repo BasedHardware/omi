@@ -292,29 +292,20 @@ async def finalize_persisted_conversation(
         # its upload barrier still prevents work until pusher has committed the tail.
         if not await run_blocking(db_executor, register_recording, uid, conversation_data):
             raise RuntimeError('desktop batch registration refused')
-        if conversation.status != ConversationStatus.completed:
-            if not await run_blocking(
-                db_executor, lifecycle_service.complete_server_batch_capture, uid, conversation_id, conversation_data
-            ):
-                raise RuntimeError('desktop batch completion fenced')
-        fanout = await run_blocking(
+        completion = await run_blocking(
             db_executor,
-            lifecycle_service.claim_finalization_fanout,
+            lifecycle_service.complete_server_batch_capture,
+            uid,
+            conversation_id,
+            conversation_data,
             finalization_job_id,
             dispatch_generation,
             lease_epoch,
         )
-        if fanout['status'] == 'claimed':
-            if not await run_blocking(
-                db_executor,
-                lifecycle_service.complete_finalization_fanout,
-                finalization_job_id,
-                dispatch_generation,
-                lease_epoch,
-            ):
-                raise RuntimeError('desktop batch handoff completion fenced')
-        elif fanout['status'] not in {'completed', 'fenced'}:
-            raise RuntimeError('desktop batch handoff claim pending')
+        if completion in {'fenced', 'lease_conflict'}:
+            return ConversationFinalizationDisposition.fenced
+        if completion != 'completed':
+            raise RuntimeError('desktop batch completion fenced')
         return ConversationFinalizationDisposition.completed
     await _episode_at_finalization_start(uid, conversation_id, conversation_data, trigger)
 
