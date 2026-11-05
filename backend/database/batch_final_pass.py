@@ -72,10 +72,17 @@ def load_reference(store, uid, unit, conversation_id, *, read_budget=None):
                 (metadata.get('segment_id') == unit, 'artifact_unit_mismatch'),
                 (metadata.get('privacy_generation') == item.privacy_generation, 'generation_mismatch'),
                 (not metadata.get('erasure_requested'), 'erasure'),
-                (metadata.get('uri') in (reference, reference.split('#')[0]), 'uri_mismatch'),
             ):
                 if not matches:
                     unavailable(reason)
+            # Retention deletes the object before removing uri/cleanup_after
+            # and setting expires_at for the metadata receipt's 45-day TTL.
+            # That TTL is not authority to read the deleted object, even when
+            # the artifact key still binds its former base URI.
+            if not metadata.get('uri') and metadata.get('expires_at'):
+                raise ReferenceUnavailable('skipped_expired', 'artifact_cleaned')
+            if metadata.get('uri') not in (reference, reference.split('#')[0]):
+                unavailable('uri_mismatch')
             if metadata.get('cleanup_after') and metadata['cleanup_after'] <= datetime.now(timezone.utc):
                 raise ReferenceUnavailable('skipped_expired')
         return (

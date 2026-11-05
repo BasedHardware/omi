@@ -447,11 +447,10 @@ def cleanup_completed_artifacts(
     return cleaned
 
 
-def batch_artifact_authorize(store: Any, item: Any, *, snapshots: dict | None = None):
+def batch_artifact_authorize(store: Any, item: Any, *, snapshots: dict | None = None, read_budget=None):
     """Authorize artifact IO; full-row exports always use live transactional reads."""
     from utils.batch_pipeline.artifacts import ProtectionContext
 
-    @firestore.transactional
     def authorize(transaction):
         loaded = {}
         # The ordinary artifact callback returns only ProtectionContext, whose
@@ -472,13 +471,17 @@ def batch_artifact_authorize(store: Any, item: Any, *, snapshots: dict | None = 
             conversation_ids=(item.conversation_id,) if item.conversation_id else (),
             expected_generation=item.privacy_generation,
             snapshots=None if decision_only else loaded,
+            read_budget=read_budget,
         )
         if snapshots is not None:
             snapshots.clear()
             snapshots.update(loaded)
         user = (
             privacy_check_metrics.read_snapshot(
-                'batch', store.client.collection('users').document(item.owner_id), transaction=transaction
+                'batch',
+                store.client.collection('users').document(item.owner_id),
+                transaction=transaction,
+                read_budget=read_budget,
             ).to_dict()
             or {}
             if decision_only
@@ -486,7 +489,9 @@ def batch_artifact_authorize(store: Any, item: Any, *, snapshots: dict | None = 
         )
         return ProtectionContext(user.get('data_protection_level', 'enhanced'), generation)
 
-    return authorize(store.client.transaction())
+    if read_budget is not None:
+        return store.read(lambda tx: authorize(tx.transaction), read_budget=read_budget)
+    return firestore.transactional(authorize)(store.client.transaction())
 
 
 def batch_artifact_register(store: Any, item: Any, uri: str, kind: str, context: Any) -> None:

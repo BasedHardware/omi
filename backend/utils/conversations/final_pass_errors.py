@@ -33,6 +33,7 @@ REFERENCE_REASONS = frozenset(
         'binding_owner_mismatch',
         'receipt_missing',
         'artifact_row_missing',
+        'artifact_cleaned',
         'artifact_kind_mismatch',
         'artifact_owner_mismatch',
         'artifact_unit_mismatch',

@@ -27,6 +27,9 @@ from tests.unit.test_batch_final_pass import (  # noqa: F401
     wav,
 )
 from utils.batch_pipeline.artifact_reads import ArtifactReadBudget, ArtifactReadLimit
+from utils.batch_pipeline.artifact_policy import create_artifact_store
+from utils.batch_pipeline.artifacts import ProtectionContext
+from tests.unit.test_batch_pipeline_artifacts import ObjectClient
 from utils.conversations import final_pass_batch as batch, final_pass_pyannote as final
 from utils.stt import diarization
 
@@ -199,6 +202,34 @@ def test_expired_reference_budget_issues_no_rpc(sdk_reference):
             sdk_reference.store, UID, 'unit-a', 'conversation', read_budget=ArtifactReadBudget(99, 0, 0)
         )
     assert not sdk_reference.calls
+
+
+@pytest.mark.parametrize('stall', ['none', 'before', 'after'])
+def test_real_artifact_composition_bounds_pre_and_post_download_privacy(sdk_reference, lane, stall):
+    client = ObjectClient()
+    artifacts = create_artifact_store(sdk_reference.store, client, 'synthetic-batch-bucket', b'x' * 32)
+    item = lane.items['unit-a']
+    name = f"{artifacts.owner_prefix(UID)}audio/unit-a/{'a' * 32}.enc"
+    sealed = artifacts._seal(item, 'audio', ProtectionContext('standard', 0), b'synthetic PCM')
+    client.objects[name] = (7, sealed)
+    item = replace(item, audio_uri=f'gs://synthetic-batch-bucket/{name}#7')
+    # A budgeted read must not accidentally use the ordinary transaction path.
+    artifacts.authorize = lambda *_: pytest.fail('unbounded artifact authorization')
+    if stall == 'before':
+        sdk_reference.state.stall = 'users/'
+    elif stall == 'after':
+        client.after_download = lambda: setattr(sdk_reference.state, 'stall', 'users/')
+    budget = ArtifactReadBudget(100.25, 1024, 1)
+    if stall == 'none':
+        assert artifacts.fetch_audio(item, read_budget=budget) == b'synthetic PCM'
+        assert [kind for kind, _ in sdk_reference.calls].count('begin') == 2
+    else:
+        with pytest.raises(ArtifactReadLimit, match='artifact read deadline'):
+            artifacts.fetch_audio(item, read_budget=budget)
+        assert sdk_reference.clock.now == pytest.approx(budget.deadline)
+    assert budget.received_bytes == (0 if stall == 'before' else len(sealed))
+    assert client.downloads == (0 if stall == 'before' else 1)
+    assert all(timeout <= 0.25 for _, timeout in sdk_reference.calls)
 
 
 def test_reference_deadline_is_terminal_without_trying_remaining_units(prod_shaped, sdk_reference, monkeypatch):

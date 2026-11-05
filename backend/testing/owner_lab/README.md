@@ -176,11 +176,39 @@ content. A missing/undecodable conversation produces `failed_load`, never an
 empty-transcript success. Production flags keep their normal values; disabled
 or out-of-cohort cases report `skipped_ineligible`.
 
+Rows also report `read_wall_seconds`, `read_bytes`, `read_reserved_bytes` and
+`read_objects`, including when reference loading or artifact decoding fails.
+Wall time covers reference snapshots, artifact retrieval and reconstruction,
+and post-diarization reference revalidation; it includes decode/projection CPU
+and excludes assembly, diarization and application. `read_bytes` counts complete
+GCS response bodies, including encrypted manifests and retained source objects;
+partial transfers that raise inside the SDK are not observable. Reserved bytes
+can therefore exceed received bytes. These are GCS payload counts, excluding
+Firestore response sizes and protocol overhead. The CLI separately reports
+`conversation_load_wall_seconds` for loading the conversation/manual receipt.
+Use these fields to distinguish slow local reads from model latency without
+changing production's 180-second initial read deadline.
+Budgeted artifact reads also use bounded read-only snapshots for their privacy
+checks before/after download and after retained-manifest materialization. These
+used ordinary Firestore transactions before this fix and could outlive the
+remaining budget despite bounded blob reads. Unbudgeted writer authorization
+retains its existing transaction path.
+
 Mixed lanes are supported only for positive-duration segments with batch-unit
 evidence. Other lanes and point-only segments are preserved. Missing required
 batch segments fail closed; expired artifacts and receipts for another
 conversation report `skipped_expired` and `skipped_merged`. Retention starts
 at completed projection, after enrichment is queued; reading never extends it.
+
+An artifact row with `expires_at` and no `uri` is a cleanup tombstone:
+`cleanup_completed_artifacts` first deletes the object, then removes `uri` and
+`cleanup_after` and retains the metadata for 45 days. A future `expires_at`
+describes the receipt's TTL, not usable audio. After ownership, generation and
+erasure checks, these rows report `skipped_expired` with `artifact_cleaned`.
+Live rows still require the exact registered base/pinned URI and a live
+`cleanup_after` if present; GCS reads still require the pinned generation.
+Results get 24 hours from projection completion. Native-record audio manifests
+get 45 days; newly registered artifacts may not yet have a cleanup deadline.
 
 Shared staged units (including projection parts and size-rollover receipts for
 another conversation) report `skipped_shared_unit` before any artifact read.
@@ -203,6 +231,11 @@ once with `skipped_slot_exhausted`; other exhausted retries use
 `skipped_retry_exhausted`. The existing enrichment maintenance schedule repairs
 lost wakes in the dedicated collection. Existing queued tasks keep their token;
 repair checks advance separately so queued work cannot pin discovery.
+
+For four ordinary on-time claims, backoffs total at most 675 seconds (11m15s). That is not a
+wall-clock delivery guarantee: queue backlog, outages and 15-minute crashed
+leases (including repair wakes) can deliver a retry after results cleanup. A late retry remains
+`skipped_expired`, closes the obligation once, and never extends retention.
 
 The retry reloads the current conversation and manual receipt, runs only
 `run_batch_final_pass`, and uses the existing revision-fenced identity-only
@@ -292,6 +325,23 @@ counts in `coverage_reasons`; other verified segments can produce terminal
 conversation speaker resolution unavailable. Shared units still skip the
 whole pass before reading audio. Complete success rate excludes partial passes.
 
+`projection_segment_missing` means a stored positive-duration segment ID was
+not emitted by the current unit/part reconstruction. IDs encode the unit/part
+and grouped segment index; changed grouping, older projection versions or
+subsequent transcript edits can invalidate that correspondence. The adapter
+does not guess an identity from text or rebased conversation offsets.
+
+`conflicting capture clocks` means two authenticated unit capture intervals
+overlap but their PCM differs in that overlap. Identical overlaps are accepted.
+Retained manifests can have padded holes, including between partial captures;
+materialized PCM does not carry an authenticated occupied-slice mask into this
+adapter. Neither zero samples nor current transcript offsets prove which unit
+owns a conflicting span. The current pass refuses the whole ambiguous timeline.
+Recovering such overlaps would require carrying verified manifest geometry;
+silencing this check could duplicate speech or choose the wrong voice evidence.
+
 Dated local validation: [2026-11-04 speaker final pass](validation/2026-11-04-speaker-final-pass.md).
 
 Resource validation: [2026-11-05 bounds and peak memory](validation/2026-11-05-speaker-final-pass-resources.md).
+
+Artifact lifecycle findings: [2026-11-05 lifecycle and read diagnostics](validation/2026-11-05-speaker-final-pass-artifact-lifecycle.md).

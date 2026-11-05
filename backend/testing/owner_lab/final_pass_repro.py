@@ -11,6 +11,7 @@ from contextlib import contextmanager, ExitStack, redirect_stdout
 import io
 import json
 import logging
+import time
 from unittest.mock import patch
 
 
@@ -233,6 +234,8 @@ def reproduce(uid, conversation, receipt, *, diarizer='stub', load_prints=None, 
     from utils.stt.diarization_turns import exclusive_from_activity
 
     captured = {'apply_calls': 0, 'learn_calls': 0}
+    read_wall_seconds = 0.0
+    read_budget = None
     coverage = set()
     projection_words = []
     original_units, original_assemble = batch._units, batch._assemble
@@ -246,13 +249,32 @@ def reproduce(uid, conversation, receipt, *, diarizer='stub', load_prints=None, 
         kinds[kind] = kinds.get(kind, 0) + 1
     required = {s.id for s in conversation.transcript_segments if batch_unit_scope(s) and s.end > s.start}
 
-    def units(*args, **kwargs):
-        stream = original_units(*args, **kwargs)
+    def timed_read(call, *args, **kwargs):
+        nonlocal read_wall_seconds
+        started = time.perf_counter()
+        try:
+            return call(*args, **kwargs)
+        finally:
+            read_wall_seconds += time.perf_counter() - started
+
+    def units(uid, conversation, budget, **kwargs):
+        nonlocal read_budget
+        # Capture before reference loading, which itself can hit the deadline.
+        read_budget = budget
+        stream = timed_read(original_units, uid, conversation, budget, **kwargs)
 
         def capture():
-            for item, pcm, words, check in stream.units:
+            while True:
+                try:
+                    item, pcm, words, check = timed_read(next, stream.units)
+                except StopIteration:
+                    return
                 coverage.update(w['segment_id'] for w in words)
-                yield item, pcm, words, check
+
+                def validate(check=check):
+                    return timed_read(check)
+
+                yield item, pcm, words, validate
                 del pcm, words
 
         return replace(stream, units=capture())
@@ -321,6 +343,12 @@ def reproduce(uid, conversation, receipt, *, diarizer='stub', load_prints=None, 
         'segment_coverage': {'total': len(before), 'required': len(required), 'placed': len(required & coverage)},
         'changed_segments': changed,
         'speaker_count': len({(s.speaker_id_scope, s.speaker_id) for s in conversation.transcript_segments}),
+        # Timed phases include decoding/projection CPU, but exclude assembly,
+        # diarization and application. Revalidation reads are included too.
+        'read_wall_seconds': read_wall_seconds,
+        'read_bytes': read_budget.received_bytes if read_budget else 0,
+        'read_reserved_bytes': read_budget.downloaded_bytes if read_budget else 0,
+        'read_objects': read_budget.objects if read_budget else 0,
         **captured,
     }
 
@@ -355,15 +383,19 @@ def main(argv=None):
         from utils.conversations.final_pass_errors import error_details
 
         for index, cid in enumerate(ids):
+            load_wall_seconds = 0.0
             try:
                 with redirect_stdout(io.StringIO()):
-                    row = db.get_conversation(uid, cid, include_transcript_decode_status=True)
-                    if not row or not row.pop('_recovery_transcript_decoded', False):
-                        raise ValueError('conversation_unavailable')
-                    conversation = Conversation(**row)
-                    result = reproduce(
-                        uid, conversation, db.get_manual_speaker_receipt(uid, cid), diarizer=args.diarizer
-                    )
+                    started = time.perf_counter()
+                    try:
+                        row = db.get_conversation(uid, cid, include_transcript_decode_status=True)
+                        if not row or not row.pop('_recovery_transcript_decoded', False):
+                            raise ValueError('conversation_unavailable')
+                        conversation = Conversation(**row)
+                        receipt = db.get_manual_speaker_receipt(uid, cid)
+                    finally:
+                        load_wall_seconds = time.perf_counter() - started
+                    result = reproduce(uid, conversation, receipt, diarizer=args.diarizer)
             except Exception as error:
                 details = error_details(error)
                 result = {
@@ -374,9 +406,15 @@ def main(argv=None):
                     'failing_unit': None,
                     'scope_kinds': {},
                     'segment_coverage': None,
+                    'read_wall_seconds': 0.0,
+                    'read_bytes': 0,
+                    'read_reserved_bytes': 0,
+                    'read_objects': 0,
                 }
             successes += result['outcome'] == 'success'
-            print(json.dumps({'case': index, **result}), flush=True)
+            print(
+                json.dumps({'case': index, **result, 'conversation_load_wall_seconds': load_wall_seconds}), flush=True
+            )
     print(
         json.dumps(
             {'summary': True, 'conversations': len(ids), 'successes': successes, 'success_rate': successes / len(ids)}
