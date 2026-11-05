@@ -176,7 +176,13 @@ class ProjectionFollowups:
         after = self.discovery.after
         if after is None:
             self.wrap_at = self.clock_now()  # wrapped on its own: next cycle's high-water
-        elif self.wrap_at is not None and after[0] >= self.wrap_at:
+        elif self.wrap_at is None:
+            # No mark yet (seed skipped or failed, or a cursor discovery already held):
+            # bound the current pass from now on.
+            self.wrap_at = self.clock_now()
+        elif after[0] > self.wrap_at:
+            # Strictly past the mark: a tie group at exactly the mark is finished
+            # first (ties order by key and the cursor stays on that timestamp).
             self.discovery.after = None
             self.wrap_at = self.clock_now()
 

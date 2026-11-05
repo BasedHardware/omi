@@ -300,6 +300,7 @@ def test_arrivals_that_keep_every_page_full_cannot_starve_rows_older_than_the_se
 
 
 def test_every_cycle_is_bounded_so_a_backed_off_row_is_revisited_under_a_full_tail(monkeypatch, clock):
+    monkeypatch.setenv(KNOB, '900')  # never inherit a kill-switch environment
     rows = backlog(150)  # committed 1000..1149
     now = [1150.0]
     followups, _ = runner(rows, monkeypatch, fraction=0.0, now=None)
@@ -317,3 +318,36 @@ def test_every_cycle_is_bounded_so_a_backed_off_row_is_revisited_under_a_full_ta
         now[0] += 10.0
         n += 1
     assert revisited
+
+
+def test_a_pass_without_a_seed_mark_is_still_bounded(monkeypatch, clock):
+    monkeypatch.setenv(KNOB, '900')
+    rows = backlog(150)
+    now = [1150.0]
+    followups, _ = runner(rows, monkeypatch, fraction=0.0, now=None)
+    followups.projector.clock = lambda: now[0]
+    followups.discovery.after = (1005.0, 'r005')  # a held cursor: the seed is skipped, so no mark from seeding
+    for _ in range(3):
+        followups.note('r002', 'blocked')
+    revisited = False
+    for n in range(40):
+        page = followups.discovered()
+        clock.now += 30.0
+        revisited = revisited or 'r002' in page
+        for i in range(150):
+            rows[f'n{n:02d}-{i:03d}'] = {'projection_state': 'persisted', 'committed_at': now[0] + i * 0.01}
+        now[0] += 10.0
+        if revisited:
+            break
+    assert revisited
+
+
+def test_a_tie_group_at_the_mark_is_never_cut_mid_group(monkeypatch, clock):
+    monkeypatch.setenv(KNOB, '900')
+    rows = {f't{i:03d}': {'projection_state': 'persisted', 'committed_at': 2000.0} for i in range(250)}
+    rows['old'] = {'projection_state': 'persisted', 'committed_at': 1999.0}  # seeds; the mark lands on the tie
+    followups, _ = runner(rows, monkeypatch, fraction=0.0, now=2000.0)
+    seen = set()
+    for _ in range(6):
+        seen.update(followups.discovered())
+    assert seen == set(rows)
