@@ -1023,3 +1023,10 @@ def test_enrichment_early_abort_and_streak_metrics_pass_the_gmp_sync_allowlist()
         'omi_enrichment_supersede_streak_sum',
     ):
         assert any(re.fullmatch(pattern, name) for pattern in keep), name
+    for name in (
+        'omi_enrichment_supersede_streak_other',
+        'enrichment_early_abort_total',
+        'omi_enrichment_early_abort_total_extra',
+        'omi_enrichment_early_abort',
+    ):
+        assert not any(re.fullmatch(pattern, name) for pattern in keep), name
