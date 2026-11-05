@@ -34,6 +34,14 @@ describe('resolveLanguageCode', () => {
     expect(resolveLanguageCode('Portuguese')).toBe('pt')
   })
 
+  it('keeps Latin American Spanish distinct from generic Spanish', () => {
+    expect(resolveLanguageCode('es-419')).toBe('es-419')
+    expect(resolveLanguageCode('Spanish (Latin America)')).toBe('es-419')
+    expect(resolveLanguageCode('español latino')).toBe('es-419')
+    expect(resolveLanguageCode('Latin American Spanish')).toBe('es-419')
+    expect(resolveLanguageCode('Spanish')).toBe('es')
+  })
+
   it('returns the canonical casing of a region-qualified code', () => {
     expect(resolveLanguageCode('pt-br')).toBe('pt-BR')
     expect(resolveLanguageCode('  PT-PT ')).toBe('pt-PT')
