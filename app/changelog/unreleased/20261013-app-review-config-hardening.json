@@ -1,0 +1,3 @@
+{
+  "change": "Hardened platform, uid, and version input validation and Firestore error recovery in app review config"
+}
