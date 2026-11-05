@@ -123,17 +123,14 @@ def _applies_to_platform(policy: dict[str, Any], platform: Any) -> bool:
 def get_desktop_update_policy(
     current_build: Optional[int], platform: str = "macos", *, firestore_client: Any = None
 ) -> dict[str, Any]:
-    try:
-        client: Any = firestore_client if firestore_client is not None else get_firestore_client()
-        doc = client.collection("desktop_update_policy").document("current").get()
-        if not getattr(doc, "exists", False):
-            return default_desktop_update_policy()
+    client: Any = firestore_client if firestore_client is not None else get_firestore_client()
 
-        raw_doc: object = doc.to_dict()
-        policy = _normalize_policy(raw_doc)
-    except Exception as e:
-        logger.warning(f"Error fetching desktop update policy, falling back to default: {e}")
+    doc = client.collection("desktop_update_policy").document("current").get()
+    if not getattr(doc, "exists", False):
         return default_desktop_update_policy()
+
+    raw_doc: object = doc.to_dict()
+    policy = _normalize_policy(raw_doc)
 
     if not _applies_to_platform(policy, platform):
         return default_desktop_update_policy()
