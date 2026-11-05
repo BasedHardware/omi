@@ -3781,7 +3781,6 @@ export interface Message {
   memories_id?: Array<string>;
   message_source?: string | null;
   metadata?: string | null;
-  plugin_id?: string | null;
   prompt_commit?: string | null;
   prompt_name?: string | null;
   rating?: number | null;
@@ -4693,7 +4692,6 @@ export interface ResponseMessage {
   memories_id?: Array<string>;
   message_source?: string | null;
   metadata?: string | null;
-  plugin_id?: string | null;
   prompt_commit?: string | null;
   prompt_name?: string | null;
   rating?: number | null;

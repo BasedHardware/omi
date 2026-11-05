@@ -563,8 +563,6 @@ class Message(BaseModel):
     created_at: datetime
     sender: MessageSender
     app_id: Optional[str] = None
-    # TODO: remove plugin_id after migration
-    plugin_id: Optional[str] = None
     from_external_integration: bool = False
     type: MessageType
     memories_id: List[str] = []  # used in db
@@ -604,9 +602,7 @@ class Message(BaseModel):
             app_id_val = data.get('app_id')
             plugin_id_val = data.get('plugin_id')
 
-            if app_id_val is not None:
-                data['plugin_id'] = app_id_val
-            elif plugin_id_val is not None:
+            if app_id_val is None and plugin_id_val is not None:
                 data['app_id'] = plugin_id_val
 
             if 'content_blocks' not in data:
@@ -867,9 +863,7 @@ class ChatSession(BaseModel):
             app_id_val = data.get('app_id')
             plugin_id_val = data.get('plugin_id')
 
-            if app_id_val is not None:
-                data['plugin_id'] = app_id_val
-            elif plugin_id_val is not None:
+            if app_id_val is None and plugin_id_val is not None:
                 data['app_id'] = plugin_id_val
         return data
 
