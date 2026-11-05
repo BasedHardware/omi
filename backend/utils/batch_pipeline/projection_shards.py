@@ -308,15 +308,20 @@ class ProjectionShards:
         self.unheld = {shard for shard, holder in enumerate(holders) if not holder}
 
     def release(self) -> None:
-        """Hand every held shard back at shutdown so the next holder starts now."""
+        """Hand every held shard back and leave the members set, so others rebalance now.
+
+        Used at shutdown and when a kill switch takes this process off the
+        sharded path. Fails open: unreleased leases lapse after LEASE_SECONDS.
+        """
         with self._lock:
             held, self.held = sorted(self.held), set()
             self.healthy = False
-            if not held:
-                return
+            self.refreshed_at = None  # Rejoin on the very next lease pass.
             try:
-                self._client().eval(_RELEASE_LUA, len(held), *(self._lease_key(s) for s in held), self.holder)
-                self._client().zrem(self._members_key(), self.holder)
+                client = self._client()
+                if held:
+                    client.eval(_RELEASE_LUA, len(held), *(self._lease_key(s) for s in held), self.holder)
+                client.zrem(self._members_key(), self.holder)
             except Exception as error:
                 logger.warning(
                     'event=batch_projection_shards action=release outcome=unavailable exception_type=%s',

@@ -669,3 +669,25 @@ def test_a_drain_task_that_raised_never_reports_the_chain_end(monkeypatch):
 
     asyncio.run(go())
     assert seen == [('a', 'error')]
+
+
+def test_a_kill_switched_member_hands_its_shards_to_engaged_members(server, blocking_inline, monkeypatch):
+    pumps = []
+    for _ in range(2):
+        shards = make(server, count=4)
+        pumps.append(ShardPump(FakeProjector(FakeDrains(4)), shards))
+    for _ in range(3):
+        for pump in pumps:
+            pump.shards.refresh()
+    assert pumps[0].shards.held and pumps[1].shards.held
+    monkeypatch.setenv('BATCH_PIPELINE_OWNER_DRAIN_ENABLED', 'false')
+    asyncio.run(pumps[0].tick())
+    assert pumps[0].shards.held == set() and not pumps[0].shards.active
+    # The engaged member sees one member left and takes every shard.
+    pumps[1].shards.refresh()
+    assert pumps[1].shards.held == set(range(4)) and pumps[1].shards.unheld == set()
+    asyncio.run(pumps[0].tick())  # still switched off: no lease pass, no shards
+    assert pumps[0].shards.held == set()
+    monkeypatch.delenv('BATCH_PIPELINE_OWNER_DRAIN_ENABLED')
+    asyncio.run(pumps[0].tick())
+    assert pumps[0].shards.active  # switched back on: rejoins on the next lease pass

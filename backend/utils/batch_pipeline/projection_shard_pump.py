@@ -95,9 +95,13 @@ class ShardPump:
         persisted/ready rows to the sweep's finish page. When any of those kill
         switches is off, this process serves exactly as it did before shards.
         """
+        return self.shards.active and self.switches_on
+
+    @property
+    def switches_on(self) -> bool:
+        """Every existing drain kill switch the sharded path relies on is on."""
         return (
-            self.shards.active
-            and owner_chain_projection_enabled()
+            owner_chain_projection_enabled()
             and sweep_owner_chain_enabled()
             and owner_drain_enabled()
             and projection_pending_page_enabled()
@@ -209,6 +213,16 @@ class ShardPump:
         if not self.attached:
             self.attach()
         shards = self.shards
+        if not self.switches_on:
+            # A kill switch took this process off the sharded path. It must not
+            # keep shard leases: members route wakes to holders, and these lanes
+            # would wait unread. Hand them back so an engaged member takes them.
+            if shards.held or shards.healthy:
+                await run_blocking(db_executor, shards.release)
+                PROJECTION_SHARDS_HELD.set(0)
+            if self.projector.owes_drains:
+                self.projector.start_drains()
+            return 0
         if shards.refresh_due():
             await run_blocking(db_executor, shards.refresh)
             PROJECTION_SHARDS_HELD.set(len(shards.held))
