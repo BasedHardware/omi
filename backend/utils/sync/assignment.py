@@ -349,6 +349,8 @@ def assign_in_transaction(
             raise SyncAssignmentConflict('record target missing', subtype=Reason.RECORD_TARGET_MISSING)
         current = decode(target)
         result, survivors = replace_record(current, incoming, record_span)
+        if result.get('transcript_segments') != current.get('transcript_segments'):
+            rearm_on_revision_change(current, result)
         invalidate(result)
         encoded = encode(result)
         estimated = _stored_document_bytes(collection.document(target_id), encoded, target, invalidate)

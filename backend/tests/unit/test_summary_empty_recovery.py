@@ -1,4 +1,4 @@
-"""Exhaustion belongs to transcript content; ownership races spend no empty budget."""
+"""Transcript recovery is lifetime-bounded; ownership races spend no empty budget."""
 
 from copy import deepcopy
 import importlib
@@ -11,7 +11,7 @@ from services import summary_debt_repair as repair
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from tests.unit.test_sync_cross_job_assignment import chunk, intake
 from utils.conversations import summary_delivery as delivery
-from utils.enrichment import outbox
+from utils.enrichment import custody, outbox
 
 CONVERSATION = ('users', 'u', 'conversations', 'c')
 KEY = outbox.key('u', 'c')
@@ -189,3 +189,83 @@ def test_lost_ack_preserves_a_banked_summary_despite_owner_change(store):
     )
     assert store.rows[CONVERSATION] == before
     assert store.rows[OUTBOX]['summary_seen']
+
+
+def test_repeated_empty_cycles_stop_after_nine_calls_even_with_more_transcripts(store):
+    store.rows[OUTBOX].update(dormant=False, summary_empty_failures=0, summary_blocked_reason=None)
+    store.rows[CONVERSATION].update(summary_empty_failures=0, summary_blocked_reason=None, summary_due_at=220)
+    calls = 0
+    for cycle in range(3):
+        token = store.rows[OUTBOX]['task_token']
+        for expected in (
+            summary_processing.EmptyFailureOutcome.RETRY,
+            summary_processing.EmptyFailureOutcome.RETRY,
+            summary_processing.EmptyFailureOutcome.BLOCKED,
+        ):
+            assert summary_processing.record_empty_failure(store, outbox.COLLECTION, KEY, 'worker', token) is expected
+            calls += 1
+        reason = delivery.EMPTY_LIFETIME_BLOCKED_REASON if cycle == 2 else delivery.EMPTY_BLOCKED_REASON
+        assert store.rows[CONVERSATION]['summary_blocked_reason'] == reason
+        assert store.rows[OUTBOX]['summary_blocked_reason'] == reason
+        intake(store, chunk(f'append-{cycle}', 1060 + cycle * 60), target_id='c')
+        row = store.rows[CONVERSATION]
+        if cycle < 2:
+            assert row['summary_empty_rearms'] == cycle + 1
+            assert repair.redrive(store, 'u', 'c', now=row['summary_due_at'] + 1)
+            store.rows[OUTBOX]['owner'] = 'worker'
+        else:
+            assert row['summary_empty_rearms'] == 2
+            assert row['summary_due_at'] is None
+            assert not repair.redrive(store, 'u', 'c', now=10000)
+    assert calls == 9
+    for revision in range(3, 6):
+        intake(store, chunk(f'append-{revision}', 1060 + revision * 60), target_id='c')
+        row = store.rows[CONVERSATION]
+        assert row['summary_blocked_reason'] == delivery.EMPTY_LIFETIME_BLOCKED_REASON
+        assert row['summary_empty_rearms'] == 2 and row['summary_due_at'] is None
+        assert delivery.refusal(row) == delivery.EMPTY_LIFETIME_BLOCKED_REASON
+        assert not repair.redrive(store, 'u', 'c', now=10000)
+    assert store.rows[OUTBOX]['dormant']
+
+
+@pytest.mark.parametrize('rearms', [0, 2])
+def test_final_record_replacement_rearms_in_its_assignment_transaction(store, rearms):
+    store.rows[CONVERSATION].update(summary_empty_rearms=rearms, record_lane_owner='batch_live_v1')
+    incoming = chunk('final', 1000, text='New final recording transcript.')
+    incoming['transcript_segments'][0]['id'] = 'final-segment'
+    incoming['_batch_replace_live'] = {'start': 1000, 'end': 1010}
+    intake(store, incoming, target_id='c')
+    row = store.rows[CONVERSATION]
+    assert row['sync_content_revision'] == 4
+    assert row['transcript_segments'][0]['text'] == 'New final recording transcript.'
+    assert row['summary_empty_rearms'] == min(rearms + 1, 2)
+    assert row['summary_empty_failures'] == (0 if rearms == 0 else 3)
+    assert (row['summary_due_at'] is not None) is (rearms == 0)
+    assert row['summary_blocked_reason'] == (None if rearms == 0 else delivery.EMPTY_LIFETIME_BLOCKED_REASON)
+
+
+@pytest.mark.parametrize('reason', sorted(delivery.EMPTY_BLOCKED_REASONS))
+def test_redirect_custody_cannot_reopen_either_empty_budget(store, monkeypatch, reason):
+    store.rows[OUTBOX]['summary_blocked_reason'] = reason
+    donor_key = outbox.key('u', 'donor')
+    source = (outbox.COLLECTION, donor_key)
+    store.rows[source] = {
+        **store.rows[OUTBOX],
+        'conversation_id': 'donor',
+        'dormant': False,
+        'due_at': 220,
+    }
+
+    def privacy_snapshot(_client, _transaction, _uid, *, conversation_ids, snapshots):
+        snapshots['conversations'] = {
+            'donor': {'deleted': True, 'sync_merged_into': 'c'},
+            'c': {'deleted': False},
+        }
+
+    monkeypatch.setattr(outbox, 'get_firestore_client', lambda: store)
+    monkeypatch.setattr(custody, 'assert_batch_write_allowed', privacy_snapshot)
+    assert custody.transfer_redirect(donor_key, 'old-token', 'worker', 'c', now=200) is None
+    assert source not in store.rows
+    pending = store.rows[OUTBOX]
+    assert pending['dormant'] and pending['due_at'] is None
+    assert pending['summary_blocked_reason'] == reason and pending['summary_empty_failures'] == 3

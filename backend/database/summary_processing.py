@@ -11,10 +11,14 @@ from typing import Any
 from google.api_core.exceptions import FailedPrecondition, NotFound
 from google.cloud import firestore
 
-from utils.conversations.summary_delivery import PROCESS_CONTEXT
+from utils.conversations.summary_delivery import (
+    PROCESS_CONTEXT,
+    MAX_EMPTY_REARMS,
+    EMPTY_BLOCKED_REASON,
+    EMPTY_LIFETIME_BLOCKED_REASON,
+)
 
 MAX_EMPTY_FAILURES = 3
-EMPTY_BLOCKED_REASON = 'empty_output_exhausted'
 
 
 class EmptyFailureOutcome(Enum):
@@ -73,12 +77,17 @@ def record_empty_failure(client: Any, collection: str, document_id: str, owner: 
         blocked = failures >= MAX_EMPTY_FAILURES
         updates: dict[str, Any] = {'summary_empty_failures': failures, 'summary_empty_outcome': 'empty_output'}
         if blocked:
+            blocked_reason = (
+                EMPTY_LIFETIME_BLOCKED_REASON
+                if conversation.get('summary_empty_rearms', 0) >= MAX_EMPTY_REARMS
+                else EMPTY_BLOCKED_REASON
+            )
             if not enriched:
                 transaction.update(
                     reference,
                     {
                         'summary_empty_failures': failures,
-                        'summary_blocked_reason': EMPTY_BLOCKED_REASON,
+                        'summary_blocked_reason': blocked_reason,
                         'summary_due_at': None,
                     },
                 )
@@ -87,7 +96,7 @@ def record_empty_failure(client: Any, collection: str, document_id: str, owner: 
                 due_at=None,
                 lease_until=0,
                 summary_seen=enriched,
-                summary_blocked_reason=None if enriched else EMPTY_BLOCKED_REASON,
+                summary_blocked_reason=None if enriched else blocked_reason,
             )
         transaction.update(outbox, updates)
         return EmptyFailureOutcome.BLOCKED if blocked else EmptyFailureOutcome.RETRY

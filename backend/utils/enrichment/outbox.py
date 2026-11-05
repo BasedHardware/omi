@@ -41,7 +41,7 @@ from config.sync_reprocess import settle_seconds
 from utils.sync import processing_hold
 from config.repeat_work import revision_reuse
 from database._client import get_firestore_client
-from database.summary_processing import record_empty_failure, EMPTY_BLOCKED_REASON, EmptyFailureOutcome
+from database.summary_processing import record_empty_failure, EmptyFailureOutcome
 
 Row: TypeAlias = dict[str, Any]
 ResultT = TypeVar('ResultT')
@@ -426,7 +426,7 @@ def mark_update(
         nonlocal candidate, recent
         if stamps is not None:
             stamps.clear()  # A CAS or transaction retry re-runs this operation.
-        if old and old.get('summary_blocked_reason') == EMPTY_BLOCKED_REASON:
+        if old and old.get('summary_blocked_reason') in summary_delivery.EMPTY_BLOCKED_REASONS:
             return old, ({**old, '_wake': False}, True)
         row = dict(old or {})
         row.pop('_wake', None)  # Dispatch intent belongs to this CAS result, not its persisted replay.
