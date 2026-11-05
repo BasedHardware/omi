@@ -60,7 +60,7 @@ def test_prod_deploy_flags_match_the_margin20_target():
         '2Gi',
         '2',
         6,
-        0,
+        1,
     )
 
     integration = model['backend-integration'].scale

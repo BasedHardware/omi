@@ -223,6 +223,7 @@ runs:
 
     # margin-20: 7d app-memory p95 <=0.882GiB / max bucket <=1.149GiB at concurrency 6
     # (concurrency 10 unqualified; Luna P2 on #24596). Rollback: prod memory 3Gi.
+    # Prod warm floor 1 (lead2 87e1ba); rollback: --min-instances=0.
     # maxScale stays Redis-guard owned.
     - name: Deploy ${{ inputs.service }}-sync-backfill to Cloud Run
       if: ${{ inputs.mode == 'worker' }}
@@ -237,7 +238,7 @@ runs:
         flags: >-
           --revision-suffix=${{ inputs.revision_suffix }}-base
           ${{ steps.candidate-tag.outputs.flag }}
-          --min-instances=0
+          --min-instances=${{ inputs.project_id == 'based-hardware' && '1' || '0' }}
           --max-instances=${{ steps.live-max-scale.outputs.max_scale }}
           --max=${{ steps.live-max-scale.outputs.max_scale }}
           --concurrency=6

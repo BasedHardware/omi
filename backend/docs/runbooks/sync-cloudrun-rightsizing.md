@@ -22,6 +22,11 @@ After review:
 
 Observability saves $0 directly and adds ingestion/CPU overhead. At 10 distributions per instance/five minutes, 80 billable bytes/distribution, 18–39 average instances from Oct 2–3 billed hours imply approximately **$31–66/month** ingestion before remaining free allotment, plus modest request/exporter CPU and Monitoring read charges. A sustained 68-instance ceiling with one active lane is ~$116/month. Mixed fresh/backfill/unknown lanes can increase this by up to 3x; dev acceptance must measure the actual active-series count and export overhead. The exporter read window grows from 2 to 10 minutes to cover this cadence; verify collection duration and pod CPU/memory because this also widens reads for existing application metrics.
 
+Production backfill warm floor: `.github/actions/sync-backfill-lifecycle/action.yml` declares
+`--min-instances=1` for `backend-sync-backfill` in `based-hardware` (lead2 ruling
+`87e1ba`, 2026-11-05 23:19Z). Non-production retains 0. Rollback: `min-instances 0`.
+The deploy previously passed `--min-instances=0` on every worker deployment.
+
 ## Memory headroom
 
 The supplied `backend-sync-backfill-container-memory-utilizations.json` has daily merged linear histograms at 8 GiB. Bucket width is 1% of allocation; the highest nonempty bucket's upper bound is `index * 0.01 * 8 GiB`, not an exact maximum. Oct 2/3 mean is 0.732/0.748 GiB and p99 upper bound is 0.96 GiB. The full Sep 24–Oct 3 range includes an **Oct 1 sample below 1.76 GiB**. The earlier recent-day 1.12 GiB summary omitted that outlier.

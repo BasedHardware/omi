@@ -374,10 +374,9 @@ def test_sync_backfill_lifecycle_is_shared_by_manual_and_auto_dev():
     assert 'ops_train.py" render-env --env prod' in action
     # Dispatch concurrency must stay within max instances x concurrency: offering more
     # than the worker admits makes Cloud Run reject the surplus and Cloud Tasks
-    # back it off, which previously stranded recordings for hours. 2026-10-24
-    # right-sizing (lead's live change 06:06Z): the worker idles at min 0; the
-    # bounded queue backoff absorbs scale-from-zero dispatch latency.
-    assert '--min-instances=0' in action
+    # back it off, which previously stranded recordings for hours. Prod keeps one
+    # warm worker (lead2 87e1ba); non-prod retains scale-to-zero.
+    assert "--min-instances=${{ inputs.project_id == 'based-hardware' && '1' || '0' }}" in action
     assert '--max-instances=${{ steps.live-max-scale.outputs.max_scale }}' in action
     assert '--max=${{ steps.live-max-scale.outputs.max_scale }}' in action
     assert '--concurrency=6' in action
