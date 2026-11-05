@@ -187,12 +187,15 @@ def test_worker_clock_failure_is_recorded_and_blocks_projection(backend_tree):
     corpus['units'][0]['worker_words'][0]['timestamp'] = [0.6, 0.7]
     result = replay(corpus, backend_tree)
     assert result['persisted'] == 0
+    # A word that starts past the window's captured extent is unowned, not a
+    # clock defect: it drops and the unit with no other words rides the
+    # assemble_words empty_asr envelope instead of the word_clocks one.
     assert result['worker_results']['word-clock-eof'] == {
         'persisted': False,
-        'stage': 'word_clocks',
-        'reason': 'word_clock',
+        'stage': 'assemble_words',
+        'reason': 'empty_asr',
     }
-    assert result['unit_issues']['word-clock-eof'] == ['word_clocks:ValidationFailureWork:word_clock']
+    assert result['unit_issues']['word-clock-eof'] == ['assemble_words:ValidationFailureWork:empty_asr']
     assert result['chain_blocks'][0]['blocked_units'] == 1
 
 

@@ -223,9 +223,7 @@ def test_subsecond_window_word_past_eof_commits_clamped():
         validate_words([{'word': 'edge', 'timestamp': [0.1, 0.54]}], 0.5)
 
 
-@pytest.mark.parametrize(
-    'clocks', [[-0.2, -0.1], [-0.1, 0.0], [0.5, 0.6], [0.3, 0.2], [0.1, float('nan')], [0.1, float('inf')]]
-)
+@pytest.mark.parametrize('clocks', [[-0.2, -0.1], [-0.1, 0.0], [0.3, 0.2], [0.1, float('nan')], [0.1, float('inf')]])
 def test_invalid_window_word_clocks_still_fail_at_word_clocks(clocks):
     results, saved = window_word_result([{'word': 'invalid', 'timestamp': clocks}])
     assert results == [ValidationFailureWork('synthetic-window', 'word_clocks', 'word_clock')]

@@ -152,14 +152,17 @@ def bounded_window_words(words, duration):
             start, end = map(float, word['timestamp'])
         except ValueError:
             raise BatchValidationError(ValidationReason.WORD_SHAPE) from None
-        if (
-            not all(math.isfinite(v) for v in (start, end))
-            or start > end
-            or end < 0
-            or (end == 0 and start < 0)
-            or start >= duration
-        ):
+        if not all(math.isfinite(v) for v in (start, end)) or start > end or end < 0 or (end == 0 and start < 0):
             raise BatchValidationError(ValidationReason.WORD_CLOCK)
+        if start >= duration:
+            # A word that begins at or after the window's captured extent can
+            # never be owned: the midpoint rule below would drop it, and so
+            # does the window's own duration. Failing the unit here discarded
+            # the already-paid hypothesis for every kept word and quarantined
+            # the capture for a fenced second recognition that cannot recover
+            # a word this window never contained. Drop the tail word and keep
+            # the window's real transcript; malformed clocks above still fail.
+            continue
         if start < previous or not isinstance(word['word'], str) or not word['word'].strip():
             raise BatchValidationError(ValidationReason.WORD_SEQUENCE)
         previous = start
