@@ -82,7 +82,7 @@ def test_process_entropy_is_sampled_and_logged_once_per_process(monkeypatch, cap
     monkeypatch.setenv('K_REVISION', 'same-revision-across-replicas')
     entropy = Mock(side_effect=[11, 22])
     monkeypatch.setattr(batch_pipeline.secrets, 'randbits', entropy)
-    batch_pipeline.projection_discovery_stripe.cache_clear()
+    monkeypatch.setattr(batch_pipeline, '_projection_discovery_stripe_value', None)
     try:
         with caplog.at_level('INFO', logger=batch_pipeline.__name__):
             first = ProjectionDiscovery(Mock()).stripe
@@ -90,7 +90,7 @@ def test_process_entropy_is_sampled_and_logged_once_per_process(monkeypatch, cap
             assert entropy.call_count == 1
             # Simulate another process with identical revision/hostname/PID,
             # injecting a fresh seed rather than relying on probabilistic tests.
-            batch_pipeline.projection_discovery_stripe.cache_clear()
+            monkeypatch.setattr(batch_pipeline, '_projection_discovery_stripe_value', None)
             second = ProjectionDiscovery(Mock()).stripe
             assert ProjectionDiscovery(Mock()).stripe == second
         assert first != second
@@ -99,7 +99,7 @@ def test_process_entropy_is_sampled_and_logged_once_per_process(monkeypatch, cap
         assert caplog.text.count('event=batch_projection_discovery action=start') == 2
         assert caplog.text.count('stripes=4096') == 2
     finally:
-        batch_pipeline.projection_discovery_stripe.cache_clear()
+        monkeypatch.setattr(batch_pipeline, '_projection_discovery_stripe_value', None)
 
 
 @pytest.mark.parametrize('raw', ['', 'on', 'false', 'garbage', 'off', ' OFF '])
