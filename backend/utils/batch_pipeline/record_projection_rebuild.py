@@ -1,16 +1,11 @@
 """Socket-independent playback metadata discovery; no audio decoding or custody."""
 
-import os
 from typing import Literal
 
 from config import audio_archive
 from database import conversations as conversations_db, conversation_tombstones, record_projection_rebuild as jobs
 from database._client import get_firestore_client
 from utils.other import storage, raw_audio_read
-
-
-def durable_debt_enabled() -> bool:
-    return os.getenv('PUSHER_PROJECTION_DEBT_DURABLE_ENABLED', '1').strip().lower() not in {'0', 'false', 'off'}
 
 
 def projection_owner_gone(uid: str, conversation_id: str) -> bool:

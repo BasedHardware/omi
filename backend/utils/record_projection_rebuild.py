@@ -7,9 +7,10 @@ from prometheus_client import Gauge
 
 from google.api_core.exceptions import FailedPrecondition, NotFound
 
+from config.batch_pipeline_projection_rebuild import enabled as durable_debt_enabled
 from database import record_projection_rebuild as jobs
 from database._client import get_firestore_client
-from utils.batch_pipeline.record_projection_rebuild import durable_debt_enabled, rebuild
+from utils.batch_pipeline.record_projection_rebuild import rebuild
 
 MAX_PER_PASS = 128
 MAX_COLLECTION_MARKERS = 10000

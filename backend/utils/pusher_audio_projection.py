@@ -11,11 +11,11 @@ from google.api_core.exceptions import InvalidArgument
 from prometheus_client import Counter
 
 from config import audio_archive
+from config.batch_pipeline_projection_rebuild import enabled as durable_debt_enabled
 from database import conversations as conversations_db, record_projection_rebuild
 from database.audio_chunk_metadata import audio_chunk_entry
 from utils.other import storage
 from utils.batch_pipeline.record_projection_rebuild import (
-    durable_debt_enabled,
     projected_chunks,
     discover,
 )
