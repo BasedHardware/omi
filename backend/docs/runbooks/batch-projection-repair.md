@@ -102,17 +102,26 @@ An original source with `deleted=true`, no deletion tombstone, and no valid
 transaction rechecks the source, account/privacy generation, immutable binding,
 ledger ownership and predecessor. It stores a ready receipt with no conversation
 ID, audio or enrichment obligation, using the existing no-text completion path.
-An empty completion reports `reason_code=source_deleted`. Tombstones retain
+Completion aggregates all parts and bound siblings. Any `source_deleted` part
+suppresses the entire job's output IDs, including content parts already
+persisted. The shared visibility fence also suppresses IDs in partial results,
+including deletion markers inside held entries; it preserves their existing
+custody semantics and does not count a partial as a job termination. Normal
+completion reports `reason_code=source_deleted`. The publisher is never
+called for that result, even with empty IDs. An older mixed completion is
+suppressed on replay without modifying its historical usage. Tombstones retain
 `conversation_deleted`; redirect chains retain their existing checks. Missing
 source documents alone are not evidence of deletion. Tombstone writers are
 unchanged.
 
 `omi_batch_pipeline_projection_source_deleted_jobs_total` increments once after
-a new no-text job receipt commits (after the last part for multipart jobs),
-not on transaction retries or receipt replays. It is a process-local Prometheus
+job settlement commits, after aggregation over every part and sibling, not
+when individual parts persist and not on transaction retries or receipt replays. It is a process-local Prometheus
 counter; a crash between commit and increment can undercount. The durable
-receipt is the audit source. Assignment logs also emit
-`event=batch_projection action=assignment outcome=source_deleted`.
+completion is the audit source. Completion logs emit
+`event=batch_projection action=completion outcome=source_deleted`, without
+user IDs or content. Assignment logs may also identify the part's disposition;
+they are not the terminated-job count.
 Async follow-up attempts report `source_deleted` in
 `omi_batch_pipeline_projection_followup_outcomes_total{outcome="source_deleted"}`;
 this outcome is terminal and does not enter backoff.

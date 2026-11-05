@@ -25,8 +25,10 @@ POLICY = ProjectionPolicy()
 @pytest.fixture
 def lane(monkeypatch):
     from utils.batch_pipeline import retention
+    from utils.sync import bridge
 
     monkeypatch.setattr(retention, 'expire_completed_segment', Mock(return_value=True))
+    monkeypatch.setattr(bridge, 'finish_sync_bridges', lambda uid, cid, **kwargs: cid)
     monkeypatch.setenv('OMI_ENV_STAGE', 'local')
     monkeypatch.delenv(FLAG, raising=False)
     client = StrictFirestore()
@@ -111,7 +113,7 @@ def test_default_on_terminal_receipt_completion_and_replay_never_publish_deleted
     assert {k: v for k, v in f.client.rows.items() if k[:1] == ('users',) and 'conversations' in k} == {
         k: v for k, v in before.items() if k[:1] == ('users',) and 'conversations' in k
     }
-    # The real completion publishes only an empty terminal status.
+    # The real completion returns an empty terminal status without publishing.
     accounting = f.store.prepare_accounting(binding, 2000)
     assert accounting['seconds'] == 0 and accounting['updates'] == {}
     record_speech.assert_called_once()
@@ -122,7 +124,7 @@ def test_default_on_terminal_receipt_completion_and_replay_never_publish_deleted
     assert result['new_memories'] == result['updated_memories'] == []
     assert f.ledger_ref.get().to_dict()['status'] == 'completed'
     assert f.store.ref('jobs', 'head').get().to_dict()['client_status'] == 'completed'
-    publish.assert_called_once_with(binding, result)
+    publish.assert_not_called()
     assert settle(f) == receipt
     assert SOURCE_DELETED_JOBS._value.get() == counter + 1
     assert f.store.complete('head', binding, 2001, accounting, policy=POLICY) == result
@@ -132,8 +134,11 @@ def test_kill_switch_off_restores_block_without_writes_or_counter(lane, monkeypa
     monkeypatch.setenv(FLAG, 'false')
     before = deepcopy(lane.client.rows)
     counter = SOURCE_DELETED_JOBS._value.get()
+    projector = make_projector(lane, monkeypatch)
+    job, entry, binding = lane.store.read('head')
     with pytest.raises(ProjectionBlocked, match='requires a source deletion tombstone'):
-        settle(lane)
+        projector._project('head', job, entry, binding)
+    projector.publish.assert_not_called()
     assert lane.client.rows == before
     assert SOURCE_DELETED_JOBS._value.get() == counter
 
@@ -213,12 +218,17 @@ def test_multipart_counts_one_terminal_job_only_after_last_part(lane, last_tombs
         session.speech_seconds = 2
         receipt = projection_disposition.persist_disposition(session, privacy_deleted=True)
         assert receipt['state'] == 'ready' and receipt['conversation_id'] is None
-        assert SOURCE_DELETED_JOBS._value.get() == counter + index
+        assert SOURCE_DELETED_JOBS._value.get() == counter
     entry = f.store.ref('results', 'head').get().to_dict()
     assert entry['projection_state'] == 'ready'
     assert entry['projection']['disposition'] == 'source_deleted'
     assert entry['projection']['speech_seconds'] == 0
     assert settle(f)['disposition'] == 'source_deleted'
+    assert SOURCE_DELETED_JOBS._value.get() == counter
+    projector = make_projector(f, f.monkeypatch)
+    result = projector.complete_content('head', f.binding, policy=POLICY)
+    assert result['reason_code'] == 'source_deleted'
+    projector.publish.assert_not_called()
     assert SOURCE_DELETED_JOBS._value.get() == counter + 1
 
 
@@ -238,4 +248,232 @@ def test_deleted_destination_does_not_impersonate_deleted_original_source(lane, 
     with pytest.raises(ProjectionBlocked, match='requires a source deletion tombstone'):
         settle(f)
     assert f.client.rows == before
+    assert SOURCE_DELETED_JOBS._value.get() == counter
+
+
+def make_projector(lane, monkeypatch, *, accounting_seconds=None):
+    if accounting_seconds is not None:
+        # Metering is outside this privacy contract. Completion still checks
+        # these seconds against the immutable result summary transactionally.
+        monkeypatch.setattr(
+            lane.store,
+            'prepare_accounting',
+            Mock(
+                return_value={
+                    'seconds': accounting_seconds,
+                    'updates': {},
+                    'charged': 0.0,
+                    'completed': False,
+                }
+            ),
+        )
+    monkeypatch.setattr(projection, 'record_speech', Mock())
+    return projection.Projector(
+        lane.store.store,
+        Mock(),
+        projection_store=lane.store,
+        assign_conversation=Mock(),
+        publish=Mock(),
+        playback=Mock(),
+        clock=lambda: 2000,
+    )
+
+
+def persist_mixed_parts(lane, deleted_index):
+    """Use real fenced part commits; a source may change between independent parts."""
+    f = lane
+    source_row = f.client.rows[('users', f.binding.owner_id, 'conversations', f.cid)]
+    f.user.collection('conversations').document('synthetic-output').create({'id': 'synthetic-output'})
+    for index in range(2):
+        session = f.store.session('head', f.binding, 2000, policy=POLICY, part_index=index, part_count=2)
+        session.speech_seconds = 2
+        session.total_speech_seconds = 4
+        source_row['deleted'] = index == deleted_index
+        if index == deleted_index:
+            projection_disposition.persist_disposition(session, privacy_deleted=True)
+        else:
+            transaction = f.client.transaction()
+            session.prepare(transaction)
+            session.persist(transaction, ({'id': 'synthetic-output', '_sync_lineage_repeat_only': True}, True, []))
+            # StrictFirestore retains transform sentinels. Supply the committed
+            # ArrayUnion readback before the next independent transaction.
+            f.client.rows[f.store.ref('jobs', 'head').path]['conversation_ids'] = ['synthetic-output']
+    source_row['deleted'] = True
+
+
+@pytest.mark.parametrize('deleted_index', [0, 1])
+def test_any_deleted_part_suppresses_entire_job_and_never_calls_publisher(lane, monkeypatch, deleted_index):
+    f = lane
+    projector = make_projector(f, monkeypatch, accounting_seconds=2)
+    counter = SOURCE_DELETED_JOBS._value.get()
+    persist_mixed_parts(f, deleted_index)
+    entry = f.store.ref('results', 'head').get().to_dict()
+    assert entry['projection_parts'][str(1 - deleted_index)]['conversation_id'] == 'synthetic-output'
+    assert entry['projection_parts'][str(1 - deleted_index)]['state'] == 'persisted'
+    assert SOURCE_DELETED_JOBS._value.get() == counter
+    job, entry, binding = f.store.read('head')
+    result = projector._finish('head', job, entry, binding)
+    assert result['reason_code'] == 'source_deleted'
+    assert result['new_memories'] == result['updated_memories'] == []
+    projector.publish.assert_not_called()
+    projector.playback.assert_not_called()
+    assert f.ledger_ref.get().to_dict()['result'] == result
+    assert f.store.ref('jobs', 'head').get().to_dict()['client_result'] == result
+    assert SOURCE_DELETED_JOBS._value.get() == counter + 1
+    # A lost completion reply must not publish or count a second termination.
+    assert projector.complete_content('head', binding, policy=POLICY) == result
+    projector.publish.assert_not_called()
+    assert SOURCE_DELETED_JOBS._value.get() == counter + 1
+
+
+@pytest.mark.parametrize('deleted_index', [0, 1])
+def test_mixed_deleted_parts_kill_switch_off_blocks_without_publishing(lane, monkeypatch, deleted_index):
+    f = lane
+    projector = make_projector(f, monkeypatch)
+    persist_mixed_parts(f, deleted_index)
+    monkeypatch.setenv(FLAG, 'false')
+    before = deepcopy(f.client.rows)
+    counter = SOURCE_DELETED_JOBS._value.get()
+    job, entry, binding = f.store.read('head')
+    with pytest.raises(ProjectionBlocked, match='requires a source deletion tombstone'):
+        projector._finish('head', job, entry, binding)
+    projector.publish.assert_not_called()
+    assert f.client.rows == before
+    assert SOURCE_DELETED_JOBS._value.get() == counter
+
+
+@pytest.mark.parametrize('case', ['tombstone', 'redirect'])
+def test_tombstone_and_redirect_keep_their_existing_publication_behavior(lane, monkeypatch, case):
+    f = lane
+    projector = make_projector(f, monkeypatch)
+    counter = SOURCE_DELETED_JOBS._value.get()
+    if case == 'tombstone':
+        f.user.collection('deleted_conversations').document(f.cid).create({})
+        job, entry, binding = f.store.read('head')
+        result = projector._project('head', job, entry, binding)
+        assert result['reason_code'] == 'conversation_deleted'
+        assert result['new_memories'] == result['updated_memories'] == []
+    else:
+        f.client.rows[('users', f.binding.owner_id, 'conversations', f.cid)]['sync_merged_into'] = 'survivor'
+        f.user.collection('conversations').document('survivor').create({'id': 'survivor'})
+        session = f.store.session('head', f.binding, 2000, policy=POLICY)
+        transaction = f.client.transaction()
+        session.prepare(transaction)
+        session.speech_seconds = 0
+        session.persist(transaction, ({'id': 'survivor', '_sync_lineage_repeat_only': True}, True, []))
+        job, entry, binding = f.store.read('head')
+        result = projector._finish('head', job, entry, binding)
+        assert result['new_memories'] == ['survivor']
+        assert 'reason_code' not in result
+    projector.publish.assert_called_once_with(binding, result)
+    assert SOURCE_DELETED_JOBS._value.get() == counter
+
+
+@pytest.mark.parametrize('deleted_index', [0, 1])
+def test_old_mixed_completion_is_scrubbed_once_without_usage_changes(lane, monkeypatch, deleted_index):
+    f = lane
+    projector = make_projector(f, monkeypatch, accounting_seconds=2)
+    persist_mixed_parts(f, deleted_index)
+    # Model an older binary's completed mixed result, including its frozen usage.
+    result_ref = f.store.ref('results', 'head')
+    entry = f.client.rows[result_ref.path]
+    for receipt in entry['projection_parts'].values():
+        receipt['state'] = 'ready'
+    entry['projection']['state'] = 'ready'
+    entry['projection_state'] = 'ready'
+    old = {
+        'new_memories': ['synthetic-output'],
+        'updated_memories': [],
+        'failed_segments': 0,
+        'total_segments': 2,
+        'errors': [],
+        'outcome': 'success',
+    }
+    ledger = f.client.rows[f.ledger_ref.path]
+    ledger.update(status='completed', result=old, usage_committed_seconds=2)
+    f.client.rows[f.store.ref('jobs', 'head').path].update(client_status='completed', client_result=old)
+    before_usage = {k: deepcopy(v) for k, v in ledger.items() if k.startswith('usage')}
+    counter = SOURCE_DELETED_JOBS._value.get()
+    result = projector.complete_content('head', f.binding, policy=POLICY)
+    assert result['reason_code'] == 'source_deleted'
+    assert result['new_memories'] == result['updated_memories'] == []
+    assert f.ledger_ref.get().to_dict()['result'] == result
+    assert {k: v for k, v in f.ledger_ref.get().to_dict().items() if k.startswith('usage')} == before_usage
+    assert SOURCE_DELETED_JOBS._value.get() == counter
+    assert projector.complete_content('head', f.binding, policy=POLICY) == result
+    assert SOURCE_DELETED_JOBS._value.get() == counter
+    projector.publish.assert_not_called()
+
+
+@pytest.mark.parametrize('deleted_index', [0, 1])
+@pytest.mark.parametrize('enabled', [True, False])
+def test_partial_completion_also_withholds_every_parts_ids(lane, monkeypatch, deleted_index, enabled):
+    f = lane
+    persist_mixed_parts(f, deleted_index)
+    binding = replace(f.binding, segment_ids=('head', 'held'))
+    f.client.rows[f.store.ref('jobs', 'head').path]['projection_binding'] = asdict(binding)
+    f.store.ref('jobs', 'held').create(
+        {
+            'owner_id': binding.owner_id,
+            'projection_binding': asdict(binding),
+            'state': 'quarantined',
+            'recovery_state': 'failed_held',
+        }
+    )
+    f.client.rows[f.ledger_ref.path]['batch_pipeline']['segment_ids'] = list(binding.segment_ids)
+    entry = f.client.rows[f.store.ref('results', 'head').path]
+    for receipt in entry['projection_parts'].values():
+        receipt['state'] = 'ready'
+    entry['projection']['state'] = entry['projection_state'] = 'ready'
+    monkeypatch.setenv(FLAG, str(enabled).lower())
+    counter = SOURCE_DELETED_JOBS._value.get()
+    accounting = {'seconds': 2, 'updates': {}, 'charged': 0.0}
+    if not enabled:
+        before = deepcopy(f.client.rows)
+        with pytest.raises(ProjectionBlocked, match='requires a source deletion tombstone'):
+            f.store.complete_partial(binding, 2000, accounting)
+        assert f.client.rows == before
+    else:
+        result, _ = f.store.complete_partial(binding, 2000, accounting)
+        assert result['outcome'] == 'partial' and result['held_segments'] == 1
+        assert result['new_memories'] == result['updated_memories'] == []
+        assert f.ledger_ref.get().to_dict()['result'] == result
+    # A partial retains custody obligations; it is not a new job termination.
+    assert SOURCE_DELETED_JOBS._value.get() == counter
+
+
+@pytest.mark.parametrize('deleted_index', [0, 1])
+@pytest.mark.parametrize('enabled', [True, False])
+def test_deletion_in_held_entry_suppresses_another_siblings_partial_output(lane, monkeypatch, deleted_index, enabled):
+    f = lane
+    persist_mixed_parts(f, deleted_index)
+    binding = replace(f.binding, segment_ids=('head', 'other'))
+    head_job = f.client.rows[f.store.ref('jobs', 'head').path]
+    head_job.update(projection_binding=asdict(binding), recovery_state='held')
+    head = f.client.rows[f.store.ref('results', 'head').path]
+    head['projection']['state'] = 'quarantined'
+    head['projection_state'] = 'quarantine_held'
+    f.store.ref('jobs', 'other').create({'projection_binding': asdict(binding), 'owner_id': binding.owner_id})
+    f.store.ref('results', 'other').create(
+        {
+            'projection': {
+                'state': 'ready',
+                'conversation_id': 'synthetic-output',
+                'created': True,
+                'speech_seconds': 0,
+            },
+        }
+    )
+    f.client.rows[f.ledger_ref.path]['batch_pipeline']['segment_ids'] = list(binding.segment_ids)
+    monkeypatch.setenv(FLAG, str(enabled).lower())
+    counter = SOURCE_DELETED_JOBS._value.get()
+    if not enabled:
+        before = deepcopy(f.client.rows)
+        with pytest.raises(ProjectionBlocked, match='requires a source deletion tombstone'):
+            f.store.complete_partial(binding, 2000, {'seconds': 0, 'updates': {}, 'charged': 0.0})
+        assert f.client.rows == before
+    else:
+        result, _ = f.store.complete_partial(binding, 2000, {'seconds': 0, 'updates': {}, 'charged': 0.0})
+        assert result['new_memories'] == result['updated_memories'] == []
+        assert result['held_segments'] == 1 and result['total_segments'] == 2
     assert SOURCE_DELETED_JOBS._value.get() == counter

@@ -11,7 +11,7 @@ from typing import Any
 
 from google.cloud import firestore
 
-from config.batch_pipeline import projection_followup_page_enabled
+from config.batch_pipeline import projection_followup_page_enabled, projection_source_deleted_enabled
 from database.batch_pipeline_policy import load_stage_policy
 from database.batch_pipeline_shadow_hook import mirror_refresh
 from config.policy import ProjectionPolicy
@@ -36,7 +36,7 @@ from database.batch_pipeline_projection_protocol import (
     ProjectionReplay as ProjectionReplay,
     normalized_binding,
 )
-from database.batch_pipeline_projection_session import ProjectionSession as ProjectionSession
+from database.batch_pipeline_projection_session import ProjectionSession as ProjectionSession, SOURCE_DELETED_JOBS
 
 logger = logging.getLogger(__name__)
 
@@ -519,6 +519,9 @@ class ProjectionStore:
                     return None, False, 0
                 parts = entry.get('projection_parts')
                 receipts.extend(parts.values() if parts else [receipt])
+            # This is a job-wide decision after collecting every sibling/part.
+            # A no-text receipt must suppress IDs from parts assigned earlier.
+            source_deleted = any(receipt.get('disposition') == 'source_deleted' for receipt in receipts)
             new, updated = self._visible(transaction, binding, receipts)
             superseded_count = sum(receipt.get('disposition') == 'superseded' for receipt in receipts)
             deleted_output_count = sum(receipt.get('disposition') == 'output_deleted' for receipt in receipts)
@@ -547,20 +550,30 @@ class ProjectionStore:
                 result['superseded_segments'] = superseded_count
             if deleted_output_count:
                 result['deleted_output_segments'] = deleted_output_count
-            if (
+            if source_deleted:
+                result['reason_code'] = 'source_deleted'
+            elif (
                 not new
                 and not updated
                 and any(receipt.get('privacy_reason') == 'conversation_deleted' for receipt in receipts)
             ):
-                result['reason_code'] = (
-                    'source_deleted'
-                    if any(receipt.get('disposition') == 'source_deleted' for receipt in receipts)
-                    else 'conversation_deleted'
-                )
+                result['reason_code'] = 'conversation_deleted'
             if session.ledger.get('status') == 'completed':
                 old = session.ledger.get('result')
                 if not isinstance(old, dict) or not is_valid_completed_sync_content_result(old):
                     raise ProjectionBlocked('invalid existing ledger completion')
+                if source_deleted:
+                    suppressed = {**old, 'new_memories': [], 'updated_memories': [], 'reason_code': 'source_deleted'}
+                    if suppressed != old:
+                        # Repair an older completion's output only. Its usage
+                        # and original part receipts remain unchanged.
+                        transaction.update(session.ledger_ref, {'result': suppressed})
+                        for sibling in live_siblings:
+                            transaction.update(self.ref('jobs', sibling), {'client_result': suppressed})
+                        # This job was already terminated. Repairing its output
+                        # is not a new completion and must not count again.
+                        return suppressed, False, 0
+                    return suppressed, False, 0
                 if deleted_output_count:
                     # Preserve historical usage; publish only destinations that
                     # remain visible after the user's output deletion.
@@ -606,12 +619,22 @@ class ProjectionStore:
             result, changed, seconds = self.run(commit, policy=policy)
         self._mirror(binding)
         if changed:
+            if result.get('reason_code') == 'source_deleted':
+                SOURCE_DELETED_JOBS.inc()
+                logger.info('event=batch_projection action=completion outcome=source_deleted')
             record_correctness('projection_completed', seconds=seconds)
         return result
 
-    def _visible(self, transaction, binding: ProjectionBinding, receipts) -> tuple[list[str], list[str]]:
+    def _visible(
+        self, transaction, binding: ProjectionBinding, receipts, *, source_deleted=False
+    ) -> tuple[list[str], list[str]]:
         """Earlier receipt IDs can have become bridge donors. Follow the same
         server redirects, retaining only visible canonical IDs."""
+        # Both full and partial completion pass their aggregated receipts here.
+        if source_deleted or any(receipt.get('disposition') == 'source_deleted' for receipt in receipts):
+            if not projection_source_deleted_enabled():
+                raise ProjectionBlocked('privacy disposition requires a source deletion tombstone')
+            return [], []
         mapped = []
         outputs = [output for receipt in receipts for output in (receipt.get('size_rollover_outputs') or [receipt])]
         for receipt in outputs:
@@ -712,6 +735,7 @@ class ProjectionStore:
             ):
                 raise ProjectionBlocked('content ledger owner lost')
             receipts, seconds, held = [], 0.0, 0
+            source_deleted = False
             erased_count = terminal_empty_count = missing_count = 0
             for sibling in binding.segment_ids:
                 job = self.ref('jobs', sibling).get(transaction=transaction).to_dict() or {}
@@ -724,6 +748,13 @@ class ProjectionStore:
                     continue
                 if not job.get('projection_binding') or normalized_binding(job['projection_binding']) != binding:
                     raise ProjectionBlocked('sibling binding mismatch')
+                parts = entry.get('projection_parts')
+                # A held entry can still contain a settled deletion part. Do
+                # not lose its privacy fence when skipping its output below.
+                source_deleted = source_deleted or any(
+                    part.get('disposition') == 'source_deleted'
+                    for part in (parts.values() if parts else [entry.get('projection') or {}])
+                )
                 if not entry and held_without_recovery(job):
                     held += 1
                     missing_count += artifact_missing(job)
@@ -741,7 +772,7 @@ class ProjectionStore:
                 receipts.extend(parts.values() if parts else [receipt])
             if not held:
                 return None, False
-            new, updated = self._visible(transaction, binding, receipts)
+            new, updated = self._visible(transaction, binding, receipts, source_deleted=source_deleted)
             # Re-read canonical deletion fences before publishing any visible IDs.
             assert_batch_write_allowed(
                 self.client,

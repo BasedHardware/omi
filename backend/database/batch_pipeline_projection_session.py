@@ -150,7 +150,15 @@ class ProjectionSession:
         # Assigned destinations are outputs, not proof that another part's
         # original input was deleted. They get independent fences below.
         outputs = set(self.job.get('conversation_ids') or []) - set(ids)
-        settling_deletion = privacy_deleted or self.receipt().get('privacy_reason') == 'conversation_deleted'
+        settling_deletion = (
+            privacy_deleted
+            or self.receipt().get('privacy_reason') == 'conversation_deleted'
+            or bool(self.receipt())
+            and any(
+                part.get('disposition') == 'source_deleted'
+                for part in (self.entry.get('projection_parts') or {}).values()
+            )
+        )
 
         def source_tombstoned(error):
             # The guard supplies the exact refused ID, including a survivor
@@ -525,21 +533,10 @@ class ProjectionSession:
             receipt = self.persist(
                 transaction, superseded=superseded, quarantined=quarantined, privacy_deleted=privacy_deleted
             )
-            parts = [*(self.entry.get('projection_parts') or {}).values(), receipt]
-            terminal = self.part_index is None or self.part_index == self.part_count - 1
-            source_deleted = (
-                terminal
-                and all(part.get('disposition') in {'superseded', 'source_deleted'} for part in parts)
-                and any(part.get('disposition') == 'source_deleted' for part in parts)
-            )
-            return receipt, source_deleted
+            return receipt
 
         try:
-            receipt, source_deleted = self.store.run(commit, policy=self.policy)
-            if source_deleted:
-                # Outside the retryable transaction, once per newly settled job.
-                SOURCE_DELETED_JOBS.inc()
-            return receipt
+            return self.store.run(commit, policy=self.policy)
         finally:
             # A2 shadow: persist() wrote the owner watermark and erased predecessors outside Store.run.
             # A strict no-op unless shadow mode; re-copies current state; never raises.

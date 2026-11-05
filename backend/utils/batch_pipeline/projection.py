@@ -685,8 +685,11 @@ class Projector:
         with projection_phase('completion', policy):
             result = self.store.complete(segment_id, binding, self.clock(), accounting, policy=policy)
         if result is not None:
-            with projection_phase('publication', policy):
-                self.publish(binding, result)
+            # complete() aggregated every part before setting this disposition.
+            # Never call the publisher, even with empty IDs, for a deleted job.
+            if result.get('reason_code') != 'source_deleted':
+                with projection_phase('publication', policy):
+                    self.publish(binding, result)
             from utils.batch_pipeline.retention import expire_completed_segment
 
             for sibling in binding.segment_ids:

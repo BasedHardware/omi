@@ -1,95 +1,87 @@
 # Source-deletion disposition verification — 2026-11-05
 
 Repository: `BasedHardware/omi`. Branch: `cl2-cost/privacy-source-deleted`.
-Base fetched before worktree creation: `e2924da5a762dc446853e5f5914af660aaafa929`.
+Initial base: `e2924da5a762dc446853e5f5914af660aaafa929`.
+Round 2 base: `cc188f5369a22816eecf772b4914647bed504cff`.
 Task owner: cl2-cost; scope/start rulings: lead2 534a5b / 437e92.
-This record covers local hermetic verification only. No production credentials,
-production data, deployment, PR creation or merge were used.
+This record covers local hermetic verification. No production credentials,
+production data, deployment, PR creation or merge were used. GCP tier: none.
 
-The current guard matched the task: `conversation_deleted` without a tombstone
-or redirect reached the missing-source-tombstone refusal in `_prepare_privacy`.
-The fix permits an original, transactionally verified deleted source to settle
-without content using `disposition=source_deleted`. Empty completion exposes
-`reason_code=source_deleted`. Tombstone writers and usage/pricing logic were
-not changed.
+## Current contract
 
-Kill switch: `BATCH_PIPELINE_PROJECTION_SOURCE_DELETED_ENABLED`, default on.
-Set `false` to restore the previous block. Counter:
-`omi_batch_pipeline_projection_source_deleted_jobs_total`, incremented after
-a new terminal no-text receipt commits, once per job including multipart jobs.
-See [the runbook](../runbooks/batch-projection-repair.md#deleted-source-without-a-tombstone)
-for replay, counter and rollback semantics.
+An original source with `deleted=true`, no tombstone and no redirect may record
+`disposition=source_deleted`. The source, account/privacy generation, immutable
+binding, ledger ownership and predecessor remain transactionally fenced.
 
-## Local verification
+Completion aggregates every bound sibling and every part. If **any** receipt
+has `source_deleted`, normal completion returns empty `new_memories` and
+`updated_memories` and `reason_code=source_deleted`. The publisher is **not
+called**, even with an empty result. Earlier persisted content parts cannot
+escape this decision, regardless of which part contains the deletion receipt.
+Partial results also withhold every ID, including when the deletion receipt
+belongs to a held entry skipped for output. Existing partial custody semantics
+remain intact. Replaying an older mixed completion removes its cached output
+IDs without changing its recorded usage. Tombstone and redirect behavior is unchanged.
 
-`make setup` passed in the fresh worktree. It created its own
-`backend/.venv` with Python 3.11.15. The uv executable-install warning was
-nonfatal; dependency synchronization and setup completed successfully.
+Kill switch: `BATCH_PIPELINE_PROJECTION_SOURCE_DELETED_ENABLED`, default **on**.
+Set `false` to restore the missing-tombstone block. Counter:
+`omi_batch_pipeline_projection_source_deleted_jobs_total`. It increments after
+new job settlement commits, not when individual parts persist and not on replay
+(including repair of an already completed legacy result).
+Completion logs contain a fixed event/outcome, without user IDs or content.
+See [the runbook](../runbooks/batch-projection-repair.md#deleted-source-without-a-tombstone).
+Deletion/tombstone writers, pricing, plans, limits and usage logic are unchanged.
 
-Run from the worktree root:
+## Verification
 
-```bash
-/Users/dazheng/workspace/omi/bin/omi-heavy run -- bash -c 'cd backend && for test in tests/unit/test_batch_projection_source_deleted.py tests/unit/test_batch_pipeline_projection.py tests/unit/test_batch_pipeline_projection_followup.py tests/unit/test_batch_projection_privacy_hold.py tests/unit/test_batch_privacy_conversation_fence.py; do .venv/bin/python -m pytest "$test" -q || exit; done'
-```
+`make setup` was completed in this worktree during Round 1; its own
+`backend/.venv` uses Python 3.11.15. No shared venv was used.
 
-Results: source-deleted 18, projection 61, follow-up 36, privacy holds 20,
-conversation fences 22: 157 passed. Each file ran in a separate pytest process.
-Covered: default-on settlement through the real projector/completion path,
-empty status publication, no content assignment/playback/enrichment, kill-switch
-rollback, replay idempotency, the counter, multipart settlement, tombstones,
-redirects, missing documents and account/binding/ledger/predecessor fences.
-Outbound network is blocked by the backend hermetic test harness.
+Exact Round 2 command, from the worktree root:
 
 ```bash
-/Users/dazheng/workspace/omi/bin/omi-heavy run -- make preflight
+printf '%s\n' tests/unit/test_batch_projection_source_deleted.py tests/unit/test_batch_pipeline_projection.py tests/unit/test_batch_pipeline_projection_followup.py tests/unit/test_batch_projection_privacy_hold.py tests/unit/test_batch_privacy_conversation_fence.py tests/unit/test_batch_pipeline_speech_redrive.py tests/unit/test_batch_pipeline_quarantine_recovery.py tests/unit/test_batch_pipeline_artifact_missing.py tests/unit/test_batch_artifact_missing_reupload.py tests/unit/test_batch_language_recovery.py > /Volumes/Ephemeral/scratch/planscost-handoff/tombstone/sol/round2-test-files.txt
+BACKEND_UNIT_TEST_FILE_LIST=/Volumes/Ephemeral/scratch/planscost-handoff/tombstone/sol/round2-test-files.txt /Users/dazheng/workspace/omi/bin/omi-heavy run -- bash -c 'cd backend && bash test.sh'
 ```
 
-Result: 41 checks passed. An earlier preflight run exited nonzero during
-implementation; the subsequent run with the completed registry and code passed.
+Result: **566 passed across ten files**, including 34 source-deletion cases. `test.sh` used separate pytest
+processes and its original CPU guard. Outbound network is blocked by the
+backend test harness. No timing thresholds or allowlists were changed.
 
-```bash
-scripts/backend-python-format --check backend/config/batch_pipeline.py backend/database/batch_pipeline_projection.py backend/database/batch_pipeline_projection_session.py backend/utils/batch_pipeline/projection_disposition.py backend/utils/batch_pipeline/projection_followup.py backend/tests/unit/test_batch_projection_source_deleted.py backend/tests/unit/test_batch_pipeline_projection.py backend/tests/unit/test_batch_pipeline_projection_followup.py
-git diff --check
+The source-deletion cases include single-part no-publish, mixed content/deletion
+parts in both positions, strict kill-switch blocking, unchanged tombstone and
+redirect publication, deferred once-only counting, replay, older mixed
+completion suppression, partial-output suppression (including held-entry
+deletions), and unchanged historical usage.
+
+Validation uses the normal pre-push hook with local review metadata supplied
+through `OMI_PR_BODY_FILE`. It opens no PR. The hook includes the shared
+preflight, Pyright and guarded selected backend unit tests.
+
+## Review and boundaries
+
+Round 2 addresses the mixed-part publication BLOCK against `cc188f5`.
+A fresh Luna review found that a legacy completed-ledger repair was being
+counted as a new termination. That repair now reports no new completion;
+its regressions assert no counter increment. Luna confirmed the correction
+and reported no directly related actionable issue. The guarded suite passed again after this correction. An additional real
+partial-completion regression reproduced a leak when a held entry containing
+a deletion receipt was skipped. The fix carries that marker separately into
+the shared visibility fence, preserving held counts and usage. Luna reviewed
+that correction with no findings; all 566 tests passed.
+
+Local branch-review metadata includes the required narrow publisher-module
+line-count allowance (no PR has been opened):
+
+```text
+Failure-Class: none
+Line-Count-Exception: backend/utils/batch_pipeline/projection.py | 1698 -> 1701 | The job-wide privacy fence belongs at the central publish decision after aggregation; three reviewed lines suppress the callback for every source-deleted job.
 ```
+Lead2 owns subsequent review; no PR, merge or deployment is authorized.
 
-Result: formatting and diff hygiene passed.
-
-The first branch push passed all 41 preflight checks and Pyright with zero
-errors, then stopped on the new end-to-end test's CPU-time guard (assertions
-passed; 2.07 s against 1 s, reproduced at 2.63 s). Its unrelated fair-use
-dispatch is now an asserted leaf mock and retention setup lives in the fixture;
-the real privacy proof, receipt, accounting, completion and empty publication
-remain tested. No timing limits or allowlists were changed. Exact guarded rerun:
-
-```bash
-# Run from backend/; the list contains tests/unit/test_batch_projection_source_deleted.py.
-BACKEND_UNIT_TEST_FILE_LIST=/Volumes/Ephemeral/scratch/planscost-handoff/tombstone/sol/failed-test-files.txt /Users/dazheng/workspace/omi/bin/omi-heavy run -- bash test.sh
-```
-
-Result: 18 passed with the original CPU guard enabled.
-
-## Changed files
-
-- `backend/config/batch_pipeline.py`
-- `backend/config/flag_budget.json`
-- `backend/database/batch_pipeline_projection.py`
-- `backend/database/batch_pipeline_projection_session.py`
-- `backend/utils/batch_pipeline/projection_disposition.py`
-- `backend/utils/batch_pipeline/projection_followup.py`
-- `backend/tests/unit/test_batch_projection_source_deleted.py`
-- `backend/tests/unit/test_batch_pipeline_projection.py`
-- `backend/tests/unit/test_batch_pipeline_projection_followup.py`
-- `config/feature-flags.yaml`
-- `backend/docs/feature-flag-registry.md`
-- `backend/docs/runbooks/batch-projection-repair.md`
-- This dated verification record.
-
-## Review and release boundary
-
-Luna's bounded review found that destination IDs could impersonate the original
-source. The proof was restricted to the computed original source ID and two
-regression cases were added (binding target and job target, with a live source).
-Luna rechecked the corrected condition and both regressions and reported the P2
-resolved, with no additional findings in that focused correction.
-Lead2 owns the subsequent review. No PR, merge or deployment is authorized.
-Runtime counts and production behavior have not been measured.
+Already delivered content cannot be recalled by this publisher fence. This
+change does not erase conversation documents or alter deletion/tombstone
+writers. Older completed records are sanitized only when replayed; no backfill
+is run. The Prometheus counter is process-local; a crash after settlement
+commits but before increment can undercount. Runtime metrics and production
+behavior have not been measured.
