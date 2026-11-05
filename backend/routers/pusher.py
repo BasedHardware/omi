@@ -315,6 +315,23 @@ class _AdmissionTransientExhausted(Exception):
         self.read = read
 
 
+class CustodyCommitUnresolved(RuntimeError):
+    """The custody fence refused a flush because an earlier commit never settled.
+
+    Raised by the durable branch of ``_queue_private_cloud_chunk`` while
+    ``durable_commit_unresolved`` is latched: a previous window commit failed
+    after leaving its remote outcome unknown, so no later flush of this
+    session may run another storage operation. The tail receives this as a
+    typed boundary condition instead of a bare ``RuntimeError`` so it can
+    settle the refusal as what it is — the already-accounted mid-session
+    custody failure handing the producer back unacknowledged — without
+    re-booking a fresh ``window_tail`` commit failure or a
+    ``finish_receive``-named traceback for a commit it never attempted. The
+    message is unchanged; ``RuntimeError`` ancestry keeps every broad
+    handler on the mid-session path behaving exactly as before.
+    """
+
+
 async def _admission_read_with_transient_shed(pool, fn, *args):
     """Run one session-admission read behind the bounded transient shed.
 
@@ -1475,7 +1492,7 @@ async def _run_websocket_util_trigger(
                 return
             if durable_audio:
                 if durable_commit_unresolved:
-                    raise RuntimeError('custody commit unresolved; producer fence retained')
+                    raise CustodyCommitUnresolved('custody commit unresolved; producer fence retained')
                 # Custody never drops a zero run: it is captured audio, and
                 # the projection reads it back exactly like any other frame.
                 if private_cloud_sync_enabled and len(private_cloud_sync_buffer) > 0:
@@ -1568,6 +1585,31 @@ async def _run_websocket_util_trigger(
             except WebSocketDisconnect as exc:
                 websocket_close_code = exc.code or 1006
                 tail_committed = durable_tail_has_receipt
+            except CustodyCommitUnresolved:
+                # The fence refusal is not a fresh tail-commit failure: the
+                # mid-session custody failure that latched the fence was
+                # already failed closed at its own boundary (close 1011, the
+                # custody layer's commit-failure accounting, one application
+                # error log). The tail attempted no commit and drops no
+                # audio — the producer stays unacknowledged and replayable —
+                # so booking ``window_tail`` here, or logging a
+                # ``finish_receive``-named traceback, would re-report one
+                # producer-visible failure as two and misattribute the
+                # refusal to the tail. Keep the fail-closed settlement the
+                # generic arm gives: same close code, same hold, and one
+                # warning line naming the fence instead of a traceback.
+                websocket_close_code = 1011
+                observation.reason = 'application_error'
+                logger.warning(
+                    'Durable audio tail refused by the custody fence; producer stays unacknowledged uid=%s conversation=%s',
+                    uid,
+                    current_conversation_id,
+                )
+                if current_conversation_id:
+                    # Same hold as the generic arm: the committed-or-not
+                    # window stays unresolved until the reconnect's replay
+                    # or the barrier's own recovery settles it.
+                    record_barrier.hold_recording(current_conversation_id, tail_committed=durable_tail_has_receipt)
             except Exception:
                 if durable_audio:
                     record_failure('window_tail')
