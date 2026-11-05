@@ -45,6 +45,17 @@ def coalesce_enabled() -> bool:
     return _enabled('SYNC_REPROCESS_COALESCE_ENABLED', default=_outbox_runtime())
 
 
+def early_abort_enabled() -> bool:
+    """Kill switch: stop an enrichment run before its LLM work once its conversation's sync revision moved.
+
+    On unless set to a false word. The checks only read ``sync_content_revision``; off restores running
+    every doomed reprocess to the persist fence.
+    """
+    from config.refactor_modes import default_on as kill_switch_on
+
+    return kill_switch_on('ENRICHMENT_EARLY_ABORT_ENABLED')
+
+
 def dedupe_enabled() -> bool:
     return _enabled('CONVERSATION_LLM_INPUT_DEDUPE_ENABLED', default=True)
 

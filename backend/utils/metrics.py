@@ -1355,6 +1355,11 @@ OMI_ACTION_ITEM_IDENTITY_TOTAL = Counter(
     ['outcome'],
 )
 
+OMI_ENRICHMENT_EARLY_ABORT_TOTAL = Counter(
+    'omi_enrichment_early_abort_total',
+    'Enrichment revision checkpoints: stage=pre_notes|pre_persist, outcome=superseded|check_failed',
+    ['stage', 'outcome'],
+)
 OMI_ACTION_ITEM_REFRESH_TOTAL = Counter(
     'omi_action_item_refresh_total',
     'Automatic refresh task preservation: kept_existing|added_new|transferred_from_donor|skipped_duplicate|disabled',

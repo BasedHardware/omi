@@ -58,6 +58,41 @@ logger = logging.getLogger(__name__)
 _LINEAGE_RETRY_LANGUAGE = '__stored_conversation_language__'
 
 
+def _revision_checkpoint(uid: str, conversation_data: dict):
+    """Stop a reprocess run whose conversation moved to a newer sync revision before its LLM work.
+
+    The persist fence would refuse the stale result anyway, and the write that moved the revision owns the
+    newer reprocess. Reads only ``sync_content_revision``. A failed read continues the run (the persist fence
+    still guards). A row without a revision is never checked.
+    """
+    from config.sync_reprocess import early_abort_enabled
+    from utils.metrics import OMI_ENRICHMENT_EARLY_ABORT_TOTAL
+
+    snapshot = conversation_data.get('sync_content_revision')
+    target = conversation_data.get('id')
+    if not isinstance(snapshot, int) or not isinstance(target, str) or not early_abort_enabled():
+        return None
+
+    def check(stage: str) -> None:
+        try:
+            current = conversations_db.get_conversation_raw_snapshot(uid, target, field_paths=['sync_content_revision'])
+        except Exception as error:
+            OMI_ENRICHMENT_EARLY_ABORT_TOTAL.labels(stage=stage, outcome='check_failed').inc()
+            logger.warning(
+                'event=enrichment_early_abort outcome=check_failed stage=%s exception_type=%s',
+                stage,
+                type(error).__name__,
+            )
+            return
+        if current is not None and current.get('sync_content_revision') == snapshot:
+            return
+        OMI_ENRICHMENT_EARLY_ABORT_TOTAL.labels(stage=stage, outcome='superseded').inc()
+        logger.info('event=enrichment_early_abort outcome=superseded stage=%s', stage)
+        raise SyncConversationPersistenceFenced('sync conversation revision moved before %s' % stage)
+
+    return check
+
+
 @observe_sync_failures
 def enrich_conversation(uid: str, conversation_id: str, language: str):
     """Reassess relevance and regenerate notes after sync appends."""
@@ -214,6 +249,7 @@ def enrich_conversation(uid: str, conversation_id: str, language: str):
     # finalization, so discarded -> visible still accepts once.
     already_visible_finalized = already_sync_processed and not was_discarded
     started = time.monotonic()
+    revision_checkpoint = _revision_checkpoint(uid, conversation_data)
     try:
         processed_conversation = process_conversation(
             uid=uid,
@@ -223,6 +259,7 @@ def enrich_conversation(uid: str, conversation_id: str, language: str):
             defer_derived_effects=silent_redrive,
             user_kept=is_user_curated(conversation_data) or REPAIR_CONTEXT.get() is not None,
             persistence_observer=_require_current_conversation_persistence,
+            revision_checkpoint=revision_checkpoint,
             # Deserialize drops relevance_decision. The raw row still has it:
             # sync_update means a previous enrichment, sync_intake or absence does not.
             prior_relevance_decision=prior_decision if isinstance(prior_decision, dict) else None,
