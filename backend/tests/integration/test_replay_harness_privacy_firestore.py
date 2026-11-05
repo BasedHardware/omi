@@ -218,3 +218,32 @@ def test_unapplied_redis_fault_stops_instead_of_counting_a_sample(monkeypatch):
     assert result.details['verified_transitions'] == 0
     assert result.details['probes'] == 6 and result.details['mismatches'] == 0
     assert not result.details['transition_results'][0]['fault_applied']
+
+
+@pytest.mark.parametrize('runtime_env', [None, 'backend', 'backend:prod'])
+def test_runtime_config_privacy_smoke(tmp_path, runtime_env):
+    from testing.replay_harness.runner import run_cases
+    from testing.replay_harness.report import write_report
+
+    previous = dict(os.environ)
+    items = asyncio.run(run_cases([FIXTURE], runtime_env=runtime_env))
+    write_report(items, tmp_path)
+    item = items[0]
+    details = item['stages'][0]['details']
+    assert details['attempted_transitions'] == details['completed_transitions'] == 120
+    assert not details['errors'] and not details['unverified_transitions']
+    assert details['ttl_override_s'] is None  # Real runtime config, no monkeypatch.
+    if runtime_env:
+        assert item['expectation_met'] and details['mismatches'] == 0
+        assert details['max_observed_staleness_seconds']['subscription'] <= 55
+        assert details['bound_margin_s_by_family']['subscription'] == 5
+        assert item['runtime_env']['service'] == 'backend' and item['runtime_env']['env'] == 'prod'
+        assert 'FSR_SUBSCRIPTION_TTL_SECONDS' in item['runtime_env']['applied_keys']
+        assert item['runtime_env']['dropped_count'] > 0
+        assert set(item['runtime_env']) == {'service', 'env', 'applied_keys', 'dropped_count'}
+    else:
+        assert not item['expectation_met'] and details['mismatches'] > 0
+        assert details['max_observed_staleness_seconds']['subscription'] == 60
+        assert details['by_family_fault_offset']['subscription']['drop_invalidation']['60.0']['mismatches'] > 0
+        assert 'runtime_env' not in item
+    assert dict(os.environ) == previous

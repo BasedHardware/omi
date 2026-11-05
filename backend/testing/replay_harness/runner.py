@@ -11,8 +11,18 @@ from testing.replay_harness.stages.base import NotImplementedStage
 
 
 async def run_cases(
-    directories: list[Path], *, privacy_ttl_override_s=None, secret_file=None, uid_file=None, consent_file=None
+    directories: list[Path],
+    *,
+    privacy_ttl_override_s=None,
+    secret_file=None,
+    uid_file=None,
+    consent_file=None,
+    runtime_env=None,
+    runtime_backend=None
 ) -> list[dict]:
+    from testing.replay_harness.runtime_env import load_runtime_env
+
+    runtime_config = load_runtime_env(runtime_env, backend=runtime_backend)
     # Validate all inputs before constructing any infrastructure.
     cases = [load_case(directory) for directory in directories]
     if len({case.manifest.id for case in cases}) != len(cases):
@@ -46,7 +56,9 @@ async def run_cases(
                     'capture_upload': CaptureUploadDriver,
                     'titling': TitlingDriver,
                     'episodes': EpisodesDriver,
-                    'privacy_cache': lambda: PrivacyCacheDriver(ttl_override_s=privacy_ttl_override_s),
+                    'privacy_cache': lambda: PrivacyCacheDriver(
+                        ttl_override_s=privacy_ttl_override_s, runtime_env=runtime_config
+                    ),
                 }.get(name, lambda: NotImplementedStage(name))()
                 # Privacy timelines own one isolated emulator/Redis context per
                 # transition. Close any preceding pipeline environment first.
@@ -54,7 +66,7 @@ async def run_cases(
                     stack.close()
                     environment = None
                 elif environment is None:
-                    environment = stack.enter_context(replay_environment())
+                    environment = stack.enter_context(replay_environment(runtime_config))
                     if enabled:
                         stack.enter_context(product_decryption(case, environment, credentials))
                 started = time.perf_counter()
@@ -66,5 +78,8 @@ async def run_cases(
                 results.append(result)
                 if result.status != 'pass':
                     break
-        items.append(item_report(case.manifest, results, decryption='on' if enabled else 'off'))
+        item = item_report(case.manifest, results, decryption='on' if enabled else 'off')
+        if runtime_config is not None:
+            item['runtime_env'] = runtime_config.report()
+        items.append(item)
     return items

@@ -50,6 +50,7 @@ async def replay(request, **options):
                         'verdict',
                         'expectation_met',
                         'decryption',
+                        *(['runtime_env'] if 'runtime_env' in item else []),
                     )
                 }
             )
@@ -75,10 +76,14 @@ def main():
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
     from testing.replay_harness.decryption import add_arguments, file_options
 
+    parser.add_argument('--runtime-env')
     add_arguments(parser)
     args = parser.parse_args()
     configure_imports(args.backend)
-    results = asyncio.run(cooperative_replay(json.load(sys.stdin), **file_options(args)))
+    options = file_options(args)
+    if args.runtime_env is not None:
+        options.update(runtime_env=args.runtime_env, runtime_backend=args.backend)
+    results = asyncio.run(cooperative_replay(json.load(sys.stdin), **options))
     from testing.replay_harness.gate_resources import private_write
 
     private_write(args.output, json.dumps(results).encode())

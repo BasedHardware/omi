@@ -10,6 +10,7 @@ def main(argv=None) -> int:
     commands = parser.add_subparsers(dest='command', required=True)
     run = commands.add_parser('run')
     run.add_argument('--case', type=Path, action='append', required=True)
+    run.add_argument('--runtime-env', help='offline service[:prod|dev] runtime config (default env: prod)')
     run.add_argument('--output', type=Path, required=True)
     run.add_argument(
         '--privacy-ttl-override-s', type=int, help='test-only cache TTL monkeypatch; never changes the manifest bound'
@@ -23,7 +24,12 @@ def main(argv=None) -> int:
 
     try:
         items = asyncio.run(
-            run_cases(args.case, privacy_ttl_override_s=args.privacy_ttl_override_s, **file_options(args))
+            run_cases(
+                args.case,
+                privacy_ttl_override_s=args.privacy_ttl_override_s,
+                runtime_env=args.runtime_env,
+                **file_options(args),
+            )
         )
     except Exception as error:
         print(f'Replay: ERROR ({type(error).__name__})')

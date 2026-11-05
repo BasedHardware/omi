@@ -43,7 +43,7 @@ class ReplayEnvironment:
 
 
 @contextmanager
-def replay_environment():
+def replay_environment(runtime_env=None):
     endpoint = emulator_endpoint()
     import google.auth
     from google.cloud import firestore, storage
@@ -102,6 +102,8 @@ def replay_environment():
             'RECORD_DRAIN_CONCURRENCY': '16',
         }
     )
+    if runtime_env is not None:
+        runtime_env.apply(settings)
     with ExitStack() as stack:
         stack.enter_context(patch.dict(os.environ, settings, clear=True))
         stack.enter_context(block_outbound_network())
