@@ -44,6 +44,34 @@ def mark_many(uid, conversation_ids, *, firestore_client=None):
     batch.commit(timeout=1, retry=None)
 
 
+def retire_empty(uid, cid, *, observed_update_time, firestore_client=None):
+    """Retire only observed empty debt with a transactionally clear producer map.
+
+    An absent or malformed map is unknown, not proof of quiescence. Reading
+    both documents makes a producer mint or marker replacement before commit
+    conflict with deletion. This never clears or interprets producer tokens.
+    """
+    if observed_update_time is None:
+        raise ValueError('observed projection marker version required')
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    marker = client.collection(COLLECTION).document(marker_id(uid, cid))
+    owner = client.collection('users').document(uid).collection('conversations').document(cid)
+
+    @firestore.transactional
+    def commit(tx):
+        observed = marker.get(transaction=tx)
+        if not observed.exists or observed.update_time != observed_update_time:
+            return 'changed'
+        snapshot = owner.get(transaction=tx)
+        sessions = (snapshot.to_dict() or {}).get('record_upload_sessions')
+        if not snapshot.exists or not isinstance(sessions, dict) or sessions:
+            return 'producer_fenced'
+        tx.delete(marker)
+        return 'retired_no_objects'
+
+    return run_transactional(client, commit, transient=True)
+
+
 def apply_projection(uid, cid, payload, *, expected_audio_files, firestore_client=None):
     """Cold repair only: deletion intent and projection CAS share the commit."""
     from database.conversations import AudioFilesChanged, audio_files_revision, retain_aliases

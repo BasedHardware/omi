@@ -9,7 +9,7 @@ from google.api_core.exceptions import FailedPrecondition
 
 from database import record_projection_rebuild as jobs
 from database.conversations import AudioFilesChanged
-from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreDocument
 from utils import record_projection_rebuild as consumer
 from utils.batch_pipeline.record_seal_budget import SweepBudget
 
@@ -267,8 +267,16 @@ def test_confirmed_empty_markers_retire_by_creation_age_or_collection_pressure(
     client.collection.return_value.order_by.return_value.limit.return_value.stream.return_value = [doc]
     monkeypatch.setattr(consumer, 'MAX_COLLECTION_MARKERS', 0 if over_capacity else 10000)
     monkeypatch.setattr(consumer, 'rebuild', lambda *_: 'no_objects')
+    retire = MagicMock(return_value='retired_no_objects')
+    monkeypatch.setattr(jobs, 'retire_empty', retire)
     report = consumer.run(budget=SweepBudget(60), firestore_client=client)
-    assert bool(doc.reference.delete.call_count) is retired
+    doc.reference.delete.assert_not_called()
+    assert bool(retire.call_count) is retired
+    if retired:
+        assert retire.call_args.kwargs == {
+            'observed_update_time': doc.reference.update.return_value.update_time,
+            'firestore_client': client,
+        }
     assert report['dispositions'] == {'retired_no_objects' if retired else 'deferred': 1}
     assert report['gauges']['marker_count'] == 1
     assert report['gauges']['oldest_age_seconds'] >= age_days * 86400
@@ -324,3 +332,130 @@ def test_socket_cleanup_is_one_content_free_bounded_batch():
     with pytest.raises(ValueError):
         jobs.mark_many('u', [str(i) for i in range(jobs.MAX_MARKERS_PER_BATCH + 1)], firestore_client=client)
     assert batch.commit.call_count == 1
+
+
+@pytest.fixture
+def retirement_store(client, monkeypatch):
+    marker = (jobs.COLLECTION, jobs.marker_id('u', 'c'))
+    client.rows[marker] = {'kind': jobs.KIND, 'owner_id': 'u', 'conversation_id': 'c'}
+    get = StrictFirestoreDocument.get
+    version = ['rotated']
+
+    def snapshot(ref, *args, **kwargs):
+        result = get(ref, *args, **kwargs)
+        if ref.path == marker:
+            result.update_time = version[0]
+        return result
+
+    # Only supply immutable snapshot metadata. The fixture still enforces all
+    # transactional reads-before-delete; real version fencing is emulator-tested.
+    monkeypatch.setattr(StrictFirestoreDocument, 'get', snapshot)
+    return client, marker, version
+
+
+@pytest.mark.parametrize(
+    'sessions', [{'live': True}, {'abandoned': {'abandoned_at': 0}}, None, True, [], 'missing', {}]
+)
+def test_empty_retirement_requires_explicit_clear_producer_map(retirement_store, sessions):
+    client, marker, _ = retirement_store
+    if sessions == 'missing':
+        client.rows[ROW].pop('record_upload_sessions')
+    else:
+        client.rows[ROW]['record_upload_sessions'] = sessions
+    before = deepcopy(client.rows)
+    result = jobs.retire_empty('u', 'c', observed_update_time='rotated', firestore_client=client)
+    clear = isinstance(sessions, dict) and not sessions
+    assert result == ('retired_no_objects' if clear else 'producer_fenced')
+    assert client.rows == ({key: row for key, row in before.items() if key != marker} if clear else before)
+    assert client.transactions[-1].updates == []
+    assert client.transactions[-1].deletes == ([marker] if clear else [])
+
+
+@pytest.mark.parametrize('race', ['replacement', 'missing_marker', 'missing_owner'])
+def test_empty_retirement_refuses_changed_marker_or_unknown_owner(retirement_store, race):
+    client, marker, version = retirement_store
+    if race == 'replacement':
+        version[0] = 'newer'
+    elif race == 'missing_marker':
+        client.rows.pop(marker)
+    else:
+        client.rows.pop(ROW)
+    before = deepcopy(client.rows)
+    assert jobs.retire_empty('u', 'c', observed_update_time='rotated', firestore_client=client) == (
+        'producer_fenced' if race == 'missing_owner' else 'changed'
+    )
+    assert client.rows == before
+    assert not client.transactions[-1].deletes
+
+
+@pytest.mark.parametrize('pressure', [False, True])
+def test_old_empty_marker_keeps_producer_minted_after_discovery(retirement_store, monkeypatch, pressure):
+    from datetime import datetime, timedelta, timezone
+
+    store, marker, _ = retirement_store
+    client = MagicMock()
+    doc = SimpleNamespace(
+        id=marker[-1],
+        reference=MagicMock(),
+        update_time='before_rotation',
+        create_time=datetime.now(timezone.utc) - timedelta(days=8),
+        to_dict=lambda: store.rows[marker],
+    )
+    doc.reference.update.return_value.update_time = 'rotated'
+    client.collection.return_value.order_by.return_value.limit.return_value.stream.return_value = [doc]
+    monkeypatch.setattr(consumer, 'MAX_COLLECTION_MARKERS', 0 if pressure else 10000)
+
+    def discover_then_mint(*args):
+        store.rows[ROW]['record_upload_sessions'] = {'new_tail': True}
+        return 'no_objects'
+
+    monkeypatch.setattr(consumer, 'rebuild', discover_then_mint)
+    retire = jobs.retire_empty
+    monkeypatch.setattr(
+        jobs,
+        'retire_empty',
+        lambda uid, cid, **kw: retire(
+            uid, cid, observed_update_time=kw['observed_update_time'], firestore_client=store
+        ),
+    )
+    report = consumer.run(budget=SweepBudget(60), firestore_client=client)
+    assert report['dispositions'] == {'producer_fenced': 1}
+    assert report['gauges']['pressure_blocked'] is pressure
+    assert report['gauges']['pressure_fenced_count'] == (1 if pressure else 0)
+    assert marker in store.rows and not store.transactions[-1].deletes
+    doc.reference.delete.assert_not_called()
+    doc.reference.update.assert_called_once()  # Deferred work is already rotated.
+
+
+@pytest.mark.parametrize('clear_one', [False, True])
+def test_pressure_alerts_when_all_empty_candidates_are_fenced(monkeypatch, clear_one):
+    from datetime import datetime, timedelta, timezone
+
+    client = MagicMock()
+    docs = [
+        SimpleNamespace(
+            id=jobs.marker_id('u', str(i)),
+            reference=MagicMock(),
+            update_time='old',
+            create_time=datetime.now(timezone.utc) - timedelta(days=8),
+            to_dict=lambda i=i: {'kind': jobs.KIND, 'owner_id': 'u', 'conversation_id': str(i)},
+        )
+        for i in range(3)
+    ]
+    client.collection.return_value.order_by.return_value.limit.return_value.stream.return_value = docs
+    monkeypatch.setattr(consumer, 'MAX_COLLECTION_MARKERS', 2)
+    monkeypatch.setattr(consumer, 'rebuild', lambda *_: 'no_objects')
+    monkeypatch.setattr(
+        jobs,
+        'retire_empty',
+        MagicMock(
+            side_effect=['producer_fenced', 'producer_fenced', 'retired_no_objects' if clear_one else 'producer_fenced']
+        ),
+    )
+    report = consumer.run(budget=SweepBudget(60), firestore_client=client)
+    assert report['outcome'] == 'capacity_exceeded'
+    assert report['gauges']['pressure_blocked'] is (not clear_one)
+    assert report['gauges']['pressure_fenced_count'] == (2 if clear_one else 3)
+    assert consumer.PRESSURE_BLOCKED.collect()[0].samples[0].value == (0 if clear_one else 1)
+    for doc in docs:
+        doc.reference.delete.assert_not_called()  # Only the fenced transaction may retire empty debt.

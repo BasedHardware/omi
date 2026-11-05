@@ -43,7 +43,13 @@ retires as `retired_no_objects`. A 10,000-marker maintenance ceiling also retire
 confirmed empty work under pressure, never useful or privacy-held debt. Per-pass
 work stays capped at 128; the collection scan caps at 10,001. Aggregate logs and
 Prometheus gauges expose bounded count, observed oldest age and capacity state.
-No retirement deletes audio.
+No retirement deletes audio. Empty-marker retirement checks the observed marker
+version and the conversation's explicit empty producer map transactionally at
+retirement time, not discovery time. Unknown or nonempty producer maps retain
+and rotate debt, including under collection pressure. A late tail still has a
+marker to repair its playback metadata. The pressure-blocked gauge and aggregate
+fenced count make an all-fenced maintenance pass alertable. No producer token
+or seal field is written.
 
 `PUSHER_PROJECTION_DEBT_DURABLE_ENABLED` defaults **on**; `0`, `false`, or `off`
 disables both handoff and consumption. Rollback disables the consumer runtime

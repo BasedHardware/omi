@@ -441,3 +441,86 @@ async def test_projection_close_debt_survives_socket_and_respects_privacy(lifecy
         assert retained_objects() == retained_before
     finally:
         marker.delete()
+
+
+@pytest.mark.parametrize(
+    'ending', ['aged_fenced', 'aged_clear', 'pressure_fenced', 'late_fence', 'marker_race', 'tail']
+)
+def test_empty_projection_retirement_rechecks_producer_fence(lifecycle_sim, monkeypatch, ending):
+    from database import record_projection_rebuild as jobs
+    from database.audio_timeline import span_blob_metadata
+    from utils import record_projection_rebuild as consumer
+    from utils.batch_pipeline.record_seal_budget import SweepBudget
+
+    sim = lifecycle_sim
+    sim.seed()
+    cid = sim.cid + '-empty'
+    ref = sim.ref.parent.document(cid)
+    row = {**sim.row(), 'id': cid, 'audio_files': [], 'record_upload_sessions': {}}
+    if ending in {'aged_fenced', 'pressure_fenced', 'tail'}:
+        row['record_upload_sessions'] = {'live': True}
+    ref.set(row)
+    marker = sim.stack.firestore.collection(jobs.COLLECTION).document(jobs.marker_id(sim.uid, cid))
+    jobs.mark_due(sim.uid, cid, firestore_client=sim.stack.firestore)
+    observed = marker.get()
+    monkeypatch.setenv('PUSHER_PROJECTION_DEBT_DURABLE_ENABLED', '1')
+    monkeypatch.setattr(processing.conversations_db, 'create_audio_files_from_chunks', create_audio_files_from_chunks)
+    # Firestore create_time is immutable. Exercise age eligibility immediately;
+    # the unit contract separately supplies an actual eight-day-old snapshot.
+    monkeypatch.setattr(consumer, 'NO_OBJECTS_MAX_AGE_SECONDS', 0)
+    if ending == 'pressure_fenced':
+        monkeypatch.setattr(consumer, 'MAX_COLLECTION_MARKERS', 0)
+    rebuild = consumer.rebuild
+
+    def after_discovery(uid, conversation_id):
+        result = rebuild(uid, conversation_id)
+        assert result == 'no_objects'
+        if ending == 'late_fence':
+            assert record_audio.set_record_upload_pending(
+                uid, conversation_id, 'late', True, firestore_client=sim.stack.firestore
+            )
+        elif ending == 'marker_race':
+            jobs.mark_due(uid, conversation_id, firestore_client=sim.stack.firestore)
+        return result
+
+    try:
+        # This new conversation genuinely has no published audio prefix yet.
+        with monkeypatch.context() as first:
+            first.setattr(consumer, 'rebuild', after_discovery)
+            report = consumer.run(budget=SweepBudget(30), firestore_client=sim.stack.firestore)
+        if ending == 'aged_clear':
+            assert not marker.get().exists and ref.get().to_dict() == row
+            assert report['dispositions'] == {'retired_no_objects': 1}
+            return
+        assert marker.get().exists
+        assert marker.get().update_time != observed.update_time
+        if ending == 'marker_race':
+            assert report['dispositions'] == {'changed': 1}
+        else:
+            assert report['dispositions'] == {'producer_fenced': 1}
+            assert ref.get().to_dict()['record_upload_sessions']
+        if ending == 'pressure_fenced':
+            assert report['gauges']['pressure_blocked'] is True
+            assert report['gauges']['pressure_fenced_count'] == 1
+        if ending == 'tail':
+            # Only the synthetic producer fixture publishes this late object.
+            # The consumer must still own a marker after its earlier empty pass.
+            start = row['started_at'].timestamp()
+            blob = sim.storage.bucket(os.environ['BUCKET_PRIVATE_CLOUD_SYNC']).blob(
+                f'chunks/{sim.uid}/{cid}/{start:.3f}.batch.bin'
+            )
+            blob.metadata = span_blob_metadata({'start': start, 'samples': 16000, 'sample_rate': 16000})
+            blob.upload_from_string(b'\x01\x00' * 16000, if_generation_match=0)
+            retained = (blob.generation, blob.metadata, blob.download_as_bytes())
+            report = consumer.run(budget=SweepBudget(30), firestore_client=sim.stack.firestore)
+            assert ref.get().to_dict()['audio_files'], report
+            assert marker.get().exists  # The publishing producer still owns its token.
+            assert record_audio.set_record_upload_pending(
+                sim.uid, cid, 'live', False, firestore_client=sim.stack.firestore
+            )
+            consumer.run(budget=SweepBudget(30), firestore_client=sim.stack.firestore)
+            assert not marker.get().exists
+            assert (blob.generation, blob.metadata, blob.download_as_bytes()) == retained
+    finally:
+        marker.delete()
+        ref.delete()

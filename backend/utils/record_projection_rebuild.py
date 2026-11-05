@@ -18,6 +18,10 @@ NO_OBJECTS_MAX_AGE_SECONDS = 7 * 86400
 BACKLOG = Gauge('omi_projection_rebuild_marker_count', 'Bounded marker count; saturated at collection limit plus one')
 OLDEST = Gauge('omi_projection_rebuild_oldest_age_seconds', 'Oldest marker age in the bounded collection scan')
 AT_CAPACITY = Gauge('omi_projection_rebuild_at_capacity', 'Marker collection exceeds its maintenance limit')
+PRESSURE_BLOCKED = Gauge(
+    'omi_projection_rebuild_pressure_blocked',
+    'Observed empty-marker retirement blocked by producer fences under pressure',
+)
 
 
 def run(*, mode='apply', budget, firestore_client=None):
@@ -46,6 +50,7 @@ def run(*, mode='apply', budget, firestore_client=None):
     BACKLOG.set(len(page))
     OLDEST.set(gauges['oldest_age_seconds'])
     AT_CAPACITY.set(at_capacity)
+    PRESSURE_BLOCKED.set(0)
     for doc in page[:MAX_PER_PASS]:
         budget.check()
         data = doc.to_dict() or {}
@@ -77,13 +82,17 @@ def run(*, mode='apply', budget, firestore_client=None):
             result = rebuild(uid, cid)
             budget.check()
             retire_empty = result == 'no_objects' and (ages.get(doc.id, 0) >= NO_OBJECTS_MAX_AGE_SECONDS or at_capacity)
-            if result is True or result is False or retire_empty:
+            if retire_empty:
+                counts[
+                    jobs.retire_empty(uid, cid, observed_update_time=attempt.update_time, firestore_client=client)
+                ] += 1
+            elif result is True or result is False:
                 doc.reference.delete(
                     option=client.write_option(last_update_time=attempt.update_time),
                     timeout=budget.timeout(),
                     retry=None,
                 )
-                counts['retired_no_objects' if retire_empty else 'rebuilt' if result else 'owner_gone'] += 1
+                counts['rebuilt' if result else 'owner_gone'] += 1
             else:
                 counts['deferred'] += 1
         except (FailedPrecondition, NotFound):
@@ -91,6 +100,9 @@ def run(*, mode='apply', budget, firestore_client=None):
         except Exception:
             budget.check()  # Let the hard deadline unwind the enclosing pass.
             counts['error'] += 1
+    gauges['pressure_fenced_count'] = counts['producer_fenced'] if at_capacity else 0
+    gauges['pressure_blocked'] = bool(at_capacity and counts['producer_fenced'] and not counts['retired_no_objects'])
+    PRESSURE_BLOCKED.set(gauges['pressure_blocked'])
     return {
         'event': 'record_projection_rebuild',
         'outcome': 'error' if counts['error'] else 'capacity_exceeded' if at_capacity else 'ok',
