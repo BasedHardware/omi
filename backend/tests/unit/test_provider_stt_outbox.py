@@ -245,3 +245,18 @@ def test_sweep_age_gate_preserves_old_rows_and_counts(box, monkeypatch, age, set
     if skipped:
         assert row(box) == before
         assert box.client.versions == versions
+
+
+def test_ancient_sweep_keeps_existing_privacy_discard(box, monkeypatch):
+    from utils.observability.sweep_age import SKIPPED
+
+    monkeypatch.setenv('BATCH_PIPELINE_SWEEP_AGE_GATE', 'on')
+    enqueue(box, now=100)
+    box.blocked.add(ROW)
+    box.woken.clear()
+    counter = SKIPPED.labels(queue='provider-stt', reason='max_age')
+    before = counter._value.get()
+    counts = box.outbox.sweep(now=100 + 15 * 86400)
+    assert counts.discarded == 1 and counts.rewoken == 0
+    assert row(box)['closed_reason'] == 'privacy_blocked'
+    assert not box.woken and counter._value.get() == before

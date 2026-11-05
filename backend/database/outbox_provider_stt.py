@@ -311,8 +311,6 @@ class FirestoreProviderSttOutbox:
         for snapshot in query.stream():
             row = snapshot.to_dict() or {}
             try:
-                if skip_ancient(row, 'provider-stt', now=now):
-                    continue
                 if self._blocked(snapshot.id, row['owner_id']):
                     self._mutate(snapshot.id, lambda old: (self._close(old, 'privacy_blocked') if old else old, None))
                     discarded += 1
@@ -322,6 +320,8 @@ class FirestoreProviderSttOutbox:
                     or row.get('lease_until', 0) > now
                     or now - float(row.get('woken_at') or 0) < REWAKE_AFTER_SECONDS
                 ):
+                    continue
+                if skip_ancient(row, 'provider-stt', now=now):
                     continue
                 if row.get('lease_token'):
                     expired += 1
