@@ -80,6 +80,53 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('legacy SD isolation', () {
+    for (final firmware in [null, '', 'Unknown']) {
+      test('unknown firmware ($firmware) never attaches, lists, starts or reads legacy SD', () async {
+        final sdcard = _SpySdcard();
+        final syncs = WalSyncs(_Listener(), sdcardSync: sdcard, phoneSync: _PhoneSync());
+        final raw = BtDevice(id: 'pendant', name: 'Omi', type: DeviceType.omi, rssi: -40, firmwareRevision: firmware);
+        syncs.setDevice(raw, firmwareVersion: firmware);
+        expect(sdcard.attached, isNull);
+        expect(await syncs.getMissingWals(), isEmpty);
+        expect(await syncs.getAllWals(), isEmpty);
+        await expectLater(syncs.syncWal(wal: sdcard.phantom), throwsStateError);
+        syncs.start();
+        await syncs.syncAll();
+        expect(sdcard.starts, 0);
+        expect(sdcard.syncAllCalls, 0);
+        expect(sdcard.listings, 0);
+        expect(sdcard.reads, 0);
+      });
+    }
+
+    for (final firmware in ['1.0.2', '3.0.16', '3.0.21']) {
+      test('a later resolution to $firmware re-routes the attached unknown device', () async {
+        final sdcard = _SpySdcard();
+        final syncs = WalSyncs(_Listener(), sdcardSync: sdcard, phoneSync: _PhoneSync());
+        final raw = BtDevice(id: 'pendant', name: 'Omi', type: DeviceType.omi, rssi: -40);
+        syncs.setDevice(raw, firmwareVersion: '');
+        expect(sdcard.attached, isNull);
+        syncs.updateFirmwareVersion('other-device', '3.0.10');
+        expect(sdcard.attached, isNull, reason: 'ignore another device\'s late read');
+        syncs.updateFirmwareVersion(raw.id, firmware);
+        if (firmware == '3.0.21') {
+          expect(sdcard.attached, isNull);
+          expect(await syncs.getAllWals(), isEmpty);
+        } else {
+          expect(sdcard.attached?.id, raw.id);
+          expect(sdcard.attached?.firmwareRevision, firmware);
+          expect(await syncs.getAllWals(), [sdcard.phantom]);
+          await syncs.syncWal(wal: sdcard.phantom);
+          syncs.start();
+          expect(sdcard.starts, 1);
+          expect(sdcard.reads, 1);
+        }
+        syncs.setDevice(null);
+        syncs.updateFirmwareVersion(raw.id, '3.0.10');
+        expect(sdcard.attached, isNull, reason: 'a late retry cannot reattach after disconnect');
+      });
+    }
+
     for (final firmware in ['3.0.20', '3.0.21', '3.1.0']) {
       test('$firmware never attaches, lists or reads legacy SD WALs', () async {
         final sdcard = _SpySdcard();
@@ -110,7 +157,7 @@ void main() {
       });
     }
 
-    for (final firmware in ['3.0.10', '3.0.16', '3.0.19']) {
+    for (final firmware in ['1.0.2', '3.0.10', '3.0.16', '3.0.19']) {
       test('$firmware keeps legacy attachment, listing and read routing', () async {
         final sdcard = _SpySdcard();
         final syncs = WalSyncs(_Listener(), sdcardSync: sdcard, phoneSync: _PhoneSync());

@@ -48,10 +48,23 @@ class WalSyncs implements IWalSync {
     _device = device;
     _firmwareVersion = firmwareVersion;
     // Ring status shares the legacy characteristic but has a different layout.
-    _sdcardSync.setDevice(_usesLegacySdcard ? device : null);
+    _sdcardSync.setDevice(_usesLegacySdcard
+        ? (device?.firmwareRevision == _resolvedFirmware
+            ? device
+            : device?.copyWith(firmwareRevision: _resolvedFirmware))
+        : null);
   }
 
-  bool get _usesLegacySdcard => !isRingBufferFirmware(_resolvedFirmware);
+  /// Re-route an already attached device after a device-info retry resolves it.
+  void updateFirmwareVersion(String deviceId, String firmwareVersion) {
+    if (_device?.id != deviceId || _firmwareVersion == firmwareVersion) return;
+    setDevice(_device, firmwareVersion: firmwareVersion);
+  }
+
+  bool get _usesLegacySdcard {
+    final firmware = _resolvedFirmware;
+    return firmware != null && firmware.isNotEmpty && firmware != 'Unknown' && !isRingBufferFirmware(firmware);
+  }
 
   /// Best available firmware for discovery routing: the enriched value if it
   /// resolved, otherwise whatever the raw connect object carries.

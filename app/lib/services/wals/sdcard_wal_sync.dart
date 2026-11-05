@@ -27,7 +27,13 @@ class SDCardWalSyncImpl implements SDCardWalSync {
 
   // A device rejection is terminal for this connection, including later auto-sync wakes.
   int? _readRejectedStatus;
-  bool get _usesLegacySdcard => !RingProtocol.isRingBufferFirmware(_device?.firmwareRevision);
+  bool get _usesLegacySdcard {
+    final firmware = _device?.firmwareRevision;
+    return firmware != null &&
+        firmware.isNotEmpty &&
+        firmware != 'Unknown' &&
+        !RingProtocol.isRingBufferFirmware(firmware);
+  }
 
   String get _readRejection =>
       'SD read rejected by device: status=0x${_readRejectedStatus!.toRadixString(16).padLeft(2, '0')}';
@@ -370,6 +376,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
     var chunkSize = sdcardChunkSizeSecs * 100;
     await _storageStream?.cancel();
     final completer = Completer<bool>();
+    String? readRejection;
     bool hasError = false;
     bool sawEndSignal = false;
     bool parseGap = false;
@@ -380,7 +387,10 @@ class SDCardWalSyncImpl implements SDCardWalSync {
       deviceId,
       onStorageBytesReceived: (List<int> value) {
         if (value.isEmpty || hasError || completer.isCompleted) return;
-        if (_handleReadRejection(value, completer)) return;
+        if (_handleReadRejection(value, completer)) {
+          readRejection = _readRejection;
+          return;
+        }
 
         if (!firstDataReceived) {
           firstDataReceived = true;
@@ -452,6 +462,9 @@ class SDCardWalSyncImpl implements SDCardWalSync {
     bool sawEnd = false;
     try {
       sawEnd = await completer.future;
+      // Keep this attempt's rejection even if disconnect resets the connection
+      // latch while stream cancellation is awaiting native cleanup.
+      if (readRejection != null) throw StateError(readRejection!);
     } catch (e) {
       rethrow;
     } finally {
@@ -515,6 +528,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
     List<MapEntry<int, int>> timestampMarkers = [];
     await _storageStream?.cancel();
     final completer = Completer<bool>();
+    String? readRejection;
     bool hasError = false;
     bool sawEndSignal = false;
     bool parseGap = false;
@@ -527,7 +541,10 @@ class SDCardWalSyncImpl implements SDCardWalSync {
       deviceId,
       onStorageBytesReceived: (List<int> value) {
         if (value.isEmpty || hasError || completer.isCompleted) return;
-        if (_handleReadRejection(value, completer)) return;
+        if (_handleReadRejection(value, completer)) {
+          readRejection = _readRejection;
+          return;
+        }
 
         if (!firstDataReceived) {
           firstDataReceived = true;
@@ -681,6 +698,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
     bool sawEnd = false;
     try {
       sawEnd = await completer.future;
+      if (readRejection != null) throw StateError(readRejection!);
     } catch (e) {
       rethrow;
     } finally {

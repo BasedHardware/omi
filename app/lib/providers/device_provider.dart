@@ -468,7 +468,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   Future getDeviceInfo() async {
     final generation = _sessionGeneration;
     if (connectedDevice != null) {
-      if (pairedDevice?.firmwareRevision != null && pairedDevice?.firmwareRevision != 'Unknown') {
+      final firmware = pairedDevice?.firmwareRevision;
+      if (firmware != null && firmware.isNotEmpty && firmware != 'Unknown') {
         if (!_isCurrent(generation)) return;
         _persistPairedDevice();
         return;
@@ -477,6 +478,14 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       if (!_isCurrent(generation)) return;
       pairedDevice = await connectedDevice?.getDeviceInfo(connection);
       if (!_isCurrent(generation)) return;
+      // A prior failed read left legacy SD detached. Publish the retry's
+      // firmware to the existing attachment without attaching an early connect.
+      if (pairedDevice != null) {
+        ServiceManager.instance()
+            .wal
+            .getSyncs()
+            .updateFirmwareVersion(pairedDevice!.id, pairedDevice!.firmwareRevision);
+      }
       _persistPairedDevice();
     } else {
       if (!_isCurrent(generation)) return;
@@ -1168,7 +1177,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     if (!_isCurrent(generation) || _admittedConnectGeneration != generation) return;
     final syncs = ServiceManager.instance().wal.getSyncs();
     syncs.setDevice(device, firmwareVersion: currentFirmwareVersion);
-    // WalSyncs attaches legacy SD only for non-ring firmware.
+    // WalSyncs attaches legacy SD only for confirmed legacy firmware.
     syncs.flashPage.setDevice(device);
     syncs.storage.setDevice(device);
     syncs.ring.setDevice(device);
