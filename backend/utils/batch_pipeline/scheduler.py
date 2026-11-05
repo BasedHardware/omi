@@ -19,6 +19,7 @@ from config.batch_pipeline import (
     pull_multi_lease_enabled,
     scheduler_control_key,
     shard_spread_enabled,
+    skip_unchanged_control_write_enabled,
 )
 from config.policy import resolve_batch_policy
 from config.stt_cap_dispatch import offline_admission_enabled as cap_dispatch_enabled
@@ -78,7 +79,11 @@ def _append(tx: Transaction, control: dict, job: dict) -> None:
     job['next'] = ''
     tx.put('queues', queue_key, queue)
     activate(tx, control, job['priority'], job['available_at'])
-    tx.put('control', scheduler_control_key(job['owner_key']), control)
+    control_key = scheduler_control_key(job['owner_key'])
+    # An owner already in the ring, on an active shard with no pull backoff to clear, leaves
+    # the shard identical; rewriting it only conflicts with every pull and admission on it.
+    if not skip_unchanged_control_write_enabled() or control != tx.get('control', control_key):
+        tx.put('control', control_key, control)
 
 
 def _pool_allows(job: dict, max_seconds: float, shared_gpu: bool) -> bool:
