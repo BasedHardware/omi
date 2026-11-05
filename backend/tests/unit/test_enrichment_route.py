@@ -215,6 +215,16 @@ def test_unresolved_redirect_defers_and_keeps_the_row(rows, monkeypatch, resolve
     assert KEY in rows[0]
 
 
+def test_transient_fault_in_the_fence_redirect_probe_keeps_the_quick_retry(rows, monkeypatch):
+    from google.api_core.exceptions import ServiceUnavailable
+
+    result, _reads, _resolves, transfers = _fenced_run(
+        rows, monkeypatch, row=REDIRECTED, resolve_error=ServiceUnavailable('synthetic blip')
+    )
+    assert (result.outcome, result.reason) == ('retry', 'dependency_warming')
+    assert transfers == [] and KEY in rows[0]
+
+
 @pytest.mark.parametrize('row', [{'sync_content_revision': 4}, {'deleted': True}, None])
 def test_live_or_plainly_deleted_fenced_row_still_settles_superseded(rows, monkeypatch, row):
     result, reads, resolves, transfers = _fenced_run(rows, monkeypatch, row=row, resolved='survivor')
