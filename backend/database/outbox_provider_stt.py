@@ -19,6 +19,7 @@ import uuid
 from typing import Any, Callable, Literal, Mapping
 
 from database.outbox import Claim, EnqueueResult, OutboxKind, Outcome, SweepCounts
+from utils.observability.sweep_age import skip_ancient
 
 Row = dict[str, Any]
 _ROW_ID = re.compile('[0-9a-f]{64}')
@@ -310,6 +311,8 @@ class FirestoreProviderSttOutbox:
         for snapshot in query.stream():
             row = snapshot.to_dict() or {}
             try:
+                if skip_ancient(row, 'provider-stt', now=now):
+                    continue
                 if self._blocked(snapshot.id, row['owner_id']):
                     self._mutate(snapshot.id, lambda old: (self._close(old, 'privacy_blocked') if old else old, None))
                     discarded += 1

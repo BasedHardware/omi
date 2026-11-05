@@ -7,6 +7,7 @@ exhausted tasks in bounded batches, including a crash between mark and enqueue.
 
 from __future__ import annotations
 from utils.observability.delivery import record_delivery
+from utils.observability.sweep_age import skip_ancient
 from utils.observability.fallback import record_fallback
 
 import hashlib
@@ -848,6 +849,17 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
     return 'superseded' if superseded else 'processed'
 
 
+def _skip_ancient_fresh(row: Row, *, now: float) -> bool:
+    queue = enrichment_config.fresh_queue()
+    dispatch = row.get('dispatch')
+    return bool(
+        queue
+        and isinstance(dispatch, dict)
+        and dispatch.get('queue') == queue
+        and skip_ancient(row, 'enrichment-fresh', now=now)
+    )
+
+
 def sweep(
     *,
     now: float | None = None,
@@ -922,6 +934,8 @@ def sweep(
             nonlocal recent
             if old is None or old.get('dormant') or old.get('lease_until', 0) > current:
                 return old, ('skipped', None)
+            if _skip_ancient_fresh(old, now=current):
+                return old, ('skipped', None)
             row = dict(old)
             promoted = False
             # A valid old wake can wait hours behind historical enrichment.
@@ -985,6 +999,8 @@ def sweep(
                 # Claim and fence the repaired binding in the same CAS. Any old
                 # task delivery becomes stale; valid backfill bindings stay put.
                 row.update(dispatch=binding, task_token=uuid.uuid4().hex, task_due_at=current)
+            if _skip_ancient_fresh(row, now=current):
+                return old, ('skipped', None)
             if expired:
                 # Fence the old holder (invariant 1) and retire its delivery: its task already ran.
                 row.update(owner=None, lease_until=0, task_token=uuid.uuid4().hex, task_due_at=current)
@@ -1007,6 +1023,10 @@ def sweep(
             return update
 
         try:
+            # Skip before the independent historical-parking policy can mutate this row.
+            candidate = getattr(snapshot, 'to_dict', lambda: {})() or {}
+            if _skip_ancient_fresh(candidate, now=current):
+                continue
             if not injected:
                 from utils.enrichment.age_gate import park_if_expired
 

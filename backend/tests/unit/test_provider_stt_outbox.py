@@ -220,3 +220,28 @@ def test_wake_task_shape(monkeypatch):
     monkeypatch.delenv('PROVIDER_STT_TASKS_QUEUE')
     with pytest.raises(RuntimeError):
         provider_stt_tasks.create_wake(ROW, 'a' * 32, due_at=0)
+
+
+@pytest.mark.parametrize(
+    'age,setting,skipped', [(15, 'on', True), (1, 'on', False), (14, 'on', False), (15, 'off', False)]
+)
+def test_sweep_age_gate_preserves_old_rows_and_counts(box, monkeypatch, age, setting, skipped):
+    from copy import deepcopy
+    from utils.observability.sweep_age import SKIPPED
+
+    monkeypatch.setenv('BATCH_PIPELINE_SWEEP_AGE_GATE', setting)
+    monkeypatch.delenv('BATCH_PIPELINE_PROVIDER_STT_SWEEP_MAX_AGE_DAYS', raising=False)
+    enqueue(box, now=100)
+    box.woken.clear()
+    before = deepcopy(row(box))
+    versions = dict(box.client.versions)
+    counter = SKIPPED.labels(queue='provider-stt', reason='max_age')
+    count = counter._value.get()
+    result = box.outbox.sweep(now=100 + age * 86400)
+    assert result.rewoken == (0 if skipped else 1)
+    assert result.errors == 0
+    assert len(box.woken) == (0 if skipped else 1)
+    assert counter._value.get() - count == int(skipped)
+    if skipped:
+        assert row(box) == before
+        assert box.client.versions == versions
