@@ -244,7 +244,6 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     try {
       final syncs = ServiceManager.instance().wal.getSyncs();
       syncs.setDevice(null);
-      syncs.sdcard.setDevice(null);
       syncs.flashPage.setDevice(null);
       syncs.storage.setDevice(null);
       syncs.ring.setDevice(null);
@@ -1169,7 +1168,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     if (!_isCurrent(generation) || _admittedConnectGeneration != generation) return;
     final syncs = ServiceManager.instance().wal.getSyncs();
     syncs.setDevice(device, firmwareVersion: currentFirmwareVersion);
-    syncs.sdcard.setDevice(device);
+    // WalSyncs attaches legacy SD only for non-ring firmware.
     syncs.flashPage.setDevice(device);
     syncs.storage.setDevice(device);
     syncs.ring.setDevice(device);

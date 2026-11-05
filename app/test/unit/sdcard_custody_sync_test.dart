@@ -178,6 +178,72 @@ void main() {
     return sync;
   }
 
+  for (final firmware in ['3.0.10', '3.0.16']) {
+    for (final ack in [
+      [1, 6],
+      [3],
+      [6]
+    ]) {
+      test('$firmware rejection $ack fails immediately and cannot retry until reconnect', () async {
+        final wal = makeWal(totalBytes: 80);
+        final local = _FakeLocalSync();
+        final card = _FakeSdCard(packets: [ack]);
+        final sync = syncWith(local, card, wal, firmware: firmware);
+        final rejected = throwsA(isA<StateError>().having(
+          (e) => e.message,
+          'reason',
+          contains('SD read rejected by device: status=0x'),
+        ));
+
+        await expectLater(sync.syncWal(wal: wal).timeout(const Duration(seconds: 1)), rejected);
+        expect(wal.status, WalStatus.miss);
+        expect(wal.isSyncing, isFalse);
+        expect(sync.isSyncing, isFalse);
+        expect(local.added, isEmpty);
+        expect(card.cleared, isFalse);
+        expect(card.writes, [
+          [1, 0, 0]
+        ]);
+
+        await expectLater(sync.syncAll().timeout(const Duration(seconds: 1)), rejected);
+        await expectLater(sync.syncWal(wal: wal).timeout(const Duration(seconds: 1)), rejected);
+        expect(card.writes, hasLength(1), reason: 'no retry on the same connection');
+
+        sync.setDevice(null);
+        sync.testWals = [wal];
+        await expectLater(sync.syncWal(wal: wal).timeout(const Duration(seconds: 1)), rejected);
+        expect(card.writes, hasLength(2), reason: 'disconnect clears the rejection latch');
+      });
+    }
+  }
+
+  for (final firmware in ['3.0.10', '3.0.16']) {
+    test('$firmware accepts a zero ACK and still completes a normal legacy read', () async {
+      final wal = makeWal(totalBytes: 80, seconds: 1);
+      final local = _FakeLocalSync();
+      final card = _FakeSdCard(packets: [
+        [1, 0],
+        _legacyPacket(10),
+        [100]
+      ]);
+      final sync = syncWith(local, card, wal, firmware: firmware);
+      await sync.syncWal(wal: wal);
+      expect(wal.status, WalStatus.synced);
+      expect(local.added, hasLength(1));
+      expect(card.cleared, isTrue);
+    });
+  }
+
+  test('ring firmware rejects direct legacy start and read without consulting the device', () async {
+    final wal = makeWal(totalBytes: 80);
+    final card = _FakeSdCard(packets: []);
+    final sync = syncWith(_FakeLocalSync(), card, wal, firmware: '3.0.21');
+    await sync.start();
+    expect(await sync.getMissingWals(), isEmpty);
+    await expectLater(sync.syncWal(wal: wal), throwsStateError);
+    expect(card.writes, isEmpty);
+  });
+
   test('admission is consulted before any chunk file is written; refusal writes nothing and keeps the card', () async {
     const packets = 5; // 5 * 80 bytes of legacy packets
     final wal = makeWal(totalBytes: packets * 80, seconds: 1);

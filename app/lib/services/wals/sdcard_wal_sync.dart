@@ -1,4 +1,5 @@
 import 'package:omi/services/wals/local_wal_sync.dart';
+import 'package:omi/services/devices/ring_protocol.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -23,6 +24,30 @@ class SDCardWalSyncImpl implements SDCardWalSync {
 
   IWalSyncListener listener;
   LocalWalSync? _localSync;
+
+  // A device rejection is terminal for this connection, including later auto-sync wakes.
+  int? _readRejectedStatus;
+  bool get _usesLegacySdcard => !RingProtocol.isRingBufferFirmware(_device?.firmwareRevision);
+
+  String get _readRejection =>
+      'SD read rejected by device: status=0x${_readRejectedStatus!.toRadixString(16).padLeft(2, '0')}';
+
+  /// Fail rejected commands before treating any bytes as audio or arming a stall timer.
+  bool _handleReadRejection(List<int> value, Completer<bool> completer) {
+    final int status;
+    if (value.length == 2 && value[0] == RingProtocol.notifyAck) {
+      status = value[1];
+    } else if (value.length == 1 && value[0] != 4 && value[0] != 100) {
+      status = value[0];
+    } else {
+      return false;
+    }
+    if (status == 0) return false;
+    _readRejectedStatus = status;
+    Logger.debug(_readRejection);
+    completer.complete(false);
+    return true;
+  }
 
   bool _isCancelled = false;
   bool _isSyncing = false;
@@ -183,7 +208,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
   }
 
   Future<List<Wal>> _getMissingWals() async {
-    if (_device == null) {
+    if (_device == null || !_usesLegacySdcard) {
       return [];
     }
     String deviceId = _device!.id;
@@ -260,11 +285,13 @@ class SDCardWalSyncImpl implements SDCardWalSync {
 
   @override
   Future<List<Wal>> getMissingWals() async {
+    if (!_usesLegacySdcard) return [];
     return _wals.where((w) => w.status == WalStatus.miss && w.storage == WalStorage.sdcard).toList();
   }
 
   @override
   Future start() async {
+    if (!_usesLegacySdcard) return;
     final syncingWal = _wals.where((w) => w.isSyncing).firstOrNull;
     _wals = await _getMissingWals();
     // Re-add the syncing WAL if it was lost
@@ -353,6 +380,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
       deviceId,
       onStorageBytesReceived: (List<int> value) {
         if (value.isEmpty || hasError || completer.isCompleted) return;
+        if (_handleReadRejection(value, completer)) return;
 
         if (!firstDataReceived) {
           firstDataReceived = true;
@@ -367,32 +395,13 @@ class SDCardWalSyncImpl implements SDCardWalSync {
           }
         });
 
+        // Preserve the legacy accepted/end statuses. A zero two-byte ACK is
+        // also an acceptance, never an audio packet or a parsing gap.
+        if (value.length == 2 && value[0] == RingProtocol.notifyAck) return;
         if (value.length == 1) {
-          Logger.debug('returned $value');
-          if (value[0] == 0) {
-            Logger.debug('good to go');
-          } else if (value[0] == 3) {
-            Logger.debug('bad file size. finishing...');
-            hasError = true;
-            if (!completer.isCompleted) completer.complete(false);
-          } else if (value[0] == 4) {
-            Logger.debug('file size is zero. going to next one....');
+          if (value[0] != 0) {
             sawEndSignal = true;
-            if (!completer.isCompleted) {
-              completer.complete(true);
-            }
-          } else if (value[0] == 100) {
-            Logger.debug('end');
-            sawEndSignal = true;
-            if (!completer.isCompleted) {
-              completer.complete(true);
-            }
-          } else {
-            Logger.debug('Error bit returned');
-            hasError = true;
-            if (!completer.isCompleted) {
-              completer.complete(false);
-            }
+            completer.complete(true);
           }
           return;
         }
@@ -518,6 +527,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
       deviceId,
       onStorageBytesReceived: (List<int> value) {
         if (value.isEmpty || hasError || completer.isCompleted) return;
+        if (_handleReadRejection(value, completer)) return;
 
         if (!firstDataReceived) {
           firstDataReceived = true;
@@ -532,32 +542,13 @@ class SDCardWalSyncImpl implements SDCardWalSync {
           }
         });
 
+        // Preserve the legacy accepted/end statuses. A zero two-byte ACK is
+        // also an acceptance, never an audio packet or a parsing gap.
+        if (value.length == 2 && value[0] == RingProtocol.notifyAck) return;
         if (value.length == 1) {
-          Logger.debug('returned $value');
-          if (value[0] == 0) {
-            Logger.debug('good to go');
-          } else if (value[0] == 3) {
-            Logger.debug('bad file size. finishing...');
-            hasError = true;
-            if (!completer.isCompleted) completer.complete(false);
-          } else if (value[0] == 4) {
-            Logger.debug('file size is zero. going to next one....');
+          if (value[0] != 0) {
             sawEndSignal = true;
-            if (!completer.isCompleted) {
-              completer.complete(true);
-            }
-          } else if (value[0] == 100) {
-            Logger.debug('end');
-            sawEndSignal = true;
-            if (!completer.isCompleted) {
-              completer.complete(true);
-            }
-          } else {
-            Logger.debug('Error bit returned');
-            hasError = true;
-            if (!completer.isCompleted) {
-              completer.complete(false);
-            }
+            completer.complete(true);
           }
           return;
         }
@@ -740,6 +731,8 @@ class SDCardWalSyncImpl implements SDCardWalSync {
   }
 
   Future<SyncLocalFilesResponse> _syncWal(final Wal wal, Function(int offset, double speedKBps)? updates) async {
+    if (!_usesLegacySdcard) throw StateError('Legacy SD read unavailable on ring-buffer firmware');
+    if (_readRejectedStatus != null) throw StateError(_readRejection);
     Logger.debug("SDCard sync (two-phase): ${wal.id} byte offset: ${wal.storageOffset} ts ${wal.timerStart}");
 
     if (_localSync == null) {
@@ -800,6 +793,8 @@ class SDCardWalSyncImpl implements SDCardWalSync {
       }
       rethrow;
     }
+
+    if (_readRejectedStatus != null) throw StateError(_readRejection);
 
     if (chunksDownloaded == 0) {
       Logger.debug("SDCard: No chunks downloaded");
@@ -988,6 +983,12 @@ class SDCardWalSyncImpl implements SDCardWalSync {
   @override
   void setDevice(BtDevice? device) async {
     _device = device;
+    _readRejectedStatus = null;
+    if (device == null || !_usesLegacySdcard) {
+      _wals = [];
+      listener.onWalUpdated();
+      return;
+    }
     final syncingWal = _wals.where((w) => w.isSyncing).firstOrNull;
     _wals = await _getMissingWals();
     // Re-add the syncing WAL if it was lost
