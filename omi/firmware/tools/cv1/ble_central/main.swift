@@ -173,17 +173,27 @@ final class Central: NSObject, NSApplicationDelegate, CBCentralManagerDelegate, 
             maximumWriteWithoutResponse: peripheral.maximumWriteValueLength(for: .withoutResponse)))
         readQueue = []; pendingRead = nil; audioCharacteristic = nil
         smpCharacteristic = nil
-        peripheral.discoverServices(options.command.isSMP ? [CBUUID(string: UUIDs.smpService)] : nil)
+        if options.command.isSMP {
+            smpPlan.endConnection()
+            receipt.identity = IdentityCheck(expectedSerial: options.expectSerial)
+        }
+        peripheral.discoverServices(options.command.isSMP ? [UUIDs.smpService, UUIDs.information].map { CBUUID(string: $0) } : nil)
     }
     func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
         guard !stopped else { return }
         guard error == nil, let services = peripheral.services, !services.isEmpty else { stop(.gatt, "Service discovery failed"); return }
         receipt.connections[connectionNumber - 1].services = services.map { $0.uuid.uuidString }.sorted()
         if options.command.isSMP {
-            guard let service = services.first(where: { $0.uuid == CBUUID(string: UUIDs.smpService) }) else {
-                stop(.gatt, "SMP service absent"); return
+            guard services.contains(where: { $0.uuid == CBUUID(string: UUIDs.smpService) }),
+                  services.contains(where: { $0.uuid == CBUUID(string: UUIDs.information) }) else {
+                stop(.gatt, "Required SMP or Device Information service absent"); return
             }
-            peripheral.discoverCharacteristics([CBUUID(string: UUIDs.smpData)], for: service)
+            let wanted = services.filter { [UUIDs.smpService, UUIDs.information].contains($0.uuid.uuidString) }
+            discoveryRemaining = wanted.count
+            for service in wanted {
+                let uuids = service.uuid == CBUUID(string: UUIDs.smpService) ? [UUIDs.smpData] : [UUIDs.firmware, UUIDs.serial]
+                peripheral.discoverCharacteristics(uuids.map { CBUUID(string: $0) }, for: service)
+            }
             return
         }
         // Enumerate all service UUIDs, but only discover characteristics in the read/notify allowlist.
@@ -198,14 +208,27 @@ final class Central: NSObject, NSApplicationDelegate, CBCentralManagerDelegate, 
         guard !stopped else { return }
         guard error == nil else { stop(.gatt, "Characteristic discovery failed"); return }
         if options.command.isSMP {
-            guard service.uuid == CBUUID(string: UUIDs.smpService),
-                  let c = service.characteristics?.first(where: { $0.uuid == CBUUID(string: UUIDs.smpData) }),
-                  c.properties.contains([.writeWithoutResponse, .notify]) else {
-                stop(.gatt, "SMP write-without-response + notify characteristic absent"); return
+            if service.uuid == CBUUID(string: UUIDs.smpService) {
+                guard let c = service.characteristics?.first(where: { $0.uuid == CBUUID(string: UUIDs.smpData) }),
+                      c.properties.contains([.writeWithoutResponse, .notify]) else {
+                    stop(.gatt, "SMP write-without-response + notify characteristic absent"); return
+                }
+                smpCharacteristic = c
+            } else if service.uuid == CBUUID(string: UUIDs.information) {
+                for c in service.characteristics ?? [] where [UUIDs.firmware, UUIDs.serial].contains(c.uuid.uuidString) {
+                    guard c.properties.contains(.read) else { stop(.gatt, "DIS characteristic is not readable"); return }
+                    readQueue.append(c)
+                }
+            } else { stop(.gatt, "Unexpected SMP service discovery callback"); return }
+            discoveryRemaining -= 1
+            if discoveryRemaining == 0 {
+                do {
+                    let discovered = Set(readQueue.map { $0.uuid.uuidString })
+                    try smpPlan.beginConnection(discovered: discovered)
+                    receipt.connections[connectionNumber - 1].absentOptionalCharacteristics = discovered.contains(UUIDs.serial) ? [] : [UUIDs.serial]
+                    readNext(peripheral)
+                } catch { stop(.gatt, String(describing: error)) }
             }
-            smpCharacteristic = c
-            unsubscriptionRequested = false
-            peripheral.setNotifyValue(true, for: c)
             return
         }
         for characteristic in service.characteristics ?? [] {
@@ -237,6 +260,23 @@ final class Central: NSObject, NSApplicationDelegate, CBCentralManagerDelegate, 
     }
     func readNext(_ peripheral: CBPeripheral) {
         observeLengths(peripheral)
+        if options.command.isSMP {
+            if let uuid = smpPlan.access?.nextRead {
+                guard let c = readQueue.first(where: { $0.uuid.uuidString == uuid }) else {
+                    stop(.gatt, "Required SMP DIS read absent"); return
+                }
+                pendingRead = c
+                peripheral.readValue(for: c)
+            } else {
+                pendingRead = nil
+                guard smpPlan.access?.allowsSMP == true, let c = smpCharacteristic else {
+                    stop(.gatt, smpPlan.access?.identity.failureDetail ?? "SMP DIS/identity gate incomplete"); return
+                }
+                unsubscriptionRequested = false
+                peripheral.setNotifyValue(true, for: c)
+            }
+            return
+        }
         // DIS is ordered before optional reads. Resolve identity immediately after DIS, before reconnect/subscription.
         if connectionNumber == 1, receipt.identity.status == .pending,
            !readQueue.contains(where: { [UUIDs.firmware, UUIDs.serial].contains($0.uuid.uuidString) }) {
@@ -311,6 +351,19 @@ final class Central: NSObject, NSApplicationDelegate, CBCentralManagerDelegate, 
         guard characteristic === pendingRead else { return }
         guard error == nil, let data = characteristic.value else { stop(.gatt, "Read failed (including protected attributes); no pairing or write retry: \(error?.localizedDescription ?? "no data")"); return }
         let uuid = characteristic.uuid.uuidString
+        if options.command.isSMP {
+            let decoded = decodeText(data)
+            receipt.connections[connectionNumber - 1].reads[uuid] = decoded
+            if connectionNumber > 1 && uuid == UUIDs.firmware { receipt.postResetFirmware = decoded }
+            do { try smpPlan.consumeDIS(uuid: uuid, data: data) }
+            catch {
+                receipt.identity = smpPlan.access?.identity ?? IdentityCheck(expectedSerial: options.expectSerial)
+                stop(.gatt, String(describing: error)); return
+            }
+            receipt.identity = smpPlan.access!.identity
+            readNext(peripheral)
+            return
+        }
         let decoded: DecodedValue
         if uuid == UUIDs.diagnostics { decoded = decodeDiagnostics(data) }
         else if uuid == UUIDs.recovery { decoded = decodeRecovery(data) }
@@ -409,6 +462,7 @@ final class Central: NSObject, NSApplicationDelegate, CBCentralManagerDelegate, 
     func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
         guard !stopped else { return }
         receipt.disconnectsAcknowledged += 1
+        if options.command.isSMP { smpPlan.endConnection() }
         if waitingForReset {
             waitingForReset = false
             disconnectRequested = false
@@ -456,6 +510,6 @@ do {
     withExtendedLifetime((central, signals)) { app.run() }
     central.stop(.interrupted, "Application run loop ended")
 } catch {
-    stderr("\(error)\nUsage: CV1BLECentral scan|session|audio|image-state|image-upload --seconds N --output NEW.json [--name-prefix Omi] [--expect-serial VALUE] [--keep-audio NEW.bin]\naudio requires --expect-serial VALUE; image-upload requires --file F.bin --mode test|confirm [--no-reset]")
+    stderr("\(error)\nUsage: CV1BLECentral scan|session|audio|image-state|image-upload --seconds N --output NEW.json [--name-prefix Omi] [--expect-serial VALUE] [--keep-audio NEW.bin]\naudio requires --expect-serial VALUE; image-upload requires --expect-serial VALUE --file F.bin --mode test|confirm [--no-reset]")
     exit(2) // Invalid invocations/file collisions never initialize CoreBluetooth.
 }

@@ -229,7 +229,7 @@ enum Tests {
         try image.data.write(to: unreadable)
         try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: unreadable.path)
         let base = ["--seconds", "120", "--output", output]
-        let upload = ["image-upload"] + base
+        let upload = ["image-upload"] + base + ["--expect-serial", "synthetic-bench"]
         rejected(upload + ["--mode", "test"])
         rejected(upload + ["--file", input])
         rejected(upload + ["--file", root.appendingPathComponent("absent.bin").path, "--mode", "test"])
@@ -239,13 +239,19 @@ enum Tests {
         rejected(upload + ["--file", input, "--mode", "test", "--no-reset", "--no-reset"])
         rejected(["image-state"] + base + ["--mode", "test"])
         rejected(["image-state"] + base + ["--no-reset"])
-        rejected(["image-state"] + base + ["--expect-serial", "synthetic"])
+        check(tryParse(["image-state"] + base + ["--expect-serial", "synthetic-bench"]), "Image-state accepts optional identity")
+        rejected(["image-upload"] + base + ["--file", input, "--mode", "test"])
+        rejected(["image-upload"] + base + ["--file", input, "--mode", "test", "--expect-serial", ""])
+        rejected(["image-upload"] + base + ["--file", input, "--mode", "test", "--expect-serial", "bad\nserial"])
         rejected(["scan"] + base + ["--file", input])
         let options = try Options.parse(upload + ["--file", input, "--mode", "test"])
+        try gateChecks(options: options)
+        try gateChecks(options: Options.parse(["image-state"] + base + ["--expect-serial", "synthetic-bench"]))
         for mode in ["test", "confirm"] {
             for noReset in [false, true] {
                 let opts = try Options.parse(upload + ["--file", input, "--mode", mode] + (noReset ? ["--no-reset"] : []))
                 var plan = SMPPlan(options: opts, sha: hash)
+                try authorizeSMP(&plan)
                 var names: [String] = [], mark: CBOR?
                 while let request = try plan.request(maximumWrite: 244) {
                     names.append(request.name)
@@ -265,7 +271,12 @@ enum Tests {
                         let second = try receiver.consume(response.suffix(response.count - split))
                         check(first == nil && second == response, "Fragmented SMP response")
                     }
+                    let wasReset = plan.step == .reset
                     try plan.accept(decoded)
+                    if wasReset {
+                        mustThrow("Reset must revoke SMP access") { _ = try plan.request(maximumWrite: 244) }
+                        try authorizeSMP(&plan)
+                    }
                 }
                 check(names.first == "initial-image-state" && names.contains("marked-image-state"), "State before upload and after mark")
                 check(names.contains("reset") == !noReset && names.contains("post-reset-image-state") == !noReset, "Reset followed by state observation unless suppressed")
@@ -273,6 +284,7 @@ enum Tests {
             }
         }
         var plan = SMPPlan(options: options, sha: hash)
+        try authorizeSMP(&plan)
         let request = try plan.request(maximumWrite: 244)!
         for body: CBOR in [.map(["rc": .negative(-1)]), .map(["err": .map(["group": .uint(1), "rc": .uint(9)])])] {
             do { try request.checkError(body); fatalError("Accepted SMP error") }
@@ -288,12 +300,74 @@ enum Tests {
         let resumed = try plan.request(maximumWrite: 244)!
         check(resumed.body["off"] == .uint(10), "Next chunk uses server offset")
         var statePlan = SMPPlan(options: try Options.parse(["image-state"] + base), sha: Data())
+        mustThrow("Ungated image-state request") { _ = try statePlan.request(maximumWrite: 20) }
+        try statePlan.beginConnection(discovered: [UUIDs.firmware])
+        mustThrow("Firmware must precede unverified image-state") { _ = try statePlan.request(maximumWrite: 20) }
+        try statePlan.consumeDIS(uuid: UUIDs.firmware, data: Data("synthetic-1".utf8))
+        check(statePlan.access?.identity.status == .notRequested && statePlan.access?.allowsSMP == true, "Optional image-state identity allows missing serial after firmware")
+        var optionalPlan = SMPPlan(options: try Options.parse(["image-state"] + base), sha: Data())
+        try optionalPlan.beginConnection(discovered: [UUIDs.firmware, UUIDs.serial])
+        try optionalPlan.consumeDIS(uuid: UUIDs.firmware, data: Data("synthetic-1".utf8))
+        mustThrow("Skipped available serial without --expect-serial") { _ = try optionalPlan.request(maximumWrite: 20) }
+        try optionalPlan.consumeDIS(uuid: UUIDs.serial, data: Data("synthetic-bench".utf8))
+        check(optionalPlan.access?.allowsSMP == true && optionalPlan.access?.identity.status == .notRequested, "Optional serial is read without claiming verified identity")
         var stateNames: [String] = []
         while let req = try statePlan.request(maximumWrite: 20) { stateNames.append(req.name); try statePlan.accept(.map([:])) }
         check(stateNames == ["bootloader-info", "initial-image-state", "echo"], "Image-state command order")
         try Data("preserve".utf8).write(to: URL(fileURLWithPath: output))
         rejected(upload + ["--file", input, "--mode", "confirm"])
         rejected(["image-state"] + base)
+    }
+    static func authorizeSMP(_ plan: inout SMPPlan) throws {
+        try plan.beginConnection(discovered: [UUIDs.serial, UUIDs.firmware])
+        try plan.consumeDIS(uuid: UUIDs.firmware, data: Data("synthetic-1".utf8))
+        try plan.consumeDIS(uuid: UUIDs.serial, data: Data("synthetic-bench".utf8))
+    }
+    static func gateChecks(options: Options) throws {
+        var plan = SMPPlan(options: options, sha: Data(repeating: 0, count: 32))
+        mustThrow("Planned SMP before DIS discovery") { _ = try plan.request(maximumWrite: 244) }
+        mustThrow("Accepted missing DIS firmware") { try plan.beginConnection(discovered: [UUIDs.serial]) }
+        for serial in [nil, Data(), Data([0xff]), Data("synthetic-other".utf8), Data("SYNTHETIC-BENCH".utf8), Data("synthetic-bench ".utf8), Data("synthetic-bench".utf8)] as [Data?] {
+            try plan.beginConnection(discovered: serial == nil ? [UUIDs.firmware] : [UUIDs.serial, UUIDs.firmware])
+            check(plan.access?.nextRead == UUIDs.firmware && plan.access?.identity.status == .pending, "Firmware is first; identity starts pending")
+            check(plan.access?.allowsSMP == false, "No SMP subscription before DIS")
+            mustThrow("Planned SMP before firmware") { _ = try plan.request(maximumWrite: 244) }
+            if let serial {
+                try plan.consumeDIS(uuid: UUIDs.firmware, data: Data("synthetic-1".utf8))
+                check(plan.access?.nextRead == UUIDs.serial && plan.access?.allowsSMP == false, "Serial follows firmware before subscription")
+                mustThrow("Planned SMP before expected serial") { _ = try plan.request(maximumWrite: 244) }
+                if serial == Data("synthetic-bench".utf8) {
+                    try plan.consumeDIS(uuid: UUIDs.serial, data: serial)
+                    check(plan.access?.identity.status == .matched && plan.access?.allowsSMP == true, "Only matched identity unlocks SMP")
+                    let request = try plan.request(maximumWrite: 244)
+                    check(request?.header.sequence == 0, "Blocked attempts did not plan a request or advance sequence")
+                    check(plan.access?.firmware?.text == "synthetic-1", "DIS firmware retained")
+                } else {
+                    mustThrow("Accepted wrong, empty or non-UTF-8 serial") { try plan.consumeDIS(uuid: UUIDs.serial, data: serial) }
+                    let absent = serial.isEmpty || String(data: serial, encoding: .utf8) == nil
+                    check(plan.access?.identity.status == (absent ? .absent : .wrong), "Existing absent/wrong semantics")
+                    check(Progress(command: options.command).outcome(.gatt) == .gattFailed, "Identity refusal is gatt_failed")
+                    check(plan.access?.allowsSMP == false, "Failed identity forbids subscription")
+                    mustThrow("Planned SMP after rejected serial") { _ = try plan.request(maximumWrite: 244) }
+                }
+            } else {
+                mustThrow("Accepted missing expected serial") { try plan.consumeDIS(uuid: UUIDs.firmware, data: Data("synthetic-1".utf8)) }
+                check(plan.access?.identity.status == .absent && plan.access?.allowsSMP == false, "Missing serial fails identity before subscription")
+                mustThrow("Planned SMP with absent serial") { _ = try plan.request(maximumWrite: 244) }
+            }
+        }
+        plan.endConnection()
+        mustThrow("Reused old identity on reconnect") { _ = try plan.request(maximumWrite: 244) }
+        try plan.beginConnection(discovered: [UUIDs.firmware, UUIDs.serial])
+        mustThrow("Read serial before firmware") { try plan.consumeDIS(uuid: UUIDs.serial, data: Data("synthetic-bench".utf8)) }
+        mustThrow("Recovered failed read order without a new connection") { _ = try plan.request(maximumWrite: 244) }
+        try plan.beginConnection(discovered: [UUIDs.firmware, UUIDs.serial])
+        mustThrow("Accepted non-UTF-8 firmware") { try plan.consumeDIS(uuid: UUIDs.firmware, data: Data([0xff])) }
+        mustThrow("Planned SMP without valid firmware") { _ = try plan.request(maximumWrite: 244) }
+        var receipt = Receipt(startedAt: "synthetic", requestedSeconds: 1, deadlineSeconds: 1, progress: Progress(command: options.command))
+        receipt.postResetFirmware = decodeText(Data("synthetic-2".utf8))
+        let json = try JSONSerialization.jsonObject(with: JSONEncoder().encode(receipt)) as! [String: Any]
+        check((json["postResetFirmware"] as? [String: Any])?["text"] as? String == "synthetic-2", "Post-reset DIS firmware serialized in receipt")
     }
     static func tryParse(_ args: [String]) -> Bool { (try? Options.parse(args)) != nil }
 }

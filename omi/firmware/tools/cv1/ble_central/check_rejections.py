@@ -26,6 +26,7 @@ def main(executable):
         assert not fresh.exists()
         for command, serial_flags in [
             ('audio', []), ('audio', ['--expect-serial', '']),
+            ('image-upload', []), ('image-upload', ['--expect-serial', '']),
             ('session', ['--expect-serial']), ('session', expected + expected),
             ('scan', expected), ('session', ['--expect-serial', 'bad\nvalue']),
         ]:
@@ -44,6 +45,8 @@ def main(executable):
         unreadable.write_bytes(image.read_bytes())
         unreadable.chmod(0)
         image_flags = ['--file', str(image), '--mode', 'test']
+        result = run(['image-upload', '--seconds', '1', '--output', str(fresh)] + image_flags, 2)
+        assert '--expect-serial' in result.stderr.splitlines()[0] and not fresh.exists()
         for command, flags in [
             ('image-upload', ['--mode', 'test']),
             ('image-upload', ['--file', str(image)]),
@@ -53,14 +56,14 @@ def main(executable):
             ('image-upload', ['--file', str(image), '--mode', 'invalid']),
             ('image-upload', image_flags + ['--no-reset', '--no-reset']),
             ('image-state', ['--no-reset']), ('image-state', ['--mode', 'test']),
-            ('image-state', expected), ('scan', image_flags),
+            ('image-state', expected + expected), ('scan', image_flags),
         ]:
-            run([command, '--seconds', '1', '--output', str(fresh)] + flags, 2)
+            run([command, '--seconds', '1', '--output', str(fresh)] + flags + (expected if command == 'image-upload' else []), 2)
             assert not fresh.exists()
         existing = root / 'existing.json'
         existing.write_text('preserve me')
         for command in ['scan', 'session', 'audio', 'image-state', 'image-upload']:
-            run([command, '--seconds', '1', '--output', str(existing)] + (expected if command == 'audio' else image_flags if command == 'image-upload' else []), 2)
+            run([command, '--seconds', '1', '--output', str(existing)] + (expected if command == 'audio' else image_flags + expected if command == 'image-upload' else []), 2)
             assert existing.read_text() == 'preserve me'
         link = root / 'link.json'
         link.symlink_to(fresh)

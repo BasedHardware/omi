@@ -62,13 +62,13 @@ struct Options {
         }
         let expectSerial = flags["--expect-serial"]
         if let serial = expectSerial {
-            guard [Command.session, .audio].contains(command), !serial.isEmpty,
+            guard command != .scan, !serial.isEmpty,
                   !serial.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }) else {
-                throw InputError.invalid("--expect-serial requires a nonempty value without controls, for session or audio")
+                throw InputError.invalid("--expect-serial requires a nonempty value without controls, for session, audio, image-state or image-upload")
             }
         }
-        if command == .audio && expectSerial == nil {
-            throw InputError.invalid("audio requires --expect-serial before Bluetooth can start")
+        if (command == .audio || command == .imageUpload) && expectSerial == nil {
+            throw InputError.invalid("\(command.rawValue) requires --expect-serial before Bluetooth can start")
         }
         if let keep = flags["--keep-audio"], keep.isEmpty || URL(fileURLWithPath: keep).standardizedFileURL == URL(fileURLWithPath: output).standardizedFileURL {
             throw InputError.invalid("Audio and receipt paths must be distinct and nonempty")
@@ -116,6 +116,37 @@ struct IdentityCheck: Codable {
         case .wrong: return "Identity check failed: DIS serial was wrong"
         case .absent: return "Identity check failed: DIS serial was absent"
         default: return nil
+        }
+    }
+}
+
+// Each SMP connection must finish ordered DIS reads before subscription or request planning.
+// A failed or incomplete identity never grants access, including after the reset reconnect.
+struct SMPAccessGate {
+    private(set) var identity: IdentityCheck
+    private(set) var firmware: DecodedValue?
+    private var remaining: [String]
+    private var failed = false
+    var nextRead: String? { failed ? nil : remaining.first }
+    var allowsSMP: Bool { !failed && firmware != nil && remaining.isEmpty && identity.allowsContinuation }
+    init(discovered: Set<String>, expectedSerial: String?) throws {
+        guard discovered.contains(UUIDs.firmware) else { throw InputError.invalid("Required firmware revision characteristic absent") }
+        identity = IdentityCheck(expectedSerial: expectedSerial)
+        remaining = [UUIDs.firmware, UUIDs.serial].filter { discovered.contains($0) }
+    }
+    mutating func consume(uuid: String, data: Data) throws {
+        guard !failed, uuid == remaining.first else {
+            failed = true
+            throw InputError.invalid("SMP DIS reads must complete in firmware-then-serial order")
+        }
+        remaining.removeFirst()
+        let decoded = decodeText(data)
+        if uuid == UUIDs.firmware { firmware = decoded }
+        if uuid == UUIDs.serial { identity.evaluate(serial: decoded.text) }
+        if remaining.isEmpty && identity.status == .pending { identity.evaluate(serial: nil) }
+        guard decoded.text?.isEmpty == false, identity.failureDetail == nil else {
+            failed = true
+            throw InputError.invalid(identity.failureDetail ?? "Invalid DIS UTF-8 or empty value")
         }
     }
 }
@@ -271,6 +302,7 @@ struct Receipt: Encodable {
     var uploadFileSHA256: String?
     var uploadImageHash: String?
     var resetRequested = false, postResetStateRead = false
+    var postResetFirmware: DecodedValue?
     var identity = IdentityCheck(expectedSerial: nil)
     let limitations = "CoreBluetooth exposes maximumWriteValueLength, not raw ATT MTU or read offsets. No long-read offset or MTU claim is made."
 }
@@ -497,11 +529,24 @@ struct SMPPlan {
     let image: UploadImage?
     let sha: Data
     let confirm: Bool, noReset: Bool
+    private let expectedSerial: String?
+    private(set) var access: SMPAccessGate?
+    mutating func endConnection() { access = nil }
+    mutating func beginConnection(discovered: Set<String>) throws {
+        access = nil
+        access = try SMPAccessGate(discovered: discovered, expectedSerial: expectedSerial)
+    }
+    mutating func consumeDIS(uuid: String, data: Data) throws {
+        guard access != nil else { throw InputError.invalid("SMP DIS discovery incomplete") }
+        try access!.consume(uuid: uuid, data: data)
+    }
     init(options: Options, sha: Data) {
+        expectedSerial = options.expectSerial
         image = options.upload; self.sha = sha; confirm = options.mode == "confirm"; noReset = options.noReset
         step = image == nil ? .boot : .initialState
     }
     mutating func request(maximumWrite: Int) throws -> SMPRequest? {
+        guard access?.allowsSMP == true else { throw InputError.invalid("SMP blocked until DIS reads and identity check pass") }
         let op: UInt8, group: UInt16, id: UInt8, body: CBOR, name: String
         switch step {
         case .done: return nil
@@ -534,7 +579,7 @@ struct SMPPlan {
             offset = Int(next); step = offset == image!.data.count ? .mark : .upload
         case .mark: step = .markedState
         case .markedState: step = noReset ? .done : .reset
-        case .reset: step = .postBoot
+        case .reset: step = .postBoot; endConnection()
         case .postBoot: step = .postState
         case .postState: step = .postEcho
         case .done: throw InputError.invalid("Unexpected SMP response after completion")
