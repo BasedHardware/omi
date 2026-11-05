@@ -113,8 +113,9 @@ recordSealRepair:
   suspend: false
   mode: apply
   rowSeconds: 270
-  # I/O-bound rows: 16 workers attempted ~157 of 1,024 selected rows per pass (2026-11-05). Rollback: 16.
-  workers: 48
+  # 48 workers (2026-11-05 #24729) pushed every row past the 270 s cap (budget_exhausted); per-row I/O, not
+  # pod resources, saturates. Back to 16 until the per-row bottleneck is profiled.
+  workers: 16
   serverFlags:
     K_SERVICE: backend
     BATCH_PIPELINE_ENABLED: 'true'

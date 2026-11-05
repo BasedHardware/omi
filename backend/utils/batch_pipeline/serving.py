@@ -16,6 +16,7 @@ from config.batch_pipeline import (
     projection_hold_recovery_enabled,
     serving_metrics_min_refresh_seconds,
     serving_projection_sweep_enabled,
+    serving_tick_seconds,
     projection_pump_enabled,
     projection_pump_sweep_pages,
     projection_pump_tick_seconds,
@@ -431,7 +432,7 @@ def start_serving_from_env():
                     'event=batch_serving outcome=retry exception_type=%s', type(error).__name__
                 )
             try:
-                await asyncio.wait_for(stop.wait(), timeout=20)
+                await asyncio.wait_for(stop.wait(), timeout=serving_tick_seconds())
             except asyncio.TimeoutError:
                 pass
 
