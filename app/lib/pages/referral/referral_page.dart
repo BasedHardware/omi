@@ -267,8 +267,9 @@ class _ReferralPageState extends State<ReferralPage> with WidgetsBindingObserver
                 padding: const EdgeInsets.all(5),
                 decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
                 child: Container(
-                  decoration: const BoxDecoration(color: Color(0xFFE5E5EA), shape: BoxShape.circle),
-                  child: const Icon(Icons.account_circle, size: 30, color: Color(0xFF8E8E93)),
+                  // The QR card stays white in dark mode, so the badge uses the light palette.
+                  decoration: BoxDecoration(color: OmiPalette.light.surface2, shape: BoxShape.circle),
+                  child: Icon(Icons.account_circle, size: 30, color: OmiPalette.light.textSecondary),
                 ),
               ),
             ]),
