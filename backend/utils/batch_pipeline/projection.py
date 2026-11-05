@@ -680,8 +680,9 @@ class Projector:
         if accounting is None:
             self.store.hold_for_quarantine(segment_id, binding, self.clock(), policy=policy)
             return None
-        with projection_phase('usage', policy):
-            record_speech(binding, accounting, self.clock())
+        if not accounting.get('source_deleted'):
+            with projection_phase('usage', policy):
+                record_speech(binding, accounting, self.clock())
         with projection_phase('completion', policy):
             result = self.store.complete(segment_id, binding, self.clock(), accounting, policy=policy)
         if result is not None:
@@ -720,7 +721,7 @@ class Projector:
         # Fair use follows the durable steps, never an uncommitted attempt. A
         # crash before this call is repaired by the next scan or the ordinary
         # completion, which re-issue every stored step under the same keys.
-        if not accounting['completed']:
+        if not accounting['completed'] and result.get('reason_code') != 'source_deleted':
             record_speech_steps(binding, accounting['source'], steps, times, self.clock())
         return result
 

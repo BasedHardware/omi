@@ -107,8 +107,11 @@ suppresses the entire job's output IDs, including content parts already
 persisted. The shared visibility fence also suppresses IDs in partial results,
 including deletion markers inside held entries; it preserves their existing
 custody semantics and does not count a partial as a job termination. Normal
-completion reports `reason_code=source_deleted`. The publisher is never
-called for that result, even with empty IDs. An older mixed completion is
+and partial completion report `reason_code=source_deleted`. Both skip the usage commit
+entirely: no hourly/monthly usage, ledger accounting fields, fair-use dispatch
+or usage-cache writer fence is written or reissued. Previously committed usage
+is preserved. Normal accounting formulas and ordering remain unchanged.
+The publisher is never called for that result, even with empty IDs. An older mixed completion is
 suppressed on replay without modifying its historical usage. Tombstones retain
 `conversation_deleted`; redirect chains retain their existing checks. Missing
 source documents alone are not evidence of deletion. Tombstone writers are

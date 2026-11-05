@@ -4,6 +4,7 @@ No transcript bodies are copied into scheduler metadata. Durable completion is
 separate from the Redis client projection, and can repair a lost Redis reply.
 """
 
+from contextlib import nullcontext
 from datetime import datetime, timedelta, timezone
 import logging
 import re
@@ -416,10 +417,16 @@ class ProjectionStore:
 
         seconds = 0.0
         source = 'sync_backfill'
+        source_deleted = False
         for sid in binding.segment_ids:
             entry = self.ref('results', sid).get().to_dict() or {}
             if entry.get('projection_state') == 'erased':
                 continue
+            parts = entry.get('projection_parts')
+            source_deleted = source_deleted or any(
+                part.get('disposition') == 'source_deleted'
+                for part in (parts.values() if parts else [entry.get('projection') or {}])
+            )
             receipt = entry.get('projection') or {}
             if receipt.get('state') != 'ready':
                 # Only a unit nothing automatic will change; an open intent or a
@@ -442,6 +449,19 @@ class ProjectionStore:
         ):
             # Charge nothing for a partial that cannot commit.
             return None
+        if source_deleted:
+            if not projection_source_deleted_enabled():
+                raise ProjectionBlocked('privacy disposition requires a source deletion tombstone')
+            # Settled deletion receipts are immutable. Suppress pre-completion
+            # fair-use dispatch and avoid resolving any new usage attribution.
+            # Completion rechecks every part in its transaction before writing.
+            return {
+                'seconds': seconds,
+                'source': source,
+                'updates': {},
+                'completed': ledger.get('status') == 'completed',
+                'source_deleted': True,
+            }
         charged = ledger.get('usage_committed_seconds', 0.0) if ledger.get('status') == BATCH_PARTIAL_STATUS else 0.0
         steps, step_times = charge_chain(ledger) if ledger.get('status') == BATCH_PARTIAL_STATUS else ([0.0], [])
         intake = self.ref('intakes', binding.job_id).get().to_dict() or {}
@@ -594,7 +614,8 @@ class ProjectionStore:
             )
             if seconds != accounting['seconds']:
                 raise ProjectionBlocked('speech accounting changed during completion')
-            self._commit_usage(transaction, session.ledger_ref, session.ledger, binding, accounting, seconds, now)
+            if not source_deleted:
+                self._commit_usage(transaction, session.ledger_ref, session.ledger, binding, accounting, seconds, now)
             from database.sync_ledger import complete_batch_projection_in_transaction
 
             complete_batch_projection_in_transaction(
@@ -615,7 +636,7 @@ class ProjectionStore:
                 transaction.update(self.ref('jobs', sibling), {'client_status': 'completed', 'client_result': result})
             return result, True, captured_seconds
 
-        with writing('usage_month_cache', binding.owner_id):
+        with nullcontext() if accounting.get('source_deleted') else writing('usage_month_cache', binding.owner_id):
             result, changed, seconds = self.run(commit, policy=policy)
         self._mirror(binding)
         if changed:
@@ -793,17 +814,20 @@ class ProjectionStore:
             if missing_count:
                 # This publishes siblings while keeping the upload unacknowledged.
                 result['reason_code'] = ARTIFACT_MISSING_REASON
+            if source_deleted:
+                result['reason_code'] = 'source_deleted'
             if terminal_empty_count:
                 result['no_recoverable_speech_segments'] = terminal_empty_count
             superseded_count = sum(receipt.get('disposition') == 'superseded' for receipt in receipts)
             if superseded_count:
                 result['superseded_segments'] = superseded_count
             if ledger.get('status') == BATCH_PARTIAL_STATUS and ledger.get('result') == result:
-                return (result, charge_chain(ledger)), False
+                return (result, ([0.0], []) if source_deleted else charge_chain(ledger)), False
             if seconds != accounting['seconds']:
                 raise ProjectionBlocked('speech accounting changed during completion')
             chain = charge_chain(ledger) if ledger.get('status') == BATCH_PARTIAL_STATUS else ([0.0], [])
-            self._commit_usage(transaction, ledger_ref, ledger, binding, accounting, seconds, now)
+            if not source_deleted:
+                self._commit_usage(transaction, ledger_ref, ledger, binding, accounting, seconds, now)
             complete_batch_partial_in_transaction(
                 transaction,
                 ledger_ref,
@@ -814,9 +838,9 @@ class ProjectionStore:
                 run_token=binding.run_token,
                 run_epoch=binding.run_epoch,
             )
-            return (result, extend_chain(*chain, seconds, now)), True
+            return (result, ([0.0], []) if source_deleted else extend_chain(*chain, seconds, now)), True
 
-        with writing('usage_month_cache', binding.owner_id):
+        with nullcontext() if accounting.get('source_deleted') else writing('usage_month_cache', binding.owner_id):
             outcome, changed = self.run(commit)
         if changed:
             logger.info('event=batch_held_partial outcome=completed held=%d', outcome[0]['held_segments'])
