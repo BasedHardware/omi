@@ -174,7 +174,7 @@ def memo_result(family, result):
         pass
 
 
-def read_snapshot(family, reference, *, memo_read=False, **kwargs):
+def read_snapshot(family, reference, *, memo_read=False, read_budget=None, **kwargs):
     """Count issued reads, including failures, without inspecting paths or payloads."""
     _count(family, 'reads')
     caller = (
@@ -182,6 +182,8 @@ def read_snapshot(family, reference, *, memo_read=False, **kwargs):
     )
     caller_token = _READ_CALLER.set(caller)
     try:
+        if read_budget is not None:
+            kwargs.update(timeout=read_budget.timeout(10), retry=None)
         snapshot = reference.get(**kwargs)
     except BaseException:
         _read_result(family, 'error')

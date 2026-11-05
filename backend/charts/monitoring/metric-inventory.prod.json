@@ -2348,7 +2348,13 @@
     "omi_record_seal_nojob_new_oldest_age_seconds",
     "omi_record_seal_nojob_observed_at_seconds",
     "omi_record_seal_nojob_scan_truncated",
-    "omi_stt_window_batch_pressure_progress_timestamp_seconds"
+    "omi_stt_window_batch_pressure_progress_timestamp_seconds",
+    "omi_transcription_final_pass_owner_delta_ratio_bucket",
+    "omi_transcription_final_pass_owner_delta_ratio_count",
+    "omi_transcription_final_pass_owner_delta_ratio_sum",
+    "omi_transcription_final_pass_unit_skips_total",
+    "omi_transcription_final_pass_retry_terminal_total",
+    "omi_transcription_final_pass_retry_terminal_observed_at_seconds"
   ],
   "legacy_debt": {
     "bfobs1syncenq01": {

@@ -81,16 +81,17 @@ class BatchPrivacyMemo:
     conflict set. Decisions, generation comparisons and walk budgets are never memoized.
     """
 
-    def __init__(self, client: Any, transaction: Any):
+    def __init__(self, client: Any, transaction: Any, *, read_budget=None):
         if transaction is None:
             raise ValueError('privacy memo requires a transaction attempt')
         self.client, self.transaction = client, transaction
+        self.read_budget = read_budget
         self.snapshots: dict = {}
 
     def get(self, reference):
         if reference.path not in self.snapshots:
             self.snapshots[reference.path] = metrics.read_snapshot(
-                'batch', reference, transaction=self.transaction, memo_read=True
+                'batch', reference, transaction=self.transaction, memo_read=True, read_budget=self.read_budget
             )
         return self.snapshots[reference.path]
 
@@ -104,6 +105,7 @@ def assert_batch_write_allowed(
     expected_generation: int | None = None,
     snapshots: dict | None = None,
     memo: BatchPrivacyMemo | None = None,
+    read_budget=None,
 ) -> int:
     """Measure the authorizing decision; shadow always runs after live authority.
 
@@ -116,7 +118,11 @@ def assert_batch_write_allowed(
     # Materialize once when comparing, including one-shot source generators.
     ids = tuple(conversation_ids) if shadow else conversation_ids
     kwargs: dict[str, Any] = dict(
-        conversation_ids=ids, expected_generation=expected_generation, snapshots=snapshots, memo=memo
+        conversation_ids=ids,
+        expected_generation=expected_generation,
+        snapshots=snapshots,
+        memo=memo,
+        read_budget=read_budget,
     )
     function = _assert_batch_write_allowed_memo if enforce else _assert_batch_write_allowed_live
 
@@ -159,6 +165,7 @@ def _assert_batch_write_allowed_memo(
     expected_generation: int | None = None,
     snapshots: dict | None = None,
     memo: BatchPrivacyMemo | None = None,
+    read_budget=None,
 ) -> int:
     # Keep the disabled path's read order, counts and WQ12 behavior unchanged.
     # Full-row exports always stay live: the token certifies authorization, not
@@ -177,6 +184,7 @@ def _assert_batch_write_allowed_memo(
             expected_generation=expected_generation,
             snapshots=snapshots,
             memo=memo,
+            read_budget=read_budget,
         )
     ids = frozenset(conversation_ids)
     if memo is not None and lever_enabled('batch_privacy_memoize', uid):
@@ -190,7 +198,7 @@ def _assert_batch_write_allowed_memo(
     try:
         # Never use the transaction-scoped WQ12 snapshot memo for this read.
         # Every authorizing transaction enrolls the token in its conflict set.
-        snapshot = metrics.read_snapshot('batch', reference, transaction=transaction)
+        snapshot = metrics.read_snapshot('batch', reference, transaction=transaction, read_budget=read_budget)
         # GAPIC transport retries may replay an already-prepared random token
         # after another writer. The server revision prevents that ABA: replay
         # commits get a new update_time, including deletion/recreation. Keep
@@ -230,6 +238,7 @@ def _assert_batch_write_allowed_memo(
             expected_generation=expected_generation,
             memo=memo,
             privacy_snapshot=snapshot,
+            read_budget=read_budget,
         )
         if eligible:
             attempt.put(key, version, generation)
@@ -252,6 +261,7 @@ def _assert_batch_write_allowed_live(
     expected_generation: int | None = None,
     snapshots: dict | None = None,
     memo: BatchPrivacyMemo | None = None,
+    read_budget=None,
     privacy_snapshot: Any = None,
 ) -> int:
     """Fence a mutation. Admission records the returned generation for replay.
@@ -270,7 +280,7 @@ def _assert_batch_write_allowed_live(
         return (
             memo.get(reference)
             if memo is not None
-            else metrics.read_snapshot('batch', reference, transaction=transaction)
+            else metrics.read_snapshot('batch', reference, transaction=transaction, read_budget=read_budget)
         )
 
     marker = read(client.collection('account_deletions').document(uid))

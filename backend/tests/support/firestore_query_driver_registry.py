@@ -3878,3 +3878,15 @@ for _function in ('projected_stream_iter',):
             },
         )
     )
+
+
+from database.batch_final_pass_retry import FinalPassRetries
+
+_add(
+    DriverEntry(
+        'database.batch_final_pass_retry.FinalPassRetries.due',
+        base={'self': FinalPassRetries()},
+        neutrals={'now': (T0.timestamp(), 'due-time range operand only'), 'limit': _LIMIT},
+        patchers=(_stub('utils.sync.stage.current_stage', 'prod'),),
+    )
+)

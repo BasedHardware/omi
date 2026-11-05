@@ -128,6 +128,7 @@ from utils.cloud_tasks import (
 from utils.executors import (
     critical_executor,
     db_executor,
+    postprocess_executor,
     storage_executor,
     sync_executor,
     run_blocking,
@@ -1887,6 +1888,16 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
         return _budget_deferral_fallback('preamble_timeout', 'degraded')
     except Exception:
         return await _run_sync_job_body(request, task_retry_count, entry_state)
+    if isinstance(payload, dict) and payload.get('kind') == 'batch_final_pass':
+        from routers.enrichment import _task
+        from utils.conversations.final_pass_retry import consume as consume_speaker_pass
+
+        task = _task(payload)
+        if task is None:
+            return JSONResponse(status_code=400, content={'status': 'invalid_speaker_task'})
+        return JSONResponse(
+            status_code=200, content=await run_blocking(postprocess_executor, consume_speaker_pass, *task)
+        )
     if isinstance(payload, dict) and payload.get('kind') == 'sync_reprocess':
         if isinstance(payload.get('uid'), str):
             try:

@@ -354,7 +354,9 @@ def test_http_timeout_is_reported_without_changing_legacy_output(monkeypatch):
     monkeypatch.setattr(final, 'get_diarizer_backend', lambda: SimpleNamespace(diarize=timeout))
     segments, outcome = final.run_final_pass(b'', [], None, {}, deadline=float('inf'), conversation_id='fixture')
     assert segments is None
-    assert outcome == {'outcome': 'failed:timeout'}
+    assert outcome['outcome'] == 'failed:timeout'
+    assert outcome['exception_type'] == 'ReadTimeout'
+    assert outcome['reason'] == 'unclassified'
 
 
 @pytest.mark.parametrize('stored_owner', [True, False])

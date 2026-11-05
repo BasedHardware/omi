@@ -39,6 +39,7 @@ def create_artifact_store(store: Any, storage_client: Any, bucket: str, master_s
         bucket=bucket,
         namespace=store.namespace,
         authorize=partial(batch_artifact_authorize, store),
+        authorize_read=partial(batch_artifact_authorize, store),
         key_for_owner=key_for_owner,
         register_artifact=partial(batch_artifact_register, store),
         shadow_result=partial(shadow_result, store),

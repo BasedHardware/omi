@@ -447,7 +447,7 @@ def test_sweep_rebinds_poison_in_cas_and_fences_old_delivery(state, sweep_query,
     rows[key]['dispatch'] = poison
     assert reprocess.sweep(now=600) == {'repaired': 1, 'error': 0}
     repaired = rows[key]
-    assert repaired['dispatch'] == reprocess._dispatch_binding()
+    assert repaired['dispatch'] == reprocess.dispatch_binding()
     assert repaired['task_token'] != original['task_token']
     assert repaired['version'] == original['version'] and repaired['due_at'] == original['due_at']
     assert tasks[-1] == repaired  # The binding/token are durable before enqueue.
@@ -464,7 +464,7 @@ def test_sweep_repairs_each_missing_binding_field(state, sweep_query, field):
     reprocess.mark('u', 'c', 'en', now=0)
     rows[reprocess.key('u', 'c')]['dispatch'][field] = ''
     assert reprocess.sweep(now=600) == {'repaired': 1, 'error': 0}
-    assert rows[reprocess.key('u', 'c')]['dispatch'] == reprocess._dispatch_binding()
+    assert rows[reprocess.key('u', 'c')]['dispatch'] == reprocess.dispatch_binding()
 
 
 def test_unbound_host_leaves_claimable_obligation_without_error_storm(state, sweep_query, monkeypatch, caplog):

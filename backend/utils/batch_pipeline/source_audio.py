@@ -125,6 +125,7 @@ def read_reference(
         retry=None,
     )
     if read_budget is not None:
+        read_budget.received_bytes += len(raw)
         read_budget.timeout(60)
     return decode_source(raw, ref, key)
 
