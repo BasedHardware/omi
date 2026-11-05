@@ -112,8 +112,8 @@ recordSealRepair:
   suspend: false
   mode: apply
   rowSeconds: 270
-  # I/O-bound rows: 16 workers attempted ~157 of 1,024 selected rows per pass (2026-11-05). Rollback: 16.
-  workers: 48
+  # 48-worker pass sealed ~0 on 2026-11-05: shared I/O saturates under the 270 s per-row cap (omi-pipeline 090f53; lead2 877111).
+  workers: 16
   serverFlags:
     K_SERVICE: backend
     BATCH_PIPELINE_ENABLED: 'true'
