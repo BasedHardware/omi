@@ -82,7 +82,11 @@ class ProjectionReleaseStore:
             held_receipt = next(
                 (
                     part
-                    for part in [receipt, *(entry.get('projection_parts') or {}).values()]
+                    for part in (
+                        [receipt, *(entry.get('projection_parts') or {}).values()]
+                        if projection_hold_recovery_enabled()
+                        else [receipt]
+                    )
                     if part.get('state') == 'quarantined' and part.get('disposition') == 'ambiguous_generation'
                 ),
                 None,

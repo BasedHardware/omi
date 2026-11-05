@@ -298,6 +298,29 @@ def test_persisted_release_requires_ambiguous_quarantine_and_enabled_recovery(mo
     assert not client.transactions[-1].updates
 
 
+def test_recovery_off_refuses_ready_summary_with_ambiguous_quarantined_part(monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_HOLD_RECOVERY_ENABLED', 'false')
+    seeded = rows(
+        projection={'state': 'ready'},
+        projection_parts={'0': {'state': 'quarantined', 'disposition': 'ambiguous_generation'}},
+    )
+    client, store = store_for(seeded)
+    assert not ProjectionReleaseStore(store).release('held', 500.0)
+    assert client.rows == seeded
+    assert not client.transactions[-1].updates
+
+
+def test_recovery_off_releases_former_summary_shape(monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_HOLD_RECOVERY_ENABLED', 'false')
+    client, store = store_for(rows())
+    assert ProjectionReleaseStore(store).release('held', 500.0)
+    result = client.rows[('batch_pipeline_prod_results', 'held')]
+    assert result['projection_state'] == 'pending'
+    assert result['protocol_version'] == 1
+    assert 'projection_release_version' not in result
+    assert client.rows[('batch_pipeline_prod_jobs', 'held')]['recovery_state'] is None
+
+
 def test_assignment_held_query_is_bounded_and_keyset():
     from database.batch_pipeline_projection_release import assignment_held_page_ids, RELEASE_PAGE
 
