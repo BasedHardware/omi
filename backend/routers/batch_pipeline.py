@@ -11,7 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, generate_latest
 from starlette.responses import Response, JSONResponse
 
-from config.batch_pipeline import read_only_metrics_enabled
+from config.batch_pipeline import projection_pump_enabled, read_only_metrics_enabled
 from config.summary_guarantee import enabled as summary_deadline_enabled
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from utils.batch_pipeline.contracts import PoolCapacity, WorkResult
@@ -263,7 +263,7 @@ async def reconcile(body: WorkerRequest):
 @router.get('/metrics', include_in_schema=False)
 async def metrics():
     service = serving_for_stage(current_stage())
-    if read_only_metrics_enabled() and service.metrics is not None:
+    if (projection_pump_enabled() or read_only_metrics_enabled()) and service.metrics is not None:
         await run_blocking(db_executor, service.metrics.refresh, service.store, time.time())
     else:
         # Periodic maintenance uses the leader lease; per-unit policy decides follow-ups.

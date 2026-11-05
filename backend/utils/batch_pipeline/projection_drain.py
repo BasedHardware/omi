@@ -17,7 +17,7 @@ import random
 import time
 from typing import TYPE_CHECKING
 
-from config.batch_pipeline import projection_drain_claim_aware_enabled
+from config.batch_pipeline import max_owner_drains, projection_drain_claim_aware_enabled
 from database.batch_pipeline_projection_claim import projection_claim_held
 from utils.batch_pipeline.metrics import PROJECTION_DRAIN_CLAIM_HELD, PROJECTION_DRAIN_CLAIM_BUSY_BACKOFFS
 from utils.batch_pipeline.scheduler import owner_key
@@ -28,7 +28,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 # Owners draining at once in one process.
-MAX_OWNER_DRAINS = 8
+MAX_OWNER_DRAINS = max_owner_drains()
 # One owner's turn; with more rows it re-queues behind every waiting owner.
 DRAIN_TURN_SECONDS = 120.0
 # One blocking step: bounds a sync-pool slot and the owner-claim hold.
