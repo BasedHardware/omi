@@ -2603,6 +2603,16 @@ class CaptureController extends ChangeNotifier
     if (foregroundAudioReady) {
       await _preferences.saveBool('nativeBleForegroundReady', true);
     } else {
+      // A persisted user mute denies audio admission, but the connected
+      // pendant still owns a paused session and needs its button listener.
+      // Keep the paused state visible so unmute can resume this session.
+      if (!_deviceIdentityStale(deviceRevision) &&
+          _preferences.capturePolicy.muted &&
+          _capture.stagedReadModel.deviceMuted) {
+        updateRecordingState(RecordingState.pause);
+        notifyListeners();
+        return;
+      }
       Logger.debug('[_initiateDeviceAudioStreaming] streamAudioToWs returned false for device $deviceId');
       return;
     }
