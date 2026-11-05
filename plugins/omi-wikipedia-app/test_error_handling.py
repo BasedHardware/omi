@@ -114,6 +114,47 @@ class WikipediaErrorHandlingTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(resp.error, "Wikipedia random article request failed.")
             self.assertNotIn(self.sensitive_leak, str(resp.error))
 
+    async def test_search_articles_handles_null_nested_fields_and_non_dict_items(self):
+        for payload in (
+            {"query": None},
+            {"query": {"search": None}},
+            {"query": {"search": ["not-a-dict", 123, None]}},
+        ):
+            with self.subTest(payload=payload):
+                with patch.object(app, "_request_json", return_value=payload):
+                    resp = await app.search_articles({"query": "Ada Lovelace"})
+                    self.assertIsNone(resp.error)
+                    self.assertIn("No Wikipedia articles found", resp.result)
+
+    async def test_format_summary_handles_null_content_urls_and_desktop(self):
+        for payload in (
+            {"title": "Ada Lovelace", "extract": "Mathematician", "content_urls": None},
+            {"title": "Ada Lovelace", "extract": "Mathematician", "content_urls": {"desktop": None}},
+            {"title": "Ada Lovelace", "extract": "Mathematician", "content_urls": {"desktop": {"page": None}}},
+        ):
+            with self.subTest(payload=payload):
+                with patch.object(app, "_request_json", return_value=payload):
+                    resp = await app.get_article_summary({"title": "Ada Lovelace"})
+                    self.assertIsNone(resp.error)
+                    self.assertIn("https://en.wikipedia.org/wiki/Ada_Lovelace", resp.result)
+
+    async def test_get_random_article_handles_null_query_and_non_dict_items(self):
+        for payload in (
+            {"query": None},
+            {"query": {"random": None}},
+            {"query": {"random": ["invalid", None]}},
+        ):
+            with self.subTest(payload=payload):
+                with patch.object(app, "_request_json", return_value=payload):
+                    resp = await app.get_random_article({})
+                    self.assertIsNone(resp.error)
+                    self.assertEqual(resp.result, "No random Wikipedia article was returned.")
+
+    async def test_endpoints_reject_non_dict_upstream_payloads(self):
+        with patch.object(app, "_request_json", return_value=["unexpected", "list"]):
+            resp_summary = await app.get_article_summary({"title": "Ada Lovelace"})
+            self.assertEqual(resp_summary.error, "Wikipedia article request failed.")
+
 
 if __name__ == "__main__":
     unittest.main()
