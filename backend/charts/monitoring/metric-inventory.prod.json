@@ -2310,7 +2310,9 @@
     "omi_audio_custody_failures_total",
     "omi_audio_custody_last_risk_timestamp_seconds",
     "omi_audio_custody_would_drop_total",
+    "omi_batch_held_oldest_age_seconds",
     "omi_batch_pipeline_vendor_overflow_audio_seconds_total",
+    "omi_batch_projection_drain_oldest_age_seconds",
     "omi_batch_record_pending_count",
     "omi_batch_record_pending_new_oldest_age_seconds",
     "omi_batch_record_pending_observed_at_seconds",
@@ -2403,7 +2405,15 @@
       "metrics": [
         "omi_sync_queue_wait_seconds_bucket"
       ],
-      "evidence": "GMP instant count of backfill histogram series in backend-sync|backend-sync-backfill; 561 series. The in-cluster snapshot does not contain this family."
+      "evidence": "GMP instant count of backfill histogram series in backend-sync|backend-sync-backfill; 561 series. The in-cluster snapshot does not contain this family.",
+      "declared_metrics": [
+        "logging_googleapis_com:user_omi_pipeline_upload_admission_503",
+        "logging_googleapis_com:user_omi_pipeline_firestore_contention_exhausted",
+        "logging_googleapis_com:user_omi_pipeline_owner_drain_advanced_count",
+        "logging_googleapis_com:user_omi_pipeline_owner_drain_advanced_sum",
+        "logging_googleapis_com:user_omi_pipeline_owner_drain_claim_busy"
+      ],
+      "declaration_evidence": "backend/charts/monitoring/batch-projection/log-metrics.json; source declarations only, not observed production series."
     }
   }
 }

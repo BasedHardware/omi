@@ -1302,6 +1302,12 @@ EXTERNAL_ALERT_METRICS = {
         "prometheus-stackdriver-exporter"
     ),
     "stackdriver_monitoring_last_scrape_error": "prometheus-stackdriver-exporter",
+    # Cloud Logging declarations, queried directly through GMP (never the local exporter).
+    "logging_googleapis_com:user_omi_pipeline_upload_admission_503": "batch-projection/log-metrics.json",
+    "logging_googleapis_com:user_omi_pipeline_firestore_contention_exhausted": "batch-projection/log-metrics.json",
+    "logging_googleapis_com:user_omi_pipeline_owner_drain_advanced_count": "batch-projection/log-metrics.json",
+    "logging_googleapis_com:user_omi_pipeline_owner_drain_advanced_sum": "batch-projection/log-metrics.json",
+    "logging_googleapis_com:user_omi_pipeline_owner_drain_claim_busy": "batch-projection/log-metrics.json",
     # deepgram self-hosted deployment exporter
     "engine_stream_latency_bucket": "deepgram self-hosted deployment exporter",
 }
