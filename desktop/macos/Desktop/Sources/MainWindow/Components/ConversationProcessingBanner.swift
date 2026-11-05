@@ -30,11 +30,15 @@ struct ConversationProcessingBanner: View {
     }
   }
 
+  static func offersReprocess(conversation: ServerConversation, phase: ConversationProcessingPhase) -> Bool {
+    phase == .stalled && !conversation.deferred && conversation.displayState == .processing
+  }
+
   var body: some View {
     TimelineView(.periodic(from: .now, by: 15)) { timeline in
       let phase = ConversationProcessingProgress.phase(for: conversation, now: timeline.date)
       let deferred = conversation.deferred
-      let offersReprocess = phase == .stalled && !deferred
+      let offersReprocess = Self.offersReprocess(conversation: conversation, phase: phase)
       HStack(spacing: OmiSpacing.md) {
         if offersReprocess {
           Image(systemName: "exclamationmark.triangle.fill")
@@ -78,7 +82,7 @@ struct ConversationProcessingBanner: View {
 
   /// Default-app reprocess: the same call the row's inline button makes.
   private func reprocess() async {
-    guard !isReprocessing else { return }
+    guard conversation.displayState == .processing, !isReprocessing else { return }
     isReprocessing = true
     defer { isReprocessing = false }
     AnalyticsManager.shared.conversationReprocessedDefault(conversationId: conversation.id)

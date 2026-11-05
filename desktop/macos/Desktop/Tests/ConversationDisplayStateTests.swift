@@ -102,6 +102,12 @@ final class ConversationDisplayStateTests: XCTestCase {
     XCTAssertEqual(conv.displayState, .titled("Transcribing…"))
     XCTAssertEqual(conv.displayTitle, "Transcribing…")
     XCTAssertFalse(conv.canReprocess)
+    XCTAssertTrue(conv.isAwaitingTranscription)
+    XCTAssertFalse(conv.showsSummaryProcessing)
+    XCTAssertFalse(ConversationProcessingBanner.offersReprocess(conversation: conv, phase: .stalled))
+    XCTAssertTrue(
+      ConversationProcessingBanner.offersReprocess(conversation: makeConversation(status: .processing), phase: .stalled)
+    )
     XCTAssertEqual(makeConversation(title: "Other title", status: .processing).displayState, .processing)
     XCTAssertEqual(makeConversation(title: "Transcribing…", status: .processing, isLocked: true).displayState, .locked)
   }

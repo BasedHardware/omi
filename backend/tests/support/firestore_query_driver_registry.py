@@ -1194,7 +1194,7 @@ _add(
     DriverEntry(
         'database.conversations.get_conversations_without_photos',
         base={'uid': UID},
-        domains={'list_fields_only': [False, True]},
+        domains={'list_fields_only': [False, True], 'presentation': [False, True]},
         patchers=(
             lambda client: unittest.mock.patch.object(
                 importlib.import_module('database.conversations'), 'indexed_list_reads_enabled', return_value=True

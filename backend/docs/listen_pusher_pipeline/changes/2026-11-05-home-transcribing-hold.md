@@ -91,7 +91,10 @@ summary-progress UI, discarding their supplied title and offering Reprocess at
 wire status while bypassing the summary-stall affordance. Ordinary processing,
 deferred, locked and populated rows retain their existing interpretation. This
 requires the macOS source change to ship as well; no installed artifact or live
-client rollout was measured here. The regression exercises the production model.
+client rollout was measured here. The regression exercises the production model, detail banner eligibility and
+summary empty-state copy. Detail refetch still follows the wire processing status;
+the transcription hold cannot offer summary-stall Reprocess or claim the
+transcript is already saved.
 
 The review also caught the shared-visibility exception reaching jobs, and missing
 list/star projections. Home reads now opt in explicitly; authoritative job
