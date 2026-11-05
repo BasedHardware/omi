@@ -6,6 +6,7 @@ are synthetic; task/filter codecs, queries, budgets and HTTP responses are real.
 """
 
 import os
+from pathlib import Path
 from urllib.parse import urlsplit
 
 import uvicorn
@@ -68,6 +69,16 @@ def main():
         @app.post('/fixture/delete-first-task')
         def delete_task():
             client.collection('users').document(uid).collection('action_items').document('t0').update({'deleted': True})
+            return {'ok': True}
+
+        @app.post('/fixture/screenshot/{name}')
+        async def screenshot(name: str, request: Request):
+            if name not in {'home-task-badge', 'conversations-with-tasks'}:
+                return JSONResponse({'detail': 'unknown capture'}, status_code=400)
+            image = await request.body()
+            if not image.startswith(b'\x89PNG\r\n\x1a\n') or len(image) > 5 * 1024 * 1024:
+                return JSONResponse({'detail': 'invalid capture'}, status_code=400)
+            Path(f'/tmp/omi-20620-{name}.png').write_bytes(image)
             return {'ok': True}
 
         seed(client, uid)

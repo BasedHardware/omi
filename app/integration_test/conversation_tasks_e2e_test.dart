@@ -32,7 +32,14 @@ class _Owner implements AuthTokenGateway {
 }
 
 void main() {
-  IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  Future<void> capture(String name) async {
+    final image = await binding.takeScreenshot(name);
+    final response = await http.post(Uri.parse('http://127.0.0.1:18966/fixture/screenshot/$name'),
+        headers: {'content-type': 'image/png'}, body: image);
+    expect(response.statusCode, 200);
+  }
+
   testWidgets('Home badge, global filter, failure/retry, lifecycle and back-position', (tester) async {
     const base = 'http://127.0.0.1:18966/';
     Env.overrideApiBaseUrl(base);
@@ -101,6 +108,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('conversation_has_tasks')), findsOneWidget);
+    await capture('home-task-badge');
     await tester.drag(find.byType(ListView).first, const Offset(0, -250));
     await tester.pumpAndSettle();
     final originalPosition = scroll.offset;
@@ -111,6 +119,7 @@ void main() {
     expect(find.text('Notes 55'), findsOneWidget);
     await tester.ensureVisible(find.text('Notes 104'));
     expect(find.text('Notes 104'), findsOneWidget, reason: 'the match is outside Home loaded rows');
+    await capture('conversations-with-tasks');
     await tester.tap(find.byKey(const ValueKey('tasks_filter_starred')));
     await tester.pump(const Duration(milliseconds: 300));
     await tester.pumpAndSettle();
