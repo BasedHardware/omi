@@ -1358,13 +1358,19 @@ class ActionItemsProvider extends ChangeNotifier {
 
   // Bulk operations
 
-  /// Deletes [itemsToDelete] with one batch-delete request. Many concurrent single deletes
-  /// for one owner all write the same server-side vector route document and fail with
-  /// commit contention; the batch endpoint settles them as one mutation.
+  /// The server commits a batch delete in 499-document Firestore batches, so a larger request
+  /// can fail after deleting part of it. At or under this size each request is all-or-nothing.
+  static const _bulkDeleteChunkSize = 450;
+
+  /// Deletes [itemsToDelete] with sequential batch-delete requests of at most
+  /// [_bulkDeleteChunkSize] ids. Many concurrent single deletes for one owner all write the
+  /// same server-side vector route document and fail with commit contention; a batch request
+  /// settles its ids as one mutation.
   ///
-  /// Rows disappear at once. If the request fails every row goes back where it was; if the
-  /// server deletes only some, the rest go back. `stale` means the session changed while the
-  /// request was in flight, so nothing was restored.
+  /// Rows disappear at once. Rows the server did not confirm go back where they were, and
+  /// Apple Reminders are removed only for confirmed rows. `deleted` is null when nothing was
+  /// deleted because a request failed. `stale` means the session changed while a request was
+  /// in flight, so nothing was restored.
   Future<({List<String>? deleted, bool stale})> _deleteItemsInBulk(List<ActionItemWithMetadata> itemsToDelete) async {
     final generation = _sessionGeneration;
     final ids = itemsToDelete.map((item) => item.id).toList(growable: false);
@@ -1380,19 +1386,32 @@ class ActionItemsProvider extends ChangeNotifier {
     _pendingDeletionIds.addAll(ids);
     notifyListeners();
 
-    // Apple Reminders mirror lives client-side, so it still has to fan out
-    // per-item. The action-item record itself goes through the bulk endpoint.
-    for (final item in itemsToDelete) {
-      _deleteAppleReminderIfLinked(item);
+    final confirmed = <String>[];
+    var failed = false;
+    for (var start = 0; start < ids.length && !failed; start += _bulkDeleteChunkSize) {
+      final chunk = ids.sublist(start, (start + _bulkDeleteChunkSize).clamp(0, ids.length));
+      List<String>? chunkDeleted;
+      try {
+        chunkDeleted = await _bulkDeleteActionItemsRequest(chunk);
+      } catch (e) {
+        Logger.debug('Error bulk deleting action items: $e');
+      }
+      if (chunkDeleted == null) {
+        failed = true;
+      } else {
+        confirmed.addAll(chunkDeleted);
+      }
+      if (generation != _sessionGeneration) break;
     }
-
-    List<String>? deleted;
-    try {
-      deleted = await _bulkDeleteActionItemsRequest(ids);
-    } catch (e) {
-      Logger.debug('Error bulk deleting action items: $e');
+    // Apple Reminders mirror lives client-side, so it still fans out per item, but only for
+    // tasks the server confirmed: a rejected request must not strip reminders from rows
+    // that come back.
+    final confirmedSet = confirmed.toSet();
+    for (final item in itemsToDelete) {
+      if (confirmedSet.contains(item.id)) _deleteAppleReminderIfLinked(item);
     }
     if (generation != _sessionGeneration) return (deleted: null, stale: true);
+    final List<String>? deleted = failed && confirmed.isEmpty ? null : confirmed;
     if (deleted == null) {
       Logger.debug('bulkDeleteActionItems returned null — rolling back local list');
       // Clear tombstones on rollback so future refreshes don't filter the

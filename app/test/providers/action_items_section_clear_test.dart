@@ -114,6 +114,31 @@ void main() {
     expect(singleDeletes, isEmpty);
   });
 
+  test('a large section is sent in sequential all-or-nothing requests of at most 450', () async {
+    // The server commits in 499-document batches, so one larger request can fail half done.
+    final rows = [for (var i = 0; i < 1000; i++) _item('done$i', completed: true)];
+    final p = await provider(rows);
+
+    expect(await p.deleteActionItems(p.actionItems.toList()), isTrue);
+
+    expect(bulkCalls.map((ids) => ids.length), [450, 450, 100]);
+    expect(bulkCalls.expand((ids) => ids).toSet(), rows.map((item) => item.id).toSet());
+    expect(singleDeletes, isEmpty);
+    expect(p.actionItems, isEmpty);
+  });
+
+  test('a failed later request restores only its own and later rows', () async {
+    final rows = [for (var i = 0; i < 1000; i++) _item('done$i', completed: true)];
+    var calls = 0;
+    final p = await provider(rows, bulk: (ids) => ++calls == 2 ? null : ids);
+
+    expect(await p.deleteActionItems(p.actionItems.toList()), isFalse);
+
+    // The first 450 were confirmed and stay gone; the failed chunk and the unsent rest return.
+    expect(bulkCalls, hasLength(2));
+    expect(p.actionItems.map((item) => item.id).toList(), [for (var i = 450; i < 1000; i++) 'done$i']);
+  });
+
   test('an empty section is a no-op', () async {
     final p = await provider([_item('c')]);
 
