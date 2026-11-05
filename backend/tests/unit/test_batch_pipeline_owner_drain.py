@@ -275,7 +275,7 @@ def test_busy_owner_claim_stops_the_step_before_any_read(claims):
     chain(log, BURST, 'a', 3)
     claims.busy.add(owner_key(BURST))
     walk = projector_for(log).drain_step(BURST, 30.0)
-    assert walk == projection.Walk([], [], False) and log.persist_order == []
+    assert walk == projection.Walk([], [], False, 'claim_busy') and log.persist_order == []
 
 
 def test_predecessor_fence_still_stops_a_drain_without_pre_checks():
@@ -426,7 +426,7 @@ def test_a_still_loading_read_ahead_ends_the_step_instead_of_holding_the_slot(mo
     projector = projector_for(log)
     loading = Mock(successor=Mock(return_value=None), take=Mock(return_value=projection_prefetch.NOT_READY))
     walk = projector.drain_step(BURST, 15.0, prefetch=loading)
-    assert walk == projection.Walk([], [], True) and log.persist_order == []
+    assert walk == projection.Walk([], [], True, 'prefetch_wait') and log.persist_order == []
     # The wait is capped by what is left of the step, never the 30 s ceiling.
     assert 0 < loading.take.call_args.kwargs['timeout'] <= 15.0
     loading.take.return_value = None
@@ -492,7 +492,7 @@ def test_a_row_stopped_between_parts_ends_the_step_with_more():
     chain(log, BURST, 'a', 2)
     projector = projector_for(log)
     projector._persist_read = Mock(side_effect=projection.StepDeadline)
-    assert projector.drain_step(BURST, 15.0) == projection.Walk([], [], True)
+    assert projector.drain_step(BURST, 15.0) == projection.Walk([], [], True, 'step_deadline')
     assert projector._persist_read.call_args.kwargs['hint'].deadline is not None
 
 
@@ -706,3 +706,62 @@ async def test_serving_tick_flushes_deferred_index_off_the_chain(monkeypatch):
             break
         await asyncio.sleep(0.01)
     assert flushed == [('u', ['c1'], [])]
+
+
+# --- stop reasons (log-only; 2026-11-05 heavy-chain follow-up) ----------------------
+
+
+def test_walk_names_why_it_stopped():
+    log = ResultLog()
+    chain(log, BURST, 'a', 5)
+    projector = projector_for(log)
+    assert projector._walk(BURST, recovered=None, limit=2, budget_seconds=30.0).stop == 'limit'
+    assert projector._walk(BURST, recovered=None, limit=100, budget_seconds=30.0).stop == 'end'
+    from utils.batch_pipeline.projection_walk_stop import WALK_STOPS
+
+    assert {'end', 'limit', 'claim_busy', 'turn_deadline', 'error'} <= WALK_STOPS
+
+
+def test_predecessor_fence_stop_is_a_closed_blocked_token():
+    log = CountingLog()
+    ids = chain(log, BURST, 'a', 5)
+    projector = projector_for(log)
+    real = log.projection_successor
+    log.projection_successor = lambda key, previous: ids[2] if previous == ids[0] else real(key, previous)
+    walk = projector.drain_step(BURST, 30.0)
+    assert walk.stop.startswith('blocked_') and walk.stop != 'blocked_'
+
+
+def test_block_stop_tokens_are_log_safe():
+    from database.batch_pipeline_projection import ProjectionBlocked
+
+    closed = ProjectionBlocked('anything at all 123')
+    setattr(closed, 'block_reason', 'lineage_ambiguous')
+    assert projection.walk_block_stop(closed, projection.projection_block_reason(closed)) == 'blocked_lineage_ambiguous'
+    assert (
+        projection.walk_block_stop(ProjectionBlocked('projection assignment claim busy'), 'other')
+        == 'blocked_projection_assignment_claim_busy'
+    )
+    # Anything that is not a constant lowercase literal collapses to `other`.
+    for message in ('missing-input repair held: x1', 'uid abc/123', 'A' * 10, 'x' * 80, ''):
+        assert projection.walk_block_stop(ProjectionBlocked(message), 'other') == 'blocked_other'
+
+
+@pytest.mark.asyncio
+async def test_drain_turn_log_carries_the_last_step_stop(monkeypatch, claims, caplog):
+    import logging
+
+    log = ResultLog()
+    chain(log, BURST, 'a', 3)
+    projector = projector_for(log)
+    with caplog.at_level(logging.INFO, logger=projection_drain.logger.name):
+        more = await projection_drain.OwnerDrains(projector).run(BURST)
+    assert more is False
+    turns = [r.getMessage() for r in caplog.records if 'action=owner_drain outcome=turn' in r.getMessage()]
+    assert turns and ' stop=end ' in turns[-1] and 'event=batch_projection ' in turns[-1]
+
+    claims.busy.add(owner_key(BURST))
+    caplog.clear()
+    with caplog.at_level(logging.INFO, logger=projection_drain.logger.name):
+        await projection_drain.OwnerDrains(projector).run(BURST)
+    assert any(' advanced=0 ' in r.getMessage() and ' stop=claim_busy ' in r.getMessage() for r in caplog.records)
