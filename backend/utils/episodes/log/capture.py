@@ -99,6 +99,9 @@ class DeferredCapture:
 
 def prepare_capture(transaction, client, uid):
     try:
+        # SDK retries reuse this transaction. A disabled attempt must discard
+        # an earlier aborted attempt's intent, even if capture returns before commit.
+        transaction._episode_capture = None
         # Global admission may refresh the control-plane flag cache. It never
         # reads customer data; per-UID admission is still checked after commit.
         if not config.capture_possible() or not config.episodes_enabled_for(uid):
@@ -111,7 +114,7 @@ def prepare_capture(transaction, client, uid):
                 result = original(*args, **kwargs)
                 try:
                     intent = transaction._episode_capture
-                    if config.capture_possible() and (intent.events or intent.stage_error):
+                    if config.capture_possible() and intent is not None and (intent.events or intent.stage_error):
                         dispatch(intent.flush, uid=uid, client=client)
                 except Exception as error:
                     dropped(error, uid=uid, client=client)

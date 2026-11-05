@@ -35,7 +35,9 @@ Global capture admission now precedes installing a commit observer, submitting
 to the executor, executing an accepted callback, flushing an old intent (including
 stage errors), and handling drops/cancellation. Off mode submits zero callbacks
 and writes zero capture/invalidation markers, including under saturation or
-submit failure. A policy release no longer invalidates in its disabled branch.
+submit failure. A policy release no longer invalidates in its disabled branch. A disabled SDK
+retry clears the preceding aborted attempt's intent, preventing its dispatch if
+capture returns before the winning commit.
 Serving mutations still commit their original data/result.
 
 `capture_possible()` can refresh the control-plane flag store, even while off.
@@ -50,12 +52,11 @@ Unit files run separately through `backend/test.sh` with its existing timing
 limits and `BACKEND_PYTEST_WORKERS=1`.
 
 - Focused selection: the same nine round-4 log suites plus
-  `tests/unit/test_episode_log_round5.py`: **151 passed**, including round-2/3/4
+  `tests/unit/test_episode_log_round5.py`: **152 passed**, including round-2/3/4
   regressions and the policy-entry race.
 - Acceptance: the exact selection recorded in the
   [round-4 evidence](2026-11-05-episode-log-round4.md), plus the new round-5 file.
-  **2,967 passed** in the broad run; the final focused run additionally passes
-  the added disabled-policy-release and source-growth cases (12 round-5 cases total).
+  **2,978 passed** in the final post-sync run (13 round-5 cases total).
 - Same 17 round-3/4 CI regression files: **127 passed**.
 - `npx --no-install firebase emulators:exec --only firestore --project
   demo-omi-isolated-tests 'backend/.venv/bin/python -m pytest -q
@@ -81,9 +82,12 @@ limits and `BACKEND_PYTEST_WORKERS=1`.
   current `origin/main` in the sync collector regex: main added the privacy
   memo-ineligible counter on the same line as this branch's episode metrics.
   The branch now retains both. That exploratory parallel run also detected
-  ongoing edits; it is not counted as a successful preflight. Final preflight
-  and guarded push run serially against stable files.
-- Final preflight and normal guarded push results recorded after completion.
+  ongoing edits; it is not counted as a successful preflight. Final preflight is serialized; the guarded push verifies committed source.
+- Final `OMI_CHECKS_JOBS=1 BACKEND_PYTEST_WORKERS=1
+  OMI_PR_BODY_FILE=<round-5-body> make preflight`: **70/70 checks passed**
+  in 831.56 seconds. Normal guarded push uses the same serial checks without
+  credential variables or hook bypasses; its completion is verified in the PR
+  handoff. The final focused and emulator runs include the disabled-retry fix.
 
 Current main (`e5f647a7f9c44459fae007835ec31abc499dad85`) was synced into the
 feature branch to resolve the same-line collector conflict, retaining both metric

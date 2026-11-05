@@ -158,3 +158,21 @@ def test_source_growth_rejects_before_spending_member_read_budget(monkeypatch):
     with pytest.raises(store.LostLease, match='source_changed'):
         reconcile.verify('u', client, {'users/u/conversations/c': 1}, object())
     client.get_all.assert_not_called()
+
+
+def test_disabled_retry_clears_aborted_intent_before_readmission(monkeypatch):
+    enabled = True
+    monkeypatch.setattr(config, 'capture_possible', lambda: enabled)
+    monkeypatch.setattr(config, 'episodes_enabled_for', lambda uid: True)
+    submit = Mock()
+    monkeypatch.setattr(capture, 'submit', submit)
+    client = StrictFirestore()
+    transaction = client.transaction()
+    aborted = store.prepare(transaction, client, 'synthetic')
+    aborted.stage([{'kind': 'member_refresh', 'cid': 'aborted', 'payload': {}}])
+    enabled = False
+    assert store.prepare(transaction, client, 'synthetic') is None
+    enabled = True
+    transaction._commit()
+    submit.assert_not_called()
+    assert client.rows == {}
