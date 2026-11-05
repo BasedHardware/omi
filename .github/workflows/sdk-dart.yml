@@ -1,0 +1,34 @@
+name: Dart Device SDK
+
+on:
+  pull_request:
+    paths:
+      - "sdks/device/dart/**"
+      - ".github/workflows/sdk-dart.yml"
+  push:
+    branches: [main]
+    paths:
+      - "sdks/device/dart/**"
+      - ".github/workflows/sdk-dart.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  dart:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: sdks/device/dart
+    steps:
+      - uses: actions/checkout@v7
+      # The Hygiene manifest runner has no Flutter toolchain, so this Flutter
+      # package runs its own suite, like sdk-cpp.yml and sdk-rust.yml.
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.44.5
+          cache: true
+      - run: flutter pub get
+      - run: flutter test
