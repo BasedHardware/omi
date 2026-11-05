@@ -543,6 +543,11 @@ overlay:
           # Graduation of the David-approved on-demand playback (DEC-BTR-004): build playback
           # artifacts on open/play/download only. Kill switch: set false.
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
+          # Read-only referral campaign preview for Nik's two accounts (#24560). Claims, attribution and
+          # grants stay off until OMI_REFERRAL_CAMPAIGN_ENABLED. Rollback: drop this key.
+          OMI_REFERRAL_CAMPAIGN_PREVIEW_UIDS:
+            value: viUv7GtdoHXbK1UBCDlPuTDuPgJ2,kiTPO8XwMlOpFpb4x1diyMg213j2
+            category: rollout
           OMI_FLAGS_FIRESTORE_PROJECT: {value: based-hardware, category: service_discovery}
           OMI_FLAGS_FIRESTORE_DATABASE: {value: omi-flags, category: service_discovery}
           OMI_FLAGS_SOURCE: {value: dual, category: rollout}

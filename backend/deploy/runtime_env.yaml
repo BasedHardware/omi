@@ -3244,6 +3244,7 @@ environments:
             ENRICHMENT_TASKS_OIDC_AUDIENCE:
               value: https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run
               category: service_auth
+            OMI_REFERRAL_CAMPAIGN_PREVIEW_UIDS: {value: 'viUv7GtdoHXbK1UBCDlPuTDuPgJ2,kiTPO8XwMlOpFpb4x1diyMg213j2', category: rollout}
             OMI_FLAGS_FIRESTORE_PROJECT:
               value: based-hardware
               category: service_discovery
