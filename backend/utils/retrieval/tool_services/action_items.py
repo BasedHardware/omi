@@ -112,8 +112,8 @@ def get_action_items_text(
                 break
             scan_offset += len(raw_page)
     except Exception as e:
-        logger.error(f"get_action_items_text error: {e}")
-        return f"Error retrieving action items: {e}"
+        logger.error(f"get_action_items_text error: {e}", exc_info=True)
+        return "Error retrieving action items. Please try again."
 
     action_items = action_items[:limit]
 
