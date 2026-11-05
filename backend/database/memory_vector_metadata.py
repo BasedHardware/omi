@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import math
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Collection, Dict, Optional, cast
@@ -16,6 +18,8 @@ from models.knowledge_ledger_search import (
     validate_ledger_kinds,
 )
 from models.product_memory import RESTRICTED_SENSITIVITY_LABELS, MemoryTier, MemoryItem
+
+logger = logging.getLogger(__name__)
 
 MEMORY_VECTOR_SCHEMA_VERSION = 1
 CANONICAL_MEMORY_PROVIDER_ID_PREFIX = "memproj"
@@ -157,8 +161,9 @@ def _is_truthy_flag(val: Any) -> bool:
     if isinstance(val, bytes):
         try:
             val = val.decode("utf-8", errors="ignore")
-        except Exception:
-            return False
+        except Exception as exc:
+            logger.error("Failed to decode bytes flag in _is_truthy_flag: %s", exc, exc_info=True)
+            raise
     if isinstance(val, str):
         return val.lower().strip() in {"true", "1", "yes"}
     return False
@@ -166,27 +171,41 @@ def _is_truthy_flag(val: Any) -> bool:
 
 def is_tombstoned_or_deleted_metadata(metadata: Any) -> bool:
     """Return True if metadata indicates a deleted, tombstoned, or purged entity."""
-    if not isinstance(metadata, dict):
+    if metadata is None:
+        return False
+
+    if not isinstance(metadata, Mapping):
         to_dict_meta = getattr(metadata, "to_dict", None)
         if callable(to_dict_meta):
             try:
                 md = to_dict_meta()
-                if isinstance(md, dict):
-                    metadata = md
-                else:
-                    return False
-            except Exception:
-                return False
-        elif metadata is not None and hasattr(metadata, "get"):
-            try:
-                metadata = dict(metadata)
-            except Exception:
-                return False
+            except Exception as exc:
+                logger.error(
+                    "Failed to extract metadata via to_dict() in is_tombstoned_or_deleted_metadata: %s",
+                    exc,
+                    exc_info=True,
+                )
+                raise
+            if isinstance(md, Mapping):
+                metadata = md
+            else:
+                logger.error(
+                    "to_dict() returned non-mapping type %s in is_tombstoned_or_deleted_metadata",
+                    type(md).__name__,
+                )
+                raise TypeError(f"Expected mapping from to_dict(), got {type(md).__name__}")
         elif hasattr(metadata, "__dict__"):
             try:
-                metadata = dict(vars(metadata))
-            except Exception:
-                return False
+                metadata = vars(metadata)
+            except Exception as exc:
+                logger.error(
+                    "Failed to extract vars(metadata) in is_tombstoned_or_deleted_metadata: %s",
+                    exc,
+                    exc_info=True,
+                )
+                raise
+        elif hasattr(metadata, "get") and callable(metadata.get):
+            pass
         else:
             return False
 
@@ -199,7 +218,8 @@ def is_tombstoned_or_deleted_metadata(metadata: Any) -> bool:
 
     return bool(
         status in {"deleted", "tombstoned", "purged", "soft_deleted", "soft-deleted", "hidden", "superseded"}
-        or redaction_status in {"deleted", "tombstoned", "purged", "soft_deleted", "soft-deleted", "payload_tombstoned", "redacted"}
+        or redaction_status
+        in {"deleted", "tombstoned", "purged", "soft_deleted", "soft-deleted", "payload_tombstoned", "redacted"}
         or source_state in {"deleted", "tombstoned", "purged", "soft_deleted", "soft-deleted", "missing"}
         or _is_truthy_flag(metadata.get("deleted"))
         or _is_truthy_flag(metadata.get("is_deleted"))
@@ -371,6 +391,7 @@ __all__ = [
     "build_ledger_memory_vector_filter",
     "build_memory_vector_metadata",
     "canonical_memory_provider_id",
+    "is_tombstoned_or_deleted_metadata",
     "parse_memory_search_vector_hit",
     "parse_search_vector_hit",
     "strip_null_metadata_values",

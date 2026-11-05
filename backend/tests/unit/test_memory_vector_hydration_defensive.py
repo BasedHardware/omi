@@ -22,6 +22,8 @@ import pytest
 from database.memory_vector_metadata import (
     ParsedMemoryVectorHit,
     ParsedVectorHit,
+    _is_truthy_flag,
+    is_tombstoned_or_deleted_metadata,
     parse_memory_search_vector_hit,
     parse_search_vector_hit,
 )
@@ -34,12 +36,14 @@ def _isolate_test_environment(monkeypatch):
     import utils.memory.read_resilience as _rr
     from tests.unit.memory_import_isolation import snapshot_sys_modules, restore_sys_modules
 
-    saved = snapshot_sys_modules([
-        "utils.retrieval.tool_services.memories",
-        "utils.retrieval.tool_services.conversations",
-        "routers.tools",
-        "routers.developer",
-    ])
+    saved = snapshot_sys_modules(
+        [
+            "utils.retrieval.tool_services.memories",
+            "utils.retrieval.tool_services.conversations",
+            "routers.tools",
+            "routers.developer",
+        ]
+    )
     yield
     restore_sys_modules(saved)
     monkeypatch.setattr(_rr, "_retry_allowance", _rr.RetryAllowance())
@@ -128,14 +132,16 @@ class TestVectorDbFindSimilarMemoriesDefensive:
             def __init__(self, matches):
                 self.matches = matches
 
-        self.mock_index.query.return_value = MockPineconeResponse([
-            None,
-            "not-a-dict",
-            MockBrokenToDict(),
-            {"id": "vec-ok", "score": 0.95, "metadata": {"memory_id": "mem-ok"}},
-            MockScoredVector("vec-obj", 0.91, {"memory_id": "mem-obj"}),
-            MockScoredVector("vec-ns", 0.89, types.SimpleNamespace(memory_id="mem-ns")),
-        ])
+        self.mock_index.query.return_value = MockPineconeResponse(
+            [
+                None,
+                "not-a-dict",
+                MockBrokenToDict(),
+                {"id": "vec-ok", "score": 0.95, "metadata": {"memory_id": "mem-ok"}},
+                MockScoredVector("vec-obj", 0.91, {"memory_id": "mem-obj"}),
+                MockScoredVector("vec-ns", 0.89, types.SimpleNamespace(memory_id="mem-ns")),
+            ]
+        )
 
         results = vector_db.find_similar_memories("uid-1", "query", threshold=0.8)
         assert len(results) == 3
@@ -144,6 +150,7 @@ class TestVectorDbFindSimilarMemoriesDefensive:
     def test_find_similar_memories_skips_tombstoned_and_deleted_vectors(self, monkeypatch):
         """Matches marked as tombstoned, deleted, redacted, or Enum status in vector metadata are skipped."""
         from models.memory_domain import MemoryRecordStatus
+
         monkeypatch.setattr(vector_db, "index", self.mock_index)
         monkeypatch.setattr(vector_db, "embeddings", self.mock_embeddings)
 
@@ -153,13 +160,29 @@ class TestVectorDbFindSimilarMemoriesDefensive:
                 {"id": "vec-tomb-2", "score": 0.98, "metadata": {"memory_id": "m-tomb-2", "status": "deleted"}},
                 {"id": "vec-tomb-3", "score": 0.97, "metadata": {"memory_id": "m-tomb-3", "tombstoned": True}},
                 {"id": "vec-tomb-4", "score": 0.96, "metadata": {"memory_id": "m-tomb-4", "deleted": True}},
-                {"id": "vec-tomb-5", "score": 0.96, "metadata": {"memory_id": "m-tomb-5", "redaction_status": "tombstoned"}},
-                {"id": "vec-tomb-enum", "score": 0.96, "metadata": {"memory_id": "m-tomb-enum", "status": MemoryRecordStatus.TOMBSTONED}},
+                {
+                    "id": "vec-tomb-5",
+                    "score": 0.96,
+                    "metadata": {"memory_id": "m-tomb-5", "redaction_status": "tombstoned"},
+                },
+                {
+                    "id": "vec-tomb-enum",
+                    "score": 0.96,
+                    "metadata": {"memory_id": "m-tomb-enum", "status": MemoryRecordStatus.TOMBSTONED},
+                },
                 {"id": "vec-tomb-upper", "score": 0.96, "metadata": {"memory_id": "m-tomb-upper", "deleted": "TRUE"}},
                 {"id": "vec-tomb-num", "score": 0.96, "metadata": {"memory_id": "m-tomb-num", "tombstoned": "1"}},
-                {"id": "vec-tomb-redact", "score": 0.96, "metadata": {"memory_id": "m-tomb-redact", "redaction_status": "redacted"}},
+                {
+                    "id": "vec-tomb-redact",
+                    "score": 0.96,
+                    "metadata": {"memory_id": "m-tomb-redact", "redaction_status": "redacted"},
+                },
                 {"id": "vec-tomb-bytes", "score": 0.96, "metadata": {"memory_id": "m-tomb-bytes", "deleted": b"true"}},
-                {"id": "vec-tomb-source", "score": 0.96, "metadata": {"memory_id": "m-tomb-source", "source_state": "tombstoned"}},
+                {
+                    "id": "vec-tomb-source",
+                    "score": 0.96,
+                    "metadata": {"memory_id": "m-tomb-source", "source_state": "tombstoned"},
+                },
                 {"id": "vec-tomb-purged", "score": 0.96, "metadata": {"memory_id": "m-tomb-purged", "purged": True}},
                 {"id": "vec-active", "score": 0.95, "metadata": {"memory_id": "m-active", "status": "active"}},
             ]
@@ -224,6 +247,7 @@ class TestMemoryVectorMetadataDefensive:
     def test_parse_search_vector_hit_tombstone_metadata_fails_closed(self):
         """Vectors carrying tombstone, deletion, redacted markers, or NaN scores fail closed."""
         from models.memory_domain import MemoryRecordStatus
+
         metadata = {
             "memory_schema_version": 1,
             "memory_id": "m1",
@@ -292,6 +316,84 @@ class TestMemoryVectorMetadataDefensive:
         assert res_nan.decision == SearchDecision.stale_vector
         assert res_nan.hit is None
 
+    def test_is_tombstoned_or_deleted_metadata_broken_to_dict_raises_and_logs(self, caplog):
+        """When an object has a failing to_dict(), failures are not swallowed into False; error is logged and raised."""
+
+        class FailingToDict:
+            def to_dict(self):
+                raise RuntimeError("failing to_dict call")
+
+        with caplog.at_level("ERROR"):
+            with pytest.raises(RuntimeError, match="failing to_dict call"):
+                is_tombstoned_or_deleted_metadata(FailingToDict())
+
+        assert "Failed to extract metadata via to_dict()" in caplog.text
+
+    def test_is_tombstoned_or_deleted_metadata_invalid_to_dict_return_type_raises_type_error(self, caplog):
+        """When to_dict() returns a non-mapping, a TypeError is logged and raised."""
+
+        class NonMappingToDict:
+            def to_dict(self):
+                return "not a mapping"
+
+        with caplog.at_level("ERROR"):
+            with pytest.raises(TypeError, match=r"Expected mapping from to_dict\(\), got str"):
+                is_tombstoned_or_deleted_metadata(NonMappingToDict())
+
+        assert "to_dict() returned non-mapping type str" in caplog.text
+
+    def test_is_tombstoned_or_deleted_metadata_failing_vars_raises_and_logs(self, monkeypatch, caplog):
+        """When extracting vars(metadata) raises an exception, it is not swallowed; error is logged and raised."""
+        obj = types.SimpleNamespace(status="active")
+
+        def mock_vars(_):
+            raise TypeError("failing vars extraction")
+
+        import database.memory_vector_metadata as mvm
+
+        monkeypatch.setattr(mvm, "vars", mock_vars, raising=False)
+
+        with caplog.at_level("ERROR"):
+            with pytest.raises(TypeError, match="failing vars extraction"):
+                is_tombstoned_or_deleted_metadata(obj)
+
+        assert "Failed to extract vars(metadata)" in caplog.text
+
+    def test_is_tombstoned_or_deleted_metadata_handles_none_primitives_mappings(self):
+        """None and primitives return False; mappings and SimpleNamespaces detect tombstone status."""
+        assert is_tombstoned_or_deleted_metadata(None) is False
+        assert is_tombstoned_or_deleted_metadata(123) is False
+        assert is_tombstoned_or_deleted_metadata("active") is False
+        assert is_tombstoned_or_deleted_metadata([]) is False
+
+        # SimpleNamespace with status
+        ns_active = types.SimpleNamespace(status="active")
+        assert is_tombstoned_or_deleted_metadata(ns_active) is False
+        ns_tomb = types.SimpleNamespace(status="tombstoned")
+        assert is_tombstoned_or_deleted_metadata(ns_tomb) is True
+
+        # Custom mapping
+        class CustomMapping(dict):
+            pass
+
+        cm_active = CustomMapping(status="active")
+        assert is_tombstoned_or_deleted_metadata(cm_active) is False
+        cm_del = CustomMapping(deleted=True)
+        assert is_tombstoned_or_deleted_metadata(cm_del) is True
+
+    def test_is_truthy_flag_failing_decode_raises_and_logs(self, caplog):
+        """When a bytes flag raises an exception during decode, failure is not swallowed into False; it is logged and raised."""
+
+        class BrokenBytes(bytes):
+            def decode(self, *args, **kwargs):
+                raise UnicodeDecodeError("utf-8", b"\xff", 0, 1, "custom decode failure")
+
+        with caplog.at_level("ERROR"):
+            with pytest.raises(UnicodeDecodeError):
+                _is_truthy_flag(BrokenBytes(b"test"))
+
+        assert "Failed to decode bytes flag in _is_truthy_flag" in caplog.text
+
 
 # ===========================================================================
 # 3. _legacy_search_memories defensive hydration
@@ -301,6 +403,7 @@ class TestLegacySearchMemoriesDefensive:
         """When Firestore returns None or tombstoned dicts for stale IDs, fail closed gracefully."""
         from models.memory_domain import MemoryRecordStatus
         from utils.memory.memory_service import _memory_ids_and_scores
+
         # Verify _memory_ids_and_scores handles None and non-iterable gracefully
         assert _memory_ids_and_scores(None) == ([], {})  # type: ignore[arg-type]
         assert _memory_ids_and_scores("invalid") == ([], {})  # type: ignore[arg-type]
@@ -328,7 +431,13 @@ class TestLegacySearchMemoriesDefensive:
                 {"id": "mem-enum", "status": MemoryRecordStatus.TOMBSTONED, "content": "dead", "is_locked": False},
                 {"id": "mem-upper-del", "status": "active", "deleted": "TRUE", "content": "dead", "is_locked": False},
                 {"id": "mem-bytes-del", "status": "active", "deleted": b"true", "content": "dead", "is_locked": False},
-                {"id": "mem-source-state", "status": "active", "source_state": "tombstoned", "content": "dead", "is_locked": False},
+                {
+                    "id": "mem-source-state",
+                    "status": "active",
+                    "source_state": "tombstoned",
+                    "content": "dead",
+                    "is_locked": False,
+                },
                 {"id": "mem-purged", "status": "active", "purged": True, "content": "dead", "is_locked": False},
                 {
                     "id": "mem-active",
@@ -345,6 +454,7 @@ class TestLegacySearchMemoriesDefensive:
         monkeypatch.setattr("utils.memory.memory_service.memories_db.get_memories_by_ids", fake_get_memories_by_ids)
 
         from utils.memory.memory_service import _legacy_search_memories
+
         results = _legacy_search_memories("uid-1", "query", limit=5)
         assert len(results) == 1
         assert results[0].memory.id == "mem-active"
@@ -358,6 +468,7 @@ class TestSearchMemoriesTextDefensive:
     def test_search_memories_text_handles_string_category(self, monkeypatch):
         """String category does not crash with AttributeError: 'str' object has no attribute 'value'."""
         import utils.retrieval.tool_services.memories as tool_memories_svc
+
         mock_service_cls = MagicMock()
         mock_service = MagicMock()
         mock_service_cls.return_value = mock_service
@@ -407,6 +518,7 @@ class TestSearchMemoriesTextDefensive:
     def test_search_memories_text_handles_none_category_and_none_score(self, monkeypatch):
         """None category, whitespace category, and None or NaN score do not crash formatting."""
         import utils.retrieval.tool_services.memories as tool_memories_svc
+
         mock_service_cls = MagicMock()
         mock_service = MagicMock()
         mock_service_cls.return_value = mock_service
@@ -448,6 +560,7 @@ class TestSearchMemoriesTextDefensive:
     def test_search_memories_text_handles_none_match_or_memory(self, monkeypatch):
         """Matches that are None or have None memory fail closed gracefully."""
         import utils.retrieval.tool_services.memories as tool_memories_svc
+
         mock_service_cls = MagicMock()
         mock_service = MagicMock()
         mock_service_cls.return_value = mock_service
@@ -514,6 +627,7 @@ class TestFastApiEndpointDefensive:
         )
         mock_service.search.return_value = [match]
         import utils.retrieval.tool_services.memories as tool_memories_svc
+
         monkeypatch.setattr(tool_memories_svc, "MemoryService", mock_service_cls)
 
         client = TestClient(app)
@@ -598,4 +712,3 @@ class TestFastApiEndpointDefensive:
         assert data["items"][2]["id"] == "mem-dev-3"
         assert data["items"][2]["category"] == "interesting"
         assert data["items"][2]["relevance_score"] == 0.75
-
