@@ -89,7 +89,7 @@ Future<ApiResult<TaskConversationPage>> getConversationsWithTasks({
             if (row is! Map<String, dynamic>) throw const FormatException('Invalid conversation row');
             rows.add(ServerConversation.fromJson(row));
           }
-        } catch (_) {
+        } on TypeError {
           throw const FormatException('Invalid conversation row');
         }
         return TaskConversationPage(

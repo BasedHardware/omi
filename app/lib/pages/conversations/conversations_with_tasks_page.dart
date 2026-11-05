@@ -262,35 +262,40 @@ class _ConversationsWithTasksPageState extends State<ConversationsWithTasksPage>
                   ]),
             ])),
         Expanded(
-            child: ListView(
+            child: ListView.builder(
           key: const PageStorageKey('task_conversation_results'),
-          children: [
-            for (var i = 0; i < _rows.length; i++)
-              ConversationListItem(
-                key: ValueKey('task_conversation_${_rows[i].id}'),
-                conversation: _rows[i],
-                date: _rows[i].createdAt,
-                conversationIdx: i,
+          itemCount: _rows.length + 1,
+          itemBuilder: (context, index) {
+            if (index < _rows.length) {
+              final row = _rows[index];
+              return ConversationListItem(
+                key: ValueKey('task_conversation_${row.id}'),
+                conversation: row,
+                date: row.createdAt,
+                conversationIdx: index,
                 allowSelection: false,
                 hasLinkedTasks: true,
-              ),
-            if (_loading) const Padding(padding: EdgeInsets.all(OmiSpacing.lg), child: Center(child: OmiSpinner())),
-            if (_failed)
-              Padding(
-                  padding: const EdgeInsets.all(OmiSpacing.md),
-                  child: Column(children: [
-                    Text(l10n.tryAgain),
-                    TextButton(
-                        key: const ValueKey('tasks_filter_retry'),
-                        onPressed: () => _load(reset: _retryReset),
-                        child: Text(l10n.retry)),
-                  ])),
-            if (!_loading && !_failed && _rows.isEmpty && _cursor == null)
-              OmiEmptyState(icon: Icons.checklist_rounded, title: l10n.noResultsFound),
-            if (!_loading && !_failed && _cursor != null)
-              TextButton(
-                  key: const ValueKey('tasks_filter_more'), onPressed: () => _load(), child: Text(l10n.showMore)),
-          ],
+              );
+            }
+            return Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              if (_loading) const Padding(padding: EdgeInsets.all(OmiSpacing.lg), child: Center(child: OmiSpinner())),
+              if (_failed)
+                Padding(
+                    padding: const EdgeInsets.all(OmiSpacing.md),
+                    child: Column(children: [
+                      Text(l10n.tryAgain),
+                      TextButton(
+                          key: const ValueKey('tasks_filter_retry'),
+                          onPressed: () => _load(reset: _retryReset),
+                          child: Text(l10n.retry)),
+                    ])),
+              if (!_loading && !_failed && _rows.isEmpty && _cursor == null)
+                OmiEmptyState(icon: Icons.checklist_rounded, title: l10n.noResultsFound),
+              if (!_loading && !_failed && _cursor != null)
+                TextButton(
+                    key: const ValueKey('tasks_filter_more'), onPressed: () => _load(), child: Text(l10n.showMore)),
+            ]);
+          },
         )),
       ]),
     );
