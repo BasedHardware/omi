@@ -1,7 +1,9 @@
 # Serving custody and all-runtime rollback validation (2026-11-05)
 
 Round 10 on `lane/spkfix`, starting from `bb0b40c724db` on
-`origin/main` `9ad243c066ac`. All data were synthetic and all checks local.
+`origin/main` `9ad243c066ac`. Final implementation: `c033c7716934`, rebased onto
+fetched main `747ccc9ddcd4`. Post-rebase: **1,185 focused cases and all 55
+selected manifest/preflight checks passed**. All data were synthetic and all checks local.
 GCP tier: none. No production/account reads, deployment, push or PR.
 Private untracked owner-lab helpers were excluded from staging.
 
@@ -126,14 +128,63 @@ OMI_PR_BODY_FILE=/Volumes/Ephemeral/scratch/spkfix/round10-pr-body.md make prefl
 ```
 
 Preflight development runs: the initial inventory drift was regenerated. A
-parallel 53-check repeat passed 52 checks but the Firestore query file hit its
-300-second wall timeout at 96%. No assertion failure was reported. A serial
+parallel repeat stopped when the Firestore query file hit its
+300-second wall timeout at 96%. Checks stop on the first failure; this was not
+52 completed checks. No assertion failure was reported. A serial
 repeat retained the same time limits and passed the seven-file Firestore guard
 in 209 seconds (the query file took 130 seconds), plus the flag registry and its
 fixtures. Its line-count ratchet then found a synthetic GMP merge conflict:
 the shared `origin/main` ref had moved after preflight selected `9ad243c066ac`.
-The implementation is committed before fetching/rebasing; post-rebase results
-will be recorded in the follow-up validation update.
+The implementation was committed before fetching/rebasing; its post-rebase
+results follow. A later deployment-boundary check required classifying the newly
+bound existing kill switch as `config` (non-secret). That catalog entry is
+included in the final complete 55-check run below.
+
+## Post-rebase gate
+
+Fetched main `747ccc9ddcd4` and rebased all lane commits. The implementation
+commit changed from `e4e1e96de8cc` to `c033c7716934`; none was amended or pushed.
+Only GMP required conflict resolution. Its keep regex retains main's
+`finalization_pair_.*` / `enrichment_summary_repair_.*` families and the branch's
+final-pass counters, durable terminal count/freshness, unit-skip counter and
+complete agreement/latency/owner-delta histogram families. A read-only regex
+comparison retained all 195 previously admitted inventory/probe metric names
+from either source plus every final-pass `_bucket`, `_sum`, `_count` suffix.
+
+The exact focused commands above were rerun on the rebased implementation:
+
+| Command group | Post-rebase result |
+| --- | --- |
+| First nine-file serving/custody command (now including all ten direct tests) | 414 passed |
+| Twenty-file reconstruction/lifecycle/resources/privacy command | 758 passed |
+| Isolated worker/chart command | 13 passed |
+| Total focused cases | 1,185 passed |
+
+After adding the deployment-setting catalog entry, its real validator passed:
+
+```bash
+backend/.venv/bin/python .github/scripts/check_deployment_secret_boundary.py \
+  --base 747ccc9ddcd4b36caa86ae052084d09152b26982
+```
+
+The complete preflight manifest then passed **55 checks**, with no skipped failure.
+This uses the same check runner as `make preflight`, retaining all selected
+checks and time limits. The base is pinned to the fetched SHA because another
+worktree can update the shared `origin/main` ref during validation. `--keep-going`
+reports every check instead of cancelling peers at the first failure.
+
+```bash
+OMI_CHECKS_JOBS=2 BACKEND_PYTEST_WORKERS=1 OMI_PREFLIGHT_BACKGROUND=0 \
+  backend/.venv/bin/python .github/scripts/run_checks.py \
+  --lane local --base 747ccc9ddcd4b36caa86ae052084d09152b26982 \
+  --keep-going --pr-body-file /Volumes/Ephemeral/scratch/spkfix/round10-pr-body.md
+```
+
+Pusher source/dependency closure passed in the preflight. A separate import-graph
+assertion confirmed `utils.conversations.final_pass_retry` is reachable in both
+role/legacy Pusher images and absent from the GPU batch-pipeline worker closure.
+The actual finalization route fixture retains its run lock and checks that direct
+speaker settlement follows canonical completion through `process_conversation`.
 
 ## Practical limits
 
