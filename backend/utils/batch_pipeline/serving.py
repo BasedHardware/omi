@@ -380,13 +380,16 @@ def start_serving_from_env():
             sweeps = owners_requested = 0
             try:
                 service = await run_blocking(sync_executor, serving_for_stage, current_stage())
+                projector = service.projector
+                if projector is None:
+                    raise RuntimeError('projection pump requires a projector')
                 for _ in range(projection_pump_sweep_pages()):
-                    await run_blocking(sync_executor, service.projector.sweep)
+                    await run_blocking(sync_executor, projector.sweep)
                     sweeps += 1
-                if service.projector.owes_drains:
-                    with service.projector.handoff:
-                        owners_requested = len(service.projector.drain_requests)
-                    service.projector.start_drains()
+                if projector.owes_drains:
+                    with projector.handoff:
+                        owners_requested = len(projector.drain_requests)
+                    projector.start_drains()
             except Exception as error:
                 logging.getLogger(__name__).error(
                     'event=batch_projection_pump outcome=retry exception_type=%s', type(error).__name__
