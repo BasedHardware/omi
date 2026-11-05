@@ -3,6 +3,9 @@
 import asyncio
 import logging
 import threading
+import gc
+import weakref
+from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
@@ -12,6 +15,8 @@ from tests.unit.test_record_audio_seal import records, PATH
 from tests.unit.test_pusher_audio_timeline import env
 from utils import executors, pusher_record_barrier as barriers, pusher_record_finish as finish
 from utils.batch_pipeline.record_producer_proof import producer_tokens_dead
+from config import pusher_record
+import routers.pusher as pusher
 
 
 @pytest.mark.parametrize(
@@ -250,3 +255,187 @@ async def test_inherited_pending_clear_never_abandons_another_sockets_running_wr
         release.set()
         later_task.cancel()
         await asyncio.gather(old_task, later_task, *owners, return_exceptions=True)
+
+
+@pytest.mark.parametrize('value,abandon,workers', [(None, 4, 4), ('bad', 4, 4), ('0', 0, 1), ('999', 16, 8)])
+def test_overflow_and_storage_bounds_are_conservative_and_clamped(monkeypatch, value, abandon, workers):
+    for name in ('PUSHER_MAX_ABANDON_RECORD_DRAINS', 'PUSHER_RECORD_STORAGE_WORKERS'):
+        if value is None:
+            monkeypatch.delenv(name, raising=False)
+        else:
+            monkeypatch.setenv(name, value)
+    assert pusher_record.abandon_record_drain_cap() == abandon
+    assert pusher_record.record_storage_workers() == workers
+
+
+class TrackedPcm(bytearray):
+    """Weak-referenceable PCM whose slices keep the same observable type."""
+
+    references = []
+
+    def __init__(self, value):
+        super().__init__(value)
+        self.references.append(weakref.ref(self))
+
+    def __getitem__(self, key):
+        value = super().__getitem__(key)
+        return type(self)(value) if isinstance(key, slice) else value
+
+
+def projection_ref():
+    return SimpleNamespace(
+        samples=160, offset_samples=0, start=100, sample_rate=16000, frames=(), receipt=SimpleNamespace(samples=160)
+    )
+
+
+async def test_stalled_storage_bounds_overflow_coordinators_and_actual_pcm_work(records, monkeypatch, caplog):
+    """More closures than both caps: waiters hold receipts, not queued PCM."""
+    workers, cap, count = 2, 1, 8
+    pool = executors.MonitoredThreadPoolExecutor(
+        name='test_record_stall', max_workers=workers, max_queue_size=0, log_saturation=False
+    )
+    monkeypatch.setattr(finish, 'MAX_CLOSED_RECORD_DRAINS', 1)
+    monkeypatch.setattr(finish, 'MAX_ABANDON_RECORD_DRAINS', cap)
+    monkeypatch.setattr(TrackedPcm, 'references', [])
+    entered, release = asyncio.Event(), threading.Event()
+    loop = asyncio.get_running_loop()
+    lock = threading.Lock()
+    materialized = 0
+    owners, tasks, trackers, barriers_ = [], [], [], []
+    start = finish.start_background_task
+
+    def track(coro, **kwargs):
+        task = start(coro, **kwargs)
+        owners.append(task)
+        return task
+
+    def hydrate(*args):
+        nonlocal materialized
+        with lock:
+            materialized += 1
+        return TrackedPcm(b'\x01\x00' * 160)
+
+    def stalled_upload(*args, **kwargs):
+        with lock:
+            if materialized == workers:
+                loop.call_soon_threadsafe(entered.set)
+        assert release.wait(15)
+        return []
+
+    monkeypatch.setattr(pusher, 'read_pcm', hydrate)
+    monkeypatch.setattr(pusher, 'upload_audio_chunks_batch', stalled_upload)
+    monkeypatch.setattr(finish, 'start_background_task', track)
+    projection = SimpleNamespace(refresh=lambda *a, **kw: True)
+    try:
+        for _ in range(count):
+            barrier = barriers.PusherRecordBarrier('uid-at')
+            await barrier.begin_recording('record')
+            barriers_.append(barrier)
+            tracker = executors.ExecutorFutureTracker(
+                pool,
+                executor_overrides={executors.storage_executor: pool},
+                receipt_only_functions=(pusher._project_durable_refs,),
+            )
+            trackers.append(tracker)
+            with tracker.scope():
+                tasks.append(
+                    asyncio.create_task(
+                        executors.run_blocking(
+                            executors.storage_executor,
+                            pusher._project_durable_refs,
+                            [projection_ref()],
+                            'uid-at',
+                            'record',
+                            None,
+                            16000,
+                            True,
+                            True,
+                            projection,
+                        )
+                    )
+                )
+        await asyncio.wait_for(entered.wait(), 5)
+        assert finish.retain_closed_record_drain(tasks[0])
+        with caplog.at_level(logging.INFO, logger=finish.__name__):
+            for task, barrier, tracker in zip(tasks[1:], barriers_[1:], trackers[1:]):
+                # A durable-tail hold can mark this hint recoverable even while
+                # a derivative upload is in flight. Refusal must fence it too.
+                barrier.hold_recording('record', tail_committed=True)
+                assert not finish.retain_closed_record_drain(
+                    task, on_capacity=lambda t=task, b=barrier, f=tracker: finish.abandon_evicted_record_drain(t, b, f)
+                )
+                task.cancel()
+            await asyncio.gather(*tasks[1:], return_exceptions=True)
+            await asyncio.sleep(0)
+        assert len(finish._abandon_record_drains) == cap
+        assert len(owners) == 2  # One retained owner, one admitted abandon owner.
+        assert sum('outcome=abandon_overflow' in r.message for r in caplog.records) == count - 2
+        assert materialized == workers
+        assert pool.active_count == workers and pool._work_queue.qsize() == 0
+        assert sum(ref() is not None for ref in TrackedPcm.references) == workers
+        assert all(not tracker.pending for tracker in trackers[workers:])
+        sessions = records.rows[PATH]['record_upload_sessions']
+        assert len(sessions) == count and all('abandoned_at' not in value for value in sessions.values())
+        registry = barriers._process_record_tokens()
+        assert all(b.upload_sessions['record'] not in registry.tokens[('uid-at', 'record')][1] for b in barriers_[2:])
+        # Reconnect can finish its own token, but cannot certify an overflow
+        # producer whose real storage future is still blocked.
+        later = barriers.PusherRecordBarrier('uid-at')
+        await later.begin_recording('record')
+        assert await later.finish_recording('record')
+        assert len(records.rows[PATH]['record_upload_sessions']) == count
+        assert not records.rows[PATH]['record_audio_closed']
+        assert tracker.pending or trackers[1].pending  # GCS still stalled.
+        # PCM-bearing custody calls fail immediately, never join a waiter/queue.
+        with trackers[-1].scope(), pytest.raises(executors.ExecutorSaturatedError):
+            await executors.run_blocking(executors.storage_executor, lambda pcm: None, bytearray(320))
+        assert pool._work_queue.qsize() == 0 and materialized == workers
+        release.set()
+        await asyncio.wait_for(asyncio.gather(tasks[0], *owners), 5)
+        await asyncio.sleep(0)
+        assert not finish._abandon_record_drains
+        assert pool.active_count == 0
+        sessions = records.rows[PATH]['record_upload_sessions']
+        assert sum('abandoned_at' in value for value in sessions.values()) == cap
+        assert all('abandoned_at' not in sessions[b.upload_sessions['record']] for b in barriers_[2:])
+        gc.collect()
+        assert not any(ref() is not None for ref in TrackedPcm.references)
+        # Coordinator capacity can be reused after completion.
+        extra = asyncio.create_task(asyncio.Event().wait())
+        tasks.append(extra)
+        assert finish.abandon_evicted_record_drain(extra, barriers_[2], executors.ExecutorFutureTracker())
+        extra.cancel()
+        await asyncio.gather(extra, return_exceptions=True)
+        await asyncio.wait_for(owners[-1], 5)
+    finally:
+        release.set()
+        for task in tasks + owners:
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(*tasks, *owners, return_exceptions=True)
+        pool.shutdown(wait=True, cancel_futures=True)
+
+
+def test_projection_error_traceback_does_not_retain_pcm(monkeypatch):
+    monkeypatch.setattr(TrackedPcm, 'references', [])
+    monkeypatch.setattr(pusher, 'read_pcm', lambda *a: TrackedPcm(b'\x01\x00' * 160))
+
+    def failed(chunks, *args, **kwargs):
+        raise OSError('synthetic storage refusal')
+
+    monkeypatch.setattr(pusher, 'upload_audio_chunks_batch', failed)
+    with pytest.raises(OSError) as error:
+        pusher._project_durable_refs([projection_ref()], 'uid-at', 'record', None, 16000, True, True, None)
+    assert error.value.__traceback__  # Keep the failure alive, as metadata retries would.
+    gc.collect()
+    assert not any(ref() is not None for ref in TrackedPcm.references)
+
+
+def test_projection_admission_checks_full_source_and_batch_size_before_read(monkeypatch):
+    read = Mock(side_effect=AssertionError('PCM hydrated before size admission'))
+    monkeypatch.setattr(pusher, 'read_pcm', read)
+    ref = projection_ref()
+    ref.receipt.samples = pusher.BUFFERED_AUDIO_MAX_BYTES // 2 + 1
+    with pytest.raises(ValueError, match='PCM batch budget'):
+        pusher._project_durable_refs([ref], 'uid-at', 'record', None, 16000, True, True, None)
+    read.assert_not_called()

@@ -351,7 +351,9 @@ STATES = (
             'transitions only the evicted socket\'s owned tokens to abandoned, after its worker and all executor '
             'futures settle (utils/pusher_record_finish.py:abandon_evicted_record_drain; '
             'utils/pusher_record_barrier.py:PusherRecordBarrier.abandon_recordings). '
-            'The kill switch can disable this conditional exit; live tokens never expire by age. '
+            'The kill switch can disable this conditional exit. When bounded abandon admission is full, '
+            'outcome=abandon_overflow leaves the token capturing/fenced with no new coordinator; '
+            'the existing process/pod-death repair proof remains its exit. Live tokens never expire by age. '
             'Dwell visibility remains required',
         ),
         row(

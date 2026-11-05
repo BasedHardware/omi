@@ -220,6 +220,7 @@ def test_get_executor_metrics_returns_all_pools():
         'postprocess',
         'cleanup',
         'storage',
+        'pusher_record_storage',
         'speaker_tag_verify',
         'cimd',
         'open_loops',

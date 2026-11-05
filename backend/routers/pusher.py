@@ -13,6 +13,7 @@ import os
 import struct
 import asyncio
 import time
+import traceback
 import uuid
 from contextlib import ExitStack
 from grpc import StatusCode
@@ -73,6 +74,7 @@ from utils.executors import (
     db_executor,
     storage_executor,
     record_barrier_executor,
+    pusher_record_storage_executor,
     run_blocking,
     start_background_task,
     ExecutorFutureTracker,
@@ -328,6 +330,73 @@ async def _commit_durable_audio_window(
     return receipt
 
 
+def _project_durable_refs(
+    refs, uid, conv_id, cached_protection_level, sample_rate, audio_timeline_v2, force, audio_projection
+):
+    """One admitted batch leaf: receipts enter; PCM never escapes into a waiter.
+
+    The zero-queue recording pool admits this function before the first read.
+    Its real executor future owns the slot through upload/refresh settlement,
+    including cancellation. Bound both hydrated batch and full source window.
+    """
+    if sum(ref.samples * 2 for ref in refs) > BUFFERED_AUDIO_MAX_BYTES or any(
+        ref.receipt.samples * 2 > BUFFERED_AUDIO_MAX_BYTES for ref in refs
+    ):
+        raise ValueError('durable projection exceeds PCM batch budget')
+    chunk: Dict[str, Any] | None = None
+    chunks = []
+    try:
+        for ref in refs:
+            pcm = read_pcm(uid, ref.receipt)
+            pcm = pcm[ref.offset_samples * 2 : (ref.offset_samples + ref.samples) * 2]
+            if len(pcm) != ref.samples * 2:
+                raise ValueError('durable projection sample range is incomplete')
+            chunk = {'data': pcm, 'timestamp': ref.start}
+            if ref.frames:
+                chunk['custody_receipt'] = ref.receipt.to_dict()
+            if audio_timeline_v2:
+                chunk['span'] = {
+                    'start': ref.start,
+                    'samples': ref.samples,
+                    'sample_rate': ref.sample_rate,
+                }
+            chunks.append(chunk)
+        if not audio_timeline_v2:
+            # Legacy headers are last-arrival-minus-duration estimates,
+            # not capture positions. Preserve the old continuous batch
+            # and its first timestamp; jitter cannot create v2 spans.
+            chunks = [{'data': b''.join(chunk['data'] for chunk in chunks), 'timestamp': refs[0].start}]
+        uploaded_paths = upload_audio_chunks_batch(
+            chunks,
+            uid,
+            conv_id,
+            cached_protection_level,
+            sample_rate=sample_rate,
+        )
+        OMI_AUDIO_TIMELINE_CHUNKS_WRITTEN_TOTAL.labels(
+            reason='with_spans' if audio_timeline_v2 else 'without_spans'
+        ).inc()
+        applied = audio_projection.refresh(
+            conv_id,
+            uploaded_paths,
+            force=force,
+        )
+        return applied
+    except BaseException as error:
+        # Error futures/async retry handlers must not retain a completed leaf's
+        # PCM in traceback locals after its executor slot has been recycled.
+        seen = set()
+        current = error
+        while current is not None and id(current) not in seen:
+            seen.add(id(current))
+            traceback.clear_frames(current.__traceback__)
+            current = current.__cause__ or current.__context__
+        raise
+    finally:
+        chunks = []
+        pcm = chunk = None
+
+
 async def _websocket_util_trigger(
     websocket: WebSocket,
     uid: str,
@@ -445,7 +514,12 @@ async def _run_websocket_util_trigger(
     audio_budget = ByteBudget(BUFFERED_AUDIO_MAX_BYTES)
     durable_audio = audio_outbox_enabled()
     log_closed_record_drain_cap()
-    record_futures = ExecutorFutureTracker(storage_executor, record_barrier_executor)
+    record_futures = ExecutorFutureTracker(
+        pusher_record_storage_executor if durable_audio else storage_executor,
+        record_barrier_executor,
+        executor_overrides={storage_executor: pusher_record_storage_executor} if durable_audio else None,
+        receipt_only_functions=(_project_durable_refs,) if durable_audio else (),
+    )
     framed_audio = durable_audio and audio_timeline_v2 and sample_rate == 16000 and framed_pack(uid)
     # The bounded lane holds generation-pinned references, never the only PCM.
     # A crash after commit but before queue.put is recoverable via raw-live's
@@ -477,45 +551,17 @@ async def _run_websocket_util_trigger(
                 return
 
             try:
-                chunks: List[Dict[str, Any]] = []
-                for ref in refs:
-                    pcm = await run_blocking(storage_executor, read_pcm, uid, ref.receipt)
-                    pcm = pcm[ref.offset_samples * 2 : (ref.offset_samples + ref.samples) * 2]
-                    if len(pcm) != ref.samples * 2:
-                        raise ValueError('durable projection sample range is incomplete')
-                    chunk: Dict[str, Any] = {'data': pcm, 'timestamp': ref.start}
-                    if ref.frames:
-                        chunk['custody_receipt'] = ref.receipt.to_dict()
-                    if audio_timeline_v2:
-                        chunk['span'] = {
-                            'start': ref.start,
-                            'samples': ref.samples,
-                            'sample_rate': ref.sample_rate,
-                        }
-                    chunks.append(chunk)
-                if not audio_timeline_v2:
-                    # Legacy headers are last-arrival-minus-duration estimates,
-                    # not capture positions. Preserve the old continuous batch
-                    # and its first timestamp; jitter cannot create v2 spans.
-                    chunks = [{'data': b''.join(chunk['data'] for chunk in chunks), 'timestamp': refs[0].start}]
-                uploaded_paths = await run_blocking(
+                applied = await run_blocking(
                     storage_executor,
-                    upload_audio_chunks_batch,
-                    chunks,
+                    _project_durable_refs,
+                    refs,
                     uid,
                     conv_id,
                     cached_protection_level,
-                    sample_rate=sample_rate,
-                )
-                OMI_AUDIO_TIMELINE_CHUNKS_WRITTEN_TOTAL.labels(
-                    reason='with_spans' if audio_timeline_v2 else 'without_spans'
-                ).inc()
-                applied = await run_blocking(
-                    storage_executor,
-                    audio_projection.refresh,
-                    conv_id,
-                    uploaded_paths,
-                    force=not websocket_active or conv_id in record_close_requests,
+                    sample_rate,
+                    audio_timeline_v2,
+                    not websocket_active or conv_id in record_close_requests,
+                    audio_projection,
                 )
                 if applied:
                     schedule_person_voice_learning_retry(uid, conv_id)

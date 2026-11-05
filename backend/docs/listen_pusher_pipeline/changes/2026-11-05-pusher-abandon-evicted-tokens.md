@@ -4,7 +4,7 @@ lead2 ruling `88ba4d`: one PR, pusher train only. See the
 [closed-drain contract](../../listen_pusher_pipeline.mdx#8-websocket-task-supervision).
 
 A cancelled closed worker previously left a live-process producer token pending
-until pod death. Capacity eviction now forgets its recovery hint, waits for the
+until pod death. An admitted capacity eviction now forgets its recovery hint, waits for the
 worker and actual storage/barrier futures (including deadline-expired metadata),
 and marks each exact remaining owned token `abandoned_at`. Inherited pending clears from another socket stay fenced until their own producer settles; a different socket cannot attest their stoppage. This never certifies a
 projected tail. Seal repair retains its archive-required listing, finish/tail
@@ -29,3 +29,21 @@ Regression coverage exercises real pusher WebSocket cleanup with held upload
 and projection threads, raw receipt readback, registration-response cancellation,
 deadline-expired metadata, idempotent exact-token transactions, reconnects,
 admission retry, the kill switch and missing-tail seal refusal.
+
+Luna FIX-FIRST follow-up: overflow owners are bounded independently by
+`PUSHER_MAX_ABANDON_RECORD_DRAINS` (default/prod 4, clamp 0..16). Full admission
+starts no coordinator and logs `abandon_overflow`; the old durable token stays fenced
+for process/pod-death repair. Refusal removes its local recovery hint so a later
+successful producer cannot clear it while its storage future is still running. A separate `PUSHER_RECORD_STORAGE_WORKERS` pool
+(default/prod 4, clamp 1..8) admits at most four actual storage submissions,
+including cancelled callers' unfinished work. Projection waiters hold receipts;
+PCM hydration/upload/refresh happens inside the admitted leaf. Custody refuses
+saturation before ACK, preserving client WAL custody. No extra admission queue
+can accumulate PCM while GCS stalls. Completion makes both bounds reusable.
+
+The canonical PCM allowance is `4 * 20 MiB = 80 MiB`; the runbook reserves an
+unmeasured eightfold planning allowance of 640 MiB for transient copies/codecs.
+This bounds detached recording work, not live ingress or total pod RSS. Retain
+the canary memory gate and watch `abandon_overflow` as well as prior outcomes.
+The lifecycle table keeps refused overflow in capturing, with the old exit;
+abandoned dwell/deadline/alert gaps remain strict expected failures.

@@ -1864,8 +1864,9 @@ async def test_closed_drain_capacity_and_early_shutdown_keep_tokens(inline_sessi
 @pytest.mark.asyncio
 @pytest.mark.parametrize('stage', ['upload', 'projection'])
 @pytest.mark.parametrize('kill_switch', ['on', 'off'])
+@pytest.mark.parametrize('abandon_cap', [0, 4])
 async def test_capacity_eviction_abandons_after_late_io_and_preserves_raw_custody(
-    inline_session, monkeypatch, stage, kill_switch
+    inline_session, monkeypatch, stage, kill_switch, abandon_cap
 ):
     client, path, barrier, projected = inline_session
     entered = asyncio.Event()
@@ -1877,6 +1878,7 @@ async def test_capacity_eviction_abandons_after_late_io_and_preserves_raw_custod
     payload = b'\x01\x00' * 160
 
     def late_io(*args, **kwargs):
+        assert threading.current_thread().name.startswith('pusher-record-storage')
         loop.call_soon_threadsafe(entered.set)
         assert release.wait(10)
         writes.append(stage)
@@ -1889,6 +1891,7 @@ async def test_capacity_eviction_abandons_after_late_io_and_preserves_raw_custod
 
     monkeypatch.setattr(finish_module, 'start_background_task', track)
     monkeypatch.setattr(finish_module, 'MAX_CLOSED_RECORD_DRAINS', 0)
+    monkeypatch.setattr(finish_module, 'MAX_ABANDON_RECORD_DRAINS', abandon_cap)
     monkeypatch.setenv('PUSHER_ABANDON_EVICTED_TOKENS', kill_switch)
     monkeypatch.setattr(pusher, 'RECORD_INLINE_FINISH_TIMEOUT', 0.01)
     monkeypatch.setattr(pusher, 'BG_DRAIN_TIMEOUT', 0.01)
@@ -1909,7 +1912,7 @@ async def test_capacity_eviction_abandons_after_late_io_and_preserves_raw_custod
         receipts = _sent_receipts(sock)
         assert receipts and b''.join(read_pcm('owner', receipt) for receipt in receipts) == payload
         release.set()
-        if kill_switch == 'on':
+        if kill_switch == 'on' and abandon_cap:
             await asyncio.wait_for(asyncio.gather(*owners), 5)
             assert 'abandoned_at' in client.rows[path]['record_upload_sessions'][token]
             assert not barrier_module._process_record_tokens().tokens

@@ -863,7 +863,9 @@ and an explicit empty literal renders as `''`.
 | `PARAKEET_INFERENCE_MODE` | Choose Parakeet transcription inference backend | backend | env | closed | — | nemo (parakeet (chart)) | nemo (parakeet (chart)) | — | keep | keep | — | unowned |
 | `PARAKEET_LID_ONLY` | CPU LID release mode: preload Whisper only, skip ASR/embeddings/stream warmup, expose language, health and metrics only | backend | env | closed | — | — | {value: 'true', category: runtime} | — | keep | keep | — | planscost |
 | `PARAKEET_USE_V2` | Select Parakeet prerecorded v2 pipeline | backend | env | open | — | — | — | — | keep | keep | — | unowned |
+| `PUSHER_MAX_ABANDON_RECORD_DRAINS` | Per-pod abandon coordinators; default and prod4, clamped0..16 | backend | env | closed | — | — | 4 (pusher (chart)); {value: '4', category: rollout} (gke/pusher) | — | keep | keep | — | two-lane lead |
 | `PUSHER_MAX_CLOSED_RECORD_DRAINS` | Per-process retained closed-record drain count; default32, clamped8..128, prod64 | backend | env | closed | — | — | 64 (pusher (chart)); {value: '64', category: rollout} (gke/pusher) | — | keep | keep | — | two-lane lead |
+| `PUSHER_RECORD_STORAGE_WORKERS` | Per-pod durable recording storage submissions; default and prod4, clamped1..8, no extra queue | backend | env | closed | — | — | 4 (pusher (chart)); {value: '4', category: rollout} (gke/pusher) | — | keep | keep | — | two-lane lead |
 | `RECORDING_SESSION_MODE` | Select recording session migration mode | backend | env | closed | — | — | — | — | keep | keep | — | unowned |
 | `RECORD_SEAL_REPAIR_MODE` | plan or apply; default apply, plan performs canonical proofs without writes | backend | env | closed | — | — | — | — | keep | keep | — | two-lane lead |
 | `RECORD_SEAL_SWEEPER_MODE` | plan or apply; default apply, plan performs proofs without writes | backend | env | closed | — | — | — | — | keep | keep | — | two-lane lead |

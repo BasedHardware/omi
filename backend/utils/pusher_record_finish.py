@@ -7,6 +7,7 @@ from collections import Counter
 from functools import lru_cache
 from typing import Callable
 
+from config.pusher_record import abandon_record_drain_cap, record_storage_workers
 from utils.executors import start_background_task
 from utils.other.audio_outbox import AudioProjection
 
@@ -23,16 +24,25 @@ def closed_record_drain_cap() -> int:
 
 MAX_CLOSED_RECORD_DRAINS = closed_record_drain_cap()
 _closed_record_drains: set[asyncio.Task] = set()
+MAX_ABANDON_RECORD_DRAINS = abandon_record_drain_cap()
+_abandon_record_drains: set[asyncio.Task] = set()
 
 
 @lru_cache(maxsize=1)
 def log_closed_record_drain_cap() -> None:
     logger.info('event=record_closed_finish_cap value=%s', MAX_CLOSED_RECORD_DRAINS)
+    logger.info('event=record_abandon_cap value=%s', MAX_ABANDON_RECORD_DRAINS)
+    logger.info('event=record_storage_cap value=%s queue=0', record_storage_workers())
 
 
-def abandon_evicted_record_drain(task, barrier, futures) -> None:
+def abandon_evicted_record_drain(task, barrier, futures) -> bool:
     """A small metadata coordinator; never restart the evicted projection."""
+    # Even refusal must fence local reconnect recovery while late I/O settles.
+    # This removes only a hint; the durable producer token remains unchanged.
     barrier.forget_evicted_tokens()
+    if len(_abandon_record_drains) >= MAX_ABANDON_RECORD_DRAINS:
+        logger.warning('event=record_closed_finish outcome=abandon_overflow')
+        return False  # No coordinator or abandon write; retain the producer fence.
 
     async def abandon(worker):
         await asyncio.wait([worker])  # Settlement, not cancellation, is the proof.
@@ -44,7 +54,10 @@ def abandon_evicted_record_drain(task, barrier, futures) -> None:
         await futures.wait()
         await barrier.abandon_recordings()
 
-    start_background_task(abandon(task), name='pusher:abandon_evicted_record_tokens')
+    owner = start_background_task(abandon(task), name='pusher:abandon_evicted_record_tokens')
+    _abandon_record_drains.add(owner)
+    owner.add_done_callback(_abandon_record_drains.discard)
+    return True
 
 
 class ProjectionQueueWaitTimeout(TimeoutError):
@@ -111,7 +124,7 @@ class RecordProjectionQueue(asyncio.Queue[AudioProjection]):
         )
 
 
-def retain_closed_record_drain(task: asyncio.Task, *, on_capacity: Callable[[], None] | None = None) -> bool:
+def retain_closed_record_drain(task: asyncio.Task, *, on_capacity: Callable[[], object] | None = None) -> bool:
     """Transfer an existing worker, never restart or certify its unfinished work.
 
     At capacity the caller retains ownership and cancels as before. The optional
