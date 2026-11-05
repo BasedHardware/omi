@@ -424,3 +424,41 @@ def test_invariant_every_row_committed_by_a_pass_mark_is_offered_within_that_pas
             owed = None  # its rows are owed by the next pass, which starts at the head
     assert passes >= 3, passes
     assert retried, 'a backed-off row was never offered again'
+
+
+def test_pagination_kill_switch_keeps_the_legacy_head_first_path(monkeypatch, clock):
+    monkeypatch.setenv(KNOB, '900')
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED', 'false')
+    followups, query = runner(backlog(5), monkeypatch, fraction=0.5, now=1005.0)
+    assert not followups.desync
+    assert followups.discovered()[0] == 'r000'
+    assert [call for call in query.calls if call[1] == 1] == []  # no seed read
+    followups.note('r000', 'blocked')
+    assert followups.backoff == {} and followups.discovered()[0] == 'r000'  # immediate retry, as before
+
+
+def test_a_failing_projector_clock_still_bounds_the_pass(monkeypatch, clock):
+    monkeypatch.setenv(KNOB, '900')
+    rows = backlog(150)
+    wall = [1150.0]
+    followups, _ = runner(rows, monkeypatch, fraction=0.0, now=None)
+
+    def broken():
+        raise RuntimeError('clock')
+
+    followups.projector.clock = broken
+    monkeypatch.setattr(projection_followup, '_wall', lambda: wall[0])
+    followups.discovery.after = (1005.0, 'r005')  # held cursor; no seed
+    for _ in range(3):
+        followups.note('r002', 'blocked')
+    revisited = False
+    for n in range(40):
+        page = followups.discovered()
+        clock.now += 30.0
+        revisited = revisited or 'r002' in page
+        for i in range(150):
+            rows[f'n{n:02d}-{i:03d}'] = {'projection_state': 'persisted', 'committed_at': wall[0] + i * 0.01}
+        wall[0] += 10.0
+        if revisited:
+            break
+    assert revisited

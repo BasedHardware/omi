@@ -24,6 +24,7 @@ from config.batch_pipeline import (
     projection_followup_backoff_seconds,
     projection_followup_page_enabled,
     projection_followup_slots,
+    projection_pagination_enabled,
 )
 from config.policy import ProjectionPolicy
 from database.batch_pipeline_projection import ProjectionBlocked, ProjectionReplay
@@ -56,8 +57,9 @@ def instance_fraction() -> float:
 
 
 _STARTED_NS = time.time_ns()
-# Patchable: backoff is process-local monotonic time.
+# Patchable: backoff is process-local monotonic time; the wall clock backs up the pass mark.
 _monotonic = time.monotonic
+_wall = time.time
 MAX_BACKOFF_ROWS = 20_000
 BACKOFF_OUTCOMES = frozenset({'blocked', 'retry', 'timeout', 'claim_busy', 'incomplete'})
 OUTCOMES = Counter(
@@ -90,8 +92,11 @@ class ProjectionFollowups:
         self.pages: dict[str, int] = {}
         self.completion_attempts: set[tuple[int, ProjectionBinding]] = set()
         self.backoff_ceiling = projection_followup_backoff_seconds()
+        # Desync needs the keyset cursor: with pagination off every page is the
+        # head, so offset, backoff and pass bounds stay off (the legacy path).
+        self.desync = self.backoff_ceiling > 0 and projection_pagination_enabled()
         self.backoff: dict[str, tuple[float, float]] = {}
-        self.seeded = self.backoff_ceiling <= 0
+        self.seeded = not self.desync
         # The current pass's mark (projector clock when it began); see begin_pass.
         self.wrap_at: float | None = None
 
@@ -132,7 +137,7 @@ class ProjectionFollowups:
 
     def note(self, segment, outcome):
         OUTCOMES.labels(outcome).inc()
-        if self.backoff_ceiling <= 0:
+        if not self.desync:
             return
         if outcome not in BACKOFF_OUTCOMES:
             self.backoff.pop(segment, None)
@@ -174,12 +179,12 @@ class ProjectionFollowups:
 
     def begin_pass(self):
         """A page fetched from the head (or with no mark yet) starts a pass: mark it now."""
-        if self.backoff_ceiling > 0 and (self.discovery.after is None or self.wrap_at is None):
+        if self.desync and (self.discovery.after is None or self.wrap_at is None):
             self.wrap_at = self.clock_now()
 
     def end_pass_past_mark(self):
         after = self.discovery.after
-        if self.backoff_ceiling <= 0 or after is None or self.wrap_at is None:
+        if not self.desync or after is None or self.wrap_at is None:
             return
         if after[0] > self.wrap_at:
             # Strictly past: ties at the mark order by key and finish first.
@@ -189,7 +194,8 @@ class ProjectionFollowups:
         try:
             return float(self.projector.clock())
         except Exception:
-            return None  # no mark: this pass ends only at the page's own wrap, as before
+            # The bound must not depend on the projector clock staying healthy.
+            return _wall()
 
     def candidates(self):
         if projection_followup_page_enabled():

@@ -1271,6 +1271,13 @@ the workspace).
 
 `BATCH_PIPELINE_PROJECTION_FOLLOWUP_BACKOFF_SECONDS` (default `900`; `0` is
 the kill switch; negative, NaN or above 3600 keeps 900):
+- **Invariant.** Every row committed at or before a pass's mark is offered
+  within that pass, ties at the mark included. A pass begins at the head, at
+  the seed, or with no mark, and its mark is the projector clock at that moment
+  (wall clock if the projector clock fails). It ends at the page's own wrap or
+  once the cursor is strictly past the mark. Desync requires keyset pagination:
+  with `BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED=false` every page is the
+  head, so offset, backoff and pass bounds stay off.
 - **Offset.** A process's first discovery page starts at a hashed point between
   the oldest persisted/ready commit and now. The hash covers host, pid and
   start time, and the seed costs one 1-row read. The page still
