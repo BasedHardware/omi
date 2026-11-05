@@ -290,6 +290,10 @@ def assert_clause(row, clause):
 # KNOWN_GAPS is a reviewed baseline, added below. It is not derived from the
 # assertions at collection time; strict XPASS is a blocking improvement signal.
 KNOWN_GAPS = {
+    ('visibility:transcribing_hold', 'dwell_metric'): 'No dedicated transcription presentation dwell gauge; '
+    'homegate phase 1; ANX lcinv-lifecycle-invariants',
+    ('visibility:transcribing_hold', 'dwell_alert'): 'No dedicated transcription presentation stock alert; '
+    'homegate phase 1; ANX lcinv-lifecycle-invariants',
     ('batch:committed', 'dwell_metric'): 'batch:committed: missing authoritative dwell/stock gauge; phase contract '
     'follow-up; no fix PR yet; ANX lcinv-lifecycle-invariants',
     ('batch:partial_retired', 'dwell_alert'): 'batch:partial_retired: missing committed dwell/stock alert; phase '
@@ -508,7 +512,7 @@ def test_required_legacy_machines_are_present():
         'record_audio': {'capturing', 'abandoned', 'sealed', 'record_upload_failed', 'record_audio_partial'},
         'summary_debt': {'pending', 'completed'},
         'fair_use': {'warning', 'throttle', 'restrict'},
-        'visibility': {'bridge_pending', 'settling_hold'},
+        'visibility': {'bridge_pending', 'settling_hold', 'transcribing_hold'},
     }
     for machine, states in required.items():
         assert states <= {row.state for row in STATES if row.machine == machine}
@@ -525,6 +529,8 @@ def test_resolved_plan_gaps_do_not_regress():
         ('finalization:dead_letter', 'dwell_alert'),
         ('batch:leased', 'entry_deadline'),
         ('visibility:bridge_pending', 'entry_deadline'),
+        ('visibility:transcribing_hold', 'entry_deadline'),
+        ('visibility:transcribing_hold', 'automatic_exit'),
     ):
         assert (key, clause) not in KNOWN_GAPS
         assert_clause(rows[key], clause)

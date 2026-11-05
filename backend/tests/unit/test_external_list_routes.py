@@ -1,7 +1,7 @@
 """Run the real four FastAPI routes with offline auth/storage dependencies."""
 
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -24,6 +24,8 @@ PATHS = ['/v1/dev/user/conversations', '/v1/dev/user/memories', '/v1/dev/user/ac
 
 @pytest.fixture
 def routes(monkeypatch):
+    # Legacy cache contract; the transcription gate has independent time-dependent responses.
+    monkeypatch.setenv('HOME_TRANSCRIPTION_PRESENTATION_GATE', 'off')
     storage = FakeRedis()
     monkeypatch.setattr(cache.action_item_versions, 'version', lambda uid: 'stable-' + uid)
     monkeypatch.setattr(cache, 'submit_with_context', immediate_population)
@@ -448,3 +450,30 @@ def test_real_route_cache_separates_effective_read_limits_and_owner(routes, monk
     assert getattr(calls, origin).call_count == 3
     assert seen == [('owner', 'owner')] * 4 + [('other-owner', 'other-owner')]
     assert len(storage.entries) == 3
+
+
+def test_transcription_gate_projects_developer_list_and_bypasses_cache(routes, monkeypatch):
+    client, state, calls, storage = routes
+    monkeypatch.setenv('HOME_TRANSCRIPTION_PRESENTATION_GATE', 'on')
+    now = datetime.now(timezone.utc)
+    # Keep this route/cache contract independent of another test module's heavy
+    # import graph; it needs only the stamped batch presentation fields.
+    state.rows = [
+        {
+            'id': 'capture',
+            'created_at': now,
+            'started_at': now,
+            'finished_at': now,
+            'status': 'completed',
+            'record_lane_owner': 'batch_live_v1',
+            'home_transcription_deadline_at': now + timedelta(hours=2),
+            'structured': {'title': '', 'overview': '', 'category': 'other'},
+            'transcript_segments': [],
+        }
+    ]
+    for _ in range(2):
+        result = client.get('/v1/dev/user/conversations', headers={'Authorization': 'Bearer synthetic-key'})
+        assert result.status_code == 200, result.text
+        assert result.json()[0]['structured']['title'] == 'Transcribing…'
+    assert calls.cards.call_count == 2
+    assert not storage.entries

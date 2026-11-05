@@ -56,6 +56,7 @@ EPISODE_HARD_CAP_ACROSS_CONVERSATIONS_ENV = 'EPISODE_HARD_CAP_ACROSS_CONVERSATIO
 HOME_HIDE_BELOW_FLOOR_ROWS_ENV = 'HOME_HIDE_BELOW_FLOOR_ROWS'
 HOME_HIDE_EPISODE_MEMBERS_ENV = 'HOME_HIDE_EPISODE_MEMBERS'
 HOME_NEUTRAL_MINIMUM_TITLES_ENV = 'HOME_NEUTRAL_MINIMUM_TITLES'
+HOME_TRANSCRIPTION_PRESENTATION_GATE_ENV = 'HOME_TRANSCRIPTION_PRESENTATION_GATE'
 EPISODE_CARRY_ON_SESSION_END_ENV = 'EPISODE_CARRY_ON_SESSION_END'
 EPISODE_MOMENT_OUTPUT_VALIDATOR_ENV = 'EPISODE_MOMENT_OUTPUT_VALIDATOR'
 EPISODE_COMPOSER_ENV = 'EPISODE_COMPOSER'
@@ -116,6 +117,20 @@ def home_hide_episode_members_enabled() -> bool:
 def home_neutral_minimum_titles_enabled() -> bool:
     """Replace provisional transcript-echo Home titles without changing storage."""
     return modes_default_on(HOME_NEUTRAL_MINIMUM_TITLES_ENV)
+
+
+def home_transcription_presentation_gate_enabled() -> bool:
+    """Default-on batch transcription presentation; off restores stored status/title."""
+    return modes_default_on(HOME_TRANSCRIPTION_PRESENTATION_GATE_ENV)
+
+
+def home_transcription_deadline_seconds() -> int:
+    """New captures get 2h (batch timeliness SLA); invalid or nonpositive values use 2h."""
+    try:
+        seconds = int(os.getenv('HOME_TRANSCRIPTION_DEADLINE_SECONDS', '7200'))
+    except ValueError:
+        return 7200
+    return seconds if seconds > 0 else 7200
 
 
 def home_hide_below_floor_rows_enabled() -> bool:

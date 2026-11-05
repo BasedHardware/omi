@@ -20,6 +20,7 @@ from utils.conversations.mcp_transcript_search import (
 from utils.conversations.search import keyword_search_conversation_ids, conversation_matches_date_range
 from utils.observability.fallback import record_fallback
 from utils.conversations.render import redact_conversation_for_list
+from utils.conversations import transcribing_hold
 from utils.external_read_contract import utc_window
 from utils.memory.product_authorization import ProductAuthorizationContext
 from utils.mcp_dates import local_date_window, localize_timestamps
@@ -117,7 +118,7 @@ def conversation_cards_page_core(
                 position={"ts": serialize_timestamp(last["created_at"]), "id": last["id"]},
                 filters=filters,
             )
-        return fetched[:limit], resume
+        return [transcribing_hold.project(row) for row in fetched[:limit]], resume
 
     try:
         page, resume = mcp_conversation_pages.get_mcp_conversation_cards_page(
@@ -140,7 +141,7 @@ def conversation_cards_page_core(
             position={"ts": serialize_timestamp(resume[0]), "id": resume[1]},
             filters=filters,
         )
-    return page, next_cursor
+    return [transcribing_hold.project(row) for row in page], next_cursor
 
 
 def is_safe_conversation_id(raw_id: Any) -> bool:
@@ -172,7 +173,7 @@ def fetch_conversation_for_detail(
         include_discarded=False,
         extra_field_paths=extra_field_paths,
     )
-    return conversations[0] if conversations else None
+    return transcribing_hold.project(conversations[0]) if conversations else None
 
 
 def get_conversations(
@@ -339,7 +340,7 @@ def get_conversations_by_ids(
         include_transcript=True,
         include_discarded=False,
     )
-    by_id = {str(conversation.get("id")): conversation for conversation in conversations}
+    by_id = {str(conversation.get("id")): transcribing_hold.project(conversation) for conversation in conversations}
     not_found = [conversation_id for conversation_id in conversation_ids if conversation_id not in by_id]
 
     filters = {
@@ -552,6 +553,7 @@ def search_conversations(
 
     results: List[Dict[str, Any]] = []
     for conv in conversations:
+        conv = transcribing_hold.project(conv)
         redact_conversation_for_list(conv)
         snippets: List[Dict[str, Any]] = []
         if not conv.get("is_locked", False):

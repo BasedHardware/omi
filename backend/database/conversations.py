@@ -66,6 +66,7 @@ from utils.manual_speaker_assignments import (
     remap_absorbed_receipt,
 )
 from utils.conversations.home_titles import apply_user_title, project_home
+from utils.conversations import transcribing_hold
 from database.mcp_read_queries import MCP_CONVERSATION_CARD_FIELD_PATHS, MCP_CONVERSATION_TRANSCRIPT_FIELD_PATHS
 from database.quiet_check_retirement import restore_quiet_check_in_transaction, stop_quiet_check_for_conversation
 from ._client import db, delete_collection_recursive, get_firestore_client, run_transactional
@@ -902,7 +903,9 @@ def is_soft_deleted(conversation: Optional[Mapping[str, Any]]) -> bool:
 
 
 @phase_shadow.compare('home_visibility')
-def is_visible_conversation(conversation: Optional[Mapping[str, Any]], *, include_discarded: bool = False) -> bool:
+def is_visible_conversation(
+    conversation: Optional[Mapping[str, Any]], *, include_discarded: bool = False, presentation: bool = False
+) -> bool:
     """Whether a stored conversation may be put in front of a user or downstream job."""
     if not conversation:
         return False
@@ -917,7 +920,10 @@ def is_visible_conversation(conversation: Optional[Mapping[str, Any]], *, includ
         if (
             conversation.get('dream_duplicate_of')
             or bridge_pending.hidden(conversation)
-            or is_settling_fragment(conversation)
+            or (
+                is_settling_fragment(conversation)
+                and not (presentation and transcribing_hold.applies(conversation, stored=True))
+            )
             or conversation.get('discarded')
             or is_completed_rule_discard(conversation)
         ):
@@ -962,7 +968,9 @@ def _with_conversation_cursor_envelope(func):
     return wrapper
 
 
-def _collect_cursor_conversation_page(conversations_ref, *, limit, include_discarded, budget, bookmark):
+def _collect_cursor_conversation_page(
+    conversations_ref, *, limit, include_discarded, budget, bookmark, presentation=False
+):
     """Bound the scan by page size plus the existing hidden-row allowance."""
     conversations = []
     last_doc = None
@@ -977,7 +985,7 @@ def _collect_cursor_conversation_page(conversations_ref, *, limit, include_disca
                 last_doc = doc
                 conversation = document_data_with_revision(doc)
                 if conversation is None or not is_visible_conversation(
-                    conversation, include_discarded=include_discarded
+                    conversation, include_discarded=include_discarded, presentation=presentation
                 ):
                     skipped += 1
                     continue
@@ -1002,6 +1010,7 @@ def _collect_visible_conversation_page(
     cursor_page: Optional[Dict[str, Any]] = None,
     cursor_filters: Optional[Dict[str, Any]] = None,
     sort_field: str = 'created_at',
+    presentation: bool = False,
 ) -> List[Dict[str, Any]]:
     """Page visible rows.
 
@@ -1051,6 +1060,7 @@ def _collect_visible_conversation_page(
                 limit=limit,
                 include_discarded=include_discarded,
                 budget=budget,
+                presentation=presentation,
                 bookmark=BookmarkDict({sort_field: stamp, '__name__': doc_id}),
             )
             return finish(conversations)
@@ -1063,7 +1073,7 @@ def _collect_visible_conversation_page(
                 last_doc = doc
                 conversation = document_data_with_revision(doc)
                 if conversation is None or not is_visible_conversation(
-                    conversation, include_discarded=include_discarded
+                    conversation, include_discarded=include_discarded, presentation=presentation
                 ):
                     continue
                 if skipped_visible < offset:
@@ -1091,7 +1101,9 @@ def _collect_visible_conversation_page(
             fetched += 1
             last_doc = doc
             conversation = document_data_with_revision(doc)
-            if conversation is None or not is_visible_conversation(conversation, include_discarded=False):
+            if conversation is None or not is_visible_conversation(
+                conversation, include_discarded=False, presentation=presentation
+            ):
                 continue
             conversations.append(conversation)
     except ListReadBudgetExhausted:
@@ -1116,7 +1128,9 @@ def _collect_visible_conversation_page(
                 refill_reads += 1
                 last_doc = doc
                 conversation = document_data_with_revision(doc)
-                if conversation is None or not is_visible_conversation(conversation, include_discarded=False):
+                if conversation is None or not is_visible_conversation(
+                    conversation, include_discarded=False, presentation=presentation
+                ):
                     continue
                 conversations.append(conversation)
                 if len(conversations) >= limit:
@@ -1815,6 +1829,7 @@ def get_conversations(
     date_field: str = 'created_at',
     *,
     metadata_only: bool = False,
+    presentation: bool = False,
     cursor: Optional[str] = None,
     page_envelope: bool = False,
     cursor_page: Optional[Dict[str, Any]] = None,
@@ -1869,6 +1884,7 @@ def get_conversations(
         limit=limit,
         offset=offset,
         include_discarded=include_discarded,
+        presentation=presentation,
         uid=uid,
         cursor=cursor,
         cursor_page=cursor_page,
@@ -1973,6 +1989,7 @@ def get_conversations_without_photos(
     budget: Optional[ListReadBudget] = None,
     list_fields_only: bool = False,
     *,
+    presentation: bool = False,
     cursor: Optional[str] = None,
     page_envelope: bool = False,
     cursor_page: Optional[Dict[str, Any]] = None,
@@ -2012,6 +2029,7 @@ def get_conversations_without_photos(
                 'episode_id',
                 'finalization_status',
                 *SETTLING_FIELDS,
+                *transcribing_hold.READ_FIELDS,
             }
         )
         conversations_ref = conversations_ref.select(sorted(fields))
@@ -2053,6 +2071,7 @@ def get_conversations_without_photos(
         limit=limit,
         offset=offset,
         include_discarded=include_discarded,
+        presentation=presentation,
         budget=budget,
         uid=uid,
         cursor=cursor,
@@ -2088,9 +2107,11 @@ def get_mcp_conversations_by_id(
     field_paths = list(
         MCP_CONVERSATION_TRANSCRIPT_FIELD_PATHS if include_transcript else MCP_CONVERSATION_CARD_FIELD_PATHS
     )
+    if transcribing_hold.home_transcription_presentation_gate_enabled():
+        field_paths.extend(transcribing_hold.READ_FIELDS)
     if extra_field_paths:
         field_paths.extend(extra_field_paths)
-    docs = client.get_all(doc_refs, field_paths=list(field_paths))
+    docs = client.get_all(doc_refs, field_paths=list(dict.fromkeys(field_paths)))
     conversations_by_id: Dict[str, Dict[str, Any]] = {}
     for doc in docs:
         if not doc.exists:
@@ -2098,7 +2119,7 @@ def get_mcp_conversations_by_id(
         data = document_data_with_revision(doc)
         if data is None:
             continue
-        if not is_visible_conversation(data, include_discarded=include_discarded):
+        if not is_visible_conversation(data, include_discarded=include_discarded, presentation=True):
             continue
         data.setdefault('id', doc.id)
         conversations_by_id[str(data['id'])] = data

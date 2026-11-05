@@ -483,6 +483,11 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     if isLocked {
       return .locked
     }
+    // This is a bounded server transcription wait, not a running summary job.
+    // Keep its explicit title and do not offer the summary stall's Reprocess.
+    if isAwaitingTranscription {
+      return .titled(structured.title)
+    }
     switch status {
     case .inProgress, .processing, .merging:
       // A deferred row wears `processing` on the wire only so the client
@@ -528,6 +533,15 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     f.dateFormat = "h:mm a"
     return f
   }()
+
+  /// The server's presentation-only batch wait must not start the summary stall clock.
+  var isAwaitingTranscription: Bool {
+    !isLocked && !deferred && status == .processing && structured.title == "Transcribing…" && transcriptSegments.isEmpty
+  }
+
+  var showsSummaryProcessing: Bool {
+    !isAwaitingTranscription && (deferred || status == .processing)
+  }
 
   /// The string a row/header should display in the title slot.
   var displayTitle: String {

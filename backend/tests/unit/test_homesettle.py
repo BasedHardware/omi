@@ -348,6 +348,8 @@ def test_member_kill_switch_restores_version_and_cache_with_header(monkeypatch, 
     from types import SimpleNamespace
 
     routes = conversation_routes
+    # Both independent time-dependent Home projections must be off for writer-version caching.
+    monkeypatch.setenv('HOME_TRANSCRIPTION_PRESENTATION_GATE', 'off')
     monkeypatch.setenv('HOME_HIDE_EPISODE_MEMBERS', 'off')
     request = Request({'type': 'http', 'headers': [(b'x-omi-home-episode-ids', b'e:a')]})
     cached = Response(status_code=304) if not_modified else None

@@ -31,6 +31,8 @@ from database.legal_holds import destructive_operation_gate
 from utils.other.account_gate_http import account_gate_busy_http_exception
 from database.firestore_read_metrics import FirestoreReadSite
 from utils.list_version_check import ListVersionCheck
+from config.episodes import home_transcription_presentation_gate_enabled
+from utils.conversations import transcribing_hold
 from utils.conversations.list_filters import aware_datetime, reject_oversized_filter
 from database.vector_db import (
     delete_action_item_vector,
@@ -996,7 +998,9 @@ def get_conversations(
     from utils.episodes import home_membership
 
     held_request = home_membership.held_for(request)
-    version_check = ListVersionCheck.start(None if held_request else request, uid, 'conversations')
+    # Reader-enforced expiry changes the body without a writer-version bump.
+    time_dependent = home_transcription_presentation_gate_enabled()
+    version_check = ListVersionCheck.start(None if held_request or time_dependent else request, uid, 'conversations')
     if version_check.not_modified is not None:
         return version_check.not_modified
 
@@ -1017,6 +1021,7 @@ def get_conversations(
         starred=starred,
         budget=budget,
         list_fields_only=True,
+        presentation=True,
     )
 
     conversations = home_membership.project_list(
@@ -1029,6 +1034,7 @@ def get_conversations(
         ),
     )
     _heal_locked_conversations_if_eligible(uid, conversations)
+    conversations = [transcribing_hold.project(row) for row in conversations]
     redact_conversations_for_list(conversations)
     if budget.truncated and response is not None:
         response.headers[OMI_LIST_TRUNCATED_HEADER] = OMI_LIST_TRUNCATED_VALUE
@@ -1038,7 +1044,7 @@ def get_conversations(
     version_check.finish(
         response,
         truncated=budget.truncated,
-        cacheable=not held_request and not any(row.get('is_locked') for row in conversations),
+        cacheable=not held_request and not time_dependent and not any(row.get('is_locked') for row in conversations),
     )
     return conversations
 
@@ -1143,7 +1149,7 @@ def get_conversation_by_id(
     show_discarded = True if include_discarded is None else include_discarded
     if hidden_from_default_detail(conversation) and include_discarded is not True:
         raise HTTPException(status_code=404, detail="Conversation not found")
-    if not conversations_db.is_visible_conversation(conversation, include_discarded=show_discarded):
+    if not conversations_db.is_visible_conversation(conversation, include_discarded=show_discarded, presentation=True):
         raise HTTPException(status_code=404, detail="Conversation not found")
     # A desktop conversation stored raw (deferred) for a freemium/Neo user is
     # enriched on first open. Other conversations are returned unchanged.
@@ -1161,7 +1167,7 @@ def get_conversation_by_id(
             response.headers['X-Translation-Status'] = translation_status
             if next_cursor is not None:
                 response.headers['X-Translation-Cursor'] = next_cursor
-    return conversation
+    return transcribing_hold.project(conversation)
 
 
 @router.patch(
@@ -2087,7 +2093,10 @@ def set_conversation_starred(conversation_id: str, starred: bool, uid: str = Dep
     logger.info(f'update_conversation_starred {conversation_id} {starred} {uid}')
     _get_valid_conversation_by_id(uid, conversation_id)
     conversations_db.set_conversation_starred(uid, conversation_id, starred)
-    return {"status": "Ok", "conversation": _get_valid_conversation_by_id(uid, conversation_id)}
+    return {
+        "status": "Ok",
+        "conversation": transcribing_hold.project(_get_valid_conversation_by_id(uid, conversation_id)),
+    }
 
 
 @router.get(
@@ -2115,7 +2124,7 @@ def get_shared_conversation_by_id(conversation_id: str):
     visibility = conversation.get('visibility', ConversationVisibility.private)
     if not visibility or visibility == ConversationVisibility.private:
         raise HTTPException(status_code=404, detail="Conversation is private")
-    conversation = deserialize_conversation(conversation)
+    conversation = deserialize_conversation(transcribing_hold.project(conversation))
 
     # Fetch people data for speaker names
     person_ids = conversation.get_person_ids()
@@ -2196,6 +2205,7 @@ async def _search_exact_conversation_reference(
     ]
     if exact_page != 1:
         conversations = []
+    conversations = [transcribing_hold.project(row) for row in conversations]
     redact_conversations_for_list(conversations)
     return {
         'items': conversations[:exact_per_page],
@@ -2245,6 +2255,7 @@ async def _browse_speaker_conversations(
         raise HTTPException(
             status_code=503, detail="Saved conversation access could not be restored. Please retry."
         ) from error
+    browse_results['items'] = [transcribing_hold.project(row) for row in browse_results['items']]
     redact_conversations_for_list(browse_results['items'])
     finish_list_budget(response, budget)
     return browse_results
@@ -2364,6 +2375,7 @@ async def search_conversations_endpoint(
     # clears segments on locked rows.
     if (search_request.query or '').strip():
         conversations = attach_match_snippets_to_conversations(conversations, search_request.query)
+    conversations = [transcribing_hold.project(row) for row in conversations]
     redact_conversations_for_list(conversations)
     search_results['items'] = conversations
     # Recompute total_pages from the effective (clamped) pagination the search actually ran with, not the

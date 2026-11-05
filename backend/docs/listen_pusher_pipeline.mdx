@@ -3044,6 +3044,25 @@ and caching. `HOME_HIDE_BELOW_FLOOR_ROWS` (default on) controls floor/minimum
 visibility. `EPISODE_OUTPUT_LANGUAGE_PIN=off` restores preference-then-capture
 resolution for conversation notes and episodes; valid capture tags also survive
 when no transcript segments were supplied.
+
+### Home transcription presentation
+
+`HOME_TRANSCRIPTION_PRESENTATION_GATE` defaults on; `off` / `false` / `0` / `no`
+restores stored status/title at conversation API exits. Desktop batch completion
+atomically stamps `home_transcription_pending_at` and
+`home_transcription_deadline_at`. `HOME_TRANSCRIPTION_DEADLINE_SECONDS` defaults
+to 7200 (invalid, blank or nonpositive values use 7200), matching the batch SLA.
+Readers do not renew the clock. A stamped completed batch capture without
+transcript/title or a projection receipt presents `processing` / `Transcribing…`
+until the deadline, then `completed` / `Couldn't transcribe` so it stays visible.
+Firestore status and custody remain unchanged; populated or unstamped rows keep
+their existing presentation. Main conversation list conditional 304 responses
+are disabled while the gate is on because expiry does not bump writer versions.
+The [phase-1 change note](listen_pusher_pipeline/changes/2026-11-05-home-transcribing-hold.md)
+records rollback, surface coverage, telemetry gaps and unmeasured acceptance.
+
+### Failure terminal summary recovery
+
 Only transient dead-letter failures with usable input and no prior
 summary get `summary_retryable=true`; enrichment and free-tier persistence clear
 it explicitly after funded work completes. Budget deferral retains the retry

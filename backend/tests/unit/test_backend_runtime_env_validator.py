@@ -64,6 +64,8 @@ def render_cloud_run_state(env_config: dict, monkeypatch) -> dict:
 
 def with_memory_env(payload: str) -> str:
     memory_env = '''\
+        {"name": "HOME_TRANSCRIPTION_PRESENTATION_GATE", "value": "true"},
+        {"name": "HOME_TRANSCRIPTION_DEADLINE_SECONDS", "value": "7200"},
         {"name": "STT_CAP_DISPATCH_ENFORCEMENT", "value": "false"},
         {"name": "STT_CAP_DISPATCH_COHORT", "value": ""},
         {"name": "STT_CAP_DISPATCH_LANES", "value": "live"},
