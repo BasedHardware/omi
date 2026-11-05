@@ -249,14 +249,6 @@ class FirestoreStore:
         return self._client if self._client is not None else get_data_plane_firestore_client()
 
     def run(self, body):
-        # Memo-ineligible batch privacy decisions were 30% no_attempt here (privacy_memo_ineligible_total,
-        # 2026-11-05); a per-call attempt makes them certifiable (lever bpp_attempt_scope, key = replica).
-        from database.batch_privacy_attempt import scoped_privacy_attempt
-
-        with scoped_privacy_attempt(os.getenv('HOSTNAME') or self.namespace):
-            return self._run(body)
-
-    def _run(self, body):
         client = self.client
         last_view: list[FirestoreTransaction] = []
 

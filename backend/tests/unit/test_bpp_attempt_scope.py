@@ -43,20 +43,6 @@ def test_an_outer_attempt_is_reused_unchanged(monkeypatch):
         assert current_attempt() is outer
 
 
-def test_store_run_executes_inside_the_scope(monkeypatch):
-    from database import batch_pipeline_store as store_module
-
-    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
-    store = store_module.FirestoreStore('batch_pipeline_dev', firestore_client=object())
-    seen = []
-    monkeypatch.setattr(store_module.FirestoreStore, '_run', lambda self, body: seen.append(current_attempt()) or 'ok')
-    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{}')
-    assert store.run(lambda view: None) == 'ok'
-    enable(monkeypatch, 'bpp_attempt_scope')
-    assert store.run(lambda view: None) == 'ok'
-    assert seen[0] is None and seen[1] is not None
-
-
 def test_retention_entry_points_execute_inside_the_scope(monkeypatch):
     from utils.batch_pipeline import retention
 
