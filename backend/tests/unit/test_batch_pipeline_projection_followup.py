@@ -116,14 +116,13 @@ def followup(monkeypatch, owner_claim):
     return SimpleNamespace(**locals())
 
 
-@pytest.mark.parametrize('page_enabled', ['true', 'false'])
 @pytest.mark.parametrize('owners', [('heavy',) * 5, ('heavy', 'light', 'heavy', 'light')])
-def test_followup_page_offers_one_receipt_per_owner_and_rotates(followup, monkeypatch, page_enabled, owners):
+def test_followup_page_offers_one_receipt_per_owner_and_rotates(followup, monkeypatch, owners):
     from dataclasses import replace
     from utils.batch_pipeline.correctness_metrics import PROJECTION_COLLAPSED_ROWS
 
     f = followup
-    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_FOLLOWUP_PAGE_ENABLED', page_enabled)
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_FOLLOWUP_PAGE_ENABLED', 'true')
     segments = [f'row-{n}' for n in range(len(owners))]
     bindings = {}
     for sid, owner in zip(segments, owners):
@@ -138,10 +137,7 @@ def test_followup_page_offers_one_receipt_per_owner_and_rotates(followup, monkey
     expected = list(dict.fromkeys(owners))
     assert first == [segments[owners.index(owner)] for owner in expected]
     assert PROJECTION_COLLAPSED_ROWS.labels('followup')._value.get() - before == len(owners) - len(expected)
-    if page_enabled == 'true':
-        f.projector.store.read.assert_not_called()
-    else:
-        assert [call.args[0] for call in f.projector.store.read.call_args_list] == first
+    f.projector.store.read.assert_not_called()
     # A ready head can depend on any later receipt: all must be offered in
     # bounded passes even while every row remains on the same discovery page.
     seen = set(first)

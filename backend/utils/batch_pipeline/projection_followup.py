@@ -203,7 +203,20 @@ class ProjectionFollowups:
             return _wall()
 
     def candidates(self):
-        self.discovery.states = PROJECTION_FINISH_STATES if projection_followup_page_enabled() else None
+        if not projection_followup_page_enabled():
+            self.discovery.states = None
+            store = self.projector.store
+            # Preserve the legacy rollback path's read budget: pending rows
+            # need only their receipt check, with no extra job hint read.
+            candidates = []
+            for sid in self.discovered():
+                if not (store.ref('results', sid).get().to_dict() or {}).get('projection'):
+                    continue
+                policy = ProjectionPolicy.from_dict(store.read(sid)[0]['policy_parts']['projection'])
+                if policy.async_projection:
+                    candidates.append(sid)
+            return candidates
+        self.discovery.states = PROJECTION_FINISH_STATES
         page = []
         for owner, rows in owner_page(self.projector.store, self.discovered()):
             ids = [sid for sid, _ in rows]
@@ -218,31 +231,19 @@ class ProjectionFollowups:
                 self.page_after[key] = sid
                 if len(self.page_after) > MAX_BACKOFF_ROWS:
                     self.page_after.pop(next(iter(self.page_after)))
-        if projection_followup_page_enabled():
-            # The query is already the durable receipt hint. Do not refetch
-            # each result twice just to choose work. Filter pinned sync policy
-            # before queueing so it cannot delay async recovery/owed rows.
-            # Keep retrying unchanged receipts: a sibling or destination can
-            # unblock them without changing this result's version.
-            candidates = []
-            for sid, job in page:
-                raw = (job.get('policy_parts') or {}).get('projection')
-                if raw is None:
-                    # Legacy unpinned policy follows the same privacy-aware
-                    # resolution as before. The common pinned path is one read.
-                    raw = self.projector.store.read(sid)[0]['policy_parts']['projection']
-                if ProjectionPolicy.from_dict(raw).async_projection:
-                    candidates.append(sid)
-            return candidates
-        store = self.projector.store
-        # Assignment failures/partial multipart output must not consume the
-        # follow-up slots ahead of rows that have actually persisted.
+        # The query is already the durable receipt hint. Do not refetch
+        # each result twice just to choose work. Filter pinned sync policy
+        # before queueing so it cannot delay async recovery/owed rows.
+        # Keep retrying unchanged receipts: a sibling or destination can
+        # unblock them without changing this result's version.
         candidates = []
-        for sid, _ in page:
-            if not (store.ref('results', sid).get().to_dict() or {}).get('projection'):
-                continue
-            policy = ProjectionPolicy.from_dict(store.read(sid)[0]['policy_parts']['projection'])
-            if policy.async_projection:
+        for sid, job in page:
+            raw = (job.get('policy_parts') or {}).get('projection')
+            if raw is None:
+                # Legacy unpinned policy follows the same privacy-aware
+                # resolution as before. The common pinned path is one read.
+                raw = self.projector.store.read(sid)[0]['policy_parts']['projection']
+            if ProjectionPolicy.from_dict(raw).async_projection:
                 candidates.append(sid)
         return candidates
 
