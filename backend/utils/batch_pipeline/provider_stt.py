@@ -37,6 +37,7 @@ from config.batch_language_recovery import enabled as independent_recovery_enabl
 from config.batch_pipeline_vendor_failover import failover_enabled, held_redrive_enabled, held_redrive_seconds
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, BatchPrivacyReason
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
+from database.batch_pipeline_transaction_labels import store_operation
 from database.outbox import Claim, OutboxKind, Outcome
 from database.batch_pipeline_quarantine_recovery import RecoveryStore
 from utils.batch_pipeline import vendor_route_contracts as contracts
@@ -294,7 +295,8 @@ class ProviderSttStore:
             tx.put('jobs', segment_id, job)
             return job
 
-        return self.store.run(commit)
+        with store_operation('batch_provider_stt'):
+            return self.store.run(commit)
 
     def _settle_attempt(self, job: dict, token: str, outcome: VendorAttemptOutcome, now: float, audio: float):
         attempts = attempts_of(job)
@@ -379,7 +381,8 @@ class ProviderSttStore:
             tx.put('jobs', segment_id, job)
             return 'settled'
 
-        return self.store.run(commit)
+        with store_operation('batch_provider_stt'):
+            return self.store.run(commit)
 
     def terminal(
         self, segment_id: str, now: float, failure: dict, *, measured_held_vad_speech_seconds: float | None = None
@@ -407,7 +410,8 @@ class ProviderSttStore:
             tx.put('jobs', segment_id, job)
             return True
 
-        return self.store.run(commit)
+        with store_operation('batch_provider_stt'):
+            return self.store.run(commit)
 
     def hold(self, segment_id: str, hold: VendorHold) -> bool:
         """CAS pending -> vendor_held. ``merge_pending`` and the audio stay: owner order holds."""
@@ -421,7 +425,8 @@ class ProviderSttStore:
             tx.put('jobs', segment_id, job)
             return True
 
-        return self.store.run(commit)
+        with store_operation('batch_provider_stt'):
+            return self.store.run(commit)
 
     def redrive(self, segment_id: str) -> dict | None:
         """CAS vendor_held -> pending (attempts preserved, the hold kept as history). Returns the job."""
@@ -437,7 +442,8 @@ class ProviderSttStore:
             tx.put('jobs', segment_id, job)
             return job
 
-        return self.store.run(commit)
+        with store_operation('batch_provider_stt'):
+            return self.store.run(commit)
 
     def supersede(self, segment_id: str, now: float) -> bool:
         """Terminal release of a unit whose content run was superseded (ProjectionBlocked).
@@ -458,7 +464,8 @@ class ProviderSttStore:
             tx.put('jobs', segment_id, job)
             return True
 
-        return self.store.run(commit)
+        with store_operation('batch_provider_stt'):
+            return self.store.run(commit)
 
 
 # --- vendor calls --------------------------------------------------------------------------------

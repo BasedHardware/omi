@@ -2,6 +2,7 @@
 
 from contextlib import contextmanager
 from contextvars import ContextVar
+import re
 
 from config.batch_pipeline import SCHEDULER_SHARDS
 
@@ -23,8 +24,30 @@ SHADOW_STORE_OPERATIONS = frozenset(
 )
 
 
+_PULL_OPERATION_PATTERN = re.compile(r'^[a-z][a-z0-9_]{0,63}$')
+
+
 def current_operation() -> str:
     return _pull_operation.get()
+
+
+@contextmanager
+def store_operation(operation: str):
+    """Attribute one batch store transaction with a static caller label.
+
+    Every worker-hot mutation that runs through ``FirestoreStore.run`` without
+    the pull/shadow contexts used to log contention as the unlabeled default
+    ``batch_pipeline_store``, so an ``outcome=exhausted`` storm could not be
+    attributed to the caller that burned the budget. Call sites pass literal
+    labels only; the pattern rejects anything a caller could interpolate.
+    """
+    if not _PULL_OPERATION_PATTERN.fullmatch(operation):
+        raise ValueError('static store operation label required')
+    token = _pull_operation.set(operation)
+    try:
+        yield
+    finally:
+        _pull_operation.reset(token)
 
 
 @contextmanager

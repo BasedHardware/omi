@@ -9,6 +9,7 @@ from config.batch_pipeline import require_record_protocol_ready
 from config.record_audio import require_record_audio_barrier
 from database.batch_pipeline_store import Store
 from database.batch_pipeline_staging import artifact_id
+from database.batch_pipeline_transaction_labels import store_operation
 from database.sync_ledger import LEDGER_RETENTION_DAYS, is_valid_completed_sync_content_result
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem
@@ -185,7 +186,8 @@ def admit(
             '_admitted_seconds': sum(i.duration_seconds for i in items),
         }
 
-    outcome = store.run(commit)
+    with store_operation('batch_admit'):
+        outcome = store.run(commit)
     policy_id = str(outcome.pop('_policy_id', policy.policy_id))
     seconds = outcome.pop('_admitted_seconds', None)
     if seconds is not None:

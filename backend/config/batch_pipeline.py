@@ -279,6 +279,23 @@ def contention_retry_enabled() -> bool:
     )
 
 
+def fifo_array_link_enabled() -> bool:
+    """Keep the owner FIFO link on the queue document by default; false is the kill switch.
+
+    The legacy representation stores each unit's ``next`` pointer on its
+    predecessor's job document, so every append read-modify-writes the
+    in-flight tail unit's lifecycle-hot document and collides with its
+    heartbeat, completion and failure transitions. The queue-document array
+    removes the job document from the append write set entirely. The flag
+    gates conversion only: queues already converted always drain through the
+    array-aware walk, so flipping the flag never strands queued units.
+    """
+    return rollout_default_on(
+        'BATCH_PIPELINE_FIFO_ARRAY_LINK_ENABLED',
+        os.getenv('BATCH_PIPELINE_FIFO_ARRAY_LINK_ENABLED', 'true').strip().lower() != 'false',
+    )
+
+
 def shadow_slot_cas_enabled() -> bool:
     """Arbitrate the shadow slot ring with conditional writes by default.
 

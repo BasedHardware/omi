@@ -8,6 +8,7 @@ from google.api_core.exceptions import FailedPrecondition, GoogleAPICallError
 from config.batch_pipeline import merge_catch_up_depth, merge_head_wait_seconds, recovered_merge_release_enabled
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_store import Store
+from database.batch_pipeline_transaction_labels import store_operation
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
 from utils.batch_pipeline.scheduler import owner_key
 from utils.batch_pipeline.metrics import QueueMetrics
@@ -337,7 +338,8 @@ class OrderedMerge:
 
         fenced: BatchPrivacyBlocked | None = None
         try:
-            entry = self.store.run(commit)
+            with store_operation('batch_merge_commit'):
+                entry = self.store.run(commit)
         except BatchPrivacyBlocked as error:
             entry, fenced = None, error
         strict_blocked, strict_catch_up = dict(blocked), bool(held.get('catch_up'))
@@ -383,7 +385,8 @@ class OrderedMerge:
             fresh, skipped = _fresh_pick(pending, now, wait)
             if fresh is not None:
                 try:
-                    entry = self.store.run(lambda tx: commit(tx, fresh=fresh, skipped=skipped))
+                    with store_operation('batch_merge_commit'):
+                        entry = self.store.run(lambda tx: commit(tx, fresh=fresh, skipped=skipped))
                 except BatchPrivacyBlocked:
                     # A fence on that fresh row refuses only it; the head wait
                     # below still releases the owner's other ready rows.
@@ -400,7 +403,8 @@ class OrderedMerge:
             segment = self._next_release(key, release)
             if segment is not None:
                 try:
-                    entry = self.store.run(lambda tx: commit(tx, exact=segment))
+                    with store_operation('batch_merge_commit'):
+                        entry = self.store.run(lambda tx: commit(tx, exact=segment))
                     if entry is not None and entry['segment_id'] == segment:
                         release.pop(0)  # Committed: the next call need not re-read it.
                 except BatchPrivacyBlocked:
@@ -428,7 +432,8 @@ class OrderedMerge:
             if not waiter or now - waiter['ready_at'] < wait:
                 return None
             try:
-                entry = self.store.run(lambda tx: commit(tx, waiter))
+                with store_operation('batch_merge_commit'):
+                    entry = self.store.run(lambda tx: commit(tx, waiter))
             except BatchPrivacyBlocked:
                 # An owner-wide fence (often the reason the head is blocked)
                 # also refuses the successor; strict order commits nothing here.

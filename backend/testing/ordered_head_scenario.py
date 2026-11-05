@@ -23,7 +23,25 @@ from testing.hermetic_network import block_outbound_network
 
 
 def ready_predecessor(tx, owner_key, priority, segment_id):
-    """Model the new indexed query, excluding stale links on non-ready rows."""
+    """Model the live predecessor discovery under both FIFO representations.
+
+    Array-backed queues keep their ordering on the queue document (the
+    production transaction reads it through its buffered view); legacy queues
+    use the indexed ``next``-pointer query, excluding stale links on
+    non-ready rows.
+    """
+    queue = tx.store.rows.get(('queues', f'{int(priority)}_{owner_key}')) or {}
+    if queue.get('link_mode') == 'fifo_array':
+        items = queue.get('items') or []
+        if segment_id not in items:
+            return None
+        index = items.index(segment_id)
+        if index == 0:
+            return None
+        row = tx.store.rows.get(('jobs', items[index - 1])) or {}
+        if row.get('state') != 'ready' or row.get('priority') != priority or row.get('owner_key') != owner_key:
+            return None
+        return deepcopy(row)
     jobs = [
         row
         for (table, _), row in tx.store.rows.items()

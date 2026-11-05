@@ -69,10 +69,19 @@ def _delete_job(client: Any, namespace: str, snapshot: Any, *, retain_ordering: 
         queue_key = f"{job['priority']}_{key}"
         queue_ref = client.collection(f'{namespace}_queues').document(queue_key)
         queue = queue_ref.get(transaction=transaction).to_dict() or {}
-        # Segment IDs are globally unique; this needs only a single-field index.
-        predecessors = queries.predecessor_documents(client, namespace, snapshot.id, transaction)
-        if predecessors and (predecessors[0].to_dict() or {}).get('owner_key') != key:
-            raise RuntimeError('batch queue ownership mismatch')
+        predecessors = []
+        if queue.get('link_mode') == 'fifo_array':
+            # The array is the ordering authority: unlink by index repair and
+            # skip the predecessor query and its next-pointer rewrites entirely.
+            items = [segment for segment in (queue.get('items') or []) if segment != snapshot.id]
+            queue['items'] = items
+            queue['head'] = items[0] if items else ''
+            queue['tail'] = items[-1] if items else ''
+        else:
+            # Segment IDs are globally unique; this needs only a single-field index.
+            predecessors = queries.predecessor_documents(client, namespace, snapshot.id, transaction)
+            if predecessors and (predecessors[0].to_dict() or {}).get('owner_key') != key:
+                raise RuntimeError('batch queue ownership mismatch')
         touched.extend([('jobs', snapshot.id), ('results', snapshot.id), ('owners', key), ('queues', queue_key)])
         touched.extend([('control', scheduler_control_key(key)), *(('jobs', p.id) for p in predecessors)])
         if queue.get('head') == snapshot.id:

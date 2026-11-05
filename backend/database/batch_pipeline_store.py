@@ -126,6 +126,27 @@ class FirestoreTransaction:
         return first_ready_pending(self.client, self.namespace, owner_key, transaction=self.transaction)
 
     def ready_predecessor(self, owner_key: str, priority: int, segment_id: str) -> dict | None:
+        queue = self.get('queues', f'{int(priority)}_{owner_key}')
+        if (queue or {}).get('link_mode') == 'fifo_array':
+            # The array is the FIFO's ordering authority and this transaction's
+            # buffered queue writes are already visible here, so the legacy
+            # ``next``-pointer index query (which reads only the snapshot and
+            # misses in-transaction splices) is neither needed nor correct.
+            items = queue.get('items') or []
+            if segment_id not in items:
+                return None
+            index = items.index(segment_id)
+            if index == 0:
+                return None
+            predecessor = self.get('jobs', items[index - 1])
+            if (
+                not predecessor
+                or predecessor.get('state') != 'ready'
+                or predecessor.get('priority') != int(priority)
+                or predecessor.get('owner_key') != owner_key
+            ):
+                return None
+            return predecessor
         return ready_predecessor(
             self.client, self.namespace, owner_key, priority, segment_id, transaction=self.transaction
         )

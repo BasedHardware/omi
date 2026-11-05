@@ -55,6 +55,20 @@ class MemoryTransaction:
         return min(jobs, key=lambda v: (v['capture_at'], v['segment_id'])) if jobs else None
 
     def ready_predecessor(self, owner_key, priority, segment_id):
+        queue = self.get('queues', f'{int(priority)}_{owner_key}') or {}
+        if queue.get('link_mode') == 'fifo_array':
+            # Array-backed FIFO: ordering lives on the queue document (mirrors
+            # FirestoreTransaction.ready_predecessor's array branch).
+            items = queue.get('items') or []
+            if segment_id not in items:
+                return None
+            index = items.index(segment_id)
+            if index == 0:
+                return None
+            row = self.get('jobs', items[index - 1]) or {}
+            if row.get('state') != 'ready' or row.get('priority') != priority or row.get('owner_key') != owner_key:
+                return None
+            return deepcopy(row)
         jobs = [
             v
             for (table, _), v in self.rows.items()
@@ -959,12 +973,14 @@ def test_head_lookup_budget_is_shared_by_all_visited_owners(monkeypatch):
 @pytest.mark.parametrize(
     'pool,kind,duration', [('batch', 'capture_span', 121), ('live', 'capture_span', 121), ('live', 'conversation', 10)]
 )
-def test_unleasable_merge_head_never_splices_ahead_of_eligible_fifo(monkeypatch, pool, kind, duration):
+@pytest.mark.parametrize('fifo_array', ['true', 'false'])
+def test_unleasable_merge_head_never_splices_ahead_of_eligible_fifo(monkeypatch, pool, kind, duration, fifo_array):
     from dataclasses import replace
     from utils.batch_pipeline.contracts import PoolCapacity
 
     monkeypatch.setenv('BATCH_PIPELINE_HEAD_PRIORITY_ENABLED', 'true')
     monkeypatch.setenv('BATCH_PIPELINE_SHARED_LIVE_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_FIFO_ARRAY_LINK_ENABLED', fifo_array)
     store = MemoryStore()
     queue = Scheduler(store, pool=pool)
     queue.enqueue(replace(item('fifo', capture=20, duration=10), unit_kind='capture_span'), 0)
@@ -983,7 +999,11 @@ def test_unleasable_merge_head_never_splices_ahead_of_eligible_fifo(monkeypatch,
     key = f'{int(Priority.DEEP)}_{owner_key("heavy")}'
     assert store.rows['queues', key]['head'] == 'head'
     assert store.rows['queues', key]['tail'] == 'tail'
-    assert store.rows['jobs', 'head']['next'] == 'tail'
+    if fifo_array == 'true':
+        assert store.rows['queues', key]['items'] == ['head', 'tail']
+        assert store.rows['jobs', 'head'].get('next', '') == ''
+    else:
+        assert store.rows['jobs', 'head']['next'] == 'tail'
     assert store.rows['jobs', 'head']['state'] == 'ready'
     assert queue.complete(WorkResult('fifo', 'gs://synthetic/result'), lease.token, 2)
     assert OrderedMerge(store).commit_next('heavy', 3) is None

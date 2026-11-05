@@ -10,11 +10,13 @@ from time import monotonic
 
 from database.batch_pipeline_store import Store, Transaction, pull_operation
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
+from database.batch_pipeline_transaction_labels import store_operation
 from database.firestore_transaction_retry import FirestoreContentionExhausted
 from config.batch_pipeline import (
     FRESH_CAPTURE_LAG_SECONDS,
     SCHEDULER_SHARDS,
     control_candidate_fanout,
+    fifo_array_link_enabled,
     pull_multi_lease_enabled,
     scheduler_control_key,
     shard_spread_enabled,
@@ -35,6 +37,18 @@ LEASE_SECONDS = 120.0
 RETRY_BACKOFF_CAP_SECONDS = 600
 MAX_ACTIVE_OWNERS = 1024
 MAX_VISITS = 128
+# The queue-document FIFO array holds the owner's ordered segment ids. Segment
+# ids are 64-char sha256 hex digests, so the bound keeps the queue document far
+# below Firestore's 1 MiB limit; admission retries past it exactly like the
+# active-owner capacity bound does.
+FIFO_ARRAY_MAX_ITEMS = 2048
+# Conversion and stray absorption walk a legacy chain only this deep; beyond
+# the cap the queue stays legacy (conversion) or refuses (absorption) instead
+# of guessing across an unverified gap.
+FIFO_LINK_MIGRATION_WALK_CAP = 512
+# A vetoed conversion re-probes at most once a minute, so a deep backlog never
+# pays the migration walk on every append.
+FIFO_LINK_PROBE_BACKOFF_SECONDS = 60.0
 # The walk visits another queue only below this many buffered writes (flush
 # refuses 450); a stop commits the rotations so far and the next pull resumes.
 PULL_WRITE_HEADROOM = 300
@@ -57,9 +71,128 @@ def owner_key(owner_id: str) -> str:
     return hashlib.sha256(owner_id.encode()).hexdigest()
 
 
-def _append(tx: Transaction, control: dict, job: dict) -> None:
+def _fifo_read_chain(tx: Transaction, queue: dict) -> list[str] | None:
+    """Read a legacy ``head -> next`` chain for conversion; ``None`` vetoes conversion.
+
+    The chain must be fully walkable (no purged rows, no cycles, within the
+    migration cap) and end exactly at the mirrored tail, or the queue stays
+    legacy: a guessed prefix would reorder the owner's FIFO.
+    """
+    head = queue.get('head', '')
+    if not head:
+        return [] if not queue.get('tail') else None
+    chain: list[str] = []
+    seen: set[str] = set()
+    cursor: str | None = head
+    while cursor:
+        if cursor in seen or len(chain) >= FIFO_LINK_MIGRATION_WALK_CAP:
+            return None
+        job = tx.get('jobs', cursor)
+        if not job:
+            return None
+        chain.append(cursor)
+        seen.add(cursor)
+        cursor = job.get('next') or ''
+    tail = queue.get('tail', '')
+    if tail and chain and chain[-1] != tail:
+        return None
+    return chain
+
+
+def _fifo_absorb_strays(tx: Transaction, queue: dict) -> bool:
+    """Fold legacy chain stragglers into the array; True when the queue changed.
+
+    Stragglers exist only while an older binary is still rolling: it seeds a
+    chain beside an empty array, or chains on from the array's tail and moves
+    the tail mirror to the straggler. Both foldings are bounded, verified row
+    by row, and end exactly at the mirrored tail before anything is folded.
+    A chain deeper than the migration cap refuses the whole append: a partial
+    fold would strand the remainder behind a moved tail mirror.
+    """
+    items = queue.setdefault('items', [])
+    head = queue.get('head', '')
+    if not items and head:
+        chain = _fifo_read_chain(tx, queue)
+        if chain is None or (queue.get('tail') and chain and chain[-1] != queue['tail']):
+            return False
+        queue['items'] = chain
+        queue['head'] = chain[0] if chain else ''
+        return True
+    tail = queue.get('tail', '')
+    if not items or not tail or tail in items:
+        return False
+    absorbed: list[str] = []
+    cursor = (tx.get('jobs', items[-1]) or {}).get('next') or ''
+    while cursor and len(absorbed) < FIFO_LINK_MIGRATION_WALK_CAP:
+        if cursor in items or cursor in absorbed:
+            cursor = ''
+            break
+        job = tx.get('jobs', cursor)
+        if not job:
+            cursor = ''
+            break
+        absorbed.append(cursor)
+        cursor = job.get('next') or ''
+    if cursor or (absorbed and absorbed[-1] != tail):
+        # Deeper than the cap, or the chain does not end at the mirrored tail:
+        # half-folded queues strand the remainder behind a moved tail mirror,
+        # so the whole append refuses and retries after the roll completes.
+        raise RuntimeError('fifo link migration chain overflow; admission must retry')
+    if absorbed:
+        queue['items'] = items + absorbed
+        queue['tail'] = absorbed[-1]
+        return True
+    return False
+
+
+def _append_fifo_array(tx: Transaction, queue: dict, queue_key: str, control: dict, job: dict, now: float) -> bool:
+    """Append through the queue-document FIFO; False falls back to the legacy chain.
+
+    Conversion happens here, at the only writer that must see it: a whole
+    legacy chain converts while it fits the bounded migration walk, and a
+    vetoed conversion stamps ``link_probe_at`` so a deep backlog does not pay
+    the walk on every append. The job document never joins the write set.
+    """
+    if queue.get('link_mode') != 'fifo_array':
+        probe_at = queue.get('link_probe_at')
+        if probe_at is not None and now - probe_at < FIFO_LINK_PROBE_BACKOFF_SECONDS:
+            return False
+        chain = _fifo_read_chain(tx, queue)
+        if chain is None:
+            queue['link_probe_at'] = now
+            tx.put('queues', queue_key, queue)
+            return False
+        queue['items'] = chain
+        queue['link_mode'] = 'fifo_array'
+    else:
+        _fifo_absorb_strays(tx, queue)
+    items = queue.setdefault('items', [])
+    if len(items) >= FIFO_ARRAY_MAX_ITEMS:
+        raise RuntimeError('fifo array capacity exceeded; admission must retry')
+    items.append(job['segment_id'])
+    queue['items'] = items
+    job['next'] = ''
+    ring = control['rings'][str(job['priority'])]
+    if not queue.get('head'):
+        if len(ring) >= MAX_ACTIVE_OWNERS:
+            raise RuntimeError('active owner capacity exceeded; admission must retry')
+        if queue_key not in ring:
+            ring.append(queue_key)
+        queue['head'] = job['segment_id']
+        queue['deficit'] = 0.0
+        queue['continuing'] = False
+    queue['tail'] = job['segment_id']
+    activate(tx, control, job['priority'], job['available_at'])
+    tx.put('control', scheduler_control_key(job['owner_key']), control)
+    tx.put('queues', queue_key, queue)
+    return True
+
+
+def _append(tx: Transaction, control: dict, job: dict, now: float) -> None:
     queue_key = f"{job['priority']}_{job['owner_key']}"
     queue = tx.get('queues', queue_key) or {'head': '', 'tail': '', 'deficit': 0.0, 'continuing': False}
+    if fifo_array_link_enabled() and _append_fifo_array(tx, queue, queue_key, control, job, now):
+        return
     ring = control['rings'][str(job['priority'])]
     if not queue['head']:
         if len(ring) >= MAX_ACTIVE_OWNERS:
@@ -179,7 +312,14 @@ def _prefer_merge_head(
     ):
         return job
     previous = tx.ready_predecessor(job['owner_key'], job['priority'], head['segment_id'])
-    if not previous or previous.get('state') != 'ready' or previous.get('next') != head['segment_id']:
+    if (
+        not previous
+        or previous.get('state') != 'ready'
+        or (queue.get('link_mode') != 'fifo_array' and previous.get('next') != head['segment_id'])
+    ):
+        # The array-backed FIFO carries its own ordering authority; the legacy
+        # chain additionally verifies the predecessor's next pointer, which an
+        # array queue never writes.
         observations.append(('head_not_found', None))
         return job
     try:
@@ -193,6 +333,16 @@ def _prefer_merge_head(
         return job
     if not stage_in_transaction(tx, head, 'scheduler', observations=observations, candidates=candidates).head_priority:
         return job
+    if queue.get('link_mode') == 'fifo_array':
+        # Promote in the array alone: no predecessor or successor job document
+        # joins the pull's write set, so the splice cannot contend with the
+        # promoted unit's own lifecycle writers.
+        items = [segment for segment in (queue.get('items') or []) if segment != head['segment_id']]
+        items.insert(0, head['segment_id'])
+        queue['items'] = items
+        queue['head'] = head['segment_id']
+        queue['tail'] = items[-1] if items else ''
+        return head
     previous['next'] = head['next']
     tx.put('jobs', previous['segment_id'], previous)
     if queue['tail'] == head['segment_id']:
@@ -233,7 +383,8 @@ class Scheduler:
         self._contention_lock = Lock()
 
     def enqueue(self, item: WorkItem, now: float) -> bool:
-        return self.store.run(lambda tx: self.enqueue_in_transaction(tx, item, now))
+        with store_operation('batch_enqueue'):
+            return self.store.run(lambda tx: self.enqueue_in_transaction(tx, item, now))
 
     @staticmethod
     def enqueue_in_transaction(tx: Transaction, item: WorkItem, now: float, *, policy=None) -> bool:
@@ -286,7 +437,7 @@ class Scheduler:
             # Merge class only: fresh rows commit ahead of the owner's catch-up backlog.
             'fresh_capture': now - item.capture_at - item.duration_seconds <= FRESH_CAPTURE_LAG_SECONDS,
         }
-        _append(tx, control, job)
+        _append(tx, control, job, now)
         tx.put('jobs', item.segment_id, job)
         # Admission and merge serialize through this fence even for different classes.
         owner['revision'] = owner.get('revision', 0) + 1
@@ -507,6 +658,10 @@ class Scheduler:
                     break
                 queue_key = ring[0]
                 queue = tx.get('queues', queue_key)
+                if queue.get('link_mode') == 'fifo_array' and _fifo_absorb_strays(tx, queue):
+                    # Folded mid-roll stragglers into the array; the lease or
+                    # rotation below commits the queue document either way.
+                    tx.put('queues', queue_key, queue)
                 job = tx.get('jobs', queue['head']) if queue.get('head') else {}
                 if not job:
                     ring.pop(0)  # A completed purge may have removed this queue.
@@ -586,7 +741,14 @@ class Scheduler:
                                 tx.put('queues', key, other)
                     continue
                 queue['deficit'] -= cost
-                queue['head'] = job['next']
+                if queue.get('link_mode') == 'fifo_array':
+                    items = queue.get('items') or []
+                    if items and items[0] == job['segment_id']:
+                        items.pop(0)
+                    queue['items'] = items
+                    queue['head'] = items[0] if items else ''
+                else:
+                    queue['head'] = job['next']
                 queue['continuing'] = True
                 if not queue['head']:
                     queue.update(tail='', deficit=0.0, continuing=False)
@@ -666,7 +828,8 @@ class Scheduler:
             tx.put('jobs', segment_id, job)
             return True
 
-        return self.store.run(commit)
+        with store_operation('batch_heartbeat'):
+            return self.store.run(commit)
 
     def complete(self, result: WorkResult, token: str, now: float) -> bool:
         def commit(tx):
@@ -683,7 +846,8 @@ class Scheduler:
             tx.put('jobs', result.segment_id, job)
             return True, True, job['duration_seconds']
 
-        accepted, changed, seconds = self.store.run(commit)
+        with store_operation('batch_complete'):
+            accepted, changed, seconds = self.store.run(commit)
         if changed and self.metrics:
             self.metrics.record('completed')
             try:
@@ -737,7 +901,8 @@ class Scheduler:
             tx.put('jobs', segment_id, job)
             return job['state'], job['attempt'], job['duration_seconds']
 
-        outcome = self.store.run(commit)
+        with store_operation('batch_fail'):
+            outcome = self.store.run(commit)
         record_policy_observations(observations)
         if outcome:
             state, attempt, seconds = outcome
@@ -821,7 +986,8 @@ class Scheduler:
             tx.put('jobs', segment_id, job)
             return True
 
-        deferred = self.store.run(commit)
+        with store_operation('batch_defer'):
+            deferred = self.store.run(commit)
         if deferred and admission_refused and self.metrics:
             try:
                 self.metrics.record(
@@ -848,48 +1014,50 @@ class Scheduler:
             tx.put('jobs', segment_id, job)
             return True
 
-        return self.store.run(commit)
+        with store_operation('batch_release'):
+            return self.store.run(commit)
 
     def recover(self, now: float, limit: int = 100) -> int:
-        self.store.run(lambda tx: migrate_legacy(tx, now))
-        recovered = 0
-        candidates, observations = {}, []
-        for state in ('leased', 'retry'):
-            for segment_id in self.store.due(state, now, limit):
+        with store_operation('batch_recover'):
+            self.store.run(lambda tx: migrate_legacy(tx, now))
+            recovered = 0
+            candidates, observations = {}, []
+            for state in ('leased', 'retry'):
+                for segment_id in self.store.due(state, now, limit):
 
-                def commit(tx: Transaction):
-                    observations.clear()
-                    job = tx.get('jobs', segment_id)
-                    if job.get('state') == 'leased' and job['lease_until'] <= now:
-                        outcome = expire_lease(
-                            tx,
-                            job,
-                            now,
-                            stage_policy=stage_in_transaction,
-                            candidates=candidates,
-                            observations=observations,
-                            defer=_defer,
-                        )
-                    elif job.get('state') == 'retry' and job['available_at'] <= now:
-                        control = read_control(tx, scheduler_control_key(job['owner_key']))
-                        job['state'] = 'ready'
-                        _append(tx, control, job)
-                        outcome = ('requeued', 0, None)
-                    else:
-                        return None
-                    tx.put('jobs', segment_id, job)
-                    return outcome
+                    def commit(tx: Transaction):
+                        observations.clear()
+                        job = tx.get('jobs', segment_id)
+                        if job.get('state') == 'leased' and job['lease_until'] <= now:
+                            outcome = expire_lease(
+                                tx,
+                                job,
+                                now,
+                                stage_policy=stage_in_transaction,
+                                candidates=candidates,
+                                observations=observations,
+                                defer=_defer,
+                            )
+                        elif job.get('state') == 'retry' and job['available_at'] <= now:
+                            control = read_control(tx, scheduler_control_key(job['owner_key']))
+                            job['state'] = 'ready'
+                            _append(tx, control, job, now)
+                            outcome = ('requeued', 0, None)
+                        else:
+                            return None
+                        tx.put('jobs', segment_id, job)
+                        return outcome
 
-                try:
-                    outcome = self.store.run(commit)
-                    record_policy_observations(observations)
-                except BatchPrivacyBlocked:
-                    self.store.quarantine_fenced(segment_id, now)
-                    continue
-                if outcome:
-                    recovered += 1
-                    observe_recovery(outcome, self.metrics)
-        return recovered
+                    try:
+                        outcome = self.store.run(commit)
+                        record_policy_observations(observations)
+                    except BatchPrivacyBlocked:
+                        self.store.quarantine_fenced(segment_id, now)
+                        continue
+                    if outcome:
+                        recovered += 1
+                        observe_recovery(outcome, self.metrics)
+            return recovered
 
     @staticmethod
     def restore_audio_in_transaction(tx: Transaction, job: dict, now: float) -> None:
@@ -911,7 +1079,7 @@ class Scheduler:
             raise ValueError('verified missing-input repair required')
         control = read_control(tx, scheduler_control_key(job['owner_key']))
         job.update(state='ready', available_at=now, merge_pending=True, token='', lease_until=0.0)
-        _append(tx, control, job)
+        _append(tx, control, job, now)
         tx.put('jobs', job['segment_id'], job)
 
     @staticmethod
@@ -927,13 +1095,14 @@ class Scheduler:
             lease_until=0.0,
             retry_started_at=job.get('retry_started_at', now),
         )
-        _append(tx, control, job)
+        _append(tx, control, job, now)
         tx.put('jobs', job['segment_id'], job)
         return True
 
     def redrive_dead(self, segment_id: str, now: float) -> bool:
         """Authenticated recovery of historical dead records; never skips a gap."""
-        return self.store.run(lambda tx: self.redrive_in_transaction(tx, tx.get('jobs', segment_id), now))
+        with store_operation('batch_redrive'):
+            return self.store.run(lambda tx: self.redrive_in_transaction(tx, tx.get('jobs', segment_id), now))
 
     def acknowledge_gpu_idle(self, gpu_id: str, token: str) -> bool:
         """Only the hardware admission owner may call this after GPU quiescence.
@@ -955,4 +1124,5 @@ class Scheduler:
             tx.put('gpus', key, gpu)
             return True
 
-        return self.store.run(commit)
+        with store_operation('batch_gpu_release'):
+            return self.store.run(commit)

@@ -201,7 +201,10 @@ def test_stale_head_query_never_re_leases_or_reverts_a_unit_leased_in_the_same_t
 
 def test_without_the_write_overlay_a_stale_head_would_be_leased_twice(monkeypatch):
     # Proves the test above has teeth: the overlay is what keeps it safe.
+    # The overlay guards the legacy snapshot-query path, which stays live
+    # behind the representation kill switch, so the premise is pinned there.
     monkeypatch.setenv('BATCH_PIPELINE_HEAD_PRIORITY_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_FIFO_ARRAY_LINK_ENABLED', 'false')
     from utils.batch_pipeline import scheduler
 
     monkeypatch.setattr(scheduler._OwnWrites, '_own', lambda self, job: job)

@@ -335,6 +335,19 @@ class SimStore:
 
     def ready_predecessor(self, owner_key: str, priority: int, segment_id: str) -> dict | None:
         """Only a ready row in this owner's priority FIFO can be the live predecessor; two matches fail closed."""
+        queue = self.rows.get(('queues', f'{int(priority)}_{owner_key}')) or {}
+        if queue.get('link_mode') == 'fifo_array':
+            # Array-backed FIFO: ordering lives on the queue document.
+            items = queue.get('items') or []
+            if segment_id not in items:
+                return None
+            index = items.index(segment_id)
+            if index == 0:
+                return None
+            row = self.rows.get(('jobs', items[index - 1])) or {}
+            if row.get('state') != 'ready' or row.get('priority') != priority or row.get('owner_key') != owner_key:
+                return None
+            return deepcopy(row)
         matches = sorted(
             key
             for (table, key), row in self.rows.items()
@@ -497,11 +510,19 @@ class SimStore:
             queue = self.rows.get(('queues', queue_key))
             touched += [('jobs', segment_id), ('results', segment_id), ('queues', queue_key)]
             touched.append(('control', scheduler_control_key(key)))
-            predecessors = [
-                other_id
-                for (other_table, other_id), other in sorted(self.rows.items())
-                if other_table == 'jobs' and other.get('next') == segment_id and other.get('owner_key') == key
-            ]
+            predecessors = []
+            if queue is not None and queue.get('link_mode') == 'fifo_array':
+                # Array-backed FIFO: unlink by index repair, no chain rewrites.
+                items = [s for s in (queue.get('items') or []) if s != segment_id]
+                queue['items'] = items
+                queue['head'] = items[0] if items else ''
+                queue['tail'] = items[-1] if items else ''
+            else:
+                predecessors = [
+                    other_id
+                    for (other_table, other_id), other in sorted(self.rows.items())
+                    if other_table == 'jobs' and other.get('next') == segment_id and other.get('owner_key') == key
+                ]
             if queue is not None:
                 queue = dict(queue)
                 if queue.get('head') == segment_id:
