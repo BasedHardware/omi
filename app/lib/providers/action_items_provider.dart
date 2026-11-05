@@ -1357,24 +1357,27 @@ class ActionItemsProvider extends ChangeNotifier {
   }
 
   // Bulk operations
-  Future<bool> deleteSelectedItems({BuildContext? context}) async {
-    if (_selectedItems.isEmpty) return false;
-    final generation = _sessionGeneration;
 
-    final itemsToDelete = _actionItems.where((item) => _selectedItems.contains(item.id)).toList();
+  /// Deletes [itemsToDelete] with one batch-delete request. Many concurrent single deletes
+  /// for one owner all write the same server-side vector route document and fail with
+  /// commit contention; the batch endpoint settles them as one mutation.
+  ///
+  /// Rows disappear at once. If the request fails every row goes back where it was; if the
+  /// server deletes only some, the rest go back. `stale` means the session changed while the
+  /// request was in flight, so nothing was restored.
+  Future<({List<String>? deleted, bool stale})> _deleteItemsInBulk(List<ActionItemWithMetadata> itemsToDelete) async {
+    final generation = _sessionGeneration;
     final ids = itemsToDelete.map((item) => item.id).toList(growable: false);
+    final idSet = ids.toSet();
     // Snapshot positions so a failed bulk delete can re-insert the rows
     // back where the user expected them, instead of dumping them at the end.
     final snapshot = <int, ActionItemWithMetadata>{for (final item in itemsToDelete) _actionItems.indexOf(item): item};
-    final wasInSelection = _isSelectionMode;
 
     // Dismiss UI immediately — don't wait for API
-    _actionItems.removeWhere((item) => _selectedItems.contains(item.id));
+    _actionItems.removeWhere((item) => idSet.contains(item.id));
     // Register all bulk-deleted IDs as pending so a concurrent background
     // fetch cannot reinsert them while the server delete is in flight.
     _pendingDeletionIds.addAll(ids);
-    _selectedItems.clear();
-    _isSelectionMode = false;
     notifyListeners();
 
     // Apple Reminders mirror lives client-side, so it still has to fan out
@@ -1389,7 +1392,7 @@ class ActionItemsProvider extends ChangeNotifier {
     } catch (e) {
       Logger.debug('Error bulk deleting action items: $e');
     }
-    if (generation != _sessionGeneration) return false;
+    if (generation != _sessionGeneration) return (deleted: null, stale: true);
     if (deleted == null) {
       Logger.debug('bulkDeleteActionItems returned null — rolling back local list');
       // Clear tombstones on rollback so future refreshes don't filter the
@@ -1400,14 +1403,8 @@ class ActionItemsProvider extends ChangeNotifier {
       for (final entry in entries) {
         _restoreDeletedItem(entry.value, entry.key);
       }
-      _isSelectionMode = wasInSelection;
-      _selectedItems = ids.toSet();
       notifyListeners();
-
-      if (context != null && context.mounted) {
-        OmiFeedback.error(context, context.l10n.bulkDeleteFailed);
-      }
-      return false;
+      return (deleted: null, stale: false);
     }
     final deletedIDs = deleted.toSet();
     for (final id in deletedIDs) {
@@ -1423,15 +1420,43 @@ class ActionItemsProvider extends ChangeNotifier {
       }
       notifyListeners();
     }
+    return (deleted: deleted, stale: false);
+  }
+
+  Future<bool> deleteSelectedItems({BuildContext? context}) async {
+    if (_selectedItems.isEmpty) return false;
+    final itemsToDelete = _actionItems.where((item) => _selectedItems.contains(item.id)).toList();
+    final ids = itemsToDelete.map((item) => item.id).toSet();
+    final wasInSelection = _isSelectionMode;
+    _selectedItems.clear();
+    _isSelectionMode = false;
+
+    final result = await _deleteItemsInBulk(itemsToDelete);
+    if (result.stale) return false;
+    final deleted = result.deleted;
+    if (deleted == null) {
+      _isSelectionMode = wasInSelection;
+      _selectedItems = ids;
+      notifyListeners();
+      if (context != null && context.mounted) {
+        OmiFeedback.error(context, context.l10n.bulkDeleteFailed);
+      }
+      return false;
+    }
     return deleted.length == ids.length;
+  }
+
+  /// Deletes a whole section (for example every completed task) in one batch request.
+  /// Returns true only when the server deleted every row; rejected rows are already back.
+  Future<bool> deleteActionItems(List<ActionItemWithMetadata> items) async {
+    if (items.isEmpty) return true;
+    final result = await _deleteItemsInBulk(items);
+    return !result.stale && result.deleted?.length == items.length;
   }
 
   Future<bool> clearCompletedItems() async {
     final completed = _actionItems.where((item) => item.completed).toList();
-    if (completed.isEmpty) return true;
-
-    final results = await Future.wait(completed.map((item) => deleteActionItem(item)));
-    return results.every((success) => success);
+    return deleteActionItems(completed);
   }
 
   void startSelectionWithItem(String itemId) {

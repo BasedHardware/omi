@@ -375,8 +375,10 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       destructive: true,
     );
     if (!shouldClear) return;
-    final deleted = await Future.wait(items.map(provider.deleteActionItem));
-    if (!mounted || deleted.every((ok) => ok)) return;
+    // One batch request, not one delete per task: concurrent single deletes for one owner
+    // contend on the same server route document and fail.
+    final deleted = await provider.deleteActionItems(items);
+    if (!mounted || deleted) return;
     // The provider has already put each rejected row back; say so, as a single delete does
     // (task_delete_undo.dart), instead of letting the rows reappear in silence.
     OmiFeedback.error(context, l10n.failedToDeleteActionItem);
