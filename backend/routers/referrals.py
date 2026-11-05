@@ -17,6 +17,7 @@ from utils.referrals import (
     referrer_uid_from_code,
 )
 from utils.integration_telemetry import emit_posthog_event
+from config.app_channel import is_testflight
 from config.referral_campaign import campaign_preview_uid
 from database import referral_campaign as campaign_db
 from utils.referral_campaign import (
@@ -154,10 +155,11 @@ def _campaign_error(error):
 
 
 @router.get('/v2/users/me/referral/campaign', response_model=CampaignSnapshotResponse)
-def get_campaign(uid: str = Depends(auth.get_current_user_uid_readonly)):
+def get_campaign(request: Request, uid: str = Depends(auth.get_current_user_uid_readonly)):
     adapter = TrustedCheckoutAdapter()
     enabled = campaign_enabled() and adapter.ready
-    preview = not enabled and campaign_preview_uid(uid)
+    # Read-only snapshot for team uids and TestFlight builds; the header is a client assertion.
+    preview = not enabled and (campaign_preview_uid(uid) or is_testflight(request))
     if not enabled and not preview:
         return campaign_snapshot(
             {}, enabled=False, reason='campaign_disabled' if not campaign_enabled() else 'checkout_activation_required'
@@ -174,10 +176,10 @@ def get_campaign(uid: str = Depends(auth.get_current_user_uid_readonly)):
 
 
 @router.post('/v2/users/me/referral/campaign/claim', response_model=CampaignSnapshotResponse)
-def claim_campaign(uid: str = Depends(auth.get_current_user_uid_readonly)):
-    # Disabled or team-preview claim returns the read-only snapshot and never writes.
+def claim_campaign(request: Request, uid: str = Depends(auth.get_current_user_uid_readonly)):
+    # Disabled or preview claim returns the read-only snapshot and never writes.
     if not campaign_enabled() or not TrustedCheckoutAdapter().ready:
-        return get_campaign(uid)
+        return get_campaign(request, uid)
     try:
         state, reason = campaign_db.claim_months(uid)
         result = campaign_snapshot(state, enabled=True, referral_url=campaign_link(uid), reason=reason)
