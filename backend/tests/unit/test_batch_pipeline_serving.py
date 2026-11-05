@@ -645,6 +645,31 @@ def test_metrics_retains_legacy_drain_until_both_controls_are_on(api, monkeypatc
     service.metrics.refresh.assert_not_called()
 
 
+@pytest.mark.parametrize(
+    'scrape_flag,serving_flag', [(None, 'false'), ('true', 'false'), (None, 'true'), ('true', 'true')]
+)
+def test_pump_metrics_refreshes_without_reconcile_regardless_of_serving_controls(
+    api, monkeypatch, scrape_flag, serving_flag
+):
+    from unittest.mock import AsyncMock
+
+    client, store = api
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_PUMP_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_SERVING_ENABLED', serving_flag)
+    monkeypatch.delenv('BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED', raising=False)
+    if scrape_flag is not None:
+        monkeypatch.setenv('BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED', scrape_flag)
+    service = Serving(store, metrics=Mock(), leader=Mock())
+    service.reconcile_async = AsyncMock(side_effect=AssertionError('pump metrics must never reconcile'))
+    monkeypatch.setattr(module, 'serving_for_stage', lambda stage: service)
+
+    assert client.get('/v2/batch-pipeline/metrics').status_code == 200
+    service.metrics.refresh.assert_called_once()
+    assert service.metrics.refresh.call_args.args[0] is store
+    service.reconcile_async.assert_not_awaited()
+    service.leader.acquire.assert_not_called()
+
+
 @pytest.mark.asyncio
 async def test_recovery_request_awaits_paid_intent_before_response_and_projection(api, monkeypatch, caplog):
     from routers import batch_pipeline as routes
