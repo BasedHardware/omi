@@ -524,9 +524,10 @@ async def drain_recordings(store, *, provider_outbox_factory=None) -> bool:
             if pending.get('partial_coordinator'):
                 record_partial_failure(error, run=pending.get('partial_run'))
             logger.warning(
-                'event=batch_live_admission outcome=retry exception_type=%s reason=%s',
+                'event=batch_live_admission outcome=retry exception_type=%s reason=%s tables=%s',
                 type(error).__name__,
                 _retry_reason(error),
+                getattr(error, 'store_tables', 'n/a'),
             )
 
         def defer(tx):
