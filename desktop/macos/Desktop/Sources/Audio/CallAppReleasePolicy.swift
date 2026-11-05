@@ -9,7 +9,13 @@ import Foundation
 enum CallAppReleasePolicy {
   // BEGIN GENERATED: call-app-catalog (desktop/macos/scripts/call-app-catalog/score.py)
   static let releaseEndsCallBundleIDs: Set<String> = [
-    "us.zoom.xos"
+    "cisco-systems.spark",
+    "com.apple.facetime",
+    "com.cisco.webexmeetingsapp",
+    "com.logmein.gotomeeting",
+    "com.microsoft.teams",
+    "com.microsoft.teams2",
+    "us.zoom.xos",
   ]
   // END GENERATED: call-app-catalog
 

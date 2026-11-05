@@ -347,13 +347,25 @@ final class MeetingDetector {
       let codeConflict =
         !confirmedMeetIDs.isEmpty && !observedMeetIDs.isEmpty
         && confirmedMeetIDs.isDisjoint(with: observedMeetIDs)
+      // A release-ends-call app bumps its generation when the mic is released and
+      // re-acquired, so a confirmed `app:<bundle>#n` that is no longer observed while a
+      // newer generation is means the first call ended: a new meeting, not a resume.
+      // Calendar overlap alone must not join two generations of the same app.
+      let generationConflict = confirmedCallIDs.contains { confirmed in
+        let body = confirmed.dropFirst("app:".count)
+        guard confirmed.hasPrefix("app:"), let hash = body.lastIndex(of: "#") else { return false }
+        let bundle = String(body[..<hash])
+        return callIDs.contains { observed in
+          observed.hasPrefix("app:\(bundle)#") && observed != confirmed
+        }
+      }
       // Retain the original conversation while the tab is hidden. Only a matching
       // code may use the longer hold; even the same calendar event cannot join two codes.
       let expired =
         confirmedMeetIDs.isEmpty
         ? elapsed >= resumeWindow : elapsed > MeetingDetectionTiming.meetingCodeResumeWindow
       let matches =
-        !codeConflict
+        !codeConflict && !generationConflict
         && (!confirmedMeetIDs.isDisjoint(with: observedMeetIDs)
           || (elapsed < resumeWindow
             && (!confirmedCallIDs.isDisjoint(with: callIDs)
