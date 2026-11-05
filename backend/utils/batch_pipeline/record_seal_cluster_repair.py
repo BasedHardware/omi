@@ -103,12 +103,14 @@ def repair_one(store, storage, artifacts, path, *, flags, inventory, budget, mod
         from database.record_pending_repair import cancel_missing
 
         return cancel_missing(store, uid, cid, now=time.time(), preview=mode == 'plan')
-    partial = bool(job.get('partial_coordinator') or row.get('record_audio_partial'))
+    partial = bool(job.get('partial_coordinator') or config.jobs_enabled() and row.get('record_audio_partial'))
     if partial:
-        # Retired coordinators stay retired until their barrier changes. Aged
-        # pending barriers may retry, always through fresh transactional proof.
+        # Aged pending/retired barriers retry only with the rollback switch on
+        # and fresh transactional proof; age never clears the barrier.
         if partial_config.partial_barrier(row) and (
-            job.get('state') != 'record_pending' or not partial_config.repair_due(row, time.time())
+            not config.jobs_enabled()
+            or job.get('state') not in {'record_pending', 'partial_retired'}
+            or not partial_config.repair_due(row, time.time())
         ):
             return 'already_partial'
     proof = inventory()
@@ -118,7 +120,13 @@ def repair_one(store, storage, artifacts, path, *, flags, inventory, budget, mod
             reason = job.get('partial_reason')
             reason_out['partial_reason'] = reason if reason in partial_config.REASONS else 'tail_lost_or_unproven'
         return finish_partial(
-            store, path, reason='tail_lagging', proof=proof, now=time.time(), preview=mode == 'plan', retry_aged=True
+            store,
+            path,
+            reason='tail_lagging',
+            proof=proof,
+            now=time.time(),
+            preview=mode == 'plan',
+            retry_aged=config.jobs_enabled(),
         )
     plan: dict[str, Any]
     if job:
@@ -200,7 +208,7 @@ def settled(data):
     return (
         bool(data.get('record_audio_partial'))
         and partial_config.partial_barrier(data)
-        and not partial_config.repair_due(data, time.time())
+        and (not config.jobs_enabled() or not partial_config.repair_due(data, time.time()))
     )
 
 

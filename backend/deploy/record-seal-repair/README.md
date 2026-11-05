@@ -164,7 +164,7 @@ A valid partial barrier is re-attemptable after the existing one-hour inventory
 poll interval, measured from its last repair or initial partial finish. Fresh
 producer and transactional privacy proof is required by `finish_partial`; the
 barrier and its generations remain intact, and no complete seal is written.
-Retired coordinators still require a changed upload revision to reopen.
+Aged retired coordinators may also reopen through this same fresh-proof transaction.
 
 After seven days (seven existing inventory-idle windows), a missing conversation
 may terminally cancel its canonical pending job. A single transaction rechecks
@@ -176,5 +176,6 @@ Row events include a closed `blocker` and `disposition`; the aggregate
 `blocker_outcomes` counts their combinations. `log-metrics.json` registers
 `omi_record_seal_repair_blocker_outcomes` for the Kubernetes CronJob. This repair
 is not served on Cloud Run; the `omi_.*` GMP keep list also covers the metric
-name. Roll back discovery with `RECORD_SEAL_REPAIR_JOBS=off`; revert this change
-for the aged-partial/closed-row behavior. Existing custody owners stay unchanged.
+name. Set `recordSealRepair.jobsDiscovery=off` to pass `RECORD_SEAL_REPAIR_JOBS=off`
+to the CronJob and restore the prior discovery and partial-retry behavior. Existing
+custody owners stay unchanged.

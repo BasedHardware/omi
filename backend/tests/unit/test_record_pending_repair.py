@@ -96,8 +96,14 @@ def repair_partial(source, proof=None, mode='apply'):
 
 
 @pytest.mark.parametrize('proof_ok', [False, True])
-def test_aged_partial_retries_with_fresh_proof_and_keeps_barrier(partial_source, proof_ok):
+@pytest.mark.parametrize('state', ['record_pending', 'partial_retired'])
+def test_aged_partial_retries_with_fresh_proof_and_keeps_barrier(partial_source, proof_ok, state):
     row = age_partial(partial_source)
+    segment = record_identity('synthetic', 'record')[1]
+    job = partial_source[1].rows[('batch_pipeline_dev_jobs', segment)]
+    job['state'] = state
+    job['partial_run'] = {'retired_at': NOW, 'coverage': [{'start': 100, 'end': 110}]}
+    before_rows = deepcopy(partial_source[1].rows)
     before = deepcopy(row['record_audio_partial'])
     assert not cluster.settled(row)
     if proof_ok:
@@ -107,9 +113,15 @@ def test_aged_partial_retries_with_fresh_proof_and_keeps_barrier(partial_source,
         assert row['record_audio_partial']['finished_at'] == before['finished_at']
         assert not row['record_audio_closed']
         assert pending(partial_source)['state'] == 'record_pending'
+        assert 'retired_at' not in pending(partial_source)['partial_run']
+        assert (
+            pending(partial_source)['partial_run']['coverage']
+            == before_rows[('batch_pipeline_dev_jobs', segment)]['partial_run']['coverage']
+        )
     else:
         with pytest.raises(ValueError):
             repair_partial(partial_source, proof={})
+        assert partial_source[1].rows == before_rows
         assert row['record_audio_partial'] == before
         assert not row['record_audio_closed']
 
@@ -137,14 +149,28 @@ def test_aged_partial_plan_does_not_rearm(partial_source):
     assert partial_source[1].rows == before
 
 
-def test_partial_fresh_proof_rechecked_after_inventory(partial_source):
+def test_partial_retired_after_inventory_retries_through_transaction(partial_source):
     row = age_partial(partial_source)
-    # Coordinator retired after discovery: fresh transactional state wins.
     job_id = record_identity('synthetic', 'record')[1]
-    partial_source[1].rows[('batch_pipeline_dev_jobs', job_id)]['state'] = 'partial_retired'
-    before = deepcopy(row)
-    assert repair_partial(partial_source) == 'already_partial'
-    assert row == before
+
+    def inventory():
+        partial_source[1].rows[('batch_pipeline_dev_jobs', job_id)]['state'] = 'partial_retired'
+        return partial_source[2]
+
+    assert (
+        cluster.repair_one(
+            partial_source[0],
+            object(),
+            object(),
+            '/'.join(ROW),
+            flags=FLAGS,
+            inventory=inventory,
+            budget=SweepBudget(240),
+        )
+        == 'partial_finished'
+    )
+    assert pending(partial_source)['state'] == 'record_pending'
+    assert row['record_audio_partial'] and not row['record_audio_closed']
 
 
 def missing(source, proof):
@@ -461,3 +487,86 @@ def test_no_initial_conversation_slots_preserve_unattempted_frontier():
     after = {'path': docs[0].reference.path, 'finished_at': stamp}
     rows, _, cursor = cluster.discover(client, budget=SweepBudget(60), after=after, advance_rows=0)
     assert len(rows) == 3 and cursor == after
+
+
+@pytest.mark.parametrize('state', ['record_pending', 'partial_retired'])
+def test_jobs_switch_off_skips_aged_partial_and_transactional_retry(partial_source, monkeypatch, state):
+    from database.record_partial import finish_partial
+
+    row = age_partial(partial_source)
+    segment = record_identity('synthetic', 'record')[1]
+    partial_source[1].rows[('batch_pipeline_dev_jobs', segment)]['state'] = state
+    monkeypatch.setenv('RECORD_SEAL_REPAIR_JOBS', 'off')
+    before = deepcopy(partial_source[1].rows)
+    assert cluster.settled(row)
+    from tests.unit.test_record_seal_cluster_repair import CursorClient
+
+    client = CursorClient([SimpleNamespace(reference=SimpleNamespace(path='/'.join(ROW)), to_dict=lambda: row)])
+    assert cluster.discover(client, budget=SweepBudget(60))[0] == []
+    inventory = Mock(side_effect=AssertionError('rollback must skip aged proof/retry'))
+    assert (
+        cluster.repair_one(
+            partial_source[0],
+            object(),
+            object(),
+            '/'.join(ROW),
+            flags=FLAGS,
+            inventory=inventory,
+            budget=SweepBudget(240),
+        )
+        == 'already_partial'
+    )
+    inventory.assert_not_called()
+    assert (
+        finish_partial(
+            partial_source[0],
+            '/'.join(ROW),
+            reason='tail_lagging',
+            proof=partial_source[2],
+            now=NOW,
+            retry_aged=True,
+        )
+        == 'already_partial'
+    )
+    assert partial_source[1].rows == before
+
+
+def test_jobs_switch_off_never_queries_jobs_leg(source, proof, monkeypatch):
+    from database import _client
+    from utils.batch_pipeline import record_seal_sweeper
+    from tests.unit.test_record_seal_cluster_repair import CursorClient
+
+    monkeypatch.setenv('RECORD_SEAL_REPAIR_JOBS', 'off')
+    monkeypatch.setattr(_client, 'get_firestore_client', lambda: CursorClient())
+    monkeypatch.setattr(record_seal_sweeper, 'read_pusher_pod_proof', proof)
+    monkeypatch.setattr(config, 'require_runtime', lambda: None)
+    monkeypatch.setattr(config, 'server_flags', lambda: SERVER)
+    monkeypatch.setattr(config, 'settings', lambda: (4, 240, 1500, 'apply'))
+    discover_jobs = Mock(side_effect=AssertionError('rollback must not query jobs leg'))
+    monkeypatch.setattr(cluster, 'discover_jobs', discover_jobs)
+    assert cluster.run()['outcome'] == 'ok'
+    discover_jobs.assert_not_called()
+
+
+def test_jobs_switch_off_during_proof_prevents_aged_partial_rearm(partial_source, monkeypatch):
+    row = age_partial(partial_source)
+    before = deepcopy(partial_source[1].rows)
+
+    def inventory():
+        monkeypatch.setenv('RECORD_SEAL_REPAIR_JOBS', 'off')
+        return partial_source[2]
+
+    assert (
+        cluster.repair_one(
+            partial_source[0],
+            object(),
+            object(),
+            '/'.join(ROW),
+            flags=FLAGS,
+            inventory=inventory,
+            budget=SweepBudget(240),
+        )
+        == 'already_partial'
+    )
+    assert partial_source[1].rows == before
+    assert row['record_audio_partial'] and not row['record_audio_closed']
