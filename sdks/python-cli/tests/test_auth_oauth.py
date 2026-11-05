@@ -181,6 +181,69 @@ def test_login_with_browser_rejects_unknown_provider(config_path) -> None:
         )
 
 
+@pytest.mark.parametrize(
+    "raw, canonical",
+    [("Google", "google"), ("GOOGLE", "google"), ("  apple  ", "apple"), ("Apple", "apple")],
+)
+def test_normalize_provider_canonicalizes_case_and_whitespace(raw, canonical) -> None:
+    assert oauth.normalize_provider(raw) == canonical
+
+
+@pytest.mark.parametrize("raw", ["microsoft", "", "   "])
+def test_normalize_provider_rejects_unknown_with_quoted_value(raw) -> None:
+    with pytest.raises(UsageError) as excinfo:
+        oauth.normalize_provider(raw)
+    assert "Unknown OAuth provider" in excinfo.value.message
+    assert repr(raw) in excinfo.value.message
+
+
+def test_login_with_browser_canonicalizes_provider(monkeypatch, capsys) -> None:
+    """A capitalized provider must reach the flow as the canonical lowercase name."""
+    monkeypatch.setattr(oauth.webbrowser, "open", lambda *a, **k: True)
+    monkeypatch.setattr(oauth, "_BROWSER_TIMEOUT_SECONDS", 0.2)
+
+    with pytest.raises(oauth.AuthError):
+        oauth.login_with_browser(
+            "default",
+            api_base="https://api.test.omi.local",
+            provider="Google",
+            open_browser=True,
+        )
+
+    captured = capsys.readouterr()
+    assert "Opening browser for google sign-in..." in captured.err
+
+
+def test_auth_login_rejects_unknown_provider_before_flow(config_path, cli_runner) -> None:
+    result = cli_runner.invoke(app, ["auth", "login", "--browser", "--provider", "Bogus"])
+    assert result.exit_code == 1
+    assert "Unknown OAuth provider" in result.stderr
+    assert "'Bogus'" in result.stderr
+
+
+def test_auth_login_normalizes_provider_case(config_path, respx_mock, cli_runner, monkeypatch) -> None:
+    store_oauth_tokens(
+        "default",
+        id_token="id_1",
+        refresh_token="refr_1",
+        expires_at=time.time() + 3600,
+        api_base="https://api.test.omi.local",
+    )
+    captured: dict = {}
+
+    def fake_login(profile_name, *, api_base, provider, open_browser=True):  # noqa: ANN001
+        captured["provider"] = provider
+        return cfg.load().get_profile("default")
+
+    monkeypatch.setattr(oauth, "login_with_browser", fake_login)
+    respx_mock.get("/v1/dev/key").respond(json={"scopes": []})
+
+    result = cli_runner.invoke(app, ["--json", "auth", "login", "--browser", "--provider", "Google"])
+    assert result.exit_code == 0, result.output
+    assert captured["provider"] == "google"
+    assert json.loads(result.stdout)["provider"] == "google"
+
+
 def test_browser_login_status_goes_to_stderr_not_stdout(monkeypatch, capsys) -> None:
     """Human status messages during browser login must not pollute stdout.
 
