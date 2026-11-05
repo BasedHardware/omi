@@ -64,6 +64,17 @@ class QueueMetrics:
             ['leg'],
             registry=registry,
         )
+        self.drain_age = Gauge(
+            'omi_batch_projection_drain_oldest_age_seconds',
+            'Oldest runnable projection age across all epochs; excludes quarantine_held; alert-only',
+            registry=registry,
+        )
+        self.held_age = Gauge(
+            'omi_batch_held_oldest_age_seconds',
+            'Oldest held row age without an epoch or rolling cohort cutoff; alert-only',
+            ['leg'],
+            registry=registry,
+        )
         self.timeliness_over_sla = Gauge(
             'omi_batch_timeliness_new_over_sla_units',
             'Units admitted at or after the epoch and still unpublished past the 2h SLA, by counted leg',
@@ -284,6 +295,9 @@ class QueueMetrics:
                 'event=batch_timeliness_sample outcome=unavailable exception_type=%s', type(error).__name__
             )
             return
+        self.drain_age.set(age_seconds(sample['drain_oldest'], now))
+        for leg, started in sample['held_oldest'].items():
+            self.held_age.labels(leg).set(age_seconds(started, now))
         for leg, started in sample['new_oldest'].items():
             self.timeliness_age.labels(leg).set(max(0.0, now - started) if started is not None else 0)
         for leg, units in sample['new_over_sla'].items():

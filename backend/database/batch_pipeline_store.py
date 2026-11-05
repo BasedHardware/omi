@@ -875,6 +875,14 @@ def timeliness_sample(
     else:
         quarantined_oldest = first(quarantined.where('enqueued_at', '>=', epoch), 'enqueued_at')
     return {
+        # Alert-only stock ages: no epoch or rolling-cohort lower bound. Indexed oldest-first
+        # limit(1) reads stay exact even when the stock is larger than a scan page.
+        'drain_oldest': first(projection, 'committed_at'),
+        'held_oldest': {
+            'quarantine_held': first(legs['quarantine_held_rows'][0], 'committed_at'),
+            'assignment_held': first(legs['assignment_held'][0], 'enqueued_at'),
+            'record_pending': first(jobs.where('state', '==', 'record_pending'), 'enqueued_at'),
+        },
         'new_oldest': {
             'uncommitted': min((started for started, _ in walks if started is not None), default=None),
             'quarantined': quarantined_oldest,
