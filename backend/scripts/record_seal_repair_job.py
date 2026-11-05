@@ -22,7 +22,12 @@ def emit(payload):
     level = (
         logging.ERROR
         if payload.get('outcome') == 'error'
-        else logging.WARNING if payload.get('outcome') == 'capacity_exceeded' else logging.INFO
+        else (
+            logging.WARNING
+            if payload.get('outcome') == 'capacity_exceeded'
+            or payload.get('event') in {'record_seal_repair_row', 'record_seal_repair'}
+            else logging.INFO
+        )
     )
     record = logger.makeRecord(
         logger.name, level, '', 0, json.dumps(payload, sort_keys=True, allow_nan=False), (), None
@@ -44,8 +49,12 @@ def main():
             try:
                 if sys.argv[1:] == ['--row']:
                     payload = json.loads(sys.stdin.buffer.read(8193))
-                    output.write(json.dumps(repair.row_main(payload)) + '\n')  # Private child IPC, closed outcome only.
-                    output.flush()
+
+                    def checkpoint(value):
+                        output.write(json.dumps(value, separators=(',', ':')) + '\n')
+                        output.flush()
+
+                    checkpoint(repair.row_main(payload, progress=checkpoint))
                 elif not sys.argv[1:]:
                     try:
                         from utils import record_projection_rebuild
