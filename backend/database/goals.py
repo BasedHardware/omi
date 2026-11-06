@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-from database import action_items as action_items_db
 from database.ports.goals import (
     GoalStoreError,
     GoalNotFoundError,
@@ -1452,6 +1451,8 @@ class FirestoreGoals:
         return count
 
     def _task_write(self, transaction, operation, ref, payload):
+        from database import action_items as action_items_db
+
         repo = action_items_db.FirestoreActionItems(
             self.space_id, firestore_client=self.client, transaction=transaction
         )
