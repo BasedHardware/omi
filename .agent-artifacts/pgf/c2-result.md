@@ -1,24 +1,52 @@
-# C2 round 2 implementation result
+# C2 round 3 implementation result
 
-Status: implementation complete. All selected files are covered; one repeatable failure remains in unchanged main Parakeet code. Final frozen preflight passed all 43 checks on the rebased tree.
-Updated: 2026-11-06T22:53:58.189926+00:00
-Repository: BasedHardware/omi. Branch: lane/pgf-c2.
-Initial tested base: 4b1c40b5ef03242b82013a64c1dc941728715bab. Final fetched/rebased base: 34125ccd5fbd6c47885d23abe70e9a1448b7515e.
-Implementation checkpoint: d486b48fbdd58938499a9ffc023f8a4a650274f1.
-GCP tier: none. No production/API/customer-data access, push, PR, deploy, or flag expansion.
+Status: implementation committed; verification in progress. Updated 2026-11-06T23:29:25.054625+00:00.
+Repository: BasedHardware/omi. Worktree: `/Volumes/Ephemeral/scratch/worktrees/omi/omi-lane-pgf-c2-upstream-keep-clean`. Branch: lane/pgf-c2.
+Fetched/rebased base: `34125ccd5fbd6c47885d23abe70e9a1448b7515e`; rebase reported already up to date.
+GCP tier: none. No production access, api.omi.me calls, customer data, push, PR, deploy, new flag admission, anx write or message to David.
 
 ## What was built
 
-- Single transcript pointer-or-inline codec, typed read outcomes, request/context memo, upload-before-reference writes, and post-commit revision-checked swaps.
-- Cold-pointer transaction preloads for processing, review, speaker/voice publication, episodes, live transcript updates, translation, sync assignment, final-pass promotion, finalization admission, privacy scrubs, and empty-recording cleanup. Cosmetic terminal helpers locally set the memo-only guard even when their parent uses the SDK directly; cold pointers preserve the existing conservative title/keep behavior without lake IO.
-- Bounded retries: 32 distinct active preloads plus three content-change retries, at most 36 outer attempts. Versions read by the current attempt are retained for legacy undo; superseded unused versions are evicted.
-- Deleted-blob results are filtered from list and MCP collections. Sync candidates/canonicals are checked at load before selection. Transport/key outages abort decisions; absent/shredded retain each domain's refusal policy.
-- Existing branch C1 review hardening is retained: deletion/key tombstones, encrypted envelope bounds, consent stamps, and authority checks. Pusher and batch worker include KMS; batch lock adds only google-cloud-kms==3.6.0, with no existing version changed or removed.
-- Hermetic cold-pointer, refusal, no-IO, retry-budget, historical-version, reader-surface, and codec regressions; listen/pusher change note.
+The inherited C2 implementation supplies the single transcript pointer-or-inline codec, typed missing/shredded/unavailable read states, transaction preload owners across conversation/review/speaker/sync/cleanup/episode paths, reader-surface coverage, C3 backfill CAS, worker dependencies, and listen/pusher documentation.
 
-## File list
+Round 3 implements all five fix-r2.md items:
 
+1. Every admitted transactional encode above the compressed inline threshold aborts before staging its transcript write, uploads the candidate outside the transaction, then reruns the complete transaction from a fresh source snapshot. Only the exact recomputed digest may reuse the uploaded pointer. This applies to live in_progress rows, including transcripts above Firestore's 1 MiB ceiling. Admission-off encoding and oversize failures retain main's behavior. Failed uploads never commit inline data; abandoned blobs belong to C3.
+2. Missing/shredded transcripts remove only the transcript signal from raw_conversation_has_content. Photos and durable has_content still prevent empty deletion; retryable read failures continue to abort cleanup.
+3. Admission requires configured bucket and release bindings. KMS remains deliberately optional for the specified hermetic FakeKMS mode; absent release defaults to v1. Flag-on/100% without a bucket stays inline and never puts.
+4. The decoded operation memo has both a 32-entry/120-second cap and a 64 MiB aggregate budget measured over decoded Python containers and strings. A budget breach raises retryable TranscriptMemoBudgetExceeded (a TranscriptPointerFetchError), and the owning operation clears plaintext in finally. Encode checks room before making its memo copy.
+5. Deep verification is documented/tested: destroyed key -> False; unavailable key -> SpaceKeyUnavailable; shallow verification can return True in either state because it checks metadata/size only. A deep False must never authorize deletion. The production verifier itself was unchanged.
+
+The retry envelope now allows up to 32 read preloads plus 32 candidate uploads and the existing shared three-content-change allowance, with 68 total outer attempts. Each attempted transaction recomputes against its own snapshot; existing SDK contention retries are unchanged. Published candidates do not displace source plaintext from the read memo. The C3 backfill primitive still skips in_progress rows; the live writer uses the preupload path and does not depend on that swap.
+
+## Round 3 file list
+
+- `.agent-artifacts/pgf/c2-result.md` (this receipt)
+- `.agent-artifacts/pgf/c2-pr-body.md` (draft metadata)
+- `backend/config/object_lake.py`
+- `backend/database/conversations.py`
+- `backend/database/transcript_pointer.py`
+- `backend/docs/listen_pusher_pipeline/changes/2026-11-06-transcript-lake-offload.md`
+- `backend/tests/unit/test_conversation_transcript_offload.py`
+- `backend/tests/unit/test_object_lake_config.py`
+- `backend/tests/unit/test_transcript_pointer.py`
+
+## Scope extensions taken and deviations
+
+- `backend/config/object_lake.py` is a C1-owned file, but fix-r2.md explicitly requires its admission contract to be corrected. `backend/tests/unit/test_object_lake_config.py` receives only the required test bucket setup; all existing cohort assertions remain intact. This is the only new extension outside the original C2 deliverables.
+- The original inline-in-transaction/deferred-drain design and its tests are superseded by fix-r2.md's preupload ruling. C3 retains offload_inline_transcript as an explicit backfill primitive; transaction owners no longer invoke a post-commit drain.
+- The bounded retry policy gains one upload attempt per admitted document. The existing three-content-change allowance stays shared, and the hard bound grows from 36 to 68 to account for 32 read+32 upload preparations.
+- Earlier approved fix-r1.md scope (cleanup/finalization/sync/voice/episode owners, batch worker KMS, strict test/import fixture migrations and People inventory refresh) remains. The historical round-2 receipt is preserved in Git at `e6bf0f78701219bd2aae61b9733c4b5136651b33:.agent-artifacts/pgf/c2-result.md`.
+- Inherited C1 library hardening follows c1-result.md Review disposition assigning tombstones, decompression bounds and authority read budgets to C2. The inherited .github dead-code allowlist removal follows the entry's own instruction to remove it when C2 adds the first caller. No round-3 edits touch .github/, jobstore/, cells/, directory/ or testing/store_fixtures.py. No credentials, workflows or production values were changed.
+- Docker image smoke is waived by fix-r1.md (Docker unavailable); runtime source and third-party closure remain required. The Docker offline-stack round trip remains unverified; the real-router ASGI pointer tests supply local HTTP 200/404/500 coverage, without claiming a live stack.
+- The no-argument run-unit-ci.sh command in brief-c2.md is obsolete: it requires --all or --changed-files. This round uses the full branch changed-file list. Its own bash test.sh invocation is the selector-driven test.sh run; that identical full set is not run redundantly a second time.
+
+## Complete implementation file list
+
+- `.agent-artifacts/pgf/c2-pr-body.md`
+- `.agent-artifacts/pgf/c2-result.md`
 - `.github/scripts/dead_code/backend.allowlist.json`
+- `backend/config/object_lake.py`
 - `backend/database/_client.py`
 - `backend/database/conversation_finalization_jobs.py`
 - `backend/database/conversation_terminal_title.py`
@@ -66,6 +94,7 @@ GCP tier: none. No production/API/customer-data access, push, PR, deploy, or fla
 - `backend/tests/unit/test_live_transcript_replay.py`
 - `backend/tests/unit/test_memory_product_error_sanitization.py`
 - `backend/tests/unit/test_object_lake.py`
+- `backend/tests/unit/test_object_lake_config.py`
 - `backend/tests/unit/test_pusher_audio_projection.py`
 - `backend/tests/unit/test_space_keys.py`
 - `backend/tests/unit/test_transcript_pointer.py`
@@ -75,117 +104,45 @@ GCP tier: none. No production/API/customer-data access, push, PR, deploy, or fla
 - `backend/utils/person_evidence_backfill.py`
 - `backend/utils/sync/assignment.py`
 
-The tracked `.agent-artifacts/pgf-result.md` is restored to origin/main (empty branch diff). This lane's report and draft PR body are under `.agent-artifacts/pgf/`. The unrelated app/analysis_options.yaml and app/pubspec.lock edits are preserved; the temporary preflight stash was restored and its exact binary patch hash matched. The first preflight stash was dropped after restoration. The earlier exact-OID stash was restored and its binary patch hash matched. The final exact-OID backup (eb0b876a43459be22cbc5e45da82b64200433908) was restored after preflight and its binary patch SHA-256 matched the pre-stash value. Backup objects are retained to avoid a race on the shared stash stack; no app edits were committed.
-
-## Deviations and scope extensions taken
-
-All eight corrections in fix-r1.md were implemented under the lead's explicit approval: helpers collection filtering; finalization admission; recording cleanup; sync load validation; bounded retry amendment; batch worker KMS pin/lock; speaker authority/auto-enroll/users publication; episode memo/timeline owners.
-
-Scope extensions taken (necessary test import/caller migrations and owning inventory; existing test assertions remain unchanged):
-
-- `test_episode_attach_cost.py`, `test_episode_attach_review.py`: inject existing operational failures through the locally imported preload runner, scoped to memo operations.
-- `test_users_add_sample_transaction.py`: preload the real codec before closing SDK package paths and retain that module in the fixture map; five setup errors are corrected without changing assertions.
-- `test_memory_product_error_sanitization.py`: preload the real import-pure codec before this legacy fixture closes SDK package paths; six setup errors are corrected.
-- `backend/docs/people-generation-writers.json`, `backend/docs/runbooks/people-scan-reuse.md`: re-audit and pin the nine changed writer scopes. Generation-helper/document-write AST calls are identical, 17 strict/inventory tests and 31 loopback emulator checks pass; no guard or test was relaxed.
-- `test_desktop_migration.py`: open the real local `utils.other` package path before importing user/codec code; the closed package stub caused a C2 collection failure.
-- `memory_import_isolation.py`: model the generic transaction marker, and snapshot/evict the new client-binding codec/terminal modules along with their callers. A real-codec no-IO test guards the fixture's behavior.
-- `test_focus_sessions_adversarial_challenge.py`, `test_focus_sessions_read_boundary.py`, `test_focus_sessions_stress_harness.py`: preload the real, import-pure codec before closing external cloud package paths. No production IO is performed by these focus-only fixtures.
-
-Additional correction within the original brief's file list: `conversation_terminal_title.py` had direct-SDK terminal callers without the generic runner marker. Both transactional cosmetic helpers now mark their local decode scope. Four cold/warm-pointer tests reproduce the unmarked SDK boundary and verify zero in-transaction lake fetches. Queue state and terminal policy are unchanged.
-
-No round-2 edits were made under .github/, database/jobstore/, database/cells/, database/directory/, or testing/store_fixtures.py. The pre-existing branch's dead-code allowlist removal and C1 review files are retained, as recorded in the round-1 receipt. No new C1 API changes were required.
-
-The final fetch also brought upstream episode F-join and pusher admission work. Rebase preserved their code. The only conflict was the People inventory: main's new previous_transcript fingerprint and C2's nine audited hashes are both retained. The nine scopes were re-audited against the final base; generation/document-write calls remain identical. The 14-file post-rebase run covers all four newly selected upstream files and the two modified upstream test files, plus the overlapping C2 tests. No new upstream feature policy was changed.
-
-The original no-argument run-unit-ci.sh command now requires a mode, so it is run with --changed-files. Its selector requires the full backend suite for database/_client.py. test.sh executes the exact CI-selected files across the checkpointed phases; no selected file is omitted. The final same-mode selector adds four upstream tests; all are covered in the post-rebase run.
-
-No anx writes or messages were made, per the implementation task's escalation rule. The earlier scope ask is superseded by fix-r1.md and was not used as an approval gate.
-
 ## Verification
 
-Every test command uses `python3 .agent-artifacts/pgf-c2-test-env.py`, which removes GOOGLE_APPLICATION_CREDENTIALS, every CLOUDSDK_* variable, service-account/Firebase credential paths and inherited project bindings; it supplies only demo hints and a closed loopback metadata endpoint. Python is backend/.venv (3.11.15). Heavy commands run through `/Users/dazheng/workspace/omi/bin/omi-heavy run --wait 3600 --`.
+All checks are launched through `python3 .agent-artifacts/pgf-c2-test-env.py`, which unsets GOOGLE_APPLICATION_CREDENTIALS, every CLOUDSDK_* variable, customer-service-account paths and inherited project bindings before execution. Only demo/loopback bindings are supplied. Python is backend/.venv (3.11.15). Heavy work goes through `/Users/dazheng/workspace/omi/bin/omi-heavy run --wait 3600 --` (7200 for queued long checks). The subprocess receipt runner has hard command deadlines and kills only its owned process groups.
 
-Current wrapper: `python3 .agent-artifacts/pgf-c2-test-env.py /Users/dazheng/workspace/omi/bin/omi-heavy run --wait 3600 -- <payload>` (the long continuation uses `--wait 7200`).
+Initial focused command: `backend/.venv/bin/python -m pytest backend/tests/unit/test_transcript_pointer.py backend/tests/unit/test_conversation_transcript_offload.py -q` -> **220 passed / 2 failed**. The failures were old tests asserting a deferred drain and inline output; both were migrated to assert the committed pointer and decoded translation/identity under the new ruling.
 
-| Exact payload / command | Result |
-| --- | --- |
-| `backend/.venv/bin/python -m pytest backend/tests/unit/test_transcript_pointer.py backend/tests/unit/test_conversation_transcript_offload.py -q` | Initial 186 passed / 3 failed; corrected 190 passed. The later HTTP/wire guard expansion passed 194. |
-| Same two files plus `backend/tests/unit/test_conversation_terminal_family.py -q` | Terminal correction: 279 passed. Final shared-fixture guard expansion: **280 passed, 0 failed**. |
-| `backend/.venv/bin/python -m pytest backend/tests/unit/test_episode_attach_cost.py backend/tests/unit/test_episode_attach_review.py -q` | **66 passed, 0 failed**. |
-| `backend/.venv/bin/python -m pytest backend/tests/unit/test_desktop_migration.py -q` | **114 passed, 0 failed** after the collection-boundary correction. |
-| `env BACKEND_UNIT_TEST_FILE_LIST="$PWD/.agent-artifacts/pgf/c2-memory-fixture-tests.txt" DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib bash backend/test.sh` | Two isolated files: feedback speaker roles **46 passed**, memory replacement policy **24 passed** (70 total). |
-| `env BACKEND_UNIT_TEST_FILE_LIST="$PWD/.agent-artifacts/pgf/c2-focus-fixture-tests.txt" DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib bash backend/test.sh` | Focus read-boundary **7 passed**; adversarial/stress **12 deselected** by `not integration and not slow`; all three files collected successfully, exit 0. |
-| `env PYTHONPATH="$PWD/backend" backend/.venv/bin/python -m pytest -p tests.conftest -p tests.unit.conftest -c backend/pyproject.toml --confcutdir=backend .agent-artifacts/pgf/test_c2_http_acceptance.py -q` | Manual real-router ASGI probe: initial 1 failed / 3 passed (sparse fixture omitted required is_user), corrected **4 passed**. The four cases are now committed in the 280-test run. |
-| `env DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib bash backend/scripts/run-unit-ci.sh --changed-files "$PWD/.agent-artifacts/pgf/c2-changed-files.txt"` | Environment: 18 passed, 8 optional warnings, 0 failed. Full type check: **0 errors**, 75,445 warnings. Intentionally stopped with exit 137 after **1,332 atomic file results**, to free this task's admission slot for corrective gates. It is not a green full-CI claim. |
-| `env BACKEND_UNIT_TEST_FILE_LIST="$PWD/.agent-artifacts/pgf/c2-remaining-tests.txt" DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib bash backend/test.sh` | Completed continuation: **1,386 files**, including 41 intentional reruns; **1,380 files exit 0 / 6 exit 1**, terminal exit 1. Union with the 1,332 atomic checkpoint is exactly **2,677 selected files**, with no omission. Corrective reruns and the upstream monitoring fix leave one unresolved file. These are file exit counts, including marker-only skips, not test-case counts. |
-| `env BACKEND_UNIT_TEST_FILE_LIST="$PWD/.agent-artifacts/pgf/c2-memory-product-fixture-tests.txt" DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib bash backend/test.sh` | **6 passed**, exit 0 after the fixture correction. |
-| `env BACKEND_UNIT_TEST_FILE_LIST="$PWD/.agent-artifacts/pgf/c2-people-generation-tests.txt" DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib bash backend/test.sh` | Initial 13 strict writer tests passed / inventory 1 failed, 3 passed (run before refresh). After audit/refresh: **17 passed**, exit 0. |
-| `env -u FIREBASE_TOKEN -u GOOGLE_OAUTH_ACCESS_TOKEN CI=1 FIREBASE_CLI_DISABLE_TELEMETRY=1 PYTHONPATH="$PWD/backend" firebase emulators:exec --only firestore --project demo-wq20-people --config "$PWD/.agent-artifacts/pgf/c2-people-firebase.json" 'backend/.venv/bin/python backend/scripts/fsr_people_generation_emulator_test.py'` | **31 checks passed**, exit 0; only owned loopback/demo resources; emulator stopped and ports closed. |
-| `.venv/bin/python -m pyright --pythonpath .venv/bin/python database/episodes.py` (backend/) | Post-rebase: **0 errors**, 381 warnings, exit 0. |
-| `.venv/bin/python -m pyright --pythonpath .venv/bin/python database/conversation_terminal_title.py` (backend/) | **0 errors**, 20 warnings. |
-| `bash test-preflight.sh` (backend/) | **18 passed, 8 optional warnings, 0 failed**. |
-| `.venv/bin/python scripts/scan_import_time_side_effects.py` (backend/) | Exit 0. |
-| `.venv/bin/python scripts/check_module_stub_pollution.py` (backend/) | Exit 0; the final 43-check preflight rechecked it after all fixture changes. |
-| `.venv/bin/python scripts/scan_async_blockers.py --dirs routers utils` (backend/) | Exit 0. |
-| `make runtime-image-source-closure` | Exit 0, **19 registered images**. |
-| `backend/.venv/bin/python backend/scripts/runtime_image_contracts.py check-third-party` | Exit 0; worker KMS gap resolved. Existing open dependency-set exemptions are unchanged. |
-| `.venv/bin/python -m pytest tests/integration/test_recurring_voice_privacy_firestore.py -q` (backend/) | **14 skipped** without an emulator/credentials. A later owned loopback rerun passed **14 tests**, exit 0; emulator stopped. |
-| `uv pip compile backend/diarizer/requirements-batch-pipeline.txt --format pylock.toml --python 3.11.15 --python-platform x86_64-unknown-linux-gnu --output-file backend/diarizer/pylock.batch-pipeline.toml` | Exit 0. Only google-cloud-kms==3.6.0 added; no existing version changed or was removed. |
-| `bash backend/scripts/update-python-lock.sh` | Exit 0; all six managed locks regenerated with **no Git changes**; no upgrade flag. |
-| `env OMI_PR_BODY_FILE="$PWD/.agent-artifacts/pgf/c2-pr-body.md" BACKEND_UNIT_FILE_BUDGET_SECONDS=900 make preflight` | Four earlier frozen runs each passed **41 checks**. Final rebased frozen run: **43 passed in 196.87s**, exit 0 on cac0edb73e7a55d1e2b0d640d5b6753d84dc7995. Only receipt text changes follow this gate. |
-| `env BACKEND_UNIT_TEST_FILE_LIST="$PWD/.agent-artifacts/pgf/c2-users-sample-tests.txt" DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib bash backend/test.sh` | **5 passed**, exit 0 after the sample fixture correction. |
-| `env BACKEND_UNIT_TEST_FILE_LIST="$PWD/.agent-artifacts/pgf/c2-soniox-tests.txt" DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib bash backend/test.sh` | Original full-selection result: 15 passed / 1 timing failure. Unchanged isolated rerun: **16 passed**, exit 0. |
-| `env BACKEND_UNIT_TEST_FILE_LIST="$PWD/.agent-artifacts/pgf/c2-parakeet-route-tests.txt" DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib bash backend/test.sh` | **33 passed / 1 failed**, exit 1, same as the continuation. Test, receipt helper and streaming implementation are byte-identical to tested main. Unresolved, not attributed to C2. |
-| `env BACKEND_UNIT_TEST_FILE_LIST="$PWD/.agent-artifacts/pgf/c2-post-rebase-tests.txt" DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib bash backend/test.sh` | Final-base regression: **625 passed across 14 files**, exit 0. All four newly selected upstream files and both modified upstream tests are covered; C2 core, terminal, episode callers and People invariants are rerun. |
-| `env -u FIREBASE_TOKEN -u GOOGLE_OAUTH_ACCESS_TOKEN CI=1 FIREBASE_CLI_DISABLE_TELEMETRY=1 PYTHONPATH="$PWD/backend" npm run test:listen-lifecycle:emulator -- --config "$PWD/.agent-artifacts/pgf/c2-people-firebase.json"` | **PASS**, exit 0: fenced cleanup races and fresh-generation listen replay; emulator stopped. |
-| `env -u FIREBASE_TOKEN -u GOOGLE_OAUTH_ACCESS_TOKEN CI=1 FIREBASE_CLI_DISABLE_TELEMETRY=1 PYTHONPATH="$PWD/backend" firebase emulators:exec --only firestore --project demo-batch-pipeline-d --config "$PWD/.agent-artifacts/pgf/c2-people-firebase.json" 'backend/.venv/bin/python -m pytest backend/tests/integration/test_recurring_voice_privacy_firestore.py -q'` | **14 passed**, exit 0; emulator stopped. |
-| `scripts/pr-preflight --suggest` | Ran; required invariant citation: none. |
-| `scripts/pr-preflight --lane local --pr-body-file .agent-artifacts/pgf/c2-pr-body.md --metadata-only` | Final metadata-only body validation: **4 passed in 18.27s**, exit 0. |
-| Pinned Black 26.5.1, `--check --line-length 120 --skip-string-normalization`, all **48 current changed backend Python files**; pinned pre-commit hooks | Passed, exit 0. The venv lacks a Black entry point, so uvx/pinned hook was used. |
-| `git diff --check` | Passed. |
+Corrected focused command: `backend/.venv/bin/python -m pytest backend/tests/unit/test_transcript_pointer.py backend/tests/unit/test_conversation_transcript_offload.py backend/tests/unit/test_object_lake_config.py -q` -> **231 passed / 0 failed** in 67.84 seconds.
 
-The exact checkpoint, atomic per-file exit statuses, continuation selection and stopped owned process groups are in c2-run-partition-checkpoint.json. No other agent's process was stopped. The continuation repeats every first-phase failure, including already-corrected fixtures; it does not hide the earlier failures. Static commands, working directories, timestamps and exit codes are in c2-static-receipts.jsonl. Logs are c2-*.log.
+Environment validation: **18 passed, 8 optional warnings, 0 failed**. Import-time side effects and module-stub pollution scans exited 0. The first async scan hit its agent-imposed 180-second deadline (exit 124), so a 900-second retry is queued; the historical receipt took 346 seconds for this full-tree scanner.
 
-First-phase baseline failures: the daily-summary monitoring contract is a pure JSON check; its test and alert-rule blob are byte-identical to origin/main, and the main JSON reproduces two forbidden PromQL rules. Executor failures match fix-r1.md's known future.result(timeout=2) main/load failures; both owning files are unchanged. Evidence: c2-main-baseline-failures.json. C2 fixture failures (desktop, feedback, focus, memory-product and sample imports) and the audited People inventory are corrected; isolated reruns pass. These are not represented as baseline failures. The final rebase includes main's monitoring fix and its contract now passes. Executors passed their continuation rerun. Soniox's unchanged keepalive test had one 80ms scheduling failure, then passed all 16 tests in isolation. Parakeet's unchanged timeout test fails both in the continuation and isolated rerun (33 passed / 1 failed each); c2-parakeet-baseline-evidence.json pins source identity. No cause in C2 was found; no unrelated STT policy/test was modified.
+Current run receipts are `.agent-artifacts/pgf/c2-r3-static-receipts.jsonl`, `c2-r3-command-receipts.jsonl`, and `c2-r3-*.log`. Final counts and exact commands will replace this in-progress entry.
 
-Coverage after the final rebase: the same CI selector requires **2,681 files**, adding four and removing none. The two-phase 2,677-file run plus the 14-file post-rebase run covers that exact set. Corrective reruns leave **2,680 files exit 0 (includes marker-only skips), one file exit 1**. Neither interrupted nor nonzero phase is described as a green CI command.
+Decode grep rerun: `.agent-artifacts/pgf/c2-r3-decode-sites.txt`. The previous full site classification remains valid; round 3 changes the shared encode/retry mechanism and content helper, introducing no new decode callers. Brief rows 1-19 retain preload owners, row 20 uses the approved finalization contention wrapper, and the direct terminal cosmetic helpers keep their local no-IO guard. Nontransactional recovery, agent-capability, projection and F-join callers need no runner changes; public-chat remains inline-only.
 
-## Decode-site classification after rebase
+## Known gaps and handoffs
 
-Fresh production decoder and runner greps are retained in `c2-decode-site-audit.txt` and `c2-runner-site-audit.txt` at the frozen source checkpoint. No decode site is intentionally left with unguarded lake IO inside a transaction.
+- Production writes stay off under O1 until C4 wipe coverage passes. No migration or index is required.
+- C3 owns backfill/re-encryption, orphan cleanup and registry/receipt, and must account for the 32-reference and 64-MiB operation ceilings before ramping backfill. C4 owns quiescing puts, prefix purge and key destruction last. B/W2 carries pointer field changes as content-free document changes. A6 ports the seam after C2.
+- Existing public shared long conversations become ineligible for bounded public-chat reads when backfilled; product treatment remains outside C2.
+- Historical round-2 full selection had one unchanged-main Parakeet timing failure. Current full-CI status will be recorded after its run; no current green full-suite claim is made yet.
+- The tracked `.agent-artifacts/pgf-result.md` remains untouched. Existing app/analysis_options.yaml and app/pubspec.lock edits remain uncommitted; their pre/post-rebase binary patches match SHA-256 `24ea1309984dd69b44cb9c08cd0d6ad04f121eeb768f7d66d2bb2314ab39f0ee`.
 
-- Brief §6a rows 1–9: processing upsert/persist, data-protection migration, projection bind, speaker assignment, live segment merge, translation, sync assignment and final-pass promotion use the shared preload owner. Migration retains pointer transcripts unchanged; sync validates availability at `load(cid)` before canonical/candidate decisions.
-- Rows 10–16: owner confirmation, overlay merge, legacy review undo, transcript correction apply/undo, smart merge, learning jobs and speaker resolution use the preload owner. Historical undo versions remain content-addressed. Freshly prepared payload reads use the same memo; in-transaction writes defer offload.
-- Rows 17–19: episode retained-bound decisions, recurring-voice privacy scrubs and person-evidence backfill use the preload owner. Privacy filtering of a freshly prepared payload is memo-backed.
-- Row 20: finalization admission's existing contention-retry/direct-SDK owner is wrapped in `run_preloaded_operation`, per fix-r1; queue-state logic is retained.
-- Corrected §6b classifications: empty-recording cleanup, episode memo/timeline attach and speaker authority/auto-enroll/users publication are transactional and now have preload owners. Terminal kept-row/dead-letter cosmetic decodes locally set the transaction guard; a cold pointer keeps the conservative terminal behavior, without IO. Non-transactional terminal calendar probes may resolve normally.
-- Read/portability seams (`_decrypt_conversation_data`, `prepare_conversation_for_read`) resolve pointers before existing list handling. Collection helpers filter absent/deleted results. The raw-content predicate retains absent/shredded False, corruption True and transport-failure raise behavior; each transactional owner above guards it.
-- Remaining non-transactional verified readers need no runner edits: recovery decode-status inspection, self-heal, agent-capability reads/transcript fingerprints, batch projection, shadow projection, and `scripts/stuck_backfill.py`. The fingerprint re-read within overlay merge is protected by that owner's memo. Emulator-script direct decodes are setup/assertion reads outside domain transactions.
-- New upstream `utils/episodes/f_join.previous_transcript` decodes outside transactions; the existing owner handles no-answer conservatively, so no C2 runner edit is needed. Its main-owned fingerprint is preserved.
-- The two strict decoder adapters only delegate to the codec. The codec's own post-commit swap decodes outside a transaction. Its pointer decoder enforces memo-only access whenever the generic marker is set.
-- Public chat uses its existing bounded inline decoder and excludes pointer docs; there is no lake fetch. List/detail/MCP/export/search-hydration/notification readers flow through the shared conversation preparation seams and need no per-surface implementation edits.
-- Pre-transaction decorator writes upload before publication. Sync/speaker/live transaction encodes return inline and defer a revision-checked swap; live `in_progress` docs are skipped by the swap. Open-loop sibling-field encoding remains inline.
+## Local commits
 
-## Known gaps
-
-- Full-unit green is not claimed: the unchanged main Parakeet timeout test remains red, including its isolated rerun. This is reported to the lead; no external ask or contact was made.
-
-- Docker image smoke is waived by fix-r1.md because Docker is unavailable. Runtime source and third-party closure both passed in the final preflight.
-- Listen lifecycle, privacy and People writer loopback emulator contracts were rerun in round 2 and passed; all emulators stopped. The offline HTTP harness was not started because local Docker is unavailable. Hermetic reader/domain tests are not a provider-backed or deployed round trip.
-- No deployment, real-provider round trip, production write admission, or C4 wipe qualification is claimed. O1 keeps writing off/0 until C4 is green; the dev-first ramp follows C1's registry metadata.
-- C3 owns backfill, orphan cleanup and registry/receipt; C4 owns wipe/prefix purge and keys last; B/W2 logs pointer field changes; A6 ports the seam after C2.
+- `33877eeb59d` feat(storage): close incomplete lake admission and retain independent content
+- `741b4e1dd24` feat(storage): preupload transactional transcript candidates with bounded memory
+- `cd44123aae7` test(storage): verify committed pointers after transactional reencoding
 
 ## Draft PR body
 
 ## What changed and why
 
-Oversized transcript_segments can be stored as an encrypted object-lake pointer inside the existing field. The shared codec resolves pointers for backend, listen, pusher, MCP, export and search; migrated transaction owners use a content-addressed preload/retry boundary and revision-checked post-commit swaps. Deleted-owner key tombstones prevent rekeying, malformed key rows remain retryable, transcript decompression is bounded to 32 MiB, and key-document authority reads are budgeted (one per unwrap, two per put).
+Oversized transcript_segments can be stored as an encrypted object-lake pointer inside the existing field. The shared codec resolves pointers for backend, listen, pusher, MCP, export and search; migrated transaction owners use a content-addressed preload/retry boundary and snapshot-recomputed candidate uploads before transaction replay. C3 backfill retains its update-time CAS swap. Deleted-owner key tombstones prevent rekeying, malformed key rows remain retryable, transcript decompression is bounded to 32 MiB, and key-document authority reads are budgeted (one per unwrap, two per put).
 
 Writes remain default-off/0 admission. O1: OBJECT_LAKE_WRITE_ENABLED stays off in prod until C4's wipe-coverage test is green. Ramp is dev-first via OBJECT_LAKE_WRITE_PERCENT; C1's registry retains ramp metadata and ownership. No new env binding, dependency upgrade, schema migration or index is introduced; space_keys already exists and retains content-free destruction tombstones.
 
 C3 reuses offload_inline_transcript for backfill and owns legacy re-encryption, orphan janitor and registry/receipt. C4 owns account-wipe integration, quiescing in-flight puts, prefix purge and key destruction last (preserving tombstones). B/W2 syncs pointer field changes as content-free doc changes. A6 ports the seam unchanged. Public-chat's bounded decoder excludes pointer docs; existing long shared conversations need a later product decision before backfill.
 
-C2 also covers finalization admission, empty-recording cleanup, sync canonical/candidate admission, voice publication, and episode memo/timeline transactions. Preloads allow up to 32 distinct documents plus three content-change retries (36 total attempts). The batch worker pins KMS to match the backend runtime; existing locked versions are preserved.
+C2 also covers finalization admission, empty-recording cleanup, sync canonical/candidate admission, voice publication, and episode memo/timeline transactions. The boundary allows 32 distinct read preloads and 32 candidate uploads plus three shared content-change retries (68 total attempts). The decoded memo is capped at 32 entries and 64 MiB of decoded Python objects, with a typed retryable byte-budget failure. Oversized live in_progress writes publish pointers before crossing Firestore's 1 MiB ceiling; retries recompute candidates from fresh transactional snapshots. Missing/shredded transcripts preserve photos and durable has_content markers during empty cleanup. Missing bucket/release bindings close admission; unset KMS intentionally selects offline FakeKMS. The batch worker pins KMS to match the backend runtime; existing locked versions are preserved.
 
 ## Product invariants affected
 
@@ -203,11 +160,11 @@ Final frozen preflight passed **43 checks in 196.87s** on `cac0edb73e7a55d1e2b0d
 
 ## Tests
 
-backend/tests/unit/test_transcript_pointer.py: codec round trips, flag-off golden encodings, compressed-byte threshold, no-IO transaction guard, preload retries, decode taxonomy, memo hygiene, consent and deferred CAS.
-backend/tests/unit/test_conversation_transcript_offload.py: pointer reader surfaces, actual HTTP detail 200/404/500 outcomes, domain refusals, direct-SDK terminal no-IO guards, oversized transcripts, tombstone races, malformed keys and authority read budgets.
+backend/tests/unit/test_transcript_pointer.py: codec round trips, flag-off golden encodings, compressed-byte threshold, no-IO transaction guard, preload/upload retry limits, decode taxonomy, aggregate memo byte budget, consent and C3 backfill CAS.
+backend/tests/unit/test_conversation_transcript_offload.py: pointer reader surfaces, actual HTTP detail 200/404/500 outcomes, domain refusals, direct-SDK terminal no-IO guards, live transcripts above 1 MiB, source changes during candidate upload, photo-bearing cleanup, destroyed/unavailable deep-verifier key outcomes, tombstone races, malformed keys and authority read budgets.
 
 
-Reader-site audit after rebase: brief §6a rows 1–19 use preload owners; row 20 finalization admission uses the approved contention-runner wrapper. Empty-recording cleanup, voice publication and episode memo/timeline attach are also transactional and migrated. Terminal cosmetic helpers enforce a local memo-only guard. No runner change is needed for non-transactional recovery status, self-heal, agent-capability reads/fingerprints, batch/shadow projections or stuck-backfill; overlay fingerprint reads inherit their owning transaction guard. Shared preparation covers list/detail/MCP/export/search/notifications. The bounded public-chat decoder intentionally excludes pointer docs. The new upstream f_join.previous_transcript read is outside transactions and retains its owner's conservative no-answer policy; no new runner is needed. Emulator-script direct decodes are setup/assertion reads. Fresh-prepared transaction encodes defer offload; protection migration retains existing pointers.
+Reader-site audit after rebase: brief §6a rows 1–19 use preload owners; row 20 finalization admission uses the approved contention-runner wrapper. Empty-recording cleanup, voice publication and episode memo/timeline attach are also transactional and migrated. Terminal cosmetic helpers enforce a local memo-only guard. No runner change is needed for non-transactional recovery status, self-heal, agent-capability reads/fingerprints, batch/shadow projections or stuck-backfill; overlay fingerprint reads inherit their owning transaction guard. Shared preparation covers list/detail/MCP/export/search/notifications. The bounded public-chat decoder intentionally excludes pointer docs. The new upstream f_join.previous_transcript read is outside transactions and retains its owner's conservative no-answer policy; no new runner is needed. Emulator-script direct decodes are setup/assertion reads. Fresh-prepared admitted transaction encodes upload before replay; protection migration retains existing pointers.
 
 ## UI evidence
 
@@ -219,8 +176,10 @@ Failure-Class: none
 
 ## Scoped cleanups
 
-Line-Count-Exception: backend/database/conversations.py | 4855 -> 4892 | Preserve domain transaction structure while adding pointer decoding and narrow unavailable-content refusals; codec mechanics live in transcript_pointer.py.
+Line-Count-Exception: backend/database/conversations.py | 4855 -> 4894 | Preserve domain transaction structure while adding pointer decoding and narrow unavailable-content refusals; codec mechanics live in transcript_pointer.py.
 
 Line-Count-Exception: backend/database/conversation_finalization_jobs.py | 3549 -> 3551 | Wrap the existing admission owner in the transcript preload boundary without changing lead2 queue state.
 Line-Count-Exception: backend/database/users.py | 2516 -> 2517 | Preserve the voice publication transaction and move its runner to the shared preload boundary.
 Line-Count-Exception: backend/utils/sync/assignment.py | 1527 -> 1536 | Validate lake-pointer availability at the existing transaction load boundary before candidate or canonical selection.
+
+Scope provenance: C1-result.md Review disposition assigned tombstones, decompression bounds and authority-read budgeting to C2; those inherited library changes remain in this branch. The inherited .github dead-code allowlist removal follows its own instruction to remove the entry when C2 adds its first caller; round 3 makes no .github edits. Round 3 extends scope only to config/object_lake.py admission and the existing cohort test setup, as required by fix-r2.md. Deep verification returns False for destroyed keys and raises SpaceKeyUnavailable for temporarily unavailable keys; shallow verification checks metadata only. C3 must account for both the 32-reference and 64-MiB operation ceilings before backfill.
