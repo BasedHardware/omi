@@ -5,7 +5,12 @@ import time
 
 from google.api_core.exceptions import FailedPrecondition, GoogleAPICallError
 
-from config.batch_pipeline import merge_catch_up_depth, merge_head_wait_seconds, recovered_merge_release_enabled
+from config.batch_pipeline import (
+    merge_catch_up_depth,
+    merge_head_wait_seconds,
+    merge_narrow_commit_enabled,
+    recovered_merge_release_enabled,
+)
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_store import Store
 from database.batch_pipeline_transaction_labels import store_operation
@@ -30,6 +35,15 @@ _WAIT_BUCKETS = (60, 120, 300, 600, 1800)
 
 class HeadWaitUnavailable(Exception):
     """The head-wait query has no serving index; the merge keeps strict order."""
+
+
+class NarrowFenceStale(Exception):
+    """The probed owner revision no longer matches inside the narrow transaction.
+
+    A pending-set mutation (admission, commit, terminal quarantine, recovery
+    disposition — each writes the owner revision) landed between the probe and
+    this transaction's snapshot; the strict body re-decides from its own query.
+    """
 
 
 def _wait_bucket(seconds: float) -> str:
@@ -70,6 +84,63 @@ def _awaiting_projection(tx, owner: dict) -> int:
     return _unprojected(
         owner.get('log_sequence', 0), owner.get('projection_watermark'), lambda key: tx.get('results', key)
     )
+
+
+def _append_committed_entry(
+    tx, key: str, owner: dict, candidate: dict, now: float, *, bypass=None, fresh_first=None, released=None
+) -> dict:
+    """The shared commit tail: append one result-log row and advance the owner fence.
+
+    The strict body and the narrow body both end here, so the written entry,
+    the job transition and the owner revision bump are byte-identical on every
+    path that selects a ready candidate. Reads the candidate's job document and
+    result row inside the caller's transaction; raises ``RuntimeError`` when a
+    result row already exists (reconciliation required).
+    """
+    job = tx.get('jobs', candidate['segment_id'])
+    existing = tx.get('results', job['segment_id'])
+    if existing:
+        raise RuntimeError('result log exists for pending job; reconciliation required')
+    watermark = owner.get('watermark')
+    position = {'capture_at': job['capture_at'], 'segment_id': job['segment_id']}
+    late = bool(
+        watermark
+        and (position['capture_at'], position['segment_id']) <= (watermark['capture_at'], watermark['segment_id'])
+    )
+    tail = owner.get('log_tail', watermark['segment_id'] if watermark else None)
+    entry = {
+        **position,
+        'protocol_version': job['protocol_version'],
+        'owner_key': key,
+        'owner_id': job['owner_id'],
+        'conversation_id': job.get('conversation_id'),
+        'privacy_generation': job.get('privacy_generation'),
+        'previous_segment_id': tail,
+        'late_capture': late,
+        'log_sequence': owner.get('log_sequence', 0) + 1,
+        'result': job['result'],
+        'committed_at': now,
+        'projection_state': 'pending',
+    }
+    if job.get('recovery_state') == 'recovered' or (job.get('stt_route') or {}).get('stt_route') == 'provider':
+        entry['recovery_version'] = 1
+    if bypass:
+        entry['head_wait_bypass'] = True
+    if fresh_first:
+        entry['fresh_first'] = True
+    if released:
+        entry['recovered_release'] = True
+    tx.put('results', job['segment_id'], entry)
+    job.update(state='committed', merge_pending=False)
+    tx.put('jobs', job['segment_id'], job)
+    owner.update(
+        watermark=watermark if late else position,
+        log_tail=job['segment_id'],
+        log_sequence=entry['log_sequence'],
+        revision=owner.get('revision', 0) + 1,
+    )
+    tx.put('owners', key, owner)
+    return entry
 
 
 class OrderedMerge:
@@ -208,8 +279,57 @@ class OrderedMerge:
             release.pop(0)
         return None
 
+    def _narrow_commit(
+        self, key: str, segment_id: str, probed_revision: object, now: float
+    ) -> tuple[dict | None, BatchPrivacyBlocked | None, bool, dict]:
+        """One plain ready-head commit through three point reads.
+
+        The strict body opens the transactional pending query for every drain,
+        and that query's read set is every matched row — the documents each
+        sibling lease heartbeat keeps rewriting — so the drain joined a hot
+        abort set to order one commit. The fence substitutes for the query: a
+        probed owner revision that still matches inside the transaction proves
+        no pending-set mutation moved the head between the probe and this
+        snapshot, so the probed head is exactly the strict body's candidate.
+        Sibling heartbeats write neither the owner nor a settled ready row, so
+        they can no longer abort this commit.
+
+        Returns ``(entry, fenced, fence_stale, head)``: ``fence_stale`` hands
+        the decision back to the strict body; otherwise the entry and privacy
+        semantics are exactly the strict body's.
+        """
+        head: dict = {}
+
+        def narrow(tx):
+            owner = tx.get('owners', key)
+            if owner.get('revision', 0) != probed_revision:
+                raise NarrowFenceStale('probed owner revision no longer matches')
+            candidate = tx.get('jobs', segment_id)
+            if not (
+                candidate.get('owner_key') == key
+                and candidate.get('merge_pending')
+                and candidate.get('state') == 'result_ready'
+            ):
+                return None
+            head['catch_up'] = _catch_up(candidate)
+            return _append_committed_entry(tx, key, owner, candidate, now)
+
+        try:
+            with store_operation('batch_merge_commit'):
+                entry = self.store.run(narrow)
+        except NarrowFenceStale:
+            return None, None, True, head
+        except BatchPrivacyBlocked as error:
+            return None, error, False, head
+        return entry, None, False, head
+
     def commit_next(self, owner_id: str, now: float, *, release: list[str] | None = None) -> dict | None:
         """Commit the owner's next result-log row, or return None.
+
+        A plain ready-head drain commits through the revision-fenced narrow
+        body (three point reads, no transactional query); every fence
+        mismatch, hold marker, release wake, shadow head and probe failure
+        keeps the strict query body below as the authority.
 
         ``release`` (a recovery wake's ``release_set``, consumed in place):
         when strict order, fresh-first and the head wait commit nothing, the
@@ -330,51 +450,9 @@ class OrderedMerge:
                 # near the projection head.
                 held['catch_up'] = True
                 return None
-            job = tx.get('jobs', candidate['segment_id'])
-            existing = tx.get('results', job['segment_id'])
-            if existing:
-                raise RuntimeError('result log exists for pending job; reconciliation required')
-            watermark = owner.get('watermark')
-            position = {'capture_at': job['capture_at'], 'segment_id': job['segment_id']}
-            late = bool(
-                watermark
-                and (position['capture_at'], position['segment_id'])
-                <= (watermark['capture_at'], watermark['segment_id'])
+            return _append_committed_entry(
+                tx, key, owner, candidate, now, bypass=bypass, fresh_first=fresh_first, released=released
             )
-            tail = owner.get('log_tail', watermark['segment_id'] if watermark else None)
-            entry = {
-                **position,
-                'protocol_version': job['protocol_version'],
-                'owner_key': key,
-                'owner_id': job['owner_id'],
-                'conversation_id': job.get('conversation_id'),
-                'privacy_generation': job.get('privacy_generation'),
-                'previous_segment_id': tail,
-                'late_capture': late,
-                'log_sequence': owner.get('log_sequence', 0) + 1,
-                'result': job['result'],
-                'committed_at': now,
-                'projection_state': 'pending',
-            }
-            if job.get('recovery_state') == 'recovered' or (job.get('stt_route') or {}).get('stt_route') == 'provider':
-                entry['recovery_version'] = 1
-            if bypass:
-                entry['head_wait_bypass'] = True
-            if fresh_first:
-                entry['fresh_first'] = True
-            if released:
-                entry['recovered_release'] = True
-            tx.put('results', job['segment_id'], entry)
-            job.update(state='committed', merge_pending=False)
-            tx.put('jobs', job['segment_id'], job)
-            owner.update(
-                watermark=watermark if late else position,
-                log_tail=job['segment_id'],
-                log_sequence=entry['log_sequence'],
-                revision=owner.get('revision', 0) + 1,
-            )
-            tx.put('owners', key, owner)
-            return entry
 
         # Probe gate: the strict transaction below is the authority for every
         # decision it makes, but when the probed head already proves the
@@ -405,7 +483,43 @@ class OrderedMerge:
                     held['over_cap'] = True
         entry: dict | None = None
         fenced: BatchPrivacyBlocked | None = None
-        if not strict_skipped:
+        narrow_decided = False
+        if (
+            merge_narrow_commit_enabled()
+            and head_error is None
+            and not strict_skipped
+            and release is None
+            and probed_head is not None
+            and not probed_head.get('shadow')
+            and probed_head.get('state') == 'result_ready'
+            and not self._over_cap_probe(key, depth)
+        ):
+            # Plain ready-head drain: the common post-publication commit. The
+            # narrow body orders it through the probed owner revision instead
+            # of the pending query, so sibling lease heartbeats on the owner's
+            # other in-flight rows stop aborting the drain; every fence
+            # mismatch, hold marker, release wake, shadow head and probe
+            # failure keeps the strict transaction below as the authority.
+            try:
+                probed_owner = self.store.probe('owners', key)
+            except GoogleAPICallError as error:
+                # A transient probe read keeps the strict transaction as the
+                # authority; the next drain probes again.
+                logger.warning(
+                    'event=batch_merge outcome=narrow_owner_probe_retry source=%s exception_type=%s count=1',
+                    self.commit_source,
+                    type(error).__name__,
+                )
+                probed_owner = None
+            if probed_owner is not None:
+                narrow_entry, narrow_fenced, fence_stale, narrow_head = self._narrow_commit(
+                    key, probed_head['segment_id'], probed_owner.get('revision', 0), now
+                )
+                head.update(narrow_head)
+                if not fence_stale and (narrow_entry is not None or narrow_fenced is not None):
+                    entry, fenced = narrow_entry, narrow_fenced
+                    narrow_decided = True
+        if entry is None and fenced is None and not strict_skipped and not narrow_decided:
             try:
                 with store_operation('batch_merge_commit'):
                     entry = self.store.run(commit)

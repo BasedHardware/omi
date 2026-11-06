@@ -366,8 +366,8 @@ FIELD_BUILDERS = {
     'utils/batch_pipeline/contracts.py': {'state': ['vad_receipt']},
     'utils/batch_pipeline/live.py': {'state': ['register_recording.commit']},
     'utils/batch_pipeline/merge.py': {
-        'projection_state': ['OrderedMerge.commit_next.commit'],
-        'state': ['OrderedMerge.commit_next.commit', '_fresh_pick'],
+        'projection_state': ['_append_committed_entry'],
+        'state': ['_append_committed_entry', '_fresh_pick'],
     },
     'utils/batch_pipeline/provider_stt.py': {
         'state': [

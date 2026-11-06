@@ -802,3 +802,22 @@ def recovery_wake_lease_seconds() -> int:
     if value == 0:
         return 0
     return value if 120 <= value <= RECOVERY_WAKE_LEASE_MAX else RECOVERY_WAKE_LEASE_DEFAULT
+
+
+def merge_narrow_commit_enabled() -> bool:
+    """Plain ready-head merge drains commit through fenced point reads by default.
+
+    The strict body opens the transactional pending query for every drain, and
+    that query's read set is every matched row — the documents each sibling
+    lease heartbeat (every 20 seconds per in-flight unit) keeps rewriting — so
+    a ready-head drain burned its whole five-attempt ladder against sibling
+    heartbeats (``event=batch_merge outcome=retry
+    exception_type=FirestoreContentionExhausted``). The narrow body commits the
+    probed head through owner/head/result point reads under a probed owner
+    revision fence and falls back to the strict body on any mismatch; ``false``
+    is the kill switch and restores the strict query for every drain.
+    """
+    return rollout_default_on(
+        'BATCH_PIPELINE_MERGE_NARROW_COMMIT_ENABLED',
+        os.getenv('BATCH_PIPELINE_MERGE_NARROW_COMMIT_ENABLED', 'true').strip().lower() != 'false',
+    )
