@@ -1168,10 +1168,10 @@ def cleanup_failed_merge_target(uid: str, merged_conversation_id: str) -> bool:
     return True
 
 
-
 # Branch-era name kept as an alias: the unreferenced-audio residue self-heal
 # suite (and any out-of-tree callers) patch/exercise this entrypoint by it.
 _cleanup_merged_target_after_failure = cleanup_failed_merge_target
+
 
 def _handle_merge_failure(
     uid: str,
