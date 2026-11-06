@@ -337,6 +337,23 @@ def test_a_later_member_keeps_the_candidate_without_a_question_so_no_overlapping
     assert 'c2' not in episode['pending_boundary']
 
 
+def test_a_member_that_attaches_while_jev_answers_keeps_the_join(store):
+    first = _first_episode(store)
+    assert _attach(store, 'c2', minutes=12) == 'joined'
+    attached = []
+
+    def ask(*_a, **_k):
+        # c3 attaches after the candidate's own check but before the model answers: the split must not go.
+        attached.append(_attach(store, 'c3', minutes=14))
+        return SimpleNamespace(noul=lambda name: 0.05)
+
+    service.record_moment(UID, _moment('c2', minutes=12, text=SECOND), _c(store, minutes=15, ask=ask))
+    assert attached == ['joined']
+    episode = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert episode['id'] == first['id'] and episode['conversation_ids'] == ['c1', 'c2', 'c3']
+    assert 'c2' not in episode['pending_boundary']
+
+
 @pytest.mark.parametrize('error', [EpisodeConflict('lost the compare-and-swap'), RuntimeError('storage down')])
 def test_a_failed_f_marker_records_the_shared_fallback_and_keeps_todays_join(monkeypatch, error):
     fallbacks = []

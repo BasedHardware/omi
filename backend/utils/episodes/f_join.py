@@ -187,6 +187,20 @@ def later_member(episode: Mapping[str, Any], conversation_id: str, started_at: d
     return False
 
 
+def _split_still_clear(
+    uid: str, episode: Mapping[str, Any], conversation_id: str, started_at: datetime, c: Any
+) -> bool:
+    """Re-reads the episode after Jev answered: a split is clear only while the episode is live and no
+    member recorded past the candidate's start. An unreadable episode keeps today's join."""
+    try:
+        fresh = episodes_db.get_episode(uid, str(episode['id']), firestore_client=c.firestore_client)
+    except Exception as error:
+        logger.warning('event=episode_f_join outcome=recheck_failed exception_type=%s', type(error).__name__)
+        _fallback('other')
+        return False
+    return policy.is_live(fresh) and not later_member(fresh, conversation_id, started_at)
+
+
 def settle(
     uid: str,
     episode: Mapping[str, Any],
@@ -221,6 +235,10 @@ def settle(
     if p_same is None:
         metrics.record_boundary('f_no_answer')
         _fallback('unknown')
+        return keep
+    if p_same < MOVED_ON_THRESHOLD and not _split_still_clear(uid, episode, conversation_id, started_at, c):
+        # A member attached while Jev was answering; the split would now overlap it.
+        metrics.record_boundary('f_later_member')
         return keep
     if p_same < MOVED_ON_THRESHOLD:
         metrics.record_boundary('f_close')
