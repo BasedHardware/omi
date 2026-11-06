@@ -374,6 +374,32 @@ def with_backend_storage_env(payload: str) -> str:
     )
 
 
+def with_object_lake_env(payload: str) -> str:
+    """Complete synthetic revisions with the six inert C1 lake bindings."""
+    manifest = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())
+    services = manifest['environments']['dev']['cloud_run']['services']
+    names = (
+        'BUCKET_OBJECT_LAKE',
+        'OBJECT_LAKE_KMS_KEY',
+        'OBJECT_LAKE_WRITE_ENABLED',
+        'OBJECT_LAKE_WRITE_PERCENT',
+        'OBJECT_LAKE_READ_ENABLED',
+        'OBJECT_LAKE_INLINE_MAX_BYTES',
+    )
+    for service in ('backend', 'backend-sync'):
+        entries = ',\n'.join(
+            json.dumps({'name': name, 'value': services[service]['env'][name]['value']}) for name in names
+        )
+        payload = re.sub(
+            rf'("{service}":\s*\{{.*?"env":\s*\[)',
+            lambda match: match.group(1) + '\n' + entries + ',',
+            payload,
+            count=1,
+            flags=re.DOTALL,
+        )
+    return payload
+
+
 def with_cloud_run_oauth_secrets(payload: str) -> str:
     # Keep integration snapshots complete while tests remove unrelated fields.
     payload = re.sub(
@@ -393,7 +419,6 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
     payload = with_wake_word_adjudication_env(payload)
     payload = with_backend_public_shared_chat_auth_env(payload)
     payload = with_audio_timeline_span_env(payload)
-    payload = payload
     payload = with_backend_storage_env(payload)
     payload = with_firestore_read_ledger_env(payload).replace(
         '"FIRESTORE_READ_LEDGER", "value": "1"},',
@@ -569,7 +594,9 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
         count=1,
         flags=re.DOTALL,
     )
-    return with_firestore_read_runtime_env(payload)
+    # Prepending lake entries earlier hides the leading GOOGLE_CLOUD_PROJECT
+    # anchor used by the translation and sync fixture helpers above.
+    return with_object_lake_env(with_firestore_read_runtime_env(payload))
 
 
 def validate_cloud_run_workflows_only(validator, *, env: str, manifest_path: Path, workflow_root: Path | None = None):

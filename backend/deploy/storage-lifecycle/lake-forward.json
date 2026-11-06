@@ -1,0 +1,50 @@
+{
+  "release": "v1",
+  "newBucketOnly": true,
+  "bucket_env_var": "BUCKET_OBJECT_LAKE",
+  "location": "us-central1",
+  "storageClass": "STANDARD",
+  "uniformBucketLevelAccess": true,
+  "publicAccessPrevention": "enforced",
+  "versioning": {
+    "enabled": false
+  },
+  "softDeletePolicy": {
+    "retentionDurationSeconds": "0"
+  },
+  "dataAccessAuditLogs": {
+    "required": true
+  },
+  "lifecycle": {
+    "rule": [
+      {
+        "action": {
+          "type": "SetStorageClass",
+          "storageClass": "NEARLINE"
+        },
+        "condition": {
+          "age": 90,
+          "matchesPrefix": [
+            "v1/spaces/"
+          ],
+          "matchesStorageClass": [
+            "STANDARD"
+          ]
+        }
+      }
+    ]
+  },
+  "dataClassTiers": {
+    "transcript": {
+      "allowed": [
+        "STANDARD",
+        "NEARLINE"
+      ],
+      "forbidden": [
+        "COLDLINE",
+        "ARCHIVE"
+      ],
+      "note": "Retrieval-fee UX paths re-read transcripts; never below Nearline."
+    }
+  }
+}
