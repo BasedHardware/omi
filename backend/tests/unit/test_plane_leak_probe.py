@@ -125,6 +125,15 @@ def test_sdk_lookup_counts_only_routed_cell_data(monkeypatch, caplog, uid, colle
         assert hash_log_identifier(uid) in caplog.text
 
 
+def test_cell_owner_lookup_miss_counts(monkeypatch):
+    # A correctly routed owner mostly misses in Firestore; a miss is still a leak.
+    monkeypatch.setattr(DocumentReference, 'get', reads._wrap_lookup_get(lambda *a, **k: SimpleNamespace(exists=False)))
+    db = firestore.Client(project='plane-probe-test', credentials=AnonymousCredentials())
+    before = count('read', 'conversations')
+    db.document(f'users/{CELL_UID}/conversations/missing').get()
+    assert count('read', 'conversations') == before + 1
+
+
 def test_empty_collection_query_and_nested_data_are_detected():
     before = count('read', 'conversations')
     reads._finish_query(('users', CELL_UID, 'conversations'), 'test', 0, 0)
