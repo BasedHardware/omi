@@ -256,7 +256,7 @@ static unsigned generation;
 void omi_boot_telemetry_snapshot(struct omi_boot_record *out) {
     memset(out, 0, sizeof(*out)); out->boot_count = ++generation;
 }
-void omi_boot_record_encode(uint8_t *out, const struct omi_boot_record *r) {
+void omi_boot_record_encode(uint8_t out[OMI_BOOT_RECORD_SIZE], const struct omi_boot_record *r) {
     memset(out, 0, OMI_BOOT_RECORD_SIZE); out[0] = 1; out[4] = r->boot_count;
 }
 static ssize_t bt_gatt_attr_read(struct bt_conn *c, const struct bt_gatt_attr *a, void *buf,
