@@ -368,6 +368,18 @@ env:
     value: "true"
   - name: OMI_SHAPED_AGENT_MODE
     value: "on"
+  - name: BUCKET_OBJECT_LAKE
+    value: ""
+  - name: OBJECT_LAKE_KMS_KEY
+    value: ""
+  - name: OBJECT_LAKE_WRITE_ENABLED
+    value: "false"
+  - name: OBJECT_LAKE_WRITE_PERCENT
+    value: "0"
+  - name: OBJECT_LAKE_READ_ENABLED
+    value: "true"
+  - name: OBJECT_LAKE_INLINE_MAX_BYTES
+    value: "4096"
   - name: BUCKET_SCREEN_FRAMES
     value: "based-hardware-prod-screen-frames"
   - name: MEETING_NOTES_EVIDENCE_WAIT_SECONDS

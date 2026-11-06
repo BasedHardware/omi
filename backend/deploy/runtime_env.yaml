@@ -308,6 +308,16 @@ environments:
           PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
           PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
           SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
+          BUCKET_OBJECT_LAKE:
+            category: storage_retention
+            value: omi-dev-object-lake-uc1
+          OBJECT_LAKE_KMS_KEY:
+            category: storage_retention
+            value: projects/based-hardware-dev/locations/us-central1/keyRings/object-lake/cryptoKeys/space-deks
+          OBJECT_LAKE_WRITE_ENABLED: {value: 'false', category: rollout}
+          OBJECT_LAKE_WRITE_PERCENT: {value: '0', category: rollout}
+          OBJECT_LAKE_READ_ENABLED: {value: 'true', category: rollout}
+          OBJECT_LAKE_INLINE_MAX_BYTES: {value: '4096', category: rollout}
           BUCKET_SCREEN_FRAMES:
             category: storage_retention
             value: based-hardware-prod-screen-frames
@@ -451,6 +461,16 @@ environments:
           PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
           PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
           SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
+          BUCKET_OBJECT_LAKE:
+            category: storage_retention
+            value: omi-dev-object-lake-uc1
+          OBJECT_LAKE_KMS_KEY:
+            category: storage_retention
+            value: projects/based-hardware-dev/locations/us-central1/keyRings/object-lake/cryptoKeys/space-deks
+          OBJECT_LAKE_WRITE_ENABLED: {value: 'false', category: rollout}
+          OBJECT_LAKE_WRITE_PERCENT: {value: '0', category: rollout}
+          OBJECT_LAKE_READ_ENABLED: {value: 'true', category: rollout}
+          OBJECT_LAKE_INLINE_MAX_BYTES: {value: '4096', category: rollout}
           BUCKET_SCREEN_FRAMES:
             category: storage_retention
             value: based-hardware-prod-screen-frames
@@ -1000,6 +1020,16 @@ environments:
             PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
             SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
             REVIEW_SURFACE_MODE: {value: 'on', category: rollout}
+            BUCKET_OBJECT_LAKE:
+              category: storage_retention
+              value: omi-dev-object-lake-uc1
+            OBJECT_LAKE_KMS_KEY:
+              category: storage_retention
+              value: projects/based-hardware-dev/locations/us-central1/keyRings/object-lake/cryptoKeys/space-deks
+            OBJECT_LAKE_WRITE_ENABLED: {value: 'false', category: rollout}
+            OBJECT_LAKE_WRITE_PERCENT: {value: '0', category: rollout}
+            OBJECT_LAKE_READ_ENABLED: {value: 'true', category: rollout}
+            OBJECT_LAKE_INLINE_MAX_BYTES: {value: '4096', category: rollout}
             BUCKET_SCREEN_FRAMES:
               category: storage_retention
               value: based-hardware-prod-screen-frames
@@ -1296,6 +1326,16 @@ environments:
             PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
             PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
             SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
+            BUCKET_OBJECT_LAKE:
+              category: storage_retention
+              value: omi-dev-object-lake-uc1
+            OBJECT_LAKE_KMS_KEY:
+              category: storage_retention
+              value: projects/based-hardware-dev/locations/us-central1/keyRings/object-lake/cryptoKeys/space-deks
+            OBJECT_LAKE_WRITE_ENABLED: {value: 'false', category: rollout}
+            OBJECT_LAKE_WRITE_PERCENT: {value: '0', category: rollout}
+            OBJECT_LAKE_READ_ENABLED: {value: 'true', category: rollout}
+            OBJECT_LAKE_INLINE_MAX_BYTES: {value: '4096', category: rollout}
             BUCKET_SCREEN_FRAMES:
               category: storage_retention
               value: based-hardware-prod-screen-frames
@@ -2482,6 +2522,16 @@ environments:
           PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
           PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
           SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
+          BUCKET_OBJECT_LAKE:
+            category: storage_retention
+            value: ''
+          OBJECT_LAKE_KMS_KEY:
+            category: storage_retention
+            value: ''
+          OBJECT_LAKE_WRITE_ENABLED: {value: 'false', category: rollout}
+          OBJECT_LAKE_WRITE_PERCENT: {value: '0', category: rollout}
+          OBJECT_LAKE_READ_ENABLED: {value: 'true', category: rollout}
+          OBJECT_LAKE_INLINE_MAX_BYTES: {value: '4096', category: rollout}
           BUCKET_SCREEN_FRAMES:
             category: storage_retention
             value: based-hardware-prod-screen-frames
@@ -2733,6 +2783,16 @@ environments:
           PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
           PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
           SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
+          BUCKET_OBJECT_LAKE:
+            category: storage_retention
+            value: ''
+          OBJECT_LAKE_KMS_KEY:
+            category: storage_retention
+            value: ''
+          OBJECT_LAKE_WRITE_ENABLED: {value: 'false', category: rollout}
+          OBJECT_LAKE_WRITE_PERCENT: {value: '0', category: rollout}
+          OBJECT_LAKE_READ_ENABLED: {value: 'true', category: rollout}
+          OBJECT_LAKE_INLINE_MAX_BYTES: {value: '4096', category: rollout}
           BUCKET_SCREEN_FRAMES:
             category: storage_retention
             value: based-hardware-prod-screen-frames
@@ -3306,6 +3366,16 @@ environments:
             PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
             SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
             REVIEW_SURFACE_MODE: {value: 'on', category: rollout}
+            BUCKET_OBJECT_LAKE:
+              category: storage_retention
+              value: ''
+            OBJECT_LAKE_KMS_KEY:
+              category: storage_retention
+              value: ''
+            OBJECT_LAKE_WRITE_ENABLED: {value: 'false', category: rollout}
+            OBJECT_LAKE_WRITE_PERCENT: {value: '0', category: rollout}
+            OBJECT_LAKE_READ_ENABLED: {value: 'true', category: rollout}
+            OBJECT_LAKE_INLINE_MAX_BYTES: {value: '4096', category: rollout}
             BUCKET_SCREEN_FRAMES:
               category: storage_retention
               value: based-hardware-prod-screen-frames
@@ -3733,6 +3803,16 @@ environments:
             PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
             PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
             SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
+            BUCKET_OBJECT_LAKE:
+              category: storage_retention
+              value: ''
+            OBJECT_LAKE_KMS_KEY:
+              category: storage_retention
+              value: ''
+            OBJECT_LAKE_WRITE_ENABLED: {value: 'false', category: rollout}
+            OBJECT_LAKE_WRITE_PERCENT: {value: '0', category: rollout}
+            OBJECT_LAKE_READ_ENABLED: {value: 'true', category: rollout}
+            OBJECT_LAKE_INLINE_MAX_BYTES: {value: '4096', category: rollout}
             BUCKET_SCREEN_FRAMES:
               category: storage_retention
               value: based-hardware-prod-screen-frames
