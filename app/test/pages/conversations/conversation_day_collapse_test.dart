@@ -5,8 +5,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
+import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/models/local_recording.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
+import 'package:omi/pages/conversations/widgets/date_list_item.dart';
 import 'package:omi/pages/conversations/widgets/processing_conversation_row.dart';
 import 'package:omi/pages/conversations/widgets/recording_list_item.dart';
 import 'package:omi/providers/conversation_provider.dart';
@@ -131,6 +133,27 @@ void main() {
     await tester.pump();
     expect(find.text('Today conversation'), findsOneWidget);
     expect(find.text('Yesterday conversation'), findsOneWidget);
+    semantics.dispose();
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('right-to-left day action announces its localized date and action', (tester) async {
+    final semantics = tester.ensureSemantics();
+    final today = DateUtils.dateOnly(DateTime.now());
+    await tester.pumpWidget(MaterialApp(
+      locale: const Locale('ar'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: Scaffold(body: DateListItem(date: today, isFirst: true, onToggle: () {})),
+    ));
+    await tester.pump();
+
+    final key = ValueKey('collapse_day_${today.toIso8601String()}');
+    final data = tester.getSemantics(find.byKey(key)).getSemanticsData();
+    final day = tester.widget<Text>(find.descendant(of: find.byType(DateListItem), matching: find.byType(Text))).data!;
+    expect(data.label, contains(day));
+    expect(data.label, contains('طيّ'));
+    expect(data.flagsCollection.isExpanded, ui.Tristate.isTrue);
     semantics.dispose();
     await tester.pumpWidget(const SizedBox.shrink());
   });
