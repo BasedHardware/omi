@@ -82,7 +82,7 @@ class PusherPcmStage(StrEnum):
     TAIL = 'tail'
 
 
-class PusherPcmError(StrEnum):
+class PusherPcmErrorReason(StrEnum):
     UNKNOWN = 'unknown'
     ACQUIRE = 'acquire'
     RELEASE = 'release'

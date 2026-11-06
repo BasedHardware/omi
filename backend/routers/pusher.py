@@ -25,7 +25,7 @@ from utils.pusher_audio_projection import PusherAudioProjection
 from utils.batch_pipeline.record_projection_rebuild import projection_owner_gone
 from utils.pusher_record_barrier import PusherRecordBarrier
 from utils.pusher_storage_budget import RetainedPcmWindow, StoragePcmBudget, storage_pcm_budget_bytes
-from utils.observability.reasons import PusherPcmError, PusherPcmStage, ReasonFamily, reason_label
+from utils.observability.reasons import PusherPcmErrorReason, PusherPcmStage, ReasonFamily, reason_label
 from utils.pusher_receive_metrics import SocketObservation, observe_work
 from utils.pusher_record_finish import (
     ProjectionQueueWaitTimeout,
@@ -126,11 +126,12 @@ PUSHER_STORAGE_PCM_BUDGET_LIMIT_BYTES.set(storage_pcm_budget.limit)
 _pcm_error_logged_at: dict[str, float] = {}
 
 
-def _record_pcm_error(reason: PusherPcmError, error: Exception) -> None:
+def _record_pcm_error(reason: PusherPcmErrorReason, error: Exception) -> None:
     """Bounded telemetry must never interfere with custody or socket survival."""
     try:
-        label = reason_label(ReasonFamily.PUSHER_PCM, reason, PusherPcmError)
-        PUSHER_STORAGE_PCM_ERRORS_TOTAL.labels(reason=label).inc()
+        PUSHER_STORAGE_PCM_ERRORS_TOTAL.labels(
+            reason=reason_label(ReasonFamily.PUSHER_PCM, reason, PusherPcmErrorReason)
+        ).inc()
     except Exception:
         pass
     try:
@@ -327,7 +328,7 @@ async def _commit_durable_audio_window(
     except Exception as exc:
         # admit rolls back even a partially mutated counter. A budget fault
         # uses the flag-0 dispatch path; it cannot become a socket failure.
-        _record_pcm_error(PusherPcmError.ACQUIRE, exc)
+        _record_pcm_error(PusherPcmErrorReason.ACQUIRE, exc)
     if not admitted:
         try:
             PUSHER_STORAGE_PCM_REFUSALS_TOTAL.labels(
@@ -376,14 +377,14 @@ async def _commit_durable_audio_window(
             if done is not None and not done.cancelled():
                 error = done.exception()
                 if error is not None:
-                    _record_pcm_error(PusherPcmError.LATE_STORAGE, error)
+                    _record_pcm_error(PusherPcmErrorReason.LATE_STORAGE, error)
             if reserved:
                 try:
                     admission.settle(payload_size)
                 except Exception as exc:
                     # settle retires exactly this reservation even when the
                     # underlying release fails before or after mutation.
-                    _record_pcm_error(PusherPcmError.RELEASE, exc)
+                    _record_pcm_error(PusherPcmErrorReason.RELEASE, exc)
             if pcm_observed:
                 try:
                     PUSHER_STORAGE_PCM_INFLIGHT_BYTES.dec(payload_size)

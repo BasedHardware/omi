@@ -91,7 +91,7 @@ PUSHER_STORAGE_PCM_BUDGET_LIMIT_BYTES = Gauge(
     'Pusher storage PCM byte budget limit; zero means no budget is enforced',
 )
 
-from utils.observability.reasons import PusherPcmError, PusherPcmStage, ReasonFamily, reason_label
+from utils.observability.reasons import PusherPcmErrorReason, PusherPcmStage, ReasonFamily, reason_label
 
 PUSHER_STORAGE_PCM_REFUSALS_TOTAL = Counter(
     'omi_pusher_storage_pcm_refusals_total',
@@ -107,8 +107,10 @@ PUSHER_STORAGE_PCM_ERRORS_TOTAL = Counter(
     'PCM admission accounting faults and late post-cancellation storage failures',
     ['reason'],
 )
-for _pcm_error in PusherPcmError:
-    PUSHER_STORAGE_PCM_ERRORS_TOTAL.labels(reason=reason_label(ReasonFamily.PUSHER_PCM, _pcm_error, PusherPcmError))
+for _pcm_error in PusherPcmErrorReason:
+    PUSHER_STORAGE_PCM_ERRORS_TOTAL.labels(
+        reason=reason_label(ReasonFamily.PUSHER_PCM, _pcm_error, PusherPcmErrorReason)
+    )
 
 PUSHER_QUEUE_DROPS = Counter(
     'pusher_queue_drops_total',
