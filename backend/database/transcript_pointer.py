@@ -86,11 +86,13 @@ def clear_memo() -> None:
 
 
 def _ref(uid, pointer):
+    ref = object_lake.LakeObjectRef.from_pointer_dict(dict(pointer))
+    if ref.key.split('/')[2] != uid or ref.data_class != 'transcript':
+        raise object_lake.LakeObjectCorrupt('Transcript pointer owner or class mismatch')
     if not config.bucket():
         raise TranscriptPointerFetchError('Transcript lake bucket is not configured')
-    ref = object_lake.LakeObjectRef.from_pointer_dict(dict(pointer))
-    if ref.key.split('/')[2] != uid or ref.bucket != config.bucket() or ref.data_class != 'transcript':
-        raise object_lake.LakeObjectCorrupt('Transcript pointer owner, bucket or class mismatch')
+    if ref.bucket != config.bucket():
+        raise object_lake.LakeObjectCorrupt('Transcript pointer bucket mismatch')
     return ref
 
 

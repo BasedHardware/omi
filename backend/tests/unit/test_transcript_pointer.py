@@ -339,3 +339,14 @@ def test_cached_failure_does_not_retain_caller_tracebacks(lake_world, monkeypatc
         errors.append(error.value)
     assert errors[0] is not errors[1]
     assert all(value.__traceback__ is None for value in pointer._memo().decoded.values())
+
+
+def test_malformed_pointer_remains_corrupt_without_bucket_configuration(lake_world, monkeypatch):
+    doc = encode()
+    pointer.clear_memo()
+    monkeypatch.delenv('BUCKET_OBJECT_LAKE')
+    with pytest.raises(pointer.TranscriptSegmentsDecodeError):
+        pointer.decode_stored_transcript(UID, {'not': 'a pointer'}, True)
+    with pytest.raises(pointer.TranscriptPointerFetchError):
+        pointer.decode_stored_transcript(UID, doc['transcript_segments'], True)
+    assert lake_world.calls['get'] == 0
