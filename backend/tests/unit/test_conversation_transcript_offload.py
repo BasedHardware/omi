@@ -12,7 +12,7 @@ import zlib
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from google.cloud import firestore
-from google.api_core.exceptions import AlreadyExists
+from google.api_core.exceptions import AlreadyExists, InvalidArgument
 from pydantic import ValidationError
 import pytest
 
@@ -40,10 +40,15 @@ from models.conversation import Conversation
 from routers import conversations as conversation_router
 from models.transcript_segment import TranscriptSegment
 from tests.support.dream_firestore import DreamFirestore
-from tests.unit.fixtures.strict_firestore_transaction import StrictFirestoreDocument, StrictFirestoreCollection
+from tests.unit.fixtures.strict_firestore_transaction import (
+    StrictFirestoreDocument,
+    StrictFirestoreCollection,
+    StrictFirestoreTransaction,
+)
 from tests.unit.test_transcript_pointer import lake_world, UID, CID, PATH, encode, speech, pointer_doc
 from utils.other import object_lake as lake, space_keys
 from utils.other.local_storage import LocalBlob
+from utils.firestore_document_size import estimate_firestore_document_bytes, FIRESTORE_MAX_DOCUMENT_BYTES
 from utils.person_evidence_backfill import backfill_person
 from utils.speaker_tag_prompts.owner_confirmation import StaleOwnerConfirmation
 
@@ -61,7 +66,6 @@ NOW = datetime(2026, 11, 6, tzinfo=timezone.utc)
 )
 def test_decode_state_display_and_content_contract(lake_world, monkeypatch, failure, display, content):
     doc = pointer_doc(lake_world)
-    doc['has_content'] = True  # cached inline hints cannot bypass lake failure states
     monkeypatch.setattr(lake, 'get_space_object', Mock(side_effect=failure('synthetic')))
     if isinstance(display, type):
         with pytest.raises(display):
@@ -107,6 +111,88 @@ def test_oversize_inline_transcript_fits_after_offload(lake_world):
     assert isinstance(doc['transcript_segments'], dict)
     assert len(json.dumps(doc)) < 1024
     assert db.decode_transcript_segments_verified(UID, doc['transcript_segments'], True) == segments
+
+
+@pytest.mark.parametrize('admitted', [False, True])
+@pytest.mark.parametrize('level', ['standard', 'enhanced'])
+def test_live_in_progress_transcript_crosses_document_limit(lake_world, monkeypatch, admitted, level):
+    monkeypatch.setenv('OBJECT_LAKE_WRITE_ENABLED', str(admitted).lower())
+    monkeypatch.setattr(db.encryption, 'encrypt', lambda value, uid: 'encrypted:' + value)
+    segments = speech(1100000)
+    doc = {'id': CID, 'status': 'in_progress', 'data_protection_level': level, 'transcript_segments': []}
+    lake_world.store.rows[PATH] = deepcopy(doc)
+    inline = db._protect_json_value(segments, UID, level)
+    assert estimate_firestore_document_bytes({**doc, 'transcript_segments': inline}, '/'.join(PATH)) > (
+        FIRESTORE_MAX_DOCUMENT_BYTES
+    )
+    original_update = StrictFirestoreTransaction.update
+    writes = []
+
+    def bounded_update(transaction, ref, patch):
+        merged = {**lake_world.store.rows[ref.path], **patch}
+        if estimate_firestore_document_bytes(merged, '/'.join(ref.path)) > FIRESTORE_MAX_DOCUMENT_BYTES:
+            raise InvalidArgument('Document exceeds 1 MiB')
+        if ref.path == PATH:
+            assert lake_world.calls['put'] == 1  # precedes the first accepted write
+            writes.append(deepcopy(patch))
+        return original_update(transaction, ref, patch)
+
+    monkeypatch.setattr(StrictFirestoreTransaction, 'update', bounded_update)
+    operation = lambda: db.update_conversation_segments(UID, CID, segments, firestore_client=lake_world.store)
+    if not admitted:
+        with pytest.raises(InvalidArgument, match='1 MiB'):
+            operation()
+        assert lake_world.store.rows[PATH] == doc
+        assert lake_world.calls == {'get': 0, 'put': 0}
+        return
+    assert operation() is True
+    assert len(writes) == 1
+    stored = lake_world.store.rows[PATH]
+    assert stored['status'] == 'in_progress'
+    assert isinstance(stored['transcript_segments'], dict)
+    assert estimate_firestore_document_bytes(stored, '/'.join(PATH)) < 4096
+    assert db.decode_transcript_segments_verified(UID, stored['transcript_segments'], True) == segments
+
+
+def test_transaction_candidate_rechecks_source_after_upload(lake_world, monkeypatch):
+    lake_world.store.rows[PATH] = {'id': CID, 'status': 'in_progress', 'transcript_segments': []}
+    original_put = lake.put_space_object
+    incoming = speech()
+    concurrent = {**speech(100)[0], 'id': 'concurrent-segment', 'start': 13.0, 'end': 14.0}
+    candidates = []
+
+    def put(*args, **kwargs):
+        assert not pointer._client.in_transaction_body()
+        candidates.append(json.loads(args[3]))
+        ref = original_put(*args, **kwargs)
+        if len(candidates) == 1:
+            # Advance the source while the first candidate upload is in flight.
+            # The transaction must recompute from this new snapshot.
+            lake_world.store.rows[PATH]['transcript_segments'] = [concurrent]
+        return ref
+
+    monkeypatch.setattr(lake, 'put_space_object', put)
+    assert db.update_conversation_segments(UID, CID, incoming, preserve_unseen=True, firestore_client=lake_world.store)
+    stored = lake_world.store.rows[PATH]
+    assert candidates == [incoming, incoming + [concurrent]]
+    assert db.decode_transcript_segments_verified(UID, stored['transcript_segments'], True) == incoming + [concurrent]
+
+
+@pytest.mark.parametrize('state', ['destroyed', 'unavailable'])
+def test_deep_object_verification_key_outcomes(lake_world, monkeypatch, state):
+    doc = encode()
+    ref = lake.LakeObjectRef.from_pointer_dict(doc['transcript_segments'])
+    if state == 'destroyed':
+        space_keys.destroy_space_keys(UID)
+        assert lake.verify_space_object(ref, deep=True) is False
+    else:
+        monkeypatch.setattr(
+            space_keys, 'unwrap_space_dek', Mock(side_effect=space_keys.SpaceKeyUnavailable('synthetic'))
+        )
+        with pytest.raises(space_keys.SpaceKeyUnavailable):
+            lake.verify_space_object(ref, deep=True)
+    # Shallow verification checks metadata only and makes no key claim.
+    assert lake.verify_space_object(ref, deep=False) is True
 
 
 @pytest.mark.parametrize('state', ['present', 'absent', 'shredded', 'outage'])
@@ -853,6 +939,25 @@ def test_empty_recording_cleanup_preloads_and_refuses_unknown_content(lake_world
         assert (PATH in lake_world.store.rows) is (state == 'present')
     if state == 'present':
         assert lake_world.calls['get'] == 1
+
+
+@pytest.mark.parametrize('state', ['absent', 'shredded', 'outage'])
+@pytest.mark.parametrize('signal', [{'photos': [{'id': 'photo-1'}]}, {'has_content': True}])
+def test_empty_recording_cleanup_preserves_independent_content(lake_world, monkeypatch, state, signal):
+    doc = pointer_doc(lake_world)
+    doc.update(status='in_progress', **signal)
+    lake_world.store.rows[PATH] = deepcopy(doc)
+    _pointer_failure(monkeypatch, state)
+    operation = lambda: recording_sessions.tombstone_and_delete_empty_conversation(
+        UID, CID, None, firestore_client=lake_world.store
+    )
+    if state == 'outage':
+        # Independent content must not swallow retryable pointer failures.
+        with pytest.raises(pointer.TranscriptPointerFetchError):
+            operation()
+    else:
+        assert operation() is False
+    assert lake_world.store.rows[PATH] == doc
 
 
 @pytest.mark.parametrize('trigger', ['capture_end', 'server_recovery'])
