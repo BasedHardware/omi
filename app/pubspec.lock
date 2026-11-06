@@ -530,7 +530,7 @@ packages:
     source: hosted
     version: "15.2.5"
   firebase_messaging_platform_interface:
-    dependency: transitive
+    dependency: "direct dev"
     description:
       name: firebase_messaging_platform_interface
       sha256: "0bbea00680249595fc896e7313a2bd90bd55be6e0abbe8b9a39d81b6b306acb6"
