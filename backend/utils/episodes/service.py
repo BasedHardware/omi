@@ -340,6 +340,8 @@ def _close(
     preserve_for_reconciliation: bool = False,
     extra_fields: Optional[Mapping[str, Any]] = None,
     split_after: Optional[datetime] = None,
+    retained_member_window: bool = False,
+    f_detaches: Optional[set[str]] = None,
 ) -> Optional[dict[str, Any]]:
     """Close once, returning committed state; None when the compare-and-swap loses.
 
@@ -406,8 +408,18 @@ def _close(
         expected_conversation_ids=episode.get('conversation_ids') if split_after is not None else None,
         split_after=split_after,
         firestore_client=c.firestore_client,
+        **({'retained_member_window': True} if retained_member_window else {}),
     )
     if closed is not None:
+        if (
+            retained_member_window
+            and detach
+            and f_detaches is not None
+            and detach in (episode.get('conversation_ids') or [])
+            and detach not in (closed.get('conversation_ids') or [])
+        ):
+            # Record the committed detach before any post-close work can fail.
+            f_detaches.add(detach)
         if carried_items is not None:
             carried_items.extend(transferred)
         metrics.record_episode_closed(reason)
@@ -692,9 +704,10 @@ def record_moment(
     if not episodes_enabled_for(uid):
         return 'disabled'
     outcome = 'error'
+    f_detaches: set[str] = set()
     for _ in range(2):
         try:
-            outcome = _record_moment_once(uid, moment, c, member_episode_id=member_episode_id)
+            outcome = _record_moment_once(uid, moment, c, member_episode_id=member_episode_id, f_detaches=f_detaches)
         except episodes_db.EpisodeConflict:
             if moment.recovery_receipts is not None:
                 moment.recovery_receipts.invalidate()
@@ -706,6 +719,7 @@ def record_moment(
         break
     if outcome in {'conflict', 'error'}:
         metrics.record_moment_update(trigger=moment.trigger, outcome=outcome)
+    f_join.record_orphans(uid, f_detaches, c)
     return outcome
 
 
@@ -719,12 +733,14 @@ def _settle_boundary(
     now: datetime,
     named: Sequence[Mapping[str, Any]] = (),
     short: bool = False,
+    f_detaches: Optional[set[str]] = None,
 ):
     """Settle provisional joins and keep continuing members with their original owner."""
     decision = boundary_runtime.decision(
         uid, episode, facts, policy.boundary(episode, facts), firestore_client=c.firestore_client
     )
     pending = _pending(episode).get(moment.conversation_id)
+    f_split = False
     if episode and pending is not None and pending.get('variant') == F_JOIN_VARIANT:
         # A recorded-time join marked for variant F settles only with F, never the legacy prompt. The join
         # was marked only where the meeting authority asked a question, and a moment too short to commit
@@ -736,10 +752,10 @@ def _settle_boundary(
                 moment.conversation_id,
                 pending,
                 named,
-                lambda rows: _named_segments(uid, rows, c),
                 c,
                 started_at=facts.started_at,
             )
+            f_split = decision.action == 'close'
     elif episode and pending is not None and decision.action == policy.CONTINUE:
         # It joined provisionally at its first words; with its text in hand, settle it now.
         decision = policy.Boundary(
@@ -790,7 +806,9 @@ def _settle_boundary(
             carry_to_successor=moment.conversation_id if carry_previous_state else None,
             carried_items=carried_items if carry_previous_state else None,
             preserve_for_reconciliation=carry_previous_state,
-            split_after=facts.started_at if pending is not None and pending.get('variant') == F_JOIN_VARIANT else None,
+            split_after=facts.started_at if f_split else None,
+            retained_member_window=f_split,
+            f_detaches=f_detaches if f_split else None,
         )
         episode = None
     elif decision.action == policy.NEW:
@@ -816,7 +834,12 @@ def _settle_boundary(
 
 
 def _record_moment_once(
-    uid: str, moment: MomentInput, c: Collaborators, *, member_episode_id: Optional[str] = None
+    uid: str,
+    moment: MomentInput,
+    c: Collaborators,
+    *,
+    member_episode_id: Optional[str] = None,
+    f_detaches: Optional[set[str]] = None,
 ) -> str:
     now = _now(c)
     walk = moment.recovery_receipts if walk_context_enabled() and moment.trigger == 'sync_recovery' else None
@@ -911,7 +934,9 @@ def _record_moment_once(
             and moment.trigger != 'session_end'
             and text.words < (FINALIZE_MIN_WORDS if moment.trigger == 'finalize' else MOMENT_MIN_WORDS)
         )
-        settled = _settle_boundary(uid, episode, moment, facts, text.text, c, now, named, short=short)
+        settled = _settle_boundary(
+            uid, episode, moment, facts, text.text, c, now, named, short=short, f_detaches=f_detaches
+        )
         if isinstance(settled, str):
             return settled
         episode, pending, carried_items, successor_started_at, carry_previous_state = settled

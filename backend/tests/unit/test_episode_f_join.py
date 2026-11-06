@@ -53,6 +53,7 @@ def _env(monkeypatch):
     monkeypatch.setenv(config.EPISODE_F_JOIN_PERCENT_ENV, '100')
     # No flag-store rule: the env bucket decides (the store path has its own test).
     monkeypatch.setattr(omi_flags, 'resolve', lambda key, uid: None)
+    monkeypatch.setattr(omi_flags, 'snapshot', lambda: omi_flags.EMPTY)
     monkeypatch.setenv('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
     monkeypatch.setattr(service.client_gate, 'client_seen', lambda uid: True)
     monkeypatch.setattr(service, 'get_user_name', lambda *_a, **_kw: None)
@@ -116,6 +117,11 @@ def _store_row(store, cid, text, *, minutes):
     store.rows[('users', UID, 'conversations', cid)] = {
         'id': cid,
         'source': 'omi',
+        'status': 'in_progress',
+        'discarded': False,
+        'is_locked': False,
+        'data_protection_level': 'standard',
+        'visibility': 'private',
         'started_at': T0 + timedelta(minutes=minutes),
         'finished_at': T0 + timedelta(minutes=minutes + 1),
         'transcript_segments': _segments(text),
@@ -308,7 +314,7 @@ def test_the_predecessor_is_the_one_recorded_at_the_join_not_a_later_member(stor
     # A later member attaching before c2's first moment must not become c2's predecessor.
     episode = {'conversation_ids': ['c1', 'c2', 'c3'], 'member_activity': {'c1': T0, 'c3': T0 + timedelta(minutes=14)}}
     _store_row(store, 'c3', SECOND, minutes=14)
-    rendered = f_join.previous_transcript(UID, episode, 'c2', marker, lambda rows: rows, store)
+    rendered = f_join.previous_transcript(UID, episode, 'c2', marker, _c(store, minutes=13))
     assert 'okay lunch' in rendered and 'dentist' not in rendered
 
 

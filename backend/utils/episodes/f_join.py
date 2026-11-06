@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from typing import Any, Callable, Mapping, Optional, Sequence
+from typing import Any, Mapping, Optional, Sequence
 
 from config.episodes import (
     CONTINUE_GAP_SECONDS,
@@ -29,12 +29,19 @@ from config.episodes import (
     MOVED_ON_THRESHOLD,
     f_join_enabled,
     f_join_env_admitted,
+    EPISODE_F_JOIN_PERCENT_ENV,
+    F_JOIN_PREVIOUS_CHARS,
+    F_JOIN_PEOPLE_READ_LIMIT,
 )
+from config.jev_decisions import percentage
+from database._client import get_firestore_client
 from database import conversations as conversations_db
 from database import episodes as episodes_db
 from database.episodes import EpisodeConflict
 from utils import omi_flags
-from utils.episodes import boundary_runtime, incremental, metrics, policy
+from utils.episodes import boundary_runtime, incremental, metrics, policy, moment_render
+from utils.episodes.visibility import hidden_member
+from utils.sync.processing_hold import FIELD as HOLD_FIELD
 from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
@@ -56,8 +63,19 @@ def admitted(uid: str) -> bool:
 
 def arm_fields(uid: str) -> dict[str, str]:
     """Attach to a newly opened episode: the arm live at open, for the closed-size metrics."""
+    if not uid or not f_join_enabled():
+        return {}
     try:
-        return {ARM_FIELD: 'f' if admitted(uid) else 'control'}
+        rule = omi_flags.snapshot().rules.get(F_JOIN_FLAG_KEY)
+        if rule is not None:
+            if not rule.active or (rule.rollout_percentage <= 0 and uid not in rule.allow_uids):
+                return {}
+            enabled = omi_flags.evaluate(rule, uid).enabled
+        else:
+            if percentage(EPISODE_F_JOIN_PERCENT_ENV, default=0.0) <= 0:
+                return {}
+            enabled = f_join_env_admitted(uid)
+        return {ARM_FIELD: 'f' if enabled else 'control'}
     except Exception:
         return {}
 
@@ -65,7 +83,8 @@ def arm_fields(uid: str) -> dict[str, str]:
 def latest_member(episode: Mapping[str, Any], exclude: str) -> Optional[str]:
     """The member with the latest recorded activity, other than ``exclude`` (the candidate)."""
     activity = episode.get('member_activity') or {}
-    members = [cid for cid in episode.get('conversation_ids') or [] if cid != exclude]
+    hidden = set(episode.get('discarded_conversation_ids') or []) | set(episode.get('duplicate_conversation_ids') or [])
+    members = [cid for cid in episode.get('conversation_ids') or [] if cid != exclude and cid not in hidden]
     if not members:
         return None
 
@@ -148,16 +167,88 @@ def previous_transcript(
     episode: Mapping[str, Any],
     conversation_id: str,
     pending: Mapping[str, Any],
-    name: Callable[[Sequence[Mapping[str, Any]]], Sequence[Mapping[str, Any]]],
-    firestore_client: Any,
+    c: Any,
 ) -> str:
-    """The predecessor recorded when the join was marked, rendered as variant F saw it."""
-    previous = pending.get('previous') or latest_member(episode, conversation_id)
-    if not previous:
+    """Read one retained predecessor, rechecking processing visibility before decoding or naming.
+
+    No photos or people projections: one conversation document and at most eight name documents.
+    The ordinary owner-only sharing visibility (``private``) does not block owner processing.
+    """
+    # An explicit None is a pinned absence, not permission to choose a later attachment.
+    previous = pending['previous'] if 'previous' in pending else latest_member(episode, conversation_id)
+    hidden = set(episode.get('discarded_conversation_ids') or []) | set(episode.get('duplicate_conversation_ids') or [])
+    if (
+        not previous
+        or previous == conversation_id
+        or previous not in (episode.get('conversation_ids') or [])
+        or previous in hidden
+    ):
         return ''
-    row = conversations_db.get_conversation(uid, str(previous), firestore_client=firestore_client) or {}
-    segments = [s for s in row.get('transcript_segments') or [] if isinstance(s, Mapping)]
-    return incremental.render_f_transcript(name(segments))
+    row = conversations_db.get_conversation_raw_snapshot(uid, str(previous), firestore_client=c.firestore_client)
+    if not row or not _may_feed_llm(uid, row):
+        return ''
+    segments = conversations_db.decode_transcript_segments_blob(
+        uid, row.get('transcript_segments'), bool(row.get('transcript_segments_compressed')), require_decryption=True
+    )
+    selected = _transcript_tail(segments)
+    person_ids = list(
+        dict.fromkeys(str(s['person_id']) for s in selected if s.get('person_id') and not s.get('is_user'))
+    )[:F_JOIN_PEOPLE_READ_LIMIT]
+    names = {}
+    if person_ids:
+        if c.people_names is not None:
+            names = c.people_names(uid, person_ids)
+        else:
+            client = c.firestore_client if c.firestore_client is not None else get_firestore_client()
+            people = client.collection('users').document(uid).collection('people')
+            for person_id in person_ids:
+                person = people.document(person_id).get(field_paths=['name']).to_dict() or {}
+                names[person_id] = str(person.get('name') or '')
+    return incremental.render_f_transcript(moment_render.name_segments(selected, names))
+
+
+def _may_feed_llm(uid: str, row: Mapping[str, Any]) -> bool:
+    # Reuse the episode composer/build visibility predicates. Missing required processing metadata
+    # is unknown, not permission; optional tombstone/redirect fields retain their schema defaults.
+    if row.get('owner_uid', uid) != uid or row.get('uid', uid) != uid:
+        return False
+    if row.get('data_protection_level') not in {'standard', 'enhanced'}:
+        return False
+    if row.get('is_locked') is not False or row.get('discarded') is not False:
+        return False
+    if any(row.get(key, False) is not False for key in ('deleted', 'deferred')):
+        return False
+    if row.get('status') not in {'completed', 'processing', 'in_progress'}:
+        return False
+    if (
+        row.get('processing_state') == 'local_pending'
+        or row.get('terminal_no_derived_effects')
+        or row.get('client_processing')
+    ):
+        return False
+    if row.get('summary_blocked_reason') == 'local_only':
+        return False
+    hold = row.get(HOLD_FIELD, {})
+    if not isinstance(hold, Mapping) or hold.get('held', False) is not False:
+        return False
+    return not hidden_member(dict(row)) and conversations_db.is_visible_conversation(row)
+
+
+def _transcript_tail(segments: Sequence[Any]) -> list[dict[str, Any]]:
+    """Keep a bounded text tail before collecting any person ids for naming."""
+    rows = sorted(
+        (s for s in segments if isinstance(s, Mapping) and str(s.get('text') or '').strip()),
+        key=lambda s: float(s.get('start') or 0.0),
+    )
+    selected = []
+    remaining = F_JOIN_PREVIOUS_CHARS
+    for segment in reversed(rows):
+        if remaining <= 0:
+            break
+        text = str(segment['text']).strip()[-remaining:]
+        selected.append({**segment, 'text': text})
+        remaining -= len(text) + 1
+    return list(reversed(selected))
 
 
 def _fallback(reason: str) -> None:
@@ -193,14 +284,24 @@ def _split_still_clear(
     """Re-reads the episode after Jev answered: a split is clear only while the episode is live and no
     member recorded past the candidate's start. An unreadable episode keeps today's join."""
     try:
-        fresh = episodes_db.get_episode(uid, str(episode['id']), firestore_client=c.firestore_client)
+        fresh = episodes_db.get_episode_membership_snapshot(
+            uid, str(episode['id']), firestore_client=c.firestore_client
+        )
     except Exception as error:
         logger.warning('event=episode_f_join outcome=recheck_failed exception_type=%s', type(error).__name__)
         _fallback('other')
         return False
     if fresh is None:
         return False
-    return policy.is_live(fresh) and not later_member(fresh, conversation_id, started_at)
+    return bool(
+        fresh
+        and not fresh.get('recorded_merged_into')
+        and isinstance(fresh.get('conversation_ids'), list)
+        and conversation_id in fresh['conversation_ids']
+        and isinstance(fresh.get('member_activity'), Mapping)
+        and policy.is_live(fresh)
+        and not later_member(fresh, conversation_id, started_at)
+    )
 
 
 def settle(
@@ -209,7 +310,6 @@ def settle(
     conversation_id: str,
     pending: Mapping[str, Any],
     named: Sequence[Mapping[str, Any]],
-    name: Callable[[Sequence[Mapping[str, Any]]], Sequence[Mapping[str, Any]]],
     c: Any,
     *,
     started_at: datetime,
@@ -226,11 +326,15 @@ def settle(
         metrics.record_boundary('f_later_member')
         return keep
     try:
-        previous = previous_transcript(uid, episode, conversation_id, pending, name, c.firestore_client)
+        previous = previous_transcript(uid, episode, conversation_id, pending, c)
     except Exception as error:
         logger.warning('event=episode_f_join outcome=previous_failed exception_type=%s', type(error).__name__)
         metrics.record_boundary('f_no_answer')
         _fallback('other')
+        return keep
+    if not previous:
+        metrics.record_boundary('f_no_answer')
+        _fallback('unknown')
         return keep
     state = incremental.f_boundary_state(previous, incremental.render_f_transcript(named))
     p_same = incremental.ask_same_occasion_f(state, ask=c.ask)
@@ -248,6 +352,34 @@ def settle(
         return policy.Boundary('close', reason, gap_seconds=gap, source_changed=source_changed)
     metrics.record_boundary('f_continue')
     return keep
+
+
+def record_orphans(uid: str, detached: set[str], c: Any) -> None:
+    """Observe each actual F detach once after record_moment's bounded retries.
+
+    At most two owner-link/episode reads for the one candidate in this call.
+    A transient gap between close and a successful successor is not an orphan.
+    No reads occur for flag-off or non-splitting moments (``detached`` is empty).
+    """
+    for conversation_id in detached:
+        try:
+            owner = episodes_db.get_episode_owner_snapshot(uid, conversation_id, firestore_client=c.firestore_client)
+            if owner and (
+                owner.get('recorded_merged_into')
+                or owner.get('status') not in {'live', 'closed'}
+                or not isinstance(owner.get('conversation_ids'), list)
+            ):
+                raise EpisodeConflict('unknown_owner')
+            orphan = (
+                not owner or not policy.is_live(owner) or conversation_id not in (owner.get('conversation_ids') or [])
+            )
+        except Exception as error:
+            metrics.record_boundary('f_orphan_check_error')
+            logger.warning('event=episode_f_join_orphan outcome=check_failed exception_type=%s', type(error).__name__)
+            continue
+        if orphan:
+            metrics.record_boundary('f_orphan')
+            logger.error('event=episode_f_join_orphan outcome=no_live_successor')
 
 
 def record_closed_size(closed: Mapping[str, Any]) -> None:

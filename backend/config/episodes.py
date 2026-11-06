@@ -247,6 +247,7 @@ F_JOIN_VARIANT = 'f'
 F_JOIN_JEV_LANE = 'episode_boundary_f'
 F_JOIN_PREVIOUS_CHARS = 12_000
 F_JOIN_NEW_CHARS = 8_000
+F_JOIN_PEOPLE_READ_LIMIT = 8
 # The gateway's own provider deadline (JEV_GATEWAY_REQUEST_MS, 2.5 s) is authoritative; the client
 # waits just past it so a slow provider surfaces as a gateway timeout. One attempt, as today.
 F_JOIN_TIMEOUT_SECONDS = JEV_CLIENT_TIMEOUT_SECONDS

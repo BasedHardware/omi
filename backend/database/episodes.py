@@ -131,6 +131,29 @@ def get_home_episode_snapshots(
     return result
 
 
+def get_episode_membership_snapshot(
+    uid: str, episode_id: str, *, firestore_client: Any = None
+) -> Optional[dict[str, Any]]:
+    """One exact metadata read for bounded safety checks; never decode content or follow redirects."""
+    snapshot = _episodes(_client(firestore_client), uid).document(episode_id).get()
+    raw = snapshot.to_dict() if snapshot.exists else None
+    if raw is None:
+        return None
+    return {
+        'id': episode_id,
+        **{key: raw.get(key) for key in ('status', 'conversation_ids', 'member_activity', 'recorded_merged_into')},
+    }
+
+
+def get_episode_owner_snapshot(
+    uid: str, conversation_id: str, *, firestore_client: Any = None
+) -> Optional[dict[str, Any]]:
+    """At most two exact owner-link/episode reads; a redirect stays explicit for the caller."""
+    client = _client(firestore_client)
+    episode_id = _link_target(client, uid, conversation_id)
+    return get_episode_membership_snapshot(uid, episode_id, firestore_client=client) if episode_id else None
+
+
 def _link_target(client: Any, uid: str, key: str, transaction: Any = None) -> Optional[str]:
     snapshot = _links(client, uid).document(key).get(transaction=transaction)
     data = snapshot.to_dict() if snapshot.exists else None
@@ -721,6 +744,7 @@ def _close(
     expected_activity_at: Optional[datetime],
     expected_conversation_ids: Optional[Sequence[str]] = None,
     split_after: Optional[datetime] = None,
+    retained_member_window: bool = False,
 ) -> Optional[dict[str, Any]]:
     timeline_enabled = recorded_episodes_enabled()
     timeline_row = None
@@ -744,10 +768,12 @@ def _close(
         raise EpisodeConflict('split_member_recorded_later')
     merged = {**(unseal(uid, raw) or {}), **extra, **_closed_fields(reason, closed_at)}
     # Finalize arrival is bookkeeping. Recorded ownership ends at retained member evidence.
-    # A detached member (``extra`` rewrites membership) no longer extends this episode's window.
+    # Only an admitted F split opts into the post-detach window; ordinary/flag-off closes
+    # retain main's exact membership reads and recorded-end evidence.
+    window = merged if retained_member_window else raw
     ends = []
     hidden = set(raw.get('discarded_conversation_ids') or []) | set(raw.get('duplicate_conversation_ids') or [])
-    for cid in merged.get('conversation_ids') or []:
+    for cid in window.get('conversation_ids') or []:
         member = (
             client.collection('users')
             .document(uid)
@@ -764,10 +790,10 @@ def _close(
         ):
             continue
         span = conversation_span(member)
-        end = span.recorded_end if span else (merged.get('member_activity') or {}).get(cid)
+        end = span.recorded_end if span else (window.get('member_activity') or {}).get(cid)
         if isinstance(end, datetime):
             ends.append(end)
-    end = max(ends, default=merged.get('last_activity_at') or raw['started_at'])
+    end = max(ends, default=window.get('last_activity_at') or raw['started_at'])
     end = max(raw['started_at'], _bounded_activity(raw, end))
     if timeline_enabled:
         rows = episode_timeline.recorded_candidates(
@@ -802,6 +828,7 @@ def close_episode(
     expected_conversation_ids: Optional[Sequence[str]] = None,
     split_after: Optional[datetime] = None,
     firestore_client: Any = None,
+    retained_member_window: bool = False,
 ) -> Optional[dict[str, Any]]:
     """Close a live episode once. Returns the closed state, or None when it was not live.
 
@@ -822,6 +849,7 @@ def close_episode(
         expected_activity_at,
         expected_conversation_ids,
         split_after,
+        retained_member_window,
     )
 
 
