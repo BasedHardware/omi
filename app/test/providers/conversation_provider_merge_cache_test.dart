@@ -204,6 +204,38 @@ void main() {
     expect((await SharedPreferencesUtil().loadCachedConversations()).map((c) => c.id), ['final-target']);
   });
 
+  test('merge completion retires its sources without publishing a deleted target', () async {
+    final sourceA = row('source-a');
+    final sourceB = row('source-b');
+    final target = row('target');
+    final keep = row('keep');
+    final snapshot = [sourceA, sourceB, target, keep];
+    final prefs = SharedPreferencesUtil();
+    await prefs.cacheConversations(snapshot);
+    final day = ConversationProvider(isSignedIn: () => true)..conversationDeleteFetcherOverride = (_) async => true;
+    addTearDown(day.dispose);
+    final readStarted = Completer<void>();
+    final read = Completer<List<ServerConversation>>();
+    final home = ConversationProvider(
+      isSignedIn: () => true,
+      conversationCacheLoader: () {
+        readStarted.complete();
+        return read.future;
+      },
+    )..conversations = [...snapshot];
+    addTearDown(home.dispose);
+    final completion = home.onMergeCompleted(target.id, [sourceA.id, sourceB.id], merged: target);
+    await readStarted.future;
+
+    await day.deleteConversationLocally(target);
+    await day.deleteConversationOnServer(target.id);
+    read.complete(snapshot);
+    await completion;
+
+    expect(home.conversations, [keep]);
+    expect((await prefs.loadCachedConversations()).map((c) => c.id), ['keep']);
+  });
+
   test('late completion cannot change a replacement account', () async {
     final target = Completer<({ServerConversation? item, bool ok})>();
     final provider = ConversationProvider(
