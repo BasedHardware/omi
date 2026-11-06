@@ -97,6 +97,12 @@ run_proof "enrichment recovery conformance (PL-342/397/398)" \
   env OMI_REQUIRE_STORE_BACKENDS="${OMI_REQUIRE_STORE_BACKENDS:-sim,emulator}" OMI_ENV_STAGE=offline \
   "$PYTHON" -m pytest -q -p no:cacheprovider scripts/enrichment_recovery_emulator_test.py
 
+# PL-439: a derived-refresh race keeps the same retryable delivery. CI requires
+# sim + emulator; complete local/staging qualification requires all three stores.
+run_proof "enrichment revision-race conformance (PL-439)" \
+  env OMI_REQUIRE_STORE_BACKENDS="${OMI_REQUIRE_STORE_BACKENDS:-sim,emulator}" OMI_ENV_STAGE=offline \
+  "$PYTHON" -m pytest -q -p no:cacheprovider scripts/enrichment_revision_emulator_test.py
+
 # Daily architecture parity: require both local CI backends rather than letting
 # a missing emulator look green. Local/staging runs require all three stores.
 run_proof "recovery/admission parity PL-057/072/086 (sim + emulator)" \
