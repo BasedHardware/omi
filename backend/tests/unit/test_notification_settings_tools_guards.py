@@ -98,6 +98,10 @@ class TestNotificationSettingsToolsGuards:
 
     def test_database_error_handled_gracefully(self):
         cfg = {"configurable": {"user_id": "u1"}}
-        with patch.object(self.mod.notification_db, "set_daily_summary_enabled", side_effect=RuntimeError("Firestore connection refused")):
+        with (
+            patch.object(self.mod.notification_db, "set_daily_summary_enabled", side_effect=RuntimeError("Firestore connection refused")),
+            patch.object(self.mod.logger, "error") as mock_log,
+        ):
             res = self.mod.manage_daily_summary_tool.func("enable", config=cfg)
             assert "Error: Failed to update notification settings. Please try again later." == res
+            mock_log.assert_called_once_with("Error in manage_daily_summary_tool: RuntimeError", exc_info=True)
