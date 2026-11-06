@@ -10,6 +10,7 @@ import pytest
 
 from database.ports.action_items import ActionItemDraft, ActionItemEntity, TaskRelationshipConflictError
 from database.ports.base import MutationConflict, RevisionConflict
+from database.ports.folders import FolderCreate
 from database.ports.goals import GoalCreate, GoalUpdate, GoalEntity, GoalConflictError
 from database.ports.workstreams import (
     WorkstreamCreate,
@@ -479,3 +480,25 @@ def test_purge_removes_domain_mutation_receipts(domain_backend):
         )
         == 'after'
     )
+
+
+def test_workstream_mutation_identity_includes_reserved_id(domain_backend):
+    h = domain_backend
+    sid = h.space('thread-mutation')
+    repo = h.workstreams(sid)
+    draft = WorkstreamCreate(data={'title': 'Thread', 'objective': 'Work', 'workstream_id': 'one'})
+    assert repo.create(draft, mutation_id='once').workstream_id == 'one'
+    assert repo.create(draft, mutation_id='once').workstream_id == 'one'
+    with pytest.raises(MutationConflict):
+        repo.create(
+            WorkstreamCreate(data={'title': 'Thread', 'objective': 'Work', 'workstream_id': 'two'}), mutation_id='once'
+        )
+
+
+def test_goal_purge_preserves_other_domain_receipts(domain_backend):
+    h = domain_backend
+    sid = h.space('purge-isolation')
+    folder = h.folders(sid).create(FolderCreate(name='Retained'), mutation_id='folder-once')
+    h.goals(sid).create(GoalCreate(data={'title': 'Purge me'}), mutation_id='goal-once')
+    h.goals(sid).purge(sid)
+    assert h.folders(sid).create(FolderCreate(name='Retained'), mutation_id='folder-once').id == folder.id

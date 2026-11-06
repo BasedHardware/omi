@@ -1666,15 +1666,11 @@ class FirestoreWorkstreams:
             def apply(transaction):
                 return FirestoreWorkstreams(
                     self.space_id, firestore_client=self.client, transaction=transaction
-                ).create(WorkstreamCreate(data={**data, 'workstream_id': wid}), mutation_id=mutation_id)
+                ).create(draft, mutation_id=mutation_id)
 
             return apply(self.client.transaction())
         owner = _user_ref(self.space_id, firestore_client=self.client)
-        digest = port_mutation_digest(
-            'workstreams',
-            'create',
-            {k: v for k, v in data.items() if k != 'workstream_id'} if mutation_id is not None else data,
-        )
+        digest = port_mutation_digest('workstreams', 'create', data)
         prior = read_port_mutation(owner, self.transaction, mutation_id, digest)
         if prior is not None:
             return WorkstreamEntity.model_construct(**deepcopy(prior['result']))
