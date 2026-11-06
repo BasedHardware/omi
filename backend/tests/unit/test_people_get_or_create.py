@@ -90,7 +90,7 @@ def test_existing_active_person_is_returned_instead_of_a_second_one():
 
     person = people_db.get_or_create_person_by_name('u1', _person('p2', 'Alice'), firestore_client=store)
 
-    assert person['id'] == 'p1' and person['name'] == 'Alice'
+    assert person.id == 'p1' and person.name == 'Alice'
     assert 'p2' not in _people(store)
     assert store.transactions[-1].sets == []
 
@@ -106,9 +106,12 @@ def test_person_is_created_when_only_a_dismissed_or_differently_named_person_exi
 
     person = people_db.get_or_create_person_by_name('u1', _person('p4', 'Alice'), firestore_client=store)
 
-    assert person == _person('p4', 'Alice')
-    assert store.rows[(*PEOPLE, 'p4')] == {**_person('p4', 'Alice'), 'is_user_created': True}
-    assert [path for path, _ in store.transactions[-1].sets] == [(*PEOPLE, 'p4')]
+    assert person.model_dump(exclude_unset=True) == {**_person('p4', 'Alice'), 'revision': 1}
+    assert store.rows[(*PEOPLE, 'p4')] == {**_person('p4', 'Alice'), 'is_user_created': True, 'revision': 1}
+    assert [path for path, _ in store.transactions[-1].sets] == [
+        (*PEOPLE, 'p4'),
+        ('users', 'u1', 'people_meta', 'generation'),
+    ]
 
 
 def test_retried_create_returns_the_person_the_first_request_created():
@@ -117,7 +120,7 @@ def test_retried_create_returns_the_person_the_first_request_created():
     first = people_db.get_or_create_person_by_name('u1', _person('p1', 'Alice'), firestore_client=store)
     retry = people_db.get_or_create_person_by_name('u1', _person('p2', 'Alice'), firestore_client=store)
 
-    assert first['id'] == retry['id'] == 'p1'
+    assert first.id == retry.id == 'p1'
     assert set(_people(store)) == {'p1'}
 
 
@@ -136,6 +139,6 @@ def test_endpoint_returns_the_person_a_racing_request_created(monkeypatch):
 
     person = users_router.get_or_create_person(CreatePerson(name='Alice'), uid='u1')
 
-    assert person['id'] == 'p-race'
+    assert person.id == 'p-race'
     assert unchecked_creates == []
     assert set(_people(store)) == {'p-race'}
