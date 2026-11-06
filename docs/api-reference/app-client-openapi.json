@@ -159,6 +159,21 @@
             "$ref": "#/components/schemas/AccountCutoverClientAction",
             "default": "none"
           },
+          "data_plane": {
+            "anyOf": [
+              {
+                "enum": [
+                  "legacy",
+                  "cell"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Plane"
+          },
           "legacy_writes_allowed": {
             "default": true,
             "title": "Legacy Writes Allowed",
@@ -269,6 +284,7 @@
           "legacy",
           "migrating",
           "new",
+          "migrated",
           "rolled_back_stranded"
         ],
         "title": "AccountCutoverState",
