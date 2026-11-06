@@ -3,6 +3,7 @@
 from copy import deepcopy
 from datetime import datetime, timezone
 import hashlib
+import inspect
 import json
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -537,3 +538,31 @@ def test_translation_drains_deferred_offload_for_the_document_id(lake_world, mon
     assert drain.call_args.args == (UID, CID)
     assert drain.call_args.kwargs['firestore_client'] is lake_world.store
     assert len(drain.call_args.kwargs['expected_sha256']) == 64
+
+
+def test_create_if_absent_preloads_and_drains_notes_identity_reencode(lake_world, monkeypatch):
+    doc = encode()
+    doc.update(data_protection_level='standard', status='completed', created_at=NOW, _notes_identity={})
+    pointer.clear_memo()
+    monkeypatch.setattr(db, 'db', lake_world.store)
+    monkeypatch.setattr(db, '_sync_conversation_search_index', lambda *args: None)
+    drain = Mock(return_value=True)
+    monkeypatch.setattr(pointer, 'offload_inline_transcript', drain)
+
+    def stage(transaction, user_ref, data, existing):
+        assert pointer._client.in_transaction_body()
+        segments = db.decode_transcript_segments_verified(UID, data['transcript_segments'], True)
+        segments[0]['is_user'] = True
+        data.update(
+            db._prepare_conversation_for_write({'transcript_segments': segments}, UID, 'standard', conversation_id=CID)
+        )
+        data.pop('_notes_identity', None)
+
+    monkeypatch.setattr(db, '_stage_notes_identity', stage)
+    # Payload is already protected exactly as the write decorator supplies it;
+    # the transaction owner and identity callback are the real product path.
+    assert inspect.unwrap(db.create_conversation_if_absent_with_lifecycle)(UID, doc)
+    assert lake_world.calls == {'get': 1, 'put': 1}
+    assert isinstance(lake_world.store.rows[PATH]['transcript_segments'], bytes)
+    drain.assert_called_once()
+    assert drain.call_args.args == (UID, CID)
