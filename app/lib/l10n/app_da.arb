@@ -4679,6 +4679,8 @@
     "referralClaimShort": "Indløs",
     "paymentDeclinedTitle": "Dit kort blev afvist",
     "paymentDeclinedMessage": "Opdater kortet for at få {plan} tilbage",
+    "hasLinkedTasksLabel": "Har tilknyttede opgaver",
+    "hasTasksFilter": "Med opgaver",
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",

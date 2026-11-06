@@ -15396,6 +15396,12 @@ class AppLocalizationsId extends AppLocalizations {
   }
 
   @override
+  String get hasLinkedTasksLabel => 'Memiliki tugas tertaut';
+
+  @override
+  String get hasTasksFilter => 'Dengan tugas';
+
+  @override
   String firmwareUpdateNotInstalledMessage(String version) {
     return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
   }

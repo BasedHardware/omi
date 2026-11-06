@@ -48,6 +48,7 @@ from tests.support.firestore_batch_pipeline_drivers import entries as batch_pipe
 from tests.support.firestore_batch_privacy_drivers import entries as batch_privacy_entries
 from tests.support.firestore_memory_ledger_drivers import registry_extension as memory_ledger_drivers
 from tests.support.firestore_lifecycle_metrics_drivers import entries as lifecycle_metrics_entries
+from tests.support.firestore_task_filter_drivers import entries as task_filter_entries
 from models.announcement import AnnouncementType
 from models.candidate import CandidateStatus
 from models.chat_first import ChatFirstSubject
@@ -230,6 +231,10 @@ def _add(entry: DriverEntry | CoveredByEntry | SkipEntry) -> None:
         COVERED_BY[entry.function] = entry
     else:
         SKIPS[entry.function] = entry
+
+
+for _entry in task_filter_entries():
+    _add(_entry)
 
 
 _add(

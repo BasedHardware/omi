@@ -15383,6 +15383,12 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
+  String get hasLinkedTasksLabel => 'Có nhiệm vụ được liên kết';
+
+  @override
+  String get hasTasksFilter => 'Có nhiệm vụ';
+
+  @override
   String firmwareUpdateNotInstalledMessage(String version) {
     return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
   }

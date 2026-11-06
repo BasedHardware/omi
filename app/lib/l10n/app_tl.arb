@@ -12194,6 +12194,8 @@
     "referralClaimShort": "Kunin",
     "paymentDeclinedTitle": "Tinanggihan ang iyong card",
     "paymentDeclinedMessage": "I-update ang card para maibalik ang {plan}",
+    "hasLinkedTasksLabel": "May mga naka-link na gawain",
+    "hasTasksFilter": "May mga gawain",
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",

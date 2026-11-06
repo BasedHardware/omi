@@ -12194,6 +12194,8 @@
     "referralClaimShort": "ಪಡೆಯಿರಿ",
     "paymentDeclinedTitle": "ನಿಮ್ಮ ಕಾರ್ಡ್ ನಿರಾಕರಿಸಲಾಗಿದೆ",
     "paymentDeclinedMessage": "{plan} ಮರಳಿ ಪಡೆಯಲು ಕಾರ್ಡ್ ನವೀಕರಿಸಿ",
+    "hasLinkedTasksLabel": "ಲಿಂಕ್ ಮಾಡಿದ ಕಾರ್ಯಗಳಿವೆ",
+    "hasTasksFilter": "ಕಾರ್ಯಗಳಿವೆ",
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",

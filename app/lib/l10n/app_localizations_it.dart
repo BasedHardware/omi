@@ -15460,6 +15460,12 @@ class AppLocalizationsIt extends AppLocalizations {
   }
 
   @override
+  String get hasLinkedTasksLabel => 'Contiene attività collegate';
+
+  @override
+  String get hasTasksFilter => 'Con attività';
+
+  @override
   String firmwareUpdateNotInstalledMessage(String version) {
     return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
   }

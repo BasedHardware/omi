@@ -4672,6 +4672,8 @@
     "referralClaimShort": "Получить",
     "paymentDeclinedTitle": "Ваша карта отклонена",
     "paymentDeclinedMessage": "Обновите карту, чтобы вернуть {plan}",
+    "hasLinkedTasksLabel": "Есть связанные задачи",
+    "hasTasksFilter": "С задачами",
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",

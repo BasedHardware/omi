@@ -28,6 +28,7 @@ import 'package:omi/pages/memories/page.dart';
 import 'package:omi/pages/settings/daily_summary_detail_page.dart';
 import 'package:omi/pages/settings/widgets/people_list.dart';
 import 'package:omi/pages/conversations/day_conversations_page.dart';
+import 'package:omi/pages/conversations/conversations_with_tasks_page.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/providers/memories_provider.dart';
@@ -684,6 +685,12 @@ class _GlobalSearchPageState extends State<GlobalSearchPage> {
               SearchFolderCount(id: f.id, name: f.name, icon: f.icon, color: f.color),
           ];
     final tiles = <Widget>[
+      _SearchTile(
+        key: const ValueKey('search_tile_has_tasks'),
+        icon: FontAwesomeIcons.listCheck,
+        label: l10n.hasTasksFilter,
+        onTap: () => routeToPage(context, const ConversationsWithTasksPage()),
+      ),
       _SearchTile(
         key: const ValueKey('search_tile_starred'),
         icon: FontAwesomeIcons.star,

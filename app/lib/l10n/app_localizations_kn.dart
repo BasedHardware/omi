@@ -15432,6 +15432,12 @@ class AppLocalizationsKn extends AppLocalizations {
   }
 
   @override
+  String get hasLinkedTasksLabel => 'ಲಿಂಕ್ ಮಾಡಿದ ಕಾರ್ಯಗಳಿವೆ';
+
+  @override
+  String get hasTasksFilter => 'ಕಾರ್ಯಗಳಿವೆ';
+
+  @override
   String firmwareUpdateNotInstalledMessage(String version) {
     return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
   }

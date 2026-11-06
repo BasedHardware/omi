@@ -12194,6 +12194,8 @@
     "referralClaimShort": "دریافت",
     "paymentDeclinedTitle": "کارت شما رد شد",
     "paymentDeclinedMessage": "برای بازگرداندن {plan} کارت را به‌روزرسانی کنید",
+    "hasLinkedTasksLabel": "دارای کارهای مرتبط",
+    "hasTasksFilter": "دارای کار",
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",

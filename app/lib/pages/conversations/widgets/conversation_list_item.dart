@@ -22,6 +22,7 @@ import 'package:omi/pages/paywall/value_moment_paywall.dart';
 import 'package:omi/pages/held_audio/held_audio_views.dart';
 import 'package:omi/pages/held_audio/processing_backlog_view.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/conversation_task_presence_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
@@ -105,6 +106,9 @@ class ConversationListItem extends StatefulWidget {
   final Episode? homeEpisode;
   final bool openEpisodeFromSearch;
 
+  /// A filtered server page already proves canonical membership.
+  final bool? hasLinkedTasks;
+
   const ConversationListItem({
     super.key,
     required this.conversation,
@@ -118,6 +122,7 @@ class ConversationListItem extends StatefulWidget {
     this.fillingSeconds,
     this.homeEpisode,
     this.openEpisodeFromSearch = true,
+    this.hasLinkedTasks,
   });
 
   @override
@@ -128,6 +133,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
   Timer? _conversationNewStatusResetTimer;
   bool isNew = false;
   bool _reprocessing = false;
+  bool _hasLinkedTasks = false;
 
   int _visualSignature(ServerConversation conversation) => Object.hashAll([
         conversation.structured.title,
@@ -149,6 +155,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
         conversation.processingDeferred,
         widget.fillingSeconds,
         widget.homeEpisode?.members.length,
+        _hasLinkedTasks,
       ]);
 
   @override
@@ -365,6 +372,14 @@ class _ConversationListItemState extends State<ConversationListItem> {
 
   @override
   Widget build(BuildContext context) {
+    bool? linked = widget.hasLinkedTasks;
+    if (!widget.conversation.isLocked && linked == null) {
+      context.read<ConversationTaskPresenceProvider?>()?.request(widget.conversation.id);
+      linked = context.select<ConversationTaskPresenceProvider?, bool?>(
+        (source) => source?.presence(widget.conversation.id),
+      );
+    }
+    _hasLinkedTasks = !widget.conversation.isLocked && linked == true;
     // Is new conversation
     DateTime memorizedAt = widget.conversation.createdAt;
     if (widget.conversation.finishedAt != null && widget.conversation.finishedAt!.isAfter(memorizedAt)) {
@@ -497,7 +512,6 @@ class _ConversationListItemState extends State<ConversationListItem> {
   }
 
   static TextStyle get _metaStyle => TextStyle(color: OmiColors.textTertiary, fontSize: 14);
-  static const _metaSeparator = ' • ';
 
   Widget _buildCardContent(BuildContext context, Future<void> Function() onTap) {
     final content = Padding(
@@ -517,47 +531,46 @@ class _ConversationListItemState extends State<ConversationListItem> {
   Widget _buildMetaRow(BuildContext context) {
     final duration = _getConversationDuration(context);
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          OmiDateFormat.of(context).time(widget.conversation.startedAt ?? widget.conversation.createdAt),
-          style: _metaStyle,
-          maxLines: 1,
-        ),
-        if (duration.isNotEmpty) ...[
-          Text(_metaSeparator, style: _metaStyle),
-          Text(duration, style: _metaStyle, maxLines: 1)
-        ],
-        if (widget.fillingSeconds case final seconds?) ...[
-          // The ring is the separator here: "34m  ◌ adding 12m from your Omi".
-          const SizedBox(width: 6),
-          OmiActivityRing.inline(color: _metaStyle.color),
-          const SizedBox(width: 6),
-          // Wins the free space over the Spacer below, so the line truncates only when it must.
-          Flexible(
-            flex: 1000,
-            child: Text(
-              context.l10n.episodeAddingFromOmi(
-                  OmiDuration.compact(seconds < 60 ? seconds : (seconds ~/ 60) * 60, context.l10n)),
-              key: const Key('conversation_row_filling'),
-              style: _metaStyle,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
+        Expanded(
+          child: Wrap(
+            spacing: OmiSpacing.xs,
+            runSpacing: 4,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Text(
+                OmiDateFormat.of(context).time(widget.conversation.startedAt ?? widget.conversation.createdAt),
+                style: _metaStyle,
+                maxLines: 1,
+              ),
+              if (duration.isNotEmpty) Text('• $duration', style: _metaStyle, maxLines: 1),
+              if (_hasLinkedTasks)
+                Semantics(
+                  key: const ValueKey('conversation_has_tasks'),
+                  label: context.l10n.hasLinkedTasksLabel,
+                  excludeSemantics: true,
+                  child: Icon(Icons.checklist_rounded, size: 16, color: OmiColors.textSecondary),
+                ),
+              if (widget.fillingSeconds case final seconds?) ...[
+                OmiActivityRing.inline(color: _metaStyle.color),
+                Text(
+                  context.l10n.episodeAddingFromOmi(
+                      OmiDuration.compact(seconds < 60 ? seconds : (seconds ~/ 60) * 60, context.l10n)),
+                  key: const Key('conversation_row_filling'),
+                  style: _metaStyle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+              if (_captureSources.length > 1) CaptureSourceIcons(sources: _captureSources),
+              if (isNew) ConversationNewStatusIndicator(text: context.l10n.conversationNewIndicator),
+            ],
           ),
-        ],
-        // One row stands for an event several devices recorded.
-        if (_captureSources.length > 1) ...[
-          Text(_metaSeparator, style: _metaStyle),
-          CaptureSourceIcons(sources: _captureSources),
-        ],
-        if (isNew) ...[
-          const SizedBox(width: OmiSpacing.xs),
-          ConversationNewStatusIndicator(text: context.l10n.conversationNewIndicator),
-        ],
-        const Spacer(),
+        ),
         if (widget.conversation.starred)
           Padding(
-            padding: const EdgeInsets.only(right: 4.0),
+            padding: const EdgeInsetsDirectional.only(start: 4),
             child: Semantics(
               label: context.l10n.starred,
               child: const FaIcon(FontAwesomeIcons.solidStar, size: 12, color: Colors.amber),

@@ -4672,6 +4672,8 @@
     "referralClaimShort": "Resgatar",
     "paymentDeclinedTitle": "Seu cartão foi recusado",
     "paymentDeclinedMessage": "Atualize o cartão para recuperar {plan}",
+    "hasLinkedTasksLabel": "Tem tarefas vinculadas",
+    "hasTasksFilter": "Com tarefas",
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",

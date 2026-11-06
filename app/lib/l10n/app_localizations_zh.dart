@@ -15131,6 +15131,12 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get hasLinkedTasksLabel => '包含关联任务';
+
+  @override
+  String get hasTasksFilter => '有任务';
+
+  @override
   String firmwareUpdateNotInstalledMessage(String version) {
     return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
   }

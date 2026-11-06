@@ -4637,6 +4637,8 @@
     "referralClaimShort": "Hämta",
     "paymentDeclinedTitle": "Ditt kort nekades",
     "paymentDeclinedMessage": "Uppdatera kortet för att få tillbaka {plan}",
+    "hasLinkedTasksLabel": "Har länkade uppgifter",
+    "hasTasksFilter": "Med uppgifter",
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",

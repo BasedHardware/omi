@@ -15508,6 +15508,12 @@ class AppLocalizationsFr extends AppLocalizations {
   }
 
   @override
+  String get hasLinkedTasksLabel => 'Contient des tâches liées';
+
+  @override
+  String get hasTasksFilter => 'Avec des tâches';
+
+  @override
   String firmwareUpdateNotInstalledMessage(String version) {
     return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
   }

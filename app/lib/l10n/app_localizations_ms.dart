@@ -15418,6 +15418,12 @@ class AppLocalizationsMs extends AppLocalizations {
   }
 
   @override
+  String get hasLinkedTasksLabel => 'Mempunyai tugas dipautkan';
+
+  @override
+  String get hasTasksFilter => 'Dengan tugas';
+
+  @override
   String firmwareUpdateNotInstalledMessage(String version) {
     return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
   }

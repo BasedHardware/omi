@@ -15409,6 +15409,12 @@ class AppLocalizationsPt extends AppLocalizations {
   }
 
   @override
+  String get hasLinkedTasksLabel => 'Tem tarefas vinculadas';
+
+  @override
+  String get hasTasksFilter => 'Com tarefas';
+
+  @override
   String firmwareUpdateNotInstalledMessage(String version) {
     return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
   }
