@@ -4498,6 +4498,8 @@
     "chatAppsWaitingMessageIn": "ส่งข้อความในแอป {app} หน้าจอนี้จะอัปเดตทันทีที่ Omi ได้รับ",
     "chatAppsCodeExpiredMessageIn": "ขอรหัสใหม่แล้วส่งจากแอป{app}",
     "episodeWritingNotes": "กำลังเขียนบันทึก…",
+    "homeStepTranscribing": "กำลังถอดเสียง…",
+    "homeRecordingsCount": "{count, plural, other{บันทึก {count} รายการ}}",
     "episodeWritingNotesDetail": "กำลังทำบทถอดความให้เสร็จก่อน คุณออกจากหน้านี้ได้",
     "episodeCoversUpTo": "ครอบคลุมถึง {time} · บันทึกฉบับเต็มเมื่อจบ",
     "liveTranscribedUpTo": "ถอดความถึง {time}",

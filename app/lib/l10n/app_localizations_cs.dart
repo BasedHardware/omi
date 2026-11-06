@@ -14819,6 +14819,22 @@ class AppLocalizationsCs extends AppLocalizations {
   String get episodeWritingNotes => 'Píšeme poznámky…';
 
   @override
+  String get homeStepTranscribing => 'Přepisujeme…';
+
+  @override
+  String homeRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count nahrávky',
+      many: '$count nahrávek',
+      few: '$count nahrávky',
+      one: '$count nahrávka',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get episodeWritingNotesDetail => 'Nejprve dokončujeme přepis. Tuto stránku můžete opustit.';
 
   @override

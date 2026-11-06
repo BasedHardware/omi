@@ -4498,6 +4498,8 @@
     "chatAppsWaitingMessageIn": "Lähetä viesti {app}-sovelluksessa. Tämä näkymä päivittyy heti, kun Omi saa sen.",
     "chatAppsCodeExpiredMessageIn": "Hae uusi koodi ja lähetä se {app}-sovelluksesta.",
     "episodeWritingNotes": "Kirjoitetaan muistiinpanoja…",
+    "homeStepTranscribing": "Litteroidaan…",
+    "homeRecordingsCount": "{count, plural, one{{count} tallenne} other{{count} tallennetta}}",
     "episodeWritingNotesDetail": "Viimeistelemme ensin litteroinnin. Voit poistua tältä sivulta.",
     "episodeCoversUpTo": "Kattaa klo {time} asti · täydet muistiinpanot lopuksi",
     "liveTranscribedUpTo": "Litteroitu klo {time} asti",

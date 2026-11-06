@@ -4533,6 +4533,8 @@
     "chatAppsWaitingMessageIn": "Envoyez le message dans {app}. Cet écran se met à jour dès qu'Omi le reçoit.",
     "chatAppsCodeExpiredMessageIn": "Obtenez un nouveau code et envoyez-le depuis {app}.",
     "episodeWritingNotes": "Rédaction des notes…",
+    "homeStepTranscribing": "Transcription en cours…",
+    "homeRecordingsCount": "{count, plural, one{{count} enregistrement} other{{count} enregistrements}}",
     "episodeWritingNotesDetail": "On termine d'abord la transcription. Vous pouvez quitter cette page.",
     "episodeCoversUpTo": "Jusqu'à {time} · notes complètes à la fin",
     "liveTranscribedUpTo": "Transcrit jusqu'à {time}",

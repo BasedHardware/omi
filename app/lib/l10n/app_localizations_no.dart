@@ -14825,6 +14825,20 @@ class AppLocalizationsNo extends AppLocalizations {
   String get episodeWritingNotes => 'Skriver notater…';
 
   @override
+  String get homeStepTranscribing => 'Transkriberer…';
+
+  @override
+  String homeRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count opptak',
+      one: '$count opptak',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get episodeWritingNotesDetail => 'Vi gjør først ferdig transkripsjonen. Du kan forlate denne siden.';
 
   @override

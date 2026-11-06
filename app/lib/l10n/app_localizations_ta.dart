@@ -14924,6 +14924,20 @@ class AppLocalizationsTa extends AppLocalizations {
   String get episodeWritingNotes => 'குறிப்புகள் எழுதப்படுகின்றன…';
 
   @override
+  String get homeStepTranscribing => 'படியெடுக்கப்படுகிறது…';
+
+  @override
+  String homeRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count பதிவுகள்',
+      one: '$count பதிவு',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get episodeWritingNotesDetail => 'முதலில் படியெடுப்பை முடிக்கிறோம். இந்தப் பக்கத்தை விட்டு வெளியேறலாம்.';
 
   @override

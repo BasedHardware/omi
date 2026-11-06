@@ -4498,6 +4498,8 @@
     "chatAppsWaitingMessageIn": "Στείλε το μήνυμα από τα {app}. Αυτή η οθόνη ενημερώνεται μόλις το λάβει το Omi.",
     "chatAppsCodeExpiredMessageIn": "Πάρε νέο κωδικό και στείλ' τον από τα {app}.",
     "episodeWritingNotes": "Γράφονται οι σημειώσεις…",
+    "homeStepTranscribing": "Μεταγραφή…",
+    "homeRecordingsCount": "{count, plural, one{{count} εγγραφή} other{{count} εγγραφές}}",
     "episodeWritingNotesDetail": "Πρώτα ολοκληρώνεται η απομαγνητοφώνηση. Μπορείς να φύγεις από τη σελίδα.",
     "episodeCoversUpTo": "Καλύπτει έως τις {time} · πλήρεις σημειώσεις στο τέλος",
     "liveTranscribedUpTo": "Απομαγνητοφώνηση έως τις {time}",

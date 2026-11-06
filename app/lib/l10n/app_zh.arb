@@ -4498,6 +4498,8 @@
     "chatAppsWaitingMessageIn": "在“{app}”中发送这条消息。Omi 一收到，此屏幕就会更新。",
     "chatAppsCodeExpiredMessageIn": "获取新验证码，并从“{app}”中发送。",
     "episodeWritingNotes": "正在撰写笔记…",
+    "homeStepTranscribing": "正在转录…",
+    "homeRecordingsCount": "{count, plural, other{{count} 条录音}}",
     "episodeWritingNotesDetail": "正在先完成转录。你可以离开此页面。",
     "episodeCoversUpTo": "涵盖至 {time} · 结束后提供完整笔记",
     "liveTranscribedUpTo": "已转录至 {time}",

@@ -11921,6 +11921,8 @@
     "chatAppsWaitingMessageIn": "{app}-இல் மெசேஜை அனுப்புங்கள். Omi-க்குக் கிடைத்தவுடன் இந்தத் திரை புதுப்பிக்கப்படும்.",
     "chatAppsCodeExpiredMessageIn": "புதிய குறியீட்டைப் பெற்று {app}-இலிருந்து அனுப்புங்கள்.",
     "episodeWritingNotes": "குறிப்புகள் எழுதப்படுகின்றன…",
+    "homeStepTranscribing": "படியெடுக்கப்படுகிறது…",
+    "homeRecordingsCount": "{count, plural, one{{count} பதிவு} other{{count} பதிவுகள்}}",
     "episodeWritingNotesDetail": "முதலில் படியெடுப்பை முடிக்கிறோம். இந்தப் பக்கத்தை விட்டு வெளியேறலாம்.",
     "episodeCoversUpTo": "{time} வரை · முடிந்ததும் முழு குறிப்புகள்",
     "liveTranscribedUpTo": "{time} வரை படியெடுக்கப்பட்டது",

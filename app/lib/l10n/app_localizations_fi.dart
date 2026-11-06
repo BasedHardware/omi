@@ -14825,6 +14825,20 @@ class AppLocalizationsFi extends AppLocalizations {
   String get episodeWritingNotes => 'Kirjoitetaan muistiinpanoja…';
 
   @override
+  String get homeStepTranscribing => 'Litteroidaan…';
+
+  @override
+  String homeRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count tallennetta',
+      one: '$count tallenne',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get episodeWritingNotesDetail => 'Viimeistelemme ensin litteroinnin. Voit poistua tältä sivulta.';
 
   @override

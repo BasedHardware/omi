@@ -256,7 +256,8 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.byType(ConversationListItem), findsNothing);
     expect(find.byType(ProcessingConversationRow), findsOneWidget);
-    expect(find.text('Wrapping up lunch'), findsOneWidget);
+    // Processing rows say what is happening, not the provisional title.
+    expect(find.text('Processing…'), findsOneWidget);
     final completed = ServerConversation.fromJson({...member.toJson(), 'status': 'completed'});
     history.removeProcessingConversation(member.id);
     await history.addConversation(completed);

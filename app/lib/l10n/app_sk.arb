@@ -4498,6 +4498,8 @@
     "chatAppsWaitingMessageIn": "Pošlite správu v aplikácii {app}. Táto obrazovka sa aktualizuje hneď, ako ju Omi dostane.",
     "chatAppsCodeExpiredMessageIn": "Získajte nový kód a pošlite ho z aplikácie {app}.",
     "episodeWritingNotes": "Píšeme poznámky…",
+    "homeStepTranscribing": "Prepisujeme…",
+    "homeRecordingsCount": "{count, plural, one{{count} nahrávka} few{{count} nahrávky} many{{count} nahrávok} other{{count} nahrávky}}",
     "episodeWritingNotesDetail": "Najprv dokončujeme prepis. Túto stránku môžete opustiť.",
     "episodeCoversUpTo": "Pokrýva do {time} · úplné poznámky po dokončení",
     "liveTranscribedUpTo": "Prepísané do {time}",

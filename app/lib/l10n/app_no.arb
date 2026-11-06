@@ -4498,6 +4498,8 @@
     "chatAppsWaitingMessageIn": "Send meldingen i {app}. Denne skjermen oppdateres så snart Omi får den.",
     "chatAppsCodeExpiredMessageIn": "Få en ny kode og send den fra {app}.",
     "episodeWritingNotes": "Skriver notater…",
+    "homeStepTranscribing": "Transkriberer…",
+    "homeRecordingsCount": "{count, plural, one{{count} opptak} other{{count} opptak}}",
     "episodeWritingNotesDetail": "Vi gjør først ferdig transkripsjonen. Du kan forlate denne siden.",
     "episodeCoversUpTo": "Dekker frem til {time} · fullstendige notater til slutt",
     "liveTranscribedUpTo": "Transkribert frem til {time}",
