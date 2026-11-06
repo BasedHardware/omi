@@ -11,6 +11,7 @@ session generation. They do not add a backend contract or change provider grants
   `skip_apple_reminders` contract. The phone's direct Apple path requires a
   fresh, connected Apple default before creating a reminder. Unknown, failed,
   disconnected or another selected destination never falls back to Apple.
+  An eligible task created as completed becomes a completed Apple Reminder.
 - Bulk Export waits for pending default saves and resolves the saved default
   through `TaskIntegrationProvider`. Connected-app enumeration order is not a
   routing decision. A changed selection cancels the pending export; concurrent

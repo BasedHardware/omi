@@ -13,6 +13,7 @@ import 'package:omi/pages/conversations/widgets/device_download_meter.dart';
 import 'package:omi/pages/conversations/widgets/device_storage_card.dart';
 import 'package:omi/pages/conversations/widgets/sync_details_sheet.dart';
 import 'package:omi/pages/conversations/widgets/sync_step_bar.dart';
+import 'package:omi/pages/on_device/on_device_queue_banner.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/user_provider.dart';
@@ -127,6 +128,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
                   delegate: SliverChildListDelegate.fixed([
                     const SizedBox(height: 8),
                     _buildOverallStatusCard(syncProvider, syncState),
+                    const OnDeviceChargerWaitLine(),
                     if (syncState.hasError) ...[const SizedBox(height: 16), _buildErrorCard(syncState, syncProvider)],
                     if (WalSyncs.isRingBufferFirmware(deviceProvider.currentFirmwareVersion) &&
                         deviceProvider.ringStatus != null) ...[
@@ -173,7 +175,9 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
         .toList();
 
     final isActive = s.isSyncing || s.isFetchingConversations;
-    final bool showSpinner = (isActive || uploaded > 0) && !p.isRateLimited;
+    // An edge throttle clears by itself and needs nothing from the user, so it is not shown (David, 11-02).
+    final paused = p.isRateLimited && p.rateLimitReason != RateLimitReason.edgeThrottle;
+    final bool showSpinner = (isActive || uploaded > 0) && !paused;
 
     String title;
     String? subtitle;
@@ -206,7 +210,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
       // Live-capture uploads run before the device drain: the bar stays on the device step, unfilled.
       if (barStep != step.step) barFraction = 0;
       action = statusActionPill(l.cancel, Colors.redAccent, () => _confirmCancel(context, p));
-    } else if (p.isRateLimited) {
+    } else if (paused) {
       title = syncCooldownTitle(p.rateLimitReason, l);
       titleColor = Colors.orangeAccent;
     } else if (isActive || uploaded > 0) {

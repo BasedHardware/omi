@@ -28,6 +28,7 @@ class AutomaticAppleRemindersExport {
                   title: item.description,
                   notes: 'From Omi',
                   dueDate: item.dueAt,
+                  completed: item.completed,
                 )),
         _acknowledge = acknowledge ??
             ((id, reminder, current) async =>
@@ -44,11 +45,7 @@ class AutomaticAppleRemindersExport {
   final Future<bool> Function(String, String, bool Function()) _acknowledge;
 
   Future<bool> export(ActionItemWithMetadata item, {required bool Function() canContinue}) async {
-    if (!_available() ||
-        item.completed ||
-        item.exported ||
-        item.appleReminderId?.isNotEmpty == true ||
-        item.status != 'active') {
+    if (!_available() || item.exported || item.appleReminderId?.isNotEmpty == true || item.status != 'active') {
       return false;
     }
     final owner = _capture();

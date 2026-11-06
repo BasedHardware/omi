@@ -43,10 +43,21 @@ KNOWN_LEVERS = frozenset(
         'memory_list_index_window',
         'mcp_conversation_cards_cache',
         'canonical_statuses_dedupe',
-        'batch_privacy_memoize',
+        'bpp_generation_memo',  # batch privacy task-attempt memo; absent = 0/off
+        'privacy_checks_shadow',  # compares live decisions; never authorizes writes
+        'privacy_negative_lookup_cache',  # WQ26-token-certified NOT_FOUND reads; 0 is the kill switch
+        'legal_hold_fence_cache',
+        'privacy_session_token',
+        'tombstone_negative_cache',
         'sync_snapshot_resolve_cache',
         'conversation_list_cursor',  # conversations:_collect_visible_conversation_page
         'finjob_candidate_queries',  # conversation_finalization_jobs:{scan_in_progress,get_abandoned_byok,get_stale_processing}
+        'bpp_decision_cache',  # batch privacy: token-validated generation reuse across attempts, <= 60s
+        'bpp_attempt_scope',  # batch privacy: per-call attempt scope for store.run + retention entry points
+        'bpp_token_mint',  # batch privacy: lazily mint memo tokens so decisions become memo-eligible
+        'privacy_ttl60',  # legal-hold fence, tombstone and deletion-marker decisions reused <= 60s, no token read
+        'action_items_ttl120',  # action_items_cache: 120s default reuse under action_items_page
+        'lifecycle_record_pending_head',  # lifecycle_metrics_queries:record_pending head(1)+count, key=serving replica
     }
 )
 

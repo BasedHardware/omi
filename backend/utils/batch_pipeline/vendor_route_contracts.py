@@ -15,9 +15,11 @@ order and price routes that policy admits on the ``prerecorded`` surface, so a
 bad table degrades to today's routing, never to an unauthorized vendor. Prices,
 caps, the GPU floor and quality rows are table values, never constants here.
 
-Vendor speaker turns stay discarded on the vendor route (words-only, like
-recovered units): ``speaker_turns`` is reserved with the single value
-``'discard'`` so a later change can add a value without a schema bump.
+Vendor speaker turns are kept on the provider payload unless the
+``BATCH_VENDOR_SPEAKER_TURNS_ENABLED`` kill switch is off
+(``provider_stt.vendor_turns``). The table's ``speaker_turns`` stays reserved
+with the single value ``'discard'`` and is not read at runtime, so a later
+per-route value needs no schema bump.
 """
 
 from __future__ import annotations
@@ -76,7 +78,7 @@ class RouteTableInvalid(ValueError):
 
 
 def normalized_language(language: str | None) -> str:
-    """The language key selection uses: unknown is ``multi``, as ``provider_stt.resolve_route``."""
+    """The language key selection uses: unknown is ``multi``, as ``provider_stt_admission.resolve_route``."""
     return normalized_stt_language(language) or 'multi'
 
 
@@ -266,7 +268,7 @@ def capable_options(table: RouteTable, language: str | None) -> tuple[RouteOptio
 
 
 # Terminal rung of the ladder and the kill-switch target: today's routing exactly. GPU for every
-# language deployed Parakeet serves, Modulate only where it cannot (provider_stt.resolve_route).
+# language deployed Parakeet serves, Modulate only where it cannot (provider_stt_admission.resolve_route).
 BUILTIN_TABLE: Final = RouteTable.from_dict(
     {
         'schema_version': SCHEMA_VERSION,
@@ -583,6 +585,9 @@ FLAGS: Final[Mapping[str, tuple[str, str]]] = {
     'BATCH_VENDOR_ROUTING_UID_ALLOWLIST': ('B', 'cohort allowlist; default empty'),
     'BATCH_VENDOR_ROUTING_SHADOW_PERCENT': ('B', 'decisions computed and counted, routing unchanged; default 0'),
     'BATCH_VENDOR_ROUTE_TABLE': ('B', 'runtime RouteTable payload; unset serves BUILTIN_TABLE'),
+    'BATCH_VENDOR_OVERFLOW_ENABLED': ('B', 'ops_kill, on unless false; false never moves a capable unit off GPU'),
+    'BATCH_VENDOR_OVERFLOW_ENTER_SECONDS': ('B', 'fresh GPU backlog age that starts overflow (stops at half); 1200'),
+    'BATCH_VENDOR_OVERFLOW_MIN_READY_UNITS': ('B', 'admissible fresh units waiting before age counts; default 300'),
     # slice C
     'BATCH_VENDOR_HEALTH_ENABLED': ('C', 'ops_kill, on unless false; false keeps the process-local vendor_guard'),
     'BATCH_VENDOR_HEALTH_THRESHOLDS': ('C', 'runtime breaker thresholds (ops 1.4); unset keeps vendor_guard defaults'),
@@ -601,6 +606,8 @@ FLAGS: Final[Mapping[str, tuple[str, str]]] = {
 
 METRIC_ROUTE_DECISIONS: Final = 'omi_batch_pipeline_vendor_route_decisions_total'  # {route, reason}  B
 METRIC_TABLE_LOADS: Final = 'omi_batch_pipeline_vendor_route_table_loads_total'  # {outcome}  B
+METRIC_GPU_OVERFLOW_ACTIVE: Final = 'omi_batch_pipeline_vendor_gpu_overflow_active'  # B (overflow)
+METRIC_GPU_BACKLOG_AGE: Final = 'omi_batch_pipeline_vendor_gpu_backlog_age_seconds'  # B (overflow)
 METRIC_ATTEMPTS: Final = 'omi_batch_pipeline_vendor_attempts_total'  # {provider, outcome}  D
 METRIC_ATTEMPT_AUDIO: Final = 'omi_batch_pipeline_vendor_attempt_audio_seconds_total'  # {provider, outcome}  D
 METRIC_FAILOVERS: Final = 'omi_batch_pipeline_vendor_failovers_total'  # {from_route, to_route}  D
@@ -614,5 +621,7 @@ METRIC_BREAKER_STATE: Final = 'omi_batch_pipeline_vendor_breaker_state'  # {prov
 METRIC_AUDIO_HOURS_USED: Final = 'omi_batch_pipeline_vendor_audio_hours_used'  # {provider}  C
 METRIC_AUDIO_HOURS_CAP: Final = 'omi_batch_pipeline_vendor_audio_hours_cap'  # {provider}  C
 METRIC_CAP_HITS: Final = 'omi_batch_pipeline_vendor_cap_hits_total'  # {provider, reason}  C
+# Billed vendor audio seconds for units routed over a capable GPU, i.e. overflow (the $50/day spend alert).
+METRIC_OVERFLOW_AUDIO: Final = 'omi_batch_pipeline_vendor_overflow_audio_seconds_total'  # {route}  B (overflow)
 BREAKER_STATES: Final[frozenset[str]] = frozenset({'closed', 'degraded', 'open', 'half_open'})
 LATE_RESULT_OUTCOMES: Final[frozenset[str]] = frozenset({'ignored', 'reconciled'})

@@ -118,6 +118,28 @@ class AudioDeliveryExpired(TimeoutError):
     """A queued live audio frame outlived its absolute capture-age deadline."""
 
 
+class RecoveryWriteStalled(TimeoutError):
+    """A paced recovery write outlived our own episode budget or slot bound.
+
+    The vendor socket is still open; we stopped waiting. It is a local
+    delivery bound (``replay_send_stalled``, censored), never ``connection_lost``,
+    which would vote against the successor's health (FC-local-bound-as-provider-death)."""
+
+
+async def paced_send(send: Callable[[], Awaitable[Any]], pace: RecoveryWriterPace, deadline: float | None = None):
+    """One recovery-leg wire write inside ``pace.write_bound``, typed by whose bound expired."""
+    bound = asyncio.timeout(pace.write_bound(deadline))
+    try:
+        async with bound:
+            await send()
+    except TimeoutError:
+        if deadline is not None and deadline <= clock():
+            raise AudioDeliveryExpired('live audio delivery expired') from None
+        if bound.expired():
+            raise RecoveryWriteStalled('recovery write exceeded its bound') from None
+        raise
+
+
 class RecoveryWriterPace:
     """Opt-in per-recovery-leg wire cadence shared with the typed limits.
 
@@ -151,7 +173,7 @@ class RecoveryWriterPace:
                 return
             cap = self.budget()
             if cap is not None and cap <= 0:
-                raise TimeoutError('recovery writer budget exhausted')
+                raise RecoveryWriteStalled('recovery writer budget exhausted')
             if deadline is not None:
                 await sleep(min(delay, WRITER_SLOT_SECONDS, max(0.000001, deadline - clock())))
             else:
@@ -173,7 +195,7 @@ class RecoveryWriterPace:
         queued frame's remaining absolute deadline — never a send after expiry."""
         cap = self.budget()
         if cap is not None and cap <= 0:
-            raise TimeoutError('recovery writer budget exhausted')
+            raise RecoveryWriteStalled('recovery writer budget exhausted')
         bound = WRITER_SLOT_SECONDS if cap is None else min(WRITER_SLOT_SECONDS, cap)
         if deadline is not None:
             remaining = deadline - clock()

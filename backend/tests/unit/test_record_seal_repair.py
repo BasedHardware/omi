@@ -111,7 +111,8 @@ def test_missing_short_or_nonfinite_tail_refused(source, monkeypatch, units):
 
 def test_archive_listing_must_require_archive_and_fail_closed(source, monkeypatch):
     def unavailable(*args, **kwargs):
-        assert kwargs == {'max_count': 4096, 'require_archive': True}
+        assert kwargs['max_count'] == 4096 and kwargs['require_archive'] is True
+        assert kwargs['source_metadata'] is True and kwargs['client'] is not None
         raise OSError('synthetic private path')
 
     monkeypatch.setattr(repair, 'list_audio_chunks', unavailable)
@@ -217,6 +218,24 @@ def test_producer_proof_change_or_new_token_requires_fresh_plan(source, monkeypa
     assert repair.apply_seals(store, old, old['plan_sha256']) == {'state_changed': 1}
 
 
+@pytest.mark.parametrize('durable_tail', [False, True])
+def test_abandoned_live_pod_still_requires_retained_tail_proof(source, monkeypatch, durable_tail):
+    store, client, artifacts = source
+    client.rows[PATH]['record_upload_sessions'] = {
+        'old': {'pod': 'live', 'process_started_at': 900, 'abandoned_at': 950}
+    }
+    if not durable_tail:
+        monkeypatch.setattr(repair, 'retained_record_units', lambda *a, **kw: iter([(100, 1, [])]))
+    result = repair.plan_seals(store, ['pending'], object(), artifacts)
+    disposition = 'eligible' if durable_tail else 'proof_refused'
+    assert result['entries'][0]['disposition'] == disposition
+    assert repair.apply_seals(store, result, result['plan_sha256']) == {
+        'sealed' if durable_tail else 'proof_refused': 1
+    }
+    assert bool(client.rows[PATH].get('record_audio_closed')) == durable_tail
+    assert bool(client.rows[PATH]['record_upload_sessions']) != durable_tail
+
+
 def test_private_exact_id_input_refuses_scans_duplicates_and_unbounded_lists(tmp_path):
     path = Path(__file__).resolve().parents[2] / 'scripts' / 'repair_record_audio_seals.py'
     spec = importlib.util.spec_from_file_location('repair_seals_cli', path)
@@ -300,3 +319,50 @@ def test_cli_refuses_unsafe_operation_before_cloud_access(cli, monkeypatch, caps
         'apply_seals',
     ):
         getattr(cli, name).assert_not_called()
+
+
+@pytest.mark.parametrize('changed', ['metageneration', 'generation'])
+def test_listed_source_precondition_failure_never_seals(source, monkeypatch, changed):
+    from google.api_core.exceptions import PreconditionFailed
+    from utils.batch_pipeline import live, source_audio
+
+    store, client, artifacts = source
+    pcm = b'\x01\x00' * 16000
+    # Stale 8kHz metadata makes this one-second 16kHz source appear to cover
+    # FINISH (102). Enforce both server-side preconditions before any decoding.
+    current = {'generation': 7, 'metageneration': 3}
+    current[changed] += 1
+
+    def download(**kwargs):
+        for version in ('generation', 'metageneration'):
+            condition = f'if_{version}_match'
+            if condition in kwargs and kwargs[condition] != current[version]:
+                raise PreconditionFailed(f'{version} changed')
+        return pcm
+
+    blob = SimpleNamespace(reload=Mock(), download_as_bytes=Mock(side_effect=download))
+    storage = SimpleNamespace(bucket=lambda _: SimpleNamespace(blob=lambda *a, **kw: blob))
+    chunk = {
+        'path': 'chunks/synthetic/record/100.batch.bin',
+        'bucket': 'synthetic',
+        'generation': 7,
+        'metageneration': 3,
+        'timestamp': 100,
+        'size': len(pcm),
+        'metadata': {'record_sample_rate': '8000'},
+    }
+    monkeypatch.setattr(live, 'private_cloud_sync_bucket', 'synthetic')
+    monkeypatch.setattr(repair, 'list_audio_chunks', lambda *a, **kw: [chunk])
+    monkeypatch.setattr(repair, 'retained_record_units', live.retained_record_units)
+    decode = Mock(wraps=source_audio.decode_source)
+    monkeypatch.setattr(source_audio, 'decode_source', decode)
+    result = repair.plan_seals(store, ['pending'], storage, artifacts)
+    assert result['entries'][0]['disposition'] == 'read_error'
+    assert repair.apply_seals(store, result, result['plan_sha256']) == {'read_error': 1}
+    assert not client.rows[PATH].get('record_audio_closed')
+    assert all(not tx.updates and not tx.sets for tx in client.transactions)
+    blob.download_as_bytes.assert_called_once_with(
+        if_generation_match=7, if_metageneration_match=3, timeout=60, retry=None
+    )
+    blob.reload.assert_not_called()
+    decode.assert_not_called()

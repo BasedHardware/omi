@@ -26,10 +26,16 @@ tolerations:
     value: present
     effect: NoSchedule
 worker:
+  heldDeadLetterEnabled: true
+  servingMetricsMinRefreshSeconds: 30
   shadowRecoveryApiUrl: "https://backend-integration-dt5lrfkkoa-uc.a.run.app"
   headPriorityEnabled: false
+  # Matches the dev backend hosts (deploy contract reader-split invariant).
+  parakeetWindowAllocationPercent: '1'
 recordSealSweeper:
   # Producer identity proof is scoped to prod; dev validation is hermetic, no ambient writes.
   enabled: false
 recordSealRepair:
+  enabled: false
+recordSealWorker:
   enabled: false

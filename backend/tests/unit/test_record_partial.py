@@ -7,7 +7,7 @@ import hashlib
 import io
 import json
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import Mock, AsyncMock
 import wave
 
 import pytest
@@ -39,6 +39,17 @@ NOW = 4000
 
 @pytest.fixture
 def source(monkeypatch):
+    from utils.executors import sync_executor
+
+    original_run_blocking = record_partial.run_blocking
+
+    async def run_blocking(executor, fn, *args, **kwargs):
+        # Partial source collection also downloads retained objects; it must
+        # not borrow the coordinator pool when admission concurrency grows.
+        assert executor is not sync_executor
+        return await original_run_blocking(executor, fn, *args, **kwargs)
+
+    monkeypatch.setattr(record_partial, 'run_blocking', run_blocking)
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
     monkeypatch.setenv('BATCH_PIPELINE_RECORD_PROTOCOL_READY', 'true')
     monkeypatch.setenv('BUCKET_BATCH_PIPELINE', 'synthetic-batch-bucket')
@@ -704,7 +715,13 @@ def audio(source, monkeypatch):
         )
         return True
 
-    monkeypatch.setattr(record_partial, 'admit', lambda *args, **kwargs: admit(*args, **kwargs, enqueue=enqueue))
+    from utils.batch_pipeline import record_provider
+
+    def admit_with_queue_seam(*args, **kwargs):
+        kwargs.setdefault('enqueue', enqueue)
+        return admit(*args, **kwargs)
+
+    monkeypatch.setattr(record_provider, 'admit', admit_with_queue_seam)
 
     def add(start, frames=16000):
         name = f'chunks/synthetic/record/{len(chunks)}.pcm'
@@ -712,9 +729,12 @@ def audio(source, monkeypatch):
         pcm[name] = b'\x01\x00' * frames
 
     async def drain(now=NOW):
-        return await live.admit_recording(store, pending(source), now=now)
+        return await live.admit_recording(
+            store, pending(source), now=now, provider_outbox_factory=lambda: environment.outbox
+        )
 
-    return SimpleNamespace(add=add, drain=drain, chunks=chunks, pcm=pcm, artifacts=artifacts)
+    environment = SimpleNamespace(add=add, drain=drain, chunks=chunks, pcm=pcm, artifacts=artifacts, outbox=None)
+    return environment
 
 
 async def test_real_staging_admission_worker_late_audio_and_serial_receipts(source, audio):
@@ -763,6 +783,60 @@ async def test_real_staging_admission_worker_late_audio_and_serial_receipts(sour
     assert new_jobs[0]['capture_at'] == 101 and new_jobs[0]['duration_seconds'] == 1
     assert new_jobs[0]['projection_binding']['partial_record']
     assert not source[1].rows[ROW]['record_audio_closed']
+
+
+@pytest.mark.parametrize('language', ['en', 'und'])
+async def test_auto_partial_freezes_audio_proof_without_changing_custody(source, audio, monkeypatch, language):
+    from diarizer.batch_pipeline_models import stt_language
+    from utils.batch_pipeline import record_language
+    from utils.batch_pipeline.audio import read_context
+
+    row = source[1].rows[ROW]
+    row.update(
+        language='multi',
+        client_platform='ios',
+        external_data={'server_batch_only': True},
+        has_content=True,
+        server_batch_audio_start=100,
+        server_batch_audio_end=110,
+    )
+    audio.add(100)
+    assert finish(source) == 'partial_finished'
+    proof = {
+        'stt_language': language,
+        'stt_language_evidence': 'audio_lid' if language == 'en' else 'unavailable',
+        'stt_language_confidence': 0.99 if language == 'en' else 0.0,
+    }
+    classify = AsyncMock(return_value=proof)
+    monkeypatch.setattr(record_language, 'classify_wav', classify)
+    monkeypatch.setattr(
+        record_language, 'ServingLanguageProbeGuard', lambda *a, **k: SimpleNamespace(raise_if_denied=lambda: None)
+    )
+    await audio.drain()
+    await audio.drain()
+    jobs = [
+        job
+        for path, job in source[1].rows.items()
+        if path[0] == 'batch_pipeline_dev_jobs' and not job.get('partial_coordinator')
+    ]
+    assert len(jobs) == 1 and classify.call_count == 1
+    intakes = [
+        intake
+        for path, intake in source[1].rows.items()
+        if path[0] == 'batch_pipeline_dev_intakes' and intake.get('record_partial_parent')
+    ]
+    assert len(intakes) == 1
+    assert intakes[0]['language_receipts'][jobs[0]['segment_id']] == {
+        'version': 1,
+        'language': language,
+        'evidence': 'audio_lid' if language == 'en' else 'unavailable',
+    }
+    work = live.WorkItem(**{key: jobs[0][key] for key in live.WorkItem.__dataclass_fields__ if key in jobs[0]})
+    context = read_context(audio.artifacts.fetch_audio(work))
+    assert stt_language(context, duration_seconds=1) == language
+    assert context['conversation_id'] == 'record'
+    assert len(audio.chunks) == 1 and audio.pcm[audio.chunks[0]['path']]
+    assert pending(source)['state'] == 'record_pending'
 
 
 async def test_over_cap_rows_use_real_worker_bounds_and_two_pages(source, audio):
@@ -848,3 +922,50 @@ async def test_deletion_during_partial_plan_read_returns_no_plaintext(source, au
     with pytest.raises(BatchPrivacyBlocked):
         await audio.drain()
     assert len([path for path in source[1].rows if path[0] == 'batch_pipeline_dev_jobs']) == 1
+
+
+@pytest.mark.parametrize('language', ['ca', 'sw'])
+async def test_unsupported_partial_uses_durable_modulate_outbox_after_rollback(source, audio, monkeypatch, language):
+    from utils.batch_pipeline import record_provider
+    from utils.batch_pipeline.audio import read_context
+
+    row = source[1].rows[ROW]
+    row.update(
+        language=language,
+        external_data={'server_batch_only': True},
+        has_content=True,
+        server_batch_audio_start=100,
+        server_batch_audio_end=110,
+    )
+    audio.add(100)
+    assert finish(source) == 'partial_finished'
+    monkeypatch.setenv('SERVER_BATCH_UNSUPPORTED_LANGUAGES', '')
+    from database.outbox_provider_stt import FirestoreProviderSttOutbox
+
+    wakes = Mock()
+    outbox = FirestoreProviderSttOutbox(client=source[1], collection='synthetic_provider_outbox', create_wake=wakes)
+    audio.outbox = outbox
+    await audio.drain()
+    await audio.drain()
+    jobs = [
+        job
+        for path, job in source[1].rows.items()
+        if path[0] == 'batch_pipeline_dev_jobs' and not job.get('partial_coordinator')
+    ]
+    assert len(jobs) == 1
+    job = jobs[0]
+    assert job['state'] == 'provider_pending'
+    assert job['stt_route']['language'] == language
+    assert job['stt_route']['provider_service'] == 'modulate'
+    assert job['policy']['provider_service'] == 'modulate'
+    assert job['policy']['batch_enabled']
+    assert not job['requires_compute_admission']
+    assert job['projection_binding']['native_record'] and job['projection_binding']['partial_record']
+    rows = [value for path, value in source[1].rows.items() if path[0] == 'synthetic_provider_outbox']
+    assert len(rows) == 1 and rows[0]['segment_id'] == job['segment_id']
+    wakes.assert_called_once()
+    work = live.WorkItem(**{key: job[key] for key in live.WorkItem.__dataclass_fields__ if key in job})
+    context = read_context(audio.artifacts.fetch_audio(work))
+    assert context['stt_language'] == language and context['stt_language_evidence'] == 'declared'
+    assert len(audio.chunks) == 1 and audio.pcm[audio.chunks[0]['path']]
+    assert not any(path[0] in {'batch_pipeline_dev_queues', 'batch_pipeline_dev_control'} for path in source[1].rows)

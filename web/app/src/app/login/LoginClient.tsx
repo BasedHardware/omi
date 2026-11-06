@@ -10,13 +10,16 @@ import { cn } from '@/lib/utils';
 import { PostHogManager } from '@/lib/analytics/posthog';
 import { TextSwap } from '@/components/ui/TextSwap';
 import { replayErrorShake } from '@/lib/transitionsDev';
-import { isFirebaseAuthConfigured } from '@/lib/firebase';
+import { auth, isFirebaseAuthConfigured } from '@/lib/firebase';
 import { safeNextPath } from '@/lib/loginNext';
 import {
   claimReferralTrial,
   ReferralClaimError,
   navigateToDesktopDownload,
   parseReferralEnvironment,
+  referralMobilePlatform,
+  referralDownloadURL,
+  referralSignInProvider,
 } from '@/lib/referrals';
 
 export function getAuthErrorMessage(
@@ -76,6 +79,12 @@ export function LoginClient() {
   const [error, setError] = useState<string | null>(null);
   const [referralClaimFailure, setReferralClaimFailure] = useState<string | null>(null);
   const referralClaimStarted = useRef(false);
+  const [activatedReferral, setActivatedReferral] = useState<string | null>(null);
+  const [mobilePlatform, setMobilePlatform] =
+    useState<ReturnType<typeof referralMobilePlatform>>(null);
+  useEffect(() => {
+    setMobilePlatform(referralMobilePlatform(navigator.userAgent));
+  }, []);
   const [canRetryReferral, setCanRetryReferral] = useState(false);
   const claimAttempt = useRef(0);
   const claimMounted = useRef(true);
@@ -87,6 +96,8 @@ export function LoginClient() {
   const referralCode = searchParams.get('referral');
   const referralEnvironment = parseReferralEnvironment(searchParams.get('environment'));
   const isReferralFlow = Boolean(referralCode && referralEnvironment);
+  const referralOwnerKey = JSON.stringify([user?.uid, referralCode, referralEnvironment]);
+  const referralActivated = activatedReferral === referralOwnerKey;
   claimOwner.current = {
     uid: user?.uid ?? null,
     code: referralCode,
@@ -127,6 +138,7 @@ export function LoginClient() {
     setCanRetryReferral(false);
     const attempt = ++claimAttempt.current;
     const isCurrent = () =>
+      auth?.currentUser === user &&
       claimMounted.current &&
       claimAttempt.current === attempt &&
       claimOwner.current.uid === uid &&
@@ -134,15 +146,22 @@ export function LoginClient() {
       claimOwner.current.environment === referralEnvironment;
     try {
       const result = await claimReferralTrial(referralCode, referralEnvironment, {
+        user,
         isCurrent,
       });
       if (!isCurrent()) return;
       PostHogManager.track('Referral Signup Completed', { claimed: result.claimed });
       if (!result.claimed) {
-        setReferralClaimFailure('This free month is only available to new accounts.');
+        setReferralClaimFailure(
+          'We could not confirm a new activation. This link is for new accounts and may already have been used. Check your plan in Omi using this same account.',
+        );
         return;
       }
-      navigateToDesktopDownload();
+      if (referralMobilePlatform(navigator.userAgent)) {
+        setActivatedReferral(JSON.stringify([uid, referralCode, referralEnvironment]));
+      } else {
+        navigateToDesktopDownload();
+      }
     } catch (claimError) {
       if (!isCurrent()) return;
       const retryable =
@@ -150,18 +169,19 @@ export function LoginClient() {
       setCanRetryReferral(retryable);
       setReferralClaimFailure(
         retryable
-          ? 'We could not apply this referral. Please try again.'
-          : 'This referral could not be applied to your account. You can continue to Omi.',
+          ? 'We could not confirm activation. Try again, or check your plan in Omi using this same account.'
+          : 'We could not confirm activation for this account. Check your plan in Omi using this same account.',
       );
     }
-  }, [user?.uid, referralCode, referralEnvironment]);
+  }, [user, referralCode, referralEnvironment]);
 
   useEffect(() => {
     claimAttempt.current++;
     referralClaimStarted.current = false;
     setReferralClaimFailure(null);
     setCanRetryReferral(false);
-  }, [user?.uid, referralCode, referralEnvironment]);
+    setActivatedReferral(null);
+  }, [user, referralCode, referralEnvironment]);
 
   useEffect(() => {
     if (!loading && user) {
@@ -203,6 +223,44 @@ export function LoginClient() {
     }
   };
 
+  if (user && isReferralFlow && referralActivated && mobilePlatform) {
+    const provider = referralSignInProvider(
+      user.providerData?.map((entry) => entry.providerId) ?? [],
+    );
+    return (
+      <div className="flex min-h-[100svh] items-center justify-center bg-black px-5 text-center">
+        <div className="max-w-sm">
+          <h1 className="font-display text-2xl font-semibold text-text-primary">
+            Your free month is active
+          </h1>
+          <p className="mt-3 text-sm text-text-tertiary">
+            You claimed 30 days of Omi Pro through your friend’s link.
+          </p>
+          <p className="mt-3 text-sm text-text-tertiary">
+            In Omi, sign in with{' '}
+            {provider ? `the same ${provider} account` : 'the same account'}
+            {user.email ? ` (${user.email})` : ''}. Your free month belongs to this
+            account.
+          </p>
+          {provider === 'Apple' && (
+            <p className="mt-3 text-sm text-text-tertiary">
+              Use Continue with Apple again, including if you chose Hide My Email.
+            </p>
+          )}
+          <a
+            href={referralDownloadURL(mobilePlatform)}
+            className="mt-6 inline-flex h-12 items-center justify-center rounded-lg bg-white px-5 font-medium text-black hover:bg-gray-100"
+          >
+            {mobilePlatform === 'ios' ? 'Get Omi for iPhone' : 'Get Omi for Android'}
+          </a>
+          <p className="mt-4 text-sm text-text-tertiary">
+            Already installed? Open Omi and sign in with this account.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   // Show loading state while checking auth
   if (loading || (user && isReferralFlow && !referralClaimFailure)) {
     return (
@@ -236,10 +294,14 @@ export function LoginClient() {
             </button>
           )}
           <a
-            href="https://macos.omi.me"
+            href={referralDownloadURL(mobilePlatform)}
             className="mt-6 inline-flex h-12 items-center justify-center rounded-lg bg-white px-5 font-medium text-black hover:bg-gray-100"
           >
-            Download Omi
+            {mobilePlatform === 'ios'
+              ? 'Get Omi for iPhone'
+              : mobilePlatform === 'android'
+              ? 'Get Omi for Android'
+              : 'Download Omi'}
           </a>
         </div>
       </div>
@@ -325,7 +387,9 @@ export function LoginClient() {
               transition={{ duration: 0.3, delay: 0.3 }}
               className="mb-8 text-sm text-text-tertiary"
             >
-              {isReferralFlow ? 'Create your account to claim it' : 'thought to action'}
+              {isReferralFlow
+                ? 'Create your account through this link to claim it'
+                : 'thought to action'}
             </motion.p>
 
             {/*

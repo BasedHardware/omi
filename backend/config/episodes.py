@@ -44,6 +44,7 @@ import os
 from config.refactor_modes import default_on as modes_default_on
 from config.refactor_switches import default_on as rollout_default_on
 
+from config.app_channel import APP_CHANNELS, app_channel
 from config.jev_decisions import percentage, uid_bucket
 
 EPISODES_ENABLED_ENV = 'EPISODES_ENABLED'
@@ -53,11 +54,13 @@ EPISODES_CLIENT_CHANNELS_ENV = 'EPISODES_CLIENT_CHANNELS'
 EPISODE_OUTPUT_LANGUAGE_PIN_ENV = 'EPISODE_OUTPUT_LANGUAGE_PIN'
 EPISODE_HARD_CAP_ACROSS_CONVERSATIONS_ENV = 'EPISODE_HARD_CAP_ACROSS_CONVERSATIONS'
 HOME_HIDE_BELOW_FLOOR_ROWS_ENV = 'HOME_HIDE_BELOW_FLOOR_ROWS'
+HOME_HIDE_EPISODE_MEMBERS_ENV = 'HOME_HIDE_EPISODE_MEMBERS'
+HOME_NEUTRAL_MINIMUM_TITLES_ENV = 'HOME_NEUTRAL_MINIMUM_TITLES'
+HOME_TRANSCRIPTION_PRESENTATION_GATE_ENV = 'HOME_TRANSCRIPTION_PRESENTATION_GATE'
 EPISODE_CARRY_ON_SESSION_END_ENV = 'EPISODE_CARRY_ON_SESSION_END'
 EPISODE_MOMENT_OUTPUT_VALIDATOR_ENV = 'EPISODE_MOMENT_OUTPUT_VALIDATOR'
 EPISODE_COMPOSER_ENV = 'EPISODE_COMPOSER'
-APP_CHANNEL_HEADER = 'X-Omi-App-Channel'
-APP_CHANNELS = frozenset({'beta', 'store'})
+EPISODE_COMPOSE_SETTLE_ENABLED_ENV = 'EPISODE_COMPOSE_SETTLE_ENABLED'
 _DEFAULT_CLIENT_CHANNELS = frozenset({'beta'})
 _COHORT_SALT = 'episodes-v1'
 _ON = frozenset({'true', 'on', '1', 'yes'})
@@ -80,12 +83,6 @@ def episodes_enabled_for(uid: str) -> bool:
     if uid in allowlist:
         return True
     return uid_bucket(uid, _COHORT_SALT) < percentage(EPISODES_PERCENT_ENV, default=100.0)
-
-
-def app_channel(raw: str | None) -> str:
-    """The request's ``X-Omi-App-Channel`` as a bounded label: ``beta``, ``store`` or ``unknown``."""
-    value = (raw or '').strip().lower()
-    return value if value in APP_CHANNELS else 'unknown'
 
 
 def episodes_client_channels() -> frozenset[str]:
@@ -112,6 +109,30 @@ def episode_hard_cap_across_conversations_enabled() -> bool:
     return modes_default_on(EPISODE_HARD_CAP_ACROSS_CONVERSATIONS_ENV)
 
 
+def home_hide_episode_members_enabled() -> bool:
+    """Hide only members covered by a client-held, extant episode projection."""
+    return modes_default_on(HOME_HIDE_EPISODE_MEMBERS_ENV)
+
+
+def home_neutral_minimum_titles_enabled() -> bool:
+    """Replace provisional transcript-echo Home titles without changing storage."""
+    return modes_default_on(HOME_NEUTRAL_MINIMUM_TITLES_ENV)
+
+
+def home_transcription_presentation_gate_enabled() -> bool:
+    """Default-on batch transcription presentation; off restores stored status/title."""
+    return modes_default_on(HOME_TRANSCRIPTION_PRESENTATION_GATE_ENV)
+
+
+def home_transcription_deadline_seconds() -> int:
+    """New captures get 2h (batch timeliness SLA); invalid or nonpositive values use 2h."""
+    try:
+        seconds = int(os.getenv('HOME_TRANSCRIPTION_DEADLINE_SECONDS', '7200'))
+    except ValueError:
+        return 7200
+    return seconds if seconds > 0 else 7200
+
+
 def home_hide_below_floor_rows_enabled() -> bool:
     """Whether Home leaves out short captures under the notes floor."""
     return modes_default_on(HOME_HIDE_BELOW_FLOOR_ROWS_ENV)
@@ -133,6 +154,11 @@ def episode_composer_enabled() -> bool:
     Off keeps the live incremental notes as the final episode notes, as before.
     """
     return modes_default_on(EPISODE_COMPOSER_ENV)
+
+
+def episode_compose_settle_enabled() -> bool:
+    """Default-on cost control; off restores the original trigger and retry behavior."""
+    return modes_default_on(EPISODE_COMPOSE_SETTLE_ENABLED_ENV)
 
 
 def client_channel_admitted(raw: str | None) -> bool:
@@ -253,6 +279,8 @@ COMPOSER_READ_THROTTLE_SECONDS = 600
 COMPOSER_LOOKUP_SCHEDULES_PER_WINDOW = 4
 # One paid call per evidence across replicas: the claim outlives the model call (90 s x 2 attempts).
 COMPOSER_LEASE_SECONDS = 240
+COMPOSER_SETTLE_SECONDS = 10 * 60
+COMPOSER_MAX_SETTLE_SECONDS = 25 * 60
 # After a failed paid attempt the read-side net backs off 10, 20, 40 min, then stops until
 # the evidence changes (a member finalize still composes).
 COMPOSER_RETRY_MINUTES = 10
@@ -263,3 +291,7 @@ COMPOSER_MAX_PARAGRAPH_CHARS = 1200
 COMPOSER_MAX_POINTS = 6
 COMPOSER_MAX_DETAILS = 4
 COMPOSER_MAX_POINT_CHARS = 400
+
+# Extra reads caused by Home projection, independent of page/member counts.
+HOME_MEMBERSHIP_EPISODE_READ_LIMIT = 5
+HOME_IDLE_CLOSES_PER_READ = 2

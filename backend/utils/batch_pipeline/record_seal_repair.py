@@ -18,6 +18,7 @@ from utils.batch_pipeline.record_barrier import validate_record_tail
 from utils.batch_pipeline.record_producer_proof import producer_tokens_dead
 from utils.batch_pipeline.record_seal_reasons import proof_reason, proof_diagnostics, tail_gap_bucket, TailGapRefusal
 from utils.other.storage import list_audio_chunks
+from utils.batch_pipeline import record_seal_profile
 
 ROW_FIELDS = (
     'record_lane_owner',
@@ -55,7 +56,9 @@ def plan_digest(value):
     return hashlib.sha256(json.dumps(value, sort_keys=True, default=encode, separators=(',', ':')).encode()).hexdigest()
 
 
-def seal_refusal(job, row, *, producer_proof=None, producers_stopped=False, repair_upload_failed=False):
+def seal_refusal(
+    job, row, *, producer_proof=None, producers_stopped=False, repair_upload_failed=False, repair_closed=False
+):
     if job.get('state') != 'record_pending' or not job.get('record_content_id'):
         return 'not_pending'
     if row.get('record_lane_owner') not in {'batch_live_v1', 'batch_sync_v1'}:
@@ -68,7 +71,7 @@ def seal_refusal(job, row, *, producer_proof=None, producers_stopped=False, repa
         row['record_upload_sessions'], producer_proof, producers_stopped=producers_stopped
     ):
         return 'upload_pending'
-    if row.get('record_audio_closed'):
+    if row.get('record_audio_closed') and not repair_closed:
         return 'already_closed'
     if row.get('status') != 'completed':
         return 'not_completed'
@@ -90,16 +93,23 @@ def retained_tail_proof(job, row, storage_client, artifacts, *, check_budget=lam
         conversation_id=cid,
         privacy_generation=job['privacy_generation'],
     )
+    record_seal_profile.enter('list')
     check_budget()
     artifacts.authorize(seed)
     check_budget()
-    chunks = list_audio_chunks(uid, cid, max_count=4096, require_archive=True)
+    chunks = list_audio_chunks(
+        uid, cid, max_count=4096, require_archive=True, client=storage_client, source_metadata=True
+    )
     check_budget()
     key = artifacts.key_for_owner(uid)
-    precheck_record_tail(uid, cid, chunks, storage_client, key, row, job, check_budget=check_budget)
+    record_seal_profile.enter('walk')
+    decoded_tail = {}
+    precheck_record_tail(
+        uid, cid, chunks, storage_client, key, row, job, check_budget=check_budget, decoded_tail=decoded_tail
+    )
     units = []
     options = {'diagnostics': diagnostics} if diagnostics is not None else {}
-    iterator = retained_record_units(uid, cid, chunks, storage_client, key, **options)
+    iterator = retained_record_units(uid, cid, chunks, storage_client, key, decoded_tail=decoded_tail, **options)
     try:
         for unit in iterator:
             check_budget()
@@ -127,7 +137,9 @@ def validate_repair_tail(units, finish, *, diagnostic_end=None):
         raise
 
 
-def precheck_record_tail(uid, cid, chunks, storage_client, key, row, job, *, check_budget=lambda: None):
+def precheck_record_tail(
+    uid, cid, chunks, storage_client, key, row, job, *, check_budget=lambda: None, decoded_tail=None
+):
     """Refusal-only necessary condition; passing still requires the full walk.
 
     A contained final object can end before the union. Under earlier-wins
@@ -137,7 +149,7 @@ def precheck_record_tail(uid, cid, chunks, storage_client, key, row, job, *, che
     if not chunks:
         return
     tail = None
-    iterator = retained_record_units(uid, cid, chunks[-1:], storage_client, key)
+    iterator = retained_record_units(uid, cid, chunks[-1:], storage_client, key, decoded_tail=decoded_tail)
     try:
         for tail in iterator:
             check_budget()
@@ -174,6 +186,7 @@ def plan_seals(
     producers_stopped=False,
     check_budget=lambda: None,
     repair_upload_failed=False,
+    repair_closed=False,
 ):
     entries = []
     for job_id in sorted(job_ids):
@@ -196,6 +209,7 @@ def plan_seals(
                 producer_proof=producer_proof,
                 producers_stopped=producers_stopped,
                 repair_upload_failed=repair_upload_failed,
+                repair_closed=repair_closed,
             )
             if refusal:
                 entry['disposition'] = refusal
@@ -230,6 +244,7 @@ def plan_seals(
         'producer_proof': producer_proof,
         'producers_stopped': producers_stopped,
         'repair_upload_failed': repair_upload_failed,
+        'repair_closed': repair_closed,
         'overlap_trim_enabled': overlap_trim_enabled(),
     }
     return {**plan, 'plan_sha256': plan_digest(plan)}
@@ -268,6 +283,7 @@ def apply_seals(store, plan, approved_digest, *, check_budget=lambda: None, outc
                 producer_proof=plan['producer_proof'],
                 producers_stopped=plan['producers_stopped'],
                 repair_upload_failed=plan.get('repair_upload_failed', False),
+                repair_closed=plan.get('repair_closed', False),
             )
             if refusal:
                 return refusal

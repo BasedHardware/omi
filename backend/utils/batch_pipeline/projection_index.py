@@ -32,14 +32,20 @@ class ProjectionIndex:
     def owed(self) -> bool:
         return bool(self.pending)
 
+    def has_owed(self, owner_id: str) -> bool:
+        with self.lock:
+            return owner_id in self.pending
+
     def defer(self, uid: str, conversation_id: str, donors: list[str]) -> None:
         with self.lock:
             conversations, absorbed, _ = self.pending.setdefault(uid, ({}, {}, self.clock()))
             conversations[conversation_id] = None
             absorbed.update(dict.fromkeys(donors))
 
-    def flush(self) -> int:
-        """Converge every owed owner; returns owners flushed. One flusher at a time.
+    def flush(self, owner_id: str | None = None) -> int:
+        """Converge owed owners; an owner id scopes recovery wakes.
+
+        Returns owners flushed. One flusher runs at a time.
 
         A single flusher keeps an older read of a conversation from landing after
         a newer one. A deferral that arrives while another flush finishes is
@@ -51,7 +57,11 @@ class ProjectionIndex:
         try:
             while True:
                 with self.lock:
-                    batch, self.pending = self.pending, {}
+                    if owner_id is None:
+                        batch, self.pending = self.pending, {}
+                    else:
+                        owed = self.pending.pop(owner_id, None)
+                        batch = {owner_id: owed} if owed is not None else {}
                 if not batch:
                     return flushed
                 lag = 0.0

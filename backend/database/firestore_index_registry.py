@@ -15,6 +15,7 @@ from database.review_queries import REVIEW_QUERY_SPECS
 from database.sync_pipeline_indexes import SYNC_PIPELINE_INDEX_REQUIREMENTS
 from database.batch_pipeline_indexes import BATCH_PIPELINE_INDEX_REQUIREMENTS
 from database.messaging_queries import MESSAGING_INDEX_REQUIREMENTS, MESSAGING_FIELD_REQUIREMENTS
+from database.lifecycle_metrics_indexes import INDEX_REQUIREMENTS as LIFECYCLE_METRICS_INDEX_REQUIREMENTS
 from .firestore_query_types import (
     FieldIndexRequirement,
     FirestoreIndexField,
@@ -39,6 +40,7 @@ def _contains(field_path: str) -> FirestoreIndexField:
 # These explicit requirements preserve the current deployed index set while
 # callers migrate one compound serving query at a time into QUERY_SPECS.
 INDEX_ONLY_REQUIREMENTS = (
+    *LIFECYCLE_METRICS_INDEX_REQUIREMENTS,
     *BATCH_PIPELINE_INDEX_REQUIREMENTS,
     *SYNC_PIPELINE_INDEX_REQUIREMENTS,
     *MESSAGING_INDEX_REQUIREMENTS,
@@ -898,6 +900,49 @@ CANONICAL_CONSOLIDATION_QUERY = FirestoreQuerySpec(
     ),
 )
 
+# Operator scan for the 2026-10 stale-planner archive remediation
+# (scripts/restore_stale_planner_archives.py). Per-user COLLECTION scope:
+# memory_items has no prod collection-group indexes, so the scan iterates one
+# user subcollection at a time under an explicit read budget.
+STALE_PLANNER_ARCHIVE_SCAN_QUERY = FirestoreQuerySpec(
+    identifier='memory_items_stale_planner_archive_scan',
+    collection_group='memory_items',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('tier', '==', 'tier'),
+        FirestoreQueryFilter('status', '==', 'status'),
+        FirestoreQueryFilter('promotion.processed_at', '>=', 'processed_from'),
+        FirestoreQueryFilter('promotion.processed_at', '<=', 'processed_to'),
+    ),
+    index_fields=(
+        _asc('tier'),
+        _asc('status'),
+        _asc('promotion.processed_at'),
+        _asc('memory_id'),
+        _asc('__name__'),
+    ),
+)
+
+# Reverse path of the same remediation: rows carrying the restore marker are
+# re-archived by tier + marker equality, again per user.
+STALE_PLANNER_RESTORE_REVERT_QUERY = FirestoreQuerySpec(
+    identifier='memory_items_stale_planner_restore_revert',
+    collection_group='memory_items',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('tier', '==', 'tier'),
+        FirestoreQueryFilter('status', '==', 'status'),
+        FirestoreQueryFilter('promotion.remediation.marker', '==', 'marker'),
+    ),
+    index_fields=(
+        _asc('tier'),
+        _asc('status'),
+        _asc('promotion.remediation.marker'),
+        _asc('memory_id'),
+        _asc('__name__'),
+    ),
+)
+
 RECENT_REJECTED_MEMORY_FEEDBACK_QUERY = FirestoreQuerySpec(
     identifier='memory_items_recent_rejected_feedback',
     collection_group='memory_items',
@@ -1726,6 +1771,35 @@ FINALIZATION_OLDEST_NONTERMINAL_QUERY = FirestoreQuerySpec(
     index_fields=(_asc('status'), _asc('created_at'), _asc('__name__')),
 )
 
+FINALIZATION_DEAD_LETTER_STOCK_QUERY = FirestoreQuerySpec(
+    identifier='finalization_dead_letter_stock',
+    collection_group='conversation_finalization_jobs',
+    query_scope='COLLECTION',
+    filters=(FirestoreQueryFilter('status', '==', 'status'),),
+    index_fields=(),  # The automatic status single-field index serves COUNT.
+)
+
+FINALIZATION_OLDEST_DEAD_LETTER_QUERY = FirestoreQuerySpec(
+    identifier='finalization_oldest_dead_letter',
+    collection_group='conversation_finalization_jobs',
+    query_scope='COLLECTION',
+    filters=(FirestoreQueryFilter('status', '==', 'status'),),
+    index_fields=(_asc('status'), _asc('terminal_at'), _asc('__name__')),
+)
+
+FINALIZATION_BYOK_ABANDONED_WINDOW_QUERY = FirestoreQuerySpec(
+    identifier='finalization_byok_abandoned_window',
+    collection_group='conversation_finalization_jobs',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('status', '==', 'status'),
+        FirestoreQueryFilter('last_failure_code', '==', 'failure_code'),
+        FirestoreQueryFilter('terminal_at', '>=', 'after'),
+        FirestoreQueryFilter('terminal_at', '<=', 'before'),
+    ),
+    index_fields=(_asc('status'), _asc('last_failure_code'), _asc('terminal_at'), _asc('__name__')),
+)
+
 # WQ13: candidate filters are read-only and gated independently of loop leases.
 FINALIZATION_BYOK_ABANDONMENT_QUERY = FirestoreQuerySpec(
     identifier='finalization_byok_active_candidates',
@@ -1971,6 +2045,8 @@ QUERY_SPECS = (
     REVIEW_QUEUE_BY_STATUS_ID_QUERY,
     REQUIRED_MEMORY_PROCESSING_QUERY,
     CANONICAL_CONSOLIDATION_QUERY,
+    STALE_PLANNER_ARCHIVE_SCAN_QUERY,
+    STALE_PLANNER_RESTORE_REVERT_QUERY,
     RECENT_REJECTED_MEMORY_FEEDBACK_QUERY,
     POLICY_EXPIRED_SHORT_TERM_QUERY,
     EXPIRY_URGENT_SHORT_TERM_BY_CAPTURE_QUERY,
@@ -2018,6 +2094,9 @@ QUERY_SPECS = (
     *MCP_CONVERSATION_CARD_QUERY_SPECS.values(),
     SYNC_RECORDING_LINEAGE_QUERY,
     FINALIZATION_OLDEST_NONTERMINAL_QUERY,
+    FINALIZATION_DEAD_LETTER_STOCK_QUERY,
+    FINALIZATION_OLDEST_DEAD_LETTER_QUERY,
+    FINALIZATION_BYOK_ABANDONED_WINDOW_QUERY,
     FINALIZATION_BYOK_ABANDONMENT_QUERY,
     FINALIZATION_BYOK_RECLAIM_QUERY,
     FINALIZATION_STALE_IN_PROGRESS_QUERY,
@@ -2145,6 +2224,7 @@ FIELD_INDEXING_EXEMPTIONS: tuple[tuple[str, str], ...] = (
 )
 
 FIELD_INDEX_REQUIREMENTS: tuple[FieldIndexRequirement, ...] = MESSAGING_FIELD_REQUIREMENTS + (
+    FieldIndexRequirement('lifecycle_pair_finalization_status', 'conversations', 'finalization_status', ('ASCENDING',)),
     FieldIndexRequirement('cap_redrive_processing_state', 'processing_backlog', 'state', ('ASCENDING',)),
     FieldIndexRequirement('cap_redrive_hold_state', 'stt_cap_holds', 'state', ('ASCENDING',)),
     FieldIndexRequirement('cap_redrive_staging_cleanup', 'stt_cap_holds', 'staging_cleanup', ('ASCENDING',)),

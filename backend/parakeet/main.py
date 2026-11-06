@@ -118,14 +118,14 @@ PRERECORDED_REQUESTS = Counter(
 LID_REQUESTS = Counter('parakeet_language_id_requests_total', 'Language gate requests', ['status'])
 LID_ROUTES = Counter('parakeet_language_id_routes_total', 'Language gate verdicts', ['route', 'bucket'])
 LID_DURATION = Histogram(
-    'parakeet_language_id_duration_seconds', 'Language gate wall time including GPU queue', buckets=_ASR_BUCKETS
+    'parakeet_language_id_duration_seconds', 'Language gate wall time including worker queue', buckets=_ASR_BUCKETS
 )
 OUTPUT_LANGUAGE = Counter(
     'parakeet_output_language_total',
     'Text language of /v2 transcripts with at least 24 letters; non-P25 output is the wrong-language alarm',
     ['bucket'],
 )
-_LID_MAX_INFLIGHT = 16
+_LID_MAX_INFLIGHT = 1 if language_gate.lid_only_enabled() else 16
 # Callers send at most 30 s; anything far larger is a misuse and must not be decoded into RAM.
 _LID_MAX_UPLOAD_BYTES = 16 * 1024 * 1024
 _lid_inflight = 0
@@ -212,11 +212,14 @@ def _on_fatal_cuda_error(_reason: str) -> None:
 async def lifespan(app: FastAPI):
     global gpu_worker, batch_engine, stream_admission, start_time
     start_time = time.monotonic()
-    stream_admission = StreamAdmissionController.from_env(os.environ)
+    stream_admission = None if language_gate.lid_only_enabled() else StreamAdmissionController.from_env(os.environ)
 
     os.makedirs("_temp", exist_ok=True)
 
-    if INFERENCE_MODE != "nim":
+    if language_gate.lid_only_enabled():
+        gpu_worker = GPUWorker()
+        gpu_worker.start()
+    elif INFERENCE_MODE != "nim":
         gpu_worker = GPUWorker(on_fatal_cuda_error=_on_fatal_cuda_error)
         gpu_worker.start()
         set_gpu_worker(gpu_worker)
@@ -247,7 +250,8 @@ async def lifespan(app: FastAPI):
     else:
         logger.info("Parakeet ASR server ready (NIM mode)")
 
-    warmup_rnnt_decoder()
+    if not language_gate.lid_only_enabled():
+        warmup_rnnt_decoder()
     yield
 
     logger.info("Shutting down...")
@@ -658,7 +662,9 @@ async def stream_transcribe(
 @app.get("/health", response_model=None)
 async def health_check() -> JSONResponse | Dict[str, Any]:
     if gpu_worker is not None:
-        ready = gpu_worker.is_ready
+        ready = gpu_worker.is_ready and (
+            not language_gate.lid_only_enabled() or gpu_worker.language_id_model is not None
+        )
         fatal_cuda_reason = gpu_worker.fatal_cuda_reason
         body = {
             "status": "healthy" if ready else "unhealthy" if fatal_cuda_reason is not None else "loading",
@@ -670,6 +676,8 @@ async def health_check() -> JSONResponse | Dict[str, Any]:
         if not ready:
             return JSONResponse(status_code=503, content=body)
         return body
+    if language_gate.lid_only_enabled():
+        return JSONResponse(status_code=503, content={"status": "loading", "ready": False})
     return {"status": "healthy"}
 
 
@@ -683,3 +691,15 @@ async def batch_metrics() -> Dict[str, Any]:
             LANE_PENDING.labels(lane=lane).set(metrics[f'{lane}_pending_requests'])
         return metrics
     return {}
+
+
+def _restrict_lid_routes() -> None:
+    if not language_gate.lid_only_enabled():
+        return
+    # A separate release of the same image exposes no ASR/streaming or docs routes.
+    app.router.routes[:] = [
+        route for route in app.router.routes if getattr(route, 'path', '') in {'/health', '/v2/language', '/metrics'}
+    ]
+
+
+_restrict_lid_routes()

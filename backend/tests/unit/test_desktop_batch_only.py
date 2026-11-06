@@ -204,30 +204,6 @@ def test_mobile_percent_is_nested_in_actual_batch_admission(monkeypatch, platfor
         assert not admitted(owner) or resolve_batch_policy(owner).batch_enabled
 
 
-@pytest.mark.parametrize(
-    'change,expected',
-    [
-        ({}, True),
-        ({'private_cloud_sync_enabled': False}, False),
-        ({'uses_custom_stt': True}, False),
-        ({'deleted': True}, False),
-        ({'record_lane_owner': 'legacy_final_pass_v1'}, False),
-    ],
-)
-def test_completion_cas_retains_empty_transcript_and_fences_privacy_races(monkeypatch, change, expected):
-    admitted = capture()
-    admitted['status'] = 'processing'
-    current = {**admitted, **change}
-    db = StrictFirestore({ROW: current})
-    monkeypatch.setattr(conversations, 'db', db)
-    monkeypatch.setattr(conversations, 'stop_quiet_check_for_conversation', Mock())
-    monkeypatch.setattr(conversations, 'invalidate_people_stats_cache', Mock())
-    monkeypatch.setattr(conversations, 'serving_for', lambda *args: False)
-    assert lifecycle.complete_server_batch_capture('owner', 'conversation', admitted) is expected
-    assert db.rows[ROW]['status'] == ('completed' if expected else 'processing')
-    assert db.rows[ROW]['transcript_segments'] == []
-
-
 @pytest.mark.asyncio
 async def test_no_provider_for_whole_session_reinit_reconnect_and_idle_reopen(monkeypatch):
     h = host()
@@ -417,10 +393,21 @@ async def test_first_audio_marker_failure_keeps_buffered_original_for_shutdown_c
 
 
 @pytest.mark.asyncio
-async def test_zero_preview_finalizer_registers_exact_language_bounds_before_completion(monkeypatch):
+@pytest.mark.parametrize(
+    'trigger',
+    [
+        finalizer.ProcessingTrigger.CAPTURE_END,
+        finalizer.ProcessingTrigger.SERVER_RECOVERY,
+        finalizer.ProcessingTrigger.CLIENT_FINALIZE,
+    ],
+)
+@pytest.mark.parametrize('status', [ConversationStatus.processing, ConversationStatus.completed])
+async def test_zero_preview_finalizer_registers_exact_language_bounds_before_completion(monkeypatch, trigger, status):
     row = capture()
     row.update(
-        status='processing',
+        status=status.value,
+        home_transcription_pending_at=datetime.fromtimestamp(1002, timezone.utc),
+        home_transcription_deadline_at=datetime.fromtimestamp(8202, timezone.utc),
         started_at=datetime.fromtimestamp(1000, timezone.utc),
         finished_at=datetime.fromtimestamp(1002, timezone.utc),
         language='es',
@@ -429,7 +416,7 @@ async def test_zero_preview_finalizer_registers_exact_language_bounds_before_com
         server_batch_audio_end=1002,
     )
     store = MemoryStore()
-    model = SimpleNamespace(status=ConversationStatus.processing, transcript_segments=[])
+    model = SimpleNamespace(status=status, transcript_segments=[])
     monkeypatch.setattr(finalizer, '_load_admitted_conversation', AsyncMock(return_value=(None, row, model)))
     monkeypatch.setattr(
         finalizer, 'register_recording', lambda owner, data: register_recording(owner, data, store=store, now=1)
@@ -441,18 +428,56 @@ async def test_zero_preview_finalizer_registers_exact_language_bounds_before_com
         assert pending['record_snapshot']['language'] == 'es'
         assert pending['record_snapshot']['started_at'].timestamp() == 1000
         assert pending['record_snapshot']['finished_at'].timestamp() == 1002
-        return True
+        assert args == ('owner', 'conversation', row, 'job', 1, 1)
+        return 'completed'
 
-    monkeypatch.setattr(finalizer.lifecycle_service, 'complete_server_batch_capture', complete)
-    monkeypatch.setattr(finalizer.lifecycle_service, 'claim_finalization_fanout', lambda *args: {'status': 'claimed'})
-    monkeypatch.setattr(finalizer.lifecycle_service, 'complete_finalization_fanout', lambda *args: True)
+    completion = Mock(side_effect=complete)
+    monkeypatch.setattr(finalizer.lifecycle_service, 'complete_server_batch_capture', completion)
+    monkeypatch.setattr(
+        finalizer.lifecycle_service, 'claim_finalization_fanout', Mock(side_effect=AssertionError('split fanout'))
+    )
+    monkeypatch.setattr(
+        finalizer.lifecycle_service,
+        'complete_finalization_fanout',
+        Mock(side_effect=AssertionError('split completion')),
+    )
     monkeypatch.setattr(
         finalizer, '_episode_at_finalization_start', AsyncMock(side_effect=AssertionError('preview work'))
     )
     result = await finalizer.finalize_persisted_conversation(
-        'owner', 'conversation', finalization_job_id='job', dispatch_generation=1, lease_epoch=1
+        'owner', 'conversation', finalization_job_id='job', dispatch_generation=1, lease_epoch=1, trigger=trigger
     )
     assert result is finalizer.ConversationFinalizationDisposition.completed
+
+    assert completion.call_count == 1
+    assert row['home_transcription_deadline_at'] == datetime.fromtimestamp(8202, timezone.utc)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'registered,outcome', [(False, None), (True, 'fenced'), (True, 'lease_conflict'), (True, 'missing')]
+)
+async def test_zero_preview_finalizer_never_acknowledges_refused_or_fenced_handoff(monkeypatch, registered, outcome):
+    row = capture(has_content=True, server_batch_audio_start=1, server_batch_audio_end=2)
+    row['status'] = 'processing'
+    model = SimpleNamespace(status=ConversationStatus.processing, transcript_segments=[])
+    monkeypatch.setattr(finalizer, '_load_admitted_conversation', AsyncMock(return_value=(None, row, model)))
+    monkeypatch.setattr(finalizer, 'register_recording', lambda *args: registered)
+    completion = Mock(return_value=outcome)
+    monkeypatch.setattr(finalizer.lifecycle_service, 'complete_server_batch_capture', completion)
+    if not registered or outcome == 'missing':
+        with pytest.raises(RuntimeError, match='registration refused|completion fenced'):
+            await finalizer.finalize_persisted_conversation(
+                'owner', 'conversation', finalization_job_id='job', dispatch_generation=1, lease_epoch=1
+            )
+    else:
+        assert (
+            await finalizer.finalize_persisted_conversation(
+                'owner', 'conversation', finalization_job_id='job', dispatch_generation=1, lease_epoch=1
+            )
+            is finalizer.ConversationFinalizationDisposition.fenced
+        )
+    assert completion.call_count == int(registered)
 
 
 @pytest.mark.asyncio

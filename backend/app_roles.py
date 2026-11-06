@@ -54,6 +54,7 @@ from routers import (
     support,
     trends,
     sync,
+    sync_worker,
     batch_pipeline,
     batch_provider_stt,
     enrichment,
@@ -65,6 +66,7 @@ from routers import (
     storefront,
     integration,
     conversations,
+    recording_speakers,
     conversation_mutations,
     memories,
     api_key_management,
@@ -187,6 +189,7 @@ ROUTER_MOUNTS: tuple[Mount, ...] = (
     Mount(omni_relay, roles=API_REALTIME),  # websockets
     Mount(auto_model),
     Mount(conversations),
+    Mount(recording_speakers),
     Mount(conversation_mutations),
     Mount(public_shared_conversation_chat),
     Mount(action_items),
@@ -227,6 +230,7 @@ ROUTER_MOUNTS: tuple[Mount, ...] = (
     Mount(firmware),
     Mount(updates),
     Mount(sync, roles=API_WORKERS),  # uploads (api) and Cloud Tasks /v2/sync-jobs/run (workers)
+    Mount(sync_worker, roles=API_WORKERS),  # OIDC backfill pull-worker control plane
     Mount(batch_pipeline, roles=API_WORKERS),  # GPU worker RPC pull and recovery tasks
     Mount(enrichment, roles=API_WORKERS),  # Cloud Tasks /v2/enrichment/run (lane 9; contract (a) phase 1)
     Mount(batch_provider_stt, roles=API_WORKERS),  # Cloud Tasks /v2/batch-pipeline/provider-stt/run (lane 8)

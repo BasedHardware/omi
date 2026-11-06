@@ -32,6 +32,10 @@ export interface GcpDailyCost {
    * Already inside netUsd/llmNetUsd; carried separately so the variable-margin
    * tile can exclude it (David 2026-10-23) without a second billing read. */
   vertexReservedUsd?: number;
+  /** Net USD on the development project (`DEV_PROJECT_ID`) for the day, all
+   * services. Excluded from the variable margin (David 2026-11-02); the
+   * all-in stack keeps counting it and names it on its own line. */
+  devNetUsd?: number;
 }
 
 export interface GcpServiceCost {
@@ -46,6 +50,12 @@ export interface GcpBillingSnapshot {
   windowStart: string;
   windowEnd: string; // inclusive; always D-2 or older
 }
+
+/** The development GCP project. Its spend is not production cost: the variable
+ * margin excludes it and shows it on its own line. Override with
+ * OMI_TV_DEV_PROJECT_ID; the default is the dev project in infrastructure/opentofu. */
+export const DEV_PROJECT_ID =
+  process.env.OMI_TV_DEV_PROJECT_ID || "based-hardware-dev";
 
 let client: BigQuery | null = null;
 
@@ -98,7 +108,9 @@ export async function fetchGcpBilling(
       ROUND(SUM(cost) + SUM(IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) c), 0)), 2) AS net_usd,
       ROUND(SUM(cost), 2) AS gross_usd,
       ROUND(SUM(IF(sku.description LIKE 'Vertex AI: Provisioned Throughput%',
-                  cost + IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) c), 0), 0)), 2) AS reserved_usd
+                  cost + IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) c), 0), 0)), 2) AS reserved_usd,
+      ROUND(SUM(IF(project.id = @devProject,
+                  cost + IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) c), 0), 0)), 2) AS dev_net_usd
     FROM \`${billingTable()}\`
     WHERE _PARTITIONTIME >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL @scanDays DAY)
       AND usage_start_time >= TIMESTAMP_SUB(TIMESTAMP_TRUNC(CURRENT_TIMESTAMP(), DAY), INTERVAL @windowDays DAY)
@@ -108,7 +120,11 @@ export async function fetchGcpBilling(
   try {
     const [rows] = await bq.query({
       query,
-      params: { scanDays: days + 7, windowDays: days + 1 },
+      params: {
+        scanDays: days + 7,
+        windowDays: days + 1,
+        devProject: DEV_PROJECT_ID,
+      },
       location: "US",
     });
 
@@ -120,6 +136,7 @@ export async function fetchGcpBilling(
       net_usd: number;
       gross_usd: number;
       reserved_usd: number | null;
+      dev_net_usd: number | null;
     }[]) {
       const entry = dailyMap.get(row.day) ?? {
         date: row.day,
@@ -127,6 +144,7 @@ export async function fetchGcpBilling(
         grossUsd: 0,
         llmNetUsd: 0,
         vertexReservedUsd: 0,
+        devNetUsd: 0,
       };
       entry.netUsd += row.net_usd;
       entry.services = entry.services ?? {};
@@ -135,6 +153,7 @@ export async function fetchGcpBilling(
       entry.grossUsd += row.gross_usd;
       entry.vertexReservedUsd =
         (entry.vertexReservedUsd ?? 0) + (row.reserved_usd ?? 0);
+      entry.devNetUsd = (entry.devNetUsd ?? 0) + (row.dev_net_usd ?? 0);
       const llm = isLlmService(row.service);
       if (llm) entry.llmNetUsd += row.net_usd;
       dailyMap.set(row.day, entry);
@@ -157,6 +176,7 @@ export async function fetchGcpBilling(
       d.grossUsd = round(d.grossUsd);
       d.llmNetUsd = round(d.llmNetUsd);
       d.vertexReservedUsd = round(d.vertexReservedUsd ?? 0);
+      d.devNetUsd = round(d.devNetUsd ?? 0);
     }
     const services = Array.from(serviceMap.values())
       .map((s) => ({ ...s, netUsd: round(s.netUsd) }))

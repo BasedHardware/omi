@@ -1,3 +1,11 @@
+// The shared HTTP layer for backend API calls (OAuth exchange is separate): auth header with a
+// five-minute expiry buffer and forced refresh, the standard request headers,
+// and the raw call path with retry and clock-skew handling.
+//
+// Token refresh and 401 retry are centralized here because per-caller token
+// handling produced divergent auth behavior, and while a custom API base URL
+// override is active the credential headers are stripped -- an override is a
+// hard boundary for Authorization and account-generation headers.
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -355,11 +363,16 @@ Future<http.StreamedResponse> makeRawApiCall({
     }
     var request = _buildStreamingRequest(url, builtHeaders, body, method, abortTrigger);
     var response = await send(request);
+    if (sessionSnapshot != null && !service.isSessionSnapshotCurrent(sessionSnapshot)) {
+      await _discardStaleResponse(response);
+      return _authUnavailableStreamedResponse();
+    }
     if (requireAuthCheck && response.statusCode == 401) {
       response = await refreshAndReplayAfter401(
         firstResponse: response,
         statusCode: (value) => value.statusCode,
         disposeUnauthorizedResponse: _drainStreamedResponse,
+        disposeStaleResponse: _discardStaleResponse,
         expireTerminalSession: signOutOn401,
         authService: service,
         sessionSnapshot: sessionSnapshot,
@@ -389,6 +402,9 @@ Future<http.StreamedResponse> makeRawApiCall({
       // The fence is in the body; read it once and hand the caller an
       // equivalent response.
       final materialized = await _materializeErrorResponse(response);
+      if (sessionSnapshot != null && !service.isSessionSnapshotCurrent(sessionSnapshot)) {
+        return _authUnavailableStreamedResponse();
+      }
       await _expireSessionIfAccountDeleted(materialized.statusCode, materialized.body, authService: service);
       return http.StreamedResponse(
         Stream<List<int>>.value(materialized.bodyBytes),
@@ -401,7 +417,9 @@ Future<http.StreamedResponse> makeRawApiCall({
     }
     return response;
   } on AuthTokenUnavailableException catch (e) {
-    await _handleAuthUnavailable(e, expireTerminalSession: signOutOn401);
+    if (sessionSnapshot == null || service.isSessionSnapshotCurrent(sessionSnapshot)) {
+      await _handleAuthUnavailable(e, expireTerminalSession: signOutOn401);
+    }
     Logger.debug('Authenticated raw request blocked before send: ${e.result.runtimeType}');
     return _authUnavailableStreamedResponse();
   }
@@ -421,6 +439,17 @@ http.Request _buildStreamingRequest(
     request.body = body;
   }
   return request;
+}
+
+Future<void> _discardStaleResponse(http.StreamedResponse response) async {
+  try {
+    final subscription = response.stream.listen(null, onError: (Object _, StackTrace __) {});
+    // Discarded bodies need no connection-reuse drain. Cancel immediately,
+    // and bound provider cleanup so a stalled stream cannot hold the caller.
+    await subscription.cancel().timeout(const Duration(seconds: 1));
+  } catch (e) {
+    Logger.debug('Failed to cancel stale response: ${e.runtimeType}');
+  }
 }
 
 Future<void> _drainStreamedResponse(http.StreamedResponse response) async {
@@ -515,6 +544,7 @@ Future<T> refreshAndReplayAfter401<T>({
   required Future<T> Function() replay,
   required bool expireTerminalSession,
   Future<void> Function(T response)? disposeUnauthorizedResponse,
+  Future<void> Function(T response)? disposeStaleResponse,
   AuthService? authService,
   void Function(AuthTokenResult refresh)? onAuthRefresh,
   AuthSessionSnapshot? sessionSnapshot,
@@ -551,7 +581,7 @@ Future<T> refreshAndReplayAfter401<T>({
       }
       if (sessionChanged()) {
         service.recordAuthenticatedRequest401(recovered: false, outcome: 'session_changed');
-        await disposeUnauthorizedResponse?.call(replayed);
+        await (disposeStaleResponse ?? disposeUnauthorizedResponse)?.call(replayed);
         return firstResponse;
       }
       final recovered = statusCode(replayed) != 401;

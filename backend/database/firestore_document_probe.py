@@ -72,6 +72,7 @@ from prometheus_client import Counter
 
 from database.firestore_tier_context import current_tier
 from database.firestore_read_origin import current_read_origin
+from database.privacy_check_metrics import current_read_caller as current_privacy_read_caller
 from utils.observability.firestore_request_reads import trace_request_reads
 
 logger = logging.getLogger(__name__)
@@ -359,6 +360,11 @@ _KNOWN_PATTERNS = frozenset(
     {
         'users',
         'users/conversations',
+        # Batch privacy authority rows and the fence's added token writes.
+        'users/deleted_conversations',
+        'batch_pipeline_privacy',
+        'legal_holds',
+        'legal_hold_deletion_gates',
         'users/memory_items',
         'users/memory_outbox',
         'users/memory_historical_overrides',
@@ -544,6 +550,9 @@ def call_site() -> str:
     label names the function that asked for the read.
     """
     try:
+        privacy_caller = current_privacy_read_caller()
+        if privacy_caller is not None:
+            return bound_caller(privacy_caller)
         frame = inspect.currentframe()
         frame = frame.f_back if frame is not None else None
         while frame is not None:

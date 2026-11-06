@@ -56,6 +56,9 @@ _DROP_FIELDS = frozenset(
         'policy',  # metadata, not part of the pre-E1 external behavior trace
         'policy_source',
         'policy_parts',
+        # Slice D's per-vendor attempt ledger (tokens, timings): metadata like 'policy'. Its rules
+        # are pinned by test_batch_provider_failover.py; provider_intent stays in the trace.
+        'provider_attempts',
         'segment_id',
         'segment_ids',
         'log_tail',

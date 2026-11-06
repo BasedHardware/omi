@@ -20,6 +20,8 @@ Provides shared executors with strict separation (bulkhead pattern):
   Firestore subcollections). Bulkheaded so bursts of account deletions cannot
   starve normal post-processing.
 - storage_executor: audio file precaching, GCS operations.
+- pinecone_shutdown: lazy single-worker mutation settlement, isolated from
+  provider calls and the event loop's default executor during termination.
 - cimd_executor: hosted-MCP OAuth client-metadata (CIMD) lookups — DNS,
   connect, and body reads to arbitrary unauthenticated-supplied hosts, all
   inside one hard monotonic deadline. Bulkheaded so hostile client_id floods
@@ -36,12 +38,14 @@ import asyncio
 import atexit
 import contextvars
 import functools
+import importlib
 import logging
 import os
 import queue
 import threading
 from collections import deque
 from concurrent.futures import Future, ThreadPoolExecutor
+from contextlib import contextmanager
 from typing import Any, Callable, Coroutine, Dict, List, ParamSpec, TypeVar, cast
 
 from prometheus_client import REGISTRY, Gauge
@@ -286,9 +290,25 @@ record_barrier_executor = MonitoredThreadPoolExecutor(
     thread_name_prefix="record-barrier",
 )
 llm_executor = MonitoredThreadPoolExecutor(name="llm", max_workers=6, thread_name_prefix="llm")
+# Batch policy HTTP leaves only; coordinators stay in async Pump code.
+admission_executor = MonitoredThreadPoolExecutor(name="admission", max_workers=4, thread_name_prefix="admission")
 stripe_executor = MonitoredThreadPoolExecutor(name="stripe", max_workers=4, thread_name_prefix="stripe")
 sync_executor = MonitoredThreadPoolExecutor(name="sync", max_workers=16, thread_name_prefix="sync")
-postprocess_executor = MonitoredThreadPoolExecutor(name="postprocess", max_workers=24, thread_name_prefix="postproc")
+# Optional per-window LID must not hold the shared sync coordination pool.
+# Bound outstanding calls; run_blocking awaits capacity without blocking a loop.
+record_language_executor = MonitoredThreadPoolExecutor(
+    name="record_language",
+    max_workers=4,
+    max_queue_size=8,
+    wait_on_saturation=True,
+    thread_name_prefix="record-language",
+)
+postprocess_executor = MonitoredThreadPoolExecutor(
+    name="postprocess",
+    # backend-integration raises this: its enrichment handler holds a thread per LLM-bound request.
+    max_workers=int(os.getenv('POSTPROCESS_EXECUTOR_WORKERS', '24')),
+    thread_name_prefix="postproc",
+)
 cleanup_executor = MonitoredThreadPoolExecutor(name="cleanup", max_workers=4, thread_name_prefix="cleanup")
 storage_executor = MonitoredThreadPoolExecutor(name="storage", max_workers=128, thread_name_prefix="storage")
 # Prompt-list verification may outlive its caller while a provider finishes.
@@ -322,7 +342,9 @@ _ALL_EXECUTORS = [
     record_barrier_executor,
     llm_executor,
     stripe_executor,
+    admission_executor,
     sync_executor,
+    record_language_executor,
     postprocess_executor,
     cleanup_executor,
     storage_executor,
@@ -361,6 +383,22 @@ def lifecycle_executor(uid: str, *, episode: bool = False) -> MonitoredThreadPoo
 
 _context_executor: MonitoredThreadPoolExecutor | None = None
 _context_executor_lock = threading.Lock()
+
+
+_pinecone_shutdown_executor: MonitoredThreadPoolExecutor | None = None
+_pinecone_shutdown_executor_lock = threading.Lock()
+
+
+def get_pinecone_shutdown_executor() -> MonitoredThreadPoolExecutor:
+    """One shutdown worker plus one retry slot; created only when draining."""
+    global _pinecone_shutdown_executor
+    with _pinecone_shutdown_executor_lock:
+        if _pinecone_shutdown_executor is None:
+            _pinecone_shutdown_executor = MonitoredThreadPoolExecutor(
+                name='pinecone_shutdown', max_workers=1, max_queue_size=1, thread_name_prefix='pinecone-shutdown'
+            )
+            _ALL_EXECUTORS.append(_pinecone_shutdown_executor)
+        return _pinecone_shutdown_executor
 
 
 def get_context_executor() -> MonitoredThreadPoolExecutor:
@@ -407,6 +445,56 @@ def after_db_call(callback: Callable[[], Coroutine[Any, Any, Any]]) -> bool:
     return True
 
 
+_future_tracker: contextvars.ContextVar['ExecutorFutureTracker | None'] = contextvars.ContextVar(
+    'executor_future_tracker', default=None
+)
+
+
+class ExecutorFutureTracker:
+    """Session-scoped completion proof, independent of caller cancellation.
+
+    Only selected pools are shielded. Completed futures are immediately removed,
+    so a long-lived socket retains neither results nor upload arguments.
+    """
+
+    def __init__(self, *pools):
+        self.pools = pools
+        self.pending: set[asyncio.Future] = set()
+
+    @contextmanager
+    def scope(self):
+        token = _future_tracker.set(self)
+        try:
+            yield
+        finally:
+            _future_tracker.reset(token)
+
+    async def wait(self):
+        # Call only after all submitting tasks have stopped. asyncio.wait never
+        # propagates this coordinator's cancellation into the underlying work.
+        while self.pending:
+            await asyncio.wait(list(self.pending))
+
+    def observe(self, executor, future):
+        if executor not in self.pools:
+            return False
+        self.pending.add(future)
+
+        def settled(done):
+            self.pending.discard(done)
+            if not done.cancelled():
+                done.exception()
+
+        future.add_done_callback(settled)
+        return True
+
+
+def track_executor_future(executor, future):
+    """Include direct metadata submissions in the same session completion proof."""
+    tracker = _future_tracker.get()
+    return tracker is not None and tracker.observe(executor, future)
+
+
 async def run_blocking(executor: ThreadPoolExecutor, fn: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> T:
     """Offload *fn* to *executor*, propagating ContextVars."""
     loop = asyncio.get_running_loop()
@@ -424,7 +512,7 @@ async def run_blocking(executor: ThreadPoolExecutor, fn: Callable[P, T], *args: 
                     raise
                 # Backpressure stays in the async caller, without occupying another worker.
                 await asyncio.sleep(0.05)
-        result = await future
+        result = await asyncio.shield(future) if track_executor_future(executor, future) else await future
     finally:
         if token is not None:
             _after_db.reset(token)
@@ -469,6 +557,18 @@ def _log_background_failure(name: str, future: "Future[Any]") -> None:
     if type(error).__name__ == 'DestructiveOperationInProgress':
         logger.info('background task %s deferred reason=destructive_operation', name)
         return
+    # A spent BYOK provider account (direct OpenRouter answers 402 'requires
+    # more credits') is user account state, not a defect: retries can never
+    # succeed and the provider's error body must not reach logs. The task body
+    # classified the raw provider error inside the propagated BYOK context
+    # (see _classify_byok_halt_in_context); the quota classification needs the
+    # request's validated key, and this callback thread has no task context.
+    # Logging the bounded class without a traceback keeps Error Reporting from
+    # grouping the account state as a crash at the openai SDK frame.
+    halt_class = getattr(error, 'omi_byok_halt_class', None)
+    if isinstance(halt_class, str) and halt_class:
+        logger.warning('background task %s halted reason=%s', name, halt_class)
+        return
     # A BYOK provider failure is the user's own provider account state, not a
     # server fault: one structured WARNING, never a traceback at ERROR.
     byok_class = _byok_detail_code(error)
@@ -483,6 +583,34 @@ def _log_background_failure(name: str, future: "Future[Any]") -> None:
     logger.error("background task %s failed: %s", name, error, exc_info=error)
 
 
+def _classify_byok_halt_in_context(fn: Callable[P, T]) -> Callable[P, T]:
+    """Run *fn* and, on failure, classify a raw BYOK quota halt while the
+    task's propagated contextvars (validated BYOK keys) are still live.
+
+    The conversation boundary answers the same classification as a typed 429;
+    tagging the exception here lets the done callback log the bounded halt
+    without a traceback. A server-key error (no validated key in context)
+    stays untagged and remains a loud server fault.
+    """
+
+    @functools.wraps(fn)
+    def run(*args: P.args, **kwargs: P.kwargs) -> T:
+        try:
+            return fn(*args, **kwargs)
+        except BaseException as error:
+            # Late-bound like merge_before_processing.py: executors sits below
+            # utils.byok in the import graph (see _byok_detail_code), so a
+            # static gateway_error_contract import would drag utils.cloud_tasks
+            # into the GPU worker runtime image closure.
+            gateway_error_contract = importlib.import_module('utils.llm.gateway_error_contract')
+
+            if gateway_error_contract.is_byok_quota_error(error):
+                setattr(error, 'omi_byok_halt_class', 'byok_quota')
+            raise
+
+    return run
+
+
 def submit_with_context(
     executor: ThreadPoolExecutor, fn: Callable[P, T], *args: P.args, **kwargs: P.kwargs
 ) -> Future[T]:
@@ -493,7 +621,7 @@ def submit_with_context(
     that do read the Future keep their own handling.
     """
     ctx = contextvars.copy_context()
-    future = executor.submit(ctx.run, fn, *args, **kwargs)
+    future = executor.submit(ctx.run, _classify_byok_halt_in_context(fn), *args, **kwargs)
     future.add_done_callback(functools.partial(_log_background_failure, getattr(fn, '__name__', repr(fn))))
     return future
 

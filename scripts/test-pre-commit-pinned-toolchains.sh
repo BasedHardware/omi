@@ -3,7 +3,13 @@ set -euo pipefail
 
 # Git hooks export their own repository environment. This fixture creates a
 # separate temporary repository, so it must not inherit that hook context.
-unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES
+# Do not pass a caller's repository selection to nested fixture Git commands.
+# GIT_NAMESPACE is repository-scoped but absent from Git's local-env-vars list.
+GIT_LOCAL_ENV_VARS="$(git rev-parse --local-env-vars)"
+for git_env_var in $GIT_LOCAL_ENV_VARS GIT_NAMESPACE; do
+  unset "$git_env_var"
+done
+unset GIT_LOCAL_ENV_VARS git_env_var
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 HOOK="$ROOT/scripts/pre-commit"
@@ -139,6 +145,43 @@ done
 STUB
   chmod +x "$STUBS/flutter" "$STUBS/dart"
 }
+
+make_clang_format_stub() {
+  cat >"$STUBS/clang-format" <<STUB
+#!/bin/sh
+if [ "\$1" = "--version" ]; then
+  echo "$1"
+  exit 0
+fi
+for arg in "\$@"; do
+  case "\$arg" in
+    *.c|*.cpp|*.cc|*.cxx|*.h|*.hpp) printf 'CLANG_FORMATTED\n' >"\$arg" ;;
+  esac
+done
+STUB
+  chmod +x "$STUBS/clang-format"
+}
+
+# PATH without the host's clang-format, so the missing-formatter case stays
+# deterministic even where a real clang-format is installed (stubs shadow it
+# elsewhere; here nothing may fall through to the host toolchain). Resolve
+# tools outside PATH-manager wrappers: the managed git shim needs realpath and
+# dirname on PATH, so prefer the system toolchain like CI's runner has.
+minimal_tool() {
+  for candidate in "/usr/bin/$1" "/bin/$1" "$(command -v "$1" 2>/dev/null)"; do
+    if [ -n "$candidate" ] && [ -x "$candidate" ]; then
+      printf '%s\n' "$candidate"
+      return
+    fi
+  done
+  echo "cannot resolve $1 for the minimal PATH fixture" >&2
+  exit 1
+}
+MINIMAL_BIN="$TMPDIR/minimal-bin"
+mkdir -p "$MINIMAL_BIN"
+for hook_tool in sh git python3 sed grep head xargs cat; do
+  ln -s "$(minimal_tool "$hook_tool")" "$MINIMAL_BIN/$hook_tool"
+done
 
 make_black_stub() {
   cat >"$STUBS/black" <<'STUB'
@@ -384,5 +427,25 @@ run_hook >/dev/null
 test "$(cat "$REPO/backend/example.py")" = "PYTHON_FORMATTED"
 git -C "$REPO" diff --exit-code -- backend/example.py >/dev/null
 git -C "$REPO" diff --cached -- backend/example.py | grep -q 'PYTHON_FORMATTED'
+
+# --- Firmware C: CI's Formatting check uses clang-format 18, so a missing
+# formatter or any other major must refuse and leave the staged bytes
+# untouched; 18 formats and re-stages (the safe_mode.c churn hazard) ---
+git -C "$REPO" reset -q --hard
+mkdir -p "$REPO/omi/firmware/omi/src"
+printf 'void boot(void) { fail = (struct boot_info){0}; }\n' >"$REPO/omi/firmware/omi/src/safe_mode.c"
+git -C "$REPO" add omi/firmware/omi/src/safe_mode.c
+rm -f "$STUBS/clang-format"
+expect_refusal "no clang-format on PATH" PATH="$MINIMAL_BIN"
+test "$(cat "$REPO/omi/firmware/omi/src/safe_mode.c")" = "void boot(void) { fail = (struct boot_info){0}; }"
+make_clang_format_stub "Homebrew clang-format version 23.1.1"
+expect_refusal "clang-format major mismatch"
+test "$(cat "$REPO/omi/firmware/omi/src/safe_mode.c")" = "void boot(void) { fail = (struct boot_info){0}; }"
+make_clang_format_stub "clang-format version 18.1.8"
+run_hook >/dev/null
+grep -q 'CLANG_FORMATTED' "$REPO/omi/firmware/omi/src/safe_mode.c"
+git -C "$REPO" diff --cached -- omi/firmware/omi/src/safe_mode.c | grep -q 'CLANG_FORMATTED'
+git -C "$REPO" reset -q --hard
+rm -f "$STUBS/clang-format"
 
 echo "pre-commit pinned-toolchain refusal tests passed"

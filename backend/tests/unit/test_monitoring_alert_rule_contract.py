@@ -5,6 +5,8 @@ import re
 from pathlib import Path
 
 import yaml
+from prometheus_client import CollectorRegistry
+from utils.lifecycle_metrics import PhaseMetrics
 
 REPO = Path(__file__).resolve().parents[3]
 MONITORING = REPO / "backend/charts/monitoring"
@@ -92,6 +94,38 @@ def _all_rule_exports() -> dict[str, dict[str, dict]]:
         "combined": _rules(MONITORING / "alert-rules.json"),
         "split": _split_rules(),
     }
+
+
+def test_batch_queue_safety_has_a_two_hour_page_and_a_separate_incomplete_scan_page():
+    for export_name, rules in _all_rule_exports().items():
+        assert 'omi-batch-queue-uncommitted-2h' not in rules
+        late = rules['omi-batch-unit-unpublished-2h']
+        nodes = {node['refId']: node for node in late['data']}
+        assert nodes['D']['model']['expression'] == '($A > 7200 && $B < 900) || ($C > 7200 && $F < 120)', export_name
+        selector = '{namespace="prod-omi-backend"}'
+        assert nodes['A']['model']['expr'] == (
+            'max(omi_batch_timeliness_new_oldest_age_seconds'
+            '{leg=~"uncommitted|quarantined|assignment_held|projection"} >= 0) or vector(0)'
+        )
+        assert nodes['B']['model']['expr'] == '(time() - max(omi_batch_timeliness_observed_at_seconds)) or vector(1e9)'
+        assert nodes['C']['model']['expr'] == f'max(omi_batch_pipeline_oldest_age_seconds{selector} >= 0) or vector(0)'
+        assert (
+            nodes['F']['model']['expr']
+            == f'max(time() - omi_batch_pipeline_metrics_refreshed_at_seconds{selector}) or vector(1e9)'
+        )
+        blind = rules['omi-batch-queue-safety-blind']
+        expr = blind['data'][0]['model']['expr']
+        assert expr == (
+            f'((max(time() - omi_batch_pipeline_metrics_refreshed_at_seconds{selector}) >= bool 120) or vector(1))'
+            f' + (count(count by (priority) (omi_batch_pipeline_oldest_age_seconds{selector} != omi_batch_pipeline_oldest_age_seconds{selector})) or vector(0))'
+            f' + (count(count by (priority) (omi_batch_pipeline_retry_age_seconds{selector} != omi_batch_pipeline_retry_age_seconds{selector})) or vector(0))'
+        )
+        for rule in (late, blind):
+            assert rule['for'] == '5m'
+            assert rule['labels']['tier'] == 'page'
+            assert rule['labels']['audience'] == 'human'
+            assert rule['notification_settings']['receiver'] == 'Omi - Services Alerting (Telegram)'
+            assert not rule['notification_settings']['mute_time_intervals']
 
 
 def test_pusher_db_saturation_sums_task_kinds_and_tracks_configured_capacity():
@@ -1268,6 +1302,12 @@ EXTERNAL_ALERT_METRICS = {
         "prometheus-stackdriver-exporter"
     ),
     "stackdriver_monitoring_last_scrape_error": "prometheus-stackdriver-exporter",
+    # Cloud Logging declarations, queried directly through GMP (never the local exporter).
+    "logging_googleapis_com:user_omi_pipeline_upload_admission_503": "batch-projection/log-metrics.json",
+    "logging_googleapis_com:user_omi_pipeline_firestore_contention_exhausted": "batch-projection/log-metrics.json",
+    "logging_googleapis_com:user_omi_pipeline_owner_drain_advanced_count": "batch-projection/log-metrics.json",
+    "logging_googleapis_com:user_omi_pipeline_owner_drain_advanced_sum": "batch-projection/log-metrics.json",
+    "logging_googleapis_com:user_omi_pipeline_owner_drain_claim_busy": "batch-projection/log-metrics.json",
     # deepgram self-hosted deployment exporter
     "engine_stream_latency_bucket": "deepgram self-hosted deployment exporter",
 }
@@ -1337,7 +1377,7 @@ _PROMQL_KEYWORDS = frozenset(
         "timestamp",
     }
 )
-_PROMQL_GROUP_CLAUSE = re.compile(r"\b(?:by|on|without|group_left|group_right)\s*\([^)]*\)")
+_PROMQL_GROUP_CLAUSE = re.compile(r"\b(?:by|on|ignoring|without|group_left|group_right)\s*\([^)]*\)")
 _HISTOGRAM_SUFFIXES = ("_bucket", "_sum", "_count")
 
 
@@ -1347,7 +1387,14 @@ def _declared_backend_metric_names() -> set[str]:
         text = str(path)
         if "/tests/" in text or "/testing/" in text or "/.venv/" in text:
             continue
-        names |= set(_METRIC_DECLARATION.findall(path.read_text(encoding="utf-8", errors="ignore")))
+        source = path.read_text(encoding="utf-8", errors="ignore")
+        names |= set(_METRIC_DECLARATION.findall(source))
+        # Resolve the bounded lifecycle helper's literal prefixes through its
+        # real collector, rather than allowlisting names no producer emits.
+        for prefix in re.findall(r"PhaseMetrics\(\s*['\"]([a-zA-Z0-9_:]+)['\"]", source):
+            registry = CollectorRegistry()
+            PhaseMetrics(prefix, ['state'], registry=registry)
+            names.update(metric.name for metric in registry.collect())
         if path == REPO / 'backend/utils/executors.py':
             # This helper constructs/reuses registered Gauge objects with fixed names.
             names |= set(re.findall(r"_gauge\(\s*['\"]([a-zA-Z0-9_:]+)['\"]", path.read_text(encoding='utf-8')))
@@ -1959,3 +2006,186 @@ def test_sync_failure_reason_and_firestore_commit_exhaustion_alerts():
         assert "Commit" in filters and "RESOURCE_EXHAUSTED" in filters, export_name
         assert fs["data"][2]["model"]["expression"] == "$B > 10", export_name
         assert fs["for"] == "5m", export_name
+
+
+def test_backfill_queue_wait_warning_uses_dispatched_histogram_and_sustained_p95():
+    for rules in _all_rule_exports().values():
+        rule = rules['omi-sync-backfill-queue-wait-high']
+        assert rule['data'][0]['datasourceUid'] == 'gmp-cloud-run'
+        assert rule['data'][0]['model']['expr'] == (
+            'histogram_quantile(0.95, sum by (le) (rate(omi_sync_queue_wait_seconds_bucket{'
+            'project_id="based-hardware",cluster="__run__",job="omi-cloud-run-application-metrics",'
+            'namespace=~"backend-sync|backend-sync-backfill",lane="backfill"}[30m])))'
+        )
+        assert rule['data'][1]['model']['expression'] == '$A > 1800'
+        assert rule['for'] == '30m' and rule['labels']['severity'] == 'warning'
+        assert rule['noDataState'] == 'OK' and not rule['isPaused']
+        assert rule['labels']['owner'] == 'planscost'
+        assert rule['notification_settings'] == {
+            'receiver': 'Omi - Services Alerting (Telegram)',
+            'group_by': ['alertname'],
+            'group_wait': '5m',
+            'group_interval': '1h',
+            'repeat_interval': '24h',
+            'mute_time_intervals': ['omi-tier-silent'],
+        }
+
+
+def test_finalization_latched_states_have_dwell_stock_and_daily_loss_alerts():
+    specs = {
+        'omi-finalization-byok-dwell-info': (
+            'max(listen_finalization_oldest_blocked_byok_age_seconds)',
+            259200,
+            'agent',
+            '15m',
+        ),
+        'omi-finalization-dead-letter-stock': (
+            'max(listen_finalization_jobs{status="dead_letter"})',
+            1000,
+            'agent',
+            '15m',
+        ),
+        'omi-finalization-dead-letter-age': (
+            'max(listen_finalization_oldest_dead_letter_age_seconds)',
+            604800,
+            'agent',
+            '15m',
+        ),
+        'omi-finalization-byok-abandoned': (
+            'max(listen_finalization_byok_session_abandoned_last_24h)',
+            0,
+            'agent',
+            '0s',
+        ),
+    }
+    for export_name, rules in _all_rule_exports().items():
+        for uid, (expr, threshold, tier, pending) in specs.items():
+            rule = rules[uid]
+            assert rule['data'][0]['model']['expr'] == expr, (export_name, uid)
+            assert rule['data'][0]['datasourceUid'] == 'prometheus'
+            assert rule['data'][2]['model']['conditions'][0]['evaluator'] == {'params': [threshold], 'type': 'gt'}
+            assert rule['for'] == pending
+            assert rule['noDataState'] == 'NoData'
+            assert rule['execErrState'] == 'KeepLast'
+            assert not rule['isPaused']
+            assert rule['labels'] == {
+                'severity': 'critical' if tier == 'page' else 'warning',
+                'instatus_component': 'speech-processing',
+                'alert_identity': uid,
+                'component': 'speech-processing',
+                'impact': 'user-experience',
+                'tier': tier,
+                'audience': 'human' if tier == 'page' else 'agent',
+                'owner': 'two-lane-lead',
+            }
+            assert rule['annotations']['runbook'] == 'backend/docs/listen_finalization_jobs.mdx'
+            assert rule['annotations']['safe_next_action']
+            assert rule['notification_settings']['receiver'] == 'Omi - Services Alerting (Telegram)'
+            assert ('mute_time_intervals' in rule['notification_settings']) == (tier != 'page')
+
+
+def test_lifecycle_pages_use_new_cohorts_freshness_and_imported_blind_companions():
+    specs = {
+        'omi-record-pending-dwell': ('omi_batch_record_pending', '', 7200, '10m'),
+        'omi-enrichment-fresh-dwell': ('omi_enrichment_obligation', '{lane="fresh"}', 3600, '10m'),
+        'omi-finalization-byok-dwell-page': ('omi_finalization_byok', '', 259200, '1h'),
+    }
+    gate = set(json.loads((MONITORING / 'live-alert-gate.json').read_text())['uids'])
+    for rules in _all_rule_exports().values():
+        for uid, (prefix, selector, threshold, pending) in specs.items():
+            freshness = 900 if prefix == 'omi_batch_record_pending' else 1200
+            page = rules[uid]
+            assert page['data'][0]['model']['expr'] == (
+                f'max({prefix}_new_oldest_age_seconds{selector} and ignoring(state, lane) '
+                f'(time() - {prefix}_observed_at_seconds < {freshness}))'
+            )
+            assert page['data'][2]['model']['conditions'][0]['evaluator']['params'] == [threshold]
+            assert page['for'] == pending
+            assert page['noDataState'] == 'OK'
+            assert page['labels']['tier'] == 'page'
+            if prefix != 'omi_finalization_byok':
+                assert '2026-11-04T09:27Z' in page['annotations']['scope']
+            assert not page['notification_settings']['mute_time_intervals']
+            for suffix in ('', '-stale', '-blind'):
+                rule = rules[uid + suffix]
+                assert rule['uid'] in gate
+                assert rule['annotations']['evidence_date'] == '2026-11-04'
+                assert rule['annotations']['intended_final_threshold']
+                if suffix:
+                    assert rule['labels']['tier'] == 'agent'
+                    assert rule['noDataState'] == 'Alerting'
+                    assert prefix in rule['data'][0]['model']['expr']
+    assert 'omi-record-nojob-dwell' not in gate
+    assert {'omi-record-nojob-stock', 'omi-record-nojob-blind', 'omi-finalization-dead-letter-stock'} <= gate
+
+
+def test_pair_page_uses_recent_jobs_and_stock_stays_agent_tier():
+    gate = set(json.loads((MONITORING / 'live-alert-gate.json').read_text())['uids'])
+    ids = {
+        'omi-finalization-pair-drift',
+        'omi-finalization-pair-stock',
+        'omi-finalization-pair-drift-stale',
+        'omi-finalization-pair-drift-blind',
+        'omi-enrichment-summary-repair-stock',
+        'omi-enrichment-repair-stock-stale',
+    }
+    assert ids <= gate
+    for rules in _all_rule_exports().values():
+        page = rules['omi-finalization-pair-drift']
+        assert page['data'][0]['model']['expr'] == (
+            'max((sum without(kind) (omi_finalization_pair_new_mismatch)) and '
+            'topk by(leg) (1, omi_finalization_pair_observed_at_seconds) and '
+            '(time() - omi_finalization_pair_observed_at_seconds < 2100))'
+        )
+        assert page['data'][2]['model']['conditions'][0]['evaluator']['params'] == [25]
+        assert page['for'] == '30m' and page['noDataState'] == 'OK'
+        assert page['labels']['tier'] == 'page'
+        assert not page['notification_settings']['mute_time_intervals']
+        assert '2026-11-04T09:27Z' in page['annotations']['scope']
+        assert 'job.created_at' in page['annotations']['scope']
+        assert rules['omi-finalization-pair-drift-stale']['data'][0]['model']['expr'] == (
+            '(time() - min(max by(leg) (omi_finalization_pair_observed_at_seconds))) or vector(1e9)'
+        )
+        for uid in ids:
+            rule = rules[uid]
+            assert rule['annotations']['evidence_date'] == '2026-11-04'
+            assert rule['annotations']['intended_final_threshold']
+            if uid != page['uid']:
+                assert rule['labels']['tier'] == 'agent'
+                assert rule['notification_settings']['mute_time_intervals'] == ['omi-tier-silent']
+            if uid.endswith(('-stale', '-blind')):
+                assert rule['noDataState'] == 'Alerting'
+        stock = rules['omi-finalization-pair-stock']
+        assert stock['data'][0]['model']['expr'] == (
+            'max((sum without(kind) (omi_finalization_pair_mismatch)) and '
+            'topk by(leg) (1, omi_finalization_pair_observed_at_seconds))'
+        )
+        assert rules['omi-finalization-pair-drift-blind']['data'][0]['model']['expr'] == (
+            'max(omi_finalization_pair_scan_truncated and '
+            'topk by(leg) (1, omi_finalization_pair_observed_at_seconds) and '
+            '(time() - omi_finalization_pair_observed_at_seconds < 2100)) or vector(1)'
+        )
+        repair = rules['omi-enrichment-summary-repair-stock']
+        assert repair['data'][0]['model']['expr'] == 'max(omi_enrichment_summary_repair_count)'
+        assert repair['data'][2]['model']['conditions'][0]['evaluator']['params'] == [100]
+        assert 'not retry attempts or a retry cap' in repair['annotations']['scope']
+
+
+def test_held_dead_letter_volume_is_agent_only_and_uses_reasoned_stock_plus_unique_expiry_rate():
+    for export_name, rules in _all_rule_exports().items():
+        rule = rules['omi-batch-held-expired-volume']
+        nodes = {node['refId']: node['model'] for node in rule['data']}
+        assert nodes['A']['expr'] == (
+            'max(omi_batch_held_expired_units and '
+            '(time() - omi_batch_held_expired_observed_at_seconds < 900)) or vector(0)'
+        ), export_name
+        assert nodes['B']['expr'] == 'sum(increase(omi_batch_held_expired_total[30m])) or vector(0)'
+        assert nodes['C']['expr'] == '(time() - max(omi_batch_held_expired_observed_at_seconds)) or vector(1e9)'
+        assert nodes['D']['expression'] == '($A > 100 && $C < 900) || $B > 10'
+        assert rule['labels']['tier'] == rule['labels']['audience'] == 'agent'
+        assert rule['notification_settings']['mute_time_intervals'] == ['omi-tier-silent']
+        assert rule['for'] == '5m' and not rule['isPaused']
+        assert 'legacy' in rule['annotations']['scope']
+        assert 'projection_state=quarantine_held with held_expired_reason=held_expired' in rule['annotations']['scope']
+        assert 'restorable' in rule['annotations']['safe_next_action']
+        assert 'Never delete' in rule['annotations']['safe_next_action']

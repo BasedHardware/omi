@@ -1,3 +1,13 @@
+"""Synchronous enrichment coordinator for a completed conversation: structuring,
+summary, memories, action items, and app/goal triggers.
+
+A ProcessingTrigger (default CAPTURE_END) selects the PROCESSING_MODES row that
+fixes run-now, reprocess, first-open bypass and relevance policy, and expensive child
+work fans out to the named executor lanes instead of running inline. The managed
+vs custom-STT credit gates sit here so one path cannot bill the wrong budget
+(backend/utils/conversations/ARCHITECTURE.md).
+"""
+
 from utils import funded_processing
 from utils.sync import processing_hold
 from utils.conversations.summary_delivery import PROCESS_CONTEXT
@@ -80,14 +90,16 @@ from utils.conversations.minimum_derived import is_server_minimum
 from utils.llm.output_language import normalize_language, resolve_output_language
 from utils.conversations.deterministic_minimum import (
     build_deterministic_minimum_structured,
+    build_deferred_structured,
     deterministic_minimum_title,
 )
 from utils.conversations.duration import conversation_duration_seconds
 from utils.conversations.duplicate_capture import link_duplicate_captures
 from utils.conversations.sync_hold_completion import complete_explicit, defer_held_budget_denial
 from utils.conversations.merge_before_processing import before_notes, ConversationAbsorbed
-from utils.conversations.processing_trigger import is_recovery_trigger
-from utils.conversations.processing_trigger import PROCESSING_MODES, ProcessingTrigger
+from utils.enrichment.admission import SyncConversationPersistenceFenced
+from utils.enrichment import early_abort
+from utils.conversations.processing_trigger import PROCESSING_MODES, ProcessingTrigger, is_recovery_trigger
 from utils.conversations.recovery import (
     RECOVERY_QUIET_MINIMUM_MAX_WORDS,
     RecoveryStructureUnavailableError,
@@ -119,6 +131,7 @@ from utils.conversations.relevance_io import (
     emit_recorded_decision,
     record_decision,
     rules_only_relevance,
+    short_clip_relevance,
     occasion_retention,
 )
 from utils.conversations.factory import deserialize_conversation
@@ -141,7 +154,7 @@ from utils.conversations.owner_attribution import (
     quote_source_attribution,
     explicitly_self_referential,
 )
-from utils.conversations.speaker_resolution import resolve_speakers_for_processing
+from utils.conversations.processing_speakers import resolve_speakers_for_processing
 from utils.observability.owner_identity_retry import identity_pass
 from utils.memory.memory_service import MemoryService
 from utils.memory.decision_path_telemetry import (
@@ -168,11 +181,7 @@ from utils.observability.finalization import FinalizationFailureReason, record_f
 from utils.product_telemetry import emit_product_event
 from utils.release_probe import is_release_probe_uid
 from utils.task_intelligence.workstream_association import associate_canonical_evidence
-from utils.subscription import (
-    is_trial_paywalled,
-    should_defer_desktop_processing,
-    should_skip_omi_paid_postprocessing,
-)
+from utils.subscription import should_defer_desktop_processing, should_skip_omi_paid_postprocessing
 from utils.free_tier_processing_policy import client_summaries_at_cap_enabled
 
 # The injected ``decision_for`` closure and its funding-owner resolution live in
@@ -189,6 +198,7 @@ from models.structured import Structured  # type: ignore[reportAttributeAccessIs
 from utils.notifications import send_important_conversation_message
 from models.task import Task, TaskStatus, TaskAction, TaskActionProvider
 from models.notification_message import NotificationMessage
+from utils.default_summary_template import DEFAULT_SUMMARY_APP_ID, default_summary_app
 from utils.apps import get_available_app_model_by_id, get_available_apps, update_persona_prompt
 from utils.executors import llm_executor, postprocess_executor, submit_with_context
 from utils.llm.conversation_processing import (
@@ -376,6 +386,7 @@ def _get_structured(
     open_loop_out: Optional[dict[str, Any]] = None,
     meeting_context_override: Optional[CalendarMeetingContext] = None,
     finalization_fence: tuple[str, int, int] | None = None,
+    revision_checkpoint: Optional[Callable[[str], None]] = None,
 ) -> Tuple[Structured, bool]:
     try:
         if is_recovery_trigger(trigger) and not recovery_transcript_decoded:
@@ -400,13 +411,7 @@ def _get_structured(
         task_intelligence_capture = _proposes_task_candidates(conversation)
         tz: Optional[str] = notification_db.get_user_time_zone(uid)
         tz_str: str = tz or ''
-        user_language = (
-            resolve_output_language(uid, language_code)
-            if serving_for('NOTES_PACKET_V2_MODE', uid)
-            else normalize_language(users_db.get_user_language_preference(uid))
-            or normalize_language(language_code)
-            or 'en'
-        )
+        user_language = resolve_output_language(uid, language_code, getattr(conversation, 'transcript_segments', None))
         summary_app_selected = selected_summary_app(uid, summary_app_selected, redis_db.get_user_preferred_app)
         minimum = quiet_minimum(
             uid,
@@ -416,11 +421,12 @@ def _get_structured(
             summary_app_selected=summary_app_selected,
         )
         if minimum is not None:
+            decision = short_clip_relevance(uid, conversation, trigger, _calendar_overlap_retains_conversation)
             if relevance_observer is not None:
-                relevance_observer(RelevanceDecision('keep', 'rule', 'content_below_floor', trigger))
-            if is_recovery_trigger(trigger) and recovery_minimum_fallback_observer is not None:
+                relevance_observer(decision)
+            if not decision.discard and is_recovery_trigger(trigger) and recovery_minimum_fallback_observer is not None:
                 recovery_minimum_fallback_observer()
-            return minimum, False
+            return minimum, decision.discard
         prompt_conversation_id = (
             conversation_id
             or getattr(conversation, 'id', None)
@@ -452,6 +458,10 @@ def _get_structured(
             conversation.source == ConversationSource.workflow
             or conversation.source == ConversationSource.external_integration
         ):
+            if relevance_observer is not None:
+                # Text integrations bypass transcript relevance intentionally;
+                # record that authorized policy instead of an empty verdict.
+                relevance_observer(RelevanceDecision('keep', 'policy', 'external_text_default', trigger))
             ext_conv = conversation
             started_at = cast(datetime, ext_conv.started_at)
             if ext_conv.text_source == ExternalIntegrationConversationSource.audio:
@@ -642,6 +652,9 @@ def _get_structured(
         if decision.discard:
             return Structured(emoji=random.choice(['🧠', '🎉'])), True
 
+        if revision_checkpoint is not None:
+            # A newer sync revision owns this conversation; stop before the notes agent (the dominant LLM call).
+            revision_checkpoint('pre_notes')
         before_notes(uid, main_conv, trigger, finalization_fence=finalization_fence)
 
         conv_started_at = cast(datetime, main_conv.started_at)
@@ -696,12 +709,15 @@ def _get_structured(
             )
         validate_structured_source_segment_ids(structured, transcript_segment_ids)
         return structured, False
-    except ConversationAbsorbed:
+    except (ConversationAbsorbed, SyncConversationPersistenceFenced):
         raise
     except Exception as e:
         if funded_processing.enabled(uid, 'batch') and _is_funded_budget_denial(e):
             raise
         raise conversation_processing_http_exception(e) from e
+
+
+get_structured = _get_structured
 
 
 def _get_conversation_obj(
@@ -794,7 +810,11 @@ def trigger_conversation_apps(
     if is_server_minimum(conversation) and not (app_id or first_party_only):
         return True
     if serving_for('NOTES_PACKET_V2_MODE', uid):
-        language_code = resolve_output_language(uid, normalize_language(conversation.language) or language_code)
+        language_code = resolve_output_language(
+            uid,
+            normalize_language(conversation.language) or language_code,
+            getattr(conversation, 'transcript_segments', None),
+        )
     else:
         # The legacy branch never resolved: a 'multi' capture tag reached app prompts verbatim.
         language_code = normalize_language(conversation.language) or normalize_language(language_code) or 'en'
@@ -824,7 +844,9 @@ def trigger_conversation_apps(
     else:
         # Summarization apps are opt-in: only a usable preferred app runs automatically.
         preferred_app_id = redis_db.get_user_preferred_app(uid)
-        if preferred_app_id and preferred_app_id in all_apps_dict:
+        if preferred_app_id == DEFAULT_SUMMARY_APP_ID:
+            app_to_run = default_summary_app()
+        elif preferred_app_id and preferred_app_id in all_apps_dict:
             app_to_run = cast(App, all_apps_dict.get(preferred_app_id))
             logger.info(f"Using user's preferred app: {app_to_run.name} (id: {preferred_app_id})")
         elif preferred_app_id:
@@ -925,7 +947,7 @@ def trigger_conversation_apps(
             )
             if not persisted:
                 raise RuntimeError('conversation disappeared while persisting app result')
-        if usage_attribution in {
+        if app.id != 'omi-default-summary' and usage_attribution in {
             AppUsageAttribution.AUTOMATIC_PROCESSING,
             AppUsageAttribution.EXPLICIT_SELECTION,
         }:
@@ -2227,24 +2249,6 @@ def _update_personas_async(uid: str):  # type: ignore[reportUnusedFunction]  # r
         logger.info(f"[PERSONAS] Finished persona updates in background thread for uid={uid}")
 
 
-def _build_deferred_structured(
-    conversation: Union[Conversation, CreateConversation, ExternalIntegrationCreateConversation],
-) -> Structured:
-    """A cheap, no-LLM placeholder Structured for a lazily-deferred conversation. The title is
-    the first few words of the transcript so the conversation list stays usable until the user
-    opens it (which triggers the real enrichment). A non-empty title is required — an empty one
-    marks the conversation discarded in `_get_conversation_obj`."""
-    text = ''
-    for seg in list(getattr(conversation, 'transcript_segments', None) or []):
-        seg_text = (getattr(seg, 'text', '') or '').strip()
-        if seg_text:
-            text = seg_text
-            break
-    words = text.split()
-    title = ' '.join(words[:8]).strip() if words else ''
-    return Structured(title=title or 'Recording')
-
-
 def _attach_client_projection(conversation: Conversation, client_projection: ClientProcessing | None) -> None:
     """Stamp a validated display projection on the server-authored conversation.
 
@@ -2281,7 +2285,7 @@ def _store_budget_waiting(uid, conversation, *, client_projection=None):
     initial = _is_ingress_create(conversation)
     estimate = defer_estimate(conversation)
     # Model-free title only; preserve every transcript and external text field.
-    structured = _build_deferred_structured(conversation)
+    structured = build_deferred_structured(conversation)
     result = _get_conversation_obj(uid, structured, conversation, relevance_discarded=False)
     effective_projection = (
         client_projection
@@ -2327,7 +2331,7 @@ def _store_deferred_conversation(
             uid, getattr(conversation, 'started_at', None), getattr(conversation, 'finished_at', None)
         ),
     )
-    structured = _build_deferred_structured(conversation)
+    structured = build_deferred_structured(conversation)
     conversation = _get_conversation_obj(uid, structured, conversation)
     _attach_client_projection(conversation, client_projection)
     conversation.deferred = True
@@ -2655,12 +2659,17 @@ def process_conversation(
             except Exception:
                 return
 
+    final_pass_settlements: list[Callable[[bool], None]] = []
+
     def report_persistence(
         current: bool,
         *,
         completed: Conversation | None = None,
         derived_effects: DerivedEffectsDisposition = DerivedEffectsDisposition.RUN,
     ) -> None:
+        for settle in final_pass_settlements:
+            settle(current)
+        final_pass_settlements.clear()
         if current and completed is not None:
             record_capture_loss(completed)
             _observe_owner_recognition_completion(completed)
@@ -2705,38 +2714,6 @@ def process_conversation(
     probe_uid = is_release_probe_uid(uid)
     if probe_uid:
         logger.info('release probe: desktop post-processing exemption active uid=%s', uid)
-    # Trial paywall: skip ALL post-processing (summaries, memories, action
-    # items, embeddings, app integrations) for paywalled desktop users.
-    # Without this, any segments that did get through before the trial gate
-    # (e.g. buffered transcripts, retroactive `/v1/conversations` create) still
-    # trigger expensive LLM + Pinecone work.
-    #
-    # `conversation.source` carries the originating client (desktop / omi / etc).
-    # Non-desktop sources flow through untouched — paywall is desktop-only.
-    if (
-        hasattr(conversation, 'source')
-        and conversation.source == ConversationSource.desktop
-        and not probe_uid
-        and is_trial_paywalled(uid, 'macos')
-    ):
-        logger.info(
-            "trial paywall: skipping post-processing for uid=%s conv=%s source=desktop",
-            uid,
-            getattr(conversation, 'id', '?'),
-        )
-        # Return the conversation as-is with no LLM work performed. If it has
-        # a status field, mark it processed so the client doesn't show a stuck
-        # "processing" state forever.
-        if isinstance(conversation, Conversation):
-            try:
-                conversation.status = ConversationStatus.completed
-            except Exception:
-                pass
-        report_persistence(False)
-        return cast(Conversation, conversation)
-
-    # Denied/unchosen backlog work returned above. Successful explicit enrichment
-    # also clears no-effects markers left by the retired terminal policy.
     clear_stale_terminal_marker = backlog_authorized or force_process or is_reprocess
     # Lazy desktop processing (freemium cost cut): desktop users without a desktop-entitled
     # paid plan (basic / Neo) get ONLY the raw transcript on capture. The expensive LLM
@@ -2800,7 +2777,11 @@ def process_conversation(
         meeting_context_override = _enrich_meeting_context(uid, conversation)
     # Everything below reads speaker_id as one voice; capture only guarantees that per piece.
     with identity_pass(None if already_observed else 'first'):
-        speaker_receipt_applied = False if silent_backfill else resolve_speakers_for_processing(uid, conversation)
+        speaker_receipt_applied = (
+            False
+            if silent_backfill
+            else resolve_speakers_for_processing(uid, conversation, on_persist=final_pass_settlements.append)
+        )
     if speaker_receipt_observer is not None:
         speaker_receipt_observer(speaker_receipt_applied)
 
@@ -2820,6 +2801,7 @@ def process_conversation(
         nonlocal recovery_minimum_fallback
         recovery_minimum_fallback = True
 
+    revision_checkpoint = early_abort.checkpoint_for(uid, conversation)
     structured, discarded = _get_structured(
         uid,
         language_code,
@@ -2836,7 +2818,12 @@ def process_conversation(
         open_loop_out=open_loop_sink,
         meeting_context_override=meeting_context_override,
         finalization_fence=finalization_fence,
+        revision_checkpoint=revision_checkpoint,
     )
+    if revision_checkpoint is not None:
+        # The notes agent ran for minutes; a sync write that landed meanwhile makes the persist fence refuse
+        # this result anyway. Stop before the persist and the apps/memories LLM work it would trigger.
+        revision_checkpoint('pre_persist')
     if recovery_minimum_fallback:
         sys.stdout.write(
             json.dumps(
@@ -2929,6 +2916,9 @@ def process_conversation(
         # Rollback keeps generating normally; clear server-only checkpoints in
         # this existing write so they cannot describe replacement outputs.
         payload.update({NOTES_HASH: None, NOTES_OUTPUT_HASH: None, L1_HASH: None})
+    notes_identity = getattr(structured, '_notes_identity', None)
+    if notes_identity is not None and not conversation.discarded:
+        payload['_notes_identity'] = notes_identity
     if relevance is not None:
         # Server-side audit record, deliberately outside the client wire model.
         payload[RELEVANCE_DECISION_FIELD] = relevance.as_record()

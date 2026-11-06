@@ -19,9 +19,17 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from models.recording_speakers import (
+    RecordingSpeakerRequest,
+    RecordingSpeakerResponse,
+    RecordingSpeakerConflict,
+    RecordingSpeakerLimit,
+)
 
-from config.episodes import APP_CHANNEL_HEADER, app_channel, client_channel_admitted, episodes_enabled_for
+from fastapi import BackgroundTasks, APIRouter, Depends, Header, HTTPException, Query
+
+from config.app_channel import APP_CHANNEL_HEADER, app_channel
+from config.episodes import client_channel_admitted, episodes_enabled_for
 from utils.episodes import home_read
 from models.episode import (
     EpisodeListResponse,
@@ -155,3 +163,28 @@ def dismiss_episode_item(
     if episode is None:
         raise HTTPException(status_code=404, detail='Episode not found')
     return home_read.wire_episode(episode)
+
+
+@router.patch(
+    '/v1/episodes/{episode_id}/assign-speaker',
+    response_model=RecordingSpeakerResponse,
+    responses={
+        409: {'model': RecordingSpeakerConflict, 'description': 'Recording rename disabled or speaker selection stale'},
+        413: {'model': RecordingSpeakerLimit, 'description': 'Recording exceeds the member or segment limit'},
+    },
+)
+def assign_episode_speaker(
+    episode_id: str,
+    body: RecordingSpeakerRequest,
+    background_tasks: BackgroundTasks,
+    uid: str = Depends(auth.get_current_user_uid),
+    channel: Optional[str] = Header(None, alias=APP_CHANNEL_HEADER),
+):
+    _require(uid, channel)
+    from routers.recording_speakers import edit
+
+    episode = service.episode_by_id(uid, episode_id)
+    if not episode or not episode.get('conversation_ids'):
+        raise HTTPException(status_code=404, detail='Episode not found')
+    anchor = body.selections[0].conversation_id if body.selections else episode['conversation_ids'][0]
+    return edit(uid, anchor, body, background_tasks, episode_id=episode_id)

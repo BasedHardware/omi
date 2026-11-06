@@ -55,6 +55,9 @@ interface DailyCostPoint {
     anthropic: number;
     /** GCP net by service; the TV's one-time incident detector reads it. */
     gcpServices?: Record<string, number>;
+    /** Net GCP on the development project (inside gcpInfra/vertexLlm): the
+     * variable margin excludes it; the all-in stack keeps it. */
+    gcpDevUsd?: number;
   };
 }
 
@@ -546,6 +549,7 @@ export async function computeBillingInfraCosts(
         openai: round(openaiByDay.get(row.date) ?? 0),
         anthropic: round(chatPool),
         gcpServices: row.services,
+        gcpDevUsd: round(row.devNetUsd ?? 0),
       },
     };
   });

@@ -84,7 +84,7 @@ void main() {
     permission = false;
     await exporter().export(item(), canContinue: () => true);
     permission = true;
-    await exporter().export(item().copyWith(completed: true), canContinue: () => true);
+    await exporter().export(item().copyWith(status: 'archived'), canContinue: () => true);
     await exporter().export(item().copyWith(exported: true, exportPlatform: 'todoist'), canContinue: () => true);
     expect(writes, isEmpty);
   });
@@ -128,7 +128,8 @@ void main() {
     final gate = Completer<TaskIntegrationsResponse?>();
     final provider = ActionItemsProvider(
       getActionItems: emptyTasks,
-      createActionItemRequest: ({required description, dueAt, conversationId, completed = false}) async => item(),
+      createActionItemRequest:
+          ({required description, dueAt, conversationId, completed = false, idempotencyKey}) async => item(),
       automaticAppleRemindersExport: exporter(read: (_) {
         reads++;
         return gate.future;
@@ -151,7 +152,8 @@ void main() {
     final gate = Completer<TaskIntegrationsResponse?>();
     final provider = ActionItemsProvider(
       getActionItems: emptyTasks,
-      createActionItemRequest: ({required description, dueAt, conversationId, completed = false}) async => item(),
+      createActionItemRequest:
+          ({required description, dueAt, conversationId, completed = false, idempotencyKey}) async => item(),
       automaticAppleRemindersExport: exporter(read: (_) => gate.future),
     );
     addTearDown(provider.dispose);
@@ -164,5 +166,24 @@ void main() {
     }
     expect(writes, isEmpty);
     expect(provider.actionItems, isEmpty);
+  });
+
+  test('creating a completed task with Apple selected exports it as completed', () async {
+    final nativeWrite = Completer<ActionItemWithMetadata>();
+    final provider = ActionItemsProvider(
+      getActionItems: emptyTasks,
+      createActionItemRequest: (
+              {required description, dueAt, conversationId, completed = false, idempotencyKey}) async =>
+          item().copyWith(completed: completed),
+      automaticAppleRemindersExport: exporter(create: (task) async {
+        nativeWrite.complete(task);
+        return 'eventkit-id';
+      }),
+    );
+    addTearDown(provider.dispose);
+    await provider.ensureLoaded();
+    final saved = await provider.createActionItem(description: 'Fixture task', completed: true);
+    expect(saved?.completed, isTrue);
+    expect((await nativeWrite.future.timeout(const Duration(seconds: 2))).completed, isTrue);
   });
 }

@@ -109,13 +109,13 @@ def test_translation_need_thresholds_are_explicit(monkeypatch, detected, confide
 
 def test_whole_text_and_sentence_methods_delegate_to_one_engine():
     provider = FakeProvider(
-        TranslationProvider.google,
+        TranslationProvider.luna,
         responses=[
             translations(('Bonjour là-bas', 'en')),
             translations(('Bonjour.', 'en'), ('Comment ça va?', 'en')),
         ],
     )
-    service, _cache = build_service({TranslationProvider.google: provider})
+    service, _cache = build_service({TranslationProvider.luna: provider})
 
     assert service.translate_text('fr', 'Hello there') == ('Bonjour là-bas', 'en')
     assert service.translate_text_by_sentence('fr', 'Hello. How are you?') == ('Bonjour. Comment ça va?', 'en')
@@ -134,8 +134,8 @@ def test_default_services_share_external_adapters_but_keep_session_lrus_separate
 
 
 def test_whitespace_only_input_skips_the_provider_in_every_mode():
-    provider = FakeProvider(TranslationProvider.google, responses=[])
-    service, _cache = build_service({TranslationProvider.google: provider})
+    provider = FakeProvider(TranslationProvider.luna, responses=[])
+    service, _cache = build_service({TranslationProvider.luna: provider})
 
     assert service.translate_text('fr', '   ') == ('   ', '')
     assert service.translate_text_by_sentence('fr', '   ') == ('   ', '')
@@ -145,10 +145,10 @@ def test_whitespace_only_input_skips_the_provider_in_every_mode():
 def test_full_text_cache_is_shared_by_sentence_mode():
     store = DictTranslationStore()
     provider = FakeProvider(
-        TranslationProvider.google,
+        TranslationProvider.luna,
         responses=[translations(('Bonjour.', 'en'), ('Ça va?', 'en'))],
     )
-    service, _cache = build_service({TranslationProvider.google: provider}, store=store)
+    service, _cache = build_service({TranslationProvider.luna: provider}, store=store)
 
     first = service.translate_text_by_sentence('fr', 'Hello. How are you?')
     second = service.translate_text_by_sentence('fr', 'Hello. How are you?')
@@ -160,8 +160,8 @@ def test_full_text_cache_is_shared_by_sentence_mode():
 
 def test_memory_cache_survives_persistent_cache_miss():
     store = DictTranslationStore()
-    provider = FakeProvider(TranslationProvider.google, responses=[translations(('Hola', 'en'))])
-    service, _cache = build_service({TranslationProvider.google: provider}, store=store)
+    provider = FakeProvider(TranslationProvider.luna, responses=[translations(('Hola', 'en'))])
+    service, _cache = build_service({TranslationProvider.luna: provider}, store=store)
 
     assert service.translate_text('es', 'Hello') == ('Hola', 'en')
     store.values.clear()
@@ -172,10 +172,10 @@ def test_memory_cache_survives_persistent_cache_miss():
 def test_session_cleanup_releases_memory_without_clearing_shared_storage():
     store = DictTranslationStore()
     provider = FakeProvider(
-        TranslationProvider.google,
+        TranslationProvider.luna,
         responses=[translations(('Hola', 'en')), translations(('Hola otra vez', 'en'))],
     )
-    service, _cache = build_service({TranslationProvider.google: provider}, store=store)
+    service, _cache = build_service({TranslationProvider.luna: provider}, store=store)
 
     assert service.translate_text('es', 'Hello') == ('Hola', 'en')
     persisted = dict(store.values)
@@ -189,8 +189,8 @@ def test_session_cleanup_releases_memory_without_clearing_shared_storage():
 
 
 def test_typed_unchanged_outcome_maps_to_legacy_tuple_only_at_facade():
-    provider = FakeProvider(TranslationProvider.google, responses=[translations(('Hello', 'en'))])
-    service, _cache = build_service({TranslationProvider.google: provider})
+    provider = FakeProvider(TranslationProvider.luna, responses=[translations(('Hello', 'en'))])
+    service, _cache = build_service({TranslationProvider.luna: provider})
 
     outcomes = service.translate_outcomes('en', [('segment', 'Hello')])
 

@@ -582,6 +582,77 @@ def checkpoint_sync_content_partial_result(
     )
 
 
+SEGMENT_MARKED = 'marked'
+SEGMENT_ALREADY_PROCESSED = 'already_processed'
+SEGMENT_FOREIGN_OWNER = 'foreign_owner'
+
+
+@firestore.transactional
+def _checkpoint_and_mark_transaction(
+    transaction: Any,
+    ref: Any,
+    job_id: str,
+    partial_result: Dict[str, Any],
+    segment_id: str,
+    now: datetime,
+    run_token: str | None = None,
+    run_epoch: int | None = None,
+) -> str:
+    """Checkpoint and processed marker in one commit (one billed write, not two).
+
+    Same outcomes as the checkpoint transaction followed by the processed
+    transaction: a foreign owner writes nothing (the checkpoint would have
+    failed); an already-processed segment still checkpoints (only the marker
+    would have failed).
+    """
+    snapshot = ref.get(transaction=transaction)
+    existing = cast(Dict[str, Any], snapshot.to_dict() or {}) if getattr(snapshot, 'exists', False) else {}
+    if not _ledger_owner_matches(existing, job_id, run_token, run_epoch):
+        return SEGMENT_FOREIGN_OWNER
+    if segment_id in (existing.get('processed_segment_ids') or []):
+        transaction.set(ref, {'partial_result': partial_result, 'updated_at': now}, merge=True)
+        return SEGMENT_ALREADY_PROCESSED
+    transaction.set(
+        ref,
+        {
+            'partial_result': partial_result,
+            'processed_segment_ids': firestore.ArrayUnion([segment_id]),
+            'updated_at': now,
+        },
+        merge=True,
+    )
+    return SEGMENT_MARKED
+
+
+def checkpoint_and_mark_sync_segment(
+    uid: str,
+    content_id: str,
+    job_id: str,
+    partial_result: Dict[str, Any],
+    segment_id: str,
+    *,
+    run_token: str | None = None,
+    run_epoch: int | None = None,
+    firestore_client: Any = None,
+) -> str:
+    """Checkpoint a segment's partial result and mark it processed atomically.
+
+    The marker can never precede its result contribution, which the separate
+    calls only guaranteed by ordering.
+    """
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    return _checkpoint_and_mark_transaction(
+        client.transaction(),
+        _ledger_ref(client, uid, content_id),
+        job_id,
+        partial_result,
+        segment_id,
+        datetime.now(timezone.utc),
+        run_token,
+        run_epoch,
+    )
+
+
 @firestore.transactional
 def _processed_segment_transaction(
     transaction: Any,

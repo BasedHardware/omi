@@ -495,7 +495,7 @@ def test_backend_integration_deploy_pins_mcp_serving_capacity():
     # backend-sync DOES carry --cpu=2 (#21668): its 6-8Gi memory requires >=2
     # CPU on Cloud Run, and 1-CPU deploys of 8Gi are rejected outright.
     # 2026-10-24 costcut mirror: backend now pins its OWN live shape (prod-scoped
-    # 8Gi/2 CPU/20/3/100) instead of inheriting it revision-to-revision; --cpu=2
+    # margin-20 4Gi/2 CPU/20/3/100) instead of inheriting it; --cpu=2
     # is legitimate there for the same #21668 pairing, but every
     # integration-specific flag below still must not leak onto it.
     integration_flags = _deploy_backend_stack_step_flags('deploy-backend-integration')
@@ -503,9 +503,13 @@ def test_backend_integration_deploy_pins_mcp_serving_capacity():
     sync_flags = _deploy_backend_stack_step_flags('deploy-backend-sync')
     # 2026-10-24 right-sizing: prod integration stays warm; the dev project idles at 0.
     integration_min = "--min-instances=${{ inputs.runtime_env == 'prod' && '3' || '0' }}"
+    # 2026-11-01 packing: enrichment (/v2/enrichment/run) holds LLM-bound requests at ~27% CPU,
+    # so concurrency 40 scaled integration 3 -> 8.3 instances. 80 per instance with 64 postprocess
+    # threads (prod overlay) and 4Gi packs them; 80 x 50 also widens MCP's slot ceiling. Dev keeps
+    # 40/2Gi with the default 24 threads.
     for flag in (
-        '--memory=2Gi',
-        '--concurrency=40',
+        "--memory=${{ inputs.runtime_env == 'prod' && '4Gi' || '2Gi' }}",
+        "--concurrency=${{ inputs.runtime_env == 'prod' && '80' || '40' }}",
         integration_min,
         '--max-instances=50',
         '--no-cpu-throttling',
@@ -521,7 +525,7 @@ def test_backend_integration_deploy_pins_mcp_serving_capacity():
     assert '--cpu=2' in sync_flags
     # Backend's own prod shape (dev branch empty: dev keeps inheriting).
     assert (
-        "${{ inputs.runtime_env == 'prod' && '--cpu=2 --memory=8Gi --concurrency=20"
+        "${{ inputs.runtime_env == 'prod' && '--cpu=2 --memory=4Gi --concurrency=20"
         " --min-instances=3 --max-instances=100' || '' }}"
     ) in backend_flags
 
@@ -723,7 +727,7 @@ def test_staged_desktop_production_controls_render_without_runtime_checkout(tmp_
     assert result.stdout == ''
     workflow_outputs = renderer_output.read_text(encoding='utf-8')
     assert (
-        'firestore_read_env_vars<<__BACKEND_RUNTIME_ENV_firestore_read_env_vars__\nFIRESTORE_READ_LEVERS={"action_items_page":100\\,"backfill_task_reads":0\\,"batch_privacy_memoize":0\\,"candidates_page":100\\,"canonical_statuses_dedupe":100\\,"conversation_list_cursor":100\\,"deletion_marker_cache":100\\,"finjob_candidate_queries":0\\,"historical_scan_memo":0\\,"ledger_purge_coalesce":0\\,"mcp_conversation_cards_cache":100\\,"memory_list_index_window":0\\,"people_scan_dedupe":0\\,"queue_age_sample_budget":0\\,"request_read_dedupe":100\\,"serving_config_cache":100\\,"singleton_loops":0\\,"subscription_cache":100\\,"usage_month_cache":0\\,"usage_month_total":0}\n'
+        'firestore_read_env_vars<<__BACKEND_RUNTIME_ENV_firestore_read_env_vars__\nFIRESTORE_READ_LEVERS={"action_items_page":100\\,"action_items_ttl120":100\\,"backfill_task_reads":100\\,"bpp_decision_cache":0\\,"bpp_generation_memo":100\\,"candidates_page":100\\,"canonical_statuses_dedupe":100\\,"conversation_list_cursor":100\\,"deletion_marker_cache":100\\,"finjob_candidate_queries":100\\,"historical_scan_memo":100\\,"ledger_purge_coalesce":100\\,"lifecycle_record_pending_head":5\\,"mcp_conversation_cards_cache":100\\,"memory_list_index_window":100\\,"people_scan_dedupe":100\\,"privacy_checks_shadow":0\\,"privacy_ttl60":0\\,"queue_age_sample_budget":100\\,"request_read_dedupe":100\\,"serving_config_cache":100\\,"singleton_loops":100\\,"subscription_cache":100\\,"sync_snapshot_resolve_cache":100\\,"usage_month_cache":0\\,"usage_month_total":0}\n'
         in workflow_outputs
     )
     assert workflow_outputs.endswith('__BACKEND_RUNTIME_ENV_firestore_read_env_vars__\n')
@@ -778,7 +782,16 @@ def test_phase_a_keeps_cloud_run_credentials_and_isolates_gke_v2_redis():
 def test_prod_cloud_run_secret_refs_match_approved_bindings():
     # Base mounts, prod-only dream salt and backend-only messaging provider credentials.
     # Preserve resource, env alias and version: aliases can introduce startup dependencies.
-    common = {'GOOGLE_CLIENT_SECRET', 'ENCRYPTION_SECRET', 'MODULATE_API_KEY', 'OMI_LLM_GATEWAY_SERVICE_TOKEN'}
+    # Lead 2026-11-02 17:42Z approved the existing Soniox key on all four roles
+    # for live GPU retirement, using the existing shared runtime identity.
+    # The independent language-recovery gate remains integration-only.
+    common = {
+        'GOOGLE_CLIENT_SECRET',
+        'ENCRYPTION_SECRET',
+        'MODULATE_API_KEY',
+        'OMI_LLM_GATEWAY_SERVICE_TOKEN',
+        'SONIOX_API_KEY',
+    }
     baseline = {
         'backend': common
         | {
@@ -801,8 +814,7 @@ def test_prod_cloud_run_secret_refs_match_approved_bindings():
         'backend-sync': common
         | {'GOOGLE_MAPS_API_KEY', 'DREAM_AGENT_FEEDBACK_SALT', 'TYPESENSE_HOST', 'TYPESENSE_API_KEY'},
         'backend-sync-backfill': common,
-        # David approved this recovery-only existing-secret binding via ce5485.
-        'backend-integration': common | {'POSTHOG_EVENTS_API_KEY', 'SONIOX_API_KEY'},
+        'backend-integration': common | {'POSTHOG_EVENTS_API_KEY'},
     }
     prod = _MANIFEST['environments']['prod']
     for service, names in baseline.items():
@@ -1320,23 +1332,29 @@ def test_firestore_train_preserves_monthly_reader_scope_and_cloud_run_overrides(
     assert set(cloud_run) == {'backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'}
     expected = {
         'action_items_page': 100,
-        'backfill_task_reads': 0,
-        'batch_privacy_memoize': 0,
+        'action_items_ttl120': 100,
+        'backfill_task_reads': 100,
+        'bpp_decision_cache': 0,
+        'bpp_generation_memo': 100,
         'candidates_page': 100,
         'canonical_statuses_dedupe': 100,
         'conversation_list_cursor': 100,
         'deletion_marker_cache': 100,
-        'finjob_candidate_queries': 0,
-        'historical_scan_memo': 0,
-        'ledger_purge_coalesce': 0,
+        'finjob_candidate_queries': 100,
+        'historical_scan_memo': 100,
+        'ledger_purge_coalesce': 100,
+        'lifecycle_record_pending_head': 5,
         'mcp_conversation_cards_cache': 100,
-        'memory_list_index_window': 0,
-        'people_scan_dedupe': 0,
-        'queue_age_sample_budget': 0,
+        'memory_list_index_window': 100,
+        'people_scan_dedupe': 100,
+        'privacy_checks_shadow': 0,
+        'privacy_ttl60': 0,
+        'queue_age_sample_budget': 100,
         'request_read_dedupe': 100,
         'serving_config_cache': 100,
-        'singleton_loops': 0,
+        'singleton_loops': 100,
         'subscription_cache': 100,
+        'sync_snapshot_resolve_cache': 100,
         'usage_month_cache': 0,
         'usage_month_total': 0,
     }

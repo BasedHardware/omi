@@ -4,6 +4,12 @@ from types import SimpleNamespace
 
 import httpx
 import pytest
+from pytest_httpserver.pytest_plugin import (  # noqa: F401 — collect upstream fixtures only in this file
+    httpserver,
+    httpserver_listen_address,
+    httpserver_ssl_context,
+    make_httpserver,
+)
 
 from scripts import bench_diarizer_batch as bench
 

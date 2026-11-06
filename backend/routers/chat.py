@@ -1,3 +1,12 @@
+"""Chat surface: /v2/messages agentic chat with SSE streaming, voice-message
+transcription, chat files, ratings, shares, and device-tool result intake.
+
+The route's real responsibility is stream discipline -- setup/first-event
+deadlines, heartbeats, the typed failure protocol for opted-in clients, and
+bounded provider retries -- while prompt assembly and tool loops live in
+utils.chat_turn (backend/docs/chat-system.md).
+"""
+
 from utils.chat_turn import (
     run_chat_turn,
     TurnOptions,
@@ -93,7 +102,7 @@ from utils.chat_rating_triage import extract_rating_triage_fields
 from utils.feedback import record_chat_message_feedback
 from utils.rate_limit_config import get_effective_limit, RATE_LIMIT_SHADOW
 from utils.llm.gateway_client import CHAT_AGENT_ROUTE_DIRECT, get_chat_agent_route
-from utils.subscription import enforce_chat_quota, is_trial_paywalled
+from utils.subscription import enforce_chat_quota
 from utils import share_links
 from utils.other import endpoints as auth, storage
 from utils.other.chat_file import FileChatTool, UnsupportedChatFileError, safe_file_chats
@@ -571,12 +580,6 @@ async def transcribe_voice_message(
 
     Returns {"transcript": "...", "language": "..."}.
     """
-    # Trial paywall: reject paywalled desktop PTT before hitting Deepgram.
-    # Narrow to trial-only on purpose — full enforce_chat_quota here would
-    # change mobile behavior for users past their existing 30/mo chat cap.
-    if await run_blocking(db_executor, is_trial_paywalled, uid, x_app_platform):
-        raise HTTPException(status_code=402, detail={'error': 'quota_exceeded', 'plan_type': 'basic'})
-
     content_type = request.headers.get("content-type", "")
 
     if "application/octet-stream" in content_type:
@@ -938,12 +941,6 @@ async def transcribe_voice_message_stream(
     )
 
     await websocket.accept()
-
-    # Paywalled desktop users — close before opening a provider connection for
-    # a PTT stream that would not be allowed to chat anyway.
-    if await run_blocking(db_executor, is_trial_paywalled, uid, x_app_platform):
-        await websocket.close(code=1008, reason='trial_expired')
-        return
 
     if codec != 'linear16':
         await websocket.close(code=1008, reason='Unsupported codec; only linear16 is supported')

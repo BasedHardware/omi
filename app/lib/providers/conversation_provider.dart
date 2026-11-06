@@ -13,7 +13,6 @@ import 'package:flutter/widgets.dart' show AppLifecycleState, WidgetsBinding;
 
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/http/api/users.dart';
-import 'package:omi/providers/conversation_noise_fold.dart';
 import 'package:omi/backend/http/api_fallback.dart';
 import 'package:omi/backend/http/api_presentation.dart';
 import 'package:omi/backend/http/api_result.dart';
@@ -27,9 +26,11 @@ import 'package:omi/services/telemetry/client_telemetry.dart';
 import 'package:omi/services/siri_integration.dart';
 import 'package:omi/services/notifications/merge_notification_handler.dart';
 import 'package:omi/utils/conversations/capture_groups.dart';
+import 'package:omi/utils/conversations/home_member_fallback.dart';
 import 'package:omi/utils/logger.dart';
 
 part 'conversation_visibility.dart';
+part 'conversation_home_fetch.dart';
 part 'conversation_processing.dart';
 
 typedef ConversationListFetcher = Future<({List<ServerConversation> items, bool ok})> Function();
@@ -83,16 +84,14 @@ Map<DateTime, List<ServerConversation>> groupSearchResultsPreservingRank(Iterabl
   return grouped;
 }
 
-class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
+class ConversationProvider extends ChangeNotifier {
   List<ServerConversation> conversations = [];
   List<ServerConversation> searchedConversations = [];
-  @override
   Map<DateTime, List<ServerConversation>> groupedConversations = {};
 
   bool isLoadingConversations = false;
   bool _isLoadingConversationList = false;
   bool _isLoadingConversationSearch = false;
-  @override
   bool showDiscardedConversations = false;
 
   HomeEmptyExplanation homeEmptyExplanation = HomeEmptyExplanation.none;
@@ -174,6 +173,17 @@ class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
   int _sessionGeneration = 0;
   int _conversationFetchRevision = 0;
   int _conversationLoadingRevision = 0;
+
+  /// Bumped whenever transcript speaker identities are edited in place
+  /// (applySpeakerPromptIdentities). The in-place segment mutations change no
+  /// conversation container identity, so downstream cheap change
+  /// fingerprints (conversation detail's projection comparator) fold this in
+  /// to notice them without re-encoding the transcript.
+  int _speakerIdentityRevision = 0;
+
+  /// Revision of the last in-place speaker-identity edit; see
+  /// [_speakerIdentityRevision].
+  int get speakerIdentityRevision => _speakerIdentityRevision;
   static const int _maxInitialFetchRetries = 4;
   // After the fast backoff budget is spent we keep retrying on a slow fixed
   // interval rather than giving up — otherwise a prolonged outage latches the
@@ -205,6 +215,7 @@ class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
   List<ServerConversation> get displayedConversations =>
       List<ServerConversation>.unmodifiable(groupedConversations.values.expand((group) => group));
 
+  Map<String, List<ServerConversation>> Function()? heldHomeEpisodes;
   final ConversationListFetcher? _conversationListFetcher;
   final ConversationLifecycleFetcher _conversationLifecycleFetcher;
   final DailySummariesChecker? _dailySummariesChecker;
@@ -344,7 +355,6 @@ class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
   }
 
   void clearUserData() {
-    resetFoldedNoise();
     for (final watcher in _mergeWatchers.values) {
       watcher.cancel();
     }
@@ -642,7 +652,6 @@ class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
   void toggleDiscardConversations() {
     showDiscardedConversations = !showDiscardedConversations;
     SharedPreferencesUtil().showDiscardedMemories = showDiscardedConversations;
-    resetFoldedNoise();
 
     // Clear grouped conversations to show shimmer effect while loading
     groupedConversations = {};
@@ -651,7 +660,7 @@ class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
     if (hasActiveSearch) {
       searchConversations(previousQuery, showShimmer: true);
     } else {
-      fetchConversations().then((_) => refreshFoldedNoiseCounts());
+      fetchConversations();
     }
 
     PlatformManager.instance.analytics.showDiscardedMemoriesToggled(showDiscardedConversations);
@@ -970,22 +979,23 @@ class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
       processingRowsAtStart,
       {for (final conversation in fetchedConversations) conversation.id: conversation.status.name},
     );
-    _conversationServerOffset = result.items.length;
-    _conversationServerHasMore = !result.truncated && result.items.length >= _conversationPageSize;
+    _conversationServerOffset = result.storageCount;
+    _conversationServerHasMore = !result.truncated && result.storageCount >= _conversationPageSize;
     _conversationServerLoadedIds
       ..clear()
       ..addAll(result.items.map((conversation) => conversation.id));
 
-    // A ConversationEvent can complete a row while the list/lifecycle awaits
-    // above. The stale page may omit that row, so preserve only completed rows
-    // that were added or replaced live during this fetch. Do not carry forward
-    // an unchanged pre-fetch row (the server page is authoritative for those),
-    // and never resurrect a row in the undo/delete window.
+    // The page replaces overlaps and covered rows; older cached pages remain
+    // reachable. A live completion while the list/lifecycle awaits can outdate
+    // this page, so changed completed rows win. Delete and processing fences
+    // apply to cached rows too.
     final currentlyProcessingIds = processingConversations
         .where((conversation) => _isActiveProcessingStatus(conversation.status))
         .map((conversation) => conversation.id)
         .toSet();
     final completedById = <String, ServerConversation>{
+      for (final conversation in _cachedRowsBeforePage(fetchedConversations, conversations))
+        if (!currentlyProcessingIds.contains(conversation.id)) conversation.id: conversation,
       for (final conversation in fetchedConversations)
         if (conversation.status == ConversationStatus.completed && !currentlyProcessingIds.contains(conversation.id))
           conversation.id: conversation.keepingTranscriptOf(conversationsAtStart[conversation.id]),
@@ -1011,7 +1021,7 @@ class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
       }
       // A changed live object wins over a stale page object even when the
       // page contains the same ID with older status/content. Unchanged
-      // pre-fetch rows remain governed by the authoritative page.
+      // pre-fetch rows within its covered range remain governed by the page.
       if (!identical(conversationsAtStart[conversation.id], conversation)) {
         completedById[conversation.id] = conversation;
       }
@@ -1139,14 +1149,13 @@ class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
     _initialFetchRetryCount = 0;
   }
 
-  Future<void> getInitialConversations() async {
+  Future<void> getInitialConversations({bool checkDailySummaries = true}) async {
     // A manual/initial entry gets a fresh retry budget so pull-to-refresh
     // can recover even after the auto-retries were exhausted.
     _cancelInitialFetchRetry();
     final fetched = await fetchConversations();
     if (!fetched || !_isSignedIn()) return;
-    unawaited(refreshFoldedNoiseCounts());
-    await checkHasDailySummaries();
+    if (checkDailySummaries) await checkHasDailySummaries();
   }
 
   List<ServerConversation> _filterOutConvos(List<ServerConversation> convos) {
@@ -1321,46 +1330,6 @@ class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
     );
   }
 
-  ({List<ServerConversation> items, bool ok, bool truncated, ApiResult<List<ServerConversation>>? typed})
-      _packTypedConversationList(ApiResult<List<ServerConversation>> typed) {
-    return switch (typed) {
-      ApiSuccess(:final data) => (items: data, ok: true, truncated: false, typed: typed),
-      ApiFailure() => (items: <ServerConversation>[], ok: false, truncated: false, typed: typed),
-    };
-  }
-
-  Future<({List<ServerConversation> items, bool ok, bool truncated, ApiResult<List<ServerConversation>>? typed})>
-      _getConversationsFromServer() async {
-    final typedApi = _conversationApi;
-    if (typedApi != null) {
-      final (startDate, endDate) = _getDateFilterRange();
-      final typed = await typedApi.list(
-        includeDiscarded: showDiscardedConversations,
-        startDate: startDate,
-        endDate: endDate,
-        folderId: selectedFolderId,
-        starred: showStarredOnly ? true : null,
-      );
-      return _packTypedConversationList(typed);
-    }
-    final fetcher = _conversationListFetcher;
-    if (fetcher != null) {
-      final result = await fetcher();
-      return (items: result.items, ok: result.ok, truncated: false, typed: null);
-    }
-
-    final (startDate, endDate) = _getDateFilterRange();
-
-    final result = await getConversationsResult(
-      includeDiscarded: showDiscardedConversations,
-      startDate: startDate,
-      endDate: endDate,
-      folderId: selectedFolderId,
-      starred: showStarredOnly ? true : null,
-    );
-    return (items: result.items, ok: result.ok, truncated: result.truncated, typed: null);
-  }
-
   void updateActionItemState(String convoId, bool state, int i, DateTime date) {
     conversations.firstWhere((element) => element.id == convoId).structured.actionItems[i].completed = state;
     groupedConversations[date]!.firstWhere((element) => element.id == convoId).structured.actionItems[i].completed =
@@ -1387,25 +1356,25 @@ class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
       List<ServerConversation> items,
       bool ok,
       bool truncated,
+      int storageCount,
       ApiResult<List<ServerConversation>>? typed
     }) pageResult;
     if (conversationPageFetcherOverride != null) {
       final fetched = await conversationPageFetcherOverride!.call();
-      pageResult = (items: fetched.items, ok: fetched.ok, truncated: fetched.truncated, typed: null);
-    } else if (typedApi != null) {
-      pageResult = _packTypedConversationList(
-        await typedApi.list(
-          limit: _conversationPageSize,
-          offset: pageOffset,
-          includeDiscarded: showDiscardedConversations,
-          startDate: startDate,
-          endDate: endDate,
-          folderId: selectedFolderId,
-          starred: showStarredOnly ? true : null,
-        ),
+      pageResult = (
+        items: fetched.items,
+        ok: fetched.ok,
+        truncated: fetched.truncated,
+        storageCount: fetched.items.length,
+        typed: null
       );
+    } else if (typedApi != null) {
+      pageResult = await _getTypedHomePage(typedApi, pageOffset, startDate, endDate);
     } else {
+      var storageCount = 0;
       final fetched = await getConversationsResult(
+        heldHomeEpisodes: _homeEpisodeAcknowledgements,
+        onStorageCount: (count) => storageCount = count,
         offset: pageOffset,
         includeDiscarded: showDiscardedConversations,
         startDate: startDate,
@@ -1413,7 +1382,8 @@ class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
         folderId: selectedFolderId,
         starred: showStarredOnly ? true : null,
       );
-      pageResult = (items: fetched.items, ok: fetched.ok, truncated: fetched.truncated, typed: null);
+      pageResult =
+          (items: fetched.items, ok: fetched.ok, truncated: fetched.truncated, storageCount: storageCount, typed: null);
     }
     if (operationRevision != _conversationFetchRevision) {
       if (_conversationLoadingRevision == operationRevision) setLoadingConversations(false);
@@ -1425,8 +1395,8 @@ class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
       return false;
     }
     final newConversations = pageResult.items;
-    _conversationServerOffset += newConversations.length;
-    _conversationServerHasMore = !pageResult.truncated && newConversations.length >= _conversationPageSize;
+    _conversationServerOffset += pageResult.storageCount;
+    _conversationServerHasMore = !pageResult.truncated && pageResult.storageCount >= _conversationPageSize;
     _conversationServerLoadedIds.addAll(newConversations.map((conversation) => conversation.id));
     final existingIds = conversations.map((conversation) => conversation.id).toSet();
     conversations.addAll(
@@ -1451,7 +1421,6 @@ class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
     }
     setLoadingConversations(false);
     notifyListeners();
-    unawaited(refreshFoldedNoiseCounts());
     return true;
   }
 
@@ -1473,6 +1442,7 @@ class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
         identity.id: identity
     };
     final rows = [...conversations, ...searchedConversations, ...groupedConversations.values.expand((group) => group)];
+    var applied = false;
     for (final row in rows) {
       if (row.id != result.conversationId) continue;
       for (final segment in row.transcriptSegments) {
@@ -1481,8 +1451,12 @@ class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
         segment.isUser = identity.isUser;
         segment.personId = identity.personId;
         segment.speakerLabelSource = 'manual';
+        applied = true;
       }
     }
+    // In-place segment edits change no container identity: bump the revision
+    // so cheap downstream fingerprints (conversation detail) still notify.
+    if (applied) _speakerIdentityRevision++;
     notifyListeners();
   }
 
@@ -1644,7 +1618,6 @@ class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
     _pendingDeleteTimers.remove(conversation.id)?.cancel();
     _pendingDeleteTimers[conversation.id] = Timer(pendingDeleteWindow, () => commitPendingDelete(conversation.id));
     conversations.removeWhere((element) => element.id == conversation.id);
-    dropFromFoldedNoise(conversation.id);
     for (final group in groupedConversations.values) {
       group.removeWhere((e) => e.id == conversation.id);
     }

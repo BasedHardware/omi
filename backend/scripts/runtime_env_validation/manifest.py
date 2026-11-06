@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
+from urllib.parse import urlsplit
 
 if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -15,6 +16,7 @@ from scripts.runtime_env_durable_dispatch_contracts import (  # noqa: E402
 )
 from scripts.runtime_env_parakeet_contract import validate_parakeet_admission_contract  # noqa: E402
 from scripts.runtime_env_capability_contracts import (
+    validate_batch_final_pass_hosts,
     validate_conversation_finalization_capabilities,
     validate_speaker_embedding_hosts,
     validate_voice_transcription_storage,
@@ -149,11 +151,21 @@ def _validate_gke(env_config: ConfigDict, *, strict_provisional: bool) -> list[V
                     errors.append(
                         ValidationError(f'gke/{service}', f'env {env_name} ConfigMap key {binding_key!r} is undeclared')
                     )
+        switch = (service_config.get('env') or {}).get('BATCH_FINAL_PASS_ENABLED', {})
+        if switch.get('config_map'):
+            # An explicit literal would override envFrom and defeat rollback.
+            binding = switch['config_map']
+            actual = actual_env.get('BATCH_FINAL_PASS_ENABLED')
+            if actual is not None and actual.get('valueFrom', {}).get('configMapKeyRef') != binding:
+                errors.append(
+                    ValidationError(f'gke/{service}', 'BATCH_FINAL_PASS_ENABLED must not override its ConfigMap')
+                )
     return errors
 
 
 def _validate_manifest_shape(env_config: ConfigDict, env: str) -> list[ValidationError]:
     errors = validate_retired_memory_manifest(env, env_config)
+    errors.extend(validate_batch_final_pass_hosts(env, env_config))
     errors.extend(_validate_redis_ports(env_config, env))
     errors.extend(
         ValidationError('sync_lineage_rollout', message) for message in validate_sync_lineage_rollout(env, env_config)
@@ -341,6 +353,23 @@ def _validate_prerecorded_stt_contract(env: str, env_config: ConfigDict) -> list
         )
 
     for scope, env_map, secrets_map in surfaces:
+        lid_url = _manifest_literal_env_value(env_map, 'HOSTED_LID_API_URL')
+        if lid_url and lid_url.strip():
+            try:
+                parsed = urlsplit(lid_url)
+                valid = (
+                    parsed.scheme in {'http', 'https'}
+                    and bool(parsed.hostname)
+                    and not parsed.username
+                    and not parsed.password
+                    and not parsed.query
+                    and not parsed.fragment
+                    and not ('/cloud_run/' in scope and '.svc.cluster.local' in lid_url)
+                )
+            except ValueError:
+                valid = False
+            if not valid:
+                errors.append(ValidationError(scope, 'HOSTED_LID_API_URL must be a reachable HTTP(S) base URL'))
         # This audience identifies the CPU recovery host, not general STT/GPU
         # workers. Default-on independent recovery needs the same pure contract
         # checked by the runtime before it claims its sole paid attempt.

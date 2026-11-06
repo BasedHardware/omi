@@ -1,0 +1,15 @@
+{
+  "id": "subscription-payment-recovery",
+  "kind": "question",
+  "owner": "Subscription",
+  "question": "How many readers see the failed-renewal Home row, tap Update and successfully load the billing portal, per namespace and build? Shown emits once per visible issue, not on repeated subscription refreshes. Portal Opened requires the web page to finish loading without a main-frame error. These events measure exposure and portal access, never payment or recovered revenue. Names contain Subscription to match the ingestion keep rule.",
+  "query": "contracts/analytics/consumers/subscription-payment-recovery.sql",
+  "events": [
+    "subscriptionPaymentIssueShown",
+    "subscriptionPaymentIssueUpdateTapped",
+    "subscriptionPaymentIssuePortalOpened"
+  ],
+  "namespace_property": "$app_namespace",
+  "dimensions": ["git_sha", "build_number"],
+  "zero_policy": "Zero is expected before this build or when no mobile reader has an eligible unpaid renewal. Portal Opened does not establish that a card was updated or an invoice paid; verify recovery using authoritative Stripe invoices."
+}
