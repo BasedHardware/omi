@@ -45,7 +45,7 @@ from config.refactor_modes import default_on as modes_default_on
 from config.refactor_switches import default_on as rollout_default_on
 
 from config.app_channel import APP_CHANNELS, app_channel
-from config.jev_decisions import percentage, uid_bucket
+from config.jev_decisions import JEV_CLIENT_TIMEOUT_SECONDS, percentage, uid_bucket
 
 EPISODES_ENABLED_ENV = 'EPISODES_ENABLED'
 EPISODES_PERCENT_ENV = 'EPISODES_PERCENT'
@@ -249,13 +249,14 @@ F_JOIN_PREVIOUS_CHARS = 12_000
 F_JOIN_NEW_CHARS = 8_000
 # The gateway's own provider deadline (JEV_GATEWAY_REQUEST_MS, 2.5 s) is authoritative; the client
 # waits just past it so a slow provider surfaces as a gateway timeout. One attempt, as today.
-F_JOIN_TIMEOUT_SECONDS = 3.0
+F_JOIN_TIMEOUT_SECONDS = JEV_CLIENT_TIMEOUT_SECONDS
 F_JOIN_SALT = 'episode-f-join-v1'
-_OFF = frozenset({'false', 'off', '0', 'no'})
 
 
 def f_join_enabled() -> bool:
-    return os.getenv(EPISODE_F_JOIN_ENABLED_ENV, '').strip().lower() not in _OFF
+    """Unset is on; an explicit on-value stays on; anything else (including a typo) turns F off."""
+    raw = os.getenv(EPISODE_F_JOIN_ENABLED_ENV, '').strip().lower()
+    return not raw or raw in _ON
 
 
 def f_join_env_admitted(uid: str) -> bool:

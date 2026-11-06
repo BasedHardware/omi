@@ -272,3 +272,51 @@ def test_closed_episode_size_is_recorded_by_arm(store):
     move = lambda *a, **k: SimpleNamespace(noul=lambda name: 0.0)  # noqa: E731
     service.record_moment(UID, _moment('c2', minutes=12, text=SECOND), _c(store, minutes=13, ask=move))
     assert metrics.EPISODE_CLOSED_MEMBERS.labels(arm='f')._sum.get() == before + 1
+
+
+def test_a_typo_in_the_kill_switch_turns_f_off(monkeypatch):
+    monkeypatch.setenv(config.EPISODE_F_JOIN_ENABLED_ENV, 'disabled')
+    assert not config.f_join_enabled()
+    monkeypatch.setenv(config.EPISODE_F_JOIN_ENABLED_ENV, 'true')
+    assert config.f_join_enabled()
+    monkeypatch.delenv(config.EPISODE_F_JOIN_ENABLED_ENV)
+    assert config.f_join_enabled()
+
+
+def test_a_moment_too_short_to_commit_never_calls_jev_or_splits(store):
+    _first_episode(store)
+    _attach(store, 'c2', minutes=12)
+
+    def ask(*_a, **_k):
+        raise AssertionError('a short moment must not ask Jev')
+
+    short = 'yes sure'
+    assert service.record_moment(UID, _moment('c2', minutes=12, text=short), _c(store, minutes=13, ask=ask)) == (
+        'skipped_short'
+    )
+    episode = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert episode['conversation_ids'] == ['c1', 'c2']
+    assert episode['pending_boundary']['c2']['variant'] == 'f'
+
+
+def test_the_predecessor_is_the_one_recorded_at_the_join_not_a_later_member(store):
+    _first_episode(store)
+    _attach(store, 'c2', minutes=12)
+    marker = episodes_db.get_current_episode(UID, firestore_client=store)['pending_boundary']['c2']
+    assert marker['previous'] == 'c1'
+    # A later member attaching before c2's first moment must not become c2's predecessor.
+    episode = {'conversation_ids': ['c1', 'c2', 'c3'], 'member_activity': {'c1': T0, 'c3': T0 + timedelta(minutes=14)}}
+    _store_row(store, 'c3', SECOND, minutes=14)
+    rendered = f_join.previous_transcript(UID, episode, 'c2', marker, lambda rows: rows, store)
+    assert 'okay lunch' in rendered and 'dentist' not in rendered
+
+
+def test_the_arm_is_the_one_live_when_the_episode_opened(store, monkeypatch):
+    _first_episode(store)
+    episode = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert episode['f_join_arm'] == 'f'
+    monkeypatch.setenv(config.EPISODE_F_JOIN_ENABLED_ENV, 'off')
+    before = metrics.EPISODE_CLOSED_MEMBERS.labels(arm='f')._sum.get()
+    f_join.record_closed_size({**episode, 'closed_at': T0 + timedelta(minutes=5), 'conversation_ids': ['c1']})
+    assert metrics.EPISODE_CLOSED_MEMBERS.labels(arm='f')._sum.get() == before + 1
+    f_join.record_closed_size({'conversation_ids': ['c1']})

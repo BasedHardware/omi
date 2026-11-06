@@ -16,9 +16,8 @@
   (``omi_episode_compose_total``, ``omi_episode_compose_seconds``)
 - Home list members shown and hidden as below the notes floor
   (``omi_episode_home_members_total``)
-- closed-episode size by join-variant arm, ``f`` or ``control``
-  (``omi_episode_closed_members``, ``omi_episode_closed_span_minutes``); each
-  histogram's count divided by the arm's percent compares episodes per user
+- closed-episode size by join-variant arm recorded when the episode opened, ``f`` or
+  ``control`` (``omi_episode_closed_members``, ``omi_episode_closed_span_seconds``)
 """
 
 from __future__ import annotations
@@ -84,6 +83,7 @@ BOUNDARY_OUTCOMES = frozenset(
         # answer, its fallback (no answer keeps today's join), and a kill-switched settle.
         'f_pending',
         'f_pending_conflict',
+        'f_pending_error',
         'f_continue',
         'f_close',
         'f_no_answer',
@@ -128,12 +128,12 @@ EPISODE_CLOSED_MEMBERS = reuse_or_create(
     ['arm'],
     buckets=(1, 2, 3, 4, 6, 8, 12, 20, 40),
 )
-EPISODE_CLOSED_SPAN_MINUTES = reuse_or_create(
+EPISODE_CLOSED_SPAN_SECONDS = reuse_or_create(
     Histogram,
-    'omi_episode_closed_span_minutes',
-    'Recorded span of a closed episode in minutes, by episode-join variant arm (f|control).',
+    'omi_episode_closed_span_seconds',
+    'Recorded span of a closed episode in seconds, by episode-join variant arm (f|control).',
     ['arm'],
-    buckets=(1, 5, 15, 30, 60, 90, 120, 180, 240),
+    buckets=(60, 300, 900, 1800, 3600, 5400, 7200, 10800, 14400),
 )
 EPISODE_CLOSE_CONFLICT_TOTAL = reuse_or_create(
     Counter, 'omi_episode_close_conflict_total', 'Lazy episode closes deferred by a storage conflict.', ['reason']
@@ -259,7 +259,7 @@ def _prime() -> None:
             EPISODE_LIVE_SESSIONS_TOTAL.labels(client_seen=seen)
         for arm in F_JOIN_ARMS:
             EPISODE_CLOSED_MEMBERS.labels(arm=arm)
-            EPISODE_CLOSED_SPAN_MINUTES.labels(arm=arm)
+            EPISODE_CLOSED_SPAN_SECONDS.labels(arm=arm)
         for outcome in COMPOSE_OUTCOMES:
             EPISODE_COMPOSE_TOTAL.labels(outcome=_label(outcome, COMPOSE_OUTCOMES))
             EPISODE_COMPOSE_SECONDS.labels(outcome=_label(outcome, COMPOSE_OUTCOMES))
@@ -307,12 +307,12 @@ def record_episode_closed(reason: str) -> None:
         pass
 
 
-def record_closed_size(arm: str, members: int, span_minutes: float | None) -> None:
+def record_closed_size(arm: str, members: int, span_seconds: float | None) -> None:
     try:
         label = _label(arm, F_JOIN_ARMS)
         EPISODE_CLOSED_MEMBERS.labels(arm=label).observe(max(0, int(members)))
-        if span_minutes is not None and span_minutes >= 0:
-            EPISODE_CLOSED_SPAN_MINUTES.labels(arm=label).observe(span_minutes)
+        if span_seconds is not None and span_seconds >= 0:
+            EPISODE_CLOSED_SPAN_SECONDS.labels(arm=label).observe(span_seconds)
     except Exception:
         pass
 

@@ -6,11 +6,13 @@ Owns the F cohort and its fail-open contract: any failure keeps today's time-onl
   episode_f_join --rollout N`` ramps, ``--inactive`` kills within 15 to 60 s). With no rule, an
   unconfigured store, or one that never loaded, ``EPISODE_F_JOIN_PERCENT`` decides (default 0).
   ``EPISODE_F_JOIN_ENABLED=off`` overrides both.
+- ``arm_fields``: stamps an episode with the arm admitted when it opened (``f_join_arm``), so
+  closed-episode size is attributed to the arm that was live, not to the arm at close.
 - ``uncertain`` / ``mark_pending``: at attach, a join to a live recorded-time owner 2 to 30 minutes
-  after its last speech is marked ``pending_boundary[cid].variant == 'f'``. Shorter gaps, overlaps
-  and closes keep today's rules (F's evaluated scope).
-- ``settle``: at the conversation's first moment, Jev answers P(same occasion) over the previous
-  member's transcript tail and the new speech. Below ``MOVED_ON_THRESHOLD`` the join splits off.
+  after its last speech is marked ``pending_boundary[cid]``, naming the predecessor member it was
+  measured against. Shorter gaps, overlaps, closes and meeting-held joins keep today's rules.
+- ``settle``: at the conversation's first moment, Jev answers P(same occasion) over the
+  predecessor's transcript tail and the new speech. Below ``MOVED_ON_THRESHOLD`` the join splits off.
 - ``record_closed_size``: closed-episode size by arm for the ramp guardrails.
 """
 
@@ -30,10 +32,13 @@ from config.episodes import (
 )
 from database import conversations as conversations_db
 from database import episodes as episodes_db
+from database.episodes import EpisodeConflict
 from utils import omi_flags
-from utils.episodes import incremental, metrics, policy
+from utils.episodes import boundary_runtime, incremental, metrics, policy
+from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
+ARM_FIELD = 'f_join_arm'
 
 
 def admitted(uid: str) -> bool:
@@ -49,8 +54,36 @@ def admitted(uid: str) -> bool:
         return False
 
 
+def arm_fields(uid: str) -> dict[str, str]:
+    """Attach to a newly opened episode: the arm live at open, for the closed-size metrics."""
+    try:
+        return {ARM_FIELD: 'f' if admitted(uid) else 'control'}
+    except Exception:
+        return {}
+
+
+def latest_member(episode: Mapping[str, Any], exclude: str) -> Optional[str]:
+    """The member with the latest recorded activity, other than ``exclude`` (the candidate)."""
+    activity = episode.get('member_activity') or {}
+    members = [cid for cid in episode.get('conversation_ids') or [] if cid != exclude]
+    if not members:
+        return None
+
+    def recency(item: tuple[int, str]) -> tuple[bool, float, int]:
+        at = policy.utc(activity.get(item[1]))
+        return at is not None, at.timestamp() if at else 0.0, item[0]
+
+    return max(enumerate(members), key=recency)[1]
+
+
 def uncertain(
-    uid: str, owner: Optional[Mapping[str, Any]], conversation_id: str, source: Optional[str], started_at: datetime
+    uid: str,
+    owner: Optional[Mapping[str, Any]],
+    conversation_id: str,
+    source: Optional[str],
+    started_at: datetime,
+    *,
+    firestore_client: Any = None,
 ) -> Optional[policy.Boundary]:
     """The ambiguous decision for an admitted join to a live owner after a 2 to 30 minute gap, else None."""
     if not owner or not policy.is_live(owner) or not admitted(uid):
@@ -63,10 +96,12 @@ def uncertain(
         calendar_identity=None,
         speakers=frozenset(),
     )
-    decision = policy.boundary(owner, facts)
-    if decision.action != policy.ASK or (decision.gap_seconds or 0.0) < CONTINUE_GAP_SECONDS:
+    legacy = policy.boundary(owner, facts)
+    if legacy.action != policy.ASK or (legacy.gap_seconds or 0.0) < CONTINUE_GAP_SECONDS:
         return None
-    return decision
+    # The active meeting authority can keep this join whole; only an ASK it does not override is F's.
+    authoritative = boundary_runtime.decision(uid, owner, facts, legacy, firestore_client=firestore_client)
+    return legacy if authoritative.action == policy.ASK else None
 
 
 def mark_pending(
@@ -88,6 +123,7 @@ def mark_pending(
         'gap_seconds': decision.gap_seconds or 0.0,
         'source_changed': decision.source_changed,
         'variant': F_JOIN_VARIANT,
+        'previous': latest_member(owner, conversation_id),
     }
     try:
         episodes_db.commit_moment(
@@ -98,8 +134,10 @@ def mark_pending(
             firestore_client=firestore_client,
         )
         metrics.record_boundary('f_pending')
-    except Exception as error:
+    except EpisodeConflict:
         metrics.record_boundary('f_pending_conflict')
+    except Exception as error:
+        metrics.record_boundary('f_pending_error')
         logger.warning('event=episode_f_join outcome=pending_failed exception_type=%s', type(error).__name__)
 
 
@@ -107,23 +145,28 @@ def previous_transcript(
     uid: str,
     episode: Mapping[str, Any],
     conversation_id: str,
+    pending: Mapping[str, Any],
     name: Callable[[Sequence[Mapping[str, Any]]], Sequence[Mapping[str, Any]]],
     firestore_client: Any,
 ) -> str:
-    """The member immediately before the candidate (latest recorded activity), rendered as F saw it."""
-    activity = episode.get('member_activity') or {}
-    members = [cid for cid in episode.get('conversation_ids') or [] if cid != conversation_id]
-    if not members:
+    """The predecessor recorded when the join was marked, rendered as variant F saw it."""
+    previous = pending.get('previous') or latest_member(episode, conversation_id)
+    if not previous:
         return ''
-
-    def recency(item: tuple[int, str]) -> tuple[bool, float, int]:
-        at = policy.utc(activity.get(item[1]))
-        return at is not None, at.timestamp() if at else 0.0, item[0]
-
-    _, previous = max(enumerate(members), key=recency)
-    row = conversations_db.get_conversation(uid, previous, firestore_client=firestore_client) or {}
+    row = conversations_db.get_conversation(uid, str(previous), firestore_client=firestore_client) or {}
     segments = [s for s in row.get('transcript_segments') or [] if isinstance(s, Mapping)]
     return incremental.render_f_transcript(name(segments))
+
+
+def _fallback(reason: str) -> None:
+    record_fallback(
+        component='episode_f_join',
+        from_mode='jev_f',
+        to_mode='time_join',
+        reason=reason,
+        outcome='degraded',
+        log=logger,
+    )
 
 
 def settle(
@@ -143,15 +186,17 @@ def settle(
         metrics.record_boundary('f_disabled')
         return keep
     try:
-        previous = previous_transcript(uid, episode, conversation_id, name, c.firestore_client)
+        previous = previous_transcript(uid, episode, conversation_id, pending, name, c.firestore_client)
     except Exception as error:
         logger.warning('event=episode_f_join outcome=previous_failed exception_type=%s', type(error).__name__)
         metrics.record_boundary('f_no_answer')
+        _fallback('other')
         return keep
     state = incremental.f_boundary_state(previous, incremental.render_f_transcript(named))
     p_same = incremental.ask_same_occasion_f(state, ask=c.ask)
     if p_same is None:
         metrics.record_boundary('f_no_answer')
+        _fallback('unknown')
         return keep
     if p_same < MOVED_ON_THRESHOLD:
         metrics.record_boundary('f_close')
@@ -161,11 +206,14 @@ def settle(
     return keep
 
 
-def record_closed_size(uid: str, closed: Mapping[str, Any]) -> None:
-    """Members and recorded span of a closed episode by arm: the ramp's size and episodes-per-user guards."""
+def record_closed_size(closed: Mapping[str, Any]) -> None:
+    """Members and recorded span of a closed episode by the arm it opened under (pre-ramp episodes: none)."""
     try:
+        arm = closed.get(ARM_FIELD)
+        if arm not in ('f', 'control'):
+            return
         start, end = policy.utc(closed.get('started_at')), policy.utc(closed.get('closed_at'))
-        span = (end - start).total_seconds() / 60 if start and end else None
-        metrics.record_closed_size('f' if admitted(uid) else 'control', len(closed.get('conversation_ids') or []), span)
+        span = (end - start).total_seconds() if start and end else None
+        metrics.record_closed_size(arm, len(closed.get('conversation_ids') or []), span)
     except Exception:
         pass

@@ -409,7 +409,7 @@ def _close(
             carried_items.extend(transferred)
         metrics.record_episode_closed(reason)
         metrics.record_provisional_outcomes({'dropped': dropped})
-        f_join.record_closed_size(uid, closed)
+        f_join.record_closed_size(closed)
         composer.schedule(uid, str(episode['id']), collaborators=c)  # Members still processing reschedule it.
     return closed
 
@@ -496,6 +496,9 @@ def _select_carried_segments(
     calls this helper, so an earlier occasion's buffer remains for finalization.
     """
     members = set(episode.get('conversation_ids') or [])
+    # A join marked for variant F keeps its speech out of another conversation's moment until its own
+    # boundary settles; its finalize tail still applies it.
+    members -= {cid for cid, marker in _pending(episode).items() if marker.get('variant') == F_JOIN_VARIANT}
     applied = dict(episode.get('applied') or {})
     selected_segments: list[Mapping[str, Any]] = []
     receipt_ids: dict[str, set[str]] = {}
@@ -585,7 +588,13 @@ def _attach_once(
         owner = episode_owning_recorded_time(uid, started_at, firestore_client=c.firestore_client)
         late = is_late((started_at, ended_at or started_at), now)
         if owner or late:
-            uncertain = None if late else f_join.uncertain(uid, owner, conversation_id, source, started_at)
+            uncertain = (
+                None
+                if late
+                else f_join.uncertain(
+                    uid, owner, conversation_id, source, started_at, firestore_client=c.firestore_client
+                )
+            )
             placed = attach_recorded(uid, conversation_id, {'source': source}, started_at, started_at, c)
             if uncertain is not None and owner is not None:
                 f_join.mark_pending(
@@ -628,7 +637,7 @@ def _attach_once(
             last_activity_at=started_at,
             calendar_identity=None,
             now=now,
-        )
+        ) | f_join.arm_fields(uid)
         episodes_db.commit_moment(
             uid,
             expected_episode_id=None,
@@ -706,6 +715,7 @@ def _settle_boundary(
     c: Collaborators,
     now: datetime,
     named: Sequence[Mapping[str, Any]] = (),
+    short: bool = False,
 ):
     """Settle provisional joins and keep continuing members with their original owner."""
     decision = boundary_runtime.decision(
@@ -713,8 +723,10 @@ def _settle_boundary(
     )
     pending = _pending(episode).get(moment.conversation_id)
     if episode and pending is not None and pending.get('variant') == F_JOIN_VARIANT:
-        # A recorded-time join marked for variant F settles only with F; never the legacy prompt.
-        if decision.action == policy.CONTINUE:
+        # A recorded-time join marked for variant F settles only with F, never the legacy prompt. The join
+        # was marked only where the meeting authority asked a question, and a moment too short to commit
+        # keeps the join unchanged.
+        if decision.action == policy.CONTINUE and not short:
             decision = f_join.settle(
                 uid, episode, moment.conversation_id, pending, named, lambda rows: _named_segments(uid, rows, c), c
             )
@@ -883,7 +895,12 @@ def _record_moment_once(
     if closed is None and not member_episode_id:
         previous_episode_id = episode.get('id') if episode else None
         hard_cap_previous = dict(episode) if episode else None
-        settled = _settle_boundary(uid, episode, moment, facts, text.text, c, now, named)
+        short = (
+            not recovered
+            and moment.trigger != 'session_end'
+            and text.words < (FINALIZE_MIN_WORDS if moment.trigger == 'finalize' else MOMENT_MIN_WORDS)
+        )
+        settled = _settle_boundary(uid, episode, moment, facts, text.text, c, now, named, short=short)
         if isinstance(settled, str):
             return settled
         episode, pending, carried_items, successor_started_at, carry_previous_state = settled
@@ -928,6 +945,8 @@ def _record_moment_once(
             previous=hard_cap_previous if carry_previous_state else None,
         )
     )
+    if episode is None:
+        base |= f_join.arm_fields(uid)
     if episode is None and carry_previous_state and hard_cap_previous is not None:
         _carry_hard_cap_state(base, hard_cap_previous, carried_items)
     if (
@@ -1447,6 +1466,7 @@ def attach_recorded(uid, conversation_id, row, started, finished, c, *, pending_
         now=_now(c),
     )
     template['sources'] = [source] if (source := getattr(row.get('source'), 'value', row.get('source'))) else []
+    template |= f_join.arm_fields(uid)
     placed = episode_timeline.attach_recorded(
         uid,
         conversation_id,
