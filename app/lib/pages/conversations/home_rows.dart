@@ -103,6 +103,7 @@ List<HomeRow> buildHomeRows(List<ServerConversation> conversations, List<Episode
     final retainedIds = metadata.isEmpty ? episode.conversationIds.toSet() : metadata.keys.toSet();
     final pending = processingConversations
         .where((c) => retainedIds.contains(c.id) && !c.discarded && !c.deleted && !deletedIds.contains(c.id))
+        .where((c) => !_serverFinished(c))
         .toList();
     // A closing episode may still be live in the last server snapshot. The
     // streaming capture owns its row until it stops; then processing owns it.
@@ -138,6 +139,10 @@ List<HomeRow> buildHomeRows(List<ServerConversation> conversations, List<Episode
       if (member != null && !member.discarded && !member.deleted && !deletedIds.contains(id)) members.add(member);
     }
     if (members.isEmpty) continue;
+    // Noise and failed recordings never show on Home, so an episode made only of them has no row.
+    if (groupAwaitingTranscript && members.every((m) => isHomeNoise(m) || homeStepOf(m) == HomeStep.failed)) {
+      continue;
+    }
     if (!episode.composed && members.any(awaitingHomeTranscript)) {
       rows.add(_processingRun(members, (members.length > 1 ? finishingTitle : processingTitle) ?? '',
           episode: episode, step: HomeStep.transcribing));
@@ -280,6 +285,11 @@ HomeStep? homeStepOf(ServerConversation c) {
 
 /// Server-classified noise: a finished row with nothing worth showing on Home.
 bool isHomeNoise(ServerConversation c) => c.homeStep == 'noise' && !c.isLocked;
+
+/// The member's own record says it is finished (ready, noise, or locked). A local processing entry
+/// for such a member cannot hold its episode in "Finishing up…", so a stale entry cannot keep the
+/// episode on a processing row after its summary has landed.
+bool _serverFinished(ServerConversation c) => c.homeStep == 'ready' || c.homeStep == 'noise' || c.isLocked;
 
 /// The step an episode row may paint for a pending member: a member's failure never
 /// becomes the episode's failed row (Home hides failed rows); the episode keeps
