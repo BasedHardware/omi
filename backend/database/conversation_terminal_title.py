@@ -67,7 +67,7 @@ def transcript_texts(uid: str, conversation: Mapping[str, Any]) -> tuple[list[st
         segments = conversations_db.decode_transcript_segments_verified(
             uid, raw_segments, bool(conversation.get('transcript_segments_compressed'))
         )
-    except (TypeError, ValueError, zlib.error):
+    except (TypeError, ValueError, zlib.error, conversations_db.transcript_pointer.TranscriptPointerError):
         return [], False
     texts: list[str] = []
     for segment in segments:
