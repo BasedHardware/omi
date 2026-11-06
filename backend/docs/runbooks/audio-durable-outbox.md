@@ -157,7 +157,9 @@ measure listen's re-offer cadence or certify installed client WAL behavior.
 admission is enabled, accounting and capacity remain held until storage actually
 settles, including a caller cancelled while its queued/running thread continues.
 An acquire accounting error rolls back its partial mutation and admits using the
-flag-0 dispatch path. A release error retires exactly its reservation and is
+flag-0 dispatch path and emits the shared `omi_fallback_total` signal
+(`pusher`, `storage_pcm_budget` -> `unbudgeted_storage`, `gate_unavailable`,
+`degraded`). Its local error log remains rate-limited. A release error retires exactly its reservation and is
 swallowed. Neither reaches socket failure handling. Both are counted in
 `omi_pusher_storage_pcm_errors_total{reason="acquire|release"}` and logged at
 most once per reason per minute. Late post-cancellation storage failures use the

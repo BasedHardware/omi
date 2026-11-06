@@ -124,6 +124,9 @@ MAX_PCM_WINDOW_FRAMES = 4096
 storage_pcm_budget = StoragePcmBudget(storage_pcm_budget_bytes())
 PUSHER_STORAGE_PCM_BUDGET_LIMIT_BYTES.set(storage_pcm_budget.limit)
 _pcm_error_logged_at: dict[str, float] = {}
+# Count every fail-open through the shared helper; the caller supplies the
+# rate-limited warning below instead of a duplicate warning for every window.
+_pcm_fallback_metrics_log = logging.Logger(f'{__name__}.pcm_fallback', level=logging.CRITICAL)
 
 
 def _record_pcm_error(reason: PusherPcmErrorReason, error: Exception) -> None:
@@ -132,6 +135,18 @@ def _record_pcm_error(reason: PusherPcmErrorReason, error: Exception) -> None:
         PUSHER_STORAGE_PCM_ERRORS_TOTAL.labels(
             reason=reason_label(ReasonFamily.PUSHER_PCM, reason, PusherPcmErrorReason)
         ).inc()
+    except Exception:
+        pass
+    try:
+        if reason is PusherPcmErrorReason.ACQUIRE:
+            record_fallback(
+                component='pusher',
+                from_mode='storage_pcm_budget',
+                to_mode='unbudgeted_storage',
+                reason='gate_unavailable',
+                outcome='degraded',
+                log=_pcm_fallback_metrics_log,
+            )
     except Exception:
         pass
     try:

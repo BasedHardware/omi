@@ -784,6 +784,8 @@ async def test_accounting_fault_fails_open_without_socket_close_or_counter_corru
         raise RuntimeError('injected accounting failure')
 
     monkeypatch.setattr(budget, operation, broken)
+    fallback = MagicMock(wraps=pusher.record_fallback)
+    monkeypatch.setattr(pusher, 'record_fallback', fallback)
     monkeypatch.setattr(pusher, '_pcm_error_logged_at', {})
     monkeypatch.setattr(pusher, 'PRIVATE_CLOUD_CHUNK_DURATION', 0)
     metric = pusher.PUSHER_STORAGE_PCM_ERRORS_TOTAL.labels(reason=operation)
@@ -793,6 +795,9 @@ async def test_accounting_fault_fails_open_without_socket_close_or_counter_corru
         await asyncio.wait_for(pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1), 5)
         assert sock.close_code == 1000 and len(_sent_receipts(sock)) == 2
         assert budget.used == 128 and metric._value.get() == before + 2
+        fail_open = [call for call in fallback.call_args_list if call.kwargs['from_mode'] == 'storage_pcm_budget']
+        assert len(fail_open) == (2 if operation == 'acquire' else 0)
+        assert all(call.kwargs['outcome'] == 'degraded' for call in fail_open)
         logs = [r for r in caplog.records if 'event=pusher_pcm_error' in r.message]
         assert len(logs) == 1 and f'reason={operation}' in logs[0].message
     finally:
