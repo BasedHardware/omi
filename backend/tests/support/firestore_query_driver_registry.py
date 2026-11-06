@@ -66,6 +66,10 @@ from utils.memory.index_window_cursor import (
     encode_cursor as encode_memory_window_cursor,
     query_scope as memory_window_scope,
 )
+from database.folders import FirestoreFolders
+from database.people import FirestorePeople
+from database.ports.folders import FolderCreate
+from database.ports.people import PersonDraft
 from database.memories import MemoryListIndexState
 from database.funded_usage_session import LegacyUsageSession
 from database.memory_outbox_worker import CanonicalMemoryOutboxSideEffects, CanonicalMemoryOutboxWorkerConfig
@@ -217,12 +221,36 @@ BODY_DIGEST = {
     'database.jobstore.backfill.backfill_table': '7ebf380f5ac18bcdb96131861dc4be37d0377a821a8ce043f638dcc5e53a6d3d',
 }
 
+# Retained application entry-point recipes. Their query bodies now belong to
+# repository methods, so they are exercised by the port surface suite rather
+# than misclassified as direct query owners in the AST/index registry.
+PORT_CALLER_DRIVERS: dict[str, DriverEntry] = {}
+_PORT_CALLERS = frozenset(
+    {
+        'database.folders.bulk_move_conversations_to_folder',
+        'database.folders.create_folder',
+        'database.folders.delete_folder',
+        'database.folders.get_conversations_in_folder',
+        'database.folders.get_folder_by_category_mapping',
+        'database.folders.get_folders',
+        'database.folders.initialize_system_folders',
+        'database.folders.move_conversation_to_folder',
+        'database.folders.update_folder_conversation_count',
+        'database.people.get_or_create_person_by_name',
+    }
+)
+
 DRIVERS: dict[str, DriverEntry] = {}
 COVERED_BY: dict[str, CoveredByEntry] = {}
 SKIPS: dict[str, SkipEntry] = {}
 
 
 def _add(entry: DriverEntry | CoveredByEntry | SkipEntry) -> None:
+    if isinstance(entry, DriverEntry) and entry.function in _PORT_CALLERS:
+        if entry.function in PORT_CALLER_DRIVERS:
+            raise ValueError(f'duplicate port caller recipe: {entry.function}')
+        PORT_CALLER_DRIVERS[entry.function] = entry
+        return
     if entry.function in DRIVERS or entry.function in COVERED_BY or entry.function in SKIPS:
         raise ValueError(f'duplicate registry entry: {entry.function}')
     if isinstance(entry, DriverEntry):
@@ -1430,32 +1458,88 @@ _add(
 )
 _add(DriverEntry('database.folders.update_folder_conversation_count', base={'uid': UID, 'folder_id': 'folder-1'}))
 
-# Query bodies moved into the typed repositories. Keep the established module
-# drivers as the caller contract and require that they actually reach these bodies.
-for _method, _drivers in (
-    ('_stream', ('get_folders', 'create_folder', 'initialize_system_folders', 'get_conversations_in_folder')),
-    ('list', ('get_folders',)),
-    ('create', ('create_folder',)),
-    ('delete', ('delete_folder',)),
-    ('initialize_system', ('initialize_system_folders',)),
-    ('conversations_in_folder', ('get_conversations_in_folder',)),
-    ('_count', ('update_folder_conversation_count',)),
-):
-    _add(
-        CoveredByEntry(
-            'database.folders.FirestoreFolders.' + _method,
-            covered_by=tuple('database.folders.' + name for name in _drivers),
-            reason='typed repository query body exercised through the retained application entry point',
-        )
-    )
+
+class _PortRepoArgument:
+    """Bind a fresh repository only after run_driver installs its fake client.
+
+    The driver's argument copier invokes this once per trial; no SDK client is
+    constructed at registry import time, and no fake client is deep-copied.
+    """
+
+    def __init__(self, factory, *, transaction=False):
+        self.factory = factory
+        self.transaction = transaction
+
+    def __deepcopy__(self, memo):
+        repo = self.factory(UID)
+        if self.transaction:
+            repo.transaction = repo.client.transaction()
+        return repo
+
+
+_FOLDER_SELF = _PortRepoArgument(FirestoreFolders)
+_PEOPLE_SELF = _PortRepoArgument(FirestorePeople, transaction=True)
+_PORT_MUTATION = (None, 'dormant receipt id; point-document IO only, no query filter change')
+_PORT_REVISION = (None, 'dormant document revision guard; no query filter change')
 _add(
-    CoveredByEntry(
-        'database.people.FirestorePeople._get_or_create_raw',
-        covered_by=('database.people.get_or_create_person_by_name',),
-        reason='same-name transaction query moved into the typed People repository',
+    DriverEntry(
+        'database.folders.FirestoreFolders.list',
+        base={'self': _FOLDER_SELF},
+        neutrals={'limit': _LIMIT_OPT, 'cursor': (None, 'opaque keyset cursor; first-page query shape')},
     )
 )
-
+_add(
+    DriverEntry(
+        'database.folders.FirestoreFolders.create',
+        base={'self': _FOLDER_SELF, 'draft': FolderCreate(name='shape-folder')},
+        neutrals={'mutation_id': _PORT_MUTATION},
+    )
+)
+_add(
+    DriverEntry(
+        'database.folders.FirestoreFolders.delete',
+        base={'self': _FOLDER_SELF, 'folder_id': 'folder-1'},
+        domains={'move_to_folder_id': [None, 'folder-2']},
+        neutrals={'expected_revision': _PORT_REVISION, 'mutation_id': _PORT_MUTATION},
+        setup=_seed(f'users/{UID}/folders/folder-1', {'name': 'shape-folder', 'deleted': False}),
+    )
+)
+_add(
+    DriverEntry(
+        'database.folders.FirestoreFolders.conversations_in_folder',
+        base={'self': _FOLDER_SELF, 'folder_id': 'folder-1'},
+        domains={'include_discarded': [False, True]},
+        neutrals={'limit': _LIMIT, 'offset': _OFFSET},
+    )
+)
+_add(
+    CoveredByEntry(
+        'database.folders.FirestoreFolders._stream',
+        covered_by=(
+            'database.folders.FirestoreFolders.list',
+            'database.folders.FirestoreFolders.create',
+            'database.folders.FirestoreFolders.conversations_in_folder',
+        ),
+        reason='repository query terminals reached by the public list/create/conversation readers',
+    )
+)
+_add(
+    CoveredByEntry(
+        'database.folders.FirestoreFolders._count',
+        covered_by=('database.folders.FirestoreFolders.delete',),
+        reason='target folder count query reached by the explicit rehome-target delete trial',
+    )
+)
+_add(
+    DriverEntry(
+        'database.people.FirestorePeople._get_or_create_raw',
+        base={'self': _PEOPLE_SELF, 'draft': PersonDraft(id='person-1', name='shape-name')},
+        neutrals={
+            'mutation_id': _PORT_MUTATION,
+            'project': (False, 'learning projection does not change the exact-name People query'),
+        },
+    )
+)
 
 _FRAME_REQUEST_DOC = {
     'request_id': 'req-1',

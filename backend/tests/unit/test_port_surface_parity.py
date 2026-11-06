@@ -13,6 +13,8 @@ from database.ports.folders import FoldersRepo, FoldersTx
 from database.ports.people import PeopleRepo, PeopleTx
 from database.space_store import FirestoreSpaceStore
 from testing.domain_sim.store import SimFolders, SimPeople, SimSpaceStore
+from tests.support.firestore_query_driver_registry import COVERED_BY, DRIVERS, PORT_CALLER_DRIVERS
+from tests.support.firestore_query_drivers import calling_key, run_driver
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, ReadAfterWriteError
 
 
@@ -72,3 +74,38 @@ def test_firestore_uow_keeps_sdk_read_before_write_rule():
 
     with pytest.raises(ReadAfterWriteError):
         store.run(body)
+
+
+@pytest.mark.parametrize('key', sorted(PORT_CALLER_DRIVERS))
+def test_retained_module_entry_points_execute(key):
+    result = run_driver(PORT_CALLER_DRIVERS[key])
+    assert not result.errors, (key, result.errors)
+    assert result.shapes, key
+
+
+_PORT_QUERY_KEYS = sorted(
+    key for key in DRIVERS if key.startswith(('database.folders.FirestoreFolders.', 'database.people.FirestorePeople.'))
+)
+
+
+@pytest.fixture(scope='module')
+def port_query_results():
+    return {key: run_driver(DRIVERS[key]) for key in _PORT_QUERY_KEYS}
+
+
+@pytest.mark.parametrize('key', _PORT_QUERY_KEYS)
+def test_repository_query_recipes_execute(port_query_results, key):
+    result = port_query_results[key]
+    assert not result.errors, (key, result.errors)
+    assert result.shapes, key
+
+
+def test_repository_query_helpers_are_observed(port_query_results):
+    for key, entry in COVERED_BY.items():
+        if not key.startswith('database.folders.FirestoreFolders.'):
+            continue
+        assert any(
+            calling_key(shape.calling_function) == key
+            for owner in entry.covered_by
+            for shape in port_query_results[owner].shapes
+        ), key
