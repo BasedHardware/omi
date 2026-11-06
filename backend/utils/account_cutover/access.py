@@ -10,6 +10,7 @@ from fastapi import WebSocketException
 
 from config.account_cutover import cutover_enforcement_enabled
 
+from database import redis_db
 from database import account_cutover as account_cutover_db
 from database.read_boundary import MalformedDocError
 from models.account_cutover import AccountCutoverClientAction, AccountCutoverRecord, AccountCutoverState
@@ -109,6 +110,9 @@ def evaluate_account_cutover_access(
     if is_cutover_control_path(path):
         return
 
+    if not force and redis_db.get_generic_cache(f'cutover-idle:{uid}'):
+        return
+
     try:
         record = account_cutover_db.get_account_cutover_record(uid, firestore_client=firestore_client)
     except MalformedDocError as error:
@@ -153,6 +157,8 @@ def evaluate_account_cutover_access(
                     'retryable': False,
                 },
             )
+        if not any(build.minimum_supported_build > 0 for build in control.minimum_supported_builds):
+            redis_db.set_generic_cache(f'cutover-idle:{uid}', 1, 60)
         return
 
     if control.client_action == AccountCutoverClientAction.force_upgrade:
@@ -175,6 +181,7 @@ def evaluate_account_cutover_access(
     if (
         control.client_action == AccountCutoverClientAction.migration_maintenance
         and record.state != AccountCutoverState.rolled_back_stranded
+        and (record.state != AccountCutoverState.migrating or mutating)
     ):
         raise AccountCutoverAccessDenial(
             code='migration_maintenance',
@@ -204,6 +211,16 @@ def evaluate_account_cutover_access(
                 'retryable': False,
             },
         )
+
+    # A bit cannot preserve generation/header or per-platform upgrade checks.
+    # Cache only universally open generation-zero states; other open states
+    # retain the authoritative read rather than bypassing bridge safeguards.
+    if (
+        record.state in {AccountCutoverState.migrated, AccountCutoverState.rolled_back_stranded}
+        and record.account_generation == 0
+        and not any(build.minimum_supported_build > 0 for build in control.minimum_supported_builds)
+    ):
+        redis_db.set_generic_cache(f'cutover-idle:{uid}', 1, 60)
 
 
 def enforce_account_cutover_http_access(
