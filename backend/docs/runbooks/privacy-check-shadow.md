@@ -80,6 +80,48 @@ overrides can only shorten that ceiling. Rollouts use the declared reader levers
 
 ## Measurement
 
+### Token-fenced negative lookups (omi-pipeline, owner lead2)
+
+`privacy_negative_lookup_cache` uses the existing 0–100 percent cohorts. Zero
+is the kill switch. `privacy_negative_lookup_shadow` takes precedence for its
+cohort, keeps every lookup live, and bypasses generation-memo hits so the live
+walk supplies comparisons. No runtime configuration is changed by this PR.
+This is independent of `privacy_ttl60` and its Firestore kill document; it never
+touches Redis or seeds an older deletion-marker cache.
+
+Only real NOT_FOUND reads of `account_deletions/{uid}`, per-ID conversation
+tombstones and conversations can seed the process-local 50,000-entry LRU.
+Entries expire at 60 seconds, measured before the authoritative read, and
+carry the client's plane, owner, exact document path and token/server revision.
+Every reuse requires an uncached token read in the same authorizing transaction.
+Malformed/missing/blocked tokens, nontransactional calls and full-row exports
+stay live. WQ12 snapshot memos cannot seed or certify these hints.
+Metadata-only conversation creates/upserts rotate the token too; existing-only
+updates may skip rotation only when they cannot change privacy authority.
+Legal-hold writes rotate the token, but hold adjudication remains in the
+existing legal-hold fence; the batch walk does not introduce a new hold policy.
+
+`privacy_negative_lookup_total{collection,mode,result}` has bounded collection
+labels (`account_deletions`, `deleted_conversations`, `conversations`, `other`),
+mode `shadow|enforce`, result `hit|miss|mismatch`. A shadow hit is a compared
+candidate NOT_FOUND; a live document is always a mismatch, even within TTL.
+The denominator for qualification is shadow **hits**, not cold misses. Both
+Cloud Run keep-lists retain it; GKE PodMonitoring retains application counters
+without a name keep-list, and isolated workers fold the counter across exits.
+
+Proposed ramp after the lead verifies writer-fence coverage on every plane:
+hour 0–2 shadow 100%, enforcement 0%; require zero mismatches on at least
+10,000 shadow hits with every serving plane represented and no scrape gaps.
+Hours 2–4 enforce 10%, hours 4–6 enforce 50%, hour 6 onward enforce 100%,
+only after the preceding two-hour window stays clean. Keep shadow 10% during
+enforcement (shadow wins overlapping cohorts). Lead2 owns each advancement;
+insufficient samples extend the window rather than advancing by the clock.
+Any mismatch stops the ramp: set enforcement to 0 (and shadow to 0 for an exact
+original read path), investigate the writer bypass, and requalify from shadow.
+Compare absolute caller reads and cache hits against each plane's own baseline.
+This schedule covers token-fenced lookup hints; the decision-cache family's
+qualification window below remains separate.
+
 All labels are closed enums with no owner, conversation, job or session IDs.
 Point reads retain their historical SDK caller labels through a closed privacy
 override, so adding the instrumentation does not move the baseline into a

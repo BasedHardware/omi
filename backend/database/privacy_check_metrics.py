@@ -43,6 +43,11 @@ DECISION_MISMATCH = Counter(
 )
 SHADOW_CHECKS = Counter('privacy_shadow_checks_total', 'Privacy shadow comparisons', ['family', 'result'])
 MEMO_REQUESTS = Counter('privacy_memo_requests_total', 'Candidate decision reuse', ['family', 'result'])
+NEGATIVE_LOOKUPS = Counter(
+    'privacy_negative_lookup_total',
+    'Token-certified NOT_FOUND lookup cache outcomes',
+    ['collection', 'mode', 'result'],
+)
 TTL_BOUND_SECONDS = 60.0
 MEMO_INELIGIBLE = Counter(
     'privacy_memo_ineligible_total',
@@ -170,6 +175,18 @@ def memo_result(family, result):
     try:
         result = result if result in {'hit', 'miss', 'ineligible', 'no_token', 'mint', 'mint_error'} else 'ineligible'
         MEMO_REQUESTS.labels(_family(family), result).inc()
+    except Exception:
+        pass
+
+
+def negative_lookup(collection, mode, result):
+    try:
+        collection = (
+            collection if collection in {'account_deletions', 'deleted_conversations', 'conversations'} else 'other'
+        )
+        mode = 'shadow' if mode == 'shadow' else 'enforce'
+        result = result if result in {'hit', 'miss', 'mismatch'} else 'miss'
+        NEGATIVE_LOOKUPS.labels(collection, mode, result).inc()
     except Exception:
         pass
 

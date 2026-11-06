@@ -46,6 +46,8 @@ KNOWN_LEVERS = frozenset(
         'batch_privacy_memoize',
         'bpp_generation_memo',  # batch privacy task-attempt memo; absent = 0/off
         'privacy_checks_shadow',  # compares live decisions; never authorizes writes
+        'privacy_negative_lookup_cache',  # WQ26-token-certified NOT_FOUND reads; 0 is the kill switch
+        'privacy_negative_lookup_shadow',  # live-read comparison; overrides enforcement and generation memo hits
         'legal_hold_fence_cache',
         'privacy_session_token',
         'tombstone_negative_cache',

@@ -17,6 +17,7 @@ from config.firestore_read_levers import lever_enabled
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 from database.batch_privacy_attempt import SCHEMA_FIELD, TOKEN_FIELD, TOKEN_SCHEMA, current_attempt, token_version
 from database import privacy_check_metrics as metrics
+from database import batch_privacy_negative_cache as negative_cache
 from database.privacy_ttl_cache import BoundedTTLCache, enabled as ttl_enabled, is_missing
 
 PRIVACY_COLLECTION = 'batch_pipeline_privacy'
@@ -114,7 +115,9 @@ def assert_batch_write_allowed(
     """
     metrics.called('batch')
     shadow = lever_enabled('privacy_checks_shadow', uid) and current_attempt() is not None
-    enforce = lever_enabled('bpp_generation_memo', uid) and not shadow
+    # A generation-memo hit would hide the live lookups needed for shadow proof.
+    negative_shadow = lever_enabled('privacy_negative_lookup_shadow', uid)
+    enforce = lever_enabled('bpp_generation_memo', uid) and not shadow and not negative_shadow
     # Materialize once when comparing, including one-shot source generators.
     ids = tuple(conversation_ids) if shadow else conversation_ids
     kwargs: dict[str, Any] = dict(
@@ -276,14 +279,30 @@ def _assert_batch_write_allowed_live(
     if memo is not None and (memo.client is not client or memo.transaction is not transaction):
         raise ValueError('privacy memo belongs to another transaction attempt')
 
-    def read(reference):
-        return (
-            memo.get(reference)
-            if memo is not None
-            else metrics.read_snapshot('batch', reference, transaction=transaction, read_budget=read_budget)
-        )
+    def live_read(reference):
+        return metrics.read_snapshot('batch', reference, transaction=transaction, read_budget=read_budget)
 
-    marker = read(client.collection('account_deletions').document(uid))
+    # Full-row exports and nontransactional preflights always read live. The
+    # disabled path retains its exact original read order/counts. Do not poll
+    # the older TTL cache's Firestore kill doc or involve Redis in this path.
+    negative_shadow = lever_enabled('privacy_negative_lookup_shadow', uid)
+    negative_on = (negative_shadow or lever_enabled('privacy_negative_lookup_cache', uid)) and (
+        transaction is not None and snapshots is None
+    )
+    started = negative_cache.LOOKUPS.clock() if negative_on else None
+    if negative_on and privacy_snapshot is None:
+        # Never use WQ12's per-callback memo for this per-decision token read.
+        privacy_snapshot = live_read(client.collection(PRIVACY_COLLECTION).document(key))
+    version = token_version(privacy_snapshot) if negative_on else None
+
+    def read(reference, collection=None):
+        if negative_on and collection is not None:
+            return negative_cache.read(
+                client, uid, reference, collection, version, live_read, shadow=negative_shadow, started=started
+            )
+        return memo.get(reference) if memo is not None else live_read(reference)
+
+    marker = read(client.collection('account_deletions').document(uid), 'account_deletions')
     status = normalize_account_deletion_status(
         marker_exists=marker.exists, raw_status=(marker.to_dict() or {}).get('wipe_status')
     )
@@ -333,9 +352,9 @@ def _assert_batch_write_allowed_live(
             if not conversation_id or '/' in conversation_id or len(conversation_id.encode()) > 256:
                 raise ValueError('bounded conversation document ID required')
             metrics.walked()
-            if read(user.collection('deleted_conversations').document(conversation_id)).exists:
+            if read(user.collection('deleted_conversations').document(conversation_id), 'deleted_conversations').exists:
                 raise BatchPrivacyBlocked('conversation_deleted', conversation_id=conversation_id)
-            conversation = read(user.collection('conversations').document(conversation_id))
+            conversation = read(user.collection('conversations').document(conversation_id), 'conversations')
             row = conversation.to_dict() or {}
             chain[conversation_id] = bool(conversation.exists)
             if snapshots is not None:
