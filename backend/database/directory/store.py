@@ -77,7 +77,7 @@ class DirectoryStore:
         uid: str,
         *,
         now: float,
-        cell: str = 'cell1',
+        cell: str,
         ramp_bucket: float | None = None,
         ramp_revision: int | None = None,
         signup_platform: str | None = None,

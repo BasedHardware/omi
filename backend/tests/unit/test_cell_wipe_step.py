@@ -1,10 +1,18 @@
 """Required wipe fencing, failure propagation and real cell/directory purge."""
 
+from concurrent.futures import ThreadPoolExecutor
+import subprocess
+import sys
+import threading
 from unittest.mock import Mock
 
 import pytest
 
 from database.directory import router, wipe
+from database.cells import CellStore
+from database.cells.errors import CellSpaceUnavailable
+from database.jobstore.connection import Pool
+from testing.cells_fixtures import cells_dsn
 from testing.cells_fixtures import make_cell_store, make_directory
 
 
@@ -51,7 +59,8 @@ def test_real_purge_fence_drain_and_retry(monkeypatch, crash):
     uid = directory.uid()
     cell.seeded.add(uid)
     try:
-        directory.store.get_or_create_personal_space(uid, now=1)
+        directory.store.get_or_create_personal_space(uid, cell='cell1', now=1)
+        cell.store.enroll_space(uid, now=1)
         cell.store.run(uid, lambda tx: tx.put('memories', 'm1', {'text': 'synthetic'}), actor_uid=uid, now=1)
         monkeypatch.setattr(router, 'directory_store', lambda: directory.store)
         events = []
@@ -63,6 +72,12 @@ def test_real_purge_fence_drain_and_retry(monkeypatch, crash):
             assert space.cell == 'disabled'
             assert space.epoch >= 2
             assert owner not in router._cache
+            with cell.store.pool.connection() as conn:
+                assert conn.execute('SELECT tombstoned FROM space_heads WHERE space_id=%s', (owner,)).fetchone() == (
+                    True,
+                )
+            with pytest.raises(CellSpaceUnavailable):
+                cell.store.run(owner, lambda tx: tx.put('memories', 'late', {}), actor_uid=owner, now=2)
             with pytest.raises(router.DirectoryRoutingUnavailable):
                 router.resolve(owner)
             events.append('purge')
@@ -85,5 +100,102 @@ def test_real_purge_fence_drain_and_retry(monkeypatch, crash):
         monkeypatch.setattr(cell.store, 'purge_space', real_purge)
     finally:
         monkeypatch.undo()
+        directory.close()
+        cell.close()
+
+
+def test_stale_route_writer_cannot_recreate_after_purge(monkeypatch):
+    directory, cell = make_directory(), make_cell_store()
+    uid = directory.uid()
+    cell.seeded.add(uid)
+    other_pool = Pool(cells_dsn(), size=1)
+    stale_writer = CellStore(other_pool)
+    try:
+        directory.store.get_or_create_personal_space(uid, cell='cell1', now=1)
+        cell.store.enroll_space(uid, now=1)
+        monkeypatch.setattr(router, 'directory_store', lambda: directory.store)
+        monkeypatch.setattr(wipe, 'cell_store', lambda: cell.store)
+        # An independent worker keeps this route even when the wiping worker
+        # invalidates its own process cache. It outlives the drain and purge.
+        other_worker_cache = {uid: 'cell'}
+        assert wipe.purge_owner_planes(uid, now=2) == {'status': 'purged'}
+        assert other_worker_cache[uid] == 'cell'
+        with pytest.raises(CellSpaceUnavailable) as error:
+            stale_writer.run(uid, lambda tx: tx.put('memories', 'late', {}), actor_uid=uid, now=3)
+        assert error.value.retryable is True
+        with pytest.raises(CellSpaceUnavailable):
+            stale_writer.enroll_space(uid, now=3)
+        # The cell authority must work in a separate interpreter too; it has
+        # neither the wiping worker's process cache nor its invalidation calls.
+        child = subprocess.run(
+            [
+                sys.executable,
+                '-c',
+                'import sys; from database.cells import CellStore; '
+                'from database.cells.errors import CellSpaceUnavailable; '
+                'from database.jobstore.connection import Pool; '
+                'pool = Pool(sys.argv[1], size=1); store = CellStore(pool)\n'
+                'try:\n'
+                '    store.run(sys.argv[2], lambda tx: tx.put("memories", "child", {}), '
+                'actor_uid=sys.argv[2], now=3)\n'
+                'except CellSpaceUnavailable as error:\n'
+                '    assert error.retryable\n'
+                'else:\n'
+                '    raise AssertionError("stale child route reopened wiped space")\n'
+                'finally:\n'
+                '    pool.close()\n',
+                cells_dsn(),
+                uid,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        assert child.returncode == 0, child.stderr
+        with stale_writer.pool.connection() as conn:
+            for table in ('cell_docs', 'change_log', 'sync_cursors', 'mutation_receipts'):
+                assert conn.execute(f'SELECT count(*) FROM {table} WHERE space_id=%s', (uid,)).fetchone()[0] == 0
+        assert wipe.purge_owner_planes(uid, now=4) == {'status': 'absent'}
+    finally:
+        other_pool.close()
+        directory.close()
+        cell.close()
+
+
+def test_resolver_read_before_fence_cannot_enroll_after_purge(monkeypatch):
+    directory, cell = make_directory(), make_cell_store()
+    uid = directory.uid()
+    cell.seeded.add(uid)
+    read, resume = threading.Event(), threading.Event()
+    real_get = directory.store.get_space
+    try:
+        directory.store.get_or_create_personal_space(uid, cell='cell1', now=1)
+        cell.store.enroll_space(uid, now=1)
+        monkeypatch.setattr(router, 'directory_store', lambda: directory.store)
+        monkeypatch.setattr(router, 'cell_store', lambda: cell.store)
+        monkeypatch.setattr(wipe, 'cell_store', lambda: cell.store)
+
+        def old_row(owner):
+            row = real_get(owner)
+            if threading.current_thread() is not threading.main_thread():
+                read.set()
+                assert resume.wait(timeout=10)
+            return row
+
+        monkeypatch.setattr(directory.store, 'get_space', old_row)
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            resolving = executor.submit(router.resolve, uid)
+            try:
+                assert read.wait(timeout=10)
+                assert wipe.purge_owner_planes(uid, now=2) == {'status': 'purged'}
+            finally:
+                resume.set()
+            with pytest.raises(router.DirectoryRoutingUnavailable):
+                resolving.result(timeout=10)
+        assert uid not in router._cache
+        with pytest.raises(CellSpaceUnavailable):
+            cell.store.run(uid, lambda tx: tx.put('memories', 'late', {}), actor_uid=uid, now=3)
+    finally:
+        resume.set()
         directory.close()
         cell.close()

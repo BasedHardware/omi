@@ -21,8 +21,10 @@ def purge_owner_planes(uid: str, *, now: float | None = None) -> dict:
     now = time.time() if now is None else now
     store.set_routing(uid, cell='disabled', bump_epoch=True, now=now)
     router.invalidate(uid)
+    cells = cell_store()
+    cells.tombstone_space(uid)
     time.sleep(directory_routing.wipe_writer_drain_seconds())
-    cell_store().purge_space(uid)
+    cells.purge_space(uid)
     store.purge_owner(uid, now=now)
     router.invalidate(uid)
     return {'status': 'purged'}

@@ -46,11 +46,11 @@ WS_AUTH_CODE_ACCOUNT_CUTOVER = 4006
 
 
 def _resolve_request_plane_or_503(uid, *, signup_platform=None, signup_os=None) -> None:
-    if not directory_router.routing_active():
-        return
     try:
+        if not directory_router.routing_active():
+            return
         directory_router.resolve(uid, signup_platform=signup_platform, signup_os=signup_os)
-    except directory_router.DirectoryRoutingUnavailable as exc:
+    except (directory_router.DirectoryRoutingUnavailable, ValueError) as exc:
         raise HTTPException(
             status_code=503, detail={'code': 'directory_routing_unavailable', 'retryable': True}
         ) from exc
