@@ -17,7 +17,6 @@ from database.ports.workstreams import (
     ArtifactDescriptorEntity,
     ContinuationCheckpointEntity,
 )
-from database.folders import port_mutation_digest, read_port_mutation, write_port_mutation
 from contextlib import nullcontext
 from copy import deepcopy
 from database.action_item_fence import fenced_action_item_commit
@@ -1654,6 +1653,8 @@ class FirestoreWorkstreams:
         )
 
     def create(self, draft: WorkstreamCreate, *, mutation_id: str | None = None) -> WorkstreamEntity:
+        from database.folders import port_mutation_digest, read_port_mutation, write_port_mutation
+
         data = deepcopy(draft.data)
         wid = (
             data.get('workstream_id')

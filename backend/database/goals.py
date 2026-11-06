@@ -16,7 +16,6 @@ from database.ports.goals import (
     GoalUpdate,
     GoalProgressEventEntity,
 )
-from database.folders import check_port_revision, port_mutation_digest, read_port_mutation, write_port_mutation
 from contextlib import nullcontext
 from copy import deepcopy
 from database.action_item_fence import fenced_action_item_commit
@@ -1276,6 +1275,8 @@ class FirestoreGoals:
     def update(
         self, goal_id: str, patch: GoalUpdate, *, expected_revision: int | None = None, mutation_id: str | None = None
     ) -> GoalEntity | None:
+        from database.folders import check_port_revision, port_mutation_digest, read_port_mutation, write_port_mutation
+
         if self.transaction is None:
 
             @firestore.transactional

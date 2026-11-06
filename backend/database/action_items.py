@@ -14,7 +14,6 @@ from database.action_item_fence import ActionItemCommitFence, fenced_action_item
 import base64
 import json
 from typing import Iterator
-from database import goals as goals_db, workstreams as workstreams_db
 from database.ports.action_items import (
     ActionItemDraft,
     ActionItemEntity,
@@ -22,7 +21,6 @@ from database.ports.action_items import (
     TaskRelationshipConflictError,
 )
 from database.ports.base import Page
-from database.folders import check_port_revision, port_mutation_digest, read_port_mutation
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta, tzinfo
@@ -1820,6 +1818,10 @@ class FirestoreActionItems:
         return typed_doc(snapshot) if snapshot.exists else {}
 
     def validate_task_relationship(self, rule: TaskRelationshipRule) -> None:
+        if rule.goal_id is None and rule.workstream_id is None:
+            return
+        from database import goals as goals_db, workstreams as workstreams_db
+
         goals = (
             self.commit_context.goals
             if self.commit_context is not None
@@ -1853,6 +1855,8 @@ class FirestoreActionItems:
                 raise TaskRelationshipConflictError('task goal_id must match workstream goal_id')
 
     def _mutation(self, method, operation, payload, mutation_id, *args, **kwargs):
+        from database.folders import port_mutation_digest, read_port_mutation
+
         if self.transaction is None:
 
             @firestore.transactional
@@ -1913,6 +1917,8 @@ class FirestoreActionItems:
         expected_revision: int | None = None,
         mutation_id: str | None = None,
     ) -> bool:
+        from database.folders import check_port_revision, port_mutation_digest, read_port_mutation
+
         if self.transaction is None:
 
             @firestore.transactional
