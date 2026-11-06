@@ -1,6 +1,7 @@
 # Object lake provisioning (not applied)
 
 C1 checks in primitives and policy only. No bucket or key is provisioned here.
+Keep `OBJECT_LAKE_RELEASE=v1` until the lifecycle contract and retention hold migrate together.
 `OBJECT_LAKE_WRITE_ENABLED=false` and percent 0 remain mandatory in production
 until C4's explicit account-wipe coverage test is green (plan v2 O1). Production
 bucket/KMS bindings remain empty. Dev literals are reserved names, not proof that
@@ -48,6 +49,7 @@ C2 owns codec integration, inline threshold/read kill switch and
 backfill, current-consent export filtering, registry and janitor. C4 must explicitly
 purge lake content with verified absence and destroy `space_keys/{sid}` **LAST**.
 The top-level key collection is invisible to today's generic user-subtree wipe.
+Before purge, C4 must durably fence deleted owners and quiesce in-flight puts to prevent object/key recreation.
 Until C4 ships, no production key documents or lake objects may be created.
 
 Destroy evicts local raw keys and every unwrap rechecks document existence before
