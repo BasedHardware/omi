@@ -1,8 +1,8 @@
 # A2a implementation and validation record
 
-Status: implementation and scoped verification complete; full backend unit contract remains in flight. This is not the final completion receipt.
+Status: A2a implementation is committed and scoped verification is green. The full backend contract is not green: its sole remaining audit mismatch needs the four reviewed metadata hashes outside the authorized file boundary. That scope request is unanswered; the file is untouched. No background validation is left running at handoff.
 
-Evidence recorded at 2026-11-06T21:48:53.820433+00:00. Repository: BasedHardware/omi. Branch: `lane/pgf-a2a`. Source revision: `78446f1214f`. Base: A1 tip `73d5a4a01ccd225083e998c99157e98e5b4c524c` (PR #24800, still open at the latest live check). No push or PR creation was performed. GCP tier: none; no production service or data was used.
+Evidence recorded at 2026-11-06T22:39:46.393515+00:00. Repository: BasedHardware/omi. Branch: `lane/pgf-a2a`. Last runtime source change: `78446f1214f`; subsequent commits contain this evidence record only. Base: A1 tip `73d5a4a01ccd225083e998c99157e98e5b4c524c` (PR #24800). The final live check found A1 OPEN with that same head and no merge commit; no rebase was required. Fresh `origin/main` is `34125ccd5fbd6c47885d23abe70e9a1448b7515e`. No push or PR creation was performed. GCP tier: none; no production service or data was used.
 
 ## Built
 
@@ -53,7 +53,7 @@ Evidence recorded at 2026-11-06T21:48:53.820433+00:00. Repository: BasedHardware
 - `M backend/tests/unit/test_port_surface_parity.py`
 - `M config/feature-flags.yaml`
 
-Implementation/evidence commits:
+Implementation/evidence commits (before the terminal report commit):
 
 - `b7b501ad58c` feat(database): define task workflow ports and explicit commit fences
 - `47358b05431` feat(database): port task workflow writers and move task commit fencing
@@ -71,6 +71,9 @@ Implementation/evidence commits:
 - `3c76364d91e` feat(database): load workflow transaction dependencies at their call sites
 - `0c3269fea3c` test(database): checkpoint A2a implementation and validation evidence
 - `78446f1214f` feat(database): keep goal reader imports independent of task writers
+- `08ea6e82096` test(database): record final A2a scoped verification results
+- `e49b1c8a69a` test(database): record shared writer audit review and scoped metadata proposal
+- `a77d706e5d6` test(database): record final formatting and bounded audit scope request
 
 ## Caller and fixture audit
 
@@ -154,6 +157,9 @@ The root prefix is `backend/.venv/bin/python /tmp/a2a-run.py /Users/dazheng/work
 | root | `cmp /tmp/a2-openapi-base.json /tmp/a2a-openapi-final.json` | PASS; byte-identical; baseline is `git show origin/main:docs/api-reference/app-client-openapi.json` |
 | root | `DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/opt/opus/lib:/opt/homebrew/lib:/usr/local/lib:/usr/lib BACKEND_UNIT_TEST_FILE_LIST=/tmp/a2a-opus-files.txt BACKEND_PYTEST_WORKERS=4 BACKEND_UNIT_FILE_BUDGET_SECONDS=900 bash backend/test.sh` | `test_empty_capture_recovery.py`: 68 passed, 1 warning, 0 failed; 11.45 seconds |
 | root | `BACKEND_UNIT_TEST_FILE_LIST=/tmp/a2a-executor-files.txt BACKEND_PYTEST_WORKERS=1 BACKEND_UNIT_FILE_BUDGET_SECONDS=900 bash backend/test.sh` | `test_executors.py`: 36 passed, 0 failed; 3.43 seconds |
+| root | `DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/opt/opus/lib:/opt/homebrew/lib:/usr/local/lib:/usr/lib BACKEND_UNIT_TEST_FILE_LIST=/tmp/a2a-failed-files-final.txt BACKEND_PYTEST_WORKERS=1 BACKEND_UNIT_FILE_BUDGET_SECONDS=900 bash backend/test.sh` | 9 failed-file replays: 353 passed, 2 failed; exit 1 (audit metadata and known executor timeout) |
+| root | `BACKEND_UNIT_TEST_FILE_LIST=/tmp/a2a-executor-files.txt BACKEND_PYTEST_WORKERS=1 BACKEND_UNIT_FILE_BUDGET_SECONDS=900 bash backend/test.sh` | Final standalone executor replay: 36 passed, 0 failed; 6.70 seconds; exit 0 |
+| root | `git show origin/main:docs/api-reference/app-client-openapi.json > /tmp/a2-openapi-current-main.json && cmp /tmp/a2-openapi-current-main.json /tmp/a2a-openapi-final.json` | PASS against fresh main `34125ccd5fbd6c47885d23abe70e9a1448b7515e` |
 
 The 29-file focused manifest is reproduced exactly below (backend-relative paths):
 
@@ -214,13 +220,43 @@ The temporary configuration references this worktree's rules/index files, binds 
 
 Every implementation commit passed the pinned staged Black formatter. Final whole-change check: `scripts/backend-python-format --check <all 30 added/modified Python paths from git diff 73d5a4a01ccd225083e998c99157e98e5b4c524c HEAD>` passed; 30 files would be left unchanged. The exact manifest is the Python subset of the file list above.
 
-### Full contract still in flight
+### Terminal full-contract result and failed-file replay
 
-Root command: `BACKEND_PYTEST_WORKERS=4 BACKEND_UNIT_FILE_BUDGET_SECONDS=900 bash backend/scripts/run-unit-ci.sh --all`. It includes `test-preflight.sh` (17 required passes), full-tree pyright (0 errors / 75,627 warnings), and `test.sh` over all 2,675 selected files. The command started before the corrective commits, so its initial failures remain in its log even after passing isolated reruns.
+Root command: `BACKEND_PYTEST_WORKERS=4 BACKEND_UNIT_FILE_BUDGET_SECONDS=900 bash backend/scripts/run-unit-ci.sh --all`. It completed all 2,675 selected files and exited 1: 2,666 file processes succeeded and 9 failed. The full-tree preflight passed all 17 required checks and pyright reported 0 errors / 75,627 warnings. Aggregating all 2,675 pytest summaries gives **65,468 passed, 46 failed, 17 errors, 154 skipped, 2,130 deselected and 75 xfailed**. Passed node markers independently match the aggregate. The command began before corrective commits; this is a historical full-run result, not a clean single-revision run on final HEAD.
 
-The changed-file selector additionally selects `testing/e2e/test_canonical_memory_pipeline.py`; the explicit isolated `test.sh` run for that file passed 8 tests with 17 warnings in 84.81 seconds. Thus the union covers all 2,676 changed-selector files. No selected file is intentionally omitted.
+The complete terminal failed-file list was replayed through `test.sh` with one worker, the same 900-second file budget and the process-only installed Opus library path. This replay exited 1 with **353 passed / 2 failed**:
 
-The following initial full-run failures have passing reruns (a subsequent People audit-pin mismatch is described below): candidate lifecycle (35 failed / 45 passed initially; 80 passed on rerun), desktop migration (1 collection error initially; 114 passed), goal ID fallback (11 fixture errors; 11 passed), goal sorting (5 fixture errors; 5 passed), goal null-patch update (1 failed / 2 passed; 3 passed), empty capture recovery (7 native-library failures; 68 passed with the process library path), and executors (1 known two-second future timeout; all 36 passed alone). Final counts and any additional failures will be recorded when the run terminates, followed by a replay of its final failed-file list.
+| File | Original full run | Final failed-file replay |
+|---|---|---|
+| `tests/unit/test_candidate_lifecycle.py` | 45 passed / 35 failed | 80 passed |
+| `tests/unit/test_desktop_migration.py` | 1 collection error | 114 passed |
+| `tests/unit/test_empty_capture_recovery.py` | 61 passed / 7 failed (native library lookup) | 68 passed |
+| `tests/unit/test_executors.py` | 35 passed / 1 failed (known two-second future timeout) | 35 passed / 1 failed; subsequent standalone replay: **36 passed**, exit 0 |
+| `tests/unit/test_goals_id_fallback.py` | 11 fixture errors | 11 passed |
+| `tests/unit/test_goals_sort_missing_created_at.py` | 5 fixture errors | 5 passed |
+| `tests/unit/test_goals_extract_progress_advice_and_patch_nulls.py` | 2 passed / 1 failed | 3 passed |
+| `tests/unit/test_people_generation_inventory.py` | 3 passed / 1 failed | **3 passed / 1 failed; scope request below** |
+| `tests/unit/test_qualify_parakeet_route.py` | 33 passed / 1 failed (mocked connection deadline reduced to 10 ms) | 34 passed |
+
+The unchanged executor file passed both its earlier standalone run and the final standalone replay (36 each); it remains intermittently sensitive to its existing two-second future deadline. No timeout or assertion changed. Parakeet also passed unchanged on the isolated replay. The remaining audit failure is deterministic and has the concrete four-hash proposal below; it was not bypassed or excluded.
+
+Failed-file manifest, in terminal runner order:
+
+```text
+tests/unit/test_goals_extract_progress_advice_and_patch_nulls.py
+tests/unit/test_goals_id_fallback.py
+tests/unit/test_goals_sort_missing_created_at.py
+tests/unit/test_people_generation_inventory.py
+tests/unit/test_qualify_parakeet_route.py
+tests/unit/test_candidate_lifecycle.py
+tests/unit/test_desktop_migration.py
+tests/unit/test_empty_capture_recovery.py
+tests/unit/test_executors.py
+```
+
+The changed-file selector additionally selects `testing/e2e/test_canonical_memory_pipeline.py`; its explicit isolated `test.sh` run passed **8 tests**, with 17 warnings, in 84.81 seconds. Thus the full run plus this additional file covers all 2,676 changed-selector files, with every initial failure replayed. Scope remains blocked on one audit assertion; no whole-tree green result is claimed.
+
+Temporary full/replay logs: `/tmp/a2a-unit-all-final.log`, `/tmp/a2a-failed-replay-final.log`, `/tmp/a2a-executor-terminal.log`. These scratch logs are supplementary; this committed report is the durable outcome record.
 
 ### Corrected development failures and command corrections
 
@@ -237,9 +273,9 @@ The following initial full-run failures have passing reruns (a subsequent People
 
 No assertion was weakened, no test was skipped to hide a failure, and no workflow or guard was modified.
 
-## Active validation checkpoint
+## Terminal validation state
 
-Recorded at 2026-11-06T21:48:53.820433+00:00. Code is at `78446f1214f`; all scoped proofs above are complete. Only the full backend run and its final failed-file replay remain. Its PID is `98653`, log `/tmp/a2a-unit-all-final.log`, tool waiter `26576`. The heartbeat remains armed and is touched during monitoring. This section will be replaced by the terminal receipt before handoff.
+All launched validation commands have terminated and their statuses were collected. Final PR-body metadata validation passed 4/4 checks in 21.57 seconds. The forbidden-path guard passed; the People audit JSON is unchanged; no emulator listens on port 10279. Only the verified owned heartbeat PID 52080 and approval-wait PID 87062 were stopped (intentional SIGTERM, collected exit 143). The final scoped 29-file run, explicit slow digest, emulator proofs, focused pyright, OpenAPI comparison, both complete preflight commands and whole-change formatter are green. The broad run and failed-file replay results above remain recorded as failures. The unanswered scope request is a metadata-only blocker, with the precise patch ready for review. Heartbeat and approval-wait processes are stopped before handoff; the ANX ask remains open.
 
 ## Approval required: shared People writer audit metadata
 
@@ -252,7 +288,7 @@ The full run found `test_people_generation_inventory.py` failing 1 test / passin
 
 The concrete proposed change is only four hash values in `backend/docs/people-generation-writers.json`. No People code, generation bump, guard, negative proof or inventory entry changes. An AST comparison against the A1 base proves each complete function is identical after removing only the new conditional task-fence/nullcontext wrapper. Every inner People writer fingerprint is already unchanged. The strict People-generation suite passed in the full run, and A1's People emulator conformance passed in the latest 110-case matrix. A candidate copy of the four-hash update produces an empty inventory delta.
 
-This JSON file is outside the brief's section-2 edit list. The user's instruction to stay strictly inside those boundaries requires explicit scope authorization before applying it. The proposed patch is prepared but has not been applied. The same concrete scope request is recorded as [ANX event:ev_8f1d7e1501b1208a27f74774b1d8cc1c](https://anx.scalingforever.com/o/david-zhang/w/omi/r/event:ev_8f1d7e1501b1208a27f74774b1d8cc1c), with a bounded answer waiter armed. No answer is assumed.
+This JSON file is outside the brief's section-2 edit list. The user's instruction to stay strictly inside those boundaries requires explicit scope authorization before applying it. The proposed patch is prepared but has not been applied. The same concrete scope request is recorded as [ANX event:ev_8f1d7e1501b1208a27f74774b1d8cc1c](https://anx.scalingforever.com/o/david-zhang/w/omi/r/event:ev_8f1d7e1501b1208a27f74774b1d8cc1c), with a bounded answer waiter used during the remaining validation. No answer was received or assumed; the waiter is stopped at handoff.
 
 Prepared patch:
 
@@ -287,6 +323,8 @@ Prepared patch:
 
 ## Known gaps and ownership
 
+- The four shared-writer audit fingerprints remain unapplied because their metadata file is outside the brief. This prevents a green full-unit contract; the proposal is ready and approval is still required.
+- The full run spanned corrective commits and was not repeated wholesale on a single final revision. Final scoped proofs and every failed-file replay are recorded separately above.
 - A2b cell adapters, typed cell migration and Postgres registration/conformance are intentionally out of scope.
 - Folders/people cell adapters remain the unowned follow-up identified by the brief. Their Firestore behavior and `bump_people_generation` are unchanged.
 - Account-wipe registry wiring and serving plane routing remain B2's work.
@@ -307,11 +345,45 @@ A2a only: cell adapters and migrations belong to A2b. No new feature flags or ro
 
 ## How it was verified
 
-Scoped verification is green: 2,831 tests across 29 isolated files, the explicit slow body-digest check, 110 sim/emulator conformance cases, 12 legacy emulator regressions, modified-boundary pyright with zero errors, and both 44-check preflight commands. OpenAPI is byte-identical to origin/main. The full 2,675-file backend run is still in progress; its final counts and failure replay will be recorded before handoff. Exact commands and outputs are in `.agent-artifacts/pgf/a2a-result.md`.
+Scoped verification is green: 2,831 tests across 29 isolated files, the explicit slow body-digest check, 110 sim/emulator conformance cases, 12 legacy emulator regressions, modified-boundary pyright with zero errors, and both 44-check preflight commands. OpenAPI is byte-identical to fresh origin/main. The full 2,675-file run exited 1 (65,468 passed / 46 failed / 17 errors) before corrective replays. All nine failed files were replayed: 353 passed / 2 failed; the known executor timeout subsequently passed all 36 tests alone. The remaining failure is the People writer audit metadata: four reviewed hashes lie outside the authorized file boundary and are still unapplied. No whole-tree green result is claimed. Exact commands, manifests and outcomes are recorded in `.agent-artifacts/pgf/a2a-result.md`.
 
 ## Tests
 
 Adds sim/emulator workflow conformance, protocol/adapter signature parity, and explicit commit-ticket parity. Existing module readers remain unchanged; moved query owners and lifecycle scopes are re-registered.
+
+All commands use backend/.venv Python 3.11.15 with Google credentials and CLOUDSDK variables removed. Heavy runs use omi-heavy. The exact final command tables follow (backend context is marked; root otherwise).
+
+| Context | Exact command after the launcher | Pass/fail result |
+|---|---|---|
+| backend | `BACKEND_UNIT_TEST_FILE_LIST=/tmp/a2a-goal-final-files.txt BACKEND_PYTEST_WORKERS=4 BACKEND_UNIT_FILE_BUDGET_SECONDS=900 bash test.sh` | 29/29 files successful; 2,831 tests passed, 1 marked-slow test deselected; 0 failures |
+| backend | `.venv/bin/python -m pytest -q tests/unit/test_firestore_query_shapes.py::test_digest_pinned_entries_unchanged` | 1 passed, 9 warnings, 0 failed; 10.97 seconds |
+| backend | `OMI_REQUIRE_STORE_BACKENDS=sim,emulator .venv/bin/python -m pytest -m integration tests/integration/test_domain_conformance_action_items_goals_workstreams.py tests/integration/test_domain_conformance_folders_people.py -q` | 110 passed, 0 failed; 19.61 seconds |
+| backend | `.venv/bin/python -m pytest -q tests/integration/test_action_items_legacy_probe_emulator.py tests/integration/test_proactivity_v2_budget_emulator.py tests/integration/test_folder_delete_concurrency_emulator.py` | 12 passed, 1 warning, 0 failed; 37.94 seconds |
+| backend | `.venv/bin/python -m pyright -p pyrightconfig.json --pythonpath .venv/bin/python database/action_items.py database/goals.py database/workstreams.py database/space_store.py database/ports` | 0 errors, 806 warnings |
+| root | `OMI_PR_BODY_FILE=/tmp/a2a-pr-body.md BACKEND_UNIT_FILE_BUDGET_SECONDS=900 make preflight` | 44 checks passed, 0 failed; 754.73 seconds |
+| root | `BACKEND_UNIT_FILE_BUDGET_SECONDS=900 scripts/pr-preflight --pr-body-file /tmp/a2a-pr-body.md` | 44 checks passed, 0 failed; 359.87 seconds |
+| root | `backend/scripts/openapi_runner.sh scripts/export_openapi.py --app-client --write /tmp/a2a-openapi-final.json` | PASS |
+| root | `backend/.venv/bin/python backend/scripts/check_app_client_openapi_compatibility.py --base-spec /tmp/a2-openapi-base.json --head-spec /tmp/a2a-openapi-final.json` | PASS |
+| root | `cmp /tmp/a2-openapi-base.json /tmp/a2a-openapi-final.json` | PASS; byte-identical; baseline is `git show origin/main:docs/api-reference/app-client-openapi.json` |
+| root | `DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/opt/opus/lib:/opt/homebrew/lib:/usr/local/lib:/usr/lib BACKEND_UNIT_TEST_FILE_LIST=/tmp/a2a-opus-files.txt BACKEND_PYTEST_WORKERS=4 BACKEND_UNIT_FILE_BUDGET_SECONDS=900 bash backend/test.sh` | `test_empty_capture_recovery.py`: 68 passed, 1 warning, 0 failed; 11.45 seconds |
+| root | `BACKEND_UNIT_TEST_FILE_LIST=/tmp/a2a-executor-files.txt BACKEND_PYTEST_WORKERS=1 BACKEND_UNIT_FILE_BUDGET_SECONDS=900 bash backend/test.sh` | `test_executors.py`: 36 passed, 0 failed; 3.43 seconds |
+| root | `DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/opt/opus/lib:/opt/homebrew/lib:/usr/local/lib:/usr/lib BACKEND_UNIT_TEST_FILE_LIST=/tmp/a2a-failed-files-final.txt BACKEND_PYTEST_WORKERS=1 BACKEND_UNIT_FILE_BUDGET_SECONDS=900 bash backend/test.sh` | 9 failed-file replays: 353 passed, 2 failed; exit 1 (audit metadata and known executor timeout) |
+| root | `BACKEND_UNIT_TEST_FILE_LIST=/tmp/a2a-executor-files.txt BACKEND_PYTEST_WORKERS=1 BACKEND_UNIT_FILE_BUDGET_SECONDS=900 bash backend/test.sh` | Final standalone executor replay: 36 passed, 0 failed; 6.70 seconds; exit 0 |
+| root | `git show origin/main:docs/api-reference/app-client-openapi.json > /tmp/a2-openapi-current-main.json && cmp /tmp/a2-openapi-current-main.json /tmp/a2a-openapi-final.json` | PASS against fresh main `34125ccd5fbd6c47885d23abe70e9a1448b7515e` |
+
+| Context | Command | Result |
+|---|---|---|
+| backend | `PYTHON=.venv/bin/python bash test-preflight.sh` | 17 required checks passed, 9 optional warnings, 0 failed |
+| backend | `.venv/bin/python scripts/scan_async_blockers.py --dirs routers utils database` | 0 selected high-network-I/O blockers; 5 existing findings of other kinds |
+| backend | `.venv/bin/python scripts/scan_import_time_side_effects.py` | 2,493 production files, 0 violations; final preflight also passes this guard |
+| backend | `.venv/bin/python scripts/check_module_stub_pollution.py` | 2,859 test files, 0 violations; final preflight also passes this guard |
+| root | `backend/.venv/bin/python scripts/render_feature_flag_registry.py && backend/.venv/bin/python scripts/check_feature_flag_registry.py` | PASS; generated doc consistent; existing warnings retained |
+| root | `make runtime-image-source-closure` | 19 image contracts passed; final preflights repeat the proof |
+| root | `make lane-backend` | PASS; worktree-local environment complete |
+| root | `scripts/pr-preflight --suggest` | PASS; final draft cites INV-TASK-2 and declares Failure-Class: none |
+| root | `scripts/pr-preflight --pr-body-file /tmp/a2a-pr-body.md --metadata-only` | 4 checks passed; full unqualified commands above also passed |
+
+Additional required full command: `BACKEND_PYTEST_WORKERS=4 BACKEND_UNIT_FILE_BUDGET_SECONDS=900 bash backend/scripts/run-unit-ci.sh --all` — 2,666 file processes passed / 9 failed before corrective replays; terminal outcomes are above. Backend context: `BACKEND_UNIT_TEST_FILE_LIST=/tmp/a2a-extra-unit-files.txt BACKEND_PYTEST_WORKERS=4 BACKEND_UNIT_FILE_BUDGET_SECONDS=900 bash test.sh` — changed-selector extra canonical-memory E2E file: 8 passed. Pinned formatter over all 30 added/modified Python files: pass.
 
 ## UI evidence
 
