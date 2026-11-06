@@ -518,6 +518,60 @@ def test_fleet_sample_follower_zero_queries_and_handover(monkeypatch, interval):
     assert list(second.timeliness_observed_at.collect())[0].samples[0].value == clock.now
 
 
+@pytest.mark.parametrize('interval', [300, 3600])
+def test_follower_retries_after_refresh_grace_without_another_full_interval(monkeypatch, interval):
+    from utils.batch_pipeline import metrics as metrics_module
+    from utils.batch_pipeline.leader import TIMELINESS_LEASE_GRACE_SECONDS
+
+    metrics, store, clock = _fleet(monkeypatch, interval)
+    monkeypatch.setattr(metrics_module.time, 'monotonic', clock)
+    first, follower = metrics
+    follower.timeliness_leader.acquire = Mock(wraps=follower.timeliness_leader.acquire)
+    first.refresh_timeliness(store, clock.now)
+    clock.now = NOW + 1
+    follower.refresh_timeliness(store, clock.now)
+    assert list(first.timeliness_observed_at.collect())[0].samples[0].value == NOW
+    assert list(follower.timeliness_observed_at.collect()) == []
+
+    # The incumbent stops. This follower loses around the normal sample tick,
+    # when the old lease is still live for its fixed refresh grace.
+    clock.now = NOW + interval + 1
+    follower.refresh_timeliness(store, clock.now)
+    assert follower.timeliness_leader.acquire.call_count == 2
+    assert store.timeliness.call_count == 1
+    assert list(first.timeliness_age.collect())
+    assert list(follower.timeliness_age.collect()) == []
+
+    takeover = clock.now + TIMELINESS_LEASE_GRACE_SECONDS
+    while clock.now < takeover - 1:
+        clock.now += 1
+        follower.refresh_timeliness(store, clock.now)
+    # Even a fast supervisor cannot poll the lease more than once per minute.
+    assert follower.timeliness_leader.acquire.call_count == 2
+    assert store.timeliness.call_count == 1
+    assert list(first.timeliness_observed_at.collect()) == []
+    assert list(follower.timeliness_observed_at.collect()) == []
+
+    clock.now = takeover
+    follower.refresh_timeliness(store, clock.now)
+    assert follower.timeliness_leader.acquire.call_count == 3
+    assert store.timeliness.call_count == 2
+    assert list(follower.timeliness_observed_at.collect())[0].samples[0].value == takeover
+    assert list(first.timeliness_age.collect()) == []
+    # Taking over restores the full successful sampling cadence, not the
+    # follower retry cadence. The old leader's values remain absent throughout.
+    clock.now = takeover + interval - 1
+    follower.refresh_timeliness(store, clock.now)
+    assert follower.timeliness_leader.acquire.call_count == 3
+    assert store.timeliness.call_count == 2
+    assert list(follower.timeliness_age.collect())
+    clock.now += 1
+    follower.refresh_timeliness(store, clock.now)
+    assert store.timeliness.call_count == 3
+    assert list(follower.timeliness_observed_at.collect())[0].samples[0].value == clock.now
+    assert list(first.timeliness_observed_at.collect()) == []
+
+
 def test_lever_zero_restores_per_instance_sampling_without_lease_reads(monkeypatch):
     metrics, store, clock = _fleet(monkeypatch)
     monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"batch_timeliness_leader":0}')

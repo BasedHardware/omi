@@ -454,6 +454,10 @@ class QueueMetrics:
             self.timeliness_leader.ttl_seconds = lease_seconds
             acquired_at = time.monotonic()
             if not self.timeliness_leader.acquire():
+                # Retry through the incumbent's refresh grace without waiting
+                # another full sample interval after it stops. Followers do
+                # at most one lease check per minute and never sample on loss.
+                self._timeliness_due = now + min(interval, TIMELINESS_LEASE_GRACE_SECONDS)
                 self._timeliness_visible = False
                 return
             sample_expires = acquired_at + lease_seconds

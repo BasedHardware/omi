@@ -29,8 +29,13 @@ The ship-on `FIRESTORE_READ_LEVERS` lever `batch_timeliness_leader` (default 100
 metrics and maintenance. Its TTL covers the sampling interval (default 300 s, 60–3600 s) plus a fixed 60 s
 refresh grace (default TTL 360 s, maximum 3660 s). This keeps a successful sample
 visible through normal supervised tick jitter and RPCs, preserving continuous
-5-minute breach evaluation. Another holder waits for that full TTL before takeover. Non-leaders execute no
-timeliness queries. Before a successful sample and after losing the lease, all
+5-minute breach evaluation. Another holder waits for that full TTL before takeover.
+After losing an election, a follower retries every 60 s (at most one lease
+transaction per minute), rather than waiting another full sampling interval.
+This bounds takeover delay after lease expiry to 60 s plus supervisor scheduling;
+successful leaders still sample only at the configured interval. The lease gates
+each retry, so non-leaders execute no timeliness queries. Before a successful sample
+and after losing the lease, all
 sampler gauges (including drain/held ages and the observation timestamp) are absent.
 Failures retain the previous stored values and timestamp without extending their
 collection deadline; expired samples stay absent even after a fail-open lease retry. Collection also withdraws an expired leader
