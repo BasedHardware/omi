@@ -22,6 +22,8 @@ returns ``EpisodeConflict`` and the caller decides whether to retry.
 
 from __future__ import annotations
 
+from database import transcript_pointer
+
 import json
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -39,7 +41,8 @@ from utils.conversations.recorded_time import conversation_span, sync_recorded_e
 from utils.conversations.fragment_visibility import is_relevance_discarded
 
 from database import episode_receipts, episode_timeline
-from database._client import get_firestore_client, run_transactional
+from database._client import get_firestore_client
+from database.transcript_pointer import run_preloaded_transactional as run_transactional
 from database.conversations import decode_transcript_segments_verified
 from utils.encryption import decrypt, encrypt
 
@@ -276,9 +279,13 @@ def retained_bounds(transaction, client, uid, raw, merged):
         if evidence and not all(isinstance(evidence.get(key), datetime) for key in ('recorded_start', 'recorded_end')):
             segments = evidence.get('transcript_segments')
             if segments is not None and not isinstance(segments, list):
-                evidence['transcript_segments'] = decode_transcript_segments_verified(
-                    uid, segments, bool(evidence.get('transcript_segments_compressed'))
-                )
+                try:
+                    evidence['transcript_segments'] = decode_transcript_segments_verified(
+                        uid, segments, bool(evidence.get('transcript_segments_compressed'))
+                    )
+                except (transcript_pointer.TranscriptBlobAbsent, transcript_pointer.TranscriptShredded):
+                    hidden.add(cid)
+                    continue
             # Legacy completion is a processing clock. Only decoded speech,
             # recording receipts or the persisted member clocks prove its end.
             # Preserve the recording authority's legacy pure-WAL receipt first.

@@ -1,3 +1,4 @@
+from contextvars import ContextVar
 import logging
 import random
 import re
@@ -523,6 +524,13 @@ def firestore_document_kind(error: BaseException) -> str:
     return 'other'
 
 
+_IN_TXN_BODY: ContextVar[bool] = ContextVar('in_transaction_body', default=False)
+
+
+def in_transaction_body() -> bool:
+    return _IN_TXN_BODY.get()
+
+
 def run_transactional(
     client: Any,
     transactional_callable: Any,
@@ -568,7 +576,11 @@ def run_transactional(
             transaction = (
                 initial_transaction if attempt == 1 and initial_transaction is not None else client.transaction()
             )
-            result = transactional_callable(transaction, *args, **kwargs)
+            token = _IN_TXN_BODY.set(True)
+            try:
+                result = transactional_callable(transaction, *args, **kwargs)
+            finally:
+                _IN_TXN_BODY.reset(token)
             if outcome is not None and attempt > 1:
                 outcome['status'] = 'retried_ok'
             return result
