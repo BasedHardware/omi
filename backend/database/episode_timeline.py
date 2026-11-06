@@ -9,7 +9,7 @@ from google.cloud.firestore_v1 import FieldFilter
 
 from config.episodes import MAX_EPISODE_SECONDS, CLOSE_GAP_SECONDS
 from database._client import get_firestore_client, run_transactional
-from database import episodes, episode_attach_memo, episode_batch_pending
+from database import episodes, episode_attach_memo, episode_batch_pending, transcript_pointer
 from utils.conversations.episode_attach_key import content_key, memo_eligible
 from config.episode_attach import content_gate_enabled, optimizations_enabled
 from utils.conversations.recorded_time import conversation_span
@@ -345,7 +345,7 @@ def attach_recorded(
         episode_attach_memo.stamp(transaction, client, uid, conversation_id, key, result['id'])
         return {**result, '_recorded_windows': [result]}
 
-    return run_transactional(client, attach, transient=True)
+    return transcript_pointer.run_preloaded_transactional(client, attach, transient=True)
 
 
 def member_episodes(uid: str, conversation_id: str, *, firestore_client: Any = None) -> list[dict[str, Any]]:

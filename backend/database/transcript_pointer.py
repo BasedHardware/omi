@@ -191,7 +191,11 @@ def run_preloaded_operation(operation, *args, swap_client=None, **kwargs):
     memo = _memo()
     result: Any = None
     try:
-        for attempt in range(3):
+        preloaded = {}
+        content_changes = 0
+        # At most 32 cold documents, three changed versions, and one commit
+        # attempt. New documents must not consume the content-change allowance.
+        for attempt in range(36):
             # Only the successful attempt may schedule a post-commit swap.
             memo.deferred.clear()
             try:
@@ -199,8 +203,17 @@ def run_preloaded_operation(operation, *args, swap_client=None, **kwargs):
                     result = operation(*args, **kwargs)
             except TranscriptPointerUnloaded as error:
                 unloaded = error
-                if attempt == 2:
+                ref = _ref(error.uid, error.pointer)
+                document = error.uid, ref.bucket, ref.key.rsplit('/', 1)[0]
+                previous = preloaded.get(document)
+                if previous is not None:
+                    content_changes += 1
+                    memo.decoded.pop(_memo_key(error.uid, previous), None)
+                elif len(preloaded) >= 32:
+                    raise TranscriptPointerFetchError('Transcript exceeds bounded preload document limit') from None
+                if content_changes > 3 or attempt == 35:
                     raise TranscriptPointerFetchError('Transcript changed during bounded preload retries') from None
+                preloaded[document] = ref
             else:
                 break
             preload_pointer(unloaded.uid, unloaded.pointer)
