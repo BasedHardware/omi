@@ -45,8 +45,11 @@ def lake_world(tmp_path, monkeypatch):
     store = StrictFirestore()
     bucket = LocalStorageClient(tmp_path).bucket('test-transcript-lake')
     monkeypatch.setattr(lake, '_lake_bucket', lambda: bucket)
-    monkeypatch.setattr(space_keys, '_client', lambda client: store if client is None else client)
+    monkeypatch.setattr(
+        space_keys, 'space_key_firestore_client', lambda client=None: store if client is None else client
+    )
     monkeypatch.setattr(_client, 'get_firestore_client', lambda: store)
+    monkeypatch.setattr(_client, 'get_data_plane_firestore_client', lambda: store)
     monkeypatch.setattr(conversations_db, 'get_firestore_client', lambda: store)
     monkeypatch.setattr(conversations_db, 'invalidate_people_stats_cache', lambda uid: None)
     calls = {'get': 0, 'put': 0}

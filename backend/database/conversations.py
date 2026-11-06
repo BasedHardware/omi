@@ -681,11 +681,12 @@ def prepare_conversation_for_read(
     level = data.get('data_protection_level')
 
     if level == 'enhanced':
+        decrypted = _decrypt_conversation_data(data, uid, firestore_client=firestore_client)
+        if decrypted is None:
+            return None
         return project_home(
             uid,
-            conversation_recorded_time.hydrate(
-                _decrypt_conversation_data(data, uid, firestore_client=firestore_client)
-            ),
+            conversation_recorded_time.hydrate(decrypted),
             firestore_client=firestore_client,
             read_budget=read_budget,
         )

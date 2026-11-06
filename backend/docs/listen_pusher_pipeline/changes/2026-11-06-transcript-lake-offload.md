@@ -30,12 +30,13 @@ pointer documents are excluded from public-chat candidates.
 
 Space-key destruction now retains a content-free tombstone, including for an
 owner without any prior key. It blocks future get-or-create operations and
-in-flight puts check authority after upload, cleaning up late objects. C4 must
+puts check the durable customer-plane account-deletion marker before key creation
+and again after upload, cleaning up late objects. An unavailable marker fails closed. C4 must
 preserve that tombstone, fence owner mutations, quiesce in-flight puts, purge the
 prefix, and destroy keys last. This PR does not integrate or run an account wipe.
 Wrapped-key corruption remains unavailable/retryable rather than shredded. Each
 unwrap reads key authority once; each put reads it twice (before encryption and
-after upload), including retries. KMS work alone is cached across operations.
+after upload), including retries, plus two uncached account-deletion marker reads per put. KMS work alone is cached across operations.
 Transcript plaintext expansion is capped at 32 MiB; future data classes need an
 explicit size limit before admission. No env bindings or migrations are added.
 

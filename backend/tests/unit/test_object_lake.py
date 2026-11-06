@@ -22,7 +22,9 @@ def storage(tmp_path, monkeypatch):
     monkeypatch.delenv('OBJECT_LAKE_KMS_FAKE_SECRET', raising=False)
     store = StrictFirestore()
     space_keys.clear_space_key_cache()
-    monkeypatch.setattr(space_keys, '_client', lambda client: store if client is None else client)
+    monkeypatch.setattr(
+        space_keys, 'space_key_firestore_client', lambda client=None: store if client is None else client
+    )
     bucket = LocalStorageClient(tmp_path).bucket('lake-test')
     with patch.object(lake, '_lake_bucket', return_value=bucket):
         yield bucket, store
