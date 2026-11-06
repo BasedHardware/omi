@@ -26,6 +26,19 @@ from testing.store_fixtures import (
 )
 
 DOMAIN_BACKENDS = ('sim', 'emulator')
+WORKFLOW_ENTITIES = (
+    'action_items',
+    'goals',
+    'workstreams',
+    'goal_events',
+    'goal_history',
+    'workstream_events',
+    'workstream_artifacts',
+    'workstream_checkpoints',
+    'task_intelligence_control',
+    'workflow_mutation_receipts',
+    'users',
+)
 
 
 @dataclass
@@ -61,27 +74,60 @@ class DomainHarness:
         self.store(space_id)
         return self._stores[space_id].people
 
+    def action_items(self, space_id):
+        self.store(space_id)
+        return self._stores[space_id].action_items
+
+    def goals(self, space_id):
+        self.store(space_id)
+        return self._stores[space_id].goals
+
+    def workstreams(self, space_id):
+        self.store(space_id)
+        return self._stores[space_id].workstreams
+
+    def _entity_ref(self, space_id, entity, entity_id):
+        owner = self._client.collection('users').document(space_id)
+        if entity == 'users':
+            return owner
+        nested = {
+            'goal_events': ('goals', 'events'),
+            'goal_history': ('goals', 'goal_history'),
+            'workstream_events': ('workstreams', 'events'),
+            'workstream_artifacts': ('workstreams', 'artifact_refs'),
+            'workstream_checkpoints': ('workstreams', 'continuation_checkpoints'),
+        }
+        if entity in nested:
+            parent, child = nested[entity]
+            parent_id, child_id = entity_id.split('/', 1)
+            return owner.collection(parent).document(parent_id).collection(child).document(child_id)
+        return owner.collection(entity).document(entity_id)
+
     def seed(self, space_id: str, entity: str, entity_id: str, data: dict) -> None:
         """Synthetic legacy/cross-domain fixtures, never part of the domain protocol."""
-        if not space_id.endswith(self.uid_suffix) or entity not in ('folders', 'people', 'conversations'):
+        if (
+            not space_id.endswith(self.uid_suffix)
+            or entity not in ('folders', 'people', 'conversations') + WORKFLOW_ENTITIES
+        ):
             raise ValueError('seed must belong to this harness')
         self.store(space_id)
         if self.name == 'sim':
             self._stores[space_id].state[entity][entity_id] = {**data, 'id': entity_id}
         else:
-            self._client.collection('users').document(space_id).collection(entity).document(entity_id).set(data)
+            self._entity_ref(space_id, entity, entity_id).set(data)
 
     def read(self, space_id: str, entity: str, entity_id: str) -> dict | None:
         """Inspect a synthetic cross-domain fixture without exposing adapter internals."""
-        if not space_id.endswith('-' + self.uid_suffix) or entity not in ('folders', 'people', 'conversations'):
+        if (
+            not space_id.endswith('-' + self.uid_suffix)
+            or entity not in ('folders', 'people', 'conversations') + WORKFLOW_ENTITIES
+        ):
             raise ValueError('read must belong to this harness')
         self.store(space_id)
         if self.name == 'sim':
             row = self._stores[space_id].state[entity].get(entity_id)
             return dict(row) if row is not None else None
-        return (
-            self._client.collection('users').document(space_id).collection(entity).document(entity_id).get().to_dict()
-        )
+        return self._entity_ref(space_id, entity, entity_id).get().to_dict()
 
     def close(self) -> None:
         for step in reversed(self.cleanup_steps):

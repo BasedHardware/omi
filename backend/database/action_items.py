@@ -1343,12 +1343,6 @@ class FirestoreActionItems:
             with self._fence():
                 return batch.commit()
 
-    def _apply_transaction(self, fn, transaction):
-        if self.transaction is not None:
-            return getattr(fn, 'to_wrap', fn)(self.transaction)
-        with self._fence():
-            return fn(transaction)
-
     def _run_contention(self, factory, fn, *, operation_name):
         if self.transaction is not None:
             return getattr(fn, 'to_wrap', fn)(self.transaction)
@@ -1823,7 +1817,7 @@ class FirestoreActionItems:
                 continue
             result.updated_ids.append(entry['id'])
             if update_data.get('completed') is True:
-                self._post_commit(lambda: _record_followup_completion(uid, entry['id']))
+                self._post_commit(lambda item_id=entry['id']: _record_followup_completion(uid, item_id))
         if result.updated_ids:
             self._post_commit(lambda: bump_action_items_list_version(uid))
         return result
@@ -2108,9 +2102,19 @@ class FirestoreActionItems:
     def purge(self, space_id: str) -> int:
         if space_id != self.space_id:
             raise ValueError('purge must belong to this space')
-        refs = list(self.client.collection('users').document(space_id).collection(action_items_collection).stream())
+        owner = self.client.collection('users').document(space_id)
+        refs = list(owner.collection(action_items_collection).stream())
         self._delete_action_items_batch([row.id for row in refs])
-        return len(refs)
+        count = len(refs)
+        for receipt in owner.collection('port_mutations').stream():
+            if (receipt.to_dict() or {}).get('entity') == 'action_items':
+                receipt.reference.delete()
+                count += 1
+        control = owner.collection(TASK_INTELLIGENCE_CONTROL_COLLECTION).document(TASK_INTELLIGENCE_CONTROL_DOCUMENT)
+        if control.get().exists:
+            control.delete()
+            count += 1
+        return count
 
     def _save_receipt(self, owner, mutation_id, digest, result):
         if mutation_id is not None:

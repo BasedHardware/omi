@@ -649,15 +649,12 @@ class FirestoreWorkstreams:
 
     def __init__(self, space_id: str, *, firestore_client: Any = None, transaction: Any = None):
         self.space_id = space_id
-        self.client = firestore_client if firestore_client is not None else get_firestore_client()
+        self.client = _get_db(firestore_client)
         self.transaction = transaction
         self._space_tx = None
 
     def _read(self, ref):
         return ref.get(transaction=self.transaction) if self.transaction is not None else ref.get()
-
-    def _stream(self, query):
-        return query.stream(transaction=self.transaction) if self.transaction is not None else query.stream()
 
     def _post_commit(self, callback):
         if self._space_tx is not None:
@@ -669,31 +666,11 @@ class FirestoreWorkstreams:
         self._touch()
         return getattr(transaction, operation)(ref, *args, **kwargs)
 
-    def _document_write(self, ref, operation, *args, **kwargs):
-        if self.transaction is not None:
-            return self._transaction_write(self.transaction, operation, ref, *args, **kwargs)
-        with self._fence():
-            return getattr(ref, operation)(*args, **kwargs)
-
-    def _batch(self):
-        return self.transaction if self.transaction is not None else self.client.batch()
-
-    def _commit_batch(self, batch):
-        if self.transaction is None:
-            with self._fence():
-                return batch.commit()
-
     def _apply_transaction(self, fn, transaction, *, task_writes=False):
         if self.transaction is not None:
             return getattr(fn, 'to_wrap', fn)(self.transaction)
         with self._fence() if task_writes else nullcontext():
             return fn(transaction)
-
-    def _run_contention(self, factory, fn, *, operation_name):
-        if self.transaction is not None:
-            return getattr(fn, 'to_wrap', fn)(self.transaction)
-        with self._fence():
-            return run_with_transaction_contention_retry(factory, fn, operation_name=operation_name)
 
     def _touch(self):
         pass
@@ -1878,10 +1855,22 @@ class FirestoreWorkstreams:
     def purge(self, space_id: str) -> int:
         if space_id != self.space_id:
             raise ValueError('purge must belong to this space')
+        owner = _user_ref(space_id, firestore_client=self.client)
         count = 0
-        for doc in _user_ref(space_id, firestore_client=self.client).collection(WORKSTREAMS_COLLECTION).stream():
-            count += 1
-            self.client.recursive_delete(doc.reference)
+        for collection in (
+            WORKSTREAMS_COLLECTION,
+            WORK_INTENT_RECEIPTS_COLLECTION,
+            MUTATION_RECEIPTS_COLLECTION,
+            'port_mutations',
+        ):
+            for doc in owner.collection(collection).stream():
+                data = doc.to_dict() or {}
+                if collection == 'port_mutations' and data.get('entity') != 'workstreams':
+                    continue
+                if collection == MUTATION_RECEIPTS_COLLECTION and 'desired_outcome' in data.get('result', {}):
+                    continue
+                count += 1
+                self.client.recursive_delete(doc.reference)
         return count
 
     def _task_write(self, transaction, operation, ref, payload):

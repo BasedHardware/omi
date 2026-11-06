@@ -67,6 +67,10 @@ from utils.memory.index_window_cursor import (
     query_scope as memory_window_scope,
 )
 from database.folders import FirestoreFolders
+from database.action_items import FirestoreActionItems
+from database.goals import FirestoreGoals
+from database.workstreams import FirestoreWorkstreams
+from dataclasses import replace
 from database.people import FirestorePeople
 from database.ports.folders import FolderCreate
 from database.ports.people import PersonDraft
@@ -195,7 +199,7 @@ BODY_DIGEST = {
     # Re-reviewed: positional .where converted to filter=FieldFilter — same field/op/value shape.
     'database.sync_backfill_sequencer._pending_for_uid': 'fc7bb91a5b03e84f63950c00ca896eaadcd97f055c571fac6a761e4d6bb4fa1d',
     # Re-reviewed: the post-commit task-list cache invalidation adds no query.
-    'database.workstreams.import_task_goal_links': '5d2384ad2102107cc487d29c18a47204f5d5fea0201c9ae0d2a56f5959b91971',
+    'database.workstreams.FirestoreWorkstreams._import_task_goal_links': '8a6795be9cc49010b33848c911928b2c57d3d18906f075b729b76d9647cfdc0a',
     # Re-reviewed: public size guard rename and correction-parent rejection add
     # no query. Post-commit quiet retirement adds document reads only; terminal
     # streams still belong to the two driven callees. Retained extraction
@@ -245,7 +249,70 @@ COVERED_BY: dict[str, CoveredByEntry] = {}
 SKIPS: dict[str, SkipEntry] = {}
 
 
+class _PortRepoArgument:
+    """Bind a fresh repository only after run_driver installs its fake client.
+
+    The driver's argument copier invokes this once per trial; no SDK client is
+    constructed at registry import time, and no fake client is deep-copied.
+    """
+
+    def __init__(self, factory, *, transaction=False):
+        self.factory = factory
+        self.transaction = transaction
+
+    def __deepcopy__(self, memo):
+        repo = self.factory(UID)
+        if self.transaction:
+            repo.transaction = repo.client.transaction()
+        return repo
+
+
+_PORT_MOVED = {
+    'database.action_items.create_action_item': 'database.action_items.FirestoreActionItems._create_action_item',
+    'database.action_items.create_action_items_batch': 'database.action_items.FirestoreActionItems._create_action_items_batch',
+    'database.action_items.update_action_item': 'database.action_items.FirestoreActionItems._update_action_item',
+    'database.action_items.restore_channel_write': 'database.action_items.FirestoreActionItems._restore_channel_write',
+    'database.action_items.batch_update_action_items': 'database.action_items.FirestoreActionItems._batch_update_action_items',
+    'database.action_items.delete_action_item': 'database.action_items.FirestoreActionItems._delete_action_item',
+    'database.action_items.delete_action_items_batch': 'database.action_items.FirestoreActionItems._delete_action_items_batch',
+    'database.action_items.delete_action_items_for_conversation': 'database.action_items.FirestoreActionItems._delete_action_items_for_conversation',
+    'database.action_items.retire_action_items_for_conversation': 'database.action_items.FirestoreActionItems._retire_action_items_for_conversation',
+    'database.action_items.batch_set_sync_requested': 'database.action_items.FirestoreActionItems._batch_set_sync_requested',
+    'database.action_items.batch_sync_update_action_items': 'database.action_items.FirestoreActionItems._batch_sync_update_action_items',
+    'database.goals.create_goal': 'database.goals.FirestoreGoals._create_goal',
+    'database.goals.create_goal_idempotent': 'database.goals.FirestoreGoals._create_goal_idempotent',
+    'database.goals.update_goal': 'database.goals.FirestoreGoals._update_goal',
+    'database.goals.focus_goal': 'database.goals.FirestoreGoals._focus_goal',
+    'database.goals.unfocus_goal': 'database.goals.FirestoreGoals._unfocus_goal',
+    'database.goals.transition_goal_lifecycle': 'database.goals.FirestoreGoals._transition_goal_lifecycle',
+    'database.goals._append_goal_progress_event': 'database.goals.FirestoreGoals.__append_goal_progress_event',
+    'database.goals.update_goal_progress': 'database.goals.FirestoreGoals._update_goal_progress',
+    'database.goals.delete_goal': 'database.goals.FirestoreGoals._delete_goal',
+    'database.workstreams.update_workstream': 'database.workstreams.FirestoreWorkstreams._update_workstream',
+    'database.workstreams.append_workstream_event': 'database.workstreams.FirestoreWorkstreams._append_workstream_event',
+    'database.workstreams.create_artifact_descriptor': 'database.workstreams.FirestoreWorkstreams._create_artifact_descriptor',
+    'database.workstreams.transition_artifact_status': 'database.workstreams.FirestoreWorkstreams._transition_artifact_status',
+    'database.workstreams.upsert_continuation_checkpoint': 'database.workstreams.FirestoreWorkstreams._upsert_continuation_checkpoint',
+    'database.workstreams.resolve_workstream_candidate': 'database.workstreams.FirestoreWorkstreams._resolve_workstream_candidate',
+    'database.workstreams.resolve_work_intent': 'database.workstreams.FirestoreWorkstreams._resolve_work_intent',
+    'database.workstreams.import_task_goal_links': 'database.workstreams.FirestoreWorkstreams._import_task_goal_links',
+}
+_PORT_FACTORIES = {'action_items': FirestoreActionItems, 'goals': FirestoreGoals, 'workstreams': FirestoreWorkstreams}
+
+
 def _add(entry: DriverEntry | CoveredByEntry | SkipEntry) -> None:
+    old_key = entry.function
+    if old_key in _PORT_MOVED:
+        if isinstance(entry, DriverEntry):
+            PORT_CALLER_DRIVERS[old_key] = entry
+            domain = old_key.split('.')[1]
+            base = {k: v for k, v in entry.base.items() if k != 'uid'}
+            base['self'] = _PortRepoArgument(_PORT_FACTORIES[domain])
+            entry = replace(entry, function=_PORT_MOVED[old_key], base=base)
+        else:
+            entry = replace(entry, function=_PORT_MOVED[old_key])
+    if isinstance(entry, CoveredByEntry):
+        entry = replace(entry, covered_by=tuple(_PORT_MOVED.get(k, k) for k in entry.covered_by))
     if isinstance(entry, DriverEntry) and entry.function in _PORT_CALLERS:
         if entry.function in PORT_CALLER_DRIVERS:
             raise ValueError(f'duplicate port caller recipe: {entry.function}')
@@ -1457,24 +1524,6 @@ _add(
     )
 )
 _add(DriverEntry('database.folders.update_folder_conversation_count', base={'uid': UID, 'folder_id': 'folder-1'}))
-
-
-class _PortRepoArgument:
-    """Bind a fresh repository only after run_driver installs its fake client.
-
-    The driver's argument copier invokes this once per trial; no SDK client is
-    constructed at registry import time, and no fake client is deep-copied.
-    """
-
-    def __init__(self, factory, *, transaction=False):
-        self.factory = factory
-        self.transaction = transaction
-
-    def __deepcopy__(self, memo):
-        repo = self.factory(UID)
-        if self.transaction:
-            repo.transaction = repo.client.transaction()
-        return repo
 
 
 _FOLDER_SELF = _PortRepoArgument(FirestoreFolders)
@@ -3145,7 +3194,7 @@ _add(
         reason='AST doc-get false positive: the entire body is transactional document '
         'get/set/update writes (control, receipt, task, goal, workstream refs); '
         'no where/stream/query terminal exists',
-        body_digest=BODY_DIGEST['database.workstreams.import_task_goal_links'],
+        body_digest=BODY_DIGEST['database.workstreams.FirestoreWorkstreams._import_task_goal_links'],
     )
 )
 _add(
@@ -4006,5 +4055,180 @@ _add(
         base={'self': FinalPassRetries()},
         neutrals={'now': (T0.timestamp(), 'due-time range operand only'), 'limit': _LIMIT},
         patchers=(_stub('utils.sync.stage.current_stage', 'prod'),),
+    )
+)
+
+# A2 portable list view uses the existing export reader; serving budgeted reads
+# stay at their original module owners. Purges are synthetic conformance only.
+_add(
+    DriverEntry(
+        'database.action_items.FirestoreActionItems.purge',
+        base={'self': _PortRepoArgument(FirestoreActionItems), 'space_id': UID},
+        profiles=(CallerProfile('conformance-purge', {}, serving=False),),
+    )
+)
+_add(
+    DriverEntry(
+        'database.goals.FirestoreGoals.purge',
+        base={'self': _PortRepoArgument(FirestoreGoals), 'space_id': UID},
+        profiles=(CallerProfile('conformance-purge', {}, serving=False),),
+    )
+)
+_add(
+    DriverEntry(
+        'database.workstreams.FirestoreWorkstreams.purge',
+        base={'self': _PortRepoArgument(FirestoreWorkstreams), 'space_id': UID},
+        profiles=(CallerProfile('conformance-purge', {}, serving=False),),
+    )
+)
+
+_add(
+    CoveredByEntry(
+        'database.action_items.FirestoreActionItems.iter_all',
+        covered_by=('database.action_items.iter_all_action_items',),
+        reason="Typed projection delegates the unchanged module query; wrapper owns no terminal.",
+        expect_observed=False,
+        body_digest='1bc86d38c0b932c87e130090fde9d1105a6ca0df82c636b7dca0e2fd24c9d6d3',
+    )
+)
+
+_add(
+    CoveredByEntry(
+        'database.action_items.FirestoreActionItems.list_ids',
+        covered_by=('database.action_items.get_action_item_ids',),
+        reason="Typed projection delegates the unchanged module query; wrapper owns no terminal.",
+        expect_observed=False,
+        body_digest='bfa7ff6065f332b1150b8e611703cd9176ce091770dd46f3173dc44189628050',
+    )
+)
+
+_add(
+    CoveredByEntry(
+        'database.goals.FirestoreGoals.get_user_goal',
+        covered_by=('database.goals.get_user_goal',),
+        reason="Typed projection delegates the unchanged module query; wrapper owns no terminal.",
+        expect_observed=False,
+        body_digest='ade696f6b61651574b6177d4295e948fc0af3ed8ab3f5e637b64bdc1d09ded47',
+    )
+)
+
+_add(
+    CoveredByEntry(
+        'database.goals.FirestoreGoals.get_user_goals',
+        covered_by=('database.goals.get_user_goals',),
+        reason="Typed projection delegates the unchanged module query; wrapper owns no terminal.",
+        expect_observed=False,
+        body_digest='cfe0cfb49323686103c695408daa23bb4dc9e9eaeb7bf5f96d8fe2e2299f36a7',
+    )
+)
+
+_add(
+    CoveredByEntry(
+        'database.goals.FirestoreGoals.get_all',
+        covered_by=('database.goals.get_all_goals',),
+        reason="Typed projection delegates the unchanged module query; wrapper owns no terminal.",
+        expect_observed=False,
+        body_digest='9c29c7df864273b95db4bcad94948043418ce4b29c740ab0732816e2d59564e7',
+    )
+)
+
+_add(
+    CoveredByEntry(
+        'database.goals.FirestoreGoals.get_history',
+        covered_by=('database.goals.get_goal_history',),
+        reason="Typed projection delegates the unchanged module query; wrapper owns no terminal.",
+        expect_observed=False,
+        body_digest='943dac16f0900da17e7ac97774fc1ce8e391547c5c09b7f67bf499bc559652f4',
+    )
+)
+
+_add(
+    CoveredByEntry(
+        'database.goals.FirestoreGoals.list_progress_events',
+        covered_by=('database.goals.list_goal_progress_events',),
+        reason="Typed projection delegates the unchanged module query; wrapper owns no terminal.",
+        expect_observed=False,
+        body_digest='738a79316daca63bc0f7637220d1b4c0223cac5947a137dde915cf003c7803d6',
+    )
+)
+
+_add(
+    CoveredByEntry(
+        'database.workstreams.FirestoreWorkstreams.list_open',
+        covered_by=('database.workstreams.list_open_workstreams',),
+        reason="Typed projection delegates the unchanged module query; wrapper owns no terminal.",
+        expect_observed=False,
+        body_digest='d8ccef4a6a4fafbf57a4905c0b96e0640df502ef136d1d209b8af0c3176516dc',
+    )
+)
+
+_add(
+    CoveredByEntry(
+        'database.workstreams.FirestoreWorkstreams.list_for_goal',
+        covered_by=('database.workstreams.list_workstreams_for_goal',),
+        reason="Typed projection delegates the unchanged module query; wrapper owns no terminal.",
+        expect_observed=False,
+        body_digest='bd79c36663771be0de8291ef0e13a3b72f1c765a995427f3e56be3ebea1e66b3',
+    )
+)
+
+_add(
+    CoveredByEntry(
+        'database.workstreams.FirestoreWorkstreams.list_events',
+        covered_by=('database.workstreams.list_workstream_events',),
+        reason="Typed projection delegates the unchanged module query; wrapper owns no terminal.",
+        expect_observed=False,
+        body_digest='d132dde8f888f782bc3fbb3481d0bc53185a0c5363bb4d0054fbe6ba916a41db',
+    )
+)
+
+_add(
+    CoveredByEntry(
+        'database.workstreams.FirestoreWorkstreams.list_artifact_descriptors',
+        covered_by=('database.workstreams.list_artifact_descriptors',),
+        reason="Typed projection delegates the unchanged module query; wrapper owns no terminal.",
+        expect_observed=False,
+        body_digest='6ca431c0d01f80749b2cddc4a72268a1a787ebe0cd0c9eed76698a1acf1246c3',
+    )
+)
+
+_add(
+    CoveredByEntry(
+        'database.workstreams.FirestoreWorkstreams.list_continuation_checkpoints',
+        covered_by=('database.workstreams.list_continuation_checkpoints',),
+        reason="Typed projection delegates the unchanged module query; wrapper owns no terminal.",
+        expect_observed=False,
+        body_digest='71769c81931af304434e48b08253a5f9263109b30e5917b57b7ef369f109edbd',
+    )
+)
+
+_add(
+    CoveredByEntry(
+        'database.workstreams.FirestoreWorkstreams.get_goal_detail',
+        covered_by=('database.workstreams.get_goal_detail',),
+        reason="Typed projection delegates the unchanged module query; wrapper owns no terminal.",
+        expect_observed=False,
+        body_digest='db1486096f370fc90d5def6596d75e7912daf639ee8bf716ecfcb203c2cb2193',
+    )
+)
+
+_add(
+    CoveredByEntry(
+        'database.workstreams.FirestoreWorkstreams.get_workstream_detail',
+        covered_by=('database.workstreams.get_workstream_detail',),
+        reason="Typed projection delegates the unchanged module query; wrapper owns no terminal.",
+        expect_observed=False,
+        body_digest='84681496fb0fb8a17431715637822dff386e3309ddc2993d2dfd8929a6ff4448',
+    )
+)
+
+_add(
+    CoveredByEntry(
+        'database.action_items.FirestoreActionItems._stream',
+        covered_by=(
+            'database.action_items.FirestoreActionItems._delete_action_items_for_conversation',
+            'database.action_items.FirestoreActionItems._retire_action_items_for_conversation',
+        ),
+        reason='Terminal for moved conversation task writers.',
     )
 )
