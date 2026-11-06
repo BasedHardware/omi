@@ -24,6 +24,12 @@ from tests.integration.test_batch_held_dead_letter_firestore import (
     test_two_forced_requeues_append_once_in_real_firestore,  # noqa: F401
     test_expired_row_survives_rollback_using_only_legacy_dead_redrive,  # noqa: F401
 )
+from tests.integration.test_batch_projection_held_dead_letter_firestore import (
+    held,  # noqa: F401
+    test_expiry_content_preserved_and_nightly_flag_off_release_cas,  # noqa: F401
+    test_duplicate_nightly_release_increments_attempts_once,  # noqa: F401
+    test_pre_change_scan_and_release_recovers_expired_row_with_flag_off,  # noqa: F401
+)
 from tests.support.lifecycle_state_table import durable_titling_rearm
 from testing.listen_pusher_stack.run import Stack, _wait_for_port
 from utils.batch_pipeline import live

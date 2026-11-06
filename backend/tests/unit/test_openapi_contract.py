@@ -81,6 +81,27 @@ def test_recording_speaker_routes_stay_first_party_like_single_conversation_assi
         assert app_schema['paths'][path][method.lower()]['security'] == [{'firebaseBearer': []}]
 
 
+def test_task_membership_routes_are_first_party_not_developer_api(monkeypatch):
+    app = FastAPI()
+    routes = {
+        ('POST', '/v1/conversations/task-presence'),
+        ('POST', '/v1/conversations/with-tasks/page'),
+    }
+    monkeypatch.setattr(
+        export_openapi,
+        'UNDOCUMENTED_PUBLIC_ROUTES',
+        {key: reason for key, reason in UNDOCUMENTED_PUBLIC_ROUTES.items() if key in routes},
+    )
+    for method, path in sorted(routes):
+        app.add_api_route(path, lambda: {}, methods=[method])
+
+    assert export_openapi.build_public_openapi(app)['paths'] == {}
+    app_schema = export_openapi.build_openapi(app, 'app-client')
+    assert set(export_openapi.documented_route_keys(app_schema)) == routes
+    for method, path in routes:
+        assert app_schema['paths'][path][method.lower()]['security'] == [{'firebaseBearer': []}]
+
+
 def test_route_inventory_fails_when_public_route_missing_from_spec():
     app = _make_app()
     schema = {

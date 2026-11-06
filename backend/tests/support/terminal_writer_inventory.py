@@ -14,7 +14,7 @@ from pathlib import Path
 
 TERMINAL_STATUSES = {'conversation': {'completed', 'failed'}, 'finalization': {'completed', 'dead_letter'}}
 TERMINAL_WRITER_OWNERS = {
-    'conversation': 'utils/conversations/lifecycle.py + database/conversations.py:claim_conversation_status',
+    'conversation': 'utils/conversations/lifecycle.py + database/conversations.py:claim_conversation_status_in_txn',
     'finalization': 'database/conversation_finalization_jobs.py',
 }
 
@@ -395,12 +395,17 @@ def terminal_writer_sites(source, module):
                 add(machine, item)
 
     for definition in definitions.values():
-        if any(arg.arg == 'conversation_ref' for arg in definition.args.args):
+        is_claim_core = definition.name == 'claim_conversation_status_in_txn'
+        if is_claim_core or any(arg.arg == 'conversation_ref' for arg in definition.args.args):
             for item in local_nodes(definition):
                 if isinstance(item, ast.Return):
                     for patch in expand(item.value):
                         if any(
-                            'status' in strings(key) and strings(value) & TERMINAL_STATUSES['conversation']
+                            'status' in strings(key)
+                            and (
+                                strings(value) & TERMINAL_STATUSES['conversation']
+                                or (is_claim_core and not strings(value))
+                            )
                             for key, value in pairs(patch)
                         ):
                             add('conversation', patch)

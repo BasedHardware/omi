@@ -81,6 +81,16 @@ PUSHER_ACTIVE_WS_CONNECTIONS = Gauge(
     'Number of currently active WebSocket connections in pusher',
 )
 
+PUSHER_STORAGE_PCM_INFLIGHT_BYTES = Gauge(
+    'omi_pusher_storage_pcm_inflight_bytes',
+    'PCM payload bytes submitted by pusher custody commits awaiting storage executor completion or cancellation',
+)
+
+PUSHER_STORAGE_PCM_BUDGET_LIMIT_BYTES = Gauge(
+    'omi_pusher_storage_pcm_budget_limit_bytes',
+    'Pusher storage PCM byte budget limit; zero means no budget is enforced',
+)
+
 PUSHER_QUEUE_DROPS = Counter(
     'pusher_queue_drops_total',
     'Pusher queue items dropped by bounded queue name',

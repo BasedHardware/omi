@@ -101,6 +101,7 @@ from utils.metrics import (
     PUSHER_PRIVATE_CLOUD_UPLOAD_DROPS,
     PUSHER_RECONCILE_LISTS_SKIPPED_TOTAL,
     PUSHER_SILENT_RUN_FLUSHES_SKIPPED_TOTAL,
+    PUSHER_STORAGE_PCM_INFLIGHT_BYTES,
 )
 from utils.readiness import ReadinessGate
 from utils.observability.fallback import record_fallback
@@ -286,22 +287,36 @@ async def _commit_durable_audio_window(
     """
     if not frames or start is None:
         return None
-    with observe_work('custody_commit'):
-        receipt = await run_blocking(
-            storage_executor,
-            commit_pcm_window,
-            uid,
-            payload,
-            conversation_id,
-            start,
-            sample_rate,
-            custody_root,
-            frames[0]['sequence'],
-            frames,
-            data_protection_level=protection_level,
-            clock_source='server_projected' if timeline_v2 else 'arrival_estimate',
-            framed=framed,
-        )
+    # Observational only: never let telemetry change storage, custody or ACK behavior.
+    pcm_observed = False
+    try:
+        try:
+            PUSHER_STORAGE_PCM_INFLIGHT_BYTES.inc(len(payload))
+            pcm_observed = True
+        except Exception:
+            pass
+        with observe_work('custody_commit'):
+            receipt = await run_blocking(
+                storage_executor,
+                commit_pcm_window,
+                uid,
+                payload,
+                conversation_id,
+                start,
+                sample_rate,
+                custody_root,
+                frames[0]['sequence'],
+                frames,
+                data_protection_level=protection_level,
+                clock_source='server_projected' if timeline_v2 else 'arrival_estimate',
+                framed=framed,
+            )
+    finally:
+        if pcm_observed:
+            try:
+                PUSHER_STORAGE_PCM_INFLIGHT_BYTES.dec(len(payload))
+            except Exception:
+                pass
     if receipt.conversation_id and receipt.samples:
         durable_queue.stage_committed(
             AudioProjection(receipt, start, 0, receipt.samples, tuple(frames) if framed else ())

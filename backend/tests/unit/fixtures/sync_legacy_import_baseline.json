@@ -52,10 +52,6 @@
       "retire_in": "C11",
       "importers": {}
     },
-    "utils.sync.legacy_fresh": {
-      "retire_in": "C9/C11",
-      "importers": {}
-    },
     "utils.sync.owner_prefetch": {
       "retire_in": "C10",
       "importers": {}

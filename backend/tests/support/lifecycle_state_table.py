@@ -339,7 +339,14 @@ STATES = (
             alert=Alert('omi-capture-oldest-nonterminal', 'agent'),
         ),
         row('conversation', 'merging', ('status',), exit=FINALIZER),
-        row('conversation', 'completed', ('status',), terminal=True, owner='utils/conversations/lifecycle.py'),
+        row(
+            'conversation',
+            'completed',
+            ('status', 'terminal_family', 'terminal_family_at'),
+            terminal=True,
+            owner='utils/conversations/lifecycle.py',
+            note='Phase 2a claim/persist success; only explicit restore supersedes failure; persist never regresses completed status; legacy and other writers may lack classifier',
+        ),
         row(
             'conversation',
             'failed',
@@ -648,12 +655,37 @@ STATES = (
             'batch_projection',
             name,
             ('projection_state',),
-            exit=BATCH,
+            exit=(
+                Exit('sweeper', 'database/batch_pipeline_projection_release.py:ProjectionReleaseStore.release')
+                if name == 'quarantine_held'
+                else BATCH
+            ),
+            deadline='held_deadline_at' if name == 'quarantine_held' else None,
             terminal=name in ('completed', 'erased'),
             owner='database/batch_pipeline_projection.py' if name in ('completed', 'erased') else None,
-            metric=None if name in ('completed', 'erased') else 'omi_batch_timeliness_new_oldest_age_seconds',
-            alert=None if name in ('completed', 'erased') else Alert('omi-batch-unit-unpublished-2h', 'page'),
-            note='Result projection receipt state, distinct from batch job state',
+            metric=(
+                None
+                if name in ('completed', 'erased')
+                else (
+                    'omi_batch_held_oldest_age_seconds'
+                    if name == 'quarantine_held'
+                    else 'omi_batch_timeliness_new_oldest_age_seconds'
+                )
+            ),
+            alert=(
+                None
+                if name in ('completed', 'erased')
+                else (
+                    Alert('omi-pipeline-held-row-age', 'page')
+                    if name == 'quarantine_held'
+                    else Alert('omi-batch-unit-unpublished-2h', 'page')
+                )
+            ),
+            note=(
+                'Assignment holds retain quarantine_held with held_deadline_at, held_expired_at and held_expired_reason; nightly re-drive; omi_batch_held_expired_units and omi-batch-held-expired-volume (agent). Privacy holds are excluded. Legacy ready-receipt ghosts have a separate hint-only ready exit in the same transaction: BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_ENABLED default OFF, 24h committed age floor, max 16 per pass; off classifies existing reads only.'
+                if name == 'quarantine_held'
+                else 'Result projection receipt state, distinct from batch job state'
+            ),
         )
         for name in ('pending', 'persisted', 'ready', 'quarantine_held', 'completed', 'erased')
     )

@@ -656,7 +656,7 @@ def main() -> int:
     parser.add_argument(
         '--cloud-run-only',
         action='store_true',
-        help='verify only Cloud Run; candidate mode accepts no traffic and serving mode requires 100% traffic',
+        help='verify only Cloud Run; candidate mode accepts no traffic and serving mode requires 100%% traffic',
     )
     parser.add_argument(
         '--latest-ready-wait-seconds',
@@ -664,7 +664,7 @@ def main() -> int:
         default=DEFAULT_LATEST_READY_WAIT_SECONDS,
         help=(
             'serving mode: seconds to wait for a lagging service-level latestReadyRevisionName '
-            'pointer to converge when the expected revision is Ready and serves 100% of traffic; '
+            'pointer to converge when the expected revision is Ready and serves 100%% of traffic; '
             '0 disables the wait'
         ),
     )

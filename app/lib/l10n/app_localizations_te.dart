@@ -14884,6 +14884,20 @@ class AppLocalizationsTe extends AppLocalizations {
   String get episodeWritingNotes => 'నోట్స్ రాస్తున్నాం…';
 
   @override
+  String get homeStepTranscribing => 'ట్రాన్స్‌క్రైబ్ చేస్తున్నాం…';
+
+  @override
+  String homeRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count రికార్డింగ్‌లు',
+      one: '$count రికార్డింగ్',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get episodeWritingNotesDetail => 'ముందు ట్రాన్స్‌క్రిప్ట్ పూర్తి చేస్తున్నాం. మీరు ఈ పేజీ వదిలి వెళ్లవచ్చు.';
 
   @override
@@ -15428,4 +15442,25 @@ class AppLocalizationsTe extends AppLocalizations {
   String paymentDeclinedMessage(Object plan) {
     return '$plan తిరిగి పొందడానికి కార్డును అప్‌డేట్ చేయండి';
   }
+
+  @override
+  String get hasLinkedTasksLabel => 'లింక్ చేసిన పనులు ఉన్నాయి';
+
+  @override
+  String get hasTasksFilter => 'పనులు ఉన్నాయి';
+
+  @override
+  String firmwareUpdateNotInstalledMessage(String version) {
+    return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
+  }
+
+  @override
+  String get firmwareUpdateUnconfirmedMessage =>
+      'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
+
+  @override
+  String get firmwareUpdateUnconfirmedTitle => 'Update Not Confirmed';
+
+  @override
+  String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
 }

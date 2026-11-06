@@ -1,5 +1,6 @@
 """Default-off batch admission cohort. Existing lane classification stays upstream."""
 
+from config.policy import kill_switch
 from config.refactor_switches import default_off as rollout_default_off, default_on as rollout_default_on
 
 from enum import IntEnum
@@ -47,6 +48,11 @@ def projection_source_deleted_enabled() -> bool:
         'BATCH_PIPELINE_PROJECTION_SOURCE_DELETED_ENABLED',
         os.getenv('BATCH_PIPELINE_PROJECTION_SOURCE_DELETED_ENABLED', 'true').strip().lower() != 'false',
     )
+
+
+def projection_ghost_settle_enabled() -> bool:
+    """Default OFF: normalize aged ghost hints; production enable needs David."""
+    return kill_switch('BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_ENABLED')
 
 
 def projection_hold_recovery_enabled() -> bool:
@@ -691,6 +697,22 @@ def projection_drain_claim_aware_enabled() -> bool:
     from config.policy import kill_switch
 
     return kill_switch('PROJECTION_DRAIN_CLAIM_AWARE')
+
+
+def projection_drain_privacy_backoff_enabled() -> bool:
+    """Default on; only off disables zero-progress privacy turn backoff."""
+    from config.policy import kill_switch
+
+    return kill_switch('PROJECTION_DRAIN_PRIVACY_BACKOFF')
+
+
+def projection_privacy_refusal_resume_enabled() -> bool:
+    """Default on; only off disables recovery from a stale privacy refusal."""
+    return kill_switch('PROJECTION_PRIVACY_REFUSAL_RESUME')
+
+
+def projection_drain_privacy_backoff_seconds() -> int:
+    return _pump_bound(os.getenv('PROJECTION_DRAIN_PRIVACY_BACKOFF_SECONDS', '180'), 180, 900, 30)
 
 
 def projection_index_deferred_enabled() -> bool:

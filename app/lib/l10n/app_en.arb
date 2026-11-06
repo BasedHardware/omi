@@ -18132,6 +18132,19 @@
     "@episodeWritingNotes": {
         "description": "The processing row and page while an episode's notes are written."
     },
+    "homeStepTranscribing": "Transcribing…",
+    "@homeStepTranscribing": {
+        "description": "Home processing row subtitle while a recording is being transcribed."
+    },
+    "homeRecordingsCount": "{count, plural, =1{1 recording} other{{count} recordings}}",
+    "@homeRecordingsCount": {
+        "description": "Home processing row subtitle giving how many recordings one row stands for.",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
     "episodeWritingNotesDetail": "Finishing the transcript first. You can leave this page.",
     "@episodeWritingNotesDetail": {
         "description": "Under Writing notes on the processing page."
@@ -18754,5 +18767,24 @@
     "paymentDeclinedMessage": "Update it to get {plan} back",
     "@paymentDeclinedMessage": {
         "description": "Home row line under 'Your card was declined'. it = the card; plan = a product name such as Omi Pro"
-    }
+    },
+    "hasLinkedTasksLabel": "Has linked tasks",
+    "@hasLinkedTasksLabel": {
+        "description": "Accessible conversation-row badge: at least one current canonical task is linked"
+    },
+    "hasTasksFilter": "Has tasks",
+    "@hasTasksFilter": {
+        "description": "Conversation search and browse filter: only conversations with current linked tasks"
+    },
+    "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
+    "@firmwareUpdateNotInstalledMessage": {
+        "placeholders": {
+            "version": {
+                "type": "String"
+            }
+        }
+    },
+    "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
+    "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
 }

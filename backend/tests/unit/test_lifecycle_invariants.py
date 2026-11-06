@@ -341,9 +341,8 @@ KNOWN_GAPS = {
     ('batch_projection:persisted', 'entry_deadline'): 'batch_projection:persisted: missing deadline stamped at '
     'entry; phase contract follow-up; no fix PR yet; ANX '
     'lcinv-lifecycle-invariants',
-    ('batch_projection:quarantine_held', 'entry_deadline'): 'batch_projection:quarantine_held: missing deadline '
-    'stamped at entry; phase contract follow-up; no fix PR '
-    'yet; ANX lcinv-lifecycle-invariants',
+    ('batch_projection:quarantine_held', 'entry_deadline'): 'Assignment holds stamp held_deadline_at; privacy holds '
+    'remain explicitly outside phase 4b and must never age-expire. ANX lcinv-lifecycle-invariants',
     ('batch_projection:ready', 'entry_deadline'): 'batch_projection:ready: missing deadline stamped at entry; phase '
     'contract follow-up; no fix PR yet; ANX lcinv-lifecycle-invariants',
     ('conversation:completed', 'dwell_metric'): 'conversation:completed: missing authoritative dwell/stock gauge; '

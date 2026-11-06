@@ -407,6 +407,11 @@ def entries():
             domains={'namespace': namespaces, 'priority': [0, 1, 2], 'ready_only': [False, True]},
         ),
         DriverEntry(
+            'database.batch_pipeline_projection_release.expired_page_ids',
+            domains={'namespace': namespaces, 'after_id': [None, 'result-100']},
+            neutrals={'limit': (32, 'bounded page size only; equality single-field index')},
+        ),
+        DriverEntry(
             'database.batch_pipeline_projection_release.held_page_ids',
             domains={'namespace': namespaces, 'after_id': [None, 'result-100']},
             neutrals={'limit': (128, 'bounded page size only; equality is served by the automatic single-field index')},
@@ -424,7 +429,7 @@ def entries():
             ),
             reason='bounded release scan delegates queries to both page builders; resets are document transactions',
             expect_observed=False,
-            body_digest='6585eb78557d3f1f336d97ca78325be4a55146f44f5e21c6c72f11abec183580',
+            body_digest='342df86ce628f1bd9d2f79d1e14fe4b153e65f71aea294197cffb134b930d49b',
         ),
         CoveredByEntry(
             'database.batch_pipeline_projection_release.release_scan_pass',
@@ -434,6 +439,6 @@ def entries():
             ),
             reason='two durable cursors share release_page; cursor reads and writes are document operations',
             expect_observed=False,
-            body_digest='7f3bbdcf0a450474ce7ed6255c758eb795706d8f1b8b69563d64471443250e58',
+            body_digest='6e181f539bf5a7833c601e1915537c6e2cdf5bf0b16367b792c0a83cf76d4b56',
         ),
     )

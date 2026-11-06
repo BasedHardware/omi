@@ -1,9 +1,9 @@
-"""Rollout gates for Firestore read-reduction levers; every lever defaults off.
+"""Rollout gates for Firestore read-reduction levers; levers default off unless listed in DEFAULT_PERCENTAGES.
 
 One runtime_env key, ``FIRESTORE_READ_LEVERS``, carries a JSON object mapping lever
 name to a 0-100 rollout percentage, e.g. ``{"singleton_loops": 100, "listen_poll": 5}``.
 A lever is on for a key (uid, pod name) when a stable hash of ``lever:key`` falls
-below its percentage. Missing, malformed or out-of-range values mean off.
+below its percentage. Missing values use DEFAULT_PERCENTAGES (otherwise off); invalid explicit percentages mean off.
 """
 
 # LIFECYCLE: permanent
@@ -23,6 +23,7 @@ ENV_KEY = 'FIRESTORE_READ_LEVERS'
 # Every lever the code consults. Unknown names in the env are ignored (and logged once).
 KNOWN_LEVERS = frozenset(
     {
+        'batch_metrics_oldest_leader',  # ship-on queue sample election; 0 restores per-instance reads
         'singleton_loops',
         'listen_poll',
         'listen_credit_backoff',
@@ -43,9 +44,9 @@ KNOWN_LEVERS = frozenset(
         'memory_list_index_window',
         'mcp_conversation_cards_cache',
         'canonical_statuses_dedupe',
-        'batch_privacy_memoize',
         'bpp_generation_memo',  # batch privacy task-attempt memo; absent = 0/off
         'privacy_checks_shadow',  # compares live decisions; never authorizes writes
+        'privacy_negative_lookup_cache',  # WQ26-token-certified NOT_FOUND reads; 0 is the kill switch
         'legal_hold_fence_cache',
         'privacy_session_token',
         'tombstone_negative_cache',
@@ -62,6 +63,9 @@ KNOWN_LEVERS = frozenset(
 )
 
 
+DEFAULT_PERCENTAGES = {'batch_metrics_oldest_leader': 100}
+
+
 @lru_cache(maxsize=4)
 def _parse(raw: str) -> Dict[str, int]:
     if not raw.strip():
@@ -69,10 +73,10 @@ def _parse(raw: str) -> Dict[str, int]:
     try:
         data = json.loads(raw)
     except ValueError:
-        logger.warning('firestore_read_levers: %s is not valid JSON; all levers off', ENV_KEY)
+        logger.warning('firestore_read_levers: %s is not valid JSON; using lever defaults', ENV_KEY)
         return {}
     if not isinstance(data, dict):
-        logger.warning('firestore_read_levers: %s is not a JSON object; all levers off', ENV_KEY)
+        logger.warning('firestore_read_levers: %s is not a JSON object; using lever defaults', ENV_KEY)
         return {}
     out: Dict[str, int] = {}
     for name, pct in data.items():
@@ -81,6 +85,7 @@ def _parse(raw: str) -> Dict[str, int]:
             continue
         if isinstance(pct, bool) or not isinstance(pct, int) or not 0 <= pct <= 100:
             logger.warning('firestore_read_levers: lever %r has invalid percentage %r; off', name, pct)
+            out[name] = 0
             continue
         out[name] = pct
     return out
@@ -89,7 +94,7 @@ def _parse(raw: str) -> Dict[str, int]:
 def lever_percent(name: str) -> int:
     if name not in KNOWN_LEVERS:
         raise ValueError(f'unknown Firestore read lever: {name}')
-    return _parse(os.getenv(ENV_KEY, '')).get(name, 0)
+    return _parse(os.getenv(ENV_KEY, '')).get(name, DEFAULT_PERCENTAGES.get(name, 0))
 
 
 def lever_enabled(name: str, key: Optional[str] = None) -> bool:

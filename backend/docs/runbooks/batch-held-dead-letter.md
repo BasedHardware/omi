@@ -70,3 +70,47 @@ proof of user-visible recovery; verify real transcript publication separately.
 Not measured here: production stock, dwell distribution, vendor spend, live
 nightly execution, alert delivery or deployed behavior. Tests use synthetic
 identities and offline/emulator paths only.
+
+## Projection receipts (phase 4b)
+
+Assignment-quarantined result receipts get the same seven-day `held_deadline_at`
+when persisted. The release scan gives legacy eligible holds a full window from
+first examination. Only settled assignment holds age-expire; original ownership,
+operator-intent, privacy and target-restorability checks still apply. Persisted
+multipart suffixes and privacy holds never age-expire.
+
+Expiry retains `projection_state=quarantine_held` and adds `held_expired_at` and
+`held_expired_reason=held_expired`. The result/transcript payload, quarantined
+receipt, proven parts, audio references, job and owner watermark are unchanged.
+There is no TTL, deletion or conversation-status change. The marker subset remains
+visible through ordinary held obligations and the `held_expired_rows` leg.
+
+The pre-4b release path rejects attempts at or above `MAX_RELEASE_ATTEMPTS=3`.
+When an aged, still-unrestorable hold expires at that cap, the same transaction
+saves its count in `held_expired_release_attempts` and resets
+`projection_release_attempts` to zero. This one-time CAS keeps the row eligible
+for the unchanged old release path; marked rows are never repeatedly reset.
+Ordinary uncapped holds retain their counter. No reset releases an unrestorable
+target or changes the receipt. A subsequent release uses the existing watermark
+and held-parts reset. A fresh assignment hold starts a fresh deadline.
+
+On the existing maintenance leader, a separate durable cursor rechecks 32 marked
+receipts per five-minute continuation of a nightly UTC pass. Only previous-day
+expirations qualify, using the same target-restorability predicate. Unrestorable
+rows remain held. Checkpoints follow work and unfinished scans retain their
+cursor across midnight; crashes replay safely and poison rows cannot pin pages.
+The ordinary release scan can also release marked rows as soon as their targets
+become restorable. Its existing durable cursors are unchanged.
+
+`BATCH_HELD_DEAD_LETTER_ENABLED=false` stops new stamps and expiry. Already marked
+rows remain discoverable and releasable by the unchanged pre-4b scan and release
+implementation, including capped rows normalized during expiry. The new nightly
+helper also continues with the flag off. A full code revert needs no metadata
+rewrite or retained new helper. Frozen pre-change code is exercised by unit and
+loopback Firestore tests with the flag off, before and after target restoration.
+
+The existing agent-only `omi-batch-held-expired-volume` alert includes job stock
+and projection rows with `projection_state=quarantine_held` and
+`held_expired_reason=held_expired`. Unrelated legacy holds do not count. Samples
+must be fresh; thresholds remain synthetic 4a defaults, not measured production
+levels. No human paging, GCP access or production measurement was performed.

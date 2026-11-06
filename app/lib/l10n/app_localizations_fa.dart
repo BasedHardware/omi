@@ -14816,6 +14816,19 @@ class AppLocalizationsFa extends AppLocalizations {
   String get episodeWritingNotes => 'در حال نوشتن یادداشت‌ها…';
 
   @override
+  String get homeStepTranscribing => 'در حال رونویسی…';
+
+  @override
+  String homeRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ضبط',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get episodeWritingNotesDetail => 'اول متن را کامل می‌کنیم. می‌توانید این صفحه را ترک کنید.';
 
   @override
@@ -15360,4 +15373,25 @@ class AppLocalizationsFa extends AppLocalizations {
   String paymentDeclinedMessage(Object plan) {
     return 'برای بازگرداندن $plan کارت را به‌روزرسانی کنید';
   }
+
+  @override
+  String get hasLinkedTasksLabel => 'دارای کارهای مرتبط';
+
+  @override
+  String get hasTasksFilter => 'دارای کار';
+
+  @override
+  String firmwareUpdateNotInstalledMessage(String version) {
+    return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
+  }
+
+  @override
+  String get firmwareUpdateUnconfirmedMessage =>
+      'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
+
+  @override
+  String get firmwareUpdateUnconfirmedTitle => 'Update Not Confirmed';
+
+  @override
+  String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
 }

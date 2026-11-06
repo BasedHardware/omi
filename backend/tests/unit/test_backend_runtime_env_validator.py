@@ -452,7 +452,8 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
     payload = re.sub(
         r'("backend(?:-sync|-sync-backfill|-integration)?":\s*\{.*?"env":\s*\[)',
         r'\1\n        {"name": "ACTION_ITEM_REFRESH_PRESERVE_ENABLED", "value": "true"},'
-        r'\n        {"name": "BATCH_HELD_DEAD_LETTER_ENABLED", "value": "true"},',
+        r'\n        {"name": "BATCH_HELD_DEAD_LETTER_ENABLED", "value": "true"},'
+        r'\n        {"name": "CONVERSATION_TERMINAL_FAMILY_MODE", "value": "on"},',
         payload,
         flags=re.DOTALL,
     )
@@ -509,12 +510,7 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
     # Keep unrelated Cloud Run failure fixtures complete under the new dark gate.
     payload = re.sub(
         r'("backend-sync(?:-backfill)?":\s*\{.*?"env":\s*\[)',
-        r'\1\n        {"name": "SYNC_LEGACY_FRESH_ENABLED", "value": "false"},'
-        r'\n        {"name": "SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED", "value": "false"},'
-        r'\n        {"name": "SYNC_LEGACY_FRESH_UID_ALLOWLIST", "value": ""},'
-        r'\n        {"name": "SYNC_LEGACY_FRESH_PERCENT", "value": "0"},'
-        r'\n        {"name": "SYNC_LEGACY_FRESH_HOURLY_TOKENS", "value": "60"},'
-        r'\n        {"name": "SYNC_LEGACY_FRESH_BURST_TOKENS", "value": "10"},',
+        r'\1\n        {"name": "SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED", "value": "false"},',
         payload,
         flags=re.DOTALL,
     )

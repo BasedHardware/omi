@@ -1041,3 +1041,28 @@ async def test_full_record_pass_repeats_after_yield_without_idle_wait(monkeypatc
     assert calls == [1, 1]
     assert waits == ([2] if first_full else [1, 2])
     assert yields == ([(1, 0)] if first_full else [])
+
+
+def test_stage_metrics_use_existing_lease_system_with_independent_bounded_role(monkeypatch):
+    from utils.batch_pipeline import serving
+    from utils.batch_pipeline.leader import QUEUE_METRICS, SERVING_MAINTENANCE
+
+    store = MemoryStore()
+    metrics = QueueMetrics(CollectorRegistry(), min_refresh_seconds=30)
+    monkeypatch.setattr(serving, 'current_stage', lambda: 'dev')
+    monkeypatch.setattr(serving, 'FirestoreStore', lambda namespace: store)
+    monkeypatch.setattr(serving, 'shadow_from_env', lambda value: value)
+    monkeypatch.setattr(serving, 'artifacts_for', lambda _: Mock())
+    monkeypatch.setattr(serving, 'Projector', Mock())
+    monkeypatch.setattr(serving, '_metrics', lambda: metrics)
+    serving.serving_for_stage.cache_clear()
+    try:
+        service = serving.serving_for_stage('dev')
+        assert service.metrics is metrics
+        assert metrics.oldest_leader.store is store
+        assert metrics.oldest_leader.role == QUEUE_METRICS
+        assert metrics.oldest_leader.ttl_seconds == 20
+        assert service.leader.role == SERVING_MAINTENANCE
+        assert service.leader.ttl_seconds == 60
+    finally:
+        serving.serving_for_stage.cache_clear()

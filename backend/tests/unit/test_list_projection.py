@@ -573,6 +573,13 @@ def test_real_conversation_route_preserves_locked_allowance_recovery(store, monk
     monkeypatch.setenv('HOME_TRANSCRIPTION_PRESENTATION_GATE', gate)
     store.client.document('users/owner/conversations/locked').set({'is_locked': True, 'status': 'completed'})
     rows = [{'id': 'locked', 'is_locked': True, 'status': 'completed'}]
+
+    def wire(source_rows):
+        # The default-on Home row contract stamps the wire copy (both gate
+        # modes). This bare completed capture has no title, transcript, batch
+        # receipt, or 2h bound, so it reads as still transcribing.
+        return [{**row, 'home_step': 'transcribing'} for row in source_rows]
+
     calls = []
 
     def source(*args, **kwargs):
@@ -608,13 +615,13 @@ def test_real_conversation_route_preserves_locked_allowance_recovery(store, monk
         starred=None,
     )
     first = Response()
-    assert conversation_routes.get_conversations(response=first, **params) == rows
+    assert conversation_routes.get_conversations(response=first, **params) == wire(rows)
     assert 'etag' not in first.headers  # monthly rollover must still reach heal
-    assert conversation_routes.get_conversations(response=Response(), **params) == rows
+    assert conversation_routes.get_conversations(response=Response(), **params) == wire(rows)
     assert calls == ['source', 'heal', 'source', 'heal']
     rows[0]['is_locked'] = False
     fresh = Response()
-    assert conversation_routes.get_conversations(response=fresh, **params) == rows
+    assert conversation_routes.get_conversations(response=fresh, **params) == wire(rows)
     if gate == 'on':
         assert 'etag' not in fresh.headers
         params['request'] = Request(
@@ -625,7 +632,7 @@ def test_real_conversation_route_preserves_locked_allowance_recovery(store, monk
                 'headers': [(b'if-none-match', b'old-writer-version')],
             }
         )
-        assert conversation_routes.get_conversations(response=Response(), **params) == rows
+        assert conversation_routes.get_conversations(response=Response(), **params) == wire(rows)
         assert calls == ['source', 'heal'] * 4
         return
     assert 'etag' in fresh.headers
@@ -639,7 +646,7 @@ def test_real_conversation_route_preserves_locked_allowance_recovery(store, monk
     )
     params['request'] = conditional
     graduated = Response()
-    assert conversation_routes.get_conversations(response=graduated, **params) == rows
+    assert conversation_routes.get_conversations(response=graduated, **params) == wire(rows)
     assert graduated.headers['etag'].startswith('W/"lp1-')
     params['request'] = Request(
         {

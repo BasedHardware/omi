@@ -29,6 +29,7 @@ from config.batch_pipeline import worker_pipeline_depth, worker_processes
 from config.batch_pipeline_providers import provider_config
 from database._client import get_data_plane_firestore_client
 from database.batch_pipeline_store import FirestoreStore
+from database.privacy_check_metrics import NEGATIVE_LOOKUPS
 from database.batch_pipeline_shadow_hook import shadow_from_env, shadow_parity_collectors
 from diarizer.batch_pipeline import is_fatal_cuda_error
 from diarizer.batch_pipeline_startup import ChainMemoryProbe, load_worker, synchronize_gpu
@@ -142,6 +143,7 @@ def health_server(
     registry.register(TRANSITIONS)
     registry.register(DURATION)
     registry.register(LABELS)
+    registry.register(NEGATIVE_LOOKUPS)
     register_gpu_skip_counters(registry)  # diarization decisions + per-unit FP32-parity counters
     for collector in shadow_parity_collectors():  # A2 shadow only; empty (no jobstore import) otherwise
         registry.register(collector)
@@ -242,6 +244,10 @@ async def run_process(store: Any, artifacts: Any, registry: CollectorRegistry, s
             worker_release=os.environ.get('BATCH_PIPELINE_WORKER_RELEASE', 'unscoped'),
             namespace=os.environ.get('POD_NAMESPACE', 'unscoped'),
             capacity_sampling=True,
+            # The sampler heartbeat gates per-pod GPU busy-time in the adapter;
+            # electing only one pod would hide healthy workers. Bound these
+            # fleet queries independently; lever 0 restores the 15s sampler.
+            oldest_min_refresh_seconds=60,
         )
         pump = Pump(
             Scheduler(store, metrics=metrics, pool='batch'),

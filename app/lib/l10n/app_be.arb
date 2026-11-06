@@ -11921,6 +11921,8 @@
     "chatAppsWaitingMessageIn": "Адпраў паведамленне ў праграме {app}. Гэты экран абновіцца, як толькі Omi яго атрымае.",
     "chatAppsCodeExpiredMessageIn": "Атрымай новы код і адпраў яго з праграмы {app}.",
     "episodeWritingNotes": "Пішам нататкі…",
+    "homeStepTranscribing": "Расшыфроўваем…",
+    "homeRecordingsCount": "{count, plural, one{{count} запіс} few{{count} запісы} many{{count} запісаў} other{{count} запісу}}",
     "episodeWritingNotesDetail": "Спачатку завяршаем транскрыпцыю. Можаце пакінуць гэту старонку.",
     "episodeCoversUpTo": "Ахоплівае да {time} · поўныя нататкі пасля завяршэння",
     "liveTranscribedUpTo": "Транскрыбавана да {time}",
@@ -12191,5 +12193,11 @@
     "referralRewardSecondDetail": "Калі яшчэ 3 сябры купяць",
     "referralClaimShort": "Атрымаць",
     "paymentDeclinedTitle": "Вашу картку адхілілі",
-    "paymentDeclinedMessage": "Абнавіце картку, каб вярнуць {plan}"
+    "paymentDeclinedMessage": "Абнавіце картку, каб вярнуць {plan}",
+    "hasLinkedTasksLabel": "Ёсць звязаныя задачы",
+    "hasTasksFilter": "З задачамі",
+    "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
+    "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
+    "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
 }

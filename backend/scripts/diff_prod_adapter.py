@@ -52,7 +52,11 @@ BATCH_PIPELINE_CHAIN_RULE: dict[str, Any] = {
         '    rate(omi_batch_pipeline_stage_seconds_sum{<<.LabelMatchers>>,stage="worker_flight"}[10m])\n'
         '  )\n'
         '  and on (namespace, pod)\n'
-        '  (time() - omi_batch_pipeline_metrics_refreshed_at_seconds{<<.LabelMatchers>>} < 60)\n'
+        '  (\n'
+        '    (time() - omi_batch_pipeline_sampler_observed_at_seconds{<<.LabelMatchers>>} < 60)\n'
+        '    or\n'
+        '    (time() - omi_batch_pipeline_metrics_refreshed_at_seconds{<<.LabelMatchers>>} < 60)\n'
+        '  )\n'
         ')'
     ),
 }

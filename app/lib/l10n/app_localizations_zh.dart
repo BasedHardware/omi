@@ -14590,6 +14590,19 @@ class AppLocalizationsZh extends AppLocalizations {
   String get episodeWritingNotes => '正在撰写笔记…';
 
   @override
+  String get homeStepTranscribing => '正在转录…';
+
+  @override
+  String homeRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 条录音',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get episodeWritingNotesDetail => '正在先完成转录。你可以离开此页面。';
 
   @override
@@ -15116,4 +15129,25 @@ class AppLocalizationsZh extends AppLocalizations {
   String paymentDeclinedMessage(Object plan) {
     return '更新银行卡以恢复使用 $plan';
   }
+
+  @override
+  String get hasLinkedTasksLabel => '包含关联任务';
+
+  @override
+  String get hasTasksFilter => '有任务';
+
+  @override
+  String firmwareUpdateNotInstalledMessage(String version) {
+    return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
+  }
+
+  @override
+  String get firmwareUpdateUnconfirmedMessage =>
+      'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
+
+  @override
+  String get firmwareUpdateUnconfirmedTitle => 'Update Not Confirmed';
+
+  @override
+  String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
 }

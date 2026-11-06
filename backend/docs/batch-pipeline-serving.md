@@ -76,7 +76,13 @@ With several serving instances, the periodic ticks (the supervisor and metrics
 scrapes) run maintenance (staging reap, artifact cleanup, enrichment sweep,
 quarantine discovery, lease recovery and the result-ready drain) on one instance
 per 60-second Firestore lease in `{namespace}_leases`. Projection sweeps and
-gauge refreshes stay per instance. Explicit `POST /reconcile` and the
+local samplers stay per instance. Fleet queue gauges use an independent
+20-second `queue_metrics` lease in the same store (default sample cadence 40s,
+60s export freshness bound). GPU queue queries use the 60s per-pod fallback
+because autoscaling also consumes per-pod freshness. Set
+`FIRESTORE_READ_LEVERS` entry `batch_metrics_oldest_leader` to 0 to restore
+per-instance sampling; see [queue sample ownership](runbooks/batch-queue-safety.md#fleet-queue-sample-ownership).
+Explicit `POST /reconcile` and the
 post-recovery drain always run. Every guarded step is already idempotent and
 transaction-fenced, so the lease saves reads and enqueues only. A lease-store
 error fails open to every instance running, and
