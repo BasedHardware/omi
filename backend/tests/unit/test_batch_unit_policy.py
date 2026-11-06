@@ -94,6 +94,8 @@ def test_cohort_registry_and_live_switch_contract():
                 'BATCH_PIPELINE_SERVING_PROJECTION_SWEEP',
                 'BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED',
                 'PROJECTION_DRAIN_CLAIM_AWARE',
+                'PROJECTION_DRAIN_PRIVACY_BACKOFF',
+                'PROJECTION_PRIVACY_REFUSAL_RESUME',
             }
             else 'false'
         )
@@ -443,7 +445,7 @@ def test_getter_guard_covers_new_directories_and_import_aliases():
         'utils/a_new_unit_handler.py',
     )
     assert not stage_policy_reads(
-        "from utils.sync import legacy_fresh\nlegacy_fresh.enabled_for('owner')",
+        "from utils.sync import stage\nstage.production_stage()",
         'routers/sync.py',
     )
 

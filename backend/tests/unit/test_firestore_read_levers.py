@@ -17,7 +17,13 @@ def test_default_off(monkeypatch):
 
 
 @pytest.mark.parametrize(
-    'name', ['conversation_list_cursor', 'finjob_candidate_queries', 'sync_snapshot_resolve_cache']
+    'name',
+    [
+        'conversation_list_cursor',
+        'finjob_candidate_queries',
+        'sync_snapshot_resolve_cache',
+        'privacy_negative_lookup_cache',
+    ],
 )
 @pytest.mark.parametrize('raw', [None, '', '{}', '{"singleton_loops":100}'])
 def test_registered_lever_stays_off_when_key_absent(monkeypatch, name, raw):
@@ -32,7 +38,13 @@ def test_registered_lever_stays_off_when_key_absent(monkeypatch, name, raw):
 
 
 @pytest.mark.parametrize(
-    'name', ['conversation_list_cursor', 'finjob_candidate_queries', 'sync_snapshot_resolve_cache']
+    'name',
+    [
+        'conversation_list_cursor',
+        'finjob_candidate_queries',
+        'sync_snapshot_resolve_cache',
+        'privacy_negative_lookup_cache',
+    ],
 )
 def test_registered_lever_is_addressable(monkeypatch, name):
     monkeypatch.setenv(levers.ENV_KEY, '{"%s":100}' % name)

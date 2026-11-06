@@ -957,7 +957,7 @@ def test_control_loop_defaults_and_value_only_rollback_render(tmp_path, rollback
     env = {
         entry['name']: entry.get('value') for entry in deployment['spec']['template']['spec']['containers'][0]['env']
     }
-    expected = ('64', 'false', '2', '{}') if rollback else ('16', 'true', '10', '{"batch_privacy_memoize":100}')
+    expected = ('64', 'false', '2', '{}') if rollback else ('16', 'true', '10', '{}')
     assert (
         tuple(
             env[key]
@@ -970,3 +970,14 @@ def test_control_loop_defaults_and_value_only_rollback_render(tmp_path, rollback
         )
         == expected
     )
+
+
+@pytest.mark.parametrize('enabled', ['true', 'false'])
+def test_held_dead_letter_kill_switch_renders_literal_worker_setting(enabled):
+    result = render(*enabled_arguments(), '--set', f'worker.heldDeadLetterEnabled={enabled}')
+    assert result.returncode == 0, result.stderr
+    deployments = [v for v in yaml.safe_load_all(result.stdout) if v and v.get('kind') == 'Deployment']
+    assert deployments
+    for deployment in deployments:
+        env = deployment['spec']['template']['spec']['containers'][0]['env']
+        assert next(v['value'] for v in env if v['name'] == 'BATCH_HELD_DEAD_LETTER_ENABLED') == enabled

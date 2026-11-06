@@ -127,7 +127,7 @@ FIELD_SITES = {
                 'projection_release_attempts',
                 'projection_state',
             ),
-        )
+        ),
     ],
     'database/batch_pipeline_projection_session.py': [
         ('ProjectionSession.persist', 'projection_state', "'pending'", ('projection_state',)),
@@ -214,6 +214,12 @@ FIELD_SITES = {
             'state',
             "'prepared'",
             ('plan_digest', 'prepared_at', 'privacy_generation', 'state', 'token'),
+        ),
+        (
+            'expire_held_in_transaction',
+            'state',
+            "'dead'",
+            ('dead_letter_reason', 'held_expired_at', 'merge_pending', 'state'),
         ),
     ],
     'database/batch_pipeline_recovery.py': [
@@ -2502,6 +2508,12 @@ FIELD_SITES = {
             'state',
             "'ready'",
             ('available_at', 'failure', 'lease_until', 'retry_started_at', 'state', 'token'),
+        ),
+        (
+            'Scheduler.requeue_quarantined_in_transaction',
+            'state',
+            "'ready'",
+            ('available_at', 'held_requeued_at', 'lease_until', 'merge_pending', 'state', 'token'),
         ),
         (
             'Scheduler.restore_audio_in_transaction',

@@ -159,7 +159,9 @@ def _terminally_held(job: dict) -> bool:
     Its encrypted artifacts stay server-side for a reviewed operator redrive, so
     a re-upload can neither change the outcome nor add a recovery path.
     """
-    return job.get('state') == 'quarantined' and job.get('recovery_state') == 'failed_held'
+    return (job.get('state') == 'quarantined' and job.get('recovery_state') == 'failed_held') or (
+        job.get('state') == 'dead' and job.get('dead_letter_reason') == 'held_expired'
+    )
 
 
 def _held_status(jobs: list[dict]) -> tuple[str, str | None] | None:
@@ -169,7 +171,8 @@ def _held_status(jobs: list[dict]) -> tuple[str, str | None] | None:
     failed = [
         job
         for job in jobs
-        if job.get('state') == 'quarantined' and job.get('recovery_state') not in {'held', 'prepared', 'running'}
+        if _terminally_held(job)
+        or (job.get('state') == 'quarantined' and job.get('recovery_state') not in {'held', 'prepared', 'running'})
     ]
     if not failed or not all(_terminally_held(job) for job in failed) or not held_terminal_status_enabled():
         return None
@@ -302,7 +305,8 @@ def durable_status(store, uid: str, job_id: str) -> dict | None:
             for job in jobs
         )
         failed = sum(
-            job.get('state') == 'quarantined' and job.get('recovery_state') not in {'held', 'prepared', 'running'}
+            _terminally_held(job)
+            or (job.get('state') == 'quarantined' and job.get('recovery_state') not in {'held', 'prepared', 'running'})
             for job in jobs
         )
         held = None if completed else _held_status(jobs)

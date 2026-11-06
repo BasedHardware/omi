@@ -14,7 +14,7 @@ Each allowlist entry is one of:
 - ``{"owner": ..., "review_by": "YYYY-MM-DD"}``: an explicit exception above the
   budget. It fails once ``review_by`` has passed: renew it or delete the flag.
 
-A name that leaves the surface moves to the append-only ``retired`` ledger as
+A name that leaves the surface moves to the append-only ``retired`` ledger (including ``retired_history``) as
 ``{"on": "YYYY-MM-DD", "replaced_by": "NEW" | null}``. A replacement is valid
 only when the retired entry names it, so a slot given up in an earlier change
 (``replaced_by: null``) cannot be reclaimed later. ``budget`` must equal the
@@ -47,9 +47,11 @@ from config.policy.guard import env_reads
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 BUDGET_PATH = BACKEND_DIR / 'config' / 'flag_budget.json'
 FEATURE_FLAGS_PATH = BACKEND_DIR.parent / 'config' / 'feature-flags.yaml'
-SEED_BUDGET = 170  # 2026-10-25 seed; lower it when the surface shrinks, never raise it.
+SEED_BUDGET = 165  # 2026-10-25 seed; lower it when the surface shrinks, never raise it.
 HELPER_KILL_SWITCHES = {
     'PROJECTION_DRAIN_CLAIM_AWARE',
+    'PROJECTION_DRAIN_PRIVACY_BACKOFF',
+    'PROJECTION_PRIVACY_REFUSAL_RESUME',
     'BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED',
     'CONVERSATION_OCCASION_RELEVANCE_ENABLED',
     'LATE_AUDIO_SYNC_INTAKE_ENABLED',
@@ -157,7 +159,11 @@ def problems(read: dict[str, list[str]], data: dict, today: datetime.date) -> li
 
 
 def _load() -> dict:
-    return json.loads(BUDGET_PATH.read_text(encoding='utf-8'))
+    data = json.loads(BUDGET_PATH.read_text(encoding='utf-8'))
+    history = json.loads((BACKEND_DIR / data['retired_history']).read_text(encoding='utf-8'))
+    assert not set(history) & set(data['retired']), 'duplicate retired flag records'
+    data['retired'].update(history)
+    return data
 
 
 def _today() -> datetime.date:
@@ -191,6 +197,7 @@ def test_helper_kill_switch_budget_entries_match_the_default_on_registry():
     # outside the pipeline scanner's scope. Keep helper kill switches separate.
     rollout_name = 'SERVER_BATCH_ONLY_WEB_PERCENT'
     assert helper_names == HELPER_KILL_SWITCHES | {
+        'BATCH_HELD_DEAD_LETTER_ENABLED',
         'SERVER_BATCH_UNSUPPORTED_LANGUAGES',
         rollout_name,
         'BATCH_PIPELINE_SERVING_PROJECTION_SWEEP',
@@ -229,11 +236,21 @@ def test_helper_kill_switch_budget_entries_match_the_default_on_registry():
     assert rollout['kind'] == 'env'
     assert rollout['lifecycle'] == 'rollout'
     assert rollout_name in env_reads((BACKEND_DIR / 'config/server_batch.py').read_text(encoding='utf-8'))
+    held = names['BATCH_HELD_DEAD_LETTER_ENABLED']
+    assert held['owner'] == 'uicleanup / omi-lifecycle'
+    assert held['review_by'] == '2026-12-06'
+    assert flags['BATCH_HELD_DEAD_LETTER_ENABLED']['lifecycle'] == 'ops_kill'
     for name in sorted(HELPER_KILL_SWITCHES):
         entry = names[name]
         flag = flags[name]
         assert entry['registry'] == 'config/feature-flags.yaml'
-        if name == 'PROJECTION_DRAIN_CLAIM_AWARE':
+        if name == 'PROJECTION_PRIVACY_REFUSAL_RESUME':
+            assert entry['owner'] == 'omi-pipeline / refusal-resume'
+            assert entry['review_by'] == '2026-12-06'
+        elif name == 'PROJECTION_DRAIN_PRIVACY_BACKOFF':
+            assert entry['owner'] == 'omi-pipeline / privblock'
+            assert entry['review_by'] == '2026-12-06'
+        elif name == 'PROJECTION_DRAIN_CLAIM_AWARE':
             assert entry['owner'] == 'two-lane lead'
             assert entry['review_by'] == '2026-12-05'
         else:

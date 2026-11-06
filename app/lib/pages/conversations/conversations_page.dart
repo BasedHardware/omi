@@ -913,10 +913,10 @@ class _ConversationsPageState extends State<ConversationsPage>
                 ),
               // Typed HTTP status precedes empty/loading/hero so an outage is
               // never the new-account empty state. Unset (data) keeps production.
-              if (_isBootstrapping)
+              // The skeleton is Home's only loading state: it stays up until the first
+              // episode read settles, so no second loader replaces it.
+              if (_isBootstrapping || _initialOverlayPending)
                 _buildLoadingShimmer()
-              else if (_initialOverlayPending)
-                SliverToBoxAdapter(child: OmiLoadingState(label: context.l10n.episodeFinishingUp))
               else if (showTypedStatus &&
                   conversationsByDate.values.every((list) => list.isEmpty) &&
                   snapshot.conversations.isEmpty &&

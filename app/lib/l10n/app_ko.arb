@@ -4636,5 +4636,9 @@
     "referralRewardSecondDetail": "친구 3명이 더 구매하면",
     "referralClaimShort": "받기",
     "paymentDeclinedTitle": "카드가 거절되었습니다",
-    "paymentDeclinedMessage": "{plan}을 다시 이용하려면 카드를 업데이트하세요"
+    "paymentDeclinedMessage": "{plan}을 다시 이용하려면 카드를 업데이트하세요",
+    "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
+    "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
+    "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
 }

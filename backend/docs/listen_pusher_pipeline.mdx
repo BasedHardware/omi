@@ -9351,3 +9351,67 @@ owner-drain admissions use a read-only Redis claim GET and fail open on errors.
 Claim-busy re-requests through `again` back off 5–15 seconds; productive
 `more=True` continuations retain immediate FIFO progress without the peek.
 The advisory claim and transactional ordering fences remain unchanged.
+
+
+### Durable playback projection rebuild debt
+
+`PUSHER_PROJECTION_DEBT_DURABLE_ENABLED` defaults **on**; `0`, `false`, or `off`
+disables pusher handoff and repair consumption. Pusher receives the flag through
+its existing `runtimeConfigMapName` `envFrom` binding; no literal env entry
+shadows that ConfigMap key. The repair CronJob declares it independently through
+`recordSealRepair.projectionDebtDurableEnabled` (default `true`). Rollback sets
+the consumer option `false` first, then the Pusher runtime ConfigMap flag off.
+Re-enabling resumes retained markers. Consumption also requires the existing
+repair CronJob to be enabled, unsuspended and runtime-enabled; this contract
+does not activate it.
+
+Exhausted close retries, empty close discovery, socket cleanup, and terminal
+transient/InvalidArgument batch failures hand off one
+`record_projection_rebuild_due` marker per user/conversation into
+`record_projection_rebuild_jobs/{sha256(JSON([uid,cid]))}`. Fields are `kind`,
+`owner_id`, `conversation_id`, and UTC `requested_at`; no content or conversation
+status is stored. Successful handoffs coalesce. Terminal handoffs enqueue into
+one metadata-only background task and never await Firestore or change recording
+completion. A separate bounded retry inventory holds up to 128 overflow owners;
+cleanup can add the 128 cached owners (256 total). Each task attempts at most two
+batch writes with a one-second SDK timeout and 1.25-second async attempt budget.
+Cleanup shares one three-second total budget across every marker and retry;
+marker failure never gates socket close or recording completion. Failure emits
+`marker_write_failed`; inventory saturation emits `marker_retry_overflow`, with
+sanitized logs and `omi_pusher_projection_debt_total` outcomes. Persistent storage
+failure, saturation, or process death before commit can still prevent handoff;
+the marker is not a WAL.
+
+The existing repair CronJob runs a separate 60-second metadata-only pass over
+at most 128 markers ordered by request time. A bounded collection scan reads at
+most 10,001 markers; the maintenance ceiling is 10,000. A confirmed empty
+inventory retires as `retired_no_objects` after seven days from Firestore document
+creation (request-time rotation and coalesced writes do not reset that age), or
+immediately under collection pressure. Retiring deletes only the observed marker,
+never audio. Empty retirement rereads the observed marker version and the
+conversation's `record_upload_sessions` in the same transaction as marker deletion.
+Only an explicit empty producer map permits retirement; nonempty, missing or
+malformed maps retain and rotate the marker. A producer mint or marker replacement
+before commit conflicts with deletion. No producer token is changed or declared
+dead. Nonempty or privacy-held debt remains due even above the ceiling;
+capacity is enforced by retiring confirmed empty work, not discarding useful debt.
+The aggregate report and Prometheus gauges expose marker count (saturated at
+10,001), oldest age in that bounded scan, and capacity state. `capacity_exceeded`
+is alertable. `omi_projection_rebuild_pressure_blocked` plus aggregate
+`pressure_fenced_count`/`pressure_blocked` reports a pass whose empty candidates
+could not be evicted because their producer fences were not clear. These gauges
+are bounded observations, not an exact count/oldest
+claim when the collection is above the ceiling. Apply rotates discovered markers
+before validation/discovery, so refusal, interruption or malformed ordered
+markers cannot monopolize the page. Preview never rebuilds or writes. Full
+rebuild refuses a tombstone or absent conversation before discovery, then
+transactionally rechecks privacy/deletion and the prior `audio_files` revision.
+Only `audio_files` may change. Temporary privacy/generation holds retain debt
+without metadata writes. Nonempty existing producer fences retain the marker
+even after metadata refresh, until their existing owner settles them. No seal
+or token authority is added. Raw-index failure retains debt; confirmed empty
+discovery uses the bounded retirement policy above.
+Successful final rebuild or permanent owner revocation clears only the observed
+marker version; a replacement marker always wins. No PCM or audio-object
+mutation occurs. The [phase 5C change note](./listen_pusher_pipeline/changes/2026-11-06-durable-projection-debt.md)
+records scope and verification limits.

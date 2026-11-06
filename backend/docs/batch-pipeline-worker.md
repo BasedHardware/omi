@@ -477,13 +477,12 @@ Service remains the primary rank and worker affinity breaks ties within the
 bounded query prefix. Set 64 to restore the previous query width; list reuse
 remains active. `BATCH_SHARD_SPREAD_ENABLED=false` restores legacy selection.
 
-`worker.firestoreReadLevers: '{"batch_privacy_memoize":100}'` renders
-`FIRESTORE_READ_LEVERS='{"batch_privacy_memoize":100}'` on worker pods only.
-The existing transaction-local memo enrolls each first read in the conflict set,
-including commit-boundary privacy checks, and is rebuilt on transaction retry.
-Set `worker.firestoreReadLevers: '{}'` in the override values file to disable it. A string avoids Helm's deep-map
-merge retaining the enabled default when an empty map is supplied. Serving-role
-complete lever literals and privacy fences are unchanged.
+`worker.firestoreReadLevers: '{}'` is the default. The retired WQ12
+`batch_privacy_memoize` lever and its transaction snapshot dedupe are removed;
+privacy checks retain the live walk and WQ26 token fencing. The string setting
+avoids Helm deep-map merging when operators supply a complete lever literal.
+The token-fenced negative lookup rollout is documented in
+[privacy-check-shadow.md](runbooks/privacy-check-shadow.md).
 
 `worker.admissionParallelCalls` maps to `BATCH_ADMISSION_PARALLEL_CALLS`
 (default true; false restores serial flight calls). First-seen owner groups are

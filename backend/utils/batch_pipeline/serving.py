@@ -16,6 +16,7 @@ from config.batch_pipeline import (
     projection_hold_recovery_enabled,
     serving_metrics_min_refresh_seconds,
     serving_projection_sweep_enabled,
+    serving_tick_seconds,
     projection_pump_enabled,
     projection_pump_sweep_pages,
     projection_pump_tick_seconds,
@@ -31,6 +32,7 @@ from utils.batch_pipeline.projection import HELD_PARTIAL_PAGE, Projector, error_
 from utils.executors import run_blocking, start_background_task, sync_executor
 from utils.batch_pipeline.contracts import PoolCapacity, WorkResult
 from utils.batch_pipeline.leader import SERVING_MAINTENANCE, LeaderLease
+from utils.batch_pipeline.held_dead_letter import HeldDeadLetter, ProjectionHeldDeadLetter
 from utils.batch_pipeline.merge import OrderedMerge
 from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.scheduler import Scheduler
@@ -81,6 +83,8 @@ class Serving:
         self.recovery = recovery
         # Optional single-owner lease for periodic maintenance (see reconcile).
         self.leader = leader
+        self.held_dead_letter = HeldDeadLetter(store, metrics=metrics)
+        self.projection_held_dead_letter = ProjectionHeldDeadLetter(store, metrics=metrics)
         self.merge = OrderedMerge(store, metrics=metrics)
         # Held units change only on a recovery or operator settle: scan them
         # at a slow cadence, not every maintenance pass.
@@ -316,11 +320,25 @@ class Serving:
                 RELEASE_HELD_INTERVAL_SECONDS if projection_hold_recovery_enabled() else 900.0
             )
             try:
-                release_held()
+                release_counts = release_held()
+                if self.metrics is not None and isinstance(release_counts, dict):
+                    self.metrics.held_expired.inc(release_counts.get('expired', 0))
             except Exception as error:
                 logging.getLogger(__name__).error(
                     'event=batch_projection action=release_held outcome=retry exception_type=%s', type(error).__name__
                 )
+        try:
+            self.held_dead_letter.tick(time.time())
+        except Exception as error:
+            logging.getLogger(__name__).error(
+                'event=batch_held_dead_letter outcome=retry exception_type=%s', type(error).__name__
+            )
+        try:
+            self.projection_held_dead_letter.tick(time.time())
+        except Exception as error:
+            logging.getLogger(__name__).error(
+                'event=batch_projection action=redrive_expired outcome=retry exception_type=%s', type(error).__name__
+            )
         self.queue().recover(time.time())
         owners = set()
         for segment in self.store.due('result_ready', time.time(), 100):
@@ -423,7 +441,7 @@ def start_serving_from_env():
                     'event=batch_serving outcome=retry exception_type=%s', type(error).__name__
                 )
             try:
-                await asyncio.wait_for(stop.wait(), timeout=20)
+                await asyncio.wait_for(stop.wait(), timeout=serving_tick_seconds())
             except asyncio.TimeoutError:
                 pass
 

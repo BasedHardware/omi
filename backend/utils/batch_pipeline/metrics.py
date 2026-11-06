@@ -25,6 +25,43 @@ PROJECTION_DRAIN_CLAIM_BUSY_BACKOFFS = Counter(
     'omi_batch_projection_claim_busy_backoffs_total', 'Owner drain turns deferred after losing the fleet claim race'
 )
 
+PROJECTION_DRAIN_PRIVACY_STOPS = Counter(
+    'omi_batch_projection_privacy_blocked_stops_total',
+    'Owner drain turns stopped by privacy, with bounded reasons',
+    ['reason'],
+)
+PROJECTION_DRAIN_PRIVACY_BACKOFFS = Counter(
+    'omi_batch_projection_privacy_backoffs_total', 'Zero-progress privacy owner drain backoffs applied'
+)
+PROJECTION_DRAIN_PRIVACY_ROW_CHANGED = Counter(
+    'omi_batch_projection_privacy_row_changed_total', 'Early owner re-requests after a blocked head row changes'
+)
+
+
+PROJECTION_PRIVACY_RESUMES_ATTEMPTED = Counter(
+    'omi_batch_projection_privacy_resumes_attempted_total', 'Fenced privacy refusal replays attempted'
+)
+PROJECTION_PRIVACY_RESUMES_SUCCEEDED = Counter(
+    'omi_batch_projection_privacy_resumes_succeeded_total', 'Fenced privacy refusal replays completed'
+)
+PROJECTION_PRIVACY_FALLTHROUGHS = Counter(
+    'omi_batch_projection_privacy_fallthroughs_total', 'Stale privacy refusals retried without a stored refusal'
+)
+PROJECTION_PRIVACY_STILL_REFUSED = Counter(
+    'omi_batch_projection_privacy_still_refused_total', 'Applicable privacy refusals held, including unchanged holds'
+)
+
+
+def record_privacy_stop(stop: str) -> None:
+    PROJECTION_DRAIN_PRIVACY_STOPS.labels(
+        reason=(
+            'tombstone'
+            if stop == 'blocked_privacy_disposition_requires_a_source_deletion_tombstone'
+            else ('refusal_no_longer_applies' if stop == 'blocked_privacy_refusal_no_longer_applies' else 'other')
+        )
+    ).inc()
+
+
 LABELS = {Priority.FRESH: 'fresh', Priority.RECENT: 'recent', Priority.DEEP: 'deep'}
 AGE_TARGETS = {Priority.FRESH: 30, Priority.RECENT: 300, Priority.DEEP: 3600}
 PARK_REASONS = frozenset({'privacy', 'pool_duration', 'pool_unit_kind', 'shared_live_policy'})
@@ -49,6 +86,19 @@ class QueueMetrics:
         min_refresh_seconds: float = 0.0,
     ):
         self.scope = (worker_release, namespace)
+        self.held_expired = Counter(
+            'omi_batch_held_expired_total',
+            'Unique fenced held expirations across jobs and projection receipts; content retained',
+            registry=registry,
+        )
+        self.held_expired_stock = Gauge(
+            'omi_batch_held_expired_units',
+            'Retained held_expired job and projection receipt stock across all ages',
+            registry=registry,
+        )
+        self.held_expired_observed_at = Gauge(
+            'omi_batch_held_expired_observed_at_seconds', 'Last successful held-expired stock sample', registry=registry
+        )
         # Serving instances share one global queue; workers keep 0 for the HPA.
         self.min_refresh_seconds = min_refresh_seconds
         self._refresh_due = 0.0

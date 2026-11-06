@@ -43,9 +43,9 @@ KNOWN_LEVERS = frozenset(
         'memory_list_index_window',
         'mcp_conversation_cards_cache',
         'canonical_statuses_dedupe',
-        'batch_privacy_memoize',
         'bpp_generation_memo',  # batch privacy task-attempt memo; absent = 0/off
         'privacy_checks_shadow',  # compares live decisions; never authorizes writes
+        'privacy_negative_lookup_cache',  # WQ26-token-certified NOT_FOUND reads; 0 is the kill switch
         'legal_hold_fence_cache',
         'privacy_session_token',
         'tombstone_negative_cache',
