@@ -171,6 +171,7 @@ class ConversationProvider extends ChangeNotifier {
   Timer? _initialFetchRetryTimer;
   int _initialFetchRetryCount = 0;
   int _sessionGeneration = 0;
+  int? _disposedSessionGeneration;
   int _conversationFetchRevision = 0;
   int _conversationLoadingRevision = 0;
 
@@ -1663,7 +1664,13 @@ class ConversationProvider extends ChangeNotifier {
     final generation = _sessionGeneration;
     final prefs = SharedPreferencesUtil();
     final owner = prefs.uid;
-    bool current() => generation == _sessionGeneration && _isSignedIn() && prefs.uid == owner;
+    final cacheSession = prefs.conversationCacheSession;
+    bool ownsCache() =>
+        (generation == _sessionGeneration || generation == _disposedSessionGeneration) &&
+        _isSignedIn() &&
+        prefs.uid == owner &&
+        prefs.conversationCacheSession == cacheSession;
+    bool current() => generation == _sessionGeneration && ownsCache();
 
     final wasLoadedFromServer = _conversationServerLoadedIds.contains(conversationId);
     bool succeeded;
@@ -1675,10 +1682,11 @@ class ConversationProvider extends ChangeNotifier {
     } catch (_) {
       succeeded = false;
     }
-    // A delete can outlive sign-out or an account switch.
-    if (!current()) return;
+    // A confirmed delete outlives its route, but never its account session.
+    if (!ownsCache()) return;
 
     if (!succeeded) {
+      if (!current()) return;
       final deleted = memoriesToDelete[conversationId];
       if (deleted != null) await _restoreDeletedConversation(deleted);
       if (!current()) return;
@@ -1689,22 +1697,24 @@ class ConversationProvider extends ChangeNotifier {
     }
 
     prefs.recordConfirmedConversationDelete(conversationId);
-    // Only a confirmed deletion changes the server cursor.
-    if (wasLoadedFromServer && _conversationServerLoadedIds.remove(conversationId)) {
-      if (_conversationServerOffset > 0) _conversationServerOffset--;
+    if (current()) {
+      // Only a confirmed deletion changes the server cursor.
+      if (wasLoadedFromServer && _conversationServerLoadedIds.remove(conversationId)) {
+        if (_conversationServerOffset > 0) _conversationServerOffset--;
+      }
+      final invalidatedRevision = _conversationFetchRevision++;
+      if (_conversationLoadingRevision == invalidatedRevision) {
+        setLoadingConversations(false);
+      }
+      _removeConfirmedDeleteFromLists(conversationId);
     }
-    final invalidatedRevision = _conversationFetchRevision++;
-    if (_conversationLoadingRevision == invalidatedRevision) {
-      setLoadingConversations(false);
-    }
-    _removeConfirmedDeleteFromLists(conversationId);
     _confirmedDeletes.add(conversationId);
 
     try {
       // Keep the row hidden through the cache write. The shared queue prevents
       // concurrent deletes, list writes and merge completion from losing each other's edits.
       await _queueConversationPersistence(() async {
-        if (current() && await prefs.evictCachedConversation(conversationId) && current()) {
+        if (ownsCache() && await prefs.evictCachedConversation(conversationId) && ownsCache()) {
           _clearDeleteTombstone(conversationId);
         }
       });
@@ -1775,6 +1785,7 @@ class ConversationProvider extends ChangeNotifier {
     _confirmedDeleteSubscription.cancel();
     _cancelProcessingPlaceholderTimers();
     _processingReconcileTimer?.cancel();
+    _disposedSessionGeneration = _sessionGeneration;
     _sessionGeneration++;
     _conversationFetchRevision++;
     _conversationLoadingRevision++;

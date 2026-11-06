@@ -1199,6 +1199,8 @@ class SharedPreferencesUtil {
   static int _conversationCacheReadSession = 0;
   static final _confirmedConversationDeletes = <String>{};
 
+  int get conversationCacheSession => _conversationCacheReadSession;
+
   bool isConversationDeleteConfirmed(String id) => _confirmedConversationDeletes.contains(id);
 
   /// Fence cache writes already admitted by another conversation provider.
@@ -1694,7 +1696,10 @@ class SharedPreferencesUtil {
   Future<bool> saveString(String key, String value) async {
     if (key == 'uid') {
       _appsListRevision++;
-      if (value != uid) _confirmedConversationDeletes.clear();
+      if (value != uid) {
+        _conversationCacheReadSession++;
+        _confirmedConversationDeletes.clear();
+      }
     }
     final changed = key == 'btDevice' && _preferences?.getString(key) != value;
     final write = _preferences?.setString(key, value);

@@ -279,6 +279,46 @@ void main() {
     expect(home.conversations, isEmpty);
   });
 
+  test('a delete confirmed after its route closes still clears the same account cache', () async {
+    final row = _conversation('deleted');
+    final keep = _conversation('keep');
+    final prefs = SharedPreferencesUtil()..uid = 'fixture-owner';
+    await prefs.cacheConversations([row, keep]);
+    final response = Completer<bool>();
+    final day = ConversationProvider(isSignedIn: () => true)
+      ..conversationDeleteFetcherOverride = (_) => response.future;
+    final home = makeProvider([row, keep]);
+
+    await day.deleteConversationLocally(row);
+    final deletion = day.deleteConversationOnServer(row.id);
+    day.dispose();
+    response.complete(true);
+    await deletion;
+
+    expect(home.conversations.map((row) => row.id), ['keep']);
+    expect(prefs.getStringList('cachedConversations'), [jsonEncode(keep.toJson())]);
+  });
+
+  test('a closed route cannot evict from a replacement session of the same account', () async {
+    final row = _conversation('deleted');
+    final prefs = SharedPreferencesUtil()..uid = 'fixture-owner';
+    await prefs.cacheConversations([row]);
+    final response = Completer<bool>();
+    final day = ConversationProvider(isSignedIn: () => true)
+      ..conversationDeleteFetcherOverride = (_) => response.future;
+
+    await day.deleteConversationLocally(row);
+    final deletion = day.deleteConversationOnServer(row.id);
+    day.dispose();
+    prefs.clearUserDisplayCache();
+    prefs.uid = 'fixture-owner';
+    await prefs.cacheConversations([row]);
+    response.complete(true);
+    await deletion;
+
+    expect(prefs.getStringList('cachedConversations'), [jsonEncode(row.toJson())]);
+  });
+
   test('a regroup during the window does not bring the row back', () {
     final a = _conversation('a');
     final provider = makeProvider([a]);
