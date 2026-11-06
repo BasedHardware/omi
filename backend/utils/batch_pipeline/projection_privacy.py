@@ -54,8 +54,6 @@ def settle_refusals(*, assignment=False):
                     ):
                         raise
                     had_refusal = bool(entry.get('projection_privacy_refusal'))
-                    if had_refusal:
-                        entry = _resume(self, segment_id, binding, policy)
                     if job.get('_projection_privacy_refusal'):
                         # read() supplies settlement-only defaults with this hint.
                         # Never let them authorize assignment: reload/pin through
@@ -63,6 +61,8 @@ def settle_refusals(*, assignment=False):
                         policy = self.store.policy(segment_id)
                         job = {**job, 'policy_parts': {**job['policy_parts'], 'projection': policy.to_dict()}}
                         job.pop('_projection_privacy_refusal')
+                    if had_refusal:
+                        entry = _resume(self, segment_id, binding, policy)
                     if not had_refusal:
                         PROJECTION_PRIVACY_FALLTHROUGHS.inc()
                     # One retry only. A new refusal from the wrapped transaction

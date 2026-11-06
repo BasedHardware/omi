@@ -1,5 +1,6 @@
 """Default-off batch admission cohort. Existing lane classification stays upstream."""
 
+from config.policy import kill_switch
 from config.refactor_switches import default_off as rollout_default_off, default_on as rollout_default_on
 
 from enum import IntEnum
@@ -702,8 +703,6 @@ def projection_drain_privacy_backoff_enabled() -> bool:
 
 def projection_privacy_refusal_resume_enabled() -> bool:
     """Default on; only off disables recovery from a stale privacy refusal."""
-    from config.policy import kill_switch
-
     return kill_switch('PROJECTION_PRIVACY_REFUSAL_RESUME')
 
 

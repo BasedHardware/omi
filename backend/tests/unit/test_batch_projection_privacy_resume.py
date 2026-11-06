@@ -81,6 +81,8 @@ def test_no_longer_applicable_hint_replays_or_falls_through(lane, monkeypatch, s
         == 'proceeded'
     )
     assert replay.call_count == int(stored_refusal)
+    if stored_refusal:
+        assert replay.call_args.kwargs['policy'] == POLICY
     assert privacy.PROJECTION_PRIVACY_RESUMES_ATTEMPTED._value.get() - attempted == int(stored_refusal)
     assert privacy.PROJECTION_PRIVACY_RESUMES_SUCCEEDED._value.get() - succeeded == int(stored_refusal)
     assert privacy.PROJECTION_PRIVACY_FALLTHROUGHS._value.get() - fallthroughs == int(not stored_refusal)
@@ -143,8 +145,13 @@ def test_repaired_policy_read_pins_serving_policy_before_assignment(lane, monkey
     assert client.rows[('privacy_hold_jobs', 'head')]['policy_parts']['projection'] == POLICY.to_dict()
 
 
-def test_persistent_policy_refusal_does_not_assign_with_synthetic_defaults(lane, monkeypatch):
+@pytest.mark.parametrize('stored_refusal', [False, True])
+def test_persistent_policy_refusal_does_not_assign_with_synthetic_defaults(lane, monkeypatch, stored_refusal):
     client, store, binding = setup_policy_store(lane)
+    if stored_refusal:
+        fence(client, binding, REASON)
+        hold(store, 'head', binding, 2000, REASON, policy=POLICY)
+        client.rows[('users', binding.owner_id)].pop('migration_status')
     # A policy-side guard may still disagree with the session. Recovery must not
     # circumvent that independent fence just to make a drain turn productive.
     monkeypatch.setattr(projection_store, 'load_stage_policy', Mock(side_effect=BatchPrivacyBlocked(REASON)))
@@ -214,6 +221,8 @@ def test_replay_failure_counts_attempt_without_success(lane, monkeypatch):
     fence(client, binding, REASON)
     hold(store, 'head', binding, 2000, REASON, policy=POLICY)
     client.rows[('users', binding.owner_id)].pop('migration_status')
+    # Isolate replay failure from the separately tested first policy pin.
+    client.rows[('privacy_hold_jobs', 'head')]['policy_parts'] = {'projection': POLICY.to_dict()}
     monkeypatch.setattr(privacy, 'resume', Mock(side_effect=ProjectionBlocked('privacy ordering checkpoint required')))
     before = deepcopy(client.rows)
     attempted = privacy.PROJECTION_PRIVACY_RESUMES_ATTEMPTED._value.get()
