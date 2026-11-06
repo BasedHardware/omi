@@ -1238,7 +1238,12 @@ class FirestoreGoals:
 
     def get(self, goal_id: str) -> GoalEntity | None:
         snapshot = self._read(_goal_ref(self.space_id, goal_id, firestore_client=self.client))
-        return self._entity({**_goal_dict(snapshot), 'id': goal_id}) if snapshot.exists else None
+        if not snapshot.exists:
+            return None
+        # The point lookup fixes document identity; preserve the raw storage fields.
+        data = _snapshot_dict(snapshot)
+        data.setdefault('goal_id', goal_id)
+        return self._entity({**data, 'id': goal_id})
 
     def create(self, draft: GoalCreate, *, mutation_id: str | None = None) -> GoalEntity:
         if mutation_id is not None:
