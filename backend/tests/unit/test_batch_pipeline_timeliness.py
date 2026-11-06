@@ -679,7 +679,7 @@ def test_failed_retry_does_not_revive_expired_replica(monkeypatch, mode):
     first.refresh_timeliness(store, clock.now)
     if mode == 'rollback':
         monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"batch_timeliness_leader":0}')
-    clock.now += first.timeliness_leader.ttl_seconds + 1
+    clock.now += 300 + TIMELINESS_LEASE_GRACE_SECONDS + 1
     second.refresh_timeliness(store, clock.now)
     assert list(first.timeliness_age.collect()) == []
     first.timeliness_leader.store = Mock(run=Mock(side_effect=RuntimeError('lease store down')))
