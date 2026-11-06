@@ -260,10 +260,10 @@ invalidations lost with Redis reads available, BEGIN-token loss, overlapping
 writers/readers, a reader held inside the real BEGIN fence, and a request memo
 spanning the real writer. Cache publication/memo events verify eligible warm
 paths actually exercise the optimization. Batch reads call the real guard twice
-inside one transaction with one shared `BatchPrivacyMemo`; distinct source sets
-force cold generation-memo misses and shared marker/user snapshot reuse. The
-`batch_snapshot:memo_hit` observation asserts snapshot object reuse separately
-from `batch:memo_hit` generation-decision reuse. Emulator mutation tests set
+inside one transaction; distinct source sets force cold generation-memo misses
+and independent live authority walks. `batch:memo_hit` proves generation-decision
+reuse across repeated checks; the retired WQ12 snapshot memo is no longer a
+qualification requirement. Emulator mutation tests set
 120s TTLs and lose invalidations: both BYOK directions and deletion-marker creation
 must record the +60/+61 mismatches and finish all probes. Default-TTL controls
 preserve the observed closed-boundary behavior, and 55s controls must qualify.

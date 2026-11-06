@@ -656,7 +656,7 @@ def test_real_child_processes_receive_sigterm_and_a_crash_exit_code_survives(tmp
     assert time.monotonic() - started < 10  # The surviving sibling drained on SIGTERM, not its sleep.
 
 
-def test_pod_probes_need_every_child_and_metrics_carry_each_child_once():
+def test_pod_probes_need_every_child_and_metrics_carry_each_child_once(monkeypatch):
     from prometheus_client import Counter, Gauge
     from prometheus_client.parser import text_string_to_metric_families
 
@@ -664,6 +664,12 @@ def test_pod_probes_need_every_child_and_metrics_carry_each_child_once():
     for index in range(2):
         state, registry = runtime.RuntimeState(), CollectorRegistry()
         Counter('omi_batch_pipeline_synthetic_events', 'synthetic', registry=registry).inc(index + 1)
+        # Each real worker is a separate process with its own privacy counter.
+        negative = Counter(
+            'privacy_negative_lookup_total', 'synthetic', ['collection', 'mode', 'result'], registry=None
+        )
+        negative.labels('conversations', 'shadow', 'hit').inc(index + 1)
+        monkeypatch.setattr(runtime, 'NEGATIVE_LOOKUPS', negative)
         if index == 0:  # Only the sampling child exports queue gauges.
             Gauge('omi_batch_pipeline_ready_units', 'ready', ['priority'], registry=registry).labels('fresh').set(7)
         server = runtime.health_server(state, registry, 0, '127.0.0.1')
@@ -690,6 +696,11 @@ def test_pod_probes_need_every_child_and_metrics_carry_each_child_once():
             for family in text_string_to_metric_families(urllib.request.urlopen(base + '/metrics').read().decode())
         }
         events = families['omi_batch_pipeline_synthetic_events'].samples
+        lookups = families['privacy_negative_lookup'].samples
+        assert sorted((s.labels['worker_process'], s.value) for s in lookups if s.name.endswith('_total')) == [
+            ('0', 1.0),
+            ('1', 2.0),
+        ]
         assert sorted((s.labels['worker_process'], s.value) for s in events if s.name.endswith('_total')) == [
             ('0', 1.0),
             ('1', 2.0),

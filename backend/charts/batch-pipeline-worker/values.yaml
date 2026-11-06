@@ -56,7 +56,7 @@ worker:
   controlCandidateFanout: 16
   admissionParallelCalls: true
   idlePollMaxSeconds: 10
-  firestoreReadLevers: '{"batch_privacy_memoize":100}'
+  firestoreReadLevers: '{}'
   # Fenced per-shard pulls and worker affinity; false restores legacy selection.
   shardSpreadEnabled: true
   # One shard transaction leases up to the pull batch; false leases one per transaction.

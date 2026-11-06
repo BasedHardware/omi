@@ -28,6 +28,7 @@ with metrics.mode_scope('shadow'):
 metrics.compare('batch', 'allow', 'allow')
 metrics.compare('batch', 'account_deleted', 'allow')
 metrics.memo_result('batch', 'hit')
+metrics.negative_lookup('conversations', 'shadow', 'mismatch')
 Counter('unrelated_total', 'Not privacy').inc()
 print('ready', flush=True)
 sys.stdin.read()
@@ -86,7 +87,17 @@ async def test_child_counters_survive_reaping_without_double_count_or_file_growt
                 'privacy_decision_mismatch_total',
                 'privacy_shadow_checks_total',
                 'privacy_memo_requests_total',
+                'privacy_negative_lookup_total',
             }
+            assert (
+                before[
+                    (
+                        'privacy_negative_lookup_total',
+                        (('collection', 'conversations'), ('mode', 'shadow'), ('result', 'mismatch')),
+                    )
+                ]
+                == attempt
+            )
             if killed:
                 os.killpg(process.pid, signal.SIGKILL)
             else:

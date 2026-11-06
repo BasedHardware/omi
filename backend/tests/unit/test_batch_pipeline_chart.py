@@ -957,7 +957,7 @@ def test_control_loop_defaults_and_value_only_rollback_render(tmp_path, rollback
     env = {
         entry['name']: entry.get('value') for entry in deployment['spec']['template']['spec']['containers'][0]['env']
     }
-    expected = ('64', 'false', '2', '{}') if rollback else ('16', 'true', '10', '{"batch_privacy_memoize":100}')
+    expected = ('64', 'false', '2', '{}') if rollback else ('16', 'true', '10', '{}')
     assert (
         tuple(
             env[key]
