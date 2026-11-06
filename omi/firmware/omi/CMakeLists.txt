@@ -33,6 +33,7 @@ file(GLOB core_sources
     src/lib/core/transport.c
     src/lib/core/button.c
     src/lib/core/monitor.c
+    src/lib/core/unit_id.c
 )
 
 if(CONFIG_OMI_ENABLE_OFFLINE_STORAGE)
