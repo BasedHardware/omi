@@ -4498,6 +4498,8 @@
     "chatAppsWaitingMessageIn": "{app}でメッセージを送信してください。Omiが受信するとすぐにこの画面が更新されます。",
     "chatAppsCodeExpiredMessageIn": "新しいコードを取得して、{app}アプリから送信してください。",
     "episodeWritingNotes": "メモを作成中…",
+    "homeStepTranscribing": "文字起こし中…",
+    "homeRecordingsCount": "{count, plural, other{{count}件の録音}}",
     "episodeWritingNotesDetail": "先に文字起こしを仕上げています。このページを離れても大丈夫です。",
     "episodeCoversUpTo": "{time}まで · 終了後に完全なメモ",
     "liveTranscribedUpTo": "{time}まで文字起こし済み",

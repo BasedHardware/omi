@@ -14734,6 +14734,23 @@ class AppLocalizationsAr extends AppLocalizations {
   String get episodeWritingNotes => 'جارٍ كتابة الملاحظات…';
 
   @override
+  String get homeStepTranscribing => 'جارٍ التفريغ…';
+
+  @override
+  String homeRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count تسجيل',
+      many: '$count تسجيلًا',
+      few: '$count تسجيلات',
+      two: 'تسجيلان',
+      one: 'تسجيل واحد',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get episodeWritingNotesDetail => 'ننهي النص أولًا. يمكنك مغادرة هذه الصفحة.';
 
   @override

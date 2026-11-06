@@ -11921,6 +11921,8 @@
     "chatAppsWaitingMessageIn": "Pošljite sporočilo v aplikaciji {app}. Ta zaslon se posodobi, takoj ko ga Omi prejme.",
     "chatAppsCodeExpiredMessageIn": "Pridobite novo kodo in jo pošljite iz aplikacije {app}.",
     "episodeWritingNotes": "Pišemo zapiske…",
+    "homeStepTranscribing": "Prepisujemo…",
+    "homeRecordingsCount": "{count, plural, one{{count} posnetek} two{{count} posnetka} few{{count} posnetki} other{{count} posnetkov}}",
     "episodeWritingNotesDetail": "Najprej dokončujemo prepis. To stran lahko zapustite.",
     "episodeCoversUpTo": "Do {time} · popolni zapiski ob koncu",
     "liveTranscribedUpTo": "Prepisano do {time}",

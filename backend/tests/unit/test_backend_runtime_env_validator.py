@@ -452,7 +452,8 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
     payload = re.sub(
         r'("backend(?:-sync|-sync-backfill|-integration)?":\s*\{.*?"env":\s*\[)',
         r'\1\n        {"name": "ACTION_ITEM_REFRESH_PRESERVE_ENABLED", "value": "true"},'
-        r'\n        {"name": "BATCH_HELD_DEAD_LETTER_ENABLED", "value": "true"},',
+        r'\n        {"name": "BATCH_HELD_DEAD_LETTER_ENABLED", "value": "true"},'
+        r'\n        {"name": "CONVERSATION_TERMINAL_FAMILY_MODE", "value": "on"},',
         payload,
         flags=re.DOTALL,
     )

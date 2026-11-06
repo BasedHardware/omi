@@ -4498,6 +4498,8 @@
     "chatAppsWaitingMessageIn": "Gửi tin nhắn trong {app}. Màn hình này sẽ cập nhật ngay khi Omi nhận được.",
     "chatAppsCodeExpiredMessageIn": "Lấy mã mới và gửi từ {app}.",
     "episodeWritingNotes": "Đang viết ghi chú…",
+    "homeStepTranscribing": "Đang chép lời…",
+    "homeRecordingsCount": "{count, plural, other{{count} bản ghi âm}}",
     "episodeWritingNotesDetail": "Đang hoàn tất bản chép trước. Bạn có thể rời trang này.",
     "episodeCoversUpTo": "Đến {time} · ghi chú đầy đủ khi kết thúc",
     "liveTranscribedUpTo": "Đã chép đến {time}",

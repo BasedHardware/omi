@@ -14748,6 +14748,19 @@ class AppLocalizationsTh extends AppLocalizations {
   String get episodeWritingNotes => 'กำลังเขียนบันทึก…';
 
   @override
+  String get homeStepTranscribing => 'กำลังถอดเสียง…';
+
+  @override
+  String homeRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'บันทึก $count รายการ',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get episodeWritingNotesDetail => 'กำลังทำบทถอดความให้เสร็จก่อน คุณออกจากหน้านี้ได้';
 
   @override

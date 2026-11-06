@@ -28,6 +28,7 @@ from models.episode import EpisodeCloseReason
 from utils.episodes import metrics as episode_metrics
 from utils.episodes import service
 from utils.conversations.fragment_visibility import SETTLING_FIELDS, is_relevance_discarded, is_completed_below_floor
+from utils.conversations.home_titles import SUMMARY_DEBT_FIELDS, user_zone_provider
 
 logger = logging.getLogger(__name__)
 
@@ -115,6 +116,7 @@ MEMBER_FIELDS = [
     'server_batch_audio_start',
     'server_batch_audio_end',
     *SETTLING_FIELDS,
+    *SUMMARY_DEBT_FIELDS,
 ]
 
 
@@ -272,6 +274,7 @@ def project_episode(
     retained: list[dict[str, Any]] = []
     hidden = 0
     now = datetime.now(timezone.utc)
+    zone = user_zone_provider(uid)
     for cid in dict.fromkeys(episode.get('conversation_ids') or []):
         row = by_id.get(cid)
         if row is None:
@@ -297,7 +300,7 @@ def project_episode(
         phase_shadow.observe('episode_member', row, True, episode=episode)
         from utils.conversations.home_titles import neutralize_minimum_title
 
-        row = neutralize_minimum_title(row)
+        row = neutralize_minimum_title(row, tz_name_provider=zone)
         structured: dict[str, Any] = row.get('structured') or {}
         title = structured.get('title') or ''
         status = row.get('status') or 'completed'

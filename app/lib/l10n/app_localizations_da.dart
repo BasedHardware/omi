@@ -14813,6 +14813,20 @@ class AppLocalizationsDa extends AppLocalizations {
   String get episodeWritingNotes => 'Skriver noter…';
 
   @override
+  String get homeStepTranscribing => 'Transskriberer…';
+
+  @override
+  String homeRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count optagelser',
+      one: '$count optagelse',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get episodeWritingNotesDetail => 'Vi gør først transskriptionen færdig. Du kan godt forlade siden.';
 
   @override

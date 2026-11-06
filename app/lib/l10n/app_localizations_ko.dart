@@ -14615,6 +14615,19 @@ class AppLocalizationsKo extends AppLocalizations {
   String get episodeWritingNotes => '메모 작성 중…';
 
   @override
+  String get homeStepTranscribing => '음성 변환 중…';
+
+  @override
+  String homeRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '녹음 $count개',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get episodeWritingNotesDetail => '먼저 대화 내용을 마무리하고 있어요. 이 페이지를 나가도 됩니다.';
 
   @override

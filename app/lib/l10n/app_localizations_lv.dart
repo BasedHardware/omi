@@ -14855,6 +14855,21 @@ class AppLocalizationsLv extends AppLocalizations {
   String get episodeWritingNotes => 'Rakstām piezīmes…';
 
   @override
+  String get homeStepTranscribing => 'Notiek transkribēšana…';
+
+  @override
+  String homeRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ieraksti',
+      one: '$count ieraksts',
+      zero: '$count ierakstu',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get episodeWritingNotesDetail => 'Vispirms pabeidzam transkripciju. Varat pamest šo lapu.';
 
   @override

@@ -14843,6 +14843,22 @@ class AppLocalizationsLt extends AppLocalizations {
   String get episodeWritingNotes => 'Rašomos pastabos…';
 
   @override
+  String get homeStepTranscribing => 'Transkribuojama…';
+
+  @override
+  String homeRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count įrašų',
+      many: '$count įrašo',
+      few: '$count įrašai',
+      one: '$count įrašas',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get episodeWritingNotesDetail => 'Pirmiausia baigiame transkripciją. Galite palikti šį puslapį.';
 
   @override

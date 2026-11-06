@@ -14940,6 +14940,20 @@ class AppLocalizationsTl extends AppLocalizations {
   String get episodeWritingNotes => 'Isinusulat ang mga tala…';
 
   @override
+  String get homeStepTranscribing => 'Tinatranscribe…';
+
+  @override
+  String homeRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count na recording',
+      one: '1 recording',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get episodeWritingNotesDetail => 'Tinatapos muna ang transcript. Maaari kang umalis sa pahinang ito.';
 
   @override

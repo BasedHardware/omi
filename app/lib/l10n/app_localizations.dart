@@ -26175,6 +26175,18 @@ abstract class AppLocalizations {
   /// **'Writing notes…'**
   String get episodeWritingNotes;
 
+  /// Home processing row subtitle while a recording is being transcribed.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcribing…'**
+  String get homeStepTranscribing;
+
+  /// Home processing row subtitle giving how many recordings one row stands for.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 recording} other{{count} recordings}}'**
+  String homeRecordingsCount(int count);
+
   /// Under Writing notes on the processing page.
   ///
   /// In en, this message translates to:

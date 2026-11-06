@@ -100,6 +100,8 @@ envFrom:
 privateEnv: {}
 
 env:
+  - name: CONVERSATION_TERMINAL_FAMILY_MODE
+    value: "on"
   - name: HOME_TRANSCRIPTION_PRESENTATION_GATE
     value: "true"
   - name: HOME_TRANSCRIPTION_DEADLINE_SECONDS

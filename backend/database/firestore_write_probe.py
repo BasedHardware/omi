@@ -62,6 +62,7 @@ from prometheus_client import Counter
 
 from database.firestore_document_probe import collection_pattern, is_plumbing_module
 from database.firestore_read_origin import current_read_origin
+from database.plane_leak_probe import record_plane_leak
 
 logger = logging.getLogger(__name__)
 
@@ -259,6 +260,7 @@ def _record(writes: Iterable[Any], caller: str) -> None:
         tally: dict[tuple[str, str, str], int] = {}
         for write in writes:
             op, database, parts = write_op(write)
+            record_plane_leak(parts, 'write')
             key = (collection_pattern(parts) if parts else _UNKNOWN, op, database)
             tally[key] = tally.get(key, 0) + 1
     except Exception:

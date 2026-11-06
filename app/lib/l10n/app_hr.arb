@@ -11921,6 +11921,8 @@
     "chatAppsWaitingMessageIn": "Pošalji poruku u aplikaciji {app}. Ovaj se zaslon ažurira čim je Omi primi.",
     "chatAppsCodeExpiredMessageIn": "Dohvati novi kôd i pošalji ga iz aplikacije {app}.",
     "episodeWritingNotes": "Pišemo bilješke…",
+    "homeStepTranscribing": "Transkribiramo…",
+    "homeRecordingsCount": "{count, plural, one{{count} snimka} few{{count} snimke} other{{count} snimki}}",
     "episodeWritingNotesDetail": "Najprije dovršavamo transkript. Možete napustiti ovu stranicu.",
     "episodeCoversUpTo": "Pokriva do {time} · potpune bilješke po završetku",
     "liveTranscribedUpTo": "Transkribirano do {time}",

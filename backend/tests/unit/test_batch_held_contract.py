@@ -38,6 +38,7 @@ def test_documented_flags_exist_in_runtime_and_registry():
     # Small, bounded source set: no tests or docs can satisfy runtime existence.
     paths = [
         'config/batch_pipeline.py',
+        'database/conversations.py',
         'config/policy/kill_switches.py',
         'config/batch_pipeline_vendor_failover.py',
         'config/listen_finalization.py',

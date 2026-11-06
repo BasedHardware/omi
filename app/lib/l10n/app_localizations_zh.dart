@@ -14590,6 +14590,19 @@ class AppLocalizationsZh extends AppLocalizations {
   String get episodeWritingNotes => '正在撰写笔记…';
 
   @override
+  String get homeStepTranscribing => '正在转录…';
+
+  @override
+  String homeRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 条录音',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get episodeWritingNotesDetail => '正在先完成转录。你可以离开此页面。';
 
   @override

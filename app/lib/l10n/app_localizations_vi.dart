@@ -14823,6 +14823,19 @@ class AppLocalizationsVi extends AppLocalizations {
   String get episodeWritingNotes => 'Đang viết ghi chú…';
 
   @override
+  String get homeStepTranscribing => 'Đang chép lời…';
+
+  @override
+  String homeRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count bản ghi âm',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get episodeWritingNotesDetail => 'Đang hoàn tất bản chép trước. Bạn có thể rời trang này.';
 
   @override

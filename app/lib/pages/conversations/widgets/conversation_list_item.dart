@@ -713,7 +713,8 @@ class _SwipeDeleteRowState extends State<_SwipeDeleteRow> with SingleTickerProvi
   static const double _askAt = 0.4;
 
   /// How far the card is pulled aside, in logical pixels.
-  late final AnimationController _offset = AnimationController.unbounded(vsync: this);
+  AnimationController? _offsetController;
+  AnimationController get _offset => _offsetController ??= AnimationController.unbounded(vsync: this);
   final GlobalKey _buttonKey = GlobalKey();
   ValueListenable<bool>? _scrolling;
   double _width = 0;
@@ -740,7 +741,8 @@ class _SwipeDeleteRowState extends State<_SwipeDeleteRow> with SingleTickerProvi
   @override
   void dispose() {
     _scrolling?.removeListener(_onScroll);
-    _offset.dispose();
+    // Never create the controller here: a row that was never swiped has no ticker left to give it.
+    _offsetController?.dispose();
     super.dispose();
   }
 

@@ -14829,6 +14829,20 @@ class AppLocalizationsMr extends AppLocalizations {
   String get episodeWritingNotes => 'नोट्स लिहीत आहे…';
 
   @override
+  String get homeStepTranscribing => 'ट्रान्सक्राइब होत आहे…';
+
+  @override
+  String homeRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count रेकॉर्डिंग',
+      one: '1 रेकॉर्डिंग',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get episodeWritingNotesDetail => 'आधी ट्रान्सक्रिप्ट पूर्ण करत आहोत. तुम्ही हे पेज सोडू शकता.';
 
   @override

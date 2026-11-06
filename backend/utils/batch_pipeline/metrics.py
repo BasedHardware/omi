@@ -3,6 +3,9 @@
 import logging
 import math
 import threading
+import time
+
+from config.firestore_read_levers import lever_enabled
 
 from prometheus_client import CollectorRegistry, Gauge, Histogram, Counter, REGISTRY
 
@@ -75,6 +78,21 @@ def age_seconds(started: float | None, now: float) -> float:
     return max(0.0, now - started) if math.isfinite(started) else float('nan')
 
 
+QUEUE_SAMPLE_FRESH_SECONDS = 60.0
+
+
+class _FreshQueueGauge(Gauge):
+    """Expire fleet samples at collection even if their supervised refresh stops."""
+
+    def __init__(self, *args, fresh=None, **kwargs):
+        self._fresh = fresh
+        super().__init__(*args, **kwargs)
+
+    def collect(self):
+        if self._fresh is None or self._fresh():
+            yield from super().collect()
+
+
 class QueueMetrics:
     def __init__(
         self,
@@ -84,8 +102,16 @@ class QueueMetrics:
         namespace: str = 'unscoped',
         capacity_sampling: bool = False,
         min_refresh_seconds: float = 0.0,
+        oldest_leader=None,
+        oldest_min_refresh_seconds: float = 0.0,
     ):
         self.scope = (worker_release, namespace)
+        self.oldest_leader = oldest_leader
+        self.oldest_min_refresh_seconds = oldest_min_refresh_seconds
+        self._oldest_due = 0.0
+        self._oldest_lock = threading.Lock()
+        self._oldest_observed = None
+        self._capacity_observed = None
         self.held_expired = Counter(
             'omi_batch_held_expired_total',
             'Unique fenced held expirations across jobs and projection receipts; content retained',
@@ -169,41 +195,53 @@ class QueueMetrics:
         self._timeliness_due = 0.0
         self.record_pending = PhaseMetrics('omi_batch_record_pending', ['state'], registry=registry)
         self.nojob = PhaseMetrics('omi_record_seal_nojob', ['kind'], registry=registry)
-        self.oldest_age = Gauge(
+        self.oldest_age = _FreshQueueGauge(
             'omi_batch_pipeline_oldest_age_seconds',
             'Oldest admitted uncommitted item age',
             ['priority', 'worker_release', 'namespace'],
             registry=registry,
+            fresh=lambda: self._sample_fresh(self._oldest_observed),
         )
-        self.ready_age = Gauge(
+        self.ready_age = _FreshQueueGauge(
             'omi_batch_pipeline_ready_age_seconds',
             'Oldest item ready for GPU capacity',
             ['priority', 'worker_release', 'namespace'],
             registry=registry,
+            fresh=lambda: self._sample_fresh(self._oldest_observed),
         )
-        self.retry_age = Gauge(
+        self.retry_age = _FreshQueueGauge(
             'omi_batch_pipeline_retry_age_seconds',
             'Age since first compute failure; alert above 600 seconds',
             ['priority', 'worker_release', 'namespace'],
             registry=registry,
+            fresh=lambda: self._sample_fresh(self._oldest_observed),
         )
-        self.refreshed_at = Gauge(
+        self.sampler_observed_at = Gauge(
+            'omi_batch_pipeline_sampler_observed_at_seconds',
+            'Last successful per-instance sampler tick, independent of fleet queue-query cadence',
+            ['worker_release', 'namespace'],
+            registry=registry,
+        )
+        self.refreshed_at = _FreshQueueGauge(
             'omi_batch_pipeline_metrics_refreshed_at_seconds',
             'Last complete queue sample timestamp',
             ['worker_release', 'namespace'],
             registry=registry,
+            fresh=lambda: self._sample_fresh(self._oldest_observed),
         )
-        self.ready_units = Gauge(
+        self.ready_units = _FreshQueueGauge(
             'omi_batch_pipeline_admissible_ready_units',
             'Ready admitted units excluding held, parked, unmarked legacy and unevaluated refusals',
             ['priority', 'worker_release', 'namespace'],
             registry=registry,
+            fresh=lambda: self._sample_fresh(self._capacity_observed),
         )
-        self.capacity_refreshed_at = Gauge(
+        self.capacity_refreshed_at = _FreshQueueGauge(
             'omi_batch_pipeline_capacity_refreshed_at_seconds',
             'Last complete three-priority admissible capacity count',
             ['worker_release', 'namespace'],
             registry=registry,
+            fresh=lambda: self._sample_fresh(self._capacity_observed),
         )
         self.owner_wait = Histogram(
             'omi_batch_pipeline_owner_wait_seconds',
@@ -290,7 +328,49 @@ class QueueMetrics:
                     self._refresh_due = previous
             raise
 
+    def _sample_fresh(self, observed: float | None) -> bool:
+        return not lever_enabled('batch_metrics_oldest_leader') or (
+            observed is not None and time.monotonic() - observed < QUEUE_SAMPLE_FRESH_SECONDS
+        )
+
+    def _forget_queue_sample(self) -> None:
+        # Remove only this process's labelled children. A follower never writes
+        # a synthetic zero, and cannot change another process's leader sample.
+        for gauge in (
+            self.oldest_age,
+            self.ready_age,
+            self.retry_age,
+            self.ready_units,
+            self.refreshed_at,
+            self.capacity_refreshed_at,
+        ):
+            gauge.clear()
+        self._oldest_observed = self._capacity_observed = None
+
     def _refresh(self, store: Store, now: float) -> None:
+        elected = lever_enabled('batch_metrics_oldest_leader')
+        # The old serving reservation still bounds all its other samplers.
+        # This independent reservation affects only fleet queue queries.
+        with self._oldest_lock:
+            if not elected or now >= self._oldest_due:
+                if elected and self.oldest_leader is not None and not self.oldest_leader.acquire():
+                    self._forget_queue_sample()
+                else:
+                    self._refresh_queue(store, now)
+                self._oldest_due = now + self.oldest_min_refresh_seconds
+        # Timeliness, lifecycle and projection sampling keep their existing
+        # per-instance schedules, including on followers and GPU fallback ticks.
+        if isinstance(store, FirestoreStore):
+            from database.lifecycle_metrics_queries import record_pending, nojob
+
+            self.record_pending.refresh(now, lambda: record_pending(store.client, store.namespace, now))
+            self.nojob.refresh(now, lambda: nojob(store.client, store.namespace))
+            self.refresh_timeliness(store, now)
+            self.refresh_projection(store, now)
+        self.sampler_observed_at.labels(*self.scope).set(now)
+
+    def _refresh_queue(self, store: Store, now: float) -> None:
+        observed = time.monotonic()
         # Collect every query before changing gauges. Failed refresh retains last
         # values and does not advance freshness; adapters must reject stale data.
         samples = []
@@ -322,17 +402,12 @@ class QueueMetrics:
             self.ready_age.labels(LABELS[priority], *self.scope).set(max(0.0, now - ready) if ready is not None else 0)
             self.retry_age.labels(LABELS[priority], *self.scope).set(age_seconds(retry, now))
         self.refreshed_at.labels(*self.scope).set(now)
+        self._oldest_observed = observed
         if capacity:
             for priority, count in capacity:
                 self.ready_units.labels(LABELS[priority], *self.scope).set(count)
             self.capacity_refreshed_at.labels(*self.scope).set(now)
-        if isinstance(store, FirestoreStore):
-            from database.lifecycle_metrics_queries import record_pending, nojob
-
-            self.record_pending.refresh(now, lambda: record_pending(store.client, store.namespace, now))
-            self.nojob.refresh(now, lambda: nojob(store.client, store.namespace))
-            self.refresh_timeliness(store, now)
-            self.refresh_projection(store, now)
+            self._capacity_observed = observed
 
     def refresh_timeliness(self, store: FirestoreStore, now: float) -> None:
         """At most one sample per interval per process; a failed sample keeps last values and freshness."""

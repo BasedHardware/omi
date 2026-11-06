@@ -4498,6 +4498,8 @@
     "chatAppsWaitingMessageIn": "Envía el mensaje desde {app}. Esta pantalla se actualiza en cuanto Omi lo recibe.",
     "chatAppsCodeExpiredMessageIn": "Obtén un código nuevo y envíalo desde {app}.",
     "episodeWritingNotes": "Escribiendo notas…",
+    "homeStepTranscribing": "Transcribiendo…",
+    "homeRecordingsCount": "{count, plural, one{{count} grabación} other{{count} grabaciones}}",
     "episodeWritingNotesDetail": "Primero terminamos la transcripción. Puedes salir de esta página.",
     "episodeCoversUpTo": "Cubre hasta las {time} · notas completas al terminar",
     "liveTranscribedUpTo": "Transcrito hasta las {time}",

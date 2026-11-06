@@ -4498,6 +4498,8 @@
     "chatAppsWaitingMessageIn": "{app} ऐप में मैसेज भेजें। Omi को मिलते ही यह स्क्रीन अपडेट हो जाएगी।",
     "chatAppsCodeExpiredMessageIn": "नया कोड लें और उसे {app} ऐप से भेजें।",
     "episodeWritingNotes": "नोट्स लिखे जा रहे हैं…",
+    "homeStepTranscribing": "ट्रांस्क्राइब हो रहा है…",
+    "homeRecordingsCount": "{count, plural, one{1 रिकॉर्डिंग} other{{count} रिकॉर्डिंग}}",
     "episodeWritingNotesDetail": "पहले ट्रांसक्रिप्ट पूरी हो रही है। आप यह पेज छोड़ सकते हैं।",
     "episodeCoversUpTo": "{time} तक · समाप्त होने पर पूरे नोट्स",
     "liveTranscribedUpTo": "{time} तक ट्रांसक्राइब हुआ",

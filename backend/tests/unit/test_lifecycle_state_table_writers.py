@@ -29,6 +29,8 @@ UNIQUE_FIELDS = frozenset(
         'summary_due_at',
         'summary_completed_at',
         'finalization_status',
+        'terminal_family',
+        'terminal_family_at',
         'wrap_up_requested_at',
         'composed_fingerprint',
         'recorded_merged_into',

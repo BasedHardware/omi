@@ -745,8 +745,15 @@ class _ConversationsPageState extends State<ConversationsPage>
           final paintEpisodes = holdingLayout
               ? heldLayout.layout.apply(latestEpisodes, standaloneIds: _paintedStandaloneIds)
               : latestEpisodes;
+          final listed = [for (final list in conversationsByDate.values) ...list];
+          final listedIds = {for (final c in listed) c.id};
           final projected = buildHomeRows(
-            [for (final list in conversationsByDate.values) ...list],
+            // Just-ended rows fold into the same Processing run as everything else unfinished.
+            [
+              ...listed,
+              for (final c in snapshot.processingConversations)
+                if (!listedIds.contains(c.id) && !hiddenByLive.contains(c.id)) c,
+            ],
             paintEpisodes,
             enabled: episodesOn,
             groupAwaitingTranscript: true,
@@ -1023,10 +1030,13 @@ class _ConversationsPageState extends State<ConversationsPage>
                         );
                       case _ConversationListRowKind.conversation:
                         if (projectedProcessingIds.contains(row.conversation!.id)) {
+                          final projectedRow = projectedEpisodes[row.conversation!.id];
                           return ProcessingConversationRow(
                             key: ValueKey('processing_${row.conversation!.id}'),
                             conversation: row.conversation!,
-                            episode: projectedEpisodes[row.conversation!.id]?.episode,
+                            episode: projectedRow?.episode,
+                            step: projectedRow?.step ?? HomeStep.writingNotes,
+                            count: projectedRow?.count ?? 1,
                           );
                         }
                         // Consecutive locked rows share one frosted card and one upgrade action;

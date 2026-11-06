@@ -198,3 +198,14 @@ def test_parent_navigation_preserves_owner_store_and_read_ordering():
     assert database.rows[('users', 'user-1', 'processing_attention_items', 'item')] == {'active': True}
     with pytest.raises(ReadAfterWriteError):
         sibling.get(transaction=transaction)
+
+
+@pytest.mark.parametrize('parent', [None, 42, {}, {'kept': 'old'}])
+def test_nested_update_matches_emulator_nonmap_replacement(parent):
+    # Proven against the real emulator in the phase 2a integration proof.
+    path = ('users', 'user-1', 'records', 'record')
+    database = StrictFirestore({path: {'nested': parent}})
+    transaction = database.transaction()
+    transaction.update(_record(database), {'nested.child': 2, '`literal.dot`.value': 3})
+    nested = {'child': 2, **({'kept': 'old'} if isinstance(parent, dict) and parent else {})}
+    assert database.rows[path] == {'nested': nested, 'literal.dot': {'value': 3}}

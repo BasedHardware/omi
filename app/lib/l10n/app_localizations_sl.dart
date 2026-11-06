@@ -14849,6 +14849,22 @@ class AppLocalizationsSl extends AppLocalizations {
   String get episodeWritingNotes => 'Pišemo zapiske…';
 
   @override
+  String get homeStepTranscribing => 'Prepisujemo…';
+
+  @override
+  String homeRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count posnetkov',
+      few: '$count posnetki',
+      two: '$count posnetka',
+      one: '$count posnetek',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get episodeWritingNotesDetail => 'Najprej dokončujemo prepis. To stran lahko zapustite.';
 
   @override

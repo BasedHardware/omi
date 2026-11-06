@@ -11921,6 +11921,8 @@
     "chatAppsWaitingMessageIn": "پیغام کو {app} میں بھیجیں۔ Omi کو ملتے ہی یہ اسکرین اپ ڈیٹ ہو جائے گی۔",
     "chatAppsCodeExpiredMessageIn": "نیا کوڈ حاصل کریں اور اسے {app} سے بھیجیں۔",
     "episodeWritingNotes": "نوٹس لکھے جا رہے ہیں…",
+    "homeStepTranscribing": "ٹرانسکرائب ہو رہا ہے…",
+    "homeRecordingsCount": "{count, plural, one{{count} ریکارڈنگ} other{{count} ریکارڈنگز}}",
     "episodeWritingNotesDetail": "پہلے ٹرانسکرپٹ مکمل کر رہے ہیں۔ آپ یہ صفحہ چھوڑ سکتے ہیں۔",
     "episodeCoversUpTo": "{time} تک · ختم ہونے پر مکمل نوٹس",
     "liveTranscribedUpTo": "{time} تک ٹرانسکرائب ہوا",
