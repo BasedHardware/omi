@@ -568,6 +568,7 @@ def test_uptime_path_is_admitted_but_never_with_a_query_string():
 
 def fake_readers(counts, prior_counts, daily):
     """counts/prior_counts: {key: (ok, settled)}; daily: {key: [(ok, settled), ...]}."""
+
     def lookup(expr):
         for key, _label, success, settled in UPTIME_JOURNEYS:
             for part, selector in ((0, success), (1, settled)):
@@ -634,6 +635,7 @@ def test_uptime_queries_only_fixed_expressions_caches_and_serves_last_good():
     for request in transport.calls:
         query = dict(part.split("=", 1) for part in urlsplit(request.full_url).query.split("&"))
         from urllib.parse import unquote_plus
+
         assert any(sel in unquote_plus(query["query"]) for sel in allowed)
     assert proxy.fetch(UPTIME_PATH) == (200, body)  # cached
     assert len(transport.calls) == expected
