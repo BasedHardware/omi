@@ -24,10 +24,17 @@ Files committed:
 - `backend/tests/services/users/test_account_deletion.py`
 - `backend/tests/unit/test_account_cutover_foundation.py`
 - `backend/tests/unit/test_cell_wipe_step.py`
+- `backend/tests/unit/test_delete_account_purge_storage.py`
+- `backend/tests/unit/test_delete_account_stripe_cancel.py`
 - `backend/tests/unit/test_dependency_async_boundaries.py`
+- `backend/tests/unit/test_desktop_transcribe.py`
 - `backend/tests/unit/test_directory_router.py`
 - `backend/tests/unit/test_directory_store.py`
 - `backend/tests/unit/test_plane_leak_probe.py`
+- `backend/tests/unit/test_sync_transcription_prefs.py`
+- `backend/tests/unit/test_verify_token_admin_and_local_dev_gating.py`
+- `backend/tests/unit/test_ws_auth_handshake.py`
+- `backend/tests/unit/test_ws_auth_rejection_logging.py`
 - `backend/utils/account_cutover/access.py`
 - `backend/utils/account_cutover/control.py`
 - `backend/utils/account_cutover/coordinator.py`
@@ -46,8 +53,11 @@ Files committed:
 - `get_current_user_uid_ws` is synchronous in this base; it resolves synchronously in FastAPI's dependency thread pool. The two actual async WS dependencies offload on db_executor.
 - Real Postgres was initially unavailable (9 router/wipe cases and 9 directory cases skipped). Installed `pgserver==0.1.4` only into this worktree's test venv and reran with `OMI_REQUIRE_STORE_BACKENDS=postgres`; the final Postgres cases pass without skips. No dependency/lock files changed.
 
-- Probe lookup checks the already-loaded router in `sys.modules` rather than eagerly importing serving code. The eager graph entered a jobstore initialization cycle in the real worker and also exhausted a cold shadow-planning time budget. The pinned baseline passes; current code failed the worker repeatably; the lazy lookup fixes both original suites without changing jobstore or weakening tests. Missing/partial-module tests preserve the no-IO/no-raise probe contract.
+- Probe lookup checks the already-loaded router in `sys.modules` rather than eagerly importing serving code. The eager graph entered a jobstore initialization cycle in the real worker and a shadow-planning wall-budget failure also appeared in the broad run. The latter passes in replay; its timing causality is not independently proven. The pinned baseline passes; current code failed the worker repeatably; the lazy lookup fixes both original suites without changing jobstore or weakening tests. Missing/partial-module tests preserve the no-IO/no-raise probe contract.
 - Cell kind is sticky when either the request or existing record is cell, including same-state refreshes; a later legacy request cannot reintroduce a generation bump.
+
+- Additional isolated caller fixtures migrated under the user-authorized exception: storage purge, Stripe cancellation, desktop transcription, WS handshake, WS rejection logging, token/admin/local gating, and sync transcription preferences. These stub the new directory collaborator at their existing persistence boundary, with routing off, and retain their existing behavioral assertions.
+- Local native setup: `uv pip install --python backend/.venv/bin/python pgserver` supplies real local PG. The installed `/opt/homebrew/lib/libopus.dylib` was not found by managed Python's default lookup. A temporary task-only `backend/.venv/lib/python3.11/site-packages/pgf_b2_native_paths.pth` sets `DYLD_LIBRARY_PATH=/opt/homebrew/lib` inside Python startup; this makes real Opus load without a host/global setting or mocked codec.
 
 ## Known gaps / required lead actions
 
@@ -122,6 +132,22 @@ Additional exact diagnostic/regression commands:
 | `cd backend && .venv/bin/python -m pyright utils/account_cutover/state.py utils/other/plane_routing.py --pythonpath .venv/bin/python` | Final delta: 0 errors, 0 warnings |
 | `scripts/pr-preflight --pr-body-file /Volumes/Ephemeral/scratch/pgf-b2-pr-body.md --metadata-only` | Pass |
 
+More caller/environment verification (one pytest process per file):
+
+| Exact command (from backend) | Result |
+| --- | --- |
+| `.venv/bin/python -m pytest tests/unit/test_delete_account_purge_storage.py -q` | 8 pass after new wipe-module stub registration; original full run had setup errors |
+| `.venv/bin/python -m pytest tests/unit/test_delete_account_stripe_cancel.py -q` | 3 pass after new wipe-module stub registration; original full run had setup errors |
+| `.venv/bin/python -m pytest tests/unit/test_desktop_transcribe.py -q` | 64 pass, including 5 slow cases; original full selector had 59 setup errors/5 deselected |
+| `.venv/bin/python -m pytest tests/unit/test_ws_auth_handshake.py -q` | 24 pass |
+| `.venv/bin/python -m pytest tests/unit/test_ws_auth_rejection_logging.py -q` | 16 pass |
+| `.venv/bin/python -m pytest tests/unit/test_verify_token_admin_and_local_dev_gating.py -q` | 9 pass |
+| `.venv/bin/python -m pytest tests/unit/test_sync_transcription_prefs.py -q` | 58 pass |
+| `.venv/bin/python -m pytest tests/unit/test_empty_capture_recovery.py -q` | Initial full run: 7 fail/61 pass, missing native Opus discovery; local library bootstrap replay: 68 pass |
+| `.venv/bin/python -m pytest tests/unit/test_executors.py -q` | 2 cold-import timeouts/34 pass, reproduced on current code and pinned baseline |
+| `backend/.venv/bin/python /Volumes/Ephemeral/scratch/pgf-b2-baseline-tests.py backend/tests/unit/test_executors.py -q` (root) | Same 2 failures/34 pass on baseline production modules pinned to d47819297e39 |
+| `.venv/bin/python -c 'import openai; import utils.llm.gateway_error_contract; import pytest; raise SystemExit(pytest.main(["tests/unit/test_executors.py", "-q"]))'` | 36 pass; dependencies warmed outside test-call budget; no source/assertion changes |
+
 ## Draft PR body
 
 ## What changed and why
@@ -141,7 +167,7 @@ Local hermetic checks only, with GOOGLE_APPLICATION_CREDENTIALS and all CLOUDSDK
 - Account cutover + plane-leak probes: final 82 pass, including cached-bit/new-upgrade-floor, persisted-cell-kind and missing/partial-router regressions.
 - Account deletion + single executor: 106 pass.
 - Batch/ramp/MCP/sync-worker witness command: 408 pass.
-- All 19 named witness files: 1,402 pass, one intentional referral-case skip. Registry render/check passes. Hermetic pre-deploy checks: 36 source-admission tests and 456 deploy tests pass. First preflight: all 44 selected checks pass, but its tracked-file guard detects implementer edits during the run; a frozen rerun is pending. Full type-check passes with zero errors; the 2,669-file selector run continues. Its two early worker/shadow failures are fixed: eager probe imports entered a jobstore cycle; current reruns pass 55 worker and 8 shadow tests. Final changed-module typing: zero errors/warnings. Auth async-boundary witness: 12 pass.
+- All 19 named witness files: 1,402 pass, one intentional referral-case skip. Registry render/check passes. Hermetic pre-deploy checks: 36 source-admission tests and 456 deploy tests pass. First preflight: all 44 selected checks pass, but its tracked-file guard detects implementer edits during the run; a frozen rerun is pending. Full type-check passes with zero errors; the 2,669-file selector run continues. Its two early worker/shadow failures are fixed: eager probe imports entered a jobstore cycle; current reruns pass 55 worker and 8 shadow tests. Final changed-module typing: zero errors/warnings. Auth async-boundary witness: 12 pass. Seven isolated auth/wipe/transcription fixture files migrated and pass 182 tests. Native-audio replay: 68 pass after exposing the installed Opus library in this task venv. Two executor cold-import timeouts reproduce on the pinned baseline; SDK/classifier-preloaded replay passes all 36 without code/assertion changes.
 - Firestore emulator integrations: 107 skipped because no loopback emulator was running; these are not acceptance evidence.
 
 Operations runbook:
