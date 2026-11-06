@@ -24,6 +24,8 @@ export type AccountCutoverCheckpointPhase = "not_started" | "inventory" | "offli
 
 export type AccountCutoverClientAction = "none" | "force_upgrade" | "migration_maintenance";
 
+export type AccountCutoverClientState = "legacy" | "migrating" | "new" | "rolled_back_stranded";
+
 export interface AccountCutoverControl {
   account_generation?: number;
   api_generation?: number;
@@ -35,7 +37,7 @@ export interface AccountCutoverControl {
   offline_queue_instruction?: OfflineQueueInstruction;
   product_traffic_allowed?: boolean;
   schema_version?: 1;
-  state?: AccountCutoverState;
+  state?: AccountCutoverClientState;
   stranded_new_data?: boolean;
   ui_generation?: number;
 }
@@ -48,8 +50,6 @@ export interface AccountCutoverManifestSummary {
   schema_version?: number;
   stranded_new_data?: boolean;
 }
-
-export type AccountCutoverState = "legacy" | "migrating" | "new" | "rolled_back_stranded";
 
 export interface AccountDeletionActionResponse {
   message: string;
@@ -6650,9 +6650,9 @@ export interface OmiApiSchemas {
   "AcceptSharedTasksRequest": AcceptSharedTasksRequest;
   "AccountCutoverCheckpointPhase": AccountCutoverCheckpointPhase;
   "AccountCutoverClientAction": AccountCutoverClientAction;
+  "AccountCutoverClientState": AccountCutoverClientState;
   "AccountCutoverControl": AccountCutoverControl;
   "AccountCutoverManifestSummary": AccountCutoverManifestSummary;
-  "AccountCutoverState": AccountCutoverState;
   "AccountDeletionActionResponse": AccountDeletionActionResponse;
   "AccountDeletionLossSummary": AccountDeletionLossSummary;
   "AccountDeletionRestoreResponse": AccountDeletionRestoreResponse;
