@@ -22,6 +22,7 @@ from database.batch_pipeline_store import projection_page
 from scripts.reconcile_batch_projection_ghost_holds import reconcile
 from tests.integration.test_batch_pipeline_projection_firestore import lane
 from utils.batch_pipeline.contracts import ProjectionBinding
+from utils.batch_pipeline.held_dead_letter import ProjectionHeldDeadLetter
 from utils.batch_pipeline.scheduler import owner_key
 
 pytestmark = pytest.mark.integration
@@ -160,6 +161,7 @@ def test_gap_ghost_hold_release_ineligible(holds, segment):
 def test_gap_ghost_hold_expiry_ineligible(holds, segment):
     scan(holds, NOW)
     scan(holds, NOW + HELD_DEAD_LETTER_SECONDS)
+    ProjectionHeldDeadLetter(holds.store).tick(NOW + HELD_DEAD_LETTER_SECONDS + 86400)
     entry = holds.projector.store.ref('results', segment).get().to_dict()
     # Aged ghosts need an automatic exit, whether repaired or dead-lettered.
     assert (
@@ -217,7 +219,7 @@ def test_repaired_ready_hint_completes_ledger_and_publishes_without_reassignment
     # accounting and acknowledgement transactions. Only external publication
     # and enqueue are captured by the established emulator lane fixture.
     result = lane.projector.project(segment)
-    assert result is not None and result['updated_memories']
+    assert result is not None and result['new_memories'] == [ready['projection']['conversation_id']]
     assert batch.ledger.get().to_dict()['status'] == 'completed'
     assert lane.projector.status(lane.uid, batch.binding.content_id)['status'] == 'completed'
     assert lane.published == [result]
