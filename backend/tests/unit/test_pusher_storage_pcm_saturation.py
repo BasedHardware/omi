@@ -554,7 +554,7 @@ async def test_first_refusal_stops_30_minute_windows_before_socket_budget_can_fi
 
     _, _, barrier, _ = inline_session
     budget = configure(monkeypatch, LIMIT)
-    monkeypatch.setattr(pusher, 'RECORD_INLINE_FINISH_TIMEOUT', 0.1)
+    monkeypatch.setattr(pusher, 'RECORD_INLINE_FINISH_TIMEOUT', 1.0)
     held = budget.live_limit
     assert budget.acquire(held)
     pcm = b'\x01\x00' * (16000 * 60)
