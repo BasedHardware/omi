@@ -55,17 +55,16 @@ void main() {
 
   test('overlapping registrations reserve durable orders even after a clock rollback and sign-out', () async {
     final previous = DateTime.now().add(const Duration(days: 1)).microsecondsSinceEpoch;
-    SharedPreferences.setMockInitialValues({SharedPreferencesUtil.fcmRegistrationOrderKey: previous});
+    SharedPreferences.setMockInitialValues({fcmRegistrationOrderKey: previous});
     await SharedPreferencesUtil.init();
-    final prefs = SharedPreferencesUtil();
-    final first = prefs.reserveFcmRegistrationOrder();
-    final second = prefs.reserveFcmRegistrationOrder();
+    final first = reserveFcmRegistrationOrder();
+    final second = reserveFcmRegistrationOrder();
     expect(await first, previous + 1);
     expect(await second, previous + 2);
 
     await clearPreferencesForSignOut();
     await SharedPreferencesUtil.init();
-    expect(await prefs.reserveFcmRegistrationOrder(), previous + 3);
+    expect(await reserveFcmRegistrationOrder(), previous + 3);
   });
 
   test('launch with a restored owner registers without a token-refresh event', () async {

@@ -1,8 +1,22 @@
 import 'dart:async';
 
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/services/auth/auth_token_result.dart';
 import 'package:omi/services/integrations/connection_read.dart';
 import 'package:omi/utils/logger.dart';
+
+/// Device-local ordering metadata, with no account identifiers or token contents.
+const fcmRegistrationOrderKey = 'fcmRegistrationOrder';
+
+Future<int?> reserveFcmRegistrationOrder() async {
+  final prefs = SharedPreferencesUtil();
+  final now = DateTime.now().microsecondsSinceEpoch;
+  final previous = prefs.getInt(fcmRegistrationOrderKey);
+  final next = now > previous ? now : previous + 1;
+  // SharedPreferences reserves the cache entry synchronously. Send only after
+  // storage acknowledges the order so overlapping attempts have unique values.
+  return await prefs.saveInt(fcmRegistrationOrderKey, next) ? next : null;
+}
 
 /// One owner for token acquisition, accepted persistence and bounded retry.
 /// SDK waits and old-account completions cannot block a replacement session.

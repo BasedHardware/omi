@@ -1,9 +1,9 @@
 import 'dart:convert';
 
 import 'package:omi/backend/http/shared.dart';
-import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/gen/misc_wire.g.dart' as wire;
 import 'package:omi/env/env.dart';
+import 'package:omi/services/notifications/fcm_token_registration.dart' show reserveFcmRegistrationOrder;
 import 'package:omi/utils/logger.dart';
 
 Future<void> syncUserTimeZoneServer({required String timeZone}) async {
@@ -16,7 +16,7 @@ Future<void> syncUserTimeZoneServer({required String timeZone}) async {
 }
 
 Future<bool> saveFcmTokenServer({required String token, required String timeZone, bool Function()? canSend}) async {
-  final order = await SharedPreferencesUtil().reserveFcmRegistrationOrder();
+  final order = await reserveFcmRegistrationOrder();
   if (order == null) return false;
   final response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/users/fcm-token',
