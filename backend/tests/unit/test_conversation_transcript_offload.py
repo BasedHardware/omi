@@ -26,7 +26,7 @@ from database import (
     review_transcript_changes,
     speaker_learning_jobs,
 )
-from database import smart_merge, recurring_voice_privacy, review_changes
+from database import smart_merge, recurring_voice_privacy, review_changes, conversation_terminal_title
 from database import recording_sessions, conversation_finalization_jobs as jobs, users, speaker_auto_enroll as auto
 from database import episode_attach_memo as memo, episode_timeline as timeline, episode_recorded_components
 from utils.speakers import auto_enroll as policy
@@ -1088,3 +1088,38 @@ def test_http_detail_resolves_pointer_or_fails_closed(lake_world, monkeypatch, s
         assert response.json()['detail'] == 'Conversation not found'
     else:
         assert 'transcript_segments' not in response.text
+
+
+@pytest.mark.parametrize('helper', ['kept', 'dead_letter'])
+@pytest.mark.parametrize('warm', [False, True])
+def test_cosmetic_terminal_helpers_never_fetch_inside_direct_sdk_transactions(lake_world, helper, warm):
+    doc = pointer_doc(lake_world)
+    doc.update(status='processing', started_at=NOW, has_photos=False, structured={'title': ''})
+    lake_world.store.rows[PATH] = doc
+    ref = lake_world.store.collection('users').document(UID).collection('conversations').document(CID)
+    if warm:
+        pointer.preload_pointer(UID, doc['transcript_segments'])
+    before = lake_world.calls['get']
+
+    @firestore.transactional
+    def commit(transaction):
+        # Reproduce terminal owners that call the SDK directly: no generic
+        # run_transactional marker exists until the cosmetic helper guards it.
+        assert not pointer._client.in_transaction_body()
+        current = ref.get(transaction=transaction).to_dict()
+        if helper == 'kept':
+            update = conversation_terminal_title.kept_row_terminal_update(
+                UID, current, ref, {'status': 'completed'}, lambda uid: 'UTC', transaction=transaction
+            )
+        else:
+            update = conversation_terminal_title.dead_letter_conversation_updates(
+                UID, current, ref, transaction, 'not_retryable', lambda uid: 'UTC'
+            )
+        transaction.update(ref, update)
+        return update
+
+    result = commit(lake_world.store.transaction())
+    assert result['structured']['title']
+    assert result['discarded'] is False
+    assert lake_world.calls['get'] == before
+    assert not pointer._client.in_transaction_body()
