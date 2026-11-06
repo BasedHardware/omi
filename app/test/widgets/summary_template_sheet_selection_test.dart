@@ -14,11 +14,11 @@ import '../helpers/summary_fixtures.dart';
 /// Records reprocess calls; the outcome is always the typed failure so the sheet's flow is the
 /// thing under test, not the result handling.
 class _RecordingReprocess {
-  final List<String?> appIds = [];
+  final List<List<String?>> calls = [];
 
   Future<ReprocessResult> call(String id,
       {String? appId, List<String>? appIds, bool requireSpeakerReceipt = false, bool forceOmi = false}) {
-    this.appIds.addAll(appIds ?? [appId]);
+    calls.add(appIds ?? [appId]);
     return Future.value(const ReprocessFailed());
   }
 }
@@ -77,7 +77,9 @@ void main() {
       expect(settled.onPressed, isNotNull);
       await tester.tap(find.byKey(const Key('summary_template_confirm')));
       await tester.pump();
-      expect(reprocess.appIds, [null]);
+      expect(reprocess.calls, [
+        [null],
+      ]);
     });
 
     testWidgets('an inherited selection the lists back is kept and runs with its app id', (tester) async {
@@ -103,7 +105,9 @@ void main() {
       expect(button.onPressed, isNotNull, reason: 'the offered template row backs the selection');
       await tester.tap(find.byKey(const Key('summary_template_confirm')));
       await tester.pump();
-      expect(reprocess.appIds, ['pg']);
+      expect(reprocess.calls, [
+        ['pg'],
+      ]);
     });
 
     testWidgets('a selection backed by a suggested row survives the load and installs-then-runs', (tester) async {
@@ -149,6 +153,11 @@ void main() {
       await tester.pump();
 
       await tester.tap(find.byKey(const Key('summary_template_multi_select')));
+      await tester.pump();
+      final rowSemantics = tester.widget<Semantics>(
+        find.descendant(of: find.byKey(const Key('summary_template_app_one')), matching: find.byType(Semantics)).first,
+      );
+      expect(rowSemantics.properties.inMutuallyExclusiveGroup, isFalse);
       await tester.tap(find.byKey(const Key('summary_template_app_one')));
       await tester.tap(find.byKey(const Key('summary_template_app_two')));
       await tester.tap(find.byKey(const Key('summary_template_omi')));
@@ -163,7 +172,9 @@ void main() {
       await tester.tap(find.byKey(const Key('summary_template_confirm')));
       await tester.pump();
 
-      expect(reprocess.appIds, ['one', 'two']);
+      expect(reprocess.calls, [
+        ['one', 'two'],
+      ]);
     });
     testWidgets('an uninstalled suggested template can be selected into a batch', (tester) async {
       final fetches = SummaryTemplateFetches();

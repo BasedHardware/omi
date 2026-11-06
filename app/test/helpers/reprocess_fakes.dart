@@ -8,6 +8,7 @@ ConversationReprocessCall conversationReprocess(
   Future<ServerConversation?> Function(String id, {String? appId, bool requireSpeakerReceipt}) fake,
 ) {
   return (id, {appId, appIds, requireSpeakerReceipt = false, forceOmi = false}) async =>
-      ReprocessResult.fromConversation(
-          await fake(id, appId: appId ?? appIds?.first, requireSpeakerReceipt: requireSpeakerReceipt));
+      ReprocessResult.fromConversation(await fake(id,
+          appId: appId ?? (appIds == null || appIds.isEmpty ? null : appIds.first),
+          requireSpeakerReceipt: requireSpeakerReceipt));
 }

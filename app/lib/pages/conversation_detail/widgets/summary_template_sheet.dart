@@ -252,6 +252,7 @@ class _SummaryTemplateSheetState extends State<SummaryTemplateSheet> {
                       onPressed: () => setState(() {
                         _multiSelect = !_multiSelect;
                         _selectedAppIds.clear();
+                        if (_multiSelect) _useForNewConversations = false;
                       }),
                     ),
                   ],
@@ -298,18 +299,22 @@ class _SummaryTemplateSheetState extends State<SummaryTemplateSheet> {
       title: app.name.decodeString,
       tag: isLastUsed ? context.l10n.lastUsedLabel : null,
       selected: isSelected,
+      multiSelect: _multiSelect,
       installing: _installingAppId == app.id,
-      onTap: () => setState(() {
-        if (_multiSelect) {
-          if (_selectedAppIds.contains(app.id)) {
-            _selectedAppIds.remove(app.id);
-          } else if (_selectedAppIds.length < maxBatchSummaryTemplates) {
-            _selectedAppIds.add(app.id);
-          }
-        } else {
-          _selectedAppId = app.id;
+      onTap: () {
+        if (_multiSelect && !_selectedAppIds.contains(app.id) && _selectedAppIds.length >= maxBatchSummaryTemplates) {
+          OmiFeedback.error(
+              context, '${context.l10n.frequencyMaximum} · ${context.l10n.selectedCount(maxBatchSummaryTemplates)}');
+          return;
         }
-      }),
+        setState(() {
+          if (_multiSelect) {
+            if (!_selectedAppIds.add(app.id)) _selectedAppIds.remove(app.id);
+          } else {
+            _selectedAppId = app.id;
+          }
+        });
+      },
     );
   }
 
@@ -331,13 +336,6 @@ class _SummaryTemplateSheetState extends State<SummaryTemplateSheet> {
       }
     }
     if (_provider.loadingReprocessConversation || _provider.offerSpeakerSummaryRefresh) return;
-    final previous = _provider.getSummarySelection();
-    PlatformManager.instance.analytics.summarizedAppSelected(
-      conversationId: _provider.conversation.id,
-      selectedAppId: ids.first,
-      previousAppId: previous.isApp ? previous.appId : null,
-    );
-    _provider.trackLastUsedSummarizationApp(ids.first);
     if (mounted) Navigator.of(context).pop();
     await _provider.reprocessConversation(appIds: ids);
   }
@@ -366,9 +364,10 @@ class _TemplateRow extends StatelessWidget {
     super.key,
     required this.leading,
     required this.title,
+    this.subtitle,
     required this.selected,
     required this.onTap,
-    this.subtitle,
+    this.multiSelect = false,
     this.tag,
     this.installing = false,
   });
@@ -378,6 +377,7 @@ class _TemplateRow extends StatelessWidget {
   final String? subtitle;
   final String? tag;
   final bool selected;
+  final bool multiSelect;
   final bool installing;
   final VoidCallback onTap;
 
@@ -386,7 +386,7 @@ class _TemplateRow extends StatelessWidget {
     return Semantics(
       button: true,
       selected: selected,
-      inMutuallyExclusiveGroup: true,
+      inMutuallyExclusiveGroup: !multiSelect,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: () {

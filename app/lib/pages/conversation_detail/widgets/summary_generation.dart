@@ -22,6 +22,7 @@ String summarySourceName(ConversationDetailProvider provider, String? appId, App
   final app = provider.findAppById(appId) ?? (selected?.id == appId ? selected : null);
   return app?.name.decodeString ?? l10n.unknownApp;
 }
+
 String summarySourceNames(ConversationDetailProvider provider, List<String> appIds, AppLocalizations l10n) =>
     appIds.map((id) => summarySourceName(provider, id, l10n)).join(', ');
 
@@ -291,6 +292,7 @@ class SummaryFailureCard extends StatelessWidget {
     final provider = context.read<ConversationDetailProvider>();
     final l10n = context.l10n;
     final busy = context.select<ConversationDetailProvider, bool>((p) => p.loadingReprocessConversation);
+    final speakerRefreshPending = context.select<ConversationDetailProvider, bool>((p) => p.offerSpeakerSummaryRefresh);
     final (
       String title,
       String body,
@@ -354,8 +356,10 @@ class SummaryFailureCard extends StatelessWidget {
           () => showSummarizedAppsSheet(context),
         ),
     };
-    // Retrying is pointless while another reprocess runs; acknowledging never is.
+    // Batch retry is unavailable while speaker labels still need their own summary refresh.
     final blocked = busy && failure.kind != SummaryFailureKind.rateLimited;
+    final batchRetry = failure.kind == SummaryFailureKind.template || failure.kind == SummaryFailureKind.generic;
+    final primaryBlocked = blocked || (batchRetry && failure.appIds.isNotEmpty && speakerRefreshPending);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: OmiSpacing.lg),
@@ -373,7 +377,7 @@ class SummaryFailureCard extends StatelessWidget {
               key: const Key('summary_failure_primary'),
               label: primaryLabel,
               expand: true,
-              onPressed: blocked ? null : primary,
+              onPressed: primaryBlocked ? null : primary,
             ),
             if (secondaryLabel != null && secondary != null) ...[
               const SizedBox(height: OmiSpacing.xxs),
