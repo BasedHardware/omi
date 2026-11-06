@@ -30,6 +30,8 @@ SWITCHES = ('BATCH_PIPELINE_SWEEP_OWNER_CHAIN_ENABLED', 'BATCH_PIPELINE_PROJECTI
 @pytest.fixture(autouse=True)
 def claims(monkeypatch):
     """Advisory owner claim that records nesting; a busy set refuses entry."""
+    # Trace assertions exercise the exact head-first discovery rollback.
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED', 'off')
     state = SimpleClaims()
 
     @contextmanager

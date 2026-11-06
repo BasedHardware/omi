@@ -1,10 +1,15 @@
 """Default-off batch admission cohort. Existing lane classification stays upstream."""
 
+from config.policy import kill_switch
 from config.refactor_switches import default_off as rollout_default_off, default_on as rollout_default_on
 
 from enum import IntEnum
+import hashlib
+import logging
 import math
 import os
+import secrets
+import threading
 
 from config.rollout_cohorts import rollout_cohort_members
 from typing import Callable, TypeVar
@@ -25,6 +30,16 @@ class Priority(IntEnum):
 
 # David's fresh bar (2026-10-20): capture lag at most 10 min at upload.
 FRESH_CAPTURE_LAG_SECONDS = 600.0
+
+# A full grace window is also given to pre-field rows on first observation.
+HELD_DEAD_LETTER_SECONDS = 7 * 86400
+
+
+def batch_held_dead_letter_enabled() -> bool:
+    """Ship-on held deadlines/expiry; manual requeue remains available when off."""
+    from config.policy.kill_switches import kill_switch
+
+    return kill_switch('BATCH_HELD_DEAD_LETTER_ENABLED')
 
 
 def projection_source_deleted_enabled() -> bool:
@@ -515,6 +530,38 @@ def projection_pagination_enabled() -> bool:
     return kill_switch('BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED')
 
 
+def projection_striping_enabled() -> bool:
+    from config.policy import kill_switch
+
+    return kill_switch('BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED')
+
+
+PROJECTION_DISCOVERY_STRIPES = 4096
+_projection_discovery_stripe_value: int | None = None
+_PROJECTION_DISCOVERY_LOCK = threading.Lock()
+
+
+def projection_discovery_stripe() -> int:
+    """Choose and log one process-local random phase, without network I/O.
+
+    Replicas may share hostname/PID. Fresh entropy separates them; 4096 buckets
+    reduce collisions at 30-50 instances. Restarts may choose a different phase.
+    """
+    global _projection_discovery_stripe_value
+    with _PROJECTION_DISCOVERY_LOCK:
+        if _projection_discovery_stripe_value is None:
+            identity = f'{os.getenv("K_REVISION", "")}:{secrets.randbits(128)}'
+            _projection_discovery_stripe_value = (
+                int.from_bytes(hashlib.sha256(identity.encode()).digest()[:8], 'big') % PROJECTION_DISCOVERY_STRIPES
+            )
+            logging.getLogger(__name__).info(
+                'event=batch_projection_discovery action=start stripe=%d stripes=%d',
+                _projection_discovery_stripe_value,
+                PROJECTION_DISCOVERY_STRIPES,
+            )
+        return _projection_discovery_stripe_value
+
+
 def owner_chain_projection_enabled() -> bool:
     from config.policy import kill_switch
 
@@ -571,6 +618,96 @@ def owner_drain_enabled() -> bool:
     from config.policy import kill_switch
 
     return kill_switch('BATCH_PIPELINE_OWNER_DRAIN_ENABLED')
+
+
+def serving_projection_sweep_enabled() -> bool:
+    """Only ``off`` disables serving-instance discovery; owner wakes still run."""
+    from config.policy import kill_switch
+
+    return kill_switch('BATCH_PIPELINE_SERVING_PROJECTION_SWEEP')
+
+
+def _pump_bound(raw: str, default: int, maximum: int, minimum: int = 1) -> int:
+    try:
+        return max(minimum, min(int(raw), maximum))
+    except ValueError:
+        return default
+
+
+def serving_sweep_page_rows() -> int:
+    """Bound projection discovery pages; unset restores the existing 100 rows."""
+    return _pump_bound(os.getenv('BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS', '100'), 100, 200, 50)
+
+
+_serving_budget_warned = False
+_SERVING_BUDGET_WARNING_LOCK = threading.Lock()
+
+
+def _serving_effective_tick(page_rows: int, requested_tick: int) -> float:
+    """Never reduce discovery pages to meet the 20 rows/s supervisor budget."""
+    global _serving_budget_warned
+    budget_tick = page_rows / 20
+    effective_tick = max(10, requested_tick, budget_tick)
+    if requested_tick < budget_tick:
+        with _SERVING_BUDGET_WARNING_LOCK:
+            if not _serving_budget_warned:
+                _serving_budget_warned = True
+                logging.getLogger(__name__).warning(
+                    'event=batch_serving_config action=read_budget requested_tick_seconds=%d '
+                    'effective_page_rows=%d effective_tick_seconds=%g max_rows_per_second=20',
+                    requested_tick,
+                    page_rows,
+                    effective_tick,
+                )
+    return effective_tick
+
+
+def serving_tick_seconds() -> float:
+    """Clamp sleep to 10-60 s and enforce the combined serving discovery budget."""
+    requested_tick = _pump_bound(os.getenv('BATCH_PIPELINE_SERVING_TICK_SECONDS', '20'), 20, 60, 0)
+    return _serving_effective_tick(serving_sweep_page_rows(), requested_tick)
+
+
+def projection_pump_enabled() -> bool:
+    """Process-role opt-in: only ``true`` starts the otherwise inert pump."""
+    from config.policy import kill_switch
+
+    return kill_switch('BATCH_PIPELINE_PROJECTION_PUMP_ENABLED')
+
+
+def projection_pump_tick_seconds() -> int:
+    return _pump_bound(os.getenv('BATCH_PIPELINE_PUMP_TICK_SECONDS', '20'), 20, 60, 2)
+
+
+def projection_pump_sweep_pages() -> int:
+    return _pump_bound(os.getenv('BATCH_PIPELINE_PUMP_SWEEP_PAGES', '1'), 1, 4)
+
+
+def max_owner_drains() -> int:
+    return _pump_bound(os.getenv('BATCH_PIPELINE_MAX_OWNER_DRAINS', '8'), 8, 16)
+
+
+def projection_drain_claim_aware_enabled() -> bool:
+    """Default on; only off disables claim-aware owner-drain admission and backoff."""
+    from config.policy import kill_switch
+
+    return kill_switch('PROJECTION_DRAIN_CLAIM_AWARE')
+
+
+def projection_drain_privacy_backoff_enabled() -> bool:
+    """Default on; only off disables zero-progress privacy turn backoff."""
+    from config.policy import kill_switch
+
+    return kill_switch('PROJECTION_DRAIN_PRIVACY_BACKOFF')
+
+
+def projection_privacy_refusal_resume_enabled() -> bool:
+    """Default on; only off disables recovery from a stale privacy refusal."""
+    return kill_switch('PROJECTION_PRIVACY_REFUSAL_RESUME')
+
+
+def projection_drain_privacy_backoff_seconds() -> int:
+    return _pump_bound(os.getenv('PROJECTION_DRAIN_PRIVACY_BACKOFF_SECONDS', '180'), 180, 900, 30)
 
 
 def projection_index_deferred_enabled() -> bool:

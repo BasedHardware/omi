@@ -2,13 +2,26 @@
 
 from datetime import datetime, timezone
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from tests.support.firestore_query_drivers import DriverEntry, CoveredByEntry, ref_collection
+
+
+def _projection_debt_on(client):
+    from utils import record_projection_rebuild
+
+    return patch.object(record_projection_rebuild, 'durable_debt_enabled', lambda: True)
 
 
 def entries():
     namespaces = ['batch_pipeline_prod', 'batch_pipeline_dev']
     return (
+        DriverEntry(
+            'utils.record_projection_rebuild.run',
+            domains={'mode': ['apply', 'plan']},
+            neutrals={'budget': (SimpleNamespace(check=lambda: None, timeout=lambda: 10), 'RPC deadline only')},
+            patchers=(_projection_debt_on,),
+        ),
         DriverEntry(
             'database.record_seal_worker.pending_page',
             domains={'namespace': namespaces, 'after': [None, (datetime(2026, 10, 1, tzinfo=timezone.utc), 'pending')]},
@@ -178,6 +191,15 @@ def entries():
                 'after_id': [None, 'held-09'],
             },
             neutrals={'limit': (10, 'bounded page size')},
+        ),
+        DriverEntry(
+            'database.batch_pipeline_quarantine_recovery.dead_held_candidates',
+            domains={'namespace': namespaces, 'after_id': [None, 'held-09']},
+            neutrals={'limit': (32, 'bounded page size')},
+        ),
+        DriverEntry(
+            'database.batch_pipeline_quarantine_recovery.held_expired_stock',
+            domains={'namespace': namespaces},
         ),
         DriverEntry(
             'database.batch_pipeline_quarantine_recovery.held_candidates',
@@ -385,6 +407,11 @@ def entries():
             domains={'namespace': namespaces, 'priority': [0, 1, 2], 'ready_only': [False, True]},
         ),
         DriverEntry(
+            'database.batch_pipeline_projection_release.expired_page_ids',
+            domains={'namespace': namespaces, 'after_id': [None, 'result-100']},
+            neutrals={'limit': (32, 'bounded page size only; equality single-field index')},
+        ),
+        DriverEntry(
             'database.batch_pipeline_projection_release.held_page_ids',
             domains={'namespace': namespaces, 'after_id': [None, 'result-100']},
             neutrals={'limit': (128, 'bounded page size only; equality is served by the automatic single-field index')},
@@ -402,7 +429,7 @@ def entries():
             ),
             reason='bounded release scan delegates queries to both page builders; resets are document transactions',
             expect_observed=False,
-            body_digest='6585eb78557d3f1f336d97ca78325be4a55146f44f5e21c6c72f11abec183580',
+            body_digest='ec3dcf9db1840bbee61eed826b815d0bac6a277975dfa5f0c9f7388b3272e397',
         ),
         CoveredByEntry(
             'database.batch_pipeline_projection_release.release_scan_pass',
@@ -412,6 +439,6 @@ def entries():
             ),
             reason='two durable cursors share release_page; cursor reads and writes are document operations',
             expect_observed=False,
-            body_digest='7f3bbdcf0a450474ce7ed6255c758eb795706d8f1b8b69563d64471443250e58',
+            body_digest='c97315dc625160d65dc0acb53a8711dc514c4d02e2dcf8ed932b9765e833627f',
         ),
     )

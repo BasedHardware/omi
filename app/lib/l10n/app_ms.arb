@@ -4636,5 +4636,9 @@
     "paymentDeclinedTitle": "Kad anda ditolak",
     "paymentDeclinedMessage": "Kemas kini kad untuk mendapatkan semula {plan}",
     "hasLinkedTasksLabel": "Mempunyai tugas dipautkan",
-    "hasTasksFilter": "Dengan tugas"
+    "hasTasksFilter": "Dengan tugas",
+    "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
+    "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
+    "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
 }

@@ -11,6 +11,8 @@ JOB_CLOCK_FIELDS = (
     'updated_at',
     'next_attempt_at',
     'lease_expires_at',
+    'held_deadline_at',
+    'held_expired_at',
 )
 
 

@@ -12193,5 +12193,9 @@
     "paymentDeclinedTitle": "আপনার কার্ড প্রত্যাখ্যাত হয়েছে",
     "paymentDeclinedMessage": "আবার {plan} পেতে কার্ডটি আপডেট করুন",
     "hasLinkedTasksLabel": "সংযুক্ত কাজ আছে",
-    "hasTasksFilter": "কাজ আছে"
+    "hasTasksFilter": "কাজ আছে",
+    "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
+    "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
+    "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
 }

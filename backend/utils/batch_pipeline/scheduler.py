@@ -937,6 +937,58 @@ class Scheduler:
         tx.put('jobs', job['segment_id'], job)
 
     @staticmethod
+    def held_requeue_eligible(tx: Transaction, job: dict, now: float, *, allow_dead=True) -> bool:
+        """Dormant worker holds only; never reopen an active paid/operator intent."""
+        held_dead = allow_dead and job.get('state') == 'dead' and job.get('dead_letter_reason') == 'held_expired'
+        state_ok = job.get('state') == 'quarantined' or held_dead
+        lease_until = job.get('lease_until', 0)
+        if (
+            not state_ok
+            or job.get('quarantine_reason') != 'worker_failed'
+            # Provider-STT units do not belong to the GPU DRR ring. Their
+            # vendor-attempt custody needs its own sanctioned re-drive path.
+            or (job.get('stt_route') or {}).get('stt_route') == 'provider'
+            or job.get('recovery_state') not in {'held', 'failed_held'}
+            or job.get('result')
+            # Expiry retains the legacy dead re-drive contract. Also accept
+            # earlier held-expired rows written with merge_pending=False.
+            or not (job.get('merge_pending') is False or (held_dead and job.get('merge_pending') is True))
+            or job.get('token')
+            or isinstance(lease_until, bool)
+            or not isinstance(lease_until, (int, float))
+            or not math.isfinite(lease_until)
+            or lease_until > now
+        ):
+            return False
+        recovery = job.get('recovery') or {}
+        if recovery and not recovery.get('settled_at'):
+            return False
+        if any(
+            job.get(key) and (job.get(key) or {}).get('state') not in {'completed', 'failed_held'}
+            for key in ('silence_disposition', 'terminal_disposition', 'speech_redrive')
+        ):
+            return False
+        return not tx.get('results', job['segment_id'])
+
+    @staticmethod
+    def requeue_quarantined_in_transaction(tx: Transaction, job: dict, now: float) -> bool:
+        """CAS requeue without deleting audio, results, intent or attempt history.
+
+        RecoveryStore owns content/ledger/privacy checks, as the missing-input
+        store does for restore_audio_in_transaction. The commit fence still runs.
+        """
+        if not Scheduler.held_requeue_eligible(tx, job, now):
+            return False
+        control = read_control(tx, scheduler_control_key(job['owner_key']))
+        owner = tx.get('owners', job['owner_key'])
+        owner['revision'] = owner.get('revision', 0) + 1
+        job.update(state='ready', available_at=now, merge_pending=True, token='', lease_until=0.0, held_requeued_at=now)
+        _append(tx, control, job)
+        tx.put('owners', job['owner_key'], owner)
+        tx.put('jobs', job['segment_id'], job)
+        return True
+
+    @staticmethod
     def redrive_in_transaction(tx: Transaction, job: dict, now: float) -> bool:
         if job.get('state') != 'dead' or not job.get('merge_pending'):
             return False

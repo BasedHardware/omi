@@ -1,5 +1,6 @@
 """Keep the live playback projection fresh without rediscovering its prefix per write."""
 
+import asyncio
 import logging
 import os
 import time
@@ -10,12 +11,16 @@ from google.api_core.exceptions import InvalidArgument
 from prometheus_client import Counter
 
 from config import audio_archive
-from database import conversations as conversations_db, conversation_tombstones
-from database._client import get_firestore_client
+from config.batch_pipeline_projection_rebuild import enabled as durable_debt_enabled
+from database import conversations as conversations_db, record_projection_rebuild
 from database.audio_chunk_metadata import audio_chunk_entry
-from utils.other import storage, raw_audio_read
+from utils.other import storage
+from utils.batch_pipeline.record_projection_rebuild import (
+    projected_chunks,
+    discover,
+)
 from utils.observability.fallback import record_fallback
-from utils.executors import run_blocking, storage_executor
+from utils.executors import run_blocking, storage_executor, db_executor, start_background_task
 from utils.other.audio_outbox_metrics import record_failure
 from utils.speaker_learning_jobs import schedule_person_voice_learning_retry
 
@@ -25,6 +30,10 @@ CLOSE_RETRY_BUDGET = 2
 REFRESH_SECONDS = 300
 MAX_CONVERSATIONS = 128
 MAX_CHUNKS = 2048
+MAX_MARKER_RETRIES = record_projection_rebuild.MAX_MARKERS_PER_BATCH
+MARKER_CLOSE_SECONDS = 3.0
+MARKER_ATTEMPT_SECONDS = 1.25
+MARKER_WRITES = Counter('omi_pusher_projection_debt_total', 'Best-effort projection marker handoffs', ['outcome'])
 
 
 def enabled() -> bool:
@@ -36,26 +45,6 @@ class Inventory:
     chunks: list[dict[str, Any]]
     files: list[dict[str, Any]]
     listed_at: float
-
-
-def projection_owner_gone(uid: str, conversation_id: str) -> bool:
-    """Deletion-intent read for a projection NotFound: owner gone, or live?
-
-    Same tombstone read as the custody write gate (utils/other/storage.py);
-    a missing conversation doc covers hard-deleted rows without a tombstone.
-    Runs only on the NotFound arm, so live conversations pay no extra reads.
-    """
-    if conversation_tombstones.is_deleted(uid, conversation_id):
-        return True
-    doc = (
-        get_firestore_client()
-        .collection('users')
-        .document(uid)
-        .collection('conversations')
-        .document(conversation_id)
-        .get()
-    )
-    return not doc.exists
 
 
 def get_uploaded_audio_chunks(uid: str, conversation_id: str, paths: List[str]) -> List[Dict[str, Any]]:
@@ -103,17 +92,14 @@ class PusherAudioProjection:
         self.uid = uid
         self.has_uploaded_paths = False
         self.close_debt: set[str] = set()
+        # Separate metadata-only overflow inventory; never retain PCM receipts
+        # or gate recording completion on optional marker persistence.
+        self.marker_retry: dict[str, int] = {}
+        self.marker_sequence = 0
+        self.marker_task: asyncio.Task | None = None
         self.finished: set[str] = set()
         self.close_retries: dict[str, int] = {}
         self.inventory: dict[str, Inventory | None] = {}
-
-    def projected_chunks(self, conversation_id: str, chunks: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        if not audio_archive.admitted(self.uid, 'READ'):
-            return chunks
-        packs = storage.list_packs(storage.get_private_cloud_sync_bucket(), self.uid, conversation_id)
-        return sorted(
-            [*chunks, *raw_audio_read.uncovered_raw_packs(packs, chunks)], key=lambda chunk: chunk['timestamp']
-        )
 
     def refresh(self, conversation_id: str, paths: list[str] | None = None, *, force: bool = False) -> bool | None:
         state = self.inventory.pop(conversation_id, None)
@@ -154,39 +140,15 @@ class PusherAudioProjection:
             raw_complete = True
             if chunks is None:
                 if enabled():
-                    # Snapshot before discovery: a full rebuild must not
-                    # overwrite a projection another pod publishes during LIST.
-                    owner = conversations_db.get_conversation_raw_snapshot(
-                        self.uid, conversation_id, field_paths=['audio_files', 'deleted']
+                    discovery = discover(
+                        self.uid, conversation_id, strict_raw=force and durable_debt_enabled(), fallback=record_fallback
                     )
-                    if owner is None or owner.get('deleted'):
+                    if discovery is None:
                         self.inventory.pop(conversation_id, None)
                         return False
-                    expected = owner.get('audio_files') or []
+                    expected, chunks, files, raw_complete = discovery
                 else:
                     expected = None
-                if enabled():
-                    chunks = storage.list_audio_chunks(
-                        self.uid, conversation_id, source_identity=True, include_archive=False
-                    )
-                    try:
-                        listed = self.projected_chunks(conversation_id, chunks)
-                    except Exception:
-                        # Preserve main's full-list fallback on a broken raw
-                        # index, but never cache that incomplete discovery.
-                        raw_complete = False
-                        listed = chunks
-                        record_fallback(
-                            component='pusher',
-                            from_mode='raw_audio',
-                            to_mode='encoded_audio_projection',
-                            reason='other',
-                            outcome='degraded',
-                        )
-                    files = conversations_db.create_audio_files_from_chunks(
-                        self.uid, conversation_id, listed_chunks=listed
-                    )
-                else:
                     files = conversations_db.create_audio_files_from_chunks(self.uid, conversation_id)
                 listed_at = time.monotonic()
                 mode = 'full'
@@ -194,7 +156,7 @@ class PusherAudioProjection:
                 # Raw fragments can shrink or split as encoded coverage grows;
                 # re-derive them, never append yesterday's projected fragments.
                 try:
-                    listed = self.projected_chunks(conversation_id, chunks)
+                    listed = projected_chunks(self.uid, conversation_id, chunks)
                 except Exception:
                     # An incremental encoded view is not a full fallback.
                     # Rediscover encoded siblings before matching main's
@@ -257,6 +219,8 @@ class PusherAudioProjection:
             return None  # Rollback/unknown writer retains per-flush-only behavior.
         result = self.refresh(conversation_id, force=True)
         self.inventory.pop(conversation_id, None)
+        if result is None and durable_debt_enabled():
+            return None  # Empty discovery cannot discharge the close obligation.
         self.close_debt.discard(conversation_id)
         if len(self.finished) < MAX_CONVERSATIONS:
             self.finished.add(conversation_id)
@@ -278,9 +242,11 @@ class PusherAudioProjection:
                 self.close_retries[conv_id] = attempts + 1
                 logger.warning('Close audio projection rebuild deferred exception_type=%s', type(exc).__name__)
                 return False
+            queued = await self.defer_rebuild(conv_id)
             self.close_retries.pop(conv_id, None)
             self.inventory.pop(conv_id, None)
-            self.close_debt.discard(conv_id)
+            if queued:
+                self.close_debt.discard(conv_id)
             if len(self.finished) < MAX_CONVERSATIONS:
                 self.finished.add(conv_id)
             record_failure('projection', reason='invalid_argument' if isinstance(exc, InvalidArgument) else 'transient')
@@ -295,6 +261,11 @@ class PusherAudioProjection:
             # The per-flush projection and raw receipt remain authoritative;
             # optional rediscovery failure cannot turn a clean drain into loss.
             return True
+        if applied is None and self.has_uploaded_paths and conv_id in self.close_debt and durable_debt_enabled():
+            if await self.defer_rebuild(conv_id):
+                self.close_debt.discard(conv_id)
+            if len(self.finished) < MAX_CONVERSATIONS:
+                self.finished.add(conv_id)
         self.close_retries.pop(conv_id, None)
         if applied:
             schedule_person_voice_learning_retry(self.uid, conv_id)
@@ -303,3 +274,66 @@ class PusherAudioProjection:
         elif applied is False:
             deleted_conversations.add(conv_id)
         return True
+
+    async def defer_rebuild(self, conv_id: str) -> bool:
+        """Queue optional metadata without awaiting Firestore on the close path."""
+        if not durable_debt_enabled():
+            return True
+        if conv_id not in self.marker_retry and len(self.marker_retry) >= MAX_MARKER_RETRIES - MAX_CONVERSATIONS:
+            MARKER_WRITES.labels(outcome='marker_retry_overflow').inc()
+            logger.error('Projection debt retry inventory full; optional marker handoff refused')
+            return False
+        self.marker_sequence += 1
+        self.marker_retry[conv_id] = self.marker_sequence
+        self._start_marker_task()
+        return True
+
+    def _start_marker_task(self) -> None:
+        if self.marker_retry and (self.marker_task is None or self.marker_task.done()):
+            self.marker_task = start_background_task(self._persist_markers(), name='projection-debt-handoff')
+
+    async def _persist_markers(self) -> None:
+        # At most two batched RPCs, including executor queue time. A late SDK
+        # commit is metadata-only, idempotent and has its own one-second timeout.
+        for _ in range(2):
+            pending = dict(self.marker_retry)
+            if not pending:
+                return
+            try:
+                async with asyncio.timeout(MARKER_ATTEMPT_SECONDS):
+                    await run_blocking(db_executor, record_projection_rebuild.mark_many, self.uid, set(pending))
+            except Exception as exc:
+                MARKER_WRITES.labels(outcome='marker_write_failed').inc()
+                logger.warning('Projection marker_write_failed exception_type=%s', type(exc).__name__)
+                continue
+            for cid, sequence in pending.items():
+                if self.marker_retry.get(cid) == sequence:
+                    self.marker_retry.pop(cid, None)
+                    self.close_debt.discard(cid)
+            MARKER_WRITES.labels(outcome='persisted').inc(len(pending))
+
+    async def persist_pending(self) -> None:
+        """Total socket-cleanup budget, independent of the number of debts."""
+        if not durable_debt_enabled():
+            self.close_debt.clear()
+            self.marker_retry.clear()
+            return
+        for cid in self.close_debt:
+            if cid not in self.marker_retry:
+                self.marker_sequence += 1
+                self.marker_retry[cid] = self.marker_sequence
+        self._start_marker_task()
+        if self.marker_task is None:
+            return
+        try:
+            async with asyncio.timeout(MARKER_CLOSE_SECONDS):
+                for attempt in range(2):
+                    await asyncio.shield(self.marker_task)
+                    if not self.marker_retry or attempt == 1:
+                        break
+                    self._start_marker_task()
+        except TimeoutError:
+            MARKER_WRITES.labels(outcome='marker_write_failed').inc()
+            logger.warning('Projection marker_write_failed cleanup_budget_exhausted')
+        # Background work is bounded independently; socket close never waits
+        # for a second round after the total cleanup budget expires.

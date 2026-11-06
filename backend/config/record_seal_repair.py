@@ -18,12 +18,17 @@ def enabled():
     return os.getenv('RECORD_SEAL_REPAIR_ENABLED', 'true').strip().lower() == 'true'
 
 
+# Rows are I/O-bound subprocesses (~150 s each, 2026-11-05: CPU 0.7 of 4, no throttling, ~70 MB per worker),
+# so throughput scales with workers. Prod runs 48; the pod's 8 Gi / 4 CPU limits cover 64.
+MAX_WORKERS = 64
+
+
 def settings():
     workers = int(os.getenv('RECORD_SEAL_REPAIR_WORKERS', '8'))
     row_seconds = int(os.getenv('RECORD_SEAL_REPAIR_ROW_SECONDS', '270'))
     run_seconds = int(os.getenv('RECORD_SEAL_REPAIR_RUN_SECONDS', '1500'))
     mode = os.getenv('RECORD_SEAL_REPAIR_MODE', 'apply')
-    if not 1 <= workers <= 16 or not 1 <= row_seconds <= 270 or not 1 <= run_seconds <= 1500:
+    if not 1 <= workers <= MAX_WORKERS or not 1 <= row_seconds <= 270 or not 1 <= run_seconds <= 1500:
         raise ValueError('invalid repair limits')
     if mode not in {'apply', 'plan'}:
         raise ValueError('invalid repair mode')

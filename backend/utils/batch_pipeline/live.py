@@ -187,7 +187,7 @@ def register_recording(
 
 
 def retained_record_units(
-    uid, conversation_id, chunks, client, key, *, diagnostics=None, partial=False
+    uid, conversation_id, chunks, client, key, *, diagnostics=None, partial=False, decoded_tail=None
 ) -> Generator[tuple[float, float, list[dict[str, Any]]], None, None]:
     """Bounded one-hour units; earlier retained objects own overlapping frames."""
     trim_divergent = overlap_trim_enabled()
@@ -204,7 +204,14 @@ def retained_record_units(
         }
         if chunk.get('span'):
             ref['sample_rate'] = int(chunk['span'].get('sample_rate', 16000))
-        pcm = read_reference(client, ref, uid, conversation_id, allowed, key, source_metadata=True)
+        if decoded_tail is not None and decoded_tail.get('chunk') is chunk:
+            ref, pcm = dict(decoded_tail['ref']), decoded_tail['pcm']
+        else:
+            pcm = read_reference(
+                client, ref, uid, conversation_id, allowed, key, source_metadata=True, listed_source=chunk
+            )
+            if decoded_tail is not None and chunk is chunks[-1]:
+                decoded_tail.update(chunk=chunk, ref=dict(ref), pcm=pcm)
         if not pcm or len(pcm) % 2:
             raise ValueError('retained source has no aligned audio')
         comparison_pcm = pcm

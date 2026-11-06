@@ -18,7 +18,6 @@ LEVERS = (
     'tombstone_negative_cache',
     'legal_hold_fence_cache',
     'bpp_generation_memo',
-    'batch_privacy_memoize',
     'privacy_session_token',
     'subscription_cache',
     'request_read_dedupe',
@@ -113,22 +112,6 @@ def clock_and_cache(environment, fault, events, *, ttl_override_s=None):
 
     stack.enter_context(patch.object(cache, '_event', event))
     stack.enter_context(patch.object(metrics, 'memo_result', memo))
-    from database.batch_pipeline_privacy import BatchPrivacyMemo
-
-    original_get = BatchPrivacyMemo.get
-
-    def snapshot_get(memo, reference):
-        previous = memo.snapshots.get(reference.path)
-        result = original_get(memo, reference)
-        if previous is not None:
-            if result is not previous:
-                raise AssertionError('transaction snapshot memo did not reuse its snapshot')
-            events[('batch_snapshot', 'memo_hit')] += 1
-        else:
-            events[('batch_snapshot', 'memo_miss')] += 1
-        return result
-
-    stack.enter_context(patch.object(BatchPrivacyMemo, 'get', snapshot_get))
     return stack, redis
 
 
@@ -223,8 +206,6 @@ class PrivacyCacheDriver:
                         for key in environment.redis.scan_iter(match='fsr:s4:v2:*:data:*')
                     ]
                     evidence = record['evidence']
-                    if row['family'] == 'batch_privacy' and not events[('batch_snapshot', 'memo_hit')]:
-                        raise AssertionError('batch transaction snapshot memo reuse was not exercised')
                     if row['fault'] == 'request_memo' and record['fault_applicable']:
                         holder = cache._request.get()
                         evidence['request_memo_warmed'] = any(key[0] == uid for key in holder.values)

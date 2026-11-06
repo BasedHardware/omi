@@ -290,6 +290,14 @@ def assert_clause(row, clause):
 # KNOWN_GAPS is a reviewed baseline, added below. It is not derived from the
 # assertions at collection time; strict XPASS is a blocking improvement signal.
 KNOWN_GAPS = {
+    ('record_audio:seal_refused', 'automatic_exit'): 'Phase 1 preserves callback-only exact-token finish and seal; '
+    'automatic requeue is phase 4; ANX lcphase1-first-refusal-clock',
+    ('record_audio:seal_refused', 'entry_deadline'): 'First-refusal clock is an age anchor, not a custody deadline; '
+    'phase 4 owns requeue; ANX lcphase1-first-refusal-clock',
+    ('record_audio:seal_refused', 'dwell_metric'): 'Phase 1 emits bounded job-page age/count in the sweeper summary; '
+    'authoritative fleet Gauge including no-job rows remains outside scope; ANX lcphase1-first-refusal-clock',
+    ('record_audio:seal_refused', 'dwell_alert'): 'Phase 1 declares the agent alert identity; committed monitoring '
+    'rule is outside named file scope; ANX lcphase1-first-refusal-clock',
     ('visibility:transcribing_hold', 'dwell_metric'): 'No dedicated transcription presentation dwell gauge; '
     'homegate phase 1; ANX lcinv-lifecycle-invariants',
     ('visibility:transcribing_hold', 'dwell_alert'): 'No dedicated transcription presentation stock alert; '
@@ -306,8 +314,11 @@ KNOWN_GAPS = {
     ('batch:privacy_blocked', 'dwell_metric'): 'batch:privacy_blocked: missing authoritative dwell/stock gauge; '
     'phase contract follow-up; no fix PR yet; ANX '
     'lcinv-lifecycle-invariants',
-    ('batch:quarantined', 'entry_deadline'): 'batch:quarantined: missing deadline stamped at entry; phase contract '
-    'follow-up; no fix PR yet; ANX lcinv-lifecycle-invariants',
+    (
+        'batch:quarantined',
+        'entry_deadline',
+    ): 'GPU holds stamp a flag-gated held_deadline_at; provider-STT settle/terminal entries '
+    'remain unstamped and cannot join the GPU requeue path. ANX omi-lifecycle phase 4a',
     ('batch:ready', 'entry_deadline'): 'batch:ready: missing deadline stamped at entry; phase contract follow-up; no '
     'fix PR yet; ANX lcinv-lifecycle-invariants',
     ('batch:record_pending', 'entry_deadline'): 'batch:record_pending: total pending-dwell deadline is still '
@@ -330,9 +341,8 @@ KNOWN_GAPS = {
     ('batch_projection:persisted', 'entry_deadline'): 'batch_projection:persisted: missing deadline stamped at '
     'entry; phase contract follow-up; no fix PR yet; ANX '
     'lcinv-lifecycle-invariants',
-    ('batch_projection:quarantine_held', 'entry_deadline'): 'batch_projection:quarantine_held: missing deadline '
-    'stamped at entry; phase contract follow-up; no fix PR '
-    'yet; ANX lcinv-lifecycle-invariants',
+    ('batch_projection:quarantine_held', 'entry_deadline'): 'Assignment holds stamp held_deadline_at; privacy holds '
+    'remain explicitly outside phase 4b and must never age-expire. ANX lcinv-lifecycle-invariants',
     ('batch_projection:ready', 'entry_deadline'): 'batch_projection:ready: missing deadline stamped at entry; phase '
     'contract follow-up; no fix PR yet; ANX lcinv-lifecycle-invariants',
     ('conversation:completed', 'dwell_metric'): 'conversation:completed: missing authoritative dwell/stock gauge; '
@@ -509,7 +519,14 @@ def test_required_legacy_machines_are_present():
             'partial_retired',
         },
         'batch_projection': {'pending', 'persisted', 'ready', 'quarantine_held', 'completed', 'erased'},
-        'record_audio': {'capturing', 'abandoned', 'sealed', 'record_upload_failed', 'record_audio_partial'},
+        'record_audio': {
+            'capturing',
+            'seal_refused',
+            'abandoned',
+            'sealed',
+            'record_upload_failed',
+            'record_audio_partial',
+        },
         'summary_debt': {'pending', 'completed'},
         'fair_use': {'warning', 'throttle', 'restrict'},
         'visibility': {'bridge_pending', 'settling_hold', 'transcribing_hold'},

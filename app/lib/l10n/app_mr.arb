@@ -12193,5 +12193,9 @@
     "paymentDeclinedTitle": "तुमचे कार्ड नाकारले गेले",
     "paymentDeclinedMessage": "{plan} परत मिळवण्यासाठी कार्ड अपडेट करा",
     "hasLinkedTasksLabel": "जोडलेली कार्ये आहेत",
-    "hasTasksFilter": "कार्ये असलेले"
+    "hasTasksFilter": "कार्ये असलेले",
+    "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
+    "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
+    "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
 }

@@ -1302,6 +1302,12 @@ EXTERNAL_ALERT_METRICS = {
         "prometheus-stackdriver-exporter"
     ),
     "stackdriver_monitoring_last_scrape_error": "prometheus-stackdriver-exporter",
+    # Cloud Logging declarations, queried directly through GMP (never the local exporter).
+    "logging_googleapis_com:user_omi_pipeline_upload_admission_503": "batch-projection/log-metrics.json",
+    "logging_googleapis_com:user_omi_pipeline_firestore_contention_exhausted": "batch-projection/log-metrics.json",
+    "logging_googleapis_com:user_omi_pipeline_owner_drain_advanced_count": "batch-projection/log-metrics.json",
+    "logging_googleapis_com:user_omi_pipeline_owner_drain_advanced_sum": "batch-projection/log-metrics.json",
+    "logging_googleapis_com:user_omi_pipeline_owner_drain_claim_busy": "batch-projection/log-metrics.json",
     # deepgram self-hosted deployment exporter
     "engine_stream_latency_bucket": "deepgram self-hosted deployment exporter",
 }
@@ -2163,3 +2169,23 @@ def test_pair_page_uses_recent_jobs_and_stock_stays_agent_tier():
         assert repair['data'][0]['model']['expr'] == 'max(omi_enrichment_summary_repair_count)'
         assert repair['data'][2]['model']['conditions'][0]['evaluator']['params'] == [100]
         assert 'not retry attempts or a retry cap' in repair['annotations']['scope']
+
+
+def test_held_dead_letter_volume_is_agent_only_and_uses_reasoned_stock_plus_unique_expiry_rate():
+    for export_name, rules in _all_rule_exports().items():
+        rule = rules['omi-batch-held-expired-volume']
+        nodes = {node['refId']: node['model'] for node in rule['data']}
+        assert nodes['A']['expr'] == (
+            'max(omi_batch_held_expired_units and '
+            '(time() - omi_batch_held_expired_observed_at_seconds < 900)) or vector(0)'
+        ), export_name
+        assert nodes['B']['expr'] == 'sum(increase(omi_batch_held_expired_total[30m])) or vector(0)'
+        assert nodes['C']['expr'] == '(time() - max(omi_batch_held_expired_observed_at_seconds)) or vector(1e9)'
+        assert nodes['D']['expression'] == '($A > 100 && $C < 900) || $B > 10'
+        assert rule['labels']['tier'] == rule['labels']['audience'] == 'agent'
+        assert rule['notification_settings']['mute_time_intervals'] == ['omi-tier-silent']
+        assert rule['for'] == '5m' and not rule['isPaused']
+        assert 'legacy' in rule['annotations']['scope']
+        assert 'projection_state=quarantine_held with held_expired_reason=held_expired' in rule['annotations']['scope']
+        assert 'restorable' in rule['annotations']['safe_next_action']
+        assert 'Never delete' in rule['annotations']['safe_next_action']
