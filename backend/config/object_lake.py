@@ -54,4 +54,12 @@ def key_cache_ttl_seconds() -> int:
 
 
 def write_admitted(space_id: str) -> bool:
-    return bool(space_id) and write_enabled() and cohort_bucket(space_id, 'object-lake', bits=64) < write_percent()
+    # KMS may deliberately be unset for offline FakeKMS. A bucket and release
+    # are required even there; incomplete bindings must keep writes inline.
+    return (
+        bool(space_id)
+        and write_enabled()
+        and bool(bucket())
+        and bool(release())
+        and cohort_bucket(space_id, 'object-lake', bits=64) < write_percent()
+    )
