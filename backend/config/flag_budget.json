@@ -24,7 +24,7 @@
   },
   "seed_review_by": "2026-11-15",
   "budget": 169,
-  "count": 263,
+  "count": 265,
   "names": {
     "BATCH_HELD_DEAD_LETTER_ENABLED": {"owner": "uicleanup / omi-lifecycle", "review_by": "2026-12-06", "registry": "config/feature-flags.yaml"},
     "BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS": {"owner": "omi-pipeline / lead2", "review_by": "2026-12-06"},
@@ -39,6 +39,8 @@
     "BATCH_PIPELINE_PROVIDER_STT_SWEEP_MAX_AGE_DAYS": {"owner": "omi-pipeline", "review_by": "2026-11-30"},
     "BATCH_PIPELINE_SWEEP_AGE_GATE": {"owner": "omi-pipeline", "review_by": "2026-11-30"},
     "PROJECTION_DRAIN_CLAIM_AWARE": {"owner": "two-lane lead", "review_by": "2026-12-05", "registry": "config/feature-flags.yaml"},
+    "PROJECTION_DRAIN_PRIVACY_BACKOFF": {"owner": "omi-pipeline / privblock", "review_by": "2026-12-06", "registry": "config/feature-flags.yaml"},
+    "PROJECTION_DRAIN_PRIVACY_BACKOFF_SECONDS": {"owner": "omi-pipeline / privblock", "review_by": "2026-12-06"},
     "BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED": {"owner": "omi-pipeline", "review_by": "2026-12-06", "registry": "config/feature-flags.yaml"},
     "K_REVISION": {"owner": "omi-pipeline", "review_by": "2026-12-06"},
     "PARAKEET_SHAPE_CANARY_FILE": {"owner": "two-lane lead", "review_by": "2026-12-04"},

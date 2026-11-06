@@ -930,3 +930,310 @@ async def test_productive_continuation_never_peeks_or_backs_off(monkeypatch, dra
     assert log.persist_order == ids
     peek.assert_called_once()
     assert not drain_timers and not drains.continuations
+
+
+PRIVACY_STOPS = [
+    ('blocked_privacy_disposition_requires_a_source_deletion_tombstone', 'tombstone'),
+    ('blocked_privacy_refusal_no_longer_applies', 'refusal_no_longer_applies'),
+    ('blocked_privacy_future_reason', 'other'),
+]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('stop,reason', PRIVACY_STOPS)
+@pytest.mark.parametrize('again', [False, True])
+async def test_zero_progress_privacy_turn_defers_and_retries(monkeypatch, drain_timers, stop, reason, again):
+    from utils.batch_pipeline.metrics import PROJECTION_DRAIN_PRIVACY_STOPS, PROJECTION_DRAIN_PRIVACY_BACKOFFS
+
+    monkeypatch.delenv('PROJECTION_DRAIN_PRIVACY_BACKOFF', raising=False)
+    monkeypatch.setenv('PROJECTION_DRAIN_PRIVACY_BACKOFF_SECONDS', '180')
+    log = ResultLog()
+    ids = chain(log, BURST, 'a', 3)
+    projector = projector_for(log)
+    drains = projector.drains = projection_drain.OwnerDrains(projector)
+    real = projector.drain_step
+    blocked = True
+    projector.drain_step = lambda *a, **kw: projection.Walk([], [], False, stop) if blocked else real(*a, **kw)
+    before_stops = PROJECTION_DRAIN_PRIVACY_STOPS.labels(reason=reason)._value.get()
+    before_backoffs = PROJECTION_DRAIN_PRIVACY_BACKOFFS._value.get()
+    drains.request([BURST])
+    if again:
+        drains.request([BURST])
+    await settle(projector)
+    assert BURST in drains.delayed and not drains.queue and not drains.again and not drains.stops
+    assert PROJECTION_DRAIN_PRIVACY_STOPS.labels(reason=reason)._value.get() == before_stops + 1
+    assert PROJECTION_DRAIN_PRIVACY_BACKOFFS._value.get() == before_backoffs + 1
+    drains.request([BURST] * 10)
+    assert len(drain_timers) == 1
+    delay, retry, _ = drain_timers.pop()
+    assert delay == 180
+    blocked = False
+    retry()
+    await settle(projector)
+    assert log.persist_order == ids and not drains.delayed
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('advanced,switch', [(1, 'on'), (0, 'off')])
+async def test_productive_privacy_turn_or_switch_off_keeps_old_queue_behavior(
+    monkeypatch, drain_timers, advanced, switch
+):
+    monkeypatch.setenv('PROJECTION_DRAIN_PRIVACY_BACKOFF', switch)
+    projector = projector_for(ResultLog())
+    drains = projector.drains = projection_drain.OwnerDrains(projector)
+    step = Mock(
+        side_effect=[
+            projection.Walk([], ['synthetic'] * advanced, False, PRIVACY_STOPS[0][0]),
+            projection.Walk([], [], False, 'end'),
+        ]
+    )
+    projector.drain_step = step
+    drains.request([BURST])
+    drains.request([BURST])
+    await settle(projector)
+    assert step.call_count == 2
+    assert not drains.delayed and not drain_timers and not drains.stops
+
+
+@pytest.mark.asyncio
+async def test_privacy_backoff_uses_existing_cap_and_close_cleanup(monkeypatch, drain_timers):
+    monkeypatch.setattr(projection_drain, 'MAX_DELAYED_OWNERS', 1)
+    monkeypatch.delenv('PROJECTION_DRAIN_PRIVACY_BACKOFF', raising=False)
+    projector = projector_for(ResultLog())
+    drains = projector.drains = projection_drain.OwnerDrains(projector)
+    projector.drain_step = lambda *a, **kw: projection.Walk([], [], False, PRIVACY_STOPS[0][0])
+    drains.defer('already-delayed')
+    drains.request([BURST])
+    await settle(projector)
+    assert list(drains.delayed) == ['already-delayed']
+    assert list(projector.drain_requests) == [BURST]
+    drains.close()
+    assert not drains.delayed and not drains.stops
+    drain_timers[0][2].cancel.assert_called_once()
+
+
+@pytest.mark.parametrize('name', ['PROJECTION_DRAIN_PRIVACY_BACKOFF'])
+@pytest.mark.parametrize('mode', ['shadow', 'serve'])
+@pytest.mark.parametrize('value', [None, '', 'false', '0', 'unknown', 'off', 'OFF', ' off '])
+def test_privacy_switches_are_disabled_only_by_off(monkeypatch, name, mode, value):
+    from config.policy import kill_switch
+
+    monkeypatch.setenv('CAPTURE_COVERAGE_MODE', mode)
+    if value is None:
+        monkeypatch.delenv(name, raising=False)
+    else:
+        monkeypatch.setenv(name, value)
+    assert kill_switch(name) is (value is None or value.strip().lower() != 'off')
+
+
+@pytest.mark.parametrize(
+    'value,expected', [(None, 180), ('bad', 180), ('0', 30), ('29', 30), ('30', 30), ('900', 900), ('901', 900)]
+)
+def test_privacy_backoff_ttl_is_clamped(monkeypatch, value, expected):
+    from config.batch_pipeline import projection_drain_privacy_backoff_seconds
+
+    if value is None:
+        monkeypatch.delenv('PROJECTION_DRAIN_PRIVACY_BACKOFF_SECONDS', raising=False)
+    else:
+        monkeypatch.setenv('PROJECTION_DRAIN_PRIVACY_BACKOFF_SECONDS', value)
+    assert projection_drain_privacy_backoff_seconds() == expected
+
+
+@pytest.mark.asyncio
+async def test_generic_privacy_stop_is_counted_as_other(monkeypatch, drain_timers):
+    from utils.batch_pipeline.metrics import PROJECTION_DRAIN_PRIVACY_STOPS
+
+    projector = projector_for(ResultLog())
+    drains = projector.drains = projection_drain.OwnerDrains(projector)
+    projector.drain_step = lambda *a, **kw: projection.Walk([], [], False, 'privacy_blocked')
+    counter = PROJECTION_DRAIN_PRIVACY_STOPS.labels(reason='other')
+    before = counter._value.get()
+    drains.request([BURST])
+    await settle(projector)
+    assert counter._value.get() == before + 1
+    assert not drains.delayed and not drain_timers
+
+
+def privacy_version_drain(monkeypatch):
+    from types import SimpleNamespace
+
+    projector = projector_for(ResultLog())
+    projector.chain_prefetch = lambda owner: None
+    first = iter([projection.Walk([], [], False, PRIVACY_STOPS[0][0], ('blocked-head', 1))])
+    step = Mock(side_effect=lambda *a, **kw: next(first, projection.Walk([], ['blocked-head'], False, 'end')))
+    projector.drain_step = step
+    snapshot = SimpleNamespace(update_time=1, exists=True)
+    read = Mock(return_value=snapshot)
+    reference = Mock(get=read)
+    ref = Mock(return_value=reference)
+    monkeypatch.setattr(projector.store, 'ref', ref)
+    drains = projector.drains = projection_drain.OwnerDrains(projector)
+    return projector, drains, step, snapshot, read, ref
+
+
+@pytest.mark.asyncio
+async def test_unchanged_head_ttl_expiry_runs_a_drain_turn(monkeypatch, drain_timers):
+    monkeypatch.delenv('PROJECTION_DRAIN_PRIVACY_BACKOFF', raising=False)
+    monkeypatch.setenv('PROJECTION_DRAIN_PRIVACY_BACKOFF_SECONDS', '180')
+    projector, drains, step, snapshot, read, ref = privacy_version_drain(monkeypatch)
+    drains.request([BURST])
+    await settle(projector)
+    delay, retry, _ = drain_timers.pop(0)
+    assert delay == 180
+    retry()
+    await settle(projector)
+    assert step.call_count == 2
+    read.assert_not_called()  # expiry retries external privacy state regardless of row version
+    assert not drains.privacy_heads and not drains.stopped_heads and not drains.delayed
+
+
+@pytest.mark.asyncio
+async def test_ttl_turn_blocked_again_defers_for_one_new_ttl(monkeypatch, drain_timers):
+    from utils.batch_pipeline.metrics import PROJECTION_DRAIN_PRIVACY_BACKOFFS
+
+    monkeypatch.delenv('PROJECTION_DRAIN_PRIVACY_BACKOFF', raising=False)
+    monkeypatch.setenv('PROJECTION_DRAIN_PRIVACY_BACKOFF_SECONDS', '180')
+    projector, drains, step, snapshot, read, _ = privacy_version_drain(monkeypatch)
+    step.side_effect = None
+    step.return_value = projection.Walk([], [], False, PRIVACY_STOPS[0][0], ('blocked-head', 1))
+    before = PROJECTION_DRAIN_PRIVACY_BACKOFFS._value.get()
+    drains.request([BURST])
+    await settle(projector)
+    for turn in range(2, 5):
+        delay, retry, _ = drain_timers.pop(0)
+        assert delay == 180
+        retry()
+        await settle(projector)
+        assert step.call_count == turn
+        assert drains.privacy_heads[BURST] == ('blocked-head', 1)
+        assert len(drains.delayed) == len(drain_timers) == 1
+    assert PROJECTION_DRAIN_PRIVACY_BACKOFFS._value.get() == before + 4
+    read.assert_not_called()
+    drains.close()
+
+
+@pytest.mark.asyncio
+async def test_changed_head_rerequests_before_ttl(monkeypatch, drain_timers):
+    from utils.batch_pipeline.metrics import PROJECTION_DRAIN_PRIVACY_ROW_CHANGED
+
+    monkeypatch.delenv('PROJECTION_DRAIN_PRIVACY_BACKOFF', raising=False)
+    projector, drains, step, snapshot, read, _ = privacy_version_drain(monkeypatch)
+    before = PROJECTION_DRAIN_PRIVACY_ROW_CHANGED._value.get()
+    drains.request([BURST])
+    await settle(projector)
+    snapshot.update_time = 2
+    drains.request([BURST] * 20)  # coalesced while the single version read runs
+    await settle(projector)
+    assert read.call_count == 1
+    assert step.call_count >= 2
+    assert PROJECTION_DRAIN_PRIVACY_ROW_CHANGED._value.get() == before + 1
+    assert not drains.privacy_heads and not drains.delayed
+    assert any(handle.cancel.called for _, _, handle in drain_timers)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('failure', ['read_error', 'missing_version', 'switch_off'])
+async def test_privacy_version_check_fails_open_and_switch_off_restores_behavior(monkeypatch, drain_timers, failure):
+    monkeypatch.delenv('PROJECTION_DRAIN_PRIVACY_BACKOFF', raising=False)
+    projector, drains, step, snapshot, read, _ = privacy_version_drain(monkeypatch)
+    drains.request([BURST])
+    await settle(projector)
+    if failure == 'read_error':
+        read.side_effect = RuntimeError('synthetic read failure')
+    elif failure == 'missing_version':
+        snapshot.update_time = None
+    else:
+        monkeypatch.setenv('PROJECTION_DRAIN_PRIVACY_BACKOFF', 'off')
+    drains.request([BURST])
+    await settle(projector)
+    assert step.call_count == 2
+    assert read.call_count == int(failure != 'switch_off')
+    assert not drains.privacy_heads and not drains.delayed
+
+
+@pytest.mark.asyncio
+async def test_unchanged_head_incoming_requests_keep_original_check_deadline(monkeypatch, drain_timers):
+    monkeypatch.delenv('PROJECTION_DRAIN_PRIVACY_BACKOFF', raising=False)
+    projector, drains, step, snapshot, read, _ = privacy_version_drain(monkeypatch)
+    drains.request([BURST])
+    await settle(projector)
+    handle = drains.delayed[BURST]
+    drains.request([BURST] * 100)
+    await settle(projector)
+    assert read.call_count == 1 and step.call_count == 1
+    assert drains.delayed[BURST] is handle and len(drain_timers) == 1
+    drains.close()
+
+
+def test_walk_privacy_block_carries_the_observed_head_version(monkeypatch):
+    from types import SimpleNamespace
+    from database.batch_pipeline_projection_protocol import ProjectionBlocked
+
+    log = ResultLog()
+    ids = chain(log, BURST, 'head-version', 2)
+    projector = projector_for(log)
+    original = log.ref
+
+    def ref(table, sid):
+        wrapped = original(table, sid)
+        return (
+            SimpleNamespace(get=lambda: SimpleNamespace(to_dict=lambda: log.results[sid], update_time=123))
+            if table == 'results'
+            else wrapped
+        )
+
+    monkeypatch.setattr(log, 'ref', ref)
+    monkeypatch.setattr(projector, 'chain_prefetch', lambda owner: None)
+    monkeypatch.setattr(
+        projector,
+        '_persist_read',
+        Mock(side_effect=ProjectionBlocked('privacy disposition requires a source deletion tombstone')),
+    )
+    walk = projector.drain_step(BURST, 30)
+    assert walk.blocked_head == (ids[0], 123)
+    assert not walk.advanced and walk.stop == PRIVACY_STOPS[0][0]
+
+
+@pytest.mark.asyncio
+async def test_privacy_head_versions_share_the_delayed_owner_cap(monkeypatch, drain_timers):
+    monkeypatch.setattr(projection_drain, 'MAX_DELAYED_OWNERS', 1)
+    monkeypatch.delenv('PROJECTION_DRAIN_PRIVACY_BACKOFF', raising=False)
+    projector, drains, step, snapshot, read, _ = privacy_version_drain(monkeypatch)
+    projector.drain_step = lambda *a, **kw: projection.Walk([], [], False, PRIVACY_STOPS[0][0], ('blocked-head', 1))
+    drains.request(['first', 'second'])
+    await settle(projector)
+    assert list(drains.privacy_heads) == list(drains.delayed) == ['first']
+    assert list(projector.drain_requests) == ['second']
+    drain_timers[0][1]()
+    await settle(projector)
+    assert list(drains.privacy_heads) == list(drains.delayed) == ['first']
+    drains.close()
+    assert not drains.privacy_heads and not drains.stopped_heads
+
+
+@pytest.mark.asyncio
+async def test_ttl_during_unchanged_early_check_cannot_lose_the_retry(monkeypatch, drain_timers):
+    monkeypatch.delenv('PROJECTION_DRAIN_PRIVACY_BACKOFF', raising=False)
+    projector, drains, step, snapshot, read, _ = privacy_version_drain(monkeypatch)
+    drains.request([BURST])
+    await settle(projector)
+    checked, release = asyncio.Event(), asyncio.Event()
+    real_run_blocking = projection_drain.run_blocking
+
+    async def pause_check(executor, fn, *args, **kwargs):
+        if fn == drains.privacy_head_unchanged:
+            result = fn(*args, **kwargs)
+            checked.set()
+            await release.wait()
+            return result
+        return await real_run_blocking(executor, fn, *args, **kwargs)
+
+    monkeypatch.setattr(projection_drain, 'run_blocking', pause_check)
+    drains.request([BURST])
+    await checked.wait()
+    drain_timers[0][1]()
+    release.set()
+    await settle(projector)
+    assert read.call_count == 1
+    assert step.call_count == 2
+    assert not drains.delayed and not drains.privacy_heads

@@ -115,6 +115,8 @@ class Walk(NamedTuple):
     more: bool = False
     # Closed, log-safe token naming why the walk stopped (WALK_STOPS, or blocked_<token>).
     stop: str = ''
+    # Scheduling hint only: the privacy-blocked head and its observed row version.
+    blocked_head: tuple[str, object] | None = None
 
 
 def error_type(error: BaseException) -> str:
@@ -1352,6 +1354,7 @@ class Projector:
         first = None
         advanced: list[str] = []
         more = False
+        blocked_head = snapshot = None
 
         def failed(error: BaseException) -> None:
             # Keep what this walk already persisted; the sweep resumes later.
@@ -1413,7 +1416,8 @@ class Projector:
                     segment_id = self.store.store.projection_successor(key, previous)
                 row = {}
                 if segment_id is not None:
-                    row = self.store.ref('results', segment_id).get().to_dict() or {}
+                    snapshot = self.store.ref('results', segment_id).get()
+                    row = snapshot.to_dict() or {}
             except Exception as error:
                 failed(error)
                 stop = 'read_error'
@@ -1466,6 +1470,8 @@ class Projector:
                 break
             except ProjectionBlocked as error:
                 stop = walk_block_stop(error, projection_block_reason(error))
+                if stop.startswith('blocked_privacy_'):
+                    blocked_head = (segment_id, getattr(snapshot, 'update_time', None))
                 break
             except Exception as error:
                 failed(error)
@@ -1510,7 +1516,7 @@ class Projector:
             stop = 'limit'
         ordered = [groups.pop(first)] if first is not None else []
         followups = list(dict.fromkeys(sid for group in ordered + list(groups.values()) for sid in group))
-        return Walk(followups, advanced, more, stop)
+        return Walk(followups, advanced, more, stop, blocked_head)
 
     def sweep(self, limit: int | None = None) -> dict[str, int]:
         """Bounded durable-log recovery; no in-memory callback is an outbox."""
