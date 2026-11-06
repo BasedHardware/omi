@@ -78,3 +78,41 @@ min 6 / max 12 and baseline 6; do not restore the stale 4/16 chart values.
 Disposition/redrive cannot be undone by
 resetting a paid token; stop further apply, preserve durable receipts, and
 replan after an uncertain result.
+
+## Fleet queue sample ownership
+
+`FIRESTORE_READ_LEVERS` includes `batch_metrics_oldest_leader` (default 100).
+Serving instances elect one queue sampler per store namespace using the existing
+`LeaderLease` implementation and a `queue_metrics` role (20-second TTL), separate
+from maintenance ownership. Followers query neither `oldest`, `oldest_retry` nor
+`ready_for_capacity`, and export no queue age/count/freshness samples. Lease errors
+retain the existing advisory fail-open behavior. At default settings, the serving
+30-second reservation plus 20-second ticks produces a sample every 40 seconds;
+a lost holder hands over within 60 seconds, excluding IO/runtime delays. A metrics
+scrape can refresh earlier. Longer configured tick/reservation values can exceed
+that target; keep their combined effective cadence within 60 seconds.
+
+GPU workers retain per-pod sampling because the adapter gates each pod's
+GPU busy-time metric on sampler freshness. Electing a single worker would remove
+other healthy pods from that signal. Only process index 0 samples; its independent
+15-second loop now runs fleet queue queries every 60 seconds, including capacity
+counts. Timeliness, projection, lifecycle and local event gauges keep their prior
+schedules. Queue ages/counts stop exporting after 60 seconds without a successful
+sample, even when the refresh task stops; capacity retains its independent success
+clock. Failed and never-observed samples cannot become fresh zeroes. The adapter's
+existing `< 60` freshness filter still rejects cached stale scrapes; a delayed
+GPU query can briefly make its queue demand signal unavailable, retaining capacity.
+GPU busy-time instead uses the independent per-instance sampler heartbeat, still
+updated by the 15-second loop (plus IO); the adapter accepts the old queue clock
+as well for mixed-version fleets and rollback. Both clocks retain a 60s bound.
+
+The queue-age and over-SLA Grafana rules (`alerts/batch-timeliness.json`,
+`alerts/batch-queue-safety.json`) use `max`/any-instance semantics, as do the
+ready-age/capacity adapter rules. No average or pinned-instance consumer was
+found in the repository. The 2h timeliness sampler is unchanged. Its observed-at
+staleness rules remain independent of this queue sampler.
+
+Rollback: set `"batch_metrics_oldest_leader": 0` in the existing
+`FIRESTORE_READ_LEVERS` JSON map, preserving other entries. This bypasses election,
+GPU throttling and export expiry, restoring the prior per-instance behavior and
+existing adapter freshness checks. There is no new environment variable.

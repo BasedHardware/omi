@@ -244,6 +244,10 @@ async def run_process(store: Any, artifacts: Any, registry: CollectorRegistry, s
             worker_release=os.environ.get('BATCH_PIPELINE_WORKER_RELEASE', 'unscoped'),
             namespace=os.environ.get('POD_NAMESPACE', 'unscoped'),
             capacity_sampling=True,
+            # The sampler heartbeat gates per-pod GPU busy-time in the adapter;
+            # electing only one pod would hide healthy workers. Bound these
+            # fleet queries independently; lever 0 restores the 15s sampler.
+            oldest_min_refresh_seconds=60,
         )
         pump = Pump(
             Scheduler(store, metrics=metrics, pool='batch'),
