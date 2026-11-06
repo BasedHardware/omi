@@ -1702,7 +1702,7 @@ class ConversationProvider extends ChangeNotifier {
       return;
     }
 
-    prefs.recordConfirmedConversationDelete(conversationId);
+    final persistDeletion = prefs.recordConfirmedConversationDelete(conversationId);
     if (current()) {
       // Only a confirmed deletion changes the server cursor.
       if (wasLoadedFromServer && _conversationServerLoadedIds.remove(conversationId)) {
@@ -1720,6 +1720,7 @@ class ConversationProvider extends ChangeNotifier {
       // Keep the row hidden through the cache write. The shared queue prevents
       // concurrent deletes, list writes and merge completion from losing each other's edits.
       await _queueConversationPersistence(() async {
+        await persistDeletion;
         if (ownsCache() && await prefs.evictCachedConversation(conversationId) && ownsCache()) {
           _clearDeleteTombstone(conversationId);
         }

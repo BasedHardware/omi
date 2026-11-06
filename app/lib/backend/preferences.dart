@@ -1203,9 +1203,18 @@ class SharedPreferencesUtil {
 
   bool isConversationDeleteConfirmed(String id) => _confirmedConversationDeletes.contains(id);
 
-  /// Fence cache writes already admitted by another conversation provider.
-  void recordConfirmedConversationDelete(String id) {
+  /// Fence stale writers and persist the confirmed deletion before cache eviction.
+  Future<void> recordConfirmedConversationDelete(String id) async {
     if (_confirmedConversationDeletes.add(id)) _cachedConversationsGeneration++;
+    final ownerUid = uid;
+    if (ownerUid.isEmpty) return;
+    try {
+      if (await _persistConversationCacheEviction(ownerUid, id)) return;
+    } catch (error) {
+      Logger.debug('Conversation deletion marker write failed: ${error.runtimeType}');
+      return;
+    }
+    Logger.debug('Conversation deletion marker write was rejected');
   }
 
   @visibleForTesting
@@ -1307,34 +1316,46 @@ class SharedPreferencesUtil {
         );
         if (!current()) return false;
         if (generation != _cachedConversationsGeneration) continue;
-        final writes = await Future.wait([
-          for (final entry in retained.entries)
-            if (entry.value.length != snapshots[entry.key]!.length) saveStringList(entry.key, entry.value),
-        ]);
+        // SharedPreferences can reflect an earlier rejected write in memory.
+        // Check both snapshots on disk before retiring the persisted marker.
+        final writes =
+            await Future.wait([for (final entry in retained.entries) saveStringList(entry.key, entry.value)]);
         if (!current()) return false;
         if (writes.any((saved) => !saved)) break;
-        if (generation == _cachedConversationsGeneration) return true;
+        if (generation != _cachedConversationsGeneration) continue;
+        if (ownerUid.isNotEmpty) {
+          final key = _conversationCacheEvictionKey(ownerUid);
+          final pending = getStringList(key);
+          if (pending.contains(id)) {
+            await saveStringList(key, pending.where((candidate) => candidate != id).toList());
+          }
+        }
+        return true;
       }
     } catch (error) {
       Logger.debug('Conversation cache eviction failed: ${error.runtimeType}');
     }
     // Preferences can reflect an unsuccessful write in memory. Record the
     // confirmed ID separately so either stale snapshot stays hidden on restart.
-    if (current() && ownerUid.isNotEmpty) {
-      final key = _userScopedKey('failedConversationCacheEvictions', ownerUid);
-      final ids = {...getStringList(key), id};
-      if (!await saveStringList(key, ids.toList())) {
-        throw StateError('Could not persist confirmed conversation cache eviction');
-      }
+    if (current() && ownerUid.isNotEmpty && !await _persistConversationCacheEviction(ownerUid, id)) {
+      throw StateError('Could not persist confirmed conversation cache eviction');
     }
     return false;
+  }
+
+  String _conversationCacheEvictionKey(String ownerUid) =>
+      _userScopedKey('pendingConversationCacheEvictions', ownerUid);
+
+  Future<bool> _persistConversationCacheEviction(String ownerUid, String id) {
+    final key = _conversationCacheEvictionKey(ownerUid);
+    return saveStringList(key, {...getStringList(key), id}.toList());
   }
 
   List<ServerConversation> _excludeConfirmedConversationDeletes(List<ServerConversation> rows) {
     final ownerUid = uid;
     final ids = {
       ..._confirmedConversationDeletes,
-      if (ownerUid.isNotEmpty) ...getStringList(_userScopedKey('failedConversationCacheEvictions', ownerUid)),
+      if (ownerUid.isNotEmpty) ...getStringList(_conversationCacheEvictionKey(ownerUid)),
     };
     return ids.isEmpty ? rows : rows.where((row) => !ids.contains(row.id)).toList();
   }
