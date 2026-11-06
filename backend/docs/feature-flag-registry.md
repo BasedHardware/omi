@@ -1,4 +1,4 @@
-<!-- feature-flag-registry as-of: 2026-11-06 -->
+<!-- feature-flag-registry as-of: 2026-11-05 -->
 
 # Feature-flag authority registry
 
@@ -108,7 +108,7 @@ entries are exempt: they are queued for removal, not running.
 | key | terminal | owner | prereg | review_by |
 | --- | --- | --- | --- | --- |
 | `DAY3_REENGAGEMENT_EMAIL_ENABLED` | undecided | dazheng | [backend/docs/experiments/EXP-001-day3-reengagement.md](../../backend/docs/experiments/EXP-001-day3-reengagement.md) | 2026-11-07 |
-| `MEETING_NOTES_EPISODE_CLAIMS_ENABLED` | undecided | dazheng | [backend/utils/conversations/EPISODE_EVIDENCE.md](../../backend/utils/conversations/EPISODE_EVIDENCE.md) | 2026-11-05 OVERDUE |
+| `MEETING_NOTES_EPISODE_CLAIMS_ENABLED` | undecided | dazheng | [backend/utils/conversations/EPISODE_EVIDENCE.md](../../backend/utils/conversations/EPISODE_EVIDENCE.md) | 2026-11-05 |
 | `onboarding-variant` | undecided | nik | [product/experiments/onboarding-variant.md](../../product/experiments/onboarding-variant.md) | 2026-11-13 |
 | `paywall-variant` | undecided | nik | [product/experiments/paywall-variant.md](../../product/experiments/paywall-variant.md) | 2026-11-12 |
 
@@ -165,20 +165,12 @@ exception is recorded for David.
 - `LIVE_CAPTURE_WINDOW_RETENTION` — review_by 2026-11-03 (dazheng)
 - `LIVE_CAPTURE_WINDOW_STRICT_PROJECTION` — review_by 2026-11-03 (dazheng)
 - `LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS` — review_by 2026-11-04 (dazheng)
-- `MEETING_NOTES_EPISODE_C6_TIMEOUT_SECONDS` — review_by 2026-11-05 (dazheng)
-- `MEETING_NOTES_EPISODE_CLAIMS_ENABLED` — review_by 2026-11-05 (dazheng)
-- `MEETING_NOTES_EPISODE_TIERED_ENABLED` — review_by 2026-11-05 (dazheng)
-- `MEETING_NOTES_EPISODE_TIER_MIN_SOURCE_KINDS` — review_by 2026-11-05 (dazheng)
-- `MEETING_NOTES_EPISODE_TIER_MIN_WORDS` — review_by 2026-11-05 (dazheng)
-- `MEETING_NOTES_EPISODE_WRITER_TIMEOUT_SECONDS` — review_by 2026-11-05 (dazheng)
-- `OMI_SHAPED_AGENT_MODE` — review_by 2026-11-05 (dazheng)
 - `PARAKEET_EXPLICIT_CUDA_GRAPHS` — review_by 2026-11-04 (dazheng)
 - `PARAKEET_PACKING_ENABLED` — review_by 2026-11-04 (dazheng)
 - `PARAKEET_WINDOW_DIARIZATION` — review_by 2026-11-04 (dazheng)
 - `SERVER_BATCH_ONLY_VISIBLE_RESTORE_PERCENT` — review_by 2026-11-03 (dazheng)
 - `SONIOX_CAPTURE_AXIS_DIAGNOSTICS` — review_by 2026-11-04 (dazheng)
 - `SONIOX_ELAPSED_AXIS` — review_by 2026-11-04 (dazheng)
-- `SONIOX_ORDERED_FINALIZE` — review_by 2026-11-05 (dazheng)
 - `SONIOX_WIRE_LEDGER` — review_by 2026-11-04 (dazheng)
 - `SPEAKER_MATCH_SCORES_ENABLED` — review_by 2026-11-04 (dazheng)
 - `STT_FAILOVER_RECOVERY_ENABLED` — review_by 2026-11-04 (backend)
@@ -206,7 +198,6 @@ exception is recorded for David.
 - `TRANSCRIPTION_SHADOW_ENABLED` — review_by 2026-11-04 (dazheng)
 - `TRANSCRIPTION_SHADOW_PERCENT` — review_by 2026-11-04 (dazheng)
 - `TRANSCRIPTION_SHADOW_UID_ALLOWLIST` — review_by 2026-11-04 (dazheng)
-- `onboarding-setup-rating-prompt` — review_by 2026-11-05 (nik)
 - `proactivity_v2` — review_by 2026-11-03 (dazheng)
 - `summary-generation-v2` — review_by 2026-11-04 (dazheng)
 

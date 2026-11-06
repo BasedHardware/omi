@@ -577,6 +577,61 @@ def _validate_proactivity_v2_flag_hosts(env: str, env_config: ConfigDict) -> lis
     return errors
 
 
+def _validate_directory_routing_bindings(env: str, env_config: ConfigDict) -> list[ValidationError]:
+    """B2 ships dark; provisioning must bind the whole serving fleet before enablement."""
+    cloud_run = _as_config_dict(env_config.get('cloud_run')) or {}
+    services = _as_config_dict(cloud_run.get('services')) or {}
+    gke = _as_config_dict(env_config.get('gke')) or {}
+    config_map = _as_config_dict(gke.get('config_map')) or {}
+    config_values = _as_config_dict(config_map.get('entries')) or {}
+    hosts = [(f'cloud_run/{name}', services.get(name)) for name in ('backend', 'backend-sync', 'backend-sync-backfill')]
+    hosts.extend((f'gke/{name}', gke.get(name)) for name in ('backend-listen', 'pusher'))
+
+    def value(scope: str, entries: ConfigDict, key: str) -> str | None:
+        entry = _as_config_dict(entries.get(key)) or {}
+        raw = entry.get('value')
+        if 'config_map' in entry and scope.startswith('gke/'):
+            binding = _as_config_dict(entry['config_map']) or {}
+            binding_key = binding.get('key')
+            if binding.get('name') == config_map.get('name') and isinstance(binding_key, str):
+                raw = config_values.get(binding_key)
+        elif 'env_var' in entry:
+            raw = os.getenv(str(entry['env_var']), entry.get('default'))
+        return str(raw).strip() if raw is not None else None
+
+    entries = {scope: _as_config_dict((_as_config_dict(host) or {}).get('env')) or {} for scope, host in hosts}
+    modes = {
+        scope: value(scope, bindings, 'DIRECTORY_ROUTING_MODE') if 'DIRECTORY_ROUTING_MODE' in bindings else 'off'
+        for scope, bindings in entries.items()
+    }
+    if all(mode == 'off' for mode in modes.values()):
+        return []
+
+    errors: list[ValidationError] = []
+    for scope, bindings in entries.items():
+        if modes[scope] != 'new_owners':
+            errors.append(
+                ValidationError(
+                    f'{env}/{scope}', 'DIRECTORY_ROUTING_MODE must be new_owners on all five serving surfaces'
+                )
+            )
+        # Every auth surface can enroll a cell head; backend also runs the wipe.
+        for prefix in ('DIRECTORY', 'CELLS'):
+            dsn = value(scope, bindings, f'{prefix}_PG_DSN')
+            iam = all(value(scope, bindings, f'{prefix}_PG_{suffix}') for suffix in ('HOST', 'DATABASE', 'USER'))
+            if not dsn and not iam:
+                errors.append(
+                    ValidationError(
+                        f'{env}/{scope}',
+                        f'{prefix}_PG_* requires a non-empty DSN or all HOST, DATABASE, USER bindings before routing',
+                    )
+                )
+            size = value(scope, bindings, f'{prefix}_PG_POOL_SIZE')
+            if size not in ('1', '2'):
+                errors.append(ValidationError(f'{env}/{scope}', f'{prefix}_PG_POOL_SIZE must be explicitly 1 or 2'))
+    return errors
+
+
 def validate_runtime_env(
     *,
     env: str,
@@ -590,6 +645,7 @@ def validate_runtime_env(
     manifest = _load_yaml(manifest_path)
     env_config = _get_env_config(manifest, env)
     errors = _validate_manifest_shape(env_config, env)
+    errors.extend(_validate_directory_routing_bindings(env, env_config))
     errors.extend(validate_mentor_pipeline(scope=env, config=env_config))
     if errors:
         return errors
