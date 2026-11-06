@@ -350,3 +350,30 @@ def test_malformed_pointer_remains_corrupt_without_bucket_configuration(lake_wor
     with pytest.raises(pointer.TranscriptPointerFetchError):
         pointer.decode_stored_transcript(UID, doc['transcript_segments'], True)
     assert lake_world.calls['get'] == 0
+
+
+def test_expiry_during_cache_lookup_is_a_transactional_miss(lake_world):
+    doc = encode()
+    key = pointer._memo_key(UID, lake.LakeObjectRef.from_pointer_dict(doc['transcript_segments']))
+
+    class ExpiringCache(TTLCache):
+        armed = False
+
+        def __getitem__(self, cache_key):
+            if self.armed:
+                self.armed = False
+                del self[cache_key]
+                raise KeyError(cache_key)
+            return super().__getitem__(cache_key)
+
+    cache = ExpiringCache(maxsize=32, ttl=120)
+    cache[key] = speech()
+    cache.armed = True
+    pointer._memo().decoded = cache
+    with pytest.raises(pointer.TranscriptPointerUnloaded):
+        _client.run_transactional(
+            lake_world.store, lambda txn: pointer.resolve_pointer(UID, doc['transcript_segments'])
+        )
+    assert lake_world.calls['get'] == 0
+    assert pointer.resolve_pointer(UID, doc['transcript_segments']) == speech()
+    assert lake_world.calls['get'] == 1

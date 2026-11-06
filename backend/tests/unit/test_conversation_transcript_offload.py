@@ -24,10 +24,13 @@ from database import (
     review_transcript_changes,
     speaker_learning_jobs,
 )
+from database import smart_merge, recurring_voice_privacy, review_changes
 from models.review import ReviewChange, ChangeRef
 from utils.conversations import transcript_chunks
 from utils.conversations.transcript_hash import transcript_sha256_for_binding
 from models.conversation import Conversation
+from models.transcript_segment import TranscriptSegment
+from tests.support.dream_firestore import DreamFirestore
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestoreDocument
 from tests.unit.test_transcript_pointer import lake_world, UID, CID, PATH, encode, speech, pointer_doc
 from utils.other import object_lake as lake, space_keys
@@ -566,3 +569,218 @@ def test_create_if_absent_preloads_and_drains_notes_identity_reencode(lake_world
     assert isinstance(lake_world.store.rows[PATH]['transcript_segments'], bytes)
     drain.assert_called_once()
     assert drain.call_args.args == (UID, CID)
+
+
+@pytest.mark.parametrize('writer', ['upsert', 'persist'])
+@pytest.mark.parametrize('state', ['present', 'absent', 'shredded', 'outage'])
+def test_processing_owners_preload_existing_transcript(lake_world, monkeypatch, writer, state):
+    doc = pointer_doc(lake_world)
+    doc.update(status='processing', has_transcript_corrections=True, discarded=False)
+    client = DreamFirestore()
+    client.rows[PATH] = deepcopy(doc)
+    payload = dict(doc, status='completed')
+    monkeypatch.setattr(db, 'db', client)
+    monkeypatch.setattr(db, '_sync_conversation_search_index', lambda *args: None)
+    monkeypatch.setattr(db, 'stop_quiet_check_for_conversation', lambda *args, **kwargs: None)
+    if state != 'present':
+        failure = {
+            'absent': lake.LakeObjectAbsent,
+            'shredded': space_keys.SpaceKeyDestroyed,
+            'outage': lake.LakeFetchError,
+        }[state]
+        monkeypatch.setattr(lake, 'get_space_object', Mock(side_effect=failure('synthetic')))
+    fn = db.upsert_conversation_with_lifecycle if writer == 'upsert' else db.persist_processing_result_with_lifecycle
+    operation = lambda: inspect.unwrap(fn)(UID, deepcopy(payload))
+    if state == 'outage':
+        with pytest.raises(pointer.TranscriptPointerFetchError):
+            operation()
+    elif state != 'present' and writer == 'upsert':
+        with pytest.raises((pointer.TranscriptBlobAbsent, pointer.TranscriptShredded)):
+            operation()
+    else:
+        result = operation()
+        if writer == 'persist':
+            assert result is (state == 'present')
+    if state == 'present':
+        assert lake_world.calls['get'] == 1
+    else:
+        assert client.rows[PATH] == doc
+
+
+def test_level_migration_keeps_lake_envelope_without_fetch(lake_world, monkeypatch):
+    doc = pointer_doc(lake_world)
+    ref = lake_world.store.collection('users').document(UID).collection('conversations').document(CID)
+    snapshot = ref.get()
+    snapshot.reference, snapshot.id = ref, CID
+    monkeypatch.setattr(lake_world.store, 'get_all', lambda *args, **kwargs: [snapshot])
+    # No photos in this transcript-only case; any batch update is a test failure.
+    monkeypatch.setattr(
+        lake_world.store,
+        'batch',
+        lambda: SimpleNamespace(update=Mock(side_effect=AssertionError('unexpected photo write')), commit=Mock()),
+        raising=False,
+    )
+    original = StrictFirestoreDocument.collection
+
+    def collection(document, name):
+        if name == 'photos':
+            return SimpleNamespace(select=lambda fields: SimpleNamespace(stream=lambda: iter(())))
+        return original(document, name)
+
+    monkeypatch.setattr(StrictFirestoreDocument, 'collection', collection)
+    monkeypatch.setattr(db, 'db', lake_world.store)
+    monkeypatch.setattr(db, '_sync_conversation_search_index', lambda *args: None)
+    db.migrate_conversations_level_batch(UID, [CID], 'enhanced')
+    assert lake_world.store.rows[PATH]['transcript_segments'] == doc['transcript_segments']
+    assert lake_world.store.rows[PATH]['data_protection_level'] == 'enhanced'
+    assert lake_world.calls == {'get': 0, 'put': 1}
+
+
+@pytest.mark.parametrize('state', ['present', 'absent', 'shredded', 'outage'])
+def test_final_pass_transaction_preloads(lake_world, monkeypatch, state):
+    pointer_doc(lake_world)
+    original = StrictFirestoreDocument.get
+
+    def get(ref, *args, **kwargs):
+        snapshot = original(ref, *args, **kwargs)
+        snapshot.update_time = NOW
+        return snapshot
+
+    monkeypatch.setattr(StrictFirestoreDocument, 'get', get)
+    monkeypatch.setattr(db, 'authoritative_for', lambda uid: True)
+    monkeypatch.setattr(pointer, 'offload_inline_transcript', lambda *args, **kwargs: True)
+    if state != 'present':
+        failure = {
+            'absent': lake.LakeObjectAbsent,
+            'shredded': space_keys.SpaceKeyDestroyed,
+            'outage': lake.LakeFetchError,
+        }[state]
+        monkeypatch.setattr(lake, 'get_space_object', Mock(side_effect=failure('synthetic')))
+    candidate = TranscriptSegment(**dict(speech()[0], id='candidate', speaker_id=1, is_user=False))
+    operation = lambda: db.promote_final_pass_if_current(
+        UID, CID, [candidate], expected_updated_at=NOW, clock_offset=0, firestore_client=lake_world.store
+    )
+    if state == 'outage':
+        with pytest.raises(pointer.TranscriptPointerFetchError):
+            operation()
+    else:
+        assert operation() is (state == 'present')
+    if state == 'present':
+        assert lake_world.calls['get'] == 1
+
+
+@pytest.mark.parametrize('state', ['present', 'absent', 'shredded', 'outage'])
+def test_smart_merge_transaction_preloads_both_rows(lake_world, monkeypatch, state):
+    pointer_doc(lake_world)
+    donor = db.encode_conversation_for_write(UID, {'id': 'donor', 'transcript_segments': speech(21000)})
+    donor['status'] = 'completed'
+    lake_world.store.rows[('users', UID, 'conversations', 'donor')] = donor
+    pointer.clear_memo()
+    monkeypatch.setattr(smart_merge, 'smart_merge_flatten_enabled', lambda: False)
+    if state != 'present':
+        failure = {
+            'absent': lake.LakeObjectAbsent,
+            'shredded': space_keys.SpaceKeyDestroyed,
+            'outage': lake.LakeFetchError,
+        }[state]
+        monkeypatch.setattr(lake, 'get_space_object', Mock(side_effect=failure('synthetic')))
+    operation = lambda: smart_merge.absorb_conversation(
+        UID,
+        CID,
+        'donor',
+        expected_revision=0,
+        plan=lambda *args: ('synthetic_stop', None, None, None),
+        firestore_client=lake_world.store,
+    )
+    if state == 'outage':
+        with pytest.raises(pointer.TranscriptPointerFetchError):
+            operation()
+    else:
+        result = operation()
+        assert result.outcome == 'rejected'
+        assert result.reason == ('synthetic_stop' if state == 'present' else 'conversation_not_eligible')
+    if state == 'present':
+        assert lake_world.calls['get'] == 2
+
+
+@pytest.mark.parametrize('state', ['present', 'absent', 'shredded', 'outage'])
+def test_privacy_scrub_transaction_resolves_pointer_but_writes_inline(lake_world, monkeypatch, state):
+    segments = speech()
+    segments[0]['recurring_voice_id'] = 'expired'
+    doc = pointer_doc(lake_world, segments)
+    store = DreamFirestore()
+    store.rows[PATH] = deepcopy(doc)
+    if state != 'present':
+        failure = {
+            'absent': lake.LakeObjectAbsent,
+            'shredded': space_keys.SpaceKeyDestroyed,
+            'outage': lake.LakeFetchError,
+        }[state]
+        monkeypatch.setattr(lake, 'get_space_object', Mock(side_effect=failure('synthetic')))
+    if state == 'outage':
+        with pytest.raises(pointer.TranscriptPointerFetchError):
+            recurring_voice_privacy.scrub_transcripts(UID, firestore_client=store)
+    else:
+        recurring_voice_privacy.scrub_transcripts(UID, firestore_client=store)
+    if state == 'present':
+        raw = store.rows[PATH]['transcript_segments']
+        assert isinstance(raw, bytes)
+        assert 'recurring_voice_id' not in pointer.decode_stored_transcript(UID, raw, True)[0]
+        assert lake_world.calls['get'] == 1
+    else:
+        assert store.rows[PATH] == doc
+
+
+@pytest.mark.parametrize('state', ['present', 'absent', 'shredded', 'outage'])
+def test_legacy_review_undo_preloads_pointer_field_states(lake_world, monkeypatch, state):
+    before = encode()
+    after = db.encode_conversation_for_write(UID, {'id': CID, 'transcript_segments': speech(21000)})
+    after.update(data_protection_level='standard', status='completed', has_transcript_corrections=True)
+    lake_world.store.rows[PATH] = after
+    change = ReviewChange(change_id='legacy-change', kind='other', title='Synthetic', created_at=NOW)
+    journal = {
+        'change': change.model_dump(mode='python'),
+        'created_at': NOW,
+        'edit_key': 'legacy-key',
+        'edits': [
+            {
+                'collection': 'conversations',
+                'document_id': CID,
+                'before': {'transcript_segments': {'present': True, 'value': before['transcript_segments']}},
+                'after': {'transcript_segments': {'present': True, 'value': after['transcript_segments']}},
+            }
+        ],
+    }
+    lake_world.store.rows[('users', UID, 'review_changes', review_store.safe_id('legacy-change'))] = (
+        review_store.encode_doc(UID, journal)
+    )
+    lake_world.store.rows[('users', UID, 'transcript_corrections', CID)] = review_store.encode_doc(UID, {'source': []})
+    pointer.clear_memo()
+    monkeypatch.setattr(review_store, 'get_firestore_client', lambda: lake_world.store)
+    monkeypatch.setattr(review_changes, 'sync_conversations', lambda *args, **kwargs: None)
+    monkeypatch.setattr(review_changes, 'record_undo', lambda *args: None)
+    if state != 'present':
+        failure = {
+            'absent': lake.LakeObjectAbsent,
+            'shredded': space_keys.SpaceKeyDestroyed,
+            'outage': lake.LakeFetchError,
+        }[state]
+        monkeypatch.setattr(lake, 'get_space_object', Mock(side_effect=failure('synthetic')))
+    operation = lambda: review_changes.set_undone(UID, 'legacy-change', True, now=NOW)
+    if state == 'outage':
+        with pytest.raises(pointer.TranscriptPointerFetchError):
+            operation()
+    elif state != 'present':
+        with pytest.raises(review_store.ReviewConflict):
+            operation()
+    else:
+        assert operation().undone
+        assert lake_world.calls['get'] == 2
+
+
+def test_explicit_document_identity_wins_over_payload_identity(lake_world):
+    encoded = db._prepare_conversation_for_write(
+        {'id': 'payload-alias', 'transcript_segments': speech()}, UID, 'standard', conversation_id=CID
+    )
+    assert f'/transcript/{CID}/' in encoded['transcript_segments']['key']
+    assert lake_world.calls['put'] == 1

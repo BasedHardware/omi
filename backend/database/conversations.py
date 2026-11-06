@@ -408,7 +408,7 @@ def _prepare_conversation_for_write(
         protect_segments(data['transcript_segments'], uid)
         data['transcript_segments'] = transcript_pointer.offload_or_inline(
             uid,
-            data.get('id') or conversation_id,
+            conversation_id or data.get('id'),
             data['transcript_segments'],
             lambda value: _protect_json_value(value, uid, level),
         )

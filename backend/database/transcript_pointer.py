@@ -129,11 +129,16 @@ def resolve_pointer(uid: str, pointer: Mapping) -> list:
     ref = _ref(uid, pointer)
     key = _memo_key(uid, ref)
     memo = _memo()
-    if key not in memo.decoded:
+    try:
+        value = memo.decoded[key]
+    except KeyError:
         if _client.in_transaction_body():
             raise TranscriptPointerUnloaded(uid, pointer)
         preload_pointer(uid, pointer)
-    value = memo.decoded[key]
+        try:
+            value = memo.decoded[key]
+        except KeyError:
+            raise TranscriptPointerFetchError('Transcript preload expired before use') from None
     if isinstance(value, Exception):
         # Cached failures must not accumulate caller tracebacks/plaintext frames.
         raise type(value)(str(value)) from None
@@ -169,9 +174,9 @@ def offload_or_inline(uid, conversation_id, segments: list, protect: Callable) -
         return inline
     memo = _memo()
     key = uid, conversation_id, digest
-    if key in memo.uploaded:
+    try:
         ref = memo.uploaded[key]
-    else:
+    except KeyError:
         ref = object_lake.put_space_object(uid, 'transcript', conversation_id, plaintext, consent=_consent_stamp(uid))
         memo.uploaded[key] = ref
     memo.decoded[_memo_key(uid, ref)] = copy.deepcopy(segments)
