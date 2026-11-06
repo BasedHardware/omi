@@ -688,6 +688,8 @@ def delete_canonical_memory_vectors_by_ids(uid: str, observed: List[tuple]) -> i
         )
     if not clauses:
         return 0
+    if LegalHoldActive is None or LegalHoldAuthorityUnavailable is None or DestructiveOperationInProgress is None:
+        raise RuntimeError('destructive authority exceptions are unavailable')
     # Stale-index cleanup runs on read paths. It must fence against deletion and
     # legal holds, but it must not claim the exclusive account gate: a claim here
     # makes every concurrent user delete fail with 409 account_gate_busy, and a
