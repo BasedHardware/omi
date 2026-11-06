@@ -212,7 +212,7 @@ The temporary configuration references this worktree's rules/index files, binds 
 | root | `scripts/pr-preflight --suggest` | PASS; final draft cites INV-TASK-2 and declares Failure-Class: none |
 | root | `scripts/pr-preflight --pr-body-file /tmp/a2a-pr-body.md --metadata-only` | 4 checks passed; full unqualified commands above also passed |
 
-Every implementation commit passed the pinned staged Black formatter. A whole-change formatter check passed 29 files before the final goal fixture/import adjustment; those two changed files also passed the same formatter. A final 30-file check is pending before handoff.
+Every implementation commit passed the pinned staged Black formatter. Final whole-change check: `scripts/backend-python-format --check <all 30 added/modified Python paths from git diff 73d5a4a01ccd225083e998c99157e98e5b4c524c HEAD>` passed; 30 files would be left unchanged. The exact manifest is the Python subset of the file list above.
 
 ### Full contract still in flight
 
@@ -252,7 +252,9 @@ The full run found `test_people_generation_inventory.py` failing 1 test / passin
 
 The concrete proposed change is only four hash values in `backend/docs/people-generation-writers.json`. No People code, generation bump, guard, negative proof or inventory entry changes. An AST comparison against the A1 base proves each complete function is identical after removing only the new conditional task-fence/nullcontext wrapper. Every inner People writer fingerprint is already unchanged. The strict People-generation suite passed in the full run, and A1's People emulator conformance passed in the latest 110-case matrix. A candidate copy of the four-hash update produces an empty inventory delta.
 
-This JSON file is outside the brief's section-2 edit list. The user's instruction to stay strictly inside those boundaries requires explicit scope authorization before applying it. The proposed patch is prepared but has not been applied:
+This JSON file is outside the brief's section-2 edit list. The user's instruction to stay strictly inside those boundaries requires explicit scope authorization before applying it. The proposed patch is prepared but has not been applied. The same concrete scope request is recorded as [ANX event:ev_8f1d7e1501b1208a27f74774b1d8cc1c](https://anx.scalingforever.com/o/david-zhang/w/omi/r/event:ev_8f1d7e1501b1208a27f74774b1d8cc1c), with a bounded answer waiter armed. No answer is assumed.
+
+Prepared patch:
 
 ```diff
 --- a/backend/docs/people-generation-writers.json
