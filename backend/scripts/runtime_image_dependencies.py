@@ -42,6 +42,9 @@ MODULE_DISTRIBUTIONS: dict[str, str | None] = {
     "google": None,
     "google.cloud": None,
     "google.cloud.exceptions": "google-cloud-core",
+    # The admin API client ships inside google-cloud-firestore; suffix-stripping
+    # would otherwise normalize firestore_admin_v1 to a nonexistent distribution.
+    "google.cloud.firestore_admin_v1": "google-cloud-firestore",
     "google.oauth2": "google-auth",
     "google.protobuf": "protobuf",
     "google.rpc": "googleapis-common-protos",
