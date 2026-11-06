@@ -115,7 +115,7 @@ def test_completion_stamp_failure_keeps_successful_recovery_and_unusable_memo(la
     fallback = Mock()
     monkeypatch.setattr(episode_attach_memo, 'record_fallback', fallback)
     monkeypatch.setattr(
-        episode_attach_memo.transcript_pointer,
+        episode_attach_memo,
         'run_preloaded_transactional',
         Mock(side_effect=TimeoutError('stamp unavailable')),
     )
