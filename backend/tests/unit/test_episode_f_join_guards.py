@@ -94,6 +94,13 @@ def test_legacy_marker_without_predecessor_key_can_use_a_retained_member(store):
         {'status': None},
         {'status': 'failed'},
         {'deferred': True},
+        {'processing_deferred': True, 'deferred': False, 'status': 'completed'},
+        {'processing_deferred': None},
+        {'processing_deferred': 'false'},
+        {'processing_deferred': 0},
+        {'processing_deferred': ''},
+        {'processing_deferred': []},
+        {'processing_deferred': {}},
         {'processing_state': 'local_pending'},
         {'terminal_no_derived_effects': True},
         {'client_processing': {'state': 'pending'}},
@@ -112,6 +119,9 @@ def test_visibility_is_rechecked_at_settle_and_unknown_keeps_join_without_jev(st
     store.rows[('users', UID, 'conversations', 'c1')].update(patch)
     asked = []
     episode = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert (
+        f_join.previous_transcript(UID, episode, 'c2', episode['pending_boundary']['c2'], _c(store, minutes=13)) == ''
+    )
     result = f_join.settle(
         UID,
         episode,

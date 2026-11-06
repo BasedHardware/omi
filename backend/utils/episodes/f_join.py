@@ -216,7 +216,7 @@ def _may_feed_llm(uid: str, row: Mapping[str, Any]) -> bool:
         return False
     if row.get('is_locked') is not False or row.get('discarded') is not False:
         return False
-    if any(row.get(key, False) is not False for key in ('deleted', 'deferred')):
+    if any(row.get(key, False) is not False for key in ('deleted', 'deferred', 'processing_deferred')):
         return False
     if row.get('status') not in {'completed', 'processing', 'in_progress'}:
         return False
