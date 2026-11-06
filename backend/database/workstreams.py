@@ -659,6 +659,8 @@ class FirestoreWorkstreams:
             self.commit_context.after_commit(callback)
         elif self.transaction is None:
             callback()
+        else:
+            raise RuntimeError('task post-commit effects require a SpaceStore commit context')
 
     def _transaction_write(self, transaction, operation, ref, *args, **kwargs):
         self._touch()
@@ -666,6 +668,8 @@ class FirestoreWorkstreams:
 
     def _apply_transaction(self, fn, transaction, *, task_writes=False):
         if self.transaction is not None:
+            if task_writes and self.commit_context is None:
+                raise RuntimeError('task writes require a SpaceStore commit context')
             return getattr(fn, 'to_wrap', fn)(self.transaction)
         with self._fence() if task_writes else nullcontext():
             return fn(transaction)

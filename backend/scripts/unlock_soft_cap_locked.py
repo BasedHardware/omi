@@ -18,6 +18,10 @@ Usage:
     # The UIDs file should contain one UID per line (blank lines and # comments ignored).
 """
 
+from contextlib import nullcontext
+
+from database.action_item_fence import fenced_action_item_commit
+
 import argparse
 import logging
 import sys
@@ -78,11 +82,13 @@ def unlock_collection(db: Any, uid: str, collection_name: str) -> int:
         batch.update(doc.reference, {'is_locked': False})
         count += 1
         if count % 499 == 0:
-            batch.commit()
+            with fenced_action_item_commit(uid) if collection_name == 'action_items' else nullcontext():
+                batch.commit()
             batch = db.batch()
 
     if count % 499 != 0:
-        batch.commit()
+        with fenced_action_item_commit(uid) if collection_name == 'action_items' else nullcontext():
+            batch.commit()
 
     return count
 

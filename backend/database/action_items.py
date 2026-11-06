@@ -16,6 +16,7 @@ import json
 from typing import Iterator
 from database.ports.action_items import (
     ActionItemDraft,
+    ActionItemTransactionLimitError,
     ActionItemEntity,
     TaskRelationshipRule,
     TaskRelationshipConflictError,
@@ -1305,7 +1306,8 @@ class FirestoreActionItems:
         self.client = firestore_client if firestore_client is not None else get_firestore_client()
         self.transaction = transaction
         self.commit_context: Any = None
-        self._effects = []
+        # Only an internally owned runner may collect and drain effects.
+        self._effects: list | None = None
 
     def _read(self, ref):
         return ref.get(transaction=self.transaction) if self.transaction is not None else ref.get()
@@ -1318,8 +1320,18 @@ class FirestoreActionItems:
             self.commit_context.after_commit(callback)
         elif self.transaction is None:
             callback()
-        else:
+        elif self._effects is not None:
             self._effects.append(callback)
+        else:
+            raise RuntimeError('task post-commit effects require a SpaceStore commit context')
+
+    def _check_bulk_transaction_budget(self, count: int) -> None:
+        if self.transaction is not None:
+            staged = len(getattr(self.transaction, '_write_pbs', ()))
+            if staged + count > 500:
+                raise ActionItemTransactionLimitError(
+                    f'atomic task operation needs {count} writes with {staged} already staged (limit 500)'
+                )
 
     def _transaction_write(self, transaction, operation, ref, *args, **kwargs):
         self._touch()
@@ -1653,6 +1665,7 @@ class FirestoreActionItems:
         '\n        Delete multiple action items by id, chunking into 500-op Firestore batches.\n\n        Skips per-id existence reads: batch.delete() is a no-op for missing\n        docs, and downstream vector + FCM cleanup are both idempotent for\n        unknown ids.\n        '
         if not action_item_ids:
             return []
+        self._check_bulk_transaction_budget(len(action_item_ids))
         user_ref = self.client.collection('users').document(uid)
         action_items_ref = user_ref.collection(action_items_collection)
         batch = self._batch()
@@ -1679,6 +1692,9 @@ class FirestoreActionItems:
             filter=FieldFilter('conversation_id', '==', conversation_id)
         )
         docs = self._stream(query)
+        if self.transaction is not None:
+            docs = list(docs)
+            self._check_bulk_transaction_budget(len(docs))
         batch = self._batch()
         count = 0
         total = 0
@@ -1862,6 +1878,7 @@ class FirestoreActionItems:
             @firestore.transactional
             def apply(transaction):
                 repo = FirestoreActionItems(self.space_id, firestore_client=self.client, transaction=transaction)
+                repo._effects = []
                 result = repo._mutation(
                     getattr(repo, method.__name__), operation, payload, mutation_id, *args, **kwargs
                 )
@@ -1924,6 +1941,7 @@ class FirestoreActionItems:
             @firestore.transactional
             def apply(transaction):
                 repo = FirestoreActionItems(self.space_id, firestore_client=self.client, transaction=transaction)
+                repo._effects = []
                 result = repo.update(
                     action_item_id,
                     patch,

@@ -1,6 +1,6 @@
 """Candidate integration outbox: claim, complete, list, redrive, and malformed dead-letter."""
 
-from database.action_item_fence import fenced_action_item_commit
+from database.action_item_fence import ActionItemCommitFence
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional, cast
 from uuid import uuid4
@@ -189,6 +189,7 @@ def claim_candidate_integration_dispatch(
     outbox_ref = _outbox_ref(uid, candidate_id, firestore_client=client)
     control_ref = _control_ref(uid, firestore_client=client)
     transaction = client.transaction()
+    fence = ActionItemCommitFence(uid)
 
     @firestore.transactional
     def apply(write_transaction) -> _ClaimApply:
@@ -269,6 +270,9 @@ def claim_candidate_integration_dispatch(
                         'external_task_id': external_id,
                     },
                 )
+                # The task and outbox writes are now staged; acquire only for
+                # this committing branch. Keep the ticket across SDK retries.
+                fence.before_commit()
                 return _ClaimApply(exported_task_id=task_id if isinstance(task_id, str) else None)
             write_transaction.update(outbox_ref, _in_doubt_dead_letter_patch(claim_time))
             return _ClaimApply()
@@ -305,8 +309,12 @@ def claim_candidate_integration_dispatch(
         )
         return _ClaimApply(lease_token=lease_token)
 
-    with fenced_action_item_commit(uid):
+    committed = False
+    try:
         applied = apply(transaction)
+        committed = True
+    finally:
+        fence.after_commit(committed)
     if applied.exported_task_id is not None:
         bump_action_items_list_version(uid)
         dream_dirty.notify(uid, [('action_items', applied.exported_task_id)])

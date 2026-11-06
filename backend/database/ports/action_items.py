@@ -9,6 +9,10 @@ from pydantic import BaseModel, ConfigDict
 from .base import Page
 
 
+class ActionItemTransactionLimitError(ValueError):
+    """An atomic task operation would exceed the adapter's transaction budget."""
+
+
 class TaskRelationshipConflictError(ValueError):
     pass
 
