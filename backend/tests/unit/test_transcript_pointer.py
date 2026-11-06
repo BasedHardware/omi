@@ -94,6 +94,7 @@ def test_round_trip_single_field_and_path(lake_world):
     pointer.clear_memo()
     assert conversations_db.decode_transcript_segments_verified(UID, doc['transcript_segments'], True) == speech()
     assert lake_world.calls == {'get': 1, 'put': 1}
+    assert not pointer._memo().resolved  # ordinary readers do not retain attempt bookkeeping
 
 
 @pytest.mark.parametrize('level', ['standard', 'enhanced'])
