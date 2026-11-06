@@ -36,6 +36,7 @@ class CaptureProvider extends CaptureController {
     super.captureWedgeMonitor,
     super.calendarGapMonitor,
     super.mobileStandardBatch,
+    super.excludeSpeaker,
     LocalSegmentStore? localSegmentStore,
   }) : localSegmentStore = localSegmentStore ?? LocalSegmentStore.disabled() {
     addListener(_persistLiveSegments);

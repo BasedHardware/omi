@@ -66,7 +66,7 @@ FIELD_SITES = {
         ('ProjectionStore.complete.commit', 'projection_state', "'ready'", ('projection_state',)),
         ('ProjectionStore.complete.commit', 'state', "'ready'", ('conversation_id', 'created', 'state')),
         ('ProjectionStore.complete_partial.commit', 'state', "'ready'", ('conversation_id', 'created', 'state')),
-        ('ProjectionStore.hold_for_quarantine.commit', 'projection_state', "'quarantine_held'", ('projection_state',)),
+        ('ProjectionStore.hold_for_quarantine.commit', 'projection_state', "'ready'", ('projection_state',)),
         (
             'ProjectionStore.mark_enrichment.commit',
             'state',
@@ -127,7 +127,8 @@ FIELD_SITES = {
                 'projection_release_attempts',
                 'projection_state',
             ),
-        )
+        ),
+        ('ProjectionReleaseStore.release.commit', 'projection_state', "'ready'", ('projection_state',)),
     ],
     'database/batch_pipeline_projection_session.py': [
         ('ProjectionSession.persist', 'projection_state', "'pending'", ('projection_state',)),
@@ -214,6 +215,12 @@ FIELD_SITES = {
             'state',
             "'prepared'",
             ('plan_digest', 'prepared_at', 'privacy_generation', 'state', 'token'),
+        ),
+        (
+            'expire_held_in_transaction',
+            'state',
+            "'dead'",
+            ('dead_letter_reason', 'held_expired_at', 'merge_pending', 'state'),
         ),
     ],
     'database/batch_pipeline_recovery.py': [
@@ -374,6 +381,12 @@ FIELD_SITES = {
             ('resolution_reason', 'status', 'updated_at'),
         ),
         (
+            'claim_candidate_integration_dispatch.apply',
+            'status',
+            "'suppressed'",
+            ('resolution_reason', 'status', 'updated_at'),
+        ),
+        (
             'complete_candidate_integration_dispatch.apply',
             'status',
             "'completed'",
@@ -417,6 +430,12 @@ FIELD_SITES = {
             'status',
             "'dead_letter'",
             ('dead_letter_reason', 'last_error_text', 'lease_token', 'status', 'updated_at'),
+        ),
+        (
+            'note_candidate_integration_provider_attempt.apply',
+            'status',
+            "'suppressed'",
+            ('resolution_reason', 'status', 'updated_at'),
         ),
     ],
     'database/candidates.py': [
@@ -609,6 +628,46 @@ FIELD_SITES = {
                 'status',
             ),
         ),
+        (
+            '_complete_server_batch_capture_txn',
+            'home_transcription_deadline_at',
+            'now + timedelta(seconds=home_transcription_deadline_seconds())',
+            ('home_transcription_deadline_at', 'home_transcription_pending_at', 'relevance_decision', 'status'),
+        ),
+        (
+            '_complete_server_batch_capture_txn',
+            'home_transcription_pending_at',
+            'now',
+            ('home_transcription_deadline_at', 'home_transcription_pending_at', 'relevance_decision', 'status'),
+        ),
+        # Zero-preview server-batch transaction: job terminal, conversation
+        # terminal/relevance update, and the relevance input snapshot.
+        (
+            '_complete_server_batch_capture_txn',
+            'status',
+            "'completed'",
+            (
+                'completed_at',
+                'fanout_completed_at',
+                'fanout_key',
+                'fanout_lease_epoch',
+                'fanout_status',
+                'finalization_outcome',
+                'last_failure_code',
+                'lease_expires_at',
+                'reconcile_after_at',
+                'status',
+                'terminal_outcome',
+                'updated_at',
+            ),
+        ),
+        (
+            '_complete_server_batch_capture_txn',
+            'status',
+            "'completed'",
+            ('home_transcription_deadline_at', 'home_transcription_pending_at', 'relevance_decision', 'status'),
+        ),
+        ('_complete_server_batch_capture_txn', 'status', "'completed'", ('status',)),
         (
             '_create_or_get_finalization_intent_txn',
             'finalization_status',
@@ -1107,7 +1166,11 @@ FIELD_SITES = {
     ],
     'database/conversations.py': [
         ('claim_conversation_status._claim', 'status', 'claimed_status.value', ('status',)),
+        ('claim_conversation_status_in_txn', 'status', 'claimed_status', ('status',)),
+        ('claim_conversation_status_in_txn', 'terminal_family', 'terminal_family', ('terminal_family',)),
+        ('claim_conversation_status_in_txn', 'terminal_family_at', 'terminal_family_at', ('terminal_family_at',)),
         ('get_conversations_finished_after', 'status', 'status', ('finished_after', 'status')),
+        ('persist_processing_result_with_lifecycle._persist', 'finalization_status', 'None', ('finalization_status',)),
         (
             'persist_processing_result_with_lifecycle._persist',
             'record_audio_partial',
@@ -1667,6 +1730,7 @@ FIELD_SITES = {
         ),
     ],
     'database/record_audio.py': [
+        ('abandon_record_upload_session.commit', 'record_upload_sessions', 'sessions', ('record_upload_sessions',)),
         (
             'mark_record_upload_failed.commit',
             'record_audio_closed',
@@ -1680,6 +1744,8 @@ FIELD_SITES = {
             ('record_audio_closed', 'record_upload_failed', 'record_upload_revision'),
         ),
         ('seal_record_audio.commit', 'record_audio_closed', 'True', ('record_audio_closed',)),
+        ('seal_record_audio.commit', 'record_seal_refused_at', 'None', ('record_seal_refused_at',)),
+        ('seal_record_audio.commit', 'record_seal_refused_at', 'time.time()', ('record_seal_refused_at',)),
         (
             'set_record_upload_pending.commit',
             'record_audio_closed',
@@ -1732,6 +1798,9 @@ FIELD_SITES = {
         )
     ],
     'database/redis_db.py': [('set_migration_status', 'status', 'status', ('status',))],
+    'database/referral_campaign.py': [
+        ('claim_months.apply', 'status', "'active'", ('campaign_id', 'ends_at', 'starts_at', 'status'))
+    ],
     'database/review_memory_hygiene.py': [
         (
             'record_change.apply',
@@ -2446,6 +2515,12 @@ FIELD_SITES = {
             ('available_at', 'failure', 'lease_until', 'retry_started_at', 'state', 'token'),
         ),
         (
+            'Scheduler.requeue_quarantined_in_transaction',
+            'state',
+            "'ready'",
+            ('available_at', 'held_requeued_at', 'lease_until', 'merge_pending', 'state', 'token'),
+        ),
+        (
             'Scheduler.restore_audio_in_transaction',
             'state',
             "'ready'",
@@ -2508,6 +2583,22 @@ FIELD_SITES = {
             ),
         )
     ],
+    'utils/conversations/late_meeting_notes.py': [
+        (
+            'refresh_notes_after_evidence',
+            'status',
+            "'completed'",
+            (
+                '_notes_evidence_reprocess',
+                '_notes_identity',
+                'id',
+                'status',
+                'structured',
+                'sync_content_revision',
+                'transcript_segments',
+            ),
+        ),
+    ],
     'utils/conversations/minimum_derived.py': [
         ('waive_short_clip_summary_debt', 'summary_due_at', 'None', ('summary_due_at',))
     ],
@@ -2531,6 +2622,13 @@ FIELD_SITES = {
         ('prepare', 'summary_due_at', "data['summary_first_pending_at'] + deadline_seconds()", ('summary_due_at',)),
         ('prepare', 'summary_first_pending_at', 'current', ('summary_first_pending_at',)),
         ('prepare', 'summary_first_pending_at', 'current', ('summary_first_pending_at',)),
+        ('rearm_on_revision_change', 'summary_due_at', 'None', ('summary_blocked_reason', 'summary_due_at')),
+        (
+            'rearm_on_revision_change',
+            'summary_due_at',
+            'current + deadline_seconds()',
+            ('summary_blocked_reason', 'summary_due_at', 'summary_empty_failures', 'summary_empty_rearms'),
+        ),
     ],
     'utils/conversations/transcript_for_llm.py': [
         ('render_cluster_transcript', 'status', "'resolved' if resolution_available else 'unavailable'", ('status',))
@@ -2793,19 +2891,7 @@ FIELD_SITES = {
     ],
     'utils/episodes/home_read.py': [
         ('project_episode', 'status', "'completed'", ('status',)),
-        (
-            'project_episode',
-            'status',
-            "status; literal aliases=[('status', ('failed', 'processing'))]",
-            (
-                'emoji',
-                'finished_at',
-                'id',
-                'started_at',
-                'status',
-                'title',
-            ),
-        ),
+        ('project_episode', 'status', 'status', ('emoji', 'finished_at', 'id', 'started_at', 'status', 'title')),
     ],
     'utils/episodes/service.py': [
         ('_close', 'status', "'dropped'", ('status',)),
@@ -3540,6 +3626,14 @@ FIELD_SITES = {
         ('PusherRecordBarrier.__init__', 'record_upload_failed', 'False', ('record_upload_failed',)),
         ('PusherRecordBarrier.hold_recording', 'record_upload_failed', 'True', ('record_upload_failed',)),
     ],
+    'utils/referral_campaign.py': [
+        (
+            'effective_subscription_payload',
+            'status',
+            "'active'",
+            ('cancel_at_period_end', 'current_period_end', 'current_period_start', 'plan', 'status'),
+        )
+    ],
     'utils/referrals.py': [
         (
             'referral_claim_patch',
@@ -3840,4 +3934,93 @@ FIELD_SITES = {
     ],
     'utils/workers/consumer.py': [('http_response', 'status', 'result.outcome.value', ('reason', 'status'))],
     'utils/workers/retry.py': [('retry_response', 'status', "'retry'", ('reason', 'status'))],
+    'utils/conversations/transcribing_hold.py': [
+        ('project', 'status', "'completed' if status == 'failed' else status", ('status', 'structured'))
+    ],
+}
+
+# Phase 3 baseline reviewed against origin/main 148bf4c1c57073dba4ec9a750415f2c72f5adb87.
+# Strict in both directions: never regenerate during a test. "owner" identifies
+# the intended owner module; it does not claim the legacy writes are unified.
+# Unclassified sites remain visible pending the typed-outcome redesign.
+KNOWN_TERMINAL_WRITERS = {
+    'conversation': {
+        ('database/conversation_finalization_jobs.py', '_apply_snapshot_bound_projection'): 'unclassified',
+        ('database/conversation_recorded_time.py', 'create_if_absent.create'): 'unclassified',
+        ('database/conversations.py', 'release_share_email_recipients'): 'unclassified',
+        ('database/review_transcript_changes.py', 'record_change.build.write'): 'unclassified',
+        ('database/review_transcript_changes.py', 'set_undone.build.write'): 'unclassified',
+        ('database/screen_frames.py', 'bump_conversation_screen_frames_revision'): 'unclassified',
+        ('database/screen_frames.py', 'mark_conversation_screen_frames_adjudicated'): 'unclassified',
+        ('database/stuck_backfill.py', '_restore_txn'): 'unclassified',
+        ('utils/sync/assignment.py', 'assign_in_transaction'): 'unclassified',
+        (
+            'database/conversation_finalization_jobs.py',
+            '_abandon_byok_finalization_job_txn',
+        ): 'known_extra_writer: byok_abandon',
+        ('database/conversation_finalization_jobs.py', '_complete_server_batch_capture_txn'): 'unclassified',
+        (
+            'database/conversation_finalization_jobs.py',
+            '_dead_letter_finalization_job',
+        ): 'known_extra_writer: dead_letter',
+        (
+            'database/conversation_finalization_jobs.py',
+            '_terminalize_exhausted_requeued_job_txn',
+        ): 'known_extra_writer: dead_letter',
+        ('database/conversation_merge_jobs.py', 'finish_recovery.commit'): 'unclassified',
+        (
+            'database/conversation_processing_recovery.py',
+            '_complete_orphan_conversation_txn',
+        ): 'known_extra_writer: orphan',
+        (
+            'database/conversation_processing_recovery.py',
+            '_complete_unstampable_orphan_conversation_txn',
+        ): 'known_extra_writer: orphan',
+        (
+            'database/conversation_terminal_title.py',
+            'dead_letter_conversation_updates',
+        ): 'known_extra_writer: dead_letter',
+        ('database/conversation_terminal_title.py', 'fit_document_limit'): 'known_extra_writer: oversized',
+        ('database/conversation_terminal_title.py', 'recover_deferred_processing_failure_txn'): 'unclassified',
+        ('database/conversations.py', 'claim_conversation_status._claim'): 'owner',
+        ('database/conversations.py', 'claim_conversation_status_in_txn'): 'owner',
+        ('database/conversations.py', 'persist_processing_result_with_lifecycle._persist'): 'unclassified',
+        ('database/conversations.py', 'transition_conversation_status'): 'unclassified',
+        ('database/conversations.py', 'upsert_conversation_with_lifecycle._write_processing_result'): 'unclassified',
+        (
+            'database/oversized_conversation_terminal.py',
+            '_complete_oversized_in_progress_conversation_txn',
+        ): 'known_extra_writer: oversized',
+        ('database/stuck_backfill.py', '_close_txn'): 'unclassified',
+        ('utils/conversations/late_meeting_notes.py', 'refresh_notes_after_evidence'): 'unclassified',
+        ('utils/conversations/lifecycle.py', 'complete'): 'owner',
+        ('utils/conversations/lifecycle.py', 'fail_and_discard_processing'): 'owner',
+        ('utils/conversations/lifecycle.py', 'transition'): 'owner',
+        ('utils/conversations/process_conversation.py', '_store_budget_waiting'): 'unclassified',
+        ('utils/conversations/process_conversation.py', 'process_conversation'): 'unclassified',
+        ('scripts/staging/replay.py', 'StagingFirestoreSeeder.seed_capture'): 'unclassified',
+        ('utils/dream_canary.py', 'seed'): 'unclassified',
+        ('utils/imports/limitless.py', 'process_limitless_import'): 'unclassified',
+        ('utils/imports/transcript_files.py', 'build_imported_conversation'): 'unclassified',
+        ('utils/sync/late_audio.py', 'ingest_late_transcript'): 'unclassified',
+        ('utils/sync/minimal_redrive.py', '_title_new_conversation'): 'unclassified',
+    },
+    'finalization': {
+        ('database/conversation_finalization_jobs.py', '_abandon_byok_finalization_job_txn'): 'owner',
+        ('database/conversation_finalization_jobs.py', '_claim_finalization_fanout_txn'): 'owner',
+        ('database/conversation_finalization_jobs.py', '_claim_finalization_replay_txn'): 'owner',
+        ('database/conversation_finalization_jobs.py', '_complete_server_batch_capture_txn'): 'owner',
+        ('database/conversation_finalization_jobs.py', '_dead_letter_finalization_job'): 'owner',
+        ('database/conversation_finalization_jobs.py', '_fenced_finalization_update'): 'owner',
+        ('database/conversation_finalization_jobs.py', '_mark_finalization_completed_txn'): 'owner',
+        ('database/conversation_finalization_jobs.py', '_mark_finalization_fenced_txn'): 'owner',
+        (
+            'database/conversation_finalization_jobs.py',
+            '_record_meeting_receipt_txn',
+        ): 'known_extra_writer: meeting_receipt',
+        ('database/conversation_finalization_jobs.py', '_terminalize_exhausted_requeued_job_txn'): 'owner',
+        ('database/conversation_merge_jobs.py', 'begin_recovery.commit'): 'unclassified',
+        ('database/conversation_merge_jobs.py', 'finish.commit'): 'unclassified',
+        ('database/conversation_merge_jobs.py', 'finish_recovery.commit'): 'unclassified',
+    },
 }

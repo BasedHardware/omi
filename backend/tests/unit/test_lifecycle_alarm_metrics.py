@@ -226,6 +226,28 @@ def test_first_failed_sample_remains_never_observed_and_calls_are_throttled():
     assert registry.get_sample_value('synthetic_phase_observed_at_seconds') == 0
 
 
+def test_repair_stock_is_capped_and_excludes_settled_receipts():
+    client = Client(
+        sync_reprocess_outbox=entries(
+            [
+                *[{'summary_repair': True, 'due_at': 0} for _ in range(120)],
+                {'summary_repair': True, 'due_at': None, 'dormant': True},
+                {'summary_repair': False, 'due_at': 0},
+            ]
+        )
+    )
+    assert queries.enrichment_summary_repair(client) == {'all': (0, 101, True)}
+    client = Client(
+        sync_reprocess_outbox=entries(
+            [
+                {'summary_repair': True, 'due_at': None, 'dormant': True},
+                {'summary_repair': False, 'due_at': 0},
+            ]
+        )
+    )
+    assert queries.enrichment_summary_repair(client) == {'all': (0, 0, False)}
+
+
 @pytest.mark.parametrize(
     'rows, expected',
     [
@@ -265,3 +287,17 @@ def test_record_pending_head_lever_matches_the_full_page_with_one_document_read(
     if expected is not None:
         assert head == {'record_pending': expected}
     assert [read.cap for read in head_client.reads] == [1]
+
+
+def test_record_pending_head_lever_cohorts_per_replica(monkeypatch):
+    from config.firestore_read_levers import lever_enabled
+
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"lifecycle_record_pending_head":50}')
+    seen = set()
+    for i in range(40):
+        monkeypatch.setenv('HOSTNAME', f'backend-integration-{i}')
+        seen.add(lever_enabled('lifecycle_record_pending_head', queries._replica_key('batch_pipeline_prod')))
+    assert seen == {True, False}  # a percentage splits replicas instead of the whole fleet
+    monkeypatch.delenv('HOSTNAME')
+    monkeypatch.delenv('K_REVISION', raising=False)
+    assert queries._replica_key('batch_pipeline_prod') == 'batch_pipeline_prod'

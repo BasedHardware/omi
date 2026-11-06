@@ -231,6 +231,19 @@ def _recover_locked_content_if_request(uid: str, request: Request | None) -> Non
         recover_locked_content(uid)
 
 
+def get_current_user_uid_readonly(
+    authorization: str = Header(None),
+    request: Request = None,  # pyright: ignore[reportArgumentType]  # FastAPI injects Request
+    _read_scope: Any = Depends(request_read_scope),
+) -> str:
+    """Verify owner and security fences without device/platform/recovery writes."""
+    uid = get_current_user_uid_for_deletion_status(authorization=authorization, _read_scope=_read_scope)
+    enforce_account_deletion_http_access(uid)
+    _enforce_cutover_http_if_request(uid, request)
+    validate_byok_request(uid)
+    return uid
+
+
 def get_current_user_uid(
     authorization: str = Header(None),
     x_app_platform: str = Header(None, alias='X-App-Platform'),

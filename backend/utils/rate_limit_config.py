@@ -78,7 +78,8 @@ ACTION_ITEMS_LIST_HOT_CLIENT_MAX: int = _hot_client_max()
 _BOOST_EXEMPT_DEFAULT = (
     "storefront:plans,import:upload,action_items:list,action_items:list_hot_client,static_map:get,"
     "dev:memories,dev:memories_write_burst,dev:conversations,dev:conversations_from_segments,"
-    "mcp:oauth_url_client,mcp:oauth_url_client_global,screen_task:gate,screen_task:gate_daily,users:budget_choice"
+    "mcp:oauth_url_client,mcp:oauth_url_client_global,screen_task:gate,screen_task:gate_daily,users:budget_choice,"
+    "conversations:task-presence"
 )
 _RATE_LIMIT_BOOST_EXEMPT_RAW: str = os.getenv("RATE_LIMIT_BOOST_EXEMPT", _BOOST_EXEMPT_DEFAULT)
 
@@ -213,6 +214,9 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     "goals:extract": (30, 3600),
     # Search
     "conversations:search": (60, 3600),
+    # Batches only mounted rows (at most 100 IDs); canonical membership is
+    # short-lived/version-cached and contains no task content.
+    "conversations:task-presence": (120, 3600),
     # Expensive background ops
     "knowledge_graph:rebuild": (2, 3600),
     # Return-only SSOT extract for desktop onboarding / local graph writers

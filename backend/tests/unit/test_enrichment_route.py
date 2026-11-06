@@ -141,6 +141,112 @@ def test_lifecycle_fence_settles_as_superseded(rows):
     assert KEY not in rows[0]
 
 
+def test_action_item_revision_race_retries_and_keeps_the_row(rows, monkeypatch):
+    # synceff 2026-11-05: a sync write moved the revision during the run, so the action-item refresh refused
+    # stale extraction. That race is a retry that keeps the row and its wake, not error/unexpected.
+    from database.action_item_refresh import RefreshRevisionChanged
+
+    monkeypatch.delenv('ENRICHMENT_REVISION_RACE_RETRY_ENABLED', raising=False)
+    result = _deliver(rows, Mock(side_effect=RefreshRevisionChanged()))
+    assert (result.outcome, result.reason) == ('retry', 'persistence_fenced')
+    assert KEY in rows[0]
+
+
+def test_action_item_revision_race_kill_switch_restores_the_failure(rows, monkeypatch):
+    from database.action_item_refresh import RefreshRevisionChanged
+
+    monkeypatch.setenv('ENRICHMENT_REVISION_RACE_RETRY_ENABLED', 'false')
+    with pytest.raises(RefreshRevisionChanged) as raised:
+        _deliver(rows, Mock(side_effect=RefreshRevisionChanged()))
+    assert isinstance(raised.value, ValueError) and str(raised.value) == 'refresh conversation revision changed'
+
+
+def test_enrichment_delivery_activates_early_abort_only_during_its_callback(rows):
+    from utils.enrichment import early_abort
+
+    seen = []
+    result = _deliver(rows, Mock(side_effect=lambda *_: seen.append(early_abort.ACTIVE.get())))
+    assert (result.outcome, result.reason) == ('done', 'processed')
+    assert seen == [True] and early_abort.ACTIVE.get() is False
+
+
+def _fenced_run(rows, monkeypatch, *, row, resolved=None, resolve_error=None, first_summary=True):
+    # synceff 2026-11-05: a merge redirected the conversation while the run's LLM steps ran, so the persist fenced.
+    from database import conversations as conversations_db
+    from utils.enrichment import custody
+    from utils.enrichment.callback import SyncConversationPersistenceFenced
+
+    if first_summary:
+        monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
+        monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
+    reads, resolves, transfers = [], [], []
+
+    def resolve(uid, cid, **_):
+        resolves.append(cid)
+        if resolve_error is not None:
+            raise resolve_error
+        return resolved
+
+    monkeypatch.setattr(
+        conversations_db, 'get_conversation_raw_snapshot', lambda uid, cid, **kw: reads.append(cid) or row
+    )
+    monkeypatch.setattr(conversations_db, 'resolve_sync_conversation_redirect', resolve)
+    monkeypatch.setattr(custody, 'transfer_redirect', lambda *args, **kwargs: transfers.append(args[3]))
+    result = _deliver(rows, Mock(side_effect=SyncConversationPersistenceFenced('synthetic')))
+    return result, reads, resolves, transfers
+
+
+REDIRECTED = {'deleted': True, 'sync_merged_into': 'survivor'}
+
+
+def test_fenced_run_redirected_mid_run_transfers_custody_to_the_survivor(rows, monkeypatch):
+    monkeypatch.delenv('ENRICHMENT_FENCE_REDIRECT_TRANSFER_ENABLED', raising=False)
+    result, reads, resolves, transfers = _fenced_run(rows, monkeypatch, row=REDIRECTED, resolved='survivor')
+    assert (result.outcome, result.reason) == ('stale', 'redirected')
+    assert reads == ['c'] and resolves == ['c'] and transfers == ['survivor']
+
+
+@pytest.mark.parametrize('resolved,error', [(None, None), ('c', None), (None, RuntimeError('synthetic outage'))])
+def test_unresolved_redirect_defers_and_keeps_the_row(rows, monkeypatch, resolved, error):
+    result, _reads, _resolves, transfers = _fenced_run(
+        rows, monkeypatch, row=REDIRECTED, resolved=resolved, resolve_error=error
+    )
+    assert result.outcome == 'deferred' and transfers == []
+    assert KEY in rows[0]
+
+
+def test_transient_fault_in_the_fence_redirect_probe_keeps_the_quick_retry(rows, monkeypatch):
+    from google.api_core.exceptions import ServiceUnavailable
+
+    result, _reads, _resolves, transfers = _fenced_run(
+        rows, monkeypatch, row=REDIRECTED, resolve_error=ServiceUnavailable('synthetic blip')
+    )
+    assert (result.outcome, result.reason) == ('retry', 'dependency_warming')
+    assert transfers == [] and KEY in rows[0]
+
+
+@pytest.mark.parametrize('row', [{'sync_content_revision': 4}, {'deleted': True}, None])
+def test_live_or_plainly_deleted_fenced_row_still_settles_superseded(rows, monkeypatch, row):
+    result, reads, resolves, transfers = _fenced_run(rows, monkeypatch, row=row, resolved='survivor')
+    assert (result.outcome, result.reason) == ('discarded', 'superseded')
+    assert reads == ['c'] and resolves == [] and transfers == []
+
+
+def test_fence_redirect_kill_switch_keeps_the_superseded_settle(rows, monkeypatch):
+    monkeypatch.setenv('ENRICHMENT_FENCE_REDIRECT_TRANSFER_ENABLED', 'false')
+    result, reads, resolves, transfers = _fenced_run(rows, monkeypatch, row=REDIRECTED, resolved='survivor')
+    assert (result.outcome, result.reason) == ('discarded', 'superseded')
+    assert reads == [] and resolves == [] and transfers == []
+
+
+def test_fence_without_custody_context_reads_nothing(rows, monkeypatch):
+    result, reads, resolves, transfers = _fenced_run(
+        rows, monkeypatch, row=REDIRECTED, resolved='survivor', first_summary=False
+    )
+    assert (result.outcome, result.reason) == ('discarded', 'superseded')
+    assert reads == [] and resolves == [] and transfers == []
+
+
 def test_open_live_target_defers_with_a_new_wake(rows, monkeypatch):
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
@@ -283,15 +389,15 @@ def test_stale_and_busy_wakes_are_consumed(rows, client):
 
 
 def test_new_rows_bind_to_the_enrichment_queue_only_when_routed(rows, monkeypatch):
-    assert reprocess._dispatch_binding()['handler'].endswith('/v2/sync-jobs/run')
+    assert reprocess.dispatch_binding()['handler'].endswith('/v2/sync-jobs/run')
     monkeypatch.setenv('ENRICHMENT_ROUTE', 'enrichment_queue')
     monkeypatch.setenv('ENRICHMENT_TASKS_QUEUE', 'enrichment')
     monkeypatch.setenv('ENRICHMENT_TASKS_HANDLER_URL', 'https://workers.invalid/v2/enrichment/run')
-    binding = reprocess._dispatch_binding()
+    binding = reprocess.dispatch_binding()
     assert binding['queue'] == 'enrichment' and binding['handler'].endswith('/v2/enrichment/run')
     assert reprocess.valid_dispatch_binding(binding)
     monkeypatch.delenv('ENRICHMENT_TASKS_QUEUE')
-    assert reprocess._dispatch_binding()['handler'].endswith('/v2/sync-jobs/run')  # incomplete: fall back, counted
+    assert reprocess.dispatch_binding()['handler'].endswith('/v2/sync-jobs/run')  # incomplete: fall back, counted
 
 
 @pytest.fixture
@@ -713,6 +819,28 @@ def test_transient_fault_in_the_empty_output_strike_releases_the_lease(rows, mon
     assert rows[0][KEY]['lease_until'] == 0 and rows[0][KEY]['task_token'] == token
 
 
+def test_empty_output_owner_race_defers_without_burning_callback_attempts(rows, monkeypatch):
+    import database._client as firestore_client
+    import database.summary_processing as summary_processing
+
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
+    monkeypatch.setattr(firestore_client, 'get_firestore_client', Mock())
+    monkeypatch.setattr(
+        summary_processing,
+        'record_empty_failure',
+        Mock(return_value=summary_processing.EmptyFailureOutcome.OWNER_MISMATCH),
+    )
+    rows[0][KEY].update(summary_empty_failures=2)
+    token = rows[0][KEY]['task_token']
+    result = _deliver(rows, lambda *_: SimpleNamespace(structured={'title': 'Synthetic'}))
+    assert (result.outcome, result.reason) == ('deferred', 'not_due')
+    pending = rows[0][KEY]
+    assert pending['deferred_reason'] == 'summary_owner_changed'
+    assert pending['summary_empty_failures'] == 2
+    assert pending['task_token'] != token and pending['lease_until'] == 0
+
+
 def test_transient_fault_on_the_effects_only_path_releases_the_lease(rows, monkeypatch):
     """Luna r1: the effects-only branch runs before the callback block."""
     from utils.conversations import lazy_enrichment
@@ -849,3 +977,78 @@ async def test_legacy_sync_handler_acks_an_oversized_conversation_with_200(rows,
     redelivery = await batch_pipeline.enrichment_response(payload)
     assert redelivery.status_code == 200
     assert json.loads(redelivery.body) == {'status': 'stale'}
+
+
+# synceff 2026-11-05 (lead2 71492d): the per-row repeat-supersede streak and its histogram.
+
+
+def _streak_count(le):
+    from prometheus_client import REGISTRY
+
+    return REGISTRY.get_sample_value('omi_enrichment_supersede_streak_bucket', {'le': le}) or 0.0
+
+
+def _superseded_with_a_newer_mark(rows, *, now):
+    from utils.enrichment.callback import SyncConversationPersistenceFenced
+
+    def fenced(uid, conversation_id, language):
+        reprocess.mark(uid, conversation_id, language, now=now - 100)  # the append that moved the revision
+        raise SyncConversationPersistenceFenced('synthetic')
+
+    return _deliver(rows, fenced, now=now)
+
+
+def test_consecutive_supersedes_build_a_bounded_streak_and_processed_clears_it(rows):
+    from database.outbox_firestore import SUPERSEDE_STREAK_FIELD
+
+    before = _streak_count('2.0') - _streak_count('1.0')
+    assert _superseded_with_a_newer_mark(rows, now=10_000).reason == 'superseded'
+    assert rows[0][KEY][SUPERSEDE_STREAK_FIELD] == 1
+    assert _superseded_with_a_newer_mark(rows, now=20_000).reason == 'superseded'
+    assert rows[0][KEY][SUPERSEDE_STREAK_FIELD] == 2
+    assert _streak_count('2.0') - _streak_count('1.0') == before + 1  # one observation of streak 2
+    assert _deliver(rows, Mock(return_value=None), now=30_000).reason == 'processed'
+    assert SUPERSEDE_STREAK_FIELD not in (rows[0].get(KEY) or {})
+
+
+def test_revision_race_retry_counts_toward_the_streak(rows):
+    from database.action_item_refresh import RefreshRevisionChanged
+    from database.outbox_firestore import SUPERSEDE_STREAK_FIELD
+
+    result = _deliver(rows, Mock(side_effect=RefreshRevisionChanged()))
+    assert (result.outcome, result.reason) == ('retry', 'persistence_fenced')
+    assert rows[0][KEY][SUPERSEDE_STREAK_FIELD] == 1
+
+
+def test_streak_is_capped(rows):
+    from database.outbox_firestore import SUPERSEDE_STREAK_CAP, SUPERSEDE_STREAK_FIELD
+
+    rows[0][KEY][SUPERSEDE_STREAK_FIELD] = SUPERSEDE_STREAK_CAP
+    _superseded_with_a_newer_mark(rows, now=10_000)
+    assert rows[0][KEY][SUPERSEDE_STREAK_FIELD] == SUPERSEDE_STREAK_CAP
+
+
+def test_enrichment_early_abort_and_streak_metrics_pass_the_gmp_sync_allowlist():
+    # synceff 2026-11-05: backend-integration has the sidecar, but its keep list hid these two families.
+    import re
+    from pathlib import Path
+
+    import yaml
+
+    config = yaml.safe_load((Path(__file__).parents[2] / 'deploy' / 'cloud_run_gmp_sync.yaml').read_text())
+    rules = config['spec']['endpoints'][0]['metricRelabeling']
+    keep = [row['regex'] for row in rules if row['action'] == 'keep' and row['sourceLabels'] == ['__name__']]
+    for name in (
+        'omi_enrichment_early_abort_total',
+        'omi_enrichment_supersede_streak_bucket',
+        'omi_enrichment_supersede_streak_count',
+        'omi_enrichment_supersede_streak_sum',
+    ):
+        assert any(re.fullmatch(pattern, name) for pattern in keep), name
+    for name in (
+        'omi_enrichment_supersede_streak_other',
+        'enrichment_early_abort_total',
+        'omi_enrichment_early_abort_total_extra',
+        'omi_enrichment_early_abort',
+    ):
+        assert not any(re.fullmatch(pattern, name) for pattern in keep), name

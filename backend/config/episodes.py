@@ -44,7 +44,8 @@ import os
 from config.refactor_modes import default_on as modes_default_on
 from config.refactor_switches import default_on as rollout_default_on
 
-from config.jev_decisions import percentage, uid_bucket
+from config.app_channel import APP_CHANNELS, app_channel
+from config.jev_decisions import JEV_CLIENT_TIMEOUT_SECONDS, percentage, uid_bucket
 
 EPISODES_ENABLED_ENV = 'EPISODES_ENABLED'
 EPISODES_PERCENT_ENV = 'EPISODES_PERCENT'
@@ -55,12 +56,12 @@ EPISODE_HARD_CAP_ACROSS_CONVERSATIONS_ENV = 'EPISODE_HARD_CAP_ACROSS_CONVERSATIO
 HOME_HIDE_BELOW_FLOOR_ROWS_ENV = 'HOME_HIDE_BELOW_FLOOR_ROWS'
 HOME_HIDE_EPISODE_MEMBERS_ENV = 'HOME_HIDE_EPISODE_MEMBERS'
 HOME_NEUTRAL_MINIMUM_TITLES_ENV = 'HOME_NEUTRAL_MINIMUM_TITLES'
+HOME_TRANSCRIPTION_PRESENTATION_GATE_ENV = 'HOME_TRANSCRIPTION_PRESENTATION_GATE'
+HOME_STEP_PROJECTION_ENV = 'HOME_STEP_PROJECTION'
 EPISODE_CARRY_ON_SESSION_END_ENV = 'EPISODE_CARRY_ON_SESSION_END'
 EPISODE_MOMENT_OUTPUT_VALIDATOR_ENV = 'EPISODE_MOMENT_OUTPUT_VALIDATOR'
 EPISODE_COMPOSER_ENV = 'EPISODE_COMPOSER'
 EPISODE_COMPOSE_SETTLE_ENABLED_ENV = 'EPISODE_COMPOSE_SETTLE_ENABLED'
-APP_CHANNEL_HEADER = 'X-Omi-App-Channel'
-APP_CHANNELS = frozenset({'beta', 'store'})
 _DEFAULT_CLIENT_CHANNELS = frozenset({'beta'})
 _COHORT_SALT = 'episodes-v1'
 _ON = frozenset({'true', 'on', '1', 'yes'})
@@ -83,12 +84,6 @@ def episodes_enabled_for(uid: str) -> bool:
     if uid in allowlist:
         return True
     return uid_bucket(uid, _COHORT_SALT) < percentage(EPISODES_PERCENT_ENV, default=100.0)
-
-
-def app_channel(raw: str | None) -> str:
-    """The request's ``X-Omi-App-Channel`` as a bounded label: ``beta``, ``store`` or ``unknown``."""
-    value = (raw or '').strip().lower()
-    return value if value in APP_CHANNELS else 'unknown'
 
 
 def episodes_client_channels() -> frozenset[str]:
@@ -123,6 +118,25 @@ def home_hide_episode_members_enabled() -> bool:
 def home_neutral_minimum_titles_enabled() -> bool:
     """Replace provisional transcript-echo Home titles without changing storage."""
     return modes_default_on(HOME_NEUTRAL_MINIMUM_TITLES_ENV)
+
+
+def home_step_projection_enabled() -> bool:
+    """Default-on Home row contract field on list reads; off omits ``home_step``."""
+    return modes_default_on(HOME_STEP_PROJECTION_ENV)
+
+
+def home_transcription_presentation_gate_enabled() -> bool:
+    """Default-on batch transcription presentation; off restores stored status/title."""
+    return modes_default_on(HOME_TRANSCRIPTION_PRESENTATION_GATE_ENV)
+
+
+def home_transcription_deadline_seconds() -> int:
+    """New captures get 2h (batch timeliness SLA); invalid or nonpositive values use 2h."""
+    try:
+        seconds = int(os.getenv('HOME_TRANSCRIPTION_DEADLINE_SECONDS', '7200'))
+    except ValueError:
+        return 7200
+    return seconds if seconds > 0 else 7200
 
 
 def home_hide_below_floor_rows_enabled() -> bool:
@@ -224,6 +238,39 @@ COMPOSER_MIN_SECTION_SECONDS = 60
 MOVED_ON_THRESHOLD = 0.2
 JEV_LANE = 'episode_boundary'
 JEV_TIMEOUT_SECONDS = 2.5
+
+# --------------------------------------------------------------------------- episode join variant F
+
+# Variant F settles an uncertain recorded-time join (a live owner 2 to 30 minutes after its last speech)
+# with Jev over the previous member's transcript and the new speech, no summary or time features.
+# The cohort is the Omi flag store rule ``episode_f_join`` (``utils/episodes/f_join.py``): ramp and
+# kill it at runtime with ``scripts/omi_flags.py``. Without a rule the env ``EPISODE_F_JOIN_PERCENT``
+# (default 0) buckets uids. ``EPISODE_F_JOIN_ENABLED`` (unset is on; off/false/0/no) overrides both.
+EPISODE_F_JOIN_ENABLED_ENV = 'EPISODE_F_JOIN_ENABLED'
+EPISODE_F_JOIN_PERCENT_ENV = 'EPISODE_F_JOIN_PERCENT'
+F_JOIN_FLAG_KEY = 'episode_f_join'
+F_JOIN_VARIANT = 'f'
+F_JOIN_JEV_LANE = 'episode_boundary_f'
+F_JOIN_PREVIOUS_CHARS = 12_000
+F_JOIN_NEW_CHARS = 8_000
+F_JOIN_PEOPLE_READ_LIMIT = 8
+# The gateway's own provider deadline (JEV_GATEWAY_REQUEST_MS, 2.5 s) is authoritative; the client
+# waits just past it so a slow provider surfaces as a gateway timeout. One attempt, as today.
+F_JOIN_TIMEOUT_SECONDS = JEV_CLIENT_TIMEOUT_SECONDS
+F_JOIN_SALT = 'episode-f-join-v1'
+
+
+def f_join_enabled() -> bool:
+    """Unset is on; an explicit on-value stays on; anything else (including a typo) turns F off."""
+    raw = os.getenv(EPISODE_F_JOIN_ENABLED_ENV, '').strip().lower()
+    return not raw or raw in _ON
+
+
+def f_join_env_admitted(uid: str) -> bool:
+    """The env fallback cohort: a stable salted uid bucket below the percent; invalid admits nobody."""
+    return bool(uid) and uid_bucket(uid, F_JOIN_SALT) < percentage(EPISODE_F_JOIN_PERCENT_ENV, default=0.0)
+
+
 # Without a Jev answer, a source change or a gap this long still closes.
 
 # --------------------------------------------------------------------------- compact state budget

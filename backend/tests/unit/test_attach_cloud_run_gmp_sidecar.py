@@ -1387,6 +1387,7 @@ def test_sync_scrape_retains_exporter_and_direct_sentinel_consumers():
                 return False
         return True
 
+    assert kept('privacy_negative_lookup_total')
     # The existing dev/prod sync exporter is the authoritative bridge consumer.
     for env in ('dev', 'prod'):
         exporter = yaml.safe_load(
@@ -1400,6 +1401,15 @@ def test_sync_scrape_retains_exporter_and_direct_sentinel_consumers():
             assert kept(family + ('events_total' if family.endswith('_') else ''))
             if family.endswith('_'):
                 assert kept(family + 'duration_seconds_bucket')
+    assert kept('omi_batch_projection_drains_skipped_total')
+    assert kept('omi_batch_projection_claim_busy_backoffs_total')
+    assert kept('omi_batch_projection_privacy_blocked_stops_total')
+    assert kept('omi_batch_projection_privacy_backoffs_total')
+    assert kept('omi_batch_projection_privacy_row_changed_total')
+    assert kept('omi_batch_projection_privacy_resumes_attempted_total')
+    assert kept('omi_batch_projection_privacy_resumes_succeeded_total')
+    assert kept('omi_batch_projection_privacy_fallthroughs_total')
+    assert kept('omi_batch_projection_privacy_still_refused_total')
     # Direct GMP consumers: sentinel batch_metrics.py/completion_telemetry.py.
     # fleet_gate/david_gate use logs, durable state and native request_count.
     for name in (
@@ -1487,7 +1497,16 @@ def test_sync_scrape_retains_exporter_and_direct_sentinel_consumers():
     assert shared['spec']['endpoints'][0]['interval'] == '60s'
     assert shared['spec']['endpoints'][0]['metricRelabeling'][0]['regex'] == (
         'omi_.*|omi_listen_server_batch_suppression_total|conversation_llm_input_dedupe_.*'
+        '|privacy_(checks|check_calls|check_reads|decision_mismatch|shadow_checks|memo_requests|memo_ineligible|ttl_cache|negative_lookup)_total'
     )
+    # The privacy shadow kill switch reads these from Cloud Run (cl2-infracost 2026-11-04).
+    for name in (
+        'privacy_decision_mismatch_total',
+        'privacy_shadow_checks_total',
+        'privacy_ttl_cache_total',
+        'privacy_negative_lookup_total',
+    ):
+        assert re.fullmatch(shared['spec']['endpoints'][0]['metricRelabeling'][0]['regex'], name)
     assert re.fullmatch(
         shared['spec']['endpoints'][0]['metricRelabeling'][0]['regex'], 'omi_listen_preview_batch_custody_total'
     )

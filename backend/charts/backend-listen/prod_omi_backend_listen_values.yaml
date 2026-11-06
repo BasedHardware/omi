@@ -100,6 +100,12 @@ envFrom:
 privateEnv: {}
 
 env:
+  - name: CONVERSATION_TERMINAL_FAMILY_MODE
+    value: "on"
+  - name: HOME_TRANSCRIPTION_PRESENTATION_GATE
+    value: "true"
+  - name: HOME_TRANSCRIPTION_DEADLINE_SECONDS
+    value: "7200"
   - name: LISTEN_PREVIEW_BATCH_CUSTODY_ENABLED
     value: "true"
   # Production retirement; false restores the old routes only after GPUs are ready.
@@ -133,6 +139,8 @@ env:
     value: "af,ar,az,be,bn,bs,ca,cy,eu,fa,gl,gu,he,hi,id,kk,kn,ko,mk,ml,mr,ms,no,pa,sq,sr,sw,ta,te,th,tl,tr,ur,vi,zh"
   - name: SERVER_BATCH_ONLY_AUTO_LANGUAGE_PERCENT
     value: "100"
+  - name: BATCH_HELD_DEAD_LETTER_ENABLED
+    value: "true"
   - name: BATCH_PIPELINE_ENABLED
     value: "true"
   - name: FIRST_SUMMARY_DEADLINE_ENABLED
@@ -249,7 +257,7 @@ env:
   - name: FIRESTORE_READ_LEDGER
     value: "1"
   - name: FIRESTORE_READ_LEVERS
-    value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":100,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0}'
+    value: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":5,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":0,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0}'
   - name: FSR_QUEUE_AGE_PUBLISHER
     value: "1"
   - name: FSR_QUEUE_AGE_LEASE_SECONDS
@@ -265,7 +273,7 @@ env:
   - name: FSR_USAGE_MONTH_TTL_SECONDS
     value: "60"
   - name: FSR_SUBSCRIPTION_TTL_SECONDS
-    value: "60"
+    value: "55"
   - name: FSR_SERVING_CONFIG_TTL_SECONDS
     value: "60"
   - name: ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS
@@ -293,6 +301,11 @@ env:
     value: "phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y"
   - name: ACTION_ITEM_REFRESH_PRESERVE_ENABLED
     value: "true"
+  - name: BATCH_FINAL_PASS_ENABLED
+    valueFrom:
+      configMapKeyRef:
+        name: prod-omi-backend-config
+        key: BATCH_FINAL_PASS_ENABLED
   - name: CONVERSATION_SMART_MERGE_FLATTEN_ENABLED
     value: "true"
   - name: SYNC_FINALIZE_TARGET_RECOVERY_ENABLED
@@ -399,6 +412,18 @@ env:
     value: "sync-tasks-invoker@based-hardware.iam.gserviceaccount.com"
   - name: LISTEN_FINALIZATION_TASKS_MAX_ATTEMPTS
     value: "5"
+  - name: BUCKET_OBJECT_LAKE
+    value: ""
+  - name: OBJECT_LAKE_KMS_KEY
+    value: ""
+  - name: OBJECT_LAKE_WRITE_ENABLED
+    value: "false"
+  - name: OBJECT_LAKE_WRITE_PERCENT
+    value: "0"
+  - name: OBJECT_LAKE_READ_ENABLED
+    value: "true"
+  - name: OBJECT_LAKE_INLINE_MAX_BYTES
+    value: "4096"
   - name: BUCKET_SCREEN_FRAMES
     value: "based-hardware-prod-screen-frames"
   - name: MEETING_NOTES_EVIDENCE_WAIT_SECONDS

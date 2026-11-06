@@ -2288,10 +2288,10 @@ class AppLocalizationsVi extends AppLocalizations {
   String get firmwareUsbWarning => 'Kết nối USB trong khi cập nhật có thể làm hỏng thiết bị của bạn.';
 
   @override
-  String get firmwareBatteryAbove15 => 'Pin trên 15%';
+  String get firmwareBatteryRequirement => 'Pin trên 30%';
 
   @override
-  String get firmwareEnsureBattery => 'Đảm bảo thiết bị của bạn có 15% pin.';
+  String get firmwareEnsureBattery => 'Đảm bảo thiết bị của bạn có 30% pin.';
 
   @override
   String get firmwareStableConnection => 'Kết nối ổn định';
@@ -10584,8 +10584,12 @@ class AppLocalizationsVi extends AppLocalizations {
       'Không tải được bản cập nhật và thiết bị không bị thay đổi. Hãy kiểm tra kết nối internet rồi thử lại.';
 
   @override
+  String get firmwareBatteryUnavailable =>
+      'Chưa có thông tin mức pin. Hãy đợi một lát và kết nối lại nếu tình trạng này vẫn tiếp diễn.';
+
+  @override
   String firmwareBatteryTooLow(int level) {
-    return 'Pin đang ở mức $level%. Hãy sạc thiết bị lên ít nhất 15% trước khi cập nhật.';
+    return 'Pin đang ở mức $level%. Hãy sạc thiết bị lên ít nhất 30% trước khi cập nhật.';
   }
 
   @override
@@ -13382,6 +13386,17 @@ class AppLocalizationsVi extends AppLocalizations {
   String get paywallTrialCancelNote => 'Hủy bất cứ lúc nào. Không phí, không phạt.';
 
   @override
+  String get paywallMonthlyFallbackTitle => 'Chưa sẵn sàng cho cả năm?';
+
+  @override
+  String paywallMonthlyFallbackTrialBody(int days, String price) {
+    return 'Hãy bắt đầu với gói tháng. Vẫn miễn phí $days ngày, sau đó $price mỗi tháng. Hủy bất cứ lúc nào.';
+  }
+
+  @override
+  String get paywallMonthlyFallbackTrialCta => 'Dùng thử gói tháng miễn phí';
+
+  @override
   String paywallTrialStarted(int days) {
     return 'Bản dùng thử miễn phí $days ngày của Omi Pro của bạn đã bắt đầu.';
   }
@@ -14808,6 +14823,19 @@ class AppLocalizationsVi extends AppLocalizations {
   String get episodeWritingNotes => 'Đang viết ghi chú…';
 
   @override
+  String get homeStepTranscribing => 'Đang chép lời…';
+
+  @override
+  String homeRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count bản ghi âm',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get episodeWritingNotesDetail => 'Đang hoàn tất bản chép trước. Bạn có thể rời trang này.';
 
   @override
@@ -15009,4 +15037,369 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get episodeFinishingUp => 'Đang hoàn tất…';
+
+  @override
+  String get buildAndShareApp => 'Xây dựng và chia sẻ ứng dụng tùy chỉnh của bạn';
+
+  @override
+  String get membersAndCounting => '8000+ thành viên và tiếp tục tăng.';
+
+  @override
+  String get privacyIntro =>
+      'Tại Omi, chúng tôi cam kết bảo vệ quyền riêng tư của bạn. Trang này cho phép bạn kiểm soát cách dữ liệu của bạn được lưu trữ và sử dụng.';
+
+  @override
+  String get dataProtectionDesc =>
+      'Dữ liệu của bạn được bảo mật mặc định với mã hóa mạnh. Xem lại cài đặt và các tùy chọn bảo mật trong tương lai bên dưới.';
+
+  @override
+  String get transcriptionConfig => 'Cấu hình nhà cung cấp STT';
+
+  @override
+  String get importDataConfig => 'Nhập dữ liệu từ các nguồn khác';
+
+  @override
+  String get understandingSubtitle => 'Số từ đã hiểu từ cuộc trò chuyện của bạn.';
+
+  @override
+  String get rememberingSubtitle => 'Sự kiện và chi tiết được ghi nhớ cho bạn.';
+
+  @override
+  String get debugLogsDesc => 'Giúp chẩn đoán các vấn đề';
+
+  @override
+  String get deleteKnowledgeGraphMessage =>
+      'Thao tác này sẽ xóa tất cả dữ liệu biểu đồ tri thức được tạo ra (nút và kết nối). Ký ức gốc của bạn sẽ vẫn an toàn. Biểu đồ sẽ được xây dựng lại theo thời gian hoặc khi có yêu cầu tiếp theo.';
+
+  @override
+  String get deleteKnowledgeGraphDesc => 'Xóa tất cả nút và kết nối';
+
+  @override
+  String get enhanceTranscriptAccuracyDesc =>
+      'Khi mô hình của chúng tôi được cải thiện, chúng tôi có thể cung cấp kết quả phiên âm tốt hơn cho bản ghi âm của bạn.';
+
+  @override
+  String get bestInClassTranscription => 'Phiên âm tốt nhất với cài đặt bằng không';
+
+  @override
+  String get optimizedForConversation => 'Được tối ưu hóa cho cuộc trò chuyện';
+
+  @override
+  String get highAccuracy => 'Độ chính xác cao';
+
+  @override
+  String get privacyFirst => 'Ưu tiên bảo mật';
+
+  @override
+  String get keepGoing => 'Tiếp tục, bạn đang làm rất tốt';
+
+  @override
+  String get personalGrowthJourney => 'Hành trình phát triển cá nhân của bạn với AI lắng nghe từng lời nói.';
+
+  @override
+  String get memoryAllowUse => 'Cho phép dùng';
+
+  @override
+  String get memoryDontUse => 'Không dùng';
+
+  @override
+  String get alwaysInContext => 'Luôn trong ngữ cảnh';
+
+  @override
+  String get firmwareBatteryAbove15 => 'Pin trên 15%';
+
+  @override
+  String get configureSttProvider => 'Cấu hình nhà cung cấp STT';
+
+  @override
+  String get clearAllNodesAndConnections => 'Xóa tất cả các nút và kết nối';
+
+  @override
+  String get welcomeToOmiDescription =>
+      'Chào mừng đến với Omi! Người bạn đồng hành AI của bạn đã sẵn sàng hỗ trợ bạn với các cuộc trò chuyện, nhiệm vụ và hơn thế nữa.';
+
+  @override
+  String get conversationsProcessedAutomatically => 'Các cuộc trò chuyện được xử lý tự động';
+
+  @override
+  String get getInsightsInstantly => 'Nhận thông tin chi tiết và tóm tắt ngay lập tức';
+
+  @override
+  String get dailyScoreDescription => 'Điểm số giúp bạn tập trung\ntốt hơn vào việc thực hiện.';
+
+  @override
+  String get startConversation => 'Bắt đầu cuộc trò chuyện và để phép màu bắt đầu';
+
+  @override
+  String get wearableAiCompanion => 'Trợ lý AI đeo được';
+
+  @override
+  String get organizeAndControlMemories => 'Tổ chức và kiểm soát ký ức của bạn';
+
+  @override
+  String get setAllMemoriesToPrivate => 'Đặt tất cả ký ức thành riêng tư';
+
+  @override
+  String get setAllMemoriesToPublic => 'Đặt tất cả ký ức thành công khai';
+
+  @override
+  String get selectPreferredLanguageForBestExperience => 'Chọn ngôn ngữ ưu tiên của bạn để có trải nghiệm Omi tốt nhất';
+
+  @override
+  String get enableFeaturesForBestExperience =>
+      'Bật các tính năng để có trải nghiệm Omi tốt nhất trên thiết bị của bạn.';
+
+  @override
+  String get deliveryTimeDescription => 'Khi nào nhận tóm tắt hàng ngày của bạn';
+
+  @override
+  String get configureSTTProvider => 'Cấu hình nhà cung cấp STT';
+
+  @override
+  String get setConversationEndDescription => 'Đặt khi nào cuộc trò chuyện tự động kết thúc';
+
+  @override
+  String get clearNodesDescription => 'Xóa tất cả các nút và kết nối';
+
+  @override
+  String get deleteKnowledgeGraphWarning =>
+      'Điều này sẽ xóa tất cả dữ liệu đồ thị tri thức dẫn xuất. Ký ức gốc của bạn vẫn an toàn.';
+
+  @override
+  String get createAndShareYourApp => 'Tạo và chia sẻ ứng dụng của bạn';
+
+  @override
+  String get e2eeDescription =>
+      'Mã hóa đầu cuối là tiêu chuẩn vàng cho quyền riêng tư. Khi được bật, dữ liệu của bạn được mã hóa trên thiết bị của bạn trước khi gửi đến máy chủ của chúng tôi. Điều này có nghĩa là không ai, kể cả Omi, có thể truy cập nội dung của bạn.';
+
+  @override
+  String get secureEncryptionDescription =>
+      'Dữ liệu của bạn được mã hóa bằng một khóa duy nhất cho bạn trên các máy chủ của chúng tôi, được lưu trữ trên Google Cloud. Điều này có nghĩa là nội dung thô của bạn không thể truy cập được bởi bất kỳ ai, bao gồm nhân viên Omi hoặc Google, trực tiếp từ cơ sở dữ liệu.';
+
+  @override
+  String get e2eeCardDescription =>
+      'Bật để bảo mật tối đa, nơi chỉ bạn mới có thể truy cập dữ liệu của mình. Nhấn để tìm hiểu thêm.';
+
+  @override
+  String get yourOmiUnleashed => 'Omi của bạn, được giải phóng. Trở nên unlimited cho khả năng vô tận.';
+
+  @override
+  String get privacyIntroText =>
+      'Tại Omi, chúng tôi rất coi trọng quyền riêng tư của bạn. Chúng tôi muốn minh bạch về dữ liệu thu thập và cách sử dụng. Đây là những gì bạn cần biết:';
+
+  @override
+  String get commitmentText =>
+      'Chúng tôi cam kết sử dụng dữ liệu thu thập chỉ để làm cho Omi trở thành sản phẩm tốt hơn cho bạn. Quyền riêng tư và sự tin tưởng của bạn là điều quan trọng nhất đối với chúng tôi.';
+
+  @override
+  String get thankYouText =>
+      'Cảm ơn bạn đã là người dùng quý giá của Omi. Nếu bạn có bất kỳ câu hỏi hoặc lo ngại nào, hãy liên hệ với chúng tôi tại team@basedhardware.com.';
+
+  @override
+  String get knowledgeGraphDeleteDescription =>
+      'Thao tác này sẽ xóa tất cả dữ liệu biểu đồ tri thức phái sinh (các nút và kết nối). Ký ức gốc của bạn sẽ vẫn an toàn. Biểu đồ sẽ được xây dựng lại theo thời gian hoặc khi có yêu cầu tiếp theo.';
+
+  @override
+  String get howPeopleWorks =>
+      'Sau khi tạo một người, bạn có thể đi đến bản ghi cuộc trò chuyện và gán các phân đoạn tương ứng cho họ, bằng cách đó Omi cũng sẽ có thể nhận dạng giọng nói của họ!';
+
+  @override
+  String get buildAndShareYourCustomApp => 'Xây dựng và chia sẻ ứng dụng tùy chỉnh của bạn';
+
+  @override
+  String get onboardingChooseYourPreference => 'Chọn sở thích của bạn';
+
+  @override
+  String get onboardingGrantRequiredAccess => 'Cấp quyền truy cập cần thiết';
+
+  @override
+  String get apiEnvironmentDescription => 'Chọn máy chủ để kết nối';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Cuộc gọi của bạn luôn riêng tư và an toàn';
+
+  @override
+  String get omisStorageDesc =>
+      'Khi Omi không kết nối với điện thoại, nó lưu trữ âm thanh cục bộ trong bộ nhớ tích hợp. Bạn sẽ không bao giờ mất bản ghi.';
+
+  @override
+  String get permissionsSetupDescription => 'Bật một vài quyền để Omi có thể phát huy hết khả năng.';
+
+  @override
+  String get architectSubtitle => 'AI nâng cao — hàng nghìn cuộc trò chuyện + tự động hóa tác nhân';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$current trên $total';
+  }
+
+  @override
+  String get newestFirst => 'Mới nhất trước';
+
+  @override
+  String get backgroundModeNote => 'Hiện chỉ hoạt động với thiết bị Omi và đang được cải thiện liên tục.';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return 'Không được ghi âm ($count)';
+  }
+
+  @override
+  String get speakerTagPromptSubtitle => 'Kiểm tra nhanh các giọng nói trong hai ngày qua';
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Bản chép âm đang chờ $count';
+  }
+
+  @override
+  String get captureRecoveryBanner => 'Omi không gửi âm thanh — chạm để kết nối lại';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Mặt dây chuyền đã mất kết nối với điện thoại này. Omi sẽ tự kết nối lại khi mặt dây chuyền bật và ở gần. Mọi thứ đã ghi trước đó vẫn an toàn.';
+
+  @override
+  String get capturePendantDisconnectedShort => 'Omi sẽ tự kết nối lại';
+
+  @override
+  String pinPersonSubtitle(String name) {
+    return 'Giữ $name và mong họ xuất hiện trong các cuộc trò chuyện của bạn';
+  }
+
+  @override
+  String get pinPersonHonestLine => 'Omi sẽ hỏi trước khi khớp các giọng nói gần giống nhau.';
+
+  @override
+  String speakerTagPromptHintConfirm(String name) {
+    return 'Chọn Có sẽ tăng độ tin cậy của $name.';
+  }
+
+  @override
+  String get localCopiesSection => 'Bản sao cục bộ';
+
+  @override
+  String get forYou => 'Dành Cho Bạn';
+
+  @override
+  String get stopThese => 'Dừng Loại Này';
+
+  @override
+  String get meetingActionItemsTitle => 'Việc cần làm';
+
+  @override
+  String get addToTasks => 'Thêm vào Công việc';
+
+  @override
+  String get showInTranscript => 'Hiển thị bản chép lời';
+
+  @override
+  String tentativeTaskDueDate(String date) {
+    return 'Hạn vào khoảng $date';
+  }
+
+  @override
+  String tentativeTaskDueDateSemantics(String date) {
+    return 'Hạn dự kiến $date';
+  }
+
+  @override
+  String get openTask => 'Mở công việc';
+
+  @override
+  String get completeTask => 'Hoàn thành công việc';
+
+  @override
+  String get reopenTask => 'Mở lại công việc';
+
+  @override
+  String get addingToTasks => 'Đang thêm vào Công việc';
+
+  @override
+  String get taskAddedToTasks => 'Đã tạo nhiệm vụ';
+
+  @override
+  String get completedStatus => 'Đã hoàn thành';
+
+  @override
+  String get notCompletedStatus => 'Đang chờ';
+
+  @override
+  String get referralAffiliate => 'Chương trình tiếp thị liên kết';
+
+  @override
+  String get referralCampaignTerms =>
+      'Bạn bè được giảm 10% thiết bị Omi. Lượt mua của 2 người bạn khác nhau đầu tiên mở khóa 2 tháng Pro, lượt mua của 3 người bạn khác nhau tiếp theo thêm 3 tháng. Tối đa 5 bạn và tổng cộng 5 tháng.';
+
+  @override
+  String referralMilestone(int months, int count, int target) {
+    return '$months tháng Pro · $count/$target lượt mua';
+  }
+
+  @override
+  String get referralClaim => 'Nhận thưởng';
+
+  @override
+  String referralClaimed(int months) {
+    return 'Đã nhận $months tháng Pro';
+  }
+
+  @override
+  String get referralRewardPending => 'Phần thưởng được giữ đến khi gói trả phí kết thúc.';
+
+  @override
+  String get referralCampaignTitle => 'Giới thiệu Omi. Nhận Pro miễn phí.';
+
+  @override
+  String get referralCampaignSubtitle => 'Họ được giảm 10% khi mua Omi. Bạn nhận tối đa 5 tháng Pro.';
+
+  @override
+  String get referralShareInvite => 'Chia sẻ lời mời';
+
+  @override
+  String get referralYourRewards => 'Phần thưởng của bạn';
+
+  @override
+  String get referralRewardFirstTitle => '2 tháng Pro';
+
+  @override
+  String get referralRewardFirstDetail => 'Khi 2 bạn bè mua Omi';
+
+  @override
+  String get referralRewardSecondTitle => 'Thêm 3 tháng';
+
+  @override
+  String get referralRewardSecondDetail => 'Khi thêm 3 bạn bè mua';
+
+  @override
+  String get referralClaimShort => 'Nhận';
+
+  @override
+  String get paymentDeclinedTitle => 'Thẻ của bạn đã bị từ chối';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return 'Cập nhật thẻ để dùng lại $plan';
+  }
+
+  @override
+  String get hasLinkedTasksLabel => 'Có nhiệm vụ được liên kết';
+
+  @override
+  String get hasTasksFilter => 'Có nhiệm vụ';
+
+  @override
+  String firmwareUpdateNotInstalledMessage(String version) {
+    return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
+  }
+
+  @override
+  String get firmwareUpdateUnconfirmedMessage =>
+      'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
+
+  @override
+  String get firmwareUpdateUnconfirmedTitle => 'Update Not Confirmed';
+
+  @override
+  String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
 }

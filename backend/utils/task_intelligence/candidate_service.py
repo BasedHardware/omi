@@ -4,6 +4,7 @@ import asyncio
 import logging
 from typing import Any, Optional, Protocol
 
+from config.explicit_reminders import enabled as reminders_enabled
 import database.action_items as action_items_db
 import database.candidate_integration_outbox as integration_outbox_db
 import database.candidates as candidates_db
@@ -379,6 +380,14 @@ def _sync_task_reminder(uid: str, task_id: str) -> None:
     """
     task = action_items_db.get_action_item(uid, task_id)
     if task is None:
+        return
+    if task.get('reminder_origin'):
+        if not reminders_enabled():
+            return
+    due = task.get('due') or {}
+    if task.get('reminder_origin') and due.get('kind') in {'date', 'none', 'unresolved'}:
+        # New all-day tasks own no notification intent. A null due_at is never
+        # converted into a scheduler time or a redundant cancellation message.
         return
     sync_action_item_reminder(
         user_id=uid,

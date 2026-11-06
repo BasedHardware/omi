@@ -16,6 +16,7 @@ from scripts.runtime_env_durable_dispatch_contracts import (  # noqa: E402
 )
 from scripts.runtime_env_parakeet_contract import validate_parakeet_admission_contract  # noqa: E402
 from scripts.runtime_env_capability_contracts import (
+    validate_batch_final_pass_hosts,
     validate_conversation_finalization_capabilities,
     validate_speaker_embedding_hosts,
     validate_voice_transcription_storage,
@@ -55,6 +56,7 @@ from scripts.runtime_env_validation.common import (
 )
 
 from scripts.runtime_env_validation.workflows import _validate_cloud_run_workflows
+from utils.pusher_storage_budget import MIN_STORAGE_PCM_BUDGET_MB
 
 
 def _canonical_memory_surfaces(env_config: ConfigDict) -> list[tuple[str, ConfigDict]]:
@@ -150,12 +152,36 @@ def _validate_gke(env_config: ConfigDict, *, strict_provisional: bool) -> list[V
                     errors.append(
                         ValidationError(f'gke/{service}', f'env {env_name} ConfigMap key {binding_key!r} is undeclared')
                     )
+        switch = (service_config.get('env') or {}).get('BATCH_FINAL_PASS_ENABLED', {})
+        if switch.get('config_map'):
+            # An explicit literal would override envFrom and defeat rollback.
+            binding = switch['config_map']
+            actual = actual_env.get('BATCH_FINAL_PASS_ENABLED')
+            if actual is not None and actual.get('valueFrom', {}).get('configMapKeyRef') != binding:
+                errors.append(
+                    ValidationError(f'gke/{service}', 'BATCH_FINAL_PASS_ENABLED must not override its ConfigMap')
+                )
     return errors
 
 
 def _validate_manifest_shape(env_config: ConfigDict, env: str) -> list[ValidationError]:
     errors = validate_retired_memory_manifest(env, env_config)
+    errors.extend(validate_batch_final_pass_hosts(env, env_config))
     errors.extend(_validate_redis_ports(env_config, env))
+    pusher = _as_config_dict((_as_config_dict(env_config.get('gke')) or {}).get('pusher')) or {}
+    value = _manifest_literal_env_value(pusher.get('env'), 'PUSHER_STORAGE_PCM_BUDGET_MB')
+    try:
+        valid = value is not None and (int(value) == 0 or int(value) >= MIN_STORAGE_PCM_BUDGET_MB)
+    except ValueError:
+        valid = False
+    if not valid:
+        errors.append(
+            ValidationError(
+                f'{env}/gke/pusher',
+                'PUSHER_STORAGE_PCM_BUDGET_MB must be 0 (off) or at least 27 MiB to admit a full socket window',
+            )
+        )
+
     errors.extend(
         ValidationError('sync_lineage_rollout', message) for message in validate_sync_lineage_rollout(env, env_config)
     )

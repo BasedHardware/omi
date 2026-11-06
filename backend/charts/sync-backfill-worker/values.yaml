@@ -6,6 +6,7 @@ serviceAccount:
   name: sync-backfill-worker
   gcpEmail: ""
 runtimeSecret: ""
+runtimeConfigMapName: prod-omi-backend-config
 worker:
   apiUrl: ""
   audience: ""

@@ -15,7 +15,7 @@ from typing import Callable, ParamSpec, TypeVar
 from prometheus_client import Counter, Gauge
 
 from database import record_audio as record_audio_db
-from utils.executors import ExecutorSaturatedError, record_barrier_executor, run_blocking
+from utils.executors import ExecutorSaturatedError, record_barrier_executor, run_blocking, track_executor_future
 from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
@@ -92,7 +92,7 @@ class _CloseAdmission:
 RECORD_BARRIER_FAILURES = Counter(
     'omi_pusher_record_barrier_failures_total', 'Record barrier metadata failures; audio upload continues', ['stage']
 )
-for _stage in ('begin', 'finish', 'seal', 'failure_marker', 'capacity'):
+for _stage in ('begin', 'finish', 'seal', 'failure_marker', 'capacity', 'abandon'):
     RECORD_BARRIER_FAILURES.labels(stage=_stage).inc(0)
 
 RECORD_SEAL_REFUSED = Counter(
@@ -222,6 +222,9 @@ class PusherRecordBarrier:
 
     def _close_failed(self, conversation_id: str, stage: str) -> bool:
         _record_failure(stage)
+        return self._retry_close(conversation_id)
+
+    def _retry_close(self, conversation_id: str) -> bool:
         attempts = min(self.close_failures.get(conversation_id, 0) + 1, 6)
         if not self.keep_close_pending and (
             attempts >= CLOSE_RETRY_BUDGET
@@ -261,6 +264,7 @@ class PusherRecordBarrier:
             raise
         future.add_done_callback(admission.completed)
         wrapped = asyncio.wrap_future(future)
+        track_executor_future(record_barrier_executor, wrapped)
         deadline = asyncio.get_running_loop().call_later(CLOSE_METADATA_DEADLINE_SECONDS, admission.abandon)
 
         def settled(done):
@@ -298,6 +302,10 @@ class PusherRecordBarrier:
             # Allocate before dispatch: registration responses can return in
             # the reverse order of producer minting.
             mint_order = registry.mint_order()
+            # Retain the exact candidate even if cancellation races a successful
+            # registration response. Abandon's transaction tolerates absent tokens.
+            self.upload_sessions[conversation_id] = token
+            registry.remember(self.uid, conversation_id, token, mint_order=mint_order)
             if await run_blocking(
                 record_barrier_executor,
                 record_audio_db.set_record_upload_pending,
@@ -307,8 +315,9 @@ class PusherRecordBarrier:
                 True,
                 producer=producer_identity(),
             ):
-                self.upload_sessions[conversation_id] = token
-                registry.remember(self.uid, conversation_id, token, mint_order=mint_order)
+                return
+            self.upload_sessions.pop(conversation_id, None)
+            registry.forget(self.uid, conversation_id, token)
         except record_audio_db.RecordUploadCapacityExceeded:
             _record_failure('capacity')
             await self.fail_recording(conversation_id)
@@ -367,12 +376,58 @@ class PusherRecordBarrier:
             if refused is not None:
                 _SEAL_REFUSAL_COUNTERS[refused].inc()
                 logger.info('event=record_seal_refused reason=%s', refused)
+                if refused == 'producer_pending':
+                    # Another producer still owes audio. Reuse the existing
+                    # close budget/backoff; never certify its tail by retiring
+                    # this retry on the first refused seal.
+                    return self._retry_close(conversation_id)
+                # upload_failed is sticky and requires full-proof repair.
+                # deleted/not_batch_owner have no seal obligation here.
+                # These terminal drain outcomes never assert audio closure.
         except _CloseAdmissionRefused:
             return self._close_admission_refused(conversation_id)
         except Exception:
             return self._close_failed(conversation_id, 'seal')
         self.retire_close(conversation_id)
         return True
+
+    def forget_evicted_tokens(self) -> None:
+        # A reconnect must never recover a token selected for abandonment, even
+        # while admission is refused. This is a hint removal, not durable proof.
+        for cid, token in self.evicted_tokens():
+            _process_record_tokens().forget(self.uid, cid, token)
+
+    def evicted_tokens(self) -> set[tuple[str, str]]:
+        # upload_sessions retains every outstanding token minted by this socket,
+        # including its own pending clears. Recovered pending_clears may belong
+        # to another socket whose projection is still running: this socket's
+        # executor settlement is no authority to attest that producer stopped.
+        return set(self.upload_sessions.items())
+
+    async def abandon_recordings(self) -> None:
+        """Called only after the worker AND its executor futures have settled."""
+        self.keep_close_pending = True
+        self.forget_evicted_tokens()
+        for cid, token in self.evicted_tokens():
+            attempts = 0
+            while True:
+                try:
+                    abandoned = await self._close_metadata(
+                        cid, record_audio_db.abandon_record_upload_session, self.uid, cid, token
+                    )
+                    if abandoned:
+                        logger.info('event=record_closed_finish outcome=abandoned')
+                    break
+                except _CloseAdmissionRefused:
+                    pass  # No submission; retry while this process is alive.
+                except Exception:
+                    _record_failure('abandon')
+                attempts = min(attempts + 1, 6)
+                ceiling = min(2.0**attempts, CLOSE_RETRY_MAX_SECONDS)
+                await asyncio.sleep(random.uniform(ceiling / 2, ceiling))
+            self.pending_clears.discard((cid, token))
+            if self.upload_sessions.get(cid) == token:
+                self.upload_sessions.pop(cid, None)
 
     def _close_admission_refused(self, conversation_id: str) -> bool:
         # The drain loop already yields between scans. A positive, jittered

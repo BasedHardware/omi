@@ -4,17 +4,27 @@ All reads precede caller writes and use the customer-data transaction. The
 hashed generation survives recursive account wipes and contains no content.
 """
 
+from collections import OrderedDict, deque
 from collections.abc import Iterable
 import hashlib
+import threading
+import time
+from uuid import uuid4
 from enum import Enum
 from typing import Any
 
 from config.firestore_read_levers import lever_enabled
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
-from database.batch_privacy_attempt import current_attempt, token_version
+from database.batch_privacy_attempt import SCHEMA_FIELD, TOKEN_FIELD, TOKEN_SCHEMA, current_attempt, token_version
 from database import privacy_check_metrics as metrics
+from database import batch_privacy_negative_cache as negative_cache
+from database.privacy_ttl_cache import BoundedTTLCache, enabled as ttl_enabled, is_missing
 
 PRIVACY_COLLECTION = 'batch_pipeline_privacy'
+# Token-validated generations shared across task attempts in this process
+# (lever bpp_decision_cache). Keys hold the client object itself, so planes and
+# recycled ids never mix; entries expire 60s after the authority walk started.
+PROCESS_DECISIONS = BoundedTTLCache()
 
 
 class BatchPrivacyReason(str, Enum):
@@ -63,29 +73,6 @@ def privacy_owner_key(uid: str) -> str:
     return hashlib.sha256(uid.encode()).hexdigest()
 
 
-class BatchPrivacyMemo:
-    """Document snapshots for the read phase of ONE transaction callback attempt.
-
-    Construct inside the callback, including on retries; never retain across
-    transactions or reuse a session's memo when its prepare callback runs again.
-    Actual reads still enroll every document (including absence) in Firestore's
-    conflict set. Decisions, generation comparisons and walk budgets are never memoized.
-    """
-
-    def __init__(self, client: Any, transaction: Any):
-        if transaction is None:
-            raise ValueError('privacy memo requires a transaction attempt')
-        self.client, self.transaction = client, transaction
-        self.snapshots: dict = {}
-
-    def get(self, reference):
-        if reference.path not in self.snapshots:
-            self.snapshots[reference.path] = metrics.read_snapshot(
-                'batch', reference, transaction=self.transaction, memo_read=True
-            )
-        return self.snapshots[reference.path]
-
-
 def assert_batch_write_allowed(
     client: Any,
     transaction: Any,
@@ -94,7 +81,7 @@ def assert_batch_write_allowed(
     conversation_ids: Iterable[str] = (),
     expected_generation: int | None = None,
     snapshots: dict | None = None,
-    memo: BatchPrivacyMemo | None = None,
+    read_budget=None,
 ) -> int:
     """Measure the authorizing decision; shadow always runs after live authority.
 
@@ -102,12 +89,19 @@ def assert_batch_write_allowed(
     Shadow never publishes snapshots, raises its failure or changes a decision.
     """
     metrics.called('batch')
-    shadow = lever_enabled('privacy_checks_shadow', uid) and current_attempt() is not None
-    enforce = lever_enabled('bpp_generation_memo', uid) and not shadow
+    # A generation-memo hit would hide the live lookups needed for shadow proof.
+    negative_shadow = lever_enabled('privacy_negative_lookup_cache', uid) and lever_enabled(
+        'privacy_checks_shadow', uid
+    )
+    shadow = lever_enabled('privacy_checks_shadow', uid) and current_attempt() is not None and not negative_shadow
+    enforce = lever_enabled('bpp_generation_memo', uid) and not shadow and not negative_shadow
     # Materialize once when comparing, including one-shot source generators.
     ids = tuple(conversation_ids) if shadow else conversation_ids
     kwargs: dict[str, Any] = dict(
-        conversation_ids=ids, expected_generation=expected_generation, snapshots=snapshots, memo=memo
+        conversation_ids=ids,
+        expected_generation=expected_generation,
+        snapshots=snapshots,
+        read_budget=read_budget,
     )
     function = _assert_batch_write_allowed_memo if enforce else _assert_batch_write_allowed_live
 
@@ -149,14 +143,17 @@ def _assert_batch_write_allowed_memo(
     conversation_ids: Iterable[str] = (),
     expected_generation: int | None = None,
     snapshots: dict | None = None,
-    memo: BatchPrivacyMemo | None = None,
+    read_budget=None,
 ) -> int:
-    # Keep the disabled path's read order, counts and WQ12 behavior unchanged.
+    # Keep the disabled path's live read order and counts unchanged.
     # Full-row exports always stay live: the token certifies authorization, not
     # arbitrary metadata returned to a snapshots= consumer.
     attempt = current_attempt()
     if attempt is None or transaction is None or snapshots is not None:
         metrics.memo_result('batch', 'ineligible')
+        metrics.memo_ineligible(
+            'no_attempt' if attempt is None else 'no_transaction' if transaction is None else 'snapshots'
+        )
         return _assert_batch_write_allowed_live(
             client,
             transaction,
@@ -164,19 +161,18 @@ def _assert_batch_write_allowed_memo(
             conversation_ids=conversation_ids,
             expected_generation=expected_generation,
             snapshots=snapshots,
-            memo=memo,
+            read_budget=read_budget,
         )
     ids = frozenset(conversation_ids)
-    if memo is not None and lever_enabled('batch_privacy_memoize', uid):
-        if memo.client is not client or memo.transaction is not transaction:
-            raise ValueError('privacy memo belongs to another transaction attempt')
     # Retain the client object itself, preventing id reuse and cross-plane hits.
     key = (client, uid, ids)
     reference = client.collection(PRIVACY_COLLECTION).document(privacy_owner_key(uid))
+    process_on = ttl_enabled('bpp_decision_cache', uid)
+    started = PROCESS_DECISIONS.clock()
     try:
-        # Never use the transaction-scoped WQ12 snapshot memo for this read.
+        # Every decision reads this token afresh, including repeated checks in one transaction.
         # Every authorizing transaction enrolls the token in its conflict set.
-        snapshot = metrics.read_snapshot('batch', reference, transaction=transaction)
+        snapshot = metrics.read_snapshot('batch', reference, transaction=transaction, read_budget=read_budget)
         # GAPIC transport retries may replay an already-prepared random token
         # after another writer. The server revision prevents that ABA: replay
         # commits get a new update_time, including deletion/recreation. Keep
@@ -184,10 +180,29 @@ def _assert_batch_write_allowed_memo(
         version = token_version(snapshot)
         eligible = version is not None
         generation = attempt.get(key, version) if eligible else None
+        if generation is None and eligible and process_on:
+            # Process-wide reuse across attempts (lever bpp_decision_cache), at most
+            # 60s old, and still certified by THIS transaction's token read: any
+            # authority write since the cached walk rotated the token in the same
+            # commit (database.batch_privacy_write_fence), so a changed token misses
+            # and a concurrent writer aborts this transaction at commit.
+            cached, _age = PROCESS_DECISIONS.get(key)
+            if not is_missing(cached) and cached[0] == version:
+                generation = cached[1]
+                metrics.ttl_result('batch', 'hit')
+                attempt.put(key, version, generation)
+            else:
+                metrics.ttl_result('batch', 'miss')
         if generation is not None and (expected_generation is None or generation == expected_generation):
             metrics.memo_result('batch', 'hit')
             return generation
         metrics.memo_result('batch', 'miss' if eligible else 'ineligible')
+        if not eligible and _mintable(snapshot):
+            metrics.memo_result('batch', 'no_token')
+            try:
+                schedule_token_mint(client, reference, uid)
+            except Exception:  # best effort: scheduling must never change or block the decision
+                metrics.memo_result('batch', 'mint_error')
         attempt.forget(key)
         generation = _assert_batch_write_allowed_live(
             client,
@@ -195,15 +210,18 @@ def _assert_batch_write_allowed_memo(
             uid,
             conversation_ids=ids,
             expected_generation=expected_generation,
-            memo=memo,
             privacy_snapshot=snapshot,
+            read_budget=read_budget,
         )
         if eligible:
             attempt.put(key, version, generation)
+            if process_on and PROCESS_DECISIONS.put(key, (version, generation), started=started):
+                metrics.ttl_result('batch', 'store')
         return generation
     except BaseException:
         # Neither a partial authority walk nor a failed token read is reusable.
         attempt.forget(key)
+        PROCESS_DECISIONS.forget(key)
         raise
 
 
@@ -215,7 +233,7 @@ def _assert_batch_write_allowed_live(
     conversation_ids: Iterable[str] = (),
     expected_generation: int | None = None,
     snapshots: dict | None = None,
-    memo: BatchPrivacyMemo | None = None,
+    read_budget=None,
     privacy_snapshot: Any = None,
 ) -> int:
     """Fence a mutation. Admission records the returned generation for replay.
@@ -225,19 +243,29 @@ def _assert_batch_write_allowed_live(
     are denied even if their deletion marker has disappeared.
     """
     key = privacy_owner_key(uid)
-    if memo is not None and not lever_enabled('batch_privacy_memoize', uid):
-        memo = None
-    if memo is not None and (memo.client is not client or memo.transaction is not transaction):
-        raise ValueError('privacy memo belongs to another transaction attempt')
 
-    def read(reference):
-        return (
-            memo.get(reference)
-            if memo is not None
-            else metrics.read_snapshot('batch', reference, transaction=transaction)
-        )
+    def live_read(reference):
+        return metrics.read_snapshot('batch', reference, transaction=transaction, read_budget=read_budget)
 
-    marker = read(client.collection('account_deletions').document(uid))
+    # Full-row exports and nontransactional preflights always read live. The
+    # disabled path retains its exact original read order/counts. Do not poll
+    # the older TTL cache's Firestore kill doc or involve Redis in this path.
+    negative_on = lever_enabled('privacy_negative_lookup_cache', uid) and transaction is not None and snapshots is None
+    negative_shadow = negative_on and lever_enabled('privacy_checks_shadow', uid)
+    started = negative_cache.LOOKUPS.clock() if negative_on else None
+    if negative_on and privacy_snapshot is None:
+        # This per-decision read must enroll the token in the transaction conflict set.
+        privacy_snapshot = live_read(client.collection(PRIVACY_COLLECTION).document(key))
+    version = token_version(privacy_snapshot) if negative_on else None
+
+    def read(reference, collection=None):
+        if negative_on and collection is not None:
+            return negative_cache.read(
+                client, uid, reference, collection, version, live_read, shadow=negative_shadow, started=started
+            )
+        return live_read(reference)
+
+    marker = read(client.collection('account_deletions').document(uid), 'account_deletions')
     status = normalize_account_deletion_status(
         marker_exists=marker.exists, raw_status=(marker.to_dict() or {}).get('wipe_status')
     )
@@ -287,9 +315,9 @@ def _assert_batch_write_allowed_live(
             if not conversation_id or '/' in conversation_id or len(conversation_id.encode()) > 256:
                 raise ValueError('bounded conversation document ID required')
             metrics.walked()
-            if read(user.collection('deleted_conversations').document(conversation_id)).exists:
+            if read(user.collection('deleted_conversations').document(conversation_id), 'deleted_conversations').exists:
                 raise BatchPrivacyBlocked('conversation_deleted', conversation_id=conversation_id)
-            conversation = read(user.collection('conversations').document(conversation_id))
+            conversation = read(user.collection('conversations').document(conversation_id), 'conversations')
             row = conversation.to_dict() or {}
             chain[conversation_id] = bool(conversation.exists)
             if snapshots is not None:
@@ -314,6 +342,103 @@ def _assert_batch_write_allowed_live(
             conversation_id, redirected = target, True
         verified.update(chain)
     return generation
+
+
+# --- lazy memo-token mint (lever bpp_token_mint) -------------------------------------------------
+# 86% of batch decisions were memo-ineligible on 2026-11-05 because the owner's privacy document had
+# no memo token: tokens were only ever written by authority writes. Minting one makes later decisions
+# certifiable by the (exact, in-transaction) token. The mint writes ONLY the token fields through the
+# installed write fence, never generation/blocked/purging, and runs after a delay so the authorizing
+# transaction that observed the gap commits first; a collision costs that transaction one retry.
+MINT_DELAY_SECONDS = 2.0
+_MINT_MAX_PENDING = 10_000
+_mint_lock = threading.Lock()
+_mint_seen: OrderedDict = OrderedDict()
+_mint_queue: deque = deque()
+_mint_wake = threading.Event()
+_mint_thread: list = []
+
+
+def _mintable(snapshot) -> bool:
+    """No usable token, and nothing that must keep the owner ineligible."""
+    data = (snapshot.to_dict() or {}) if snapshot.exists else {}
+    if any(data.get(field) for field in ('blocked', 'purging', 'memo_blocked')):
+        return False
+    return not (isinstance(data.get(TOKEN_FIELD), str) and data.get(SCHEMA_FIELD) == TOKEN_SCHEMA)
+
+
+def schedule_token_mint(client, reference, uid: str) -> None:
+    if not lever_enabled('bpp_token_mint', uid):
+        return
+    with _mint_lock:
+        if reference.path in _mint_seen or len(_mint_queue) >= _MINT_MAX_PENDING:
+            return
+        # Start (or confirm) the worker BEFORE recording anything: a failed start must
+        # leave no queued item or dedupe entry behind, so a later call retries cleanly.
+        if not _mint_thread:
+            worker = threading.Thread(target=_mint_worker, name='bpp-token-mint', daemon=True)
+            try:
+                worker.start()
+            except Exception:
+                # Never fail a privacy decision over an optimization.
+                metrics.memo_result('batch', 'mint_error')
+                return
+            _mint_thread.append(worker)
+        _mint_seen[reference.path] = True
+        while len(_mint_seen) > 100_000:
+            _mint_seen.popitem(last=False)
+        _mint_queue.append((time.monotonic() + MINT_DELAY_SECONDS, client, reference))
+    _mint_wake.set()
+
+
+def mint_token(client, reference) -> bool:
+    """Transactionally add a token to an owner that has none; True when one was written.
+
+    Re-reads inside the transaction and writes nothing when the owner is blocked,
+    purging or memo_blocked, or already carries a token (an authority writer won the
+    race). Writes ONLY the token fields as a masked update when the document exists. When
+    it never existed, it creates it with the token plus the defaults every reader already
+    applies to a missing document (generation 0, not blocked, not purging). The installed write
+    fence appends its own rotation in the same commit.
+    """
+    from google.cloud import firestore
+
+    fields = {TOKEN_FIELD: uuid4().hex, SCHEMA_FIELD: TOKEN_SCHEMA}
+
+    @firestore.transactional
+    def mint(transaction) -> bool:
+        snapshot = reference.get(transaction=transaction)
+        if not _mintable(snapshot):
+            return False
+        if snapshot.exists:
+            transaction.update(reference, fields)
+        else:
+            # The write fence rejects a privacy-document replacement that omits the
+            # authority state; these are the defaults every reader applies to a
+            # missing document, so the decision is unchanged.
+            transaction.create(reference, {'generation': 0, 'blocked': False, 'purging': False, **fields})
+        return True
+
+    return mint(client.transaction())
+
+
+def _mint_worker() -> None:
+    while True:
+        with _mint_lock:
+            item = _mint_queue.popleft() if _mint_queue else None
+        if item is None:
+            _mint_wake.wait(5)
+            _mint_wake.clear()
+            continue
+        due, client, reference = item
+        delay = due - time.monotonic()
+        if delay > 0:
+            time.sleep(delay)
+        try:
+            if mint_token(client, reference):
+                metrics.memo_result('batch', 'mint')
+        except Exception:
+            metrics.memo_result('batch', 'mint_error')
 
 
 def advance_privacy_generation(client: Any, uid: str, *, blocked: bool) -> int:

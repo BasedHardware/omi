@@ -566,9 +566,15 @@ def get_usage_units(
     client = firestore_client or get_customer_firestore_client()
     user = client.collection('users').document(uid)
     if entitlements is None:
-        snap = user.get(['subscription'])
+        from utils.referral_campaign import GRANT_FIELD, campaign_enabled, effective_subscription_payload
+
+        promotional = campaign_enabled()
+        snap = user.get(['subscription', GRANT_FIELD] if promotional else ['subscription'])
         data = snap.to_dict() or {}
-        entitlements = resolve_subscription_entitlements(data.get('subscription') or {})
+        subscription = data.get('subscription') or {}
+        if promotional:
+            subscription = effective_subscription_payload(subscription, data.get(GRANT_FIELD))
+        entitlements = resolve_subscription_entitlements(subscription)
     enforcing = budget_enforcement_enabled() and entitlements['entitlement_version'] == 'ladder_v1'
     if session_cache is not None and enforcing and rate_card_version is None:
         summary = session_cache.read(uid, period, client, entitlements)

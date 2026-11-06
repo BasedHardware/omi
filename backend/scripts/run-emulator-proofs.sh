@@ -74,9 +74,18 @@ run_proof "summary task recovery, concurrency and expiry" \
   tests/integration/test_summary_task_promotion_emulator.py \
   tests/integration/test_candidate_accept_expiry_emulator.py -q
 
+run_proof "projection ghost-hold release gaps and ready-hint repair follow-up" \
+  "$PYTHON" -m pytest -q -rxX -p no:cacheprovider \
+  tests/integration/test_batch_projection_ghost_holds_firestore.py
+
 run_proof "record replay (capture, admission, titling and scoped receipts)" \
   "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_replay_harness_firestore.py \
   tests/integration/test_replay_harness_titling_firestore.py
+
+# The committed 120-transition privacy smoke plus mutation controls; the full
+# qualification corpus stays on the explicit heavy-lane Make target.
+run_proof "privacy cache replay (120-transition smoke and catch proofs)" \
+  "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_replay_harness_privacy_firestore.py
 
 # Job-store conformance (legacy-retire lane 12): sim + Firestore emulator legs here; the Postgres leg
 # skips in CI (no Postgres service, decision S6) and is proven locally/staging.
@@ -91,6 +100,19 @@ run_proof "job-store conformance (sim + emulator, including fenced scheduler pul
 run_proof "enrichment recovery conformance (PL-342/397/398)" \
   env OMI_REQUIRE_STORE_BACKENDS="${OMI_REQUIRE_STORE_BACKENDS:-sim,emulator}" OMI_ENV_STAGE=offline \
   "$PYTHON" -m pytest -q -p no:cacheprovider scripts/enrichment_recovery_emulator_test.py
+
+# Real delivery/settlement on old and replacement stores, with virtual budget
+# and heartbeat schedules. CI requires sim + emulator; local/staging qualification
+# must set OMI_REQUIRE_STORE_BACKENDS=all so Postgres is required too.
+run_proof "enrichment budget and hold-cap conformance (PL-420/421)" \
+  env OMI_REQUIRE_STORE_BACKENDS="${OMI_REQUIRE_STORE_BACKENDS:-sim,emulator}" OMI_ENV_STAGE=offline \
+  "$PYTHON" -m pytest -q -p no:cacheprovider scripts/enrichment_budget_emulator_test.py
+
+# PL-439: a derived-refresh race keeps the same retryable delivery. CI requires
+# sim + emulator; complete local/staging qualification requires all three stores.
+run_proof "enrichment revision-race conformance (PL-439)" \
+  env OMI_REQUIRE_STORE_BACKENDS="${OMI_REQUIRE_STORE_BACKENDS:-sim,emulator}" OMI_ENV_STAGE=offline \
+  "$PYTHON" -m pytest -q -p no:cacheprovider scripts/enrichment_revision_emulator_test.py
 
 # Daily architecture parity: require both local CI backends rather than letting
 # a missing emulator look green. Local/staging runs require all three stores.

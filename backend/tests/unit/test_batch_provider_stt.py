@@ -353,7 +353,9 @@ def test_provider_result_write_logs_stage_and_type_without_private_content(world
     assert vendor.calls == 1
 
 
-@pytest.mark.parametrize('stored_speech', [None, 0.0, 0.5])
+# A vendor-called intent always measured positive speech (spans are validated start < end); an
+# intent measuring 0 skipped the vendor and settles as silence (test_a_legacy_silent_intent_...).
+@pytest.mark.parametrize('stored_speech', [None, 0.5])
 def test_abandoned_running_intent_settles_failed_held_without_spend(world, monkeypatch, stored_speech):
     _, store = world
     admit(monkeypatch, store, [item('p1', 10)], 'content-p', JA)
@@ -1274,3 +1276,179 @@ def test_native_provider_placeholder_conversion_preserves_owner_fence(world, cha
         assert store.run(lambda tx: enqueue(tx, work, 100, policy=POLICY))
         assert job(store, work.segment_id)['state'] == PENDING
         assert not [key for key in store.rows if key[0] in {'queues', 'control'}]
+
+
+# GPU-overflow spend (omi_batch_pipeline_vendor_overflow_audio_seconds_total, the $50/day alert):
+# billed vendor audio for a unit routed over a capable GPU (provider_reason 'none') counts on every
+# settle path, including reconciliation; capability routing to a vendor never counts.
+EN_OVERFLOW = SttRoute('provider', 'none', 'modulate', 'en')
+
+
+def _overflow_spent():
+    from utils.batch_pipeline import vendor_route_metrics as metrics
+
+    return metrics.OVERFLOW_AUDIO.labels(route='modulate')._value.get()
+
+
+@pytest.mark.parametrize('route,counts', [(EN_OVERFLOW, True), (JA, False)])
+def test_a_reconciled_saved_result_counts_overflow_spend(world, monkeypatch, route, counts):
+    _, store = world
+    unit = item('p1', 10)
+    admit(monkeypatch, store, [unit], 'content-p', route)
+    artifacts, vendor = Artifacts(), Vendor()
+    artifacts.fail_persist = True
+    before = _overflow_spent()
+    assert stage(store, artifacts, vendor).run('p1').outcome == 'retry'  # billed, then settle never ran
+    assert _overflow_spent() == before
+    artifacts.fail_persist = False
+    token = job(store, 'p1')['provider_intent']['token']
+    artifacts.results[f'gs://synthetic/results/p1/{token}.enc'] = Vendor()(None, 'ja', SPEECH, service='modulate')
+    assert stage(store, artifacts, vendor, now=310.0).run('p1').reason == 'processed'
+    assert _overflow_spent() - before == (unit.duration_seconds if counts else 0)
+
+
+@pytest.mark.parametrize('route,counts', [(EN_OVERFLOW, True), (JA, False)])
+def test_an_abandoned_billed_intent_counts_overflow_spend(world, monkeypatch, route, counts):
+    _, store = world
+    unit = item('p1', 10)
+    admit(monkeypatch, store, [unit], 'content-p', route)
+    artifacts, vendor = Artifacts(), Vendor()
+    artifacts.fail_persist = True
+    stage(store, artifacts, vendor).run('p1')
+    before = _overflow_spent()
+    stage(store, artifacts, vendor, now=200.0 + ABANDON_SECONDS + 1).run('p1')
+    assert _overflow_spent() - before == (unit.duration_seconds if counts else 0)
+
+
+def test_an_abandoned_silent_intent_never_counts_overflow_spend(world, monkeypatch):
+    # Strict VAD found no speech, so the stage answered silence without calling the vendor; the
+    # abandoned intent settles as that silence and bills nothing anywhere.
+    from utils.batch_pipeline import vendor_route_metrics as metrics
+
+    _, store = world
+    admit(monkeypatch, store, [item('p1', 10)], 'content-p', EN_OVERFLOW)
+    artifacts, vendor = Artifacts(), Vendor()
+    artifacts.fail_persist = True
+    stage(store, artifacts, vendor, inspect=lambda *_: SILENCE).run('p1')
+    artifacts.fail_persist = False
+    attempt_audio = metrics.ATTEMPT_AUDIO.labels(provider='modulate', outcome='abandoned')
+    before, before_audio = _overflow_spent(), attempt_audio._value.get()
+    late = stage(store, artifacts, vendor, inspect=lambda *_: SILENCE, now=200.0 + ABANDON_SECONDS + 1)
+    assert late.run('p1').reason == 'processed' and vendor.calls == 0
+    assert _overflow_spent() == before and attempt_audio._value.get() == before_audio
+    attempts = job(store, 'p1').get('provider_attempts') or []
+    assert attempts and 'abandoned' not in [a.get('outcome') for a in attempts]
+    assert all(a['audio_seconds'] == 0 for a in attempts)
+
+
+# A strict-VAD-silent unit never reaches the vendor: an abandoned intent for it settles as the same
+# local silence (lead2 ccadcc), never an ABANDONED vendor attempt that bills audio or feeds the breaker.
+
+
+def _real_health(clock):
+    from utils.batch_pipeline import route_selection
+    from utils.batch_pipeline import vendor_health as health_module
+
+    return health_module.VendorHealthService(
+        shared=health_module.MemoryStore(),
+        local=health_module.MemoryStore(),
+        routes=lambda: route_selection.current_table()[0].routes,
+        enabled=lambda: True,
+        clock=clock,
+        rng=lambda: 0.5,
+        background=False,
+    )
+
+
+def _silent_abandon(store, artifacts, vendor, health, segment_id, started):
+    first = ProviderSttStage(
+        store,
+        artifacts,
+        stt=vendor,
+        inspect=lambda *_: SILENCE,
+        clock=lambda: started,
+        health=health,
+        armed=lambda: True,
+    )
+    artifacts.fail_persist = True
+    assert first.run(segment_id).outcome == 'retry'  # local silence computed, its save failed
+    artifacts.fail_persist = False
+    late = started + ABANDON_SECONDS + 1
+    replay = ProviderSttStage(
+        store, artifacts, stt=vendor, inspect=lambda *_: SILENCE, clock=lambda: late, health=health, armed=lambda: True
+    )
+    return replay.run(segment_id)
+
+
+def test_a_silent_unit_intent_is_marked_vendor_skipped(world, monkeypatch):
+    _, store = world
+    admit(monkeypatch, store, [item('p1', 10)], 'content-p', JA)
+    artifacts, vendor = Artifacts(), Vendor()
+    artifacts.fail_persist = True
+    stage(store, artifacts, vendor, inspect=lambda *_: SILENCE).run('p1')
+    assert vendor.calls == 0
+    assert job(store, 'p1')['provider_intent']['vendor_skipped'] is True
+
+
+def test_a_speech_unit_intent_is_not_marked_vendor_skipped(world, monkeypatch):
+    _, store = world
+    admit(monkeypatch, store, [item('p1', 10)], 'content-p', JA)
+    artifacts, vendor = Artifacts(), Vendor()
+    artifacts.fail_persist = True
+    stage(store, artifacts, vendor).run('p1')
+    assert vendor.calls == 1
+    assert 'vendor_skipped' not in job(store, 'p1')['provider_intent']
+
+
+def test_an_abandoned_skipped_intent_settles_as_silence_without_billing(world, monkeypatch):
+    _, store = world
+    admit(monkeypatch, store, [item('p1', 10)], 'content-p', JA)
+    artifacts, vendor = Artifacts(), Vendor()
+    health = _real_health(lambda: 200.0)
+    outcome = _silent_abandon(store, artifacts, vendor, health, 'p1', 200.0)
+    assert outcome.reason == 'processed' and vendor.calls == 0
+    row = job(store, 'p1')
+    assert row['state'] == 'result_ready'
+    outcomes = [a.get('outcome') for a in row.get('provider_attempts') or []]
+    assert 'abandoned' not in outcomes and outcomes[-1] == 'silence'
+    assert all(a.get('audio_seconds', 0) == 0 for a in row['provider_attempts'])
+
+
+def test_a_burst_of_abandoned_silent_intents_never_opens_a_healthy_vendors_breaker(world, monkeypatch):
+    # lead2 ccadcc: five or more silent units whose silence saves failed, reconciled within five
+    # minutes, used to record five ABANDONED vendor failures and could open Modulate's breaker.
+    _, store = world
+    units = [item(f'p{n}', 10 + n) for n in range(6)]
+    admit(monkeypatch, store, units, 'content-p', JA)
+    artifacts, vendor = Artifacts(), Vendor()
+    now = [200.0]
+    health = _real_health(lambda: now[0])
+    for n, unit in enumerate(units):
+        now[0] = 200.0 + ABANDON_SECONDS + 1 + n * 30  # all six within five minutes
+        assert _silent_abandon(store, artifacts, vendor, health, unit.segment_id, 200.0).reason == 'processed'
+    assert vendor.calls == 0
+    allowed, _ = health.allows('modulate')
+    assert allowed
+
+
+def test_a_legacy_silent_intent_without_the_marker_also_settles_as_silence(world, monkeypatch):
+    # Rolling deploy: an older worker minted the intent with only measured_vad_speech_seconds == 0.
+    _, store = world
+    admit(monkeypatch, store, [item('p1', 10)], 'content-p', JA)
+    artifacts, vendor = Artifacts(), Vendor()
+    artifacts.fail_persist = True
+    stage(store, artifacts, vendor, inspect=lambda *_: SILENCE).run('p1')
+
+    def legacy(tx):
+        row = tx.get('jobs', 'p1')
+        row['provider_intent'].pop('vendor_skipped', None)
+        assert row['provider_intent']['measured_vad_speech_seconds'] == 0
+        tx.put('jobs', 'p1', row)
+
+    store.run(legacy)
+    artifacts.fail_persist = False
+    outcome = stage(store, artifacts, vendor, inspect=lambda *_: SILENCE, now=200.0 + ABANDON_SECONDS + 1).run('p1')
+    assert outcome.reason == 'processed' and vendor.calls == 0
+    row = job(store, 'p1')
+    assert row['state'] == 'result_ready'
+    assert 'abandoned' not in [a.get('outcome') for a in row.get('provider_attempts') or []]

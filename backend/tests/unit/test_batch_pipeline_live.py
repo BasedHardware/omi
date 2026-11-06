@@ -74,7 +74,7 @@ async def test_drain_bounds_concurrency_and_passes_slow_partial(monkeypatch, cap
             slow.set()
             full.set()
             release.set()
-            await task
+            await asyncio.wait_for(task, timeout=1)
     events = [r.getMessage() for r in caplog.records if 'event=batch_drain_pass' in r.getMessage()]
     assert len(events) == 1
     assert 'row_count=10 partial_count=1 seconds=' in events[0]
@@ -385,6 +385,9 @@ async def test_retry_log_names_only_static_value_error_reasons(monkeypatch, capl
 @pytest.fixture(autouse=True)
 def protocol_ready(monkeypatch):
     monkeypatch.setenv('BATCH_PIPELINE_RECORD_PROTOCOL_READY', 'true')
+    # Paging/privacy fixtures share an owner; drain those rows serially.
+    # Parallel-admission tests explicitly choose their own worker count.
+    monkeypatch.setenv('RECORD_DRAIN_CONCURRENCY', '1')
 
 
 def recording(**changes):

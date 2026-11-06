@@ -363,7 +363,13 @@ def _firestore_doc_kind(error: BaseException) -> str:
 async def _resolve_fair_use_soft_cap_plan(uid: str):
     """Return the stored plan, falling back to the default soft-cap tier on read failure."""
     try:
-        fair_use_sub = await run_blocking(db_executor, users_db.get_existing_user_subscription, uid)
+        from config.referral_campaign import campaign_enabled
+
+        fair_use_sub = (
+            await run_blocking(db_executor, users_db.get_user_valid_subscription, uid, provision=False)
+            if campaign_enabled()
+            else await run_blocking(db_executor, users_db.get_existing_user_subscription, uid)
+        )
         return fair_use_sub.plan if fair_use_sub else None
     except Exception as e:
         logger.warning(
@@ -1064,7 +1070,19 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
     context = PROCESS_CONTEXT.get()
     if conversation_data and conversation_data.get('deleted') and conversation_data.get('sync_merged_into'):
         if context is not None:
-            canonical = conversations_db.resolve_sync_conversation_redirect(uid, conversation_id)
+            try:
+                canonical = conversations_db.resolve_sync_conversation_redirect(uid, conversation_id)
+            except Exception as error:
+                from utils.enrichment.consumer import transient_dependency
+
+                if transient_dependency(error):
+                    raise  # A transient Firestore fault keeps the consumer's quick retry.
+                # A persistent resolver failure is unresolved custody, not a queue-cadence retry: the outbox's
+                # redirect_unresolved deferral backs a long-stuck episode off to hourly polls.
+                logger.warning(
+                    'event=sync_reprocess outcome=redirect_unresolved exception_type=%s', type(error).__name__
+                )
+                canonical = None
             # The outbox transfers custody atomically before acknowledging this donor.
             context['redirect_to' if canonical else 'defer_reason'] = canonical or 'redirect_unresolved'
             return sync_result('deferred')

@@ -31,13 +31,17 @@ import 'package:omi/utils/platform/platform_service.dart';
 /// it returned after the destination account has been established.
 Future<ProviderLinkResult?> completeProviderLinkAndMigrate({
   required Future<ProviderLinkResult?> Function() linkProvider,
-  required Future<bool> Function(String sourceUid, String sourceToken) migrate,
+  required Future<bool> Function(String sourceUid, String sourceToken, AuthSessionSnapshot destination) migrate,
 }) async {
   final result = await linkProvider();
   final source = result?.anonymousSourceMigration;
   final destinationUid = result?.destinationUid;
   if (source != null && destinationUid != null && destinationUid != source.uid) {
-    await migrate(source.uid, source.token);
+    final destination = result!.destinationSession;
+    if (destination == null || destination.ownerUid != destinationUid) {
+      throw StateError('Migration destination session is missing');
+    }
+    await migrate(source.uid, source.token, destination);
   }
   return result;
 }
@@ -398,40 +402,10 @@ class AuthenticationProvider extends BaseProvider {
   Future<void> linkWithApple() async {
     setLoading(true);
     try {
-      final appleProvider = AppleAuthProvider();
-      try {
-        await FirebaseAuth.instance.currentUser?.linkWithProvider(appleProvider);
-      } catch (e) {
-        if (e is FirebaseAuthException && e.code == 'credential-already-in-use') {
-          // Get existing user credentials
-          final existingCred = e.credential;
-          final oldUserId = FirebaseAuth.instance.currentUser?.uid;
-          final sourceToken = await FirebaseAuth.instance.currentUser?.getIdToken();
-
-          // Sign out current anonymous user
-          await AuthService.instance.signOutForAccountSwitch();
-
-          // Sign in with existing account
-          await FirebaseAuth.instance.signInWithCredential(existingCred!);
-          final newUserId = FirebaseAuth.instance.currentUser?.uid;
-          if (newUserId != null) AuthService.instance.markAuthenticatedUser(newUserId);
-          await AuthService.instance.getIdToken();
-
-          SharedPreferencesUtil().onboardingCompleted = false;
-          SharedPreferencesUtil().uid = newUserId ?? '';
-          SharedPreferencesUtil().email = FirebaseAuth.instance.currentUser?.email ?? '';
-          SharedPreferencesUtil().givenName = FirebaseAuth.instance.currentUser?.displayName?.split(' ')[0] ?? '';
-          if (oldUserId != null && newUserId != null && sourceToken != null) {
-            await migrateAppOwnerId(oldUserId, sourceToken);
-          }
-          return;
-        }
-        AppSnackbar.showSnackbarError(
-          globalNavigatorKey.currentContext?.l10n.authFailedToLinkApple ??
-              'Failed to link with Apple, please try again.',
-        );
-        rethrow;
-      }
+      await completeProviderLinkAndMigrate(
+        linkProvider: AuthService.instance.linkWithApple,
+        migrate: migrateAppOwnerId,
+      );
     } catch (e) {
       Logger.debug('Error linking with Apple: $e');
       AppSnackbar.showSnackbarError(
@@ -443,7 +417,7 @@ class AuthenticationProvider extends BaseProvider {
     }
   }
 
-  Future<bool> migrateAppOwnerId(String oldId, String sourceToken) async {
-    return await apps_api.migrateAppOwnerId(oldId, sourceToken);
+  Future<bool> migrateAppOwnerId(String oldId, String sourceToken, AuthSessionSnapshot destination) async {
+    return await apps_api.migrateAppOwnerId(oldId, sourceToken, destination: destination);
   }
 }

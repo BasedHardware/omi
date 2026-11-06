@@ -106,7 +106,60 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
-      "expression": "((max(time() - omi_batch_pipeline_metrics_refreshed_at_seconds{namespace=\"prod-omi-backend\"}) >= bool 120) or vector(1)) + (count(omi_batch_pipeline_oldest_age_seconds{namespace=\"prod-omi-backend\"} != omi_batch_pipeline_oldest_age_seconds{namespace=\"prod-omi-backend\"}) or vector(0)) + (count(omi_batch_pipeline_retry_age_seconds{namespace=\"prod-omi-backend\"} != omi_batch_pipeline_retry_age_seconds{namespace=\"prod-omi-backend\"}) or vector(0))",
+      "expression": "(sum(increase(omi_batch_pipeline_vendor_overflow_audio_seconds_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill|backend-integration\",route=\"modulate\"}[24h])) / 3600 * 0.06) or vector(0)",
+      "file": "alerts/backend-sync.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_vendor_overflow_audio_seconds_total"
+      ],
+      "owner_title": "Batch Modulate overflow - spend over $50/day",
+      "owner_uid": "omi-batch-vendor-overflow-spend",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max(omi_batch_held_expired_units and (time() - omi_batch_held_expired_observed_at_seconds < 900)) or vector(0)",
+      "file": "alerts/batch-held-dead-letter.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_held_expired_observed_at_seconds",
+        "omi_batch_held_expired_units"
+      ],
+      "owner_title": "Retained held batch dead-letter volume",
+      "owner_uid": "omi-batch-held-expired-volume",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(increase(omi_batch_held_expired_total[30m])) or vector(0)",
+      "file": "alerts/batch-held-dead-letter.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_held_expired_total"
+      ],
+      "owner_title": "Retained held batch dead-letter volume",
+      "owner_uid": "omi-batch-held-expired-volume",
+      "panel": null,
+      "pointer": "/data/1/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "(time() - max(omi_batch_held_expired_observed_at_seconds)) or vector(1e9)",
+      "file": "alerts/batch-held-dead-letter.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_held_expired_observed_at_seconds"
+      ],
+      "owner_title": "Retained held batch dead-letter volume",
+      "owner_uid": "omi-batch-held-expired-volume",
+      "panel": null,
+      "pointer": "/data/2/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "((max(time() - omi_batch_pipeline_metrics_refreshed_at_seconds{namespace=\"prod-omi-backend\"}) >= bool 120) or vector(1)) + (count(count by (priority) (omi_batch_pipeline_oldest_age_seconds{namespace=\"prod-omi-backend\"} != omi_batch_pipeline_oldest_age_seconds{namespace=\"prod-omi-backend\"})) or vector(0)) + (count(count by (priority) (omi_batch_pipeline_retry_age_seconds{namespace=\"prod-omi-backend\"} != omi_batch_pipeline_retry_age_seconds{namespace=\"prod-omi-backend\"})) or vector(0))",
       "file": "alerts/batch-queue-safety.json",
       "issues": [],
       "metrics": [
@@ -234,6 +287,72 @@
       "panel": null,
       "pointer": "/data/0/model/expr",
       "scope": "explicit-bridge"
+    },
+    {
+      "expression": "(max(omi_batch_timeliness_backlog_units{leg=\"assignment_held\"}) > bool 1000) * on() (delta((max(omi_batch_timeliness_backlog_units{leg=\"assignment_held\"}))[1h:5m]) > bool 50) * on() ((time() - max(omi_batch_timeliness_observed_at_seconds)) < bool 900)",
+      "file": "alerts/critical-failures.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_timeliness_backlog_units",
+        "omi_batch_timeliness_observed_at_seconds"
+      ],
+      "owner_title": "Held batch backlog is growing while owners wait",
+      "owner_uid": "omi-batch-held-backlog-growing",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "min by (target) (omi_stt_cost_routing_stage{job=\"backend-listen-metrics\",target=~\"modulate-velma-2|soniox\"})",
+      "file": "alerts/critical-failures.json",
+      "issues": [],
+      "metrics": [
+        "omi_stt_cost_routing_stage"
+      ],
+      "owner_title": "A serving STT vendor remains at a low routing stage",
+      "owner_uid": "omi-stt-vendor-benched-page",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum by (provider) (increase(omi_stt_stream_close_total{job=\"backend-listen-metrics\",provider=\"modulate\",reason=\"provider_budget_exhausted\"}[15m]))",
+      "file": "alerts/critical-failures.json",
+      "issues": [],
+      "metrics": [
+        "omi_stt_stream_close_total"
+      ],
+      "owner_title": "Modulate has rejected company credit",
+      "owner_uid": "omi-modulate-credit-page",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "time() - max(omi_error_class_last_fired_timestamp_seconds) < 900",
+      "file": "alerts/error-classes.json",
+      "issues": [],
+      "metrics": [
+        "omi_error_class_last_fired_timestamp_seconds"
+      ],
+      "owner_title": "Error classes - a new or surging error class is firing",
+      "owner_uid": "omi-error-class-firing",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max((sum(increase(omi_error_class_sweep_total{outcome!=\"ok\"}[1h])) > bool 0) + (sum(increase(omi_error_class_sweep_total[1h])) < bool 4))",
+      "file": "alerts/error-classes.json",
+      "issues": [],
+      "metrics": [
+        "omi_error_class_sweep_total"
+      ],
+      "owner_title": "Error classes - sentinel sweep is silent or failing",
+      "owner_uid": "omi-error-class-sweep-silent",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
     },
     {
       "expression": "(sum by (family) (rate(omi_firestore_documents_per_operation_sum[2h])) > 2 * sum by (family) (rate(omi_firestore_documents_per_operation_sum[2h] offset 24h))) and (sum by (family) (rate(omi_firestore_documents_per_operation_sum[2h])) > 100)",
@@ -1152,6 +1271,34 @@
       "scope": "explicit-bridge"
     },
     {
+      "expression": "max(omi_batch_projection_drain_oldest_age_seconds and (time() - omi_batch_timeliness_observed_at_seconds < 900)) or vector(0)",
+      "file": "alerts/pipeline-drain.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_projection_drain_oldest_age_seconds",
+        "omi_batch_timeliness_observed_at_seconds"
+      ],
+      "owner_title": "Batch projection drain stalled",
+      "owner_uid": "omi-pipeline-projection-drain-stall",
+      "panel": null,
+      "pointer": "/data/2/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max by (leg) (omi_batch_held_oldest_age_seconds{leg=~\"quarantine_held|assignment_held|record_pending\"} and ignoring(leg) (time() - omi_batch_timeliness_observed_at_seconds < 900))",
+      "file": "alerts/pipeline-drain.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_held_oldest_age_seconds",
+        "omi_batch_timeliness_observed_at_seconds"
+      ],
+      "owner_title": "Batch held row older than six hours",
+      "owner_uid": "omi-pipeline-held-row-age",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
       "expression": "(sum(increase(omi_audio_custody_would_drop_total[5m])) or vector(0)) + (sum(increase(omi_audio_custody_failures_total[5m])) or vector(0)) + (sum(increase(pusher_queue_drops_total{queue=~\"private.*|audio.*\"}[5m])) or vector(0)) + (sum(increase(pusher_private_cloud_upload_drops_total[5m])) or vector(0)) + ((max(omi_audio_custody_last_risk_timestamp_seconds) > time() - 300) or vector(0))",
       "file": "alerts/pusher.json",
       "issues": [],
@@ -1176,6 +1323,45 @@
       ],
       "owner_title": "Pusher - DB executor saturated",
       "owner_uid": "omi-pusher-db-executor-saturated",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum without (task) (omi_executor_task_queued{job=\"pusher-metrics\",executor=\"storage\"} and (time() - timestamp(omi_executor_task_queued{job=\"pusher-metrics\",executor=\"storage\"}) < 120))",
+      "file": "alerts/pusher.json",
+      "issues": [],
+      "metrics": [
+        "omi_executor_task_queued"
+      ],
+      "owner_title": "Pusher - Storage executor queue high",
+      "owner_uid": "omi-pusher-storage-queue-warning",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum without (task) (omi_executor_task_queued{job=\"pusher-metrics\",executor=\"storage\"} and (time() - timestamp(omi_executor_task_queued{job=\"pusher-metrics\",executor=\"storage\"}) < 120))",
+      "file": "alerts/pusher.json",
+      "issues": [],
+      "metrics": [
+        "omi_executor_task_queued"
+      ],
+      "owner_title": "Pusher - Storage executor queue critical",
+      "owner_uid": "omi-pusher-storage-queue-critical",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum by (stage) (rate(omi_pusher_storage_pcm_refusals_total{job=\"pusher-metrics\"}[5m]) and (time() - timestamp(omi_pusher_storage_pcm_refusals_total{job=\"pusher-metrics\"}) < 120))",
+      "file": "alerts/pusher.json",
+      "issues": [],
+      "metrics": [
+        "omi_pusher_storage_pcm_refusals_total"
+      ],
+      "owner_title": "Pusher - Storage PCM admission refused",
+      "owner_uid": "omi-pusher-storage-pcm-refusals",
       "panel": null,
       "pointer": "/data/0/model/expr",
       "scope": "normalized-omi-consumer-source-review"
@@ -1710,6 +1896,87 @@
       ],
       "owner_title": "New BYOK blocked state exceeds three days scan blind",
       "owner_uid": "omi-finalization-byok-dwell-page-blind",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max((sum without(kind) (omi_finalization_pair_new_mismatch)) and topk by(leg) (1, omi_finalization_pair_observed_at_seconds) and (time() - omi_finalization_pair_observed_at_seconds < 2100))",
+      "file": "alerts/resilience.json",
+      "issues": [],
+      "metrics": [
+        "omi_finalization_pair_new_mismatch",
+        "omi_finalization_pair_observed_at_seconds"
+      ],
+      "owner_title": "Fresh lifecycle pair drift persists",
+      "owner_uid": "omi-finalization-pair-drift",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max((sum without(kind) (omi_finalization_pair_mismatch)) and topk by(leg) (1, omi_finalization_pair_observed_at_seconds))",
+      "file": "alerts/resilience.json",
+      "issues": [],
+      "metrics": [
+        "omi_finalization_pair_mismatch",
+        "omi_finalization_pair_observed_at_seconds"
+      ],
+      "owner_title": "Lifecycle pair mismatch stock exceeds 25",
+      "owner_uid": "omi-finalization-pair-stock",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "(time() - min(max by(leg) (omi_finalization_pair_observed_at_seconds))) or vector(1e9)",
+      "file": "alerts/resilience.json",
+      "issues": [],
+      "metrics": [
+        "omi_finalization_pair_observed_at_seconds"
+      ],
+      "owner_title": "Lifecycle pair census stale",
+      "owner_uid": "omi-finalization-pair-drift-stale",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max(omi_finalization_pair_scan_truncated and topk by(leg) (1, omi_finalization_pair_observed_at_seconds) and (time() - omi_finalization_pair_observed_at_seconds < 2100)) or vector(1)",
+      "file": "alerts/resilience.json",
+      "issues": [],
+      "metrics": [
+        "omi_finalization_pair_observed_at_seconds",
+        "omi_finalization_pair_scan_truncated"
+      ],
+      "owner_title": "Lifecycle pair census incomplete",
+      "owner_uid": "omi-finalization-pair-drift-blind",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max(omi_enrichment_summary_repair_count)",
+      "file": "alerts/resilience.json",
+      "issues": [],
+      "metrics": [
+        "omi_enrichment_summary_repair_count"
+      ],
+      "owner_title": "Enrichment repair-fence stock exceeds 100",
+      "owner_uid": "omi-enrichment-summary-repair-stock",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "(time() - max(omi_enrichment_summary_repair_observed_at_seconds)) or vector(1e9)",
+      "file": "alerts/resilience.json",
+      "issues": [],
+      "metrics": [
+        "omi_enrichment_summary_repair_observed_at_seconds"
+      ],
+      "owner_title": "Enrichment repair stock observer stale",
+      "owner_uid": "omi-enrichment-repair-stock-stale",
       "panel": null,
       "pointer": "/data/0/model/expr",
       "scope": "normalized-omi-consumer-source-review"
@@ -3616,7 +3883,7 @@
   ],
   "counts": {
     "explicit_bridge": 25,
-    "query_consumers": 239
+    "query_consumers": 259
   },
   "schema_version": 1,
   "source": "repository, not live Grafana export"

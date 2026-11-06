@@ -47,6 +47,44 @@ _EXPECTED_DEPLOYABLE_CAPABILITIES: dict[tuple[str, str], frozenset[str]] = {
 # Summary acceptance must agree on every finalization host.
 FINALIZATION_GATE_FLAGS = ('CLIENT_SUMMARIES_AT_CAP_ENABLED',)
 
+BATCH_FINAL_PASS_FLAG = 'BATCH_FINAL_PASS_ENABLED'
+BATCH_FINAL_PASS_HOSTS = (
+    ('gke', 'backend-listen'),
+    ('gke', 'pusher'),
+    ('cloud_run', 'backend'),
+    ('cloud_run', 'backend-sync'),
+    ('cloud_run', 'backend-sync-backfill'),
+    ('cloud_run', 'backend-integration'),
+)
+
+
+def validate_batch_final_pass_hosts(env: str, config: ConfigDict) -> list[ValidationError]:
+    """Independent serving roster: deleting a binding cannot hide a runtime."""
+    if env != 'prod':
+        return []
+    errors, values = [], set()
+    gke = config.get('gke', {})
+    config_map = gke.get('config_map', {})
+    flag = BATCH_FINAL_PASS_FLAG
+    for platform, name in BATCH_FINAL_PASS_HOSTS:
+        services = gke if platform == 'gke' else config.get('cloud_run', {}).get('services', {})
+        entry = services.get(name, {}).get('env', {}).get(flag, {})
+        value = entry.get('value')
+        if platform == 'gke':
+            expected = {'name': config_map.get('name'), 'key': flag}
+            if entry.get('config_map') != expected or not expected['name']:
+                errors.append(ValidationError(f'{platform}/{name}', f'{flag} must use the shared ConfigMap'))
+            source = config_map.get('entries', {}).get(flag, {})
+            value = source.get('value') if source.get('source') == 'literal' else None
+        if value not in {'true', 'false'}:
+            errors.append(ValidationError(f'{platform}/{name}', f'{flag} needs an explicit true/false binding'))
+        else:
+            values.add(value)
+    if len(values) > 1:
+        errors.append(ValidationError('batch_final_pass', f'{flag} must agree across all production hosts'))
+    return errors
+
+
 # The runtime resolves these flags with strip().casefold() against the truthy
 # set {'1','true','yes','on'}; anything else — including '' — is silently False.
 # Admission therefore only accepts that truthy set and its falsy counterparts,
@@ -244,11 +282,13 @@ SPEAKER_EMBEDDING_HOSTS: tuple[tuple[str, str], ...] = (
     ('cloud_run', 'backend-integration'),
 )
 _CLUSTER_LOCAL_DNS = '.svc.cluster.local'
-# Cloud Run cannot resolve cluster DNS. These are the internal-ALB routes
-# (gateway IP + /diarizer); admission rejects any other literal, including a
-# value that merely agrees across Cloud Run hosts.
+# Cloud Run cannot resolve cluster DNS. Prod routes through the internal-ALB
+# shared gateway (gateway IP + /diarizer); the dev gateway VIP was deleted
+# 2026-11-02, so dev uses the documented rollback Ingress host. Admission
+# rejects any other literal, including a value that merely agrees across
+# Cloud Run hosts.
 _CLOUD_RUN_SPEAKER_EMBEDDING_URL = {
-    'dev': 'http://172.16.48.49/diarizer',
+    'dev': 'http://diarizer.omiapi.com:80',
     'prod': 'http://172.16.160.20/diarizer',
 }
 
@@ -261,7 +301,8 @@ def validate_speaker_embedding_hosts(env: str, env_config: ConfigDict) -> list[V
     voice matching there while the others keep working. Cloud Run cannot use
     in-cluster DNS, so each Cloud Run host must use that environment's
     approved internal-ALB route. GKE hosts share one route (ClusterIP service
-    DNS in prod, the shared internal gateway in dev).
+    DNS in prod, the legacy diarizer Ingress host in dev after the shared
+    internal gateway was removed).
     """
     errors: list[ValidationError] = []
     gke_values: dict[str, str] = {}
@@ -318,11 +359,14 @@ def validate_speaker_embedding_hosts(env: str, env_config: ConfigDict) -> list[V
 
 
 __all__ = [
+    'BATCH_FINAL_PASS_FLAG',
+    'BATCH_FINAL_PASS_HOSTS',
     'CANONICAL_MEMORY_MUTATION_CAPABILITY',
     'CONVERSATION_FINALIZATION_CAPABILITY',
     'FINALIZATION_GATE_FLAGS',
     'SPEAKER_EMBEDDING_ENV',
     'SPEAKER_EMBEDDING_HOSTS',
     'validate_conversation_finalization_capabilities',
+    'validate_batch_final_pass_hosts',
     'validate_speaker_embedding_hosts',
 ]

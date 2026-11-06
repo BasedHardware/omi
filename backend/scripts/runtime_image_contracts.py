@@ -7,6 +7,8 @@ truth, stages that exact source surface in a temporary directory, and walks impo
 from each declared entrypoint.  It catches a first-party package omitted from a
 whitelist Dockerfile without building an image.
 
+``check-third-party`` (runtime_image_dependencies.py) is its offline half.
+
 ``smoke`` is intentionally separate: it checks every reachable third-party module
 is installed in an already-built image with no network, then imports isolated
 entrypoints where that is side-effect safe. GPU images use the dependency-presence
@@ -622,7 +624,9 @@ def workflow_contract_errors(contracts: Iterable[ImageContract]) -> list[str]:
     return errors
 
 
-def third_party_dependency_modules(contract: ImageContract) -> tuple[str, ...]:
+def third_party_dependency_modules(
+    contract: ImageContract, *, _trees: dict[Path, ast.Module] | None = None
+) -> tuple[str, ...]:
     """Find reachable third-party import targets without executing application code.
 
     ``from google.cloud import tasks_v2`` records both ``google.cloud`` and
@@ -643,7 +647,11 @@ def third_party_dependency_modules(contract: ImageContract) -> tuple[str, ...]:
         if source is None:
             return
         source_path, _ = source
-        tree = ast.parse(source_path.read_text(encoding="utf-8"), filename=str(source_path))
+        tree = _trees.get(source_path) if _trees is not None else None
+        if tree is None:
+            tree = ast.parse(source_path.read_text(encoding="utf-8"), filename=str(source_path))
+            if _trees is not None:
+                _trees[source_path] = tree
         for imported in _imported_modules(
             tree,
             module,
@@ -1059,6 +1067,10 @@ def parse_args() -> argparse.Namespace:
     subparsers.add_parser("check-source", help="check each entrypoint's first-party Docker source closure")
     subparsers.add_parser("check-workflows", help="check registered deployment workflows smoke their image")
     subparsers.add_parser("check-roles", help="check the role -> image -> service map and role-image build stamps")
+    subparsers.add_parser(
+        "check-third-party",
+        help="check each image's reachable third-party imports against the distributions its Dockerfile installs",
+    )
     smoke = subparsers.add_parser("smoke", help="import an already-built image's registered entrypoint")
     smoke.add_argument("--dockerfile", type=Path, required=True)
     smoke.add_argument("--image", required=True)
@@ -1081,8 +1093,9 @@ def main() -> int:
         else:
             dockerfile = None
             contracts = load_contracts(args.registry)
-        if args.command in {"check", "check-source", "check-workflows", "check-roles"}:
+        if args.command in {"check", "check-source", "check-workflows", "check-roles", "check-third-party"}:
             errors = []
+            notes: list[str] = []
             if args.command in {"check", "check-source"}:
                 errors.extend(check_source_closures(contracts))
                 errors.extend(import_smoke_environment_errors(contracts))
@@ -1090,6 +1103,13 @@ def main() -> int:
                 errors.extend(workflow_contract_errors(contracts))
             if args.command in {"check", "check-roles"}:
                 errors.extend(role_map_errors(contracts, args.registry))
+            if args.command == "check-third-party":
+                from runtime_image_dependencies import check_third_party_closures
+
+                third_party_errors, notes = check_third_party_closures(contracts)
+                errors.extend(third_party_errors)
+            for note in notes:
+                print(f"note: {note}")
             if errors:
                 print("FAIL: runtime-image contract is incomplete:", file=sys.stderr)
                 for error in errors:
@@ -1110,4 +1130,5 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    sys.modules.setdefault("runtime_image_contracts", sys.modules[__name__])  # one ContractError for helpers
     raise SystemExit(main())

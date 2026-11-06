@@ -126,6 +126,7 @@ APP_CLIENT_PREFIXES = (
     '/v2/sync-capture-manifest',
     '/v2/sync-local-files',
     '/v2/tts',
+    '/v2/users/me/referral/campaign',
     '/v2/voice-message',
     '/v2/voice-messages',
     '/v3/memories',
@@ -330,6 +331,14 @@ UNDOCUMENTED_PUBLIC_ROUTES: dict[tuple[str, str], str] = {
         'POST',
         '/v1/conversations/search',
     ): 'Firebase-authenticated first-party app route; not part of the Developer API key contract.',
+    (
+        'POST',
+        '/v1/conversations/task-presence',
+    ): 'Firebase-authenticated first-party task membership metadata; not part of the Developer API key contract.',
+    (
+        'POST',
+        '/v1/conversations/with-tasks/page',
+    ): 'Firebase-authenticated first-party task-filtered conversation browse; not part of the Developer API key contract.',
     (
         'POST',
         '/v1/conversations/merge',

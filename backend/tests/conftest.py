@@ -66,9 +66,11 @@ _UNIT_TEST_ROOTS = (
 _FAST_UNIT_ALLOWLIST = BACKEND_DIR / 'tests' / 'fast_unit_duration_allowlist.txt'
 _ACCOUNT_DELETION_AUTHORITY_TESTS = {
     'tests/unit/test_account_deletion_auth_fence.py',
+    'tests/unit/test_account_deletion_marker_memo.py',
     'tests/unit/test_conversation_quiet_finalization.py',
     'tests/unit/test_firestore_read_site_attribution.py',
     'tests/unit/test_fsr_s4_caches.py',
+    'tests/unit/test_privacy_ttl_cache.py',
 }
 
 

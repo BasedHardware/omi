@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:omi/utils/logger.dart';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
@@ -1904,6 +1906,7 @@ void main() {
           await world.settle();
         }
         connection.failNextAudio = true;
+        Logger.instance.talker.cleanHistory();
         await expectLater(
           duringResume
               ? world.controller.resumeDeviceRecording()
@@ -1912,6 +1915,13 @@ void main() {
         );
         await world.settle();
         expect(world.controller.liveCaptureSource, isNull);
+        expect(
+            Logger.instance.talker.history.map((entry) => entry.message),
+            contains(allOf(
+              contains(
+                  '[Capture] fail closed: failure_class=StateError reason=Bad state: synthetic audio capture start failure'),
+              contains('phase=pendantLive source=pendant call_active=false device_connected=true'),
+            )));
         expect(world.controller.bleBytesStream, isNull);
         expect(connection.openAudioSubscriptions, 0);
         await world.controller.streamDeviceRecording(device: pendant);

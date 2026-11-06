@@ -26,6 +26,7 @@ from config.batch_pipeline import (
     projection_prefetch_depth,
     projection_hold_recovery_enabled,
     sweep_owner_chain_enabled,
+    serving_sweep_page_rows,
 )
 from database.batch_pipeline_projection import ProjectionBlocked, ProjectionReplay, ProjectionStore
 from database.batch_pipeline_projection_protocol import ProjectionGenerationAmbiguous
@@ -39,6 +40,7 @@ from utils.batch_pipeline.projection_privacy import PRIVACY_HELD, settle_refusal
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, BatchPrivacyReason
 from utils.batch_pipeline.projection_index import ProjectionIndex
 from database import conversations as conversations_db
+from utils.batch_pipeline.projection_walk_stop import walk_block_stop
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem, projection_speech_spans
 from utils.batch_pipeline import artifact_missing
 from utils.batch_pipeline.errors import error_site_field
@@ -111,6 +113,10 @@ class Walk(NamedTuple):
     advanced: list[str]
     # Stopped at its time or row bound with the chain still continuing.
     more: bool = False
+    # Closed, log-safe token naming why the walk stopped (WALK_STOPS, or blocked_<token>).
+    stop: str = ''
+    # Scheduling hint only: the privacy-blocked head and its observed row version.
+    blocked_head: tuple[str, object] | None = None
 
 
 def error_type(error: BaseException) -> str:
@@ -677,13 +683,17 @@ class Projector:
         if accounting is None:
             self.store.hold_for_quarantine(segment_id, binding, self.clock(), policy=policy)
             return None
-        with projection_phase('usage', policy):
-            record_speech(binding, accounting, self.clock())
+        if not accounting.get('source_deleted'):
+            with projection_phase('usage', policy):
+                record_speech(binding, accounting, self.clock())
         with projection_phase('completion', policy):
             result = self.store.complete(segment_id, binding, self.clock(), accounting, policy=policy)
         if result is not None:
-            with projection_phase('publication', policy):
-                self.publish(binding, result)
+            # complete() aggregated every part before setting this disposition.
+            # Never call the publisher, even with empty IDs, for a deleted job.
+            if result.get('reason_code') != 'source_deleted':
+                with projection_phase('publication', policy):
+                    self.publish(binding, result)
             from utils.batch_pipeline.retention import expire_completed_segment
 
             for sibling in binding.segment_ids:
@@ -714,7 +724,7 @@ class Projector:
         # Fair use follows the durable steps, never an uncommitted attempt. A
         # crash before this call is repaired by the next scan or the ordinary
         # completion, which re-issue every stored step under the same keys.
-        if not accounting['completed']:
+        if not accounting['completed'] and result.get('reason_code') != 'source_deleted':
             record_speech_steps(binding, accounting['source'], steps, times, self.clock())
         return result
 
@@ -783,7 +793,13 @@ class Projector:
 
     def release_held_scan(self, limit: int | None = None) -> dict[str, int]:
         """One bounded page of held units whose record target may be restored."""
-        from database.batch_pipeline_projection_release import RELEASE_PAGE, RELEASE_TICK_SECONDS, release_scan_pass
+        from database.batch_pipeline_projection_release import (
+            RELEASE_PAGE,
+            RELEASE_TICK_SECONDS,
+            GHOST_SKIP_CLASSES,
+            GHOST_AGE_BUCKETS,
+            release_scan_pass,
+        )
 
         enabled = projection_hold_recovery_enabled()
         started = time.monotonic()
@@ -796,12 +812,16 @@ class Projector:
         )
         if counts.get('examined'):
             logger.info(
-                'event=batch_projection action=release_held outcome=summary released=%d examined=%d waiting=%d error=%d elapsed_ms=%d',
+                'event=batch_projection action=release_held outcome=summary released=%d examined=%d waiting=%d error=%d elapsed_ms=%d ghost_settled=%d classified=%d skipped_by_class=%s age_buckets=%s',
                 counts['released'],
                 counts['examined'],
                 counts['waiting'],
                 counts['error'],
                 int((time.monotonic() - started) * 1000),
+                counts['ghost_settled'],
+                counts['ghost_classified'],
+                ','.join(f'{name}:{counts[f"ghost_skipped_{name}"]}' for name in GHOST_SKIP_CLASSES),
+                ','.join(f'{name}:{counts[f"ghost_age_{name}"]}' for name in GHOST_AGE_BUCKETS),
             )
         return counts
 
@@ -1252,9 +1272,10 @@ class Projector:
         if walk.more and owner_drain_enabled():
             self.request_drain(owner_id)
         logger.info(
-            'event=batch_projection action=owner_chain outcome=summary advanced=%d followups=%d',
+            'event=batch_projection action=owner_chain outcome=summary advanced=%d followups=%d stop=%s',
             len(walk.advanced),
             len(walk.followups),
+            walk.stop or 'end',
         )
         return walk.followups
 
@@ -1316,7 +1337,7 @@ class Projector:
                 acquired = stack.enter_context(projection_claim(self.store.store.namespace, owner_key(owner_id)))
                 if not acquired:
                     logger.info('event=batch_projection action=owner_chain outcome=claim_busy')
-                    return Walk([], [])
+                    return Walk([], [], stop='claim_busy')
             if prefetch is None and budget_seconds > 0:
                 prefetch = self.chain_prefetch(owner_id)
                 if prefetch is not None:
@@ -1343,6 +1364,7 @@ class Projector:
         first = None
         advanced: list[str] = []
         more = False
+        blocked_head = snapshot = None
 
         def failed(error: BaseException) -> None:
             # Keep what this walk already persisted; the sweep resumes later.
@@ -1376,18 +1398,24 @@ class Projector:
             group[segment_id] = None
             return True
 
+        stop = 'end'
         try:
             previous = self.store.projection_watermark(key)
         except Exception as error:
             if seed is not None:
                 owe(*seed)
             failed(error)
-            return Walk(list(dict.fromkeys(sid for group in groups.values() for sid in group)), advanced)
+            return Walk(
+                list(dict.fromkeys(sid for group in groups.values() for sid in group)), advanced, stop='watermark_error'
+            )
         if seed is not None and previous == seed[0] and not owe(*seed):
-            return Walk(list(dict.fromkeys(sid for group in groups.values() for sid in group)), advanced)
+            return Walk(
+                list(dict.fromkeys(sid for group in groups.values() for sid in group)), advanced, stop='owe_error'
+            )
         for _ in range(max(1, limit)):
             if time.monotonic() >= deadline:
                 more = True
+                stop = 'deadline'
                 break
             try:
                 segment_id = None
@@ -1398,9 +1426,11 @@ class Projector:
                     segment_id = self.store.store.projection_successor(key, previous)
                 row = {}
                 if segment_id is not None:
-                    row = self.store.ref('results', segment_id).get().to_dict() or {}
+                    snapshot = self.store.ref('results', segment_id).get()
+                    row = snapshot.to_dict() or {}
             except Exception as error:
                 failed(error)
+                stop = 'read_error'
                 break
             if segment_id is None:
                 break
@@ -1417,6 +1447,7 @@ class Projector:
                         # Still loading at the step deadline: the next step
                         # resumes here instead of holding this pool slot.
                         more = True
+                        stop = 'prefetch_wait'
                         break
                 inputs = prefetched if isinstance(prefetched, Prefetched) and row else None
                 if inputs is not None:
@@ -1442,20 +1473,30 @@ class Projector:
                     self._project_read(segment_id, job, entry, binding, hint=hint, claimed=drain)
             except StepDeadline:
                 more = True  # a partial multipart; the next step resumes it
+                stop = 'step_deadline'
                 break
-            except (ProjectionBlocked, BatchPrivacyBlocked):
+            except BatchPrivacyBlocked:
+                stop, blocked_head = 'privacy_blocked', (segment_id, getattr(snapshot, 'update_time', None))
+                break
+            except ProjectionBlocked as error:
+                stop = walk_block_stop(error, projection_block_reason(error))
+                if stop.startswith('blocked_privacy_'):
+                    blocked_head = (segment_id, getattr(snapshot, 'update_time', None))
                 break
             except Exception as error:
                 failed(error)
                 if binding is None or not self.resolve_failing_head(segment_id, job, entry, binding, error):
+                    stop = 'head_error'
                     break
                 # Held (or already terminal): continue iff the chain advanced.
                 try:
                     watermark = self.store.projection_watermark(key)
                 except Exception as watermark_error:
                     failed(watermark_error)
+                    stop = 'watermark_error'
                     break
                 if watermark != segment_id:
+                    stop = 'hold_not_landed'
                     break  # the hold did not land; the sweep retries this head
                 previous = segment_id
                 advanced.append(segment_id)
@@ -1467,8 +1508,10 @@ class Projector:
                 if policy.async_projection:
                     owe(segment_id, binding)
                 failed(error)
+                stop = 'watermark_error'
                 break
             if watermark != segment_id:
+                stop = 'not_advanced'
                 break  # Busy claim or partial multipart: the sweep retries it.
             previous = segment_id
             advanced.append(segment_id)
@@ -1476,21 +1519,24 @@ class Projector:
                 if segment_id == recovered:
                     first = binding.content_id
                 if not privacy_held and not owe(segment_id, binding):
+                    stop = 'owe_error'
                     break
         else:
             more = True
+            stop = 'limit'
         ordered = [groups.pop(first)] if first is not None else []
         followups = list(dict.fromkeys(sid for group in ordered + list(groups.values()) for sid in group))
-        return Walk(followups, advanced, more)
+        return Walk(followups, advanced, more, stop, blocked_head)
 
-    def sweep(self, limit: int = 100) -> dict[str, int]:
+    def sweep(self, limit: int | None = None) -> dict[str, int]:
         """Bounded durable-log recovery; no in-memory callback is an outbox."""
         from database.batch_pipeline_privacy import BatchPrivacyBlocked
 
         counts = {'completed': 0, 'waiting': 0, 'blocked': 0, 'error': 0}
         contention = False
         self.has_async_followups = False
-        size = max(1, min(limit, 100))
+        page_rows = serving_sweep_page_rows()
+        size = page_rows if limit is None else max(1, min(limit, page_rows))
         pending_page = projection_pending_page_enabled()
         chain = sweep_owner_chain_enabled()
         # The owner drain walks chains continuously; the sweep only discovers
