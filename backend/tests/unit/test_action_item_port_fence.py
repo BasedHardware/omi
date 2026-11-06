@@ -2,6 +2,9 @@
 
 from datetime import datetime, timezone
 import importlib
+from pathlib import Path
+import subprocess
+import sys
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -536,3 +539,12 @@ def test_non_task_operator_unlock_takes_no_task_ticket(redis, monkeypatch):
     operator = importlib.import_module('scripts.unlock_soft_cap_locked')
     monkeypatch.setattr(versions, 'begin', lambda uid: pytest.fail('non-task ticket'))
     operator.unlock_collection(loose_client(), UID, 'memories')
+
+
+def test_operator_direct_script_help_needs_no_pythonpath(tmp_path):
+    script = Path(__file__).resolve().parents[2] / 'scripts' / 'unlock_soft_cap_locked.py'
+    result = subprocess.run(
+        [sys.executable, str(script), '--help'], cwd=tmp_path, capture_output=True, text=True, timeout=15
+    )
+    assert result.returncode == 0, result.stderr
+    assert '--uids-file' in result.stdout

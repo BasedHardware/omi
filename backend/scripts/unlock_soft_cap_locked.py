@@ -20,16 +20,19 @@ Usage:
 
 from contextlib import nullcontext
 
-from database.action_item_fence import fenced_action_item_commit
-
 import argparse
 import logging
 import sys
+from pathlib import Path
 from typing import Any, cast
 
 import firebase_admin
 from firebase_admin import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
+
+# Keep the documented direct-script invocation usable from any working directory.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from database.action_item_fence import fenced_action_item_commit
 
 # firebase_admin ships partial/py.typed stubs that surface as partially-unknown
 # member types; the SDK boundary is treated as Any (mirrors database/_client.py).
