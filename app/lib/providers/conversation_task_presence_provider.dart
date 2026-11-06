@@ -45,7 +45,7 @@ class ConversationTaskPresenceProvider extends ChangeNotifier {
     if (!identical(_conversations, conversations)) {
       _conversations?.removeListener(_conversationChanged);
       _conversations = conversations..addListener(_conversationChanged);
-      _conversationKey = _conversationInputs(conversations);
+      _conversationKey = conversations._taskPresenceInputs;
     }
     if (!identical(_tasks, tasks)) {
       _tasks?.removeListener(_tasksChanged);
@@ -53,17 +53,6 @@ class ConversationTaskPresenceProvider extends ChangeNotifier {
       _taskKey = _taskInputs(tasks);
     }
   }
-
-  Object _conversationInputs(ConversationProvider source) => (
-        source.conversations,
-        source.conversations.length,
-        source.searchedConversations,
-        source.searchedConversations.length,
-        source.processingConversations,
-        source.processingConversations.length,
-        source.isFetchingConversations,
-        source.isLoadingConversations,
-      );
 
   Object _taskInputs(ActionItemsProvider source) => (
         source.apiViewState,
@@ -73,7 +62,8 @@ class ConversationTaskPresenceProvider extends ChangeNotifier {
       );
 
   void _conversationChanged() {
-    final key = _conversationInputs(_conversations!);
+    final conversations = _conversations!;
+    final key = conversations._taskPresenceInputs;
     if (key == _conversationKey) return;
     _conversationKey = key;
     invalidate();
@@ -170,4 +160,17 @@ class ConversationTaskPresenceProvider extends ChangeNotifier {
     _tasks?.removeListener(_tasksChanged);
     super.dispose();
   }
+}
+
+extension on ConversationProvider {
+  Object get _taskPresenceInputs => (
+        conversations,
+        conversations.length,
+        searchedConversations,
+        searchedConversations.length,
+        processingConversations,
+        processingConversations.length,
+        isFetchingConversations,
+        isLoadingConversations,
+      );
 }
