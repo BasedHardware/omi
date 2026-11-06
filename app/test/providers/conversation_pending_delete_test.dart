@@ -339,6 +339,21 @@ void main() {
     expect(prefs.getStringList('cachedConversations'), [jsonEncode(row.toJson())]);
   });
 
+  test('a refused delete still reports failure after its route closes', () async {
+    final row = _conversation('deleted');
+    final response = Completer<bool>();
+    final day = ConversationProvider(isSignedIn: () => true)
+      ..conversationDeleteFetcherOverride = (_) => response.future;
+    var failures = 0;
+    await day.deleteConversationLocally(row, onFailure: () => failures++);
+    final deletion = day.deleteConversationOnServer(row.id);
+    day.dispose();
+    response.complete(false);
+    await deletion;
+
+    expect(failures, 1);
+  });
+
   test('a regroup during the window does not bring the row back', () {
     final a = _conversation('a');
     final provider = makeProvider([a]);

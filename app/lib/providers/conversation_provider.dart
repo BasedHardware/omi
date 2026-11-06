@@ -1686,12 +1686,17 @@ class ConversationProvider extends ChangeNotifier {
     if (!ownsCache()) return;
 
     if (!succeeded) {
-      if (!current()) return;
       final deleted = memoriesToDelete[conversationId];
-      if (deleted != null) await _restoreDeletedConversation(deleted);
-      if (!current()) return;
+      if (deleted != null) {
+        if (current()) {
+          await _restoreDeletedConversation(deleted);
+        } else {
+          await _restoreSiriAfterOptimisticDelete(deleted);
+        }
+      }
+      if (!ownsCache()) return;
       _clearDeleteTombstone(conversationId);
-      notifyListeners();
+      if (current()) notifyListeners();
       pending?.onFailure?.call();
       return;
     }
@@ -2301,7 +2306,9 @@ class ConversationProvider extends ChangeNotifier {
       _mergedAwayConversationIds.addAll(removed);
       mergingConversationIds.removeAll({...removed, mergedConversationId});
       conversations.removeWhere((c) => removed.contains(c.id) || c.id == target.id);
-      if (_matchesActiveConversationFilters(target)) conversations.insert(0, target);
+      if (!_isHiddenByDelete(target.id) && _matchesActiveConversationFilters(target)) {
+        conversations.insert(0, target);
+      }
       searchedConversations.removeWhere((c) => removed.contains(c.id));
       processingConversations.removeWhere((c) => removed.contains(c.id) || c.id == target.id);
       final cacheRows = {
@@ -2332,7 +2339,7 @@ class ConversationProvider extends ChangeNotifier {
       for (final id in removed) {
         SiriIntegration.current.queueDelete('conversation', id);
       }
-      SiriIntegration.current.queueUpsertConversations([target]);
+      if (!_isHiddenByDelete(target.id)) SiriIntegration.current.queueUpsertConversations([target]);
       PlatformManager.instance.analytics.conversationMergeCompleted(mergedConversationId, removed.toList());
       notifyListeners();
     });
