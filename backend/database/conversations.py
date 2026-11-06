@@ -2350,6 +2350,52 @@ def update_conversation(
     return True
 
 
+def _effective_user_reprocess_app_source(
+    uid: str, conversation_id: str, current: dict[str, Any], transaction
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    current_receipt = decode_manual_speaker_assignments(
+        uid,
+        current.get('manual_speaker_assignments'),
+        bool(current.get('manual_speaker_assignments_compressed')),
+    )
+    segments = _decode_transcript_segments_strict(
+        uid,
+        current.get('transcript_segments', []),
+        bool(current.get('transcript_segments_compressed')),
+        require_decryption=True,
+    )
+    if current.get('has_transcript_corrections'):
+        from utils.agent_capabilities.transcripts import apply_entries, load_entries
+
+        corrections = load_entries(uid, conversation_id, firestore_client=db, transaction=transaction)
+        segments = apply_entries(segments, corrections)
+    return apply_manual_assignments(segments, current_receipt), current_receipt
+
+
+def get_user_reprocess_app_snapshot(
+    uid: str, conversation_id: str
+) -> tuple[list[dict[str, Any]], dict] | None:
+    """Read the effective canonical transcript and speaker receipt for app generation."""
+    conversation_ref = db.collection('users').document(uid).collection(conversations_collection).document(
+        conversation_id
+    )
+
+    @firestore.transactional
+    def _read(transaction):
+        snapshot = conversation_ref.get(transaction=transaction)
+        if not getattr(snapshot, 'exists', False):
+            return None
+        current = snapshot.to_dict() or {}
+        if current.get('is_locked') or not is_visible_conversation(current, include_discarded=True):
+            return None
+        try:
+            return _effective_user_reprocess_app_source(uid, conversation_id, current, transaction)
+        except (TranscriptSegmentsDecodeError, ValueError, TypeError, json.JSONDecodeError, zlib.error):
+            return None
+
+    return run_transactional(db, _read)
+
+
 @after_write('conversations')
 def persist_user_reprocess_app_results(
     uid: str,
@@ -2381,23 +2427,9 @@ def persist_user_reprocess_app_results(
         if current.get('is_locked') or not is_visible_conversation(current, include_discarded=True):
             return False
         try:
-            current_receipt = decode_manual_speaker_assignments(
-                uid,
-                current.get('manual_speaker_assignments'),
-                bool(current.get('manual_speaker_assignments_compressed')),
+            segments, current_receipt = _effective_user_reprocess_app_source(
+                uid, conversation_id, current, transaction
             )
-            segments = _decode_transcript_segments_strict(
-                uid,
-                current.get('transcript_segments', []),
-                bool(current.get('transcript_segments_compressed')),
-                require_decryption=True,
-            )
-            if current.get('has_transcript_corrections'):
-                from utils.agent_capabilities.transcripts import apply_entries, load_entries
-
-                corrections = load_entries(uid, conversation_id, firestore_client=db, transaction=transaction)
-                segments = apply_entries(segments, corrections)
-            segments = apply_manual_assignments(segments, current_receipt)
         except (TranscriptSegmentsDecodeError, ValueError, TypeError, json.JSONDecodeError, zlib.error):
             return False
         if (
@@ -2503,7 +2535,7 @@ def persist_template_batch_results(
 
                 corrections = load_entries(uid, conversation_id, firestore_client=db, transaction=transaction)
                 segments = apply_entries(segments, corrections)
-        except (TranscriptSegmentsDecodeError, ValueError, TypeError, json.JSONDecodeError):
+        except (TranscriptSegmentsDecodeError, ValueError, TypeError, json.JSONDecodeError, zlib.error):
             return False
         segments = apply_manual_assignments(segments, current_receipt)
         if transcript_fence_sha256(segments) != expected_transcript_fence_sha256:

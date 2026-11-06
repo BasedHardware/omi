@@ -118,6 +118,41 @@ def _persist_app_results(
     return persisted, document
 
 
+def test_user_reprocess_app_snapshot_reads_committed_speaker_identity(monkeypatch):
+    segments = [
+        {
+            'id': 'segment',
+            'text': 'Speaker identity committed with notes.',
+            'speaker': 'SPEAKER_00',
+            'speaker_id': 0,
+            'is_user': False,
+            'person_id': 'committed-person',
+            'speaker_match_source': 'person_match',
+            'start': 0,
+            'end': 1,
+        }
+    ]
+    document = _Document(
+        {
+            'status': 'completed',
+            'discarded': False,
+            'transcript_segments': segments,
+            'manual_speaker_assignments': {},
+        }
+    )
+    monkeypatch.setattr(conversations_db, 'db', _Database(document))
+    monkeypatch.setattr(conversations_db.firestore, 'transactional', lambda function: function)
+    monkeypatch.setattr(conversations_db, 'run_transactional', lambda _db, function: function(_Transaction()))
+
+    snapshot = conversations_db.get_user_reprocess_app_snapshot('user', 'conversation')
+
+    assert snapshot is not None
+    effective_segments, receipt = snapshot
+    assert effective_segments[0]['person_id'] == 'committed-person'
+    assert effective_segments[0]['speaker_match_source'] == 'person_match'
+    assert receipt == {}
+
+
 def test_batch_transaction_merges_current_unselected_user_edits(monkeypatch):
     transcript = [{'text': 'Transcript stays intact', 'speaker_id': 0}]
     receipt = {}
@@ -156,6 +191,18 @@ def test_batch_transaction_refuses_deleted_or_transcript_changed_conversation(mo
 
     assert deleted is False and deleted_doc.writes == []
     assert changed is False and changed_doc.writes == []
+
+
+def test_batch_transaction_fails_closed_on_corrupt_compressed_transcript(monkeypatch):
+    persisted, document = _persist(
+        monkeypatch,
+        {'transcript_segments': b'not-zlib', 'transcript_segments_compressed': True},
+        transcript=[],
+    )
+
+    assert persisted is False
+    assert document.writes == []
+
 
 
 def test_batch_transaction_refuses_overwriting_concurrent_edit_to_selected_result(monkeypatch):

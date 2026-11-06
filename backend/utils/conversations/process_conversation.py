@@ -3187,11 +3187,13 @@ def process_conversation(
             expected_app_transcript_fence = None
             expected_app_speaker_receipt_fence = None
             if user_reprocess:
-                app_speaker_receipt = conversations_db.get_manual_speaker_receipt(uid, conversation.id)
-                app_segments = apply_manual_assignments(
-                    [segment.dict() for segment in conversation.transcript_segments or []],
-                    app_speaker_receipt,
-                )
+                app_snapshot = conversations_db.get_user_reprocess_app_snapshot(uid, conversation.id)
+                if app_snapshot is None:
+                    _current_user_reprocess_conversation(uid, conversation.id)
+                    raise HTTPException(
+                        status_code=409, detail='Conversation changed during reprocessing. Please retry.'
+                    )
+                app_segments, app_speaker_receipt = app_snapshot
                 conversation.transcript_segments = [TranscriptSegment(**segment) for segment in app_segments]
                 expected_app_transcript_fence = transcript_fence_sha256(app_segments)
                 expected_app_speaker_receipt_fence = conversations_db.manual_speaker_receipt_sha256(

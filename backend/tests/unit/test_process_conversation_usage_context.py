@@ -639,12 +639,21 @@ def _explicit_selection_flow_conversation():
     return completed
 
 
-def _run_explicit_selection_flow(monkeypatch, trigger_apps, update_calls, **process_kwargs):
+def _run_explicit_selection_flow(
+    monkeypatch,
+    trigger_apps,
+    update_calls,
+    *,
+    user_reprocess_snapshot=None,
+    app_result_fences=None,
+    **process_kwargs,
+):
     """Drive process_conversation for an explicit app selection; appends each write to update_calls."""
     input_conversation = MagicMock()
     input_conversation.source = "omi"
     input_conversation.get_person_ids.return_value = []
     completed = _explicit_selection_flow_conversation()
+    completed.transcript_segments = [TranscriptSegment(text='stale snapshot', is_user=False, start=0, end=1)]
 
     monkeypatch.setattr(process_conversation, "_get_structured", lambda *args, **kwargs: (MagicMock(), False))
     monkeypatch.setattr(process_conversation, "_get_conversation_obj", lambda *args, **kwargs: completed)
@@ -655,12 +664,19 @@ def _run_explicit_selection_flow(monkeypatch, trigger_apps, update_calls, **proc
     monkeypatch.setattr(process_conversation, "trigger_conversation_apps", trigger_apps)
     monkeypatch.setattr(process_conversation, "_save_action_items", MagicMock())
     monkeypatch.setattr(process_conversation, "_extract_memories", MagicMock())
-    monkeypatch.setattr(process_conversation.conversations_db, 'get_manual_speaker_receipt', lambda *_: {})
+    snapshot = user_reprocess_snapshot or ([], {})
+    monkeypatch.setattr(
+        process_conversation.conversations_db,
+        'get_user_reprocess_app_snapshot',
+        lambda *_: snapshot,
+    )
     monkeypatch.setattr(process_conversation.conversations_db, 'manual_speaker_receipt_sha256', lambda *_: 'receipt')
 
     def persist_app_results(_uid, _cid, *, suggested_summarization_apps, **kwargs):
         assert kwargs['expected_transcript_fence_sha256']
         assert kwargs['expected_speaker_receipt_sha256'] == 'receipt'
+        if app_result_fences is not None:
+            app_result_fences.append(kwargs['expected_transcript_fence_sha256'])
         update_calls.append(
             {
                 'suggested_summarization_apps': suggested_summarization_apps,
@@ -709,6 +725,39 @@ def test_explicit_selection_success_persists_that_apps_result(monkeypatch):
         'apps_results': [{'app_id': 'selected-app', 'content': 'APP SUMMARY'}],
         'suggested_summarization_apps': [],
     } in (update_calls)
+
+
+def test_user_reprocess_generates_apps_from_committed_identity_snapshot(monkeypatch):
+    canonical_segments = [
+        {
+            'text': 'Identity was bound during canonical persistence.',
+            'speaker': 'SPEAKER_00',
+            'speaker_id': 0,
+            'is_user': False,
+            'person_id': 'committed-person',
+            'speaker_match_source': 'person_match',
+            'start': 0,
+            'end': 1,
+        }
+    ]
+    app_result_fences = []
+
+    def _trigger_apps(_uid, conversation, **kwargs):
+        segment = conversation.transcript_segments[0]
+        assert segment.text == canonical_segments[0]['text']
+        assert segment.person_id == 'committed-person'
+        assert segment.speaker_match_source == 'person_match'
+        conversation.apps_results.append(process_conversation.AppResult(app_id='selected-app', content='APP SUMMARY'))
+
+    _run_explicit_selection_flow(
+        monkeypatch,
+        _trigger_apps,
+        [],
+        user_reprocess_snapshot=(canonical_segments, {}),
+        app_result_fences=app_result_fences,
+    )
+
+    assert app_result_fences == [process_conversation.transcript_fence_sha256(canonical_segments)]
 
 
 def test_explicit_selection_failure_surfaces_a_real_error_and_persists_as_today(monkeypatch):
