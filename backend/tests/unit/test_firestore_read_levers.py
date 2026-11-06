@@ -79,3 +79,18 @@ def test_unknown_names(monkeypatch):
     assert levers.lever_enabled('listen_poll')
     with pytest.raises(ValueError):
         levers.lever_percent('bogus')
+
+
+@pytest.mark.parametrize('raw', ['', '{}', '{"singleton_loops":100}'])
+def test_oldest_metrics_lever_defaults_on(monkeypatch, raw):
+    monkeypatch.setenv(levers.ENV_KEY, raw)
+    assert levers.lever_percent('batch_metrics_oldest_leader') == 100
+    assert levers.lever_enabled('batch_metrics_oldest_leader')
+
+
+@pytest.mark.parametrize('value', [0, False, 'off', 101])
+def test_oldest_metrics_explicit_off_or_invalid_restores_old_behavior(monkeypatch, value):
+    import json
+
+    monkeypatch.setenv(levers.ENV_KEY, json.dumps({'batch_metrics_oldest_leader': value}))
+    assert not levers.lever_enabled('batch_metrics_oldest_leader')
