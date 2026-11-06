@@ -25,6 +25,7 @@ class AccountCutoverGenerationMismatchError(ValueError):
 
 
 def legacy_writes_allowed_for_state(state: AccountCutoverState) -> bool:
+    """Migrated owners may mutate cells; legacy writes remain fenced."""
     """Legacy product mutations are only legal while the account remains legacy.
 
     ``rolled_back_stranded`` restores the legacy data plane for reads and new

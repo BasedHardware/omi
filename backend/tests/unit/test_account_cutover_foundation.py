@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from database import account_cutover as account_cutover_db
+from database import redis_db
 from database.read_boundary import MalformedDocError
 from models.account_cutover import (
     AccountCutoverCheckpointPhase,
@@ -35,6 +36,15 @@ from utils.account_cutover.fence import (
 )
 from utils.account_cutover.state import AccountCutoverTransitionError, apply_cutover_transition, legal_transitions
 from utils.other import endpoints as auth
+
+
+@pytest.fixture(autouse=True)
+def idle_cache(monkeypatch):
+    cache = {}
+    monkeypatch.setattr(redis_db, 'get_generic_cache', lambda key: cache.get(key))
+    monkeypatch.setattr(redis_db, 'set_generic_cache', lambda key, value, ttl: cache.update({key: value}))
+    monkeypatch.setattr(redis_db, 'delete_generic_cache', lambda key: cache.pop(key, None))
+    return cache
 
 
 @pytest.fixture
@@ -353,15 +363,15 @@ def test_generation_zero_remains_compatible_without_header(monkeypatch):
 def test_coordinator_begin_requires_explicit_enrollment(fake_db):
     coordinator = AccountCutoverCoordinator(firestore_client=fake_db)
     with pytest.raises(AccountCutoverTransitionError) as exc:
-        coordinator.begin('user-abc')
+        coordinator.begin('user-abc', data_plane='legacy')
     assert exc.value.code == 'cutover_not_enrolled'
 
 
 def test_coordinator_begin_is_idempotent(fake_db, enroll_uid):
     enroll_uid('user-abc')
     coordinator = AccountCutoverCoordinator(firestore_client=fake_db)
-    first = coordinator.begin('user-abc')
-    second = coordinator.begin('user-abc')
+    first = coordinator.begin('user-abc', data_plane='legacy')
+    second = coordinator.begin('user-abc', data_plane='legacy')
     assert first.created is True
     assert second.resumed is True
     assert first.record.manifest_id == second.record.manifest_id
@@ -375,7 +385,7 @@ def test_prepare_offline_drain_only_before_fence(fake_db, enroll_uid):
     drained = coordinator.prepare_offline_drain('user-drain')
     assert drained.state == AccountCutoverState.legacy
     assert drained.offline_queue_instruction == OfflineQueueInstruction.drain
-    begun = coordinator.begin('user-drain')
+    begun = coordinator.begin('user-drain', data_plane='legacy')
     assert begun.record.offline_queue_instruction == OfflineQueueInstruction.quarantine
     with pytest.raises(AccountCutoverTransitionError) as exc:
         coordinator.prepare_offline_drain('user-drain')
@@ -385,7 +395,7 @@ def test_prepare_offline_drain_only_before_fence(fake_db, enroll_uid):
 def test_coordinator_refuses_import_without_destination_binding(fake_db, enroll_uid):
     enroll_uid('user-xyz')
     coordinator = AccountCutoverCoordinator(firestore_client=fake_db)
-    begun = coordinator.begin('user-xyz')
+    begun = coordinator.begin('user-xyz', data_plane='legacy')
     coordinator.checkpoint(
         'user-xyz',
         phase=AccountCutoverCheckpointPhase.offline_queue_fenced,
@@ -407,7 +417,7 @@ def test_coordinator_refuses_import_without_destination_binding(fake_db, enroll_
 def test_bind_product_generations_refuses_without_destination(fake_db, enroll_uid):
     enroll_uid('user-bind')
     coordinator = AccountCutoverCoordinator(firestore_client=fake_db)
-    begun = coordinator.begin('user-bind')
+    begun = coordinator.begin('user-bind', data_plane='legacy')
     with pytest.raises(AccountCutoverTransitionError) as exc:
         coordinator.bind_destination_product_generations(
             'user-bind',
@@ -445,6 +455,7 @@ def test_access_denies_migrating_product_traffic(monkeypatch, fake_db):
             force=True,
         )
     assert exc.value.code == 'migration_maintenance'
+    evaluate_account_cutover_access('u1', method='GET', path='/v1/conversations', headers={}, force=True)
 
 
 def test_control_endpoint_projects_legacy_default(monkeypatch):
@@ -494,7 +505,7 @@ def test_uid_document_binding_rejects_mismatched_embedded_uid(fake_db):
 def test_cas_requires_token_match_for_existing_document(fake_db, enroll_uid):
     enroll_uid('cas-uid')
     coordinator = AccountCutoverCoordinator(firestore_client=fake_db)
-    begun = coordinator.begin('cas-uid')
+    begun = coordinator.begin('cas-uid', data_plane='legacy')
     stale = begun.record.model_copy(update={'checkpoint_phase': AccountCutoverCheckpointPhase.offline_queue_fenced})
     with pytest.raises(account_cutover_db.AccountCutoverConcurrencyError) as exc:
         account_cutover_db.cas_set_account_cutover_record(
@@ -511,7 +522,7 @@ def test_cas_requires_token_match_for_existing_document(fake_db, enroll_uid):
 def test_checkpoint_rotates_token_and_rejects_completed_phase(fake_db, enroll_uid):
     enroll_uid('token-uid')
     coordinator = AccountCutoverCoordinator(firestore_client=fake_db)
-    begun = coordinator.begin('token-uid')
+    begun = coordinator.begin('token-uid', data_plane='legacy')
     first_token = begun.record.checkpoint_token
     advanced = coordinator.checkpoint(
         'token-uid',
@@ -539,7 +550,7 @@ def test_checkpoint_rotates_token_and_rejects_completed_phase(fake_db, enroll_ui
 def test_complete_to_new_is_idempotent(fake_db, enroll_uid):
     enroll_uid('complete-uid')
     coordinator = AccountCutoverCoordinator(firestore_client=fake_db)
-    begun = coordinator.begin('complete-uid')
+    begun = coordinator.begin('complete-uid', data_plane='legacy')
     # Seed a cutover_ready + destination-bound record through CAS.
     ready = begun.record.model_copy(
         update={
@@ -724,7 +735,7 @@ def test_telemetry_bounds_unknown_transition_reason(monkeypatch):
 def test_concurrent_checkpoint_loses_on_stale_token(fake_db, enroll_uid):
     enroll_uid('race-uid')
     coordinator = AccountCutoverCoordinator(firestore_client=fake_db)
-    begun = coordinator.begin('race-uid')
+    begun = coordinator.begin('race-uid', data_plane='legacy')
     token = begun.record.checkpoint_token
     first = coordinator.checkpoint(
         'race-uid',
@@ -749,3 +760,99 @@ def test_concurrent_checkpoint_loses_on_stale_token(fake_db, enroll_uid):
             require_existing=True,
             firestore_client=fake_db,
         )
+
+
+@pytest.mark.parametrize('source', [AccountCutoverState.legacy, AccountCutoverState.new])
+def test_migrated_cannot_skip_migration(source):
+    with pytest.raises(AccountCutoverTransitionError):
+        apply_cutover_transition(
+            AccountCutoverRecord(uid='u1', state=source),
+            AccountCutoverTransitionRequest(
+                target_state=AccountCutoverState.migrated, expected_account_generation=0, reason='illegal'
+            ),
+        )
+
+
+def test_cell_transitions_preserve_generation_and_project_open_control(fake_db, monkeypatch):
+    coordinator = AccountCutoverCoordinator(firestore_client=fake_db)
+    begun = coordinator.begin('cell-owner')  # Cell ceremony does not use bridge cohort.
+    assert begun.record.data_plane == 'cell'
+    assert begun.record.account_generation == 0
+    assert begun.record.offline_queue_instruction == OfflineQueueInstruction.quarantine
+    ready = begun.record.model_copy(
+        update={
+            'checkpoint_phase': AccountCutoverCheckpointPhase.cutover_ready,
+            'destination_backend_bound': True,
+            'checkpoint_token': 'ready-cell',
+        }
+    )
+    account_cutover_db.set_account_cutover_record('cell-owner', ready, firestore_client=fake_db)
+    migrated = coordinator.complete_to_migrated('cell-owner', expected_account_generation=0)
+    assert migrated.state == AccountCutoverState.migrated
+    assert migrated.account_generation == 0
+    assert coordinator.complete_to_migrated('cell-owner', expected_account_generation=0) == migrated
+    control = build_account_cutover_control(migrated)
+    assert control.client_action == AccountCutoverClientAction.none
+    assert control.offline_queue_instruction == OfflineQueueInstruction.none
+    assert control.product_traffic_allowed is True
+    assert control.legacy_writes_allowed is False
+    assert control.data_plane == 'cell'
+    for method in ('GET', 'POST'):
+        evaluate_account_cutover_access(
+            'cell-owner', method=method, path='/v1/conversations', headers={}, firestore_client=fake_db, force=True
+        )
+    rollback = coordinator.rollback_lossy('cell-owner', expected_account_generation=0)
+    assert rollback.state == AccountCutoverState.rolled_back_stranded
+
+
+def test_cell_migrating_reads_open_mutations_and_ws_denied(monkeypatch, fake_db, idle_cache):
+    monkeypatch.setenv('ACCOUNT_CUTOVER_ENFORCEMENT', 'on')
+    record = AccountCutoverRecord(uid='u1', state=AccountCutoverState.migrating, data_plane='cell')
+    account_cutover_db.set_account_cutover_record('u1', record, firestore_client=fake_db)
+    evaluate_account_cutover_access('u1', method='GET', path='/v1/conversations', headers={}, firestore_client=fake_db)
+    assert 'cutover-idle:u1' not in idle_cache
+    with pytest.raises(AccountCutoverAccessDenial) as error:
+        evaluate_account_cutover_access(
+            'u1', method='POST', path='/v1/conversations', headers={}, firestore_client=fake_db
+        )
+    assert error.value.code == 'migration_maintenance'
+    assert error.value.detail['retryable'] is True
+    with pytest.raises(auth.WebSocketException) as error:
+        auth.enforce_account_cutover_ws_access('u1', path='/v4/listen', headers={}, firestore_client=fake_db)
+    assert error.value.code == auth.WS_AUTH_CODE_ACCOUNT_CUTOVER
+
+
+def test_idle_bit_gates_read_and_both_write_seams_delete(monkeypatch, fake_db, idle_cache):
+    monkeypatch.setenv('ACCOUNT_CUTOVER_ENFORCEMENT', 'on')
+    evaluate_account_cutover_access('u1', method='GET', path='/v1/conversations', headers={}, firestore_client=fake_db)
+    assert idle_cache == {'cutover-idle:u1': 1}
+    original = account_cutover_db.get_account_cutover_record
+    monkeypatch.setattr(account_cutover_db, 'get_account_cutover_record', lambda *a, **k: pytest.fail('idle read'))
+    evaluate_account_cutover_access('u1', method='POST', path='/v1/conversations', headers={}, firestore_client=fake_db)
+    monkeypatch.setattr(account_cutover_db, 'get_account_cutover_record', original)
+    record = AccountCutoverRecord(uid='u1', data_plane='cell', state=AccountCutoverState.migrating)
+    account_cutover_db.set_account_cutover_record('u1', record, firestore_client=fake_db)
+    assert not idle_cache
+    with pytest.raises(AccountCutoverAccessDenial):
+        evaluate_account_cutover_access(
+            'u1', method='POST', path='/v1/conversations', headers={}, firestore_client=fake_db
+        )
+    assert not idle_cache
+    idle_cache['cutover-idle:u1'] = 1
+    account_cutover_db.cas_set_account_cutover_record(
+        'u1', record, expected_account_generation=0, firestore_client=fake_db
+    )
+    assert not idle_cache
+
+
+def test_idle_bit_never_bypasses_bridge_generation(monkeypatch, fake_db, idle_cache):
+    monkeypatch.setenv('ACCOUNT_CUTOVER_ENFORCEMENT', 'on')
+    record = AccountCutoverRecord(uid='u1', state=AccountCutoverState.rolled_back_stranded, account_generation=2)
+    account_cutover_db.set_account_cutover_record('u1', record, firestore_client=fake_db)
+    evaluate_account_cutover_access('u1', method='GET', path='/v1/conversations', headers={}, firestore_client=fake_db)
+    assert not idle_cache
+    with pytest.raises(AccountCutoverAccessDenial) as error:
+        evaluate_account_cutover_access(
+            'u1', method='POST', path='/v1/conversations', headers={}, firestore_client=fake_db
+        )
+    assert error.value.code == 'account_generation_mismatch'

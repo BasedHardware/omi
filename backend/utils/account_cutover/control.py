@@ -141,6 +141,7 @@ def build_account_cutover_control(
 
     return AccountCutoverControl(
         state=record.state,
+        data_plane=record.data_plane,
         account_generation=record.account_generation,
         ui_generation=ui_generation,
         api_generation=api_generation,

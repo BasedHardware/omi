@@ -5,7 +5,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Optional, cast
 
-from database import _client
+from database import _client, redis_db
 from database.read_boundary import MalformedDocError, parse_snapshot_strict
 from models.account_cutover import AccountCutoverRecord, AccountCutoverState
 
@@ -126,6 +126,7 @@ def set_account_cutover_record(
     if record.uid != uid:
         raise ValueError('cutover record uid mismatch')
     _write_document(_control_ref(uid, firestore_client=firestore_client), record.persisted_payload())
+    redis_db.delete_generic_cache(f'cutover-idle:{uid}')
 
 
 def get_account_cutover_record_optional(
@@ -205,7 +206,9 @@ def cas_set_account_cutover_record(
 
     if lock is not None:
         with lock:
-            return _locked_cas()
+            result = _locked_cas()
+        redis_db.delete_generic_cache(f'cutover-idle:{uid}')
+        return result
 
     transaction_factory = getattr(client, 'transaction', None)
     if callable(transaction_factory):
@@ -236,7 +239,9 @@ def cas_set_account_cutover_record(
             transaction.set(doc_ref, payload)
             return record
 
-        return cast(Any, _txn)(transaction_factory())
+        result = cast(Any, _txn)(transaction_factory())
+        redis_db.delete_generic_cache(f'cutover-idle:{uid}')
+        return result
 
     raise AccountCutoverConcurrencyError(
         'firestore client does not support transactional/locked cutover CAS',
