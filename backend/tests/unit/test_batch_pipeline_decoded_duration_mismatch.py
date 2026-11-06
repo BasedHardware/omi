@@ -20,6 +20,7 @@ import pytest
 
 from config.batch_pipeline_providers import ProviderConfig
 from utils.batch_pipeline.contracts import FailedWork, ValidationFailureWork
+from diarizer.batch_pipeline import DecodedDurationMismatch
 from utils.batch_pipeline.pump import Pump
 from utils.batch_pipeline.scheduler import Scheduler
 from utils.batch_pipeline.word_validation import BatchValidationError, ValidationReason
@@ -110,11 +111,11 @@ def test_typed_errors_keep_their_own_reason(monkeypatch):
 
 
 def test_duration_message_at_vad_stage_stays_unclassified(monkeypatch):
-    """Stage scoping: the same message from a later stage keeps the legacy path."""
+    """Stage scoping: the same deterministic fault from a later stage keeps the legacy path."""
     monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED', 'true')
 
     def vad(_samples):
-        raise ValueError('decoded duration differs from admitted capture')
+        raise DecodedDurationMismatch('decoded duration differs from admitted capture')
 
     worker, words, saved, *_ = setup_worker(vad=vad)
     results = worker.process_batch([item()])
@@ -155,7 +156,7 @@ def test_duration_mismatch_counts_one_failure_and_notifies_once():
     worker, _, _, _, _, failures = setup_worker(decode=mismatched_decode(99))
     worker.process_batch([item()])
     assert worker.counts['failed'] == 1
-    assert failures == [('a', 'ValueError')]
+    assert failures == [('a', 'DecodedDurationMismatch')]
 
 
 def test_duration_mismatch_makes_no_model_calls():

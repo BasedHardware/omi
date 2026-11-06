@@ -823,7 +823,7 @@ def test_pool_unit_limits_reject_conversation_on_shared_live_before_decode():
     results = over.process_batch([replace(item(duration=120), unit_kind='capture_span')])
     # Over-ceiling decode is a deterministic admission disagreement: terminal.
     assert results == [ValidationFailureWork('a', 'fetch_decode', 'decoded_duration_mismatch')]
-    assert not words.calls and failures == [('a', 'ValueError')]
+    assert not words.calls and failures == [('a', 'DecodedDurationMismatch')]
 
 
 def test_unit_ceiling_ignores_admission_clock_noise_below_one_frame():

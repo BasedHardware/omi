@@ -273,12 +273,16 @@ def test_bucket_misconfiguration_stays_retryable():
         lambda: _staged_body(truncated=True),
     ],
 )
-def test_staged_wav_family_stays_plain_value_error(build):
+def test_staged_wav_family_is_typed_and_distinct_from_retained(build):
     from diarizer.batch_pipeline_models import decode_pcm16_wav
+    from utils.batch_pipeline.audio import StagedAudioInvalid
 
+    # The staged family carries its own typed marker: the fetch_decode
+    # boundary terminalizes it by type, never by matching a message, and it
+    # stays distinct from the retained custody family.
     with pytest.raises(ValueError) as error:
         decode_pcm16_wav(build())
-    assert type(error.value) is ValueError
+    assert isinstance(error.value, StagedAudioInvalid)
     assert not isinstance(error.value, RetainedAudioInvalid)
 
 

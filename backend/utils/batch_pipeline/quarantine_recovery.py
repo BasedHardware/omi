@@ -30,6 +30,7 @@ from database.batch_pipeline_policy import load_stage_policy, refresh_disabled_r
 from config.policy import kill_switch
 from config.batch_pipeline_empty_asr import safety_net_enabled, terminal_empty_allowed
 from config.stt_provider_policy import HELD_RECOVERY_SECOND_PROVIDER
+from utils.batch_pipeline.audio import StagedAudioInvalid
 from config.batch_language_recovery import (
     MAX_AUDIO_SECONDS,
     allowed as independent_allowed,
@@ -376,6 +377,17 @@ class QuarantineRecovery:
                 ):
                     return 'held'
                 logger.info('event=batch_quarantine_recovery outcome=failed_held reason=retained_audio_invalid')
+                return 'failed_held'
+            except StagedAudioInvalid:
+                # The staged decode fault is deterministic on the pinned bytes
+                # exactly like its retained sibling: the sweep re-fetches the
+                # same undecodable unit on every pass, so hold once under the
+                # closed refusal family instead of looping the fetch.
+                if not self.protocol.hold_invalid_manifest(
+                    segment_id, token, self.clock(), audio_uri=item.audio_uri, refusal_reason='staged_audio_invalid'
+                ):
+                    return 'held'
+                logger.info('event=batch_quarantine_recovery outcome=failed_held reason=staged_audio_invalid')
                 return 'failed_held'
             duration = item.duration_seconds
             # The input-bound worker VAD is acoustic evidence for ordinary

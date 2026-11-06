@@ -201,8 +201,10 @@ def test_helper_stage_vocabulary_is_the_shared_closed_set():
 
 
 def test_staged_audio_message_keeps_the_typed_terminal_handoff(monkeypatch):
+    from utils.batch_pipeline.audio import StagedAudioInvalid
+
     monkeypatch.setenv('BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED', 'true')
-    worker, *_ = setup_worker(decode=Mock(side_effect=ValueError('staging requires 16kHz mono PCM16 WAV')))
+    worker, *_ = setup_worker(decode=Mock(side_effect=StagedAudioInvalid('staging requires 16kHz mono PCM16 WAV')))
     results = worker.process_batch([item()])
     assert results == [ValidationFailureWork('a', 'fetch_decode', 'staged_audio_invalid')]
 
@@ -217,8 +219,12 @@ def test_retained_audio_invalid_keeps_the_typed_terminal_handoff(monkeypatch):
 
 
 def test_decoded_duration_mismatch_keeps_the_typed_terminal_handoff(monkeypatch):
+    from diarizer.batch_pipeline import DecodedDurationMismatch
+
     monkeypatch.setenv('BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED', 'true')
-    worker, *_ = setup_worker(decode=Mock(side_effect=ValueError('decoded duration differs from admitted capture')))
+    worker, *_ = setup_worker(
+        decode=Mock(side_effect=DecodedDurationMismatch('decoded duration differs from admitted capture'))
+    )
     results = worker.process_batch([item()])
     assert results == [ValidationFailureWork('a', 'fetch_decode', 'decoded_duration_mismatch')]
 
@@ -226,8 +232,10 @@ def test_decoded_duration_mismatch_keeps_the_typed_terminal_handoff(monkeypatch)
 def test_no_failed_work_evidence_is_produced_for_the_terminal_families(monkeypatch):
     # The evidence field belongs to FailedWork only; the typed terminal
     # handoff already carries stage+reason as first-class fields.
+    from utils.batch_pipeline.audio import StagedAudioInvalid
+
     monkeypatch.setenv('BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED', 'true')
-    worker, *_ = setup_worker(decode=Mock(side_effect=ValueError('staging requires 16kHz mono PCM16 WAV')))
+    worker, *_ = setup_worker(decode=Mock(side_effect=StagedAudioInvalid('staging requires 16kHz mono PCM16 WAV')))
     result = worker.process_batch([item()])[0]
     assert isinstance(result, ValidationFailureWork)
     assert not hasattr(result, 'worker_failure')

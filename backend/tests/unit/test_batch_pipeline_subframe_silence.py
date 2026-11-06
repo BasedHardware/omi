@@ -21,6 +21,7 @@ from unittest.mock import Mock
 from config.batch_language_recovery import below_silence_threshold
 from config.batch_pipeline import worker_validation_disposition_enabled
 from diarizer import batch_pipeline
+from diarizer.batch_pipeline import DecodedDurationMismatch
 from tests.unit.test_batch_pipeline_worker import item, setup_worker
 from utils.batch_pipeline.contracts import ValidationFailureWork, WorkResult
 from utils.batch_pipeline.recovery_disposition import silence_payload
@@ -674,7 +675,7 @@ def test_counts_items_counts_every_pulled_unit(monkeypatch):
 
 def test_failed_decode_still_reports_the_fetch_decode_stage(monkeypatch):
     def bad_decode(work):
-        raise ValueError('decoded duration differs from admitted capture')
+        raise DecodedDurationMismatch('decoded duration differs from admitted capture')
 
     worker, *_rest = setup_worker(decode=bad_decode)
     results = worker.process_batch([item('x', 0.02)])
@@ -690,7 +691,7 @@ def test_sub_frame_unit_after_a_failed_decode_sibling_still_disposes(monkeypatch
     def decode(work):
         calls['n'] += 1
         if work.segment_id == 'boom':
-            raise ValueError('decoded duration differs from admitted capture')
+            raise DecodedDurationMismatch('decoded duration differs from admitted capture')
         return type('S', (), {'__len__': lambda self: int(work.duration_seconds * 16000)})()
 
     worker, *_rest = setup_worker(decode=decode, vad=Mock(return_value=[]))

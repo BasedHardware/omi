@@ -11,6 +11,19 @@ from utils.batch_pipeline.contracts import INTAKE_CONTEXT_CHUNK, INTAKE_CONTEXT_
 RATE = 16000
 
 
+class StagedAudioInvalid(ValueError):
+    """Staged or derived audio that can never decode from these pinned bytes.
+
+    Deterministic on the stored bytes and frozen intake context: a retry
+    re-reads the same bytes, re-validates the same envelope and fails the
+    same way, so the failure must end the GPU chain at the fetch_decode
+    boundary instead of walking the bounded retry ladder. Raise sites carry
+    the type and the worker boundary reads the type — never an exception
+    message — so a new deterministic decode fault cannot silently drift
+    back onto the ladder.
+    """
+
+
 @dataclass(frozen=True)
 class AudioUnit:
     capture_at: float
@@ -30,11 +43,16 @@ def audio_unit(capture_at: float, pcm: bytes) -> AudioUnit:
 
 def with_context(wav: bytes, context: dict) -> bytes:
     """Freeze provenance inside the encrypted WAV, outside the PCM data chunk."""
-    body = json.dumps(
-        {**context, 'version': INTAKE_CONTEXT_VERSION}, allow_nan=False, sort_keys=True, separators=(',', ':')
-    ).encode()
+    try:
+        body = json.dumps(
+            {**context, 'version': INTAKE_CONTEXT_VERSION}, allow_nan=False, sort_keys=True, separators=(',', ':')
+        ).encode()
+    except ValueError as error:
+        # A NaN/Infinity float in the stored context is deterministic on the
+        # pinned manifest: re-serializing it can never succeed.
+        raise StagedAudioInvalid('invalid bounded intake context or WAV') from error
     if len(body) > INTAKE_CONTEXT_LIMIT or wav[:4] != b'RIFF' or wav[8:12] != b'WAVE':
-        raise ValueError('invalid bounded intake context or WAV')
+        raise StagedAudioInvalid('invalid bounded intake context or WAV')
     chunk = INTAKE_CONTEXT_CHUNK + struct.pack('<I', len(body)) + body + (b'\0' if len(body) % 2 else b'')
     result = wav + chunk
     return result[:4] + struct.pack('<I', len(result) - 8) + result[8:]

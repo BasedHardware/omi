@@ -257,11 +257,25 @@ def test_two_owners_pin_their_own_anchors():
         binding = asdict(ProjectionBinding(owner, 'job', 'content', (f'{owner}-head', f'{owner}-tail')))
         store.rows[('jobs', f'{owner}-head')]['projection_binding'] = dict(binding)
         store.rows[('jobs', f'{owner}-tail')]['projection_binding'] = dict(binding)
-    queue.pull(2)
-    assert store.get('jobs', 'owner-a-head')['policy_parts']['scheduler']
-    queue.pull(2)
-    assert store.get('jobs', 'owner-b-head')['policy_parts']['scheduler']
-    assert spy.pin_runs == 2, 'each owner converges on its own canonical row'
+    # Candidate shard order depends on the owners' shard assignment, so the
+    # two pulls may converge in either order; the contract under test is
+    # that EACH owner's pull pins its OWN canonical head row.
+    pinned = set()
+    pulls = 0
+    for _ in range(4):
+        if len(pinned) == 2:
+            break
+        queue.pull(2)
+        pulls += 1
+        for owner in ('owner-a', 'owner-b'):
+            row = store.get('jobs', f'{owner}-head')
+            if row.get('policy_parts', {}).get('scheduler'):
+                pinned.add(owner)
+        for key in [key for key in store.rows if key[0] == 'pull_claims']:
+            store.rows.pop(key)
+    assert pinned == {'owner-a', 'owner-b'}, 'each owner converges on its own canonical row'
+    assert pulls == 2, 'exactly one pull per owner'
+    assert spy.pin_runs == 2
 
 
 # ---------------------------------------------------------------------------

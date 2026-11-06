@@ -6,6 +6,7 @@ and loads unrelated embedding models. This chain is the sole model owner.
 
 from collections import OrderedDict
 import io
+import struct
 from copy import deepcopy
 from contextlib import nullcontext
 from typing import TypeGuard
@@ -27,6 +28,7 @@ except ImportError:
 
 from config.batch_pipeline_providers import provider_config
 from config.batch_pipeline_empty_asr import safety_net_enabled
+from utils.batch_pipeline.audio import StagedAudioInvalid
 from utils.batch_pipeline.word_validation import validate_words
 from diarizer.batch_pipeline import (
     PipelineWorker,
@@ -355,14 +357,22 @@ def stt_language(
 
 def decode_pcm16_wav(body):
     """Bounded canonical staging format; callers decrypt/fetch before this step."""
-    with wave.open(io.BytesIO(body), 'rb') as handle:
-        if (handle.getnchannels(), handle.getsampwidth(), handle.getframerate()) != (1, 2, 16000):
-            raise ValueError('staging requires 16kHz mono PCM16 WAV')
-        if not 0 < handle.getnframes() <= 7200 * 16000:
-            raise ValueError('invalid staged audio length')
-        raw = handle.readframes(handle.getnframes())
-        if len(raw) != handle.getnframes() * 2:
-            raise ValueError('truncated staged WAV')
+    try:
+        with wave.open(io.BytesIO(body), 'rb') as handle:
+            if (handle.getnchannels(), handle.getsampwidth(), handle.getframerate()) != (1, 2, 16000):
+                raise StagedAudioInvalid('staging requires 16kHz mono PCM16 WAV')
+            if not 0 < handle.getnframes() <= 7200 * 16000:
+                raise StagedAudioInvalid('invalid staged audio length')
+            raw = handle.readframes(handle.getnframes())
+            if len(raw) != handle.getnframes() * 2:
+                raise StagedAudioInvalid('truncated staged WAV')
+    except StagedAudioInvalid:
+        raise
+    except (wave.Error, EOFError, struct.error) as error:
+        # A garbage or header-truncated container is deterministic on the
+        # pinned bytes: wave refuses it identically on every attempt, so it
+        # must terminate the chain, not ride the retry ladder.
+        raise StagedAudioInvalid('invalid staged WAV container') from error
     return np.frombuffer(raw, dtype='<i2').astype(np.float32) / 32768
 
 

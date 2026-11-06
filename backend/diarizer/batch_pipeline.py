@@ -65,6 +65,7 @@ from utils.batch_pipeline.stage_timings import StageTimings
 from utils.batch_pipeline.source_audio import RetainedAudioInvalid
 from utils.batch_pipeline.worker_io import DecodeBudget, FirstDecode, PendingResults, PreparedFlight
 from utils.batch_pipeline import worker_metrics
+from utils.batch_pipeline.audio import StagedAudioInvalid
 from utils.observability.fallback import record_fallback
 from utils.observability.reasons import WorkerValidationReason, WorkerValidationStage
 from utils.batch_pipeline.errors import WORKER_VALIDATION_REASONS, WORKER_VALIDATION_STAGES
@@ -170,6 +171,17 @@ def bounded_window_words(words, duration):
         if 0 <= (start + end) / 2 < duration:
             result.append({**word, 'timestamp': [max(0, start), min(duration, end)]})
     return validate_words(result, duration)
+
+
+class DecodedDurationMismatch(ValueError):
+    """Decoded extent disagreeing with the admitted capture extent.
+
+    Deterministic on the pinned bytes plus the admitted metadata: every
+    attempt decodes the same samples against the same admitted duration,
+    so the mismatch must end the GPU chain instead of walking the bounded
+    retry ladder. Carries a type so the fetch_decode boundary never has to
+    match an exception message.
+    """
 
 
 def transient_failure_evidence(stage: str, reason: str) -> dict | None:
@@ -711,15 +723,16 @@ class PipelineWorker:
                 failed.add(item.segment_id)
                 self.counts['failed'] += 1
                 reason = exc.reason if isinstance(exc, BatchValidationError) else 'unclassified'
-                staged_audio_invalid = (
-                    stage == WorkerValidationStage.FETCH_DECODE.value
-                    and isinstance(exc, ValueError)
-                    and str(exc)
-                    in {
-                        'staging requires 16kHz mono PCM16 WAV',
-                        'invalid staged audio length',
-                        'truncated staged WAV',
-                    }
+                # Staged audio that can never decode is deterministic on the
+                # pinned stored bytes: a retry re-reads the same bytes and
+                # fails the same way, so it must end the chain instead of
+                # walking the bounded retry ladder on identical input. The
+                # raise sites carry the type (decode_pcm16_wav, with_context)
+                # and the boundary reads the type — never an exception
+                # message — so a new deterministic decode fault cannot
+                # silently drift back onto the ladder.
+                staged_audio_invalid = stage == WorkerValidationStage.FETCH_DECODE.value and isinstance(
+                    exc, StagedAudioInvalid
                 )
                 # Retained audio that can never decode is deterministic on the
                 # pinned stored bytes: a retry re-reads the same bytes and
@@ -734,8 +747,7 @@ class PipelineWorker:
                 decoded_duration_mismatch = (
                     stage == WorkerValidationStage.FETCH_DECODE.value
                     and not retained_audio_invalid
-                    and isinstance(exc, ValueError)
-                    and str(exc) == 'decoded duration differs from admitted capture'
+                    and isinstance(exc, DecodedDurationMismatch)
                 )
                 if staged_audio_invalid:
                     reason = WorkerValidationReason.STAGED_AUDIO_INVALID.value
@@ -862,7 +874,7 @@ class PipelineWorker:
                             not 0 < duration <= self.config.max_unit_seconds
                             or abs(duration - item.duration_seconds) > 0.1
                         ):
-                            raise ValueError('decoded duration differs from admitted capture')
+                            raise DecodedDurationMismatch('decoded duration differs from admitted capture')
                     except Exception as exc:
                         fail(item, exc, 'fetch_decode')
                         continue
