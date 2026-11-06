@@ -1315,6 +1315,7 @@ async def _run_websocket_util_trigger(
         private_cloud_window_opened_at: Optional[float] = None
         durable_tail_has_receipt = False
         durable_commit_unresolved = False
+        pcm_admission_cancelled = False
         # Audio-timeline v2 continuity for this socket: the projected end of
         # the last accepted run and its conversation. None until first audio
         # or after a conversation switch (which flushes the run).
@@ -1361,7 +1362,7 @@ async def _run_websocket_util_trigger(
                 raise
 
         async def _queue_private_cloud_chunk(*, skip_if_silent: bool = False, tail: bool = False) -> None:
-            nonlocal durable_window_frames, pcm_admission_wait_active
+            nonlocal durable_window_frames, pcm_admission_wait_active, pcm_admission_cancelled
             if current_conversation_id in deleted_conversations:
                 # A gone-owner result is terminal for both encoded projection
                 # and future raw custody windows in this socket.
@@ -1406,6 +1407,9 @@ async def _run_websocket_util_trigger(
                             pcm_admission_wait_active = True
                             try:
                                 await asyncio.sleep(0.05)
+                            except asyncio.CancelledError:
+                                pcm_admission_cancelled = True
+                                raise
                             finally:
                                 pcm_admission_wait_active = False
                             continue
@@ -1488,8 +1492,12 @@ async def _run_websocket_util_trigger(
             tail_committed = False
             durable_tail_has_receipt = False
             try:
-                await _queue_private_cloud_chunk(tail=True)
-                tail_committed = durable_audio and not refused_windows
+                # Cancelling admission leaves the unacknowledged window for
+                # WAL replay. Never start storage (or ACK a departed peer) in
+                # this cancellation cleanup, which must not wait on GCS retries.
+                if not pcm_admission_cancelled:
+                    await _queue_private_cloud_chunk(tail=True)
+                    tail_committed = durable_audio and not refused_windows
             except ProjectionQueueWaitTimeout:
                 observation.reason = 'queue_wait_timeout'
                 websocket_close_code = 1011
@@ -1975,8 +1983,8 @@ async def _run_websocket_util_trigger(
         observation.reason = 'cancelled'
         if receive_task is not None and (durable_queue.capacity_wait_active or pcm_admission_wait_active):
             # Interrupt projection capacity after custody, or PCM admission
-            # before storage submission. The same receive finalizer flushes
-            # its retained tail through the reserve; the same worker drains.
+            # before submission. A cancelled admission pause keeps its tail
+            # unacknowledged for WAL replay without starting storage in cleanup.
             receive_task.cancel()
             try:
                 await receive_task

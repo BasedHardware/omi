@@ -345,6 +345,8 @@ async def test_flag_zero_preserves_exact_pcm_ack_and_failure_characterization(mo
 @pytest.mark.parametrize('failure', [False, True])
 async def test_cancelled_caller_holds_admission_until_real_thread_settles(monkeypatch, caplog, failure):
     budget = configure(monkeypatch, LIMIT)
+    settle = MagicMock(wraps=budget.settle)
+    monkeypatch.setattr(budget, 'settle', settle)
     gcs = SlowGCS()
     gcs.fail = failure
     monkeypatch.setattr(pusher, '_pcm_error_logged_at', {})
@@ -361,7 +363,8 @@ async def test_cancelled_caller_holds_admission_until_real_thread_settles(monkey
         assert gcs.bytes == PCM_SIZE
         task.cancel()
         with pytest.raises(asyncio.CancelledError):
-            await task
+            await asyncio.wait_for(task, 1)
+        settle.assert_not_called()
         assert budget.used == PCM_SIZE
         assert pusher.PUSHER_STORAGE_PCM_INFLIGHT_BYTES._value.get() == PCM_SIZE
         assert sock.buffer == sock.original and sock.frames == sock.checkpoints
@@ -372,13 +375,74 @@ async def test_cancelled_caller_holds_admission_until_real_thread_settles(monkey
                 break
             await asyncio.sleep(0.001)
         assert budget.used == 0 and not pusher._pcm_commits
+        settle.assert_called_once_with(PCM_SIZE)
         assert errors._value.get() == errors_before + int(failure)
         logs = [r for r in caplog.records if 'reason=late_storage' in r.message]
         assert len(logs) == int(failure)
         assert pusher.PUSHER_STORAGE_PCM_INFLIGHT_BYTES._value.get() == 0
+        sock.websocket.send_bytes.assert_not_awaited()
     finally:
         gcs.release.set()
         await asyncio.gather(task, *pusher._pcm_commits, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('peer_gone', [False, True], ids=['stalled-storage', 'peer-disconnected'])
+async def test_admission_pause_cancellation_keeps_wal_without_tail_storage(inline_session, monkeypatch, peer_gone):
+    from fastapi.websockets import WebSocketState
+
+    client, path, barrier, projected = inline_session
+    budget = configure(monkeypatch, LIMIT)
+    held = budget.live_limit
+    assert budget.acquire(held)
+    monkeypatch.setattr(pusher, 'PRIVATE_CLOUD_CHUNK_DURATION', 0)
+    monkeypatch.setattr(pusher, 'RECORD_INLINE_FINISH_TIMEOUT', 1.0)
+    gcs = SlowGCS()
+    monkeypatch.setattr(pusher, 'commit_pcm_window', gcs)
+    paused = asyncio.Event()
+    windows = []
+    commit, retain = pusher._commit_durable_audio_window, pusher.RetainedPcmWindow
+
+    async def committing(**kwargs):
+        result = await commit(**kwargs)
+        if result is None:
+            paused.set()
+        return result
+
+    def retaining(*args):
+        window = retain(*args)
+        windows.append(window)
+        return window
+
+    monkeypatch.setattr(pusher, '_commit_durable_audio_window', committing)
+    monkeypatch.setattr(pusher, 'RetainedPcmWindow', retaining)
+    pcm = b'\x01\x00' * 160
+    client_wal = _audio_frames('conversation', [pcm, pcm])
+    sock = Socket(client_wal)
+    handler = asyncio.create_task(pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1))
+    try:
+        await asyncio.wait_for(paused.wait(), 5)
+        checkpoints = [dict(frame) for frame in windows[0].frames]
+        if peer_gone:
+            sock.client_state = WebSocketState.DISCONNECTED
+            gcs.release.set()  # A faulty cancellation flush would commit and ACK the gone peer.
+        handler.cancel()
+        done, _ = await asyncio.wait({handler}, timeout=1.0)
+        assert handler in done, 'cancellation cleanup must not wait for storage or its retries'
+        with pytest.raises(asyncio.CancelledError):
+            await handler
+        assert not gcs.calls and not projected and not sock.sent
+        assert windows[0].payload == pcm and windows[0].frames == checkpoints
+        assert len(sock.frames) == 1 and len(client_wal) == 3
+        assert budget.used == held and not pusher._pcm_commits
+        assert client.rows[path]['record_upload_sessions']
+        assert not client.rows[path]['record_audio_closed']
+        assert 'conversation' in barrier.failed_recordings
+        assert sock.close_code == (None if peer_gone else 1006)
+    finally:
+        gcs.release.set()
+        await asyncio.wait_for(asyncio.gather(handler, return_exceptions=True), 5)
+        budget.release(held)
 
 
 @pytest.mark.asyncio
@@ -545,7 +609,7 @@ def test_minimum_enabled_budget_can_admit_the_largest_socket_window():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('outcome', ['recover', 'cancel_to_tail', 'cancel_handler'])
+@pytest.mark.parametrize('outcome', ['recover', 'cancel_to_replay', 'cancel_handler'])
 async def test_first_refusal_stops_30_minute_windows_before_socket_budget_can_fill(
     inline_session, monkeypatch, outcome
 ):
@@ -613,9 +677,9 @@ async def test_first_refusal_stops_30_minute_windows_before_socket_budget_can_fi
         if outcome == 'recover':
             budget.release(held)
             released = True
-        elif outcome == 'cancel_to_tail':
-            # The sleep is cancellable; the receive finalizer immediately uses
-            # the reserved lane, even though live capacity remains saturated.
+        elif outcome == 'cancel_to_replay':
+            # Cancellation keeps the refused window unacknowledged for WAL
+            # replay, without starting a reserved-lane commit during cleanup.
             tasks[0].cancel()
         else:
             handler.cancel()  # SIGTERM cancels the endpoint, not its private receive task.
@@ -625,11 +689,16 @@ async def test_first_refusal_stops_30_minute_windows_before_socket_budget_can_fi
         else:
             await asyncio.wait_for(handler, 5)
         receipts = _sent_receipts(sock)
-        assert len(receipts) == 1 and read_pcm('owner', receipts[0]) == pcm
+        if outcome == 'recover':
+            assert len(receipts) == 1 and read_pcm('owner', receipts[0]) == pcm
+        else:
+            assert not receipts
+            assert windows[0].payload == pcm and len(windows[0].frames) == 1
+            assert 'conversation' in barrier.failed_recordings
         assert len(sock.frames) == 29 and client_wal == [pcm] * 30
         assert sock.close_code == (1006 if outcome == 'cancel_handler' else 1000)
         assert budget.used == (0 if released else held)
-        assert attempts[-1][0] is (outcome != 'recover')
+        assert not attempts[-1][0]
     finally:
         if not released:
             budget.release(held)

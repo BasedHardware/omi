@@ -53,14 +53,18 @@ before publication.
 The final review delta offers 30 minute-long windows to the real receive loop
 while live admission stays full for at least 30 probes: only the first window is
 read/charged, below half the socket budget, with no receipt, ACK or close. It
-checks recovery once, cancellation into the reserved tail lane, full-tail fence
+checks recovery once, cancellation retaining the window for WAL replay, full-tail fence
 retention, and accounting faults both before and after counter mutation. Flag 0
 preserves successful PCM/checkpoint/receipt/ACK bytes and storage dispatch; the
 new unresolved-owner finalizer may still hold fences and defer inline finish on
 genuine failure at flag 0. It is not a claim of identical failure finalization.
 
-The handler-cancellation regression was added before its fix and failed with no
-tail receipt: cancellation of the endpoint left its private receive task paused.
-An explicit admission-wait state now routes outer cancellation through the same
-receive finalizer as projection-capacity cancellation. The test requires the
-reserved-lane tail receipt before the existing cancellation close completes.
+An explicit admission-wait state lets outer-handler cancellation interrupt its
+paused receive task. Cancelling the admission pause skips the new cancellation-time
+tail commit entirely, including after peer disconnect: no storage submission,
+receipt or ACK occurs in that cleanup path. The original window/checkpoints and
+producer fence remain for client WAL replay. Event-stalled storage tests require
+cleanup to complete within one second without calling storage. Already-submitted
+storage retains its byte charge until actual settlement, releases it exactly
+once and cannot send a late ACK. Normal tail commits still use the reserve;
+flag-0 dispatch and cancellation behavior are unchanged by this focused fix.
