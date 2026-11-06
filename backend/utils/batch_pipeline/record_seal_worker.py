@@ -11,6 +11,7 @@ from config import record_seal_repair as config
 from database import record_seal_worker as claims
 from utils.batch_pipeline import record_seal_cluster_repair as repair
 from utils.batch_pipeline.record_seal_budget import SweepBudget, BudgetExhausted
+from utils.observability.firestore_probe_export import register_probe_collectors
 
 
 def enabled():
@@ -21,6 +22,7 @@ def enabled():
 class Metrics:
     def __init__(self, release, namespace):
         self.registry = CollectorRegistry()
+        register_probe_collectors(self.registry)
         labels = ('worker_release', 'namespace')
         values = (release, namespace)
 

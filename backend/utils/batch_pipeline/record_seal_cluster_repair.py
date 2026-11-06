@@ -24,6 +24,7 @@ from config import record_seal_repair as config
 from config import record_partial as partial_config
 from database.record_partial import finish_partial
 from utils.batch_pipeline.record_seal_reasons import PROOF_REASONS, TAIL_GAP_BUCKETS
+from utils.observability.firestore_probe_export import collect_child_probe, launch_with_probe
 
 MAX_ROWS = 1024
 MAX_SCAN = 10000
@@ -381,7 +382,8 @@ class RowProcess(subprocess.Popen):
 def launch_row(path, seconds, mode):
     script = Path(__file__).resolve().parents[2] / 'scripts/record_seal_repair_job.py'
     started = time.monotonic()
-    process = RowProcess(
+    process = launch_with_probe(
+        RowProcess,
         [sys.executable, str(script), '--row'],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
@@ -407,6 +409,7 @@ def stop(process):
     # Also reap decoder descendants if the row leader already exited.
     process.kill()
     process.wait()
+    collect_child_probe(process)
     process.stdout.close()
 
 

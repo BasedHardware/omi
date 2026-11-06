@@ -23,6 +23,151 @@ from tests.unit.test_record_seal_nojob import source, SCOPE, SERVER, PATH, JOB_P
 from tests.unit.test_record_producer_proof import inventory
 
 
+@pytest.mark.parametrize('fail', [False, True])
+def test_repair_child_terminal_reads_reach_parent_registry_once(fail):
+    from database.firestore_document_probe import FIRESTORE_BILLED_READS, FIRESTORE_BILLED_READS_BY_CALLER
+    from utils.batch_pipeline.record_seal_worker import Metrics
+    from utils.observability import firestore_probe_export as export
+
+    billed = FIRESTORE_BILLED_READS.labels('other', 'query', 'unattributed')
+    caller = FIRESTORE_BILLED_READS_BY_CALLER.labels('other', 'query', 'tests:repair_child_export')
+    before = (billed._value.get(), caller._value.get())
+    entrypoint = Path(__file__).resolve().parents[2] / 'scripts/record_seal_repair_job.py'
+    # Run the real entrypoint/finally in a separate interpreter, replacing only
+    # the row's cloud work with synthetic counter increments.
+    code = (
+        'import runpy, sys\n'
+        f'entry = runpy.run_path({str(entrypoint)!r})\n'
+        'from database.firestore_document_probe import FIRESTORE_BILLED_READS, FIRESTORE_BILLED_READS_BY_CALLER\n'
+        'def row(*args, **kwargs):\n'
+        '    FIRESTORE_BILLED_READS.labels("other", "query", "unattributed").inc(11)\n'
+        '    FIRESTORE_BILLED_READS_BY_CALLER.labels("other", "query", "tests:repair_child_export").inc(11)\n'
+        + ('    raise RuntimeError("private synthetic error")\n' if fail else '    return {"disposition":"sealed"}\n')
+        + 'entry["repair"].row_main = row\n'
+        'sys.argv = ["record_seal_repair_job.py", "--row"]\n'
+        'sys.exit(entry["main"]())\n'
+    )
+    process = export.launch_with_probe(
+        cluster.RowProcess,
+        [sys.executable, '-c', code],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        start_new_session=True,
+    )
+    try:
+        stdout, stderr = process.communicate(b'{}', timeout=30)
+        assert process.returncode == int(fail)
+        assert not stderr and b'private synthetic error' not in stdout
+        # communicate closes stdout; stop's normal contract owns an open pipe.
+        process.stdout = io.BytesIO(stdout)
+        cluster.stop(process)
+        assert (billed._value.get(), caller._value.get()) == (before[0] + 11, before[1] + 11)
+        export.collect_child_probe(process)
+        assert (billed._value.get(), caller._value.get()) == (before[0] + 11, before[1] + 11)
+        assert (
+            Metrics('r', 'n').registry.get_sample_value(
+                'omi_firestore_billed_reads_by_caller_total',
+                {'collection': 'other', 'kind': 'query', 'caller': 'tests:repair_child_export'},
+            )
+            == before[1] + 11
+        )
+    finally:
+        if process.poll() is None:
+            cluster.stop(process)
+
+
+def test_launch_row_passes_terminal_fd_without_changing_row_output(monkeypatch):
+    monkeypatch.setenv('RECORD_SEAL_REPAIR_ENABLED', 'false')
+    process = cluster.launch_row('users/synthetic/conversations/synthetic', 1, 'plan')
+    output = process._firestore_probe_output
+    try:
+        process.wait(timeout=30)
+        assert process.returncode == 0
+        records = [json.loads(line) for line in process.stdout.read().splitlines()]
+        assert records[-1]['disposition'] == 'disabled'
+        assert not any('firestore_probe' in json.dumps(record) for record in records)
+        output.seek(0)
+        assert json.load(output) == []
+    finally:
+        cluster.stop(process)
+    assert output.closed and process._firestore_probe_output is None
+
+
+def test_missing_or_invalid_child_aggregate_does_not_change_cleanup(caplog):
+    import tempfile
+    from utils.observability import firestore_probe_export as export
+
+    for data in (b'', b'not-json', b'[["unknown_total",{},1]]'):
+        output = tempfile.TemporaryFile()
+        output.write(data)
+        process = SimpleNamespace(_firestore_probe_output=output)
+        export.collect_child_probe(process)
+        assert output.closed and process._firestore_probe_output is None
+    assert sum(json.loads(record.message).get('outcome') == 'unavailable' for record in caplog.records) == 3
+
+
+def test_terminal_transport_failure_preserves_launch_and_original_exception(monkeypatch, caplog):
+    from utils.observability import firestore_probe_export as export
+
+    def unavailable(**_):
+        raise OSError('synthetic fd exhaustion')
+
+    monkeypatch.setattr(export.tempfile, 'TemporaryFile', unavailable)
+    process = SimpleNamespace()
+    factory = Mock(return_value=process)
+    assert export.launch_with_probe(factory, ['synthetic-child'], stdout=subprocess.PIPE) is process
+    factory.assert_called_once_with(['synthetic-child'], stdout=subprocess.PIPE)
+    assert process._firestore_probe_output is None
+    records = len(caplog.records)
+    with pytest.raises(RuntimeError, match='original job error'):
+        with export.terminal_probe_totals(fd='not-a-file-descriptor'):
+            raise RuntimeError('original job error')
+    assert len(caplog.records) == records  # No telemetry diagnostics on the child's result pipe.
+
+
+def test_spawn_failure_closes_terminal_transport(monkeypatch):
+    import tempfile
+    from utils.observability import firestore_probe_export as export
+
+    output = tempfile.TemporaryFile()
+    monkeypatch.setattr(export.tempfile, 'TemporaryFile', lambda **_: output)
+    with pytest.raises(OSError, match='synthetic launch failure'):
+        export.launch_with_probe(Mock(side_effect=OSError('synthetic launch failure')), ['synthetic-child'])
+    assert output.closed
+
+
+def test_repair_coordinator_terminal_totals_escape_dependency_silencing(tmp_path):
+    entrypoint = Path(__file__).resolve().parents[2] / 'scripts/record_seal_repair_job.py'
+    script = tmp_path / 'terminal_boundary.py'
+    script.write_text(
+        'import runpy, sys\n'
+        f'entry = runpy.run_path({str(entrypoint)!r})\n'
+        'from database.firestore_document_probe import FIRESTORE_BILLED_READS_BY_CALLER\n'
+        'def run(**kwargs):\n'
+        '    FIRESTORE_BILLED_READS_BY_CALLER.labels("other", "query", "tests:coordinator_terminal").inc(13)\n'
+        '    return {"event":"record_seal_repair","outcome":"ok"}\n'
+        'entry["repair"].run = run\n'
+        'sys.argv = ["record_seal_repair_job.py"]\n'
+        'sys.exit(entry["main"]())\n'
+    )
+    result = subprocess.run(
+        [sys.executable, str(script)],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        env={**os.environ, 'RECORD_SEAL_REPAIR_ENABLED': 'false'},
+    )
+    assert result.returncode == 0 and not result.stderr
+    messages = [json.loads(json.loads(line)['message']) for line in result.stdout.splitlines()]
+    assert any(
+        message.get('event') == 'firestore_probe_terminal_sample'
+        and message['labels'].get('caller') == 'tests:coordinator_terminal'
+        and message['value'] == 13
+        for message in messages
+    )
+
+
 @pytest.fixture
 def proof():
     def build():
