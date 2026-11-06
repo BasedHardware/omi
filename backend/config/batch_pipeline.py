@@ -821,3 +821,29 @@ def merge_narrow_commit_enabled() -> bool:
         'BATCH_PIPELINE_MERGE_NARROW_COMMIT_ENABLED',
         os.getenv('BATCH_PIPELINE_MERGE_NARROW_COMMIT_ENABLED', 'true').strip().lower() != 'false',
     )
+
+
+def merge_held_head_gate_enabled() -> bool:
+    """Held owners with a ready catch-up head skip the strict hold re-decide by default.
+
+    An owner parked at the projection depth cap carries a durable hold marker,
+    and the pump re-drains it from three directions every cycle: after each of
+    its unit completions, through the global result_ready page, and through the
+    marked-owner re-offer. Every one of those drains used to open the strict
+    ``batch_merge_commit`` transaction whose first act is the owner's pending
+    query — a query-in-transaction read set is every matched row, the documents
+    each sibling lease heartbeat keeps rewriting — only to re-conclude
+    ``held`` and write nothing (``event=batch_merge outcome=retry
+    exception_type=FirestoreContentionExhausted``). When outside-transaction
+    probes positively prove that conclusion (the probed head is this owner's
+    pending catch-up row in ``result_ready``, the probed owner still sits at
+    the cap, and the probed durable marker is already set), the drain skips
+    the transaction and records the same held facts the body would have; a
+    ready fresh row still commits through the unchanged fresh-first re-verify
+    below. ``false`` is the kill switch and restores the strict re-decide for
+    every held-owner drain.
+    """
+    return rollout_default_on(
+        'BATCH_PIPELINE_MERGE_HELD_HEAD_GATE_ENABLED',
+        os.getenv('BATCH_PIPELINE_MERGE_HELD_HEAD_GATE_ENABLED', 'true').strip().lower() != 'false',
+    )

@@ -8,6 +8,7 @@ from google.api_core.exceptions import FailedPrecondition, GoogleAPICallError
 from config.batch_pipeline import (
     merge_catch_up_depth,
     merge_head_wait_seconds,
+    merge_held_head_gate_enabled,
     merge_narrow_commit_enabled,
     recovered_merge_release_enabled,
 )
@@ -484,6 +485,7 @@ class OrderedMerge:
         entry: dict | None = None
         fenced: BatchPrivacyBlocked | None = None
         narrow_decided = False
+        held_gate_skipped = False
         if (
             merge_narrow_commit_enabled()
             and head_error is None
@@ -519,7 +521,46 @@ class OrderedMerge:
                 if not fence_stale and (narrow_entry is not None or narrow_fenced is not None):
                     entry, fenced = narrow_entry, narrow_fenced
                     narrow_decided = True
-        if entry is None and fenced is None and not strict_skipped and not narrow_decided:
+        if (
+            merge_held_head_gate_enabled()
+            and head_error is None
+            and release is None
+            and not strict_skipped
+            and not narrow_decided
+            and probed_head is not None
+            and not probed_head.get('shadow')
+            and probed_head.get('state') == 'result_ready'
+            and _catch_up(probed_head)
+            and self._over_cap_probe(key, depth)
+        ):
+            # Held-owner ready catch-up head: the probed owner still sits at
+            # the projection depth cap with a ready catch-up row heading it.
+            # When the durable depth-cap marker is already set too, the strict
+            # body could only re-conclude ``held`` — opening its wide pending
+            # query (the read set every sibling lease heartbeat keeps
+            # rewriting) to write nothing. Record exactly its held facts
+            # instead: any ready fresh row still commits through the unchanged
+            # fresh-first re-verify below, and the marked-owner re-offer plus
+            # ``release_hold`` restore the normal drain once projection
+            # advances below the cap. Every gate refusal (fresh head, shadow,
+            # unmarked owner, below-cap probe, probe failure, kill switch,
+            # release wake) keeps the strict transaction as the authority.
+            try:
+                marker_held = bool(self.store.probe('merge_holds', key).get('held'))
+            except GoogleAPICallError as error:
+                # A transient marker probe keeps the strict transaction as the
+                # authority; the next drain probes again.
+                logger.warning(
+                    'event=batch_merge outcome=held_marker_probe_retry source=%s exception_type=%s count=1',
+                    self.commit_source,
+                    type(error).__name__,
+                )
+                marker_held = False
+            if marker_held:
+                held_gate_skipped = True
+                held['over_cap'] = True
+                held['catch_up'] = True
+        if entry is None and fenced is None and not strict_skipped and not narrow_decided and not held_gate_skipped:
             try:
                 with store_operation('batch_merge_commit'):
                     entry = self.store.run(commit)
