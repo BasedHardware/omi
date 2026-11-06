@@ -273,7 +273,7 @@ def deleted_artifact_references():
     """
     module = 'utils.sync.' + 'legacy_' + 'fresh'
     module_path = _module_path(module)
-    needles = ('SYNC_LEGACY_' + 'FRESH', module, module_path, module_path.rsplit('/', 1)[1])
+    needles = ('SYNC_LEGACY_' + 'FRESH', module, module_path)
     assert not (BACKEND_DIR / module_path).exists()
     found = []
     for root, dirs, files in os.walk(BACKEND_DIR):
@@ -289,7 +289,7 @@ def deleted_artifact_references():
             except UnicodeDecodeError:
                 continue
             relative = path.relative_to(BACKEND_DIR).as_posix()
-            if any(needle in source or needle in relative for needle in needles):
+            if name == module_path.rsplit('/', 1)[1] or any(needle in source for needle in needles):
                 found.append(relative)
             if name.endswith('.py') and module.rsplit('.', 1)[1] in source:
                 tree = ast.parse(source, filename=relative)

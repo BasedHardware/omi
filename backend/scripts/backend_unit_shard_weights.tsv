@@ -2010,6 +2010,7 @@ tests/unit/test_sync_job_stale_self_heal.py	2.7
 tests/unit/test_sync_jobs_corrupt_blob.py	2.7
 tests/unit/test_sync_ledger_checkpoint_mark.py	2.7
 tests/unit/test_sync_ledger_fence_cutover.py	2.7
+tests/unit/test_sync_legacy_fresh.py	3.7
 tests/unit/test_sync_lineage_allowlist.py	22.7
 tests/unit/test_sync_lineage_created.py	4.7
 tests/unit/test_sync_lineage_dedupe_replay.py	13.7
