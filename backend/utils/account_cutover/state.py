@@ -79,6 +79,16 @@ def apply_cutover_transition(
             'account generation fence mismatch',
             code='account_generation_mismatch',
         )
+    if (
+        (request.data_plane == 'cell' or record.data_plane == 'cell')
+        and request.next_account_generation is not None
+        and request.next_account_generation != record.account_generation
+    ):
+        # Cell cutovers keep generation 0 so released clients without the header stay admitted.
+        raise AccountCutoverTransitionError(
+            'cell cutovers must preserve the account generation',
+            code='account_generation_regression',
+        )
     if request.target_state == record.state:
         # Idempotent no-op with optional checkpoint/manifest refresh.
         return _refresh_same_state(record, request)

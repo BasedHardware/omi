@@ -977,3 +977,29 @@ def test_redis_key_loss_cannot_republish_an_old_epoch(idle_cache):
     assert not account_cutover_db.publish_cutover_idle('u1', epoch)
     assert account_cutover_db.cutover_cache_epoch('u1') != epoch
     assert not account_cutover_db.publish_cutover_idle('u1', epoch)
+
+
+@pytest.mark.parametrize(
+    ('record', 'request_plane'),
+    [
+        (AccountCutoverRecord(uid='u1'), 'cell'),
+        (AccountCutoverRecord(uid='u1', data_plane='cell', state=AccountCutoverState.migrating), None),
+    ],
+)
+def test_cell_cutover_rejects_explicit_generation_change(record, request_plane):
+    target = (
+        AccountCutoverState.migrating if record.state == AccountCutoverState.legacy else AccountCutoverState.migrated
+    )
+    with pytest.raises(AccountCutoverTransitionError) as excinfo:
+        apply_cutover_transition(
+            record,
+            AccountCutoverTransitionRequest(
+                data_plane=request_plane,
+                target_state=target,
+                expected_account_generation=0,
+                next_account_generation=1,
+                reason='test',
+            ),
+        )
+    assert excinfo.value.code == 'account_generation_regression'
+    assert record.account_generation == 0
