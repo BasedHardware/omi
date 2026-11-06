@@ -838,11 +838,11 @@ class ConversationProvider extends ChangeNotifier {
       processingRowsAtStart,
       {for (final conversation in newConversations) conversation.id: conversation.status.name},
     );
+    final receivedStorageCount = _recordServerPageIds(rawNewConversations, rawNewConversations.length);
     if (_conversationServerOffset == 0) {
-      _conversationServerOffset = rawNewConversations.length;
+      _conversationServerOffset = receivedStorageCount;
       _conversationServerHasMore = !result.truncated && rawNewConversations.length >= _conversationPageSize;
     }
-    _conversationServerLoadedIds.addAll(rawNewConversations.map((conversation) => conversation.id));
     final currentlyProcessingIds = processingConversations
         .where((conversation) => _isActiveProcessingStatus(conversation.status))
         .map((conversation) => conversation.id)
@@ -988,11 +988,9 @@ class ConversationProvider extends ChangeNotifier {
       processingRowsAtStart,
       {for (final conversation in fetchedConversations) conversation.id: conversation.status.name},
     );
-    _conversationServerOffset = result.storageCount;
+    _conversationServerLoadedIds.clear();
+    _conversationServerOffset = _recordServerPageIds(result.items, result.storageCount);
     _conversationServerHasMore = !result.truncated && result.storageCount >= _conversationPageSize;
-    _conversationServerLoadedIds
-      ..clear()
-      ..addAll(result.items.map((conversation) => conversation.id));
 
     // The page replaces overlaps and covered rows; older cached pages remain
     // reachable. A live completion while the list/lifecycle awaits can outdate
@@ -1399,19 +1397,22 @@ class ConversationProvider extends ChangeNotifier {
       if (_conversationLoadingRevision == operationRevision) setLoadingConversations(false);
       return false;
     }
+    if (pageOffset != _conversationServerOffset) {
+      // A confirmed delete in the already-loaded range shifted this request's offset.
+      setLoadingConversations(false);
+      return getMoreConversationsFromServer();
+    }
     if (!pageResult.ok) {
       setLoadingConversations(false);
       notifyListeners();
       return false;
     }
     final newConversations = pageResult.items;
-    _conversationServerOffset += pageResult.storageCount;
+    _conversationServerOffset += _recordServerPageIds(newConversations, pageResult.storageCount);
     _conversationServerHasMore = !pageResult.truncated && pageResult.storageCount >= _conversationPageSize;
-    _conversationServerLoadedIds.addAll(newConversations.map((conversation) => conversation.id));
     final existingIds = conversations.map((conversation) => conversation.id).toSet();
-    conversations.addAll(
-      _filterPendingDeletes(newConversations).where((conversation) => !existingIds.contains(conversation.id)),
-    );
+    final visiblePage = _filterPendingDeletes(newConversations);
+    conversations.addAll(visiblePage.where((conversation) => !existingIds.contains(conversation.id)));
     conversations.sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
     _groupConversationsByDateWithoutNotify();
     final siriFetchIsUnfiltered = selectedFolderId == null &&
@@ -1427,7 +1428,7 @@ class ConversationProvider extends ChangeNotifier {
       final serverRows = conversations.where((row) => _conversationServerLoadedIds.contains(row.id)).toList();
       SiriIntegration.current.queueReconcileConversations(serverRows, coveredAfter: coveredAfter);
     } else {
-      SiriIntegration.current.queueUpsertConversations(newConversations);
+      SiriIntegration.current.queueUpsertConversations(visiblePage);
     }
     setLoadingConversations(false);
     notifyListeners();

@@ -270,11 +270,36 @@ void main() {
     await reopened.fetchConversations();
     expect(reopened.conversations.map((row) => row.id), ['keep']);
     expect(home.conversations.map((row) => row.id), ['keep']);
+    expect(home.conversationServerOffset, 1);
     expect(prefs.getStringList('cachedConversations'), [jsonEncode(keep.toJson())]);
 
     prefs.uid = 'other-owner';
     await prefs.cacheConversations([a, keep]);
     expect((await prefs.loadCachedConversations()).map((row) => row.id), ['a', 'keep']);
+  });
+
+  test('a load-more request retries at the cursor rebased by another provider', () async {
+    final items = [for (var i = 0; i < 50; i++) _conversation('initial-$i')];
+    final home = makeProvider(items);
+    await home.fetchConversations();
+    final page = Completer<({List<ServerConversation> items, bool ok, bool truncated})>();
+    final offsets = <int>[];
+    final next = _conversation('next-row');
+    home.conversationPageFetcherOverride = () {
+      offsets.add(home.conversationServerOffset);
+      if (offsets.length == 1) return page.future;
+      return Future.value((items: [next], ok: true, truncated: false));
+    };
+    final pagination = home.getMoreConversationsFromServer();
+    final day = makeProvider([items.first]);
+    await day.deleteConversationLocally(items.first);
+    await day.deleteConversationOnServer(items.first.id);
+
+    page.complete((items: [_conversation('one-too-far')], ok: true, truncated: false));
+    expect(await pagination, isTrue);
+    expect(offsets, [50, 49]);
+    expect(home.conversations.map((row) => row.id), contains(next.id));
+    expect(home.conversations.map((row) => row.id), isNot(contains('one-too-far')));
   });
 
   test('a confirmed delete removes matching processing cards and rejects late updates', () async {
