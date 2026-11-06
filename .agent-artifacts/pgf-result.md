@@ -1,8 +1,8 @@
 # C2 implementation result — acceptance blocked
 
-Updated: 2026-11-06T18:04:32.466237+00:00. Repository: BasedHardware/omi.
+Updated: 2026-11-06T18:06:24.446423+00:00. Repository: BasedHardware/omi.
 Worktree: `/Volumes/Ephemeral/scratch/worktrees/omi/omi-lane-pgf-c2-upstream-keep-clean`. Branch: `lane/pgf-c2`.
-Implementation head when this receipt was written: `bf0856b3f1537ca464c4e2e710c8d8df2e8cd055`. Implementation base / merge base:
+Implementation head when this receipt was written: `e2540f6694e8db379f134f004174da2776fa46fa`. Implementation base / merge base:
 `05dcd6065f9f396c5cb9f883868db72cb8bf908e`, which includes C1 #24795.
 Shared `origin/main` advanced during this run; it is currently `4b1c40b5ef03242b82013a64c1dc941728715bab`.
 No rebase, push, PR, merge, deployment, production-data access or flag expansion
@@ -221,7 +221,7 @@ hooks are not Firestore emulator contention proof for C4.
 using the authorized [anx-participant skill](/Users/dazheng/.agents/skills/anx-participant/SKILL.md).
 The scope ask has a bounded ANX await subscription. The card is blocked on the scope decision. Local full CI remains in flight
 at this checkpoint (PID/PGID 45361, command session 17604); its command session is watched and the 50-minute heartbeat is
-armed and touched on wakes. Focused codec/transaction reruns are complete (see receipts above). Native-audio and archive-fixture reruns completed successfully and their command sessions were reaped. The superseded scope waiter was stopped by its owned PID; the current eight-area scope ask is watched in session 38393 with a four-hour timeout. Heartbeat session 34503 wakes this thread after 50 minutes idle. No native/delegated agents were launched.
+armed and touched on wakes. Focused codec/transaction reruns are complete (see receipts above). Native-audio and archive-fixture reruns completed successfully and their command sessions were reaped. The superseded scope waiter was stopped by its owned PID; the current eight-area scope ask is watched in session 18560 with a four-hour outer deadline and four-minute CLI waits. Two long waits lost bearer-token validity; the shorter bounded loop refreshes CLI credentials between timeouts and exits on any other terminal/error state. Heartbeat session 34503 wakes this thread after 50 minutes idle. No native/delegated agents were launched.
 
 ## Draft PR body (not submitted)
 
