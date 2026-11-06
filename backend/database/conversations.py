@@ -1493,11 +1493,32 @@ def persist_processing_result_with_lifecycle(
             if requested_status == ConversationStatus.completed:
                 write_data.pop('status', None)
                 family = existing.get('terminal_family')
-                if family in TERMINAL_FAILURE_FAMILIES or existing.get('finalization_status') == 'dead_letter':
-                    terminal_refusal_family = family if family in TERMINAL_FAILURE_FAMILIES else 'dead_letter'
+                dead_letter = existing.get('finalization_status') == 'dead_letter'
+                # Restore authority is durable, and an explicit reprocess of a
+                # hidden row commits it in this payload before the route's restore.
+                user_restored = bool(existing.get('sync_relevance_user_kept')) or bool(
+                    write_data.get('sync_relevance_user_kept')
+                )
+                decision = write_data.get('relevance_decision')
+                retry_trigger = decision.get('trigger') if isinstance(decision, Mapping) else None
+                # These server-generated decisions describe intentional retries
+                # that can persist directly from failed without readmission.
+                retry_failed = isinstance(retry_trigger, str) and retry_trigger in TERMINAL_FAILED_RETRY_TRIGGERS
+                failure_family = (
+                    family if family in TERMINAL_FAILURE_FAMILIES else 'dead_letter' if dead_letter else None
+                )
+                if not failure_family and existing.get('status') == ConversationStatus.failed and not retry_failed:
+                    failure_family = 'failed'
+                if failure_family and not user_restored:
+                    terminal_refusal_family = failure_family
                     # Keep the legacy marker too if a stale payload carries it.
                     write_data.pop('finalization_status', None)
+                    write_data.pop('discarded', None)
                 else:
+                    if dead_letter:
+                        # The restored generation supersedes the old failure;
+                        # clear it atomically with the new success classifier.
+                        write_data['finalization_status'] = None
                     updates = claim_conversation_status_in_txn(
                         existing,
                         expected_status=existing.get('status'),
@@ -2879,6 +2900,7 @@ def transition_conversation_status(uid: str, conversation_id: str, status: str):
 
 # Backend-only conversation classification; job/API terminal_outcome is separate.
 TERMINAL_FAILURE_FAMILIES = frozenset({'dead_letter', 'byok_abandoned', 'oversized', 'orphan_swept', 'deferred_retry'})
+TERMINAL_FAILED_RETRY_TRIGGERS = frozenset({'server_recovery', 'silent_backfill', 'user_reprocess', 'backlog_choice'})
 TERMINAL_CLAIM_REFUSALS = Counter(
     'omi_conversation_terminal_claim_refusals_total',
     'Committed processor content merges whose success claim lost to a failure marker',
@@ -2901,9 +2923,9 @@ def _record_terminal_claim_refusal(family: str) -> None:
 def _terminal_family_serving(uid: str) -> bool:
     # The on|off operator surface maps on to the shared serve mode. The shared
     # parser retains its cohort support for a later ramp without changing defaults.
-    from config.policy import kill_switch
+    from config.refactor_modes import default_on
 
-    return kill_switch('CONVERSATION_TERMINAL_FAMILY_MODE') and serving_for(
+    return default_on('CONVERSATION_TERMINAL_FAMILY_MODE') and serving_for(
         'CONVERSATION_TERMINAL_FAMILY_MODE', uid, default='serve'
     )
 

@@ -190,7 +190,15 @@ def test_persist_flips_content_and_status_in_one_write(store):
     assert observed == [True]
 
 
-def test_flag_off_persist_write_golden(store, monkeypatch):
+@pytest.mark.parametrize(
+    'existing',
+    [
+        {'finalization_status': 'dead_letter'},
+        {'status': 'failed', 'discarded': True},
+        {'finalization_status': 'dead_letter', 'sync_relevance_user_kept': True},
+    ],
+)
+def test_flag_off_persist_write_golden(store, monkeypatch, existing):
     monkeypatch.setenv('CONVERSATION_TERMINAL_FAMILY_MODE', 'off')
     captured = []
     # StrictFirestore deliberately does not simulate general merge=True. Record
@@ -198,12 +206,89 @@ def test_flag_off_persist_write_golden(store, monkeypatch):
     tx = store.transaction()
     monkeypatch.setattr(store, 'transaction', lambda: tx)
     monkeypatch.setattr(tx, 'set', lambda ref, data, **kwargs: captured.append((ref.path, data, kwargs)))
-    store.rows[PATH]['finalization_status'] = 'dead_letter'
+    store.rows[PATH].update(existing)
     assert persist({'status': 'completed', 'structured': {'title': 'legacy'}})
-    assert captured == [
-        (PATH, {'id': 'capture', 'status': 'completed', 'structured': {'title': 'legacy'}}, {'merge': True})
-    ]
+    golden = {'id': 'capture', 'status': 'completed', 'structured': {'title': 'legacy'}}
+    if existing.get('sync_relevance_user_kept'):
+        golden.update(sync_relevance_user_kept=True, discarded=False, sync_relevance='keep')
+    assert captured == [(PATH, golden, {'merge': True})]
     assert tx.updates == []
+
+
+@pytest.mark.parametrize('discarded', [False, True])
+def test_late_completed_payload_cannot_erase_unclassified_failed_row(store, discarded):
+    store.rows[PATH].update(status='failed', discarded=discarded)
+    metric = db.TERMINAL_CLAIM_REFUSALS.labels(family='failed')
+    before = metric._value.get()
+    assert persist({'status': 'completed', 'discarded': False, 'title': 'late content'})
+    row = store.rows[PATH]
+    assert row['status'] == 'failed' and row['discarded'] is discarded
+    assert row['title'] == 'late content'
+    assert 'terminal_family' not in row
+    assert metric._value.get() == before + 1
+    assert len(store.transactions[-1].updates) == 1
+
+
+@pytest.mark.parametrize('family', [None, 'dead_letter', 'byok_abandoned'])
+def test_explicit_restore_supersedes_failure_in_atomic_completion(store, family):
+    store.rows[PATH].update(status='failed', discarded=True, finalization_status='dead_letter')
+    if family:
+        store.rows[PATH].update(terminal_family=family, terminal_family_at=NOW)
+    assert db.restore_conversation_from_discarded('synthetic', 'capture')
+    assert store.rows[PATH]['sync_relevance_user_kept'] is True
+    assert store.rows[PATH]['finalization_status'] == 'dead_letter'
+    metric = db.TERMINAL_CLAIM_REFUSALS.labels(family=family or 'dead_letter')
+    before = metric._value.get()
+    assert persist({'status': 'completed', 'title': 'restored notes', 'finalization_status': 'dead_letter'})
+    row = store.rows[PATH]
+    assert row['status'] == 'completed' and row['terminal_family'] == 'success'
+    assert row['terminal_family_at'] >= NOW and row['finalization_status'] is None
+    assert row['discarded'] is False and row['title'] == 'restored notes'
+    assert metric._value.get() == before
+    assert len(store.transactions[-1].updates) == 1
+
+
+def test_user_reprocess_commits_restore_authority_with_completion(store):
+    # execute_reprocess restores after processing; its processor payload already
+    # carries user_kept so the transaction must recognize that same authority.
+    store.rows[PATH].update(status='failed', discarded=True, finalization_status='dead_letter')
+    assert persist(
+        {'status': 'completed', 'discarded': False, 'sync_relevance_user_kept': True, 'title': 'retried notes'}
+    )
+    assert store.rows[PATH]['terminal_family'] == 'success'
+    assert store.rows[PATH]['finalization_status'] is None
+
+
+@pytest.mark.parametrize('trigger', ['server_recovery', 'silent_backfill', 'user_reprocess', 'backlog_choice'])
+def test_intentional_failed_retries_keep_their_legacy_completion_path(store, trigger):
+    from utils.conversations.relevance import RelevanceDecision
+    from utils.conversations.processing_trigger import ProcessingTrigger
+    from utils.conversations import lifecycle
+
+    store.rows[PATH].update(status='failed', discarded=True)
+    decision = RelevanceDecision('keep', 'policy', 'explicit_retry', ProcessingTrigger(trigger)).as_record()
+    # Use the lifecycle wrapper: its terminal stamp must retain the processor's
+    # trigger, which is the same record process_conversation passes at persist.
+    assert lifecycle.persist_processed_conversation(
+        'synthetic', {'id': 'capture', 'status': 'completed', 'discarded': False, 'relevance_decision': decision}
+    )
+    assert store.rows[PATH]['status'] == 'completed'
+    assert store.rows[PATH]['terminal_family'] == 'success'
+    assert store.rows[PATH]['relevance_decision']['trigger'] == trigger
+
+
+@pytest.mark.parametrize('trigger', ['capture_end', 'sync_update', 'lifecycle_terminal'])
+def test_ordinary_processing_trigger_cannot_reopen_failed_row(store, trigger):
+    store.rows[PATH].update(status='failed', discarded=True)
+    assert persist({'status': 'completed', 'relevance_decision': {**KEEP, 'trigger': trigger}})
+    assert store.rows[PATH]['status'] == 'failed'
+
+
+def test_recovery_trigger_alone_does_not_override_terminal_family(store):
+    store.rows[PATH].update(status='failed', terminal_family='dead_letter')
+    assert persist({'status': 'completed', 'relevance_decision': {**KEEP, 'trigger': 'server_recovery'}})
+    assert store.rows[PATH]['status'] == 'failed'
+    assert store.rows[PATH]['terminal_family'] == 'dead_letter'
 
 
 def test_update_mask_matches_legacy_merge_including_empty_maps_and_literal_keys():
@@ -216,7 +301,9 @@ def test_update_mask_matches_legacy_merge_including_empty_maps_and_literal_keys(
     assert merge.update.fields == update.update.fields
 
 
-@pytest.mark.parametrize('mode, expected', [(None, True), ('on', True), ('off', False)])
+@pytest.mark.parametrize(
+    'mode, expected', [(None, True), ('on', True), ('off', False), ('false', False), ('0', False), ('no', False)]
+)
 def test_mode_default_and_operator_kill_switch(monkeypatch, mode, expected):
     if mode is None:
         monkeypatch.delenv('CONVERSATION_TERMINAL_FAMILY_MODE', raising=False)

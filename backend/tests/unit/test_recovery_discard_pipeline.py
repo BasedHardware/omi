@@ -477,13 +477,14 @@ async def test_rule_discard_keeps_stored_speaker_metadata_with_its_transcript(pi
 
 
 @pytest.mark.parametrize('level', ['enhanced', 'standard'])
-def test_kept_recovery_preserves_encoded_capture_and_later_audio(pipeline, level):
+@pytest.mark.parametrize('status', ['processing', 'failed'])
+def test_kept_recovery_preserves_encoded_capture_and_later_audio(pipeline, level, status):
     # A model round-trip can normalize legacy fields without changing speech.
     # Recovery must enrich the row without replacing its durable capture.
     text = 'The synthetic release meeting agreed to ship the tested repair tomorrow.'
     transcript = [{'text': text, 'start': 0, 'end': 30, 'legacy_capture_metadata': list(range(100))}]
     speaker_metadata = {'status': 'capture', 'version': 1, 'participant_speaker_ids': [7]}
-    blob = _seed(pipeline, level=level, transcript=transcript, speaker_resolution=speaker_metadata)
+    blob = _seed(pipeline, level=level, transcript=transcript, speaker_resolution=speaker_metadata, status=status)
     row = pipeline.store.rows[CONVERSATION_PATH]
     row['audio_files'].append({'id': 'later-audio'})
     stored_audio = deepcopy(row['audio_files'])
@@ -498,6 +499,7 @@ def test_kept_recovery_preserves_encoded_capture_and_later_audio(pipeline, level
     }
     assert lifecycle.persist_processed_conversation(UID, payload)
     row = pipeline.store.rows[CONVERSATION_PATH]
+    assert row['status'] == 'completed' and row['terminal_family'] == 'success'
     assert row['transcript_segments'] == blob
     assert row['audio_files'] == stored_audio
     assert row['speaker_resolution'] == speaker_metadata

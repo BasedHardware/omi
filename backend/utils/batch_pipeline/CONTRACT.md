@@ -143,6 +143,11 @@ never proof of transcript publication. Phase 2a persists backend-only
 wrapper and processor persist, under `CONVERSATION_TERMINAL_FAMILY_MODE` (on by
 default). Processor content and status commit together; a stored failure family
 or `finalization_status=dead_letter` refuses success while still merging content.
+Unclassified `failed` rows also refuse ordinary late completion. Explicit user
+restoration supersedes failure markers and clears the old dead-letter marker
+with success; server recovery, silent backfill, user reprocess and funded-backlog
+choice retain their direct retry of unclassified failed rows, keyed on the
+processor's relevance-decision trigger.
 Legacy rows may lack the classifier. Other writer-family routing remains
 **PLANNED phase 2b**; no API model, receipt, backfill, custody or drain change.
 Off restores legacy writes and leaves classifier fields inert.
@@ -338,11 +343,11 @@ explicit deletion.
 
 ### PLANNED gates
 
-- **PLANNED phase 2 — `terminal_family`:** agree the vocabulary and one writer
-  for terminal semantics through this owner and a CONTRACT.md PR before adding
-  a field or migrating readers. Gate on this table and legacy compatibility,
-  including conversation completion versus audio/result/finalization obligations.
-  No values or migration are implemented here.
+- **Phase 2a implemented; PLANNED phase 2b — `terminal_family`:** claim and
+  processor persist stamp backend-only success under the mode above. Routing
+  the remaining terminal writer families through the claim owner remains gated
+  on this table and legacy compatibility, including conversation completion
+  versus audio/result/finalization obligations. No backfill is implemented.
 - **PLANNED phase 4c — BYOK consumer + finalization dead-letter requeue:** gate
   on this table landing first, owner-reviewed credential custody/consumer and
   generation/lease CAS contracts, retained-content and pre-change recovery

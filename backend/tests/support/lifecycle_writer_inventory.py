@@ -1169,6 +1169,7 @@ FIELD_SITES = {
         ('claim_conversation_status_in_txn', 'terminal_family', 'terminal_family', ('terminal_family',)),
         ('claim_conversation_status_in_txn', 'terminal_family_at', 'terminal_family_at', ('terminal_family_at',)),
         ('get_conversations_finished_after', 'status', 'status', ('finished_after', 'status')),
+        ('persist_processing_result_with_lifecycle._persist', 'finalization_status', 'None', ('finalization_status',)),
         (
             'persist_processing_result_with_lifecycle._persist',
             'record_audio_partial',
