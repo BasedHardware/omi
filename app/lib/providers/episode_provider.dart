@@ -188,12 +188,20 @@ class EpisodeProvider extends ChangeNotifier {
   }
 
   /// Nothing else rebuilds Home while a finished episode waits, so re-read until it settles.
-  /// A single member shows as its own conversation and never waits. Re-reads back off and stop
-  /// after [homeHoldAttempts]; a read that brings the summary ends the hold.
+  /// A single member shows as its own conversation and never waits. While a summary is pending,
+  /// re-reads run every [pollInterval]; after that window, a member still processing keeps the
+  /// hold, with re-reads that back off and stop after [homeHoldAttempts].
   void _holdHome(DateTime from, DateTime to, String key) {
     _homeHold?.cancel();
     final now = _clock();
-    if (!_homeEpisodes.any((e) => _homeNeedsRead(e, now))) {
+    if (_homeEpisodes.any((e) => e.members.length != 1 && e.awaitingSummary(now))) {
+      _homeHoldAttempts = 0;
+      _homeHold = Timer(pollInterval, () {
+        if (key == _homeKey) unawaited(refreshHome(from, to, force: true));
+      });
+      return;
+    }
+    if (!_homeEpisodes.any((e) => _homeHeldByProcessingMember(e))) {
       _homeHoldAttempts = 0;
       return;
     }
@@ -207,12 +215,10 @@ class EpisodeProvider extends ChangeNotifier {
     });
   }
 
-  /// A closed episode needs another read while its summary is pending, or while a member is still
-  /// processing: Home's pending hold keeps the uncomposed copy on screen until a read brings the
-  /// composed one.
-  bool _homeNeedsRead(Episode episode, DateTime now) {
+  /// A closed episode needs another read while a member is still processing: Home's pending hold
+  /// keeps the uncomposed copy on screen until a read brings the composed one.
+  bool _homeHeldByProcessingMember(Episode episode) {
     if (episode.live || episode.composed || episode.members.length == 1) return false;
-    if (episode.awaitingSummary(now)) return true;
     final processing = _homeConversations?.processingConversations;
     return processing != null && processing.any((c) => episode.conversationIds.contains(c.id));
   }
