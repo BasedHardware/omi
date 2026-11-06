@@ -104,6 +104,17 @@ def test_directory_dark_manifest_needs_no_pg_bindings(mode):
     assert _validate_directory_routing_bindings('prod', manifest) == []
 
 
+def test_directory_mode_inherited_from_shared_config_map_cannot_bypass_guard():
+    manifest = {
+        'gke': {'config_map': {'name': 'synthetic-config', 'entries': {'DIRECTORY_ROUTING_MODE': 'new_owners'}}}
+    }
+    errors = _validate_directory_routing_bindings('prod', manifest)
+    assert any(error.scope == 'prod/gke/pusher' and 'DIRECTORY_PG_*' in error.message for error in errors)
+    assert any(
+        error.scope == 'prod/cloud_run/backend' and 'DIRECTORY_ROUTING_MODE' in error.message for error in errors
+    )
+
+
 def test_directory_binding_guard_is_in_deploy_validator(directory_manifest, monkeypatch):
     validator = load_validator()
     manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)

@@ -589,7 +589,9 @@ def _validate_directory_routing_bindings(env: str, env_config: ConfigDict) -> li
 
     def value(scope: str, entries: ConfigDict, key: str) -> str | None:
         entry = _as_config_dict(entries.get(key)) or {}
-        raw = entry.get('value')
+        # GKE's envFrom imports the shared ConfigMap even without a per-key
+        # service declaration. An explicit env entry still takes precedence.
+        raw = config_values.get(key) if scope.startswith('gke/') and key not in entries else entry.get('value')
         if 'config_map' in entry and scope.startswith('gke/'):
             binding = _as_config_dict(entry['config_map']) or {}
             binding_key = binding.get('key')
@@ -601,7 +603,12 @@ def _validate_directory_routing_bindings(env: str, env_config: ConfigDict) -> li
 
     entries = {scope: _as_config_dict((_as_config_dict(host) or {}).get('env')) or {} for scope, host in hosts}
     modes = {
-        scope: value(scope, bindings, 'DIRECTORY_ROUTING_MODE') if 'DIRECTORY_ROUTING_MODE' in bindings else 'off'
+        scope: (
+            value(scope, bindings, 'DIRECTORY_ROUTING_MODE')
+            if 'DIRECTORY_ROUTING_MODE' in bindings
+            or (scope.startswith('gke/') and 'DIRECTORY_ROUTING_MODE' in config_values)
+            else 'off'
+        )
         for scope, bindings in entries.items()
     }
     if all(mode == 'off' for mode in modes.values()):
