@@ -144,6 +144,22 @@ def stop_child(child: Child, evidence: Path, *, census: Callable[[int], list[Mem
         if status is not None:
             prove_absent()
             return
+        if sig == signal.SIGKILL and len(rows) == 1:
+            row = rows[0]
+            if (
+                row.pid == process.pid
+                and row.ppid == os.getpid()
+                and row.pgid == pgid
+                and row.uid == child.uid
+                and row.sid is None
+                and row.sid_errno == errno.ESRCH
+            ):
+                # Missing SID cannot authorize KILL, even if the snapshot looks
+                # like an exiting child. Use the existing KILL wait allowance
+                # solely to reap this exact retained child; neither its state
+                # nor ESRCH proves exit. The caller must still prove absence.
+                record('reap_only', reason='sole_direct_child_sid_unknown')
+                return
         verify_ownership(rows)
         if not rows:
             raise CleanupFailure(f'{child.name}: live child missing from group census')

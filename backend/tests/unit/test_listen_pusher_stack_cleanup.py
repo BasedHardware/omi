@@ -313,6 +313,135 @@ def test_exit_between_term_timeout_and_kill_requires_reap_and_absence(monkeypatc
     assert signals == [signal.SIGTERM]
 
 
+@pytest.mark.parametrize('state', ['?Es', 'S', 'Z'])
+def test_deferred_waitability_uses_kill_wait_without_signal(monkeypatch, tmp_path, state):
+    process = fake_process()
+    process.poll.side_effect = lambda: process.returncode
+    unknown = member(process, state=state, sid=None, sid_errno=errno.ESRCH)
+    census = Mock(side_effect=[[member(process)], [unknown]])
+
+    def wait(timeout):
+        assert timeout == 5 and process.returncode is None
+        if process.wait.call_count == 1:
+            raise subprocess.TimeoutExpired('owned-child', timeout)
+        # Both polls around the KILL census still found the child non-waitable.
+        assert process.poll.call_count == 5
+        assert process.wait.call_count == 2
+        process.returncode = -signal.SIGTERM
+        return process.returncode
+
+    def send(pgid, sig):
+        assert pgid == process.pid
+        if sig == 0:
+            assert process.returncode == -signal.SIGTERM
+            gone()
+        assert sig == signal.SIGTERM and process.returncode is None
+
+    process.wait.side_effect = wait
+    send_mock = Mock(side_effect=send)
+    monkeypatch.setattr(cleanup.os, 'killpg', send_mock)
+    monkeypatch.setattr(cleanup, 'group_members', census)
+    stack = runner.Stack.__new__(runner.Stack)
+    stack.state_dir = tmp_path
+    stack.children = {'backend': child_for(process, tmp_path)}
+    stack.stop('backend')
+    assert not stack.children
+    assert process.returncode == -signal.SIGTERM
+    assert process.wait.call_args_list == [call(timeout=5), call(timeout=5)]
+    assert send_mock.call_args_list == [call(process.pid, signal.SIGTERM), call(process.pid, 0)]
+    recorded = events(tmp_path / 'cleanup.jsonl')
+    observed = [row for row in recorded if row['event'] == 'census'][-1]['members']
+    assert observed == [vars(unknown)]
+    assert all(row['status'] is None for row in recorded if row['event'].startswith('poll'))
+    tail = recorded[next(i for i, row in enumerate(recorded) if row['event'] == 'reap_only') :]
+    assert [row['event'] for row in tail] == ['reap_only', 'wait_begin', 'wait_reaped', 'group_absent', 'cleaned']
+    assert tail[1]['stage'] == tail[2]['stage'] == 'wait_kill'
+
+
+@pytest.mark.parametrize('outcome', ['timeout', 'live', 'unknown', 'foreign', 'descendant', 'denied'])
+def test_reap_only_requires_wait_and_independent_absence(monkeypatch, tmp_path, outcome):
+    process = fake_process()
+    process.poll.side_effect = lambda: process.returncode
+    unknown = member(process, state='?Es', sid=None, sid_errno=errno.ESRCH)
+    remaining = {
+        'live': [member(process)],
+        'unknown': [unknown],
+        'foreign': [member(process, pid=process.pid + 1, uid=os.getuid() + 1)],
+        'descendant': [member(process, pid=process.pid + 1, ppid=1)],
+    }.get(outcome, [])
+    census = Mock(side_effect=[[member(process)], [unknown], remaining])
+
+    def wait(timeout):
+        assert timeout == 5 and process.returncode is None
+        if process.wait.call_count == 1 or outcome == 'timeout':
+            raise subprocess.TimeoutExpired('owned-child', timeout)
+        process.returncode = -signal.SIGTERM
+        return process.returncode
+
+    def send(_pgid, sig):
+        if sig == 0:
+            assert process.returncode == -signal.SIGTERM
+            if outcome == 'denied':
+                raise PermissionError(errno.EPERM, 'absence probe denied')
+        else:
+            assert sig == signal.SIGTERM
+
+    process.wait.side_effect = wait
+    send_mock = Mock(side_effect=send)
+    monkeypatch.setattr(cleanup.os, 'killpg', send_mock)
+    monkeypatch.setattr(cleanup, 'group_members', census)
+    stack = runner.Stack.__new__(runner.Stack)
+    stack.state_dir = tmp_path
+    child = child_for(process, tmp_path)
+    stack.children = {'backend': child}
+    expected = 'TimeoutExpired' if outcome == 'timeout' else 'PermissionError' if outcome == 'denied' else 'surviving'
+    with pytest.raises(cleanup.CleanupFailure, match=expected):
+        stack.stop('backend')
+    assert stack.children['backend'] is child
+    assert process.wait.call_args_list == [call(timeout=5), call(timeout=5)]
+    expected_calls = [call(process.pid, signal.SIGTERM)]
+    if outcome != 'timeout':
+        expected_calls.append(call(process.pid, 0))
+    assert send_mock.call_args_list == expected_calls
+    assert process.returncode == (None if outcome == 'timeout' else -signal.SIGTERM)
+    recorded = events(tmp_path / 'cleanup.jsonl')
+    assert any(row['event'] == 'reap_only' for row in recorded)
+    assert not any(row['event'] in {'group_absent', 'cleaned'} for row in recorded)
+    assert recorded[-1]['event'] == 'failed'
+
+
+@pytest.mark.parametrize('mismatch', ['pid', 'ppid', 'pgid', 'uid', 'sid_errno', 'extra_member'])
+def test_reap_only_does_not_accept_other_unknown_membership(monkeypatch, tmp_path, mismatch):
+    process = fake_process()
+    process.wait.side_effect = subprocess.TimeoutExpired('owned-child', 5)
+    changes = {
+        'pid': {'pid': process.pid + 1},
+        'ppid': {'ppid': os.getpid() + 1},
+        'pgid': {'pgid': process.pid + 1},
+        'uid': {'uid': os.getuid() + 1},
+        'sid_errno': {'sid_errno': errno.EPERM},
+        'extra_member': {},
+    }[mismatch]
+    rows = [member(process, state='?Es', sid=None, sid_errno=errno.ESRCH)]
+    rows[0] = cleanup.Member(**(vars(rows[0]) | changes))
+    if mismatch == 'extra_member':
+        rows.append(member(process, pid=process.pid + 1, ppid=process.pid))
+    census = Mock(side_effect=[[member(process)], rows])
+    monkeypatch.setattr(cleanup, 'group_members', census)
+    send = Mock()
+    monkeypatch.setattr(cleanup.os, 'killpg', send)
+    stack = runner.Stack.__new__(runner.Stack)
+    stack.state_dir = tmp_path
+    child = child_for(process, tmp_path)
+    stack.children = {'backend': child}
+    with pytest.raises(cleanup.CleanupFailure, match='foreign or unverifiable'):
+        stack.stop('backend')
+    assert stack.children['backend'] is child
+    send.assert_called_once_with(process.pid, signal.SIGTERM)
+    process.wait.assert_called_once_with(timeout=5)
+    assert not any(row['event'] == 'reap_only' for row in events(tmp_path / 'cleanup.jsonl'))
+
+
 @pytest.mark.parametrize('denied_signal', [signal.SIGTERM, signal.SIGKILL])
 def test_eperm_is_failure_with_handle_retained(monkeypatch, tmp_path, denied_signal):
     process = fake_process()

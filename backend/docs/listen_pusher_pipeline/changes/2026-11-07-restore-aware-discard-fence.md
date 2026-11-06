@@ -36,5 +36,18 @@ and zombie/reap, but the kernel-probe fixture encountered SID ESRCH after a
 non-Z snapshot. Such rows now retain their observed state and an explicitly
 unknown SID; only actual child reap plus independent kernel group-absence proof
 can finish cleanup. Unknown observations never authorize signaling. The updated
-regressions and real kernel probe remain pending; the historical EPERM mechanism
-has not been reproduced.
+cleanup regressions subsequently passed in the parent run (29/29), but the full
+stack failed at pusher restart: after TERM timed out, the sole direct child's
+KILL-stage census had SID ESRCH and state `?Es` while both polls still returned
+`None`. Final close later reaped that same child with TERM status and proved
+kernel group absence. This is a distinct non-waitable exit observation, not an
+explanation of the historical EPERM.
+
+For only that sole direct-child identity with matching PID/PGID/UID/PPID and an
+unknown SID from ESRCH, cleanup now spends the existing five-second KILL wait
+allowance on reap alone, without sending KILL. State and lookup failure prove
+neither exit nor ownership. Actual reap and independent kernel group absence
+remain mandatory; timeout, foreign/unknown surviving membership and denials
+retain failure and the child handle. TERM, KILL and census bounds are unchanged.
+Deterministic deferred-waitability regressions and full-stack acceptance remain
+pending parent validation; no new behavioral pass is claimed.
