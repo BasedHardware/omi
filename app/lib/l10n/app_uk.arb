@@ -4634,5 +4634,9 @@
     "referralRewardSecondDetail": "Коли ще 3 друзі куплять",
     "referralClaimShort": "Отримати",
     "paymentDeclinedTitle": "Вашу картку відхилено",
-    "paymentDeclinedMessage": "Оновіть картку, щоб повернути {plan}"
+    "paymentDeclinedMessage": "Оновіть картку, щоб повернути {plan}",
+    "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
+    "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
+    "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
 }

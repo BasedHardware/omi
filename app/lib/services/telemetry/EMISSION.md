@@ -47,3 +47,28 @@ ingress omits `unverified_duration_ms` rather than inventing one. The
 
 Real collector deployment and seven-day canary acceptance are pending. Do not
 enable the migration or retirement flags in this lane.
+
+## Firmware adoption
+
+`Firmware Update Started`, `Firmware Update Upload Finished`, `Firmware Update
+Install Requested`, `Firmware Update Completed`, and `Firmware Update Failed`
+use `AnalyticsManager.track` and its consent/identity/retry queue, then
+`PostHogAnalyticsAdapter` (default host `https://us.i.posthog.com`). They remain
+on that route when `posthogRetirementEnabled` is true; the frozen client-batch
+schema has no firmware family. One random attempt id joins the funnel. Only a
+fresh DIS revision after DFU can produce Completed (`verified: true`);
+`to_version` is observed, never the requested version. A known starting
+revision must change, even when it equals the target. Only an unknown starting
+revision may be verified by matching the target.
+
+Device Connected/Paired carry `firmware_revision`, `model`, `hardware_family`.
+Device Session Ended deliberately remains on PostHog with retirement enabled:
+its client-batch replacement lacks those adoption dimensions. Missing metadata
+is `unknown`. The reconnect owner refreshes DIS before emitting Connected.
+
+The ingestion sampling table linked above documents Device Connected at 2%,
+Device Paired/Session Ended in the keep-list, and unlisted long-tail events at
+2%. Firmware events need an explicit ingestion keep-list entry before raw
+funnel counts can represent the fleet. This app change does not update or
+verify that external PostHog configuration. No collector schema, production
+account, or remote flag is changed.

@@ -4634,5 +4634,9 @@
     "referralRewardSecondDetail": "Når 3 venner til kjøper",
     "referralClaimShort": "Løs inn",
     "paymentDeclinedTitle": "Kortet ditt ble avvist",
-    "paymentDeclinedMessage": "Oppdater kortet for å få {plan} tilbake"
+    "paymentDeclinedMessage": "Oppdater kortet for å få {plan} tilbake",
+    "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
+    "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
+    "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
 }

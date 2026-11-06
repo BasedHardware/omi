@@ -47,7 +47,7 @@ class _Device extends ChangeNotifier implements DeviceProvider {
   @override
   String get latestStableFirmwareVersion => '';
   @override
-  Future<void> getDeviceInfo() async {}
+  Future<void> getDeviceInfo({bool forceRefresh = false}) async {}
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

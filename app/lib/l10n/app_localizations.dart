@@ -26996,6 +26996,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Update it to get {plan} back'**
   String paymentDeclinedMessage(Object plan);
+
+  /// No description provided for @firmwareUpdateNotInstalledMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'The update didn\'t install. Your pendant is still on {version}. Please try again.'**
+  String firmwareUpdateNotInstalledMessage(String version);
+
+  /// No description provided for @firmwareUpdateUnconfirmedMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.'**
+  String get firmwareUpdateUnconfirmedMessage;
+
+  /// No description provided for @firmwareUpdateUnconfirmedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Update Not Confirmed'**
+  String get firmwareUpdateUnconfirmedTitle;
+
+  /// No description provided for @firmwareVerifyingInstallation.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirming installation… This may take up to 3 minutes.'**
+  String get firmwareVerifyingInstallation;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
