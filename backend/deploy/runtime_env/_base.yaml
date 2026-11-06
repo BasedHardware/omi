@@ -462,6 +462,22 @@ environment_shared:
         SONIOX_ORDERED_FINALIZE:
           value: 'false'
           category: rollout
+        BUCKET_OBJECT_LAKE:
+          category: storage_retention
+        OBJECT_LAKE_KMS_KEY:
+          category: storage_retention
+        OBJECT_LAKE_WRITE_ENABLED:
+          value: 'false'
+          category: rollout
+        OBJECT_LAKE_WRITE_PERCENT:
+          value: '0'
+          category: rollout
+        OBJECT_LAKE_READ_ENABLED:
+          value: 'true'
+          category: rollout
+        OBJECT_LAKE_INLINE_MAX_BYTES:
+          value: '4096'
+          category: rollout
         BUCKET_SCREEN_FRAMES:
           category: storage_retention
         CONVERSATION_RELEVANCE_JEV_PERCENT:
@@ -670,6 +686,22 @@ environment_shared:
           category: rollout
         SONIOX_ORDERED_FINALIZE:
           value: 'false'
+          category: rollout
+        BUCKET_OBJECT_LAKE:
+          category: storage_retention
+        OBJECT_LAKE_KMS_KEY:
+          category: storage_retention
+        OBJECT_LAKE_WRITE_ENABLED:
+          value: 'false'
+          category: rollout
+        OBJECT_LAKE_WRITE_PERCENT:
+          value: '0'
+          category: rollout
+        OBJECT_LAKE_READ_ENABLED:
+          value: 'true'
+          category: rollout
+        OBJECT_LAKE_INLINE_MAX_BYTES:
+          value: '4096'
           category: rollout
         BUCKET_SCREEN_FRAMES:
           category: storage_retention
@@ -1230,6 +1262,22 @@ environment_shared:
           REVIEW_SURFACE_MODE:
             value: 'on'
             category: rollout
+          BUCKET_OBJECT_LAKE:
+            category: storage_retention
+          OBJECT_LAKE_KMS_KEY:
+            category: storage_retention
+          OBJECT_LAKE_WRITE_ENABLED:
+            value: 'false'
+            category: rollout
+          OBJECT_LAKE_WRITE_PERCENT:
+            value: '0'
+            category: rollout
+          OBJECT_LAKE_READ_ENABLED:
+            value: 'true'
+            category: rollout
+          OBJECT_LAKE_INLINE_MAX_BYTES:
+            value: '4096'
+            category: rollout
           BUCKET_SCREEN_FRAMES:
             category: storage_retention
           CONVERSATION_RELEVANCE_JEV_PERCENT:
@@ -1598,6 +1646,22 @@ environment_shared:
             category: rollout
           SONIOX_ORDERED_FINALIZE:
             value: 'false'
+            category: rollout
+          BUCKET_OBJECT_LAKE:
+            category: storage_retention
+          OBJECT_LAKE_KMS_KEY:
+            category: storage_retention
+          OBJECT_LAKE_WRITE_ENABLED:
+            value: 'false'
+            category: rollout
+          OBJECT_LAKE_WRITE_PERCENT:
+            value: '0'
+            category: rollout
+          OBJECT_LAKE_READ_ENABLED:
+            value: 'true'
+            category: rollout
+          OBJECT_LAKE_INLINE_MAX_BYTES:
+            value: '4096'
             category: rollout
           BUCKET_SCREEN_FRAMES:
             category: storage_retention

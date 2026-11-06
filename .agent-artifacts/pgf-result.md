@@ -1,83 +1,84 @@
-# PG foundation wave 1: M9 implementation result
+# C1 implementation result
 
-Repository: BasedHardware/omi. Worktree: `/Volumes/Ephemeral/scratch/worktrees/omi/omi-lane-pgf-m9-upstream-keep-clean`. Branch: `lane/pgf-m9`. No push or PR. No GCP tier used and no production access.
+Local branch: `lane/pgf-c1`. Worktree: `/Volumes/Ephemeral/scratch/worktrees/omi/omi-lane-pgf-c1-upstream-keep-clean`. No push, PR creation, provisioning, deployment, production API or production data access. GCP tier: **none**.
 
-## Built
+**Status:** the runtime fixture fix is complete and committed. Acceptance remains **blocked** on two additional out-of-scope admission metadata changes; neither patch was applied without authorization.
 
-- `backend/utils/other/plane_routing.py`: `plane_for(uid)` defaults to Firestore; a ContextVar binding supports request-local resolved routes with restoration on exit. The process-configured `PLANE_LEAK_TEST_CELL_UIDS` override accepts local/offline/test stages only and rejects deployed/unspecified stages before probes install. B2 owns directory resolution.
-- `backend/database/plane_leak_probe.py`: one routed-collection constant combining the W5 domain names with the canonical memory collection catalog. `plane_leak_total{op,collection,origin}` records reads and committed writes; logs contain only bounded operation/collection/origin plus `hash_log_identifier(uid)`. Descendants fold into their domain collection label. The empty-route fast path does not parse paths, resolve owners, hash, log, or create metric series.
-- `backend/database/firestore_document_probe.py`: adds the observer to the existing common read-recording seam, including miss/empty-query floor observations.
-- `backend/database/firestore_write_probe.py`: observes successful writes only, after Commit success or BatchWrite per-entry OK filtering. Failed/ambiguous commits do not increment the leak counter.
-- `backend/tests/unit/test_plane_leak_probe.py`: hermetic SDK transports, allow/deny stages, Firestore vs cell owners, non-routed collections, nested reads, empty queries, successful/failed/partial writes, request isolation, disabled fast path, private logging, and telemetry-failure containment.
+C1 supplies create-only, envelope-encrypted object-lake storage and Firestore/KMS space-key primitives with zero product callers. Config, lifecycle/retention policy, inert runtime/Helm bindings, offline admission validation and the unexecuted provisioning runbook ship together. The lead authorized and committed the four fixture/scanner/snapshot/dead-code scope exceptions before this round.
 
-Implementation plus tests: 298 added lines, below the brief's 400-line target (excluding this handoff).
+Historical C1 verification receipts remain in `pgf-verification.jsonl` and the linked `pgf-*.log` files. [Historical C1 report reconstructed from its original renderer and receipts](pgf-c1-result-before-r1.md) preserves the earlier blocked results; its old scope-exception status is superseded below. Rebase introduced M9's tracked report at this same generic path; that upstream report remains [in the pinned main tree](https://github.com/BasedHardware/omi/blob/876abc7312f28ae02d7b92c5c5034e5ba74303df/.agent-artifacts/pgf-result.md). This requested path now reports C1.
 
-## Deviations and scope
+## Fix round 1
 
-The read probe implementation has moved out of `database/_client.py` into `database/firestore_document_probe.py`; the existing `_client` installation path is retained and the detector hooks the extracted probe. Two small shared modules keep routing separate from telemetry and avoid duplicating the domain list between probes. No callers of a retired API exist, and no compatibility wrapper was added.
+### Rebase and preservation
 
-Existing unrelated edits to `app/analysis_options.yaml` and `app/pubspec.lock` are preserved and excluded from commits. No edits under the prohibited directories or A1/B1/C1-owned paths.
+- Saved original branch tip `4a4f1b71d34b` as local branch `pgf-c1-before-fix-r1`.
+- Fetched `origin/main` and rebased onto `876abc7312f28ae02d7b92c5c5034e5ba74303df`. All seven commits replayed without conflicts. The scope-exception commit became `3abf8596cb1c`.
+- Ran `backend/.venv/bin/python backend/deploy/compose_runtime_env.py` and `backend/.venv/bin/python scripts/render_feature_flag_registry.py`; both outputs already match their sources (no diff). No generated output was hand-merged.
+- Temporarily stashed only the two existing app edits for Git's clean-index requirement, restored them after rebase, and compared both the patch and file hashes. They are unchanged and remain uncommitted. SHA-256: analysis options `585e4fec57ff03a99bf6654e5f370e4eb49d9a4c55140089fbef37c883bb05f7`; lock `067a184bf86123668abe3fe825a74a280cff9d70335a6a2b187f1ec3fc5e52d4`.
 
-## Verification
+### Root cause and correction
 
-Status: implementation complete; broad validation BLOCKED, not green. Evidence cutoff: 2026-11-06T09:30:16.425604+00:00.
+The fixture and validator read the **same** worktree `backend/deploy/runtime_env.yaml`; the parsed and normalized manifests agree. Regeneration is drift-free. The regression is positional: `with_object_lake_env()` prepended six entries before the leading `GOOGLE_CLOUD_PROJECT` entry, while later translation, ledger/sidecar, sync-settle and shadow helpers match only when that entry is first. Those helpers silently matched zero times. This left 17 unrelated required bindings absent, in addition to the intended gateway or secret failure.
 
-Task-start base was `82b83d3b9288b508458e3018b20ad8335c3a8cf2`. The three implementation/test commits are `8a77d8d30027`, `a77da44e8f6b`, and `8b8f66768318`; their combined diff touches exactly the five Python paths listed above. The shared `origin/main` ref advanced to `579400fdf69d3dda2a267bfa2e73ed0593604708` during this run; this lane was not rebased or published.
+Moved lake completion to the final return, after the anchored helpers, and removed an adjacent no-op assignment. No validator code, expected error list, secret-version assertion or negative kill-switch assertion changed.
 
-Tests are launched through `.agent-artifacts/pgf-tests/run-clean.py`, which removes `GOOGLE_APPLICATION_CREDENTIALS`, every `CLOUDSDK_*` variable, `SERVICE_ACCOUNT_JSON`, and `FIREBASE_AUTH_CREDENTIALS_PATH`, sets `OMI_ENV_STAGE=offline`, then execs the command. All pytest invocations use this worktree's `backend/.venv/bin/python`. Heavy runs use `/Users/dazheng/workspace/omi/bin/omi-heavy run --`.
+- Before: [three failures on the lead-patched branch](pgf-r1-validator-before.log), including `test_cloud_run_state_rejects_old_secret_versions` with **18 errors instead of 1**.
+- After: [the same selection](pgf-r1-validator-after.log), **3 passed / 148 deselected**. The full validator file also passes **151 tests**.
+- Selection: `python -m pytest backend/tests/unit/test_backend_runtime_env_validator.py -q -k 'test_cloud_run_state_reports_missing_gateway_url or test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outputs or test_cloud_run_state_rejects_old_secret_versions'` from the root, through the credential scrubber and `omi-heavy`.
 
-Completed:
+### Review disposition
 
-- `backend/.venv/bin/python .agent-artifacts/pgf-tests/run-clean.py /Users/dazheng/workspace/omi/bin/omi-heavy run -- backend/.venv/bin/python -m pytest -q backend/tests/unit/test_plane_leak_probe.py`: initial and revised 30-test runs each passed; final 31 passed, 0 failed.
-- `backend/.venv/bin/python .agent-artifacts/pgf-tests/run-clean.py /Users/dazheng/workspace/omi/bin/omi-heavy run -- backend/.venv/bin/python -m pytest -q backend/tests/unit/test_firestore_document_probe.py backend/tests/unit/test_firestore_write_probe.py`: 155 passed, 0 failed.
-- `backend/.venv/bin/python .agent-artifacts/pgf-tests/run-clean.py /Users/dazheng/workspace/omi/bin/omi-heavy run -- backend/.venv/bin/pyright --pythonpath "$PWD/backend/.venv/bin/python" backend/database/plane_leak_probe.py backend/utils/other/plane_routing.py`: 0 errors, 0 warnings. Initial invocation without `--pythonpath` reported 1 unresolved dependency because it selected the wrong environment; fixed by selecting the worktree interpreter.
-- `backend/.venv/bin/python .agent-artifacts/pgf-tests/run-clean.py /Users/dazheng/workspace/omi/bin/omi-heavy run -- env PYTHON="$PWD/backend/.venv/bin/python" bash backend/test-preflight.sh`: 17 passed checks, 9 optional warnings, 0 failed. Initial invocation without `PYTHON` used system Python: 5 passed, 17 warnings, 4 failed; rerun above corrected the interpreter.
-- `black --line-length 120 --skip-string-normalization backend/utils/other/plane_routing.py backend/database/plane_leak_probe.py backend/database/firestore_document_probe.py backend/database/firestore_write_probe.py backend/tests/unit/test_plane_leak_probe.py`: passed. The virtualenv lacks Black, so the installed formatter was used; commit hooks also ran the pinned formatter successfully.
-- `git diff --check`: passed.
+Two one-line runbook clarifications are applied: pin `OBJECT_LAKE_RELEASE=v1` until the lifecycle/retention contract migrates with it; C4 must durably fence deleted owners and quiesce in-flight puts before purge. The remaining review items need behavioral, integration or test work beyond a safe one-line change:
 
-Selector and repository-gate commands (terminal results):
+- C2/C4: durable deleted-owner write fence plus concurrent object/key resurrection coverage; C4 emulator transaction-contention/retry coverage.
+- Next core test pass: reject an otherwise valid retry metadata DEK version that disagrees with the envelope header, and cover reload transport errors, unavailable/destroyed deep verification, and unsafe put identifiers. Header verification adds object IO to retry and needs an explicit tested policy.
+- C2: choose and enforce per-class decompressed-size limits; retain fail-closed handling for malformed wrapped-key rows (currently unavailable/retryable, distinct from shredded).
+- C2/C3: budget the deliberate key-doc authority reads (one per unwrap and two per put); optimize only while retaining cross-worker destroy semantics.
+- Provisioning/C3: enforce release alignment in runtime/admission configuration before serving; the runbook pin alone is not a code guard.
 
-- `backend/.venv/bin/python .agent-artifacts/pgf-tests/run-clean.py backend/.venv/bin/python backend/scripts/select_backend_unit_tests.py --changed-files /dev/stdin --output .agent-artifacts/pgf-tests/selected.txt`, stdin = the five touched Python paths above: selected 2,659 files via the database full-suite fallback plus canonical memory E2E.
-- `backend/.venv/bin/python .agent-artifacts/pgf-tests/run-clean.py /Users/dazheng/workspace/omi/bin/omi-heavy run -- env BACKEND_UNIT_TEST_FILE_LIST="$PWD/.agent-artifacts/pgf-tests/selected.txt" BACKEND_PYTEST_WORKERS=6 bash backend/test.sh`: interrupted deliberately to isolate the recurring preflight timeout. Final partial log has 227 completed file workers and 4,698 pytest-reported passes; no assertion failure was reported before interruption. Six worker-cancellation errors were generated by termination. Three subsequently discovered orphan worker groups were also stopped after confirming their cwd, inherited heavy lock, and exact selected-test commands. There are 2,432 files without recorded worker completion in `remaining.txt`. This is NOT a full-suite pass. Runner exit 137 reflects deliberate shutdown, not an assertion failure.
-- `backend/.venv/bin/python .agent-artifacts/pgf-tests/run-clean.py /Users/dazheng/workspace/omi/bin/omi-heavy run -- backend/.venv/bin/python backend/scripts/scan_async_blockers.py --dirs backend/routers backend/utils`: passed; 594 sync and 168 async endpoints scanned, 0 selected blocking findings.
-- `backend/.venv/bin/python .agent-artifacts/pgf-tests/run-clean.py /Users/dazheng/workspace/omi/bin/omi-heavy run -- make preflight`: FAILED. The Firestore index guard timed out `tests/unit/test_firestore_query_shapes.py` at its 300-second per-file budget (exit 124); other parallel checks were cancelled by the gate. This command exited 2. No index-shape assertion failure was reported before timeout.
-- `backend/.venv/bin/python .agent-artifacts/pgf-tests/run-clean.py scripts/pr-preflight --suggest`: completed; no locked product invariants affected.
-- `backend/.venv/bin/python .agent-artifacts/pgf-tests/run-clean.py /Users/dazheng/workspace/omi/bin/omi-heavy run -- scripts/pr-preflight --pr-body-file .agent-artifacts/pgf-pr-body.md`: FAILED on the same 300-second query-shape timeout. It additionally detected the final test-file edit made while that earlier parallel check was running; that edit was committed before the last standalone verification. Source files are stable and committed now, but this run is not a valid green metadata/preflight result.
-- `backend/.venv/bin/python .agent-artifacts/pgf-tests/run-clean.py /Users/dazheng/workspace/omi/bin/omi-heavy run -- env OMI_PR_BODY_FILE="$PWD/.agent-artifacts/pgf-pr-body.md" make preflight`: cancelled while awaiting heavy-run admission, before execution, to remove the duplicate pending preflight.
-- `backend/.venv/bin/python .agent-artifacts/pgf-tests/run-clean.py /Users/dazheng/workspace/omi/bin/omi-heavy run -- timeout --signal=TERM --kill-after=30s 300s backend/.venv/bin/python -m pytest -v backend/tests/unit/test_firestore_query_shapes.py`: FAILED, exit 124, after admission and 300 seconds of execution. Collected 555 tests; eight tests visibly passed, then the runtime-driver capture fixture did not finish before the deadline. No assertion failure was reported. This used the worktree virtualenv after the broad workers were stopped, so the timeout remains unresolved. No further identical rerun was attempted.
+### Validation
 
-Logs and selection are in `.agent-artifacts/pgf-tests/` locally.
+All commands use this worktree's Python 3.11 environment via `pgf-test-env.py`, which unsets `GOOGLE_APPLICATION_CREDENTIALS`, every `CLOUDSDK_*`, service-account/auth paths and inherited project bindings. Metadata discovery points at a closed loopback port; tests use demo-only project hints and loopback Redis. Heavy runs use `/Users/dazheng/workspace/omi/bin/omi-heavy run --wait 3600 -- ...`. The verification driver sets `BACKEND_PYTEST_WORKERS=4`, `BACKEND_UNIT_FILE_BUDGET_SECONDS=900`, and a process-local installed Opus loader path. No GCP credential tier was loaded.
 
-## Known gaps and integration obligations
+Completed 2026-11-06T13:39:24.342868+00:00. Source fix commit: `b1404559e9da566e761ba208f70add244f74249d`; the final handoff commit changes only this report. This is local verification, not GitHub CI or deployed/provider acceptance.
 
-- Required broad validation is unresolved: the existing query-shape guard exceeded its fixed budget in both preflight attempts and the standalone diagnostic. The full selector run is incomplete. No budget, guard, index registry, workflow, unrelated test, or host configuration was changed to hide the failure. The cause of the timeout has not been established; this handoff does not claim it is proven baseline behavior.
-- Offline-harness journey script is intentionally not in this PR; W5 integration owns it.
-- Directory lookup/enrollment is B2's work. No owners are routed to a real cell by this PR. B2 must bind the resolved request route or replace the source behind `plane_for` and preserve the fast-path gate for routed owners.
-- Coverage is the existing SDK probes' coverage: installing through `database._client` is required, and the write-probe kill switch must stay on for the ramp gate. Unattributable collection-group aggregates with no concrete owner path and direct transport reads are not new coverage added here. This is telemetry, not a read/write enforcement fence.
-- No deployed behavior, production ramp, API endpoint acceptance, or live data was tested or changed.
+| Command | Exit | Outcome | Evidence |
+|---|---:|---|---|
+| Four focused lake files, `python -m pytest ... -q` (backend/) | 0 | 88 passed | [focused](pgf-r1-focused.log) |
+| `python -m pytest tests/unit/test_backend_runtime_env_validator.py -q` (backend/) | 0 | 151 passed | [runtime validator](pgf-r1-backend_runtime_env_validator.log) |
+| `python -m pytest tests/unit/test_retention_contract.py -q` (backend/) | 0 | 26 passed | [retention](pgf-r1-retention_contract.log) |
+| `python -m pytest tests/unit/test_verify_pusher_config_references.py -q` (backend/) | 0 | 28 passed | [pusher](pgf-r1-verify_pusher_config_references.log) |
+| `python -m pytest tests/unit/test_sync_staging_lifecycle_guard.py -q` (backend/) | 0 | 27 passed | [lifecycle](pgf-r1-sync_staging_lifecycle_guard.log) |
+| `python .github/scripts/test_check_dead_code.py` (root) | 0 | 16 passed | [dead-code self-tests](pgf-r1-dead-code-tests.log) |
+| `bash backend/scripts/pre-deploy-check.sh` (root) | 0 | 456 pytest + 36 unittest tests passed; all source validators passed | [pre-deploy](pgf-r1-pre-deploy.log) |
+| Required `make preflight` (root, exact env below) | 2 | Stopped at feature-flag registry; earlier checks including dead-code, runtime-image closure, async and Firestore passed | [make](pgf-r1-make-preflight.log) |
+| First manifest continuation via explicit `--check-id` selections | 1 | Exposed the deployment classification omission | [continuation](pgf-r1-remaining-manifest-checks.log) |
+| Final manifest continuation via explicit `--check-id` selections | 0 | All remaining 29 checks passed | [continuation 2](pgf-r1-remaining-manifest-checks-r2.log) |
+| Draft `scripts/pr-preflight --pr-body-file ... --metadata-only` | 0 | All four checks passed | [final metadata](pgf-r1-pr-metadata-final.log) |
 
-## Draft PR body
+Repository preflight command executed through `omi-heavy` after the credential scrubber:
 
-## What changed and why
+```sh
+OMI_PR_BODY_FILE="$PWD/.agent-artifacts/pgf-pr-body.md" BACKEND_UNIT_FILE_BUDGET_SECONDS=900 BACKEND_PYTEST_WORKERS=4 make preflight
+```
 
-Add the W5 plane-leak ramp signal: routed-domain Firestore reads and known-successful writes for cell owners increment `plane_leak_total{op,collection,origin}` and emit a content-free warning with a hashed owner ID. Add a request-local routing seam, Firestore defaults, and a stage-guarded offline override; B2 will supply directory routing.
+The first-failure runner cancelled unrun guards. Those guards were then executed with explicit manifest selections, preserving earlier passing results rather than claiming a terminal-green make run. The exact coverage assertion reports **53 selected, 51 passed, two not green**: [coverage receipt](pgf-r1-preflight-coverage.json). No test or validator assertion was weakened. Exact commands, timestamps and exit statuses are in [JSONL](pgf-r1-verification.jsonl); the [driver source](pgf-r1-verify.py) records the credential and budget settings. `git diff --check` is clean and product-import search is empty.
 
-## Product invariants affected
+### Remaining scope blockers (prepared, not applied)
 
-none
+1. `scripts/check_feature_flag_registry.py` rejects the required lake percent declarations across `_base.yaml` plus four Helm values files. [One-line patch](pgf-feature-flag-scope-exception.patch) adds only `OBJECT_LAKE_WRITE_PERCENT` to the existing workstream-B duplicate-declaration allowlist, preserving its **2026-11-20 expiry**. The duplicate sources must be consolidated before that date. The actual source guard remains red. A disposable checker copy with exactly this one-line change passes: [candidate log](pgf-r1-feature-flag-candidate.log).
+2. `config/deployment-setting-classification.json` lacks classification for the six lake deployment bindings. [Six-line patch](pgf-secret-classification-scope-exception.patch) adds them to `kinds.config`: the bucket and KMS resource identifier are configuration, not secret payloads. The actual source guard remains red. The unchanged checker passes using the proposed JSON via its `--policy` option: [candidate log](pgf-r1-secret-classification-candidate.log).
 
-## How it was verified
+Both patches pass `git apply --check`. Both owning files are outside brief section 9 and the four scope exceptions the lead already authorized. Additional authorization was requested asynchronously in chat; neither was assumed. Candidate checks validate the proposed changes only and do **not** clear the branch's full preflight. Next: integration lead approves/applies these patches, then reruns full preflight. No provisioning, flag expansion, runtime apply or push is authorized by this handoff.
 
-The 31 new M9 tests and 155 existing read/write probe tests pass using anonymous credentials and fake transports. The two new modules pass type checking; the async-blocking scan passes. Required broad validation is not green: `make preflight` and an isolated query-shape run exceed the 300-second test-file budget, and the 2,659-file selector run was interrupted during diagnosis. Exact commands and results are in `.agent-artifacts/pgf-result.md`. No production or user-facing endpoint acceptance was exercised.
 
-## Tests
+### Draft PR body
 
-`backend/tests/unit/test_plane_leak_probe.py` covers cell and Firestore owners, routed and unrelated collections, committed/failed/partial writes, empty queries, request isolation, the disabled fast path, sanitized logs, and production override rejection. Existing read/write probe regressions also pass.
+The refreshed ready-to-paste draft is [pgf-pr-body.md](pgf-pr-body.md). It includes current passing checks, the two remaining gate blockers, authorized scope exceptions, ramp ownership and review follow-ups.
 
-## UI evidence
+### Outcome record and cleanup
 
-UI-Evidence: none -- backend only
+Recorded on [the ANX C1 card](https://anx.scalingforever.com/o/david-zhang/w/omi/r/card:pg-foundation-c1-encrypted-object-lake), note `event:3337fd31-980a-4c00-947b-56ed2e20ed0f`, using the authorized [anx-participant skill](/Users/dazheng/.agents/skills/anx-participant/SKILL.md). The card remains blocked on the two scope exceptions; no merge, push or deployment is claimed.
 
-## Failure class (fixes)
-
-Failure-Class: none
+All validation commands have reached terminal states. The app patch is still identical to the pre-rebase copy; the temporary stash created for rebase was removed after verification. The local `pgf-c1-before-fix-r1` branch remains as the requested operation's rollback reference. The task heartbeat is stopped after the final commit and recorded in `pgf-r1-cleanup.json`. No servers, emulators or watchers were started.

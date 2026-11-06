@@ -78,6 +78,10 @@ overlay:
           category: rollout
         DREAM_AGENT_UID_ALLOWLIST:
           value: ''
+        BUCKET_OBJECT_LAKE:
+          value: 'omi-dev-object-lake-uc1'
+        OBJECT_LAKE_KMS_KEY:
+          value: 'projects/based-hardware-dev/locations/us-central1/keyRings/object-lake/cryptoKeys/space-deks'
         BUCKET_SCREEN_FRAMES:
           value: based-hardware-prod-screen-frames
         TRANSCRIPTION_SHADOW_ENABLED:
@@ -132,6 +136,10 @@ overlay:
           category: rollout
         DREAM_AGENT_UID_ALLOWLIST:
           value: ''
+        BUCKET_OBJECT_LAKE:
+          value: 'omi-dev-object-lake-uc1'
+        OBJECT_LAKE_KMS_KEY:
+          value: 'projects/based-hardware-dev/locations/us-central1/keyRings/object-lake/cryptoKeys/space-deks'
         BUCKET_SCREEN_FRAMES:
           value: based-hardware-prod-screen-frames
         TRANSCRIPTION_SHADOW_ENABLED:
@@ -369,6 +377,10 @@ overlay:
           OMI_SHAPED_AGENT_MODE:
             value: 'on'
             category: rollout
+          BUCKET_OBJECT_LAKE:
+            value: 'omi-dev-object-lake-uc1'
+          OBJECT_LAKE_KMS_KEY:
+            value: 'projects/based-hardware-dev/locations/us-central1/keyRings/object-lake/cryptoKeys/space-deks'
           BUCKET_SCREEN_FRAMES:
             value: based-hardware-prod-screen-frames
           OMI_CUSTOMER_DATA_PROJECT:
@@ -448,6 +460,10 @@ overlay:
           OMI_SHAPED_AGENT_MODE:
             value: 'on'
             category: rollout
+          BUCKET_OBJECT_LAKE:
+            value: 'omi-dev-object-lake-uc1'
+          OBJECT_LAKE_KMS_KEY:
+            value: 'projects/based-hardware-dev/locations/us-central1/keyRings/object-lake/cryptoKeys/space-deks'
           BUCKET_SCREEN_FRAMES:
             value: based-hardware-prod-screen-frames
           TRANSCRIPTION_SHADOW_ENABLED:

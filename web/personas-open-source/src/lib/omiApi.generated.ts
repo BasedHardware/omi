@@ -4868,6 +4868,7 @@ export interface SamePersonItem {
 
 export interface SaveFcmTokenRequest {
   fcm_token: string;
+  registration_order?: number | null;
   time_zone: string;
 }
 

@@ -30257,6 +30257,19 @@
             "title": "Fcm Token",
             "type": "string"
           },
+          "registration_order": {
+            "anyOf": [
+              {
+                "maximum": 9007199254740991.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Registration Order"
+          },
           "time_zone": {
             "title": "Time Zone",
             "type": "string"

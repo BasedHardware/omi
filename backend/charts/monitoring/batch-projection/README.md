@@ -71,6 +71,8 @@ definition is not evidence that production Grafana has imported it.
    main SHA, or use the documented Grafana provisioning path (`--apply --backup-file <new-file>`).
 4. Read back every gated UID, its definition, unpaused state and receiver; distinguish import proof from actual
    notification-delivery proof.
+5. Complete the delivery qualification in [critical-failures.md](../critical-failures.md) for the new
+   critical-failure pages admitted alongside these rules.
 
 `omi-batch-unit-unpublished-2h` is page tier with human audience and no agent mute interval: it uses the existing
 Telegram receiver. The stale and truncated-scan diagnostics remain agent tier. The independent queue-safety blind
@@ -78,6 +80,7 @@ rule is page tier. The single lateness rule combines the new-cohort delivery leg
 compute commitments. Each source has its own freshness gate; no separate queue lateness UID duplicates it.
 No contact point, secret or notification-policy tree is changed.
 
-Rollback: set `BATCH_TIMELINESS_ALARM_ENABLED=false` on the worker (gauges freeze and the stale rule fires), or pause
-the three Grafana rules. The index step: merge triggers the Firestore index reconcile; approve its prod job and wait
-for READY before shipping the worker (merge_pr.sh waits out these gates).
+Rollback an incorrect definition with a forward revert and the same import;
+keep real timeliness breaches tracked while reverting. The index step: merge
+triggers the Firestore index reconcile; approve its prod job and wait for READY
+before shipping the worker (merge_pr.sh waits out these gates).
