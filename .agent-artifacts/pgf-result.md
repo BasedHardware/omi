@@ -1,84 +1,149 @@
-# C1 implementation result
+# B2 implementation result (in progress)
 
-Local branch: `lane/pgf-c1`. Worktree: `/Volumes/Ephemeral/scratch/worktrees/omi/omi-lane-pgf-c1-upstream-keep-clean`. No push, PR creation, provisioning, deployment, production API or production data access. GCP tier: **none**.
+Repository: BasedHardware/omi. Worktree: `/Volumes/Ephemeral/scratch/worktrees/omi/omi-lane-pgf-b2-upstream-keep-clean`. Branch: `lane/pgf-b2`. Base: `d47819297e39` (contains B1 #24790 and M9 #24778). No push or PR. No GCP tier or production access used. Pre-existing `app/analysis_options.yaml` and `app/pubspec.lock` changes remain untouched and uncommitted.
 
-**Status:** the runtime fixture fix is complete and committed. Acceptance remains **blocked** on two additional out-of-scope admission metadata changes; neither patch was applied without authorization.
+## Built
 
-C1 supplies create-only, envelope-encrypted object-lake storage and Firestore/KMS space-key primitives with zero product callers. Config, lifecycle/retention policy, inert runtime/Helm bindings, offline admission validation and the unexecuted provisioning runbook ship together. The lead authorized and committed the four fixture/scanner/snapshot/dead-code scope exceptions before this round.
+Sticky lazy directory enrollment before platform telemetry; process/Redis/PG routing; fail-closed HTTP 503 and WS 1013; bounded lazy IAM/DSN pools; IO-free plane probe lookup; recorded bucket/revision migration; migrated cell cutover state; reads-open migration with mutation fence; idle-cache invalidation in both persistence seams; required running-marker/fence/drain/cell-purge/directory-purge wipe step; runtime ramp name; three registered flags and 13 setting classifications.
 
-Historical C1 verification receipts remain in `pgf-verification.jsonl` and the linked `pgf-*.log` files. [Historical C1 report reconstructed from its original renderer and receipts](pgf-c1-result-before-r1.md) preserves the earlier blocked results; its old scope-exception status is superseded below. Rebase introduced M9's tracked report at this same generic path; that upstream report remains [in the pinned main tree](https://github.com/BasedHardware/omi/blob/876abc7312f28ae02d7b92c5c5034e5ba74303df/.agent-artifacts/pgf-result.md). This requested path now reports C1.
+Files committed:
 
-## Fix round 1
+- `backend/config/directory_routing.py`
+- `backend/database/account_cutover.py`
+- `backend/database/cells/serving.py`
+- `backend/database/directory/migrations/0002_enrollment.sql`
+- `backend/database/directory/router.py`
+- `backend/database/directory/store.py`
+- `backend/database/directory/wipe.py`
+- `backend/database/rollout_cohorts.py`
+- `backend/dependencies.py`
+- `backend/docs/feature-flag-registry.md`
+- `backend/models/account_cutover.py`
+- `backend/services/users/account_deletion.py`
+- `backend/tests/services/users/test_account_deletion.py`
+- `backend/tests/unit/test_account_cutover_foundation.py`
+- `backend/tests/unit/test_cell_wipe_step.py`
+- `backend/tests/unit/test_dependency_async_boundaries.py`
+- `backend/tests/unit/test_directory_router.py`
+- `backend/tests/unit/test_directory_store.py`
+- `backend/tests/unit/test_plane_leak_probe.py`
+- `backend/utils/account_cutover/access.py`
+- `backend/utils/account_cutover/control.py`
+- `backend/utils/account_cutover/coordinator.py`
+- `backend/utils/account_cutover/fence.py`
+- `backend/utils/account_cutover/state.py`
+- `backend/utils/account_cutover/telemetry.py`
+- `backend/utils/other/endpoints.py`
+- `backend/utils/other/plane_routing.py`
+- `config/deployment-setting-classification.json`
+- `config/feature-flags.yaml`
 
-### Rebase and preservation
+## Deviations and reasons
 
-- Saved original branch tip `4a4f1b71d34b` as local branch `pgf-c1-before-fix-r1`.
-- Fetched `origin/main` and rebased onto `876abc7312f28ae02d7b92c5c5034e5ba74303df`. All seven commits replayed without conflicts. The scope-exception commit became `3abf8596cb1c`.
-- Ran `backend/.venv/bin/python backend/deploy/compose_runtime_env.py` and `backend/.venv/bin/python scripts/render_feature_flag_registry.py`; both outputs already match their sources (no diff). No generated output was hand-merged.
-- Temporarily stashed only the two existing app edits for Git's clean-index requirement, restored them after rebase, and compared both the patch and file hashes. They are unchanged and remain uncommitted. SHA-256: analysis options `585e4fec57ff03a99bf6654e5f370e4eb49d9a4c55140089fbef37c883bb05f7`; lock `067a184bf86123668abe3fe825a74a280cff9d70335a6a2b187f1ec3fc5e52d4`.
+- Idle bits are set only for generation-zero universally open records with no configured minimum build. Caching open bridge records with a positive generation would bypass the existing generation-header check; caching a platform-dependent upgrade decision would bypass the build floor. These retain the authoritative read. Redis loss still adds a read and never opens a paused account.
+- Existing bridge coordinator callers/tests now pass `data_plane='legacy'` explicitly; the existing bridge convenience entrypoint also supplies it. `begin` itself defaults to cell as specified. No compatibility wrapper was added.
+- `get_current_user_uid_ws` is synchronous in this base; it resolves synchronously in FastAPI's dependency thread pool. The two actual async WS dependencies offload on db_executor.
+- Real Postgres was initially unavailable (9 router/wipe cases and 9 directory cases skipped). Installed `pgserver==0.1.4` only into this worktree's test venv and reran with `OMI_REQUIRE_STORE_BACKENDS=postgres`; the final Postgres cases pass without skips. No dependency/lock files changed.
 
-### Root cause and correction
+## Known gaps / required lead actions
 
-The fixture and validator read the **same** worktree `backend/deploy/runtime_env.yaml`; the parsed and normalized manifests agree. Regeneration is drift-free. The regression is positional: `with_object_lake_env()` prepended six entries before the leading `GOOGLE_CLOUD_PROJECT` entry, while later translation, ledger/sidecar, sync-settle and shadow helpers match only when that entry is first. Those helpers silently matched zero times. This left 17 unrelated required bindings absent, in addition to the intended gateway or secret failure.
+- Runtime bindings are pending: the brief forbids guessing PG host/database/IAM users and requires values from the deploy owner; none were supplied. The base now generates `backend/deploy/runtime_env.yaml` from files outside B2's exact file list. A clarification asks for values and permission to update owning compose sources. No guessed or generated-only manifest edits made.
+- No loopback Firestore emulator was available: both named integration suites skipped, not verified.
+- No provisioning, deployment, positive ramp, prod connection-budget measurement or serving-domain integration authorized. W5 must gate before its first 1% enrollment. The PR draft records the connection arithmetic and gate.
+- Lead owns the separate INV-CUTOVER-1 revision note for `migrated`; invariant files remain untouched.
 
-Moved lake completion to the final return, after the anchored helpers, and removed an adjacent no-op assignment. No validator code, expected error list, secret-version assertion or negative kill-switch assertion changed.
+- The caller sweep found the explicit executor-call witness `backend/tests/unit/test_dependency_async_boundaries.py`; updated its stub and expected calls, and added a resolver event-loop responsiveness test under the user-authorized witness exception.
 
-- Before: [three failures on the lead-patched branch](pgf-r1-validator-before.log), including `test_cloud_run_state_rejects_old_secret_versions` with **18 errors instead of 1**.
-- After: [the same selection](pgf-r1-validator-after.log), **3 passed / 148 deselected**. The full validator file also passes **151 tests**.
-- Selection: `python -m pytest backend/tests/unit/test_backend_runtime_env_validator.py -q -k 'test_cloud_run_state_reports_missing_gateway_url or test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outputs or test_cloud_run_state_rejects_old_secret_versions'` from the root, through the credential scrubber and `omi-heavy`.
+## Verification
 
-### Review disposition
+Every command below ran through `/Volumes/Ephemeral/scratch/pgf-b2-test`, which removes `GOOGLE_APPLICATION_CREDENTIALS`, every `CLOUDSDK_*` variable, `SERVICE_ACCOUNT_JSON`, and `FIREBASE_AUTH_CREDENTIALS_PATH`, uses this worktree's backend/.venv Python, and uses `omi-heavy run --` for heavy runs. Root-relative paths unless a command starts with `cd backend`.
 
-Two one-line runbook clarifications are applied: pin `OBJECT_LAKE_RELEASE=v1` until the lifecycle/retention contract migrates with it; C4 must durably fence deleted owners and quiesce in-flight puts before purge. The remaining review items need behavioral, integration or test work beyond a safe one-line change:
+| Exact command | Result |
+| --- | --- |
+| `bash backend/test-preflight.sh` | 17 pass, 9 optional warnings, 0 fail |
+| `cd backend && .venv/bin/python -m pytest tests/unit/test_directory_router.py tests/unit/test_cell_wipe_step.py -q` | Initial 17 pass, 9 skip; final with `OMI_REQUIRE_STORE_BACKENDS=postgres`: 28 pass, 0 skip; post-type-fix rerun also 28 pass |
+| `cd backend && .venv/bin/python -m pytest tests/unit/test_account_cutover_foundation.py tests/unit/test_plane_leak_probe.py -q` | Initial 72 pass; after T3 additions 79 pass; final upgrade-floor guard: 80 pass |
+| `cd backend && .venv/bin/python -m pytest tests/services/users/test_account_deletion.py tests/unit/test_account_deletion_single_executor.py -q` | 106 pass |
+| `cd backend && .venv/bin/python -m pytest tests/unit/test_directory_store.py -q` | Initial 9 skip (no local PG); final standalone rerun with required Postgres: 9 pass, 0 skip |
+| `cd backend && OMI_REQUIRE_STORE_BACKENDS=postgres .venv/bin/python -m pytest tests/unit/test_directory_router.py tests/unit/test_cell_wipe_step.py tests/unit/test_directory_store.py -q` | 35 pass, 0 skip (before 2 additional IAM pool cases) |
+| `cd backend && .venv/bin/python -m pytest tests/unit/test_batch_ramp.py tests/unit/test_ramp_controller.py tests/unit/test_mcp_streamable_http.py tests/unit/test_sync_worker_execution.py -q` | 408 pass |
+| `cd backend && .venv/bin/python -m pytest tests/integration/test_bpp_generation_fence_emulator.py tests/integration/test_stuck_backfill_emulator.py -q -rs` | 107 skip, loopback Firestore emulator unavailable |
+| `python3 scripts/render_feature_flag_registry.py --as-of 2026-11-06 && python3 scripts/check_feature_flag_registry.py` | Pass after correcting placement of new entries under flags (two initial renderer errors: entries were placed under retired/ignore) |
+| `bash backend/scripts/pre-deploy-check.sh` | Pass: 36 source-admission tests + 456 deploy tests; runtime manifest unchanged |
+| `python backend/scripts/scan_async_blockers.py --dirs backend/routers backend/utils` | Pass (exit 0) |
+| `black --line-length 120 --skip-string-normalization <changed Python files>` | Pass; commit hook pinned formatter also passes (initial `.venv/bin/python -m black` unavailable; used installed black CLI) |
+| `scripts/pr-preflight --suggest` | Pass, demands INV-CUTOVER-1; draft also cites INV-DATA-1 and wipe-triggered INV-MEM-3 |
+| `bash backend/scripts/run-unit-ci.sh --changed-files /Volumes/Ephemeral/scratch/pgf-b2-changed-files.txt` (with `BACKEND_UNIT_FILE_BUDGET_SECONDS=900`) | First attempt: stopped before tests, 2 router type errors (defensive row validation and spec-required private normalizer reuse). Corrected and retry in flight; selector expands to 2668 files |
+| `OMI_PR_BODY_FILE=/Volumes/Ephemeral/scratch/pgf-b2-pr-body.md BACKEND_UNIT_FILE_BUDGET_SECONDS=900 make preflight` | First run: 44 checks pass, 0 checks fail; overall FAIL because I edited tracked files during its parallel run. Frozen rerun pending. |
 
-- C2/C4: durable deleted-owner write fence plus concurrent object/key resurrection coverage; C4 emulator transaction-contention/retry coverage.
-- Next core test pass: reject an otherwise valid retry metadata DEK version that disagrees with the envelope header, and cover reload transport errors, unavailable/destroyed deep verification, and unsafe put identifiers. Header verification adds object IO to retry and needs an explicit tested policy.
-- C2: choose and enforce per-class decompressed-size limits; retain fail-closed handling for malformed wrapped-key rows (currently unavailable/retryable, distinct from shredded).
-- C2/C3: budget the deliberate key-doc authority reads (one per unwrap and two per put); optimize only while retaining cross-worker destroy semantics.
-- Provisioning/C3: enforce release alignment in runtime/admission configuration before serving; the runbook pin alone is not a code guard.
+Named keep-green witness sweep: one `cd backend && .venv/bin/python -m pytest tests/unit/<name>.py -q` process per brief witness. All 19 files finished: 1402 passed, 1 skipped, 0 failed. The one referral skip is intentional: the two-purchase first-claim case has no unconsumed slot.
 
-### Validation
+| `<name>` | Pass | Skip |
+| --- | ---: | ---: |
+| `test_finalization_replay_exhaustion` | 56 | 0 |
+| `test_mcp_streamable_http` | 270 | 0 |
+| `test_fsr_scope_opener` | 20 | 0 |
+| `test_sync_worker_execution` | 19 | 0 |
+| `test_sync_v2` | 175 | 0 |
+| `test_sync_cloud_tasks` | 208 | 0 |
+| `test_listen_finalization_cloud_tasks` | 222 | 0 |
+| `test_conversation_quiet_finalization` | 65 | 0 |
+| `test_audio_merge_destructive_deferral` | 8 | 0 |
+| `test_audio_merge_tasks` | 23 | 0 |
+| `test_playback_idempotency` | 62 | 0 |
+| `test_recovery_discard_pipeline` | 34 | 0 |
+| `test_repeat_work_cuts` | 37 | 0 |
+| `test_referral_campaign_money_review` | 31 | 1 |
+| `test_sync_audio_merge_job_tombstone_guard` | 10 | 0 |
+| `test_batch_ramp` | 24 | 0 |
+| `test_ramp_controller` | 95 | 0 |
+| `test_batch_ramp_deploy` | 18 | 0 |
+| `test_cell_store_conformance` | 25 | 0 |
 
-All commands use this worktree's Python 3.11 environment via `pgf-test-env.py`, which unsets `GOOGLE_APPLICATION_CREDENTIALS`, every `CLOUDSDK_*`, service-account/auth paths and inherited project bindings. Metadata discovery points at a closed loopback port; tests use demo-only project hints and loopback Redis. Heavy runs use `/Users/dazheng/workspace/omi/bin/omi-heavy run --wait 3600 -- ...`. The verification driver sets `BACKEND_PYTEST_WORKERS=4`, `BACKEND_UNIT_FILE_BUDGET_SECONDS=900`, and a process-local installed Opus loader path. No GCP credential tier was loaded.
+Caller search includes `backend/tests/support`, `backend/tests/routers`, all coordinator begin callers, auth paths, ramp readers and purge-shape witnesses; no jobstore, .github, or testing/store_fixtures.py edits.
 
-Completed 2026-11-06T13:39:24.342868+00:00. Source fix commit: `b1404559e9da566e761ba208f70add244f74249d`; the final handoff commit changes only this report. This is local verification, not GitHub CI or deployed/provider acceptance.
+Product code frozen at `f90ce409cc9f`; only handoff/report metadata may be finalized after the frozen preflight completes.
 
-| Command | Exit | Outcome | Evidence |
-|---|---:|---|---|
-| Four focused lake files, `python -m pytest ... -q` (backend/) | 0 | 88 passed | [focused](pgf-r1-focused.log) |
-| `python -m pytest tests/unit/test_backend_runtime_env_validator.py -q` (backend/) | 0 | 151 passed | [runtime validator](pgf-r1-backend_runtime_env_validator.log) |
-| `python -m pytest tests/unit/test_retention_contract.py -q` (backend/) | 0 | 26 passed | [retention](pgf-r1-retention_contract.log) |
-| `python -m pytest tests/unit/test_verify_pusher_config_references.py -q` (backend/) | 0 | 28 passed | [pusher](pgf-r1-verify_pusher_config_references.log) |
-| `python -m pytest tests/unit/test_sync_staging_lifecycle_guard.py -q` (backend/) | 0 | 27 passed | [lifecycle](pgf-r1-sync_staging_lifecycle_guard.log) |
-| `python .github/scripts/test_check_dead_code.py` (root) | 0 | 16 passed | [dead-code self-tests](pgf-r1-dead-code-tests.log) |
-| `bash backend/scripts/pre-deploy-check.sh` (root) | 0 | 456 pytest + 36 unittest tests passed; all source validators passed | [pre-deploy](pgf-r1-pre-deploy.log) |
-| Required `make preflight` (root, exact env below) | 2 | Stopped at feature-flag registry; earlier checks including dead-code, runtime-image closure, async and Firestore passed | [make](pgf-r1-make-preflight.log) |
-| First manifest continuation via explicit `--check-id` selections | 1 | Exposed the deployment classification omission | [continuation](pgf-r1-remaining-manifest-checks.log) |
-| Final manifest continuation via explicit `--check-id` selections | 0 | All remaining 29 checks passed | [continuation 2](pgf-r1-remaining-manifest-checks-r2.log) |
-| Draft `scripts/pr-preflight --pr-body-file ... --metadata-only` | 0 | All four checks passed | [final metadata](pgf-r1-pr-metadata-final.log) |
+ANX outcome note: `event:3aa44637-2cff-47c7-a4ac-616b4178fd57` on `card:backend-target-architecture`, using the anx-participant skill.
 
-Repository preflight command executed through `omi-heavy` after the credential scrubber:
+## Draft PR body
 
-```sh
-OMI_PR_BODY_FILE="$PWD/.agent-artifacts/pgf-pr-body.md" BACKEND_UNIT_FILE_BUDGET_SECONDS=900 BACKEND_PYTEST_WORKERS=4 make preflight
-```
+## What changed and why
 
-The first-failure runner cancelled unrun guards. Those guards were then executed with explicit manifest selections, preserving earlier passing results rather than claiming a terminal-green make run. The exact coverage assertion reports **53 selected, 51 passed, two not green**: [coverage receipt](pgf-r1-preflight-coverage.json). No test or validator assertion was weakened. Exact commands, timestamps and exit statuses are in [JSONL](pgf-r1-verification.jsonl); the [driver source](pgf-r1-verify.py) records the credential and budget settings. `git diff --check` is clean and product-import search is empty.
+Add sticky directory enrollment and fail-closed request resolution, generation-zero cell cutovers, and the required fenced cell/directory account-wipe step. Ships with DIRECTORY_ROUTING_MODE=off and new-owner-cell1 at zero; B2 authorizes no positive serving ramp. Domain adapters and traffic migration remain W5 work.
 
-### Remaining scope blockers (prepared, not applied)
+## Product invariants affected
 
-1. `scripts/check_feature_flag_registry.py` rejects the required lake percent declarations across `_base.yaml` plus four Helm values files. [One-line patch](pgf-feature-flag-scope-exception.patch) adds only `OBJECT_LAKE_WRITE_PERCENT` to the existing workstream-B duplicate-declaration allowlist, preserving its **2026-11-20 expiry**. The duplicate sources must be consolidated before that date. The actual source guard remains red. A disposable checker copy with exactly this one-line change passes: [candidate log](pgf-r1-feature-flag-candidate.log).
-2. `config/deployment-setting-classification.json` lacks classification for the six lake deployment bindings. [Six-line patch](pgf-secret-classification-scope-exception.patch) adds them to `kinds.config`: the bucket and KMS resource identifier are configuration, not secret payloads. The actual source guard remains red. The unchanged checker passes using the proposed JSON via its `--policy` option: [candidate log](pgf-r1-secret-classification-candidate.log).
+INV-CUTOVER-1, INV-DATA-1, INV-MEM-3. The account-wipe step also touches INV-MEM-3: canonical purge failures stay required failures; no historical fallback is added. Extend the existing control record/projection; bridge generation fences, auth/control reachability, destination-binding honesty, and legacy write fencing remain. Migrating permits reads and denies mutations; migrated is open on the directory plane. Lead must schedule the separate locked-invariant revision note for the migrated state.
 
-Both patches pass `git apply --check`. Both owning files are outside brief section 9 and the four scope exceptions the lead already authorized. Additional authorization was requested asynchronously in chat; neither was assumed. Candidate checks validate the proposed changes only and do **not** clear the branch's full preflight. Next: integration lead approves/applies these patches, then reruns full preflight. No provisioning, flag expansion, runtime apply or push is authorized by this handoff.
+## How it was verified
 
+Local hermetic checks only, with GOOGLE_APPLICATION_CREDENTIALS and all CLOUDSDK_* variables removed. No GCP tier used; no production access, API calls, provisioning, rollout or deployment.
 
-### Draft PR body
+- backend/test-preflight.sh: 17 pass, 9 optional warnings, 0 fail.
+- Postgres router/wipe/store suites: 35 pass; final router/wipe with IAM-pool cases: 28 pass. Real local pgserver, synthetic owners, separate databases; no skips.
+- Account cutover + plane-leak probes: 80 pass, including a cached-bit/new-upgrade-floor regression.
+- Account deletion + single executor: 106 pass.
+- Batch/ramp/MCP/sync-worker witness command: 408 pass.
+- All 19 named witness files: 1,402 pass, one intentional referral-case skip. Registry render/check passes. Hermetic pre-deploy checks: 36 source-admission tests and 456 deploy tests pass. First preflight: all 44 selected checks pass, but its tracked-file guard detects implementer edits during the run; a frozen rerun and corrected type-check/full-selector contract are pending.
+- Firestore emulator integrations: 107 skipped because no loopback emulator was running; these are not acceptance evidence.
 
-The refreshed ready-to-paste draft is [pgf-pr-body.md](pgf-pr-body.md). It includes current passing checks, the two remaining gate blockers, authorized scope exceptions, ramp ownership and review follow-ups.
+Operations runbook:
 
-### Outcome record and cleanup
+1. Merge B1 (#24790) then B2; deploy B2 with routing off everywhere. Apply `python -m database.directory migrate` on staging before mode turn-on; cell migrations are unchanged.
+2. Deploy-before-write (O4): write the new-owner-cell1 _ramp percent only after every reader knows the name: backend, backend-listen, pusher, backend-sync and notifications-job. Use backend/scripts/rollout/ramp_set.py. Older readers reject the entire unknown-name document and freeze other ramps at last-known-good.
+3. Deploy-before-enroll (O6): all five plane-aware services (backend, backend-listen, pusher, backend-sync, backend-sync-backfill) must run B2 before routing mode changes. Positive enrollment is gated on W5 adapters/readers, plane-leak zero, wipe coverage and connection budget before 1%.
+4. Connection budget: at configured pool size 2 the upper bound added by each serving instance is 2 directory + 2 cell = 4 connections; total incremental bound is `4 * sum(max instances across the five serving surfaces)`, in addition to jobstore/admin/other clients. Normal auth creates only directory connections; cell pool first opens on purge. Actual fleet counts and prod-jobs max_connections are unmeasured here (no prod authorization); W5 1% remains blocked until the owner verifies headroom or supplies a pooler.
+5. Rollback: set DIRECTORY_ROUTING_MODE=off (directory rows inert; cell wipe no-op). Ramp zero stops new cell enrollment without moving enrolled owners. Off is a pre-serving rollback only; after W5 serves cell owners, never route them back without its migration ceremony.
 
-Recorded on [the ANX C1 card](https://anx.scalingforever.com/o/david-zhang/w/omi/r/card:pg-foundation-c1-encrypted-object-lake), note `event:3337fd31-980a-4c00-947b-56ed2e20ed0f`, using the authorized [anx-participant skill](/Users/dazheng/.agents/skills/anx-participant/SKILL.md). The card remains blocked on the two scope exceptions; no merge, push or deployment is claimed.
+## Tests
 
-All validation commands have reached terminal states. The app patch is still identical to the pre-rebase copy; the temporary stash created for rebase was removed after verification. The local `pgf-c1-before-fix-r1` branch remains as the requested operation's rollback reference. The task heartbeat is stopped after the final commit and recorded in `pgf-r1-cleanup.json`. No servers, emulators or watchers were started.
+Core coverage: asynchronous auth boundary witness updated for directory resolution and event-loop responsiveness; sticky enrollment at 0/100%, existing-owner protection, concurrency, cache tiers and outage paths, off-mode no resources, IAM pool bounds, HTTP/WS retryable mapping, cutover graph and generation semantics, idle-bit invalidation in both persistence seams, directory fence/drain/purge ordering and crash retry, required wipe-step failures.
+
+## UI evidence
+
+UI-Evidence: none -- backend only
+
+## Failure class (fixes)
+
+Failure-Class: none
