@@ -227,3 +227,40 @@ def test_replay_failure_counts_attempt_without_success(lane, monkeypatch):
     assert privacy.PROJECTION_PRIVACY_RESUMES_SUCCEEDED._value.get() == succeeded
     assert client.rows == before
     method.assert_not_called()
+
+
+@pytest.mark.parametrize('stored_refusal', [False, True])
+def test_real_job_output_refusal_then_clear_session_retries_head(lane, monkeypatch, stored_refusal):
+    client, store, binding = setup_policy_store(lane)
+    if stored_refusal:
+        fence(client, binding, REASON)
+        hold(store, 'head', binding, 2000, REASON, policy=POLICY)
+        client.rows[('users', binding.owner_id)].pop('migration_status')
+    output = 'previous-private-output'
+    client.rows[('privacy_hold_jobs', 'head')]['conversation_ids'] = [output]
+    client.rows[('users', binding.owner_id, 'conversations', output)] = {
+        'record_lane_owner': 'batch_live_v1',
+        'uses_custom_stt': True,
+    }
+    monkeypatch.setattr('database.batch_pipeline_policy.resolve_stage_policy', lambda *args, **kwargs: POLICY)
+    # The real policy guard rejects the job's output and read() returns its hint.
+    job, entry, binding = store.read('head')
+    assert job['_projection_privacy_refusal'] == BatchPrivacyReason.RECORDING_PRIVACY_CHANGED.value
+    assert 'projection' not in client.rows[('privacy_hold_jobs', 'head')].get('policy_parts', {})
+    # A concurrent job update detaches that previous output. The subsequent
+    # session sees a different id set: inputs are clear, and the output is no
+    # longer part of the durable job. Its private source document stays private.
+    client.rows[('privacy_hold_jobs', 'head')].pop('conversation_ids')
+    private_output = deepcopy(client.rows[('users', binding.owner_id, 'conversations', output)])
+    method = assign_fenced(store)
+    assert (
+        privacy.settle_refusals(assignment=True)(method)(
+            SimpleNamespace(store=store, clock=lambda: 3000), 'head', job, entry, binding
+        )
+        == 'proceeded'
+    )
+    assert client.rows[('users', binding.owner_id, 'conversations', output)] == private_output
+    assert store.ref('results', 'head').get().to_dict()['projection']['state'] == 'persisted'
+    fresh_job, fresh_entry, _ = store.read('head')
+    assert not fresh_job.get('_projection_privacy_refusal')
+    assert not fresh_entry.get('projection_privacy_refusal')
