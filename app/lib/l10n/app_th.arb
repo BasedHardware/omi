@@ -4498,6 +4498,8 @@
     "chatAppsWaitingMessageIn": "ส่งข้อความในแอป {app} หน้าจอนี้จะอัปเดตทันทีที่ Omi ได้รับ",
     "chatAppsCodeExpiredMessageIn": "ขอรหัสใหม่แล้วส่งจากแอป{app}",
     "episodeWritingNotes": "กำลังเขียนบันทึก…",
+    "homeStepTranscribing": "กำลังถอดเสียง…",
+    "homeRecordingsCount": "{count, plural, other{บันทึก {count} รายการ}}",
     "episodeWritingNotesDetail": "กำลังทำบทถอดความให้เสร็จก่อน คุณออกจากหน้านี้ได้",
     "episodeCoversUpTo": "ครอบคลุมถึง {time} · บันทึกฉบับเต็มเมื่อจบ",
     "liveTranscribedUpTo": "ถอดความถึง {time}",
@@ -4632,5 +4634,13 @@
     "referralRewardFirstDetail": "เมื่อเพื่อน 2 คนซื้อ Omi",
     "referralRewardSecondTitle": "อีก 3 เดือน",
     "referralRewardSecondDetail": "เมื่อเพื่อนอีก 3 คนซื้อ",
-    "referralClaimShort": "รับ"
+    "referralClaimShort": "รับ",
+    "paymentDeclinedTitle": "บัตรของคุณถูกปฏิเสธ",
+    "paymentDeclinedMessage": "อัปเดตบัตรเพื่อกลับมาใช้ {plan}",
+    "hasLinkedTasksLabel": "มีงานที่เชื่อมโยง",
+    "hasTasksFilter": "มีงาน",
+    "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
+    "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
+    "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
 }

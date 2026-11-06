@@ -4498,6 +4498,8 @@
     "chatAppsWaitingMessageIn": "{app}에서 메시지를 보내세요. Omi가 받는 즉시 이 화면이 업데이트됩니다.",
     "chatAppsCodeExpiredMessageIn": "새 코드를 받아 {app} 앱에서 보내세요.",
     "episodeWritingNotes": "메모 작성 중…",
+    "homeStepTranscribing": "음성 변환 중…",
+    "homeRecordingsCount": "{count, plural, other{녹음 {count}개}}",
     "episodeWritingNotesDetail": "먼저 대화 내용을 마무리하고 있어요. 이 페이지를 나가도 됩니다.",
     "episodeCoversUpTo": "{time}까지 · 끝나면 전체 메모 제공",
     "liveTranscribedUpTo": "{time}까지 변환됨",
@@ -4632,5 +4634,13 @@
     "referralRewardFirstDetail": "친구 2명이 Omi를 구매하면",
     "referralRewardSecondTitle": "3개월 추가",
     "referralRewardSecondDetail": "친구 3명이 더 구매하면",
-    "referralClaimShort": "받기"
+    "referralClaimShort": "받기",
+    "paymentDeclinedTitle": "카드가 거절되었습니다",
+    "paymentDeclinedMessage": "{plan}을 다시 이용하려면 카드를 업데이트하세요",
+    "hasLinkedTasksLabel": "연결된 작업 있음",
+    "hasTasksFilter": "작업 있음",
+    "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
+    "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
+    "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
 }

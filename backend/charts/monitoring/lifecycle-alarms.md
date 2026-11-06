@@ -1,7 +1,7 @@
 # Lifecycle alarms
 
 WP-C evidence date: 2026-11-04. Owner: two-lane lead. These observations never
-change state, schedule work, or replay historical obligations.
+change account lifecycle state, schedule work, or replay historical obligations.
 
 New page rules live in `alerts/resilience.json`, already in the metrics-egress
 workflow's trigger list. Every new rule, including agent companions and stock
@@ -9,7 +9,7 @@ rules, is listed in `live-alert-gate.json`, so the existing gate-based import
 includes it. `alert-rules.json` is the combined mirror. No workflow change is
 needed. Deploy emitters and reconcile their indexes before importing rules.
 The dev/prod Cloud Run exporter allowlists and sync-sidecar keep filter carry
-these four metric families. Their existing ten-minute collection and one-minute
+the lifecycle metric families. Their existing ten-minute collection and one-minute
 offset, plus the five-minute producer cadence, need a 20-minute freshness
 budget for enrichment/BYOK. Direct batch samples keep the 15-minute budget.
 Freshness is applied to each observer's value before replicas aggregate, so
@@ -51,3 +51,76 @@ timestamp exists, so no no-job dwell page is claimed (thread-owner ruling
 Enrichment's backfill stock includes backfill-labeled pending first summaries;
 the fresh age gauge also includes those summaries, matching watchdog promotion.
 Fresh count is the recent-cohort sampled count, not a fleet-wide total.
+
+## Pair consistency and repair fences
+
+The pair observer rotates through three indexed legs: active finalization jobs,
+queued conversation mirrors, and processing conversations. A fleet-wide CAS
+lease plus `next_due` admits at most one pass every 300 seconds. Each pass reads
+at most 200 source rows, 200 distinct counterparts and two lease/cursor rows
+(402 document reads); successful passes write the single private cursor twice.
+Transactions have one attempt and RPCs have ten-second deadlines. No account
+rows are mutated. A failed read or lost owner never advances the cursor or
+freshness timestamp. The scan state contains the keyset cursor needed to resume;
+it is never exported in labels or logs.
+
+Every admitted page rotates to the next domain, even when that page is full.
+Three separate keyset cursors preserve progress. A large jobs backlog therefore
+cannot prevent the queued and processing domains from being sampled on each
+three-pass rotation.
+
+At 288 passes/day, the ceiling is 115,776 document reads plus 576 cursor writes
+per day, plus up to 288 denied lease reads/day per calling observer. This is a
+bound, not measured spend. Reconcile the additional conversation group field
+index and summary-repair composite before the emitter train.
+
+`omi_finalization_pair_mismatch{leg,kind}` counts each indexed leg's last bounded page's all-age
+mismatches. `omi_finalization_pair_new_mismatch{leg,kind}` restricts those mismatches
+to jobs with `created_at` within 24 hours and at/after 2026-11-04 09:27Z. The
+recent gauge pages at >25 for 30m; stock is agent tier. Each leg retains its own
+page and clock while other legs run. The 35-minute freshness budget covers the
+nominal 15-minute rotation plus the 10-minute bridge and one-minute offset.
+Across replicas, page, stock and blind values use only the newest successful
+observation of each leg. `topk by(leg)` selects the observer clock while keeping
+its labels, so the matching value comes from that same observer. A newer clear
+therefore supersedes an older bad snapshot; a different leg's clear cannot
+erase the retained jobs observation. Merely taking the maximum of every
+still-fresh replica would allow one old bad sample to satisfy the pending timer
+after a later leader had already observed recovery.
+Stale checks the freshest observer of each leg, so a busy jobs leg cannot hide
+starvation of the queued/processing legs. The four closed kinds are
+terminal-job/queued-mirror, terminal-job/processing-mirror, live-job/missing-
+conversation and linked-but-missing-job. Deleted, discarded, merged and deferred
+mirrors and superseded generations are excluded.
+
+This is a bounded page, not an exact global mismatch count. A full page, malformed
+row or mismatch lacking a job entry clock sets the incomplete flag. Missing jobs
+have no job creation clock and cannot qualify for the new-cohort page. Terminal
+history with settled mirrors and bare processing rows without job links are
+outside coverage. Sparse drift across pages can remain below the page threshold;
+the observer does not promise detection of every individual mismatch. The
+stale/blind companions remain agent tier. Missing-clock/coverage follow-up owner:
+uicleanup, evidence date 2026-11-04.
+
+Only `users/{uid}/conversations/{cid}` mirrors are inspected. Other collection-
+group paths, such as nested archives, mark the sample blind and are skipped.
+The keyset cursor still accepts those valid document paths so a full excluded
+page cannot strand the scan at the same cursor forever.
+
+`omi_enrichment_summary_repair_count{lane="all"}` is a capped count of active
+outbox obligations with `summary_repair=true` and numeric `due_at>=0`. COUNT101
+can prove >100 but cannot report total stock. Settled receipts have no numeric
+due date. This metric is repair-fence stock, not attempt count or a retry cap.
+There is no numeric retry cap in the current source; uicleanup owns that policy
+debt (ruling 4256d5). Its stock and stale rules are agent tier.
+
+The offline semantic regression at
+`tests/unit/test_lifecycle_pair_alert_semantics.py` evaluates the committed
+queries with Prometheus `promtool test rules`, including the pending timer.
+Provide `PROMTOOL_BIN` outside the test and run it through the canonical selected
+`backend/test.sh` harness. It performs no download, network request or server
+startup. The engine check explicitly skips when no tool is provided; the
+always-on rule contract still pins the reviewed expressions. Local release
+validation includes the real engine check. Cases cover a newer clear, ongoing
+drift across leader changes, independent legs, stale observations and absent
+observers.

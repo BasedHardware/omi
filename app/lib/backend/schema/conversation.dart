@@ -425,6 +425,10 @@ class ServerConversation {
   final bool summaryRetryable;
   final bool processingDeferred;
 
+  /// Server-authored Home step for a row still being processed: 'transcribing',
+  /// 'writing_notes' or 'failed'. Null on finished rows and from older servers.
+  final String? homeStep;
+
   /// Coverage projected from the server capture receipt; absent on legacy rows.
   final String? captureCoverage;
 
@@ -477,6 +481,7 @@ class ServerConversation {
     this.processingDeferred = false,
     this.captureCoverage,
     this.excludedSpeakers,
+    this.homeStep,
   });
 
   /// List rows omit transcript_segments ("unknown/not loaded, not an empty transcript"), while the
@@ -525,6 +530,7 @@ class ServerConversation {
         summaryRetryable: summaryRetryable,
         processingDeferred: processingDeferred,
         captureCoverage: captureCoverage,
+        homeStep: homeStep,
       )..isNew = isNew;
 
   factory ServerConversation.fromJson(Map<String, dynamic> json) {
@@ -566,6 +572,7 @@ class ServerConversation {
           (json['visibility'] == null || const ['private', 'shared', 'public'].contains(json['visibility'])),
       matchSnippets: snippets,
       processingDeferred: json['processing_deferred'] == true,
+      homeStep: json['home_step'] is String ? json['home_step'] as String : null,
       onDeviceProvenance:
           json['on_device_provenance'] is Map ? Map<String, dynamic>.from(json['on_device_provenance']) : null,
       clientProcessing: json['client_processing'] is Map ? Map<String, dynamic>.from(json['client_processing']) : null,
@@ -583,6 +590,7 @@ class ServerConversation {
     List<TranscriptMatchSnippet>? matchSnippets,
     Map<String, dynamic>? onDeviceProvenance,
     Map<String, dynamic>? clientProcessing,
+    String? homeStep,
   }) {
     final snippets = matchSnippets ?? const <TranscriptMatchSnippet>[];
     return ServerConversation(
@@ -631,6 +639,7 @@ class ServerConversation {
       processingDeferred: processingDeferred ?? generated.toJson()['processing_deferred'] == true,
       captureCoverage: generated.captureCoverage,
       excludedSpeakers: generated.excludedSpeakers,
+      homeStep: homeStep,
     );
   }
 
@@ -670,6 +679,7 @@ class ServerConversation {
       'speaker_resolution': speakerResolution?.toJson(),
       if (summaryRetryable) 'summary_retryable': true,
       if (processingDeferred) 'processing_deferred': true,
+      if (homeStep != null) 'home_step': homeStep,
       if (captureCoverage != null) 'capture_coverage': captureCoverage,
       if (excludedSpeakers != null) 'excluded_speakers': excludedSpeakers,
     };

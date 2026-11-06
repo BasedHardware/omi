@@ -47,6 +47,7 @@ import 'package:omi/pages/conversations/widgets/recording_list_item.dart';
 import 'package:omi/pages/home/widgets/home_daily_recaps.dart';
 import 'package:omi/pages/home/widgets/home_daily_recaps_setting.dart';
 import 'package:omi/models/subscription.dart';
+import 'package:omi/pages/home/widgets/payment_issue_row.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -744,8 +745,15 @@ class _ConversationsPageState extends State<ConversationsPage>
           final paintEpisodes = holdingLayout
               ? heldLayout.layout.apply(latestEpisodes, standaloneIds: _paintedStandaloneIds)
               : latestEpisodes;
+          final listed = [for (final list in conversationsByDate.values) ...list];
+          final listedIds = {for (final c in listed) c.id};
           final projected = buildHomeRows(
-            [for (final list in conversationsByDate.values) ...list],
+            // Just-ended rows fold into the same Processing run as everything else unfinished.
+            [
+              ...listed,
+              for (final c in snapshot.processingConversations)
+                if (!listedIds.contains(c.id) && !hiddenByLive.contains(c.id)) c,
+            ],
             paintEpisodes,
             enabled: episodesOn,
             groupAwaitingTranscript: true,
@@ -872,6 +880,8 @@ class _ConversationsPageState extends State<ConversationsPage>
               SliverToBoxAdapter(
                 child: ConversationCaptureWidget(showsCall: true, deferStreamingToEpisode: episodeLive),
               ),
+              // A declined renewal the user can still pay: one row, Update opens Stripe's billing portal.
+              const SliverToBoxAdapter(child: PaymentIssueRow()),
               const SliverToBoxAdapter(child: SpeechProfileCardWidget()),
               const SliverToBoxAdapter(child: UpdateFirmwareCardWidget()),
               // Review absorbs the voice prompts; the old card shows only while Review is off.
@@ -903,10 +913,10 @@ class _ConversationsPageState extends State<ConversationsPage>
                 ),
               // Typed HTTP status precedes empty/loading/hero so an outage is
               // never the new-account empty state. Unset (data) keeps production.
-              if (_isBootstrapping)
+              // The skeleton is Home's only loading state: it stays up until the first
+              // episode read settles, so no second loader replaces it.
+              if (_isBootstrapping || _initialOverlayPending)
                 _buildLoadingShimmer()
-              else if (_initialOverlayPending)
-                SliverToBoxAdapter(child: OmiLoadingState(label: context.l10n.episodeFinishingUp))
               else if (showTypedStatus &&
                   conversationsByDate.values.every((list) => list.isEmpty) &&
                   snapshot.conversations.isEmpty &&
@@ -1020,10 +1030,13 @@ class _ConversationsPageState extends State<ConversationsPage>
                         );
                       case _ConversationListRowKind.conversation:
                         if (projectedProcessingIds.contains(row.conversation!.id)) {
+                          final projectedRow = projectedEpisodes[row.conversation!.id];
                           return ProcessingConversationRow(
                             key: ValueKey('processing_${row.conversation!.id}'),
                             conversation: row.conversation!,
-                            episode: projectedEpisodes[row.conversation!.id]?.episode,
+                            episode: projectedRow?.episode,
+                            step: projectedRow?.step ?? HomeStep.writingNotes,
+                            count: projectedRow?.count ?? 1,
                           );
                         }
                         // Consecutive locked rows share one frosted card and one upgrade action;

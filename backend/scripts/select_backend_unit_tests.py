@@ -691,6 +691,8 @@ def tests_for_changed_paths(changed_paths: list[str], all_tests: list[str]) -> t
     # module. Keep the source fallback unchanged while always running its guard.
     if any(path.startswith(('backend/database/', 'backend/utils/')) and path.endswith('.py') for path in changed_paths):
         selected.update(test for test in LIFECYCLE_INVARIANT_TESTS if test in all_tests)
+    if any(path.startswith('backend/') and path.endswith('.py') for path in changed_paths):
+        selected.update(test for test in ('tests/unit/test_lifecycle_state_table_writers.py',) if test in all_tests)
     for path in changed_paths:
         selected.update(test for test in LIFECYCLE_SOURCE_REGRESSION_TESTS.get(path, ()) if test in all_tests)
     if any(is_sync_legacy_ratchet_path(path) for path in changed_paths):

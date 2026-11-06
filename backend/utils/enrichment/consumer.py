@@ -35,6 +35,7 @@ from database.outbox import Claim, OutboxKind, Outcome
 from utils.observability.reasons import ConsumerReason, RetryReason
 from utils.workers.consumer import Result, Role
 from utils.sync import processing_hold
+from utils.enrichment import early_abort
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +75,35 @@ def _transient_dependency(error: BaseException) -> bool:
 
 # Public name for the age-gate route's dependency-fault check.
 transient_dependency = _transient_dependency
+
+
+def _fenced_redirect(uid: str, conversation_id: str) -> tuple[str, str | None]:
+    """How a fenced run with custody settles: ('superseded', None), ('transfer', canonical) or ('defer', None).
+
+    Mirrors the callback's entry rule: a row a merge redirected moves its custody to the canonical conversation,
+    and a redirect that cannot be resolved (broken topology, a failed read) keeps the row deferred, never retired.
+    A live row or a plain user deletion stays superseded.
+    """
+    from config.sync_reprocess import fence_redirect_transfer_enabled
+    from database import conversations as conversations_db
+
+    if not fence_redirect_transfer_enabled():
+        return 'superseded', None
+    try:
+        row = conversations_db.get_conversation_raw_snapshot(
+            uid, conversation_id, field_paths=['deleted', 'sync_merged_into']
+        )
+        if not row or not (row.get('deleted') and row.get('sync_merged_into')):
+            return 'superseded', None
+        canonical = conversations_db.resolve_sync_conversation_redirect(uid, conversation_id)
+    except Exception as error:
+        if _transient_dependency(error):
+            raise  # A transient Firestore fault keeps the consumer's quick retry, not the custody backoff.
+        logger.warning('event=sync_reprocess outcome=fence_redirect_unresolved exception_type=%s', type(error).__name__)
+        return 'defer', None
+    if isinstance(canonical, str) and canonical and canonical != conversation_id:
+        return 'transfer', canonical
+    return 'defer', None
 
 
 def _cause(error: BaseException) -> str:
@@ -164,7 +194,7 @@ class EnrichmentConsumer:
     def _deliver(self, claim: Claim, heartbeat: Callable[[], bool]) -> Result:
         from config.summary_guarantee import ADMITTED_OWNER, preserves_admitted
         from database._client import get_firestore_client
-        from database.summary_processing import record_empty_failure
+        from database.summary_processing import record_empty_failure, EmptyFailureOutcome
         from utils.conversations import summary_delivery
         from utils.enrichment import outbox as rows
         from config.action_item_identity import enrichment_revision_race_retry_enabled
@@ -212,7 +242,11 @@ class EnrichmentConsumer:
         )
         try:
             with _beating(heartbeat, self.heartbeat_seconds, context) as lost:
-                output = self._callback()(uid, conversation_id, language)
+                abort_token = early_abort.ACTIVE.set(True)
+                try:
+                    output = self._callback()(uid, conversation_id, language)
+                finally:
+                    early_abort.ACTIVE.reset(abort_token)
                 if summary_policy:
                     summary_seen = output is not None and summary_delivery.present(
                         summary_delivery.field(output, 'structured')
@@ -249,14 +283,36 @@ class EnrichmentConsumer:
             logger.info('event=enrichment_consumer outcome=retry reason=persistence_fenced source=action_item_refresh')
             return Result(Outcome.RETRY, RetryReason.PERSISTENCE_FENCED, available_at=now)
         except SyncConversationPersistenceFenced:
-            # #21968: the newer writer owns the conversation and marks its own obligation.
-            logger.info('event=sync_reprocess outcome=conversation_fenced')
-            superseded = True
+            # #21968: the newer writer owns the conversation and marks its own obligation. A merge that
+            # redirected this conversation while it ran is the exception: its custody (first summary, hold)
+            # must move to the canonical conversation, exactly as before_notes' ConversationAbsorbed does.
+            action, canonical = _fenced_redirect(uid, conversation_id) if context is not None else ('superseded', None)
+            if context is not None and action == 'transfer':
+                logger.info('event=sync_reprocess outcome=conversation_fenced redirect=transferred')
+                context['redirect_to'] = canonical
+            elif context is not None and action == 'defer':
+                logger.info('event=sync_reprocess outcome=conversation_fenced redirect=unresolved')
+                context['defer_reason'] = 'redirect_unresolved'
+            else:
+                logger.info('event=sync_reprocess outcome=conversation_fenced')
+                superseded = True
         except summary_delivery.SummaryOutputUnavailable:
-            if not context or not record_empty_failure(
-                get_firestore_client(), rows.COLLECTION, claim.row_id, claim.lease_token, claim.wake_token
-            ):
+            if not context:
                 return _callback_pending('empty_output_unrecorded', now)
+            empty_outcome = record_empty_failure(
+                get_firestore_client(), rows.COLLECTION, claim.row_id, claim.lease_token, claim.wake_token
+            )
+            if empty_outcome is EmptyFailureOutcome.STALE:
+                return Result(Outcome.STALE, ConsumerReason.STALE_TOKEN)
+            if empty_outcome is EmptyFailureOutcome.OWNER_MISMATCH:
+                return Result(
+                    Outcome.DEFERRED,
+                    ConsumerReason.NOT_DUE,
+                    available_at=now + rows.LIVE_DEFER_SECONDS,
+                    defer_cause='summary_owner_changed',
+                )
+            if empty_outcome is EmptyFailureOutcome.RETRY:
+                return _callback_pending('empty_output', now)
             record_delivery('summary', 'failed')
             empty_blocked = True
         finally:

@@ -49,13 +49,14 @@ borrowedNodePools:
   # autoscaler's expendable cutoff (-10), so a Pending borrower is not ignored.
   priority: -1
 worker:
+  heldDeadLetterEnabled: true
   # Match the serving hosts; prod overrides this below the 120s guard blind window.
   servingMetricsMinRefreshSeconds: 30
   # Control-loop defaults; rollback independently with 64 / false / 2 / {}.
   controlCandidateFanout: 16
   admissionParallelCalls: true
   idlePollMaxSeconds: 10
-  firestoreReadLevers: '{"batch_privacy_memoize":100}'
+  firestoreReadLevers: '{}'
   # Fenced per-shard pulls and worker affinity; false restores legacy selection.
   shardSpreadEnabled: true
   # One shard transaction leases up to the pull batch; false leases one per transaction.
@@ -208,6 +209,9 @@ t4Fallback:
   # Worker processes on the T4 sibling, independent of worker.processes: two
   # model chains are not qualified on 16 GB of T4 VRAM / n1-standard-8.
   processes: 1
+  # Pump lanes per process on the T4 sibling, independent of worker.pipelineDepth:
+  # the slower T4 chain keeps the default 2 so fresh work waits at most one extra chain.
+  pipelineDepth: 2
 podMonitoring:
   enabled: true
 recordSealRepair:
@@ -216,6 +220,8 @@ recordSealRepair:
   # Retained for evening overlap and rollback; lead overrides false for the first peak.
   suspend: true
   runtimeEnabled: true
+  jobsDiscovery: "on"
+  projectionDebtDurableEnabled: true
   mode: apply
   workers: 8
   rowSeconds: 270

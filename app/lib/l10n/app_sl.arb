@@ -11921,6 +11921,8 @@
     "chatAppsWaitingMessageIn": "Pošljite sporočilo v aplikaciji {app}. Ta zaslon se posodobi, takoj ko ga Omi prejme.",
     "chatAppsCodeExpiredMessageIn": "Pridobite novo kodo in jo pošljite iz aplikacije {app}.",
     "episodeWritingNotes": "Pišemo zapiske…",
+    "homeStepTranscribing": "Prepisujemo…",
+    "homeRecordingsCount": "{count, plural, one{{count} posnetek} two{{count} posnetka} few{{count} posnetki} other{{count} posnetkov}}",
     "episodeWritingNotesDetail": "Najprej dokončujemo prepis. To stran lahko zapustite.",
     "episodeCoversUpTo": "Do {time} · popolni zapiski ob koncu",
     "liveTranscribedUpTo": "Prepisano do {time}",
@@ -12189,5 +12191,13 @@
     "referralRewardFirstDetail": "Ko 2 prijatelja kupita Omi",
     "referralRewardSecondTitle": "Še 3 mesece",
     "referralRewardSecondDetail": "Ko kupijo še 3 prijatelji",
-    "referralClaimShort": "Prevzemi"
+    "referralClaimShort": "Prevzemi",
+    "paymentDeclinedTitle": "Vaša kartica je bila zavrnjena",
+    "paymentDeclinedMessage": "Posodobite kartico, da znova dobite {plan}",
+    "hasLinkedTasksLabel": "Ima povezane naloge",
+    "hasTasksFilter": "Z nalogami",
+    "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
+    "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
+    "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
 }

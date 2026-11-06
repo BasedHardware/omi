@@ -16,6 +16,8 @@ overlay:
   gke:
     backend-listen:
       env:
+        HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
+        HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
         # Dev qualification for the David-approved graduation (DEC-BTR-004): open/play/download,
         # changed-source and duplicate-task checks before prod.
         PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
@@ -101,6 +103,8 @@ overlay:
           value: '0'
     pusher:
       env:
+        HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
+        HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
         # Dev qualification for the David-approved graduation (DEC-BTR-004): open/play/download,
         # changed-source and duplicate-task checks before prod.
         PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
@@ -338,6 +342,8 @@ overlay:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
+          HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
+          HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
           # Dev qualification for the David-approved graduation (DEC-BTR-004): open/play/download,
           # changed-source and duplicate-task checks before prod.
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
@@ -409,6 +415,8 @@ overlay:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
+          HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
+          HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
           # Dev qualification for the David-approved graduation (DEC-BTR-004): open/play/download,
           # changed-source and duplicate-task checks before prod.
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
@@ -433,16 +441,8 @@ overlay:
             value: http://parakeet.omiapi.com
           HOSTED_SPEAKER_EMBEDDING_API_URL:
             value: http://diarizer.omiapi.com:80
-          SYNC_LEGACY_FRESH_ENABLED:
-            value: 'false'
           SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED:
             value: 'false'
-          SYNC_LEGACY_FRESH_PERCENT:
-            value: '0'
-          SYNC_LEGACY_FRESH_HOURLY_TOKENS:
-            value: '60'
-          SYNC_LEGACY_FRESH_BURST_TOKENS:
-            value: '10'
           POSTHOG_HOST:
             value: https://app.posthog.com
           OMI_SHAPED_AGENT_MODE:
@@ -501,6 +501,8 @@ overlay:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
+          HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
+          HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
           # Dev qualification for the David-approved graduation (DEC-BTR-004): open/play/download,
           # changed-source and duplicate-task checks before prod.
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
@@ -521,16 +523,8 @@ overlay:
             value: http://parakeet.omiapi.com
           HOSTED_SPEAKER_EMBEDDING_API_URL:
             value: http://diarizer.omiapi.com:80
-          SYNC_LEGACY_FRESH_ENABLED:
-            value: 'false'
           SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED:
             value: 'false'
-          SYNC_LEGACY_FRESH_PERCENT:
-            value: '0'
-          SYNC_LEGACY_FRESH_HOURLY_TOKENS:
-            value: '60'
-          SYNC_LEGACY_FRESH_BURST_TOKENS:
-            value: '10'
           POSTHOG_HOST:
             value: https://app.posthog.com
           OMI_SHAPED_AGENT_MODE:
@@ -575,6 +569,8 @@ overlay:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
+          HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
+          HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
           # Dev qualification for the David-approved graduation (DEC-BTR-004): open/play/download,
           # changed-source and duplicate-task checks before prod.
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}

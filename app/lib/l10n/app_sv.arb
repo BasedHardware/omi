@@ -4498,6 +4498,8 @@
     "chatAppsWaitingMessageIn": "Skicka meddelandet i {app}. Den här skärmen uppdateras så fort Omi får det.",
     "chatAppsCodeExpiredMessageIn": "Hämta en ny kod och skicka den från {app}.",
     "episodeWritingNotes": "Skriver anteckningar…",
+    "homeStepTranscribing": "Transkriberar…",
+    "homeRecordingsCount": "{count, plural, one{{count} inspelning} other{{count} inspelningar}}",
     "episodeWritingNotesDetail": "Vi gör först klart transkriptionen. Du kan lämna den här sidan.",
     "episodeCoversUpTo": "Täcker fram till {time} · fullständiga anteckningar när det är klart",
     "liveTranscribedUpTo": "Transkriberat fram till {time}",
@@ -4632,5 +4634,13 @@
     "referralRewardFirstDetail": "När 2 vänner köper Omi",
     "referralRewardSecondTitle": "3 månader till",
     "referralRewardSecondDetail": "När 3 vänner till köper",
-    "referralClaimShort": "Hämta"
+    "referralClaimShort": "Hämta",
+    "paymentDeclinedTitle": "Ditt kort nekades",
+    "paymentDeclinedMessage": "Uppdatera kortet för att få tillbaka {plan}",
+    "hasLinkedTasksLabel": "Har länkade uppgifter",
+    "hasTasksFilter": "Med uppgifter",
+    "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
+    "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
+    "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
 }

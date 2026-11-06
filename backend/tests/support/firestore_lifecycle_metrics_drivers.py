@@ -12,9 +12,38 @@ def entries():
         DriverEntry(prefix + 'nojob', domains={'namespace': namespaces}),
         DriverEntry(prefix + 'enrichment', neutrals={'now': now}),
         DriverEntry(prefix + 'blocked_byok', neutrals={'now': now}),
+        DriverEntry(prefix + 'enrichment_summary_repair'),
+        DriverEntry(
+            'utils.lifecycle_pair_census.sample',
+            neutrals={'now': now},
+            domains={
+                'state': [
+                    {
+                        'phase': phase,
+                        **(
+                            {'cursor': path}
+                            if mode == 'legacy'
+                            else {'cursors': {phase: path}} if mode == 'map' else {}
+                        ),
+                    }
+                    for phase in ('jobs', 'queued', 'processing')
+                    for path in [
+                        (
+                            'conversation_finalization_jobs/previous'
+                            if phase == 'jobs'
+                            else 'users/shape-user/conversations/previous'
+                        )
+                    ]
+                    for mode in ('none', 'legacy', 'map')
+                ]
+            },
+        ),
         CoveredByEntry(
             prefix + '_where',
-            covered_by=tuple(prefix + name for name in ('record_pending', 'nojob', 'enrichment', 'blocked_byok')),
+            covered_by=tuple(
+                prefix + name
+                for name in ('record_pending', 'nojob', 'enrichment', 'blocked_byok', 'enrichment_summary_repair')
+            ),
             reason='pure filter builder; terminal observations execute inside the named sampler drivers',
             expect_observed=False,
             body_digest='51d3e38b20df6800101fbf671471d2538c487d9c702698c6a9ad221c43f89a79',

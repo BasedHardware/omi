@@ -4594,6 +4594,8 @@
     "chatAppsWaitingMessageIn": "Küldd el az üzenetet az {app} alkalmazásban. Ez a képernyő azonnal frissül, amint Omi megkapja.",
     "chatAppsCodeExpiredMessageIn": "Kérj új kódot, és küldd el az {app} alkalmazásból.",
     "episodeWritingNotes": "Jegyzetek írása…",
+    "homeStepTranscribing": "Átírás folyamatban…",
+    "homeRecordingsCount": "{count, plural, one{1 felvétel} other{{count} felvétel}}",
     "episodeWritingNotesDetail": "Először befejezzük az átiratot. Elhagyhatod ezt az oldalt.",
     "episodeCoversUpTo": "{time}-ig · teljes jegyzetek a végén",
     "liveTranscribedUpTo": "Átírva eddig: {time}",
@@ -4728,5 +4730,13 @@
     "referralRewardFirstDetail": "Ha 2 barátod megveszi az Omit",
     "referralRewardSecondTitle": "Még 3 hónap",
     "referralRewardSecondDetail": "Ha még 3 barátod vásárol",
-    "referralClaimShort": "Beváltás"
+    "referralClaimShort": "Beváltás",
+    "paymentDeclinedTitle": "A kártyáját elutasították",
+    "paymentDeclinedMessage": "Frissítse a kártyát a(z) {plan} visszaállításához",
+    "hasLinkedTasksLabel": "Kapcsolódó feladatokat tartalmaz",
+    "hasTasksFilter": "Feladatokkal",
+    "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
+    "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
+    "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
 }

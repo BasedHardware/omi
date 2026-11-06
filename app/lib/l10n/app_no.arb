@@ -4498,6 +4498,8 @@
     "chatAppsWaitingMessageIn": "Send meldingen i {app}. Denne skjermen oppdateres så snart Omi får den.",
     "chatAppsCodeExpiredMessageIn": "Få en ny kode og send den fra {app}.",
     "episodeWritingNotes": "Skriver notater…",
+    "homeStepTranscribing": "Transkriberer…",
+    "homeRecordingsCount": "{count, plural, one{{count} opptak} other{{count} opptak}}",
     "episodeWritingNotesDetail": "Vi gjør først ferdig transkripsjonen. Du kan forlate denne siden.",
     "episodeCoversUpTo": "Dekker frem til {time} · fullstendige notater til slutt",
     "liveTranscribedUpTo": "Transkribert frem til {time}",
@@ -4632,5 +4634,13 @@
     "referralRewardFirstDetail": "Når 2 venner kjøper Omi",
     "referralRewardSecondTitle": "3 måneder til",
     "referralRewardSecondDetail": "Når 3 venner til kjøper",
-    "referralClaimShort": "Løs inn"
+    "referralClaimShort": "Løs inn",
+    "paymentDeclinedTitle": "Kortet ditt ble avvist",
+    "paymentDeclinedMessage": "Oppdater kortet for å få {plan} tilbake",
+    "hasLinkedTasksLabel": "Har tilknyttede oppgaver",
+    "hasTasksFilter": "Med oppgaver",
+    "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
+    "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
+    "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
 }

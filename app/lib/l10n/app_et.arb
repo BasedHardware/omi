@@ -4498,6 +4498,8 @@
     "chatAppsWaitingMessageIn": "Saada sõnum rakenduses {app}. See ekraan uueneb, kui Omi selle kätte saab.",
     "chatAppsCodeExpiredMessageIn": "Hangi uus kood ja saada see rakendusest {app}.",
     "episodeWritingNotes": "Kirjutame märkmeid…",
+    "homeStepTranscribing": "Transkribeerime…",
+    "homeRecordingsCount": "{count, plural, one{{count} salvestus} other{{count} salvestust}}",
     "episodeWritingNotesDetail": "Kõigepealt lõpetame transkriptsiooni. Võid sellelt lehelt lahkuda.",
     "episodeCoversUpTo": "Katab kuni {time} · täielikud märkmed lõpus",
     "liveTranscribedUpTo": "Transkribeeritud kuni {time}",
@@ -4632,5 +4634,13 @@
     "referralRewardFirstDetail": "Kui 2 sõpra ostavad Omi",
     "referralRewardSecondTitle": "Veel 3 kuud",
     "referralRewardSecondDetail": "Kui veel 3 sõpra ostavad",
-    "referralClaimShort": "Lunasta"
+    "referralClaimShort": "Lunasta",
+    "paymentDeclinedTitle": "Sinu kaart lükati tagasi",
+    "paymentDeclinedMessage": "Uuenda kaarti, et {plan} tagasi saada",
+    "hasLinkedTasksLabel": "Sisaldab seotud ülesandeid",
+    "hasTasksFilter": "Ülesannetega",
+    "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
+    "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
+    "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
 }

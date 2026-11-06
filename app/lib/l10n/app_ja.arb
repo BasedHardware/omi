@@ -4498,6 +4498,8 @@
     "chatAppsWaitingMessageIn": "{app}でメッセージを送信してください。Omiが受信するとすぐにこの画面が更新されます。",
     "chatAppsCodeExpiredMessageIn": "新しいコードを取得して、{app}アプリから送信してください。",
     "episodeWritingNotes": "メモを作成中…",
+    "homeStepTranscribing": "文字起こし中…",
+    "homeRecordingsCount": "{count, plural, other{{count}件の録音}}",
     "episodeWritingNotesDetail": "先に文字起こしを仕上げています。このページを離れても大丈夫です。",
     "episodeCoversUpTo": "{time}まで · 終了後に完全なメモ",
     "liveTranscribedUpTo": "{time}まで文字起こし済み",
@@ -4632,5 +4634,13 @@
     "referralRewardFirstDetail": "友達2人がOmiを購入したら",
     "referralRewardSecondTitle": "さらに3か月",
     "referralRewardSecondDetail": "さらに友達3人が購入したら",
-    "referralClaimShort": "受け取る"
+    "referralClaimShort": "受け取る",
+    "paymentDeclinedTitle": "カードが拒否されました",
+    "paymentDeclinedMessage": "{plan}を再開するにはカードを更新してください",
+    "hasLinkedTasksLabel": "関連するタスクあり",
+    "hasTasksFilter": "タスクあり",
+    "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
+    "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
+    "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
 }

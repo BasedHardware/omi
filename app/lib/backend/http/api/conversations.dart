@@ -540,7 +540,7 @@ class ConversationApi {
   /// runs on Home's load-more while the user scrolls, and on the detail open
   /// right after a tap. [decode] is read before the hop because the other
   /// isolate has its own copy of every global.
-  static Future<R> _decodeOffUi<R>(String body, R Function(String) decode) => offUiIsolate(
+  static Future<R> decodeOffUi<R>(String body, R Function(String) decode) => offUiIsolate(
         () => decode(body),
         size: body.length,
         threshold: conversationListBackgroundParseBytes,
@@ -558,7 +558,7 @@ class ConversationApi {
         return ApiFailure(problem);
       case ApiSuccess(:final data, :final truncated):
         try {
-          return ApiSuccess(await _decodeOffUi(data, conversationDetailDecoder), truncated: truncated);
+          return ApiSuccess(await decodeOffUi(data, conversationDetailDecoder), truncated: truncated);
         } on FormatException {
           return const ApiFailure(ApiProblem(ApiProblemKind.decode));
         }

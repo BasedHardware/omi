@@ -4498,6 +4498,8 @@
     "chatAppsWaitingMessageIn": "Gửi tin nhắn trong {app}. Màn hình này sẽ cập nhật ngay khi Omi nhận được.",
     "chatAppsCodeExpiredMessageIn": "Lấy mã mới và gửi từ {app}.",
     "episodeWritingNotes": "Đang viết ghi chú…",
+    "homeStepTranscribing": "Đang chép lời…",
+    "homeRecordingsCount": "{count, plural, other{{count} bản ghi âm}}",
     "episodeWritingNotesDetail": "Đang hoàn tất bản chép trước. Bạn có thể rời trang này.",
     "episodeCoversUpTo": "Đến {time} · ghi chú đầy đủ khi kết thúc",
     "liveTranscribedUpTo": "Đã chép đến {time}",
@@ -4632,5 +4634,13 @@
     "referralRewardFirstDetail": "Khi 2 bạn bè mua Omi",
     "referralRewardSecondTitle": "Thêm 3 tháng",
     "referralRewardSecondDetail": "Khi thêm 3 bạn bè mua",
-    "referralClaimShort": "Nhận"
+    "referralClaimShort": "Nhận",
+    "paymentDeclinedTitle": "Thẻ của bạn đã bị từ chối",
+    "paymentDeclinedMessage": "Cập nhật thẻ để dùng lại {plan}",
+    "hasLinkedTasksLabel": "Có nhiệm vụ được liên kết",
+    "hasTasksFilter": "Có nhiệm vụ",
+    "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
+    "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
+    "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
 }

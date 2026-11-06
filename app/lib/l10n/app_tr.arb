@@ -4533,6 +4533,8 @@
     "chatAppsWaitingMessageIn": "Mesajı {app}'dan gönder. Omi'ye ulaşır ulaşmaz bu ekran güncellenir.",
     "chatAppsCodeExpiredMessageIn": "Yeni bir kod al ve {app}'dan gönder.",
     "episodeWritingNotes": "Notlar yazılıyor…",
+    "homeStepTranscribing": "Metne dökülüyor…",
+    "homeRecordingsCount": "{count, plural, other{{count} kayıt}}",
     "episodeWritingNotesDetail": "Önce döküm tamamlanıyor. Bu sayfadan çıkabilirsiniz.",
     "episodeCoversUpTo": "{time} saatine kadar · bitince tam notlar",
     "liveTranscribedUpTo": "{time} saatine kadar yazıya döküldü",
@@ -4667,5 +4669,13 @@
     "referralRewardFirstDetail": "2 arkadaşın Omi aldığında",
     "referralRewardSecondTitle": "3 ay daha",
     "referralRewardSecondDetail": "3 arkadaşın daha aldığında",
-    "referralClaimShort": "Al"
+    "referralClaimShort": "Al",
+    "paymentDeclinedTitle": "Kartınız reddedildi",
+    "paymentDeclinedMessage": "{plan} planınızı geri almak için kartınızı güncelleyin",
+    "hasLinkedTasksLabel": "Bağlı görevleri var",
+    "hasTasksFilter": "Görev içerenler",
+    "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
+    "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
+    "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
 }

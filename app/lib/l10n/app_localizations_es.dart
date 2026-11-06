@@ -14866,6 +14866,20 @@ class AppLocalizationsEs extends AppLocalizations {
   String get episodeWritingNotes => 'Escribiendo notas…';
 
   @override
+  String get homeStepTranscribing => 'Transcribiendo…';
+
+  @override
+  String homeRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count grabaciones',
+      one: '$count grabación',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get episodeWritingNotesDetail => 'Primero terminamos la transcripción. Puedes salir de esta página.';
 
   @override
@@ -15401,4 +15415,33 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get referralClaimShort => 'Reclamar';
+
+  @override
+  String get paymentDeclinedTitle => 'Tu tarjeta fue rechazada';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return 'Actualízala para recuperar $plan';
+  }
+
+  @override
+  String get hasLinkedTasksLabel => 'Tiene tareas vinculadas';
+
+  @override
+  String get hasTasksFilter => 'Con tareas';
+
+  @override
+  String firmwareUpdateNotInstalledMessage(String version) {
+    return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
+  }
+
+  @override
+  String get firmwareUpdateUnconfirmedMessage =>
+      'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
+
+  @override
+  String get firmwareUpdateUnconfirmedTitle => 'Update Not Confirmed';
+
+  @override
+  String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
 }

@@ -64,12 +64,13 @@ def redrive(client: Any, uid: str, conversation_id: str, *, now: float) -> bool:
 
             if old and parked(old):
                 return {}, True
-            if old and (
-                old.get('lease_until', 0) > now
-                or old.get('summary_seen')
-                or old.get('summary_blocked_reason') == 'empty_output_exhausted'
-            ):
+            if old and (old.get('lease_until', 0) > now or old.get('summary_seen')):
                 return {}, True
+            if old and old.get('summary_blocked_reason') == 'empty_output_exhausted':
+                # The conversation's transactional revision writer reopened its
+                # debt. Its current eligibility is authoritative; reopen the
+                # matching dormant outbox in this same admission transaction.
+                old = {**old, 'summary_blocked_reason': None, 'summary_empty_failures': 0}
             new, _ = operation(old)
             new['first_pending_at'] = min(new['first_pending_at'], row['summary_first_pending_at'])
             new['summary_deadline_at'] = min(new.get('summary_deadline_at', due), due)

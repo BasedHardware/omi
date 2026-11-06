@@ -55,6 +55,7 @@ borrowedNodePools:
   enabled: false
   pools: [parakeet-pool, parakeet-pool-b, parakeet-pool-v2]
 worker:
+  heldDeadLetterEnabled: true
   # Two pump processes share each L4 (cl2-gpueff 2026-11-04, data/run-2026-11-04-gpueff
   # in omi-workspace): prod is claim-path bound (GPU util 16%, ~1.6 units per
   # 3.2s pull), so a second independent pump doubles concurrent claims per GPU.
@@ -63,6 +64,13 @@ worker:
   # g2-standard-8 node with daemons). The T4 fallback stays at t4Fallback.processes 1.
   # Kill switch / rollback: processes: 1 (values-only Helm roll).
   processes: 2
+  # Three pump lanes per process (cl2-gpueff 2026-11-05, queue v3 #2): after the claim-ceiling
+  # lift (#24626) the fleet is bound by per-lane claim/publish latency, not GPU-lock time; more
+  # lanes overlap more claims per GPU. Dev L4 bench under a 3.2 s simulated claim: 2 processes x 2
+  # lanes 124.7 vs x 4 lanes 180 audio-h/GPU-h. One step to 3 first to watch shard-claim contention.
+  # Decoded memory stays inside each process's shared 1800 audio-second prepare budget and the
+  # 7200 audio-second bound. Kill switch / rollback: pipelineDepth 2.
+  pipelineDepth: 3
   servingMetricsMinRefreshSeconds: 60
   # Matches the prod backend hosts (deploy contract reader-split invariant):
   # window allocation 100, replica recovery explicitly off, and the
@@ -74,7 +82,7 @@ worker:
   controlCandidateFanout: 16
   admissionParallelCalls: true
   idlePollMaxSeconds: 10
-  firestoreReadLevers: '{"batch_privacy_memoize":100}'
+  firestoreReadLevers: '{}'
   # Preserve the measured profiling-on state across the scaler Helm upgrade.
   stageProfilingEnabled: true
   # #24213 IO 5 did not run in qualification (NO-GO 2026-11-01); hold the prior 3.
@@ -105,6 +113,8 @@ recordSealRepair:
   suspend: false
   mode: apply
   rowSeconds: 270
+  # 48 workers (2026-11-05 #24729) pushed every row past the 270 s cap (budget_exhausted); per-row I/O, not
+  # pod resources, saturates. Back to 16 until the per-row bottleneck is profiled.
   workers: 16
   serverFlags:
     K_SERVICE: backend

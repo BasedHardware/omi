@@ -14804,6 +14804,20 @@ class AppLocalizationsHi extends AppLocalizations {
   String get episodeWritingNotes => 'नोट्स लिखे जा रहे हैं…';
 
   @override
+  String get homeStepTranscribing => 'ट्रांस्क्राइब हो रहा है…';
+
+  @override
+  String homeRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count रिकॉर्डिंग',
+      one: '1 रिकॉर्डिंग',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get episodeWritingNotesDetail => 'पहले ट्रांसक्रिप्ट पूरी हो रही है। आप यह पेज छोड़ सकते हैं।';
 
   @override
@@ -15340,4 +15354,33 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get referralClaimShort => 'पाएं';
+
+  @override
+  String get paymentDeclinedTitle => 'आपका कार्ड अस्वीकार हो गया';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return '$plan वापस पाने के लिए कार्ड अपडेट करें';
+  }
+
+  @override
+  String get hasLinkedTasksLabel => 'लिंक किए गए कार्य हैं';
+
+  @override
+  String get hasTasksFilter => 'कार्य वाले';
+
+  @override
+  String firmwareUpdateNotInstalledMessage(String version) {
+    return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
+  }
+
+  @override
+  String get firmwareUpdateUnconfirmedMessage =>
+      'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
+
+  @override
+  String get firmwareUpdateUnconfirmedTitle => 'Update Not Confirmed';
+
+  @override
+  String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
 }

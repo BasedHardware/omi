@@ -285,9 +285,12 @@ def test_stored_derived_effects_digest_reaches_processing_unless_the_row_was_hid
 @pytest.mark.parametrize(
     'discarded,stored_keep,expected', [(True, False, True), (False, True, True), (False, False, False)]
 )
-def test_http_reprocess_passes_explicit_restore_and_persisted_keep_to_classification(discarded, stored_keep, expected):
+@pytest.mark.parametrize('status', ['completed', 'failed'])
+def test_http_reprocess_passes_explicit_restore_and_persisted_keep_to_classification(
+    discarded, stored_keep, expected, status
+):
     model, _p1, p2, p3, p4, p5, p6, process_patch = _route_context(raw_app=None, available_app=None, enabled=False)
-    row = {'id': 'c1', 'status': 'completed', 'discarded': discarded, 'sync_relevance_user_kept': stored_keep}
+    row = {'id': 'c1', 'status': status, 'discarded': discarded, 'sync_relevance_user_kept': stored_keep}
     model.discarded = False
     model.sync_relevance = 'review'
     with (

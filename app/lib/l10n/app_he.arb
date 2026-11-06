@@ -11921,6 +11921,8 @@
     "chatAppsWaitingMessageIn": "שלחו את ההודעה באפליקציית {app}. המסך הזה יתעדכן ברגע ש-Omi יקבל אותה.",
     "chatAppsCodeExpiredMessageIn": "קבלו קוד חדש ושלחו אותו מ{app}.",
     "episodeWritingNotes": "כותבים הערות…",
+    "homeStepTranscribing": "מתמללים…",
+    "homeRecordingsCount": "{count, plural, one{הקלטה אחת} two{שתי הקלטות} many{{count} הקלטות} other{{count} הקלטות}}",
     "episodeWritingNotesDetail": "קודם מסיימים את התמלול. אפשר לעזוב את הדף.",
     "episodeCoversUpTo": "מכסה עד {time} · הערות מלאות בסיום",
     "liveTranscribedUpTo": "תומלל עד {time}",
@@ -12189,5 +12191,13 @@
     "referralRewardFirstDetail": "כש-2 חברים קונים Omi",
     "referralRewardSecondTitle": "עוד 3 חודשים",
     "referralRewardSecondDetail": "כשעוד 3 חברים קונים",
-    "referralClaimShort": "קבלה"
+    "referralClaimShort": "קבלה",
+    "paymentDeclinedTitle": "הכרטיס שלך נדחה",
+    "paymentDeclinedMessage": "עדכנו את הכרטיס כדי לקבל שוב את {plan}",
+    "hasLinkedTasksLabel": "כולל משימות מקושרות",
+    "hasTasksFilter": "עם משימות",
+    "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
+    "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
+    "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
 }

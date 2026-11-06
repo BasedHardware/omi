@@ -25,6 +25,9 @@ class Writer:
 class Exit:
     kind: str
     cite: str
+    # Conditional automatic transitions coexist with a live producer's normal
+    # callback exit. They do not make all live tokens eligible for expiration.
+    automatic_writers: tuple[Writer, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -131,6 +134,11 @@ def entry(module, function, field, state=None, *, inplace=False, patches=(), **b
 
 # Automatic entry paths are distinct from conservative payload builders.
 DEADLINE_ENTRIES = {
+    'batch:quarantined': (
+        entry('utils/batch_pipeline/retry_policy.py', 'quarantine_job', 'state', 'quarantined', inplace=True),
+        entry('utils/batch_pipeline/provider_stt.py', 'ProviderSttStore.settle.commit', 'state', 'quarantined'),
+        entry('utils/batch_pipeline/provider_stt.py', 'ProviderSttStore.terminal.commit', 'state', 'quarantined'),
+    ),
     'finalization:queued': (
         entry(
             FINALIZATION_MODULE,
@@ -199,6 +207,13 @@ DEADLINE_ENTRIES = {
             FAIR_USE_THROTTLE_DECAY_ENABLED=True,
         ),
     ),
+    'visibility:transcribing_hold': (
+        entry(
+            'database/conversation_finalization_jobs.py',
+            '_complete_server_batch_capture_txn',
+            'home_transcription_pending_at',
+        ),
+    ),
     'visibility:bridge_pending': (
         entry(
             'utils/sync/assignment.py',
@@ -229,12 +244,17 @@ def row(
     quiescent=False,
     deadline_exemption='',
     exit_exemption='',
+    entry_writers=None,
 ):
     entries = DEADLINE_ENTRIES.get(f'{machine}:{state}', ())
     entered_by = (
-        tuple(dict.fromkeys(Writer(path.module, path.function) for path in entries))
-        if entries
-        else writers(machine, *fields)
+        entry_writers
+        if entry_writers is not None
+        else (
+            tuple(dict.fromkeys(Writer(path.module, path.function) for path in entries))
+            if entries
+            else writers(machine, *fields)
+        )
     )
     return State(
         machine,
@@ -264,6 +284,7 @@ LEASE = Exit('lease', 'utils/batch_pipeline/scheduler.py:Scheduler.recover')
 DECAY = Exit('decay', 'utils/fair_use.py:normalize_expired_restriction_state')
 SUMMARY = Exit('sweeper', 'services/summary_debt_repair.py:tick')
 RECORD_REPAIR = Exit('sweeper', 'utils/batch_pipeline/record_seal_worker.py:Worker.tick')
+ABANDON_RECORD_PRODUCER = Writer('database/record_audio.py', 'abandon_record_upload_session.commit')
 PHASE_FIELDS = (
     'status',
     'finalization_status',
@@ -318,7 +339,14 @@ STATES = (
             alert=Alert('omi-capture-oldest-nonterminal', 'agent'),
         ),
         row('conversation', 'merging', ('status',), exit=FINALIZER),
-        row('conversation', 'completed', ('status',), terminal=True, owner='utils/conversations/lifecycle.py'),
+        row(
+            'conversation',
+            'completed',
+            ('status', 'terminal_family', 'terminal_family_at'),
+            terminal=True,
+            owner='utils/conversations/lifecycle.py',
+            note='Phase 2a claim/persist success; only explicit restore supersedes failure; persist never regresses completed status; legacy and other writers may lack classifier',
+        ),
         row(
             'conversation',
             'failed',
@@ -331,10 +359,51 @@ STATES = (
             'record_audio',
             'capturing',
             ('record_upload_sessions',),
-            exit=Exit('callback-only', 'database/record_audio.py:set_record_upload_pending'),
+            exit=Exit(
+                'callback-only',
+                'database/record_audio.py:set_record_upload_pending',
+                automatic_writers=(ABANDON_RECORD_PRODUCER,),
+            ),
             deadline_exemption='No producer TTL: live custody is cleared only by exact-token finish; lead2 9d457c / 4bf62d',
             exit_exemption='Interactive live custody awaits exact-token finish, not automatic expiration; 4bf62d',
-            note='Live producer custody; dwell visibility remains required even though age cannot clear its token',
+            note='Live producer custody; exact-token finish remains the normal exit. Capacity eviction automatically '
+            'transitions only the evicted socket\'s owned tokens to abandoned, after its worker and all executor '
+            'futures settle (utils/pusher_record_finish.py:abandon_evicted_record_drain; '
+            'utils/pusher_record_barrier.py:PusherRecordBarrier.abandon_recordings). '
+            'The kill switch can disable this conditional exit. When bounded abandon admission is full, '
+            'outcome=abandon_overflow leaves the token capturing/fenced with no new coordinator; '
+            'the existing process/pod-death repair proof remains its exit. Live tokens never expire by age. '
+            'Refused seals have a separate first-entry clock and bounded job-page visibility in seal_refused; '
+            'general live-producer dwell visibility remains required',
+        ),
+        row(
+            'record_audio',
+            'seal_refused',
+            ('record_seal_refused_at',),
+            entry_writers=(Writer('database/record_audio.py', 'seal_record_audio.commit'),),
+            exit=Exit('callback-only', 'database/record_audio.py:seal_record_audio'),
+            metric='omi_record_seal_refused_age_seconds',
+            alert=Alert('omi-record-seal-refused-age', 'agent'),
+            note='First producer-pending refusal clock, meaningful only while record_audio_closed is false. '
+            'Normal successful seal after exact-token finish clears it; repair/nojob seals may retain a stale stamp. '
+            'Closed stamped rows are excluded from sweeper classification and refusal count/age gauges. '
+            'Age is not a deadline or seal authority. Metrics cover the existing bounded record_pending job page; '
+            'the alert is a declaration, not a deployed rule. No-job visibility remains outside phase 1.',
+        ),
+        row(
+            'record_audio',
+            'abandoned',
+            ('record_upload_sessions',),
+            entry_writers=(ABANDON_RECORD_PRODUCER,),
+            exit=Exit('sweeper', 'utils/batch_pipeline/record_seal_sweeper.py:sweep'),
+            note='Conditional per-token view: a conversation can also have live reconnect tokens. '
+            'Producer token gains abandoned_at, not a successful-drain clear. '
+            'record_producer_proof.producer_tokens_dead accepts finite abandoned_at >= process_started_at; '
+            'seal repair still requires archive discovery, retained-tail/finish proof and the privacy transaction '
+            'before clearing the exact producer map and sealing. abandoned_at is an age anchor, not a deadline. '
+            'The 30-second metadata admission deadline and bounded 1-60 second retry backoff are attempt bounds, '
+            'not an end-to-end exit deadline; waiting for worker/future settlement and durable-tail repair is unbounded. '
+            'outcome=abandoned is an event, not an authoritative dwell gauge or alert; those remain declared gaps',
         ),
         row(
             'record_audio_orphan',
@@ -348,6 +417,9 @@ STATES = (
             'record_audio',
             'sealed',
             ('record_audio_closed',),
+            # Bounded stock coverage for the no-job subset only, not all sealed captures.
+            metric='omi_record_seal_nojob_count',
+            alert=Alert('omi-record-nojob-stock', 'agent'),
             note='No job: manual digest-gated nojob recovery is not an automatic exit; freshtitles fix, no PR yet',
         ),
         row(
@@ -479,6 +551,15 @@ STATES = (
         ),
         row(
             'visibility',
+            'transcribing_hold',
+            ('home_transcription_pending_at', 'home_transcription_deadline_at'),
+            exit=Exit('decay', 'utils/conversations/transcribing_hold.py:project'),
+            deadline='home_transcription_deadline_at',
+            stamped=True,
+            note='Reader-enforced expiry keeps overdue rows visible; no dedicated dwell gauge/alert yet (homegate phase 1).',
+        ),
+        row(
+            'visibility',
             'settling_hold',
             ('status',),
             exit=Exit('decay', 'utils/conversations/fragment_visibility.py:is_settling_fragment'),
@@ -490,9 +571,21 @@ STATES = (
             'batch',
             name,
             ('state',),
-            exit=LEASE if name == 'leased' else BATCH,
-            deadline='lease_until' if name == 'leased' else None,
-            stamped=name == 'leased',
+            exit=(
+                LEASE
+                if name == 'leased'
+                else (
+                    Exit(
+                        'sweeper',
+                        'utils/batch_pipeline/held_dead_letter.py:HeldDeadLetter.tick',
+                        (Writer('database/batch_pipeline_quarantine_recovery.py', 'expire_held_in_transaction'),),
+                    )
+                    if name == 'quarantined'
+                    else BATCH
+                )
+            ),
+            deadline='lease_until' if name == 'leased' else 'held_deadline_at' if name == 'quarantined' else None,
+            stamped=name in {'leased', 'quarantined'},
             metric=(
                 'omi_batch_record_pending_new_oldest_age_seconds'
                 if name == 'record_pending'
@@ -522,7 +615,11 @@ STATES = (
                 '#24587 adds a per-attempt admission lease; total pending-dwell deadline is still unstamped. '
                 '#24595 supplies recent-cohort age/page'
                 if name == 'record_pending'
-                else ''
+                else (
+                    'GPU holds gain seven-day expiry and nightly requeue; provider-STT holds remain fenced from the GPU ring.'
+                    if name == 'quarantined'
+                    else ''
+                )
             ),
         )
         for name in (
@@ -538,17 +635,57 @@ STATES = (
             'committed',
         )
     )
+    + (
+        row(
+            'batch',
+            'dead',
+            ('state',),
+            terminal=True,
+            owner='database/batch_pipeline_quarantine_recovery.py',
+            deadline='held_deadline_at',
+            exit=Exit('sweeper', 'utils/batch_pipeline/held_dead_letter.py:HeldDeadLetter.tick'),
+            metric='omi_batch_held_expired_units',
+            alert=Alert('omi-batch-held-expired-volume', 'agent'),
+            alert_required=True,
+            note='Reason held_expired is retained stock, never TTL/deletion; nightly UTC and private OIDC requeue.',
+        ),
+    )
     + tuple(
         row(
             'batch_projection',
             name,
             ('projection_state',),
-            exit=BATCH,
+            exit=(
+                Exit('sweeper', 'database/batch_pipeline_projection_release.py:ProjectionReleaseStore.release')
+                if name == 'quarantine_held'
+                else BATCH
+            ),
+            deadline='held_deadline_at' if name == 'quarantine_held' else None,
             terminal=name in ('completed', 'erased'),
             owner='database/batch_pipeline_projection.py' if name in ('completed', 'erased') else None,
-            metric=None if name in ('completed', 'erased') else 'omi_batch_timeliness_new_oldest_age_seconds',
-            alert=None if name in ('completed', 'erased') else Alert('omi-batch-unit-unpublished-2h', 'page'),
-            note='Result projection receipt state, distinct from batch job state',
+            metric=(
+                None
+                if name in ('completed', 'erased')
+                else (
+                    'omi_batch_held_oldest_age_seconds'
+                    if name == 'quarantine_held'
+                    else 'omi_batch_timeliness_new_oldest_age_seconds'
+                )
+            ),
+            alert=(
+                None
+                if name in ('completed', 'erased')
+                else (
+                    Alert('omi-pipeline-held-row-age', 'page')
+                    if name == 'quarantine_held'
+                    else Alert('omi-batch-unit-unpublished-2h', 'page')
+                )
+            ),
+            note=(
+                'Assignment holds retain quarantine_held with held_deadline_at, held_expired_at and held_expired_reason; nightly re-drive; omi_batch_held_expired_units and omi-batch-held-expired-volume (agent). Privacy holds are excluded. Legacy ready-receipt ghosts have a separate hint-only ready exit in the same transaction: BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_ENABLED default OFF, 24h committed age floor, max 16 per pass; off classifies existing reads only.'
+                if name == 'quarantine_held'
+                else 'Result projection receipt state, distinct from batch job state'
+            ),
         )
         for name in ('pending', 'persisted', 'ready', 'quarantine_held', 'completed', 'erased')
     )

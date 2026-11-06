@@ -4533,6 +4533,8 @@
     "chatAppsWaitingMessageIn": "Wyślij wiadomość w aplikacji {app}. Ten ekran odświeży się, gdy tylko Omi ją odbierze.",
     "chatAppsCodeExpiredMessageIn": "Pobierz nowy kod i wyślij go z aplikacji {app}.",
     "episodeWritingNotes": "Piszemy notatki…",
+    "homeStepTranscribing": "Transkrybujemy…",
+    "homeRecordingsCount": "{count, plural, one{{count} nagranie} few{{count} nagrania} many{{count} nagrań} other{{count} nagrania}}",
     "episodeWritingNotesDetail": "Najpierw kończymy transkrypcję. Możesz opuścić tę stronę.",
     "episodeCoversUpTo": "Obejmuje do {time} · pełne notatki na końcu",
     "liveTranscribedUpTo": "Transkrypcja do {time}",
@@ -4667,5 +4669,13 @@
     "referralRewardFirstDetail": "Gdy 2 znajomych kupi Omi",
     "referralRewardSecondTitle": "Kolejne 3 miesiące",
     "referralRewardSecondDetail": "Gdy kupi 3 kolejnych znajomych",
-    "referralClaimShort": "Odbierz"
+    "referralClaimShort": "Odbierz",
+    "paymentDeclinedTitle": "Twoja karta została odrzucona",
+    "paymentDeclinedMessage": "Zaktualizuj kartę, aby odzyskać {plan}",
+    "hasLinkedTasksLabel": "Zawiera powiązane zadania",
+    "hasTasksFilter": "Z zadaniami",
+    "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
+    "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
+    "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
 }

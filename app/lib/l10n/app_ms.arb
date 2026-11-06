@@ -4498,6 +4498,8 @@
     "chatAppsWaitingMessageIn": "Hantar mesej dalam {app}. Skrin ini dikemas kini sebaik sahaja Omi menerimanya.",
     "chatAppsCodeExpiredMessageIn": "Dapatkan kod baharu dan hantar daripada {app}.",
     "episodeWritingNotes": "Menulis nota…",
+    "homeStepTranscribing": "Sedang mentranskrip…",
+    "homeRecordingsCount": "{count, plural, other{{count} rakaman}}",
     "episodeWritingNotesDetail": "Menyiapkan transkrip dahulu. Anda boleh meninggalkan halaman ini.",
     "episodeCoversUpTo": "Meliputi sehingga {time} · nota penuh apabila selesai",
     "liveTranscribedUpTo": "Ditranskripsi sehingga {time}",
@@ -4632,5 +4634,13 @@
     "referralRewardFirstDetail": "Apabila 2 rakan membeli Omi",
     "referralRewardSecondTitle": "3 bulan lagi",
     "referralRewardSecondDetail": "Apabila 3 lagi rakan membeli",
-    "referralClaimShort": "Tuntut"
+    "referralClaimShort": "Tuntut",
+    "paymentDeclinedTitle": "Kad anda ditolak",
+    "paymentDeclinedMessage": "Kemas kini kad untuk mendapatkan semula {plan}",
+    "hasLinkedTasksLabel": "Mempunyai tugas dipautkan",
+    "hasTasksFilter": "Dengan tugas",
+    "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
+    "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
+    "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
 }

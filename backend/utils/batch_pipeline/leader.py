@@ -32,7 +32,8 @@ TABLE = 'leases'
 # separate: each already ran its own recovery before replicas existed.
 PUMP_RECOVERY = 'pump_recovery'
 SERVING_MAINTENANCE = 'serving_maintenance'
-ROLES = frozenset({PUMP_RECOVERY, SERVING_MAINTENANCE})
+QUEUE_METRICS = 'queue_metrics'
+ROLES = frozenset({PUMP_RECOVERY, SERVING_MAINTENANCE, QUEUE_METRICS})
 
 
 class LeaderLease:

@@ -137,6 +137,10 @@ def test_chart_pins_identity_resources_and_dedicated_entrypoint():
     assert container['command'] == ['python', '-m', 'utils.sync.worker_runtime']
     assert container['image'].endswith('@sha256:' + 'a' * 64)
     assert container['envFrom'] == [{'secretRef': {'name': 'synthetic-runtime'}}]
+    assert next(e for e in container['env'] if e['name'] == 'BATCH_FINAL_PASS_ENABLED') == {
+        'name': 'BATCH_FINAL_PASS_ENABLED',
+        'valueFrom': {'configMapKeyRef': {'name': 'prod-omi-backend-config', 'key': 'BATCH_FINAL_PASS_ENABLED'}},
+    }
     assert set(docs) == {'ServiceAccount', 'Deployment', 'PodMonitoring'}
     monitoring = docs['PodMonitoring']['spec']
     assert monitoring['selector']['matchLabels'] == deployment['template']['metadata']['labels']

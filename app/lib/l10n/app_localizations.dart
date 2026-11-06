@@ -26175,6 +26175,18 @@ abstract class AppLocalizations {
   /// **'Writing notes…'**
   String get episodeWritingNotes;
 
+  /// Home processing row subtitle while a recording is being transcribed.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcribing…'**
+  String get homeStepTranscribing;
+
+  /// Home processing row subtitle giving how many recordings one row stands for.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 recording} other{{count} recordings}}'**
+  String homeRecordingsCount(int count);
+
   /// Under Writing notes on the processing page.
   ///
   /// In en, this message translates to:
@@ -26984,6 +26996,54 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Claim'**
   String get referralClaimShort;
+
+  /// Home row title when the renewal charge for the user's plan failed
+  ///
+  /// In en, this message translates to:
+  /// **'Your card was declined'**
+  String get paymentDeclinedTitle;
+
+  /// Home row line under 'Your card was declined'. it = the card; plan = a product name such as Omi Pro
+  ///
+  /// In en, this message translates to:
+  /// **'Update it to get {plan} back'**
+  String paymentDeclinedMessage(Object plan);
+
+  /// Accessible conversation-row badge: at least one current canonical task is linked
+  ///
+  /// In en, this message translates to:
+  /// **'Has linked tasks'**
+  String get hasLinkedTasksLabel;
+
+  /// Conversation search and browse filter: only conversations with current linked tasks
+  ///
+  /// In en, this message translates to:
+  /// **'Has tasks'**
+  String get hasTasksFilter;
+
+  /// No description provided for @firmwareUpdateNotInstalledMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'The update didn\'t install. Your pendant is still on {version}. Please try again.'**
+  String firmwareUpdateNotInstalledMessage(String version);
+
+  /// No description provided for @firmwareUpdateUnconfirmedMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.'**
+  String get firmwareUpdateUnconfirmedMessage;
+
+  /// No description provided for @firmwareUpdateUnconfirmedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Update Not Confirmed'**
+  String get firmwareUpdateUnconfirmedTitle;
+
+  /// No description provided for @firmwareVerifyingInstallation.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirming installation… This may take up to 3 minutes.'**
+  String get firmwareVerifyingInstallation;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

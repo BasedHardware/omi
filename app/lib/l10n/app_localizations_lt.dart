@@ -14843,6 +14843,22 @@ class AppLocalizationsLt extends AppLocalizations {
   String get episodeWritingNotes => 'Rašomos pastabos…';
 
   @override
+  String get homeStepTranscribing => 'Transkribuojama…';
+
+  @override
+  String homeRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count įrašų',
+      many: '$count įrašo',
+      few: '$count įrašai',
+      one: '$count įrašas',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get episodeWritingNotesDetail => 'Pirmiausia baigiame transkripciją. Galite palikti šį puslapį.';
 
   @override
@@ -15379,4 +15395,33 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get referralClaimShort => 'Atsiimti';
+
+  @override
+  String get paymentDeclinedTitle => 'Jūsų kortelė atmesta';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return 'Atnaujinkite kortelę, kad vėl naudotumėte $plan';
+  }
+
+  @override
+  String get hasLinkedTasksLabel => 'Yra susietų užduočių';
+
+  @override
+  String get hasTasksFilter => 'Su užduotimis';
+
+  @override
+  String firmwareUpdateNotInstalledMessage(String version) {
+    return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
+  }
+
+  @override
+  String get firmwareUpdateUnconfirmedMessage =>
+      'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
+
+  @override
+  String get firmwareUpdateUnconfirmedTitle => 'Update Not Confirmed';
+
+  @override
+  String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
 }

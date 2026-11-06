@@ -4498,6 +4498,8 @@
     "chatAppsWaitingMessageIn": "Pošlite správu v aplikácii {app}. Táto obrazovka sa aktualizuje hneď, ako ju Omi dostane.",
     "chatAppsCodeExpiredMessageIn": "Získajte nový kód a pošlite ho z aplikácie {app}.",
     "episodeWritingNotes": "Píšeme poznámky…",
+    "homeStepTranscribing": "Prepisujeme…",
+    "homeRecordingsCount": "{count, plural, one{{count} nahrávka} few{{count} nahrávky} many{{count} nahrávok} other{{count} nahrávky}}",
     "episodeWritingNotesDetail": "Najprv dokončujeme prepis. Túto stránku môžete opustiť.",
     "episodeCoversUpTo": "Pokrýva do {time} · úplné poznámky po dokončení",
     "liveTranscribedUpTo": "Prepísané do {time}",
@@ -4632,5 +4634,13 @@
     "referralRewardFirstDetail": "Keď si 2 priatelia kúpia Omi",
     "referralRewardSecondTitle": "Ďalšie 3 mesiace",
     "referralRewardSecondDetail": "Keď si kúpia ďalší 3 priatelia",
-    "referralClaimShort": "Získať"
+    "referralClaimShort": "Získať",
+    "paymentDeclinedTitle": "Vaša karta bola zamietnutá",
+    "paymentDeclinedMessage": "Aktualizujte kartu a obnovte {plan}",
+    "hasLinkedTasksLabel": "Má prepojené úlohy",
+    "hasTasksFilter": "S úlohami",
+    "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
+    "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
+    "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
 }

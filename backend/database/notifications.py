@@ -108,6 +108,23 @@ def get_user_time_zone(uid: str) -> Optional[str]:
     return None
 
 
+def get_cached_user_time_zone(uid: str) -> Optional[str]:
+    """The stored IANA zone for read-time labels, reused for 10 minutes per process.
+
+    Projected field read only. A missing zone is cached as absent too, so Home
+    rows without one never re-read per row. Callers treat ``None`` as UTC.
+    """
+
+    def fetch() -> str:
+        doc = db.collection('users').document(uid).get(field_paths=['time_zone'])
+        if getattr(doc, "exists", False):
+            tz = _typed_doc(doc).get('time_zone')
+            return str(tz) if tz else ''
+        return ''
+
+    return get_memory_cache().get_or_fetch(f"home_time_zone:{uid}", fetch, ttl=600) or None
+
+
 def set_user_time_zone(uid: str, time_zone: str, *, firestore_client: Any = None) -> None:
     """Persist the client timezone and atomically fill absent schedule fields.
 

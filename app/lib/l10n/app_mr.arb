@@ -11921,6 +11921,8 @@
     "chatAppsWaitingMessageIn": "{app} अॅपमध्ये मेसेज पाठवा. Omi ला तो मिळताच ही स्क्रीन अपडेट होईल.",
     "chatAppsCodeExpiredMessageIn": "नवीन कोड मिळवा आणि तो {app} अॅपमधून पाठवा.",
     "episodeWritingNotes": "नोट्स लिहीत आहे…",
+    "homeStepTranscribing": "ट्रान्सक्राइब होत आहे…",
+    "homeRecordingsCount": "{count, plural, one{1 रेकॉर्डिंग} other{{count} रेकॉर्डिंग}}",
     "episodeWritingNotesDetail": "आधी ट्रान्सक्रिप्ट पूर्ण करत आहोत. तुम्ही हे पेज सोडू शकता.",
     "episodeCoversUpTo": "{time} पर्यंत · संपल्यावर पूर्ण नोट्स",
     "liveTranscribedUpTo": "{time} पर्यंत ट्रान्सक्राइब झाले",
@@ -12189,5 +12191,13 @@
     "referralRewardFirstDetail": "2 मित्रांनी Omi घेतल्यावर",
     "referralRewardSecondTitle": "आणखी 3 महिने",
     "referralRewardSecondDetail": "आणखी 3 मित्रांनी घेतल्यावर",
-    "referralClaimShort": "मिळवा"
+    "referralClaimShort": "मिळवा",
+    "paymentDeclinedTitle": "तुमचे कार्ड नाकारले गेले",
+    "paymentDeclinedMessage": "{plan} परत मिळवण्यासाठी कार्ड अपडेट करा",
+    "hasLinkedTasksLabel": "जोडलेली कार्ये आहेत",
+    "hasTasksFilter": "कार्ये असलेले",
+    "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
+    "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
+    "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
 }

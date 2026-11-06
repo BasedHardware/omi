@@ -76,7 +76,13 @@ With several serving instances, the periodic ticks (the supervisor and metrics
 scrapes) run maintenance (staging reap, artifact cleanup, enrichment sweep,
 quarantine discovery, lease recovery and the result-ready drain) on one instance
 per 60-second Firestore lease in `{namespace}_leases`. Projection sweeps and
-gauge refreshes stay per instance. Explicit `POST /reconcile` and the
+local samplers stay per instance. Fleet queue gauges use an independent
+20-second `queue_metrics` lease in the same store (default sample cadence 40s,
+60s export freshness bound). GPU queue queries use the 60s per-pod fallback
+because autoscaling also consumes per-pod freshness. Set
+`FIRESTORE_READ_LEVERS` entry `batch_metrics_oldest_leader` to 0 to restore
+per-instance sampling; see [queue sample ownership](runbooks/batch-queue-safety.md#fleet-queue-sample-ownership).
+Explicit `POST /reconcile` and the
 post-recovery drain always run. Every guarded step is already idempotent and
 transaction-fenced, so the lease saves reads and enqueues only. A lease-store
 error fails open to every instance running, and
@@ -1258,6 +1264,47 @@ below have their own switches; all three off is the pre-drain behaviour):
 - Log lines: `event=batch_projection action=owner_drain outcome=turn steps=
   advanced= more= elapsed_ms=` per turn, and `action=owner_chain
   outcome=claim_busy`.
+
+### Follow-up desync (2026-11-05)
+
+Every serving process runs its own async follow-up discovery over the same
+`(projection_state, committed_at, __name__)` page. After a roll, all processes
+started at the head together and walked it in lockstep. Each retried the same
+unchanged blocked receipts and skipped rows that a peer had just claimed. On
+2026-11-05 the persisted/ready backlog grew past 45k over SLA while CPU stayed
+near 45 % (`data/run-2026-11-04-gpueff/projection-backlog-2026-11-05.md` in
+the workspace).
+
+`BATCH_PIPELINE_PROJECTION_FOLLOWUP_BACKOFF_SECONDS` (default `900`; `0` is
+the kill switch; negative, NaN or above 3600 keeps 900):
+- **Invariant.** Every row committed at or before a pass's mark is offered
+  within that pass, ties at the mark included. A pass begins at the head, at
+  the seed, or with no mark, and its mark is the projector clock at that moment
+  (wall clock if the projector clock fails). It ends at the page's own wrap or
+  once the cursor is strictly past the mark. Desync requires keyset pagination:
+  with `BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED=false` every page is the
+  head, so offset, backoff and pass bounds stay off.
+- **Offset.** A process's first discovery page starts at a hashed point between
+  the oldest persisted/ready commit and now. The hash covers host, pid and
+  start time, and the seed costs one 1-row read. The page still
+  wraps to the head at its end, and every pass also wraps as soon as its cursor
+  reaches rows committed after that pass began (a high-water mark, re-armed
+  on each wrap). Arrivals that keep every page full can therefore neither
+  starve rows older than the seed nor strand a row skipped in backoff. A
+  failed seed read falls back to head-first.
+- **Backoff.** A row this process saw `blocked`, `retry`, `timeout`,
+  `incomplete` (content not finishable yet) or `claim_busy` is skipped in this
+  process's discovery. The skip is 60 s, doubling per repeat up to the ceiling.
+  `claim_busy` never escalates, and any other outcome clears the entry. The skip
+  lives in process memory only (at most 20,000 rows; dropping an entry only
+  retries sooner). Targeted and owed wakes bypass it, and other processes do
+  not see it. The durable row and its fences are unchanged.
+- **Counter.** `omi_batch_pipeline_projection_followup_outcomes_total{outcome}`
+  counts `completed`, `incomplete`, `blocked`, `retry`, `timeout`,
+  `claim_busy`, `coalesced`, `sync_owned`, `backoff_skipped` and `seeded`.
+
+`BATCH_PIPELINE_PROJECTION_FOLLOWUP_SLOTS` (default `4`, range 1–16; unset or
+out-of-range keeps 4) sets the concurrent follow-ups per process.
 
 `BATCH_PIPELINE_PROJECTION_PREFETCH` (default `4`; `0` is the kill switch;
 malformed or above 8 keeps 4). A budgeted walk reads the next N rows ahead on

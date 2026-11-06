@@ -11921,6 +11921,8 @@
     "chatAppsWaitingMessageIn": "{app} ನಲ್ಲಿ ಸಂದೇಶ ಕಳುಹಿಸಿ. Omi ಗೆ ಅದು ಸಿಕ್ಕ ತಕ್ಷಣ ಈ ಪರದೆ ನವೀಕರಣಗೊಳ್ಳುತ್ತದೆ.",
     "chatAppsCodeExpiredMessageIn": "ಹೊಸ ಕೋಡ್ ಪಡೆದು {app} ನಿಂದ ಕಳುಹಿಸಿ.",
     "episodeWritingNotes": "ಟಿಪ್ಪಣಿಗಳನ್ನು ಬರೆಯಲಾಗುತ್ತಿದೆ…",
+    "homeStepTranscribing": "ಪ್ರತಿಲೇಖನ ಮಾಡಲಾಗುತ್ತಿದೆ…",
+    "homeRecordingsCount": "{count, plural, one{1 ರೆಕಾರ್ಡಿಂಗ್} other{{count} ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು}}",
     "episodeWritingNotesDetail": "ಮೊದಲು ಪ್ರತಿಲೇಖನ ಮುಗಿಸಲಾಗುತ್ತಿದೆ. ನೀವು ಈ ಪುಟದಿಂದ ಹೊರಡಬಹುದು.",
     "episodeCoversUpTo": "{time} ವರೆಗೆ · ಮುಗಿದಾಗ ಪೂರ್ಣ ಟಿಪ್ಪಣಿಗಳು",
     "liveTranscribedUpTo": "{time} ವರೆಗೆ ಪ್ರತಿಲೇಖನವಾಗಿದೆ",
@@ -12189,5 +12191,13 @@
     "referralRewardFirstDetail": "2 ಸ್ನೇಹಿತರು Omi ಖರೀದಿಸಿದಾಗ",
     "referralRewardSecondTitle": "ಇನ್ನೂ 3 ತಿಂಗಳು",
     "referralRewardSecondDetail": "ಇನ್ನೂ 3 ಸ್ನೇಹಿತರು ಖರೀದಿಸಿದಾಗ",
-    "referralClaimShort": "ಪಡೆಯಿರಿ"
+    "referralClaimShort": "ಪಡೆಯಿರಿ",
+    "paymentDeclinedTitle": "ನಿಮ್ಮ ಕಾರ್ಡ್ ನಿರಾಕರಿಸಲಾಗಿದೆ",
+    "paymentDeclinedMessage": "{plan} ಮರಳಿ ಪಡೆಯಲು ಕಾರ್ಡ್ ನವೀಕರಿಸಿ",
+    "hasLinkedTasksLabel": "ಲಿಂಕ್ ಮಾಡಿದ ಕಾರ್ಯಗಳಿವೆ",
+    "hasTasksFilter": "ಕಾರ್ಯಗಳಿವೆ",
+    "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
+    "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
+    "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
 }

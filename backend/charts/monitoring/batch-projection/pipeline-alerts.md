@@ -1,0 +1,99 @@
+# Pipeline drain warning policies
+
+Owner: omi-pipeline. Evidence: wave 4 `WAVE4-1715Z.md` (Now 1, Overnight guards),
+`out-t8.md`, `out-t5.md` in the workspace run
+`data/run-2026-11-05-omi-pipeline/swarm-oversla-1105/`; held-age request: coordinator 8b38e3.
+Evidence cutoff: 2026-11-05T17:15Z. **review_by: 2026-11-07** (coordinator reviews thresholds after the drain).
+
+These are alert-only warnings. No scheduler, ramp, rollback, release gate or autoscaling decision reads them.
+The Telegram receiver matches batch-timeliness. Warning timing follows the existing notification contract
+(5m group wait, 1h group interval, 24h repeat), as on the batch-timeliness warning diagnostics; these are human
+warnings without the agent mute. Grafana resolves on a healthy evaluation (`keep_firing_for=0s`); log queries zero-fill absent series, so these
+recover through the false threshold. Unfilled vanished held-leg series resolve after two evaluations
+(`missingSeriesEvalsToResolve=2`). No Cloud Monitoring native policy is added.
+
+| UID | Signal | Strict threshold | Pending |
+| --- | --- | --- | --- |
+| `omi-pipeline-upload-503-storm` | backend-sync POST `/v2/sync-local-files`, status 503, responseSize 266 | >100 entries in each trailing minute | 10m |
+| `omi-pipeline-firestore-contention` | `FirestoreContentionExhausted` log entries, fleet sum | >20 entries in each trailing minute | 10m |
+| `omi-pipeline-projection-drain-stall` | completed owner_drain turns: claim_busy turns / all turns OR advanced rows / wall second, trailing 5m | >50% OR <10/s, while fresh pending projection debt exists | 15m |
+| `omi-pipeline-held-row-age` | oldest all-epoch held row, independently by leg | >21600 seconds (6h) | 10m |
+
+## Sources and verification
+
+`log-metrics.json` declares project-level Cloud Logging API metric bodies, following the existing
+`backend/deploy/record-seal-sweeper/log-metrics.json` pattern. They contain no IDs or free-text labels.
+An operator must provision them separately before importing rules. This PR neither provisions nor verifies them.
+
+The upload filter uses platform request logs, the upload route (with optional query string/trailing slash),
+method POST, status 503 and exactly 266 response bytes. The size is a custody-wait **proxy**, not captured response
+body proof; 259-byte `sync_batch_unavailable` responses and polling requests are excluded. `out-t8.md` gives the
+size-class attribution but does not contain a literal full filter or an explicit contention service list. We
+scope contention and owner-drain metrics to the batch Cloud Run services: backend-sync, backend-sync-backfill,
+backend-integration. Contention matches textPayload or jsonPayload.message. Verify counts with the exact
+committed filter in one-minute buckets; counts are log entries, not unique failed transactions.
+
+Main exposes no owner-drain GMP counters. The authoritative existing line is:
+
+```text
+event=batch_projection action=owner_drain outcome=turn steps=%d advanced=%d more=%s stop=%s elapsed_ms=%d
+```
+
+Use a distribution extracting `advanced` including zero. Its `_sum` yields advanced rows; `_count` yields turns.
+A second counter matches `stop=claim_busy` on that same turn line. This avoids treating rows as turns, averaging
+per-revision ratios, or adding runtime instrumentation to the drain. The producer currently preserves
+textPayload; a future JSON migration must migrate these metric filters and extractor together. No raw log
+scan runs during rule evaluation.
+
+Queries use the existing `gmp-cloud-run` Prometheus datasource and its project-scoped frontend, including
+`monitored_resource="cloud_run_revision"`. Cloud Monitoring exposes log-based metrics through that API;
+[its documented mapping](https://docs.cloud.google.com/monitoring/promql) replaces the first slash with a colon
+and the remaining punctuation with underscores, and supports distribution `_sum`/`_count` suffixes.
+This avoids the legacy Cloud Monitoring datasource PromQL evaluator failure documented by daily-recap alerts.
+All log queries use `offset 10m`: their 1m count or 5m rate window ends ten minutes before evaluation.
+[Cloud Logging documents up to ten minutes of metric-update delay](https://docs.cloud.google.com/logging/docs/logs-based-metrics/troubleshooting).
+This preserves the requested per-minute thresholds and pending windows while allowing on-time metrics to settle:
+expect roughly 20m before storm/contention firing and at least 25m for drain stalls (plus rate-window and
+notification grouping delays). This is a deliberate latency tradeoff, not a live delay measurement. Late-arriving
+logs beyond that allowance and rare metric gaps can still affect detection. No backfill is available before
+metric creation. Operators must verify source completeness and compare the same delayed window before admission.
+Declared metric names are scoped to GMP in the inventory; they are **not** added to observed metric evidence.
+Verify `_sum` and `_count` exist, advance, and agree with a bounded turn-log census before notification admission.
+Missing busy counts mean zero busy; missing turn logs mean zero throughput. The rate denominator is wall time,
+not logged elapsed_ms. A fresh positive all-epoch runnable projection age enables the drain warning; idle/empty queues
+remain quiet. Existing timeliness sample stale alerts own unavailable debt measurements. A roll has the full
+15-minute pending period to recover; this adds no post-train gate.
+
+Held stock uses `omi_batch_held_oldest_age_seconds{leg}` from three indexed oldest-first `limit(1)` queries:
+
+- quarantine_held: result projection_state, clocked from committed_at;
+- assignment_held: committed job with recovery_state held, clocked from enqueued_at;
+- record_pending: job state, clocked from enqueued_at.
+
+There is no epoch or rolling 24h predicate. Even a stock larger than a scan page yields its exact oldest row;
+empty stocks reset to zero. This adds at most four document reads per existing timeliness sample, using
+existing query/index shapes. Sample errors preserve the last values and freshness. Freshness is checked on the
+same producer series before max-by-leg aggregation; missing/stale samples are owned by the existing
+`omi-batch-timeliness-sample-stale` warning. The 24h-capped `omi_batch_record_pending_new_oldest_age_seconds` is
+not a source. Existing new-cohort 2h delivery semantics remain unchanged. The fourth indexed oldest-row read exports
+`omi_batch_projection_drain_oldest_age_seconds` for pending/persisted/ready only, so held-only stock never
+enables the stalled-drain warning. It shares timeliness sample freshness (900 seconds).
+
+## Offline checks and operator admission
+
+```bash
+python backend/scripts/provision_monitoring_alerts.py --regenerate
+python backend/scripts/provision_monitoring_alerts.py --lint
+python backend/scripts/alert_backtest.py --lint
+```
+
+Split rules are maintained in `alerts/pipeline-drain.json`; the offline regeneration mode preserves existing
+combined-rule order, then appends new UIDs. Run backend unit tests for the monitoring contracts, backtest,
+provisioner and timeliness sampler. Synthetic evaluation covers both branches, strict boundaries, missing
+frames, recovery and the pending windows. It does not establish live ingestion or delivery.
+
+Before manual import, the coordinator must verify metric provisioning, nonempty fresh series on each named
+datasource, live filter counts and receiver delivery. These warnings are intentionally outside the release
+`live-alert-gate.json` allowlist. No workflow change is needed for the existing standalone alert provisioner.
+Rollback: pause the four UIDs or revert their split definitions and regenerate the combined export; no drain,
+scheduler, capacity or custody state is changed. The read-only held gauge may remain deployed.

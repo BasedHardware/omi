@@ -28,6 +28,7 @@ with metrics.mode_scope('shadow'):
 metrics.compare('batch', 'allow', 'allow')
 metrics.compare('batch', 'account_deleted', 'allow')
 metrics.memo_result('batch', 'hit')
+metrics.negative_lookup('conversations', 'shadow', 'mismatch')
 Counter('unrelated_total', 'Not privacy').inc()
 print('ready', flush=True)
 sys.stdin.read()
@@ -86,7 +87,17 @@ async def test_child_counters_survive_reaping_without_double_count_or_file_growt
                 'privacy_decision_mismatch_total',
                 'privacy_shadow_checks_total',
                 'privacy_memo_requests_total',
+                'privacy_negative_lookup_total',
             }
+            assert (
+                before[
+                    (
+                        'privacy_negative_lookup_total',
+                        (('collection', 'conversations'), ('mode', 'shadow'), ('result', 'mismatch')),
+                    )
+                ]
+                == attempt
+            )
             if killed:
                 os.killpg(process.pid, signal.SIGKILL)
             else:
@@ -146,3 +157,10 @@ async def test_supervisor_wires_child_counters_to_metrics_endpoint(monkeypatch):
     assert b'privacy_decision_mismatch_total{family="batch",reason="stale_allow"} 1.0' in responses[1].content
     assert runtime.privacy_metrics._directory is None
     assert client.call.call_args.args[0] == 'complete'
+
+
+def test_memo_ineligible_counter_survives_isolated_job_exits():
+    """Luna r1 P2 on #24666: the parent only folds counters named in COUNTERS."""
+    from utils.sync.worker_privacy_metrics import COUNTERS
+
+    assert 'privacy_memo_ineligible' in COUNTERS
