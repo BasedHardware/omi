@@ -205,6 +205,25 @@ void main() {
     expect(provider.conversations, isEmpty);
   });
 
+  test('confirmed deletes stay removed when an empty refresh restores cached rows', () async {
+    final a = _conversation('a');
+    final b = _conversation('b');
+    final keep = _conversation('keep');
+    await SharedPreferencesUtil().cacheConversations([a, b, keep]);
+    final provider = makeProvider([a, b, keep]);
+
+    await provider.deleteConversationLocally(a);
+    await provider.deleteConversationLocally(b);
+    provider.commitPendingDelete(a.id);
+    provider.commitPendingDelete(b.id);
+    await Future<void>.delayed(Duration.zero);
+
+    final reopened = makeProvider([]);
+    await reopened.fetchConversations();
+
+    expect(reopened.conversations.map((row) => row.id), ['keep']);
+  });
+
   test('a regroup during the window does not bring the row back', () {
     final a = _conversation('a');
     final provider = makeProvider([a]);

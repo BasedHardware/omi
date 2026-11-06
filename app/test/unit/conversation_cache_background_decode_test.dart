@@ -130,6 +130,25 @@ void main() {
     expect(offUiIsolateFallbacks, 0);
   });
 
+  test('eviction removes the selected row from both cache formats off the UI isolate', () async {
+    final removed = jsonEncode(_conversation('deleted', segments: 60).toJson());
+    final kept = jsonEncode(_conversation('keep').toJson());
+    final prefs = await _prefs({
+      'migratedMemories': true,
+      'cachedMemories': [removed, kept],
+      'cachedConversations': [kept, removed],
+    });
+    final completedBefore = offUiIsolateWorkerCompletions;
+
+    await prefs.evictCachedConversation('deleted');
+
+    expect(prefs.getStringList('cachedConversations'), [kept]);
+    expect(prefs.getStringList('cachedMemories'), [kept]);
+    expect((await prefs.loadCachedConversations()).map((row) => row.id), ['keep']);
+    expect(offUiIsolateWorkerCompletions, greaterThan(completedBefore));
+    expect(offUiIsolateFallbacks, 0);
+  });
+
   test('an old legacy read cannot migrate over a newer cache writer', () async {
     final prefs = await _prefs({
       'migratedMemories': true,

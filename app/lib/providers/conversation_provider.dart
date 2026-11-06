@@ -1585,7 +1585,7 @@ class ConversationProvider extends ChangeNotifier {
   /// [pendingDeleteWindow] so Undo can restore them, then kept as tombstones through the in-flight
   /// request so a concurrent refresh cannot reinsert them.
   Map<String, ServerConversation> memoriesToDelete = {};
-  final Map<String, Timer> _pendingDeleteTimers = {};
+  final Map<String, ({Timer timer, VoidCallback? onFailure})> _pendingDeletes = {};
 
   Future<void> _restoreSiriAfterOptimisticDelete(ServerConversation conversation) async {
     final generation = _sessionGeneration;
@@ -1612,11 +1612,14 @@ class ConversationProvider extends ChangeNotifier {
 
   /// Hides [conversation] now and deletes it on the server after [pendingDeleteWindow], unless
   /// [undoDeletedConversation] restores it first. The one delete path for list, bulk and detail.
-  Future<void> deleteConversationLocally(ServerConversation conversation, [DateTime? date]) async {
+  Future<void> deleteConversationLocally(ServerConversation conversation, {VoidCallback? onFailure}) async {
     memoriesToDelete[conversation.id] = conversation;
     SiriIntegration.current.queueDelete('conversation', conversation.id);
-    _pendingDeleteTimers.remove(conversation.id)?.cancel();
-    _pendingDeleteTimers[conversation.id] = Timer(pendingDeleteWindow, () => commitPendingDelete(conversation.id));
+    _pendingDeletes.remove(conversation.id)?.timer.cancel();
+    _pendingDeletes[conversation.id] = (
+      timer: Timer(pendingDeleteWindow, () => commitPendingDelete(conversation.id)),
+      onFailure: onFailure,
+    );
     conversations.removeWhere((element) => element.id == conversation.id);
     for (final group in groupedConversations.values) {
       group.removeWhere((e) => e.id == conversation.id);
@@ -1626,77 +1629,80 @@ class ConversationProvider extends ChangeNotifier {
   }
 
   /// Whether [conversationId] was deleted in the UI and can still be restored.
-  bool isDeletePending(String conversationId) => _pendingDeleteTimers.containsKey(conversationId);
+  bool isDeletePending(String conversationId) => _pendingDeletes.containsKey(conversationId);
 
   /// Sends a pending delete now (its Undo toast closed without Undo). No-op once sent or restored.
   void commitPendingDelete(String conversationId) {
     if (!isDeletePending(conversationId)) return;
-    deleteConversationOnServer(conversationId);
+    unawaited(deleteConversationOnServer(conversationId));
   }
 
   void _cancelPendingDeleteTimers() {
-    for (final timer in _pendingDeleteTimers.values) {
-      timer.cancel();
+    for (final pending in _pendingDeletes.values) {
+      pending.timer.cancel();
     }
-    _pendingDeleteTimers.clear();
+    _pendingDeletes.clear();
   }
 
-  void deleteConversationOnServer(String conversationId) {
-    _pendingDeleteTimers.remove(conversationId)?.cancel();
+  Future<void> deleteConversationOnServer(String conversationId) async {
+    final pending = _pendingDeletes.remove(conversationId);
+    pending?.timer.cancel();
     final generation = _sessionGeneration;
+    final prefs = SharedPreferencesUtil();
+    final owner = prefs.uid;
+    bool current() => generation == _sessionGeneration && _isSignedIn() && prefs.uid == owner;
+
     final wasLoadedFromServer = _conversationServerLoadedIds.contains(conversationId);
-    final deleteFuture = conversationId.startsWith('ondevice-')
-        ? (OnDeviceTranscriptionController.instance.deleteLocalConversation?.call(conversationId) ??
-            Future.value(false))
-        : conversationDeleteFetcherOverride?.call(conversationId) ?? deleteConversationServer(conversationId);
-    unawaited(
-      deleteFuture.then(
-        (succeeded) async {
-          // A DELETE can outlive sign-out/account switching. Its result belongs
-          // to the session that started it; never let an old account mutate the
-          // new provider's tombstones, cursor, revision, or loading state.
-          if (generation != _sessionGeneration) return;
-          // Only rebase the server cursor after the backend confirms deletion. A
-          // failed DELETE leaves the row in the server sequence and must not make
-          // the next page skip an item.
-          if (succeeded && wasLoadedFromServer && _conversationServerLoadedIds.remove(conversationId)) {
-            if (_conversationServerOffset > 0) _conversationServerOffset--;
-          }
-          if (succeeded) {
-            final invalidatedRevision = _conversationFetchRevision;
-            _conversationFetchRevision++;
-            if (_conversationLoadingRevision == invalidatedRevision) {
-              setLoadingConversations(false);
-            }
-          }
-          // Keep the tombstone in place until the request settles so a concurrent
-          // refresh cannot reinsert the server row before DELETE completes.
-          if (succeeded) {
-            _phoneOnlyConversations.remove(conversationId);
-            conversations.removeWhere((conversation) => conversation.id == conversationId);
-            searchedConversations.removeWhere((conversation) => conversation.id == conversationId);
-            for (final group in groupedConversations.values) {
-              group.removeWhere((conversation) => conversation.id == conversationId);
-            }
-            groupedConversations.removeWhere((_, group) => group.isEmpty);
-          } else {
-            final deleted = memoriesToDelete[conversationId];
-            if (deleted != null) await _restoreDeletedConversation(deleted);
-          }
-          _clearDeleteTombstone(conversationId);
-          notifyListeners();
-        },
-        onError: (Object _, StackTrace __) async {
-          // Same as a refused DELETE: the conversation still exists, so put its
-          // row back, but do not rebase the server cursor.
-          if (generation != _sessionGeneration) return;
-          final deleted = memoriesToDelete[conversationId];
-          if (deleted != null) await _restoreDeletedConversation(deleted);
-          _clearDeleteTombstone(conversationId);
-          notifyListeners();
-        },
-      ),
-    );
+    bool succeeded;
+    try {
+      succeeded = await (conversationId.startsWith('ondevice-')
+          ? (OnDeviceTranscriptionController.instance.deleteLocalConversation?.call(conversationId) ??
+              Future.value(false))
+          : conversationDeleteFetcherOverride?.call(conversationId) ?? deleteConversationServer(conversationId));
+    } catch (_) {
+      succeeded = false;
+    }
+    // A delete can outlive sign-out or an account switch.
+    if (!current()) return;
+
+    if (!succeeded) {
+      final deleted = memoriesToDelete[conversationId];
+      if (deleted != null) await _restoreDeletedConversation(deleted);
+      if (!current()) return;
+      _clearDeleteTombstone(conversationId);
+      notifyListeners();
+      pending?.onFailure?.call();
+      return;
+    }
+
+    // Only a confirmed deletion changes the server cursor.
+    if (wasLoadedFromServer && _conversationServerLoadedIds.remove(conversationId)) {
+      if (_conversationServerOffset > 0) _conversationServerOffset--;
+    }
+    final invalidatedRevision = _conversationFetchRevision++;
+    if (_conversationLoadingRevision == invalidatedRevision) {
+      setLoadingConversations(false);
+    }
+    _phoneOnlyConversations.remove(conversationId);
+    conversations.removeWhere((conversation) => conversation.id == conversationId);
+    searchedConversations.removeWhere((conversation) => conversation.id == conversationId);
+    for (final group in groupedConversations.values) {
+      group.removeWhere((conversation) => conversation.id == conversationId);
+    }
+    groupedConversations.removeWhere((_, group) => group.isEmpty);
+
+    try {
+      // Keep the row hidden through the cache write. The shared queue prevents
+      // concurrent deletes, list writes and merge completion from losing each other's edits.
+      await _queueConversationPersistence(() async {
+        if (current()) await prefs.evictCachedConversation(conversationId);
+      });
+    } catch (error) {
+      Logger.debug('ConversationProvider: deleted row cache eviction failed: ${error.runtimeType}');
+    }
+    if (!current()) return;
+    _clearDeleteTombstone(conversationId);
+    notifyListeners();
   }
 
   void _clearDeleteTombstone(String conversationId) => memoriesToDelete.remove(conversationId);
@@ -1715,9 +1721,9 @@ class ConversationProvider extends ChangeNotifier {
 
   /// Restores a conversation whose delete is still pending. Does nothing once the DELETE was sent.
   Future<void> undoDeletedConversation(ServerConversation conversation) async {
-    final timer = _pendingDeleteTimers.remove(conversation.id);
-    if (timer == null) return;
-    timer.cancel();
+    final pending = _pendingDeletes.remove(conversation.id);
+    if (pending == null) return;
+    pending.timer.cancel();
     await _restoreDeletedConversation(conversation);
   }
 

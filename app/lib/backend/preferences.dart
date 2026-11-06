@@ -1271,6 +1271,36 @@ class SharedPreferencesUtil {
     await saveStringList('cachedConversations', encoded);
   }
 
+  /// Removes a confirmed deletion from both the current cache and any legacy
+  /// conversation snapshot that could seed it again on reopen.
+  Future<void> evictCachedConversation(String id) async {
+    final session = _conversationCacheReadSession;
+    final ownerUid = uid;
+    for (var attempt = 0; attempt < 2; attempt++) {
+      final generation = ++_cachedConversationsGeneration;
+      final snapshots = {
+        'cachedConversations': getStringList('cachedConversations'),
+        if (getBool('migratedMemories')) 'cachedMemories': getStringList('cachedMemories'),
+      };
+      final size = snapshots.values.expand((rows) => rows).fold<int>(0, (total, row) => total + row.length);
+      final retained = await offUiIsolate(
+        () => {
+          for (final entry in snapshots.entries) entry.key: entry.value.where((row) => !_hasId(row, id)).toList(),
+        },
+        size: size,
+        threshold: cachedConversationsBackgroundDecodeThreshold,
+        debugName: 'conversation_cache_evict',
+      );
+      if (session != _conversationCacheReadSession || uid != ownerUid) return;
+      if (generation != _cachedConversationsGeneration) continue;
+      await Future.wait([
+        for (final entry in retained.entries)
+          if (entry.value.length != snapshots[entry.key]!.length) saveStringList(entry.key, entry.value),
+      ]);
+      return;
+    }
+  }
+
   List<ServerMessage> get cachedMessages {
     // Older caches discarded journal provenance, so automatic cards cannot be
     // distinguished from rich replies. Rehydrate those from canonical history.
@@ -1339,7 +1369,7 @@ class SharedPreferencesUtil {
     saveStringList(key, getStringList(key).where((encoded) => !_hasId(encoded, memoryId)).toList());
   }
 
-  bool _hasId(String encoded, String id) {
+  static bool _hasId(String encoded, String id) {
     try {
       final decoded = jsonDecode(encoded);
       return decoded is Map<String, dynamic> && decoded['id'] == id;
