@@ -187,6 +187,7 @@ ALLOWED_STT_FAILURE_SUBTYPES = frozenset(
 
 ALLOWED_COMPONENTS = frozenset(
     {
+        'episode_f_join',
         'screen_task_gate',
         'sync_dispatch',
         'pusher',
