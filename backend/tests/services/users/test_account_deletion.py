@@ -96,6 +96,8 @@ def _default_to_no_legal_hold(monkeypatch):
     monkeypatch.setattr(account_deletion, 'assert_account_deletion_permitted', MagicMock())
     # Existing cases below exercise the immediate kill-switch path. Grace
     # behavior is covered separately with the flag explicitly enabled.
+    monkeypatch.setenv('DIRECTORY_ROUTING_MODE', 'off')
+    monkeypatch.setattr(account_deletion, 'purge_owner_planes', lambda uid: {'status': 'noop'})
     monkeypatch.setenv('ACCOUNT_DELETION_GRACE_ENABLED', 'false')
     monkeypatch.setattr(account_deletion.deletion_grace_db, 'promote_grace_to_immediate', lambda _uid: None)
     monkeypatch.setattr(account_deletion, 'acquire_destructive_operation', MagicMock())
@@ -1507,8 +1509,11 @@ def test_account_deletion_status_reports_pre_delete_policy(monkeypatch, enabled,
     assert result['grace_period_days'] == expected_days
 
 
-def test_background_wipe_user_data_preserves_order(monkeypatch):
+@pytest.mark.parametrize('routing_on', [False, True])
+def test_background_wipe_user_data_preserves_order(monkeypatch, routing_on):
     calls = []
+    if routing_on:
+        monkeypatch.setattr(account_deletion, 'purge_owner_planes', lambda uid: calls.append(('cell', uid)))
     monkeypatch.setattr(
         account_deletion.users_db, 'mark_user_deletion_wipe_running', lambda uid: calls.append(('running', uid))
     )
@@ -1552,6 +1557,7 @@ def test_background_wipe_user_data_preserves_order(monkeypatch):
         ('auth', 'uid1'),
         ('twilio', 'uid1'),
         ('purge', 'uid1'),
+        *([('cell', 'uid1')] if routing_on else []),
         ('firestore', 'uid1'),
         ('typesense', 'uid1'),
         ('memory_registry', 'uid1'),
@@ -2566,3 +2572,15 @@ def test_account_wipe_requires_all_retained_vector_copies_to_be_removed(monkeypa
     purge.assert_called_once_with('uid1')
     assert any(failure['operation'] == 'all_vector_copies' for failure in result['required_failures'])
     assert result['best_effort_failures'] == []
+
+
+def test_required_cell_purge_failure_retries_before_firestore(monkeypatch):
+    _stub_wipe_steps_after_billing(monkeypatch)
+    monkeypatch.setattr(account_deletion, 'purge_owner_planes', MagicMock(side_effect=RuntimeError('directory down')))
+    monkeypatch.setattr(account_deletion.users_db, 'delete_user_data', MagicMock())
+    monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_failed', MagicMock())
+    monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_completed', MagicMock())
+    assert account_deletion.background_wipe_user_data('uid1') is False
+    account_deletion.users_db.mark_user_deletion_wipe_failed.assert_called_once_with('uid1')
+    account_deletion.users_db.delete_user_data.assert_not_called()
+    account_deletion.users_db.mark_user_deletion_wipe_completed.assert_not_called()

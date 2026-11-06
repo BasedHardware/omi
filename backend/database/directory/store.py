@@ -28,6 +28,8 @@ class Space:
     signup_platform_at: float | None
     created_at: float
     updated_at: float
+    ramp_bucket: float | None = None
+    ramp_revision: int | None = None
 
 
 @dataclass(frozen=True)
@@ -75,15 +77,19 @@ class DirectoryStore:
         uid: str,
         *,
         now: float,
+        cell: str = 'cell1',
+        ramp_bucket: float | None = None,
+        ramp_revision: int | None = None,
         signup_platform: str | None = None,
         signup_os: str | None = None,
         signup_platform_at: float | None = None,
     ) -> Space:
         def body(conn: Any) -> Space:
             conn.execute(
-                'INSERT INTO spaces (space_id, signup_platform, signup_os, signup_platform_at, created_at, updated_at) '
-                'VALUES (%s,%s,%s,%s,%s,%s) ON CONFLICT (space_id) DO NOTHING',
-                (uid, signup_platform, signup_os, signup_platform_at, now, now),
+                'INSERT INTO spaces (space_id, cell, ramp_bucket, ramp_revision, signup_platform, signup_os, '
+                'signup_platform_at, created_at, updated_at) '
+                'VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (space_id) DO NOTHING',
+                (uid, cell, ramp_bucket, ramp_revision, signup_platform, signup_os, signup_platform_at, now, now),
             )
             conn.execute(
                 "INSERT INTO memberships (space_id, uid, role, created_at) VALUES (%s,%s,'owner',%s) "

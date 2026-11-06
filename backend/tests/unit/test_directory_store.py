@@ -196,5 +196,5 @@ def test_migrations_are_separate_and_idempotent(harness):
         path = Path(directory_module.__file__).parent / 'migrations'
         assert migrate(conn, directory=path) == []
         assert migrate(conn, directory=path) == []
-        assert current_version(conn) == 1
+        assert current_version(conn) == 2
         assert conn.execute("SELECT to_regclass('cell_docs')").fetchone()[0] is None

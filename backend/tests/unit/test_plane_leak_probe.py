@@ -197,3 +197,19 @@ def test_telemetry_fault_does_not_break_access(monkeypatch):
     monkeypatch.setattr(probe, 'PLANE_LEAK', SimpleNamespace(labels=fail))
     reads._record(('users', CELL_UID, 'memories', 'm'), True)
     writes._record([{'delete': f'projects/p/databases/(default)/documents/users/{CELL_UID}/memories/m'}], 'test')
+
+
+def test_directory_cache_supplies_plane_without_request_context(monkeypatch):
+    monkeypatch.setenv('DIRECTORY_ROUTING_MODE', 'new_owners')
+    monkeypatch.setattr(routing, '_TEST_CELL_UIDS', frozenset())
+    monkeypatch.setattr(routing.router, '_cache', {})
+    routing.router._remember(CELL_UID, 'cell')
+    assert routing.plane_for(CELL_UID) == 'cell'
+    before = count('read', 'memories')
+    reads._record(('users', CELL_UID, 'memories', 'm'), True)
+    assert count('read', 'memories') == before + 1
+    with routing.plane_context(CELL_UID, 'firestore'):
+        assert routing.plane_for(CELL_UID) == 'firestore'
+    monkeypatch.setenv('DIRECTORY_ROUTING_MODE', 'off')
+    assert routing.plane_for(CELL_UID) == 'firestore'
+    assert not routing.has_cell_plane()
