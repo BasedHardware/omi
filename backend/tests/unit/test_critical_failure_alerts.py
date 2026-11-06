@@ -46,7 +46,7 @@ def test_real_grafana_nodes_page_on_incident_and_resolve_on_control(uid, bad, go
     pending = int(BACKTEST['seconds'](rule['for']))
 
     # Run the real reduce/threshold graph through a full pending window. The
-    # exact PromQL is separately replayed on retained aggregate query results.
+    # query inputs are separately replayed on retained aggregate results.
     def frame(value):
         return evaluate(rule, {'A': {(): [float(value)]}})
 
@@ -54,6 +54,61 @@ def test_real_grafana_nodes_page_on_incident_and_resolve_on_control(uid, bad, go
     assert result['episodes'] == 1
     result = episodes(rule, [(t, frame(good)) for t in range(0, pending + 61, 60)], 0, pending + 60, 60)
     assert result['episodes'] == 0
+
+
+@pytest.mark.parametrize(
+    'uid,metric,resource,lookback,aligner,reducer,temporal,threshold,bad,good',
+    [
+        (
+            'omi-enrichment-queue-depth-page',
+            'cloudtasks.googleapis.com/queue/depth',
+            'cloud_tasks_queue',
+            300,
+            'ALIGN_MAX',
+            'REDUCE_MAX',
+            'max',
+            6000,
+            [7001, 100],
+            [5000, 100],
+        ),
+        (
+            'omi-incluster-guard-unsafe-page',
+            'logging.googleapis.com/user/omi_incluster_guard_unsafe',
+            'k8s_container',
+            900,
+            'ALIGN_DELTA',
+            'REDUCE_SUM',
+            'sum',
+            0,
+            [1, 0, 0],
+            [0, 0, 0],
+        ),
+    ],
+)
+def test_native_cloud_alerts_use_supported_queries_and_preserve_window_reduction(
+    uid, metric, resource, lookback, aligner, reducer, temporal, threshold, bad, good
+):
+    rule = RULES[uid]
+    nodes = {node['refId']: node for node in rule['data']}
+    query = nodes['A']
+    assert query['queryType'] == query['model']['queryType'] == 'timeSeriesList'
+    assert 'promQLQuery' not in query['model']
+    assert query['model']['datasource']['type'] == 'stackdriver'
+    assert query['relativeTimeRange'] == {'from': lookback, 'to': 0}
+    series = query['model']['timeSeriesList']
+    expected = ['metric.type', '=', metric, 'AND', 'resource.type', '=', resource]
+    if resource == 'cloud_tasks_queue':
+        expected += ['AND', 'resource.label.queue_id', '=', 'enrichment']
+    assert series['filters'] == expected
+    assert series['projectName'] == 'based-hardware' and series['groupBys'] == []
+    assert series['alignmentPeriod'] == '+60s'
+    assert series['perSeriesAligner'] == aligner and series['crossSeriesReducer'] == reducer
+    assert nodes['B']['model']['reducer'] == temporal
+    assert nodes['C']['model']['conditions'][0]['evaluator'] == {'params': [threshold], 'type': 'gt'}
+    # A last-point reduction would lose both a recent depth spike and a single
+    # unsafe verdict followed by quiet minutes. Exercise the real Grafana graph.
+    assert BACKTEST['evaluate'](rule, {'A': {(): bad}})[()] == 1
+    assert BACKTEST['evaluate'](rule, {'A': {(): good}})[()] == 0
 
 
 def test_batch_alarm_requires_freshness_and_keeps_the_two_hour_contract():
