@@ -20,6 +20,7 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from google.api_core.exceptions import NotFound, PreconditionFailed
 
 from config import object_lake as config
+from database.account_deletion_policy import account_deletion_marker_blocks_access
 from utils.other import space_keys
 from utils.other.local_storage import create_storage_client
 
@@ -39,6 +40,10 @@ class ObjectLakeError(Exception):
 
 class ObjectLakeNotConfigured(ObjectLakeError):
     """No bucket configured or write admission is closed."""
+
+
+class LakeWriteFenced(ObjectLakeError):
+    """Durable owner deletion forbids a new lake write."""
 
 
 class LakeObjectAbsent(ObjectLakeError):
@@ -129,6 +134,7 @@ def _parse_ref(ref: LakeObjectRef) -> tuple[str, str, str, str, str]:
             or ref.data_class != data_class
             or type(ref.bytes) is not int
             or ref.bytes < _HEADER.size + 16
+            or ref.bytes > MAX_PLAINTEXT_BYTES[data_class] + 65536
             or type(ref.dek_version) is not int
             or not 1 <= ref.dek_version <= 0xFFFFFFFF
             or not ref.bucket
@@ -176,10 +182,10 @@ def put_space_object(
     key = (
         f'{_segment(config.release())}/spaces/{_segment(space_id)}/{_class(data_class)}/{_segment(entity_id)}/{digest}'
     )
-    keys = space_keys.get_or_create_space_key(space_id)
+    _assert_owner_write_allowed(space_id)
+    keys, dek = space_keys.active_space_dek(space_id)
     # Two authority reads per put: get/create before encryption and a fresh
     # post-upload check. Share the first snapshot with unwrap, never cache authority.
-    dek = space_keys._unwrap_keys(space_keys._client(None), keys, keys.active_version)
     nonce = os.urandom(12)
     try:
         payload = _HEADER.pack(b'OLK1', 1, keys.active_version, nonce) + AESGCM(dek).encrypt(
@@ -230,11 +236,26 @@ def put_space_object(
     return LakeObjectRef(config.bucket(), key, digest, len(payload), data_class, keys.active_version)
 
 
+def _assert_owner_write_allowed(space_id):
+    try:
+        # Same customer plane as the key authority, never a cached negative.
+        marker = space_keys.space_key_firestore_client().collection('account_deletions').document(space_id).get()
+        if account_deletion_marker_blocks_access(
+            marker_exists=marker.exists, raw_status=(marker.to_dict() or {}).get('wipe_status')
+        ):
+            raise LakeWriteFenced('Owner deletion fences lake writes')
+    except LakeWriteFenced:
+        raise
+    except Exception:
+        raise LakeFetchError('Lake owner write authority unavailable') from None
+
+
 def _check_put_authority(space_id, blob):
     try:
+        _assert_owner_write_allowed(space_id)
         if space_keys.get_space_keys(space_id) is None:
             raise space_keys.SpaceKeyDestroyed('Space key disappeared during upload')
-    except space_keys.SpaceKeyDestroyed:
+    except (space_keys.SpaceKeyDestroyed, LakeWriteFenced):
         # An in-flight upload must not outlive a durable destroy fence.
         try:
             blob.delete()

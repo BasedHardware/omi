@@ -1,10 +1,11 @@
+from contextlib import contextmanager
 from contextvars import ContextVar
 import logging
 import random
 import re
 import time
 from threading import Lock
-from typing import Any, Callable
+from typing import Any, Callable, Iterator
 
 import os
 from google.api_core.exceptions import Aborted, DeadlineExceeded, InvalidArgument, ResourceExhausted, ServiceUnavailable
@@ -531,6 +532,15 @@ def in_transaction_body() -> bool:
     return _IN_TXN_BODY.get()
 
 
+@contextmanager
+def transaction_body() -> Iterator[None]:
+    token = _IN_TXN_BODY.set(True)
+    try:
+        yield
+    finally:
+        _IN_TXN_BODY.reset(token)
+
+
 def run_transactional(
     client: Any,
     transactional_callable: Any,
@@ -576,11 +586,8 @@ def run_transactional(
             transaction = (
                 initial_transaction if attempt == 1 and initial_transaction is not None else client.transaction()
             )
-            token = _IN_TXN_BODY.set(True)
-            try:
+            with transaction_body():
                 result = transactional_callable(transaction, *args, **kwargs)
-            finally:
-                _IN_TXN_BODY.reset(token)
             if outcome is not None and attempt > 1:
                 outcome['status'] = 'retried_ok'
             return result

@@ -101,12 +101,12 @@ def _kms():
         return _kms_client
 
 
-def _client(firestore_client):
+def space_key_firestore_client(firestore_client=None):
     if firestore_client is not None:
         return firestore_client
-    from database._client import get_firestore_client
+    from database._client import get_data_plane_firestore_client
 
-    return get_firestore_client()
+    return get_data_plane_firestore_client()
 
 
 def _space_id(space_id: str) -> str:
@@ -143,9 +143,11 @@ def _decode(data: dict, space_id: str) -> SpaceKey:
         or len({v.version for v in versions}) != len(versions)
         or any(
             type(v.version) is not int
-            or v.version < 1
+            or not 1 <= v.version <= 0xFFFFFFFF
             or v.state not in ('active', 'retired')
-            or not isinstance(v.wrapped_b64, str)
+            or type(v.wrapped_at) is not str
+            or not v.wrapped_at
+            or type(v.wrapped_b64) is not str
             or not base64.b64decode(v.wrapped_b64, validate=True)
             for v in versions
         )
@@ -158,7 +160,7 @@ def _decode(data: dict, space_id: str) -> SpaceKey:
 def get_space_keys(space_id: str, *, firestore_client=None) -> SpaceKey | None:
     _space_id(space_id)
     with _key_errors():
-        snapshot = _client(firestore_client).collection('space_keys').document(space_id).get()
+        snapshot = space_key_firestore_client(firestore_client).collection('space_keys').document(space_id).get()
         return _decode(snapshot.to_dict(), space_id) if snapshot.exists else None
 
 
@@ -179,7 +181,7 @@ def _wrapped_version(version: int) -> dict:
 def get_or_create_space_key(space_id: str, *, firestore_client=None) -> SpaceKey:
     _space_id(space_id)
     with _key_errors():
-        client = _client(firestore_client)
+        client = space_key_firestore_client(firestore_client)
         existing = get_space_keys(space_id, firestore_client=client)
         if existing is not None:
             return existing
@@ -209,7 +211,7 @@ def rotate_space_key(space_id: str, *, firestore_client=None) -> SpaceKey:
     with _key_errors():
         from google.cloud.firestore_v1 import transactional
 
-        client = _client(firestore_client)
+        client = space_key_firestore_client(firestore_client)
         ref = client.collection('space_keys').document(space_id)
         # KMS is outside the transaction (including retries).
         candidate = _wrapped_version(1)
@@ -247,7 +249,7 @@ def _key_cache() -> TTLCache:
 def unwrap_space_dek(space_id: str, version: int, *, firestore_client=None) -> bytes:
     _space_id(space_id)
     with _key_errors():
-        client = _client(firestore_client)
+        client = space_key_firestore_client(firestore_client)
         # Cache only KMS work, never the authority that the document still exists.
         keys = get_space_keys(space_id, firestore_client=client)
         if keys is None:
@@ -279,6 +281,13 @@ def _unwrap_keys(client, keys: SpaceKey, version: int) -> bytes:
         return raw
 
 
+def active_space_dek(space_id: str) -> tuple[SpaceKey, bytes]:
+    """One fresh key authority read for a put; the caller rechecks after upload."""
+    client = space_key_firestore_client()
+    keys = get_or_create_space_key(space_id, firestore_client=client)
+    return keys, _unwrap_keys(client, keys, keys.active_version)
+
+
 def _evict_space(space_id: str) -> None:
     with _cache_lock:
         if _cache is not None:
@@ -293,7 +302,7 @@ def destroy_space_keys(space_id: str, *, firestore_client=None) -> int:
         with _key_errors():
             from google.cloud.firestore_v1 import transactional
 
-            client = _client(firestore_client)
+            client = space_key_firestore_client(firestore_client)
             ref = client.collection('space_keys').document(space_id)
 
             @transactional

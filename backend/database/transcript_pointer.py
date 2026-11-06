@@ -137,7 +137,7 @@ def resolve_pointer(uid: str, pointer: Mapping) -> list:
 
 
 def _consent_stamp(uid) -> object_lake.ConsentStamp:
-    data = _client.get_firestore_client().collection('users').document(uid).get().to_dict() or {}
+    data = _client.get_data_plane_firestore_client().collection('users').document(uid).get().to_dict() or {}
     opt_in = data.get('training_data_opt_in')
     return object_lake.ConsentStamp(
         'opt_in' if opt_in is True else 'opt_out' if opt_in is False else 'unknown',
@@ -171,25 +171,24 @@ def offload_or_inline(uid, conversation_id, segments: list, protect: Callable) -
 
 def run_preloaded_operation(operation, *args, swap_client=None, **kwargs):
     """Also supports transaction owners (e.g. ledger) with their own runner."""
+    if _client.in_transaction_body():
+        # The outer owner must abort before any preload or deferred drain.
+        return operation(*args, **kwargs)
     memo = _memo()
-    outer = _client.in_transaction_body()
+    result: Any = None
     try:
         for attempt in range(3):
             # Only the successful attempt may schedule a post-commit swap.
             memo.deferred.clear()
-            token = _client._IN_TXN_BODY.set(True)
             try:
-                result = operation(*args, **kwargs)
+                with _client.transaction_body():
+                    result = operation(*args, **kwargs)
             except TranscriptPointerUnloaded as error:
                 unloaded = error
-                if _client.in_transaction_body() and token.old_value is True:
-                    raise
                 if attempt == 2:
                     raise TranscriptPointerFetchError('Transcript changed during bounded preload retries') from None
             else:
                 break
-            finally:
-                _client._IN_TXN_BODY.reset(token)
             preload_pointer(unloaded.uid, unloaded.pointer)
         notes = list(memo.deferred.items())
         memo.deferred.clear()
@@ -201,8 +200,7 @@ def run_preloaded_operation(operation, *args, swap_client=None, **kwargs):
         return result
     finally:
         # A worker thread must not retain plaintext for the next request.
-        if not outer:
-            clear_memo()
+        clear_memo()
 
 
 def run_preloaded_transactional(client, fn, *args, **kwargs):

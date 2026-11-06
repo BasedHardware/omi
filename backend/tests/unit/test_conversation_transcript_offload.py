@@ -377,3 +377,125 @@ def test_export_skips_absent_pointer(lake_world, monkeypatch):
     monkeypatch.setattr(db, 'db', _ReadSurface(lake_world))
     monkeypatch.setattr(lake, 'get_space_object', Mock(side_effect=lake.LakeObjectAbsent('synthetic')))
     assert list(db.iter_all_conversations(UID)) == []
+
+
+@pytest.mark.parametrize('status', ['pending_deletion', 'pending', 'wiping', 'completed', 'unknown', None])
+def test_durable_account_deletion_marker_fences_put_before_key_creation(lake_world, status):
+    lake_world.store.rows[('account_deletions', UID)] = {'wipe_status': status}
+    with pytest.raises(lake.LakeWriteFenced):
+        encode()
+    assert ('space_keys', UID) not in lake_world.store.rows
+    assert lake_world.calls['put'] == 0
+
+
+@pytest.mark.parametrize('status', ['cancelled', 'billing_failed'])
+def test_explicitly_restored_account_can_put(lake_world, status):
+    lake_world.store.rows[('account_deletions', UID)] = {'wipe_status': status}
+    assert isinstance(encode()['transcript_segments'], dict)
+
+
+def test_owner_deletion_during_upload_cleans_object(lake_world, monkeypatch):
+    original = LocalBlob.upload_from_string
+
+    def upload(blob, *args, **kwargs):
+        lake_world.store.rows[('account_deletions', UID)] = {'wipe_status': 'wiping'}
+        return original(blob, *args, **kwargs)
+
+    monkeypatch.setattr(LocalBlob, 'upload_from_string', upload)
+    with pytest.raises(lake.LakeWriteFenced):
+        encode()
+    assert list(lake_world.bucket.list_blobs(prefix=f'v1/spaces/{UID}/')) == []
+
+
+def test_unavailable_owner_authority_fails_closed(lake_world, monkeypatch):
+    original = StrictFirestoreDocument.get
+
+    def get(ref, *args, **kwargs):
+        if ref.path[0] == 'account_deletions':
+            raise TimeoutError('synthetic')
+        return original(ref, *args, **kwargs)
+
+    monkeypatch.setattr(StrictFirestoreDocument, 'get', get)
+    with pytest.raises(lake.LakeFetchError, match='authority'):
+        encode()
+    assert lake_world.calls['put'] == 0
+
+
+def test_review_overlay_apply_and_undo_preload_cold_pointers(lake_world, monkeypatch):
+    from database import review_transcript_changes, memory_ledger
+    from models.review import ReviewChange, ChangeRef
+
+    doc = pointer_doc(lake_world)
+    monkeypatch.setattr(review_store, 'get_firestore_client', lambda: lake_world.store)
+    monkeypatch.setattr(review_transcript_changes, 'sync_conversations', lambda *args, **kwargs: None)
+    monkeypatch.setattr(review_transcript_changes, 'sync_transcript_chunks', lambda *args, **kwargs: None)
+    change = ReviewChange(
+        change_id='synthetic-change',
+        kind='other',
+        title='Synthetic spelling',
+        created_at=NOW,
+        refs=[ChangeRef(type='conversation', id=CID, label='Synthetic')],
+    )
+    correction = dict(
+        segment_id='segment-1',
+        conversation_id=CID,
+        segment_index=0,
+        start=0.0,
+        before=speech()[0]['text'],
+        after='synthetic',
+        kind='transcript',
+        source='user',
+        change_id=change.change_id,
+        created_at=NOW,
+        undone=False,
+    )
+    review_transcript_changes.record_change(
+        UID,
+        change,
+        {},
+        [correction],
+        edit_key='synthetic-edit',
+        expected_records={},
+        expected_document=doc,
+        authority='user',
+        firestore_client=lake_world.store,
+    )
+    assert lake_world.calls['get'] == 1
+    pointer.clear_memo()
+    review_transcript_changes.set_undone(UID, change.change_id, True)
+    assert lake_world.calls['get'] == 2
+
+
+@pytest.mark.parametrize('site', ['legacy_learning', 'ensure_learning'])
+@pytest.mark.parametrize('state', ['present', 'absent', 'shredded', 'outage'])
+def test_learning_ledger_transactions_preload(lake_world, monkeypatch, site, state):
+    from database import speaker_learning_jobs
+
+    doc = pointer_doc(lake_world)
+    doc['manual_speaker_assignments'] = {
+        'generation': 1,
+        'speakers': {'0': {'person_id': 'p', 'generation': 1, 'is_user': False}},
+    }
+    lake_world.store.rows[PATH] = doc
+    lake_world.store.rows[('users', UID)] = {'save_other_voice_profiles': True}
+    lake_world.store.rows[('users', UID, 'people', 'p')] = {'id': 'p', 'name': 'Synthetic'}
+    if state != 'present':
+        failure = {
+            'absent': lake.LakeObjectAbsent,
+            'shredded': space_keys.SpaceKeyDestroyed,
+            'outage': lake.LakeFetchError,
+        }[state]
+        monkeypatch.setattr(lake, 'get_space_object', Mock(side_effect=failure('synthetic')))
+    if site == 'legacy_learning':
+        operation = lambda: speaker_learning_jobs.claim_next_job(UID, CID, now=NOW, firestore_client=lake_world.store)
+    else:
+        operation = lambda: speaker_learning_jobs.ensure_job(
+            UID, CID, person_id='p', segment_ids=['segment-1'], now=NOW, firestore_client=lake_world.store
+        )
+    if state == 'outage':
+        with pytest.raises(pointer.TranscriptPointerFetchError):
+            operation()
+    else:
+        operation()
+    if state == 'present':
+        assert lake_world.calls['get'] == 1

@@ -4,7 +4,7 @@ from database import transcript_pointer
 
 from google.cloud import firestore
 
-from database import _client, recurring_voices, transcript_pointer
+from database import recurring_voices, transcript_pointer
 from database.legal_holds import external_write_fence
 from utils.observability.fallback import record_fallback
 
