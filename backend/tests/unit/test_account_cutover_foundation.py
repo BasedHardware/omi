@@ -872,3 +872,29 @@ def test_new_upgrade_floor_overrides_old_idle_bit(monkeypatch, fake_db, idle_cac
             firestore_client=fake_db,
         )
     assert error.value.code == 'force_upgrade_required'
+
+
+def test_persisted_cell_kind_wins_over_a_later_legacy_request():
+    record = AccountCutoverRecord(uid='cell-owner', data_plane='cell')
+    migrating = apply_cutover_transition(
+        record,
+        AccountCutoverTransitionRequest(
+            data_plane='legacy',
+            target_state=AccountCutoverState.migrating,
+            expected_account_generation=0,
+            reason='persisted-cell-kind',
+        ),
+    )
+    assert migrating.data_plane == 'cell'
+    assert migrating.account_generation == 0
+    refreshed = apply_cutover_transition(
+        migrating,
+        AccountCutoverTransitionRequest(
+            data_plane='legacy',
+            target_state=AccountCutoverState.migrating,
+            expected_account_generation=0,
+            reason='refresh-cell-kind',
+        ),
+    )
+    assert refreshed.data_plane == 'cell'
+    assert refreshed.account_generation == 0
