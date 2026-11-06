@@ -69,6 +69,7 @@ async def conversations_with_tasks(
                 end_date=data.end_date.isoformat() if data.end_date else None,
             ),
             uid=uid,
+            budget=budget,
         )
 
     async def presence(ids):

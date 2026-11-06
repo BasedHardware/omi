@@ -23,6 +23,12 @@ from utils.conversations.task_filter import task_conversation_page
 from utils.other.list_budget import ListReadBudget
 
 
+@pytest.fixture(scope='session', autouse=True)
+def initialize_firebase():
+    """The loopback fixture uses anonymous Firestore and synthetic route auth."""
+    yield
+
+
 @pytest.fixture
 def store(monkeypatch):
     host = os.getenv('FIRESTORE_EMULATOR_HOST', '')
@@ -141,7 +147,13 @@ async def test_production_http_routes_validate_scope_and_redact_task_contents(st
     from routers.conversation_tasks import router
 
     client, uid = store
-    seed(client, uid)
+    user = seed(client, uid)
+    user.collection('conversations').document('c055').update(
+        {
+            'folder_user_set': True,
+            'relevance_decision': {'decided_by': 'rule', 'verdict': 'discard', 'reason': 'empty_transcript'},
+        }
+    )
     app = FastAPI()
     app.include_router(router)
     # Only authentication is replaced, with this fixture's synthetic namespace.
@@ -167,6 +179,9 @@ async def test_production_http_routes_validate_scope_and_redact_task_contents(st
         assert changed.status_code == 400
         invalid = await http.post('/v1/conversations/task-presence', json={'conversation_ids': ['../other']})
         assert invalid.status_code == 422
+        curated = await http.post('/v1/conversations/with-tasks/page', json={'folder_id': 'personal'})
+        assert curated.status_code == 200, curated.text
+        assert [row['id'] for row in curated.json()['items']] == ['c055']
 
 
 @pytest.mark.asyncio
@@ -246,3 +261,10 @@ async def test_task_page_unlocks_only_selected_linked_rows(store, monkeypatch, q
         assert [row['id'] for row in response.json()['items']] == ['c055']
         assert records.document('c055').get().to_dict()['is_locked'] is False
         assert records.document('c001').get().to_dict()['is_locked'] is True
+
+        if query:
+            # The first raw page has 49 valid index hits, mostly missing
+            # Firestore parents. Their hydration consumes the same cap.
+            monkeypatch.setenv('OMI_LIST_READ_MAX_DOCUMENTS', '20')
+            limited = await http.post('/v1/conversations/with-tasks/page', json=payload)
+            assert limited.status_code == 503, limited.text

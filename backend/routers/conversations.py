@@ -139,6 +139,7 @@ from utils.product_metrics import extract_app_build, record_product_event
 from utils.product_telemetry import emit_product_event
 from services.conversation_frame_evidence import delete_conversation_and_frame_evidence
 from utils.other.list_budget import (
+    ListReadBudget,
     OMI_LIST_TRUNCATED_HEADER,
     OMI_LIST_TRUNCATED_VALUE,
     finish_list_budget,
@@ -2187,8 +2188,9 @@ async def _search_exact_conversation_reference(
     start_timestamp: Optional[int],
     end_timestamp: Optional[int],
     *,
-    candidates_only: bool = False,
+    read_budget: ListReadBudget | None = None,
 ) -> Dict[str, Any]:
+    read_options = {"read_budget": read_budget} if read_budget is not None else {}
     exact_page, exact_per_page = clamp_conversation_search_pagination(search_request.page, search_request.per_page)
     conversations = await run_blocking(
         db_executor,
@@ -2196,8 +2198,9 @@ async def _search_exact_conversation_reference(
         uid,
         [exact_conversation_id],
         include_discarded=bool(search_request.include_discarded),
+        **read_options,
     )
-    if not candidates_only:
+    if read_budget is None:
         await run_blocking(db_executor, _heal_locked_conversations_if_eligible, uid, conversations)
         conversations = [conversation for conversation in conversations if not conversation.get('is_locked')]
     conversations = [
@@ -2208,7 +2211,7 @@ async def _search_exact_conversation_reference(
     ]
     if exact_page != 1:
         conversations = []
-    if not candidates_only:
+    if read_budget is None:
         conversations = [transcribing_hold.project(row) for row in conversations]
         redact_conversations_for_list(conversations)
     return {
@@ -2275,9 +2278,11 @@ async def search_conversations_endpoint(
     return await _search_conversation_page(search_request, uid, request, response)
 
 
-async def search_task_conversation_candidates(search_request: SearchRequest, uid: str) -> Dict[str, Any]:
+async def search_task_conversation_candidates(
+    search_request: SearchRequest, uid: str, *, budget: ListReadBudget
+) -> Dict[str, Any]:
     """Internal task discovery, with raw pagination and no access writes."""
-    return await _search_conversation_page(search_request, uid, None, None, candidates_only=True)
+    return await _search_conversation_page(search_request, uid, None, None, candidate_budget=budget)
 
 
 async def _search_conversation_page(
@@ -2286,8 +2291,9 @@ async def _search_conversation_page(
     request: Request | None,
     response: Response | None,
     *,
-    candidates_only: bool = False,
+    candidate_budget: ListReadBudget | None = None,
 ) -> Dict[str, Any]:
+    candidates_only = candidate_budget is not None
     if search_request.speaker_id and search_request.speaker_id != 'user':
         person = await run_blocking(db_executor, users_db.get_person, uid, search_request.speaker_id)
         if person is None:
@@ -2306,7 +2312,7 @@ async def _search_conversation_page(
             uid,
             start_timestamp,
             end_timestamp,
-            candidates_only=candidates_only,
+            read_budget=candidate_budget,
         )
 
     if not candidates_only and search_request.speaker_id and not (search_request.query or '').strip():
@@ -2371,10 +2377,11 @@ async def _search_conversation_page(
         page=effective_page,
         per_page=merge_cap,
     )
+    read_options = {"read_budget": candidate_budget} if candidate_budget is not None else {}
     conversations = await run_blocking(
         db_executor,
         lambda: conversations_db.get_conversations_by_id_without_photos(
-            uid, conversation_ids, include_discarded=bool(search_request.include_discarded)
+            uid, conversation_ids, include_discarded=bool(search_request.include_discarded), **read_options
         ),
     )
     # Preserve merge order (transcript-first on page 1); Firestore fetch may reshuffle.

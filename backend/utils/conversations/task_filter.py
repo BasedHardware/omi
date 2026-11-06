@@ -48,7 +48,7 @@ def _eligible_rows(
         for _, row in candidates
         if row
         and row.get('id')
-        and is_visible_conversation(row, include_discarded=filters.include_discarded)
+        and is_visible_conversation(row, include_discarded=filters.include_discarded, presentation=True)
         and row.get('status') in ('processing', 'completed')
         and (not filters.folder_id or row.get('folder_id') == filters.folder_id)
         and (filters.starred is None or bool(row.get('starred')) == filters.starred)
@@ -154,15 +154,17 @@ async def task_conversation_page(
             eligible = await run_blocking(
                 db_executor, _eligible_rows, candidates, filters, can_recover_locked is not None
             )
-            linked = await presence(list(dict.fromkeys(row['id'] for row in eligible))) if eligible else {}
+            async with asyncio.timeout(budget.remaining_seconds):
+                linked = await presence(list(dict.fromkeys(row['id'] for row in eligible))) if eligible else {}
             eligible_ids = {row['id'] for row in eligible}
             for after, row in candidates:
                 budget.check()
                 matched = row and row.get('id') in eligible_ids and linked.get(row['id']) is True
                 if matched and row and row.get('is_locked'):
-                    matched = can_recover_locked is not None and await run_blocking(
-                        db_executor, can_recover_locked, row
-                    )
+                    async with asyncio.timeout(budget.remaining_seconds):
+                        matched = can_recover_locked is not None and await run_blocking(
+                            db_executor, can_recover_locked, row
+                        )
                 next_position = after
                 if matched and row:
                     items.append(row)

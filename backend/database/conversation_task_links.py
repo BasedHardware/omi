@@ -20,6 +20,8 @@ from database.conversations import document_data_with_revision, is_visible_conve
 from models.conversation import Conversation
 from models.conversation_tasks import TaskConversationPageRequest
 from utils.conversation_page_cursor import BookmarkDict, decode_cursor, encode_cursor
+from utils.conversations import transcribing_hold
+from utils.conversations.fragment_visibility import SETTLING_FIELDS
 from utils.other.list_budget import ListReadBudget, budgeted_stream_iter
 
 
@@ -127,6 +129,9 @@ def browse_candidate_page(
             'data_protection_level',
             'user_title',
             'user_corrections_compressed',
+            'folder_user_set',
+            *SETTLING_FIELDS,
+            *transcribing_hold.READ_FIELDS,
             'deleted',
             'dream_duplicate_of',
             'sync_bridge_pending',
@@ -136,9 +141,6 @@ def browse_candidate_page(
             'has_photos',
         }
     )
-    from utils.conversations.fragment_visibility import SETTLING_FIELDS
-
-    fields.update(SETTLING_FIELDS)
     snapshots = list(budgeted_stream_iter(query.select(sorted(fields)).limit(50), budget))
     rows = []
     for snapshot in snapshots:
@@ -149,7 +151,7 @@ def browse_candidate_page(
         raw['id'] = snapshot.id
         position = encode_cursor(raw['created_at'], snapshot.id, scope)
         row = None
-        if is_visible_conversation(raw, include_discarded=filters.include_discarded):
+        if is_visible_conversation(raw, include_discarded=filters.include_discarded, presentation=True):
             row = prepare_conversation_for_read(raw, uid, firestore_client=client, read_budget=budget)
         rows.append((position, row))
     return rows, len(snapshots) == 50

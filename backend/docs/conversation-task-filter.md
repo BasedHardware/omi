@@ -22,12 +22,13 @@ textual discovery reuses the current conversation search owner. Both scans are
 read-only. Access recovery checks eligibility for linked matches and writes only
 the selected response page. Text discovery advances by the raw index page even
 when hydration drops stale or inaccessible hits. Public search continues to
-report pagination from visible results. Filter cursors
+report pagination from visible results. Text hydration, membership and recovery
+eligibility share the request budget. Filter cursors
 are signed, expire after one hour, and bind the owner and all filter inputs.
 Sparse scans may return an empty intermediate page **with continuation**, which
 the UI never labels “No results”. A budget failure without progress is retryable.
 The presence read uses existing task version invalidation and a 15-second cache.
-Its 120/hour limit is exempt from the global rate-limit multiplier.
+Its 120/hour limit is exempt from the global rate-limit multiplier by default.
 No new composite-index deployment is required; runtime query guards verify this.
 
 The mobile presence reader batches mounted row IDs (max 100 retained), invalidates
