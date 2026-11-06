@@ -9,6 +9,8 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 import zlib
 
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 from google.cloud import firestore
 from google.api_core.exceptions import AlreadyExists
 from pydantic import ValidationError
@@ -35,6 +37,7 @@ from models.review import ReviewChange, ChangeRef
 from utils.conversations import transcript_chunks
 from utils.conversations.transcript_hash import transcript_sha256_for_binding
 from models.conversation import Conversation
+from routers import conversations as conversation_router
 from models.transcript_segment import TranscriptSegment
 from tests.support.dream_firestore import DreamFirestore
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestoreDocument, StrictFirestoreCollection
@@ -83,11 +86,17 @@ def test_display_decoder_decrypts_lake_independent_of_level(lake_world, enhanced
 
 
 def test_public_chat_rejects_pointer_and_wire_model_fails_loud(lake_world):
-    doc = pointer_doc(lake_world)
+    segments = [{**speech()[0], 'is_user': False}]
+    doc = pointer_doc(lake_world, segments)
+    doc.update(created_at=NOW, started_at=NOW, finished_at=NOW, structured={'title': 'Synthetic'})
+    # Establish an otherwise valid wire fixture; a missing required field
+    # must not hide an accidental acceptance of the raw pointer dictionary.
+    assert Conversation.model_validate({**doc, 'transcript_segments': segments}).transcript_segments
     with pytest.raises(ValueError):
         db._decode_public_transcript_segments_bounded(UID, doc['transcript_segments'], compressed=True)
-    with pytest.raises(ValidationError):
+    with pytest.raises(ValidationError) as failure:
         Conversation.model_validate(doc)
+    assert any(error['loc'] == ('transcript_segments',) for error in failure.value.errors())
     assert lake_world.calls['get'] == 0
 
 
@@ -1046,3 +1055,36 @@ def test_sync_load_validates_pointer_before_selection(lake_world, monkeypatch, r
             assert lake_world.store.rows[PATH] == doc
     if state == 'present':
         assert lake_world.calls['get'] == 1
+
+
+@pytest.mark.parametrize('state,status', [('present', 200), ('absent', 404), ('shredded', 500), ('outage', 500)])
+def test_http_detail_resolves_pointer_or_fails_closed(lake_world, monkeypatch, state, status):
+    segments = [{**speech()[0], 'is_user': False}]
+    doc = pointer_doc(lake_world, segments)
+    doc.update(
+        created_at=NOW,
+        started_at=NOW,
+        finished_at=NOW + timedelta(seconds=12),
+        source='omi',
+        has_photos=False,
+        discarded=False,
+        structured={'title': 'Synthetic local probe'},
+    )
+    lake_world.store.rows[PATH] = deepcopy(doc)
+    monkeypatch.setattr(db, 'db', _ReadSurface(lake_world))
+    monkeypatch.setattr(conversation_router.paid_lock_recovery, 'heal_conversations', lambda *a, **kw: None)
+    _pointer_failure(monkeypatch, state)
+    app = FastAPI()
+    app.include_router(conversation_router.router)
+    app.dependency_overrides[conversation_router.auth.get_current_user_uid] = lambda: UID
+    with TestClient(app, raise_server_exceptions=state == 'present') as client:
+        response = client.get(f'/v1/conversations/{CID}')
+    assert response.status_code == status, response.text
+    if state == 'present':
+        assert response.json()['transcript_segments'][0]['text'] == segments[0]['text']
+        assert response.json()['transcript_segments'][0]['is_user'] is False
+        assert lake_world.calls['get'] == 1
+    elif state == 'absent':
+        assert response.json()['detail'] == 'Conversation not found'
+    else:
+        assert 'transcript_segments' not in response.text
