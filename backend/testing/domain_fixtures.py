@@ -71,6 +71,18 @@ class DomainHarness:
         else:
             self._client.collection('users').document(space_id).collection(entity).document(entity_id).set(data)
 
+    def read(self, space_id: str, entity: str, entity_id: str) -> dict | None:
+        """Inspect a synthetic cross-domain fixture without exposing adapter internals."""
+        if not space_id.endswith('-' + self.uid_suffix) or entity not in ('folders', 'people', 'conversations'):
+            raise ValueError('read must belong to this harness')
+        self.store(space_id)
+        if self.name == 'sim':
+            row = self._stores[space_id].state[entity].get(entity_id)
+            return dict(row) if row is not None else None
+        return (
+            self._client.collection('users').document(space_id).collection(entity).document(entity_id).get().to_dict()
+        )
+
     def close(self) -> None:
         for step in reversed(self.cleanup_steps):
             step()
