@@ -17,6 +17,8 @@ from database.batch_pipeline_quarantine_recovery import (
     dead_held_candidates,
     held_expired_stock,
 )
+from database.batch_pipeline_projection import ProjectionStore
+from database.batch_pipeline_projection_release import ProjectionReleaseStore, expired_page_ids
 
 PAGE_SIZE = 32
 INTERVAL_SECONDS = 300
@@ -124,9 +126,6 @@ class ProjectionHeldDeadLetter:
         self.store, self.metrics = store, metrics
 
     def tick(self, now):
-        from database.batch_pipeline_projection import ProjectionStore
-        from database.batch_pipeline_projection_release import ProjectionReleaseStore, expired_page_ids
-
         state = self.store.run(lambda tx: tx.get('leases', self.CURSOR))
         if state.get('next_at', 0) > now:
             return 0

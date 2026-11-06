@@ -6,6 +6,7 @@ from unittest.mock import Mock
 import pytest
 
 from config.batch_pipeline import HELD_DEAD_LETTER_SECONDS
+from utils.batch_pipeline import held_dead_letter as held_sweep
 from database.batch_pipeline_projection_release import ProjectionReleaseStore, expired_page_ids
 from tests.unit.test_batch_pipeline_projection_release import rows, store_for, OWNER, TARGET
 
@@ -159,7 +160,7 @@ def test_nightly_cursor_survives_restart_continues_full_pages_and_sleeps(monkeyp
         start = order.index(after) + 1 if after else 0
         return order[start : start + limit]
 
-    monkeypatch.setattr(release_module, 'expired_page_ids', page)
+    monkeypatch.setattr(held_sweep, 'expired_page_ids', page)
 
     def redrive(_self, sid, now, *, dead_before):
         seen.append((sid, dead_before))
@@ -186,7 +187,7 @@ def test_nightly_time_budget_checkpoints_last_examined_row(monkeypatch):
     store = projection.store
     clock = [0.0]
     monkeypatch.setattr(sweep.time, 'monotonic', lambda: clock[0])
-    monkeypatch.setattr(release_module, 'expired_page_ids', lambda *args: ['one', 'two', 'three'])
+    monkeypatch.setattr(held_sweep, 'expired_page_ids', lambda *args: ['one', 'two', 'three'])
 
     def slow_release(*args, **kwargs):
         clock[0] += 3
@@ -228,7 +229,7 @@ def test_unfinished_nightly_pass_keeps_cursor_across_midnight(monkeypatch):
         seen.append(after)
         return [f'blocked-{i}' for i in range(32)] if after is None else ['restored-tail']
 
-    monkeypatch.setattr(release_module, 'expired_page_ids', page)
+    monkeypatch.setattr(held_sweep, 'expired_page_ids', page)
     monkeypatch.setattr(release_module.ProjectionReleaseStore, 'release', lambda *a, **kw: a[1] == 'restored-tail')
     assert ProjectionHeldDeadLetter(projection.store).tick(172790) == 0
     assert ProjectionHeldDeadLetter(projection.store).tick(173090) == 1
