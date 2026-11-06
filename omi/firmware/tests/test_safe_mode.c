@@ -263,7 +263,7 @@ static void test_resolve_retries(void)
 
 static void test_resolve_hangs(void)
 {
-    for (unsigned hang_init = 0; hang_init < 2; ++hang_init) {
+    for (volatile unsigned hang_init = 0; hang_init < 2; ++hang_init) {
         interrupted_dfu();
         init_hang = hang_init;
         load_hang = !hang_init;
