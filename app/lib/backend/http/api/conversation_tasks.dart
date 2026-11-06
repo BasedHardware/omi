@@ -2,9 +2,11 @@
 // typed failures; no task text or speculative empty-success fallback is exposed.
 import 'dart:convert';
 
+import 'package:omi/backend/http/api/conversations.dart' show conversationListBackgroundParseBytes;
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/utils/off_ui_isolate.dart';
 
 class TaskConversationPage {
   const TaskConversationPage({required this.items, this.nextCursor, this.partial = false});
@@ -54,48 +56,69 @@ Future<ApiResult<TaskConversationPage>> getConversationsWithTasks({
   String? cursor,
   ApiSend? send,
   bool Function()? canSend,
-}) =>
-    executeApi(
-      request: ApiRequest(
-        url: '${Env.apiBaseUrl}v1/conversations/with-tasks/page',
-        method: 'POST',
-        body: jsonEncode({
-          'query': query,
-          'include_discarded': includeDiscarded,
-          'folder_id': folderId,
-          'starred': starred,
-          'start_date': startDate?.toUtc().toIso8601String(),
-          'end_date': endDate?.toUtc().toIso8601String(),
-          'cursor': cursor,
-          'limit': 25,
-        }),
-      ),
-      send: send,
-      canSend: canSend,
-      decode: (body) {
-        final json = _object(body);
-        if (json['items'] is! List ||
-            json['partial'] is! bool ||
-            (json['next_cursor'] != null && json['next_cursor'] is! String)) {
-          throw const FormatException('Invalid task conversation page');
-        }
-        final next = json['next_cursor'] as String?;
-        if (next?.isEmpty == true || (json['partial'] == true && next == null)) {
-          throw const FormatException('Incomplete task filter without continuation');
-        }
-        final rows = <ServerConversation>[];
-        try {
-          for (final row in json['items']) {
-            if (row is! Map<String, dynamic>) throw const FormatException('Invalid conversation row');
-            rows.add(ServerConversation.fromJson(row));
-          }
-        } on TypeError {
-          throw const FormatException('Invalid conversation row');
-        }
-        return TaskConversationPage(
-          items: rows,
-          nextCursor: next,
-          partial: json['partial'],
-        );
-      },
+}) async {
+  final sent = await executeApi<String>(
+    request: ApiRequest(
+      url: '${Env.apiBaseUrl}v1/conversations/with-tasks/page',
+      method: 'POST',
+      body: jsonEncode({
+        'query': query,
+        'include_discarded': includeDiscarded,
+        'folder_id': folderId,
+        'starred': starred,
+        'start_date': startDate?.toUtc().toIso8601String(),
+        'end_date': endDate?.toUtc().toIso8601String(),
+        'cursor': cursor,
+        'limit': 25,
+      }),
+    ),
+    send: send,
+    canSend: canSend,
+    decode: (body) => body,
+  );
+  switch (sent) {
+    case ApiFailure(:final problem):
+      return ApiFailure(problem);
+    case ApiSuccess(:final data, :final truncated):
+      try {
+        final page = await _decodeTaskPageOffUi(data);
+        return ApiSuccess(page, truncated: truncated);
+      } on FormatException {
+        return const ApiFailure(ApiProblem(ApiProblemKind.decode));
+      }
+  }
+}
+
+Future<TaskConversationPage> _decodeTaskPageOffUi(String body) => offUiIsolate(
+      () => _decodeTaskPage(body),
+      size: body.length,
+      threshold: conversationListBackgroundParseBytes,
+      debugName: 'task_conversation_parse',
     );
+
+TaskConversationPage _decodeTaskPage(String body) {
+  final json = _object(body);
+  if (json['items'] is! List ||
+      json['partial'] is! bool ||
+      (json['next_cursor'] != null && json['next_cursor'] is! String)) {
+    throw const FormatException('Invalid task conversation page');
+  }
+  final next = json['next_cursor'] as String?;
+  if (next?.isEmpty == true || (json['partial'] == true && next == null)) {
+    throw const FormatException('Invalid task filter continuation');
+  }
+  final rows = <ServerConversation>[];
+  try {
+    for (final row in json['items']) {
+      if (row is! Map<String, dynamic>) throw const FormatException('Invalid conversation row');
+      rows.add(ServerConversation.fromJson(row));
+    }
+  } on TypeError {
+    throw const FormatException('Invalid conversation row');
+  }
+  return TaskConversationPage(
+    items: rows,
+    nextCursor: next,
+    partial: json['partial'],
+  );
+}

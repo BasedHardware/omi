@@ -228,7 +228,7 @@ class _ConversationsWithTasksPageState extends State<ConversationsWithTasksPage>
     final folders = context.watch<FolderProvider?>()?.folders ?? const [];
     return Scaffold(
       key: const ValueKey('conversations_with_tasks_page'),
-      appBar: AppBar(title: Text(l10n.hasTasksFilter), actions: [
+      appBar: AppBar(leading: const OmiBackButton(), title: Text(l10n.hasTasksFilter), actions: [
         IconButton(
             key: const ValueKey('tasks_filter_refresh'),
             tooltip: l10n.refresh,
