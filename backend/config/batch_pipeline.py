@@ -30,6 +30,16 @@ class Priority(IntEnum):
 # David's fresh bar (2026-10-20): capture lag at most 10 min at upload.
 FRESH_CAPTURE_LAG_SECONDS = 600.0
 
+# A full grace window is also given to pre-field rows on first observation.
+HELD_DEAD_LETTER_SECONDS = 7 * 86400
+
+
+def batch_held_dead_letter_enabled() -> bool:
+    """Ship-on held deadlines/expiry; manual requeue remains available when off."""
+    from config.policy.kill_switches import kill_switch
+
+    return kill_switch('BATCH_HELD_DEAD_LETTER_ENABLED')
+
 
 def projection_source_deleted_enabled() -> bool:
     """Ship-on no-text settlement for a deleted source without a tombstone or redirect."""

@@ -16,6 +16,14 @@ from database import record_audio
 from database import conversation_finalization_jobs as finalization_jobs
 from testing.lifecycle_sim.faults import BoundaryFault, InjectedLifecycleFault
 from testing.lifecycle_sim.harness import LifecycleSim
+
+# Shared real-Firestore regressions also run in the hermetic lifecycle harness.
+from tests.integration.test_batch_held_dead_letter_firestore import (
+    lane,  # noqa: F401
+    test_worker_fail_expire_and_nightly_redrive_keep_audio_and_cold_queue_integrity,  # noqa: F401
+    test_two_forced_requeues_append_once_in_real_firestore,  # noqa: F401
+    test_expired_row_survives_rollback_using_only_legacy_dead_redrive,  # noqa: F401
+)
 from tests.support.lifecycle_state_table import durable_titling_rearm
 from testing.listen_pusher_stack.run import Stack, _wait_for_port
 from utils.batch_pipeline import live

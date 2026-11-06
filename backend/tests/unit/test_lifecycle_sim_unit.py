@@ -189,7 +189,14 @@ def test_shell_routes_retained_diagnostics_to_its_own_subdirectory(tmp_path, onl
 
 def test_age_job_preserves_evidence_and_shifts_numeric_and_datetime_deadlines():
     stamp = datetime.fromtimestamp(1000, timezone.utc)
-    row = {'enqueued_at': 1000.0, 'available_at': 1060.0, 'committed_at': stamp, 'state': 'record_pending'}
+    row = {
+        'enqueued_at': 1000.0,
+        'available_at': 1060.0,
+        'committed_at': stamp,
+        'state': 'record_pending',
+        'held_deadline_at': 2000.0,
+        'held_expired_at': 1000.0,
+    }
     ref = Mock()
     ref.get.return_value.to_dict.return_value = row
     updates = age_job_row(ref, 120)
@@ -197,6 +204,8 @@ def test_age_job_preserves_evidence_and_shifts_numeric_and_datetime_deadlines():
         'enqueued_at': 880.0,
         'available_at': 940.0,
         'committed_at': datetime.fromtimestamp(880, timezone.utc),
+        'held_deadline_at': 1880.0,
+        'held_expired_at': 880.0,
     }
     ref.update.assert_called_once_with(updates)
     assert row['enqueued_at'] == 1000.0

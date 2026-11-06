@@ -134,6 +134,11 @@ def entry(module, function, field, state=None, *, inplace=False, patches=(), **b
 
 # Automatic entry paths are distinct from conservative payload builders.
 DEADLINE_ENTRIES = {
+    'batch:quarantined': (
+        entry('utils/batch_pipeline/retry_policy.py', 'quarantine_job', 'state', 'quarantined', inplace=True),
+        entry('utils/batch_pipeline/provider_stt.py', 'ProviderSttStore.settle.commit', 'state', 'quarantined'),
+        entry('utils/batch_pipeline/provider_stt.py', 'ProviderSttStore.terminal.commit', 'state', 'quarantined'),
+    ),
     'finalization:queued': (
         entry(
             FINALIZATION_MODULE,
@@ -559,9 +564,21 @@ STATES = (
             'batch',
             name,
             ('state',),
-            exit=LEASE if name == 'leased' else BATCH,
-            deadline='lease_until' if name == 'leased' else None,
-            stamped=name == 'leased',
+            exit=(
+                LEASE
+                if name == 'leased'
+                else (
+                    Exit(
+                        'sweeper',
+                        'utils/batch_pipeline/held_dead_letter.py:HeldDeadLetter.tick',
+                        (Writer('database/batch_pipeline_quarantine_recovery.py', 'expire_held_in_transaction'),),
+                    )
+                    if name == 'quarantined'
+                    else BATCH
+                )
+            ),
+            deadline='lease_until' if name == 'leased' else 'held_deadline_at' if name == 'quarantined' else None,
+            stamped=name in {'leased', 'quarantined'},
             metric=(
                 'omi_batch_record_pending_new_oldest_age_seconds'
                 if name == 'record_pending'
@@ -591,7 +608,11 @@ STATES = (
                 '#24587 adds a per-attempt admission lease; total pending-dwell deadline is still unstamped. '
                 '#24595 supplies recent-cohort age/page'
                 if name == 'record_pending'
-                else ''
+                else (
+                    'GPU holds gain seven-day expiry and nightly requeue; provider-STT holds remain fenced from the GPU ring.'
+                    if name == 'quarantined'
+                    else ''
+                )
             ),
         )
         for name in (
@@ -606,6 +627,21 @@ STATES = (
             'partial_retired',
             'committed',
         )
+    )
+    + (
+        row(
+            'batch',
+            'dead',
+            ('state',),
+            terminal=True,
+            owner='database/batch_pipeline_quarantine_recovery.py',
+            deadline='held_deadline_at',
+            exit=Exit('sweeper', 'utils/batch_pipeline/held_dead_letter.py:HeldDeadLetter.tick'),
+            metric='omi_batch_held_expired_units',
+            alert=Alert('omi-batch-held-expired-volume', 'agent'),
+            alert_required=True,
+            note='Reason held_expired is retained stock, never TTL/deletion; nightly UTC and private OIDC requeue.',
+        ),
     )
     + tuple(
         row(

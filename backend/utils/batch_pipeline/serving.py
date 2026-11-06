@@ -32,6 +32,7 @@ from utils.batch_pipeline.projection import HELD_PARTIAL_PAGE, Projector, error_
 from utils.executors import run_blocking, start_background_task, sync_executor
 from utils.batch_pipeline.contracts import PoolCapacity, WorkResult
 from utils.batch_pipeline.leader import SERVING_MAINTENANCE, LeaderLease
+from utils.batch_pipeline.held_dead_letter import HeldDeadLetter
 from utils.batch_pipeline.merge import OrderedMerge
 from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.scheduler import Scheduler
@@ -82,6 +83,7 @@ class Serving:
         self.recovery = recovery
         # Optional single-owner lease for periodic maintenance (see reconcile).
         self.leader = leader
+        self.held_dead_letter = HeldDeadLetter(store, metrics=metrics)
         self.merge = OrderedMerge(store, metrics=metrics)
         # Held units change only on a recovery or operator settle: scan them
         # at a slow cadence, not every maintenance pass.
@@ -322,6 +324,12 @@ class Serving:
                 logging.getLogger(__name__).error(
                     'event=batch_projection action=release_held outcome=retry exception_type=%s', type(error).__name__
                 )
+        try:
+            self.held_dead_letter.tick(time.time())
+        except Exception as error:
+            logging.getLogger(__name__).error(
+                'event=batch_held_dead_letter outcome=retry exception_type=%s', type(error).__name__
+            )
         self.queue().recover(time.time())
         owners = set()
         for segment in self.store.due('result_ready', time.time(), 100):

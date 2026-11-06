@@ -67,6 +67,7 @@ environment_shared:
         BATCH_CONTROL_CANDIDATE_FANOUT: {value: '16', category: rollout}
         BATCH_ADMISSION_PARALLEL_CALLS: {value: 'true', category: rollout}
         BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS: {value: '10', category: rollout}
+        BATCH_HELD_DEAD_LETTER_ENABLED: {value: 'true', category: ops_kill}
         BATCH_PIPELINE_ENABLED:
           value: 'false'
           category: rollout
@@ -927,6 +928,7 @@ environment_shared:
           BATCH_CONTROL_CANDIDATE_FANOUT: {value: '16', category: rollout}
           BATCH_ADMISSION_PARALLEL_CALLS: {value: 'true', category: rollout}
           BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS: {value: '10', category: rollout}
+          BATCH_HELD_DEAD_LETTER_ENABLED: {value: 'true', category: ops_kill}
           BATCH_PIPELINE_ENABLED:
             value: 'false'
             category: rollout
@@ -1305,6 +1307,7 @@ environment_shared:
           BATCH_CONTROL_CANDIDATE_FANOUT: {value: '16', category: rollout}
           BATCH_ADMISSION_PARALLEL_CALLS: {value: 'true', category: rollout}
           BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS: {value: '10', category: rollout}
+          BATCH_HELD_DEAD_LETTER_ENABLED: {value: 'true', category: ops_kill}
           BATCH_PIPELINE_ENABLED:
             value: 'false'
             category: rollout
@@ -1668,6 +1671,7 @@ environment_shared:
           BATCH_CONTROL_CANDIDATE_FANOUT: {value: '16', category: rollout}
           BATCH_ADMISSION_PARALLEL_CALLS: {value: 'true', category: rollout}
           BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS: {value: '10', category: rollout}
+          BATCH_HELD_DEAD_LETTER_ENABLED: {value: 'true', category: ops_kill}
           BATCH_PIPELINE_ENABLED:
             value: 'false'
             category: rollout
@@ -2022,6 +2026,7 @@ environment_shared:
           BATCH_CONTROL_CANDIDATE_FANOUT: {value: '16', category: rollout}
           BATCH_ADMISSION_PARALLEL_CALLS: {value: 'true', category: rollout}
           BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS: {value: '10', category: rollout}
+          BATCH_HELD_DEAD_LETTER_ENABLED: {value: 'true', category: ops_kill}
           BATCH_PIPELINE_ENABLED:
             value: 'false'
             category: rollout

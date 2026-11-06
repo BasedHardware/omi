@@ -205,6 +205,9 @@ CLOUD_RUN_EXPORTER_PREFIXES = [
     'prometheus.googleapis.com/omi_finalization_pair_',
     'prometheus.googleapis.com/omi_enrichment_summary_repair_',
     'prometheus.googleapis.com/omi_batch_record_pending_',
+    'prometheus.googleapis.com/omi_batch_held_expired_total/',
+    'prometheus.googleapis.com/omi_batch_held_expired_units/',
+    'prometheus.googleapis.com/omi_batch_held_expired_observed_at_seconds/',
     'prometheus.googleapis.com/omi_record_seal_nojob_',
     'prometheus.googleapis.com/omi_enrichment_obligation_',
     'prometheus.googleapis.com/omi_finalization_byok_',
@@ -263,6 +266,9 @@ CLOUD_RUN_SYNC_EXPORTER_PREFIXES = [
     'prometheus.googleapis.com/omi_finalization_pair_',
     'prometheus.googleapis.com/omi_enrichment_summary_repair_',
     'prometheus.googleapis.com/omi_batch_record_pending_',
+    'prometheus.googleapis.com/omi_batch_held_expired_total/',
+    'prometheus.googleapis.com/omi_batch_held_expired_units/',
+    'prometheus.googleapis.com/omi_batch_held_expired_observed_at_seconds/',
     'prometheus.googleapis.com/omi_record_seal_nojob_',
     'prometheus.googleapis.com/omi_enrichment_obligation_',
     'prometheus.googleapis.com/omi_finalization_byok_',
@@ -608,3 +614,29 @@ def test_custom_metric_api_aggregates_are_renamed_back_too(env):
         (Path(__file__).resolve().parents[3] / "backend/charts/monitoring/metric-inventory.prod.json").read_text()
     )
     assert not [m for m in inventory["metrics"] if re.fullmatch(r"stackdriver_.*_omi_.*", m)]
+
+
+@pytest.mark.parametrize(
+    'path', [CLOUD_RUN_EXPORTER, CLOUD_RUN_EXPORTER_DEV, CLOUD_RUN_SYNC_EXPORTER, CLOUD_RUN_SYNC_EXPORTER_DEV]
+)
+def test_held_dead_letter_producer_families_reach_the_volume_alert_through_each_cloud_run_bridge(path):
+    from prometheus_client import CollectorRegistry
+    from utils.batch_pipeline.metrics import QueueMetrics
+
+    registry = CollectorRegistry()
+    producer = QueueMetrics(registry)
+    producer.held_expired.inc()
+    producer.held_expired_stock.set(101)
+    producer.held_expired_observed_at.set(1000)
+    families = {
+        'omi_batch_held_expired_total',
+        'omi_batch_held_expired_units',
+        'omi_batch_held_expired_observed_at_seconds',
+    }
+    emitted = {sample.name for metric in registry.collect() for sample in metric.samples}
+    assert families <= emitted
+    imported = set(yaml.safe_load(path.read_text())['stackdriver']['metrics']['prefixes'])
+    assert {f'prometheus.googleapis.com/{name}/' for name in families} <= imported
+    rule = next(r for r in json.loads(ALERT_RULES.read_text()) if r['uid'] == 'omi-batch-held-expired-volume')
+    queries = ' '.join(node['model'].get('expr', '') for node in rule['data'])
+    assert all(name in queries for name in families)

@@ -191,6 +191,7 @@ def test_helper_kill_switch_budget_entries_match_the_default_on_registry():
     # outside the pipeline scanner's scope. Keep helper kill switches separate.
     rollout_name = 'SERVER_BATCH_ONLY_WEB_PERCENT'
     assert helper_names == HELPER_KILL_SWITCHES | {
+        'BATCH_HELD_DEAD_LETTER_ENABLED',
         'SERVER_BATCH_UNSUPPORTED_LANGUAGES',
         rollout_name,
         'BATCH_PIPELINE_SERVING_PROJECTION_SWEEP',
@@ -229,6 +230,10 @@ def test_helper_kill_switch_budget_entries_match_the_default_on_registry():
     assert rollout['kind'] == 'env'
     assert rollout['lifecycle'] == 'rollout'
     assert rollout_name in env_reads((BACKEND_DIR / 'config/server_batch.py').read_text(encoding='utf-8'))
+    held = names['BATCH_HELD_DEAD_LETTER_ENABLED']
+    assert held['owner'] == 'uicleanup / omi-lifecycle'
+    assert held['review_by'] == '2026-12-06'
+    assert flags['BATCH_HELD_DEAD_LETTER_ENABLED']['lifecycle'] == 'ops_kill'
     for name in sorted(HELPER_KILL_SWITCHES):
         entry = names[name]
         flag = flags[name]

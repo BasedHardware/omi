@@ -314,8 +314,11 @@ KNOWN_GAPS = {
     ('batch:privacy_blocked', 'dwell_metric'): 'batch:privacy_blocked: missing authoritative dwell/stock gauge; '
     'phase contract follow-up; no fix PR yet; ANX '
     'lcinv-lifecycle-invariants',
-    ('batch:quarantined', 'entry_deadline'): 'batch:quarantined: missing deadline stamped at entry; phase contract '
-    'follow-up; no fix PR yet; ANX lcinv-lifecycle-invariants',
+    (
+        'batch:quarantined',
+        'entry_deadline',
+    ): 'GPU holds stamp a flag-gated held_deadline_at; provider-STT settle/terminal entries '
+    'remain unstamped and cannot join the GPU requeue path. ANX omi-lifecycle phase 4a',
     ('batch:ready', 'entry_deadline'): 'batch:ready: missing deadline stamped at entry; phase contract follow-up; no '
     'fix PR yet; ANX lcinv-lifecycle-invariants',
     ('batch:record_pending', 'entry_deadline'): 'batch:record_pending: total pending-dwell deadline is still '

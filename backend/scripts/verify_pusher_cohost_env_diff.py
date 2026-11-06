@@ -100,6 +100,9 @@ _FINALIZATION_REPLAY_LISTEN_ONLY = frozenset(
 # none of those surfaces and never starts the dedicated GPU process.
 _BATCH_PIPELINE_LISTEN_ONLY = frozenset(
     {
+        # Held expiry/requeue is owned by main.py maintenance/RPC and GPU workers;
+        # pusher does not run the held maintenance loop or worker failure writer.
+        'BATCH_HELD_DEAD_LETTER_ENABLED',
         'BATCH_CONTROL_CANDIDATE_FANOUT',
         'BATCH_ADMISSION_PARALLEL_CALLS',
         'BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS',

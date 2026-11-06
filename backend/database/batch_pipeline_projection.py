@@ -882,14 +882,15 @@ def held_without_recovery(job: dict) -> bool:
     """
     from config.policy import RecoveryPolicy
 
-    if job.get('state') != 'quarantined' or job.get('result'):
+    retained_dead = job.get('state') == 'dead' and job.get('dead_letter_reason') == 'held_expired'
+    if (job.get('state') != 'quarantined' and not retained_dead) or job.get('result'):
         return False
     if any(
         isinstance(job.get(key), dict) and job[key].get('state') not in {'completed', 'failed_held'}
         for key in OPERATOR_INTENTS
     ):
         return False
-    if job.get('recovery_state') == 'failed_held':
+    if retained_dead or job.get('recovery_state') == 'failed_held':
         return True
     raw = (job.get('policy_parts') or {}).get('recovery')
     return (

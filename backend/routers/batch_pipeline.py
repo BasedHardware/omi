@@ -225,6 +225,21 @@ async def redrive_dead(body: RedriveRequest):
     return {'accepted': accepted}
 
 
+@router.post('/requeue-quarantined', include_in_schema=False)
+async def requeue_quarantined(body: RedriveRequest):
+    """Same private worker OIDC boundary; usable even with expiry disabled."""
+    from database.batch_pipeline_quarantine_recovery import RecoveryStore
+    from database.batch_pipeline_projection_protocol import ProjectionBlocked
+
+    try:
+        accepted = await run_blocking(
+            db_executor, RecoveryStore(body.service().store).requeue_quarantined, body.segment_id, time.time()
+        )
+    except (BatchPrivacyBlocked, ProjectionBlocked):
+        accepted = False
+    return {'accepted': accepted}
+
+
 @router.post('/shadow-recover', include_in_schema=False)
 async def shadow_recover(body: RedriveRequest):
     from database.batch_pipeline_shadow import ShadowStore

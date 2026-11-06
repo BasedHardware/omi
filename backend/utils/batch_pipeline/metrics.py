@@ -49,6 +49,15 @@ class QueueMetrics:
         min_refresh_seconds: float = 0.0,
     ):
         self.scope = (worker_release, namespace)
+        self.held_expired = Counter(
+            'omi_batch_held_expired_total', 'Unique fenced held-to-dead transitions; audio retained', registry=registry
+        )
+        self.held_expired_stock = Gauge(
+            'omi_batch_held_expired_units', 'Retained dead(held_expired) stock across all ages', registry=registry
+        )
+        self.held_expired_observed_at = Gauge(
+            'omi_batch_held_expired_observed_at_seconds', 'Last successful held-expired stock sample', registry=registry
+        )
         # Serving instances share one global queue; workers keep 0 for the HPA.
         self.min_refresh_seconds = min_refresh_seconds
         self._refresh_due = 0.0
