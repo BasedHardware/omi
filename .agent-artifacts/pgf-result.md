@@ -1,8 +1,8 @@
 # C2 implementation result — acceptance blocked
 
-Updated: 2026-11-06T18:00:29.917916+00:00. Repository: BasedHardware/omi.
+Updated: 2026-11-06T18:04:32.466237+00:00. Repository: BasedHardware/omi.
 Worktree: `/Volumes/Ephemeral/scratch/worktrees/omi/omi-lane-pgf-c2-upstream-keep-clean`. Branch: `lane/pgf-c2`.
-Implementation head when this receipt was written: `8d496d4813b49d1bdc4fe1a171edf2e1fad46963`. Implementation base / merge base:
+Implementation head when this receipt was written: `bf0856b3f1537ca464c4e2e710c8d8df2e8cd055`. Implementation base / merge base:
 `05dcd6065f9f396c5cb9f883868db72cb8bf908e`, which includes C1 #24795.
 Shared `origin/main` advanced during this run; it is currently `4b1c40b5ef03242b82013a64c1dc941728715bab`.
 No rebase, push, PR, merge, deployment, production-data access or flag expansion
@@ -51,6 +51,7 @@ any production lake write admission.
 
 ### Changed files
 
+- `.agent-artifacts/pgf-result.md`
 - `.github/scripts/dead_code/backend.allowlist.json`
 - `backend/database/_client.py`
 - `backend/database/conversation_terminal_title.py`
@@ -73,6 +74,7 @@ any production lake write admission.
 - `backend/tests/integration/test_recurring_voice_privacy_firestore.py`
 - `backend/tests/support/dream_firestore.py`
 - `backend/tests/support/firestore_query_driver_registry.py`
+- `backend/tests/unit/test_conversation_archive_filter_contract.py`
 - `backend/tests/unit/test_conversation_terminal_family.py`
 - `backend/tests/unit/test_conversation_transcript_offload.py`
 - `backend/tests/unit/test_live_transcript_merge.py`
@@ -139,7 +141,7 @@ python3 .agent-artifacts/pgf-c2-test-env.py \
 | --- | --- |
 | `backend/.venv/bin/python -m pytest backend/tests/unit/test_transcript_pointer.py backend/tests/unit/test_conversation_transcript_offload.py -q` | Latest two-file regression run: 112 passed; final expanded four-file run below supersedes this receipt. |
 | Same two files plus `backend/tests/unit/test_object_lake.py backend/tests/unit/test_space_keys.py -q` | 147 passed before the last consent/identity/memo additions. |
-| `bash backend/scripts/run-unit-ci.sh --changed-files "$PWD/.agent-artifacts/pgf-c2-changed-files.txt"` | First attempt: 7 new type errors; corrected. Second attempt: **0 type errors**, full 2674-file unit selection still in flight at this checkpoint. Three old-runner fixture failures found and corrected; affected-file rerun is green below. Seven native-audio failures also occurred because this process cannot locate the installed libopus; process-local library-path rerun is recorded below. This original run will remain nonzero even after the correction. |
+| `bash backend/scripts/run-unit-ci.sh --changed-files "$PWD/.agent-artifacts/pgf-c2-changed-files.txt"` | First attempt: 7 new type errors; corrected. Second attempt: **0 type errors**, full 2674-file unit selection still in flight at this checkpoint. Three old-runner fixture failures found and corrected; affected-file rerun is green below. Five archive query setup errors also occurred because the closed import fixture omitted the new real codec; corrected fixture rerun is recorded below. Seven native-audio failures also occurred because this process cannot locate the installed libopus; process-local library-path rerun is recorded below. This original run will remain nonzero even after the correction. |
 | `BACKEND_UNIT_TEST_FILE_LIST="$PWD/.agent-artifacts/pgf-c2-legacy-codec-tests.txt" bash backend/test.sh` | 73 caller test files; 2870 passed, 2 failed. Only the pusher fixture file failed, due to the newly explicit codec keyword; fixture corrected, budgeted rerun below. |
 | `BACKEND_UNIT_TEST_FILE_LIST="$PWD/.agent-artifacts/pgf-c2-firestore-guard-tests.txt" bash backend/test.sh` | Seven guard files: 840 passed, 1 deselected; no failures. |
 | `BACKEND_UNIT_TEST_FILE_LIST="$PWD/.agent-artifacts/pgf-c2-single-test-list.txt" bash backend/test.sh` | Five focused/fixture files: 266 passed, exit 0. Final narrow reference/create regressions have an additional current-source run. |
@@ -149,7 +151,8 @@ python3 .agent-artifacts/pgf-c2-test-env.py \
 | `backend/.venv/bin/python -m pytest backend/tests/unit/test_conversation_terminal_family.py -q` | 81 passed, exit 0 after migrating the injected failed-commit/retry seam. |
 | `backend/.venv/bin/python -m pytest backend/tests/unit/test_conversation_transcript_offload.py -q -k 'processing_owners or migration_keeps or final_pass_transaction or smart_merge_transaction or privacy_scrub_transaction or legacy_review_undo'` | First run: 14 failed, 11 passed, 79 deselected, caused by incomplete test-fake support / synthetic rows. Corrected matrix: 25 passed, 79 deselected, exit 0. |
 | `backend/.venv/bin/python -m pytest backend/tests/unit/test_conversation_transcript_offload.py::test_explicit_document_identity_wins_over_payload_identity -q` | 1 passed, exit 0; single lightweight regression, outside the heavy gate. |
-| `env DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib backend/.venv/bin/python -m pytest backend/tests/unit/test_empty_capture_recovery.py -q` | see log; no pytest summary; uses the heavy gate and installed native libopus, no host changes. Initial full-suite file: 61 passed, 7 failed (library not found). |
+| `env DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib backend/.venv/bin/python -m pytest backend/tests/unit/test_empty_capture_recovery.py -q` | 68 passed, exit 0; uses the heavy gate and installed native libopus, no host changes. Initial full-suite file: 61 passed, 7 failed (library not found). |
+| `backend/.venv/bin/python -m pytest backend/tests/unit/test_conversation_archive_filter_contract.py -q` | 5 passed, exit 0; migrated only the fixture import seam, retaining query assertions. Initial full-suite file: five setup errors. |
 | `bash test-preflight.sh` (backend/) | Exit 0: 18 checks passed, 8 optional warnings, 0 failed. |
 | `python scripts/scan_import_time_side_effects.py` (backend/) | Exit 0. |
 | `python scripts/check_module_stub_pollution.py` (backend/) | Exit 0. |
@@ -176,8 +179,9 @@ The first Docker smoke attempted the host-configured registry credential helper
 and failed to refresh its token before building. No cloud service read/write
 was performed. Subsequent Docker commands use an empty task-only auth config;
 no login, host-service installation/start, bucket/KMS provisioning or deployment
-was attempted. Real image import acceptance and the HTTP offline harness remain
-unverified because Docker is unavailable. The hermetic list/detail/MCP/export/
+was attempted. Real image import acceptance remains unverified because Docker is unavailable.
+The HTTP offline harness was not started; that additional product-acceptance
+receipt remains outstanding. The hermetic list/detail/MCP/export/
 search/notification-path tests are local product-code tests, not deployed proof.
 
 ## Remaining scope and acceptance blockers
@@ -217,7 +221,7 @@ hooks are not Firestore emulator contention proof for C4.
 using the authorized [anx-participant skill](/Users/dazheng/.agents/skills/anx-participant/SKILL.md).
 The scope ask has a bounded ANX await subscription. The card is blocked on the scope decision. Local full CI remains in flight
 at this checkpoint (PID/PGID 45361, command session 17604); its command session is watched and the 50-minute heartbeat is
-armed and touched on wakes. Focused codec/transaction reruns are complete (see receipts above). The native-audio rerun is separately tracked in command session 94087 until terminal. The superseded scope waiter was stopped by its owned PID; the current eight-area scope ask is watched in session 38393 with a four-hour timeout. Heartbeat session 34503 wakes this thread after 50 minutes idle. No native/delegated agents were launched.
+armed and touched on wakes. Focused codec/transaction reruns are complete (see receipts above). Native-audio and archive-fixture reruns completed successfully and their command sessions were reaped. The superseded scope waiter was stopped by its owned PID; the current eight-area scope ask is watched in session 38393 with a four-hour timeout. Heartbeat session 34503 wakes this thread after 50 minutes idle. No native/delegated agents were launched.
 
 ## Draft PR body (not submitted)
 
