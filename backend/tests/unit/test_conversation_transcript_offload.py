@@ -631,27 +631,25 @@ def test_nontransactional_update_offloads_without_id_in_patch(lake_world, monkey
     )
 
 
-def test_translation_drains_deferred_offload_for_the_document_id(lake_world, monkeypatch):
+def test_translation_preuploads_the_candidate_for_the_document_id(lake_world):
     pointer_doc(lake_world)
-    drain = Mock(return_value=True)
-    monkeypatch.setattr(pointer, 'offload_inline_transcript', drain)
     assert db.materialize_translation(
         UID, CID, 'segment-1', speech()[0]['text'], 'es', 'Synthetic translation', firestore_client=lake_world.store
     )
-    drain.assert_called_once()
-    assert drain.call_args.args == (UID, CID)
-    assert drain.call_args.kwargs['firestore_client'] is lake_world.store
-    assert len(drain.call_args.kwargs['expected_sha256']) == 64
+    stored = lake_world.store.rows[PATH]['transcript_segments']
+    assert isinstance(stored, dict)
+    assert stored['key'].split('/')[4] == CID
+    assert lake_world.calls == {'get': 1, 'put': 2}  # original plus translated candidate
+    segments = db.decode_transcript_segments_verified(UID, stored, True)
+    assert segments[0]['translations'] == [{'lang': 'es', 'text': 'Synthetic translation'}]
 
 
-def test_create_if_absent_preloads_and_drains_notes_identity_reencode(lake_world, monkeypatch):
+def test_create_if_absent_preloads_and_preuploads_notes_identity_reencode(lake_world, monkeypatch):
     doc = encode()
     doc.update(data_protection_level='standard', status='completed', created_at=NOW, _notes_identity={})
     pointer.clear_memo()
     monkeypatch.setattr(db, 'db', lake_world.store)
     monkeypatch.setattr(db, '_sync_conversation_search_index', lambda *args: None)
-    drain = Mock(return_value=True)
-    monkeypatch.setattr(pointer, 'offload_inline_transcript', drain)
 
     def stage(transaction, user_ref, data, existing):
         assert pointer._client.in_transaction_body()
@@ -666,10 +664,10 @@ def test_create_if_absent_preloads_and_drains_notes_identity_reencode(lake_world
     # Payload is already protected exactly as the write decorator supplies it;
     # the transaction owner and identity callback are the real product path.
     assert inspect.unwrap(db.create_conversation_if_absent_with_lifecycle)(UID, doc)
-    assert lake_world.calls == {'get': 1, 'put': 1}
-    assert isinstance(lake_world.store.rows[PATH]['transcript_segments'], bytes)
-    drain.assert_called_once()
-    assert drain.call_args.args == (UID, CID)
+    assert lake_world.calls == {'get': 1, 'put': 2}
+    stored = lake_world.store.rows[PATH]['transcript_segments']
+    assert isinstance(stored, dict)
+    assert db.decode_transcript_segments_verified(UID, stored, True)[0]['is_user'] is True
 
 
 @pytest.mark.parametrize('writer', ['upsert', 'persist'])
