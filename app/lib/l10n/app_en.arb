@@ -2419,11 +2419,8 @@
     "@firmwareUsbWarning": {
         "description": "Warning about USB connection during firmware update"
     },
-    "firmwareBatteryAbove15": "Battery Above 15%",
-    "@firmwareBatteryAbove15": {
-        "description": "Firmware update step title about battery level"
-    },
-    "firmwareEnsureBattery": "Ensure your device has 15% battery.",
+    "firmwareBatteryRequirement": "Battery Above 30%",
+    "firmwareEnsureBattery": "Ensure your device has 30% battery.",
     "@firmwareEnsureBattery": {
         "description": "Description for battery requirement during firmware update"
     },
@@ -12487,7 +12484,11 @@
     "@firmwareDownloadFailedMessage": {
         "description": "Firmware download failed"
     },
-    "firmwareBatteryTooLow": "Battery is at {level}%. Charge your device to at least 15% before updating.",
+    "firmwareBatteryUnavailable": "Battery level isn't available yet. Wait a moment and reconnect if it stays this way.",
+    "@firmwareBatteryUnavailable": {
+        "description": "Shown when a pendant firmware update is blocked because its battery level is unknown and it is not charging."
+    },
+    "firmwareBatteryTooLow": "Battery is at {level}%. Charge your device to at least 30% before updating.",
     "@firmwareBatteryTooLow": {
         "description": "Firmware update blocked by low battery",
         "placeholders": {
@@ -15001,48 +15002,13 @@
     "@reviewChangesSectionOther": {
         "description": "Recent changes section: changes that fit no other section"
     },
-    "reviewChangeConversationCount": "{count, plural, =1{1 conversation} other{{count} conversations}}",
-    "@reviewChangeConversationCount": {
-        "description": "How many conversations one change touched",
-        "placeholders": {
-            "count": {
-                "type": "int"
-            }
-        }
-    },
-    "reviewChangePlaceCount": "{count, plural, =1{1 place} other{{count} places}}",
-    "@reviewChangePlaceCount": {
-        "description": "How many places in transcripts one change touched",
-        "placeholders": {
-            "count": {
-                "type": "int"
-            }
-        }
-    },
-    "reviewChangeShowAll": "Show all {count}",
-    "@reviewChangeShowAll": {
-        "description": "Button opening every place a change landed",
-        "placeholders": {
-            "count": {
-                "type": "int"
-            }
-        }
-    },
     "reviewChangeUndoAll": "Undo all",
     "@reviewChangeUndoAll": {
         "description": "Button undoing every instance of one change"
     },
-    "reviewChangeSeeEvidence": "See evidence",
-    "@reviewChangeSeeEvidence": {
-        "description": "Button showing the conversation evidence behind a change"
-    },
     "reviewChangeViewConversation": "View conversation",
     "@reviewChangeViewConversation": {
         "description": "Button opening the conversation a change came from"
-    },
-    "reviewChangeViewTask": "View task",
-    "@reviewChangeViewTask": {
-        "description": "Button opening the tasks list from a task change"
     },
     "reviewChangesUndoPartial": "Couldn’t undo {failed} of {total}. Try again.",
     "@reviewChangesUndoPartial": {
@@ -15150,10 +15116,6 @@
     "@dreamReportTitle": {
         "description": "Title of the dogfood screen showing what the background 'Dream' agent looked at and proposed. 'Dream' is a product name; keep it untranslated."
     },
-    "dreamReportShadowBanner": "Preview mode: Dream shows what it would change, but nothing in your account changes yet.",
-    "@dreamReportShadowBanner": {
-        "description": "Banner when the agent runs in shadow mode. Keep 'Dream' untranslated."
-    },
     "dreamReportLiveBanner": "Dream applies these changes on its own. Undo any of them in Recent Changes.",
     "@dreamReportLiveBanner": {
         "description": "Banner when the agent applies edits. 'Recent Changes' is the name of another screen."
@@ -15215,18 +15177,6 @@
     "@dreamReportNothingFound": {
         "description": "Run summary when the pass found nothing to change."
     },
-    "dreamReportStats": "Read {records} items · {tokens} tokens",
-    "@dreamReportStats": {
-        "description": "Technical stats for a run: items read and model tokens used.",
-        "placeholders": {
-            "records": {
-                "type": "int"
-            },
-            "tokens": {
-                "type": "int"
-            }
-        }
-    },
     "dreamReportWouldFix": "Would fix",
     "@dreamReportWouldFix": {
         "description": "Section label for edits proposed in preview mode."
@@ -15247,34 +15197,9 @@
     "@dreamReportLearnedWords": {
         "description": "Section label for names and terms the agent added to the user's vocabulary."
     },
-    "dreamReportFeedback": "Reported to the Omi team",
-    "@dreamReportFeedback": {
-        "description": "Section label for anonymous diagnostics sent to developers. 'Omi' is a product name."
-    },
     "dreamReportDeletedItem": "Deleted item",
     "@dreamReportDeletedItem": {
         "description": "Label for an edit whose target no longer exists."
-    },
-    "dreamReportPasses": "{count} of {limit} passes today",
-    "@dreamReportPasses": {
-        "description": "How many scheduled agent passes ran today out of the daily limit.",
-        "placeholders": {
-            "count": {
-                "type": "int"
-            },
-            "limit": {
-                "type": "int"
-            }
-        }
-    },
-    "dreamReportQueued": "{count, plural, =0{No changes waiting} =1{1 change waiting} other{{count} changes waiting}}",
-    "@dreamReportQueued": {
-        "description": "How many changed items are queued for the agent to look at.",
-        "placeholders": {
-            "count": {
-                "type": "int"
-            }
-        }
     },
     "dreamReportRunsLeft": "{count, plural, =1{1 manual run left today} other{{count} manual runs left today}}",
     "@dreamReportRunsLeft": {
@@ -15293,24 +15218,6 @@
                 "type": "int"
             },
             "asks": {
-                "type": "int"
-            }
-        }
-    },
-    "dreamReportDropped": "{count, plural, =1{1 older change skipped} other{{count} older changes skipped}}",
-    "@dreamReportDropped": {
-        "description": "How many old queued changes were dropped because the queue was full.",
-        "placeholders": {
-            "count": {
-                "type": "int"
-            }
-        }
-    },
-    "dreamReportPrivacyHeld": "{count, plural, =1{1 report held back for privacy} other{{count} reports held back for privacy}}",
-    "@dreamReportPrivacyHeld": {
-        "description": "Diagnostics the privacy filter refused to send.",
-        "placeholders": {
-            "count": {
                 "type": "int"
             }
         }
@@ -16201,6 +16108,26 @@
     "@paywallTrialCancelNote": {
         "description": "Paywall footnote"
     },
+    "paywallMonthlyFallbackTitle": "Not ready for a year?",
+    "@paywallMonthlyFallbackTitle": {
+        "description": "Title of the sheet shown on the trial paywall after the reader left the yearly checkout without buying."
+    },
+    "paywallMonthlyFallbackTrialBody": "Start monthly instead. Same {days} days free, then {price} a month. Cancel anytime.",
+    "@paywallMonthlyFallbackTrialBody": {
+        "description": "Body of that sheet when the reader can still get the free trial. days is the trial length, price is the monthly price with currency, e.g. US$29.99.",
+        "placeholders": {
+            "days": {
+                "type": "int"
+            },
+            "price": {
+                "type": "String"
+            }
+        }
+    },
+    "paywallMonthlyFallbackTrialCta": "Try monthly free",
+    "@paywallMonthlyFallbackTrialCta": {
+        "description": "Button on that sheet: opens the monthly checkout with the free trial."
+    },
     "paywallTrialStarted": "Your {days}-day free trial of Omi Pro has started.",
     "@paywallTrialStarted": {
         "description": "Toast after a trial checkout completes; days is the trial length",
@@ -16289,18 +16216,6 @@
             }
         }
     },
-    "syncStepLabelDownload": "Omi → phone",
-    "@syncStepLabelDownload": {
-        "description": "Tiny label under the first of three Offline Sync progress segments: moving audio from the Omi device to the phone."
-    },
-    "syncStepLabelUpload": "Upload",
-    "@syncStepLabelUpload": {
-        "description": "Tiny label under the second of three Offline Sync progress segments: uploading to Omi."
-    },
-    "syncStepLabelTranscribe": "Transcribe",
-    "@syncStepLabelTranscribe": {
-        "description": "Tiny label under the third of three Offline Sync progress segments: server transcription."
-    },
     "syncDetailsTitle": "Sync details",
     "@syncDetailsTitle": {
         "description": "Title of the Offline Sync diagnostics sheet and the link on the status card that opens it."
@@ -16328,10 +16243,6 @@
     "syncDetailsTranscribing": "Transcribing on Omi",
     "@syncDetailsTranscribing": {
         "description": "Sync details row label: audio uploaded and still being transcribed by Omi."
-    },
-    "syncDetailsForSupport": "For support",
-    "@syncDetailsForSupport": {
-        "description": "Sync details section header for raw technical counts meant for customer support."
     },
     "syncDetailsAudioFiles": "Audio files",
     "@syncDetailsAudioFiles": {
@@ -17917,14 +17828,6 @@
     "@episodeNotesStartWithTranscript": {
         "description": "Quiet line when no on-device notes can be drafted."
     },
-    "episodeOnDeviceNotesFootnote": "Drafted on your phone as you talk. The full notes arrive with the final transcript.",
-    "@episodeOnDeviceNotesFootnote": {
-        "description": "Footnote under on-device live notes."
-    },
-    "episodeOnThisPhone": "On this phone",
-    "@episodeOnThisPhone": {
-        "description": "Tag on notes drafted on-device from the live preview."
-    },
     "livePreviewBehind": "Final transcript about {duration} behind",
     "@livePreviewBehind": {
         "description": "Quiet line: how far the final transcript lags the live preview.",
@@ -17939,10 +17842,6 @@
     "livePreviewNoEngineBody": "Your words show up here a minute or two after you say them.",
     "@livePreviewNoEngineBody": {
         "description": "No-engine preview card body."
-    },
-    "livePreviewNoEngineTitle": "Recording safely",
-    "@livePreviewNoEngineTitle": {
-        "description": "No-engine preview card title."
     },
     "livePreviewOnPhoneDivider": "Just now, on this phone",
     "@livePreviewOnPhoneDivider": {
@@ -17959,15 +17858,6 @@
     "deviceCatchUpWhenOnline": "when online",
     "@deviceCatchUpWhenOnline": {
         "description": "Lowercase caption on the Device Settings 'Catching up' stat tile, under a duration like '8h 14m', while the phone has no internet: the recordings will upload once it is back online. A chevron follows."
-    },
-    "onTheWayCatchingUp": "{duration} catching up",
-    "@onTheWayCatchingUp": {
-        "description": "Headline of the On the Way page: how much recorded audio is still uploading or being turned into conversations. {duration} is like '8h 14m'.",
-        "placeholders": {
-            "duration": {
-                "type": "String"
-            }
-        }
     },
     "onTheWayUploadsByItself": "Uploads by itself. Conversations fill in as it lands.",
     "@onTheWayUploadsByItself": {
@@ -17996,32 +17886,6 @@
     "onTheWayFootnote": "Recordings that fail keep retrying in the background. Anything we can't transcribe is reported to us automatically.",
     "@onTheWayFootnote": {
         "description": "Footnote under the list of days on the On the Way page. 'We/us' is the Omi team."
-    },
-    "onTheWayDetailsForSupport": "Details for support",
-    "@onTheWayDetailsForSupport": {
-        "description": "Small text link at the bottom of On the Way, and the title of the page it opens: a plain technical list of every pending recording with its status codes, meant for the support team."
-    },
-    "homeNoiseFoldHidden": "{count, plural, =1{1 short clip hidden} other{{count} short clips hidden}}",
-    "@homeNoiseFoldHidden": {
-        "description": "Quiet line at the end of a day on the Home list: how many very short or noise-only recordings Omi folded away from that day. {count} is a whole number.",
-        "placeholders": {
-            "count": {
-                "type": "int"
-            }
-        }
-    },
-    "homeNoiseFoldShow": "Show",
-    "@homeNoiseFoldShow": {
-        "description": "Tappable word after the hidden-clips count on Home; reveals the folded short recordings in place."
-    },
-    "homeNoiseFoldHide": "{count, plural, =1{Hide 1 short clip} other{Hide {count} short clips}}",
-    "@homeNoiseFoldHide": {
-        "description": "Tappable line at the end of a day on Home after the user revealed the short recordings; folds them away again. {count} is a whole number.",
-        "placeholders": {
-            "count": {
-                "type": "int"
-            }
-        }
     },
     "deleteLocalRecordingsWarning": "{count, plural, =1{1 recording hasn't uploaded yet. Deleting now loses it — keep the app open to finish uploading.} other{{count} recordings haven't uploaded yet. Deleting now loses them — keep the app open to finish uploading.}}",
     "@deleteLocalRecordingsWarning": {
@@ -18268,6 +18132,19 @@
     "@episodeWritingNotes": {
         "description": "The processing row and page while an episode's notes are written."
     },
+    "homeStepTranscribing": "Transcribing…",
+    "@homeStepTranscribing": {
+        "description": "Home processing row subtitle while a recording is being transcribed."
+    },
+    "homeRecordingsCount": "{count, plural, =1{1 recording} other{{count} recordings}}",
+    "@homeRecordingsCount": {
+        "description": "Home processing row subtitle giving how many recordings one row stands for.",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
     "episodeWritingNotesDetail": "Finishing the transcript first. You can leave this page.",
     "@episodeWritingNotesDetail": {
         "description": "Under Writing notes on the processing page."
@@ -18296,5 +18173,618 @@
     "liveAudioSavedDetail": "Speakers and the final transcript fill in here as it uploads.",
     "@liveAudioSavedDetail": {
         "description": "Under the saved-audio card's heading."
-    }
+    },
+    "searchNoiseFilter": "Short clips",
+    "@searchNoiseFilter": {
+        "description": "Search filter chip: show only short clips (noise or media) that Home hides"
+    },
+    "reviewChangeConversationCount": "{count, plural, =1{1 conversation} other{{count} conversations}}",
+    "@reviewChangeConversationCount": {
+        "description": "How many conversations one change touched",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "reviewChangePlaceCount": "{count, plural, =1{1 place} other{{count} places}}",
+    "@reviewChangePlaceCount": {
+        "description": "How many places in transcripts one change touched",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "reviewChangeShowAll": "Show all {count}",
+    "@reviewChangeShowAll": {
+        "description": "Button opening every place a change landed",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "reviewChangeSeeEvidence": "See evidence",
+    "@reviewChangeSeeEvidence": {
+        "description": "Button showing the conversation evidence behind a change"
+    },
+    "reviewChangeViewTask": "View task",
+    "@reviewChangeViewTask": {
+        "description": "Button opening the tasks list from a task change"
+    },
+    "dreamReportShadowBanner": "Preview mode: Dream shows what it would change, but nothing in your account changes yet.",
+    "@dreamReportShadowBanner": {
+        "description": "Banner when the agent runs in shadow mode. Keep 'Dream' untranslated."
+    },
+    "dreamReportStats": "Read {records} items · {tokens} tokens",
+    "@dreamReportStats": {
+        "description": "Technical stats for a run: items read and model tokens used.",
+        "placeholders": {
+            "records": {
+                "type": "int"
+            },
+            "tokens": {
+                "type": "int"
+            }
+        }
+    },
+    "dreamReportFeedback": "Reported to the Omi team",
+    "@dreamReportFeedback": {
+        "description": "Section label for anonymous diagnostics sent to developers. 'Omi' is a product name."
+    },
+    "dreamReportPasses": "{count} of {limit} passes today",
+    "@dreamReportPasses": {
+        "description": "How many scheduled agent passes ran today out of the daily limit.",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            },
+            "limit": {
+                "type": "int"
+            }
+        }
+    },
+    "dreamReportQueued": "{count, plural, =0{No changes waiting} =1{1 change waiting} other{{count} changes waiting}}",
+    "@dreamReportQueued": {
+        "description": "How many changed items are queued for the agent to look at.",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "dreamReportDropped": "{count, plural, =1{1 older change skipped} other{{count} older changes skipped}}",
+    "@dreamReportDropped": {
+        "description": "How many old queued changes were dropped because the queue was full.",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "dreamReportPrivacyHeld": "{count, plural, =1{1 report held back for privacy} other{{count} reports held back for privacy}}",
+    "@dreamReportPrivacyHeld": {
+        "description": "Diagnostics the privacy filter refused to send.",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "syncStepLabelDownload": "Omi → phone",
+    "@syncStepLabelDownload": {
+        "description": "Tiny label under the first of three Offline Sync progress segments: moving audio from the Omi device to the phone."
+    },
+    "syncStepLabelUpload": "Upload",
+    "@syncStepLabelUpload": {
+        "description": "Tiny label under the second of three Offline Sync progress segments: uploading to Omi."
+    },
+    "syncStepLabelTranscribe": "Transcribe",
+    "@syncStepLabelTranscribe": {
+        "description": "Tiny label under the third of three Offline Sync progress segments: server transcription."
+    },
+    "syncDetailsForSupport": "For support",
+    "@syncDetailsForSupport": {
+        "description": "Sync details section header for raw technical counts meant for customer support."
+    },
+    "episodeOnDeviceNotesFootnote": "Drafted on your phone as you talk. The full notes arrive with the final transcript.",
+    "@episodeOnDeviceNotesFootnote": {
+        "description": "Footnote under on-device live notes."
+    },
+    "episodeOnThisPhone": "On this phone",
+    "@episodeOnThisPhone": {
+        "description": "Tag on notes drafted on-device from the live preview."
+    },
+    "livePreviewNoEngineTitle": "Recording safely",
+    "@livePreviewNoEngineTitle": {
+        "description": "No-engine preview card title."
+    },
+    "onTheWayCatchingUp": "{duration} catching up",
+    "@onTheWayCatchingUp": {
+        "description": "Headline of the On the Way page: how much recorded audio is still uploading or being turned into conversations. {duration} is like '8h 14m'.",
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "onTheWayDetailsForSupport": "Details for support",
+    "@onTheWayDetailsForSupport": {
+        "description": "Small text link at the bottom of On the Way, and the title of the page it opens: a plain technical list of every pending recording with its status codes, meant for the support team."
+    },
+    "homeNoiseFoldHidden": "{count, plural, =1{1 short clip hidden} other{{count} short clips hidden}}",
+    "@homeNoiseFoldHidden": {
+        "description": "Quiet line at the end of a day on the Home list: how many very short or noise-only recordings Omi folded away from that day. {count} is a whole number.",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "homeNoiseFoldShow": "Show",
+    "@homeNoiseFoldShow": {
+        "description": "Tappable word after the hidden-clips count on Home; reveals the folded short recordings in place."
+    },
+    "homeNoiseFoldHide": "{count, plural, =1{Hide 1 short clip} other{Hide {count} short clips}}",
+    "@homeNoiseFoldHide": {
+        "description": "Tappable line at the end of a day on Home after the user revealed the short recordings; folds them away again. {count} is a whole number.",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "speakerWholeRecording": "Apply to the whole recording",
+    "speakerSelectionChanged": "The speaker changed. Select the lines again.",
+    "speakerRenameIssue": "{reason, select, limit{Recording too large. Select fewer lines in one conversation.} partial{Some lines were saved. Select the remaining lines and try again.} other{Some lines were saved. Select the remaining lines and try again.}}",
+    "@speakerRenameIssue": {
+        "description": "Speaker rename budget refusal or partial member save; successful labels remain applied.",
+        "placeholders": {
+            "reason": {
+                "type": "String"
+            }
+        }
+    },
+    "speakerRecordingCoverage": "{state, select, scope{Other lines from this voice (recording coverage unconfirmed)} other{{count, plural, =1{Renamed 1 line in the available conversations only.} other{Renamed {count} lines in the available conversations only.}}}}",
+    "@speakerRecordingCoverage": {
+        "description": "Scope explanation or saved confirmation when full recording coverage is unconfirmed.",
+        "placeholders": {
+            "state": {
+                "type": "String"
+            },
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "episodeFinishingUp": "Finishing up…",
+    "@episodeFinishingUp": {
+        "description": "Neutral Home row title while an episode summary is being completed."
+    },
+    "@firmwareBatteryRequirement": {
+        "description": "Firmware update step title about battery level"
+    },
+    "buildAndShareApp": "Build and share your custom app",
+    "@buildAndShareApp": {
+        "description": "Create app button subtitle"
+    },
+    "membersAndCounting": "8000+ members and counting.",
+    "@membersAndCounting": {
+        "description": "Discord member count"
+    },
+    "privacyIntro": "At Omi, we are committed to protecting your privacy. This page allows you to control how your data is stored and used.",
+    "@privacyIntro": {
+        "description": "Data privacy page introduction"
+    },
+    "dataProtectionDesc": "Your data is secured by default with strong encryption. Review your settings and future privacy options below.",
+    "@dataProtectionDesc": {
+        "description": "Data protection section description"
+    },
+    "transcriptionConfig": "Configure STT provider",
+    "@transcriptionConfig": {
+        "description": "Transcription configuration subtitle"
+    },
+    "importDataConfig": "Import data from other sources",
+    "@importDataConfig": {
+        "description": "Import data details subtitle"
+    },
+    "understandingSubtitle": "Words understood from your conversations.",
+    "@understandingSubtitle": {
+        "description": "Understanding stat subtitle"
+    },
+    "rememberingSubtitle": "Facts and details remembered for you.",
+    "@rememberingSubtitle": {
+        "description": "Remembering stat subtitle"
+    },
+    "debugLogsDesc": "Helps diagnose issues",
+    "deleteKnowledgeGraphMessage": "This will delete all derived knowledge graph data (nodes and connections). Your original memories will remain safe. The graph will be rebuilt over time or upon next request.",
+    "deleteKnowledgeGraphDesc": "Clear all nodes and connections",
+    "enhanceTranscriptAccuracyDesc": "As our model improves, we can provide better transcription results for your recordings.",
+    "bestInClassTranscription": "Best in class transcription with zero setup",
+    "optimizedForConversation": "Optimized for conversation",
+    "highAccuracy": "High accuracy",
+    "privacyFirst": "Privacy first",
+    "keepGoing": "Keep going, you are doing great",
+    "@keepGoing": {
+        "description": "Encouragement text during a multi-step process"
+    },
+    "personalGrowthJourney": "Your personal growth journey with AI that listens to your every word.",
+    "@personalGrowthJourney": {
+        "description": "Subtitle describing Omi on auth screen"
+    },
+    "memoryAllowUse": "Allow Use",
+    "@memoryAllowUse": {
+        "description": "Button that clears suppression so this memory may be used"
+    },
+    "memoryDontUse": "Don't Use",
+    "@memoryDontUse": {
+        "description": "Button that suppresses this memory from future use"
+    },
+    "alwaysInContext": "Always in context",
+    "@alwaysInContext": {
+        "description": "Description for baseline memory being always in context"
+    },
+    "firmwareBatteryAbove15": "Battery Above 15%",
+    "@firmwareBatteryAbove15": {
+        "description": "Firmware update step title about battery level"
+    },
+    "configureSttProvider": "Configure STT provider",
+    "@configureSttProvider": {
+        "description": "Description for transcription settings"
+    },
+    "@deleteKnowledgeGraphMessage": {
+        "description": "Dialog message explaining delete knowledge graph action"
+    },
+    "clearAllNodesAndConnections": "Clear all nodes and connections",
+    "@clearAllNodesAndConnections": {
+        "description": "Description for delete knowledge graph"
+    },
+    "welcomeToOmiDescription": "Welcome to Omi! Your AI companion is ready to assist you with conversations, tasks, and more.",
+    "@welcomeToOmiDescription": {
+        "description": "Welcome message on completion screen"
+    },
+    "conversationsProcessedAutomatically": "Conversations are processed automatically",
+    "@conversationsProcessedAutomatically": {
+        "description": "Tip about automatic conversation processing"
+    },
+    "getInsightsInstantly": "Get insights and summaries instantly",
+    "@getInsightsInstantly": {
+        "description": "Tip about instant insights feature"
+    },
+    "dailyScoreDescription": "A score to help you better\nfocus on execution.",
+    "@dailyScoreDescription": {
+        "description": "Description text for daily score widget"
+    },
+    "startConversation": "Start a conversation and let the magic begin",
+    "@startConversation": {
+        "description": "Empty state subtitle when connected"
+    },
+    "wearableAiCompanion": "Wearable AI companion",
+    "@wearableAiCompanion": {
+        "description": "Widget subtitle for device promotion"
+    },
+    "organizeAndControlMemories": "Organize and control your memories",
+    "@organizeAndControlMemories": {
+        "description": "Subtitle for memory management dialog"
+    },
+    "setAllMemoriesToPrivate": "Set all memories to private visibility",
+    "@setAllMemoriesToPrivate": {
+        "description": "Description for making all memories private"
+    },
+    "setAllMemoriesToPublic": "Set all memories to public visibility",
+    "@setAllMemoriesToPublic": {
+        "description": "Description for making all memories public"
+    },
+    "selectPreferredLanguageForBestExperience": "Select your preferred language for the best Omi experience",
+    "enableFeaturesForBestExperience": "Enable features for the best Omi experience on your device.",
+    "deliveryTimeDescription": "When to receive your daily summary",
+    "@deliveryTimeDescription": {
+        "description": "Delivery time description"
+    },
+    "configureSTTProvider": "Configure STT provider",
+    "setConversationEndDescription": "Set when conversations auto-end",
+    "clearNodesDescription": "Clear all nodes and connections",
+    "deleteKnowledgeGraphWarning": "This will delete all derived knowledge graph data. Your original memories remain safe.",
+    "createAndShareYourApp": "Create and share your app",
+    "@createAndShareYourApp": {
+        "description": "Subtitle for create app option"
+    },
+    "e2eeDescription": "End-to-end encryption is the gold standard for privacy. When enabled, your data is encrypted on your device before it's sent to our servers. This means no one, not even Omi, can access your content.",
+    "@e2eeDescription": {
+        "description": "Description of E2EE encryption explaining its benefits"
+    },
+    "secureEncryptionDescription": "Your data is encrypted with a key unique to you on our servers, hosted on Google Cloud. This means your raw content is inaccessible to anyone, including Omi staff or Google, directly from the database.",
+    "@secureEncryptionDescription": {
+        "description": "Description of secure encryption explaining how data is protected"
+    },
+    "e2eeCardDescription": "Enable for maximum security where only you can access your data. Tap to learn more.",
+    "@e2eeCardDescription": {
+        "description": "Description for E2EE card explaining its benefit"
+    },
+    "yourOmiUnleashed": "Your Omi, unleashed. Go unlimited for endless possibilities.",
+    "@yourOmiUnleashed": {
+        "description": "Marketing text for unlimited plan"
+    },
+    "privacyIntroText": "At Omi, we take your privacy very seriously. We want to be transparent about the data we collect and how we use it to improve our product for you. Here's what you need to know:",
+    "@privacyIntroText": {
+        "description": "Privacy page - privacyIntroText"
+    },
+    "commitmentText": "We are committed to using the data we collect only to make Omi a better product for you. Your privacy and trust are paramount to us.",
+    "@commitmentText": {
+        "description": "Privacy page - commitmentText"
+    },
+    "thankYouText": "Thank you for being a valued user of Omi. If you have any questions or concerns, feel free to reach out to us to team@basedhardware.com.",
+    "@thankYouText": {
+        "description": "Privacy page - thankYouText"
+    },
+    "knowledgeGraphDeleteDescription": "This will delete all derived knowledge graph data (nodes and connections). Your original memories will remain safe. The graph will be rebuilt over time or upon next request.",
+    "@knowledgeGraphDeleteDescription": {
+        "description": "Developer settings - knowledgeGraphDeleteDescription"
+    },
+    "howPeopleWorks": "Once a person is created, you can go to a conversation transcript, and assign them their corresponding segments, that way Omi will be able to recognize their speech too!",
+    "@howPeopleWorks": {
+        "description": "Explanation of how people/speech recognition works"
+    },
+    "buildAndShareYourCustomApp": "Build and share your custom app",
+    "@buildAndShareYourCustomApp": {
+        "description": "Subtitle for create app button"
+    },
+    "onboardingChooseYourPreference": "Choose your preference",
+    "@onboardingChooseYourPreference": {
+        "description": "Onboarding step description for language selection"
+    },
+    "onboardingGrantRequiredAccess": "Grant required access",
+    "@onboardingGrantRequiredAccess": {
+        "description": "Onboarding step description for permissions"
+    },
+    "apiEnvironmentDescription": "Choose which backend to connect to",
+    "@apiEnvironmentDescription": {
+        "description": "Subtitle for the API environment switcher"
+    },
+    "phoneCallsUpsellFeature4": "Your calls stay private and secure",
+    "@phoneCallsUpsellFeature4": {
+        "description": "Phone calls upsell feature 4"
+    },
+    "omisStorageDesc": "When your Omi is not connected to your phone, it stores audio locally on its built-in memory. You never lose a recording.",
+    "@omisStorageDesc": {
+        "description": "Description of device storage in sync info sheet"
+    },
+    "permissionsSetupDescription": "Enable a few permissions so Omi can work its magic.",
+    "@permissionsSetupDescription": {
+        "description": "Subtitle for the permissions interstitial screen"
+    },
+    "architectSubtitle": "Power-user AI — thousands of chats + agentic automations",
+    "syncCardProgressOf": "{current} of {total}",
+    "@syncCardProgressOf": {
+        "description": "Top status card: secondary progress line under the phase title.",
+        "placeholders": {
+            "current": {
+                "type": "int"
+            },
+            "total": {
+                "type": "int"
+            }
+        }
+    },
+    "newestFirst": "Newest first",
+    "@newestFirst": {
+        "description": "Subtle sort-order indicator next to the recordings list header so the user knows the newest items are at the top."
+    },
+    "backgroundModeNote": "Works with Omi devices only for now, and is being improved continuously.",
+    "@backgroundModeNote": {
+        "description": "Caveat note shown in the Background Mode sheet"
+    },
+    "conversationsNotCapturedCount": "Not captured ({count})",
+    "@conversationsNotCapturedCount": {
+        "description": "Header for the calendar capture-gap group in the conversations list",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "speakerTagPromptSubtitle": "A quick check on voices from the last two days",
+    "@speakerTagPromptSubtitle": {
+        "description": "Card subtitle for the speaker tagging prompt"
+    },
+    "transcriptionsPendingCount": "Transcriptions pending {count}",
+    "@transcriptionsPendingCount": {
+        "description": "Phone-local recordings still waiting to be uploaded for transcription, on the conversations list banner.",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "captureRecoveryBanner": "Omi isn't sending audio — tap to reconnect",
+    "@captureRecoveryBanner": {
+        "description": "Reconnect banner shown after automatic BLE recovery has not restored pendant audio; tapping opens device settings"
+    },
+    "capturePendantDisconnectedDetail": "Your pendant lost its connection to this phone. Omi reconnects on its own when the pendant is on and nearby. Everything recorded before this is safe.",
+    "@capturePendantDisconnectedDetail": {
+        "description": "Details sheet from the Home live capture card when the pendant disconnected in the middle of a capture."
+    },
+    "capturePendantDisconnectedShort": "Omi reconnects on its own",
+    "@capturePendantDisconnectedShort": {
+        "description": "Listening pill, after the status, when the pendant dropped and is not reconnecting yet: the one-line reassurance. The details sheet has the full explanation."
+    },
+    "pinPersonSubtitle": "Keep {name}, and expect them in your conversations",
+    "@pinPersonSubtitle": {
+        "description": "What pinning a person means, under the Pin switch.",
+        "placeholders": {
+            "name": {
+                "type": "String"
+            }
+        }
+    },
+    "pinPersonHonestLine": "Omi asks before matching close voices.",
+    "@pinPersonHonestLine": {
+        "description": "Footer under the Pin switch: pinning makes Omi ask about near matches rather than label them."
+    },
+    "speakerTagPromptHintConfirm": "Yes raises {name}'s confidence.",
+    "@speakerTagPromptHintConfirm": {
+        "description": "Hint at the bottom of the 'Is this <name>?' card.",
+        "placeholders": {
+            "name": {
+                "type": "String"
+            }
+        }
+    },
+    "localCopiesSection": "Local Copies",
+    "@localCopiesSection": {
+        "description": "Section header above the auto-remove synced copies setting"
+    },
+    "forYou": "For You",
+    "@forYou": {
+        "description": "Home proactivity feed section title"
+    },
+    "stopThese": "Stop These",
+    "@stopThese": {
+        "description": "Disable the producer of a For You card"
+    },
+    "meetingActionItemsTitle": "Action items",
+    "@meetingActionItemsTitle": {
+        "description": "meetingActionItemsTitle"
+    },
+    "addToTasks": "Add to Tasks",
+    "@addToTasks": {
+        "description": "addToTasks"
+    },
+    "showInTranscript": "Show in Transcript",
+    "@showInTranscript": {
+        "description": "showInTranscript"
+    },
+    "tentativeTaskDueDate": "Due ~{date}",
+    "@tentativeTaskDueDate": {
+        "description": "tentativeTaskDueDate",
+        "placeholders": {
+            "date": {
+                "type": "String"
+            }
+        }
+    },
+    "tentativeTaskDueDateSemantics": "Tentatively due {date}",
+    "@tentativeTaskDueDateSemantics": {
+        "description": "tentativeTaskDueDateSemantics",
+        "placeholders": {
+            "date": {
+                "type": "String"
+            }
+        }
+    },
+    "openTask": "Open Task",
+    "@openTask": {
+        "description": "openTask"
+    },
+    "completeTask": "Complete task",
+    "@completeTask": {
+        "description": "completeTask"
+    },
+    "reopenTask": "Reopen task",
+    "@reopenTask": {
+        "description": "reopenTask"
+    },
+    "addingToTasks": "Adding to Tasks…",
+    "@addingToTasks": {
+        "description": "addingToTasks"
+    },
+    "taskAddedToTasks": "Added to Tasks",
+    "@taskAddedToTasks": {
+        "description": "taskAddedToTasks"
+    },
+    "completedStatus": "Completed",
+    "@completedStatus": {
+        "description": "completedStatus"
+    },
+    "notCompletedStatus": "Not completed",
+    "@notCompletedStatus": {
+        "description": "notCompletedStatus"
+    },
+    "referralAffiliate": "Affiliate program",
+    "referralCampaignTerms": "Friends get 10% off Omi hardware. Your first 2 friends who purchase unlock 2 months of Pro. The next 3 unlock 3 more. Up to 5 friends and 5 months total.",
+    "referralMilestone": "{months} months of Pro · {count}/{target} purchases",
+    "@referralMilestone": {
+        "placeholders": {
+            "months": {
+                "type": "int"
+            },
+            "count": {
+                "type": "int"
+            },
+            "target": {
+                "type": "int"
+            }
+        }
+    },
+    "referralClaim": "Claim Reward",
+    "referralClaimed": "{months} Pro months claimed",
+    "@referralClaimed": {
+        "placeholders": {
+            "months": {
+                "type": "int"
+            }
+        }
+    },
+    "referralRewardPending": "Your reward is saved until your paid subscription ends.",
+    "referralCampaignTitle": "Refer Omi. Get free Pro.",
+    "referralCampaignSubtitle": "10% off Omi for them. Up to 5 months of Pro for you.",
+    "@referralCampaignSubtitle": {
+        "description": "Referral page subtitle under the title"
+    },
+    "referralShareInvite": "Share invite",
+    "@referralShareInvite": {
+        "description": "Primary button that opens the share sheet with the referral link"
+    },
+    "referralYourRewards": "Your rewards",
+    "@referralYourRewards": {
+        "description": "Section header above the referral reward rows"
+    },
+    "referralRewardFirstTitle": "2 months of Pro",
+    "@referralRewardFirstTitle": {
+        "description": "First referral reward row title"
+    },
+    "referralRewardFirstDetail": "When 2 friends buy Omi",
+    "@referralRewardFirstDetail": {
+        "description": "First referral reward row condition"
+    },
+    "referralRewardSecondTitle": "3 more months",
+    "@referralRewardSecondTitle": {
+        "description": "Second referral reward row title, months of Pro"
+    },
+    "referralRewardSecondDetail": "When 3 more friends buy",
+    "@referralRewardSecondDetail": {
+        "description": "Second referral reward row condition"
+    },
+    "referralClaimShort": "Claim",
+    "@referralClaimShort": {
+        "description": "Short pill button to claim an earned referral reward"
+    },
+    "paymentDeclinedTitle": "Your card was declined",
+    "@paymentDeclinedTitle": {
+        "description": "Home row title when the renewal charge for the user's plan failed"
+    },
+    "paymentDeclinedMessage": "Update it to get {plan} back",
+    "@paymentDeclinedMessage": {
+        "description": "Home row line under 'Your card was declined'. it = the card; plan = a product name such as Omi Pro"
+    },
+    "hasLinkedTasksLabel": "Has linked tasks",
+    "@hasLinkedTasksLabel": {
+        "description": "Accessible conversation-row badge: at least one current canonical task is linked"
+    },
+    "hasTasksFilter": "Has tasks",
+    "@hasTasksFilter": {
+        "description": "Conversation search and browse filter: only conversations with current linked tasks"
+    },
+    "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
+    "@firmwareUpdateNotInstalledMessage": {
+        "placeholders": {
+            "version": {
+                "type": "String"
+            }
+        }
+    },
+    "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
+    "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
 }

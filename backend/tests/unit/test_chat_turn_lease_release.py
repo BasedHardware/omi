@@ -119,4 +119,4 @@ def test_release_after_stop_tolerates_a_lease_already_taken_over():
             raise PermissionError('Lost surface lease')
 
     sink = _LeasedReplySink(_Delegate(), _TakenOver(), 'uid-1', 'tok-old')
-    sink._release_after_stop()  # must not raise into the executor's error log
+    sink.release_after_interruption()  # must not raise into the executor's error log

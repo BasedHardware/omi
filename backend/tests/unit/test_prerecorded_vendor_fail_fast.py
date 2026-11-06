@@ -94,6 +94,10 @@ def burn(endpoint, outcome):
     return metric('omi_prerecorded_vendor_audio_seconds_total', provider='modulate', endpoint=endpoint, outcome=outcome)
 
 
+def payload_bytes(provider, endpoint):
+    return metric('omi_prerecorded_vendor_payload_bytes_total', provider=provider, endpoint=endpoint)
+
+
 def probe_total():
     return sum(metric('omi_batch_pipeline_language_probe_total', outcome=o) for o in PROBE_OUTCOMES)
 
@@ -191,10 +195,15 @@ def test_transient_retry_then_success_is_bounded_to_two_posts(monkeypatch):
     no_retry_sleep(monkeypatch)
     ok_before = burn('stt', 'ok')
     error_before = burn('stt', 'error')
-    assert stt.modulate_prerecorded_from_bytes(wav_bytes(3)) == []
+    before = payload_bytes('modulate', 'stt')
+    audio = wav_bytes(3)
+    assert stt.modulate_prerecorded_from_bytes(audio) == []
     assert client.post.call_count == 2
     assert burn('stt', 'ok') - ok_before == 3.0
     assert burn('stt', 'error') - error_before == 3.0
+    assert payload_bytes('modulate', 'stt') - before == 2 * len(audio)
+    for call in client.post.call_args_list:
+        assert call.kwargs['files']['upload_file'][1].getvalue() == audio
 
 
 def test_non_wav_audio_burns_zero_seconds_without_raising(monkeypatch):
@@ -414,6 +423,30 @@ def test_detect_outcome_accepted(monkeypatch):
     assert burn('lid', 'ok') - burn_before == 6.0
 
 
+def test_lid_payload_counts_the_bounded_probe_body(monkeypatch):
+    client = install_http(monkeypatch, lid, post=lid_reply(200))
+    before = payload_bytes('modulate', 'lid')
+    audio = wav_bytes(45)
+    assert lid.detect(audio).probe_seconds == 30
+    body = client.post.call_args.kwargs['files']['upload_file'][1]
+    assert body == lid.probe_wav(audio)[0]
+    assert payload_bytes('modulate', 'lid') - before == len(body)
+
+
+def test_parakeet_v2_fallback_counts_both_unchanged_payloads(monkeypatch):
+    monkeypatch.setenv('HOSTED_PARAKEET_API_URL', 'https://parakeet.test')
+    monkeypatch.setenv('PARAKEET_USE_V2', '1')
+    client = install_http(monkeypatch, stt, post=[stt_reply(404), stt_reply(200, {'text': '', 'segments': []})])
+    before_v2, before_v1 = payload_bytes('parakeet', 'v2'), payload_bytes('parakeet', 'v1')
+    audio = wav_bytes(3)
+    assert stt.parakeet_prerecorded_from_bytes(audio) == []
+    assert client.post.call_count == 2
+    assert payload_bytes('parakeet', 'v2') - before_v2 == len(audio)
+    assert payload_bytes('parakeet', 'v1') - before_v1 == len(audio)
+    for call in client.post.call_args_list:
+        assert call.kwargs['files']['file'][1].getvalue() == audio
+
+
 @pytest.mark.parametrize(
     'post,expected_outcome',
     [
@@ -469,10 +502,12 @@ def test_detect_outcome_breaker_open(monkeypatch):
     assert client.post.call_count == 5
     assert breaker_gauge('lid') == 1
     before, outcome_before = probe_total(), probe_outcome('breaker_open')
+    bytes_before = payload_bytes('modulate', 'lid')
     assert_unavailable(lid.detect(wav_bytes(6)))
     assert client.post.call_count == 5
     assert probe_total() - before == 1
     assert probe_outcome('breaker_open') - outcome_before == 1
+    assert payload_bytes('modulate', 'lid') == bytes_before
 
 
 def test_detect_quota_failure_burns_probe_seconds_as_error(monkeypatch):

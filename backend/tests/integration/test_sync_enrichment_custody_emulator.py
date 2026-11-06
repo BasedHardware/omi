@@ -227,7 +227,7 @@ def test_watchdog_cursor_reaches_exhausted_wake_beyond_valid_prefix(custody, mon
                 'task_due_at': 100000,
                 'first_pending_at': 0,
                 'summary_deadline_at': 120,
-                'dispatch': reprocess._dispatch_binding(),
+                'dispatch': reprocess.dispatch_binding(),
             }
         )
         refs.append(ref)

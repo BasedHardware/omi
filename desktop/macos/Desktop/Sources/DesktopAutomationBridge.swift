@@ -1,3 +1,10 @@
+// The local automation bridge: the HTTP surface (omi-ctl state/navigate/actions)
+// that calls the app's real code in-process for agent and e2e verification.
+//
+// It never synthesizes mouse events, auto-enables only on non-production
+// bundles, and every registered action must declare its effects so read-only
+// verification cannot mutate app state
+// (.github/agent-docs/desktop-automation-effects.md).
 import AppKit
 import CryptoKit
 import Foundation

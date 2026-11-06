@@ -106,7 +106,8 @@ abstract final class SyncPendingWork {
     // Device downloads run through an upload cooldown (pulling audio uses no upload quota), so a
     // download in progress is reported as itself, not as the cooldown.
     if (active && s.phase == SyncPhase.downloadingFromDevice) return l.syncCardDownloadingTitle;
-    if (rateLimited) return syncCooldownTitle(rateLimitReason, l);
+    // An edge throttle clears by itself and needs nothing from the user, so it is not named (David, 11-02).
+    if (rateLimited && rateLimitReason != RateLimitReason.edgeThrottle) return syncCooldownTitle(rateLimitReason, l);
     if (active) {
       switch (s.phase) {
         case SyncPhase.downloadingFromDevice:

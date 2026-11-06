@@ -23,6 +23,7 @@ import uuid
 from typing import Any
 
 from google.api_core.datetime_helpers import DatetimeWithNanoseconds
+from google.api_core.exceptions import Aborted
 from google.cloud.firestore_v1 import FieldFilter
 
 from database._client import get_firestore_client
@@ -79,6 +80,9 @@ def private_write(path: Path, data: dict[str, Any]) -> None:
 
 
 def parse_time(value: str) -> datetime:
+    # Plans use isoformat(), while the SDK parser requires a UTC Z suffix.
+    if value.endswith('+00:00'):
+        value = value[:-6] + 'Z'
     return DatetimeWithNanoseconds.from_rfc3339(value)
 
 
@@ -318,24 +322,39 @@ def apply(client: Any, plan: dict[str, Any], digest: str, args: Any) -> None:
                 modeled += item['modeled_usd']
                 counts['reserved'] += 1
                 if item['kind'] == 'noise':
-                    closed_revision = lifecycle.close_stuck_backfill_noise(
-                        item['uid'],
-                        item['id'],
-                        expected_revision=item['revision'],
-                        cutoff=parse_time(plan['cutoff']),
-                        expected_session_revision=item['session_revision'],
-                        run_id=plan['run_id'],
-                        firestore_client=client,
-                    )
-                    snap = (
-                        client.collection('users')
-                        .document(item['uid'])
-                        .collection('conversations')
-                        .document(item['id'])
-                        .get()
-                    )
-                    require(db.revision(snap) == closed_revision, 'noise_changed_after_close')
-                    result = {'closed_revision': closed_revision}
+                    closed_revision = None
+                    for attempt in range(4):
+                        if attempt:
+                            time.sleep(5 * attempt)
+                            check_enabled(client, plan, digest)
+                        try:
+                            closed_revision = lifecycle.close_stuck_backfill_noise(
+                                item['uid'],
+                                item['id'],
+                                expected_revision=item['revision'],
+                                cutoff=parse_time(plan['cutoff']),
+                                expected_session_revision=item['session_revision'],
+                                run_id=plan['run_id'],
+                                firestore_client=client,
+                            )
+                            break
+                        except (Aborted, ValueError) as error:
+                            # The SDK wraps exhausted Aborted retries in ValueError.
+                            # Other validation failures must still freeze the run.
+                            if isinstance(error, ValueError) and 'Failed to commit transaction' not in str(error):
+                                raise
+                    if closed_revision is None:
+                        result = {'kind': 'skipped_close_contention'}
+                    else:
+                        snap = (
+                            client.collection('users')
+                            .document(item['uid'])
+                            .collection('conversations')
+                            .document(item['id'])
+                            .get()
+                        )
+                        require(db.revision(snap) == closed_revision, 'noise_changed_after_close')
+                        result = {'closed_revision': closed_revision}
                 else:
                     intent = lifecycle.request_finalization(
                         item['uid'],
@@ -354,7 +373,7 @@ def apply(client: Any, plan: dict[str, Any], digest: str, args: Any) -> None:
                     # the transactional owner fence also covers other/restarted operators.
                     result = wait_job(client, plan, digest, item, intent, args.job_timeout)
                 entries.append({**{k: item[k] for k in ['uid', 'id', 'kind', 'revision']}, **result})
-                counts[item['kind']] += 1
+                counts[result.get('kind', item['kind'])] += 1
                 # Persist after each outcome with atomic replacement; an admission with
                 # lost ACK leaves incomplete=True and stops unattended resumption.
                 tmp = journal.with_suffix('.tmp')
@@ -497,10 +516,17 @@ def main() -> None:
     print(json.dumps({'mode': 'plan' if args.plan else 'dry_run', **summarize(plan)}))
 
 
-if __name__ == '__main__':
+def cli() -> None:
     try:
         main()
     except Exception as error:
         reason = str(error) if isinstance(error, db.BackfillConflict) else type(error).__name__
-        print(json.dumps({'stopped': reason}), file=sys.stderr)
+        details = {'stopped': reason, 'error_type': type(error).__name__, 'error_message': str(error)}
+        if error.__cause__ is not None:
+            details.update(cause_type=type(error.__cause__).__name__, cause_message=str(error.__cause__))
+        print(json.dumps(details), file=sys.stderr)
         raise SystemExit(1)
+
+
+if __name__ == '__main__':
+    cli()

@@ -348,6 +348,8 @@ def test_member_kill_switch_restores_version_and_cache_with_header(monkeypatch, 
     from types import SimpleNamespace
 
     routes = conversation_routes
+    # Both independent time-dependent Home projections must be off for writer-version caching.
+    monkeypatch.setenv('HOME_TRANSCRIPTION_PRESENTATION_GATE', 'off')
     monkeypatch.setenv('HOME_HIDE_EPISODE_MEMBERS', 'off')
     request = Request({'type': 'http', 'headers': [(b'x-omi-home-episode-ids', b'e:a')]})
     cached = Response(status_code=304) if not_modified else None
@@ -504,3 +506,34 @@ def test_date_filtered_members_stay_reachable_even_with_a_held_header(monkeypatc
     assert home_membership.held_for(request) == ''  # Also restores ordinary cache/version decisions.
     assert home_membership.project_list('u', rows, request, response, filtered=False) == rows
     assert response.headers == {}
+
+
+@pytest.mark.parametrize(
+    'deadline_hours, status, title',
+    [(1, 'processing', 'Transcribing…'), (-1, 'failed', "Couldn't transcribe")],
+)
+def test_batch_placeholders_coexist_with_neutral_titles_and_floor_holding(deadline_hours, status, title):
+    neutral = floor(
+        summary_blocked_reason=None,
+        started_at=NOW - timedelta(hours=4),
+        finished_at=NOW - timedelta(hours=4) + timedelta(seconds=30),
+        structured={'title': 'Thank you.', 'title_provenance': 'server_minimum'},
+    )
+    pending = dict(neutral, id='pending', episode_transcription_deadline_at=NOW + timedelta(hours=deadline_hours))
+    members = {
+        'a': neutral,
+        'pending': pending,
+        'floor': floor(id='floor', episode_transcription_deadline_at=NOW - timedelta(hours=1)),
+    }
+    before = deepcopy(members)
+    wire = home_read.project_episode(
+        'u',
+        episode(conversation_ids=list(members)),
+        members=members,
+        list_row=True,
+    )
+    by_id = {member['id']: member for member in wire['members']}
+    assert by_id['a']['title'].startswith('Recording · ')
+    assert (by_id['pending']['title'], by_id['pending']['status']) == (title, status)
+    assert 'floor' not in by_id
+    assert members == before

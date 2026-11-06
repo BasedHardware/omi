@@ -362,3 +362,14 @@ def test_preview_custody_rollback_is_listen_only(gate: SimpleNamespace, chart_fi
         '  - name: LISTEN_PREVIEW_BATCH_CUSTODY_ENABLED\n    value: "false"\n',
     )
     assert gate.validate_preflight(chart_fixture) == []
+
+
+def test_web_batch_cohort_is_listen_admission_only(gate: SimpleNamespace, monkeypatch) -> None:
+    assert gate.validate_preflight(REPO_ROOT) == []
+    # Removing the reviewed listen-only classification must reject the chart binding.
+    monkeypatch.setitem(
+        gate.LISTEN_ONLY_ALLOWED,
+        'prod',
+        gate.LISTEN_ONLY_ALLOWED['prod'] - {'SERVER_BATCH_ONLY_WEB_PERCENT'},
+    )
+    assert any('SERVER_BATCH_ONLY_WEB_PERCENT' in error for error in gate.validate_preflight(REPO_ROOT))

@@ -12,6 +12,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
+import re
 
 from config import record_seal_repair as config
 from utils.batch_pipeline import record_seal_nojob as nojob, record_seal_cluster_repair as cluster
@@ -163,7 +164,10 @@ def test_native_and_dependency_diagnostics_never_reach_cli_output(tmp_path):
         'raise SystemExit(entry["main"]())\n'
     )
     result = subprocess.run(
-        [sys.executable, str(script)], capture_output=True, text=True, env={**os.environ, 'OMI_LOG_FORMAT': 'json'}
+        [sys.executable, str(script)],
+        capture_output=True,
+        text=True,
+        env={**os.environ, 'OMI_LOG_FORMAT': 'json', 'PUSHER_PROJECTION_DEBT_DURABLE_ENABLED': 'off'},
     )
     assert result.returncode == 0 and not result.stderr
     assert private not in result.stdout
@@ -331,7 +335,15 @@ def test_discovery_pages_past_closed_rows_and_preserves_oldest_order():
             return self
 
         def select(self, fields):
-            assert fields == ('finished_at', 'record_audio_closed', 'record_audio_partial')
+            assert fields == (
+                'finished_at',
+                'record_audio_closed',
+                'record_audio_partial',
+                'record_upload_revision',
+                'deleted',
+                'discarded',
+                'private_cloud_sync_enabled',
+            )
             return self
 
         def limit(self, _):
@@ -350,7 +362,12 @@ def test_discovery_pages_past_closed_rows_and_preserves_oldest_order():
                         to_dict=lambda: {'finished_at': finish, 'record_audio_closed': True},
                     )
                 ] * 128
-            return [SimpleNamespace(reference=SimpleNamespace(path='oldest'), to_dict=lambda: {'finished_at': finish})]
+            return [
+                SimpleNamespace(
+                    reference=SimpleNamespace(path='oldest'),
+                    to_dict=lambda: {'finished_at': finish, 'private_cloud_sync_enabled': True},
+                )
+            ]
 
     query = Query()
     rows, saturated, cursor = cluster.discover(
@@ -495,6 +512,7 @@ def test_closed_row_scan_cap_also_advances_without_skipping_the_tail():
 
 @pytest.mark.parametrize('mode,writes', [('apply', 1), ('plan', 0)])
 def test_frontier_advances_before_work_and_plan_never_writes(source, proof, monkeypatch, mode, writes):
+    monkeypatch.setattr(config, 'jobs_enabled', lambda: False)
     from database import _client
     from utils.batch_pipeline import record_seal_sweeper
 
@@ -514,6 +532,7 @@ def test_frontier_advances_before_work_and_plan_never_writes(source, proof, monk
 
 
 def test_run_budget_deferral_cannot_reset_the_unattempted_tail(source, proof, monkeypatch):
+    monkeypatch.setattr(config, 'jobs_enabled', lambda: False)
     from database import _client
     from utils.batch_pipeline import record_seal_sweeper
 
@@ -567,6 +586,7 @@ def test_admitted_registration_succeeds_at_zero_and_full_ramp_but_policy_changes
 
 
 def test_last_attempt_checkpoint_skips_refused_prefix_and_wrap_revisits_oldest(source, proof, monkeypatch):
+    monkeypatch.setattr(config, 'jobs_enabled', lambda: False)
     from database import _client
     from utils.batch_pipeline import record_seal_sweeper
 
@@ -673,7 +693,7 @@ def test_row_refusal_reason_survives_canonical_planner(source, proof):
         )
         == 'proof_refused'
     )
-    assert reason == {'proof_reason': 'finish_missing'}
+    assert reason == {'proof_reason': 'finish_missing', 'blocker': 'seal_eligible'}
 
 
 @pytest.mark.parametrize('pending_job', [False, True])
@@ -701,7 +721,7 @@ def test_row_tail_gap_survives_both_canonical_planners(source, proof, pending_jo
         )
         == 'proof_refused'
     )
-    assert reason == {'proof_reason': 'tail_lagging', 'tail_gap_bucket': '30_to_120s'}
+    assert reason == {'proof_reason': 'tail_lagging', 'tail_gap_bucket': '30_to_120s', 'blocker': 'seal_eligible'}
     assert not source[1].rows[PATH].get('record_audio_closed')
 
 
@@ -731,6 +751,9 @@ def test_child_gap_bucket_is_allowlisted(candidate):
     assert report['tail_gap_buckets'] == {expected: 1}
     assert progress[0]['tail_gap_bucket'] == expected
     assert set(progress[0]) == {
+        'elapsed_ms',
+        'stage',
+        'stage_ms',
         'event',
         'count',
         'disposition',
@@ -762,7 +785,7 @@ def test_upload_failed_skips_proof_cost_and_gap(source, proof, monkeypatch):
         )
         == 'upload_failed'
     )
-    assert reason == {}
+    assert reason == {'blocker': 'upload_failed'}
     read.assert_not_called()
     assert source[1].rows[PATH]['record_upload_failed'] is True
 
@@ -859,3 +882,291 @@ def test_non_tail_child_cannot_emit_gap():
     )
     assert report['tail_gap_buckets'] == {}
     assert 'tail_gap_bucket' not in progress[0]
+
+
+def _partial_mark(revision, finish):
+    return {
+        'version': 1,
+        'reason': sorted(cluster.partial_config.REASONS)[0],
+        'upload_revision': revision,
+        'finished_at': finish,
+        'finished_partial_at': datetime.now(timezone.utc),
+    }
+
+
+@pytest.mark.parametrize(
+    'extra,selected',
+    [
+        ({}, True),  # open, sync on: still a repair candidate
+        ({'deleted': True}, False),
+        ({'discarded': True}, False),
+        ({'private_cloud_sync_enabled': False}, False),
+        ({'record_audio_closed': True, 'record_audio_partial': 'MARK', 'record_upload_revision': 3}, False),
+        # A new upload revision invalidates the barrier and must be revisited.
+        ({'record_audio_closed': False, 'record_audio_partial': 'MARK', 'record_upload_revision': 4}, True),
+    ],
+)
+def test_discovery_skips_rows_repair_can_only_refuse(extra, selected):
+    finish = datetime.fromtimestamp(100, timezone.utc)
+    data = {'finished_at': finish, 'private_cloud_sync_enabled': True, **extra}
+    if data.get('record_audio_partial') == 'MARK':
+        data['record_audio_partial'] = _partial_mark(3, finish)
+
+    class Query:
+        def where(self, **kw):
+            return self
+
+        def order_by(self, field):
+            return self
+
+        def select(self, fields):
+            return self
+
+        def limit(self, _):
+            return self
+
+        def start_after(self, cursor):
+            return self
+
+        def stream(self, **kw):
+            return [SimpleNamespace(reference=SimpleNamespace(path='row'), to_dict=lambda: dict(data))]
+
+    rows, _, _ = cluster.discover(
+        SimpleNamespace(collection_group=lambda _: Query(), document=lambda path: path), budget=SweepBudget(60)
+    )
+    assert bool(rows) is selected
+
+
+@pytest.mark.parametrize('workers', ['1', '16', '48', '64'])
+def test_repair_workers_accept_io_bound_range(monkeypatch, workers):
+    monkeypatch.setenv('RECORD_SEAL_REPAIR_WORKERS', workers)
+    monkeypatch.setenv('RECORD_SEAL_REPAIR_ROW_SECONDS', '270')
+    monkeypatch.setenv('RECORD_SEAL_REPAIR_RUN_SECONDS', '1500')
+    monkeypatch.setenv('RECORD_SEAL_REPAIR_MODE', 'apply')
+    assert config.settings() == (int(workers), 270, 1500, 'apply')
+
+
+@pytest.mark.parametrize('workers', ['0', '65', '128'])
+def test_repair_workers_outside_range_refuse(monkeypatch, workers):
+    monkeypatch.setenv('RECORD_SEAL_REPAIR_WORKERS', workers)
+    with pytest.raises(ValueError, match='invalid repair limits'):
+        config.settings()
+
+
+def test_row_reuses_exactly_one_gcs_client_and_reports_stages(source, proof, monkeypatch):
+    from contextlib import nullcontext
+    from database import batch_pipeline_store
+    from utils.batch_pipeline import artifact_policy, record_seal_repair, record_seal_sweeper
+    from utils.other import local_storage, storage
+
+    store, _, artifacts = source
+    monkeypatch.setattr(config, 'enabled', lambda: True)
+    monkeypatch.setattr(config, 'require_runtime', lambda: None)
+    monkeypatch.setattr(config, 'server_flags', lambda: SERVER)
+    monkeypatch.setattr(cluster, 'silent_dependencies', nullcontext)
+    monkeypatch.setattr(batch_pipeline_store, 'FirestoreStore', lambda _: store)
+    monkeypatch.setattr(record_seal_sweeper, 'read_pusher_pod_proof', proof)
+    monkeypatch.delenv('BUCKET_AUDIO_DERIVED', raising=False)
+    monkeypatch.setattr(storage.audio_archive, 'admitted', lambda *a: False)
+    monkeypatch.setenv('BUCKET_BATCH_PIPELINE', 'synthetic')
+    blob = SimpleNamespace(name='chunks/synthetic/capture/100.bin', size=64000, generation=7, metadata={})
+    bucket = SimpleNamespace(name=storage.private_cloud_sync_bucket, list_blobs=lambda **kw: iter([blob]))
+    client = SimpleNamespace(bucket=lambda _: bucket)
+    construct = Mock(return_value=client)
+    monkeypatch.setattr(local_storage, 'create_storage_client', construct)
+    # Any accidental default construction in either downstream module must count.
+    monkeypatch.setattr(artifact_policy, 'create_storage_client', construct)
+    monkeypatch.setattr(storage, 'create_storage_client', construct)
+    monkeypatch.setattr(storage, 'storage_client', None)
+    composed = Mock(return_value=artifacts)
+    monkeypatch.setattr(artifact_policy, 'create_artifact_store', composed)
+    monkeypatch.setattr(record_seal_repair, 'list_audio_chunks', storage.list_audio_chunks)
+    checkpoints = []
+    result = cluster.row_main(
+        {'path': SCOPE[0], 'mode': 'apply', 'seconds': 240, 'started': time.monotonic() - 0.02},
+        progress=checkpoints.append,
+    )
+    assert result['disposition'] == 'sealed_registered'
+    assert construct.call_count == 1
+    assert composed.call_args.args[1] is client
+    assert list(result['stage_ms']) == list(cluster.record_seal_profile.STAGES)
+    assert result['stage_ms']['startup'] >= 20
+    assert {entry['stage'] for entry in checkpoints} == {'clients', 'proof', 'list', 'walk', 'apply'}
+    assert all(0 <= value <= 3600000 for value in result['stage_ms'].values())
+    assert result['chunks'] == result['bytes'] == 0  # This fixture stubs the decoder only.
+    assert len(json.dumps(result).encode()) < 1024
+
+
+def test_profile_measures_deltas_and_bounds_worst_case_ipc():
+    now = [1.0]
+    profile = cluster.record_seal_profile.RowProfile(0, clock=lambda: now[0])
+    with profile.install():
+        for stage in cluster.record_seal_profile.STAGES[1:]:
+            profile.enter(stage)
+            now[0] += 1
+        cluster.record_seal_profile.received(123)
+    result = profile.snapshot()
+    assert result['stage_ms'] == dict.fromkeys(cluster.record_seal_profile.STAGES, 1000)
+    assert result['chunks'] == 1 and result['bytes'] == 123
+    result.update(
+        disposition='budget_exhausted',
+        blocker='already_closed_job_pending',
+        partial_reason='tail_lost_or_unproven',
+        proof_reason='tail_lagging',
+        tail_gap_bucket='negative_or_unknown',
+        trimmed_divergent_overlaps=4096,
+    )
+    result['stage_ms'] = dict.fromkeys(cluster.record_seal_profile.STAGES, 3600000)
+    result['chunks'] = result['bytes'] = result['metadata_reloads'] = 2**53
+    assert len(json.dumps(result).encode()) < 1024
+
+
+@pytest.mark.parametrize('checkpoint,expected', [(True, 'walk'), (False, 'unknown')])
+def test_killed_child_reports_last_received_stage(checkpoint, expected):
+    children, events = [], []
+    code = (
+        'import os,time\n'
+        + (
+            'os.write(1, b\'{"stage":"walk","stage_ms":{"proof":12},"chunks":2,"bytes":99}\\n\')\n'
+            if checkpoint
+            else ''
+        )
+        + 'time.sleep(30)\n'
+    )
+
+    def launch(*_):
+        child = subprocess.Popen([sys.executable, '-c', code], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        children.append(child)
+        return child
+
+    report = cluster.coordinate(
+        [('private', 100)],
+        workers=1,
+        row_seconds=0.3,
+        run_seconds=5,
+        mode='apply',
+        launch=launch,
+        progress=events.append,
+    )
+    assert report['dispositions'] == {'budget_exhausted': 1}
+    assert events[0]['stage'] == expected
+    assert report['disposition_elapsed_ms']['budget_exhausted'] == events[0]['elapsed_ms']
+    assert children[0].returncode is not None and children[0].stdout.closed
+    if checkpoint:
+        assert events[0]['chunks'] == 2 and events[0]['bytes'] == 99
+
+
+def test_ipc_tolerates_old_partial_oversized_and_untrusted_profiles():
+    process = SimpleNamespace(stdout=io.BytesIO())
+    output = cluster.RowOutput(process)
+    output.accept(b'{"stage":"private@example.invalid","bytes":"private","stage_ms":{"walk":-1}}')
+    assert output.profile == {'stage': 'unknown', 'stage_ms': {}}
+    process.stdout = io.BytesIO(b'x' * 1025 + b'\n{"stage":"proof"}\n{"disposition":"sealed"}')
+    output.drain(True)
+    assert output.result == {'disposition': 'sealed'}
+    assert output.profile['stage'] == 'proof'
+    _, _, _, _, events = scheduling([('old-child', 100)])
+    assert events[0]['stage'] == 'unknown' and events[0]['disposition'] == 'sealed'
+
+
+@pytest.mark.parametrize('event', ['record_seal_repair', 'record_seal_repair_row'])
+def test_parent_row_and_summary_are_warning(event, monkeypatch):
+    import importlib.util
+    import logging
+
+    path = Path(__file__).resolve().parents[2] / 'scripts/record_seal_repair_job.py'
+    spec = importlib.util.spec_from_file_location('seal_job_warning_test', path)
+    module = importlib.util.module_from_spec(spec)
+    # Loading this entrypoint must not replace pytest's logging handlers.
+    import omi_logging
+
+    monkeypatch.setattr(omi_logging, 'configure_logging', lambda *a, **kw: None)
+    spec.loader.exec_module(module)
+    records = []
+    logger = logging.getLogger('record-seal-repair')
+    monkeypatch.setattr(logger, 'handle', records.append)
+    module.emit({'event': event, 'outcome': 'ok', 'stage_ms': {'walk': 12}})
+    assert records[0].levelno == logging.WARNING
+    assert json.loads(records[0].msg)['stage_ms']['walk'] == 12
+
+
+@pytest.mark.parametrize('stage', ['run', 'rebuild'])
+def test_job_failure_logs_exception_type_and_site_never_message(tmp_path, stage):
+    entrypoint = Path(__file__).resolve().parents[2] / 'scripts/record_seal_repair_job.py'
+    script = tmp_path / 'failure_boundary.py'
+    private = 'users/private-uid/conversations/private-cid private@example.invalid'
+    script.write_text(
+        'import runpy, sys, types\n'
+        f'entry = runpy.run_path({str(entrypoint)!r})\n'
+        'def boom(**kwargs):\n'
+        f'    raise RuntimeError({private!r})\n'
+        'def ok(**kwargs):\n'
+        '    return {"event": "record_seal_repair", "outcome": "ok", "rows": 0}\n'
+        f'if {stage!r} == "run":\n'
+        '    entry["repair"].run = boom\n'
+        'else:\n'
+        '    entry["repair"].run = ok\n'
+        '    sys.modules["utils.record_projection_rebuild"] = types.SimpleNamespace(run_job=lambda: boom())\n'
+        '    import utils\n'
+        '    utils.record_projection_rebuild = sys.modules["utils.record_projection_rebuild"]\n'
+        f'sys.argv = [{str(entrypoint)!r}]\n'
+        'raise SystemExit(entry["main"]())\n'
+    )
+    result = subprocess.run(
+        [sys.executable, str(script)],
+        capture_output=True,
+        text=True,
+        cwd=Path(__file__).resolve().parents[2],
+        env={**os.environ, 'OMI_LOG_FORMAT': 'json', 'RECORD_SEAL_REPAIR_ENABLED': 'true'},
+    )
+    assert private not in result.stdout and private not in result.stderr
+    messages = [json.loads(json.loads(line)['message']) for line in result.stdout.splitlines() if line.strip()]
+    event = 'record_seal_repair' if stage == 'run' else 'record_projection_rebuild'
+    failure = next(m for m in messages if m.get('event') == event and m.get('outcome') == 'error')
+    assert failure['exception_type'] == 'RuntimeError'
+    assert re.fullmatch(r'[a-z0-9_]{1,64}\.py:\d+', failure['error_site'])
+    assert set(failure) <= {'event', 'outcome', 'exception_type', 'error_site'}
+    assert result.returncode == (1 if stage == 'run' else 0)
+
+
+def _job_module(monkeypatch):
+    import importlib.util
+
+    import omi_logging
+
+    path = Path(__file__).resolve().parents[2] / 'scripts/record_seal_repair_job.py'
+    spec = importlib.util.spec_from_file_location('seal_job_failure_redaction', path)
+    module = importlib.util.module_from_spec(spec)
+    monkeypatch.setattr(omi_logging, 'configure_logging', lambda *a, **kw: None)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_failure_redacts_dynamic_exception_class_name(monkeypatch):
+    module = _job_module(monkeypatch)
+    private = type('uid_9f8e7d6c5b4a_conversation', (RuntimeError,), {'__module__': 'private_payload'})
+    try:
+        raise private('users/private/conversations/private')
+    except RuntimeError as error:
+        payload = module.failure('record_seal_repair', error)
+    assert payload['exception_type'] == 'other'
+    assert 'uid_9f8e7d6c5b4a' not in json.dumps(payload)
+
+
+def test_failure_drops_site_from_dynamically_compiled_frame(monkeypatch):
+    module = _job_module(monkeypatch)
+    code = compile('raise RuntimeError("x")', '/tmp/users/private-uid/conversation.py', 'exec')
+    try:
+        exec(code, {})
+    except RuntimeError as error:
+        payload = module.failure('record_seal_repair', error)
+    assert payload['exception_type'] == 'RuntimeError'
+    assert 'private-uid' not in json.dumps(payload)
+    assert 'error_site' not in payload or 'conversation.py' not in payload['error_site']
+
+
+def test_failure_falls_back_when_fields_cannot_be_built(monkeypatch):
+    module = _job_module(monkeypatch)
+    monkeypatch.setattr(module, '_error_site', lambda error: (_ for _ in ()).throw(ImportError('boom')))
+    payload = module.failure('record_seal_repair', RuntimeError('users/private'))
+    assert payload == {'event': 'record_seal_repair', 'outcome': 'error', 'exception_type': 'RuntimeError'}

@@ -26,10 +26,9 @@ Future<void> showSyncDetailsSheet(BuildContext context, {required VoidCallback o
   );
 }
 
-/// Where unsynced audio is right now, plus the raw counts support asks for.
-///
-/// File, upload-part and server-job counts are real diagnostics but meaningless
-/// as progress, so this is the only place they appear, under their own names.
+/// Where unsynced audio is right now. Transfer speed, file and server-job counts
+/// and the firmware version are diagnostics, not progress: they are not shown,
+/// only included in the text the copy button puts on the clipboard for support.
 class SyncDetailsSheet extends StatelessWidget {
   const SyncDetailsSheet({super.key, required this.sync, required this.device, required this.onHowSyncingWorks});
 
@@ -52,12 +51,12 @@ class SyncDetailsSheet extends StatelessWidget {
 
     final rightNow = <(String, String)>[
       (l.syncDetailsYourOmi, device.isConnected ? l.connected : l.disconnected),
-      if (speed != null && speed > 0) (l.syncDetailsTransferSpeed, '${speed.toStringAsFixed(speed < 10 ? 1 : 0)} KB/s'),
       (l.syncDetailsWaitingOnOmi, onDevice),
       (l.syncDetailsWaitingOnPhone, dur(amounts.onPhoneSeconds)),
       (l.syncDetailsTranscribing, dur(amounts.processingSeconds)),
     ];
     final forSupport = <(String, String)>[
+      if (speed != null && speed > 0) (l.syncDetailsTransferSpeed, '${speed.toStringAsFixed(speed < 10 ? 1 : 0)} KB/s'),
       (l.syncDetailsAudioFiles, '${sync.allWals.length}'),
       if (jobs.total > 0) (l.syncDetailsServerJobs, '${jobs.processed} / ${jobs.total}'),
       (l.firmware, device.currentFirmwareVersion),
@@ -71,11 +70,6 @@ class SyncDetailsSheet extends StatelessWidget {
           OmiSettingsGroup(
             header: l.syncDetailsRightNow,
             children: [for (final (k, v) in rightNow) OmiSettingsRow(title: k, value: v, showChevron: false)],
-          ),
-          const SizedBox(height: OmiSpacing.xl),
-          OmiSettingsGroup(
-            header: l.syncDetailsForSupport,
-            children: [for (final (k, v) in forSupport) OmiSettingsRow(title: k, value: v, showChevron: false)],
           ),
           const SizedBox(height: OmiSpacing.xl),
           OmiButton(

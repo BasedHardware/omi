@@ -5,11 +5,12 @@ from collections import Counter as Counts
 from contextlib import contextmanager
 from contextvars import ContextVar
 from functools import wraps
+import inspect
 import logging
 import threading
 import time
 
-from prometheus_client import Counter, Histogram
+from prometheus_client import Counter, Gauge, Histogram
 from database.batch_privacy_attempt import PrivacyAttempt
 from utils.async_tasks import create_named_task, drain_tasks, wait_for_event
 
@@ -42,6 +43,41 @@ DECISION_MISMATCH = Counter(
 )
 SHADOW_CHECKS = Counter('privacy_shadow_checks_total', 'Privacy shadow comparisons', ['family', 'result'])
 MEMO_REQUESTS = Counter('privacy_memo_requests_total', 'Candidate decision reuse', ['family', 'result'])
+NEGATIVE_LOOKUPS = Counter(
+    'privacy_negative_lookup_total',
+    'Token-certified NOT_FOUND lookup cache outcomes',
+    ['collection', 'mode', 'result'],
+)
+TTL_BOUND_SECONDS = 60.0
+MEMO_INELIGIBLE = Counter(
+    'privacy_memo_ineligible_total',
+    'Batch privacy decisions the attempt memo could not certify, by reason and calling module',
+    ['reason', 'caller'],
+)
+# Bounded caller label: the known assert_batch_write_allowed call sites (git grep, 2026-11-05).
+_INELIGIBLE_CALLERS = frozenset(
+    {
+        'database.batch_pipeline_projection',
+        'database.batch_pipeline_projection_session',
+        'database.batch_pipeline_quarantine_recovery',
+        'database.batch_pipeline_recovery',
+        'database.batch_pipeline_store',
+        'database.batch_voice_evidence',
+        'database.jobstore.postgres_store',
+        'database.outbox_provider_stt',
+        'services.summary_debt_repair',
+        'utils.batch_pipeline.record_seal_repair',
+        'utils.batch_pipeline.retention',
+        'utils.enrichment.custody',
+        'utils.enrichment.redrive',
+        'utils.sync.completed_status',
+        'utils.sync.retired_handle_ack',
+    }
+)
+_PRIVACY_MODULES = frozenset({'database.batch_pipeline_privacy', 'database.privacy_check_metrics'})
+TTL_CACHE = Counter(
+    'privacy_ttl_cache_total', '60s-bounded privacy decision reuse (hit, miss, store)', ['family', 'result']
+)
 CENSUS = Histogram(
     'privacy_session_cycle_operations',
     'Operations in each completed 60 second session interval',
@@ -93,22 +129,76 @@ def called(family):
         pass
 
 
+TTL_KILL = Gauge('privacy_ttl_cache_disabled', '1 when the privacy decision cache kill switch is set or unreadable')
+
+
+def ttl_kill_state(disabled):
+    try:
+        TTL_KILL.set(1 if disabled else 0)
+    except Exception:
+        pass
+
+
+def ttl_result(family, result):
+    try:
+        result = result if result in {'hit', 'miss', 'store'} else 'miss'
+        TTL_CACHE.labels(_family(family), result).inc()
+    except Exception:
+        pass
+
+
+def memo_ineligible(reason):
+    """Count why a batch decision skipped the attempt memo, attributed to the first non-privacy frame."""
+    current = frame = None
+    try:
+        reason = reason if reason in {'no_attempt', 'no_transaction', 'snapshots'} else 'other'
+        caller = 'other'
+        current = inspect.currentframe()
+        frame = current.f_back if current is not None else None
+        for _ in range(8):
+            if frame is None:
+                break
+            module = frame.f_globals.get('__name__', '')
+            if module not in _PRIVACY_MODULES:
+                caller = module if module in _INELIGIBLE_CALLERS else 'other'
+                break
+            frame = frame.f_back
+        MEMO_INELIGIBLE.labels(reason, caller).inc()
+    except Exception:
+        pass
+    finally:
+        # Break the frame reference cycle so request frames are freed immediately.
+        del current, frame
+
+
 def memo_result(family, result):
     try:
-        result = result if result in {'hit', 'miss', 'ineligible'} else 'ineligible'
+        result = result if result in {'hit', 'miss', 'ineligible', 'no_token', 'mint', 'mint_error'} else 'ineligible'
         MEMO_REQUESTS.labels(_family(family), result).inc()
     except Exception:
         pass
 
 
-def read_snapshot(family, reference, *, memo_read=False, **kwargs):
+def negative_lookup(collection, mode, result):
+    try:
+        collection = (
+            collection if collection in {'account_deletions', 'deleted_conversations', 'conversations'} else 'other'
+        )
+        mode = 'shadow' if mode == 'shadow' else 'enforce'
+        result = result if result in {'hit', 'miss', 'mismatch'} else 'miss'
+        NEGATIVE_LOOKUPS.labels(collection, mode, result).inc()
+    except Exception:
+        pass
+
+
+def read_snapshot(family, reference, *, read_budget=None, **kwargs):
     """Count issued reads, including failures, without inspecting paths or payloads."""
     _count(family, 'reads')
-    caller = (
-        'database.batch_pipeline_privacy:get' if family == 'batch' and memo_read else _READ_CALLERS[_family(family)]
-    )
+    caller = _READ_CALLERS[_family(family)]
     caller_token = _READ_CALLER.set(caller)
     try:
+        if read_budget is not None:
+            kwargs.update(timeout=read_budget.timeout(10), retry=None)
         snapshot = reference.get(**kwargs)
     except BaseException:
         _read_result(family, 'error')
@@ -148,14 +238,23 @@ def mode_scope(mode):
         _MODE.reset(token)
 
 
-def compare(family, live, candidate):
-    """Only bounded decision names leave this module; never exception text."""
+def compare(family, live, candidate, *, cached_age=None):
+    """Only bounded decision names leave this module; never exception text.
+
+    ``cached_age`` is the age in seconds of a reused 60s-bounded decision
+    (database.privacy_ttl_cache). A stale allow younger than the ruling's bound
+    is the accepted cost of that bound, so it is labelled ``stale_within_ttl``
+    and kept apart from real mismatches; the kill switch ignores only that label.
+    """
     family, live, candidate = _family(family), _reason(live), _reason(candidate)
     mismatch = live != candidate
     try:
-        SHADOW_CHECKS.labels(family, 'mismatch' if mismatch else 'match').inc()
+        within = mismatch and candidate == 'allow' and cached_age is not None and 0 <= cached_age <= TTL_BOUND_SECONDS
+        SHADOW_CHECKS.labels(family, ('within_ttl' if within else 'mismatch') if mismatch else 'match').inc()
         if mismatch:
             reason = 'stale_allow' if candidate == 'allow' else 'stale_block' if live == 'allow' else 'block_reason'
+            if within:
+                reason = 'stale_within_ttl'
             DECISION_MISMATCH.labels(family, reason).inc()
             # At most one fixed-size line per family per minute, across threads.
             with _LOG_LOCK:

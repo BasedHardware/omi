@@ -24,6 +24,8 @@ COUNTERS = frozenset(
         'privacy_decision_mismatch',
         'privacy_shadow_checks',
         'privacy_memo_requests',
+        'privacy_memo_ineligible',
+        'privacy_negative_lookup',
     }
 )
 

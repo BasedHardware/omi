@@ -294,8 +294,12 @@ async def test_finish_page_checks_pinned_sync_policy_before_any_side_effect(foll
 
 
 @pytest.mark.asyncio
-async def test_unchanged_ready_receipt_retries_when_external_sibling_unblocks(followup):
+async def test_unchanged_ready_receipt_retries_when_external_sibling_unblocks(followup, monkeypatch):
+    # Immediate retry is the kill-switch path; desync retries after a bounded
+    # backoff (test_batch_pipeline_followup_desync.py).
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_FOLLOWUP_BACKOFF_SECONDS', '0')
     f = followup
+    f.runner.backoff_ceiling, f.runner.seeded = 0, True
     f.receipts['head']['state'] = 'ready'
     f.projector.store.store.projection_pending.return_value = ['head']
     sibling_ready = False
@@ -585,6 +589,8 @@ async def test_followup_deadline_cancels_stuck_step_refills_and_retries_same_rec
     from utils.sync import bridge
 
     f = followup
+    # Kill-switch path: the timed-out row is rediscovered on the very next pass.
+    f.runner.backoff_ceiling, f.runner.seeded = 0, True
     f.binding = replace(f.binding, native_record=False)
     f.projector.store.read.side_effect = lambda sid: (f.jobs[sid], {'projection': f.receipts[sid]}, f.binding)
     monkeypatch.setattr(projection_followup, 'MAX_FOLLOWUPS', 1)
@@ -776,3 +782,30 @@ async def test_split_rollover_followup_stores_playback_for_every_part(followup):
         None,
     )
     assert calls == [('playback', 'head'), ('playback', 'extra'), ('enrich', 'head')]
+
+
+@pytest.mark.asyncio
+async def test_source_deleted_followup_is_terminal_without_backoff_or_content_work(followup):
+    f = followup
+    f.receipts['head'].update(
+        state='ready',
+        disposition='source_deleted',
+        conversation_id=None,
+        audio_required=False,
+        enrichment_required=False,
+    )
+    f.projector.complete_content.return_value = {
+        'reason_code': 'source_deleted',
+        'new_memories': [],
+        'updated_memories': [],
+    }
+    f.runner.desync = True
+    f.runner.backoff['head'] = (float('inf'), 60)
+    counter = projection_followup.OUTCOMES.labels('source_deleted')._value.get()
+    await f.runner.run('head')
+    assert projection_followup.OUTCOMES.labels('source_deleted')._value.get() == counter + 1
+    assert 'head' not in f.runner.backoff
+    assert 'source_deleted' not in projection_followup.BACKOFF_OUTCOMES
+    f.projector.store.mark_enrichment.assert_not_called()
+    f.projector.store.ready.assert_not_called()
+    f.projector.load_result.assert_not_called()

@@ -2243,10 +2243,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get firmwareUsbWarning => '업데이트 중 USB 연결은 기기를 손상시킬 수 있습니다.';
 
   @override
-  String get firmwareBatteryAbove15 => '배터리 15% 이상';
+  String get firmwareBatteryRequirement => '배터리 30% 이상';
 
   @override
-  String get firmwareEnsureBattery => '기기 배터리가 15%인지 확인하세요.';
+  String get firmwareEnsureBattery => '기기 배터리가 30%인지 확인하세요.';
 
   @override
   String get firmwareStableConnection => '안정적인 연결';
@@ -10426,8 +10426,11 @@ class AppLocalizationsKo extends AppLocalizations {
   String get firmwareDownloadFailedMessage => '업데이트를 다운로드하지 못했으며 기기는 변경되지 않았습니다. 인터넷 연결을 확인한 후 다시 시도하세요.';
 
   @override
+  String get firmwareBatteryUnavailable => '아직 배터리 잔량을 확인할 수 없습니다. 잠시 기다린 후에도 그대로라면 다시 연결해 주세요.';
+
+  @override
   String firmwareBatteryTooLow(int level) {
-    return '배터리가 $level%입니다. 업데이트 전에 기기를 15% 이상 충전하세요.';
+    return '배터리가 $level%입니다. 업데이트 전에 기기를 30% 이상 충전하세요.';
   }
 
   @override
@@ -12335,43 +12338,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get reviewChangesSectionOther => '기타 변경 사항';
 
   @override
-  String reviewChangeConversationCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '대화 $count개',
-      one: '대화 1개',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String reviewChangePlaceCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count곳',
-      one: '1곳',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String reviewChangeShowAll(int count) {
-    return '$count개 모두 보기';
-  }
-
-  @override
   String get reviewChangeUndoAll => '모두 실행 취소';
 
   @override
-  String get reviewChangeSeeEvidence => '근거 보기';
-
-  @override
   String get reviewChangeViewConversation => '대화 보기';
-
-  @override
-  String get reviewChangeViewTask => '할 일 보기';
 
   @override
   String reviewChangesUndoPartial(int failed, int total) {
@@ -12446,9 +12416,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get dreamReportTitle => 'Dream 리포트';
 
   @override
-  String get dreamReportShadowBanner => '미리보기 모드: Dream이 변경할 내용을 보여 주지만, 아직 계정에는 아무것도 바뀌지 않습니다.';
-
-  @override
   String get dreamReportLiveBanner => 'Dream이 이 변경 사항을 직접 적용합니다. 최근 변경 사항에서 언제든 되돌릴 수 있어요.';
 
   @override
@@ -12493,11 +12460,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get dreamReportNothingFound => '수정할 내용 없음';
 
   @override
-  String dreamReportStats(int records, int tokens) {
-    return '항목 $records개 읽음 · 토큰 $tokens개';
-  }
-
-  @override
   String get dreamReportWouldFix => '수정할 예정';
 
   @override
@@ -12513,27 +12475,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get dreamReportLearnedWords => '배운 단어';
 
   @override
-  String get dreamReportFeedback => 'Omi 팀에 보고됨';
-
-  @override
   String get dreamReportDeletedItem => '삭제된 항목';
-
-  @override
-  String dreamReportPasses(int count, int limit) {
-    return '오늘 $count/$limit회 실행';
-  }
-
-  @override
-  String dreamReportQueued(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '변경 $count 건 대기 중',
-      one: '변경 1건 대기 중',
-      zero: '대기 중인 변경 없음',
-    );
-    return '$_temp0';
-  }
 
   @override
   String dreamReportRunsLeft(int count) {
@@ -12561,28 +12503,6 @@ class AppLocalizationsKo extends AppLocalizations {
       one: '제안 1건',
     );
     return '$_temp0 · $_temp1';
-  }
-
-  @override
-  String dreamReportDropped(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '이전 변경 $count 건 건너뜀',
-      one: '이전 변경 1건 건너뜀',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String dreamReportPrivacyHeld(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '개인정보 보호를 위해 리포트 $count 건 보류',
-      one: '개인정보 보호를 위해 리포트 1건 보류',
-    );
-    return '$_temp0';
   }
 
   @override
@@ -13283,6 +13203,17 @@ class AppLocalizationsKo extends AppLocalizations {
   String get paywallTrialCancelNote => '언제든지 취소 가능. 수수료나 위약금 없음.';
 
   @override
+  String get paywallMonthlyFallbackTitle => '1년은 아직 부담되시나요?';
+
+  @override
+  String paywallMonthlyFallbackTrialBody(int days, String price) {
+    return '대신 월간으로 시작하세요. 똑같이 $days일 무료, 이후 월 $price. 언제든 취소할 수 있어요.';
+  }
+
+  @override
+  String get paywallMonthlyFallbackTrialCta => '월간 무료로 체험하기';
+
+  @override
   String paywallTrialStarted(int days) {
     return 'Omi Pro의 $days일 무료 체험이 시작되었습니다.';
   }
@@ -13330,15 +13261,6 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get syncStepLabelDownload => 'Omi → 휴대폰';
-
-  @override
-  String get syncStepLabelUpload => '업로드';
-
-  @override
-  String get syncStepLabelTranscribe => '텍스트 변환';
-
-  @override
   String get syncDetailsTitle => '동기화 상세 정보';
 
   @override
@@ -13358,9 +13280,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get syncDetailsTranscribing => 'Omi에서 텍스트 변환 중';
-
-  @override
-  String get syncDetailsForSupport => '지원팀용';
 
   @override
   String get syncDetailsAudioFiles => '오디오 파일';
@@ -14466,12 +14385,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get episodeNotesStartWithTranscript => '최종 스크립트가 도착하면 노트가 시작됩니다.';
 
   @override
-  String get episodeOnDeviceNotesFootnote => '말하는 동안 휴대전화에서 초안이 작성됩니다. 전체 노트는 최종 스크립트와 함께 도착합니다.';
-
-  @override
-  String get episodeOnThisPhone => '이 휴대전화에서';
-
-  @override
   String livePreviewBehind(Object duration) {
     return '최종 스크립트가 약 $duration 뒤처져 있습니다';
   }
@@ -14481,9 +14394,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get livePreviewNoEngineBody => '말한 내용은 1~2분 후 이곳에 나타납니다.';
-
-  @override
-  String get livePreviewNoEngineTitle => '안전하게 기록 중입니다';
 
   @override
   String get livePreviewOnPhoneDivider => '방금, 이 휴대전화에서';
@@ -14496,11 +14406,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get deviceCatchUpWhenOnline => '온라인 시';
-
-  @override
-  String onTheWayCatchingUp(String duration) {
-    return '$duration 처리 중';
-  }
 
   @override
   String get onTheWayUploadsByItself => '자동으로 업로드됩니다. 도착하는 대로 대화가 채워집니다.';
@@ -14522,34 +14427,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get onTheWayFootnote => '실패한 녹음은 백그라운드에서 계속 다시 시도합니다. 전사할 수 없는 내용은 자동으로 저희에게 보고됩니다.';
-
-  @override
-  String get onTheWayDetailsForSupport => '고객지원용 세부 정보';
-
-  @override
-  String homeNoiseFoldHidden(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '짧은 클립 $count개 숨겨짐',
-      one: '짧은 클립 1개 숨겨짐',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String get homeNoiseFoldShow => '표시';
-
-  @override
-  String homeNoiseFoldHide(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '짧은 클립 $count개 숨기기',
-      one: '짧은 클립 1개 숨기기',
-    );
-    return '$_temp0';
-  }
 
   @override
   String deleteLocalRecordingsWarning(int count) {
@@ -14738,6 +14615,19 @@ class AppLocalizationsKo extends AppLocalizations {
   String get episodeWritingNotes => '메모 작성 중…';
 
   @override
+  String get homeStepTranscribing => '음성 변환 중…';
+
+  @override
+  String homeRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '녹음 $count개',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get episodeWritingNotesDetail => '먼저 대화 내용을 마무리하고 있어요. 이 페이지를 나가도 됩니다.';
 
   @override
@@ -14757,4 +14647,537 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get liveAudioSavedDetail => '업로드되는 대로 화자와 최종 대화 내용이 여기에 표시됩니다.';
+
+  @override
+  String get searchNoiseFilter => '짧은 클립';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '대화 $count개',
+      one: '대화 1개',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count곳',
+      one: '1곳',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return '$count개 모두 보기';
+  }
+
+  @override
+  String get reviewChangeSeeEvidence => '근거 보기';
+
+  @override
+  String get reviewChangeViewTask => '할 일 보기';
+
+  @override
+  String get dreamReportShadowBanner => '미리보기 모드: Dream이 변경할 내용을 보여 주지만, 아직 계정에는 아무것도 바뀌지 않습니다.';
+
+  @override
+  String dreamReportStats(int records, int tokens) {
+    return '항목 $records개 읽음 · 토큰 $tokens개';
+  }
+
+  @override
+  String get dreamReportFeedback => 'Omi 팀에 보고됨';
+
+  @override
+  String dreamReportPasses(int count, int limit) {
+    return '오늘 $count/$limit회 실행';
+  }
+
+  @override
+  String dreamReportQueued(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '변경 $count 건 대기 중',
+      one: '변경 1건 대기 중',
+      zero: '대기 중인 변경 없음',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportDropped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '이전 변경 $count 건 건너뜀',
+      one: '이전 변경 1건 건너뜀',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportPrivacyHeld(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '개인정보 보호를 위해 리포트 $count 건 보류',
+      one: '개인정보 보호를 위해 리포트 1건 보류',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncStepLabelDownload => 'Omi → 휴대폰';
+
+  @override
+  String get syncStepLabelUpload => '업로드';
+
+  @override
+  String get syncStepLabelTranscribe => '텍스트 변환';
+
+  @override
+  String get syncDetailsForSupport => '지원팀용';
+
+  @override
+  String get episodeOnDeviceNotesFootnote => '말하는 동안 휴대전화에서 초안이 작성됩니다. 전체 노트는 최종 스크립트와 함께 도착합니다.';
+
+  @override
+  String get episodeOnThisPhone => '이 휴대전화에서';
+
+  @override
+  String get livePreviewNoEngineTitle => '안전하게 기록 중입니다';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return '$duration 처리 중';
+  }
+
+  @override
+  String get onTheWayDetailsForSupport => '고객지원용 세부 정보';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '짧은 클립 $count개 숨겨짐',
+      one: '짧은 클립 1개 숨겨짐',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => '표시';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '짧은 클립 $count개 숨기기',
+      one: '짧은 클립 1개 숨기기',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get speakerWholeRecording => '녹음 전체에 적용';
+
+  @override
+  String get speakerSelectionChanged => '화자가 변경되었습니다. 줄을 다시 선택해 주세요.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': '녹음이 너무 큽니다. 한 대화에서 더 적은 줄을 선택하세요.',
+        'partial': '일부 줄이 저장되었습니다. 나머지 줄을 선택하고 다시 시도하세요.',
+        'other': '일부 줄이 저장되었습니다. 나머지 줄을 선택하고 다시 시도하세요.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerRecordingCoverage(String state, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '사용 가능한 대화에서만 $count줄의 이름을 변경했습니다.',
+      one: '사용 가능한 대화에서만 1줄의 이름을 변경했습니다.',
+    );
+    String _temp1 = intl.Intl.selectLogic(
+      state,
+      {
+        'scope': '이 목소리의 다른 줄 (녹음 범위 미확인)',
+        'other': '$_temp0',
+      },
+    );
+    return '$_temp1';
+  }
+
+  @override
+  String get episodeFinishingUp => '마무리 중…';
+
+  @override
+  String get buildAndShareApp => '맞춤형 앱을 만들고 공유하세요';
+
+  @override
+  String get membersAndCounting => '8000+명의 회원이 있으며 계속 증가하고 있습니다.';
+
+  @override
+  String get privacyIntro => 'Omi는 귀하의 개인정보 보호에 최선을 다하고 있습니다. 이 페이지에서 데이터 저장 및 사용 방법을 제어할 수 있습니다.';
+
+  @override
+  String get dataProtectionDesc => '귀하의 데이터는 기본적으로 강력한 암호화로 보호됩니다. 아래에서 설정 및 향후 개인정보 옵션을 검토하세요.';
+
+  @override
+  String get transcriptionConfig => 'STT 제공업체 구성';
+
+  @override
+  String get importDataConfig => '다른 소스에서 데이터 가져오기';
+
+  @override
+  String get understandingSubtitle => '대화에서 이해한 단어 수입니다.';
+
+  @override
+  String get rememberingSubtitle => '당신을 위해 기억된 사실과 세부 정보입니다.';
+
+  @override
+  String get debugLogsDesc => '문제 진단에 도움이 됩니다';
+
+  @override
+  String get deleteKnowledgeGraphMessage =>
+      '파생된 모든 지식 그래프 데이터(노드 및 연결)가 삭제됩니다. 원본 기억은 안전하게 유지됩니다. 그래프는 시간이 지나면 다시 구축되거나 다음 요청 시 재구축됩니다.';
+
+  @override
+  String get deleteKnowledgeGraphDesc => '모든 노드 및 연결 지우기';
+
+  @override
+  String get enhanceTranscriptAccuracyDesc => '모델이 개선됨에 따라 녹음에 대한 더 나은 변환 결과를 제공할 수 있습니다.';
+
+  @override
+  String get bestInClassTranscription => '설정이 필요 없는 최고 수준의 음성 변환';
+
+  @override
+  String get optimizedForConversation => '대화에 최적화';
+
+  @override
+  String get highAccuracy => '높은 정확도';
+
+  @override
+  String get privacyFirst => '개인정보 보호 우선';
+
+  @override
+  String get keepGoing => '계속하세요, 잘하고 있습니다';
+
+  @override
+  String get personalGrowthJourney => '모든 말을 듣는 AI와 함께하는 개인 성장 여정.';
+
+  @override
+  String get memoryAllowUse => '사용 허용';
+
+  @override
+  String get memoryDontUse => '사용 안 함';
+
+  @override
+  String get alwaysInContext => '항상 컨텍스트에 포함';
+
+  @override
+  String get firmwareBatteryAbove15 => '배터리 15% 이상';
+
+  @override
+  String get configureSttProvider => 'STT 제공업체 구성';
+
+  @override
+  String get clearAllNodesAndConnections => '모든 노드와 연결 지우기';
+
+  @override
+  String get welcomeToOmiDescription => 'Omi에 오신 것을 환영합니다! AI 동반자가 대화, 작업 등을 도와드릴 준비가 되었습니다.';
+
+  @override
+  String get conversationsProcessedAutomatically => '대화는 자동으로 처리됩니다';
+
+  @override
+  String get getInsightsInstantly => '즉시 인사이트와 요약을 얻으세요';
+
+  @override
+  String get dailyScoreDescription => '실행에 더 잘 집중할 수 있도록\n도와주는 점수입니다.';
+
+  @override
+  String get startConversation => '대화를 시작하고 마법을 시작하세요';
+
+  @override
+  String get wearableAiCompanion => '웨어러블 AI 컴패니언';
+
+  @override
+  String get organizeAndControlMemories => '메모리를 정리하고 관리하세요';
+
+  @override
+  String get setAllMemoriesToPrivate => '모든 메모리를 비공개로 설정';
+
+  @override
+  String get setAllMemoriesToPublic => '모든 메모리를 공개로 설정';
+
+  @override
+  String get selectPreferredLanguageForBestExperience => '최고의 Omi 경험을 위해 선호하는 언어를 선택하세요';
+
+  @override
+  String get enableFeaturesForBestExperience => '기기에서 최고의 Omi 경험을 위해 기능을 활성화하세요.';
+
+  @override
+  String get deliveryTimeDescription => '일일 요약을 받을 시간';
+
+  @override
+  String get configureSTTProvider => 'STT 제공업체 구성';
+
+  @override
+  String get setConversationEndDescription => '대화가 자동으로 종료되는 시기 설정';
+
+  @override
+  String get clearNodesDescription => '모든 노드와 연결 지우기';
+
+  @override
+  String get deleteKnowledgeGraphWarning => '파생된 모든 지식 그래프 데이터가 삭제됩니다. 원래 메모리는 안전하게 유지됩니다.';
+
+  @override
+  String get createAndShareYourApp => '앱을 만들고 공유하세요';
+
+  @override
+  String get e2eeDescription =>
+      '엔드투엔드 암호화는 개인정보 보호의 최고 기준입니다. 활성화되면 데이터가 서버로 전송되기 전에 기기에서 암호화됩니다. 이는 Omi를 포함한 그 누구도 귀하의 콘텐츠에 접근할 수 없음을 의미합니다.';
+
+  @override
+  String get secureEncryptionDescription =>
+      '귀하의 데이터는 Google Cloud에서 호스팅되는 당사 서버에서 귀하만의 고유한 키로 암호화됩니다. 이는 Omi 직원이나 Google을 포함한 누구도 데이터베이스에서 직접 귀하의 원시 콘텐츠에 접근할 수 없음을 의미합니다.';
+
+  @override
+  String get e2eeCardDescription => '최대 보안을 위해 활성화하면 본인만 데이터에 접근할 수 있습니다. 자세히 알아보려면 탭하세요.';
+
+  @override
+  String get yourOmiUnleashed => '당신의 Omi, 해방되다. 무한한 가능성을 위해 Unlimited로.';
+
+  @override
+  String get privacyIntroText =>
+      'Omi에서는 귀하의 개인정보를 매우 중요하게 생각합니다. 수집하는 데이터와 사용 방법에 대해 투명하게 알려드리고자 합니다. 알아야 할 사항은 다음과 같습니다:';
+
+  @override
+  String get commitmentText => '우리는 수집한 데이터를 Omi를 더 나은 제품으로 만드는 데만 사용할 것을 약속합니다. 귀하의 개인정보와 신뢰는 우리에게 가장 중요합니다.';
+
+  @override
+  String get thankYouText => 'Omi의 소중한 사용자가 되어 주셔서 감사합니다. 질문이나 우려 사항이 있으시면 team@basedhardware.com으로 연락해 주세요.';
+
+  @override
+  String get knowledgeGraphDeleteDescription =>
+      '이렇게 하면 모든 파생 지식 그래프 데이터(노드 및 연결)가 삭제됩니다. 원본 기억은 안전하게 유지됩니다. 그래프는 시간이 지나면서 또는 다음 요청 시 다시 구축됩니다.';
+
+  @override
+  String get howPeopleWorks => '사람이 생성되면 대화 기록으로 이동하여 해당 세그먼트를 할당할 수 있습니다. 그러면 Omi가 그들의 음성도 인식할 수 있습니다!';
+
+  @override
+  String get buildAndShareYourCustomApp => '맞춤 앱을 만들고 공유하세요';
+
+  @override
+  String get onboardingChooseYourPreference => '선호 설정을 선택하세요';
+
+  @override
+  String get onboardingGrantRequiredAccess => '필요한 권한을 허용하세요';
+
+  @override
+  String get apiEnvironmentDescription => '연결할 서버를 선택하세요';
+
+  @override
+  String get phoneCallsUpsellFeature4 => '통화는 비공개이고 안전합니다';
+
+  @override
+  String get omisStorageDesc => 'Omi가 휴대폰에 연결되지 않으면 내장 메모리에 오디오를 로컬 저장합니다. 녹음을 잃지 않습니다.';
+
+  @override
+  String get permissionsSetupDescription => 'Omi가 마법을 부릴 수 있도록 몇 가지 권한을 활성화하세요.';
+
+  @override
+  String get architectSubtitle => '파워유저 AI — 수천 건의 채팅 + 에이전트 자동화';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$total개 중 $current개';
+  }
+
+  @override
+  String get newestFirst => '최신순';
+
+  @override
+  String get backgroundModeNote => '현재는 Omi 기기에서만 작동하며 지속적으로 개선되고 있습니다.';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return '기록되지 않음 ($count)';
+  }
+
+  @override
+  String get speakerTagPromptSubtitle => '최근 이틀간의 목소리를 빠르게 확인해요';
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return '대기 중인 전사 $count';
+  }
+
+  @override
+  String get captureRecoveryBanner => 'Omi가 오디오를 보내지 않고 있습니다 — 탭하여 다시 연결하세요';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      '펜던트와 이 휴대폰의 연결이 끊겼어요. 펜던트가 켜져 있고 가까이 있으면 Omi가 자동으로 다시 연결해요. 그 전에 녹음된 내용은 안전하게 보관돼요.';
+
+  @override
+  String get capturePendantDisconnectedShort => 'Omi가 자동으로 다시 연결해요';
+
+  @override
+  String pinPersonSubtitle(String name) {
+    return '$name을(를) 목록 위에 두고, 대화에 등장할 사람으로 기억해요';
+  }
+
+  @override
+  String get pinPersonHonestLine => '비슷한 목소리를 매칭하기 전에 Omi가 확인합니다.';
+
+  @override
+  String speakerTagPromptHintConfirm(String name) {
+    return '“예”를 누르면 $name의 신뢰도가 올라가요.';
+  }
+
+  @override
+  String get localCopiesSection => '로컬 사본';
+
+  @override
+  String get forYou => '나를 위한 추천';
+
+  @override
+  String get stopThese => '이 유형 중지';
+
+  @override
+  String get meetingActionItemsTitle => '실행 항목';
+
+  @override
+  String get addToTasks => '작업에 추가';
+
+  @override
+  String get showInTranscript => '스크립트에서 보기';
+
+  @override
+  String tentativeTaskDueDate(String date) {
+    return '기한 약 $date';
+  }
+
+  @override
+  String tentativeTaskDueDateSemantics(String date) {
+    return '예정 기한 $date';
+  }
+
+  @override
+  String get openTask => '작업 열기';
+
+  @override
+  String get completeTask => '작업 완료';
+
+  @override
+  String get reopenTask => '작업 다시 열기';
+
+  @override
+  String get addingToTasks => '작업에 추가 중…';
+
+  @override
+  String get taskAddedToTasks => '작업이 생성되었습니다';
+
+  @override
+  String get completedStatus => '완료';
+
+  @override
+  String get notCompletedStatus => '대기 중';
+
+  @override
+  String get referralAffiliate => '제휴 프로그램';
+
+  @override
+  String get referralCampaignTerms => '친구는 Omi 기기를 10% 할인받아요. 첫 2명의 구매로 Pro 2개월, 다음 3명으로 3개월을 더 받아요. 최대 5명, 총 5개월이에요.';
+
+  @override
+  String referralMilestone(int months, int count, int target) {
+    return 'Pro $months개월 · 구매 $count/$target건';
+  }
+
+  @override
+  String get referralClaim => '보상 받기';
+
+  @override
+  String referralClaimed(int months) {
+    return 'Pro $months개월 수령 완료';
+  }
+
+  @override
+  String get referralRewardPending => '유료 구독이 끝날 때까지 보상이 보관됩니다.';
+
+  @override
+  String get referralCampaignTitle => 'Omi를 추천하고 Pro를 무료로 받으세요.';
+
+  @override
+  String get referralCampaignSubtitle => '친구는 Omi 10% 할인. 나는 최대 5개월 Pro.';
+
+  @override
+  String get referralShareInvite => '초대 공유';
+
+  @override
+  String get referralYourRewards => '내 보상';
+
+  @override
+  String get referralRewardFirstTitle => 'Pro 2개월';
+
+  @override
+  String get referralRewardFirstDetail => '친구 2명이 Omi를 구매하면';
+
+  @override
+  String get referralRewardSecondTitle => '3개월 추가';
+
+  @override
+  String get referralRewardSecondDetail => '친구 3명이 더 구매하면';
+
+  @override
+  String get referralClaimShort => '받기';
+
+  @override
+  String get paymentDeclinedTitle => '카드가 거절되었습니다';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return '$plan을 다시 이용하려면 카드를 업데이트하세요';
+  }
+
+  @override
+  String get hasLinkedTasksLabel => '연결된 작업 있음';
+
+  @override
+  String get hasTasksFilter => '작업 있음';
+
+  @override
+  String firmwareUpdateNotInstalledMessage(String version) {
+    return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
+  }
+
+  @override
+  String get firmwareUpdateUnconfirmedMessage =>
+      'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
+
+  @override
+  String get firmwareUpdateUnconfirmedTitle => 'Update Not Confirmed';
+
+  @override
+  String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
 }

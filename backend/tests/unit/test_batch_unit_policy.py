@@ -86,8 +86,20 @@ def test_cohort_registry_and_live_switch_contract():
     by_key = {row['key']: row for row in rows}
     for key in KILL_SWITCHES:
         assert by_key[key]['lifecycle'] == 'ops_kill'
-        assert kill_switch(key, flags={})
-        assert not kill_switch(key, flags={key: 'false'})
+        assert kill_switch(key, flags={}) is KILL_SWITCHES[key]
+        disabled = (
+            'off'
+            if key
+            in {
+                'BATCH_PIPELINE_SERVING_PROJECTION_SWEEP',
+                'BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED',
+                'PROJECTION_DRAIN_CLAIM_AWARE',
+                'PROJECTION_DRAIN_PRIVACY_BACKOFF',
+                'PROJECTION_PRIVACY_REFUSAL_RESUME',
+            }
+            else 'false'
+        )
+        assert not kill_switch(key, flags={key: disabled})
     assert 'nested' in by_key['BATCH_LIVE_STT_RETIRE_PERCENT']['notes'].lower()
     with pytest.raises(ValueError):
         kill_switch('BATCH_PIPELINE_ENABLED')
@@ -433,7 +445,7 @@ def test_getter_guard_covers_new_directories_and_import_aliases():
         'utils/a_new_unit_handler.py',
     )
     assert not stage_policy_reads(
-        "from utils.sync import legacy_fresh\nlegacy_fresh.enabled_for('owner')",
+        "from utils.sync import stage\nstage.production_stage()",
         'routers/sync.py',
     )
 

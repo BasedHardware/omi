@@ -728,6 +728,7 @@ def test_supersession_cannot_bypass_privacy_fence(binding):
     'source', ['live', 'donor_only', 'output_only', 'direct_deleted', 'redirect_deleted', 'soft_deleted']
 )
 def test_privacy_disposition_requires_transactional_input_tombstone_proof(binding, source, monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_SOURCE_DELETED_ENABLED', 'false')
     monkeypatch.setenv('OMI_ENV_STAGE', 'local')
     client = StrictFirestore()
     store = ProjectionStore(SimpleNamespace(client=client, namespace='batch_privacy_proof'))
@@ -930,3 +931,36 @@ def test_split_rollover_enqueues_every_output_before_acknowledging_and_resumes(m
         client.collection(reprocess.COLLECTION).document(reprocess.key(binding.owner_id, cid)).get().exists
         for cid in calls
     )
+
+
+def test_claim_peek_is_non_acquiring_and_observes_release(claim_redis):
+    from database import batch_pipeline_projection_claim as claims
+
+    assert not claims.projection_claim_held('synthetic', 'owner')
+    assert not claim_redis.exists('batch_projection:synthetic:owner')
+    with claims.projection_claim('synthetic', 'owner') as acquired:
+        assert acquired and claims.projection_claim_held('synthetic', 'owner')
+        assert not claims.projection_claim_held('different-stage', 'owner')
+    assert not claims.projection_claim_held('synthetic', 'owner')
+
+
+def test_claim_peek_error_fails_open(monkeypatch):
+    from database import batch_pipeline_projection_claim as claims
+
+    monkeypatch.setattr(claims, '_redis_client', Mock(side_effect=RuntimeError('synthetic outage')))
+    assert claims.projection_claim_held('synthetic', 'owner') is False
+
+
+def test_claim_peek_uses_only_get(monkeypatch):
+    from database import batch_pipeline_projection_claim as claims
+    from unittest.mock import call
+
+    client = Mock()
+    client.get.side_effect = [b'other-walker', None]
+    monkeypatch.setattr(claims, '_redis_client', lambda: client)
+    assert claims.projection_claim_held('synthetic', 'owner')
+    assert not claims.projection_claim_held('synthetic', 'owner')
+    assert client.method_calls == [
+        call.get('batch_projection:synthetic:owner'),
+        call.get('batch_projection:synthetic:owner'),
+    ]

@@ -1,4 +1,5 @@
 from dataclasses import replace
+from types import SimpleNamespace
 import asyncio
 import json
 import logging
@@ -19,6 +20,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel, Field
 
+from utils.task_intelligence import reminder_policy
 from models.app import App
 from models.calendar_context import CalendarMeetingContext
 from models.conversation import Conversation
@@ -63,6 +65,7 @@ from utils.llm.meeting_notes_validation import (
     sanitize_structured_speaker_placeholders,
     strip_speaker_placeholders,
     validate_rich_meeting_notes,
+    attach_notes_identity_context,
     validate_structured_source_segment_ids,
 )
 from config.refactor_modes import serving_for
@@ -484,6 +487,8 @@ def _get_shaped_conversation_notes(
     from utils.llm.action_item_v2 import instructions_for
 
     mount = replace(mount, instructions=instructions_for(uid, mount.instructions))
+    if kwargs.get('task_intelligence_capture'):
+        mount = replace(mount, instructions=reminder_policy.instructions(mount.instructions))
     if open_loops_enabled():
         mount = replace(mount, instructions=mount.instructions + '\n\n' + OPEN_LOOP_EXTRACTION_RULES)
     evidence = [
@@ -601,6 +606,15 @@ def _finish_shaped_notes(
         user_tz = ZoneInfo(tz) if tz else timezone.utc
     except Exception:
         user_tz = timezone.utc
+    source = (inputs or {}).get('reminder_source')
+    if source is not None:
+        clock = SimpleNamespace(**source)
+        clock.transcript_segments = [SimpleNamespace(**row) for row in source.get('transcript_segments', ())]
+        structured.action_items = [
+            prepared
+            for item in structured.action_items
+            if (prepared := reminder_policy.prepare_reminder(item, conversation=clock, extracted_at=now)) is not None
+        ]
     for item in structured.action_items:
         if item.created_at is None:
             item.created_at = now
@@ -609,6 +623,19 @@ def _finish_shaped_notes(
         event.duration = min(event.duration, 180)
         event.created = False
     structured.overview = render_sections_markdown(structured.sections) or structured.overview
+    # Provisional meeting identities ride the parsed structure to the save seam
+    # as server-only context (outside the client/model schema): roster entries,
+    # screen-frame count and corroborated names, for the notes-identity stager.
+    roster = (inputs or {}).get('roster')
+    meeting_context = (inputs or {}).get('meeting_context')
+    evidence_frames = (inputs or {}).get('screen_frames') or ()
+    has_identity_evidence = bool(
+        evidence_frames
+        or 'SCREEN MOMENTS' in (meeting_context or '')
+        or (roster and any(e.kind != 'owner' for e in roster.entries))
+    )
+    if rich_mode and has_identity_evidence:
+        attach_notes_identity_context(structured, roster, len(evidence_frames), meeting_context or '')
     return structured
 
 

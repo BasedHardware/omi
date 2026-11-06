@@ -268,6 +268,30 @@ def test_lease_expiry_backoff_and_stale_result_fencing():
     assert not queue.complete(WorkResult('a', 'gs://results/changed'), second.token, 999)
 
 
+def test_result_receipt_persists_and_optional_receipt_is_rolling_idempotent():
+    from utils.batch_pipeline.language_receipt import observation
+
+    store = MemoryStore()
+    queue = Scheduler(store)
+    queue.enqueue(item('receipt'), 0)
+    lease = queue.pull(0)[0]
+    receipt = observation('en', 'parakeet', [{'word': 'hello'}])
+    with_receipt = WorkResult('receipt', 'gs://results/receipt', language_receipt=receipt)
+    assert queue.complete(with_receipt, lease.token, 1)
+    assert store.rows['jobs', 'receipt']['result']['language_receipt'] == receipt
+    assert queue.complete(with_receipt, lease.token, 2)
+    changed = observation('en', 'parakeet', [{'word': 'Привет'}])
+    assert not queue.complete(WorkResult('receipt', 'gs://results/receipt', language_receipt=changed), lease.token, 3)
+
+    queue.enqueue(item('legacy'), 4)
+    legacy_lease = queue.pull(4)[0]
+    without_receipt = WorkResult('legacy', 'gs://results/legacy')
+    assert queue.complete(without_receipt, legacy_lease.token, 5)
+    assert 'language_receipt' not in store.rows['jobs', 'legacy']['result']
+    replay_with_receipt = WorkResult('legacy', 'gs://results/legacy', language_receipt=receipt)
+    assert queue.complete(replay_with_receipt, legacy_lease.token, 6)
+
+
 def test_admission_deferred_re_lease_records_relet_true_first_lease_false():
     from prometheus_client import CollectorRegistry
     from utils.batch_pipeline.metrics import QueueMetrics
@@ -1120,3 +1144,67 @@ def test_release_expires_lease_now_with_expiry_semantics_and_fences_stale_tokens
     assert queue.complete(WorkResult('a', 'gs://results/a'), second.token, 8)
     assert not queue.release('a', second.token, 9)  # Published work is never released.
     assert store.rows['jobs', 'a']['state'] == 'result_ready'
+
+
+def _count_control_puts(monkeypatch):
+    puts = []
+    original = MemoryTransaction.put
+
+    def put(self, table, key, value):
+        if table == 'control':
+            puts.append(key)
+        return original(self, table, key, value)
+
+    monkeypatch.setattr(MemoryTransaction, 'put', put)
+    return puts
+
+
+def test_steady_state_admission_does_not_rewrite_its_control_shard(monkeypatch):
+    # Every admission and every pull wrote the same 64 shared shards; an identical rewrite
+    # only turned concurrent admissions and pulls into commit conflicts.
+    monkeypatch.delenv('BATCH_SKIP_UNCHANGED_CONTROL_WRITE_ENABLED', raising=False)
+    store = MemoryStore()
+    queue = Scheduler(store)
+    puts = _count_control_puts(monkeypatch)
+    shard = scheduler_control_key(owner_key('heavy'))
+
+    queue.enqueue(item('a', capture=1), now=10)
+    assert puts == [shard]  # joins the ring and activates the shard: a real change
+    before = deepcopy(store.rows['control', shard])
+
+    queue.enqueue(item('b', capture=2), now=11)
+    assert puts == [shard]  # already in the ring, shard active, no backoff to clear
+    assert store.rows['control', shard] == before
+    assert store.rows['jobs', 'b']['state'] == 'ready'
+    assert store.rows['jobs', 'a']['next'] == 'b'
+
+
+def test_admission_still_writes_control_when_the_shard_changes(monkeypatch):
+    monkeypatch.delenv('BATCH_SKIP_UNCHANGED_CONTROL_WRITE_ENABLED', raising=False)
+    store = MemoryStore()
+    queue = Scheduler(store)
+    puts = _count_control_puts(monkeypatch)
+    shard = scheduler_control_key(owner_key('heavy'))
+    queue.enqueue(item('a', capture=1), now=10)
+
+    # A second owner on the same shard joins its ring.
+    mate = colliding_owner('heavy')
+    queue.enqueue(item('m', owner=mate, capture=1), now=11)
+    assert puts == [shard, shard]
+    assert f"{int(Priority.DEEP)}_{owner_key(mate)}" in store.rows['control', shard]['rings'][str(int(Priority.DEEP))]
+
+    # A pull backoff on the shard is cleared by new work.
+    store.rows['control', shard][f'p{int(Priority.DEEP)}_batch_available_at'] = 1000.0
+    queue.enqueue(item('c', capture=3), now=12)
+    assert puts == [shard, shard, shard]
+    assert store.rows['control', shard][f'p{int(Priority.DEEP)}_batch_available_at'] == 12
+
+
+def test_control_write_kill_switch_restores_the_unconditional_write(monkeypatch):
+    monkeypatch.setenv('BATCH_SKIP_UNCHANGED_CONTROL_WRITE_ENABLED', 'false')
+    store = MemoryStore()
+    queue = Scheduler(store)
+    puts = _count_control_puts(monkeypatch)
+    queue.enqueue(item('a', capture=1), now=10)
+    queue.enqueue(item('b', capture=2), now=11)
+    assert len(puts) == 2

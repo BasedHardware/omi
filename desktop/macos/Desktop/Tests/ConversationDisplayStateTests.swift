@@ -90,11 +90,27 @@ final class ConversationDisplayStateTests: XCTestCase {
       segments: [segment("plenty of words to look recoverable normally")]
     )
     XCTAssertEqual(conv.displayState, .locked)
-    XCTAssertEqual(conv.displayTitle, "Saved and waiting")
+    XCTAssertEqual(conv.displayTitle, "Waiting")
     XCTAssertFalse(conv.canReprocess, "Reprocess shouldn't be offered while locked")
   }
 
   // MARK: - Processing
+
+  func test_serverTranscriptionHold_preservesTitleWithoutSummaryStallReprocess() {
+    let conv = makeConversation(title: "Transcribing…", status: .processing)
+    XCTAssertEqual(conv.status, .processing)
+    XCTAssertEqual(conv.displayState, .titled("Transcribing…"))
+    XCTAssertEqual(conv.displayTitle, "Transcribing…")
+    XCTAssertFalse(conv.canReprocess)
+    XCTAssertTrue(conv.isAwaitingTranscription)
+    XCTAssertFalse(conv.showsSummaryProcessing)
+    XCTAssertFalse(ConversationProcessingBanner.offersReprocess(conversation: conv, phase: .stalled))
+    XCTAssertTrue(
+      ConversationProcessingBanner.offersReprocess(conversation: makeConversation(status: .processing), phase: .stalled)
+    )
+    XCTAssertEqual(makeConversation(title: "Other title", status: .processing).displayState, .processing)
+    XCTAssertEqual(makeConversation(title: "Transcribing…", status: .processing, isLocked: true).displayState, .locked)
+  }
 
   func test_inProgressStatus_returnsProcessing() {
     let conv = makeConversation(status: .inProgress)

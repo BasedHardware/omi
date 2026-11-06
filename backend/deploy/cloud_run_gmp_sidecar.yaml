@@ -8,14 +8,15 @@ spec:
   endpoints:
     - port: 9090
       path: /metrics
-      interval: 30s
+      # margin-20: halve shared-profile ingestion; rollback 30s.
+      interval: 60s
       timeout: 10s
       metricRelabeling:
         - action: keep
           sourceLabels:
             - __name__
           # Pin the suppression readout explicitly as well as the broad application keep.
-          regex: omi_.*|omi_listen_server_batch_suppression_total|conversation_llm_input_dedupe_.*
+          regex: omi_.*|omi_listen_server_batch_suppression_total|conversation_llm_input_dedupe_.*|privacy_(checks|check_calls|check_reads|decision_mismatch|shadow_checks|memo_requests|memo_ineligible|ttl_cache|negative_lookup)_total
   targetLabels:
     metadata:
       - service

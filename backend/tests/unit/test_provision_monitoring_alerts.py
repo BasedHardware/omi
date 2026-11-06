@@ -305,3 +305,21 @@ def test_readback_still_reports_semantic_changes(provisioner):
     assert provisioner.comparable(base) != provisioner.comparable(other)
     assert provisioner.duration_seconds('24h') == provisioner.duration_seconds('1d') == 86400
     assert provisioner.duration_seconds('5ms') == 0.005
+
+
+def test_regenerate_is_offline_preserves_order_and_rejects_duplicate_sources(provisioner, tmp_path):
+    path = tmp_path / 'alert-rules.json'
+    sources = tmp_path / 'alerts'
+    sources.mkdir()
+    path.write_text(json.dumps([rule('b'), rule('removed'), rule('a')]))
+    (sources / 'a.json').write_text(json.dumps([rule('a'), rule('new')]))
+    (sources / 'b.json').write_text(json.dumps([{**rule('b'), 'title': 'updated'}]))
+    provisioner.regenerate_export(path)
+    assert list(provisioner.load_rules(path)) == ['b', 'a', 'new']
+    first = path.read_bytes()
+    provisioner.regenerate_export(path)
+    assert path.read_bytes() == first
+    (sources / 'duplicate.json').write_text(json.dumps([rule('a')]))
+    with pytest.raises(ValueError, match='duplicate'):
+        provisioner.regenerate_export(path)
+    assert path.read_bytes() == first
