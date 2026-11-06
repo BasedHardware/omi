@@ -22,6 +22,7 @@ Files committed:
 - `backend/models/account_cutover.py`
 - `backend/services/users/account_deletion.py`
 - `backend/tests/services/users/test_account_deletion.py`
+- `backend/tests/support/lifecycle_writer_inventory.py`
 - `backend/tests/unit/test_account_cutover_foundation.py`
 - `backend/tests/unit/test_cell_wipe_step.py`
 - `backend/tests/unit/test_delete_account_purge_storage.py`
@@ -67,6 +68,8 @@ Files committed:
 - Lead owns the separate INV-CUTOVER-1 revision note for `migrated`; invariant files remain untouched.
 
 - The caller sweep found the explicit executor-call witness `backend/tests/unit/test_dependency_async_boundaries.py`; updated its stub and expected calls, and added a resolver event-loop responsiveness test under the user-authorized witness exception.
+
+- The lifecycle-writer inventory now declares the new wipe result statuses (`noop`, `absent`, `purged`); its full contract passes 1,694 tests. This uses the explicitly authorized support-witness exception.
 
 ## Verification
 
@@ -147,6 +150,18 @@ More caller/environment verification (one pytest process per file):
 | `.venv/bin/python -m pytest tests/unit/test_executors.py -q` | 2 cold-import timeouts/34 pass, reproduced on current code and pinned baseline |
 | `backend/.venv/bin/python /Volumes/Ephemeral/scratch/pgf-b2-baseline-tests.py backend/tests/unit/test_executors.py -q` (root) | Same 2 failures/34 pass on baseline production modules pinned to d47819297e39 |
 | `.venv/bin/python -c 'import openai; import utils.llm.gateway_error_contract; import pytest; raise SystemExit(pytest.main(["tests/unit/test_executors.py", "-q"]))'` | 36 pass; dependencies warmed outside test-call budget; no source/assertion changes |
+
+Additional broad-selector qualifications (original assertions and budgets retained):
+
+| Exact command | Result |
+| --- | --- |
+| `cd backend && .venv/bin/python -m pytest tests/unit/test_lifecycle_state_table_writers.py -q` | 1694 pass after registering new wipe return statuses in the support inventory |
+| `cd backend && .venv/bin/python -m pytest tests/unit/test_live_evidence_settlement.py -q` | 1 concurrent-CAS timing failure, 43 pass in full and isolated background runs |
+| `backend/.venv/bin/python /Volumes/Ephemeral/scratch/pgf-b2-baseline-tests.py backend/tests/unit/test_live_evidence_settlement.py -q` | Pinned baseline production import overlay: 44 pass |
+| `backend/.venv/bin/python /Volumes/Ephemeral/scratch/pgf-b2-baseline-tests.py backend/tests/unit/test_live_router_hardening.py -q` | Pinned baseline production import overlay: 158 pass |
+| `cd backend && .venv/bin/python -m pytest tests/unit/test_live_evidence_settlement.py::test_concurrent_cas_cannot_spend_a_user_budget_twice -q && .venv/bin/python -m pytest "tests/unit/test_live_router_hardening.py::test_write_result_identity_change_stops_cleanup_and_new_scope_writes[exec]" -q` (through `omi-heavy run --no-priority --`) | Both cases pass: 1 + 1; the bulk run had 1 failure/157 pass in the hardening file. Isolation and priority both changed, so this supports scheduling sensitivity without uniquely proving its cause. |
+
+The raw broad selector retains its original failing results even where repaired or diagnostic replays pass. These replays are separate evidence, not a green full-suite claim.
 
 ## Draft PR body
 
