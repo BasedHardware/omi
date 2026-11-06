@@ -137,3 +137,45 @@ switch `RECORD_SEAL_REPAIR_ENABLED=false`), or remove only this job with
 `recordSealRepair.enabled=false`. Active Jobs retain their initial settings;
 lead stops the active repair Job for immediate cessation. `mode=plan` retains
 proof reads but performs no writes. The sweeper and host fallback remain usable.
+
+## Aged pending discovery and proof-gated exits
+
+`RECORD_SEAL_REPAIR_JOBS` defaults on; only `off` disables the added discovery
+leg. It scans at most 128 `{ns}_jobs` metadata rows in document order, selecting
+`record_pending` jobs aged at least the existing 30-minute partial wait. Upload
+admission's zero-second grace is unsuitable for a repair scan; 30 minutes gives
+ordinary uploads their existing proof wait without assigning any expiry to a
+producer token. Numeric `enqueued_at` is filtered locally so no new composite
+index is required. Resolution happens inside the existing disposable row budget.
+The jobs leg has its own encrypted maintenance cursor at
+`batch_pipeline_prod_maintenance/record_seal_repair_jobs_cursor_v1`; its candidates
+occupy at most half the first worker group (one for a single-worker run). Both
+legs share the existing discovery deadline, row cap, worker cap and run deadline.
+Preview does not write either frontier.
+
+Producer-token, upload-failed and closed-but-pending rows run the existing
+same-digest planner/apply path. Closed rows must pass the full retained-tail proof
+against both current and frozen finish times; their job state is never advanced
+by repair. Admission remains the owner of that transition. Discovery includes
+conversations that never completed, but `not_completed` remains a refusal:
+repair does not assume finalization authority from age or producer absence.
+
+A valid partial barrier is re-attemptable after the existing one-hour inventory
+poll interval, measured from its last repair or initial partial finish. Fresh
+producer and transactional privacy proof is required by `finish_partial`; the
+barrier and its generations remain intact, and no complete seal is written.
+Aged retired coordinators may also reopen through this same fresh-proof transaction.
+
+After seven days (seven existing inventory-idle windows), a missing conversation
+may terminally cancel its canonical pending job. A single transaction rechecks
+absence, identity, numeric age and privacy. Like `cancel_fenced_recovery`, a
+privacy refusal permits only revocation of work; erasure owns all content and
+artifact deletion. Cancellation writes no speech receipt, TTL or conversation.
+
+Row events include a closed `blocker` and `disposition`; the aggregate
+`blocker_outcomes` counts their combinations. `log-metrics.json` registers
+`omi_record_seal_repair_blocker_outcomes` for the Kubernetes CronJob. This repair
+is not served on Cloud Run; the `omi_.*` GMP keep list also covers the metric
+name. Set `recordSealRepair.jobsDiscovery=off` to pass `RECORD_SEAL_REPAIR_JOBS=off`
+to the CronJob and restore the prior discovery and partial-retry behavior. Existing
+custody owners stay unchanged.

@@ -115,3 +115,32 @@ def test_preview_list_excludes_other_uids(runtime, monkeypatch):
     result = http.get('/v2/users/me/referral/campaign').json()
     assert result['enabled'] is False and result['referral_url'] is None
     assert result['reason'] == 'campaign_disabled'
+
+
+@pytest.mark.parametrize(
+    ('headers', 'preview'),
+    [({'X-Omi-App-Channel': 'beta'}, True), ({'X-Omi-App-Channel': 'store'}, False), ({}, False)],
+)
+def test_testflight_header_sees_read_only_preview(runtime, monkeypatch, headers, preview):
+    http, client, router = runtime
+    monkeypatch.setenv('ENCRYPTION_SECRET', 'x' * 32)
+    for i in range(2):
+        prepare(client, f'buyer-{i}')
+        settle(client, f'buyer-{i}', f'order-{i}')
+    monkeypatch.setenv('OMI_REFERRAL_CAMPAIGN_ENABLED', 'false')
+
+    class MissingAdapter:
+        ready = False
+
+    monkeypatch.setattr(router, 'TrustedCheckoutAdapter', MissingAdapter)
+    base = '/v2/users/me/referral/campaign'
+    before = dict(client.rows)
+    result = http.get(base, headers=headers).json()
+    assert result['enabled'] is preview
+    assert result['reason'] == ('preview' if preview else 'campaign_disabled')
+    assert (result['referral_url'] is not None) is preview
+    for _ in range(2):
+        claimed = http.post(base + '/claim', headers=headers).json()
+        assert claimed == result and claimed['claimed_months'] == 0
+    assert http.post(base + '/attribution', json={'code': 'ref2.invalid.signature'}, headers=headers).status_code == 503
+    assert client.rows == before

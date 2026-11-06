@@ -30,6 +30,7 @@ from utils.conversations.size_limit import (
     projected_document_bytes,
     projected_size_bucket,
 )
+from utils.conversations.summary_delivery import rearm_on_revision_change
 from utils.observability.fallback import record_fallback
 from utils.sync.size_telemetry import (
     finish_size_attempt,
@@ -355,6 +356,8 @@ def assign_in_transaction(
             raise SyncAssignmentConflict('record target missing', subtype=Reason.RECORD_TARGET_MISSING)
         current = decode(target)
         result, survivors = replace_record(current, incoming, record_span)
+        if result.get('transcript_segments') != current.get('transcript_segments'):
+            rearm_on_revision_change(current, result)
         invalidate(result)
         encoded = encode(result)
         estimated = _stored_document_bytes(collection.document(target_id), encoded, target, invalidate)
@@ -1001,6 +1004,8 @@ def assign_in_transaction(
         # Read all occupied day buckets before the first write.
         index.read(extent)
         result.update(write_span(result, arrival_at=incoming.get('arrival_at')))
+        if survivors or transfers:
+            rearm_on_revision_change(current or {}, result)
         payload = encode(result)
         payload.pop('photos', None)
         if current is not None:

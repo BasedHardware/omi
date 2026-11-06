@@ -645,6 +645,31 @@ def test_metrics_retains_legacy_drain_until_both_controls_are_on(api, monkeypatc
     service.metrics.refresh.assert_not_called()
 
 
+@pytest.mark.parametrize(
+    'scrape_flag,serving_flag', [(None, 'false'), ('true', 'false'), (None, 'true'), ('true', 'true')]
+)
+def test_pump_metrics_refreshes_without_reconcile_regardless_of_serving_controls(
+    api, monkeypatch, scrape_flag, serving_flag
+):
+    from unittest.mock import AsyncMock
+
+    client, store = api
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_PUMP_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_SERVING_ENABLED', serving_flag)
+    monkeypatch.delenv('BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED', raising=False)
+    if scrape_flag is not None:
+        monkeypatch.setenv('BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED', scrape_flag)
+    service = Serving(store, metrics=Mock(), leader=Mock())
+    service.reconcile_async = AsyncMock(side_effect=AssertionError('pump metrics must never reconcile'))
+    monkeypatch.setattr(module, 'serving_for_stage', lambda stage: service)
+
+    assert client.get('/v2/batch-pipeline/metrics').status_code == 200
+    service.metrics.refresh.assert_called_once()
+    assert service.metrics.refresh.call_args.args[0] is store
+    service.reconcile_async.assert_not_awaited()
+    service.leader.acquire.assert_not_called()
+
+
 @pytest.mark.asyncio
 async def test_recovery_request_awaits_paid_intent_before_response_and_projection(api, monkeypatch, caplog):
     from routers import batch_pipeline as routes
@@ -1016,3 +1041,28 @@ async def test_full_record_pass_repeats_after_yield_without_idle_wait(monkeypatc
     assert calls == [1, 1]
     assert waits == ([2] if first_full else [1, 2])
     assert yields == ([(1, 0)] if first_full else [])
+
+
+def test_stage_metrics_use_existing_lease_system_with_independent_bounded_role(monkeypatch):
+    from utils.batch_pipeline import serving
+    from utils.batch_pipeline.leader import QUEUE_METRICS, SERVING_MAINTENANCE
+
+    store = MemoryStore()
+    metrics = QueueMetrics(CollectorRegistry(), min_refresh_seconds=30)
+    monkeypatch.setattr(serving, 'current_stage', lambda: 'dev')
+    monkeypatch.setattr(serving, 'FirestoreStore', lambda namespace: store)
+    monkeypatch.setattr(serving, 'shadow_from_env', lambda value: value)
+    monkeypatch.setattr(serving, 'artifacts_for', lambda _: Mock())
+    monkeypatch.setattr(serving, 'Projector', Mock())
+    monkeypatch.setattr(serving, '_metrics', lambda: metrics)
+    serving.serving_for_stage.cache_clear()
+    try:
+        service = serving.serving_for_stage('dev')
+        assert service.metrics is metrics
+        assert metrics.oldest_leader.store is store
+        assert metrics.oldest_leader.role == QUEUE_METRICS
+        assert metrics.oldest_leader.ttl_seconds == 20
+        assert service.leader.role == SERVING_MAINTENANCE
+        assert service.leader.ttl_seconds == 60
+    finally:
+        serving.serving_for_stage.cache_clear()

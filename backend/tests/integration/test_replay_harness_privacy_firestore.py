@@ -55,7 +55,6 @@ def test_privacy_smoke_via_registered_runner(tmp_path, ttl_override_s):
     assert details['cache_events']['tombstone_negative_cache:publish'] > 0
     assert details['cache_events']['legal_hold_fence_cache:publish'] > 0
     assert details['cache_events']['batch:memo_hit'] > 0
-    assert details['cache_events']['batch_snapshot:memo_hit'] > 0
     assert details['verified_transitions'] > 0 and details['verified_baselines'] > 0
     assert details['not_applicable_transitions'] == details['unverified_transitions'] == 0
     assert sum(not cell['applicable'] for fam in details['fault_coverage'].values() for cell in fam.values()) == 10
@@ -114,6 +113,47 @@ def test_stage_catches_stale_deletion_marker(monkeypatch):
     assert result.details['mismatches'] == 2 and result.details['probes'] == 6
 
 
+@pytest.mark.parametrize('kind', ['grace_intent', 'wipe_intent', 'restore'])
+def test_deletion_marker_request_scope_rechecks_redis_after_another_request_writes(kind):
+    from testing.replay_harness.stages.privacy_cache import PrivacyCacheDriver
+
+    result = asyncio.run(PrivacyCacheDriver().run(single_case(kind, fault='request_memo', family='deletion_marker')))
+    assert result.status == 'pass', result
+    assert result.details['verified_transitions'] == 1
+    evidence = result.details['transition_results'][0]['evidence']
+    assert evidence['request_memo_absent']
+    assert evidence['independent_writer_scope'] and evidence['reader_scope_preserved']
+    assert evidence['request_redis_warm_reads'] == 2
+    assert evidence['request_redis_probe_reads'] == [1] * 6
+    assert evidence['request_deletion_observed']
+    if kind != 'restore':
+        assert result.details['cache_events']['deletion_marker_cache:hit'] == 1
+
+
+def test_stage_rejects_reintroduced_deletion_marker_request_memo(monkeypatch):
+    from database import account_deletion_marker as marker, fsr_read_cache as cache
+    from testing.replay_harness.stages.privacy_cache import PrivacyCacheDriver
+
+    original = marker.get_user_deletion_wipe_status
+
+    def memoized(uid, **kwargs):
+        return cache.memo(uid, ('deletion-status',), lambda: original(uid, **kwargs))
+
+    monkeypatch.setattr(marker, 'get_user_deletion_wipe_status', memoized)
+    result = asyncio.run(
+        PrivacyCacheDriver().run(single_case('wipe_intent', fault='request_memo', family='deletion_marker'))
+    )
+    assert result.reason == 'privacy_cache:staleness_bound_exceeded', result
+    assert result.details['mismatches'] == 3
+    evidence = result.details['transition_results'][0]['evidence']
+    assert not evidence['request_memo_absent']
+    assert evidence['independent_writer_scope'] and evidence['reader_scope_preserved']
+    assert evidence['request_redis_warm_reads'] == 1
+    assert evidence['request_redis_probe_reads'] == [0] * 6
+    assert not evidence['request_deletion_observed']
+    assert not result.details['transition_results'][0]['fault_applied']
+
+
 def test_fake_clock_controls_redis_expiry_and_lua_time():
     from collections import Counter
     from testing.replay_harness.env import replay_environment
@@ -166,12 +206,12 @@ def test_unfenced_overlap_reaches_real_commit(family, kind, fault, writers):
     assert result.details['verified_transitions'] == 1
 
 
-def test_batch_snapshot_memo_reuses_same_transaction_snapshots():
+def test_batch_generation_memo_qualifies_without_retired_snapshot_dedupe():
     from testing.replay_harness.stages.privacy_cache import PrivacyCacheDriver
 
     result = asyncio.run(PrivacyCacheDriver().run(single_case('advance', fault='none', family='batch_privacy')))
     assert result.status == 'pass', result
-    assert result.details['cache_events']['batch_snapshot:memo_hit'] > 0
+    assert result.details['cache_events']['batch:memo_hit'] > 0
     assert result.details['verified_transitions'] == 0  # A baseline is never a fault sample.
     assert result.details['verified_baselines'] == 1
 
@@ -192,21 +232,6 @@ def test_unsupported_faults_are_not_gate_samples(family, kind, fault):
     assert result.details['verified_transitions'] == 0
     record = result.details['transition_results'][0]
     assert record['verification'] == 'not_applicable' and not record['fault_applied']
-
-
-def test_missing_snapshot_reuse_stops_instead_of_claiming_coverage(monkeypatch):
-    from database import batch_pipeline_privacy as bpp
-    from database import privacy_check_metrics as metrics
-    from testing.replay_harness.stages.privacy_cache import PrivacyCacheDriver
-
-    monkeypatch.setattr(
-        bpp.BatchPrivacyMemo,
-        'get',
-        lambda memo, ref: metrics.read_snapshot('batch', ref, transaction=memo.transaction, memo_read=True),
-    )
-    result = asyncio.run(PrivacyCacheDriver().run(single_case('advance', fault='none', family='batch_privacy')))
-    assert result.reason == 'privacy_cache:transition_errors'
-    assert result.details['verified_baselines'] == result.details['verified_transitions'] == 0
 
 
 def test_unapplied_redis_fault_stops_instead_of_counting_a_sample(monkeypatch):

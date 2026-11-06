@@ -48,6 +48,7 @@ from tests.support.firestore_batch_pipeline_drivers import entries as batch_pipe
 from tests.support.firestore_batch_privacy_drivers import entries as batch_privacy_entries
 from tests.support.firestore_memory_ledger_drivers import registry_extension as memory_ledger_drivers
 from tests.support.firestore_lifecycle_metrics_drivers import entries as lifecycle_metrics_entries
+from tests.support.firestore_task_filter_drivers import entries as task_filter_entries
 from models.announcement import AnnouncementType
 from models.candidate import CandidateStatus
 from models.chat_first import ChatFirstSubject
@@ -146,14 +147,15 @@ BODY_DIGEST = {
     'database.lifecycle_metrics_queries._where': '51d3e38b20df6800101fbf671471d2538c487d9c702698c6a9ad221c43f89a79',
     'database.batch_pipeline_store.FirestoreStore.ready_for_capacity': '975eabd92f43ba5da3d847439f4d8e3592525ccd31c11dcac6463365535eac10',
     'database.batch_pipeline_store.FirestoreStore.oldest_admissible_ready': '293687cc6708d7ab2f673cb2984e6bb8cbfe581fa526db8c1040fd011dc00107',
-    'database.batch_pipeline_projection_release.release_page': '51d879075128af7e074b0ab3ccdb376e2171678351cad3ade376a3a3f78e2e69',
-    'database.batch_pipeline_projection_release.release_scan_pass': '1b9c67910b80e2628cf61514e1b24875242fc623069e6a2f64764cb90f2fa27e',
+    'database.batch_pipeline_projection_release.release_page': '342df86ce628f1bd9d2f79d1e14fe4b153e65f71aea294197cffb134b930d49b',
+    'database.batch_pipeline_projection_release.release_scan_pass': '6e181f539bf5a7833c601e1915537c6e2cdf5bf0b16367b792c0a83cf76d4b56',
     'database.monthly_usage_totals._rebuild': '2c9be83589399a6824fbb2ef7376cd7baf8492e8a780671e31b67a8294b40db0',
     'database.batch_pipeline_shadow.ShadowStore._busy': 'bf2a9290745e8dd01ebb927b03ed67b08fac05fdb43fd76f81f2dcfa54e0b85a',
     'database.batch_pipeline_shadow.ShadowStore.reap': '014a779e64fb2ab2baded6c4baef3ae9528bd080b8b7bafbd0e68948e8c418d4',
     # Re-reviewed 2026-11-01: intake-outcome evidence kwarg only; no query or read added.
     'database.batch_ramp.ramp_admission_policy': '2d702e87308e65426820bbe9b4b89f492a966a01bc056fa39d63ed3a8545d649',
-    'database.conversations._collect_cursor_conversation_page': '1d5fc817a402bd5bb5cb8fae5492d29b1e34cb4a15405bd06a784fc8730fa4e9',
+    # Re-reviewed 2026-11-05: forward presentation visibility only; cursor/query/budget bounds unchanged.
+    'database.conversations._collect_cursor_conversation_page': 'bd16ecd16fae8402a6abd848e94163c38f1272e64bdbbb3131df863cddc79018',
     'database.batch_pipeline_store.FirestoreTransaction.ready_predecessor': '345662386754d78758580d321467fcd012838fc0a9ae8194eeb7b3e6ede54f14',
     'database.batch_pipeline_store.projection_pending': '52cc913cca9086557133a8f7118b9980ce5f13649897207fafcfa221513a5629',
     'database.batch_pipeline_store.FirestoreStore.projection_page': 'bc9fe5cd08a05748eaa118af15031abdcb1a68d91d7f0b74bf177a27eb980a94',
@@ -199,8 +201,9 @@ BODY_DIGEST = {
     # Encoded-size preflight and the size backstop add no serving query; the
     # discarded-barrier scan is still covered by the same two driven callees.
     # Recorded-span recomputation is pure; barrier queries still run under the covered callees.
-    # Reviewed: owner get and dirty append only; no range-query shape changed.
-    'database.smart_merge.absorb_conversation': 'dd8211b0259859f18ae140c00d66c06241a1c5151e831b1ebefa18120e881001',
+    # Reviewed: episode-log member-change capture adds an owner get and dirty
+    # append only; summary-recovery rearm adds no query. No range-query shape changed.
+    'database.smart_merge.absorb_conversation': '4c07bb8e1848afab6466b6499e999fc101a70e2f280c46f04522c5d71cf9d2fe',
     'database.omi_flags.read_all': '58b65fc434cd3253a55aa54c6defc2a4cfc40dc33b565326b6c688eb8ed374d3',
     'database.omi_flags.read_audit': '12ee243338e5fc080b8e2f81223586837bb454f8d8e14d711f3805c74e258cfa',
     'database.client_telemetry.recent_owner_ids': '65fe8200d7ad9418b793ccb0fa53a172b2576a80bba644caa3b36cdb53b74510',
@@ -230,6 +233,10 @@ def _add(entry: DriverEntry | CoveredByEntry | SkipEntry) -> None:
         COVERED_BY[entry.function] = entry
     else:
         SKIPS[entry.function] = entry
+
+
+for _entry in task_filter_entries():
+    _add(_entry)
 
 
 _add(
@@ -1167,6 +1174,7 @@ _add(
     DriverEntry(
         'database.conversations.get_conversations',
         base={'uid': UID},
+        domains={'presentation': [False, True]},
         profiles=PHOTO_PROFILES,
         neutrals={
             'limit': _LIMIT,
@@ -1196,7 +1204,7 @@ _add(
     DriverEntry(
         'database.conversations.get_conversations_without_photos',
         base={'uid': UID},
-        domains={'list_fields_only': [False, True]},
+        domains={'list_fields_only': [False, True], 'presentation': [False, True]},
         patchers=(
             lambda client: unittest.mock.patch.object(
                 importlib.import_module('database.conversations'), 'indexed_list_reads_enabled', return_value=True
@@ -2404,7 +2412,8 @@ _add(
         ),
         reason='the discarded-barrier scan runs inside absorb_attempt through '
         'has_intervening_discarded/find_preceding_conversations, so the terminal '
-        'stream records under those callees, never under absorb_conversation',
+        'stream records under those callees, never under absorb_conversation. '
+        'The revision-debt hook is a pure payload update with no query or read',
         expect_observed=False,
         body_digest=BODY_DIGEST['database.smart_merge.absorb_conversation'],
     )
@@ -3896,5 +3905,16 @@ _add(
             'uid': UID,
             'claimed': {'state': {'cursor': 0, 'next_seq': 0}},
         },
+    )
+)
+
+from database.batch_final_pass_retry import FinalPassRetries
+
+_add(
+    DriverEntry(
+        'database.batch_final_pass_retry.FinalPassRetries.due',
+        base={'self': FinalPassRetries()},
+        neutrals={'now': (T0.timestamp(), 'due-time range operand only'), 'limit': _LIMIT},
+        patchers=(_stub('utils.sync.stage.current_stage', 'prod'),),
     )
 )

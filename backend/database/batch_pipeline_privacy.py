@@ -17,6 +17,7 @@ from config.firestore_read_levers import lever_enabled
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 from database.batch_privacy_attempt import SCHEMA_FIELD, TOKEN_FIELD, TOKEN_SCHEMA, current_attempt, token_version
 from database import privacy_check_metrics as metrics
+from database import batch_privacy_negative_cache as negative_cache
 from database.privacy_ttl_cache import BoundedTTLCache, enabled as ttl_enabled, is_missing
 
 PRIVACY_COLLECTION = 'batch_pipeline_privacy'
@@ -72,29 +73,6 @@ def privacy_owner_key(uid: str) -> str:
     return hashlib.sha256(uid.encode()).hexdigest()
 
 
-class BatchPrivacyMemo:
-    """Document snapshots for the read phase of ONE transaction callback attempt.
-
-    Construct inside the callback, including on retries; never retain across
-    transactions or reuse a session's memo when its prepare callback runs again.
-    Actual reads still enroll every document (including absence) in Firestore's
-    conflict set. Decisions, generation comparisons and walk budgets are never memoized.
-    """
-
-    def __init__(self, client: Any, transaction: Any):
-        if transaction is None:
-            raise ValueError('privacy memo requires a transaction attempt')
-        self.client, self.transaction = client, transaction
-        self.snapshots: dict = {}
-
-    def get(self, reference):
-        if reference.path not in self.snapshots:
-            self.snapshots[reference.path] = metrics.read_snapshot(
-                'batch', reference, transaction=self.transaction, memo_read=True
-            )
-        return self.snapshots[reference.path]
-
-
 def assert_batch_write_allowed(
     client: Any,
     transaction: Any,
@@ -103,7 +81,7 @@ def assert_batch_write_allowed(
     conversation_ids: Iterable[str] = (),
     expected_generation: int | None = None,
     snapshots: dict | None = None,
-    memo: BatchPrivacyMemo | None = None,
+    read_budget=None,
 ) -> int:
     """Measure the authorizing decision; shadow always runs after live authority.
 
@@ -111,12 +89,19 @@ def assert_batch_write_allowed(
     Shadow never publishes snapshots, raises its failure or changes a decision.
     """
     metrics.called('batch')
-    shadow = lever_enabled('privacy_checks_shadow', uid) and current_attempt() is not None
-    enforce = lever_enabled('bpp_generation_memo', uid) and not shadow
+    # A generation-memo hit would hide the live lookups needed for shadow proof.
+    negative_shadow = lever_enabled('privacy_negative_lookup_cache', uid) and lever_enabled(
+        'privacy_checks_shadow', uid
+    )
+    shadow = lever_enabled('privacy_checks_shadow', uid) and current_attempt() is not None and not negative_shadow
+    enforce = lever_enabled('bpp_generation_memo', uid) and not shadow and not negative_shadow
     # Materialize once when comparing, including one-shot source generators.
     ids = tuple(conversation_ids) if shadow else conversation_ids
     kwargs: dict[str, Any] = dict(
-        conversation_ids=ids, expected_generation=expected_generation, snapshots=snapshots, memo=memo
+        conversation_ids=ids,
+        expected_generation=expected_generation,
+        snapshots=snapshots,
+        read_budget=read_budget,
     )
     function = _assert_batch_write_allowed_memo if enforce else _assert_batch_write_allowed_live
 
@@ -158,9 +143,9 @@ def _assert_batch_write_allowed_memo(
     conversation_ids: Iterable[str] = (),
     expected_generation: int | None = None,
     snapshots: dict | None = None,
-    memo: BatchPrivacyMemo | None = None,
+    read_budget=None,
 ) -> int:
-    # Keep the disabled path's read order, counts and WQ12 behavior unchanged.
+    # Keep the disabled path's live read order and counts unchanged.
     # Full-row exports always stay live: the token certifies authorization, not
     # arbitrary metadata returned to a snapshots= consumer.
     attempt = current_attempt()
@@ -176,21 +161,18 @@ def _assert_batch_write_allowed_memo(
             conversation_ids=conversation_ids,
             expected_generation=expected_generation,
             snapshots=snapshots,
-            memo=memo,
+            read_budget=read_budget,
         )
     ids = frozenset(conversation_ids)
-    if memo is not None and lever_enabled('batch_privacy_memoize', uid):
-        if memo.client is not client or memo.transaction is not transaction:
-            raise ValueError('privacy memo belongs to another transaction attempt')
     # Retain the client object itself, preventing id reuse and cross-plane hits.
     key = (client, uid, ids)
     reference = client.collection(PRIVACY_COLLECTION).document(privacy_owner_key(uid))
     process_on = ttl_enabled('bpp_decision_cache', uid)
     started = PROCESS_DECISIONS.clock()
     try:
-        # Never use the transaction-scoped WQ12 snapshot memo for this read.
+        # Every decision reads this token afresh, including repeated checks in one transaction.
         # Every authorizing transaction enrolls the token in its conflict set.
-        snapshot = metrics.read_snapshot('batch', reference, transaction=transaction)
+        snapshot = metrics.read_snapshot('batch', reference, transaction=transaction, read_budget=read_budget)
         # GAPIC transport retries may replay an already-prepared random token
         # after another writer. The server revision prevents that ABA: replay
         # commits get a new update_time, including deletion/recreation. Keep
@@ -228,8 +210,8 @@ def _assert_batch_write_allowed_memo(
             uid,
             conversation_ids=ids,
             expected_generation=expected_generation,
-            memo=memo,
             privacy_snapshot=snapshot,
+            read_budget=read_budget,
         )
         if eligible:
             attempt.put(key, version, generation)
@@ -251,7 +233,7 @@ def _assert_batch_write_allowed_live(
     conversation_ids: Iterable[str] = (),
     expected_generation: int | None = None,
     snapshots: dict | None = None,
-    memo: BatchPrivacyMemo | None = None,
+    read_budget=None,
     privacy_snapshot: Any = None,
 ) -> int:
     """Fence a mutation. Admission records the returned generation for replay.
@@ -261,19 +243,29 @@ def _assert_batch_write_allowed_live(
     are denied even if their deletion marker has disappeared.
     """
     key = privacy_owner_key(uid)
-    if memo is not None and not lever_enabled('batch_privacy_memoize', uid):
-        memo = None
-    if memo is not None and (memo.client is not client or memo.transaction is not transaction):
-        raise ValueError('privacy memo belongs to another transaction attempt')
 
-    def read(reference):
-        return (
-            memo.get(reference)
-            if memo is not None
-            else metrics.read_snapshot('batch', reference, transaction=transaction)
-        )
+    def live_read(reference):
+        return metrics.read_snapshot('batch', reference, transaction=transaction, read_budget=read_budget)
 
-    marker = read(client.collection('account_deletions').document(uid))
+    # Full-row exports and nontransactional preflights always read live. The
+    # disabled path retains its exact original read order/counts. Do not poll
+    # the older TTL cache's Firestore kill doc or involve Redis in this path.
+    negative_on = lever_enabled('privacy_negative_lookup_cache', uid) and transaction is not None and snapshots is None
+    negative_shadow = negative_on and lever_enabled('privacy_checks_shadow', uid)
+    started = negative_cache.LOOKUPS.clock() if negative_on else None
+    if negative_on and privacy_snapshot is None:
+        # This per-decision read must enroll the token in the transaction conflict set.
+        privacy_snapshot = live_read(client.collection(PRIVACY_COLLECTION).document(key))
+    version = token_version(privacy_snapshot) if negative_on else None
+
+    def read(reference, collection=None):
+        if negative_on and collection is not None:
+            return negative_cache.read(
+                client, uid, reference, collection, version, live_read, shadow=negative_shadow, started=started
+            )
+        return live_read(reference)
+
+    marker = read(client.collection('account_deletions').document(uid), 'account_deletions')
     status = normalize_account_deletion_status(
         marker_exists=marker.exists, raw_status=(marker.to_dict() or {}).get('wipe_status')
     )
@@ -323,9 +315,9 @@ def _assert_batch_write_allowed_live(
             if not conversation_id or '/' in conversation_id or len(conversation_id.encode()) > 256:
                 raise ValueError('bounded conversation document ID required')
             metrics.walked()
-            if read(user.collection('deleted_conversations').document(conversation_id)).exists:
+            if read(user.collection('deleted_conversations').document(conversation_id), 'deleted_conversations').exists:
                 raise BatchPrivacyBlocked('conversation_deleted', conversation_id=conversation_id)
-            conversation = read(user.collection('conversations').document(conversation_id))
+            conversation = read(user.collection('conversations').document(conversation_id), 'conversations')
             row = conversation.to_dict() or {}
             chain[conversation_id] = bool(conversation.exists)
             if snapshots is not None:

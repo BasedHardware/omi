@@ -25,7 +25,7 @@ from utils.workers.retry import retry_response
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-_KINDS = {'enrichment', 'sync_reprocess'}
+_KINDS = {'enrichment', 'sync_reprocess', 'batch_final_pass'}
 # TimeoutMiddleware cuts an attempt at HTTP_POST_TIMEOUT (600s), so the request log records a bare 504
 # while this thread may still be working. Retries and slow deliveries log their real end and timing.
 SLOW_DELIVERY_SECONDS = 120.0
@@ -115,8 +115,14 @@ async def run_enrichment_task(request: Request, _retry_count: int = Depends(veri
     except ValueError:
         payload = None
     task = _task(payload)
-    if task is None:
+    if payload is None or task is None:
         return JSONResponse(status_code=400, content={'status': 'invalid_enrichment_task'})
+    if payload['kind'] == 'batch_final_pass':
+        from utils.conversations.final_pass_retry import consume as consume_speaker_pass
+
+        return JSONResponse(
+            status_code=200, content=await run_blocking(postprocess_executor, consume_speaker_pass, *task)
+        )
     from utils.enrichment import outbox
 
     if not outbox.owns_runtime():
@@ -158,6 +164,13 @@ def maintain(now: float) -> dict[str, int]:
     from database.outbox_firestore import ENRICHMENT_OUTBOX
     from services import summary_debt_repair
 
+    from utils.conversations import final_pass_retry
+
+    # Same scheduled maintenance, separate rows and speaker-only wakes.
+    try:
+        final_pass_retry.sweep(now=now)
+    except Exception as error:
+        logger.error('event=batch_final_pass_retry outcome=sweep_failed exception_type=%s', type(error).__name__)
     swept = ENRICHMENT_OUTBOX.sweep(now=now)
     counts = {
         'rewoken': swept.rewoken,

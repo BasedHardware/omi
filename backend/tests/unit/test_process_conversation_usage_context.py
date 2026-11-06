@@ -162,6 +162,13 @@ def _build_fakes() -> dict[str, ModuleType]:
     workstream_association.associate_canonical_evidence = MagicMock()
     add("utils.task_intelligence.workstream_association", workstream_association)
 
+    # Speaker providers/custody are outside this usage/persistence fixture.
+    # Stub the processing boundary, including its on_persist keyword, rather
+    # than importing diarization against the deliberately fake Firebase SDK.
+    speakers = AutoMockModule("utils.conversations.processing_speakers")
+    speakers.resolve_speakers_for_processing = MagicMock(return_value=False)
+    add("utils.conversations.processing_speakers", speakers)
+
     # --- firebase / pinecone / typesense / anthropic / stripe --------------
     firebase_admin = ModuleType("firebase_admin")
     firebase_admin.auth = MagicMock()

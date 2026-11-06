@@ -37,6 +37,7 @@ from database.firestore_index_registry import (
 from database.people_stats_cache import invalidate_people_stats_cache
 from config.sync_live_dedupe import sync_live_dedupe_active_for
 from utils.conversations.smart_merge_policy import rebase_donor_segments
+from utils.conversations.summary_delivery import rearm_on_revision_change
 from utils.sync.bridge_observation import log_bridge_observation
 from config import merge_ancestry
 from config.conversation_smart_merge import smart_merge_flatten_enabled
@@ -478,6 +479,8 @@ def absorb_conversation(
         from utils.conversations.recorded_time import write_span
 
         survivor_update.update(write_span({**survivor, **survivor_update}))
+        if 'transcript_segments' in survivor_update:
+            rearm_on_revision_change(survivor_raw, survivor_update)
         payload = conversations_db.encode_conversation_for_write(uid, survivor_update, level)
         conversations_db.guard_match_score_size(payload, survivor_raw)
         if (

@@ -616,3 +616,187 @@ def test_firestore_oldest_skips_a_decisionless_job_with_a_last_allowance_hold():
     assert math.isnan(oldest(Client(truncated), 'omi', 1))
     exact = [Doc({**parked, 'enqueued_at': float(n)}) for n in range(OLDEST_POLICY_HOLD_SCAN_LIMIT)]
     assert oldest(Client(exact), 'omi', 1) is None
+
+
+def test_elected_queue_sampler_follower_reads_nothing_and_hands_over(monkeypatch):
+    from utils.batch_pipeline.leader import LeaderLease, QUEUE_METRICS
+    from utils.batch_pipeline import metrics as module
+    from unittest.mock import Mock
+
+    monkeypatch.delenv('FIRESTORE_READ_LEVERS', raising=False)
+    clock = [100.0]
+    monkeypatch.setattr(module.time, 'monotonic', lambda: clock[0])
+    store = MemoryStore()
+    monkeypatch.setattr(store, 'ready_for_capacity', Mock(return_value=0), raising=False)
+    for name in ('oldest', 'oldest_retry'):
+        monkeypatch.setattr(store, name, Mock(wraps=getattr(store, name)))
+    registries = [CollectorRegistry(), CollectorRegistry()]
+    samplers = [
+        QueueMetrics(
+            registry,
+            capacity_sampling=True,
+            oldest_leader=LeaderLease(store, QUEUE_METRICS, ttl_seconds=20, clock=lambda: clock[0]),
+        )
+        for registry in registries
+    ]
+    labels = {'priority': 'deep', 'worker_release': 'unscoped', 'namespace': 'unscoped'}
+    samplers[0].refresh(store, clock[0])
+    samplers[1].refresh(store, clock[0])
+    assert store.oldest.call_count == 6
+    assert store.oldest_retry.call_count == 3
+    assert store.ready_for_capacity.call_count == 3
+    assert _deep_oldest_age(registries[0]) == 0
+    assert _deep_oldest_age(registries[1]) is None
+    assert registries[1].get_sample_value('omi_batch_pipeline_admissible_ready_units', labels) is None
+    # Lease expires before the next default serving sample (40s). A follower
+    # can take over in that interval; the former leader drops only its gauges.
+    clock[0] += 40
+    samplers[1].refresh(store, clock[0])
+    samplers[0].refresh(store, clock[0])
+    assert store.oldest.call_count == 12
+    assert store.oldest_retry.call_count == 6
+    assert store.ready_for_capacity.call_count == 6
+    assert _deep_oldest_age(registries[0]) is None
+    assert _deep_oldest_age(registries[1]) == 0
+    assert registries[1].get_sample_value('omi_batch_pipeline_admissible_ready_units', labels) == 0
+
+
+def test_lever_zero_restores_queries_on_every_instance_and_old_freshness(monkeypatch):
+    from unittest.mock import Mock
+    from utils.batch_pipeline import metrics as module
+
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"batch_metrics_oldest_leader":0}')
+    leader = Mock()
+    leader.acquire.return_value = False
+    store = MemoryStore()
+    monkeypatch.setattr(store, 'oldest', Mock(wraps=store.oldest))
+    clock = [100.0]
+    monkeypatch.setattr(module.time, 'monotonic', lambda: clock[0])
+    for _ in range(2):
+        registry = CollectorRegistry()
+        sampler = QueueMetrics(registry, oldest_leader=leader, oldest_min_refresh_seconds=60)
+        sampler.refresh(store, 100)
+        sampler.refresh(store, 115)
+        clock[0] += 61
+        assert _deep_oldest_age(registry) == 0  # old adapter freshness contract
+    assert store.oldest.call_count == 24
+    leader.acquire.assert_not_called()
+
+
+def test_queue_gauges_expire_without_another_refresh_and_keep_local_gauges(monkeypatch):
+    from utils.batch_pipeline import metrics as module
+
+    monkeypatch.delenv('FIRESTORE_READ_LEVERS', raising=False)
+    clock = [100.0]
+    monkeypatch.setattr(module.time, 'monotonic', lambda: clock[0])
+    registry = CollectorRegistry()
+    sampler = QueueMetrics(registry, capacity_sampling=True)
+    assert _deep_oldest_age(registry) is None
+    store = MemoryStore()
+    monkeypatch.setattr(store, 'ready_for_capacity', lambda *_: 0, raising=False)
+    sampler.refresh(store, 100)
+    sampler.record('leased', wait_seconds=1)
+    clock[0] = 159.9
+    assert _deep_oldest_age(registry) == 0
+    clock[0] = 160
+    for family in registry.collect():
+        if family.name in {
+            'omi_batch_pipeline_oldest_age_seconds',
+            'omi_batch_pipeline_ready_age_seconds',
+            'omi_batch_pipeline_retry_age_seconds',
+            'omi_batch_pipeline_metrics_refreshed_at_seconds',
+            'omi_batch_pipeline_admissible_ready_units',
+            'omi_batch_pipeline_capacity_refreshed_at_seconds',
+        }:
+            assert not family.samples
+    assert _deep_oldest_age(registry) is None
+    assert registry.get_sample_value('omi_batch_pipeline_events_total', {'event': 'leased'}) == 1
+
+
+def test_gpu_fallback_bounds_only_queue_queries_and_failed_samples_expire(monkeypatch):
+    from unittest.mock import Mock
+    from utils.batch_pipeline import metrics as module
+    from database.batch_pipeline_store import FirestoreStore
+    from database import lifecycle_metrics_queries
+
+    monkeypatch.delenv('FIRESTORE_READ_LEVERS', raising=False)
+    clock = [100.0]
+    monkeypatch.setattr(module.time, 'monotonic', lambda: clock[0])
+    registry = CollectorRegistry()
+    sampler = QueueMetrics(registry, capacity_sampling=True, oldest_min_refresh_seconds=60)
+    # Firestore boundary is mocked; no cloud clients or reads.
+    store = Mock(spec=FirestoreStore)
+    store.client, store.namespace = Mock(), 'synthetic'
+    store.oldest.return_value = store.oldest_retry.return_value = None
+    store.ready_for_capacity.return_value = 0
+    monkeypatch.setattr(sampler.record_pending, 'refresh', Mock())
+    monkeypatch.setattr(sampler.nojob, 'refresh', Mock())
+    monkeypatch.setattr(sampler, 'refresh_timeliness', Mock())
+    monkeypatch.setattr(sampler, 'refresh_projection', Mock())
+    monkeypatch.setattr(lifecycle_metrics_queries, 'record_pending', Mock())
+    monkeypatch.setattr(lifecycle_metrics_queries, 'nojob', Mock())
+    for instant in (100, 115, 130, 145, 160):
+        clock[0] = instant
+        sampler.refresh(store, instant)
+    assert store.oldest.call_count == 12
+    assert store.oldest_retry.call_count == 6
+    assert store.ready_for_capacity.call_count == 6
+    assert sampler.refresh_timeliness.call_count == 5
+    assert sampler.refresh_projection.call_count == 5
+    assert sampler.record_pending.refresh.call_count == 5
+    clock[0] = 220
+    store.oldest.side_effect = TimeoutError('synthetic')
+    with pytest.raises(TimeoutError):
+        sampler.refresh(store, 220)
+    assert _deep_oldest_age(registry) is None
+    # Failure did not reserve another 60s; the immediately following tick retries.
+    store.oldest.side_effect = None
+    sampler.refresh(store, 221)
+    assert _deep_oldest_age(registry) == 0
+
+
+def test_capacity_expiry_does_not_borrow_a_successful_age_sample_clock(monkeypatch):
+    from utils.batch_pipeline import metrics as module
+    from unittest.mock import Mock
+
+    monkeypatch.delenv('FIRESTORE_READ_LEVERS', raising=False)
+    clock = [100.0]
+    monkeypatch.setattr(module.time, 'monotonic', lambda: clock[0])
+    registry = CollectorRegistry()
+    sampler = QueueMetrics(registry, capacity_sampling=True)
+    store = MemoryStore()
+    capacity = Mock(return_value=0)
+    monkeypatch.setattr(store, 'ready_for_capacity', capacity, raising=False)
+    sampler.refresh(store, 100)
+    scope = {'worker_release': 'unscoped', 'namespace': 'unscoped'}
+    assert registry.get_sample_value('omi_batch_pipeline_capacity_refreshed_at_seconds', scope) == 100
+    clock[0] = 150
+    capacity.side_effect = TimeoutError('synthetic')
+    sampler.refresh(store, 150)
+    clock[0] = 160
+    assert _deep_oldest_age(registry) == 0
+    assert registry.get_sample_value('omi_batch_pipeline_capacity_refreshed_at_seconds', scope) is None
+    assert registry.get_sample_value('omi_batch_pipeline_admissible_ready_units', {**scope, 'priority': 'deep'}) is None
+
+
+def test_gpu_query_cadence_does_not_stale_per_pod_busy_time_heartbeat(monkeypatch):
+    from utils.batch_pipeline import metrics as module
+
+    monkeypatch.delenv('FIRESTORE_READ_LEVERS', raising=False)
+    clock = [100.0]
+    monkeypatch.setattr(module.time, 'monotonic', lambda: clock[0])
+    registry = CollectorRegistry()
+    sampler = QueueMetrics(registry, oldest_min_refresh_seconds=60)
+    store = MemoryStore()
+    scope = {'worker_release': 'unscoped', 'namespace': 'unscoped'}
+    # Simulate 2s of IO plus 15s sleep: ticks arrive 17s apart, so the
+    # next queue sample is at 168, after the 160 queue freshness deadline.
+    for instant in (100, 117, 134, 151):
+        clock[0] = instant
+        sampler.refresh(store, instant)
+    clock[0] = 161
+    assert _deep_oldest_age(registry) is None
+    assert registry.get_sample_value('omi_batch_pipeline_metrics_refreshed_at_seconds', scope) is None
+    assert registry.get_sample_value('omi_batch_pipeline_sampler_observed_at_seconds', scope) == 151
+    sampler.refresh(store, 168)
+    assert registry.get_sample_value('omi_batch_pipeline_metrics_refreshed_at_seconds', scope) == 168

@@ -41,6 +41,7 @@ import 'package:omi/services/wals/recording_transfer_coordinator.dart';
 import 'package:omi/utils/device.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/firmware_update_build_policy.dart';
+import 'package:omi/utils/firmware_install_verification.dart';
 import 'package:omi/utils/firmware_update_battery.dart';
 import 'package:omi/utils/firmware_update_check_session.dart';
 import 'package:omi/utils/firmware_update_prompt_coordinator.dart';
@@ -179,6 +180,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     FindDeviceRunner? findDeviceRunner,
     CaptureWedgeMonitor? captureWedgeMonitor,
     Future<DeviceConnection?> Function(String)? chargingConnectionLoader,
+    Future<DeviceConnection?> Function(String)? deviceInfoConnectionLoader,
     DateTime Function()? clock,
     Duration Function()? monotonicNow,
     Duration? fullyChargedMinimumDwell,
@@ -186,6 +188,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     FullyChargedLevelMismatch? fullyChargedLevelMismatch,
   })  : _bleDiagnosticsLoader = bleDiagnosticsLoader ?? BleHostApi().getDeviceDiagnostics,
         _findDeviceRunner = findDeviceRunner ?? _defaultFindDeviceRunner,
+        _deviceInfoConnectionLoader = deviceInfoConnectionLoader ?? ServiceManager.instance().device.ensureConnection,
         _chargingConnectionLoader = chargingConnectionLoader ?? ServiceManager.instance().device.ensureConnection,
         _wedgeMonitor = captureWedgeMonitor ?? CaptureWedgeMonitor.instance {
     _fullyChargedAlert = FullyChargedAlertGate(
@@ -244,7 +247,6 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     try {
       final syncs = ServiceManager.instance().wal.getSyncs();
       syncs.setDevice(null);
-      syncs.sdcard.setDevice(null);
       syncs.flashPage.setDevice(null);
       syncs.storage.setDevice(null);
       syncs.ring.setDevice(null);
@@ -381,10 +383,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       _deviceSessionStartedAt = null;
       _deviceSessionOperationId = null;
     }
-    await getDeviceInfo();
+    await getDeviceInfo(forceRefresh: isNewConnection);
     if (!_isCurrent(generation)) return;
     if (isNewConnection) {
-      PlatformManager.instance.analytics.deviceConnected(device);
+      PlatformManager.instance.analytics.deviceConnected(pairedDevice ?? device);
     }
     if (device != null) {
       final firstPairedAt = await _markDevicePaired(device.id, generation);
@@ -466,18 +468,54 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     return firstPairedAt;
   }
 
-  Future getDeviceInfo() async {
+  final Future<DeviceConnection?> Function(String) _deviceInfoConnectionLoader;
+
+  final _firmwareRevisions = StreamController<FirmwareRevisionObservation>.broadcast(sync: true);
+
+  Stream<FirmwareRevisionObservation> get firmwareRevisions => _firmwareRevisions.stream;
+
+  Future getDeviceInfo({bool forceRefresh = false}) async {
     final generation = _sessionGeneration;
     if (connectedDevice != null) {
-      if (pairedDevice?.firmwareRevision != null && pairedDevice?.firmwareRevision != 'Unknown') {
+      final firmware = pairedDevice?.firmwareRevision;
+      if (!forceRefresh && firmware != null && firmware.isNotEmpty && firmware != 'Unknown') {
         if (!_isCurrent(generation)) return;
         _persistPairedDevice();
         return;
       }
-      var connection = await ServiceManager.instance().device.ensureConnection(connectedDevice!.id);
-      if (!_isCurrent(generation)) return;
-      pairedDevice = await connectedDevice?.getDeviceInfo(connection);
-      if (!_isCurrent(generation)) return;
+      final readingDevice = connectedDevice!;
+      final readingSession = _firmwareUpdateCheckSessionGuard.capture();
+      final connection = await _deviceInfoConnectionLoader(readingDevice.id);
+      if (!_isCurrent(generation) ||
+          connectedDevice?.id != readingDevice.id ||
+          (readingSession != null && !_firmwareUpdateCheckSessionGuard.isCurrent(readingSession))) {
+        return;
+      }
+      // BtDevice.getDeviceInfo(null) falls back to persisted metadata. Preserve
+      // the discovery identity, but report the unread firmware as unknown.
+      if (forceRefresh && connection == null) {
+        pairedDevice = readingDevice.copyWith(firmwareRevision: 'Unknown');
+        _persistPairedDevice();
+        return;
+      }
+      final info = await readingDevice.getDeviceInfo(connection);
+      if (!_isCurrent(generation) ||
+          connectedDevice?.id != readingDevice.id ||
+          (readingSession != null && !_firmwareUpdateCheckSessionGuard.isCurrent(readingSession))) {
+        return;
+      }
+      pairedDevice = info;
+      if (connection != null) {
+        _firmwareRevisions.add((deviceId: readingDevice.id, version: info.firmwareRevision));
+      }
+      // A prior failed read left legacy SD detached. Publish the retry's
+      // firmware to the existing attachment without attaching an early connect.
+      if (pairedDevice != null) {
+        ServiceManager.instance()
+            .wal
+            .getSyncs()
+            .updateFirmwareVersion(pairedDevice!.id, pairedDevice!.firmwareRevision);
+      }
       _persistPairedDevice();
     } else {
       if (!_isCurrent(generation)) return;
@@ -927,6 +965,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   @override
   void dispose() {
+    unawaited(_firmwareRevisions.close());
     ServiceManager.instance().device.savedReconnect.stop();
     _isDisposed = true;
     _sessionGeneration++;
@@ -1169,7 +1208,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     if (!_isCurrent(generation) || _admittedConnectGeneration != generation) return;
     final syncs = ServiceManager.instance().wal.getSyncs();
     syncs.setDevice(device, firmwareVersion: currentFirmwareVersion);
-    syncs.sdcard.setDevice(device);
+    // WalSyncs attaches legacy SD only for confirmed legacy firmware.
     syncs.flashPage.setDevice(device);
     syncs.storage.setDevice(device);
     syncs.ring.setDevice(device);

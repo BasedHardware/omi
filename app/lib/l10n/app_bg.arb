@@ -4498,6 +4498,8 @@
     "chatAppsWaitingMessageIn": "Изпрати съобщението от {app}. Този екран се обновява веднага щом Omi го получи.",
     "chatAppsCodeExpiredMessageIn": "Вземи нов код и го изпрати от {app}.",
     "episodeWritingNotes": "Пишем бележките…",
+    "homeStepTranscribing": "Транскрибираме…",
+    "homeRecordingsCount": "{count, plural, one{{count} запис} other{{count} записа}}",
     "episodeWritingNotesDetail": "Първо довършваме транскрипцията. Можете да напуснете страницата.",
     "episodeCoversUpTo": "Обхваща до {time} · пълните бележки при приключване",
     "liveTranscribedUpTo": "Транскрибирано до {time}",
@@ -4634,5 +4636,11 @@
     "referralRewardSecondDetail": "Когато още 3 приятели купят",
     "referralClaimShort": "Вземи",
     "paymentDeclinedTitle": "Картата ви беше отхвърлена",
-    "paymentDeclinedMessage": "Обновете картата, за да възстановите {plan}"
+    "paymentDeclinedMessage": "Обновете картата, за да възстановите {plan}",
+    "hasLinkedTasksLabel": "Има свързани задачи",
+    "hasTasksFilter": "Със задачи",
+    "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
+    "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
+    "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
 }

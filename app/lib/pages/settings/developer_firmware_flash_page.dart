@@ -45,7 +45,16 @@ class _DeveloperFirmwareFlashPageState extends State<DeveloperFirmwareFlashPage>
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final flashing = _confirmed && !isInstalled && _error == null;
+    final observedVersion = observedFirmwareVersion ?? '';
+    final failure = updateFailure;
+    final failureMessage = switch (failure) {
+      FirmwareUpdateFailure.notInstalled => l10n.firmwareUpdateNotInstalledMessage(observedFirmwareVersion ?? ''),
+      FirmwareUpdateFailure.noReconnect => l10n.firmwareUpdateUnconfirmedMessage,
+      FirmwareUpdateFailure.download => l10n.firmwareDownloadFailedMessage,
+      FirmwareUpdateFailure.install => l10n.firmwareUpdateFailedMessage,
+      null => _error,
+    };
+    final flashing = isInstalling;
     return PopScope(
       // Leaving mid-flash would kill the update manager and can leave the device half-written.
       canPop: !flashing,
@@ -94,8 +103,9 @@ class _DeveloperFirmwareFlashPageState extends State<DeveloperFirmwareFlashPage>
                   const Spacer(),
                   OmiButton(label: l10n.flashFirmware, onPressed: _startFlash, expand: true),
                 ],
-                if (_confirmed && !isInstalled) ...[
-                  Text(l10n.installingFirmware, style: OmiType.headline),
+                if (flashing) ...[
+                  Text(isVerifying ? l10n.firmwareVerifyingInstallation : l10n.installingFirmware,
+                      style: OmiType.headline),
                   const SizedBox(height: OmiSpacing.md),
                   LinearProgressIndicator(
                     value: installProgress / 100,
@@ -116,16 +126,17 @@ class _DeveloperFirmwareFlashPageState extends State<DeveloperFirmwareFlashPage>
                         const SizedBox(height: OmiSpacing.md),
                         Text(l10n.firmwareFlashed, style: OmiType.title3),
                         const SizedBox(height: OmiSpacing.xs),
-                        Text(l10n.deviceWillRestart, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
+                        Text('${l10n.currentVersion}: $observedVersion',
+                            style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
                       ],
                     ),
                   ),
-                if (_error != null) ...[
+                if (failureMessage != null) ...[
                   const SizedBox(height: OmiSpacing.md),
                   Container(
                     padding: const EdgeInsets.all(OmiSpacing.sm),
                     decoration: BoxDecoration(color: OmiColors.dangerSurface, borderRadius: OmiRadius.smAll),
-                    child: Text(_error!, style: OmiType.footnote.copyWith(color: OmiColors.danger)),
+                    child: Text(failureMessage, style: OmiType.footnote.copyWith(color: OmiColors.danger)),
                   ),
                 ],
               ],

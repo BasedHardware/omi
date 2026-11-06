@@ -70,7 +70,7 @@ mixed identity cannot be established. No actual resource is configured here.
 
 `FIRESTORE_READ_LEVERS` is a **replacement JSON literal**, not a patch. All
 surfaces explicitly declare all 20 current keys. The guard flag-offs leave
-`memory_list_index_window:0`, `batch_privacy_memoize:0`,
+`memory_list_index_window:0`,
 `people_scan_dedupe:0`, and `finjob_candidate_queries:0`.
 
 Monthly-total enablement and epoch deliberately remain split:
@@ -110,9 +110,9 @@ establishes no realized savings.
 
 Batch worker control-loop settings are declared in the worker chart (including
 explicit prod values): candidate fanout 16, parallel admission true, idle max 10s,
-and `firestoreReadLevers: '{"batch_privacy_memoize":100}' `. The three control knobs
+and `firestoreReadLevers: '{}'`. The three control knobs
 also have matching base declarations on serving batch hosts; pusher does not run
 the batch scheduler/pump and the co-host contract classifies them listen-only.
-The worker-only privacy lever does not change the complete serving-role literals
-above. Worker rollback: 64 / false / 2 / `{}` respectively. See
+The retired WQ12 privacy lever is absent from worker and serving-role literals.
+Worker rollback: 64 / false / 2 / `{}` respectively. See
 [the worker runbook](../../docs/batch-pipeline-worker.md) for the lead's soak gates.

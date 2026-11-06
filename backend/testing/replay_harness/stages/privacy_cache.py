@@ -18,7 +18,6 @@ LEVERS = (
     'tombstone_negative_cache',
     'legal_hold_fence_cache',
     'bpp_generation_memo',
-    'batch_privacy_memoize',
     'privacy_session_token',
     'subscription_cache',
     'request_read_dedupe',
@@ -32,6 +31,7 @@ class FaultRedis:
         self.redis, self.fault = redis, fault
         self.active = False
         self.calls = Counter()
+        self.total_calls = Counter()
         self.injected = Counter()
         self.successful = Counter()
         self.begins = 0
@@ -42,6 +42,7 @@ class FaultRedis:
         from database import fsr_read_cache as cache
 
         operation = {cache._BEGIN: 'begin', cache._END: 'end', cache._READ: 'read', cache._PUBLISH: 'publish'}[script]
+        self.total_calls[operation] += 1
         if self.active:
             self.calls[operation] += 1
             if (
@@ -113,22 +114,6 @@ def clock_and_cache(environment, fault, events, *, ttl_override_s=None):
 
     stack.enter_context(patch.object(cache, '_event', event))
     stack.enter_context(patch.object(metrics, 'memo_result', memo))
-    from database.batch_pipeline_privacy import BatchPrivacyMemo
-
-    original_get = BatchPrivacyMemo.get
-
-    def snapshot_get(memo, reference):
-        previous = memo.snapshots.get(reference.path)
-        result = original_get(memo, reference)
-        if previous is not None:
-            if result is not previous:
-                raise AssertionError('transaction snapshot memo did not reuse its snapshot')
-            events[('batch_snapshot', 'memo_hit')] += 1
-        else:
-            events[('batch_snapshot', 'memo_miss')] += 1
-        return result
-
-    stack.enter_context(patch.object(BatchPrivacyMemo, 'get', snapshot_get))
     return stack, redis
 
 
@@ -197,7 +182,9 @@ class PrivacyCacheDriver:
                         scope = cache.request_read_scope()
                         await scope.__anext__()
                         request_stack.push_async_callback(scope.aclose)
+                    marker_request = row['fault'] == 'request_memo' and row['family'] == 'deletion_marker'
                     before = truth()
+                    warm_reads = redis.total_calls['read']
                     if read() != before or read() != before:
                         raise AssertionError('privacy warm differs from authority')
                     # Valid cacheable baselines must publish or hit a real memo.
@@ -223,9 +210,16 @@ class PrivacyCacheDriver:
                         for key in environment.redis.scan_iter(match='fsr:s4:v2:*:data:*')
                     ]
                     evidence = record['evidence']
-                    if row['family'] == 'batch_privacy' and not events[('batch_snapshot', 'memo_hit')]:
-                        raise AssertionError('batch transaction snapshot memo reuse was not exercised')
-                    if row['fault'] == 'request_memo' and record['fault_applicable']:
+                    if marker_request:
+                        reader_holder = cache._request.get()
+                        evidence.update(
+                            request_memo_absent=not any(key[0] == uid for key in reader_holder.values),
+                            request_redis_warm_reads=redis.total_calls['read'] - warm_reads,
+                            request_redis_probe_reads=[],
+                            request_deletion_observed=True,
+                            reader_scope_preserved=True,
+                        )
+                    elif row['fault'] == 'request_memo' and record['fault_applicable']:
                         holder = cache._request.get()
                         evidence['request_memo_warmed'] = any(key[0] == uid for key in holder.values)
                         evidence['request_memo_hit'] = bool(events[('request_read_dedupe', 'hit')])
@@ -241,6 +235,16 @@ class PrivacyCacheDriver:
                             fenced=row['family'] in FSR_FAMILIES,
                         )
                         evidence.update(overlap_evidence)
+                    elif marker_request:
+                        # Another request cannot clear the original reader's memo.
+                        # Keep the reader open while the real writer fences Redis.
+                        writer_scope = cache.request_read_scope()
+                        await anext(writer_scope)
+                        try:
+                            evidence['independent_writer_scope'] = cache._request.get() is not reader_holder
+                            write()
+                        finally:
+                            await writer_scope.aclose()
                     else:
                         write()
                     after = truth()
@@ -251,7 +255,7 @@ class PrivacyCacheDriver:
                     if any(value != before and value != after for value in overlap):
                         raise AssertionError('overlapping reader returned neither durable state')
                     details['overlap_probes'] += len(overlap)
-                    if row['fault'] == 'request_memo' and record['fault_applicable']:
+                    if row['fault'] == 'request_memo' and record['fault_applicable'] and not marker_request:
                         holder = cache._request.get()
                         if any(key[0] == uid for key in holder.values):
                             raise AssertionError('writer retained request memo')
@@ -269,7 +273,18 @@ class PrivacyCacheDriver:
                     for offset in sorted(set((*OFFSETS, details['bound_s']))):
                         environment.clock.advance(start + offset - environment.clock.time())
                         try:
-                            observed, expected = read(), truth()
+                            probe_reads = redis.total_calls['read']
+                            observed = read()
+                            if marker_request:
+                                evidence['request_redis_probe_reads'].append(redis.total_calls['read'] - probe_reads)
+                                evidence['request_deletion_observed'] &= observed == after
+                                evidence['reader_scope_preserved'] &= (
+                                    cache._request.get() is reader_holder and not reader_holder.closed
+                                )
+                                evidence['request_memo_absent'] &= not any(
+                                    key[0] == uid for key in reader_holder.values
+                                )
+                            expected = truth()
                             if expected != after:
                                 raise AssertionError('authority changed outside replayed writer')
                             observe_probe(details, row, offset, observed, expected, before)
@@ -284,7 +299,9 @@ class PrivacyCacheDriver:
                             )
                     evidence['injected'] = dict(redis.injected)
                     evidence['successful'] = dict(redis.successful)
-                    record['fault_applied'] = record['fault_applicable'] and fault_applied(row['fault'], evidence)
+                    record['fault_applied'] = record['fault_applicable'] and fault_applied(
+                        row['fault'], evidence, family=row['family']
+                    )
                     for operation, count in redis.calls.items():
                         label = f'{row["fault"]}:{operation}'
                         details['redis_fault_calls'][label] = details['redis_fault_calls'].get(label, 0) + count

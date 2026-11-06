@@ -257,3 +257,16 @@ def test_debt_fingerprint_ignores_routing_and_annotations():
     retuned = json.loads(json.dumps(rule))
     retuned['for'] = '99m'
     assert b.fingerprint(retuned) != b.fingerprint(rule)
+
+
+def test_declared_gmp_log_metrics_are_not_admitted_as_observed_or_local():
+    r = rule()
+    inventory = {
+        'metrics': [],
+        'datasource_metrics': {'gmp-cloud-run': {'declared_metrics': ['fixture_total']}},
+    }
+    assert b.lint({'fixture': r}, inventory)['failures']
+    r['data'][0]['datasourceUid'] = 'gmp-cloud-run'
+    r['data'][0]['model']['datasource'] = {'type': 'prometheus', 'uid': 'gmp-cloud-run'}
+    assert not b.lint({'fixture': r}, inventory)['failures']
+    assert 'metrics' not in inventory['datasource_metrics']['gmp-cloud-run']

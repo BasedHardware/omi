@@ -14880,6 +14880,20 @@ class AppLocalizationsHu extends AppLocalizations {
   String get episodeWritingNotes => 'Jegyzetek írása…';
 
   @override
+  String get homeStepTranscribing => 'Átírás folyamatban…';
+
+  @override
+  String homeRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count felvétel',
+      one: '1 felvétel',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get episodeWritingNotesDetail => 'Először befejezzük az átiratot. Elhagyhatod ezt az oldalt.';
 
   @override
@@ -15424,4 +15438,25 @@ class AppLocalizationsHu extends AppLocalizations {
   String paymentDeclinedMessage(Object plan) {
     return 'Frissítse a kártyát a(z) $plan visszaállításához';
   }
+
+  @override
+  String get hasLinkedTasksLabel => 'Kapcsolódó feladatokat tartalmaz';
+
+  @override
+  String get hasTasksFilter => 'Feladatokkal';
+
+  @override
+  String firmwareUpdateNotInstalledMessage(String version) {
+    return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
+  }
+
+  @override
+  String get firmwareUpdateUnconfirmedMessage =>
+      'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
+
+  @override
+  String get firmwareUpdateUnconfirmedTitle => 'Update Not Confirmed';
+
+  @override
+  String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
 }

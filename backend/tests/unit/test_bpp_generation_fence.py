@@ -95,6 +95,18 @@ def test_one_token_per_plane_and_owner_and_random_on_every_retry():
     assert first.writes[-1] != second.writes[-1]
 
 
+@pytest.mark.parametrize('operation', ['create', 'merge_upsert', 'replace'])
+def test_metadata_only_conversation_creation_always_rotates(operation):
+    write = Write(update=Document(name=f'{ROOT}/users/u/conversations/c', fields={'title': {'string_value': 'new'}}))
+    if operation == 'create':
+        write.current_document = {'exists': False}
+    elif operation == 'merge_upsert':
+        write.update_mask = {'field_paths': ['title']}
+    prepared, _ = fence.augment_commit({'writes': [write]})
+    assert prepared.writes[0] == write
+    assert prepared.writes[1].update.name == TOKEN
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize('asynchronous', [False, True])
 @pytest.mark.parametrize('bulk', [False, True])

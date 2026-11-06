@@ -220,6 +220,11 @@ def test_stale_processor_result_cannot_rehide_restored_review(monkeypatch):
         def set(self, ref, data, merge=False):
             ref.written = dict(data)
 
+        def update(self, ref, data):
+            from google.cloud.firestore_v1._helpers import DocumentExtractorForUpdate
+
+            ref.written = DocumentExtractorForUpdate(data).set_fields
+
     ref = _Ref()
     transaction = _Transaction()
     db = MagicMock()
@@ -416,7 +421,9 @@ def test_restored_jev_discard_survives_reassessment_persist(monkeypatch):
 
     assert conversations.persist_processing_result_with_lifecycle('u', payload) is True
 
-    assert db.transactions[-1].merges == [(('users', 'u', 'conversations', 'restored'), True)]
+    assert len(db.transactions[-1].updates) == 1
+    assert db.transactions[-1].updates[0][0] == ('users', 'u', 'conversations', 'restored')
+    assert db.transactions[-1].merges == []
     stored = db.rows[('users', 'u', 'conversations', 'restored')]
     assert stored['relevance_decision']['decided_by'] == 'user'
     assert stored['relevance_decision']['verdict'] == 'keep'

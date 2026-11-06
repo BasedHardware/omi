@@ -100,6 +100,9 @@ _FINALIZATION_REPLAY_LISTEN_ONLY = frozenset(
 # none of those surfaces and never starts the dedicated GPU process.
 _BATCH_PIPELINE_LISTEN_ONLY = frozenset(
     {
+        # Held expiry/requeue is owned by main.py maintenance/RPC and GPU workers;
+        # pusher does not run the held maintenance loop or worker failure writer.
+        'BATCH_HELD_DEAD_LETTER_ENABLED',
         'BATCH_CONTROL_CANDIDATE_FANOUT',
         'BATCH_ADMISSION_PARALLEL_CALLS',
         'BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS',
@@ -381,6 +384,10 @@ PUSHER_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     # Pusher retains its cloud/BYOK credential; listen has no managed cloud key.
     "prod": frozenset(
         {
+            # Only pusher owns closed recording workers and their eviction proof.
+            "PUSHER_MAX_CLOSED_RECORD_DRAINS",
+            "PUSHER_ABANDON_EVICTED_TOKENS",
+            "PUSHER_MAX_ABANDON_RECORD_DRAINS",
             # Late identity retries are scheduled only by prod pusher audio drain.
             "OWNER_IDENTITY_RETRY_COALESCE_ENABLED",
             # Pusher alone writes PCM chunk batches (upload_audio_chunks_batch).

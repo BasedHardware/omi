@@ -4498,6 +4498,8 @@
     "chatAppsWaitingMessageIn": "Trimite mesajul din {app}. Acest ecran se actualizează de îndată ce Omi îl primește.",
     "chatAppsCodeExpiredMessageIn": "Obține un cod nou și trimite-l din {app}.",
     "episodeWritingNotes": "Scriem notițele…",
+    "homeStepTranscribing": "Se transcrie…",
+    "homeRecordingsCount": "{count, plural, one{{count} înregistrare} few{{count} înregistrări} other{{count} de înregistrări}}",
     "episodeWritingNotesDetail": "Mai întâi terminăm transcrierea. Poți părăsi această pagină.",
     "episodeCoversUpTo": "Până la {time} · notițe complete la final",
     "liveTranscribedUpTo": "Transcris până la {time}",
@@ -4634,5 +4636,11 @@
     "referralRewardSecondDetail": "Când încă 3 prieteni cumpără",
     "referralClaimShort": "Revendică",
     "paymentDeclinedTitle": "Cardul dvs. a fost refuzat",
-    "paymentDeclinedMessage": "Actualizați cardul pentru a recupera {plan}"
+    "paymentDeclinedMessage": "Actualizați cardul pentru a recupera {plan}",
+    "hasLinkedTasksLabel": "Are sarcini asociate",
+    "hasTasksFilter": "Cu sarcini",
+    "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
+    "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
+    "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
 }

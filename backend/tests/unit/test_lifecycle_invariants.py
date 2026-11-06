@@ -14,7 +14,15 @@ from pathlib import Path
 
 import pytest
 
-from tests.support.lifecycle_state_table import CLAUSES, ORDERING_RULES, PATCH_CONTRACTS, STATES, ordering_holds
+from tests.support.lifecycle_state_table import (
+    ABANDON_RECORD_PRODUCER,
+    CLAUSES,
+    FIELD_BUILDERS,
+    ORDERING_RULES,
+    PATCH_CONTRACTS,
+    STATES,
+    ordering_holds,
+)
 from tests.support.lifecycle_ast import EntryPath, definition_fingerprint, entry_deadline_sites, function_node
 from utils.conversations.phase import ConversationPhase, EpisodePhase
 
@@ -217,6 +225,11 @@ def assert_clause(row, clause):
         assert (row.machine, row.state) == ('fair_use', 'none')
         return  # Base state carries no outstanding enforcement obligation.
     if clause == 'automatic_exit':
+        for writer in row.exit.automatic_writers:
+            assert function_source(f'{writer.module}:{writer.function}'), writer
+            assert any(
+                writer.function in FIELD_BUILDERS.get(writer.module, {}).get(field, ()) for field in row.fields
+            ), f'{row.key}: automatic exit writer is outside the reviewed field inventory: {writer}'
         if row.exit_exemption:
             assert row.key == 'record_audio:capturing' and not row.terminal
             assert row.exit.kind == 'callback-only'
@@ -277,6 +290,18 @@ def assert_clause(row, clause):
 # KNOWN_GAPS is a reviewed baseline, added below. It is not derived from the
 # assertions at collection time; strict XPASS is a blocking improvement signal.
 KNOWN_GAPS = {
+    ('record_audio:seal_refused', 'automatic_exit'): 'Phase 1 preserves callback-only exact-token finish and seal; '
+    'automatic requeue is phase 4; ANX lcphase1-first-refusal-clock',
+    ('record_audio:seal_refused', 'entry_deadline'): 'First-refusal clock is an age anchor, not a custody deadline; '
+    'phase 4 owns requeue; ANX lcphase1-first-refusal-clock',
+    ('record_audio:seal_refused', 'dwell_metric'): 'Phase 1 emits bounded job-page age/count in the sweeper summary; '
+    'authoritative fleet Gauge including no-job rows remains outside scope; ANX lcphase1-first-refusal-clock',
+    ('record_audio:seal_refused', 'dwell_alert'): 'Phase 1 declares the agent alert identity; committed monitoring '
+    'rule is outside named file scope; ANX lcphase1-first-refusal-clock',
+    ('visibility:transcribing_hold', 'dwell_metric'): 'No dedicated transcription presentation dwell gauge; '
+    'homegate phase 1; ANX lcinv-lifecycle-invariants',
+    ('visibility:transcribing_hold', 'dwell_alert'): 'No dedicated transcription presentation stock alert; '
+    'homegate phase 1; ANX lcinv-lifecycle-invariants',
     ('batch:committed', 'dwell_metric'): 'batch:committed: missing authoritative dwell/stock gauge; phase contract '
     'follow-up; no fix PR yet; ANX lcinv-lifecycle-invariants',
     ('batch:partial_retired', 'dwell_alert'): 'batch:partial_retired: missing committed dwell/stock alert; phase '
@@ -289,8 +314,11 @@ KNOWN_GAPS = {
     ('batch:privacy_blocked', 'dwell_metric'): 'batch:privacy_blocked: missing authoritative dwell/stock gauge; '
     'phase contract follow-up; no fix PR yet; ANX '
     'lcinv-lifecycle-invariants',
-    ('batch:quarantined', 'entry_deadline'): 'batch:quarantined: missing deadline stamped at entry; phase contract '
-    'follow-up; no fix PR yet; ANX lcinv-lifecycle-invariants',
+    (
+        'batch:quarantined',
+        'entry_deadline',
+    ): 'GPU holds stamp a flag-gated held_deadline_at; provider-STT settle/terminal entries '
+    'remain unstamped and cannot join the GPU requeue path. ANX omi-lifecycle phase 4a',
     ('batch:ready', 'entry_deadline'): 'batch:ready: missing deadline stamped at entry; phase contract follow-up; no '
     'fix PR yet; ANX lcinv-lifecycle-invariants',
     ('batch:record_pending', 'entry_deadline'): 'batch:record_pending: total pending-dwell deadline is still '
@@ -313,9 +341,8 @@ KNOWN_GAPS = {
     ('batch_projection:persisted', 'entry_deadline'): 'batch_projection:persisted: missing deadline stamped at '
     'entry; phase contract follow-up; no fix PR yet; ANX '
     'lcinv-lifecycle-invariants',
-    ('batch_projection:quarantine_held', 'entry_deadline'): 'batch_projection:quarantine_held: missing deadline '
-    'stamped at entry; phase contract follow-up; no fix PR '
-    'yet; ANX lcinv-lifecycle-invariants',
+    ('batch_projection:quarantine_held', 'entry_deadline'): 'Assignment holds stamp held_deadline_at; privacy holds '
+    'remain explicitly outside phase 4b and must never age-expire. ANX lcinv-lifecycle-invariants',
     ('batch_projection:ready', 'entry_deadline'): 'batch_projection:ready: missing deadline stamped at entry; phase '
     'contract follow-up; no fix PR yet; ANX lcinv-lifecycle-invariants',
     ('conversation:completed', 'dwell_metric'): 'conversation:completed: missing authoritative dwell/stock gauge; '
@@ -387,6 +414,13 @@ KNOWN_GAPS = {
     'capture monitoring follow-up, no PR yet; ANX lcinv-lifecycle-invariants',
     ('record_audio:capturing', 'dwell_metric'): 'Live producer custody needs authoritative dwell visibility; 4bf62d; '
     'capture monitoring follow-up, no PR yet; ANX lcinv-lifecycle-invariants',
+    ('record_audio:abandoned', 'entry_deadline'): 'PR #24689 adds a conditional eviction exit, not a bounded '
+    'repair deadline: abandoned_at records stopped-producer age; executor settlement, metadata admission retry '
+    'and retained-tail durability can wait indefinitely; ANX lcinv-lifecycle-invariants',
+    ('record_audio:abandoned', 'dwell_metric'): 'PR #24689 logs outcome=abandoned but supplies no authoritative '
+    'abandoned-token age/stock gauge; ANX lcinv-lifecycle-invariants',
+    ('record_audio:abandoned', 'dwell_alert'): 'PR #24689 supplies no abandoned-token dwell alert; '
+    'ANX lcinv-lifecycle-invariants',
     (
         'record_audio_orphan:capturing',
         'dwell_metric',
@@ -416,12 +450,6 @@ KNOWN_GAPS = {
     'bit; reconnect-only retry remains a freshtitles fix, '
     'no PR yet; ANX lcinv-lifecycle-invariants',
     ('record_audio:sealed', 'automatic_exit'): 'record_audio:sealed: missing independent automatic exit; No job: '
-    'manual digest-gated nojob recovery is not an automatic exit; '
-    'freshtitles fix, no PR yet; ANX lcinv-lifecycle-invariants',
-    ('record_audio:sealed', 'dwell_alert'): 'record_audio:sealed: missing committed dwell/stock alert; No job: '
-    'manual digest-gated nojob recovery is not an automatic exit; '
-    'freshtitles fix, no PR yet; ANX lcinv-lifecycle-invariants',
-    ('record_audio:sealed', 'dwell_metric'): 'record_audio:sealed: missing authoritative dwell/stock gauge; No job: '
     'manual digest-gated nojob recovery is not an automatic exit; '
     'freshtitles fix, no PR yet; ANX lcinv-lifecycle-invariants',
     ('record_audio:sealed', 'entry_deadline'): 'record_audio:sealed: missing deadline stamped at entry; No job: '
@@ -491,10 +519,17 @@ def test_required_legacy_machines_are_present():
             'partial_retired',
         },
         'batch_projection': {'pending', 'persisted', 'ready', 'quarantine_held', 'completed', 'erased'},
-        'record_audio': {'capturing', 'sealed', 'record_upload_failed', 'record_audio_partial'},
+        'record_audio': {
+            'capturing',
+            'seal_refused',
+            'abandoned',
+            'sealed',
+            'record_upload_failed',
+            'record_audio_partial',
+        },
         'summary_debt': {'pending', 'completed'},
         'fair_use': {'warning', 'throttle', 'restrict'},
-        'visibility': {'bridge_pending', 'settling_hold'},
+        'visibility': {'bridge_pending', 'settling_hold', 'transcribing_hold'},
     }
     for machine, states in required.items():
         assert states <= {row.state for row in STATES if row.machine == machine}
@@ -511,6 +546,8 @@ def test_resolved_plan_gaps_do_not_regress():
         ('finalization:dead_letter', 'dwell_alert'),
         ('batch:leased', 'entry_deadline'),
         ('visibility:bridge_pending', 'entry_deadline'),
+        ('visibility:transcribing_hold', 'entry_deadline'),
+        ('visibility:transcribing_hold', 'automatic_exit'),
     ):
         assert (key, clause) not in KNOWN_GAPS
         assert_clause(rows[key], clause)
@@ -766,6 +803,24 @@ def test_automatic_upload_failure_repair_is_a_green_source_control():
     assert_clause(row, 'automatic_exit')
     repair = function_source('utils/batch_pipeline/record_seal_cluster_repair.py:repair_one')
     assert 'repair_upload_failed=True' in repair
+
+
+def test_capacity_abandonment_declares_conditional_exit_and_honest_repair_gaps():
+    rows = {row.key: row for row in STATES}
+    live, abandoned = rows['record_audio:capturing'], rows['record_audio:abandoned']
+    assert live.exit.automatic_writers == (ABANDON_RECORD_PRODUCER,)
+    assert abandoned.entered_by == (ABANDON_RECORD_PRODUCER,)
+    assert abandoned.fields == ('record_upload_sessions',)
+    assert_clause(live, 'automatic_exit')
+    assert_clause(abandoned, 'automatic_exit')
+    assert not abandoned.terminal and not abandoned.derived and not abandoned.deadline_exemption
+    assert abandoned.deadline_field is None and not abandoned.deadline_stamped_at_entry
+    assert abandoned.dwell_metric is None and abandoned.alert.uid is None
+    assert {clause for key, clause in KNOWN_GAPS if key == abandoned.key} == {
+        'entry_deadline',
+        'dwell_metric',
+        'dwell_alert',
+    }
 
 
 @pytest.mark.parametrize('state,deadline', [('queued', 'reconcile_after_at'), ('leased', 'lease_expires_at')])

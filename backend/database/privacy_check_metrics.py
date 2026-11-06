@@ -43,6 +43,11 @@ DECISION_MISMATCH = Counter(
 )
 SHADOW_CHECKS = Counter('privacy_shadow_checks_total', 'Privacy shadow comparisons', ['family', 'result'])
 MEMO_REQUESTS = Counter('privacy_memo_requests_total', 'Candidate decision reuse', ['family', 'result'])
+NEGATIVE_LOOKUPS = Counter(
+    'privacy_negative_lookup_total',
+    'Token-certified NOT_FOUND lookup cache outcomes',
+    ['collection', 'mode', 'result'],
+)
 TTL_BOUND_SECONDS = 60.0
 MEMO_INELIGIBLE = Counter(
     'privacy_memo_ineligible_total',
@@ -174,14 +179,26 @@ def memo_result(family, result):
         pass
 
 
-def read_snapshot(family, reference, *, memo_read=False, **kwargs):
+def negative_lookup(collection, mode, result):
+    try:
+        collection = (
+            collection if collection in {'account_deletions', 'deleted_conversations', 'conversations'} else 'other'
+        )
+        mode = 'shadow' if mode == 'shadow' else 'enforce'
+        result = result if result in {'hit', 'miss', 'mismatch'} else 'miss'
+        NEGATIVE_LOOKUPS.labels(collection, mode, result).inc()
+    except Exception:
+        pass
+
+
+def read_snapshot(family, reference, *, read_budget=None, **kwargs):
     """Count issued reads, including failures, without inspecting paths or payloads."""
     _count(family, 'reads')
-    caller = (
-        'database.batch_pipeline_privacy:get' if family == 'batch' and memo_read else _READ_CALLERS[_family(family)]
-    )
+    caller = _READ_CALLERS[_family(family)]
     caller_token = _READ_CALLER.set(caller)
     try:
+        if read_budget is not None:
+            kwargs.update(timeout=read_budget.timeout(10), retry=None)
         snapshot = reference.get(**kwargs)
     except BaseException:
         _read_result(family, 'error')

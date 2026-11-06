@@ -45,6 +45,7 @@ import queue
 import threading
 from collections import deque
 from concurrent.futures import Future, ThreadPoolExecutor
+from contextlib import contextmanager
 from typing import Any, Callable, Coroutine, Dict, List, ParamSpec, TypeVar, cast
 
 from prometheus_client import REGISTRY, Gauge
@@ -460,6 +461,56 @@ def after_db_call(callback: Callable[[], Coroutine[Any, Any, Any]]) -> bool:
     return True
 
 
+_future_tracker: contextvars.ContextVar['ExecutorFutureTracker | None'] = contextvars.ContextVar(
+    'executor_future_tracker', default=None
+)
+
+
+class ExecutorFutureTracker:
+    """Session-scoped completion proof, independent of caller cancellation.
+
+    Only selected pools are shielded. Completed futures are immediately removed,
+    so a long-lived socket retains neither results nor upload arguments.
+    """
+
+    def __init__(self, *pools):
+        self.pools = pools
+        self.pending: set[asyncio.Future] = set()
+
+    @contextmanager
+    def scope(self):
+        token = _future_tracker.set(self)
+        try:
+            yield
+        finally:
+            _future_tracker.reset(token)
+
+    async def wait(self):
+        # Call only after all submitting tasks have stopped. asyncio.wait never
+        # propagates this coordinator's cancellation into the underlying work.
+        while self.pending:
+            await asyncio.wait(list(self.pending))
+
+    def observe(self, executor, future):
+        if executor not in self.pools:
+            return False
+        self.pending.add(future)
+
+        def settled(done):
+            self.pending.discard(done)
+            if not done.cancelled():
+                done.exception()
+
+        future.add_done_callback(settled)
+        return True
+
+
+def track_executor_future(executor, future):
+    """Include direct metadata submissions in the same session completion proof."""
+    tracker = _future_tracker.get()
+    return tracker is not None and tracker.observe(executor, future)
+
+
 async def run_blocking(executor: ThreadPoolExecutor, fn: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> T:
     """Offload *fn* to *executor*, propagating ContextVars."""
     loop = asyncio.get_running_loop()
@@ -477,7 +528,7 @@ async def run_blocking(executor: ThreadPoolExecutor, fn: Callable[P, T], *args: 
                     raise
                 # Backpressure stays in the async caller, without occupying another worker.
                 await asyncio.sleep(0.05)
-        result = await future
+        result = await asyncio.shield(future) if track_executor_future(executor, future) else await future
     finally:
         if token is not None:
             _after_db.reset(token)

@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-ota-verifying.png",
+      "platform": "mobile-ios",
+      "description": "Firmware update verifying; hermetic production-widget render at 393x852 using product fonts",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-ota-not-installed.png",
+      "platform": "mobile-ios",
+      "description": "Firmware update not-installed; hermetic production-widget render at 393x852 using product fonts",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-ota-no-reconnect.png",
+      "platform": "mobile-ios",
+      "description": "Firmware update no-reconnect; hermetic production-widget render at 393x852 using product fonts",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-ios-ota-installed.png",
+      "platform": "mobile-ios",
+      "description": "Firmware update installed; hermetic production-widget render at 393x852 using product fonts",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "005-mobile-ios-ota-already-stable.png",
+      "platform": "mobile-ios",
+      "description": "Rollback already on the stable version shows no installation offer; hermetic production-widget render at 393x852",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

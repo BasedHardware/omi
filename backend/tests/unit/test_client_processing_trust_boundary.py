@@ -740,6 +740,12 @@ PINNED_CONVERSATION_FIELDS: FrozenSet[str] = frozenset(
         # Server-authored counts/enums/durations/ids only; no client display
         # projection. Internal metadata, excluded from API and integrations.
         'owner_recognition_diagnostics',
+        # Server-computed Home row contract stamp on list reads
+        # (utils/conversations/home_step.py): a read-time wire projection of
+        # the processing step, never stored and never client-authored. NOT
+        # projection-family — it must survive the integration redactor so
+        # clients receive it; the model serializer omits it when unset.
+        'home_step',
     }
 )
 

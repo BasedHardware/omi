@@ -6,6 +6,7 @@ import uuid
 from google.cloud import firestore
 
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, BatchPrivacyReason, assert_batch_write_allowed
+from utils.conversations.summary_delivery import EMPTY_BLOCKED_REASONS
 
 
 def discard_blocked(document_id: str) -> bool:
@@ -127,7 +128,7 @@ def transfer_redirect(document_id: str, token: str, owner: str, canonical: str, 
             pending['due_at'] = min(pending['due_at'], pending['summary_deadline_at'])
         # A canonical empty-output budget remains terminal. Redirects cannot
         # reset it, nor can they grant another paid processing epoch.
-        if previous.get('summary_blocked_reason') == reprocess.EMPTY_BLOCKED_REASON:
+        if previous.get('summary_blocked_reason') in EMPTY_BLOCKED_REASONS:
             pending.update(dormant=True, due_at=None)
         else:
             pending.update(dormant=False, summary_seen=bool(previous.get('summary_seen')))

@@ -4498,6 +4498,8 @@
     "chatAppsWaitingMessageIn": "Envia el missatge a {app}. Aquesta pantalla s'actualitzarà quan l'Omi el rebi.",
     "chatAppsCodeExpiredMessageIn": "Obtén un codi nou i envia'l des de {app}.",
     "episodeWritingNotes": "S'estan escrivint les notes…",
+    "homeStepTranscribing": "Transcrivint…",
+    "homeRecordingsCount": "{count, plural, one{{count} enregistrament} other{{count} enregistraments}}",
     "episodeWritingNotesDetail": "Primer acabem la transcripció. Pots sortir d'aquesta pàgina.",
     "episodeCoversUpTo": "Cobreix fins a les {time} · notes completes en acabar",
     "liveTranscribedUpTo": "Transcrit fins a les {time}",
@@ -4634,5 +4636,11 @@
     "referralRewardSecondDetail": "Quan 3 amics més comprin",
     "referralClaimShort": "Reclama",
     "paymentDeclinedTitle": "La teva targeta ha estat rebutjada",
-    "paymentDeclinedMessage": "Actualitza-la per recuperar {plan}"
+    "paymentDeclinedMessage": "Actualitza-la per recuperar {plan}",
+    "hasLinkedTasksLabel": "Té tasques vinculades",
+    "hasTasksFilter": "Amb tasques",
+    "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
+    "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
+    "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
 }

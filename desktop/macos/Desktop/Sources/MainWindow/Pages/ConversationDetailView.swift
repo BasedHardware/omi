@@ -805,7 +805,9 @@ struct ConversationDetailView: View {
 
   private var summaryPane: some View {
     ScrollView {
-      ConversationDetailProcessingLayout(isProcessing: isEnrichingDeferred) {
+      ConversationDetailProcessingLayout(
+        isProcessing: isEnrichingDeferred && displayConversation.showsSummaryProcessing
+      ) {
         deferredProcessingSection
       } content: {
         // Spacing 0: each section carries its own top inset, so one that renders nothing (or only
