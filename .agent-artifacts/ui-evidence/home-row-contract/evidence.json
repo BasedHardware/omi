@@ -16,9 +16,9 @@
       "source": "visual-audit"
     },
     {
-      "file": "003-mobile-ios-failed-run.png",
+      "file": "003-mobile-ios-failed-hidden.png",
       "platform": "mobile-ios",
-      "description": "Two failed recordings fold into one Couldn't process row between finished rows. Widget-rendered with synthetic data; emoji tiles render as bars because the test font has no emoji glyphs.",
+      "description": "Two failed recordings are hidden on the default Home the way noise is; only the finished rows around them show. Activity's Needs attention section owns the retry. Widget-rendered with synthetic data; emoji tiles render as bars because the test font has no emoji glyphs.",
       "captured_by": "agent",
       "source": "visual-audit"
     },
@@ -47,6 +47,13 @@
       "file": "007-mobile-ios-all-processing.png",
       "platform": "mobile-ios",
       "description": "A day of only unfinished recordings shows one Processing row. Widget-rendered with synthetic data; emoji tiles render as bars because the test font has no emoji glyphs.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "008-mobile-ios-home-nov6.png",
+      "platform": "mobile-ios",
+      "description": "David's 2026-11-06 Home: no Processing row at all. Yesterday's junk settled to noise or failed and is hidden (the 11 s empty capture now failed among them), leaving Family Tensions, Project Work and Company OS above Wednesday's finished rows; the two morning noise recordings are gone from Wed, Nov 4. Widget-rendered with synthetic data; emoji tiles render as bars because the test font has no emoji glyphs.",
       "captured_by": "agent",
       "source": "visual-audit"
     }
