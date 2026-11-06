@@ -32,5 +32,25 @@ def validate_worker_failure(failure):
         raise ValueError('closed worker validation failure required')
 
 
+WORKER_VALIDATION_REASON_TOKENS = frozenset(member.value for member in WorkerValidationReason)
+
+
+def validate_worker_failure_evidence(failure):
+    """Evidence-only diagnostics from an ordinary retryable failure.
+
+    The stage stays closed. The reason may additionally be the enum's own
+    ``unknown`` token: an unclassified exception is still a diagnosed stage,
+    and the evidence never decides a transition, so its vocabulary is the
+    strict superset of the terminal gate's. Exception messages stay out.
+    """
+    if (
+        not isinstance(failure, dict)
+        or set(failure) != {'stage', 'reason'}
+        or failure['stage'] not in WORKER_VALIDATION_STAGES
+        or failure['reason'] not in WORKER_VALIDATION_REASON_TOKENS
+    ):
+        raise ValueError('closed worker failure evidence required')
+
+
 class FatalGpuError(RuntimeError):
     """GPU process must restart; never turn this flight into a segment failure."""

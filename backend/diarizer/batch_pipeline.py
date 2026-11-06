@@ -67,6 +67,7 @@ from utils.batch_pipeline.worker_io import DecodeBudget, FirstDecode, PendingRes
 from utils.batch_pipeline import worker_metrics
 from utils.observability.fallback import record_fallback
 from utils.observability.reasons import WorkerValidationReason, WorkerValidationStage
+from utils.batch_pipeline.errors import WORKER_VALIDATION_REASONS, WORKER_VALIDATION_STAGES
 
 SAMPLE_RATE = 16000
 _GPU_CHAIN_LOCK = threading.Lock()
@@ -169,6 +170,22 @@ def bounded_window_words(words, duration):
         if 0 <= (start + end) / 2 < duration:
             result.append({**word, 'timestamp': [max(0, start), min(duration, end)]})
     return validate_words(result, duration)
+
+
+def transient_failure_evidence(stage: str, reason: str) -> dict | None:
+    """Close a transient failure into durable evidence, or None when the stage has no closed token.
+
+    Evidence is only produced for stages in the shared closed vocabulary; the
+    untyped provider/persist stages stay unevidenced rather than inventing a
+    token. Reasons map to the closed vocabulary: a BatchValidationError reason
+    passes through, anything else collapses to ``unknown`` — never an
+    exception message, mirroring validate_worker_failure's contract.
+    """
+
+    if stage not in WORKER_VALIDATION_STAGES:
+        return None
+    closed_reason = reason if reason in WORKER_VALIDATION_REASONS else WorkerValidationReason.UNKNOWN.value
+    return {'stage': stage, 'reason': closed_reason}
 
 
 def padded_retry_seconds(samples) -> float:
@@ -770,7 +787,14 @@ class PipelineWorker:
                     # custody for the independent privacy-fenced recovery path.
                     results.append(ValidationFailureWork(item.segment_id, stage, reason, measured_vad, receipt))
                 elif safety_net_enabled():
-                    results.append(FailedWork(item.segment_id, measured_vad, receipt))
+                    results.append(
+                        FailedWork(
+                            item.segment_id,
+                            measured_vad,
+                            receipt,
+                            worker_failure=transient_failure_evidence(stage, reason),
+                        )
+                    )
                 owned = len(states.get(item.segment_id, {}).get('words', []))
                 shape = shapes[item.segment_id]
                 failure_records.append(

@@ -864,6 +864,7 @@ class Pump:
                             result.measured_held_vad_speech_seconds if result is not None else None
                         ),
                         worker_vad_receipt=result.worker_vad_receipt if result is not None else None,
+                        worker_failure_evidence=result.worker_failure if isinstance(result, FailedWork) else None,
                     )
                 )
             return bool(

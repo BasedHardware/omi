@@ -34,7 +34,7 @@ from utils.batch_pipeline.contracts import LeasedWork, Priority, WorkItem, WorkR
 from utils.batch_pipeline.capacity import within_unit_ceiling
 from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.control import read_control, activate, field, migrate_legacy
-from utils.batch_pipeline.errors import error_site_field, validate_worker_failure
+from utils.batch_pipeline.errors import error_site_field, validate_worker_failure, validate_worker_failure_evidence
 from utils.batch_pipeline.retry_policy import quarantine_job, expire_lease, observe_recovery
 
 QUANTUM_SECONDS = 30.0
@@ -854,6 +854,7 @@ class Scheduler:
             job.update(state='result_ready', result=result.to_dict(), ready_at=now)
             job.pop('retry_started_at', None)
             job.pop('admission_refusals', None)
+            job.pop('worker_failure_evidence', None)
             tx.put('jobs', result.segment_id, job)
             return True, True, job['duration_seconds']
 
@@ -877,11 +878,17 @@ class Scheduler:
         padded_retry_empty: bool = False,
         padded_retry: str | None = None,
         worker_failure: dict | None = None,
+        worker_failure_evidence: dict | None = None,
         measured_held_vad_speech_seconds: float | None = None,
         worker_vad_receipt: dict | None = None,
     ) -> bool:
         if worker_failure is not None:
             validate_worker_failure(worker_failure)
+        if worker_failure_evidence is not None:
+            # Evidence-only diagnostics from an ordinary retryable failure.
+            # Unlike ``worker_failure`` this never decides the transition: the
+            # ladder still runs, but the terminal record keeps the diagnosis.
+            validate_worker_failure_evidence(worker_failure_evidence)
         if padded_retry is None and padded_retry_empty:
             padded_retry = 'empty'
         elif padded_retry == 'empty' and not padded_retry_empty:
@@ -904,6 +911,11 @@ class Scheduler:
                 tx, job, 'scheduler', candidates=candidates, observations=observations, pins=pins
             )
             attach_held_vad(job, measured_held_vad_speech_seconds, worker_vad_receipt)
+            if worker_failure_evidence is not None:
+                # Latest worker diagnosis rides on the job through every
+                # ladder attempt; a later attempt without evidence preserves
+                # the previous diagnosis rather than erasing it.
+                job['worker_failure_evidence'] = dict(worker_failure_evidence)
             if quarantine or worker_failure is not None or job['attempt'] >= policy.max_attempts:
                 quarantine_job(tx, job, now, 'worker_failed')
                 if quarantine and padded_retry in {'empty', 'skipped_oversize', 'skipped_long_speech'}:
@@ -939,11 +951,26 @@ class Scheduler:
                     pass
             if state == 'quarantined':
                 try:
+                    # A terminal quarantine names the strongest diagnosis it
+                    # holds: the structured worker_failure of a validation or
+                    # recovery handoff, else the evidence the ladder's
+                    # ordinary failures carried, else the historical
+                    # unknown/unclassified shape for a never-diagnosed unit.
+                    terminal_stage = (
+                        worker_failure['stage']
+                        if worker_failure
+                        else (worker_failure_evidence or {}).get('stage', 'unknown')
+                    )
+                    terminal_reason = (
+                        worker_failure['reason']
+                        if worker_failure
+                        else (worker_failure_evidence or {}).get('reason', 'unclassified')
+                    )
                     logger.error(
                         'event=batch_quarantined reason=worker_failed attempt=%d recovery=held stage=%s worker_reason=%s',
                         attempt,
-                        worker_failure['stage'] if worker_failure else 'unknown',
-                        worker_failure['reason'] if worker_failure else 'unclassified',
+                        terminal_stage,
+                        terminal_reason,
                     )
                     logger.warning('event=batch_recovery outcome=held reason=awaiting_fenced_recovery')
                 except Exception:

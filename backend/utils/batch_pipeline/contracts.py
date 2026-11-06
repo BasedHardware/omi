@@ -9,7 +9,7 @@ from typing import Protocol, Sequence
 from config.batch_pipeline import Priority
 from config.batch_language_recovery import language_guarded, below_silence_threshold
 from utils.batch_pipeline.capacity import PoolCapacity as PoolCapacity
-from utils.batch_pipeline.errors import validate_worker_failure
+from utils.batch_pipeline.errors import validate_worker_failure, validate_worker_failure_evidence
 from utils.observability.reasons import WorkerValidationReason, WorkOutcome, reason_values
 
 MAX_PROJECTION_PARTS = 128
@@ -330,14 +330,23 @@ class HeldWork:
 
 @dataclass(frozen=True)
 class FailedWork:
-    """Ordinary retryable worker failure, carrying available VAD evidence."""
+    """Ordinary retryable worker failure, carrying available VAD evidence.
+
+    ``worker_failure`` is the worker's closed-code diagnosis of THIS attempt
+    ({'stage', 'reason'}). It is evidence only: an ordinary failure still rides
+    the bounded retry ladder, but the ladder's eventual terminal record names
+    the real stage and reason instead of ``unknown``/``unclassified``.
+    """
 
     segment_id: str
     measured_held_vad_speech_seconds: float | None = None
     worker_vad_receipt: dict | None = None
+    worker_failure: dict | None = None
 
     def __post_init__(self):
         validate_measured_vad(self.measured_held_vad_speech_seconds)
+        if self.worker_failure is not None:
+            validate_worker_failure_evidence(self.worker_failure)
 
 
 @dataclass(frozen=True)
