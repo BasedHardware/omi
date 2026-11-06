@@ -27,7 +27,7 @@ DATA_CLASSES = ('transcript',)
 _HEADER = struct.Struct('>4sBI12s')
 _bucket_lock = threading.Lock()
 _bucket_instance = None
-_bucket_name = None
+_bucket_name: str | None = None
 
 
 class ObjectLakeError(Exception):
@@ -94,7 +94,7 @@ class LakeObjectRef:
             raise LakeObjectCorrupt('Invalid lake pointer') from None
 
 
-def _segment(value: str) -> str:
+def _segment(value: object) -> str:
     if (
         not isinstance(value, str)
         or not value
@@ -118,6 +118,7 @@ def _parse_ref(ref: LakeObjectRef) -> tuple[str, str, str, str, str]:
         for segment in (release, sid, entity_id):
             _segment(segment)
         _class(data_class)
+        _segment(ref.bucket)
         if (
             spaces != 'spaces'
             or re.fullmatch(r'[0-9a-f]{64}', digest) is None
@@ -127,7 +128,6 @@ def _parse_ref(ref: LakeObjectRef) -> tuple[str, str, str, str, str]:
             or ref.bytes < _HEADER.size + 16
             or type(ref.dek_version) is not int
             or not 1 <= ref.dek_version <= 0xFFFFFFFF
-            or not isinstance(ref.bucket, str)
             or not ref.bucket
         ):
             raise ValueError('Invalid pointer fields')
@@ -204,7 +204,10 @@ def put_space_object(
             if any(existing.get(k) != stamp[k] for k in ('plaintext_sha256', 'space_id', 'data_class')):
                 raise LakeObjectConflict('Existing lake object metadata conflicts')
             try:
-                ref = LakeObjectRef(config.bucket(), key, digest, blob.size, data_class, int(existing['dek_version']))
+                size = blob.size
+                if size is None:
+                    raise LakeObjectConflict('Existing lake object size is unavailable')
+                ref = LakeObjectRef(config.bucket(), key, digest, size, data_class, int(existing['dek_version']))
                 _parse_ref(ref)
             except (KeyError, TypeError, ValueError, LakeObjectCorrupt):
                 raise LakeObjectConflict('Existing lake object metadata is invalid') from None
