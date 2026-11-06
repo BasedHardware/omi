@@ -115,6 +115,7 @@ FIELD_SITES = {
         ('resume.commit', 'state', "receipt.pop('privacy_previous_state')", ('state',)),
     ],
     'database/batch_pipeline_projection_release.py': [
+        ('ProjectionReleaseStore.release.commit', 'projection_state', "'ready'", ('projection_state',)),
         (
             'ProjectionReleaseStore.release.commit',
             'projection_state',

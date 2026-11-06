@@ -50,6 +50,11 @@ def projection_source_deleted_enabled() -> bool:
     )
 
 
+def projection_ghost_settle_enabled() -> bool:
+    """Default OFF: normalize aged ghost hints; production enable needs David."""
+    return kill_switch('BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_ENABLED')
+
+
 def projection_hold_recovery_enabled() -> bool:
     """Ship-on hold age gate and automatic redrive; false restores old behavior."""
     return rollout_default_on(

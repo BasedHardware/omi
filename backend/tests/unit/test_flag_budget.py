@@ -203,6 +203,7 @@ def test_helper_kill_switch_budget_entries_match_the_default_on_registry():
         rollout_name,
         'BATCH_PIPELINE_SERVING_PROJECTION_SWEEP',
         'BATCH_PIPELINE_PROJECTION_PUMP_ENABLED',
+        'BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_ENABLED',
     }
 
     # Keep this inventory check inside the fast-unit CPU budget; the C safe

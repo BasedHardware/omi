@@ -682,7 +682,7 @@ STATES = (
                 )
             ),
             note=(
-                'Assignment holds retain quarantine_held with held_deadline_at, held_expired_at and held_expired_reason; nightly re-drive; omi_batch_held_expired_units and omi-batch-held-expired-volume (agent). Privacy holds are excluded.'
+                'Assignment holds retain quarantine_held with held_deadline_at, held_expired_at and held_expired_reason; nightly re-drive; omi_batch_held_expired_units and omi-batch-held-expired-volume (agent). Privacy holds are excluded. Legacy ready-receipt ghosts have a separate hint-only ready exit in the same transaction: BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_ENABLED default OFF, 24h committed age floor, max 16 per pass; off classifies existing reads only.'
                 if name == 'quarantine_held'
                 else 'Result projection receipt state, distinct from batch job state'
             ),
