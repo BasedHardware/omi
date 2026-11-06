@@ -793,7 +793,13 @@ class Projector:
 
     def release_held_scan(self, limit: int | None = None) -> dict[str, int]:
         """One bounded page of held units whose record target may be restored."""
-        from database.batch_pipeline_projection_release import RELEASE_PAGE, RELEASE_TICK_SECONDS, release_scan_pass
+        from database.batch_pipeline_projection_release import (
+            RELEASE_PAGE,
+            RELEASE_TICK_SECONDS,
+            GHOST_SKIP_CLASSES,
+            GHOST_AGE_BUCKETS,
+            release_scan_pass,
+        )
 
         enabled = projection_hold_recovery_enabled()
         started = time.monotonic()
@@ -806,12 +812,16 @@ class Projector:
         )
         if counts.get('examined'):
             logger.info(
-                'event=batch_projection action=release_held outcome=summary released=%d examined=%d waiting=%d error=%d elapsed_ms=%d',
+                'event=batch_projection action=release_held outcome=summary released=%d examined=%d waiting=%d error=%d elapsed_ms=%d ghost_settled=%d classified=%d skipped_by_class=%s age_buckets=%s',
                 counts['released'],
                 counts['examined'],
                 counts['waiting'],
                 counts['error'],
                 int((time.monotonic() - started) * 1000),
+                counts['ghost_settled'],
+                counts['ghost_classified'],
+                ','.join(f'{name}:{counts[f"ghost_skipped_{name}"]}' for name in GHOST_SKIP_CLASSES),
+                ','.join(f'{name}:{counts[f"ghost_age_{name}"]}' for name in GHOST_AGE_BUCKETS),
             )
         return counts
 

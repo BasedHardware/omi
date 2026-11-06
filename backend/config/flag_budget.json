@@ -24,7 +24,7 @@
   },
   "seed_review_by": "2026-11-15",
   "budget": 165,
-  "count": 263,
+  "count": 264,
   "names": {
     "CONVERSATION_TERMINAL_FAMILY_MODE": {"owner": "uicleanup / omi-lifecycle", "review_by": "2026-12-06", "registry": "config/feature-flags.yaml"},
     "BATCH_HELD_DEAD_LETTER_ENABLED": {"owner": "uicleanup / omi-lifecycle", "review_by": "2026-12-06", "registry": "config/feature-flags.yaml"},
@@ -33,6 +33,7 @@
     "PUSHER_PROJECTION_DEBT_DURABLE_ENABLED": {"owner": "uicleanup / omi-lifecycle", "review_by": "2026-12-06"},
     "BATCH_PIPELINE_SERVING_PROJECTION_SWEEP": {"owner": "omi-pipeline / lead2", "review_by": "2026-12-05", "registry": "config/feature-flags.yaml"},
     "BATCH_PIPELINE_PROJECTION_PUMP_ENABLED": {"owner": "omi-pipeline / lead2", "review_by": "2026-12-05", "registry": "config/feature-flags.yaml"},
+    "BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_ENABLED": {"owner": "uicleanup / omi-lifecycle", "review_by": "2026-12-06", "registry": "config/feature-flags.yaml"},
     "BATCH_PIPELINE_PUMP_SWEEP_PAGES": {"owner": "omi-pipeline / lead2", "review_by": "2026-12-05"},
     "BATCH_PIPELINE_PUMP_TICK_SECONDS": {"owner": "omi-pipeline / lead2", "review_by": "2026-12-05"},
     "BATCH_PIPELINE_MAX_OWNER_DRAINS": {"owner": "omi-pipeline / lead2", "review_by": "2026-12-05"},

@@ -1,8 +1,8 @@
 """Synthetic ghost hints: release/expiry gaps and the repair's active follow-up.
 
 Loopback Firestore only, using the existing projection lane's anonymous client.
-The strict xfails assert the desired automatic exit, so a selector fix must turn
-them into passing regressions rather than silently preserving today's gap.
+The former strict xfails are regressions for the flagged automatic exit.
+All storage here is synthetic and emulator-only.
 """
 
 from copy import deepcopy
@@ -27,7 +27,7 @@ from utils.batch_pipeline.held_dead_letter import ProjectionHeldDeadLetter
 from utils.batch_pipeline.scheduler import owner_key
 
 pytestmark = pytest.mark.integration
-NOW = 10000.0
+NOW = 40 * 86400.0
 GHOSTS = ('a-ghost-none', 'b-ghost-recovered')
 RESTORABLE, MISSING, PRIVACY = 'c-real-restorable', 'd-real-missing', 'e-privacy'
 
@@ -121,7 +121,7 @@ def test_real_hold_releases_missing_target_waits_then_expires_privacy_is_fenced(
     before_jobs = snapshot(holds, 'jobs')
     privacy_job = projection.ref('jobs', PRIVACY).get().to_dict()
     # Passing mixed-page control: all five result classes are actually examined.
-    # Ghost exit expectations belong only in the strict xfails below.
+    # Ghost exit expectations are covered by the flag-on regressions below.
     assert scan(holds, NOW, caplog)['examined'] >= 5
     release = ProjectionReleaseStore(projection)
     released = projection.ref('results', RESTORABLE).get().to_dict()
@@ -152,37 +152,23 @@ def test_real_hold_releases_missing_target_waits_then_expires_privacy_is_fenced(
 
 
 @pytest.mark.parametrize('segment', GHOSTS, ids=['recovery-none', 'recovery-recovered'])
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason='GAP ghost_hold_release_ineligible: ready receipts with recovery none/recovered fail release gates',
-)
-def test_gap_ghost_hold_release_ineligible(holds, segment, caplog):
+def test_ghost_hold_release_normalizes_ready_hint(holds, segment, caplog, monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_ENABLED', 'true')
     scan(holds, NOW, caplog)
-    # Desired automatic ready-hint repair; current main leaves the ghost held.
-    assert holds.projector.store.ref('results', segment).get().to_dict()['projection_state'] in {
-        'ready',
-        'pending',
-        'completed',
-    }
+    # Automatic repair uses the normal ready discovery state.
+    assert holds.projector.store.ref('results', segment).get().to_dict()['projection_state'] == 'ready'
 
 
 @pytest.mark.parametrize('segment', GHOSTS, ids=['recovery-none', 'recovery-recovered'])
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason='GAP ghost_hold_expiry_ineligible: receipt/job gates precede deadline stamping and held expiry',
-)
-def test_gap_ghost_hold_expiry_ineligible(holds, segment, caplog):
+def test_aged_ghost_exits_via_ready_without_expiry(holds, segment, caplog, monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_ENABLED', 'true')
     scan(holds, NOW, caplog)
     scan(holds, NOW + HELD_DEAD_LETTER_SECONDS, caplog)
     ProjectionHeldDeadLetter(holds.store).tick(NOW + HELD_DEAD_LETTER_SECONDS + 86400)
     entry = holds.projector.store.ref('results', segment).get().to_dict()
-    # Aged ghosts need an automatic exit, whether repaired or dead-lettered.
-    assert (
-        entry['projection_state'] in {'ready', 'pending', 'completed'}
-        or entry.get('held_expired_reason') == 'held_expired'
-    )
+    assert entry['projection_state'] == 'ready'
+    assert 'held_expired_reason' not in entry
+    assert 'held_deadline_at' not in entry
 
 
 @pytest.mark.parametrize('failure', ['fetch', 'transaction'])
@@ -240,7 +226,10 @@ def test_repaired_ready_hint_completes_ledger_and_publishes_without_reassignment
     assert not lane.published
     assert projection_page(lane.client, lane.store.namespace, states=('ready',))[0] == []
     loads, tasks = list(lane.loads), list(lane.tasks)
-    assert reconcile(lane.client, lane.store.namespace, apply=True)['updated'] == 1
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_ENABLED', 'true')
+    committed_at = ready['committed_at']
+    counts, _ = release_scan_pass(lane.projector.store, limit=RELEASE_PAGE, after_id=None, now=committed_at + 86400)
+    assert counts['ghost_settled'] == 1
     assert ref.get().to_dict() == ready
     assert projection_page(lane.client, lane.store.namespace, states=('ready',))[0] == [segment]
     # Drive the ordinary ready-receipt replay path, including the real ledger,
@@ -269,3 +258,74 @@ def test_repaired_ready_hint_completes_ledger_and_publishes_without_reassignment
 )
 def test_release_scan_throughput_5s_page128():
     assert RELEASE_TICK_SECONDS == 5.0 and RELEASE_PAGE == 128
+
+
+def test_flag_off_classifies_ghosts_without_mutating_them(holds, monkeypatch, caplog):
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_ENABLED', 'false')
+    before_results, before_jobs = snapshot(holds, 'results'), snapshot(holds, 'jobs')
+    counts = scan(holds, NOW, caplog)
+    assert counts['ghost_settled'] == 0 and counts['ghost_skipped_count_only'] == 2
+    for segment in GHOSTS:
+        assert holds.projector.store.ref('results', segment).get().to_dict() == before_results[segment]
+        assert holds.projector.store.ref('jobs', segment).get().to_dict() == before_jobs[segment]
+
+
+@pytest.mark.parametrize(
+    'kind,changes,skip',
+    [
+        ('results', {'projection_state': 'pending'}, 'hint_changed'),
+        ('results', {'projection': {'state': 'persisted'}}, 'receipt_not_ready'),
+        ('results', {'projection_parts': {'0': {'state': 'quarantined'}}}, 'part_quarantined'),
+        ('results', {'projection_privacy_refusal': {'version': 1}}, 'privacy'),
+        ('results', {'owner_key': 'foreign'}, 'binding'),
+        ('jobs', {'recovery_state': 'held'}, 'job_held'),
+        ('jobs', {'state': 'quarantined'}, 'job_not_committed'),
+        ('results', {'committed_at': NOW - 86399}, 'young'),
+    ],
+)
+def test_page_selection_cannot_authorize_changed_ghost(holds, monkeypatch, kind, changes, skip):
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_ENABLED', 'true')
+    projection = holds.projector.store
+    segment = GHOSTS[0]
+    before = {}
+
+    def selected_page(*args):
+        # A writer changes authority after the page was selected. release()
+        # must use its transaction-fresh documents, never page-time predicates.
+        projection.ref(kind, segment).update(changes)
+        before.update({name: projection.ref(name, segment).get().to_dict() for name in ('jobs', 'results')})
+        return [segment]
+
+    monkeypatch.setattr(release_module, 'held_page_ids', selected_page)
+    counts, _ = release_module.release_page(projection, limit=1, after_id=None, now=NOW)
+    assert counts['error'] == 0 and counts['ghost_settled'] == 0
+    assert counts[f'ghost_skipped_{skip}'] == 1
+    assert {name: projection.ref(name, segment).get().to_dict() for name in before} == before
+
+
+def test_transaction_retry_counts_only_one_committed_ghost(holds, monkeypatch):
+    from google.api_core.exceptions import Aborted
+    from google.cloud.firestore_v1.transaction import Transaction
+
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_ENABLED', 'true')
+    segment = GHOSTS[0]
+    monkeypatch.setattr(release_module, 'held_page_ids', lambda *a: [segment])
+    original = Transaction._commit
+    attempts = []
+
+    def commit(transaction):
+        if transaction._write_pbs:
+            attempts.append(True)
+            if len(attempts) == 1:
+                # Model a server abort, including release of its read locks.
+                # Raising locally without rollback leaves a live emulator tx.
+                transaction._rollback()
+                raise Aborted('synthetic commit contention')
+        return original(transaction)
+
+    monkeypatch.setattr(Transaction, '_commit', commit)
+    counts, _ = release_module.release_page(holds.projector.store, limit=1, after_id=None, now=NOW)
+    assert len(attempts) == 2
+    assert counts['error'] == 0 and counts['ghost_settled'] == counts['ghost_classified'] == 1
+    assert counts['ghost_age_30d_plus'] == 1
+    assert holds.projector.store.ref('results', segment).get().to_dict()['projection_state'] == 'ready'

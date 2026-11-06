@@ -187,7 +187,7 @@ job; that does not turn it into a worker quarantine.
 | `batch_projection:pending` | `M:OrderedMerge.commit_next`; re-drive `U:ProjectionReleaseStore.release` | `S:ProjectionSession.persist` | none | T | T | `BATCH_PIPELINE_PROJECTION_HOLD_RECOVERY_ENABLED` controls expanded release | Reassignment respects binding and watermark |
 | `batch_projection:persisted` | `S:ProjectionSession.persist` | `P:ProjectionStore.mark_enrichment`, `S:ProjectionSession.write_receipt` | none | T | T | Same release switch | Multipart suffixes still owe follow-ups; no age expiry |
 | `batch_projection:ready` | `S:ProjectionSession.write_receipt`, `P:ProjectionStore.mark_enrichment` | `P:ProjectionStore.complete`, then `P:ProjectionStore.acknowledge` | none | T | T | No held-specific switch | Existing accounting/receipt fences |
-| `batch_projection:quarantine_held` | `S:ProjectionSession.persist/write_receipt` | `U:ProjectionReleaseStore.release`; nightly `H:ProjectionHeldDeadLetter.tick` | `held_deadline_at` for assignment holds only | `omi_batch_held_oldest_age_seconds`; expired subset `omi_batch_held_expired_units` | `omi-pipeline-held-row-age` (page); expired volume (agent) | `BATCH_HELD_DEAD_LETTER_ENABLED`; release expansion separately `BATCH_PIPELINE_PROJECTION_HOLD_RECOVERY_ENABLED` | Physical state retained; capped attempt reset preserves pre-4b release eligibility |
+| `batch_projection:quarantine_held` | `S:ProjectionSession.persist/write_receipt` | `U:ProjectionReleaseStore.release`; nightly `H:ProjectionHeldDeadLetter.tick` | `held_deadline_at` for assignment holds only | `omi_batch_held_oldest_age_seconds`; expired subset `omi_batch_held_expired_units` | `omi-pipeline-held-row-age` (page); expired volume (agent) | `BATCH_HELD_DEAD_LETTER_ENABLED`; release expansion separately `BATCH_PIPELINE_PROJECTION_HOLD_RECOVERY_ENABLED`; ghost hint repair `BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_ENABLED` (default OFF) | Physical state retained; capped attempt reset preserves pre-4b release eligibility |
 | `batch_projection:completed` | `P:ProjectionStore.acknowledge.commit` | Terminal | none | none | none | No held-specific switch | Keep receipts; no automatic reopening |
 | `batch_projection:erased` | `database/batch_pipeline_purge.py:_write_erased_result` | Terminal privacy disposition | none | none | none | No held switch bypasses privacy | This is explicit privacy deletion, never dead-lettering |
 
@@ -282,6 +282,41 @@ with falsy tombstones, removes only quarantined parts, clears job
 normalization/release-version fences still apply. A new assignment hold gets a
 fresh deadline; this is not deletion of the retained result or audio.
 
+Legacy **ghost hints** are a separate projection/held exit: a row whose hint
+is `quarantine_held` but whose summary receipt is `ready` and has no quarantined
+part owes ordinary discovery, not held expiry. In the existing
+`U:ProjectionReleaseStore.release` transaction, only when the real-held gate
+fails, recheck the hint, ready receipt, all parts, absence of a privacy refusal,
+segment/binding/owner identity, committed job with recovery state other than
+`held`, and finite `committed_at` at least 24 hours old. With
+`BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_ENABLED=true`, write **only**
+`projection_state=ready`, matching `hold_for_quarantine`'s ready-sibling write.
+Receipts, parts, jobs, audio, attempt counters and watermarks stay intact. The
+existing discovery/completion/publication/acknowledgement path rechecks its own
+fences. This is never `held_expired`; nightly expiry does not settle ghosts.
+
+`GHOST_SETTLE_MAX_PER_PASS=16` is shared across both release legs. Default OFF
+is count-only: **no extra queries** or document reads, no ghost writes; classify
+using the job/result documents already read by the existing transaction. Existing
+real-hold writes and cursor progress remain unchanged. The release summary adds
+aggregate-only `ghost_settled`, `classified`, `skipped_by_class` and `age_buckets`.
+Classified counts held-gate failures (including stale hints); each gets exactly
+one skip class or a committed repair. Skip classes distinguish hint changes,
+non-ready receipts, quarantined parts, privacy, identity, held/non-committed jobs,
+invalid/young age, count-only, cap and nightly expiry. Age buckets for classified
+rows are disjoint: 1d to <7d, 7d to <30d, and 30d+. Younger/invalid ages have no
+bucket. Retry attempts never inflate counters. No row IDs or user data enter
+these aggregates.
+
+Rollout owner David: day 0 count-only, then **ONE train enable only with David's
+approval**, then review after 24h using these summaries and the existing
+`quarantine_held_rows`, `assignment_held`, `held_expired_rows` legs. Rollback false
+stops future repairs; already normalized hints and published sync results remain
+valid and publications are not undone. The selector PR does not enable prod.
+New atomic writers must keep the CI invariant: hint `quarantine_held` implies a
+quarantined summary/part; only pre-fix legacy rows may violate it. Runtime release
+also uses the 24h floor and authority checks, never an assumed epoch cutoff.
+
 Both nightly helpers use the maintenance leader, 32-row pages, a five-minute
 continuation cadence, durable cursors and post-work checkpoints. Only expirations
 before UTC midnight qualify. Projection's unfinished cursor continues across
@@ -312,6 +347,7 @@ for these retained shapes. Defaults are code defaults, not measured live values.
 | --- | --- | --- |
 | `BATCH_HELD_DEAD_LETTER_ENABLED` | true | `config/policy/kill_switches.py:KILL_SWITCHES`, read by `config/batch_pipeline.py:batch_held_dead_letter_enabled`; set false on serving and worker roles: no new deadlines/expiry or GPU nightly pass; manual GPU requeue and existing projection release/nightly recovery remain |
 | `BATCH_PIPELINE_PROJECTION_HOLD_RECOVERY_ENABLED` | true | `config/batch_pipeline.py:projection_hold_recovery_enabled`; false restores older release scope/attempt fences and conflict waiting policy |
+| `BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_ENABLED` | false | `config/policy/kill_switches.py`, `config/batch_pipeline.py:projection_ghost_settle_enabled`; false classifies existing reads only, no ghost writes or extra queries |
 | `PROJECTION_PRIVACY_REFUSAL_RESUME` | true | `config/policy/kill_switches.py`, `config/batch_pipeline.py:projection_privacy_refusal_resume_enabled`; off disables retry of stale privacy refusals; actual privacy fences remain unconditional |
 | `BATCH_PIPELINE_HELD_TERMINAL_STATUS_ENABLED` | true | `config/policy/kill_switches.py`, `config/batch_pipeline.py:held_terminal_status_enabled`; false restores legacy status reading, never authorizes custody deletion |
 | `BATCH_PIPELINE_HELD_PARTIAL_ENABLED` | true | `config/policy/kill_switches.py`, `config/batch_pipeline.py:held_partial_enabled`; false stops new partial-ledger settlement; healthy projected siblings stay visible |
