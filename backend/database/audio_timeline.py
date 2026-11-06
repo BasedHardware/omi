@@ -50,9 +50,9 @@ def span_blob_metadata(span: object) -> Dict[str, str]:
         samples = int(span['samples'])
         rate = int(span['sample_rate'])
     except (KeyError, TypeError, ValueError) as err:
-        raise ValueError(f"Invalid span fields: {err}") from err
+        raise ValueError("Invalid span fields") from err
     if samples <= 0 or rate <= 0 or not math.isfinite(start):
-        raise ValueError(f"Span values must be finite and positive: start={start}, samples={samples}, rate={rate}")
+        raise ValueError("Span values must be finite and positive")
     return {
         'v2_start': repr(start),
         'v2_samples': str(samples),

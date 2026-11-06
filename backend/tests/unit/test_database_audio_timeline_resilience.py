@@ -32,6 +32,11 @@ class TestSpanBlobMetadataResilience:
         with pytest.raises(ValueError, match="Span values must be finite and positive"):
             span_blob_metadata(span)
 
+    @pytest.mark.parametrize('bad_field', [{'start': 'abc', 'samples': 16000, 'sample_rate': 16000}, {'samples': 16000}])
+    def test_span_blob_metadata_rejects_invalid_fields(self, bad_field):
+        with pytest.raises(ValueError, match="^Invalid span fields$"):
+            span_blob_metadata(bad_field)
+
     @pytest.mark.parametrize('bad_span', [None, '', 123, []])
     def test_span_blob_metadata_rejects_non_mapping(self, bad_span):
         with pytest.raises(ValueError, match="span must be a Mapping"):
