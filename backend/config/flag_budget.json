@@ -23,8 +23,8 @@
     "config/batch_language_recovery.py": "planscost"
   },
   "seed_review_by": "2026-11-15",
-  "budget": 169,
-  "count": 267,
+  "budget": 165,
+  "count": 263,
   "names": {
     "CONVERSATION_TERMINAL_FAMILY_MODE": {"owner": "uicleanup / omi-lifecycle", "review_by": "2026-12-06", "registry": "config/feature-flags.yaml"},
     "BATCH_HELD_DEAD_LETTER_ENABLED": {"owner": "uicleanup / omi-lifecycle", "review_by": "2026-12-06", "registry": "config/feature-flags.yaml"},
@@ -275,10 +275,6 @@
     "SYNC_FRESH_MAX_AGE_SECONDS": {"seeded": "2026-10-25"},
     "SYNC_INLINE_BACKFILL_CONCURRENCY": {"seeded": "2026-10-25"},
     "SYNC_LEGACY_COMPLETION_CONVERGENCE": {"seeded": "2026-10-25"},
-    "SYNC_LEGACY_FRESH_BURST_TOKENS": {"seeded": "2026-10-25"},
-    "SYNC_LEGACY_FRESH_ENABLED": {"seeded": "2026-10-25"},
-    "SYNC_LEGACY_FRESH_HOURLY_TOKENS": {"seeded": "2026-10-25"},
-    "SYNC_LEGACY_FRESH_PERCENT": {"seeded": "2026-10-25"},
     "SYNC_LIVE_OVERLAP_ENABLED": {"seeded": "2026-10-25"},
     "SYNC_MAX_VAD_SEGMENT_SECONDS": {"seeded": "2026-10-25"},
     "SYNC_MINIMAL_REDRIVE_ENABLED": {"seeded": "2026-10-25"},
@@ -294,6 +290,7 @@
     "VAD_GATE_AUDIO_CAPTURE_DIR": {"seeded": "2026-10-25"},
     "VAD_GATE_MODE": {"seeded": "2026-10-25"}
   },
+  "retired_history": "docs/history/retired-pipeline-flags.json",
   "retired": {
     "MENTOR_PIPELINE": {
       "on": "2026-10-26",

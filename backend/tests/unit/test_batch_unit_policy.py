@@ -445,7 +445,7 @@ def test_getter_guard_covers_new_directories_and_import_aliases():
         'utils/a_new_unit_handler.py',
     )
     assert not stage_policy_reads(
-        "from utils.sync import legacy_fresh\nlegacy_fresh.enabled_for('owner')",
+        "from utils.sync import stage\nstage.production_stage()",
         'routers/sync.py',
     )
 

@@ -14,7 +14,7 @@ Each allowlist entry is one of:
 - ``{"owner": ..., "review_by": "YYYY-MM-DD"}``: an explicit exception above the
   budget. It fails once ``review_by`` has passed: renew it or delete the flag.
 
-A name that leaves the surface moves to the append-only ``retired`` ledger as
+A name that leaves the surface moves to the append-only ``retired`` ledger (including ``retired_history``) as
 ``{"on": "YYYY-MM-DD", "replaced_by": "NEW" | null}``. A replacement is valid
 only when the retired entry names it, so a slot given up in an earlier change
 (``replaced_by: null``) cannot be reclaimed later. ``budget`` must equal the
@@ -47,7 +47,7 @@ from config.policy.guard import env_reads
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 BUDGET_PATH = BACKEND_DIR / 'config' / 'flag_budget.json'
 FEATURE_FLAGS_PATH = BACKEND_DIR.parent / 'config' / 'feature-flags.yaml'
-SEED_BUDGET = 170  # 2026-10-25 seed; lower it when the surface shrinks, never raise it.
+SEED_BUDGET = 165  # 2026-10-25 seed; lower it when the surface shrinks, never raise it.
 HELPER_KILL_SWITCHES = {
     'PROJECTION_DRAIN_CLAIM_AWARE',
     'PROJECTION_DRAIN_PRIVACY_BACKOFF',
@@ -159,7 +159,11 @@ def problems(read: dict[str, list[str]], data: dict, today: datetime.date) -> li
 
 
 def _load() -> dict:
-    return json.loads(BUDGET_PATH.read_text(encoding='utf-8'))
+    data = json.loads(BUDGET_PATH.read_text(encoding='utf-8'))
+    history = json.loads((BACKEND_DIR / data['retired_history']).read_text(encoding='utf-8'))
+    assert not set(history) & set(data['retired']), 'duplicate retired flag records'
+    data['retired'].update(history)
+    return data
 
 
 def _today() -> datetime.date:
