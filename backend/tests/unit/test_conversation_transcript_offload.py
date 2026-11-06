@@ -207,7 +207,7 @@ def test_destroy_racing_first_key_creation_observes_tombstone(lake_world, monkey
     assert lake_world.calls['put'] == 0
 
 
-@pytest.mark.parametrize('malformation', ['wrapped', 'versions', 'algo', 'version'])
+@pytest.mark.parametrize('malformation', ['wrapped', 'versions', 'algo', 'version', 'false_tombstone'])
 def test_malformed_key_rows_are_retryable_even_after_cache_hit(lake_world, malformation):
     encode()
     doc = lake_world.store.rows[('space_keys', UID)]
@@ -217,6 +217,8 @@ def test_malformed_key_rows_are_retryable_even_after_cache_hit(lake_world, malfo
         doc['versions'] = []
     elif malformation == 'algo':
         doc['algo'] = 'unknown'
+    elif malformation == 'false_tombstone':
+        doc['state'] = 'destroyed'  # wrapped material still present: retryable corruption
     else:
         doc['versions'][0]['version'] = True
     with pytest.raises(space_keys.SpaceKeyUnavailable):
