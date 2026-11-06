@@ -10,7 +10,7 @@ from google.api_core.exceptions import Aborted
 
 from database import action_item_versions as versions, action_items, action_item_completion_backfill as backfill
 from database import candidates, candidate_integration_outbox as outbox, chat_edits, staged_tasks, review_changes
-from database import locked_content, legal_holds, review_store
+from database import locked_content, legal_holds, review_store, action_item_refresh
 from database.action_item_fence import ActionItemCommitFence, fenced_action_item_commit
 from database.ports.action_items import ActionItemDraft
 from database.space_store import FirestoreSpaceStore
@@ -244,3 +244,42 @@ def test_mutation_replay_does_not_repeat_post_commit_effect(redis, monkeypatch):
     first = repo.create(draft, document_id='task', mutation_id='once')
     assert repo.create(draft, document_id='task', mutation_id='once') == first
     assert calls == [UID]
+
+
+@pytest.mark.parametrize('operation', ['reconcile', 'claim_delivery'])
+def test_refresh_writer_tickets_cover_real_commit(redis, monkeypatch, operation):
+    before = versions.version(UID)
+    client = StrictFirestore(
+        {
+            ('users', UID, 'conversations', 'conversation'): {'id': 'conversation', 'sync_content_revision': 1},
+            ('users', UID, 'action_items', 'existing'): {
+                'description': 'Existing',
+                'completed': False,
+                'status': 'active',
+                'conversation_id': 'conversation',
+                'account_generation': 0,
+                'refresh_delivery': 'pending',
+            },
+        }
+    )
+    calls = []
+
+    def fail(tx):
+        assert versions.version(UID) is None
+        calls.append(operation)
+        raise AtCommit(operation)
+
+    monkeypatch.setattr(StrictFirestoreTransaction, '_commit', fail)
+    with pytest.raises(AtCommit):
+        if operation == 'reconcile':
+            action_item_refresh.reconcile(
+                UID,
+                'conversation',
+                [{'description': 'Existing'}, {'description': 'New'}],
+                expected_revision=1,
+                firestore_client=client,
+            )
+        else:
+            action_item_refresh.claim_delivery(UID, 'conversation', ['existing'], firestore_client=client)
+    assert calls == [operation]
+    assert versions.version(UID) not in (before, None)

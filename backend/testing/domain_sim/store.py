@@ -573,12 +573,31 @@ class SimActionItems(_WorkflowRepo):
     def create_batch(self, drafts: list[ActionItemDraft], *, document_ids: list[str | None] | None = None) -> list[str]:
         if len(drafts) > 400 or (document_ids is not None and len(drafts) != len(document_ids)):
             raise ValueError('invalid task batch')
-        return self.store.run(
-            lambda tx: [
-                self.create(draft, document_id=document_ids[i] if document_ids else None)
-                for i, draft in enumerate(drafts)
-            ]
-        )
+        generation = int(self.read_control().get('account_generation', 0))
+        prepared = []
+        now = datetime.now(timezone.utc)
+        for i, draft in enumerate(drafts):
+            data = prepare_action_item_for_write(draft.data)
+            self.validate_task_relationship(
+                TaskRelationshipRule(
+                    goal_id=data.get('goal_id'), workstream_id=data.get('workstream_id'), account_generation=generation
+                )
+            )
+            entity_id = document_ids[i] if document_ids is not None else None
+            if entity_id == '':
+                raise ValueError('document id must not be empty')
+            entity_id = entity_id or uuid.uuid4().hex
+            for field in ('created_at', 'updated_at'):
+                if not data.get(field):
+                    data[field] = now
+            if data.get('completed') and not data.get('completed_at'):
+                data['completed_at'] = now
+            prepared.append((entity_id, {**data, 'id': entity_id, 'account_generation': generation}))
+        for entity_id, data in prepared:
+            self._write_task()
+            # The existing Firestore batch uses set, including occupied ids.
+            self._rows()[entity_id] = data
+        return [entity_id for entity_id, _ in prepared]
 
     @_locked
     def update(

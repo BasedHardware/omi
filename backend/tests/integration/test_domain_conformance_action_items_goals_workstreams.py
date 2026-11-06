@@ -193,6 +193,10 @@ def test_batch_caps_and_idempotent_reserved_id(domain_backend):
     assert repo.create(draft, document_id='reserved') == 'reserved'
     assert repo.create(ActionItemDraft(data={'description': 'retry'}), document_id='reserved') == 'reserved'
     assert repo.get('reserved').description == 'Task'
+    assert repo.create_batch([ActionItemDraft(data={'description': 'Batch set'})], document_ids=['reserved']) == [
+        'reserved'
+    ]
+    assert repo.get('reserved').description == 'Batch set'
     assert repo.create_batch([draft, draft], document_ids=['one', 'two']) == ['one', 'two']
     assert repo.delete_batch(['one', 'two', 'missing']) == ['one', 'two', 'missing']
     with pytest.raises(ValueError):
