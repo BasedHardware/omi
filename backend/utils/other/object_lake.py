@@ -1,4 +1,4 @@
-"""Create-only, envelope-encrypted space content. No product callers in C1.
+"""Create-only, envelope-encrypted space content. Transcript codec storage.
 
 All operations are synchronous; C2 owns executor dispatch, privacy fences and
 pointer admission at the codec seam. Reads never return ciphertext on failure.
@@ -23,7 +23,10 @@ from config import object_lake as config
 from utils.other import space_keys
 from utils.other.local_storage import create_storage_client
 
-DATA_CLASSES = ('transcript',)
+# 32 MiB accommodates long transcripts while bounding authenticated zlib expansion.
+# Every future class must choose its own reviewed limit before admission.
+MAX_PLAINTEXT_BYTES = {'transcript': 32 * 1024 * 1024}
+DATA_CLASSES = tuple(MAX_PLAINTEXT_BYTES)
 _HEADER = struct.Struct('>4sBI12s')
 _bucket_lock = threading.Lock()
 _bucket_instance = None
@@ -167,12 +170,16 @@ def put_space_object(
 ) -> LakeObjectRef:
     if not config.bucket() or not config.write_admitted(space_id):
         raise ObjectLakeNotConfigured('Lake writes are not configured or admitted')
+    if len(plaintext) > MAX_PLAINTEXT_BYTES[_class(data_class)]:
+        raise LakeObjectCorrupt('Lake plaintext exceeds data-class limit')
     digest = hashlib.sha256(plaintext).hexdigest()
     key = (
         f'{_segment(config.release())}/spaces/{_segment(space_id)}/{_class(data_class)}/{_segment(entity_id)}/{digest}'
     )
     keys = space_keys.get_or_create_space_key(space_id)
-    dek = space_keys.unwrap_space_dek(space_id, keys.active_version)
+    # Two authority reads per put: get/create before encryption and a fresh
+    # post-upload check. Share the first snapshot with unwrap, never cache authority.
+    dek = space_keys._unwrap_keys(space_keys._client(None), keys, keys.active_version)
     nonce = os.urandom(12)
     try:
         payload = _HEADER.pack(b'OLK1', 1, keys.active_version, nonce) + AESGCM(dek).encrypt(
@@ -211,7 +218,11 @@ def put_space_object(
                 _parse_ref(ref)
             except (KeyError, TypeError, ValueError, LakeObjectCorrupt):
                 raise LakeObjectConflict('Existing lake object metadata is invalid') from None
+            _check_put_authority(space_id, blob)
             return ref
+        _check_put_authority(space_id, blob)
+    except (space_keys.SpaceKeyDestroyed, space_keys.SpaceKeyUnavailable):
+        raise
     except ObjectLakeError:
         raise
     except Exception:
@@ -219,8 +230,23 @@ def put_space_object(
     return LakeObjectRef(config.bucket(), key, digest, len(payload), data_class, keys.active_version)
 
 
+def _check_put_authority(space_id, blob):
+    try:
+        if space_keys.get_space_keys(space_id) is None:
+            raise space_keys.SpaceKeyDestroyed('Space key disappeared during upload')
+    except space_keys.SpaceKeyDestroyed:
+        # An in-flight upload must not outlive a durable destroy fence.
+        try:
+            blob.delete()
+        except NotFound:
+            pass
+        except Exception:
+            raise LakeFetchError('Fenced lake upload cleanup unavailable') from None
+        raise
+
+
 def get_space_object(ref: LakeObjectRef) -> bytes:
-    _, sid, _, _, digest = _parse_ref(ref)
+    _, sid, data_class, _, digest = _parse_ref(ref)
     try:
         payload = _bucket_for(ref).blob(ref.key).download_as_bytes()
     except ObjectLakeError:
@@ -238,7 +264,10 @@ def get_space_object(ref: LakeObjectRef) -> bytes:
     try:
         compressed = AESGCM(dek).decrypt(nonce, payload[_HEADER.size :], ref.key.encode('utf-8'))
         decoder = zlib.decompressobj()
-        plaintext = decoder.decompress(compressed) + decoder.flush()
+        limit = MAX_PLAINTEXT_BYTES[data_class]
+        plaintext = decoder.decompress(compressed, limit + 1)
+        if len(plaintext) > limit or decoder.unconsumed_tail:
+            raise LakeObjectCorrupt('Lake plaintext exceeds data-class limit')
         if not decoder.eof or decoder.unused_data or hashlib.sha256(plaintext).hexdigest() != digest:
             raise LakeObjectCorrupt('Lake plaintext digest or compression mismatch')
         return plaintext
