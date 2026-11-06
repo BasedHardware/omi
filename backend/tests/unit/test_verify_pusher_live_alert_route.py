@@ -1353,7 +1353,8 @@ def test_production_native_queries_never_cross_into_development(verifier):
     for uid in verifier.PRODUCTION_ONLY_IMPORT_UIDS:
         assert uid in production and uid not in development
         model = production[uid]['data'][0]['model']
-        assert model['promQLQuery']['projectName'] == 'based-hardware'
+        assert model['queryType'] == 'timeSeriesList'
+        assert 'promQLQuery' not in model
         assert model['timeSeriesList']['projectName'] == 'based-hardware'
     # The production filter is a detached transformation, including when used
     # by the read-back gate rather than the importer.
