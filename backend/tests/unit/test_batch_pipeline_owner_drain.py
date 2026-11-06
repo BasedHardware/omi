@@ -1072,29 +1072,48 @@ def privacy_version_drain(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_unchanged_head_only_rechecks_versions_at_ttl(monkeypatch, drain_timers):
+async def test_unchanged_head_ttl_expiry_runs_a_drain_turn(monkeypatch, drain_timers):
     monkeypatch.delenv('PROJECTION_DRAIN_PRIVACY_BACKOFF', raising=False)
     monkeypatch.setenv('PROJECTION_DRAIN_PRIVACY_BACKOFF_SECONDS', '180')
     projector, drains, step, snapshot, read, ref = privacy_version_drain(monkeypatch)
     drains.request([BURST])
     await settle(projector)
-    for _ in range(3):
-        delay, retry, _ = drain_timers.pop(0)
-        assert delay == 180
-        retry()
-        await settle(projector)
-        assert step.call_count == 1
-        assert drains.privacy_heads[BURST] == ('blocked-head', 1)
-        assert len(drains.delayed) == 1
-    assert read.call_count == 3
-    assert ref.call_args.args == ('results', 'blocked-head')
-    drains.close()
+    delay, retry, _ = drain_timers.pop(0)
+    assert delay == 180
+    retry()
+    await settle(projector)
+    assert step.call_count == 2
+    read.assert_not_called()  # expiry retries external privacy state regardless of row version
     assert not drains.privacy_heads and not drains.stopped_heads and not drains.delayed
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('wake', ['request', 'timer'])
-async def test_changed_head_rerequests_before_another_backoff(monkeypatch, drain_timers, wake):
+async def test_ttl_turn_blocked_again_defers_for_one_new_ttl(monkeypatch, drain_timers):
+    from utils.batch_pipeline.metrics import PROJECTION_DRAIN_PRIVACY_BACKOFFS
+
+    monkeypatch.delenv('PROJECTION_DRAIN_PRIVACY_BACKOFF', raising=False)
+    monkeypatch.setenv('PROJECTION_DRAIN_PRIVACY_BACKOFF_SECONDS', '180')
+    projector, drains, step, snapshot, read, _ = privacy_version_drain(monkeypatch)
+    step.side_effect = None
+    step.return_value = projection.Walk([], [], False, PRIVACY_STOPS[0][0], ('blocked-head', 1))
+    before = PROJECTION_DRAIN_PRIVACY_BACKOFFS._value.get()
+    drains.request([BURST])
+    await settle(projector)
+    for turn in range(2, 5):
+        delay, retry, _ = drain_timers.pop(0)
+        assert delay == 180
+        retry()
+        await settle(projector)
+        assert step.call_count == turn
+        assert drains.privacy_heads[BURST] == ('blocked-head', 1)
+        assert len(drains.delayed) == len(drain_timers) == 1
+    assert PROJECTION_DRAIN_PRIVACY_BACKOFFS._value.get() == before + 4
+    read.assert_not_called()
+    drains.close()
+
+
+@pytest.mark.asyncio
+async def test_changed_head_rerequests_before_ttl(monkeypatch, drain_timers):
     from utils.batch_pipeline.metrics import PROJECTION_DRAIN_PRIVACY_ROW_CHANGED
 
     monkeypatch.delenv('PROJECTION_DRAIN_PRIVACY_BACKOFF', raising=False)
@@ -1103,10 +1122,7 @@ async def test_changed_head_rerequests_before_another_backoff(monkeypatch, drain
     drains.request([BURST])
     await settle(projector)
     snapshot.update_time = 2
-    if wake == 'request':
-        drains.request([BURST] * 20)  # coalesced while the single version read runs
-    else:
-        drain_timers[0][1]()
+    drains.request([BURST] * 20)  # coalesced while the single version read runs
     await settle(projector)
     assert read.call_count == 1
     assert step.call_count >= 2
@@ -1128,7 +1144,7 @@ async def test_privacy_version_check_fails_open_and_switch_off_restores_behavior
         snapshot.update_time = None
     else:
         monkeypatch.setenv('PROJECTION_DRAIN_PRIVACY_BACKOFF', 'off')
-    drain_timers[0][1]()
+    drains.request([BURST])
     await settle(projector)
     assert step.call_count == 2
     assert read.call_count == int(failure != 'switch_off')
@@ -1193,3 +1209,31 @@ async def test_privacy_head_versions_share_the_delayed_owner_cap(monkeypatch, dr
     assert list(drains.privacy_heads) == list(drains.delayed) == ['first']
     drains.close()
     assert not drains.privacy_heads and not drains.stopped_heads
+
+
+@pytest.mark.asyncio
+async def test_ttl_during_unchanged_early_check_cannot_lose_the_retry(monkeypatch, drain_timers):
+    monkeypatch.delenv('PROJECTION_DRAIN_PRIVACY_BACKOFF', raising=False)
+    projector, drains, step, snapshot, read, _ = privacy_version_drain(monkeypatch)
+    drains.request([BURST])
+    await settle(projector)
+    checked, release = asyncio.Event(), asyncio.Event()
+    real_run_blocking = projection_drain.run_blocking
+
+    async def pause_check(executor, fn, *args, **kwargs):
+        if fn == drains.privacy_head_unchanged:
+            result = fn(*args, **kwargs)
+            checked.set()
+            await release.wait()
+            return result
+        return await real_run_blocking(executor, fn, *args, **kwargs)
+
+    monkeypatch.setattr(projection_drain, 'run_blocking', pause_check)
+    drains.request([BURST])
+    await checked.wait()
+    drain_timers[0][1]()
+    release.set()
+    await settle(projector)
+    assert read.call_count == 1
+    assert step.call_count == 2
+    assert not drains.delayed and not drains.privacy_heads

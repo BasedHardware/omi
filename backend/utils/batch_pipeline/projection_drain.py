@@ -91,11 +91,11 @@ class OwnerDrains:
         if owner in self.privacy_heads:
             if projection_drain_privacy_backoff_enabled():
                 unchanged, changed = await run_blocking(sync_executor, self.privacy_head_unchanged, owner)
-                if unchanged:
+                if unchanged and owner in self.privacy_heads:
                     self.stops[owner] = 'privacy_unchanged'
                     PROJECTION_DRAIN_PRIVACY_BACKOFFS.inc()
                     return False
-                if changed:
+                if changed and owner in self.privacy_heads:
                     PROJECTION_DRAIN_PRIVACY_ROW_CHANGED.inc()
             self.privacy_heads.pop(owner, None)
             handle = self.delayed.pop(owner, None)
@@ -144,17 +144,14 @@ class OwnerDrains:
         handle = None
 
         def retry():
-            nonlocal handle
             if self.delayed.get(owner) is not handle:
                 return
-            if owner in self.privacy_heads:
-                # Keep the slot reserved while queued/checking, so the same
-                # cap bounds row-version state as well as timer handles.
-                handle = asyncio.get_running_loop().call_later(projection_drain_privacy_backoff_seconds(), retry)
-                self.delayed[owner] = handle
-            else:
-                self.delayed.pop(owner, None)
-            self.request([owner])
+            # Privacy can change outside the result row. TTL expiry always
+            # releases the version hold for one ordinary drain turn.
+            self.privacy_heads.pop(owner, None)
+            self.delayed.pop(owner, None)
+            if owner not in self.tasks:
+                self.request([owner])
 
         handle = asyncio.get_running_loop().call_later(random.uniform(5.0, 15.0) if delay is None else delay, retry)
         self.delayed[owner] = handle
@@ -190,7 +187,9 @@ class OwnerDrains:
             self.continuations.add(owner)
             self.queue.append(owner)  # Productive turns always continue at the FIFO tail.
         elif stop == 'privacy_unchanged':
-            pass  # Its timer still guarantees another bounded version check.
+            if owner not in self.privacy_heads:
+                # The TTL fired after the check returned but before this callback.
+                self.queue.append(owner)
         elif stop and stop.startswith('blocked_privacy_') and projection_drain_privacy_backoff_enabled():
             # run records privacy stops here only for zero-progress turns.
             if self.defer(owner, delay=projection_drain_privacy_backoff_seconds()):
