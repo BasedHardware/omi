@@ -126,6 +126,7 @@ def browse_candidate_page(
         {
             'data_protection_level',
             'user_title',
+            'user_corrections_compressed',
             'deleted',
             'dream_duplicate_of',
             'sync_bridge_pending',

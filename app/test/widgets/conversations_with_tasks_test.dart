@@ -60,36 +60,42 @@ void main() {
     await tester.pump();
   }
 
-  testWidgets('empty bounded page offers continuation; failed append retries same cursor', (tester) async {
-    final cursors = <String?>[];
-    Future<ApiResult<TaskConversationPage>> fetch(
-        {required String query,
-        bool includeDiscarded = false,
-        String? folderId,
-        bool? starred,
-        DateTime? startDate,
-        DateTime? endDate,
-        String? cursor,
-        bool Function()? canSend}) async {
-      cursors.add(cursor);
-      if (cursors.length == 1) {
-        return const ApiSuccess(TaskConversationPage(items: [], nextCursor: 'older', partial: true));
+  for (final repeatedCursor in [false, true]) {
+    testWidgets('empty bounded page offers continuation; repeated cursor: $repeatedCursor', (tester) async {
+      final cursors = <String?>[];
+      Future<ApiResult<TaskConversationPage>> fetch(
+          {required String query,
+          bool includeDiscarded = false,
+          String? folderId,
+          bool? starred,
+          DateTime? startDate,
+          DateTime? endDate,
+          String? cursor,
+          bool Function()? canSend}) async {
+        cursors.add(cursor);
+        if (cursors.length == 1) {
+          return const ApiSuccess(TaskConversationPage(items: [], nextCursor: 'older', partial: true));
+        }
+        if (cursors.length == 2) {
+          return repeatedCursor
+              ? const ApiSuccess(TaskConversationPage(items: [], nextCursor: 'older', partial: true))
+              : const ApiFailure(ApiProblem(ApiProblemKind.server));
+        }
+        return ApiSuccess(TaskConversationPage(items: [_row('older')]));
       }
-      if (cursors.length == 2) return const ApiFailure(ApiProblem(ApiProblemKind.server));
-      return ApiSuccess(TaskConversationPage(items: [_row('older')]));
-    }
 
-    await pump(tester, fetch);
-    expect(find.text('No results found'), findsNothing);
-    await tester.tap(find.byKey(const ValueKey('tasks_filter_more')));
-    await tester.pump();
-    expect(find.byKey(const ValueKey('tasks_filter_retry')), findsOneWidget);
-    await tester.tap(find.byKey(const ValueKey('tasks_filter_retry')));
-    await tester.pump();
-    expect(cursors, [null, 'older', 'older']);
-    expect(find.text('Conversation older'), findsOneWidget);
-    expect(find.byKey(const ValueKey('conversation_has_tasks')), findsOneWidget);
-  });
+      await pump(tester, fetch);
+      expect(find.text('No results found'), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('tasks_filter_more')));
+      await tester.pump();
+      expect(find.byKey(const ValueKey('tasks_filter_retry')), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('tasks_filter_retry')));
+      await tester.pump();
+      expect(cursors, [null, 'older', repeatedCursor ? null : 'older']);
+      expect(find.text('Conversation older'), findsOneWidget);
+      expect(find.byKey(const ValueKey('conversation_has_tasks')), findsOneWidget);
+    });
+  }
 
   testWidgets('query plus starred is server-side and superseded responses cannot repaint', (tester) async {
     SharedPreferencesUtil().showDiscardedMemories = true;

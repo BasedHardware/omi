@@ -141,7 +141,14 @@ class _ConversationsWithTasksPageState extends State<ConversationsWithTasksPage>
       }
       switch (result) {
         case ApiSuccess(:final data):
-          if (cursor != null && data.nextCursor == cursor) throw StateError('Task filter did not advance');
+          if (cursor != null && data.nextCursor == cursor) {
+            setState(() {
+              _cursor = null;
+              _failed = true;
+              _retryReset = true;
+            });
+            return;
+          }
           setState(() {
             final byId = {
               if (!reset)

@@ -54,6 +54,7 @@ void main() {
   test('bounded empty continuation is distinct from complete empty or failure', () async {
     for (final body in [
       '{"items":[],"next_cursor":null,"partial":true}',
+      '{"items":[],"next_cursor":"","partial":false}',
       '{"items":[],"partial":"false"}',
       '{"items":[false],"partial":false}',
       '{"items":[{}],"partial":false}'

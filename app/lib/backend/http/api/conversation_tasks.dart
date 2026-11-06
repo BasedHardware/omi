@@ -80,7 +80,7 @@ Future<ApiResult<TaskConversationPage>> getConversationsWithTasks({
           throw const FormatException('Invalid task conversation page');
         }
         final next = json['next_cursor'] as String?;
-        if (json['partial'] == true && (next == null || next.isEmpty)) {
+        if (next?.isEmpty == true || (json['partial'] == true && next == null)) {
           throw const FormatException('Incomplete task filter without continuation');
         }
         final rows = <ServerConversation>[];

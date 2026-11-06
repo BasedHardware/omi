@@ -150,10 +150,10 @@ void main() {
     auth.handleAuthUserChanged('replacement');
     provider.request('a');
     expect(oldCurrent!(), isFalse);
+    await tester.pump(const Duration(milliseconds: 151));
+    expect(calls, 2, reason: 'replacement must not wait for the old network request');
     old.complete(const ApiSuccess({'a': true}));
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 151));
-    expect(calls, 2);
     expect(provider.presence('a'), isFalse);
   });
 }

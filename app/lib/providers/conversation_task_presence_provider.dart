@@ -27,13 +27,12 @@ class ConversationTaskPresenceProvider extends ChangeNotifier {
   final Map<String, bool> _presence = {};
   final Set<String> _observed = {};
   final Set<String> _pending = {};
-  final Set<String> _inFlight = {};
+  Set<String>? _inFlight;
   final Set<String> _attempted = {};
   StreamSubscription<int>? _session;
   Timer? _timer;
   int _revision = 0;
   int taskRevision = 0;
-  bool _loading = false;
   bool _disposed = false;
   ConversationProvider? _conversations;
   ActionItemsProvider? _tasks;
@@ -63,6 +62,7 @@ class ConversationTaskPresenceProvider extends ChangeNotifier {
         source.processingConversations,
         source.processingConversations.length,
         source.isFetchingConversations,
+        source.isLoadingConversations,
       );
 
   Object _taskInputs(ActionItemsProvider source) => (
@@ -73,16 +73,7 @@ class ConversationTaskPresenceProvider extends ChangeNotifier {
       );
 
   void _conversationChanged() {
-    final conversations = _conversations!;
-    final key = (
-      conversations.conversations,
-      conversations.conversations.length,
-      conversations.searchedConversations,
-      conversations.searchedConversations.length,
-      conversations.processingConversations,
-      conversations.processingConversations.length,
-      conversations.isFetchingConversations,
-    );
+    final key = _conversationInputs(_conversations!);
     if (key == _conversationKey) return;
     _conversationKey = key;
     invalidate();
@@ -105,7 +96,7 @@ class ConversationTaskPresenceProvider extends ChangeNotifier {
       _attempted.remove(oldest);
     }
     _observed.add(id);
-    if (_presence.containsKey(id) || _inFlight.contains(id) || _attempted.contains(id)) return;
+    if (_presence.containsKey(id) || (_inFlight?.contains(id) ?? false) || _attempted.contains(id)) return;
     _pending.add(id);
     _schedule();
   }
@@ -129,15 +120,14 @@ class ConversationTaskPresenceProvider extends ChangeNotifier {
   }
 
   Future<void> _drain() async {
-    if (_disposed || _loading || _pending.isEmpty) return;
+    if (_disposed || _inFlight != null || _pending.isEmpty) return;
     final owner = _auth.captureSessionSnapshot();
-    if (owner == null) return;
+    if (owner == null || _pending.isEmpty) return;
     final revision = _revision;
     final ids = _pending.take(100).toList();
     _pending.removeAll(ids);
-    _inFlight.addAll(ids);
+    final flight = _inFlight = ids.toSet();
     _attempted.addAll(ids);
-    _loading = true;
     bool current() => !_disposed && revision == _revision && _auth.isSessionSnapshotCurrent(owner);
     try {
       final result = await _fetch(ids, current).timeout(const Duration(seconds: 20));
@@ -152,9 +142,10 @@ class ConversationTaskPresenceProvider extends ChangeNotifier {
       // Unknown is not "no tasks". A refresh/mutation retries; a rebuilding
       // row cannot create an infinite loop during a network outage.
     } finally {
-      _inFlight.removeAll(ids);
-      _loading = false;
-      if (!_disposed && _pending.isNotEmpty) _schedule();
+      if (identical(_inFlight, flight)) {
+        _inFlight = null;
+        if (!_disposed && _pending.isNotEmpty) _schedule();
+      }
     }
   }
 
@@ -165,7 +156,7 @@ class ConversationTaskPresenceProvider extends ChangeNotifier {
     _presence.clear();
     _observed.clear();
     _pending.clear();
-    _inFlight.clear();
+    _inFlight = null;
     _attempted.clear();
     if (!_disposed) notifyListeners();
   }
