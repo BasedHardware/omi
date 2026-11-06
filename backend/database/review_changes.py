@@ -471,7 +471,7 @@ def set_undone(uid: str, change_id: str, undone: bool, *, now: datetime | None =
     try:
         with (
             fenced_action_item_commit(uid)
-            if any(edit.get('collection') == 'action_items' for edit in data.get('edits', []))
+            if any(edit.get('collection') == 'action_items' for edit in (data or {}).get('edits', []))
             else nullcontext()
         ):
             memory_ledger.append_commit_with_builder(

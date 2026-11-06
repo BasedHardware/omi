@@ -24,7 +24,7 @@ FIELD_SITES = {
     ],
     'database/action_items.py': [
         (
-            'FirestoreActionItems._retire_action_items_for_conversation',
+            'FirestoreActionItems.retire_conversation_documents',
             'status',
             "'superseded' if replacement_id else 'cancelled'",
             ('completed', 'completed_at', 'deleted', 'status', 'superseded_by', 'updated_at'),
@@ -1310,37 +1310,37 @@ FIELD_SITES = {
     ],
     'database/goals.py': [
         (
-            'FirestoreGoals._delete_goal',
+            'FirestoreGoals.delete_document',
             'status',
             'GoalStatus.abandoned.value',
             ('ended_at', 'focus_rank', 'is_active', 'relationship_disposition', 'status', 'updated_at'),
         ),
         (
-            'FirestoreGoals._focus_goal.apply',
+            'FirestoreGoals.focus_document.apply',
             'status',
             'GoalStatus.background.value',
             ('focus_rank', 'status', 'updated_at'),
         ),
         (
-            'FirestoreGoals._focus_goal.apply',
+            'FirestoreGoals.focus_document.apply',
             'status',
             'GoalStatus.focused.value',
             ('focus_rank', 'is_active', 'status', 'updated_at'),
         ),
         (
-            'FirestoreGoals._transition_goal_lifecycle.apply',
+            'FirestoreGoals.transition_lifecycle_document.apply',
             'status',
             'status.value',
             ('ended_at', 'focus_rank', 'is_active', 'relationship_disposition', 'status', 'updated_at'),
         ),
         (
-            'FirestoreGoals._transition_goal_lifecycle.apply',
+            'FirestoreGoals.transition_lifecycle_document.apply',
             'status',
             'status.value',
             ('relationship_disposition', 'status'),
         ),
         (
-            'FirestoreGoals._unfocus_goal.apply',
+            'FirestoreGoals.unfocus_document.apply',
             'status',
             'GoalStatus.background.value',
             ('focus_rank', 'status', 'updated_at'),
@@ -2147,25 +2147,25 @@ FIELD_SITES = {
     ],
     'database/workstreams.py': [
         (
-            'FirestoreWorkstreams._create_artifact_descriptor.apply',
+            'FirestoreWorkstreams.create_artifact_document.apply',
             'status',
             'ArtifactStatus.superseded.value',
             ('status',),
         ),
         (
-            'FirestoreWorkstreams._import_task_goal_links.complete',
+            'FirestoreWorkstreams.import_links_documents.complete',
             'status',
             "'complete'",
             ('completed_at', 'result', 'status', 'updated_at'),
         ),
         (
-            'FirestoreWorkstreams._import_task_goal_links.reserve',
+            'FirestoreWorkstreams.import_links_documents.reserve',
             'status',
             "'processing'",
             ('created_at', 'outcomes', 'request_hash', 'status', 'updated_at'),
         ),
         (
-            'FirestoreWorkstreams._resolve_workstream_candidate.apply',
+            'FirestoreWorkstreams.resolve_candidate_document.apply',
             'status',
             "'pending'",
             (
@@ -2180,13 +2180,13 @@ FIELD_SITES = {
             ),
         ),
         (
-            'FirestoreWorkstreams._resolve_workstream_candidate.apply',
+            'FirestoreWorkstreams.resolve_candidate_document.apply',
             'status',
             'CandidateStatus.accepted.value',
             ('resolution_reason', 'resolved_at', 'result_task_id', 'result_workstream_id', 'status'),
         ),
-        ('FirestoreWorkstreams._transition_artifact_status.apply', 'status', 'request.status', ('status',)),
-        ('FirestoreWorkstreams._transition_artifact_status.apply', 'status', 'request.status.value', ('status',)),
+        ('FirestoreWorkstreams.transition_artifact_document.apply', 'status', 'request.status', ('status',)),
+        ('FirestoreWorkstreams.transition_artifact_document.apply', 'status', 'request.status.value', ('status',)),
         (
             '_task_storage',
             'status',

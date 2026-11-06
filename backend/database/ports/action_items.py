@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Iterator, Protocol
+from typing import Any, Iterator, List, Protocol
 
 from pydantic import BaseModel, ConfigDict
 from .base import Page
@@ -59,8 +59,8 @@ class ActionItemsTx(Protocol):
     ) -> str: ...
 
     def create_batch(
-        self, drafts: list[ActionItemDraft], *, document_ids: list[str | None] | None = None
-    ) -> list[str]: ...
+        self, drafts: List[ActionItemDraft], *, document_ids: List[str | None] | None = None
+    ) -> List[str]: ...
 
     def update(
         self,
@@ -74,17 +74,17 @@ class ActionItemsTx(Protocol):
 
     def delete(self, action_item_id: str) -> bool: ...
 
-    def delete_batch(self, ids: list[str]) -> list[str]: ...
+    def delete_batch(self, ids: List[str]) -> List[str]: ...
 
     def retire_for_conversation(
-        self, conversation_id: str, *, active_ids: list[str], replacements: dict[str, str] | None = None
+        self, conversation_id: str, *, active_ids: List[str], replacements: dict[str, str] | None = None
     ) -> int: ...
 
 
 class ActionItemsRepo(ActionItemsTx, Protocol):
     def get(self, action_item_id: str) -> ActionItemEntity | None: ...
 
-    def get_by_ids(self, ids: list[str]) -> list[ActionItemEntity]: ...
+    def get_by_ids(self, ids: List[str]) -> List[ActionItemEntity]: ...
 
     def list(
         self,
@@ -101,7 +101,7 @@ class ActionItemsRepo(ActionItemsTx, Protocol):
 
     def find_active_by_description(self, description: str) -> ActionItemEntity | None: ...
 
-    def list_ids(self, *, completed: bool | None = None) -> list[str]: ...
+    def list_ids(self, *, completed: bool | None = None) -> List[str]: ...
 
     def iter_all(self) -> Iterator[ActionItemEntity]: ...
 

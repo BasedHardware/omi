@@ -1066,7 +1066,6 @@ class SimGoals(_WorkflowRepo):
             'goal_history',
             'task_intelligence_control',
             'workflow_mutation_receipts',
-            'receipts',
         ):
             count += len(self.store.state[entity])
             self.store.state[entity].clear()

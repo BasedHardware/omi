@@ -19,10 +19,9 @@ from database.ports.goals import (
 from database.folders import check_port_revision, port_mutation_digest, read_port_mutation, write_port_mutation
 from contextlib import nullcontext
 from copy import deepcopy
-from database.action_item_fence import ActionItemCommitFence, fenced_action_item_commit
-from database.firestore_transaction_retry import run_with_transaction_contention_retry
+from database.action_item_fence import fenced_action_item_commit
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Dict, List, Optional, cast, overload
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
@@ -474,7 +473,7 @@ def create_goal(
     firestore_client: Any = None,
 ) -> Dict[str, Any]:
     """Create a goal without implicitly changing any other goal's lifecycle."""
-    return FirestoreGoals(uid, firestore_client=firestore_client)._create_goal(goal_data, max_goals)
+    return FirestoreGoals(uid, firestore_client=firestore_client).create_document(goal_data, max_goals)
 
 
 def _new_goal_payload(
@@ -517,7 +516,7 @@ def create_goal_idempotent(
     firestore_client: Any = None,
 ) -> Dict[str, Any]:
     """Create one canonical goal for a generation-scoped UI occurrence."""
-    return FirestoreGoals(uid, firestore_client=firestore_client)._create_goal_idempotent(
+    return FirestoreGoals(uid, firestore_client=firestore_client).create_idempotent_document(
         goal_data, idempotency_key=idempotency_key, account_generation=account_generation
     )
 
@@ -538,7 +537,7 @@ def _metric_validation_message(exc: ValidationError) -> str:
 def update_goal(
     uid: str, goal_id: str, updates: Dict[str, Any], *, firestore_client: Any = None
 ) -> Optional[Dict[str, Any]]:
-    return FirestoreGoals(uid, firestore_client=firestore_client)._update_goal(goal_id, updates)
+    return FirestoreGoals(uid, firestore_client=firestore_client).update_document(goal_id, updates)
 
 
 def focus_goal(
@@ -552,7 +551,7 @@ def focus_goal(
     focus_cap: int = DEFAULT_FOCUS_CAP,
     firestore_client: Any = None,
 ) -> Dict[str, Any]:
-    return FirestoreGoals(uid, firestore_client=firestore_client)._focus_goal(
+    return FirestoreGoals(uid, firestore_client=firestore_client).focus_document(
         goal_id,
         idempotency_key=idempotency_key,
         account_generation=account_generation,
@@ -570,7 +569,7 @@ def unfocus_goal(
     account_generation: int,
     firestore_client: Any = None,
 ) -> Dict[str, Any]:
-    return FirestoreGoals(uid, firestore_client=firestore_client)._unfocus_goal(
+    return FirestoreGoals(uid, firestore_client=firestore_client).unfocus_document(
         goal_id, idempotency_key=idempotency_key, account_generation=account_generation
     )
 
@@ -585,7 +584,7 @@ def transition_goal_lifecycle(
     account_generation: int,
     firestore_client: Any = None,
 ) -> Dict[str, Any]:
-    return FirestoreGoals(uid, firestore_client=firestore_client)._transition_goal_lifecycle(
+    return FirestoreGoals(uid, firestore_client=firestore_client).transition_lifecycle_document(
         goal_id,
         status=status,
         relationship_disposition=relationship_disposition,
@@ -606,7 +605,7 @@ def _append_goal_progress_event(
     first_write_wins: bool = False,
     firestore_client: Any = None,
 ) -> GoalProgressEvent:
-    return FirestoreGoals(uid, firestore_client=firestore_client)._append_progress_documents(
+    return FirestoreGoals(uid, firestore_client=firestore_client).append_progress_document(
         goal_id,
         event,
         idempotency_key=idempotency_key,
@@ -663,7 +662,7 @@ def update_goal_progress(
     authority_source_generation: Optional[int] = None,
     firestore_client: Any = None,
 ) -> Optional[Dict[str, Any]]:
-    return FirestoreGoals(uid, firestore_client=firestore_client)._update_goal_progress(
+    return FirestoreGoals(uid, firestore_client=firestore_client).update_progress_document(
         goal_id,
         current_value,
         idempotency_key=idempotency_key,
@@ -702,7 +701,7 @@ def get_goal_history(
 
 def delete_goal(uid: str, goal_id: str, *, firestore_client: Any = None) -> bool:
     """Released DELETE compatibility: soft-abandon and retain relationships."""
-    return FirestoreGoals(uid, firestore_client=firestore_client)._delete_goal(goal_id)
+    return FirestoreGoals(uid, firestore_client=firestore_client).delete_document(goal_id)
 
 
 __all__ = [
@@ -736,14 +735,14 @@ class FirestoreGoals:
         self.space_id = space_id
         self.client = _get_db(firestore_client)
         self.transaction = transaction
-        self._space_tx = None
+        self.commit_context: Any = None
 
     def _read(self, ref):
         return ref.get(transaction=self.transaction) if self.transaction is not None else ref.get()
 
     def _post_commit(self, callback):
-        if self._space_tx is not None:
-            self._space_tx.after_commit(callback)
+        if self.commit_context is not None:
+            self.commit_context.after_commit(callback)
         elif self.transaction is None:
             callback()
 
@@ -769,11 +768,10 @@ class FirestoreGoals:
     def _fence(self):
         return fenced_action_item_commit(self.space_id)
 
-    def _create_goal(
+    def create_document(
         self, goal_data: Dict[str, Any], max_goals: int = DEFAULT_FOCUS_CAP, *, firestore_client: Any = None
     ) -> Dict[str, Any]:
         uid = self.space_id
-        firestore_client = self.client
         "Create a goal without implicitly changing any other goal's lifecycle."
         del max_goals
         client = self.client
@@ -801,11 +799,10 @@ class FirestoreGoals:
 
         return self._apply_transaction(create_in_generation, transaction)
 
-    def _create_goal_idempotent(
+    def create_idempotent_document(
         self, goal_data: Dict[str, Any], *, idempotency_key: str, account_generation: int, firestore_client: Any = None
     ) -> Dict[str, Any]:
         uid = self.space_id
-        firestore_client = self.client
         'Create one canonical goal for a generation-scoped UI occurrence.'
         client = self.client
         transaction = client.transaction()
@@ -835,7 +832,7 @@ class FirestoreGoals:
 
         return self._apply_transaction(apply, transaction)
 
-    def _update_goal(
+    def update_document(
         self, goal_id: str, updates: Dict[str, Any], *, firestore_client: Any = None
     ) -> Optional[Dict[str, Any]]:
         uid = self.space_id
@@ -889,7 +886,7 @@ class FirestoreGoals:
             else get_goal_by_id(uid, goal_id, firestore_client=firestore_client)
         )
 
-    def _focus_goal(
+    def focus_document(
         self,
         goal_id: str,
         *,
@@ -901,7 +898,6 @@ class FirestoreGoals:
         firestore_client: Any = None,
     ) -> Dict[str, Any]:
         uid = self.space_id
-        firestore_client = self.client
         client = self.client
         target_ref = _goal_ref(uid, goal_id, firestore_client=client)
         collection = client.collection(users_collection).document(uid).collection(goals_collection)
@@ -974,11 +970,10 @@ class FirestoreGoals:
 
         return self._apply_transaction(apply, transaction)
 
-    def _unfocus_goal(
+    def unfocus_document(
         self, goal_id: str, *, idempotency_key: str, account_generation: int, firestore_client: Any = None
     ) -> Dict[str, Any]:
         uid = self.space_id
-        firestore_client = self.client
         client = self.client
         goal_ref = _goal_ref(uid, goal_id, firestore_client=client)
         transaction = client.transaction()
@@ -1010,7 +1005,7 @@ class FirestoreGoals:
 
         return self._apply_transaction(apply, transaction)
 
-    def _transition_goal_lifecycle(
+    def transition_lifecycle_document(
         self,
         goal_id: str,
         *,
@@ -1021,7 +1016,6 @@ class FirestoreGoals:
         firestore_client: Any = None,
     ) -> Dict[str, Any]:
         uid = self.space_id
-        firestore_client = self.client
         if status not in {GoalStatus.paused, GoalStatus.achieved, GoalStatus.abandoned}:
             raise ValueError('invalid goal lifecycle target')
         client = self.client
@@ -1088,7 +1082,7 @@ class FirestoreGoals:
         self._post_commit(lambda: bump_action_items_list_version(uid))
         return lifecycle_result
 
-    def _append_progress_documents(
+    def append_progress_document(
         self,
         goal_id: str,
         event: GoalProgressEventCreate,
@@ -1101,7 +1095,6 @@ class FirestoreGoals:
         firestore_client: Any = None,
     ) -> GoalProgressEvent:
         uid = self.space_id
-        firestore_client = self.client
         client = self.client
         goal_ref = _goal_ref(uid, goal_id, firestore_client=client)
         transaction = client.transaction()
@@ -1171,7 +1164,7 @@ class FirestoreGoals:
 
         return self._apply_transaction(apply, transaction)
 
-    def _update_goal_progress(
+    def update_progress_document(
         self,
         goal_id: str,
         current_value: float,
@@ -1194,7 +1187,7 @@ class FirestoreGoals:
             return None
         metric = _metric_from_storage(goal) or GoalMetric(type=GoalType.numeric, current=0, target=0)
         metric = metric.model_copy(update={'current': current_value})
-        self._append_progress_documents(
+        self.append_progress_document(
             goal_id,
             GoalProgressEventCreate(kind=GoalProgressEventKind.metric_update, summary='Metric updated', metric=metric),
             idempotency_key=idempotency_key,
@@ -1212,7 +1205,7 @@ class FirestoreGoals:
             else get_goal_by_id(uid, goal_id, firestore_client=self.client)
         )
 
-    def _delete_goal(self, goal_id: str, *, firestore_client: Any = None) -> bool:
+    def delete_document(self, goal_id: str, *, firestore_client: Any = None) -> bool:
         uid = self.space_id
         firestore_client = self.client
         'Released DELETE compatibility: soft-abandon and retain relationships.'
@@ -1234,7 +1227,13 @@ class FirestoreGoals:
         )
         return True
 
-    def _entity(self, data) -> GoalEntity | None:
+    @overload
+    def _entity(self, data: dict[str, Any]) -> GoalEntity: ...
+
+    @overload
+    def _entity(self, data: None) -> None: ...
+
+    def _entity(self, data: dict[str, Any] | None) -> GoalEntity | None:
         return GoalEntity.model_construct(**deepcopy(data)) if data is not None else None
 
     def get(self, goal_id: str) -> GoalEntity | None:
@@ -1248,11 +1247,11 @@ class FirestoreGoals:
                 idempotency_key=mutation_id,
                 account_generation=int(self.read_control().get('account_generation', 0)),
             )
-        return self._entity(self._create_goal(draft.data))
+        return self._entity(self.create_document(draft.data))
 
     def create_idempotent(self, draft: GoalCreate, *, idempotency_key: str, account_generation: int) -> GoalEntity:
         return self._entity(
-            self._create_goal_idempotent(
+            self.create_idempotent_document(
                 draft.data, idempotency_key=idempotency_key, account_generation=account_generation
             )
         )
@@ -1291,7 +1290,7 @@ class FirestoreGoals:
             return None
         raw = current.model_dump(exclude_unset=True)
         revision = check_port_revision(self.space_id, 'goals', goal_id, raw, expected_revision)
-        result = self._update_goal(goal_id, patch.data)
+        result = self.update_document(goal_id, patch.data)
         if result is None:
             return None
         self.transaction.update(
@@ -1313,7 +1312,7 @@ class FirestoreGoals:
         focus_cap: int = 5,
     ) -> GoalEntity:
         return self._entity(
-            self._focus_goal(
+            self.focus_document(
                 goal_id,
                 idempotency_key=idempotency_key,
                 account_generation=account_generation,
@@ -1325,14 +1324,14 @@ class FirestoreGoals:
 
     def unfocus(self, goal_id: str, *, idempotency_key: str, account_generation: int) -> GoalEntity:
         return self._entity(
-            self._unfocus_goal(goal_id, idempotency_key=idempotency_key, account_generation=account_generation)
+            self.unfocus_document(goal_id, idempotency_key=idempotency_key, account_generation=account_generation)
         )
 
     def transition_lifecycle(
         self, goal_id: str, *, status: str, relationship_disposition: str, idempotency_key: str, account_generation: int
     ) -> GoalEntity:
         return self._entity(
-            self._transition_goal_lifecycle(
+            self.transition_lifecycle_document(
                 goal_id,
                 status=GoalStatus(status),
                 relationship_disposition=GoalRelationshipDisposition(relationship_disposition),
@@ -1344,7 +1343,7 @@ class FirestoreGoals:
     def append_progress_event(
         self, goal_id: str, event: dict[str, Any], *, idempotency_key: str, account_generation: int
     ) -> GoalProgressEventEntity:
-        result = self._append_progress_documents(
+        result = self.append_progress_document(
             goal_id,
             GoalProgressEventCreate.model_validate(event),
             idempotency_key=idempotency_key,
@@ -1367,7 +1366,7 @@ class FirestoreGoals:
         account_generation: int | None = None,
     ) -> GoalEntity | None:
         return self._entity(
-            self._update_goal_progress(
+            self.update_progress_document(
                 goal_id, current_value, idempotency_key=idempotency_key, account_generation=account_generation
             )
         )
@@ -1376,7 +1375,7 @@ class FirestoreGoals:
         return get_goal_history(self.space_id, goal_id, days, firestore_client=self.client)
 
     def delete(self, goal_id: str) -> bool:
-        return self._delete_goal(goal_id)
+        return self.delete_document(goal_id)
 
     def read_control(self) -> dict[str, Any]:
         snapshot = self._read(_goal_control_ref(self.space_id, firestore_client=self.client))
@@ -1448,5 +1447,5 @@ class FirestoreGoals:
         repo = action_items_db.FirestoreActionItems(
             self.space_id, firestore_client=self.client, transaction=transaction
         )
-        repo._space_tx = self._space_tx
+        repo.commit_context = self.commit_context
         return repo.stage_write(operation, ref.id, payload)

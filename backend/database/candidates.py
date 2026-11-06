@@ -951,7 +951,7 @@ def resolve_task_candidate(
                 raise CandidateConflictError('Summary action item is linked to another task')
         if candidate.status == CandidateStatus.accepted:
             if summary_row is not None:
-                task_snapshot = tasks._read_snapshot(cast(str, candidate.result_task_id))
+                task_snapshot = tasks.read_snapshot(cast(str, candidate.result_task_id))
                 if not task_snapshot.exists:
                     raise CandidateNotFoundError('Linked task not found')
                 existing_task = _snapshot_dict(task_snapshot)
@@ -998,7 +998,7 @@ def resolve_task_candidate(
         if candidate.proposed_action == CandidateAction.create:
             task_id = task_id_for_candidate(uid, account_generation, candidate_id)
             task_ref = _task_ref(uid, task_id)
-            task_snapshot = tasks._read_snapshot(task_ref.id)
+            task_snapshot = tasks.read_snapshot(task_ref.id)
             task_data = _task_create_storage(candidate, task_id=task_id, now=resolved_at)
             if summary_row is not None:
                 task_data['conversation_id'] = summary_row.conversation_id
@@ -1022,7 +1022,7 @@ def resolve_task_candidate(
         else:
             task_id = cast(str, candidate.task_id)
             task_ref = _task_ref(uid, task_id)
-            task_snapshot = tasks._read_snapshot(task_ref.id)
+            task_snapshot = tasks.read_snapshot(task_ref.id)
             if not task_snapshot.exists:
                 raise CandidateNotFoundError(f'task:{task_id}')
             current_task = _snapshot_dict(task_snapshot)

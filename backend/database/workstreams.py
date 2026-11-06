@@ -17,11 +17,10 @@ from database.ports.workstreams import (
     ArtifactDescriptorEntity,
     ContinuationCheckpointEntity,
 )
-from database.folders import check_port_revision, port_mutation_digest, read_port_mutation, write_port_mutation
+from database.folders import port_mutation_digest, read_port_mutation, write_port_mutation
 from contextlib import nullcontext
 from copy import deepcopy
-from database.action_item_fence import ActionItemCommitFence, fenced_action_item_commit
-from database.firestore_transaction_retry import run_with_transaction_contention_retry
+from database.action_item_fence import fenced_action_item_commit
 from datetime import datetime, timezone
 from typing import Any, Optional, cast
 
@@ -412,7 +411,7 @@ def update_workstream(
     account_generation: int,
     firestore_client: Any = None,
 ) -> Workstream:
-    return FirestoreWorkstreams(uid, firestore_client=firestore_client)._update_workstream(
+    return FirestoreWorkstreams(uid, firestore_client=firestore_client).update_document(
         workstream_id, update, idempotency_key=idempotency_key, account_generation=account_generation
     )
 
@@ -427,7 +426,7 @@ def append_workstream_event(
     firestore_client: Any = None,
     required_status: Optional[WorkstreamStatus] = None,
 ) -> WorkstreamEvent:
-    return FirestoreWorkstreams(uid, firestore_client=firestore_client)._append_workstream_event(
+    return FirestoreWorkstreams(uid, firestore_client=firestore_client).append_event_document(
         workstream_id,
         event,
         idempotency_key=idempotency_key,
@@ -463,7 +462,7 @@ def create_artifact_descriptor(
     account_generation: int,
     firestore_client: Any = None,
 ) -> ArtifactDescriptor:
-    return FirestoreWorkstreams(uid, firestore_client=firestore_client)._create_artifact_descriptor(
+    return FirestoreWorkstreams(uid, firestore_client=firestore_client).create_artifact_document(
         workstream_id, proposal, idempotency_key=idempotency_key, account_generation=account_generation
     )
 
@@ -478,7 +477,7 @@ def transition_artifact_status(
     account_generation: int,
     firestore_client: Any = None,
 ) -> ArtifactDescriptor:
-    return FirestoreWorkstreams(uid, firestore_client=firestore_client)._transition_artifact_status(
+    return FirestoreWorkstreams(uid, firestore_client=firestore_client).transition_artifact_document(
         workstream_id, artifact_id, request, idempotency_key=idempotency_key, account_generation=account_generation
     )
 
@@ -508,7 +507,7 @@ def upsert_continuation_checkpoint(
     account_generation: int,
     firestore_client: Any = None,
 ) -> ContinuationCheckpoint:
-    return FirestoreWorkstreams(uid, firestore_client=firestore_client)._upsert_continuation_checkpoint(
+    return FirestoreWorkstreams(uid, firestore_client=firestore_client).upsert_checkpoint_document(
         workstream_id, checkpoint, idempotency_key=idempotency_key, account_generation=account_generation
     )
 
@@ -535,7 +534,7 @@ def resolve_workstream_candidate(
     *,
     firestore_client: Any = None,
 ) -> CandidateResolutionReceipt:
-    return FirestoreWorkstreams(uid, firestore_client=firestore_client)._resolve_workstream_candidate(
+    return FirestoreWorkstreams(uid, firestore_client=firestore_client).resolve_candidate_document(
         candidate, account_generation
     )
 
@@ -548,7 +547,7 @@ def resolve_work_intent(
     account_generation: int,
     firestore_client: Any = None,
 ) -> WorkIntentReceipt:
-    return FirestoreWorkstreams(uid, firestore_client=firestore_client)._resolve_work_intent(
+    return FirestoreWorkstreams(uid, firestore_client=firestore_client).resolve_intent_document(
         request, idempotency_key=idempotency_key, account_generation=account_generation
     )
 
@@ -561,7 +560,7 @@ def import_task_goal_links(
     account_generation: int,
     firestore_client: Any = None,
 ) -> TaskGoalLinkImportReport:
-    return FirestoreWorkstreams(uid, firestore_client=firestore_client)._import_task_goal_links(
+    return FirestoreWorkstreams(uid, firestore_client=firestore_client).import_links_documents(
         request, idempotency_key=idempotency_key, account_generation=account_generation
     )
 
@@ -651,14 +650,14 @@ class FirestoreWorkstreams:
         self.space_id = space_id
         self.client = _get_db(firestore_client)
         self.transaction = transaction
-        self._space_tx = None
+        self.commit_context: Any = None
 
     def _read(self, ref):
         return ref.get(transaction=self.transaction) if self.transaction is not None else ref.get()
 
     def _post_commit(self, callback):
-        if self._space_tx is not None:
-            self._space_tx.after_commit(callback)
+        if self.commit_context is not None:
+            self.commit_context.after_commit(callback)
         elif self.transaction is None:
             callback()
 
@@ -678,7 +677,7 @@ class FirestoreWorkstreams:
     def _fence(self):
         return fenced_action_item_commit(self.space_id)
 
-    def _update_workstream(
+    def update_document(
         self,
         workstream_id: str,
         update: WorkstreamUpdate,
@@ -688,7 +687,6 @@ class FirestoreWorkstreams:
         firestore_client: Any = None,
     ) -> Workstream:
         uid = self.space_id
-        firestore_client = self.client
         client = self.client
         ref = _workstream_ref(uid, workstream_id, firestore_client=client)
         patch = update.model_dump(mode='python', exclude_unset=True)
@@ -720,7 +718,7 @@ class FirestoreWorkstreams:
 
         return self._apply_transaction(apply, transaction)
 
-    def _append_workstream_event(
+    def append_event_document(
         self,
         workstream_id: str,
         event: WorkstreamEventCreate,
@@ -731,7 +729,6 @@ class FirestoreWorkstreams:
         required_status: Optional[WorkstreamStatus] = None,
     ) -> WorkstreamEvent:
         uid = self.space_id
-        firestore_client = self.client
         client = self.client
         workstream_ref = _workstream_ref(uid, workstream_id, firestore_client=client)
         transaction = client.transaction()
@@ -784,7 +781,7 @@ class FirestoreWorkstreams:
 
         return self._apply_transaction(apply, transaction)
 
-    def _create_artifact_descriptor(
+    def create_artifact_document(
         self,
         workstream_id: str,
         proposal: ArtifactDescriptorCreate,
@@ -794,7 +791,6 @@ class FirestoreWorkstreams:
         firestore_client: Any = None,
     ) -> ArtifactDescriptor:
         uid = self.space_id
-        firestore_client = self.client
         client = self.client
         workstream_ref = _workstream_ref(uid, workstream_id, firestore_client=client)
         artifact_id = _stable_id('artifact', uid, workstream_id, proposal.logical_key, proposal.version)
@@ -926,7 +922,7 @@ class FirestoreWorkstreams:
 
         return self._apply_transaction(apply, transaction)
 
-    def _transition_artifact_status(
+    def transition_artifact_document(
         self,
         workstream_id: str,
         artifact_id: str,
@@ -937,7 +933,6 @@ class FirestoreWorkstreams:
         firestore_client: Any = None,
     ) -> ArtifactDescriptor:
         uid = self.space_id
-        firestore_client = self.client
         client = self.client
         workstream_ref = _workstream_ref(uid, workstream_id, firestore_client=client)
         artifact_ref = workstream_ref.collection(ARTIFACTS_COLLECTION).document(artifact_id)
@@ -1018,7 +1013,7 @@ class FirestoreWorkstreams:
 
         return self._apply_transaction(apply, transaction)
 
-    def _upsert_continuation_checkpoint(
+    def upsert_checkpoint_document(
         self,
         workstream_id: str,
         checkpoint: ContinuationCheckpointUpsert,
@@ -1028,7 +1023,6 @@ class FirestoreWorkstreams:
         firestore_client: Any = None,
     ) -> ContinuationCheckpoint:
         uid = self.space_id
-        firestore_client = self.client
         client = self.client
         workstream_ref = _workstream_ref(uid, workstream_id, firestore_client=client)
         checkpoint_id = _stable_id('checkpoint', uid, workstream_id, checkpoint.runtime_id)
@@ -1095,11 +1089,10 @@ class FirestoreWorkstreams:
 
         return self._apply_transaction(apply, transaction)
 
-    def _resolve_workstream_candidate(
+    def resolve_candidate_document(
         self, candidate: CandidateRecord, account_generation: int, *, firestore_client: Any = None
     ) -> CandidateResolutionReceipt:
         uid = self.space_id
-        firestore_client = self.client
         if candidate.subject_kind != CandidateSubjectKind.workstream or candidate.workstream_proposal is None:
             raise WorkstreamConflictError('Candidate is not a workstream create proposal')
         client = self.client
@@ -1237,7 +1230,7 @@ class FirestoreWorkstreams:
             self._post_commit(lambda: bump_action_items_list_version(uid))
         return receipt
 
-    def _resolve_work_intent(
+    def resolve_intent_document(
         self,
         request: TaskOriginWorkIntent | GoalOriginWorkIntent,
         *,
@@ -1246,7 +1239,6 @@ class FirestoreWorkstreams:
         firestore_client: Any = None,
     ) -> WorkIntentReceipt:
         uid = self.space_id
-        firestore_client = self.client
         if not idempotency_key.strip():
             raise ValueError('idempotency_key is required')
         client = self.client
@@ -1469,7 +1461,7 @@ class FirestoreWorkstreams:
             self._post_commit(lambda: bump_action_items_list_version(uid))
         return receipt
 
-    def _import_task_goal_links(
+    def import_links_documents(
         self,
         request: TaskGoalLinkImportRequest,
         *,
@@ -1478,7 +1470,6 @@ class FirestoreWorkstreams:
         firestore_client: Any = None,
     ) -> TaskGoalLinkImportReport:
         uid = self.space_id
-        firestore_client = self.client
         client = self.client
         request_payload = request.model_dump(mode='json')
         operation = 'task-goal-link-import'
@@ -1655,7 +1646,9 @@ class FirestoreWorkstreams:
     def get(self, workstream_id: str) -> WorkstreamEntity | None:
         snapshot = self._read(_workstream_ref(self.space_id, workstream_id, firestore_client=self.client))
         return (
-            WorkstreamEntity.model_construct(**deepcopy({**_snapshot_dict(snapshot), 'id': workstream_id}))
+            WorkstreamEntity.model_construct(
+                **cast(dict[str, Any], deepcopy({**_snapshot_dict(snapshot), 'id': workstream_id}))
+            )
             if snapshot.exists
             else None
         )
@@ -1712,7 +1705,7 @@ class FirestoreWorkstreams:
         payload.pop('revision', None)
         self.transaction.create(_workstream_ref(self.space_id, wid, firestore_client=self.client), payload)
         write_port_mutation(owner, self.transaction, mutation_id, digest, 'workstreams', wid, result=payload)
-        return WorkstreamEntity.model_construct(**payload)
+        return WorkstreamEntity.model_construct(**cast(dict[str, Any], payload))
 
     def list_open(self, *, limit: int = 500, account_generation: int | None = None) -> list[WorkstreamEntity]:
         return [
@@ -1735,7 +1728,7 @@ class FirestoreWorkstreams:
     def update(
         self, workstream_id: str, patch: PortWorkstreamUpdate, *, idempotency_key: str, account_generation: int
     ) -> WorkstreamEntity:
-        result = self._update_workstream(
+        result = self.update_document(
             workstream_id,
             WorkstreamUpdate.model_validate(patch.data),
             idempotency_key=idempotency_key,
@@ -1746,7 +1739,7 @@ class FirestoreWorkstreams:
     def append_event(
         self, workstream_id: str, event: dict[str, Any], *, idempotency_key: str, account_generation: int
     ) -> WorkstreamEventEntity:
-        result = self._append_workstream_event(
+        result = self.append_event_document(
             workstream_id,
             WorkstreamEventCreate.model_validate(event),
             idempotency_key=idempotency_key,
@@ -1767,7 +1760,7 @@ class FirestoreWorkstreams:
     def create_artifact_descriptor(
         self, workstream_id: str, proposal: dict[str, Any], *, idempotency_key: str, account_generation: int
     ) -> ArtifactDescriptorEntity:
-        result = self._create_artifact_descriptor(
+        result = self.create_artifact_document(
             workstream_id,
             ArtifactDescriptorCreate.model_validate(proposal),
             idempotency_key=idempotency_key,
@@ -1784,7 +1777,7 @@ class FirestoreWorkstreams:
         idempotency_key: str,
         account_generation: int,
     ) -> ArtifactDescriptorEntity:
-        result = self._transition_artifact_status(
+        result = self.transition_artifact_document(
             workstream_id,
             artifact_id,
             ArtifactStatusTransitionRequest.model_validate(request),
@@ -1804,7 +1797,7 @@ class FirestoreWorkstreams:
     def upsert_continuation_checkpoint(
         self, workstream_id: str, checkpoint: dict[str, Any], *, idempotency_key: str, account_generation: int
     ) -> ContinuationCheckpointEntity:
-        result = self._upsert_continuation_checkpoint(
+        result = self.upsert_checkpoint_document(
             workstream_id,
             ContinuationCheckpointUpsert.model_validate(checkpoint),
             idempotency_key=idempotency_key,
@@ -1819,7 +1812,7 @@ class FirestoreWorkstreams:
         ]
 
     def resolve_candidate(self, candidate: dict[str, Any], account_generation: int) -> dict[str, Any]:
-        return self._resolve_workstream_candidate(
+        return self.resolve_candidate_document(
             CandidateRecord.model_validate(candidate), account_generation
         ).model_dump(mode='python')
 
@@ -1827,7 +1820,7 @@ class FirestoreWorkstreams:
         self, request: dict[str, Any], *, idempotency_key: str, account_generation: int
     ) -> dict[str, Any]:
         model = TaskOriginWorkIntent if request.get('origin') == 'task' else GoalOriginWorkIntent
-        return self._resolve_work_intent(
+        return self.resolve_intent_document(
             model.model_validate(request), idempotency_key=idempotency_key, account_generation=account_generation
         ).model_dump(mode='python')
 
@@ -1838,7 +1831,7 @@ class FirestoreWorkstreams:
             return self._import_links_atomic(
                 TaskGoalLinkImportRequest.model_validate(request), idempotency_key, account_generation
             )
-        return self._import_task_goal_links(
+        return self.import_links_documents(
             TaskGoalLinkImportRequest.model_validate(request),
             idempotency_key=idempotency_key,
             account_generation=account_generation,
@@ -1877,7 +1870,7 @@ class FirestoreWorkstreams:
         repo = action_items_db.FirestoreActionItems(
             self.space_id, firestore_client=self.client, transaction=transaction
         )
-        repo._space_tx = self._space_tx
+        repo.commit_context = self.commit_context
         return repo.stage_write(operation, ref.id, payload)
 
     def _import_links_atomic(self, request, idempotency_key, account_generation):
@@ -1901,7 +1894,7 @@ class FirestoreWorkstreams:
         tasks = action_items_db.FirestoreActionItems(
             self.space_id, firestore_client=self.client, transaction=self.transaction
         )
-        tasks._space_tx = self._space_tx
+        tasks.commit_context = self.commit_context
         planned = []
         failed = []
         unchanged = imported = 0
@@ -1917,7 +1910,7 @@ class FirestoreWorkstreams:
                 and goal.account_generation == account_generation
                 and task.goal_id in (None, link.goal_id)
             )
-            if valid and task.workstream_id:
+            if valid and task is not None and task.workstream_id:
                 workstream = self.get(task.workstream_id)
                 valid = (
                     workstream is not None
@@ -1926,7 +1919,7 @@ class FirestoreWorkstreams:
                 )
             if not valid:
                 failed.append(link.task_id)
-            elif task.goal_id == link.goal_id:
+            elif task is not None and task.goal_id == link.goal_id:
                 unchanged += 1
                 if not task.account_generation:
                     planned.append((link.task_id, {'account_generation': account_generation}))

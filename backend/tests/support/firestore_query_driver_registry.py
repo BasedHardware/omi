@@ -154,7 +154,7 @@ _MCP_KEY = 'omi_mcp_' + 'a' * 32
 
 BODY_DIGEST = {
     'database.action_items.FirestoreActionItems.iter_all': '1bc86d38c0b932c87e130090fde9d1105a6ca0df82c636b7dca0e2fd24c9d6d3',
-    'database.action_items.FirestoreActionItems.list_ids': 'bfa7ff6065f332b1150b8e611703cd9176ce091770dd46f3173dc44189628050',
+    'database.action_items.FirestoreActionItems.list_ids': '3948d1bcd948a5e6a36d39aef7d4a69bf19562b5fab40edf1e6775aa1165f7d7',
     'database.goals.FirestoreGoals.get_all': '9c29c7df864273b95db4bcad94948043418ce4b29c740ab0732816e2d59564e7',
     'database.goals.FirestoreGoals.get_history': '943dac16f0900da17e7ac97774fc1ce8e391547c5c09b7f67bf499bc559652f4',
     'database.goals.FirestoreGoals.get_user_goal': 'ade696f6b61651574b6177d4295e948fc0af3ed8ab3f5e637b64bdc1d09ded47',
@@ -214,7 +214,7 @@ BODY_DIGEST = {
     # Re-reviewed: positional .where converted to filter=FieldFilter — same field/op/value shape.
     'database.sync_backfill_sequencer._pending_for_uid': 'fc7bb91a5b03e84f63950c00ca896eaadcd97f055c571fac6a761e4d6bb4fa1d',
     # Re-reviewed: the post-commit task-list cache invalidation adds no query.
-    'database.workstreams.FirestoreWorkstreams._import_task_goal_links': '8a6795be9cc49010b33848c911928b2c57d3d18906f075b729b76d9647cfdc0a',
+    'database.workstreams.FirestoreWorkstreams.import_links_documents': 'b8617ff18f7f89e8f9d0419e7fb30d4e3f6a3df98f49ba7aa138d318807482ea',
     # Re-reviewed: public size guard rename and correction-parent rejection add
     # no query. Post-commit quiet retirement adds document reads only; terminal
     # streams still belong to the two driven callees. Retained extraction
@@ -283,34 +283,34 @@ class _PortRepoArgument:
 
 
 _PORT_MOVED = {
-    'database.action_items.create_action_item': 'database.action_items.FirestoreActionItems._create_action_item',
-    'database.action_items.create_action_items_batch': 'database.action_items.FirestoreActionItems._create_action_items_batch',
-    'database.action_items.update_action_item': 'database.action_items.FirestoreActionItems._update_action_item',
-    'database.action_items.restore_channel_write': 'database.action_items.FirestoreActionItems._restore_channel_write',
-    'database.action_items.batch_update_action_items': 'database.action_items.FirestoreActionItems._batch_update_action_items',
-    'database.action_items.delete_action_item': 'database.action_items.FirestoreActionItems._delete_action_item',
-    'database.action_items.delete_action_items_batch': 'database.action_items.FirestoreActionItems._delete_action_items_batch',
-    'database.action_items.delete_action_items_for_conversation': 'database.action_items.FirestoreActionItems._delete_action_items_for_conversation',
-    'database.action_items.retire_action_items_for_conversation': 'database.action_items.FirestoreActionItems._retire_action_items_for_conversation',
-    'database.action_items.batch_set_sync_requested': 'database.action_items.FirestoreActionItems._batch_set_sync_requested',
-    'database.action_items.batch_sync_update_action_items': 'database.action_items.FirestoreActionItems._batch_sync_update_action_items',
-    'database.goals.create_goal': 'database.goals.FirestoreGoals._create_goal',
-    'database.goals.create_goal_idempotent': 'database.goals.FirestoreGoals._create_goal_idempotent',
-    'database.goals.update_goal': 'database.goals.FirestoreGoals._update_goal',
-    'database.goals.focus_goal': 'database.goals.FirestoreGoals._focus_goal',
-    'database.goals.unfocus_goal': 'database.goals.FirestoreGoals._unfocus_goal',
-    'database.goals.transition_goal_lifecycle': 'database.goals.FirestoreGoals._transition_goal_lifecycle',
+    'database.action_items.create_action_item': 'database.action_items.FirestoreActionItems.create_document',
+    'database.action_items.create_action_items_batch': 'database.action_items.FirestoreActionItems.create_documents',
+    'database.action_items.update_action_item': 'database.action_items.FirestoreActionItems.update_document',
+    'database.action_items.restore_channel_write': 'database.action_items.FirestoreActionItems.restore_channel_document',
+    'database.action_items.batch_update_action_items': 'database.action_items.FirestoreActionItems.update_documents',
+    'database.action_items.delete_action_item': 'database.action_items.FirestoreActionItems.delete_document',
+    'database.action_items.delete_action_items_batch': 'database.action_items.FirestoreActionItems.delete_documents',
+    'database.action_items.delete_action_items_for_conversation': 'database.action_items.FirestoreActionItems.delete_conversation_documents',
+    'database.action_items.retire_action_items_for_conversation': 'database.action_items.FirestoreActionItems.retire_conversation_documents',
+    'database.action_items.batch_set_sync_requested': 'database.action_items.FirestoreActionItems.request_sync_documents',
+    'database.action_items.batch_sync_update_action_items': 'database.action_items.FirestoreActionItems.sync_update_documents',
+    'database.goals.create_goal': 'database.goals.FirestoreGoals.create_document',
+    'database.goals.create_goal_idempotent': 'database.goals.FirestoreGoals.create_idempotent_document',
+    'database.goals.update_goal': 'database.goals.FirestoreGoals.update_document',
+    'database.goals.focus_goal': 'database.goals.FirestoreGoals.focus_document',
+    'database.goals.unfocus_goal': 'database.goals.FirestoreGoals.unfocus_document',
+    'database.goals.transition_goal_lifecycle': 'database.goals.FirestoreGoals.transition_lifecycle_document',
     'database.goals._append_goal_progress_event': 'database.goals.FirestoreGoals.__append_goal_progress_event',
-    'database.goals.update_goal_progress': 'database.goals.FirestoreGoals._update_goal_progress',
-    'database.goals.delete_goal': 'database.goals.FirestoreGoals._delete_goal',
-    'database.workstreams.update_workstream': 'database.workstreams.FirestoreWorkstreams._update_workstream',
-    'database.workstreams.append_workstream_event': 'database.workstreams.FirestoreWorkstreams._append_workstream_event',
-    'database.workstreams.create_artifact_descriptor': 'database.workstreams.FirestoreWorkstreams._create_artifact_descriptor',
-    'database.workstreams.transition_artifact_status': 'database.workstreams.FirestoreWorkstreams._transition_artifact_status',
-    'database.workstreams.upsert_continuation_checkpoint': 'database.workstreams.FirestoreWorkstreams._upsert_continuation_checkpoint',
-    'database.workstreams.resolve_workstream_candidate': 'database.workstreams.FirestoreWorkstreams._resolve_workstream_candidate',
-    'database.workstreams.resolve_work_intent': 'database.workstreams.FirestoreWorkstreams._resolve_work_intent',
-    'database.workstreams.import_task_goal_links': 'database.workstreams.FirestoreWorkstreams._import_task_goal_links',
+    'database.goals.update_goal_progress': 'database.goals.FirestoreGoals.update_progress_document',
+    'database.goals.delete_goal': 'database.goals.FirestoreGoals.delete_document',
+    'database.workstreams.update_workstream': 'database.workstreams.FirestoreWorkstreams.update_document',
+    'database.workstreams.append_workstream_event': 'database.workstreams.FirestoreWorkstreams.append_event_document',
+    'database.workstreams.create_artifact_descriptor': 'database.workstreams.FirestoreWorkstreams.create_artifact_document',
+    'database.workstreams.transition_artifact_status': 'database.workstreams.FirestoreWorkstreams.transition_artifact_document',
+    'database.workstreams.upsert_continuation_checkpoint': 'database.workstreams.FirestoreWorkstreams.upsert_checkpoint_document',
+    'database.workstreams.resolve_workstream_candidate': 'database.workstreams.FirestoreWorkstreams.resolve_candidate_document',
+    'database.workstreams.resolve_work_intent': 'database.workstreams.FirestoreWorkstreams.resolve_intent_document',
+    'database.workstreams.import_task_goal_links': 'database.workstreams.FirestoreWorkstreams.import_links_documents',
 }
 _PORT_FACTORIES = {'action_items': FirestoreActionItems, 'goals': FirestoreGoals, 'workstreams': FirestoreWorkstreams}
 
@@ -3219,7 +3219,7 @@ _add(
         reason='AST doc-get false positive: the entire body is transactional document '
         'get/set/update writes (control, receipt, task, goal, workstream refs); '
         'no where/stream/query terminal exists',
-        body_digest=BODY_DIGEST['database.workstreams.FirestoreWorkstreams._import_task_goal_links'],
+        body_digest=BODY_DIGEST['database.workstreams.FirestoreWorkstreams.import_links_documents'],
     )
 )
 _add(
@@ -4251,9 +4251,18 @@ _add(
     CoveredByEntry(
         'database.action_items.FirestoreActionItems._stream',
         covered_by=(
-            'database.action_items.FirestoreActionItems._delete_action_items_for_conversation',
-            'database.action_items.FirestoreActionItems._retire_action_items_for_conversation',
+            'database.action_items.FirestoreActionItems.delete_conversation_documents',
+            'database.action_items.FirestoreActionItems.retire_conversation_documents',
         ),
         reason='Terminal for moved conversation task writers.',
+    )
+)
+
+_add(
+    DriverEntry(
+        'database.action_items.FirestoreActionItems.sync_page',
+        base={'self': _PortRepoArgument(FirestoreActionItems)},
+        domains={'updated_since': [None, T0]},
+        neutrals={'limit': _LIMIT, 'cursor': (None, 'opaque keyset; first-page query shape')},
     )
 )

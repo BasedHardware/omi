@@ -31,7 +31,7 @@ class FirestoreSpaceTx:
         self.goals = FirestoreGoals(space_id, firestore_client=client, transaction=transaction)
         self.workstreams = FirestoreWorkstreams(space_id, firestore_client=client, transaction=transaction)
         for repo in (self.action_items, self.goals, self.workstreams):
-            repo._space_tx = self
+            repo.commit_context = self
         self._fences: list[CommitFence] = []
         self._effects: list[Callable[[], None]] = []
         self._sealed = False
@@ -50,12 +50,12 @@ class FirestoreSpaceTx:
             raise RuntimeError('transaction body has already returned')
         self._effects.append(callback)
 
-    def _before_commit(self) -> None:
+    def before_commit(self) -> None:
         self._sealed = True
         for fence in self._fences:
             fence.before_commit()
 
-    def _after_commit(self, committed: bool) -> None:
+    def finish_commit(self, committed: bool) -> None:
         try:
             for fence in self._fences:
                 fence.after_commit(committed)
@@ -84,7 +84,7 @@ class FirestoreSpaceStore:
             tx = FirestoreSpaceTx(self.space_id, self.client, transaction)
             attempts.append(tx)
             result = body(tx)
-            tx._before_commit()
+            tx.before_commit()
             return result
 
         try:
@@ -101,7 +101,7 @@ class FirestoreSpaceStore:
             # A failed attempt retains its tickets until the whole retry run
             # exits. Only the final committed attempt publishes side effects.
             for index, tx in enumerate(attempts):
-                tx._after_commit(completed and index == len(attempts) - 1)
+                tx.finish_commit(completed and index == len(attempts) - 1)
 
     def run(self, body: Callable[[SpaceTx], T]) -> T:
         return self._run(body)
