@@ -1,7 +1,7 @@
-"""Firestore per-space UoW. Bodies must be pure and restartable, with all reads first.
+"""Firestore per-space UoW with per-attempt fences and post-commit effects.
 
-No buffering or commit hooks: SDK read-before-write ordering applies to the whole
-body. Standalone repositories retain domain-specific transaction retry policies.
+Bodies are restartable and obey SDK read-before-write ordering. Standalone
+repositories retain each domain operation's original retry policy.
 """
 
 from typing import Any, Callable, TypeVar
@@ -10,9 +10,13 @@ from google.cloud import firestore
 
 from database._client import get_firestore_client, run_transactional
 from database.firestore_transaction_retry import run_with_transaction_contention_retry
+from database.action_item_fence import ActionItemCommitFence
+from database.action_items import FirestoreActionItems
+from database.goals import FirestoreGoals
+from database.workstreams import FirestoreWorkstreams
 from database.folders import FirestoreFolders
 from database.people import FirestorePeople
-from database.ports.base import SpaceTx
+from database.ports.base import CommitFence, SpaceTx
 
 T = TypeVar('T')
 
@@ -20,8 +24,45 @@ T = TypeVar('T')
 class FirestoreSpaceTx:
     def __init__(self, space_id: str, client: Any, transaction: Any):
         self.space_id = space_id
+        self.transaction = transaction
         self.folders = FirestoreFolders(space_id, firestore_client=client, transaction=transaction)
         self.people = FirestorePeople(space_id, firestore_client=client, transaction=transaction)
+        self.action_items = FirestoreActionItems(space_id, firestore_client=client, transaction=transaction)
+        self.goals = FirestoreGoals(space_id, firestore_client=client, transaction=transaction)
+        self.workstreams = FirestoreWorkstreams(space_id, firestore_client=client, transaction=transaction)
+        for repo in (self.action_items, self.goals, self.workstreams):
+            repo._space_tx = self
+        self._fences: list[CommitFence] = []
+        self._effects: list[Callable[[], None]] = []
+        self._sealed = False
+
+    def register_commit_fence(self, fence: CommitFence) -> None:
+        if self._sealed:
+            raise RuntimeError('transaction body has already returned')
+        if isinstance(fence, ActionItemCommitFence) and any(
+            isinstance(existing, ActionItemCommitFence) and existing.uid == fence.uid for existing in self._fences
+        ):
+            return
+        self._fences.append(fence)
+
+    def after_commit(self, callback: Callable[[], None]) -> None:
+        if self._sealed:
+            raise RuntimeError('transaction body has already returned')
+        self._effects.append(callback)
+
+    def _before_commit(self) -> None:
+        self._sealed = True
+        for fence in self._fences:
+            fence.before_commit()
+
+    def _after_commit(self, committed: bool) -> None:
+        try:
+            for fence in self._fences:
+                fence.after_commit(committed)
+        finally:
+            if committed:
+                for effect in self._effects:
+                    effect()
 
 
 class FirestoreSpaceStore:
@@ -30,17 +71,40 @@ class FirestoreSpaceStore:
         self.client = firestore_client if firestore_client is not None else get_firestore_client()
         self.folders = FirestoreFolders(space_id, firestore_client=self.client)
         self.people = FirestorePeople(space_id, firestore_client=self.client)
+        self.action_items = FirestoreActionItems(space_id, firestore_client=self.client)
+        self.goals = FirestoreGoals(space_id, firestore_client=self.client)
+        self.workstreams = FirestoreWorkstreams(space_id, firestore_client=self.client)
+
+    def _run(self, body, *, operation_name=None):
+        attempts: list[FirestoreSpaceTx] = []
+        completed = False
+
+        @firestore.transactional
+        def apply(transaction):
+            tx = FirestoreSpaceTx(self.space_id, self.client, transaction)
+            attempts.append(tx)
+            result = body(tx)
+            tx._before_commit()
+            return result
+
+        try:
+            result = (
+                run_transactional(self.client, apply, attempts=3)
+                if operation_name is None
+                else run_with_transaction_contention_retry(
+                    self.client.transaction, apply, operation_name=operation_name
+                )
+            )
+            completed = True
+            return result
+        finally:
+            # A failed attempt retains its tickets until the whole retry run
+            # exits. Only the final committed attempt publishes side effects.
+            for index, tx in enumerate(attempts):
+                tx._after_commit(completed and index == len(attempts) - 1)
 
     def run(self, body: Callable[[SpaceTx], T]) -> T:
-        @firestore.transactional
-        def apply(transaction):
-            return body(FirestoreSpaceTx(self.space_id, self.client, transaction))
-
-        return run_transactional(self.client, apply, attempts=3)
+        return self._run(body)
 
     def run_with_contention_retry(self, body: Callable[[SpaceTx], T], *, operation_name: str) -> T:
-        @firestore.transactional
-        def apply(transaction):
-            return body(FirestoreSpaceTx(self.space_id, self.client, transaction))
-
-        return run_with_transaction_contention_retry(self.client.transaction, apply, operation_name=operation_name)
+        return self._run(body, operation_name=operation_name)

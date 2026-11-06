@@ -1,5 +1,6 @@
 """Candidate integration outbox: claim, complete, list, redrive, and malformed dead-letter."""
 
+from database.action_item_fence import fenced_action_item_commit
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional, cast
 from uuid import uuid4
@@ -304,7 +305,8 @@ def claim_candidate_integration_dispatch(
         )
         return _ClaimApply(lease_token=lease_token)
 
-    applied = apply(transaction)
+    with fenced_action_item_commit(uid):
+        applied = apply(transaction)
     if applied.exported_task_id is not None:
         bump_action_items_list_version(uid)
         dream_dirty.notify(uid, [('action_items', applied.exported_task_id)])

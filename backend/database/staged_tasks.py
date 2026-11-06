@@ -5,6 +5,7 @@ Collection: users/{uid}/staged_tasks
 
 import logging
 import uuid
+from database.action_item_fence import fenced_action_item_commit
 from datetime import datetime, timezone
 from typing import Any, List, Optional
 
@@ -460,7 +461,8 @@ def restore_legacy_conversation_items(
             delete_option = client.write_option(last_update_time=staged_snapshot.update_time)
             batch.delete(staged_ref, option=delete_option)
             try:
-                batch.commit()
+                with fenced_action_item_commit(uid):
+                    batch.commit()
             except (AlreadyExists, Conflict):
                 # An action-item collision preserves both copies for the next
                 # recovery pass or manual inspection.
