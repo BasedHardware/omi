@@ -71,6 +71,7 @@ from database.action_items import FirestoreActionItems
 from database.goals import FirestoreGoals
 from database.workstreams import FirestoreWorkstreams
 from dataclasses import replace
+import fakeredis
 from database.people import FirestorePeople
 from database.ports.folders import FolderCreate
 from database.ports.people import PersonDraft
@@ -152,6 +153,20 @@ _DEV_KEY = 'omi_dev_' + 'a' * 32
 _MCP_KEY = 'omi_mcp_' + 'a' * 32
 
 BODY_DIGEST = {
+    'database.action_items.FirestoreActionItems.iter_all': '1bc86d38c0b932c87e130090fde9d1105a6ca0df82c636b7dca0e2fd24c9d6d3',
+    'database.action_items.FirestoreActionItems.list_ids': 'bfa7ff6065f332b1150b8e611703cd9176ce091770dd46f3173dc44189628050',
+    'database.goals.FirestoreGoals.get_all': '9c29c7df864273b95db4bcad94948043418ce4b29c740ab0732816e2d59564e7',
+    'database.goals.FirestoreGoals.get_history': '943dac16f0900da17e7ac97774fc1ce8e391547c5c09b7f67bf499bc559652f4',
+    'database.goals.FirestoreGoals.get_user_goal': 'ade696f6b61651574b6177d4295e948fc0af3ed8ab3f5e637b64bdc1d09ded47',
+    'database.goals.FirestoreGoals.get_user_goals': 'cfe0cfb49323686103c695408daa23bb4dc9e9eaeb7bf5f96d8fe2e2299f36a7',
+    'database.goals.FirestoreGoals.list_progress_events': '738a79316daca63bc0f7637220d1b4c0223cac5947a137dde915cf003c7803d6',
+    'database.workstreams.FirestoreWorkstreams.get_goal_detail': 'db1486096f370fc90d5def6596d75e7912daf639ee8bf716ecfcb203c2cb2193',
+    'database.workstreams.FirestoreWorkstreams.get_workstream_detail': '84681496fb0fb8a17431715637822dff386e3309ddc2993d2dfd8929a6ff4448',
+    'database.workstreams.FirestoreWorkstreams.list_artifact_descriptors': '6ca431c0d01f80749b2cddc4a72268a1a787ebe0cd0c9eed76698a1acf1246c3',
+    'database.workstreams.FirestoreWorkstreams.list_continuation_checkpoints': '71769c81931af304434e48b08253a5f9263109b30e5917b57b7ef369f109edbd',
+    'database.workstreams.FirestoreWorkstreams.list_events': 'd132dde8f888f782bc3fbb3481d0bc53185a0c5363bb4d0054fbe6ba916a41db',
+    'database.workstreams.FirestoreWorkstreams.list_for_goal': 'bd79c36663771be0de8291ef0e13a3b72f1c765a995427f3e56be3ebea1e66b3',
+    'database.workstreams.FirestoreWorkstreams.list_open': 'd8ccef4a6a4fafbf57a4905c0b96e0640df502ef136d1d209b8af0c3176516dc',
     'database.lifecycle_metrics_queries._where': '51d3e38b20df6800101fbf671471d2538c487d9c702698c6a9ad221c43f89a79',
     'database.batch_pipeline_store.FirestoreStore.ready_for_capacity': '975eabd92f43ba5da3d847439f4d8e3592525ccd31c11dcac6463365535eac10',
     'database.batch_pipeline_store.FirestoreStore.oldest_admissible_ready': '293687cc6708d7ab2f673cb2984e6bb8cbfe581fa526db8c1040fd011dc00107',
@@ -300,7 +315,17 @@ _PORT_MOVED = {
 _PORT_FACTORIES = {'action_items': FirestoreActionItems, 'goals': FirestoreGoals, 'workstreams': FirestoreWorkstreams}
 
 
+def _task_ticket_redis(client):
+    redis = fakeredis.FakeRedis()
+    return unittest.mock.patch.object(importlib.import_module('database.action_item_versions'), '_redis', lambda: redis)
+
+
 def _add(entry: DriverEntry | CoveredByEntry | SkipEntry) -> None:
+    if isinstance(entry, DriverEntry) and entry.function in set(_PORT_MOVED) | {
+        'database.action_items.unlock_all_action_items',
+        'database.action_item_refresh.reconcile',
+    }:
+        entry = replace(entry, patchers=entry.patchers + (_task_ticket_redis,))
     old_key = entry.function
     if old_key in _PORT_MOVED:
         if isinstance(entry, DriverEntry):
@@ -4088,7 +4113,7 @@ _add(
         covered_by=('database.action_items.iter_all_action_items',),
         reason="Typed projection delegates the unchanged module query; wrapper owns no terminal.",
         expect_observed=False,
-        body_digest='1bc86d38c0b932c87e130090fde9d1105a6ca0df82c636b7dca0e2fd24c9d6d3',
+        body_digest=BODY_DIGEST['database.action_items.FirestoreActionItems.iter_all'],
     )
 )
 
@@ -4098,7 +4123,7 @@ _add(
         covered_by=('database.action_items.get_action_item_ids',),
         reason="Typed projection delegates the unchanged module query; wrapper owns no terminal.",
         expect_observed=False,
-        body_digest='bfa7ff6065f332b1150b8e611703cd9176ce091770dd46f3173dc44189628050',
+        body_digest=BODY_DIGEST['database.action_items.FirestoreActionItems.list_ids'],
     )
 )
 
@@ -4108,7 +4133,7 @@ _add(
         covered_by=('database.goals.get_user_goal',),
         reason="Typed projection delegates the unchanged module query; wrapper owns no terminal.",
         expect_observed=False,
-        body_digest='ade696f6b61651574b6177d4295e948fc0af3ed8ab3f5e637b64bdc1d09ded47',
+        body_digest=BODY_DIGEST['database.goals.FirestoreGoals.get_user_goal'],
     )
 )
 
@@ -4118,7 +4143,7 @@ _add(
         covered_by=('database.goals.get_user_goals',),
         reason="Typed projection delegates the unchanged module query; wrapper owns no terminal.",
         expect_observed=False,
-        body_digest='cfe0cfb49323686103c695408daa23bb4dc9e9eaeb7bf5f96d8fe2e2299f36a7',
+        body_digest=BODY_DIGEST['database.goals.FirestoreGoals.get_user_goals'],
     )
 )
 
@@ -4128,7 +4153,7 @@ _add(
         covered_by=('database.goals.get_all_goals',),
         reason="Typed projection delegates the unchanged module query; wrapper owns no terminal.",
         expect_observed=False,
-        body_digest='9c29c7df864273b95db4bcad94948043418ce4b29c740ab0732816e2d59564e7',
+        body_digest=BODY_DIGEST['database.goals.FirestoreGoals.get_all'],
     )
 )
 
@@ -4138,7 +4163,7 @@ _add(
         covered_by=('database.goals.get_goal_history',),
         reason="Typed projection delegates the unchanged module query; wrapper owns no terminal.",
         expect_observed=False,
-        body_digest='943dac16f0900da17e7ac97774fc1ce8e391547c5c09b7f67bf499bc559652f4',
+        body_digest=BODY_DIGEST['database.goals.FirestoreGoals.get_history'],
     )
 )
 
@@ -4148,7 +4173,7 @@ _add(
         covered_by=('database.goals.list_goal_progress_events',),
         reason="Typed projection delegates the unchanged module query; wrapper owns no terminal.",
         expect_observed=False,
-        body_digest='738a79316daca63bc0f7637220d1b4c0223cac5947a137dde915cf003c7803d6',
+        body_digest=BODY_DIGEST['database.goals.FirestoreGoals.list_progress_events'],
     )
 )
 
@@ -4158,7 +4183,7 @@ _add(
         covered_by=('database.workstreams.list_open_workstreams',),
         reason="Typed projection delegates the unchanged module query; wrapper owns no terminal.",
         expect_observed=False,
-        body_digest='d8ccef4a6a4fafbf57a4905c0b96e0640df502ef136d1d209b8af0c3176516dc',
+        body_digest=BODY_DIGEST['database.workstreams.FirestoreWorkstreams.list_open'],
     )
 )
 
@@ -4168,7 +4193,7 @@ _add(
         covered_by=('database.workstreams.list_workstreams_for_goal',),
         reason="Typed projection delegates the unchanged module query; wrapper owns no terminal.",
         expect_observed=False,
-        body_digest='bd79c36663771be0de8291ef0e13a3b72f1c765a995427f3e56be3ebea1e66b3',
+        body_digest=BODY_DIGEST['database.workstreams.FirestoreWorkstreams.list_for_goal'],
     )
 )
 
@@ -4178,7 +4203,7 @@ _add(
         covered_by=('database.workstreams.list_workstream_events',),
         reason="Typed projection delegates the unchanged module query; wrapper owns no terminal.",
         expect_observed=False,
-        body_digest='d132dde8f888f782bc3fbb3481d0bc53185a0c5363bb4d0054fbe6ba916a41db',
+        body_digest=BODY_DIGEST['database.workstreams.FirestoreWorkstreams.list_events'],
     )
 )
 
@@ -4188,7 +4213,7 @@ _add(
         covered_by=('database.workstreams.list_artifact_descriptors',),
         reason="Typed projection delegates the unchanged module query; wrapper owns no terminal.",
         expect_observed=False,
-        body_digest='6ca431c0d01f80749b2cddc4a72268a1a787ebe0cd0c9eed76698a1acf1246c3',
+        body_digest=BODY_DIGEST['database.workstreams.FirestoreWorkstreams.list_artifact_descriptors'],
     )
 )
 
@@ -4198,7 +4223,7 @@ _add(
         covered_by=('database.workstreams.list_continuation_checkpoints',),
         reason="Typed projection delegates the unchanged module query; wrapper owns no terminal.",
         expect_observed=False,
-        body_digest='71769c81931af304434e48b08253a5f9263109b30e5917b57b7ef369f109edbd',
+        body_digest=BODY_DIGEST['database.workstreams.FirestoreWorkstreams.list_continuation_checkpoints'],
     )
 )
 
@@ -4208,7 +4233,7 @@ _add(
         covered_by=('database.workstreams.get_goal_detail',),
         reason="Typed projection delegates the unchanged module query; wrapper owns no terminal.",
         expect_observed=False,
-        body_digest='db1486096f370fc90d5def6596d75e7912daf639ee8bf716ecfcb203c2cb2193',
+        body_digest=BODY_DIGEST['database.workstreams.FirestoreWorkstreams.get_goal_detail'],
     )
 )
 
@@ -4218,7 +4243,7 @@ _add(
         covered_by=('database.workstreams.get_workstream_detail',),
         reason="Typed projection delegates the unchanged module query; wrapper owns no terminal.",
         expect_observed=False,
-        body_digest='84681496fb0fb8a17431715637822dff386e3309ddc2993d2dfd8929a6ff4448',
+        body_digest=BODY_DIGEST['database.workstreams.FirestoreWorkstreams.get_workstream_detail'],
     )
 )
 

@@ -31,7 +31,7 @@ from google.cloud.firestore_v1 import FieldFilter
 from database import action_items as action_items_db
 import database.goals as goals_db
 from database.action_items_cache import bump_action_items_list_version
-from database.candidates import candidate_has_lapsed
+from database import candidates as candidates_db
 from database._client import get_firestore_client
 from database.staged_promote_cache import invalidate_around_write
 from database.read_boundary import parse_snapshot_or_none, parse_snapshot_strict, parse_snapshots
@@ -1133,7 +1133,7 @@ class FirestoreWorkstreams:
             if stored_candidate.status != CandidateStatus.pending:
                 raise WorkstreamConflictError(f'Candidate already {stored_candidate.status.value}')
             now = datetime.now(timezone.utc)
-            if candidate_has_lapsed(stored_candidate, now=now):
+            if candidates_db.candidate_has_lapsed(stored_candidate, now=now):
                 raise WorkstreamConflictError('Candidate suggestion has expired')
             proposal = stored_candidate.workstream_proposal
             if proposal is None:
