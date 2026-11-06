@@ -14,9 +14,12 @@ os.environ.setdefault(
 
 from datetime import datetime, timezone
 
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
 import routers.users as users_router
 from database import people as people_db
-from models.other import CreatePerson
 from tests.unit.fixtures.strict_firestore_transaction import (
     ForeignTransactionError,
     StrictFirestore,
@@ -124,12 +127,14 @@ def test_retried_create_returns_the_person_the_first_request_created():
     assert set(_people(store)) == {'p1'}
 
 
-def test_endpoint_returns_the_person_a_racing_request_created(monkeypatch):
+@pytest.mark.parametrize('racing_create', [False, True])
+def test_endpoint_returns_the_person_a_racing_request_created(monkeypatch, racing_create):
     store = PeopleFirestore()
 
     def lookup_misses_then_the_racing_create_lands(uid, name):
         # The other request's create commits after this request's lookup has missed.
-        store.rows[('users', uid, 'people', 'p-race')] = {**_person('p-race', name), 'is_user_created': True}
+        if racing_create:
+            store.rows[('users', uid, 'people', 'p-race')] = {**_person('p-race', name), 'is_user_created': True}
         return None
 
     unchecked_creates = []
@@ -137,8 +142,18 @@ def test_endpoint_returns_the_person_a_racing_request_created(monkeypatch):
     monkeypatch.setattr(users_router, 'create_person', lambda uid, data: unchecked_creates.append(data) or data)
     monkeypatch.setattr(people_db, 'get_firestore_client', lambda: store)
 
-    person = users_router.get_or_create_person(CreatePerson(name='Alice'), uid='u1')
+    app = FastAPI()
+    app.include_router(users_router.router)
+    app.dependency_overrides[users_router.auth.get_current_user_uid] = lambda: 'u1'
+    with TestClient(app) as client:
+        response = client.post('/v1/users/people', json={'name': 'Alice'})
 
-    assert person.id == 'p-race'
+    assert response.status_code == 200
+    person = response.json()
+    assert person['name'] == 'Alice'
+    assert person['pinned'] is False
+    assert 'revision' not in person
+    if racing_create:
+        assert person['id'] == 'p-race'
     assert unchecked_creates == []
-    assert set(_people(store)) == {'p-race'}
+    assert set(_people(store)) == {person['id']}

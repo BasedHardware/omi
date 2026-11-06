@@ -11,7 +11,7 @@ from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 @pytest.mark.parametrize('target', ['target', None])
 def test_rehome_uses_current_membership_and_preserves_other_fields(target):
     rows = {
-        ('conversations', 'still_source'): {'folder_id': 'source', 'title': 'Keep title', 'folder_user_set': True},
+        ('conversations', 'still_source'): {'folder_id': 'source', 'title': 'Keep title', 'folder_user_set': False},
         ('conversations', 'moved'): {'folder_id': 'chosen'},
         ('conversations', 'unfiled'): {'folder_id': None},
         ('conversations', 'legacy'): {'title': 'No folder'},
@@ -31,7 +31,9 @@ def test_rehome_uses_current_membership_and_preserves_other_fields(target):
     for name in ('moved', 'unfiled', 'legacy'):
         assert client.rows[('conversations', name)] == rows[('conversations', name)]
     assert ('conversations', 'gone') not in client.rows
-    assert client.transactions[0].updates == [(('conversations', 'still_source'), {'folder_id': target})]
+    assert client.transactions[0].updates == [
+        (('conversations', 'still_source'), {'folder_id': target, 'folder_user_set': True})
+    ]
 
 
 def test_rehome_materializes_all_reads_before_the_first_write(monkeypatch):

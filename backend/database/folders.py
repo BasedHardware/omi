@@ -266,7 +266,7 @@ class FirestoreFolders:
             target = self.get(target_folder_id) if target_folder_id else None
             target_count = self._count(target_folder_id) if target_folder_id else 0
             for snapshot in snapshots:
-                self._write('update', snapshot.reference, {'folder_id': target_folder_id})
+                self._write('update', snapshot.reference, {'folder_id': target_folder_id, 'folder_user_set': True})
             if target:
                 self._write(
                     'update',
@@ -490,7 +490,7 @@ def _rehome_folder_conversations(
         snapshots = list(client.get_all(references, field_paths=['folder_id'], transaction=write_transaction))
         for snapshot in snapshots:
             if snapshot.exists and _typed_doc(snapshot).get('folder_id') == source_folder_id:
-                write_transaction.update(snapshot.reference, {'folder_id': target_folder_id})
+                write_transaction.update(snapshot.reference, {'folder_id': target_folder_id, 'folder_user_set': True})
 
     run_with_transaction_contention_retry(client.transaction, rehome, operation_name='folder_delete_rehome')
 

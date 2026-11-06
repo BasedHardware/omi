@@ -515,6 +515,9 @@ PINNED_CONVERSATION_DUMPS: FrozenSet[DumpSite] = frozenset(
         # Request serialization goes only to encrypted staging, never intelligence.
         DumpSite('routers/developer_segments.py', 'stage_chunk', 'model_dump'),
         DumpSite('routers/developer.py', 'update_goal', 'model_dump'),
+        # FolderEntity serialization for the Developer API folder response;
+        # this path neither reads a Conversation nor feeds intelligence.
+        DumpSite('routers/developer.py', 'get_user_folders', 'model_dump'),
         # DailySummaryDayStatsPayload aggregates (counts/minutes watched), not
         # conversation content; transcripts reach the LLM via
         # conversations_to_string. Reviewed with the daily-summary work (#12636).

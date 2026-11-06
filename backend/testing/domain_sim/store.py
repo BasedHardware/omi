@@ -194,7 +194,7 @@ class SimFolders(_Repo):
             target = default.id if default else None
         for conv in self.store.state['conversations'].values():
             if conv.get('folder_id') == folder_id:
-                conv['folder_id'] = target
+                conv.update(folder_id=target, folder_user_set=True)
         if target:
             self.refresh_conversation_count(target)
         self.store.state['folders'].pop(folder_id, None)

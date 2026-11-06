@@ -191,7 +191,9 @@ def test_uow_atomicity_and_cross_domain_composition(domain_backend):
 
 
 @pytest.mark.parametrize('default', [True, False])
-def test_delete_rehomes_and_refreshes_count(domain_backend, default):
+@pytest.mark.parametrize('in_uow', [True, False])
+@pytest.mark.parametrize('user_set', [None, False], ids=['unset', 'false'])
+def test_delete_rehomes_and_refreshes_count(domain_backend, default, in_uow, user_set):
     h = domain_backend
     sid = h.space('delete')
     repo = h.folders(sid)
@@ -202,11 +204,22 @@ def test_delete_rehomes_and_refreshes_count(domain_backend, default):
         sid,
         'conversations',
         'c',
-        {'folder_id': source.id, 'folder_user_set': True, 'discarded': False, 'created_at': NOW},
+        {
+            'folder_id': source.id,
+            'discarded': False,
+            'created_at': NOW,
+            **({'folder_user_set': user_set} if user_set is not None else {}),
+        },
     )
-    repo.delete(source.id)
+    if in_uow:
+        assert h.store(sid).run(lambda tx: tx.folders.delete(source.id))
+    else:
+        assert repo.delete(source.id)
     assert repo.get(source.id) is None
     target = 'default' if default else None
+    rehomed = h.read(sid, 'conversations', 'c')
+    assert rehomed['folder_id'] == target
+    assert rehomed['folder_user_set'] is True
     if default:
         assert repo.get(target).conversation_count == 1
         assert repo.conversations_in_folder(target)[0]['folder_user_set'] is True
