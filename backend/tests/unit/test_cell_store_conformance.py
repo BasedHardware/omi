@@ -229,20 +229,23 @@ def test_current_state_read_set(harness, space):
 def test_compaction_floor_and_tombstone(harness, space):
     store = harness.store
     old = NOW - 40 * 86400
-    for i in range(4):
+    for i in range(2):
         write(store, space, str(i), now=old)
     store.run(space, lambda tx: tx.delete('notes', 'missing'), actor_uid=space, now=old)
+    for i in range(2, 4):
+        write(store, space, str(i), now=old)
     write(store, space, 'recent')
     store.set_cursor(space, 'device', last_seq=5, now=NOW)
     assert store.floor(space, now=NOW) == 5
-    assert store.compact(space, now=NOW) == 4
+    assert store.compact(space, now=NOW) == 3
     with pytest.raises(ResyncRequired) as error:
         store.pull(space, cursor=3, now=NOW)
     assert (error.value.floor, error.value.epoch) == (5, 1)
     assert store.pull(space, cursor=5, now=NOW).entries[0].seq == 6
     with store.pool.connection() as conn:
         assert conn.execute('SELECT seq, op FROM change_log WHERE space_id=%s ORDER BY seq', (space,)).fetchall() == [
-            (5, 'delete'),
+            (3, 'delete'),
+            (5, 'upsert'),
             (6, 'upsert'),
         ]
     assert store.compact(space, now=NOW) == 0
