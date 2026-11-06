@@ -340,7 +340,7 @@ def columns():
                                               ("other", "Other", "number")])],
                    unit="currencyUSD", stack=True, time_from="40d",
                    overrides=[color(n, h) for n, h in PLANS.items()])),
-        (3, chart("Shopify sales per week",
+        (6, chart("Shopify sales per week",
                    "Mon–Sun weeks. Net device sales (refunds restate their sale week, no tax/shipping) and Omi Unlimited plan prepay cash (reported separately, never MRR). Device units in the tooltip. The latest Hardware bar is the Hardware stat.",
                    [target("revenue", "hardware", [("date", "Week ending", "timestamp"),
                                                    ("hardwareUsd", "Hardware", "number"),
@@ -350,34 +350,8 @@ def columns():
                    overrides=[color("Hardware", REVENUE), color("Plan prepay (cash)", MUTED),
                               hidden("Devices"), prop("Devices", ("unit", "short"))],
                    extra=barchart_options(time_x=True))),
-        (3, variable_margin_stat()),
-        (1, variable_margin_status()),
-        (4, chart("Cost run rate vs MRR",
-                  "The variable margin's two lines: violet = MRR (that day's FinOps book snapshot, USD-only: "
-                  "non-USD paying subscriptions excluded), blue-grey = real monthly cost (trailing-7-day run "
-                  f"rate × 30.44). Dashed green = the cost level where margin is {MARGIN_GOAL_PCT:g}%. Same scope as "
-                  "the Variable margin tile above (GCP net ex prepaid Vertex reserved, one-time GCP incidents "
-                  "included, + OpenAI, Soniox, Modulate, Stripe fees); the tooltip carries each line's run "
-                  "rate and the excluded prepaid reserved dollars. Settled through D−2; D−1 and today are live estimates (est.); a day without a book snapshot "
-                  "gaps the MRR line, never borrows a neighbour's.",
-                  [target("health", "variableMargin", [DATE, ("costPerMonth", "Cost run rate", "number"),
-                                                       ("mrr", "MRR (book)", "number"),
-                                                       ("goalCost", GOAL_COST, "number"),
-                                                       ("gcpPerMonth", "GCP /mo", "number"),
-                                                       ("vertexReservedPerMonth", "Vertex reserved excluded", "number"),
-                                                       ("openaiPerMonth", "OpenAI /mo", "number"),
-                                                       ("sonioxPerMonth", "Soniox /mo", "number"),
-                                                       ("modulatePerMonth", "Modulate /mo", "number"),
-                                                       ("feesPerMonth", "Stripe fees /mo", "number")])],
-                  unit="currencyUSD", decimals=0, time_from="62d", soft_min=None,
-                  overrides=[color("Cost run rate", COST["GCP"]),
-                             line("MRR (book)", REVENUE, 3),
-                             dashed(GOAL_COST, STATUS_GOOD),
-                             *[tooltip_only(n) for n in ("GCP /mo", "Vertex reserved excluded", "OpenAI /mo",
-                                                          "Soniox /mo", "Modulate /mo", "Stripe fees /mo")]],
-                  extra=disconnect_after(1.5))),
-        (6, margin_by_plan()),
-        (1, margin_status()),
+        (4, variable_margin_stat()),
+        (8, margin_by_plan()),
     ]
     health = [
         stat("Health", ALL_IN + "All-in/day: the settled day D−2, every line of the all-in stack above (it excludes the margin-only lines OpenRouter and Pinecone). "
@@ -443,7 +417,7 @@ def margin_by_plan():
                  "fully-loaded plan cost + the shared pool (TV all-in − FinOps: BigQuery, STT, SaaS) split by each "
                  "plan's cost-active user-days. Lines: margin % (left); Free: −$/day bars (right); $/day and the "
                  "unattributed row in the tooltip. FinOps plan cost settles ~3 days back, so this chart ends earlier "
-                 "than the wall (line below); a day without both cost and revenue is a gap. Caveats: STT is not "
+                 "than the wall (its data-through day is the marginStatus frame of /api/omi/stats/wall/series/health); a day without both cost and revenue is a gap. Caveats: STT is not "
                  "invoiced per plan (vendor cost is pooled; GCP audio is allocated by speech seconds), and plan "
                  "membership comes from a point-in-time snapshot.",
                  [target("health", "marginByPlan", [DATE, *pct, ("basicMargin", FREE, "number"), *money])],
@@ -463,30 +437,19 @@ def tooltip_only(name):
                 ("custom.hideFrom", {"legend": True, "tooltip": False, "viz": False}))
 
 
-def margin_status():
-    """Margin by plan's own data-through day and how STT/SaaS were priced."""
-    panel = data_through()
-    panel["description"] = ("Margin by plan's last day with both a settled FinOps plan cost and a book snapshot, "
-                            "and the source used for each all-in line. Estimates are dated and marked stale after "
-                            "35 days; measured SaaS is labeled from Mercury.")
-    panel["targets"] = [target("health", "marginStatus", [("text", "Margin status", "string")])]
-    panel["fieldConfig"]["defaults"]["noValue"] = "Margin through —"
-    return panel
-
-
 VARIABLE_MARGIN = ("Variable margin (approved 2026-10-24, definition 2026-10-23): (MRR − real monthly cost) ÷ MRR. "
                    "Real monthly cost = the trailing-7-day run rate (× 30.44) of GCP net of credits with only the "
                    "prepaid Vertex reserved capacity excluded (a one-time GCP incident stays in), plus OpenAI, "
                    "Soniox, Modulate (Mercury cash), OpenRouter and Pinecone (configured, dated estimates) and Stripe "
-                   "fees. The development project's GCP is excluded and shown on the status line. It excludes "
+                   "fees. The development project's GCP is excluded. It excludes "
                    "marketing, hardware, SaaS tooling and non-GCP infra (the all-in stack on Health counts those). "
                    "MRR = the FinOps plan book, USD-only: non-USD paying subscriptions are excluded from the figure "
-                   "and named with their count on the status line. The headline is the live estimate (est.) for "
+                   "and counted in the variableMarginStatus frame of /api/omi/stats/wall/series/health. The headline is the live estimate (est.) for "
                    "today, from metered Cloud Monitoring usage lagged 5 minutes; settled through D−2 beneath it; "
                    "the sparkline is the daily trailing-7d series over 60 days. "
                    f"Goal {MARGIN_GOAL_PCT:g}%: green at or above, red below. When the latest day has no MRR book snapshot the "
-                   "headline shows no value (no MRR book), never the previous day's margin. The line below names "
-                   "each line's source; a missing or stale vendor line is disclosed there, never silently dropped.")
+                   "headline shows no value (no MRR book), never the previous day's margin. The variableMarginStatus frame "
+                   "names each line's source; a missing or stale vendor line is disclosed there, never silently dropped.")
 
 
 def variable_margin_stat():
@@ -510,25 +473,6 @@ def variable_margin_stat():
                          "showPercentChange": False,
                          "text": {"titleSize": STAT_LABEL_SIZE, "valueSize": STAT_VALUE_SIZE}},
              "timeFrom": "62d", "hideTimeOverride": True}
-    return panel
-
-
-def variable_margin_status():
-    """The tile's disclosure line: data-through day, the MRR book's source with
-    its non-USD exclusion count, and how every cost line was priced (measured /
-    Mercury cash / dated estimate), with missing or stale lines named — e.g.
-    "Soniox: n/a since …" — never a silent undercount."""
-    panel = data_through()
-    panel["description"] = ("First line: the live estimate through today (est.) and the settled D−2 margin with the "
-                            "variance of the stored live days against it (live − settled, 7-day window). Then the "
-                            "variable margin's data-through day, the MRR book's source (FinOps plan book, USD-only, "
-                            "non-USD paying subscriptions excluded with their count) and the source of each "
-                            "in-scope cost line: GCP net ex reserved, OpenAI, Soniox, Modulate, OpenRouter, Pinecone, Stripe fees. "
-                            "Soniox coverage is aggregated over the whole 7-day window (measured / est. / "
-                            "gap-spread day counts). A line with no source is named (n/a), a dated estimate "
-                            "carries its read date and goes stale by its own threshold.")
-    panel["targets"] = [target("health", "variableMarginStatus", [("text", "Margin sources", "string")])]
-    panel["fieldConfig"]["defaults"]["noValue"] = "Margin sources —"
     return panel
 
 

@@ -591,17 +591,23 @@ export function growthFrames(
     for (const r of rows)
       if (Number(r[0]) === p && String(r[1]).startsWith(DAYS_ROW_PREFIX))
         lcurve[p][String(r[1]).slice(DAYS_ROW_PREFIX.length)] = Number(r[2]);
+    // Growth accounting compares against the prior period. When that period
+    // starts before full telemetry, its users are undercounted: "lost" shrinks
+    // and "back after a break" swells (the 2026-05-14 quick ratio read 3.9).
+    const accounted =
+      isoDay(shiftDay(end, -7 * (p + 2))) >= QUALIFIED_TELEMETRY_START;
     points.set(isoDay(shiftDay(end, -7 * p - 1)), {
       total,
       macos: a.split.macos,
       mobile: a.split.mobile,
       other: a.split.other,
       mcp: a.split.mcp ?? null,
-      new: fresh,
-      resurrected,
-      retained,
-      churned: -churned,
-      quickRatio: churned ? round((fresh + resurrected) / churned) : null,
+      new: accounted ? fresh : null,
+      resurrected: accounted ? resurrected : null,
+      retained: accounted ? retained : null,
+      churned: accounted ? -churned : null,
+      quickRatio:
+        accounted && churned ? round((fresh + resurrected) / churned) : null,
       stickiness: total ? round((100 * sum(3)) / (7 * total), 1) : null,
     });
   }

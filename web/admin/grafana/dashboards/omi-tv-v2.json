@@ -3838,14 +3838,14 @@
         "x": 15,
         "y": 9,
         "w": 5,
-        "h": 3
+        "h": 6
       },
       "id": 20
     },
     {
       "type": "stat",
       "title": "Variable margin (live est.)",
-      "description": "Variable margin (approved 2026-10-24, definition 2026-10-23): (MRR \u2212 real monthly cost) \u00f7 MRR. Real monthly cost = the trailing-7-day run rate (\u00d7 30.44) of GCP net of credits with only the prepaid Vertex reserved capacity excluded (a one-time GCP incident stays in), plus OpenAI, Soniox, Modulate (Mercury cash), OpenRouter and Pinecone (configured, dated estimates) and Stripe fees. The development project's GCP is excluded and shown on the status line. It excludes marketing, hardware, SaaS tooling and non-GCP infra (the all-in stack on Health counts those). MRR = the FinOps plan book, USD-only: non-USD paying subscriptions are excluded from the figure and named with their count on the status line. The headline is the live estimate (est.) for today, from metered Cloud Monitoring usage lagged 5 minutes; settled through D\u22122 beneath it; the sparkline is the daily trailing-7d series over 60 days. Goal 50%: green at or above, red below. When the latest day has no MRR book snapshot the headline shows no value (no MRR book), never the previous day's margin. The line below names each line's source; a missing or stale vendor line is disclosed there, never silently dropped.",
+      "description": "Variable margin (approved 2026-10-24, definition 2026-10-23): (MRR \u2212 real monthly cost) \u00f7 MRR. Real monthly cost = the trailing-7-day run rate (\u00d7 30.44) of GCP net of credits with only the prepaid Vertex reserved capacity excluded (a one-time GCP incident stays in), plus OpenAI, Soniox, Modulate (Mercury cash), OpenRouter and Pinecone (configured, dated estimates) and Stripe fees. The development project's GCP is excluded. It excludes marketing, hardware, SaaS tooling and non-GCP infra (the all-in stack on Health counts those). MRR = the FinOps plan book, USD-only: non-USD paying subscriptions are excluded from the figure and counted in the variableMarginStatus frame of /api/omi/stats/wall/series/health. The headline is the live estimate (est.) for today, from metered Cloud Monitoring usage lagged 5 minutes; settled through D\u22122 beneath it; the sparkline is the daily trailing-7d series over 60 days. Goal 50%: green at or above, red below. When the latest day has no MRR book snapshot the headline shows no value (no MRR book), never the previous day's margin. The variableMarginStatus frame names each line's source; a missing or stale vendor line is disclosed there, never silently dropped.",
       "datasource": {
         "type": "yesoreyeram-infinity-datasource",
         "uid": "omi-admin-api"
@@ -3923,661 +3923,16 @@
       "hideTimeOverride": true,
       "gridPos": {
         "x": 15,
-        "y": 12,
+        "y": 15,
         "w": 5,
-        "h": 3
+        "h": 4
       },
       "id": 21
     },
     {
-      "type": "stat",
-      "title": "",
-      "transparent": true,
-      "datasource": {
-        "type": "yesoreyeram-infinity-datasource",
-        "uid": "omi-admin-api"
-      },
-      "description": "First line: the live estimate through today (est.) and the settled D\u22122 margin with the variance of the stored live days against it (live \u2212 settled, 7-day window). Then the variable margin's data-through day, the MRR book's source (FinOps plan book, USD-only, non-USD paying subscriptions excluded with their count) and the source of each in-scope cost line: GCP net ex reserved, OpenAI, Soniox, Modulate, OpenRouter, Pinecone, Stripe fees. Soniox coverage is aggregated over the whole 7-day window (measured / est. / gap-spread day counts). A line with no source is named (n/a), a dated estimate carries its read date and goes stale by its own threshold.",
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "yesoreyeram-infinity-datasource",
-            "uid": "omi-admin-api"
-          },
-          "type": "json",
-          "source": "url",
-          "format": "table",
-          "parser": "backend",
-          "url": "http://127.0.0.1:8899/api/omi/stats/wall/series/health",
-          "url_options": {
-            "method": "GET"
-          },
-          "root_selector": "frames.variableMarginStatus",
-          "columns": [
-            {
-              "selector": "text",
-              "text": "Margin sources",
-              "type": "string"
-            }
-          ]
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "fixed",
-            "fixedColor": "#6b6a63"
-          },
-          "noValue": "Margin sources \u2014"
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "/.*/",
-          "values": false
-        },
-        "textMode": "value",
-        "colorMode": "value",
-        "graphMode": "none",
-        "justifyMode": "center",
-        "orientation": "vertical",
-        "wideLayout": true,
-        "showPercentChange": false,
-        "text": {
-          "valueSize": 12
-        }
-      },
-      "gridPos": {
-        "x": 15,
-        "y": 15,
-        "w": 5,
-        "h": 1
-      },
-      "id": 22
-    },
-    {
-      "type": "timeseries",
-      "title": "Cost run rate vs MRR",
-      "description": "The variable margin's two lines: violet = MRR (that day's FinOps book snapshot, USD-only: non-USD paying subscriptions excluded), blue-grey = real monthly cost (trailing-7-day run rate \u00d7 30.44). Dashed green = the cost level where margin is 50%. Same scope as the Variable margin tile above (GCP net ex prepaid Vertex reserved, one-time GCP incidents included, + OpenAI, Soniox, Modulate, Stripe fees); the tooltip carries each line's run rate and the excluded prepaid reserved dollars. Settled through D\u22122; D\u22121 and today are live estimates (est.); a day without a book snapshot gaps the MRR line, never borrows a neighbour's.",
-      "datasource": {
-        "type": "yesoreyeram-infinity-datasource",
-        "uid": "omi-admin-api"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "yesoreyeram-infinity-datasource",
-            "uid": "omi-admin-api"
-          },
-          "type": "json",
-          "source": "url",
-          "format": "table",
-          "parser": "backend",
-          "url": "http://127.0.0.1:8899/api/omi/stats/wall/series/health",
-          "url_options": {
-            "method": "GET"
-          },
-          "root_selector": "frames.variableMargin",
-          "columns": [
-            {
-              "selector": "date",
-              "text": "date",
-              "type": "timestamp"
-            },
-            {
-              "selector": "costPerMonth",
-              "text": "Cost run rate",
-              "type": "number"
-            },
-            {
-              "selector": "mrr",
-              "text": "MRR (book)",
-              "type": "number"
-            },
-            {
-              "selector": "goalCost",
-              "text": "50% target cost",
-              "type": "number"
-            },
-            {
-              "selector": "gcpPerMonth",
-              "text": "GCP /mo",
-              "type": "number"
-            },
-            {
-              "selector": "vertexReservedPerMonth",
-              "text": "Vertex reserved excluded",
-              "type": "number"
-            },
-            {
-              "selector": "openaiPerMonth",
-              "text": "OpenAI /mo",
-              "type": "number"
-            },
-            {
-              "selector": "sonioxPerMonth",
-              "text": "Soniox /mo",
-              "type": "number"
-            },
-            {
-              "selector": "modulatePerMonth",
-              "text": "Modulate /mo",
-              "type": "number"
-            },
-            {
-              "selector": "feesPerMonth",
-              "text": "Stripe fees /mo",
-              "type": "number"
-            }
-          ]
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "currencyUSD",
-          "color": {
-            "mode": "fixed",
-            "fixedColor": "#e8e6df"
-          },
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 2,
-            "fillOpacity": 0,
-            "gradientMode": "none",
-            "showPoints": "never",
-            "pointSize": 5,
-            "spanNulls": false,
-            "barAlignment": 0,
-            "axisPlacement": "left",
-            "axisLabel": "",
-            "axisSoftMin": null,
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "stacking": {
-              "mode": "none",
-              "group": "A"
-            },
-            "lineInterpolation": "smooth",
-            "thresholdsStyle": {
-              "mode": "off"
-            },
-            "insertNulls": 129600000
-          },
-          "noValue": "Loading\u2026",
-          "decimals": 0
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Cost run rate"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Cost run rate"
-              },
-              {
-                "id": "color",
-                "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#5c6b80"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "MRR (book)"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "MRR (book)"
-              },
-              {
-                "id": "color",
-                "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#9085e9"
-                }
-              },
-              {
-                "id": "custom.drawStyle",
-                "value": "line"
-              },
-              {
-                "id": "custom.fillOpacity",
-                "value": 0
-              },
-              {
-                "id": "custom.stacking",
-                "value": {
-                  "mode": "none",
-                  "group": "A"
-                }
-              },
-              {
-                "id": "custom.lineWidth",
-                "value": 3
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "50% target cost"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "50% target cost"
-              },
-              {
-                "id": "color",
-                "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#0ca30c"
-                }
-              },
-              {
-                "id": "custom.lineStyle",
-                "value": {
-                  "fill": "dash",
-                  "dash": [
-                    6,
-                    4
-                  ]
-                }
-              },
-              {
-                "id": "custom.drawStyle",
-                "value": "line"
-              },
-              {
-                "id": "custom.fillOpacity",
-                "value": 0
-              },
-              {
-                "id": "custom.stacking",
-                "value": {
-                  "mode": "none",
-                  "group": "A"
-                }
-              },
-              {
-                "id": "custom.lineWidth",
-                "value": 2
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "GCP /mo"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "GCP /mo"
-              },
-              {
-                "id": "unit",
-                "value": "currencyUSD"
-              },
-              {
-                "id": "decimals",
-                "value": 2
-              },
-              {
-                "id": "min",
-                "value": -1000000.0
-              },
-              {
-                "id": "max",
-                "value": 1000000.0
-              },
-              {
-                "id": "custom.axisPlacement",
-                "value": "hidden"
-              },
-              {
-                "id": "custom.lineWidth",
-                "value": 0
-              },
-              {
-                "id": "custom.fillOpacity",
-                "value": 0
-              },
-              {
-                "id": "custom.pointSize",
-                "value": 1
-              },
-              {
-                "id": "custom.hideFrom",
-                "value": {
-                  "legend": true,
-                  "tooltip": false,
-                  "viz": false
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Vertex reserved excluded"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Vertex reserved excluded"
-              },
-              {
-                "id": "unit",
-                "value": "currencyUSD"
-              },
-              {
-                "id": "decimals",
-                "value": 2
-              },
-              {
-                "id": "min",
-                "value": -1000000.0
-              },
-              {
-                "id": "max",
-                "value": 1000000.0
-              },
-              {
-                "id": "custom.axisPlacement",
-                "value": "hidden"
-              },
-              {
-                "id": "custom.lineWidth",
-                "value": 0
-              },
-              {
-                "id": "custom.fillOpacity",
-                "value": 0
-              },
-              {
-                "id": "custom.pointSize",
-                "value": 1
-              },
-              {
-                "id": "custom.hideFrom",
-                "value": {
-                  "legend": true,
-                  "tooltip": false,
-                  "viz": false
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "OpenAI /mo"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "OpenAI /mo"
-              },
-              {
-                "id": "unit",
-                "value": "currencyUSD"
-              },
-              {
-                "id": "decimals",
-                "value": 2
-              },
-              {
-                "id": "min",
-                "value": -1000000.0
-              },
-              {
-                "id": "max",
-                "value": 1000000.0
-              },
-              {
-                "id": "custom.axisPlacement",
-                "value": "hidden"
-              },
-              {
-                "id": "custom.lineWidth",
-                "value": 0
-              },
-              {
-                "id": "custom.fillOpacity",
-                "value": 0
-              },
-              {
-                "id": "custom.pointSize",
-                "value": 1
-              },
-              {
-                "id": "custom.hideFrom",
-                "value": {
-                  "legend": true,
-                  "tooltip": false,
-                  "viz": false
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Soniox /mo"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Soniox /mo"
-              },
-              {
-                "id": "unit",
-                "value": "currencyUSD"
-              },
-              {
-                "id": "decimals",
-                "value": 2
-              },
-              {
-                "id": "min",
-                "value": -1000000.0
-              },
-              {
-                "id": "max",
-                "value": 1000000.0
-              },
-              {
-                "id": "custom.axisPlacement",
-                "value": "hidden"
-              },
-              {
-                "id": "custom.lineWidth",
-                "value": 0
-              },
-              {
-                "id": "custom.fillOpacity",
-                "value": 0
-              },
-              {
-                "id": "custom.pointSize",
-                "value": 1
-              },
-              {
-                "id": "custom.hideFrom",
-                "value": {
-                  "legend": true,
-                  "tooltip": false,
-                  "viz": false
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Modulate /mo"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Modulate /mo"
-              },
-              {
-                "id": "unit",
-                "value": "currencyUSD"
-              },
-              {
-                "id": "decimals",
-                "value": 2
-              },
-              {
-                "id": "min",
-                "value": -1000000.0
-              },
-              {
-                "id": "max",
-                "value": 1000000.0
-              },
-              {
-                "id": "custom.axisPlacement",
-                "value": "hidden"
-              },
-              {
-                "id": "custom.lineWidth",
-                "value": 0
-              },
-              {
-                "id": "custom.fillOpacity",
-                "value": 0
-              },
-              {
-                "id": "custom.pointSize",
-                "value": 1
-              },
-              {
-                "id": "custom.hideFrom",
-                "value": {
-                  "legend": true,
-                  "tooltip": false,
-                  "viz": false
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Stripe fees /mo"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Stripe fees /mo"
-              },
-              {
-                "id": "unit",
-                "value": "currencyUSD"
-              },
-              {
-                "id": "decimals",
-                "value": 2
-              },
-              {
-                "id": "min",
-                "value": -1000000.0
-              },
-              {
-                "id": "max",
-                "value": 1000000.0
-              },
-              {
-                "id": "custom.axisPlacement",
-                "value": "hidden"
-              },
-              {
-                "id": "custom.lineWidth",
-                "value": 0
-              },
-              {
-                "id": "custom.fillOpacity",
-                "value": 0
-              },
-              {
-                "id": "custom.pointSize",
-                "value": 1
-              },
-              {
-                "id": "custom.hideFrom",
-                "value": {
-                  "legend": true,
-                  "tooltip": false,
-                  "viz": false
-                }
-              }
-            ]
-          }
-        ]
-      },
-      "options": {
-        "legend": {
-          "showLegend": true,
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "none"
-        }
-      },
-      "transformations": [
-        {
-          "id": "organize",
-          "options": {
-            "indexByName": {
-              "date": 0,
-              "Cost run rate": 1,
-              "MRR (book)": 2,
-              "50% target cost": 3,
-              "GCP /mo": 4,
-              "Vertex reserved excluded": 5,
-              "OpenAI /mo": 6,
-              "Soniox /mo": 7,
-              "Modulate /mo": 8,
-              "Stripe fees /mo": 9
-            },
-            "excludeByName": {},
-            "renameByName": {}
-          }
-        }
-      ],
-      "timeFrom": "62d",
-      "hideTimeOverride": true,
-      "gridPos": {
-        "x": 15,
-        "y": 16,
-        "w": 5,
-        "h": 4
-      },
-      "id": 23
-    },
-    {
       "type": "timeseries",
       "title": "Margin by plan",
-      "description": "Allocated estimate, not gross margin. Revenue = that day's FinOps MRR \u00f7 30.4. Cost = FinOps fully-loaded plan cost + the shared pool (TV all-in \u2212 FinOps: BigQuery, STT, SaaS) split by each plan's cost-active user-days. Lines: margin % (left); Free: \u2212$/day bars (right); $/day and the unattributed row in the tooltip. FinOps plan cost settles ~3 days back, so this chart ends earlier than the wall (line below); a day without both cost and revenue is a gap. Caveats: STT is not invoiced per plan (vendor cost is pooled; GCP audio is allocated by speech seconds), and plan membership comes from a point-in-time snapshot.",
+      "description": "Allocated estimate, not gross margin. Revenue = that day's FinOps MRR \u00f7 30.4. Cost = FinOps fully-loaded plan cost + the shared pool (TV all-in \u2212 FinOps: BigQuery, STT, SaaS) split by each plan's cost-active user-days. Lines: margin % (left); Free: \u2212$/day bars (right); $/day and the unattributed row in the tooltip. FinOps plan cost settles ~3 days back, so this chart ends earlier than the wall (its data-through day is the marginStatus frame of /api/omi/stats/wall/series/health); a day without both cost and revenue is a gap. Caveats: STT is not invoiced per plan (vendor cost is pooled; GCP audio is allocated by speech seconds), and plan membership comes from a point-in-time snapshot.",
       "datasource": {
         "type": "yesoreyeram-infinity-datasource",
         "uid": "omi-admin-api"
@@ -5951,82 +5306,11 @@
       "hideTimeOverride": true,
       "gridPos": {
         "x": 15,
-        "y": 20,
+        "y": 19,
         "w": 5,
-        "h": 6
+        "h": 8
       },
-      "id": 24
-    },
-    {
-      "type": "stat",
-      "title": "",
-      "transparent": true,
-      "datasource": {
-        "type": "yesoreyeram-infinity-datasource",
-        "uid": "omi-admin-api"
-      },
-      "description": "Margin by plan's last day with both a settled FinOps plan cost and a book snapshot, and the source used for each all-in line. Estimates are dated and marked stale after 35 days; measured SaaS is labeled from Mercury.",
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "yesoreyeram-infinity-datasource",
-            "uid": "omi-admin-api"
-          },
-          "type": "json",
-          "source": "url",
-          "format": "table",
-          "parser": "backend",
-          "url": "http://127.0.0.1:8899/api/omi/stats/wall/series/health",
-          "url_options": {
-            "method": "GET"
-          },
-          "root_selector": "frames.marginStatus",
-          "columns": [
-            {
-              "selector": "text",
-              "text": "Margin status",
-              "type": "string"
-            }
-          ]
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "fixed",
-            "fixedColor": "#6b6a63"
-          },
-          "noValue": "Margin through \u2014"
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "/.*/",
-          "values": false
-        },
-        "textMode": "value",
-        "colorMode": "value",
-        "graphMode": "none",
-        "justifyMode": "center",
-        "orientation": "vertical",
-        "wideLayout": true,
-        "showPercentChange": false,
-        "text": {
-          "valueSize": 12
-        }
-      },
-      "gridPos": {
-        "x": 15,
-        "y": 26,
-        "w": 5,
-        "h": 1
-      },
-      "id": 25
+      "id": 22
     },
     {
       "type": "stat",
@@ -6161,7 +5445,7 @@
         "w": 4,
         "h": 3
       },
-      "id": 26
+      "id": 23
     },
     {
       "type": "stat",
@@ -6270,7 +5554,7 @@
         "w": 4,
         "h": 1
       },
-      "id": 27
+      "id": 24
     },
     {
       "type": "timeseries",
@@ -6733,7 +6017,7 @@
         "w": 4,
         "h": 12
       },
-      "id": 28
+      "id": 25
     },
     {
       "type": "timeseries",
@@ -6909,7 +6193,7 @@
         "w": 4,
         "h": 10
       },
-      "id": 29
+      "id": 26
     },
     {
       "type": "stat",
@@ -6980,7 +6264,7 @@
         "w": 4,
         "h": 1
       },
-      "id": 30
+      "id": 27
     },
     {
       "type": "barchart",
@@ -7130,7 +6414,7 @@
         "w": 11,
         "h": 9
       },
-      "id": 31
+      "id": 28
     },
     {
       "type": "timeseries",
@@ -7282,7 +6566,7 @@
         "w": 7,
         "h": 9
       },
-      "id": 32
+      "id": 29
     },
     {
       "type": "barchart",
@@ -7432,7 +6716,7 @@
         "w": 6,
         "h": 9
       },
-      "id": 33
+      "id": 30
     }
   ],
   "links": [],

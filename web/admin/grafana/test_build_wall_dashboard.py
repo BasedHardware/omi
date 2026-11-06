@@ -224,13 +224,11 @@ class WallV2Contract(unittest.TestCase):
         self.assertEqual(panel["timeFrom"], "35d")  # the FinOps book's daily history
         self.assertIn("one point per day", panel["description"])
 
-    def test_margin_by_plan_keeps_its_frame_and_status_line(self):
+    def test_margin_by_plan_keeps_its_frame_and_closes_the_column(self):
         from build_wall_dashboard import FREE, PLAN_NAMES
         board = load("omi-tv-v2")
         panel = next(p for p in board["panels"] if p["title"] == "Margin by plan")
-        # Still the Revenue column's tall closing chart, directly above its
-        # status line (the Variable margin tile now fills the space beside
-        # Unit economics instead — same frame family, 2026-10-24).
+        # The Revenue column's tall closing chart.
         self.assertEqual(panel["gridPos"]["x"], 15)
         self.assertGreaterEqual(panel["gridPos"]["h"], 6)
         target = panel["targets"][0]
@@ -265,11 +263,14 @@ class WallV2Contract(unittest.TestCase):
         for phrase in ("Allocated estimate", "cost-active user-days", "speech seconds", "point-in-time snapshot",
                        "~3 days back"):
             self.assertIn(phrase, panel["description"])
-        status = next(p for p in board["panels"] if p["targets"][0]["root_selector"] == "frames.marginStatus")
-        self.assertEqual(status["gridPos"], {**panel["gridPos"], "y": panel["gridPos"]["y"] + panel["gridPos"]["h"],
-                                             "h": 1})
+        # It closes the Revenue column; its data-through text stays in the API
+        # (frames.marginStatus), not as a tiny line on the wall (David 2026-11-06).
+        from build_wall_dashboard import WALL_H
+        self.assertEqual(panel["gridPos"]["y"] + panel["gridPos"]["h"], WALL_H)
+        roots = {t.get("root_selector") for p in board["panels"] for t in p.get("targets", [])}
+        self.assertNotIn("frames.marginStatus", roots)
 
-    def test_all_in_tiles_name_their_scope_and_status_carries_settled_variance(self):
+    def test_all_in_tiles_name_their_scope(self):
         board = load("omi-tv-v2")
         # Relabelled so the names say what they include (David 2026-11-02): the
         # stat names stay short (no wrap at 1440), the description carries scope.
@@ -279,12 +280,6 @@ class WallV2Contract(unittest.TestCase):
         self.assertIn("All-in/user", blob)
         self.assertNotIn('"Cost / day"', blob)
         self.assertNotIn('"Cost / user"', blob)
-        status = next(p for p in board["panels"]
-                      if p["targets"][0]["root_selector"] == "frames.variableMarginStatus")
-        # The live headline's settled D−2 figure and variance fold into this
-        # line, so the board keeps its layout.
-        self.assertIn("settled D−2", status["description"])
-        self.assertIn("variance", status["description"])
 
     def test_variable_margin_tile_big_number_sparkline_and_target(self):
         from build_wall_dashboard import STATUS_GOOD
@@ -312,24 +307,14 @@ class WallV2Contract(unittest.TestCase):
         for phrase in ("MRR − real monthly cost", "Vertex reserved", "OpenAI, Soniox, Modulate (Mercury cash), OpenRouter and Pinecone",
                        "Goal 50%", "60 days", "non-USD paying subscriptions", "no MRR book"):
             self.assertIn(phrase, tile["description"])
-        # The secondary chart: cost run rate vs MRR with the 50% target marked.
-        chart_panel = next(p for p in board["panels"] if p["title"] == "Cost run rate vs MRR")
-        fields = [c["selector"] for c in chart_panel["targets"][0]["columns"]]
-        for field in ("costPerMonth", "mrr", "goalCost", "vertexReservedPerMonth"):
-            self.assertIn(field, fields)
-        styled = {o["matcher"]["options"]: {p["id"]: p["value"] for p in o["properties"]}
-                  for o in chart_panel["fieldConfig"]["overrides"]}
-        target_line = styled["50% target cost"]
-        self.assertEqual(target_line["color"]["fixedColor"], STATUS_GOOD)
-        self.assertEqual(target_line["custom.lineStyle"]["dash"], [6, 4])  # a goal, not a series
-        # Missing/stale vendor lines are named on the tile's own status line,
-        # which also carries the MRR source and its non-USD exclusion count.
-        status = next(p for p in board["panels"]
-                      if p["targets"][0]["root_selector"] == "frames.variableMarginStatus")
-        self.assertEqual(status["gridPos"]["h"], 1)
-        self.assertIn("named", status["description"])
-        self.assertIn("non-USD", status["description"])
-        self.assertIn("7-day window", status["description"])
+        # Cost vs revenue on Health covers the run-rate view; the duplicate
+        # chart and the tiny status lines are gone (David 2026-11-06).
+        titles = {p["title"] for p in board["panels"]}
+        self.assertNotIn("Cost run rate vs MRR", titles)
+        roots = {t.get("root_selector") for p in board["panels"] for t in p.get("targets", [])}
+        self.assertNotIn("frames.variableMarginStatus", roots)
+        shopify = next(p for p in board["panels"] if p["title"] == "Shopify sales per week")
+        self.assertGreaterEqual(shopify["gridPos"]["h"], 5)  # tall enough to read the bars
 
     def test_cost_estimates_are_dated_like_the_api(self):
         import re
