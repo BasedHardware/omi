@@ -7,6 +7,7 @@ deployed socket counts. Run in the normal isolated unit-file lane.
 """
 
 import asyncio
+import hashlib
 from collections import Counter
 import os
 from pathlib import Path
@@ -109,7 +110,7 @@ class SlowGCS:
             self.max_per_socket[uid] = max(self.max_per_socket[uid], self.active[uid])
             self.bytes += len(payload)
             self.peak = max(self.peak, self.bytes)
-            self.calls.append((uid, payload))
+            self.calls.append((uid, hashlib.sha256(payload).digest()))
         try:
             assert self.release.wait(10), 'test must release every owned storage thread'
             if self.fail:
@@ -187,7 +188,7 @@ async def test_50_sockets_plateau_refuse_without_ack_then_retry_once(monkeypatch
         assert len(gcs.calls) == 50 and max(gcs.max_per_socket.values()) == 1
         assert gcs.bytes == 0 and budget.used == 0
         assert pusher.PUSHER_STORAGE_PCM_INFLIGHT_BYTES._value.get() == 0
-        gcs.calls.clear()  # The test recorder must not retain the settled PCM.
+        gcs.calls.clear()  # Drop recorder metadata; it never retains settled PCM.
         import gc
 
         gc.collect()
@@ -324,7 +325,7 @@ async def test_flag_zero_preserves_exact_pcm_ack_and_failure_characterization(mo
         gcs.release.set()
         results = await asyncio.gather(*tasks, return_exceptions=True)
         for sock, result in zip(sockets, results):
-            assert (sock.uid, sock.original) in gcs.calls
+            assert (sock.uid, hashlib.sha256(sock.original).digest()) in gcs.calls
             if failure:
                 assert isinstance(result, OSError)
                 assert sock.buffer == sock.original and sock.frames == sock.checkpoints
