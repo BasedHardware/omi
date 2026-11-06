@@ -63,6 +63,10 @@ static ssize_t bt_gatt_attr_read(struct bt_conn *conn,
     memcpy(buf, (const uint8_t *) value + offset, len);
     return len;
 }
+static void recovery_reset_read_cache(struct bt_conn *conn)
+{
+    (void) conn;
+}
 #include "diagnostics_gatt_block.inc"
 static uint32_t rd(const uint8_t *p)
 {

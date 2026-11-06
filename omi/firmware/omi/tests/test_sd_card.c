@@ -778,3 +778,5 @@ int main(void)
     printf("sd_card harness: %d failures\n", failures);
     return failures ? 1 : 0;
 }
+
+void omi_boot_telemetry_sd_failure(void) {}

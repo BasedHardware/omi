@@ -24,6 +24,7 @@
 #include <zephyr/fatal.h>
 #endif
 
+#include "boot_telemetry.h"
 #include "imu.h"
 #include "lib/core/sd_card.h"
 #include "rtc.h"
@@ -151,6 +152,9 @@ int main(void)
     }
     int setting_ret = app_settings_init();
     safe_mode_settings_ready(setting_ret);
+    if (!setting_ret) {
+        omi_boot_telemetry_open();
+    }
     ret = safe_mode_devices_init();
     if (ret) {
         LOG_ERR("Deferred device initialization failed (%d)", ret);

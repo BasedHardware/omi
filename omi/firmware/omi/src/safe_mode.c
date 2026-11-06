@@ -5,6 +5,8 @@
 #include <string.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
+
+#include "boot_telemetry.h"
 #if defined(CONFIG_MCUMGR)
 #include <zephyr/mgmt/mcumgr/grp/img_mgmt/img_mgmt.h>
 #include <zephyr/mgmt/mcumgr/grp/img_mgmt/img_mgmt_callbacks.h>
@@ -37,7 +39,7 @@ LOG_MODULE_REGISTER(safe_mode, CONFIG_LOG_DEFAULT_LEVEL);
 #error "Fault injection is forbidden in release builds"
 #endif
 
-#define BOOT_MAGIC 0x53414632u
+#define BOOT_MAGIC 0x53414633u
 #define BOOT_COUNT_MAX 255u
 #define FW CONFIG_BT_DIS_FW_REV_STR
 #define STATE_SAFE 1
@@ -66,6 +68,10 @@ struct retained_boot {
     char fw[16];
     uint32_t dfu_pending;
     uint32_t persist_attempted;
+    uint32_t telemetry_blocked;
+    uint32_t total_boots;
+    uint32_t telemetry_fatal;
+    uint32_t total_seeded;
     uint32_t crc;
 };
 #ifndef CONFIG_OMI_NATIVE_SIM
@@ -74,8 +80,8 @@ static volatile struct retained_boot retained __attribute__((section(".omi_retai
 static volatile struct retained_boot retained;
 #endif
 _Static_assert(sizeof(retained) <= 64, "retained boot record exceeds reservation");
-_Static_assert(sizeof(retained) == 48 && offsetof(struct retained_boot, dfu_pending) == 36 &&
-                   offsetof(struct retained_boot, crc) == 44,
+_Static_assert(sizeof(retained) == 64 && offsetof(struct retained_boot, dfu_pending) == 36 &&
+                   offsetof(struct retained_boot, crc) == 60,
                "retained boot layout changed");
 _Static_assert(sizeof(FW) <= sizeof(retained.fw), "firmware version too long");
 
@@ -86,6 +92,8 @@ struct bootstate {
 };
 static struct bootstate saved;
 static bool active;
+static bool previous_fatal;
+static uint32_t boot_reset_reason;
 static bool settings_ready;
 static bool self_test_done;
 static int64_t ready_at;
@@ -122,15 +130,24 @@ static void retained_seal(void)
 static bool retained_valid(void)
 {
     return retained.magic == BOOT_MAGIC && retained.count <= BOOT_COUNT_MAX && retained.latch_reason <= 3 &&
-           retained.fatal <= 1 && retained.dfu_pending <= DFU_RETRY_ONE && retained.persist_attempted <= 1 &&
+           retained.fatal <= 1 && retained.telemetry_blocked <= 1 && retained.telemetry_fatal <= 1 &&
+           retained.total_seeded <= 1 && retained.dfu_pending <= DFU_RETRY_ONE && retained.persist_attempted <= 1 &&
            memcmp((const void *) retained.fw, FW, sizeof(FW)) == 0 && retained.crc == retained_crc();
 }
 
 static void new_trial(void)
 {
+    /* Recovery trials reset independently of lifetime diagnostics. */
+    bool valid = retained_valid();
+    uint32_t total_boots = valid ? retained.total_boots : 0;
+    uint32_t fatal = valid ? retained.telemetry_fatal : 0;
+    uint32_t seeded = valid ? retained.total_seeded : 0;
     memset((void *) &retained, 0, sizeof(retained));
     memcpy((void *) retained.fw, FW, sizeof(FW));
     retained.magic = BOOT_MAGIC;
+    retained.total_boots = total_boots;
+    retained.telemetry_fatal = fatal;
+    retained.total_seeded = seeded;
     retained_seal();
 }
 
@@ -142,6 +159,7 @@ static void record_fatal(void)
         new_trial();
     }
     retained.fatal = 1;
+    retained.telemetry_fatal = 1;
     retained_seal();
 }
 #endif
@@ -163,6 +181,9 @@ void safe_mode_early_boot(void)
     nrf_reset_resetreas_clear(NRF_RESET, reason);
 #endif
     bool valid = retained_valid();
+    uint32_t total_before = valid ? retained.total_boots : 0;
+    uint32_t seeded_before = valid ? retained.total_seeded : 0;
+    boot_reset_reason = reason;
     restore_latch = !valid;
     resolve_dfu = valid && (retained.dfu_pending == DFU_PENDING || retained.dfu_pending == DFU_RETRY_TWO ||
                             retained.dfu_pending == DFU_RETRY_ONE);
@@ -174,12 +195,19 @@ void safe_mode_early_boot(void)
     } else if (valid && retained.dfu_pending == DFU_WAIT_ONE) {
         retained.dfu_pending = DFU_RETRY_ONE;
     }
+    previous_fatal = valid && retained.telemetry_fatal != 0;
     crash = crash || (valid && retained.fatal != 0);
     /* RESETREAS=0 is POR; RAM contents on cold boot are not a contract. */
     if (!valid || (!crash && !retained.latch_reason)) {
         new_trial();
     }
     retained.fatal = 0;
+    retained.total_boots = total_before;
+    retained.telemetry_fatal = previous_fatal;
+    retained.total_seeded = seeded_before;
+    if (retained.total_boots != UINT32_MAX) {
+        ++retained.total_boots;
+    }
     retained.reset_reason = reason;
     if (retained.count < BOOT_COUNT_MAX) {
         retained.count++;
@@ -192,6 +220,12 @@ void safe_mode_early_boot(void)
 
 int safe_mode_settings_set(const char *name, size_t len, settings_read_cb read_cb, void *arg)
 {
+    if (!strcmp(name, "boot_telemetry")) {
+        /* The telemetry owner loads this key directly, after boot selection.
+         * Broad normal app/BT loads must neither reject nor replay it.
+         */
+        return 0;
+    }
     if (strcmp(name, "bootstate")) {
         return -ENOENT;
     }
@@ -294,16 +328,25 @@ void safe_mode_restore(void)
 void safe_mode_persist(void)
 {
     k_mutex_lock(&bootstate_lock, K_FOREVER);
-    if (!active || !retained.latch_reason || retained.persist_attempted || retained.dfu_pending != DFU_IDLE) {
-        k_mutex_unlock(&bootstate_lock);
-        return;
+    if (active && retained.latch_reason && !retained.persist_attempted && retained.dfu_pending == DFU_IDLE) {
+        retained.persist_attempted = 1;
+        retained_seal();
+        if (!settings_ready) {
+            settings_ready = settings_subsys_init() == 0;
+        }
+        (void) save_state(STATE_SAFE, retained.latch_reason);
     }
-    retained.persist_attempted = 1;
-    retained_seal();
-    if (!settings_ready) {
-        settings_ready = settings_subsys_init() == 0;
+    /* Preserve the mandatory no-backend boot between DFU resolve attempts.
+     * Durable SAFE gets its existing attempt before optional telemetry IO.
+     */
+    if (active && !retained.telemetry_blocked && retained.dfu_pending == DFU_IDLE) {
+        retained.telemetry_blocked = 1;
+        retained_seal();
+        omi_boot_telemetry_open();
+        /* Returned backend errors are nonfatal; only a hang keeps the guard. */
+        retained.telemetry_blocked = 0;
+        retained_seal();
     }
-    (void) save_state(STATE_SAFE, retained.latch_reason);
     k_mutex_unlock(&bootstate_lock);
 }
 
@@ -339,6 +382,7 @@ static enum mgmt_cb_return dfu_event(uint32_t event,
         bool completed_app = image0_upload && prev_status == MGMT_CB_OK;
         image0_upload = false;
         if (completed_app) {
+            omi_boot_telemetry_upload_pending();
             k_mutex_lock(&bootstate_lock, K_FOREVER);
             if (!settings_ready) {
                 settings_ready = settings_subsys_init() == 0;
@@ -388,6 +432,7 @@ bool safe_mode_boot(void)
 #endif
     retained_seal();
     active = retained.latch_reason != 0;
+    omi_boot_telemetry_start(boot_reset_reason, previous_fatal, active, retained.latch_reason);
     printk("BOOTSTATE: active=%u count=%u reason=%u reset=0x%08x state=%u\n",
            active,
            retained.count,
@@ -414,6 +459,9 @@ void safe_mode_main_loop_ready(bool advertising)
 
 void safe_mode_poll(void)
 {
+    if (!active) {
+        omi_boot_telemetry_poll();
+    }
     k_mutex_lock(&bootstate_lock, K_FOREVER);
     if (!active && !self_test_done && trial_ready &&
         k_uptime_get() - ready_at >= (int64_t) CONFIG_OMI_SAFE_MODE_GOOD_UPTIME_S * 1000) {
@@ -425,6 +473,31 @@ void safe_mode_poll(void)
         printk("Safe mode self-test passed\n");
     }
     k_mutex_unlock(&bootstate_lock);
+}
+
+uint32_t safe_mode_total_boots(void)
+{
+    return retained.total_boots;
+}
+
+uint32_t safe_mode_restore_total_boots(uint32_t persisted_count)
+{
+    /* Called before normal BLE, or under recovery's bootstate lock. Before
+     * seeding, total_boots is the delta since cold/invalid RAM, including all
+     * pre-settings failures. Afterwards it is an absolute lifetime count.
+     */
+    if (!retained.total_seeded) {
+        retained.total_boots =
+            UINT32_MAX - persisted_count < retained.total_boots ? UINT32_MAX : persisted_count + retained.total_boots;
+        retained.total_seeded = 1;
+    } else {
+        uint32_t minimum = persisted_count == UINT32_MAX ? UINT32_MAX : persisted_count + 1;
+        if (retained.total_boots < minimum) {
+            retained.total_boots = minimum;
+        }
+    }
+    retained_seal();
+    return retained.total_boots;
 }
 
 void safe_mode_snapshot_get(struct safe_mode_snapshot *out)
@@ -455,17 +528,29 @@ static const struct gpio_dt_spec safe_button = GPIO_DT_SPEC_GET(DT_NODELABEL(usr
 static bool secondary_readable(void)
 {
     const struct flash_area *area;
-    uint32_t magic = 0;
+    uint8_t first[32], second[32];
     if (flash_area_open(FIXED_PARTITION_ID(slot1_partition), &area)) {
+        omi_boot_telemetry_nor_failure();
         return false;
     }
-    int rc = flash_area_read(area, 0, &magic, sizeof(magic));
+    int rc = flash_area_read(area, 0, first, sizeof(first));
+    if (!rc) {
+        watchdog_feed();
+        rc = flash_area_read(area, 0, second, sizeof(second));
+        if (!rc && memcmp(first, second, sizeof(first))) {
+            rc = -EIO;
+        }
+    }
+    if (rc) {
+        omi_boot_telemetry_nor_failure();
+    }
     flash_area_close(area);
     return rc == 0;
 }
 
 void safe_mode_run(void)
 {
+    safe_mode_sd_bus_init();
     /* Keep the SD rail as the boot hog and MCUboot leave it (ON): with it off the
      * shared SPI3 bus times out and the DFU secondary slot in the external NOR is
      * unreachable, so SAFE could never stage an image. NOR shares SPI3, so never

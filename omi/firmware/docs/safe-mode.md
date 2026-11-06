@@ -1,8 +1,8 @@
 # CV1 application safe mode (3.0.23 candidate)
 
 This candidate integrates the firmware backlog with the 3.0.22 recovery release
-and its bounded interrupted-DFU retry fix. The state machine and retained record
-are unchanged from main. Qualification of either parent does not qualify this
+and its bounded interrupted-DFU retry fix. The recovery state machine is retained, with an SD bus initialization fix and
+boot/update/storage diagnostics appended to the recovery packet. Qualification of either parent does not qualify this
 combined image; it needs fresh build and jig evidence before release. It does not
 provide MCUboot rollback or repair a bootloader/network image. Ship only the
 application image after build-only QA and jig qualification.
@@ -17,7 +17,8 @@ The fatal handler uses only retained RAM, a barrier and `NVIC_SystemReset()`.
 Pre-hook `PRE_KERNEL_1` hangs remain outside coverage. Application-only DTS
 `zephyr,deferred-init` removes non-recovery devices from automatic boot
 initialization. Normal mode calls `device_init()`
-before any application use; SAFE never calls it. A repeatable deferred-driver
+before any application use. SAFE initializes only the SD host and its MMC
+child to quiet the shared bus; the injected hang device remains normal-only. A repeatable deferred-driver
 hang therefore counts until the fourth boot selects SAFE and bypasses that
 init. Recovery still depends on the eager kernel/devices and network core.
 
@@ -31,12 +32,22 @@ settings handlers. An interrupted DFU transaction has the narrow TRIAL check
 described below. A three-second P0.26 hold also latches recovery.
 
 The recovery branch powers PDM enable low, leaves the SD rail on (as the boot
-hog and MCUboot leave it), logs whether the secondary slot is readable,
+hog and MCUboot leave it), initializes `sdhc0`, then its `mmc` child, then
+attempts `disk_access_init("SDMMC")` before any application NOR read. The
+2026-11-06/07 jig measurement found an uninitialized card driving shared SPI3
+MISO while deselected. Initialization attempts quieted the bus even when disk
+init returned `-134`. Returned errors are counted and never abort recovery.
+Each stage is attempted once, with watchdog feeds between calls and the SDK's
+finite SD command/retry timeouts; a wedged driver still falls back to the
+30-second hardware watchdog. No new retry/wait loop is added.
+The slot check compares two 32-byte reads (blank slots are allowed), counts
+read errors/mismatches and logs whether the secondary slot is readable,
 initializes the LED, enables
 Bluetooth, registers diagnostics and starts connectable advertising at 1–2
 seconds. SMP, DIS and the configured static BAS service are registered by
 Zephyr; application audio/settings/features/time/storage/button/haptic services
-and connection callbacks are skipped. No SD initialization, mic, codec,
+and application connection callbacks are skipped; SAFE registers only cache
+invalidation callbacks for diagnostic long reads. No SD mount, mic, codec,
 capture, ring writer, pusher thread or battery work runs. NOR/SPI3 stays awake
 for the secondary slot. Do not switch the SD rail off here: on the CV1 jig that
 made every SPI3 NOR transfer time out, so phone DFU in SAFE could never stage an
@@ -71,7 +82,11 @@ SPI3/external NOR, internal flash, IPC/Bluetooth and other kernel/system init
 required by recovery remain eager. A repeatable hang there cannot be bypassed.
 PWM is kept for the recovery LED, and SPI3/NOR must remain ready for DFU; no
 required driver was deferred. NVS/backend access can also hang: cold/invalid
-RAM needs one restore attempt; a warm valid latch skips it. After advertising,
+RAM needs one restore attempt; a warm valid latch skips it. After advertising, a separate CRC-covered telemetry
+access guard permits one isolated telemetry load/save per boot; if it hangs,
+subsequent warm SAFE boots skip it. It never loads application or bond settings.
+See [gatt-map.md](gatt-map.md) for the record, persistence cadence and limits.
+After advertising,
 SAFE attempts backend initialization and a SAFE write once per retained latch,
 without loading settings. A CRC-covered attempt bit prevents a backend hang
 from blocking every following recovery boot. If this attempt fails/hangs,
@@ -142,21 +157,24 @@ persistence attempt cannot overwrite a completed DFU's TRIAL.
 
 ## Retained RAM placement and evidence
 
-The record is 48 bytes inside a 64-byte DTS `zephyr,retained-ram` reservation
+The record is 64 bytes inside the existing 64-byte DTS `zephyr,retained-ram` reservation
 at `0x2006FF00–0x2006FF40`. The application linker owns it as `.omi_retained`
 NOLOAD. CRC-32/ISO-HDLC covers every preceding byte (including magic, reset
 cause, full firmware field and transaction/persistence fields). Count saturates
-at 255, latch reason must be 0–3, fatal and persistence attempt must be 0–1.
+at 255, latch reason must be 0–3, fatal, telemetry-fatal and persistence/access guard bits must be 0–1.
 The existing 32-bit `dfu_pending` word at byte offset 36 encodes only these states:
 0 idle, 1 initial resolve, 2 bypass with two retries remaining, 3 retry with two
 remaining, 4 bypass with one retry remaining, 5 final retry. All other values
 invalidate the record, even with a matching CRC. The original pending value 1
-still starts resolution. Field offsets, the 48-byte size, format magic and CRC
-coverage (bytes 0–43, CRC at 44–47) are unchanged by the retry budget. Magic,
+still starts resolution. The original fields through `persist_attempted` at offset 40 retain their
+offsets. This telemetry extension adds a backend-hang guard at 44, lifetime
+warm-boot count at 48 and fatal-history indication at 52, and an NVS-baseline-seeded bit at 56; CRC covers
+bytes 0–59 and occupies 60–63. Lifetime fields survive trial/DFU clears, saturate,
+and merge with the durable telemetry record on open. Magic,
 version, CRC or range mismatch invalidates the whole record; no field from it
 can supply a latch. A cold/invalid record can still restore a separately valid
 NVS SAFE. All mutations, including fatal, reseal the CRC. The format magic is
-changed so the prior 36-byte record is invalidated safely. Link assertions reject overlap with data/BSS/noinit (including static
+changed to `0x53414633`, invalidating prior 36/48-byte records safely. Link assertions reject overlap with data/BSS/noinit (including static
 stacks/heaps) and excess size. The node lives in `omi/app.overlay`, selected
 only by the application; shared board DTS and bootloader configuration are
 unchanged. Kconfig conditionals in shared DTS are not a valid isolation guard
@@ -240,7 +258,7 @@ SAFE must reload from real simulated NVS), delivers a synthetic mcumgr callback,
 and boots normally again to check TRIAL → GOOD. These four persistence runs
 share the cache's flash backing file. It requires `Safe mode initialized: BLE DFU only`,
 `Safe mode feed loop started`, and a second watchdog feed, and rejects
-codec/mic/SD startup in recovery. Normal tokens are not fabricated on safe
+codec/mic/SD mount startup in recovery. Normal tokens are not fabricated on safe
 boots. Only callback delivery and hardware boundaries are stubbed; NVS is real
 Zephyr. It also compiles a real deferred Zephyr fault device: the normal path
 must print its init-hang witness and time out, while forced SAFE with the same
@@ -343,7 +361,7 @@ factory hex is only for an independently authorized baseline restore; follow
    Interrupt an upload before completion: SAFE must stay set. A failed
    bootstate write must log a warning and must not claim latch clearance.
 5. **Power.** Measure average current and compare recovery against a crash
-   loop. Confirm P1.10 SD power low and P1.4 PDM enable low. Release the entry
+   loop. Confirm P1.10 SD power remains high and P1.4 PDM enable is low. Release the entry
    gesture, hold button for three seconds, then release: require
    `Safe mode entering system off`, System OFF current, no WDT wake after
    more than 30 seconds, and button wake back into SAFE. Also verify the
@@ -356,8 +374,8 @@ factory hex is only for an independently authorized baseline restore; follow
    legitimate appends may advance `write_seq`, and acknowledged phone drains
    may advance `read_seq`; account for those rather than requiring a frozen
    write pointer while recording. Require the same ring identity and preserved
-   preexisting audio. Safe mode never calls SD/storage/capture initialization
-   or mutates the raw ring.
+   preexisting audio. Safe mode initializes only the SD host/card to quiet SPI3; it never mounts
+   the SD ring, starts storage/capture services or mutates the raw ring.
    The backlog custody changes run only in normal mode. Safe
    mode suspends new capture visibly (red pulse/diagnostics); it cannot
    recover recordings lost before entry or promise recording while repairing.
@@ -370,9 +388,9 @@ factory hex is only for an independently authorized baseline restore; follow
 ## Differences from the scoping snapshot
 
 The backlog already owns a 25-byte telemetry packet at `19B10041`. The combined
-candidate keeps that UUID/layout and exposes main's unchanged 16-byte recovery
-snapshot at `19B10042`, in the same service. Normal diagnostics follows storage;
-SAFE registers only recovery state, without telemetry. See [gatt-map.md](gatt-map.md)
+candidate keeps that UUID/layout and exposes main's 16-byte recovery
+prefix plus the 80-byte boot record at `19B10042`, in the same service. Normal diagnostics follows storage;
+SAFE registers the extended recovery state, including boot/storage telemetry. See [gatt-map.md](gatt-map.md)
 for exact registration and attribute order. The backlog's fail-closed mute,
 persisted device name, power control and custody behavior remain normal-only.
 Its CMD12 replacement SD host follows the same deferred-init path as the stock

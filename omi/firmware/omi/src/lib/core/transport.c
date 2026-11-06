@@ -430,15 +430,62 @@ static struct bt_uuid_128 diagnostics_characteristic_uuid =
 static struct bt_uuid_128 recovery_diagnostics_characteristic_uuid =
     BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10042, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
 
+/* Recovery also needs a coherent value across ATT Read Blob requests. */
+static struct {
+    bool valid;
+    uint8_t value[OMI_RECOVERY_DIAGNOSTICS_SIZE];
+} recovery_read_cache[CONFIG_BT_MAX_CONN];
+K_MUTEX_DEFINE(recovery_read_lock);
+
+static void recovery_reset_read_cache(struct bt_conn *conn)
+{
+    if (conn && bt_conn_index(conn) < ARRAY_SIZE(recovery_read_cache)) {
+        k_mutex_lock(&recovery_read_lock, K_FOREVER);
+        recovery_read_cache[bt_conn_index(conn)].valid = false;
+        k_mutex_unlock(&recovery_read_lock);
+    }
+}
+
+static void recovery_connected(struct bt_conn *conn, uint8_t err)
+{
+    ARG_UNUSED(err);
+    recovery_reset_read_cache(conn);
+}
+
+static void recovery_disconnected(struct bt_conn *conn, uint8_t reason)
+{
+    ARG_UNUSED(reason);
+    recovery_reset_read_cache(conn);
+}
+
+/* SAFE omits application callbacks, but still invalidates diagnostic caches. */
+static struct bt_conn_cb recovery_callbacks = {
+    .connected = recovery_connected,
+    .disconnected = recovery_disconnected,
+};
+
 static ssize_t recovery_diagnostics_read(struct bt_conn *conn,
                                          const struct bt_gatt_attr *attr,
                                          void *buf,
                                          uint16_t len,
                                          uint16_t offset)
 {
-    uint8_t snapshot[OMI_RECOVERY_DIAGNOSTICS_SIZE];
-    recovery_diagnostics_snapshot(snapshot);
-    return bt_gatt_attr_read(conn, attr, buf, len, offset, snapshot, sizeof(snapshot));
+    if (offset > OMI_RECOVERY_DIAGNOSTICS_SIZE) {
+        return BT_GATT_ERR(BT_ATT_ERR_INVALID_OFFSET);
+    }
+    if (!conn || bt_conn_index(conn) >= ARRAY_SIZE(recovery_read_cache)) {
+        return BT_GATT_ERR(BT_ATT_ERR_UNLIKELY);
+    }
+    uint8_t index = bt_conn_index(conn);
+    uint8_t value[OMI_RECOVERY_DIAGNOSTICS_SIZE];
+    k_mutex_lock(&recovery_read_lock, K_FOREVER);
+    if (offset == 0 || !recovery_read_cache[index].valid) {
+        recovery_diagnostics_snapshot(recovery_read_cache[index].value);
+        recovery_read_cache[index].valid = true;
+    }
+    memcpy(value, recovery_read_cache[index].value, sizeof(value));
+    k_mutex_unlock(&recovery_read_lock);
+    return bt_gatt_attr_read(conn, attr, buf, len, offset, value, sizeof(value));
 }
 
 /* One snapshot per connection. A new offset-zero read starts a new snapshot.
@@ -454,6 +501,7 @@ static struct k_spinlock diagnostics_read_lock;
 
 static void diagnostics_reset_read_cache(struct bt_conn *conn)
 {
+    recovery_reset_read_cache(conn);
     if (conn == NULL) {
         return;
     }
@@ -1859,6 +1907,7 @@ int transport_off()
 int transport_start_safe(void)
 {
     int err;
+    bt_conn_cb_register(&recovery_callbacks);
 #ifdef CONFIG_OMI_ENABLE_RFSW_CTRL
     err = gpio_pin_configure_dt(&rfsw_en, GPIO_OUTPUT_ACTIVE | NRF_GPIO_DRIVE_S0H1);
     if (err) {

@@ -13,6 +13,9 @@ endif()
 target_sources(app PRIVATE
   ../src/main.c
   ../src/safe_mode.c
+  ../src/boot_telemetry.c
+  ../src/boot_telemetry_logic.c
+  ../src/diagnostics_packet.c
   ../src/safe_mode_devices.c
   ../src/settings.c
   ../src/rtc.c

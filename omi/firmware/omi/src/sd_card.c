@@ -16,6 +16,7 @@
 #include <zephyr/sys/crc.h>
 #include <zephyr/sys/util.h>
 
+#include "boot_telemetry.h"
 #include "diagnostics.h"
 #include "lib/core/custody.h"
 #include "lib/core/storage.h"
@@ -1211,6 +1212,7 @@ static int sd_mount(void)
     for (int attempt = 1; attempt <= 5; attempt++) {
         ret = sd_enable_power(true);
         if (ret < 0) {
+            omi_boot_telemetry_sd_failure();
             LOG_ERR("SD power on failed: %d", ret);
             return ret;
         }
@@ -1221,6 +1223,7 @@ static int sd_mount(void)
             break;
         }
 
+        omi_boot_telemetry_sd_failure();
         LOG_WRN("SD CTRL_INIT attempt %d/5 failed: %d", attempt, ret);
         (void) disk_access_ioctl(DISK_DRIVE_NAME, DISK_IOCTL_CTRL_DEINIT, NULL);
         sd_enable_power(false);
