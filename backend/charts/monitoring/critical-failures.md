@@ -112,15 +112,3 @@ burn history or failed history write, while preserving the atomic export and
 the existing nonzero low-runway result. A measured zero burn is healthy. The
 lead must install that companion patch into the supervised coord snapshot;
 merging this public PR alone does not repair the installed watcher.
-
-## Native alert query compatibility
-
-Cloud Monitoring alert queries use `timeSeriesList`, matching the repository's
-alert-evaluator contract. Enrichment reads a five-minute window with one-minute
-`ALIGN_MAX` / `REDUCE_MAX` buckets and a final maximum. The guard counter reads
-15 minutes with `ALIGN_DELTA` / `REDUCE_SUM` buckets and a final sum. Delta
-alignment follows the [Cloud Monitoring aggregation contract](https://docs.cloud.google.com/monitoring/api/v3/aggregation).
-Selectors, thresholds, pending durations, gate membership and receiver routing
-stay unchanged. Static query-shape and multi-point graph tests verify these
-reductions; native production query read-back and notification delivery remain
-lead-owned deployment checks, not measurements claimed by this source repair.

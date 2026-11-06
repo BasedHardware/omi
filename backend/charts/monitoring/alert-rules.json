@@ -29391,7 +29391,7 @@
         "refId": "A",
         "queryType": "timeSeriesList",
         "relativeTimeRange": {
-          "from": 300,
+          "from": 600,
           "to": 0
         },
         "datasourceUid": "beuxmaq8oxhq8e",
@@ -29400,12 +29400,14 @@
             "type": "stackdriver",
             "uid": "beuxmaq8oxhq8e"
           },
-          "refId": "A",
-          "queryType": "timeSeriesList",
+          "instant": false,
           "intervalMs": 60000,
           "maxDataPoints": 43200,
+          "queryType": "timeSeriesList",
+          "range": true,
+          "refId": "A",
           "timeSeriesList": {
-            "alignmentPeriod": "+60s",
+            "alignmentPeriod": "300s",
             "crossSeriesReducer": "REDUCE_MAX",
             "filters": [
               "metric.type",
@@ -29422,13 +29424,14 @@
             ],
             "groupBys": [],
             "perSeriesAligner": "ALIGN_MAX",
-            "preprocessor": "none",
             "projectName": "based-hardware",
             "view": "FULL"
           },
-          "instant": false,
-          "range": true,
-          "aliasBy": "enrichment queue depth"
+          "promQLQuery": {
+            "expr": "max(max_over_time({\"cloudtasks.googleapis.com/queue/depth\",monitored_resource=\"cloud_tasks_queue\",queue_id=\"enrichment\"}[5m]))",
+            "projectName": "based-hardware",
+            "step": "1m"
+          }
         }
       },
       {
@@ -29447,7 +29450,7 @@
           "expression": "A",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
-          "reducer": "max",
+          "reducer": "last",
           "refId": "B",
           "type": "reduce"
         }
@@ -29675,7 +29678,7 @@
         "refId": "A",
         "queryType": "timeSeriesList",
         "relativeTimeRange": {
-          "from": 900,
+          "from": 600,
           "to": 0
         },
         "datasourceUid": "beuxmaq8oxhq8e",
@@ -29684,12 +29687,14 @@
             "type": "stackdriver",
             "uid": "beuxmaq8oxhq8e"
           },
-          "refId": "A",
-          "queryType": "timeSeriesList",
+          "instant": false,
           "intervalMs": 60000,
           "maxDataPoints": 43200,
+          "queryType": "timeSeriesList",
+          "range": true,
+          "refId": "A",
           "timeSeriesList": {
-            "alignmentPeriod": "+60s",
+            "alignmentPeriod": "900s",
             "crossSeriesReducer": "REDUCE_SUM",
             "filters": [
               "metric.type",
@@ -29702,13 +29707,14 @@
             ],
             "groupBys": [],
             "perSeriesAligner": "ALIGN_DELTA",
-            "preprocessor": "none",
             "projectName": "based-hardware",
             "view": "FULL"
           },
-          "instant": false,
-          "range": true,
-          "aliasBy": "unsafe guard signals"
+          "promQLQuery": {
+            "expr": "sum(increase({\"logging.googleapis.com/user/omi_incluster_guard_unsafe\",monitored_resource=\"k8s_container\"}[15m]))",
+            "projectName": "based-hardware",
+            "step": "1m"
+          }
         }
       },
       {
@@ -29727,7 +29733,7 @@
           "expression": "A",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
-          "reducer": "sum",
+          "reducer": "last",
           "refId": "B",
           "type": "reduce"
         }
