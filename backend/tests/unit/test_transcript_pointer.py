@@ -11,6 +11,7 @@ import zlib
 
 from google.api_core.exceptions import FailedPrecondition
 import pytest
+from cachetools import TTLCache
 
 from database import _client, conversations as conversations_db, transcript_pointer as pointer
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreDocument
@@ -242,9 +243,14 @@ def test_memo_validates_full_pointer_and_owner(lake_world):
         pointer.decode_stored_transcript(UID, altered, True)
 
 
-@pytest.mark.parametrize('opt_in,expected', [(True, 'opt_in'), (False, 'opt_out'), (None, 'unknown')])
+@pytest.mark.parametrize(
+    'opt_in,expected',
+    [('approved', 'opt_in'), ('rejected', 'opt_out'), ('pending_review', 'unknown'), (None, 'unknown')],
+)
 def test_ingest_consent(lake_world, opt_in, expected):
-    lake_world.store.rows[('users', UID)] = {} if opt_in is None else {'training_data_opt_in': opt_in}
+    lake_world.store.rows[('users', UID)] = (
+        {} if opt_in is None else {'training_data_opt_in': {'status': opt_in, 'requested_at': '2026-11-06T00:00:00Z'}}
+    )
     doc = encode()
     blob = lake_world.bucket.blob(doc['transcript_segments']['key'])
     blob.reload()
@@ -288,3 +294,36 @@ def test_deferred_swap_cas_and_skip_policy(lake_world, monkeypatch, state):
         assert not pointer.offload_inline_transcript(UID, CID, firestore_client=lake_world.store)
     elif state != 'pointer':
         assert isinstance(lake_world.store.rows[PATH]['transcript_segments'], bytes)
+
+
+def test_memo_ttl_expires_plaintext(lake_world):
+    doc = encode()
+    pointer.clear_memo()
+    clock = [0]
+    pointer._memo().decoded = TTLCache(maxsize=32, ttl=120, timer=lambda: clock[0])
+    assert pointer.resolve_pointer(UID, doc['transcript_segments']) == speech()
+    assert lake_world.calls['get'] == 1
+    clock[0] = 121
+    assert pointer.resolve_pointer(UID, doc['transcript_segments']) == speech()
+    assert lake_world.calls['get'] == 2
+
+
+def test_explicit_preload_cannot_fetch_inside_transaction(lake_world):
+    doc = pointer_doc(lake_world)
+    with pytest.raises(pointer.TranscriptPointerUnloaded):
+        _client.run_transactional(
+            lake_world.store, lambda txn: pointer.preload_pointer(UID, doc['transcript_segments'])
+        )
+    assert lake_world.calls['get'] == 0
+
+
+def test_nested_runner_does_not_fetch_or_discard_outer_deferred_notes(lake_world):
+    doc = pointer_doc(lake_world)
+    with _client.transaction_body():
+        encode(speech(21000))
+        notes = dict(pointer._memo().deferred)
+        assert pointer.run_preloaded_operation(lambda: 'nested') == 'nested'
+        assert pointer._memo().deferred == notes
+        with pytest.raises(pointer.TranscriptPointerUnloaded):
+            pointer.run_preloaded_operation(lambda: pointer.resolve_pointer(UID, doc['transcript_segments']))
+    assert lake_world.calls['get'] == 0

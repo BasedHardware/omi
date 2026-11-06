@@ -11,6 +11,7 @@ import asyncio
 import copy
 from contextvars import ContextVar
 from dataclasses import dataclass, field
+from datetime import datetime
 import hashlib
 import json
 import logging
@@ -138,11 +139,16 @@ def resolve_pointer(uid: str, pointer: Mapping) -> list:
 
 def _consent_stamp(uid) -> object_lake.ConsentStamp:
     data = _client.get_data_plane_firestore_client().collection('users').document(uid).get().to_dict() or {}
+    # users.set_user_training_data_opt_in stores a status/requested_at map,
+    # not a boolean. Pending review cannot assert permission to train.
     opt_in = data.get('training_data_opt_in')
+    status = opt_in.get('status') if isinstance(opt_in, dict) else None
+    requested_at = opt_in.get('requested_at') if isinstance(opt_in, dict) else None
+    at = requested_at.isoformat() if isinstance(requested_at, datetime) else requested_at
     return object_lake.ConsentStamp(
-        'opt_in' if opt_in is True else 'opt_out' if opt_in is False else 'unknown',
-        str(data.get('training_data_policy_version') or ''),
-        str(data.get('training_data_consented_at') or ''),
+        'opt_in' if status == 'approved' else 'opt_out' if status == 'rejected' else 'unknown',
+        '',  # The existing consent record has no policy-version field.
+        at if isinstance(at, str) else '',
     )
 
 
