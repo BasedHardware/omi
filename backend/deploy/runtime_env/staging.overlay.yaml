@@ -80,12 +80,6 @@ cloud_run:
     LIFECYCLE_EMAIL_FROM_ADDRESS: staging-no-send@based-hardware-dev.invalid
     SHARE_EMAIL_FROM_ADDRESS: staging-no-send@based-hardware-dev.invalid
     BUCKET_BATCH_PIPELINE: based-hardware-dev-staging-batch
-    BUCKET_OBJECT_LAKE: ''
-    OBJECT_LAKE_KMS_KEY: ''
-    OBJECT_LAKE_WRITE_ENABLED: 'false'
-    OBJECT_LAKE_WRITE_PERCENT: '0'
-    OBJECT_LAKE_READ_ENABLED: 'true'
-    OBJECT_LAKE_INLINE_MAX_BYTES: '4096'
     BUCKET_SCREEN_FRAMES: based-hardware-dev-staging-batch
     BATCH_PIPELINE_API_URL: '{run_url:backend-sync}'
     BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE: '{run_url:backend-integration}'
@@ -190,6 +184,12 @@ overlay:
     services:
       backend:
         env:
+          BUCKET_OBJECT_LAKE: {category: storage_retention, value: ''}
+          OBJECT_LAKE_KMS_KEY: {category: storage_retention, value: ''}
+          OBJECT_LAKE_WRITE_ENABLED: {category: rollout, value: 'false'}
+          OBJECT_LAKE_WRITE_PERCENT: {category: rollout, value: '0'}
+          OBJECT_LAKE_READ_ENABLED: {category: rollout, value: 'true'}
+          OBJECT_LAKE_INLINE_MAX_BYTES: {category: rollout, value: '4096'}
           ACCOUNT_DELETION_DISPATCH_MODE: {category: rollout, value: cloud_tasks}
           HOSTED_PARAKEET_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}
           HOSTED_LID_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}
@@ -197,6 +197,12 @@ overlay:
           HOSTED_SPEAKER_EMBEDDING_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}
       backend-sync:
         env:
+          BUCKET_OBJECT_LAKE: {category: storage_retention, value: ''}
+          OBJECT_LAKE_KMS_KEY: {category: storage_retention, value: ''}
+          OBJECT_LAKE_WRITE_ENABLED: {category: rollout, value: 'false'}
+          OBJECT_LAKE_WRITE_PERCENT: {category: rollout, value: '0'}
+          OBJECT_LAKE_READ_ENABLED: {category: rollout, value: 'true'}
+          OBJECT_LAKE_INLINE_MAX_BYTES: {category: rollout, value: '4096'}
           SYNC_DISPATCH_MODE: {category: rollout, value: cloud_tasks}
           ACCOUNT_DELETION_DISPATCH_MODE: {category: rollout, value: cloud_tasks}
           HOSTED_PARAKEET_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}

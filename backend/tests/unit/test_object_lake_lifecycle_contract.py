@@ -10,6 +10,7 @@ import pytest
 import yaml
 
 from scripts import validate_object_lake_bucket_contract as validator
+from scripts.cross_service_checks import staging as staging_check
 
 BACKEND = Path(__file__).resolve().parents[2]
 ROOT = BACKEND.parent
@@ -149,3 +150,26 @@ def test_validator_cli_is_offline_by_default_and_rejects_mutations(tmp_path):
     command[-1] = str(mutated)
     result = subprocess.run(command, capture_output=True, text=True, timeout=30)
     assert result.returncode == 1 and 'versioning' in result.stdout
+
+
+def test_staging_keeps_lake_bindings_on_the_same_services_as_prod():
+    composer = staging_check._load_composer(ROOT)
+    staging = composer.compose_staging(inputs={'STAGING_REDIS_HOST': '10.0.0.7'})
+    names = {
+        'BUCKET_OBJECT_LAKE',
+        'OBJECT_LAKE_KMS_KEY',
+        'OBJECT_LAKE_WRITE_ENABLED',
+        'OBJECT_LAKE_WRITE_PERCENT',
+        'OBJECT_LAKE_READ_ENABLED',
+        'OBJECT_LAKE_INLINE_MAX_BYTES',
+    }
+    for service, config in staging['cloud_run']['services'].items():
+        bindings = config['env']
+        if service in ('backend', 'backend-sync'):
+            assert names <= bindings.keys()
+            assert bindings['BUCKET_OBJECT_LAKE']['value'] == ''
+            assert bindings['OBJECT_LAKE_KMS_KEY']['value'] == ''
+            assert bindings['OBJECT_LAKE_WRITE_ENABLED']['value'] == 'false'
+            assert bindings['OBJECT_LAKE_WRITE_PERCENT']['value'] == '0'
+        else:
+            assert names.isdisjoint(bindings)
