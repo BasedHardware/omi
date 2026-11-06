@@ -13,6 +13,7 @@ from typing import Literal
 from config import directory_routing, rollout_cohorts
 from config.policy.batch import cohort_bucket
 from database import redis_db, users as users_db
+from database.cells.serving import cell_store
 from database.directory.store import DirectoryStore, Space
 from database.jobstore.connection import Pool, iam_connector
 from utils.rollout.runtime_percent import ramp_snapshot
@@ -128,6 +129,10 @@ def resolve(uid: str, *, signup_platform: str | None = None, signup_os: str | No
                 now=now,
             )
         plane = _plane_of(space)
+        if plane == 'cell':
+            # Explicit enrollment only. The durable cell tombstone rejects a
+            # resolver that read the old directory row before a wipe fence.
+            cell_store().enroll_space(uid, now=time.time())
         _remember(uid, plane)
         with suppress(Exception):
             redis_db.set_generic_cache(f'plane:v1:{uid}', plane, REDIS_TTL_SECONDS)

@@ -12,7 +12,7 @@ from fastapi import HTTPException, WebSocketException
 from config import directory_routing
 from database.directory import router
 from database.cells import serving as cells_serving
-from testing.cells_fixtures import make_directory
+from testing.cells_fixtures import make_cell_store, make_directory
 from utils.other import endpoints, plane_routing
 
 
@@ -35,7 +35,11 @@ def isolated(monkeypatch):
 def harness(monkeypatch):
     harness = make_directory()
     monkeypatch.setattr(router, 'directory_store', lambda: harness.store)
+    cell = make_cell_store()
+    monkeypatch.setattr(router, 'cell_store', lambda: cell.store)
     yield harness
+    cell.seeded.update(harness.seeded)
+    cell.close()
     harness.close()
 
 
@@ -219,3 +223,15 @@ def test_iam_pool_uses_explicit_bindings(monkeypatch, module, accessor, prefix):
     getattr(module, accessor)()
     factory.assert_called_once_with('localhost', 'synthetic', 'synthetic-user')
     pool.assert_called_once_with('', size=2, connect=connect)
+
+
+def test_invalid_mode_is_retryable_at_http_and_ws_boundary(monkeypatch):
+    monkeypatch.setenv('DIRECTORY_ROUTING_MODE', 'typo')
+    with pytest.raises(HTTPException) as error:
+        endpoints._resolve_request_plane_or_503('owner')
+    assert error.value.status_code == 503
+    assert error.value.detail == {'code': 'directory_routing_unavailable', 'retryable': True}
+    with pytest.raises(WebSocketException) as error:
+        endpoints._resolve_request_plane_ws('owner')
+    assert error.value.code == 1013
+    assert error.value.reason == 'directory_routing_unavailable'

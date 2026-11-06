@@ -34,7 +34,7 @@ def test_concurrent_personal_creation(harness, uid):
     def create():
         barrier.wait(timeout=5)
         return store.get_or_create_personal_space(
-            uid, now=NOW, signup_platform='mobile', signup_os='ios', signup_platform_at=NOW - 10
+            uid, cell='cell1', now=NOW, signup_platform='mobile', signup_os='ios', signup_platform_at=NOW - 10
         )
 
     with ThreadPoolExecutor(max_workers=2) as executor:
@@ -43,7 +43,7 @@ def test_concurrent_personal_creation(harness, uid):
     space = results[0]
     assert (space.space_id, space.cell, space.region, space.epoch) == (uid, 'cell1', None, 1)
     assert (space.signup_platform, space.signup_os, space.signup_platform_at) == ('mobile', 'ios', NOW - 10)
-    assert store.get_or_create_personal_space(uid, now=NOW + 1, signup_os='android') == space
+    assert store.get_or_create_personal_space(uid, cell='cell1', now=NOW + 1, signup_os='android') == space
     members = store.memberships_for_space(uid)
     assert len(members) == 1
     assert (members[0].uid, members[0].role, members[0].state) == (uid, 'owner', 'active')
@@ -56,7 +56,7 @@ def test_routing_and_epoch(harness, uid):
     assert store.get_space(uid) is None
     with pytest.raises(LookupError):
         store.set_routing(uid, cell='cell2', now=NOW)
-    store.get_or_create_personal_space(uid, now=NOW)
+    store.get_or_create_personal_space(uid, cell='cell1', now=NOW)
     updated = store.set_routing(uid, cell='cell2', region='us-central1', bump_epoch=True, now=NOW + 1)
     assert (updated.cell, updated.region, updated.epoch, updated.updated_at) == ('cell2', 'us-central1', 2, NOW + 1)
     assert store.get_space(uid) == updated
@@ -66,7 +66,7 @@ def test_routing_and_epoch(harness, uid):
 def test_membership_revoke_and_revive(harness, uid):
     store = harness.store
     member = harness.uid('membership-member')
-    store.get_or_create_personal_space(uid, now=NOW)
+    store.get_or_create_personal_space(uid, cell='cell1', now=NOW)
     store.add_member(uid, member, now=NOW)
     assert len(store.memberships_for_uid(member)) == 1
     assert store.revoke_member(uid, member, now=NOW + 1)
@@ -118,7 +118,7 @@ def test_public_conversations(harness, uid):
     store = harness.store
     conversation = uid + ':conversation'
     assert store.public_conversation_owner(conversation) is None
-    store.get_or_create_personal_space(uid, now=NOW)
+    store.get_or_create_personal_space(uid, cell='cell1', now=NOW)
     store.register_public_conversation(conversation, uid, visibility='public', now=NOW)
     assert store.public_conversation_owner(conversation) == uid
     store.register_public_conversation(conversation, uid, visibility='shared', now=NOW + 1)
@@ -134,7 +134,7 @@ def test_owner_purge_all_tables_and_other_spaces(harness, uid):
     store = harness.store
     other = harness.uid('purge-neighbor')
     for owner in (uid, other):
-        store.get_or_create_personal_space(owner, now=NOW)
+        store.get_or_create_personal_space(owner, cell='cell1', now=NOW)
         store.upsert_token(owner, 'phone', owner + ':token', now=NOW)
         store.register_public_conversation(owner + ':conversation', owner, visibility='shared', now=NOW)
     store.add_member(other, uid, now=NOW)
@@ -159,7 +159,7 @@ def test_owner_purge_all_tables_and_other_spaces(harness, uid):
 
 def test_purge_rolls_back_on_error(harness, uid, monkeypatch):
     store = harness.store
-    store.get_or_create_personal_space(uid, now=NOW)
+    store.get_or_create_personal_space(uid, cell='cell1', now=NOW)
     store.upsert_token(uid, 'phone', uid + ':token', now=NOW)
     store.register_public_conversation(uid + ':conversation', uid, visibility='public', now=NOW)
     original = store.pool.connection
