@@ -29389,7 +29389,7 @@
     "data": [
       {
         "refId": "A",
-        "queryType": "promQL",
+        "queryType": "timeSeriesList",
         "relativeTimeRange": {
           "from": 600,
           "to": 0
@@ -29400,17 +29400,32 @@
             "type": "stackdriver",
             "uid": "beuxmaq8oxhq8e"
           },
-          "refId": "A",
-          "queryType": "promQL",
+          "instant": false,
           "intervalMs": 60000,
           "maxDataPoints": 43200,
-          "promQLQuery": {
-            "expr": "max(max_over_time({\"cloudtasks.googleapis.com/queue/depth\",monitored_resource=\"cloud_tasks_queue\",queue_id=\"enrichment\"}[5m]))",
-            "projectName": "based-hardware",
-            "step": "1m"
-          },
+          "queryType": "timeSeriesList",
+          "range": true,
+          "refId": "A",
           "timeSeriesList": {
-            "projectName": "based-hardware"
+            "alignmentPeriod": "300s",
+            "crossSeriesReducer": "REDUCE_MAX",
+            "filters": [
+              "metric.type",
+              "=",
+              "cloudtasks.googleapis.com/queue/depth",
+              "AND",
+              "resource.type",
+              "=",
+              "cloud_tasks_queue",
+              "AND",
+              "resource.label.queue_id",
+              "=",
+              "enrichment"
+            ],
+            "groupBys": [],
+            "perSeriesAligner": "ALIGN_MAX",
+            "projectName": "based-hardware",
+            "view": "FULL"
           }
         }
       },
@@ -29656,7 +29671,7 @@
     "data": [
       {
         "refId": "A",
-        "queryType": "promQL",
+        "queryType": "timeSeriesList",
         "relativeTimeRange": {
           "from": 600,
           "to": 0
@@ -29667,17 +29682,28 @@
             "type": "stackdriver",
             "uid": "beuxmaq8oxhq8e"
           },
-          "refId": "A",
-          "queryType": "promQL",
+          "instant": false,
           "intervalMs": 60000,
           "maxDataPoints": 43200,
-          "promQLQuery": {
-            "expr": "sum(increase({\"logging.googleapis.com/user/omi_incluster_guard_unsafe\",monitored_resource=\"k8s_container\"}[15m]))",
-            "projectName": "based-hardware",
-            "step": "1m"
-          },
+          "queryType": "timeSeriesList",
+          "range": true,
+          "refId": "A",
           "timeSeriesList": {
-            "projectName": "based-hardware"
+            "alignmentPeriod": "900s",
+            "crossSeriesReducer": "REDUCE_SUM",
+            "filters": [
+              "metric.type",
+              "=",
+              "logging.googleapis.com/user/omi_incluster_guard_unsafe",
+              "AND",
+              "resource.type",
+              "=",
+              "k8s_container"
+            ],
+            "groupBys": [],
+            "perSeriesAligner": "ALIGN_DELTA",
+            "projectName": "based-hardware",
+            "view": "FULL"
           }
         }
       },
