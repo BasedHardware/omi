@@ -73,6 +73,15 @@ def test_concurrent_request_planes_are_isolated():
     assert asyncio.run(run()) == ['cell', 'firestore']
 
 
+def test_request_binding_detects_leaks_without_test_override(monkeypatch):
+    monkeypatch.setattr(routing, '_TEST_CELL_UIDS', frozenset())
+    before = count('read', 'memories')
+    with routing.plane_context(CELL_UID, 'cell'):
+        reads._record(('users', CELL_UID, 'memories', 'm'), True)
+    reads._record(('users', CELL_UID, 'memories', 'm'), True)
+    assert count('read', 'memories') == before + 1
+
+
 def test_disabled_gate_does_not_parse_path_or_resolve_owner(monkeypatch):
     monkeypatch.setattr(routing, '_TEST_CELL_UIDS', frozenset())
 
