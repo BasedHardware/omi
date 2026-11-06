@@ -4,19 +4,21 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
+import subprocess
+import sys
 import threading
 import time
 
 import pytest
 
 from config import cell_store
-from database.cells import CellStore
-from database.cells.adapters import AdapterRegistry
+from database.cells import AdapterRegistry, CellStore
 from database.cells.errors import BaseRevisionMismatch, CellContentionExhausted, MutationIdReused
 from database.cells.feed import DEVICE_STALE_S, FEED_RETENTION_S, ResyncRequired
 from database.cells import store as store_module
 from database.jobstore.connection import Pool, dial
 from database.jobstore.migrate import current_version, migrate
+from testing import cells_fixtures
 from testing.cells_fixtures import cells_dsn, make_cell_store
 
 NOW = 2_000_000_000.0
@@ -162,6 +164,9 @@ def test_replay_cas_and_reuse(harness, space):
     assert error.value.current_rev == 2
     with pytest.raises(BaseRevisionMismatch) as error:
         write(store, space, 'missing', expected_rev=1)
+    assert error.value.current_rev is None
+    with pytest.raises(BaseRevisionMismatch) as error:
+        write(store, space, 'missing', expected_rev=0)
     assert error.value.current_rev is None
     assert store.head(space) == (2, 1)
 
@@ -402,3 +407,52 @@ def test_purge_rollback(harness, space, monkeypatch):
     assert store.head(space) == (1, 1)
     assert store.read_doc(space, 'notes', 'a')
     assert len(store.pull(space, cursor=0, now=NOW).entries) == 1
+
+
+def test_mutation_receipts_cannot_be_lost_during_coalescing(harness, space):
+    store = harness.store
+
+    def overwritten(tx):
+        tx.put('notes', 'a', {}, client_mutation_id='first', fingerprint='fp')
+        tx.put('notes', 'a', {'new': True}, client_mutation_id='second', fingerprint='fp2')
+
+    with pytest.raises(ValueError, match='discard a client mutation receipt'):
+        store.run(space, overwritten, actor_uid=space, now=NOW)
+
+    def reused(tx):
+        tx.put('notes', 'a', {}, client_mutation_id='same', fingerprint='fp')
+        tx.put('notes', 'b', {}, client_mutation_id='same', fingerprint='fp')
+
+    with pytest.raises(MutationIdReused):
+        store.run(space, reused, actor_uid=space, now=NOW)
+    assert store.head(space) == (0, 0)
+    assert store.read_doc(space, 'notes', 'a') == {}
+
+
+def test_imports_are_driver_and_connection_lazy():
+    # A clean process proves import purity independently of this suite's PG setup.
+    import_result = subprocess.run(
+        [
+            sys.executable,
+            '-c',
+            'import sys; import database.cells, database.directory, config.cell_store; '
+            'assert "psycopg" not in sys.modules',
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert import_result.returncode == 0, import_result.stderr
+
+
+def test_iam_fixture_refuses_before_contacting_postgres(monkeypatch):
+    monkeypatch.setenv('OMI_TEST_POSTGRES_IAM', 'not-a-real-target')
+
+    def forbidden():
+        raise AssertionError('IAM refusal must precede discovery')
+
+    monkeypatch.setattr(cells_fixtures, 'postgres_dsn', forbidden)
+    with pytest.raises(cells_fixtures.BackendUnavailable, match='do not support IAM'):
+        cells_fixtures.cells_dsn()
+    with pytest.raises(cells_fixtures.BackendUnavailable, match='do not support IAM'):
+        cells_fixtures.directory_dsn()

@@ -38,7 +38,7 @@ class ChangeEntry:
 @dataclass
 class PullPage:
     entries: list[ChangeEntry]
-    rows: dict[tuple[str, str], dict | None]
+    rows: dict[tuple[str, str], dict[str, Any] | None]
     next_cursor: int
     head: int
     epoch: int
@@ -84,7 +84,7 @@ class Feed:
             ).fetchall()
             latest = {(r[1], r[2]): ChangeEntry(*r) for r in raw}
             entries = sorted(latest.values(), key=lambda entry: entry.seq)
-            rows: dict[tuple[str, str], dict | None] = {address: None for address in latest}
+            rows: dict[tuple[str, str], dict[str, Any] | None] = {address: None for address in latest}
             if rows:
                 # Parallel unnest avoids psycopg's unregistered anonymous-record array.
                 # This is one read-set statement, scoped to the page's distinct keys.

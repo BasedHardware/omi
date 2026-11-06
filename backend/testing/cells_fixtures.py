@@ -57,7 +57,7 @@ def directory_dsn() -> str:
 class Harness:
     store: Any
     prefix: str
-    seeded: set[str] = field(default_factory=set)
+    seeded: set[str] = field(default_factory=lambda: set[str]())
 
     def uid(self, label: str = 'space') -> str:
         uid = f'{self.prefix}-{label}'

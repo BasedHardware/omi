@@ -14,9 +14,10 @@ from dataclasses import dataclass
 from typing import Any, Callable, Generic, TypeVar
 
 from database.cells.errors import BaseRevisionMismatch, CellContentionExhausted, MutationIdReused
+from database.cells.errors import CellWriteError as CellWriteError
 from database.jobstore.codec import dumps
 from database.jobstore.connection import Pool
-from database.cells._validation import validate_address, validate_id
+from database.cells._validation import validate_address, validate_document, validate_id
 from database.cells.feed import Feed
 from database.cells.purge import Purge
 
@@ -35,7 +36,7 @@ class RunResult(Generic[T]):
 class _Mutation:
     entity: str
     entity_id: str
-    doc: dict | None
+    doc: dict[str, Any] | None
     feed: bool
     expected_rev: int | None
     client_mutation_id: str | None
@@ -55,10 +56,10 @@ class CellTransaction:
         self.space_id = space_id
         self.actor_uid = actor_uid
         self.now = now
-        self.cache: dict[tuple[str, str], tuple[int, dict] | None] = {}
+        self.cache: dict[tuple[str, str], tuple[int, dict[str, Any]] | None] = {}
         self.mutations: list[_Mutation] = []
 
-    def _lock_read(self, entity: str, entity_id: str) -> tuple[int, dict] | None:
+    def _lock_read(self, entity: str, entity_id: str) -> tuple[int, dict[str, Any]] | None:
         address = (entity, entity_id)
         if address not in self.cache:
             args = (self.space_id, entity, entity_id)
@@ -71,7 +72,7 @@ class CellTransaction:
             self.cache[address] = row
         return self.cache[address]
 
-    def get(self, entity: str, entity_id: str) -> dict:
+    def get(self, entity: str, entity_id: str) -> dict[str, Any]:
         validate_address(entity, entity_id)
         row = self._lock_read(entity, entity_id)
         for mutation in reversed(self.mutations):
@@ -83,7 +84,7 @@ class CellTransaction:
         self,
         entity: str,
         entity_id: str,
-        doc: dict | None,
+        doc: dict[str, Any] | None,
         *,
         feed: bool = True,
         expected_rev: int | None = None,
@@ -97,8 +98,6 @@ class CellTransaction:
         if client_mutation_id is not None:
             if not client_mutation_id or '\x00' in client_mutation_id or fingerprint is None:
                 raise ValueError('client_mutation_id requires a fingerprint and a nonempty id without NUL')
-        if expected_rev is not None and expected_rev < 1:
-            raise ValueError('expected_rev must be positive')
         self.mutations.append(
             _Mutation(
                 entity,
@@ -116,7 +115,7 @@ class CellTransaction:
         self,
         entity: str,
         entity_id: str,
-        doc: dict,
+        doc: dict[str, Any],
         *,
         feed: bool = True,
         expected_rev: int | None = None,
@@ -124,8 +123,7 @@ class CellTransaction:
         fingerprint: str | None = None,
         author_uid: str | None = None,
     ) -> None:
-        if not isinstance(doc, dict):
-            raise TypeError('cell document must be a dict')
+        validate_document(doc)
         self._buffer(
             entity,
             entity_id,
@@ -274,7 +272,7 @@ class CellStore(Feed, Purge):
                 last = exc
         raise CellContentionExhausted(space_id) from last
 
-    def read_doc(self, space_id: str, entity: str, entity_id: str) -> dict:
+    def read_doc(self, space_id: str, entity: str, entity_id: str) -> dict[str, Any]:
         validate_id(space_id)
         validate_address(entity, entity_id)
         with self.pool.connection() as conn:
