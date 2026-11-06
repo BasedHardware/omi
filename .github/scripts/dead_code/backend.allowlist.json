@@ -5,6 +5,10 @@
       "reason": "PG foundation C1 deliberately ships envelope-encrypted lake primitives with zero product callers until the C2 codec integration. Writes stay off until C4 wipe coverage is green. Contracts: backend/tests/unit/test_object_lake.py and backend/deploy/storage-lifecycle/LAKE.md. Remove this entry when C2 adds the first caller."
     },
     {
+      "path": "backend/database/space_store.py",
+      "reason": "PG foundation A1 ships the per-space SpaceStore unit of work with contract-suite consumers only; product callers arrive with the A2 domain ports and cell adapters. Contracts: backend/tests/integration/test_domain_conformance_folders_people.py. Remove this entry when A2 adds the first product caller."
+    },
+    {
       "path": "backend/utils/external_oauth/admission.py",
       "reason": "External OAuth control-plane scaffold is intentionally unwired: activation requires an explicit owner admission decision against config/external_oauth_admission.json (fail-closed by design). Contract behavior is exercised by backend/tests/unit/external_oauth/*; see docs/integrations/oauth-control-plane.md"
     },
