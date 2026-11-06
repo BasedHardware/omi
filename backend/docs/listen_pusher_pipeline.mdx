@@ -438,6 +438,11 @@ apply non-blocking process-wide admission only to queued/running custody PCM
 writes, with 25% headroom reserved for shutdown tails. Refusal submits nothing,
 issues no receipt or opcode-203 ACK, preserves the original buffered windows
 and frame checkpoints for the next flush boundary, and never closes the socket.
+With admission enabled, windows cap at 4096 checkpoints; after 20 retained
+windows plus one boundary window, the receive task pauses intake and probes
+non-waiting admission every 50ms. Tails bypass this metadata-capacity pause.
+Every unresolved owner stays fenced through failure, cancellation and ACK
+departure; an earlier receipt never certifies a later buffered tail.
 Record metadata and projection operations remain outside this admission.
 See the [byte admission runbook](runbooks/audio-durable-outbox.md#pusher-pcm-storage-byte-admission-default-off).
 

@@ -17,7 +17,9 @@ admission every50ms; no extra task, ACK, drop or error close is introduced.
 Shutdown tails bypass this pause. Every retained owner is checked against the
 socket gone-owner set before retry. These two safeguards address the independent
 review findings for tiny-window metadata growth and deletion after refusal.
-Refused tails
+Every unresolved owner is held in a finalizer `finally`, including failed retries
+and cancellation. ACK departure after one committed owner cannot release the
+producer fence of a later uncommitted owner. Refused tails
 retain the producer fence without changing the normal close code. Existing
 per-socket exhaustion remains the last-resort behavior. Queued/running storage
 keeps its byte reservation across caller cancellation until actual settlement.
