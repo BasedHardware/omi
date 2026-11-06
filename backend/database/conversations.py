@@ -600,7 +600,9 @@ def raw_conversation_has_content(uid: str, conversation: Dict[str, Any]) -> bool
             uid, raw_segments, bool(conversation.get('transcript_segments_compressed'))
         )
     except (transcript_pointer.TranscriptBlobAbsent, transcript_pointer.TranscriptShredded):
-        return False
+        # Only the transcript signal disappeared. Photos and the durable
+        # content marker still forbid empty-recording deletion.
+        return bool(conversation.get('photos')) or bool(conversation.get('has_content'))
     except (json.JSONDecodeError, TypeError, zlib.error, ValueError) as e:
         logger.error(f'raw_conversation_has_content: undecodable segments, assuming content. {uid} {e}')
         return True
