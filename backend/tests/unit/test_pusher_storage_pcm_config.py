@@ -14,8 +14,8 @@ KEY = 'PUSHER_STORAGE_PCM_BUDGET_MB'
 
 
 @pytest.mark.parametrize('environment', ['dev', 'prod'])
-@pytest.mark.parametrize('value', ['0', '512', '-1', 'bad', '0.5', None])
-def test_pusher_byte_limit_manifest_requires_nonnegative_integer(environment, value):
+@pytest.mark.parametrize('value', ['0', '27', '512', '1', '26', '-1', 'bad', '0.5', None])
+def test_pusher_byte_limit_manifest_requires_progress_capable_integer(environment, value):
     manifest = yaml.load((ROOT / 'backend/deploy/runtime_env.yaml').read_text(), Loader=yaml.CSafeLoader)
     config = copy.deepcopy(manifest['environments'][environment])
     env = config['gke']['pusher']['env']
@@ -25,7 +25,7 @@ def test_pusher_byte_limit_manifest_requires_nonnegative_integer(environment, va
         env[KEY] = {'value': value, 'category': 'ops_kill'}
     errors = _validate_manifest_shape(config, environment)
     relevant = [error for error in errors if KEY in str(error)]
-    assert bool(relevant) is (value not in ('0', '512'))
+    assert bool(relevant) is (value not in ('0', '27', '512'))
 
 
 def test_all_deployment_declarations_remain_off_and_classified():

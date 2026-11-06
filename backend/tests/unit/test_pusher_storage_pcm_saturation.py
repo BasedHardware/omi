@@ -22,10 +22,10 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from routers import pusher
-from utils.pusher_protocol import ByteBudget
+from utils.pusher_protocol import BUFFERED_AUDIO_MAX_BYTES, ByteBudget
 from tests.unit.test_audio_durable_outbox import Socket, _audio_frames, inline_session, remote
 from utils.other.audio_outbox import read_pcm
-from utils.pusher_storage_budget import StoragePcmBudget, storage_pcm_budget_bytes
+from utils.pusher_storage_budget import MIN_STORAGE_PCM_BUDGET_MB, StoragePcmBudget, storage_pcm_budget_bytes
 
 MIB = 1024 * 1024
 LIMIT = 8 * MIB
@@ -481,7 +481,10 @@ async def test_enabled_failure_wave_releases_capacity_and_retains_unacked_input(
         await asyncio.gather(*tasks, return_exceptions=True)
 
 
-@pytest.mark.parametrize('value, expected', [(None, 0), ('0', 0), ('512', 512 * MIB), ('bad', 0), ('-1', 0)])
+@pytest.mark.parametrize(
+    'value, expected',
+    [(None, 0), ('0', 0), ('1', 0), ('26', 0), ('27', 27 * MIB), ('512', 512 * MIB), ('bad', 0), ('-1', 0)],
+)
 def test_startup_configuration_default_and_kill_switch(monkeypatch, value, expected):
     if value is None:
         monkeypatch.delenv('PUSHER_STORAGE_PCM_BUDGET_MB', raising=False)
@@ -500,6 +503,17 @@ def test_tail_refusal_and_exact_release():
     budget.release(budget.live_limit)
     budget.release(LIMIT // 4)
     assert budget.used == 0
+
+
+def test_minimum_enabled_budget_can_admit_the_largest_socket_window():
+    budget = StoragePcmBudget(MIN_STORAGE_PCM_BUDGET_MB * MIB)
+    assert budget.acquire(BUFFERED_AUDIO_MAX_BYTES)
+    budget.release(BUFFERED_AUDIO_MAX_BYTES)
+    assert budget.acquire(BUFFERED_AUDIO_MAX_BYTES, tail=True)
+    budget.release(BUFFERED_AUDIO_MAX_BYTES)
+    assert budget.used == 0
+    # The next smaller integer MiB cannot satisfy the live-lane contract.
+    assert StoragePcmBudget((MIN_STORAGE_PCM_BUDGET_MB - 1) * MIB).live_limit < BUFFERED_AUDIO_MAX_BYTES
 
 
 @pytest.mark.asyncio

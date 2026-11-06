@@ -4,12 +4,18 @@ from dataclasses import dataclass
 import os
 import threading
 
+# ceil(20 MiB * 4/3): an enabled live lane must admit even the largest
+# protocol-valid socket window when otherwise idle. A contract test pins this
+# to BUFFERED_AUDIO_MAX_BYTES without importing the metrics-heavy protocol here.
+MIN_STORAGE_PCM_BUDGET_MB = 27
+
 
 def storage_pcm_budget_bytes() -> int:
     # Deployment validation rejects malformed values. Keep the runtime kill
     # switch safe for older/unvalidated environments too.
     try:
-        return max(0, int(os.getenv('PUSHER_STORAGE_PCM_BUDGET_MB', '0'))) * 1024 * 1024
+        value = int(os.getenv('PUSHER_STORAGE_PCM_BUDGET_MB', '0'))
+        return value * 1024 * 1024 if value >= MIN_STORAGE_PCM_BUDGET_MB else 0
     except ValueError:
         return 0
 

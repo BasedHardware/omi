@@ -121,8 +121,12 @@ and coordinator count caps do not establish a PCM byte bound or pod RSS bound.
 
 ### Pusher PCM storage byte admission (default off)
 
-`PUSHER_STORAGE_PCM_BUDGET_MB` is a non-negative integer in MiB, default **0**
-(off / kill switch). All committed chart and manifest values remain 0. A
+`PUSHER_STORAGE_PCM_BUDGET_MB` is an integer in MiB, default **0**
+(off / kill switch). Enabled deployment values must be **at least 27 MiB**:
+ceil(20 MiB x4/3) lets the 75% live lane admit the largest socket window even
+when otherwise idle. Smaller positive values are rejected by deployment
+validation; an unvalidated invalid startup value selects off, as malformed
+values do. All committed chart and manifest values remain 0. A
 positive value bounds only PCM submitted to `commit_pcm_window` through the
 shared storage executor, queued plus running, per process. No executor pool,
 projection read/upload, record barrier, seal, failure marker or abandonment

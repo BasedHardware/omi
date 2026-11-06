@@ -2,7 +2,9 @@
 
 The [runtime contract](../../listen_pusher_pipeline.mdx) adds
 `PUSHER_STORAGE_PCM_BUDGET_MB=0`: default off everywhere, with a proposed
-512 MiB canary size. The [runbook](../../runbooks/audio-durable-outbox.md#pusher-pcm-storage-byte-admission-default-off)
+512 MiB canary size. Deployment validation requires0 or at least27 MiB
+(ceil of20 MiB x4/3), ensuring a largest legal socket window can progress when
+the live lane is idle; smaller/malformed unvalidated runtime values select off. The [runbook](../../runbooks/audio-durable-outbox.md#pusher-pcm-storage-byte-admission-default-off)
 owns sizing, metrics, the lifecycle-owned dev -> one pod 15min -> fleet ramp,
 and chart-value-0 rollback. No enablement, merge or deployment is part of PR-B.
 

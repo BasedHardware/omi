@@ -56,6 +56,7 @@ from scripts.runtime_env_validation.common import (
 )
 
 from scripts.runtime_env_validation.workflows import _validate_cloud_run_workflows
+from utils.pusher_storage_budget import MIN_STORAGE_PCM_BUDGET_MB
 
 
 def _canonical_memory_surfaces(env_config: ConfigDict) -> list[tuple[str, ConfigDict]]:
@@ -170,14 +171,14 @@ def _validate_manifest_shape(env_config: ConfigDict, env: str) -> list[Validatio
     pusher = _as_config_dict((_as_config_dict(env_config.get('gke')) or {}).get('pusher')) or {}
     value = _manifest_literal_env_value(pusher.get('env'), 'PUSHER_STORAGE_PCM_BUDGET_MB')
     try:
-        valid = value is not None and int(value) >= 0
+        valid = value is not None and (int(value) == 0 or int(value) >= MIN_STORAGE_PCM_BUDGET_MB)
     except ValueError:
         valid = False
     if not valid:
         errors.append(
             ValidationError(
                 f'{env}/gke/pusher',
-                'PUSHER_STORAGE_PCM_BUDGET_MB must be a non-negative integer (0 disables admission)',
+                'PUSHER_STORAGE_PCM_BUDGET_MB must be 0 (off) or at least 27 MiB to admit a full socket window',
             )
         )
 
