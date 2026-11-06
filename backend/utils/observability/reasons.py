@@ -45,6 +45,7 @@ class ServerBatchSuppressionReason(StrEnum):
 
 
 class ReasonFamily(StrEnum):
+    PUSHER_PCM = 'pusher_pcm'
     LIVE_STT = 'live_stt'
     WORKER_VALIDATION = 'worker_validation'
     RECOVERY_FAILURE = 'recovery_failure'
@@ -73,6 +74,19 @@ class ReasonFamily(StrEnum):
     DELIVERY = 'delivery'
     BATCH_FINAL_PASS = 'batch_final_pass'
     RECURRING_VOICE = 'recurring_voice'
+
+
+class PusherPcmStage(StrEnum):
+    UNKNOWN = 'unknown'
+    LIVE = 'live'
+    TAIL = 'tail'
+
+
+class PusherPcmErrorReason(StrEnum):
+    UNKNOWN = 'unknown'
+    ACQUIRE = 'acquire'
+    RELEASE = 'release'
+    LATE_STORAGE = 'late_storage'
 
 
 REASON_UNKNOWN_TOTAL = Counter(

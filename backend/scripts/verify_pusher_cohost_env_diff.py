@@ -380,7 +380,7 @@ PROD_FINAL_PASS_SHADOW_VALUES = {
 }
 
 PUSHER_ONLY_ALLOWED: dict[str, frozenset[str]] = {
-    "dev": frozenset({"GOOGLE_CLIENT_ID", "REDIS_DB_HOST", "TYPESENSE_HOST"}),
+    "dev": frozenset({"GOOGLE_CLIENT_ID", "REDIS_DB_HOST", "TYPESENSE_HOST", "PUSHER_STORAGE_PCM_BUDGET_MB"}),
     # Pusher retains its cloud/BYOK credential; listen has no managed cloud key.
     "prod": frozenset(
         {
@@ -388,6 +388,7 @@ PUSHER_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "PUSHER_MAX_CLOSED_RECORD_DRAINS",
             "PUSHER_ABANDON_EVICTED_TOKENS",
             "PUSHER_MAX_ABANDON_RECORD_DRAINS",
+            "PUSHER_STORAGE_PCM_BUDGET_MB",
             # Late identity retries are scheduled only by prod pusher audio drain.
             "OWNER_IDENTITY_RETRY_COALESCE_ENABLED",
             # Pusher alone writes PCM chunk batches (upload_audio_chunks_batch).

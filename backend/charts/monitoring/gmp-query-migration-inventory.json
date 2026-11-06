@@ -1354,6 +1354,19 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
+      "expression": "sum by (stage) (rate(omi_pusher_storage_pcm_refusals_total{job=\"pusher-metrics\"}[5m]) and (time() - timestamp(omi_pusher_storage_pcm_refusals_total{job=\"pusher-metrics\"}) < 120))",
+      "file": "alerts/pusher.json",
+      "issues": [],
+      "metrics": [
+        "omi_pusher_storage_pcm_refusals_total"
+      ],
+      "owner_title": "Pusher - Storage PCM admission refused",
+      "owner_uid": "omi-pusher-storage-pcm-refusals",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
       "expression": "sum(increase(omi_journey_terminal_total{journey=\"chat_response\",outcome=~\"success|failure\"}[30m]))",
       "file": "alerts/resilience.json",
       "issues": [],
@@ -3870,7 +3883,7 @@
   ],
   "counts": {
     "explicit_bridge": 25,
-    "query_consumers": 258
+    "query_consumers": 259
   },
   "schema_version": 1,
   "source": "repository, not live Grafana export"
