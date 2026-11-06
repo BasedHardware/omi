@@ -1484,12 +1484,13 @@ def persist_processing_result_with_lifecycle(
         guard_match_score_size(write_data, existing, getattr(conversation_ref, 'path', None))
 
         if family_enabled:
-            requested_status = write_data.pop('status', None)
+            requested_status = write_data.get('status')
             # Processor snapshots never own the terminal classifier, even when
             # they were taken before another writer marked the row as failed.
             write_data.pop('terminal_family', None)
             write_data.pop('terminal_family_at', None)
             if requested_status == ConversationStatus.completed:
+                write_data.pop('status', None)
                 family = existing.get('terminal_family')
                 if family in TERMINAL_FAILURE_FAMILIES or existing.get('finalization_status') == 'dead_letter':
                     terminal_refusal_family = family if family in TERMINAL_FAILURE_FAMILIES else 'dead_letter'

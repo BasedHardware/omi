@@ -256,3 +256,12 @@ def test_transaction_retry_resets_refusal_outcome(store, monkeypatch):
     assert metric._value.get() == before
     assert store.rows[PATH]['status'] == 'completed'
     assert store.rows[PATH]['terminal_family'] == 'success'
+
+
+@pytest.mark.parametrize('status', ['processing', 'in_progress', 'failed', None])
+def test_noncompletion_persist_keeps_legacy_status_writes(store, status):
+    store.rows[PATH]['status'] = 'in_progress'
+    assert persist({'status': status, 'title': 'awaiting enrichment'})
+    assert store.rows[PATH]['status'] == status
+    assert 'terminal_family' not in store.rows[PATH]
+    assert 'terminal_family_at' not in store.rows[PATH]
