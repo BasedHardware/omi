@@ -183,29 +183,37 @@ def test_terminal_child_is_reaped_before_any_census(monkeypatch, tmp_path):
     assert process.returncode == 0
 
 
-def test_missing_zombie_sid_is_recorded_but_cannot_authorize_signal(monkeypatch, tmp_path):
+@pytest.mark.parametrize('state', ['S', 'Z'])
+def test_missing_sid_is_recorded_but_cannot_authorize_signal(monkeypatch, tmp_path, state):
     process = fake_process()
-    output = f'{process.pid} {os.getpid()} {process.pid} {os.getuid()} Z python\n'
+    output = f'{process.pid} {os.getpid()} {process.pid} {os.getuid()} {state} python\n'
     monkeypatch.setattr(cleanup.subprocess, 'run', Mock(return_value=SimpleNamespace(stdout=output)))
     monkeypatch.setattr(cleanup.os, 'getsid', gone)
     rows = cleanup.group_members(process.pid)
     assert len(rows) == 1 and rows[0].sid is None and rows[0].sid_errno == errno.ESRCH
+    assert rows[0].state == state
+    monkeypatch.setattr(cleanup, 'group_members', lambda _: rows)
     send = Mock()
     monkeypatch.setattr(cleanup.os, 'killpg', send)
+    stack = runner.Stack.__new__(runner.Stack)
+    stack.state_dir = tmp_path
+    child = child_for(process, tmp_path)
+    stack.children = {'backend': child}
     with pytest.raises(cleanup.CleanupFailure, match='foreign or unverifiable'):
-        cleanup.stop_child(child_for(process, tmp_path), tmp_path / 'cleanup.jsonl', census=lambda _: rows)
+        stack.stop('backend')
+    assert stack.children['backend'] is child
     send.assert_not_called()
 
 
 @pytest.mark.parametrize(
     'state,error',
     [
-        ('S', ProcessLookupError(errno.ESRCH, 'live lookup unknown')),
         ('S', PermissionError(errno.EPERM, 'live lookup denied')),
         ('Z', PermissionError(errno.EPERM, 'zombie lookup denied')),
+        ('S', OSError(errno.EIO, 'lookup failed')),
     ],
 )
-def test_sid_lookup_failures_other_than_zombie_esrch_propagate(monkeypatch, state, error):
+def test_sid_lookup_denials_and_other_errors_propagate(monkeypatch, state, error):
     output = f'424242 {os.getpid()} 424242 {os.getuid()} {state} python\n'
     monkeypatch.setattr(cleanup.subprocess, 'run', Mock(return_value=SimpleNamespace(stdout=output)))
     monkeypatch.setattr(cleanup.os, 'getsid', Mock(side_effect=error))
@@ -228,7 +236,8 @@ def test_census_timeout_retains_child_and_never_signals(monkeypatch, tmp_path):
     send.assert_not_called()
 
 
-def test_exit_during_census_reaps_before_unknown_zombie_metadata_is_used(monkeypatch, tmp_path):
+@pytest.mark.parametrize('state', ['S', 'Z'])
+def test_exit_during_census_reaps_before_unknown_metadata_is_used(monkeypatch, tmp_path, state):
     process = fake_process()
     statuses = iter([None, None, 0])
 
@@ -237,11 +246,16 @@ def test_exit_during_census_reaps_before_unknown_zombie_metadata_is_used(monkeyp
         return process.returncode
 
     process.poll.side_effect = poll
-    rows = [member(process, state='Z', sid=None, sid_errno=errno.ESRCH)]
+    rows = [member(process, state=state, sid=None, sid_errno=errno.ESRCH)]
     monkeypatch.setattr(cleanup.os, 'killpg', gone)
     cleanup.stop_child(child_for(process, tmp_path), tmp_path / 'cleanup.jsonl', census=lambda _: rows)
     assert process.returncode == 0
-    assert not any(row['event'] == 'signal' for row in events(tmp_path / 'cleanup.jsonl'))
+    recorded = events(tmp_path / 'cleanup.jsonl')
+    observed = next(row['members'][0] for row in recorded if row['event'] == 'census')
+    assert observed['state'] == state
+    assert observed['sid'] is None and observed['sid_errno'] == errno.ESRCH
+    assert any(row['event'] == 'group_absent' for row in recorded)
+    assert not any(row['event'] == 'signal' for row in recorded)
 
 
 def test_term_timeout_then_kill_waits_and_proves_group_absence(monkeypatch, tmp_path):

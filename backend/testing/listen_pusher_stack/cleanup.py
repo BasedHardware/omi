@@ -45,9 +45,10 @@ class Member:
 
 def group_members(pgid: int) -> list[Member]:
     # Only numeric identities, executable basename and state are retained, never argv or
-    # environment. Darwin can enumerate an unreaped zombie for which getsid
-    # returns ESRCH. Retain that row with an explicitly unknown SID: observation
-    # is not ownership authorization or evidence that the group disappeared.
+    # environment. A process can exit between the ps snapshot and getsid, even
+    # when the observed state was not Z. Retain ESRCH as an explicitly unknown
+    # SID with the original state: observation is not ownership authorization
+    # or evidence that the group disappeared.
     result = subprocess.run(
         ['ps', '-axo', 'pid=,ppid=,pgid=,uid=,stat=,comm='],
         check=True,
@@ -63,7 +64,7 @@ def group_members(pgid: int) -> list[Member]:
             try:
                 sid = os.getsid(int(pid))
             except ProcessLookupError as error:
-                if not state.startswith('Z') or error.errno != errno.ESRCH:
+                if error.errno != errno.ESRCH:
                     raise
                 sid = None
                 sid_errno = error.errno
@@ -136,8 +137,8 @@ def stop_child(child: Child, evidence: Path, *, census: Callable[[int], list[Mem
             prove_absent()
             return
         rows = members()
-        # The child may have exited during ps/getsid, including Darwin's Z/SID
-        # ESRCH case. Reap and prove absence rather than inventing its SID.
+        # The child may have exited during ps/getsid regardless of the snapshot
+        # state. Reap and prove absence rather than inventing its missing SID.
         status = process.poll()
         record('poll_after_census', status=status)
         if status is not None:

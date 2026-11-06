@@ -31,5 +31,10 @@ no denial-as-exit recovery is enabled. A first Darwin regression run exposed
 `ps` timeout whose cause is unknown. Cleanup now polls/reaps its direct child
 before metadata inspection and proves group absence with a kernel probe; unknown
 zombie SID data never authorizes a signal. The finite zombie fixture captures
-its live session before exit. Corrected regression and kernel-probe execution
-remain pending; the historical EPERM mechanism has not been reproduced.
+its live session before exit. A subsequent run passed real TERM/reap/idempotence
+and zombie/reap, but the kernel-probe fixture encountered SID ESRCH after a
+non-Z snapshot. Such rows now retain their observed state and an explicitly
+unknown SID; only actual child reap plus independent kernel group-absence proof
+can finish cleanup. Unknown observations never authorize signaling. The updated
+regressions and real kernel probe remain pending; the historical EPERM mechanism
+has not been reproduced.
