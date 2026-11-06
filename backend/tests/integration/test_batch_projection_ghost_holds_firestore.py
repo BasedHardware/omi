@@ -14,6 +14,7 @@ from config.batch_pipeline import HELD_DEAD_LETTER_SECONDS
 from database.batch_pipeline_projection_release import (
     RELEASE_PAGE,
     RELEASE_TICK_SECONDS,
+    ProjectionReleaseStore,
     expired_page_ids,
     release_scan_pass,
 )
@@ -108,25 +109,28 @@ def test_real_hold_releases_missing_target_waits_then_expires_privacy_is_fenced(
     projection = holds.projector.store
     before = snapshot(holds, 'results')
     privacy_job = projection.ref('jobs', PRIVACY).get().to_dict()
-    counts = scan(holds, NOW)
-    assert counts['released'] == 1 and counts['expired'] == 0
+    release = ProjectionReleaseStore(projection)
+    assert release.release(RESTORABLE, NOW)
     released = projection.ref('results', RESTORABLE).get().to_dict()
     assert released['projection_state'] == 'pending' and released['projection'] == {}
     assert projection.ref('jobs', RESTORABLE).get().to_dict()['recovery_state'] is None
     assert released['payload'] == before[RESTORABLE]['payload']
+    assert not release.release(MISSING, NOW) and not release.expired
     waiting = projection.ref('results', MISSING).get().to_dict()
     deadline = NOW + HELD_DEAD_LETTER_SECONDS
     assert waiting == {**before[MISSING], 'held_deadline_at': deadline}
-    assert scan(holds, deadline - 1)['expired'] == 0
+    assert not release.release(MISSING, deadline - 1) and not release.expired
     assert projection.ref('results', MISSING).get().to_dict() == waiting
-    assert scan(holds, deadline)['expired'] == 1
+    assert not release.release(MISSING, deadline) and release.expired
     assert projection.ref('results', MISSING).get().to_dict() == {
         **waiting,
         'held_expired_at': deadline,
         'held_expired_reason': 'held_expired',
     }
-    assert scan(holds, deadline + 1)['expired'] == 0
-    assert expired_page_ids(holds.client, holds.store.namespace, RELEASE_PAGE, None) == [MISSING]
+    assert not release.release(MISSING, deadline + 1) and not release.expired
+    assert MISSING in expired_page_ids(holds.client, holds.store.namespace, RELEASE_PAGE, None)
+    assert not release.release(PRIVACY, NOW)
+    assert not release.release(PRIVACY, deadline)
     assert projection.ref('results', PRIVACY).get().to_dict() == before[PRIVACY]
     assert projection.ref('jobs', PRIVACY).get().to_dict() == privacy_job
 
