@@ -133,7 +133,8 @@ def resolve_pointer(uid: str, pointer: Mapping) -> list:
         preload_pointer(uid, pointer)
     value = memo.decoded[key]
     if isinstance(value, Exception):
-        raise value
+        # Cached failures must not accumulate caller tracebacks/plaintext frames.
+        raise type(value)(str(value)) from None
     return copy.deepcopy(value)
 
 

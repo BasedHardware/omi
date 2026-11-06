@@ -327,3 +327,15 @@ def test_nested_runner_does_not_fetch_or_discard_outer_deferred_notes(lake_world
         with pytest.raises(pointer.TranscriptPointerUnloaded):
             pointer.run_preloaded_operation(lambda: pointer.resolve_pointer(UID, doc['transcript_segments']))
     assert lake_world.calls['get'] == 0
+
+
+def test_cached_failure_does_not_retain_caller_tracebacks(lake_world, monkeypatch):
+    doc = pointer_doc(lake_world)
+    monkeypatch.setattr(lake, 'get_space_object', Mock(side_effect=lake.LakeObjectAbsent('synthetic')))
+    errors = []
+    for _ in range(2):
+        with pytest.raises(pointer.TranscriptBlobAbsent) as error:
+            pointer.resolve_pointer(UID, doc['transcript_segments'])
+        errors.append(error.value)
+    assert errors[0] is not errors[1]
+    assert all(value.__traceback__ is None for value in pointer._memo().decoded.values())
