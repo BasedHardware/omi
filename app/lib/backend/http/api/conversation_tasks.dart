@@ -2,11 +2,10 @@
 // typed failures; no task text or speculative empty-success fallback is exposed.
 import 'dart:convert';
 
-import 'package:omi/backend/http/api/conversations.dart' show conversationListBackgroundParseBytes;
+import 'package:omi/backend/http/api/conversations.dart' show ConversationApi;
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/env/env.dart';
-import 'package:omi/utils/off_ui_isolate.dart';
 
 class TaskConversationPage {
   const TaskConversationPage({required this.items, this.nextCursor, this.partial = false});
@@ -81,20 +80,13 @@ Future<ApiResult<TaskConversationPage>> getConversationsWithTasks({
       return ApiFailure(problem);
     case ApiSuccess(:final data, :final truncated):
       try {
-        final page = await _decodeTaskPageOffUi(data);
+        final page = await ConversationApi.decodeOffUi(data, _decodeTaskPage);
         return ApiSuccess(page, truncated: truncated);
       } on FormatException {
         return const ApiFailure(ApiProblem(ApiProblemKind.decode));
       }
   }
 }
-
-Future<TaskConversationPage> _decodeTaskPageOffUi(String body) => offUiIsolate(
-      () => _decodeTaskPage(body),
-      size: body.length,
-      threshold: conversationListBackgroundParseBytes,
-      debugName: 'task_conversation_parse',
-    );
 
 TaskConversationPage _decodeTaskPage(String body) {
   final json = _object(body);
