@@ -1695,13 +1695,14 @@ class ConversationProvider extends ChangeNotifier {
       // Keep the row hidden through the cache write. The shared queue prevents
       // concurrent deletes, list writes and merge completion from losing each other's edits.
       await _queueConversationPersistence(() async {
-        if (current()) await prefs.evictCachedConversation(conversationId);
+        if (current() && await prefs.evictCachedConversation(conversationId) && current()) {
+          _clearDeleteTombstone(conversationId);
+        }
       });
     } catch (error) {
       Logger.debug('ConversationProvider: deleted row cache eviction failed: ${error.runtimeType}');
     }
     if (!current()) return;
-    _clearDeleteTombstone(conversationId);
     notifyListeners();
   }
 

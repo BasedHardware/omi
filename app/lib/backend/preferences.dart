@@ -1181,12 +1181,12 @@ class SharedPreferencesUtil {
         saveBool('migratedMemories', true);
       }
     }
-    return _decodeCachedList('cachedConversations', (json) => ServerConversation.fromJson(json));
+    return _excludeFailedCacheEvictions(_decodeCachedList('cachedConversations', ServerConversation.fromJson));
   }
 
   set cachedConversations(List<ServerConversation> value) {
     _cachedConversationsGeneration++;
-    final List<String> conversations = value.map((e) => jsonEncode(e.toJson())).toList();
+    final conversations = _excludeFailedCacheEvictions(value).map((row) => jsonEncode(row.toJson())).toList();
     saveStringList('cachedConversations', conversations);
   }
 
@@ -1244,7 +1244,7 @@ class SharedPreferencesUtil {
         if (session != _conversationCacheReadSession || uid != ownerUid) return [];
         if (_cachedConversationsGeneration != migrationGeneration) return [];
       }
-      return decoded.conversations;
+      return _excludeFailedCacheEvictions(decoded.conversations);
     }
     // Concurrent live rows are reconciled by the provider. Never publish a
     // superseded cache snapshot merely to complete a best-effort fallback.
@@ -1260,7 +1260,7 @@ class SharedPreferencesUtil {
     final generation = ++_cachedConversationsGeneration;
     final session = _conversationCacheReadSession;
     final ownerUid = uid;
-    final snapshot = List<ServerConversation>.of(value);
+    final snapshot = List<ServerConversation>.of(_excludeFailedCacheEvictions(value));
     final encoded = await offUiIsolate(() => [for (final c in snapshot) jsonEncode(c.toJson())],
         size: snapshot.length,
         threshold: cachedConversationsBackgroundEncodeThreshold,
@@ -1272,33 +1272,58 @@ class SharedPreferencesUtil {
   }
 
   /// Removes a confirmed deletion from both the current cache and any legacy
-  /// conversation snapshot that could seed it again on reopen.
-  Future<void> evictCachedConversation(String id) async {
+  /// conversation snapshot that could seed it again on reopen. Returns whether
+  /// both snapshots were evicted so the caller can retire its in-memory guard.
+  Future<bool> evictCachedConversation(String id) async {
     final session = _conversationCacheReadSession;
     final ownerUid = uid;
-    for (var attempt = 0; attempt < 2; attempt++) {
-      final generation = ++_cachedConversationsGeneration;
-      final snapshots = {
-        'cachedConversations': getStringList('cachedConversations'),
-        if (getBool('migratedMemories')) 'cachedMemories': getStringList('cachedMemories'),
-      };
-      final size = snapshots.values.expand((rows) => rows).fold<int>(0, (total, row) => total + row.length);
-      final retained = await offUiIsolate(
-        () => {
-          for (final entry in snapshots.entries) entry.key: entry.value.where((row) => !_hasId(row, id)).toList(),
-        },
-        size: size,
-        threshold: cachedConversationsBackgroundDecodeThreshold,
-        debugName: 'conversation_cache_evict',
-      );
-      if (session != _conversationCacheReadSession || uid != ownerUid) return;
-      if (generation != _cachedConversationsGeneration) continue;
-      await Future.wait([
-        for (final entry in retained.entries)
-          if (entry.value.length != snapshots[entry.key]!.length) saveStringList(entry.key, entry.value),
-      ]);
-      return;
+    bool current() => session == _conversationCacheReadSession && uid == ownerUid;
+    try {
+      for (var attempt = 0; attempt < 2; attempt++) {
+        final generation = ++_cachedConversationsGeneration;
+        final snapshots = {
+          'cachedConversations': getStringList('cachedConversations'),
+          if (getBool('migratedMemories')) 'cachedMemories': getStringList('cachedMemories'),
+        };
+        final size = snapshots.values.expand((rows) => rows).fold<int>(0, (total, row) => total + row.length);
+        final retained = await offUiIsolate(
+          () => {
+            for (final entry in snapshots.entries) entry.key: entry.value.where((row) => !_hasId(row, id)).toList(),
+          },
+          size: size,
+          threshold: cachedConversationsBackgroundDecodeThreshold,
+          debugName: 'conversation_cache_evict',
+        );
+        if (!current()) return false;
+        if (generation != _cachedConversationsGeneration) continue;
+        final writes = await Future.wait([
+          for (final entry in retained.entries)
+            if (entry.value.length != snapshots[entry.key]!.length) saveStringList(entry.key, entry.value),
+        ]);
+        if (!current()) return false;
+        if (writes.any((saved) => !saved)) break;
+        if (generation == _cachedConversationsGeneration) return true;
+      }
+    } catch (error) {
+      Logger.debug('Conversation cache eviction failed: ${error.runtimeType}');
     }
+    // Preferences can reflect an unsuccessful write in memory. Record the
+    // confirmed ID separately so either stale snapshot stays hidden on restart.
+    if (current() && ownerUid.isNotEmpty) {
+      final key = _userScopedKey('failedConversationCacheEvictions', ownerUid);
+      final ids = {...getStringList(key), id};
+      if (!await saveStringList(key, ids.toList())) {
+        throw StateError('Could not persist confirmed conversation cache eviction');
+      }
+    }
+    return false;
+  }
+
+  List<ServerConversation> _excludeFailedCacheEvictions(List<ServerConversation> rows) {
+    final ownerUid = uid;
+    if (ownerUid.isEmpty) return rows;
+    final ids = getStringList(_userScopedKey('failedConversationCacheEvictions', ownerUid)).toSet();
+    return ids.isEmpty ? rows : rows.where((row) => !ids.contains(row.id)).toList();
   }
 
   List<ServerMessage> get cachedMessages {
