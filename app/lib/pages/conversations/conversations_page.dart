@@ -799,23 +799,32 @@ class _ConversationsPageState extends State<ConversationsPage>
         final mergedDates = <DateTime>{...conversationsByDate.keys, ...recordingsByDate.keys, ...heldByDate.keys}
             .toList()
           ..sort((a, b) => b.compareTo(a));
-        final hasCollapsedDays = mergedDates.any(_collapsedConversationDays.contains);
         final isSearchPage = convoProvider.previousQuery.isNotEmpty || convoProvider.selectedSpeakerId != null;
         final canLoadMore = isSearchPage
             ? convoProvider.totalSearchPages > convoProvider.currentSearchPage
             : convoProvider.hasMoreConversations;
         // Episodes beta, default view: background conversations live in the day's recap, not on Home.
         final hidingBackground = episodesOn && showRecordings && !convoProvider.isSelectionModeActive;
+        final conversationsForRows = hidingBackground ? _withoutBackground(conversationsByDate) : conversationsByDate;
+        final preservedConversationIds = {
+          ...projectedProcessingIds,
+          ...snapshot.processingConversations.map((conversation) => conversation.id),
+        };
+        final collapsibleDays = {
+          for (final day in mergedDates)
+            if ((conversationsForRows[day] ?? const <ServerConversation>[])
+                .any((conversation) => !preservedConversationIds.contains(conversation.id)))
+              DateUtils.dateOnly(day),
+        };
+        final collapsedDays = _collapsedConversationDays.intersection(collapsibleDays);
+        final hasCollapsedDays = collapsedDays.isNotEmpty;
         final builtRows = _buildConversationListRows(
           dates: mergedDates,
-          conversationsByDate: hidingBackground ? _withoutBackground(conversationsByDate) : conversationsByDate,
+          conversationsByDate: conversationsForRows,
           recordingsByDate: recordingsByDate,
           heldByDate: heldByDate,
-          collapsedDates: _collapsedConversationDays,
-          preservedConversationIds: {
-            ...projectedProcessingIds,
-            ...snapshot.processingConversations.map((conversation) => conversation.id),
-          },
+          collapsedDates: collapsedDays,
+          preservedConversationIds: preservedConversationIds,
         );
         final withLive =
             episodeLive ? _withTodayRow(builtRows, DateTime.now(), _ConversationListRowKind.liveEpisode) : builtRows;
@@ -995,9 +1004,9 @@ class _ConversationsPageState extends State<ConversationsPage>
                       if (hasCollapsedDays) {
                         if (!canLoadMore) return const SizedBox(height: 20);
                         return Center(
-                          child: TextButton(
+                          child: OmiButton.tertiary(
+                            label: context.l10n.showMore,
                             onPressed: () => _requestMoreIfNeeded(context.read<ConversationProvider>()),
-                            child: Text(context.l10n.showMore),
                           ),
                         );
                       }
@@ -1025,15 +1034,18 @@ class _ConversationsPageState extends State<ConversationsPage>
                         );
                       case _ConversationListRowKind.dateHeader:
                         final day = DateUtils.dateOnly(row.date);
-                        final collapsed = _collapsedConversationDays.contains(day);
+                        final canCollapse = collapsibleDays.contains(day);
+                        final collapsed = collapsedDays.contains(day);
                         return DateListItem(
                           key: ValueKey('date_${row.date.toIso8601String()}'),
                           date: row.date,
                           isFirst: row.isFirst,
                           collapsed: collapsed,
-                          onToggle: () => setState(() {
-                            if (!_collapsedConversationDays.add(day)) _collapsedConversationDays.remove(day);
-                          }),
+                          onToggle: canCollapse
+                              ? () => setState(() {
+                                    if (!_collapsedConversationDays.add(day)) _collapsedConversationDays.remove(day);
+                                  })
+                              : null,
                         );
                       case _ConversationListRowKind.liveEpisode:
                         return Column(

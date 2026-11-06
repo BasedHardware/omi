@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
@@ -9,6 +11,7 @@ import 'package:omi/pages/conversations/widgets/processing_conversation_row.dart
 import 'package:omi/pages/conversations/widgets/recording_list_item.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/local_recordings_provider.dart';
+import 'package:omi/ui/components/omi_button.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
 import '../../support/typed_conversation_screen.dart';
@@ -35,6 +38,7 @@ void main() {
   tearDownAll(() => VisibilityDetectorController.instance.updateInterval = previousVisibilityInterval);
 
   testWidgets('days collapse and expand without changing their conversations', (tester) async {
+    final semantics = tester.ensureSemantics();
     tester.view.physicalSize = const Size(800, 1600);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -88,9 +92,21 @@ void main() {
     await tester.pump(const Duration(milliseconds: 250));
 
     final dayKey = ValueKey('collapse_day_${today.toIso8601String()}');
-    expect(find.byTooltip('Today: Collapse'), findsOneWidget);
-    expect(tester.getSize(find.byKey(dayKey)).width, greaterThanOrEqualTo(48));
-    expect(tester.getSize(find.byKey(dayKey)).height, greaterThanOrEqualTo(48));
+    expect(find.byTooltip('Collapse'), findsNWidgets(2));
+    expect(tester.getSize(find.byKey(dayKey)).width, greaterThanOrEqualTo(44));
+    expect(tester.getSize(find.byKey(dayKey)).height, greaterThanOrEqualTo(44));
+    final todayToggle = tester.getSemantics(find.byKey(dayKey)).getSemanticsData();
+    final yesterday = DateTime(today.year, today.month, today.day - 1);
+    final yesterdayKey = ValueKey('collapse_day_${yesterday.toIso8601String()}');
+    final yesterdayToggle = tester.getSemantics(find.byKey(yesterdayKey)).getSemanticsData();
+    expect(todayToggle.label, contains('Today'));
+    expect(todayToggle.label, contains('Collapse'));
+    expect(todayToggle.hasAction(ui.SemanticsAction.tap), isTrue);
+    expect(todayToggle.flagsCollection.isButton, isTrue);
+    expect(todayToggle.flagsCollection.isExpanded, ui.Tristate.isTrue);
+    expect(yesterdayToggle.label, contains('Yesterday'));
+    expect(yesterdayToggle.label, contains('Collapse'));
+    expect(yesterdayToggle.flagsCollection.isExpanded, ui.Tristate.isTrue);
     expect(find.byType(ConversationListItem), findsNWidgets(2));
     expect(find.text('Today conversation'), findsOneWidget);
     expect(find.text('Yesterday conversation'), findsOneWidget);
@@ -99,7 +115,11 @@ void main() {
 
     await tester.tap(find.byKey(dayKey));
     await tester.pump();
-    expect(find.byTooltip('Today: Expand'), findsOneWidget);
+    expect(find.byTooltip('Expand'), findsOneWidget);
+    final collapsedToggle = tester.getSemantics(find.byKey(dayKey)).getSemanticsData();
+    expect(collapsedToggle.label, contains('Today'));
+    expect(collapsedToggle.label, contains('Expand'));
+    expect(collapsedToggle.flagsCollection.isExpanded, ui.Tristate.isFalse);
     expect(find.text('Today conversation'), findsNothing);
     expect(find.text('Yesterday conversation'), findsOneWidget);
     expect(find.byType(ConversationListItem), findsOneWidget);
@@ -111,6 +131,42 @@ void main() {
     await tester.pump();
     expect(find.text('Today conversation'), findsOneWidget);
     expect(find.text('Yesterday conversation'), findsOneWidget);
+    semantics.dispose();
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('recording-only day has no collapse control or collapsed pagination mode', (tester) async {
+    tester.view.physicalSize = const Size(800, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final today = DateUtils.dateOnly(DateTime.now());
+    final provider = ConversationProvider(
+      conversationListFetcher: () async => (items: <ServerConversation>[], ok: true),
+      isSignedIn: () => true,
+    );
+    addTearDown(provider.dispose);
+    final recordings = _Recordings([
+      LocalRecording(
+        fileName: 'recording.bin',
+        filePath: '/tmp/recording.bin',
+        timerStart: today.millisecondsSinceEpoch ~/ 1000,
+        codec: BleAudioCodec.opus,
+        frameSize: 160,
+        sizeBytes: 1024,
+        seconds: 1,
+        state: LocalRecordingState.pending,
+      ),
+    ]);
+    addTearDown(recordings.dispose);
+
+    await tester.pumpWidget(await buildTypedConversationScreen(provider, recordingsProvider: recordings));
+    await tester.pump();
+
+    expect(find.byType(RecordingListItem), findsOneWidget);
+    expect(find.byKey(ValueKey('collapse_day_${today.toIso8601String()}')), findsNothing);
+    expect(find.byType(OmiButton), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
@@ -147,6 +203,8 @@ void main() {
     await tester.pump();
     expect(requests, 0);
     expect(find.text('show more ↓'), findsOneWidget);
+    expect(find.byType(OmiButton), findsOneWidget);
+    expect(tester.getSize(find.byType(OmiButton)).height, greaterThanOrEqualTo(48));
 
     await tester.tap(find.text('show more ↓'));
     await tester.pump();
