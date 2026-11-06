@@ -42,8 +42,12 @@ UNVERIFIED: a per-cohort legacy switch does not exist on main. `legacy_sync_mode
 | Stage C per-clip diarization: `utils/stt/diarization.py` `/v2/diarization` client and `diarizer/api_v2.py` route | Diarization on the recovery path (the audio that must stay on the vendor gets pyannote speakers); one diarization service | batch quality lane | Revert; the RPC is stateless |
 | One of three speaker resolvers: `utils/stt/conversation_speakers.py:resolve_conversation_speakers`, `utils/conversations/speaker_resolution.py:_resolve`, `routers/listen/speakers.py:_match_unmapped` | #23581 merged; named-speaker share on the batch cohort ≥ legacy for 7 days. UNVERIFIED which resolver goes | batch speakers lane | Revert |
 | Legacy-mode fence: `utils/rollout/runtime_percent.py:legacy_sync_mode`, the double-processing fence in `utils/sync/legacy_dark.py` | All legacy code above deleted | sync lane | Revert |
-| Optional legacy fresh lane `utils/sync/legacy_fresh.py` (`SYNC_LEGACY_FRESH_*`) | Mode `dark`; no legacy fresh admissions for 7 days | sync lane | Revert |
 | Graduated batch flags (e.g. `BATCH_PIPELINE_SERVING_ENABLED`, cohort percents at 100) | Flag at its terminal value for 7 days; row marked `terminal: on` in `config/feature-flags.yaml` | each flag's owner | Revert; lower `config/flag_budget.json` in the same change ([ADR 0006](adr/0006-pipeline-flag-budget.md)) |
+
+The optional legacy fresh-admission flags and Redis budget were removed in
+[#24754](https://github.com/BasedHardware/omi/pull/24754). Mode `on` retains
+recent unbound fresh classification, including fail-safe mode reads, without
+the retired budget; `draining` and `dark` still disable that promotion.
 
 ## Not on the batch ladder
 

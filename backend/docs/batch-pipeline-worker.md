@@ -17,8 +17,10 @@ routes approximately 99% to backfill. One job per owner, queue concurrency
 13 seconds/job constrain dispatch. Supplied GPU utilization is approximately
 7%; batch pyannote T4 RTF is 0.04 and Parakeet L4 RTF 0.0025. The supplied
 1.5 seconds/audio-hour batch estimate is not qualified full-chain capacity.
-`SYNC_LEGACY_FRESH_ENABLED` remains independently owned; its classification
-feeds this queue unchanged.
+The optional legacy fresh-admission flags and Redis budget were retired in
+[#24754](https://github.com/BasedHardware/omi/pull/24754). Recent unbound
+uploads retain fresh routing only when legacy mode is `on`, including its
+fail-safe path; `draining` and `dark` disable that promotion.
 
 ## Target, ownership and work units
 
