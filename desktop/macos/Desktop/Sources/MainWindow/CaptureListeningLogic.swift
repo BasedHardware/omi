@@ -170,9 +170,7 @@ enum CaptureListeningLogic {
     }
 
     screenAnalysisEnabled.wrappedValue = enabled
-    AssistantSettings.shared.screenAnalysisEnabled = enabled
-    SettingsSyncManager.shared.pushPartialUpdate(
-      SettingsSyncManager.screenAnalysisEnabledUpdate(enabled))
+    AssistantSettings.shared.setUserScreenAnalysisEnabled(enabled)
     AnalyticsManager.shared.settingToggled(setting: "monitoring", enabled: enabled)
 
     if enabled {
@@ -182,9 +180,7 @@ enum CaptureListeningLogic {
           isCaptureMonitoring.wrappedValue = ProactiveAssistantsPlugin.shared.isMonitoring
           if !success {
             screenAnalysisEnabled.wrappedValue = false
-            AssistantSettings.shared.screenAnalysisEnabled = false
-            SettingsSyncManager.shared.pushPartialUpdate(
-              SettingsSyncManager.screenAnalysisEnabledUpdate(false))
+            AssistantSettings.shared.revertScreenAnalysisAfterFailedStart()
             isCaptureMonitoring.wrappedValue = false
           }
         }

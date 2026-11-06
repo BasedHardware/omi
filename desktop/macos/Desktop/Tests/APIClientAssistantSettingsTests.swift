@@ -289,36 +289,104 @@ final class APIClientAssistantSettingsTests: XCTestCase {
   }
 
   @MainActor
+  private func withScreenAnalysisSyncState(_ body: () -> Void) {
+    let defaults = UserDefaults.standard
+    let originalEnabled = defaults.object(forKey: .screenAnalysisEnabled)
+    let originalDisabledOwner = defaults.string(forKey: .screenAnalysisDisabledOwner)
+    let originalRemoteMarker = defaults.object(forKey: .screenAnalysisSetByRemoteSync)
+    let originalOwner = defaults.string(forKey: .authUserId)
+    defer {
+      if let originalEnabled {
+        // omi-test-quality: shared-defaults -- integration: restores SettingsSyncManager singleton state
+        UserDefaults.standard.set(originalEnabled, forKey: .screenAnalysisEnabled)
+      } else {
+        // omi-test-quality: shared-defaults -- integration: restores SettingsSyncManager singleton state
+        UserDefaults.standard.removeObject(forKey: .screenAnalysisEnabled)
+      }
+      if let originalDisabledOwner {
+        // omi-test-quality: shared-defaults -- integration: restores SettingsSyncManager singleton state
+        UserDefaults.standard.set(originalDisabledOwner, forKey: .screenAnalysisDisabledOwner)
+      } else {
+        // omi-test-quality: shared-defaults -- integration: restores SettingsSyncManager singleton state
+        UserDefaults.standard.removeObject(forKey: .screenAnalysisDisabledOwner)
+      }
+      if let originalRemoteMarker {
+        // omi-test-quality: shared-defaults -- integration: restores SettingsSyncManager singleton state
+        UserDefaults.standard.set(originalRemoteMarker, forKey: .screenAnalysisSetByRemoteSync)
+      } else {
+        // omi-test-quality: shared-defaults -- integration: restores SettingsSyncManager singleton state
+        UserDefaults.standard.removeObject(forKey: .screenAnalysisSetByRemoteSync)
+      }
+      if let originalOwner {
+        // omi-test-quality: shared-defaults -- integration: restores SettingsSyncManager singleton state
+        UserDefaults.standard.set(originalOwner, forKey: .authUserId)
+      } else {
+        // omi-test-quality: shared-defaults -- integration: restores SettingsSyncManager singleton state
+        UserDefaults.standard.removeObject(forKey: .authUserId)
+      }
+    }
+    body()
+  }
+
+  @MainActor
   func testRemoteSyncDoesNotReEnableLocallyDisabledScreenAnalysis() {
-    let originalEnabled = AssistantSettings.shared.screenAnalysisEnabled
-    defer { AssistantSettings.shared.screenAnalysisEnabled = originalEnabled }
+    withScreenAnalysisSyncState {
+      // omi-test-quality: shared-defaults -- integration: exercises SettingsSyncManager singleton
+      UserDefaults.standard.set("owner-a", forKey: .authUserId)
+      AssistantSettings.shared.screenAnalysisEnabled = false
+      SettingsSyncManager.shared.recordLocalScreenAnalysisPreference(false)
 
-    AssistantSettings.shared.screenAnalysisEnabled = false
-    SettingsSyncManager.shared.applyRemoteSettings(
-      AssistantSettingsResponse(shared: SharedAssistantSettingsResponse(screenAnalysisEnabled: true))
-    )
+      // Even if a matching remote false arrives first, local disable provenance must survive.
+      SettingsSyncManager.shared.applyRemoteSettings(
+        AssistantSettingsResponse(shared: SharedAssistantSettingsResponse(screenAnalysisEnabled: false))
+      )
+      SettingsSyncManager.shared.applyRemoteSettings(
+        AssistantSettingsResponse(shared: SharedAssistantSettingsResponse(screenAnalysisEnabled: true))
+      )
 
-    XCTAssertFalse(
-      AssistantSettings.shared.screenAnalysisEnabled,
-      "A background server sync must not override a local screen-analysis off choice"
-    )
+      XCTAssertFalse(
+        AssistantSettings.shared.screenAnalysisEnabled,
+        "A background server sync must not override a local screen-analysis off choice"
+      )
+    }
   }
 
   @MainActor
   func testRemoteSyncCanReEnableScreenAnalysisWhenEarlierDisableCameFromRemoteSync() {
-    let originalEnabled = AssistantSettings.shared.screenAnalysisEnabled
-    defer { AssistantSettings.shared.screenAnalysisEnabled = originalEnabled }
+    withScreenAnalysisSyncState {
+      AssistantSettings.shared.screenAnalysisEnabled = true
+      SettingsSyncManager.shared.recordLocalScreenAnalysisPreference(true)
+      SettingsSyncManager.shared.applyRemoteSettings(
+        AssistantSettingsResponse(shared: SharedAssistantSettingsResponse(screenAnalysisEnabled: false))
+      )
+      XCTAssertFalse(AssistantSettings.shared.screenAnalysisEnabled)
 
-    AssistantSettings.shared.screenAnalysisEnabled = true
-    SettingsSyncManager.shared.applyRemoteSettings(
-      AssistantSettingsResponse(shared: SharedAssistantSettingsResponse(screenAnalysisEnabled: false))
-    )
-    XCTAssertFalse(AssistantSettings.shared.screenAnalysisEnabled)
+      SettingsSyncManager.shared.applyRemoteSettings(
+        AssistantSettingsResponse(shared: SharedAssistantSettingsResponse(screenAnalysisEnabled: true))
+      )
+      XCTAssertTrue(AssistantSettings.shared.screenAnalysisEnabled)
+    }
+  }
 
-    SettingsSyncManager.shared.applyRemoteSettings(
-      AssistantSettingsResponse(shared: SharedAssistantSettingsResponse(screenAnalysisEnabled: true))
-    )
-    XCTAssertTrue(AssistantSettings.shared.screenAnalysisEnabled)
+  @MainActor
+  func testRemoteSyncAppliesWhenDifferentAccountSignsInAfterLocalDisable() {
+    withScreenAnalysisSyncState {
+      // omi-test-quality: shared-defaults -- integration: exercises SettingsSyncManager singleton
+      UserDefaults.standard.set("owner-a", forKey: .authUserId)
+      AssistantSettings.shared.screenAnalysisEnabled = false
+      SettingsSyncManager.shared.recordLocalScreenAnalysisPreference(false)
+
+      // omi-test-quality: shared-defaults -- integration: exercises SettingsSyncManager singleton
+      UserDefaults.standard.set("owner-b", forKey: .authUserId)
+      SettingsSyncManager.shared.applyRemoteSettings(
+        AssistantSettingsResponse(shared: SharedAssistantSettingsResponse(screenAnalysisEnabled: true))
+      )
+
+      XCTAssertTrue(
+        AssistantSettings.shared.screenAnalysisEnabled,
+        "A newly signed-in second account on the same Mac should hydrate its own screen-analysis setting"
+      )
+    }
   }
 
   func testAssistantSettingsDecodesValidSiblingsWhenOneKnownSectionIsMalformed() throws {

@@ -218,13 +218,17 @@ struct RewindSettingsView: View {
           title: "Screen Capture",
           subtitle: "Capture screenshots for Rewind timeline"
         ) {
-          Toggle("", isOn: $screenAnalysisEnabled)
-            .toggleStyle(OmiToggleStyle())
-            .onChange(of: screenAnalysisEnabled) { _, newValue in
-              AssistantSettings.shared.screenAnalysisEnabled = newValue
-              SettingsSyncManager.shared.pushPartialUpdate(
-                SettingsSyncManager.screenAnalysisEnabledUpdate(newValue))
-            }
+          Toggle(
+            "",
+            isOn: Binding(
+              get: { screenAnalysisEnabled },
+              set: { newValue in
+                screenAnalysisEnabled = newValue
+                AssistantSettings.shared.setUserScreenAnalysisEnabled(newValue)
+              }
+            )
+          )
+          .toggleStyle(OmiToggleStyle())
         }
 
         // Retention Period

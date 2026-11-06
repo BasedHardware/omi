@@ -6,6 +6,7 @@ import Foundation
 class SettingsSyncManager {
   static let shared = SettingsSyncManager()
   private var isApplyingRemoteScreenAnalysis = false
+  private var screenAnalysisPushTask: Task<Void, Never>?
   private init() {}
 
   /// Pull settings from server and apply non-nil values to local singletons.
@@ -75,7 +76,7 @@ class SettingsSyncManager {
         if v {
           UserDefaults.standard.removeObject(forKey: .screenAnalysisSetByRemoteSync)
           UserDefaults.standard.removeObject(forKey: .screenAnalysisDisabledOwner)
-        } else {
+        } else if !hasRecordedLocalScreenAnalysisDisable {
           UserDefaults.standard.set(true, forKey: .screenAnalysisSetByRemoteSync)
         }
       }
@@ -131,6 +132,33 @@ class SettingsSyncManager {
 
   private var shouldKeepLocalScreenAnalysisDefault: Bool {
     AppBuild.usesLazyDevPermissions
+  }
+
+  private var hasRecordedLocalScreenAnalysisDisable: Bool {
+    guard let recordedOwner = UserDefaults.standard.string(forKey: .screenAnalysisDisabledOwner) else {
+      return false
+    }
+    if recordedOwner == "local" {
+      return true
+    }
+    return recordedOwner == Self.currentOwnerID
+  }
+
+  /// Pushes a coalesced `screen_analysis_enabled` partial update for non-lazy-dev bundles.
+  func pushScreenAnalysisPreference(_ enabled: Bool) {
+    guard !shouldKeepLocalScreenAnalysisDefault else { return }
+    let payload = Self.screenAnalysisEnabledUpdate(enabled)
+    screenAnalysisPushTask?.cancel()
+    screenAnalysisPushTask = Task {
+      guard !Task.isCancelled else { return }
+      do {
+        let _ = try await APIClient.shared.updateAssistantSettings(payload)
+      } catch {
+        if !Task.isCancelled {
+          logError("SettingsSyncManager: failed to push partial update", error: error)
+        }
+      }
+    }
   }
 
   /// Records whether the user explicitly enabled or disabled screen analysis on this Mac.
