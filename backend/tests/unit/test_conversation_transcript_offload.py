@@ -1,7 +1,7 @@
 """Pointer-mode domain refusals, reader surfaces and C1 review follow-ups."""
 
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import hashlib
 import inspect
 import json
@@ -25,13 +25,19 @@ from database import (
     speaker_learning_jobs,
 )
 from database import smart_merge, recurring_voice_privacy, review_changes
+from database import recording_sessions, conversation_finalization_jobs as jobs, users, speaker_auto_enroll as auto
+from database import episode_attach_memo as memo, episode_timeline as timeline, episode_recorded_components
+from utils.speakers import auto_enroll as policy
+from utils.conversations.episode_attach_key import content_key
+from utils.sync.assignment import assign_in_transaction
+from utils.sync.assignment_errors import SyncAssignmentSuperseded
 from models.review import ReviewChange, ChangeRef
 from utils.conversations import transcript_chunks
 from utils.conversations.transcript_hash import transcript_sha256_for_binding
 from models.conversation import Conversation
 from models.transcript_segment import TranscriptSegment
 from tests.support.dream_firestore import DreamFirestore
-from tests.unit.fixtures.strict_firestore_transaction import StrictFirestoreDocument
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestoreDocument, StrictFirestoreCollection
 from tests.unit.test_transcript_pointer import lake_world, UID, CID, PATH, encode, speech, pointer_doc
 from utils.other import object_lake as lake, space_keys
 from utils.other.local_storage import LocalBlob
@@ -784,3 +790,256 @@ def test_explicit_document_identity_wins_over_payload_identity(lake_world):
     )
     assert f'/transcript/{CID}/' in encoded['transcript_segments']['key']
     assert lake_world.calls['put'] == 1
+
+
+def _pointer_failure(monkeypatch, state):
+    if state != 'present':
+        failure = {
+            'absent': lake.LakeObjectAbsent,
+            'shredded': space_keys.SpaceKeyDestroyed,
+            'outage': lake.LakeFetchError,
+        }[state]
+
+        def fail(ref):
+            assert not pointer._client.in_transaction_body()
+            raise failure('synthetic')
+
+        monkeypatch.setattr(lake, 'get_space_object', fail)
+
+
+@pytest.mark.parametrize('surface', ['list', 'mcp'])
+def test_absent_pointer_is_filtered_from_collections(lake_world, monkeypatch, surface):
+    doc = pointer_doc(lake_world)
+    doc.update(discarded=False, has_photos=False, created_at=NOW, started_at=NOW, finished_at=NOW)
+    lake_world.store.rows[PATH] = doc
+    transport = _ReadSurface(lake_world)
+    monkeypatch.setattr(db, 'db', transport)
+    monkeypatch.setattr(db, '_collect_visible_conversation_page', lambda *a, **kw: [deepcopy(doc)])
+    _pointer_failure(monkeypatch, 'absent')
+    rows = (
+        db.get_conversations(UID)
+        if surface == 'list'
+        else db.get_mcp_conversations_by_id(UID, [CID], include_transcript=True, firestore_client=transport)
+    )
+    assert rows == []
+
+
+@pytest.mark.parametrize('state', ['present', 'absent', 'shredded', 'outage'])
+def test_empty_recording_cleanup_preloads_and_refuses_unknown_content(lake_world, monkeypatch, state):
+    doc = pointer_doc(lake_world)
+    doc['status'] = 'in_progress'
+    lake_world.store.rows[PATH] = doc
+    monkeypatch.setattr(recording_sessions, 'stop_quiet_check_for_conversation', lambda *a, **kw: None)
+    monkeypatch.setattr(recording_sessions, 'invalidate_people_stats_cache', lambda *a: None)
+    _pointer_failure(monkeypatch, state)
+    operation = lambda: recording_sessions.tombstone_and_delete_empty_conversation(
+        UID, CID, None, firestore_client=lake_world.store
+    )
+    if state == 'outage':
+        with pytest.raises(pointer.TranscriptPointerFetchError):
+            operation()
+        assert lake_world.store.rows[PATH] == doc
+    else:
+        assert operation() is (state in {'absent', 'shredded'})
+        assert (PATH in lake_world.store.rows) is (state == 'present')
+    if state == 'present':
+        assert lake_world.calls['get'] == 1
+
+
+@pytest.mark.parametrize('trigger', ['capture_end', 'server_recovery'])
+@pytest.mark.parametrize('state', ['present', 'absent', 'shredded', 'outage'])
+def test_finalization_admission_preloads_before_outbox_writes(lake_world, monkeypatch, state, trigger):
+    doc = pointer_doc(lake_world)
+    doc.update(status='in_progress', source='omi', finished_at=NOW, last_speech_at=NOW, has_photos=False)
+    lake_world.store.rows[PATH] = doc
+
+    # StrictFirestore intentionally has no photo-query model; this boundary
+    # returns the empty legacy photo probe, enforcing its transaction ordering.
+    def limit(collection, count):
+        assert collection._path[-1] == 'photos' and count == 1
+
+        def stream(transaction):
+            transaction._assert_read_allowed()
+            return iter(())
+
+        return SimpleNamespace(stream=stream)
+
+    monkeypatch.setattr(StrictFirestoreCollection, 'limit', limit, raising=False)
+    monkeypatch.setattr(jobs, 'quiet_finalization_enabled', lambda: False)
+    monkeypatch.setattr(jobs, 'stop_quiet_check_for_conversation', lambda *a, **kw: None)
+    monkeypatch.setattr(jobs, 'invalidate_people_stats_cache', lambda *a: None)
+    _pointer_failure(monkeypatch, state)
+    operation = lambda: jobs.create_or_get_finalization_intent(
+        UID,
+        CID,
+        requires_byok=False,
+        finalization_admission=lambda row: dict(accepted=True, terminal=False, reason='accepted', fanout_key='test'),
+        trigger=jobs.ProcessingTrigger(trigger),
+        recovery_cutoff=NOW + timedelta(days=1),
+        firestore_client=lake_world.store,
+    )
+    if state == 'outage':
+        with pytest.raises(pointer.TranscriptPointerFetchError):
+            operation()
+        assert lake_world.store.rows[PATH] == doc
+        assert not any(key[0] == jobs.FINALIZATION_JOBS_COLLECTION for key in lake_world.store.rows)
+    else:
+        result = operation()
+        assert result['created'] is (state == 'present')
+        if state == 'present':
+            assert lake_world.calls['get'] == 1
+
+
+@pytest.mark.parametrize('site', ['memo_check', 'memo_finish', 'timeline'])
+@pytest.mark.parametrize('state', ['present', 'absent', 'shredded', 'outage'])
+def test_episode_memo_owners_preload(lake_world, monkeypatch, site, state):
+    doc = pointer_doc(lake_world)
+    doc.update(source='omi', started_at=NOW, finished_at=NOW + timedelta(seconds=12), episode_id='episode')
+    lake_world.store.rows[PATH] = doc
+    row = {**doc, 'transcript_segments': speech()}
+    key = content_key(row)
+    assert key
+    link_path = ('users', UID, 'episode_links', CID)
+    lake_world.store.rows[link_path] = dict(
+        episode_id='episode',
+        attach_owner_id='episode',
+        attach_revision=key,
+        attach_completed=key if site == 'memo_check' else None,
+    )
+    monkeypatch.setattr(memo, 'content_gate_enabled', lambda: True)
+    monkeypatch.setattr(timeline, 'content_gate_enabled', lambda: True)
+    monkeypatch.setattr(episode_recorded_components, 'attach', lambda *a, **kw: {'id': 'episode'})
+    _pointer_failure(monkeypatch, state)
+    if site == 'memo_check':
+        operation = lambda: memo.matches(UID, CID, row, firestore_client=lake_world.store)
+    elif site == 'memo_finish':
+        operation = lambda: memo.complete(UID, CID, row, {'id': 'episode'}, firestore_client=lake_world.store)
+    else:
+        operation = lambda: timeline.attach_recorded(
+            UID,
+            CID,
+            'omi',
+            NOW,
+            NOW + timedelta(seconds=12),
+            choose=lambda *a: None,
+            new_episode={},
+            attach_row=row,
+            firestore_client=lake_world.store,
+        )
+    if state == 'outage':
+        with pytest.raises(pointer.TranscriptPointerFetchError):
+            operation()
+    else:
+        result = operation()
+        if site == 'memo_check':
+            assert result is (state == 'present')
+        else:
+            assert (lake_world.store.rows[link_path].get('attach_completed') == key) is (
+                state == 'present' and site == 'memo_finish'
+            )
+    if state == 'present':
+        assert lake_world.calls['get'] == 1
+
+
+@pytest.mark.parametrize('site', ['profile', 'auto_enroll'])
+@pytest.mark.parametrize('state', ['present', 'absent', 'shredded', 'outage'])
+def test_speaker_publication_owners_preload(lake_world, monkeypatch, site, state):
+    doc = pointer_doc(lake_world, [dict(speech()[0], person_id='p', is_user=False)])
+    doc['manual_speaker_assignments'] = {'generation': 1}
+    doc['private_cloud_sync_enabled'] = True
+    lake_world.store.rows[PATH] = doc
+    lake_world.store.rows[('users', UID)] = dict(save_other_voice_profiles=True, private_cloud_sync_enabled=True)
+    lake_world.store.rows[('users', UID, 'people', 'p')] = {'id': 'p', 'updated_at': NOW}
+    monkeypatch.setattr(users, 'db', lake_world.store)
+    monkeypatch.setattr(users, 'shadow_profile', lambda *a: None)
+    monkeypatch.setattr(policy, 'enabled', lambda: True)
+    monkeypatch.setattr(policy, 'retained', lambda row: True)
+    # Stop after real current-source authorization; policy scoring is unrelated
+    # to whether a cold pointer is resolved by the publication owner.
+    candidate = Mock(return_value=None)
+    monkeypatch.setattr(policy, 'candidate', candidate)
+    _pointer_failure(monkeypatch, state)
+    if site == 'profile':
+        operation = lambda: users.replace_person_speech_profile(
+            UID, 'p', NOW, 'sample', 'text', [0.1], CID, ['segment-1'], expected_receipt_generation=1
+        )
+    else:
+        operation = lambda: auto.publish(UID, 'p', CID, ['segment-1'], {}, NOW, 1, firestore_client=lake_world.store)
+    if state == 'outage':
+        with pytest.raises(pointer.TranscriptPointerFetchError):
+            operation()
+        assert lake_world.store.rows[('users', UID, 'people', 'p')]['updated_at'] == NOW
+    else:
+        result = operation()
+        if site == 'profile':
+            assert (result == []) is (state == 'present')
+        else:
+            assert result is False
+            assert candidate.called is (state == 'present')
+    if state == 'present':
+        assert lake_world.calls['get'] == 1
+
+
+@pytest.mark.parametrize('role', ['candidate', 'canonical', 'target'])
+@pytest.mark.parametrize('state', ['present', 'absent', 'shredded', 'outage'])
+def test_sync_load_validates_pointer_before_selection(lake_world, monkeypatch, role, state):
+    doc = pointer_doc(lake_world)
+    doc.update(
+        started_at=NOW,
+        finished_at=NOW + timedelta(seconds=12),
+        source='omi',
+        client_device_id='pendant',
+        sync_content_revision=1,
+        sync_merged_from=[],
+        discarded=False,
+    )
+    lake_world.store.rows[PATH] = deepcopy(doc)
+    incoming = dict(
+        id=CID if role == 'canonical' else 'new',
+        started_at=NOW + timedelta(seconds=12),
+        finished_at=NOW + timedelta(seconds=24),
+        source='omi',
+        client_device_id='pendant',
+        status='completed',
+        discarded=False,
+        transcript_segments=[dict(speech(100)[0], id='new-segment')],
+    )
+    _pointer_failure(monkeypatch, state)
+
+    def decode(row):
+        return {
+            **row,
+            'transcript_segments': db.decode_transcript_segments_verified(
+                UID, row.get('transcript_segments', []), bool(row.get('transcript_segments_compressed'))
+            ),
+        }
+
+    def body(transaction):
+        return assign_in_transaction(
+            transaction,
+            lake_world.store.collection('users').document(UID),
+            incoming,
+            candidate_id=CID if role == 'candidate' else None,
+            target_id=CID if role == 'target' else None,
+            decode=decode,
+            encode=deepcopy,
+            invalidate=lambda row: None,
+        )
+
+    operation = lambda: pointer.run_preloaded_transactional(lake_world.store, body)
+    if state == 'outage':
+        with pytest.raises(pointer.TranscriptPointerFetchError):
+            operation()
+        assert lake_world.store.rows[PATH] == doc
+    elif state in {'absent', 'shredded'} and role == 'canonical':
+        with pytest.raises(SyncAssignmentSuperseded):
+            operation()
+        assert lake_world.store.rows[PATH] == doc
+    else:
+        result, created, _ = operation()
+        assert result['id'] == ('new' if state != 'present' else CID)
+        assert created is (state != 'present')
+        if state != 'present':
+            assert lake_world.store.rows[PATH] == doc
+    if state == 'present':
+        assert lake_world.calls['get'] == 1

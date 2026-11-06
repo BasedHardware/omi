@@ -173,7 +173,7 @@ def test_changed_pointer_preloads_again(lake_world):
 
 
 def test_preload_churn_is_bounded_and_typed(lake_world):
-    docs = [encode(speech(n)) for n in [18000, 19000, 20000]]
+    docs = [encode(speech(n)) for n in range(18000, 18005)]
     pointer.clear_memo()
     attempts = []
 
@@ -184,7 +184,8 @@ def test_preload_churn_is_bounded_and_typed(lake_world):
 
     with pytest.raises(pointer.TranscriptPointerFetchError, match='bounded'):
         pointer.run_preloaded_transactional(lake_world.store, body)
-    assert len(attempts) == 3
+    assert len(attempts) == 5
+    assert lake_world.calls['get'] == 4
 
 
 @pytest.mark.parametrize(
@@ -377,3 +378,47 @@ def test_expiry_during_cache_lookup_is_a_transactional_miss(lake_world):
     assert lake_world.calls['get'] == 0
     assert pointer.resolve_pointer(UID, doc['transcript_segments']) == speech()
     assert lake_world.calls['get'] == 1
+
+
+@pytest.mark.parametrize('count', [3, 32, 33])
+def test_distinct_cold_documents_have_separate_bounded_budget(lake_world, monkeypatch, count):
+    base = pointer_doc(lake_world)['transcript_segments']
+    refs = [{**base, 'key': base['key'].replace(f'/{CID}/', f'/conversation-{i}/')} for i in range(count)]
+    fetch = Mock(return_value=json.dumps(speech()).encode())
+    monkeypatch.setattr(lake, 'get_space_object', fetch)
+    attempts = []
+
+    def body(transaction):
+        attempts.append(1)
+        return [pointer.resolve_pointer(UID, ref) for ref in refs]
+
+    if count > 32:
+        with pytest.raises(pointer.TranscriptPointerFetchError, match='bounded'):
+            pointer.run_preloaded_transactional(lake_world.store, body)
+        assert len(attempts) == 33
+        assert fetch.call_count == 32
+    else:
+        assert pointer.run_preloaded_transactional(lake_world.store, body) == [speech()] * count
+        assert len(attempts) == count + 1
+        assert fetch.call_count == count
+
+
+def test_superseded_versions_do_not_evict_other_cold_documents(lake_world, monkeypatch):
+    docs = [encode(speech(n))['transcript_segments'] for n in range(18000, 18004)]
+    others = [{**docs[0], 'key': docs[0]['key'].replace(f'/{CID}/', f'/other-{i}/')} for i in range(31)]
+    pointer.clear_memo()
+    monkeypatch.setattr(lake, 'get_space_object', lambda ref: json.dumps(speech()).encode())
+    attempts = []
+
+    def body(transaction):
+        # Each version is actually observed before advancing the simulated
+        # concurrent writer; then the remaining 31 distinct documents go cold.
+        attempt = len(attempts)
+        attempts.append(1)
+        current = docs[min(attempt, 3)]
+        result = pointer.resolve_pointer(UID, current)
+        return result, [pointer.resolve_pointer(UID, ref) for ref in others]
+
+    result, rest = pointer.run_preloaded_transactional(lake_world.store, body)
+    assert result == speech() and len(rest) == 31
+    assert len(attempts) == 36
