@@ -45,7 +45,7 @@ void main() {
       final reminders = AppleRemindersService();
       expect(await reminders.hasPermission(), isTrue, reason: 'Grant reminders on the isolated simulator first');
       final id = 'reminder-retry-${DateTime.now().microsecondsSinceEpoch}';
-      final item = ActionItemWithMetadata(id: id, description: id, completed: true);
+      final item = ActionItemWithMetadata(id: id, description: id, completed: true, status: 'completed');
       final writtenIds = <String>{};
       final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
       Env.overrideApiBaseUrl('http://127.0.0.1:${server.port}/');
@@ -68,7 +68,7 @@ void main() {
         } else if (request.method == 'PATCH' && request.uri.path == '/v1/action-items/$id') {
           final patch = jsonDecode(await utf8.decoder.bind(request).join()) as Map<String, dynamic>;
           writtenIds.add(patch['apple_reminder_id'] as String);
-          committed = {'id': id, 'description': id, 'completed': true, ...patch};
+          committed = {'id': id, 'description': id, 'completed': true, 'status': 'completed', ...patch};
           if (!receiptAvailable) response.statusCode = HttpStatus.serviceUnavailable;
           response.write(jsonEncode(receiptAvailable ? committed : {'detail': 'synthetic lost receipt'}));
         } else {
@@ -95,17 +95,21 @@ void main() {
         expect(titles.where((title) => title == editedTitle), hasLength(1));
         expect(titles, isNot(contains(id)));
 
-        // Simultaneous first exports converge on one native save for a new task
-        // with the same title as the original. An unrelated title is no key.
+        // Simultaneous exports of different tasks with the same title keep
+        // separate reminders, and repeated exports of one task reuse its ID.
         final another = item.copyWith(id: '$id-concurrent', description: editedTitle);
-        final concurrent = await Future.wait(
-          List.generate(2, (_) => reminders.exportTaskReminder(another, ownerUid: _owner)),
-        );
+        final third = another.copyWith(id: '$id-concurrent-other');
+        final concurrent = await Future.wait([
+          reminders.exportTaskReminder(another, ownerUid: _owner),
+          reminders.exportTaskReminder(third, ownerUid: _owner),
+          reminders.exportTaskReminder(another, ownerUid: _owner),
+        ]);
         writtenIds.addAll(concurrent.whereType<String>());
-        expect(concurrent.first, isNotNull);
-        expect(concurrent.first, isNot(original));
-        expect(concurrent.last, concurrent.first);
-        expect((await reminders.getExistingReminders()).where((title) => title == editedTitle), hasLength(2));
+        expect(concurrent, everyElement(isNotNull));
+        expect(concurrent[2], concurrent[0]);
+        expect(writtenIds, hasLength(3));
+        expect(await reminders.exportTaskReminder(third, ownerUid: _owner), concurrent[1]);
+        expect((await reminders.getExistingReminders()).where((title) => title == editedTitle), hasLength(3));
         expect(await reminders.exportTaskReminder(item, ownerUid: 'different-owner'), isNull);
       } finally {
         await server.close(force: true);

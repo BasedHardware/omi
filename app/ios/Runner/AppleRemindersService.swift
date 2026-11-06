@@ -4,14 +4,20 @@ import EventKit
 import Flutter
 
 class AppleRemindersService {
+    private struct PendingTaskExport {
+        let owner: String
+        let call: FlutterMethodCall
+        var waiters: [FlutterResult]
+    }
+
     private let eventStore = EKEventStore()
     // Method-channel handlers and all mutations of this table run on the main queue.
-    private var pendingTaskExports: [URL: [FlutterResult]] = [:]
+    private var pendingTaskExports: [URL: PendingTaskExport] = [:]
 
-    private func hasRemindersAccess(readRequired: Bool = false) -> Bool {
+    private func hasRemindersAccess() -> Bool {
         let status = EKEventStore.authorizationStatus(for: .reminder)
         if #available(iOS 17.0, *) {
-            return status == .fullAccess || status == .authorized || (!readRequired && status == .writeOnly)
+            return status == .fullAccess || status == .authorized
         } else {
             return status == .authorized
         }
@@ -288,7 +294,7 @@ class AppleRemindersService {
               let owner = args["ownerUid"] as? String, !owner.isEmpty,
               let taskID = args["actionItemId"] as? String, !taskID.isEmpty,
               owner == UserDefaults.standard.string(forKey: "flutter.uid"),
-              hasRemindersAccess(readRequired: true) else {
+              hasRemindersAccess() else {
             result(FlutterError(code: "EXPORT_UNAVAILABLE", message: "Task reminder export is unavailable", details: nil))
             return
         }
@@ -300,31 +306,40 @@ class AppleRemindersService {
             return
         }
         if pendingTaskExports[marker] != nil {
-            pendingTaskExports[marker]?.append(result)
+            pendingTaskExports[marker]?.waiters.append(result)
             return
         }
-        pendingTaskExports[marker] = [result]
+        let lookupInProgress = !pendingTaskExports.isEmpty
+        pendingTaskExports[marker] = PendingTaskExport(owner: owner, call: call, waiters: [result])
+        guard !lookupInProgress else { return }
 
-        // Search readable lists, including completed reminders and reminders
-        // moved out of the original list. A failed lookup is ambiguous.
+        // Concurrent exports share a lookup across readable lists, including
+        // completed reminders and reminders moved out of the original list.
         let predicate = eventStore.predicateForReminders(in: nil)
         eventStore.fetchReminders(matching: predicate) { reminders in
-            let existingID = reminders?.first { $0.url == marker }?.calendarItemIdentifier
-            let lookupSucceeded = reminders != nil
+            let existing = reminders?.reduce(into: [URL: String]()) { index, reminder in
+                guard let url = reminder.url, url.scheme == "omi-reminder", url.host == "task" else { return }
+                if index[url] == nil {
+                    index[url] = reminder.calendarItemIdentifier
+                }
+            }
             DispatchQueue.main.async {
-                let waiters = self.pendingTaskExports.removeValue(forKey: marker) ?? []
-                let finish: FlutterResult = { receipt in waiters.forEach { $0(receipt) } }
-                guard lookupSucceeded,
-                      owner == UserDefaults.standard.string(forKey: "flutter.uid"),
-                      self.hasRemindersAccess(readRequired: true) else {
-                    finish(FlutterError(code: "EXPORT_UNAVAILABLE", message: "Task reminder lookup is unavailable", details: nil))
-                    return
+                let exports = self.pendingTaskExports
+                self.pendingTaskExports.removeAll()
+                for (marker, export) in exports {
+                    let finish: FlutterResult = { receipt in export.waiters.forEach { $0(receipt) } }
+                    guard let existing,
+                          export.owner == UserDefaults.standard.string(forKey: "flutter.uid"),
+                          self.hasRemindersAccess() else {
+                        finish(FlutterError(code: "EXPORT_UNAVAILABLE", message: "Task reminder lookup is unavailable", details: nil))
+                        continue
+                    }
+                    if let existingID = existing[marker] {
+                        finish(existingID)
+                    } else {
+                        self.addReminder(call: export.call, marker: marker, result: finish)
+                    }
                 }
-                if let existingID {
-                    finish(existingID)
-                    return
-                }
-                self.addReminder(call: call, marker: marker, result: finish)
             }
         }
     }

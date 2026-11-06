@@ -25,7 +25,8 @@ Provider grants are unchanged.
   alongside the reminder. A retry finds it across readable lists, including
   completed reminders, then writes the same identifier to the backend.
   Reminders are matched by identity so existing edits and unrelated reminders
-  with the same title stay intact. An unavailable lookup defers export.
+  with the same title stay intact. Concurrent exports share one lookup.
+  An unavailable lookup defers export.
 - The direct task-create route leaves Apple export to the phone. Native
   push-driven sync for other task sources and changes to linked reminders
   keep their existing paths.
@@ -73,7 +74,8 @@ cannot replace that accepted token with an older cached value.
 - [x] `integration_test/apple_reminders_retry_test.dart` on an isolated iPhone 16
       Pro simulator with iOS 26.5 and Reminders permission. Real EventKit
       preserved the edited reminder when the loopback server withheld the
-      acknowledgement after saving the task link. Concurrent first exports
+      acknowledgement after saving the task link. The task used the backend's
+      completed status. Concurrent exports of distinct tasks with the same title
       also produced one reminder per task.
 - [ ] Repository mobile journeys, preflight, final diff and CI for the current commit.
 - [ ] Merge, then release the backend before the mobile build so that ordered

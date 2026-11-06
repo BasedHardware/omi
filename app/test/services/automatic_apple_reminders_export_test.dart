@@ -174,7 +174,7 @@ void main() {
       getActionItems: emptyTasks,
       createActionItemRequest: (
               {required description, dueAt, conversationId, completed = false, idempotencyKey}) async =>
-          item().copyWith(completed: completed),
+          item().copyWith(completed: completed, status: completed ? 'completed' : 'active'),
       automaticAppleRemindersExport: exporter(create: (task) async {
         nativeWrite.complete(task);
         return 'eventkit-id';
@@ -183,7 +183,9 @@ void main() {
     addTearDown(provider.dispose);
     await provider.ensureLoaded();
     final saved = await provider.createActionItem(description: 'Fixture task', completed: true);
-    expect(saved?.completed, isTrue);
-    expect((await nativeWrite.future.timeout(const Duration(seconds: 2))).completed, isTrue);
+    expect(saved?.status, 'completed');
+    final exported = await nativeWrite.future.timeout(const Duration(seconds: 2));
+    expect(exported.status, 'completed');
+    expect(exported.completed, isTrue);
   });
 }
