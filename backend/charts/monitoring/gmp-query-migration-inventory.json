@@ -329,6 +329,32 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
+      "expression": "time() - max(omi_error_class_last_fired_timestamp_seconds) < 900",
+      "file": "alerts/error-classes.json",
+      "issues": [],
+      "metrics": [
+        "omi_error_class_last_fired_timestamp_seconds"
+      ],
+      "owner_title": "Error classes - a new or surging error class is firing",
+      "owner_uid": "omi-error-class-firing",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max((sum(increase(omi_error_class_sweep_total{outcome!=\"ok\"}[1h])) > bool 0) + (sum(increase(omi_error_class_sweep_total[1h])) < bool 4))",
+      "file": "alerts/error-classes.json",
+      "issues": [],
+      "metrics": [
+        "omi_error_class_sweep_total"
+      ],
+      "owner_title": "Error classes - sentinel sweep is silent or failing",
+      "owner_uid": "omi-error-class-sweep-silent",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
       "expression": "(sum by (family) (rate(omi_firestore_documents_per_operation_sum[2h])) > 2 * sum by (family) (rate(omi_firestore_documents_per_operation_sum[2h] offset 24h))) and (sum by (family) (rate(omi_firestore_documents_per_operation_sum[2h])) > 100)",
       "file": "alerts/firestore.json",
       "issues": [],
@@ -470,7 +496,7 @@
       "metrics": [
         "omi_stt_window_admissions_total"
       ],
-      "owner_title": "Parakeet canary capacity_full — roll allocation back if sustained",
+      "owner_title": "Parakeet canary capacity_full \u2014 roll allocation back if sustained",
       "owner_uid": "omi-stt-window-overflow",
       "panel": null,
       "pointer": "/data/0/model/expr",
@@ -483,7 +509,7 @@
       "metrics": [
         "omi_stt_window_admissions_total"
       ],
-      "owner_title": "Parakeet canary capacity_full — roll allocation back if sustained",
+      "owner_title": "Parakeet canary capacity_full \u2014 roll allocation back if sustained",
       "owner_uid": "omi-stt-window-overflow",
       "panel": null,
       "pointer": "/data/1/model/expr",
@@ -632,7 +658,7 @@
       "metrics": [
         "omi_stt_stream_close_total"
       ],
-      "owner_title": "Soniox balance exhausted — top up now",
+      "owner_title": "Soniox balance exhausted \u2014 top up now",
       "owner_uid": "omi-soniox-budget-exhausted",
       "panel": null,
       "pointer": "/data/0/model/expr",
@@ -645,7 +671,7 @@
       "metrics": [
         "omi_stt_provider_connect_total"
       ],
-      "owner_title": "Modulate failing — traffic on Soniox",
+      "owner_title": "Modulate failing \u2014 traffic on Soniox",
       "owner_uid": "omi-modulate-failing-soniox",
       "panel": null,
       "pointer": "/data/0/model/expr",
@@ -658,7 +684,7 @@
       "metrics": [
         "omi_stt_provider_connect_total"
       ],
-      "owner_title": "Modulate failing — traffic on Soniox",
+      "owner_title": "Modulate failing \u2014 traffic on Soniox",
       "owner_uid": "omi-modulate-failing-soniox",
       "panel": null,
       "pointer": "/data/1/model/expr",
@@ -2521,7 +2547,7 @@
       "owner_uid": "omi-core-features",
       "panel": {
         "id": 64,
-        "title": "Live sessions by platform — pendant vs phone"
+        "title": "Live sessions by platform \u2014 pendant vs phone"
       },
       "pointer": "/panels/33/panels/1/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
@@ -2537,7 +2563,7 @@
       "owner_uid": "omi-core-features",
       "panel": {
         "id": 64,
-        "title": "Live sessions by platform — pendant vs phone"
+        "title": "Live sessions by platform \u2014 pendant vs phone"
       },
       "pointer": "/panels/33/panels/1/targets/1/expr",
       "scope": "normalized-omi-consumer-source-review"
@@ -2948,7 +2974,7 @@
       "owner_uid": "omi-core-features",
       "panel": {
         "id": 60,
-        "title": "Memory retrieval — tool-gated volume"
+        "title": "Memory retrieval \u2014 tool-gated volume"
       },
       "pointer": "/panels/38/panels/9/targets/0/expr",
       "scope": "explicit-bridge"
@@ -3390,7 +3416,7 @@
       "owner_uid": "omi-translation-pipeline",
       "panel": {
         "id": 37,
-        "title": "NLLB → Luna Fallback Rate"
+        "title": "NLLB \u2192 Luna Fallback Rate"
       },
       "pointer": "/panels/10/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
@@ -3638,7 +3664,7 @@
       "owner_uid": "omi-resilience-fallbacks",
       "panel": {
         "id": 3,
-        "title": "Sync dispatch — enqueue uncertainty share (PAGE SLO)"
+        "title": "Sync dispatch \u2014 enqueue uncertainty share (PAGE SLO)"
       },
       "pointer": "/panels/2/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
@@ -3709,7 +3735,7 @@
       "owner_uid": "omi-resilience-fallbacks",
       "panel": {
         "id": 14,
-        "title": "Journey signal liveness (accepted attempts — zero means the alert input is dead)"
+        "title": "Journey signal liveness (accepted attempts \u2014 zero means the alert input is dead)"
       },
       "pointer": "/panels/13/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
@@ -3839,32 +3865,6 @@
         "title": "Live STT fleet-health writes by path, kind, and drop reason"
       },
       "pointer": "/panels/19/targets/2/expr",
-      "scope": "normalized-omi-consumer-source-review"
-    },
-    {
-      "expression": "time() - max(omi_error_class_last_fired_timestamp_seconds) < 900",
-      "file": "alerts/error-classes.json",
-      "issues": [],
-      "metrics": [
-        "omi_error_class_last_fired_timestamp_seconds"
-      ],
-      "owner_title": "Error classes - a new or surging error class is firing",
-      "owner_uid": "omi-error-class-firing",
-      "panel": null,
-      "pointer": "/data/0/model/expr",
-      "scope": "normalized-omi-consumer-source-review"
-    },
-    {
-      "expression": "max((sum(increase(omi_error_class_sweep_total{outcome!=\"ok\"}[1h])) > bool 0) + (sum(increase(omi_error_class_sweep_total[1h])) < bool 4))",
-      "file": "alerts/error-classes.json",
-      "issues": [],
-      "metrics": [
-        "omi_error_class_sweep_total"
-      ],
-      "owner_title": "Error classes - sentinel sweep is silent or failing",
-      "owner_uid": "omi-error-class-sweep-silent",
-      "panel": null,
-      "pointer": "/data/0/model/expr",
       "scope": "normalized-omi-consumer-source-review"
     }
   ],
