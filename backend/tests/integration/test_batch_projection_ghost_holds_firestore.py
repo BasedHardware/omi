@@ -227,9 +227,13 @@ def test_repaired_ready_hint_completes_ledger_and_publishes_without_reassignment
     assert lane.loads == loads and lane.tasks == tasks
     accounting = lane.projector.store.prepare_accounting(batch.binding, NOW)
     assert accounting['completed'] and not accounting['updates']
+    completed_ledger = batch.ledger.get().to_dict()
     assert lane.projector.project(segment) == result
+    assert batch.ledger.get().to_dict() == completed_ledger
     assert lane.loads == loads and lane.tasks == tasks
-    assert lane.published == [result]
+    # Publication is intentionally replayed to repair a lost client reply;
+    # the real publisher owns its idempotency fence, not this captured callback.
+    assert lane.published == [result, result]
 
 
 @pytest.mark.skip(
