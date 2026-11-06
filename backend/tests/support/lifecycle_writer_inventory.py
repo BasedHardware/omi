@@ -1189,6 +1189,11 @@ FIELD_SITES = {
     'database/daily_summaries.py': [
         ('set_daily_summary_generation_status', 'status', 'status', ('generated_at', 'status', 'updated_at'))
     ],
+    'database/directory/wipe.py': [
+        ('purge_owner_planes', 'status', "'absent'", ('status',)),
+        ('purge_owner_planes', 'status', "'noop'", ('status',)),
+        ('purge_owner_planes', 'status', "'purged'", ('status',)),
+    ],
     'database/dream_store.py': [
         (
             'acquire.claim',
