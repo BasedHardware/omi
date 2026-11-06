@@ -25,7 +25,7 @@ from utils.pusher_audio_projection import PusherAudioProjection
 from utils.batch_pipeline.record_projection_rebuild import projection_owner_gone
 from utils.pusher_record_barrier import PusherRecordBarrier
 from utils.pusher_storage_budget import RetainedPcmWindow, StoragePcmBudget, storage_pcm_budget_bytes
-from utils.observability.reasons import PusherPcmStage, ReasonFamily, reason_label
+from utils.observability.reasons import PusherPcmError, PusherPcmStage, ReasonFamily, reason_label
 from utils.pusher_receive_metrics import SocketObservation, observe_work
 from utils.pusher_record_finish import (
     ProjectionQueueWaitTimeout,
@@ -106,6 +106,7 @@ from utils.metrics import (
     PUSHER_STORAGE_PCM_INFLIGHT_BYTES,
     PUSHER_STORAGE_PCM_BUDGET_LIMIT_BYTES,
     PUSHER_STORAGE_PCM_REFUSALS_TOTAL,
+    PUSHER_STORAGE_PCM_ERRORS_TOTAL,
 )
 from utils.readiness import ReadinessGate
 from utils.observability.fallback import record_fallback
@@ -119,10 +120,26 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 _pcm_commits: set[asyncio.Task[Any]] = set()
-MAX_RETAINED_PCM_WINDOWS = 20
 MAX_PCM_WINDOW_FRAMES = 4096
 storage_pcm_budget = StoragePcmBudget(storage_pcm_budget_bytes())
 PUSHER_STORAGE_PCM_BUDGET_LIMIT_BYTES.set(storage_pcm_budget.limit)
+_pcm_error_logged_at: dict[str, float] = {}
+
+
+def _record_pcm_error(reason: PusherPcmError, error: Exception) -> None:
+    """Bounded telemetry must never interfere with custody or socket survival."""
+    try:
+        label = reason_label(ReasonFamily.PUSHER_PCM, reason, PusherPcmError)
+        PUSHER_STORAGE_PCM_ERRORS_TOTAL.labels(reason=label).inc()
+    except Exception:
+        pass
+    try:
+        now = time.monotonic()
+        if now - _pcm_error_logged_at.get(reason.value, float('-inf')) >= 60:
+            _pcm_error_logged_at[reason.value] = now
+            logger.warning('event=pusher_pcm_error reason=%s error_type=%s', reason.value, type(error).__name__)
+    except Exception:
+        pass
 
 
 def _parse_finalization_result_protocol(value: Any) -> int:
@@ -301,7 +318,17 @@ async def _commit_durable_audio_window(
     # supervision. Nothing owns a receipt and the caller retains its buffers.
     admission = storage_pcm_budget
     payload_size = len(payload)
-    if not admission.acquire(payload_size, tail=tail):
+    reserved = False
+    admitted = True
+    try:
+        if admission.limit:
+            admitted = admission.admit(payload_size, tail=tail)
+            reserved = admitted
+    except Exception as exc:
+        # admit rolls back even a partially mutated counter. A budget fault
+        # uses the flag-0 dispatch path; it cannot become a socket failure.
+        _record_pcm_error(PusherPcmError.ACQUIRE, exc)
+    if not admitted:
         try:
             PUSHER_STORAGE_PCM_REFUSALS_TOTAL.labels(
                 stage=reason_label(
@@ -335,7 +362,7 @@ async def _commit_durable_audio_window(
                 clock_source='server_projected' if timeline_v2 else 'arrival_estimate',
                 framed=framed,
             )
-            if admission.limit:
+            if reserved:
                 # Shield this await independently of the socket tracker: byte
                 # capacity belongs to the actual storage completion, including
                 # cancellation before submission or during a running thread.
@@ -347,8 +374,16 @@ async def _commit_durable_audio_window(
 
         def settled(done=None):
             if done is not None and not done.cancelled():
-                done.exception()  # Observe a late failure after caller cancellation.
-            admission.release(payload_size)
+                error = done.exception()
+                if error is not None:
+                    _record_pcm_error(PusherPcmError.LATE_STORAGE, error)
+            if reserved:
+                try:
+                    admission.settle(payload_size)
+                except Exception as exc:
+                    # settle retires exactly this reservation even when the
+                    # underlying release fails before or after mutation.
+                    _record_pcm_error(PusherPcmError.RELEASE, exc)
             if pcm_observed:
                 try:
                     PUSHER_STORAGE_PCM_INFLIGHT_BYTES.dec(payload_size)
@@ -1346,15 +1381,14 @@ async def _run_websocket_util_trigger(
                         window.frames.clear()
                         continue
                     if await commit_durable_window(refused_windows[0], tail=tail) is None:
-                        if not tail and len(refused_windows) > MAX_RETAINED_PCM_WINDOWS:
-                            # A boundary can retain one additional window. At
-                            # that point pause this receive task, not storage
-                            # workers, so tiny windows cannot grow metadata
-                            # without bound below the PCM byte cap. Admission
-                            # itself remains non-waiting; no extra retry task.
+                        if not tail:
+                            # Stop intake on the FIRST refusal: another PCM
+                            # window must never consume the socket's remaining
+                            # byte budget while pod admission is full. Sleep
+                            # is cancellable; tails and metadata never wait.
                             await asyncio.sleep(0.05)
                             continue
-                        break  # Next data-driven flush retries; no waiter task.
+                        break  # Tail refusal leaves the producer unacknowledged.
                 return
             if not (private_cloud_sync_enabled and current_conversation_id and len(private_cloud_sync_buffer) > 0):
                 return

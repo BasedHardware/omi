@@ -439,13 +439,18 @@ Positive values
 apply non-blocking process-wide admission only to queued/running custody PCM
 writes, with 25% headroom reserved for shutdown tails. Refusal submits nothing,
 issues no receipt or opcode-203 ACK, preserves the original buffered windows
-and frame checkpoints for the next flush boundary, and never closes the socket.
-With admission enabled, windows cap at 4096 checkpoints; after 20 retained
-windows plus one boundary window, the receive task pauses intake and probes
-non-waiting admission every 50ms. Tails bypass this metadata-capacity pause.
+and frame checkpoints, and never closes the socket. The first live refusal
+pauses that receive task immediately, probing non-waiting admission every 50ms
+without reading another frame. The pause is cancellable; tails use the reserved
+lane without waiting, and metadata operations stay ungated. Enabled windows cap
+at 4096 checkpoints. Accounting faults fail open, are counted with bounded enum
+reasons and rate-limited logs, and cannot reach socket failure handling.
 Every unresolved owner stays fenced through failure, cancellation and ACK
 departure; an earlier receipt never certifies a later buffered tail.
-Record metadata and projection operations remain outside this admission.
+Record metadata and projection operations remain outside this admission. Flag 0
+preserves successful wire bytes and storage dispatch/cancellation behavior; the
+new unresolved-owner finalizer can still hold fences and defer inline finish
+after genuine failures while the flag is off.
 See the [byte admission runbook](runbooks/audio-durable-outbox.md#pusher-pcm-storage-byte-admission-default-off).
 
 `PUSHER_PROJECTION_QUEUE_WAIT_BOUND_ENABLED=false` restores unbounded capacity

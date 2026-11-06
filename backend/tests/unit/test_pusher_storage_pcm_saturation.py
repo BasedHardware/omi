@@ -157,7 +157,7 @@ async def test_50_sockets_plateau_refuse_without_ack_then_retry_once(monkeypatch
             assert sock.commits == 0 and sock.budget.used == PCM_SIZE
             sock.websocket.send_bytes.assert_not_awaited()
             sock.queue.stage_committed.assert_not_called()
-        for _ in range(3):
+        for _ in range(30):
             # Repeated data-driven boundaries during the same GCS outage do
             # not grow submissions, allocate waiting tasks or trim input.
             for sock in refused:
@@ -343,10 +343,13 @@ async def test_flag_zero_preserves_exact_pcm_ack_and_failure_characterization(mo
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('failure', [False, True])
-async def test_cancelled_caller_holds_admission_until_real_thread_settles(monkeypatch, failure):
+async def test_cancelled_caller_holds_admission_until_real_thread_settles(monkeypatch, caplog, failure):
     budget = configure(monkeypatch, LIMIT)
     gcs = SlowGCS()
     gcs.fail = failure
+    monkeypatch.setattr(pusher, '_pcm_error_logged_at', {})
+    errors = pusher.PUSHER_STORAGE_PCM_ERRORS_TOTAL.labels(reason='late_storage')
+    errors_before = errors._value.get()
     monkeypatch.setattr(pusher, 'commit_pcm_window', gcs)
     sock = BufferedSocket(0)
     task = asyncio.create_task(sock.flush())
@@ -369,6 +372,9 @@ async def test_cancelled_caller_holds_admission_until_real_thread_settles(monkey
                 break
             await asyncio.sleep(0.001)
         assert budget.used == 0 and not pusher._pcm_commits
+        assert errors._value.get() == errors_before + int(failure)
+        logs = [r for r in caplog.records if 'reason=late_storage' in r.message]
+        assert len(logs) == int(failure)
         assert pusher.PUSHER_STORAGE_PCM_INFLIGHT_BYTES._value.get() == 0
     finally:
         gcs.release.set()
@@ -401,15 +407,37 @@ async def test_real_socket_full_budget_tail_retains_producer_without_error_close
     budget = configure(monkeypatch, LIMIT)
     assert budget.acquire(LIMIT, tail=True)
     monkeypatch.setattr(pusher, 'PRIVATE_CLOUD_CHUNK_DURATION', 0)
+    refused, tasks = asyncio.Event(), []
+    commit, create = pusher._commit_durable_audio_window, pusher.create_named_task
+
+    async def observe(**kwargs):
+        result = await commit(**kwargs)
+        if result is None:
+            refused.set()
+        return result
+
+    def creating(*args, **kwargs):
+        task = create(*args, **kwargs)
+        if kwargs.get('name', '').endswith(':receive'):
+            tasks.append(task)
+        return task
+
+    monkeypatch.setattr(pusher, '_commit_durable_audio_window', observe)
+    monkeypatch.setattr(pusher, 'create_named_task', creating)
     sock = Socket(_audio_frames('conversation', [b'\x01\x00' * 160] * 3))
+    handler = asyncio.create_task(pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1))
     try:
-        await asyncio.wait_for(pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1), 5)
+        await asyncio.wait_for(refused.wait(), 5)
+        tasks[0].cancel()  # Cancellable intake pause; even a full tail cannot select 1011.
+        await asyncio.wait_for(handler, 5)
         assert sock.close_code == 1000 and not sock.sent and not projected
+        assert len(sock.frames) == 2
         assert client.rows[path]['record_upload_sessions']
         assert not client.rows[path]['record_audio_closed']
         assert 'conversation' in barrier.failed_recordings
     finally:
         budget.release(LIMIT)
+        await asyncio.wait_for(handler, 5)
 
 
 @pytest.mark.asyncio
@@ -517,43 +545,88 @@ def test_minimum_enabled_budget_can_admit_the_largest_socket_window():
 
 
 @pytest.mark.asyncio
-async def test_tiny_windows_pause_intake_at_metadata_bound_without_close_or_loss(inline_session, monkeypatch):
-    _, _, _, _ = inline_session
-    budget = configure(monkeypatch, LIMIT)
-    assert budget.acquire(LIMIT, tail=True)
-    monkeypatch.setattr(pusher, 'MAX_RETAINED_PCM_WINDOWS', 2)
-    monkeypatch.setattr(pusher, 'PRIVATE_CLOUD_CHUNK_DURATION', 0)
-    windows, at_bound = [], asyncio.Event()
-    factory = pusher.RetainedPcmWindow
+@pytest.mark.parametrize('outcome', ['recover', 'cancel_to_tail'])
+async def test_first_refusal_stops_30_minute_windows_before_socket_budget_can_fill(
+    inline_session, monkeypatch, outcome
+):
+    from fastapi.websockets import WebSocketDisconnect
+    from tests.unit.test_audio_durable_outbox import _sent_receipts
 
-    def retain(*args):
-        window = factory(*args)
+    _, _, barrier, _ = inline_session
+    budget = configure(monkeypatch, LIMIT)
+    held = budget.live_limit
+    assert budget.acquire(held)
+    pcm = b'\x01\x00' * (16000 * 60)
+    client_wal = [pcm] * 30
+    sock = Socket([struct.pack('<I', 103) + b'conversation'] + [struct.pack('<Id', 101, 1000.0) + pcm] * 30)
+    attempts, windows, tasks = [], [], []
+    saturated, stop_source = asyncio.Event(), asyncio.Event()
+    commit, retain, create = pusher._commit_durable_audio_window, pusher.RetainedPcmWindow, pusher.create_named_task
+    receive = sock.receive_bytes
+    reads = 0
+
+    def retaining(*args):
+        window = retain(*args)
         windows.append(window)
-        if len(windows) == 3:
-            at_bound.set()
         return window
 
-    monkeypatch.setattr(pusher, 'RetainedPcmWindow', retain)
-    pcm = b'\x01\x00'
-    sock = Socket(_audio_frames('conversation', [pcm] * 5))
+    def creating(*args, **kwargs):
+        task = create(*args, **kwargs)
+        if kwargs.get('name', '').endswith(':receive'):
+            tasks.append(task)
+        return task
+
+    async def receiving():
+        nonlocal reads
+        if stop_source.is_set():
+            raise WebSocketDisconnect(1000)
+        reads += 1
+        return await receive()
+
+    async def committing(**kwargs):
+        result = await commit(**kwargs)
+        attempts.append((kwargs['tail'], kwargs['budget'], result))
+        if len(attempts) >= 30:
+            saturated.set()
+        return result
+
+    monkeypatch.setattr(pusher, 'RetainedPcmWindow', retaining)
+    monkeypatch.setattr(pusher, 'create_named_task', creating)
+    monkeypatch.setattr(pusher, '_commit_durable_audio_window', committing)
+    monkeypatch.setattr(sock, 'receive_bytes', receiving)
     handler = asyncio.create_task(pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1))
     released = False
     try:
-        await asyncio.wait_for(at_bound.wait(), 5)
-        assert len(windows) == 3 and len(sock.frames) == 2
-        assert all(window.payload == pcm and len(window.frames) == 1 for window in windows)
+        await asyncio.wait_for(saturated.wait(), 5)
+        # Thirty full-minute windows are offered; after thirty capacity probes
+        # only the FIRST has entered this socket. Unread source WAL stays owned
+        # by the producer, rather than charging another 29 windows server-side.
+        assert reads == 2 and len(sock.frames) == 29 and len(windows) == 1
+        assert windows[0].payload == pcm and len(windows[0].frames) == 1
+        assert all(result is None and not tail for tail, _, result in attempts)
+        assert attempts[-1][1].used == len(pcm) < BUFFERED_AUDIO_MAX_BYTES // 2
         assert not sock.sent and sock.close_code is None and not handler.done()
-        budget.release(LIMIT)
-        released = True
+        for stage in ('close', 'abandon', 'marker'):
+            assert await asyncio.wait_for(barrier._close_metadata('other', lambda: stage), 1) == stage
+        stop_source.set()
+        if outcome == 'recover':
+            budget.release(held)
+            released = True
+        else:
+            # The sleep is cancellable; the receive finalizer immediately uses
+            # the reserved lane, even though live capacity remains saturated.
+            tasks[0].cancel()
         await asyncio.wait_for(handler, 5)
-        from tests.unit.test_audio_durable_outbox import _sent_receipts
-
         receipts = _sent_receipts(sock)
-        assert len(receipts) == 5 and all(read_pcm('owner', receipt) == pcm for receipt in receipts)
-        assert sock.close_code == 1000 and budget.used == 0
+        assert len(receipts) == 1 and read_pcm('owner', receipts[0]) == pcm
+        assert len(sock.frames) == 29 and client_wal == [pcm] * 30
+        assert sock.close_code == 1000 and budget.used == (0 if released else held)
+        assert attempts[-1][0] is (outcome == 'cancel_to_tail')
     finally:
         if not released:
-            budget.release(LIMIT)
+            budget.release(held)
+        if not handler.done():
+            stop_source.set()
         await asyncio.wait_for(handler, 5)
 
 
@@ -593,7 +666,7 @@ async def test_retained_deleted_owner_is_not_retried_into_new_conversation(inlin
 
     async def refuse_second(**kwargs):
         calls.append(kwargs['conversation_id'])
-        if len(calls) == 2:
+        if len(calls) >= 2 and kwargs['conversation_id'] == 'conversation':
             refused.set()
             return None
         return await commit(**kwargs)
@@ -629,13 +702,13 @@ async def test_retained_deleted_owner_is_not_retried_into_new_conversation(inlin
 
     monkeypatch.setattr(sock, 'receive_bytes', sequenced)
     await asyncio.wait_for(pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1), 5)
-    assert calls == ['conversation', 'conversation', 'next']
+    assert calls[:2] == ['conversation', 'conversation'] and calls[-1] == 'next'
     assert sock.close_code == 1000
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('failure', ['storage', 'ack_departure'])
-async def test_retained_previous_owner_and_later_tail_stay_fenced_on_failure(inline_session, monkeypatch, failure):
+async def test_failed_first_retry_never_reads_or_certifies_a_later_owner(inline_session, monkeypatch, failure):
     from fastapi.websockets import WebSocketDisconnect
 
     client, path, barrier, _ = inline_session
@@ -646,38 +719,69 @@ async def test_retained_previous_owner_and_later_tail_stay_fenced_on_failure(inl
     monkeypatch.setattr(pusher, 'PRIVATE_CLOUD_CHUNK_DURATION', 0)
     frames = _audio_frames('conversation', [b'\x01\x00']) + _audio_frames('next', [b'\x02\x00'])
     sock = Socket(frames)
-    receive = sock.receive_bytes
-    reads, released = 0, False
+    refused = asyncio.Event()
+    commit = pusher._commit_durable_audio_window
 
-    async def sequenced():
-        nonlocal reads, released
-        # Storage failure during B's live flush; ACK departure during A's
-        # shutdown flush, with B still waiting in the same retained deque.
-        if reads == (3 if failure == 'storage' else 4):
-            budget.release(LIMIT)
-            released = True
-        reads += 1
-        return await receive()
+    async def observe(**kwargs):
+        result = await commit(**kwargs)
+        if result is None:
+            refused.set()
+        return result
 
-    monkeypatch.setattr(sock, 'receive_bytes', sequenced)
+    monkeypatch.setattr(pusher, '_commit_durable_audio_window', observe)
     if failure == 'storage':
         monkeypatch.setattr(pusher, 'commit_pcm_window', MagicMock(side_effect=OSError('synthetic storage failure')))
     else:
         monkeypatch.setattr(sock, 'send_bytes', AsyncMock(side_effect=WebSocketDisconnect(1006)))
+    handler = asyncio.create_task(pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1))
+    try:
+        await asyncio.wait_for(refused.wait(), 5)
+    finally:
+        budget.release(LIMIT)
+    await asyncio.wait_for(handler, 5)
+    assert len(sock.frames) == 2  # B's ID and PCM never entered the receive task.
+    assert not client.rows[next_path].get('record_upload_sessions')
+    assert 'next' not in barrier.failed_recordings
+    if failure == 'storage':
+        assert client.rows[path]['record_upload_sessions']
+        assert not client.rows[path]['record_audio_closed']
+        assert 'conversation' in barrier.failed_recordings
+        assert sock.close_code == 1011  # Existing genuine storage-error policy.
+    else:
+        assert sock.close_code == 1006 and client.rows[path]['record_audio_closed']
+    assert budget.used == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('operation', ['acquire', 'release'])
+@pytest.mark.parametrize('after_mutation', [False, True])
+async def test_accounting_fault_fails_open_without_socket_close_or_counter_corruption(
+    inline_session, monkeypatch, caplog, operation, after_mutation
+):
+    from tests.unit.test_audio_durable_outbox import _sent_receipts
+
+    _, _, _, _ = inline_session
+    budget = configure(monkeypatch, LIMIT)
+    assert budget.acquire(128)  # Another socket's reservation must remain intact.
+    release = budget.release
+    original = getattr(budget, operation)
+
+    def broken(*args, **kwargs):
+        if after_mutation:
+            original(*args, **kwargs)
+        raise RuntimeError('injected accounting failure')
+
+    monkeypatch.setattr(budget, operation, broken)
+    monkeypatch.setattr(pusher, '_pcm_error_logged_at', {})
+    monkeypatch.setattr(pusher, 'PRIVATE_CLOUD_CHUNK_DURATION', 0)
+    metric = pusher.PUSHER_STORAGE_PCM_ERRORS_TOTAL.labels(reason=operation)
+    before = metric._value.get()
+    sock = Socket(_audio_frames('conversation', [b'\x01\x00', b'\x02\x00']))
     try:
         await asyncio.wait_for(pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1), 5)
-        assert client.rows[next_path]['record_upload_sessions']
-        assert not client.rows[next_path]['record_audio_closed']
-        assert 'next' in barrier.failed_recordings
-        if failure == 'storage':
-            assert client.rows[path]['record_upload_sessions']
-            assert not client.rows[path]['record_audio_closed']
-            assert 'conversation' in barrier.failed_recordings
-            assert sock.close_code == 1011  # Existing genuine storage-error policy.
-        else:
-            assert sock.close_code == 1006
-            assert client.rows[path]['record_audio_closed']  # Only A really committed.
-        assert budget.used == 0
+        assert sock.close_code == 1000 and len(_sent_receipts(sock)) == 2
+        assert budget.used == 128 and metric._value.get() == before + 2
+        logs = [r for r in caplog.records if 'event=pusher_pcm_error' in r.message]
+        assert len(logs) == 1 and f'reason={operation}' in logs[0].message
     finally:
-        if not released:
-            budget.release(LIMIT)
+        release(128)

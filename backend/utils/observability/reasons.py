@@ -82,6 +82,13 @@ class PusherPcmStage(StrEnum):
     TAIL = 'tail'
 
 
+class PusherPcmError(StrEnum):
+    UNKNOWN = 'unknown'
+    ACQUIRE = 'acquire'
+    RELEASE = 'release'
+    LATE_STORAGE = 'late_storage'
+
+
 REASON_UNKNOWN_TOTAL = Counter(
     'omi_reason_unknown_total',
     'Values presented to a closed reason enum that were not members, by reason family',

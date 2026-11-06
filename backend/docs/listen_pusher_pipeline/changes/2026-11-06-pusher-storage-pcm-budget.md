@@ -12,18 +12,18 @@ Admission is non-waiting immediately before custody storage submission. Live
 windows can use 75%; shutdown tails can use the full total. A refusal returns
 without a receipt, callback or ACK. Original buffers and checkpoints retain
 both byte charge and conversation identity across size, conversation, process,
-discontinuity and framed boundaries. Later flushes retry in order. Enabled admission caps each window at 4096
-checkpoints and retains at most 20 windows plus the boundary window. At that
-metadata cap the existing receive task pauses intake and probes non-waiting
-admission every50ms; no extra task, ACK, drop or error close is introduced.
-Shutdown tails bypass this pause. Every retained owner is checked against the
-socket gone-owner set before retry. These two safeguards address the independent
-review findings for tiny-window metadata growth and deletion after refusal.
+discontinuity and framed boundaries. The first refused live window immediately
+pauses intake in the same cancellable receive task; admission is probed every
+50 ms before another frame can be read. Refusals cannot accumulate toward the
+socket byte limit. Enabled windows cap at 4096 checkpoints; shutdown tails use
+the reserve without entering this pause. Known-deleted owners take the existing
+gone-owner disposition. Acquire/release faults are transactional, fail open,
+and have bounded enum counters and rate-limited logs; late post-cancellation
+storage failures are also observed and logged.
 Every unresolved owner is held in a finalizer `finally`, including failed retries
 and cancellation. ACK departure after one committed owner cannot release the
 producer fence of a later uncommitted owner. Refused tails
-retain the producer fence without changing the normal close code. Existing
-per-socket exhaustion remains the last-resort behavior. Queued/running storage
+retain the producer fence without changing the normal close code. Queued/running storage
 keeps its byte reservation across caller cancellation until actual settlement.
 
 The unit saturation harness was written and run before admission code:
@@ -49,3 +49,12 @@ projection-debt contract and executor pools remain unchanged. Neither this
 harness nor a local green suite proves deployed custody or installed client WAL
 retention. Two independent parallel custody reviews, including Grok, are required
 before publication.
+
+The final review delta offers 30 minute-long windows to the real receive loop
+while live admission stays full for at least 30 probes: only the first window is
+read/charged, below half the socket budget, with no receipt, ACK or close. It
+checks recovery once, cancellation into the reserved tail lane, full-tail fence
+retention, and accounting faults both before and after counter mutation. Flag 0
+preserves successful PCM/checkpoint/receipt/ACK bytes and storage dispatch; the
+new unresolved-owner finalizer may still hold fences and defer inline finish on
+genuine failure at flag 0. It is not a claim of identical failure finalization.

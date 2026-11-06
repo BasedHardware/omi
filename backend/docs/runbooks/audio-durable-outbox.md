@@ -138,27 +138,37 @@ A full budget **returns without submitting storage**. It never raises, closes a
 socket or sends opcode 203. There is no receipt and no commit callback. Original
 socket PCM, owner, start time and exact frame checkpoints stay charged to the
 existing 20 MiB per-socket budget; boundary callers cannot erase or rebind them.
-The next data-driven flush boundary retries retained windows in order, at most
-one outstanding commit per socket. There is no detached retry task or global admission waiter list. With admission
-on, windows also cap at 4096 checkpoints. At 20 retained windows, the next
-boundary may retain one extra window and pauses that receive task, probing
-non-waiting admission every 50ms until a slot frees; this bounds tiny-window
-metadata without closing or dropping input. Shutdown tails never enter that
-capacity pause. Known-deleted retained owners use the existing gone-owner
-disposition before retry and cannot terminate a later conversation. A shutdown-tail refusal keeps its producer fence and normal close
-code: no ACK means the source WAL must retain and replay. This does not measure
-listen's re-offer cadence or certify installed client WAL behavior. Continued
-intake can still hit the pre-existing 20 MiB last-resort socket bound; byte
-admission does not change that close path.
+The **first live refusal immediately pauses intake** in the same receive task.
+It probes non-waiting admission every 50 ms without reading another frame until
+that window commits. Refused windows therefore cannot accumulate toward the
+socket byte limit. There is no detached retry task or global admission waiter
+list. Enabled windows also cap at 4096 checkpoints.
+
+The pause is cancellable. Shutdown tails bypass it and try the reserved lane;
+a full tail budget retains the producer fence without selecting an error close.
+Known-deleted retained owners use the existing gone-owner disposition before
+retry. Close, abandon and marker operations remain ungated on their metadata
+executor. No ACK means the source WAL must retain and replay. This does not
+measure listen's re-offer cadence or certify installed client WAL behavior.
 
 `omi_pusher_storage_pcm_inflight_bytes` measures submitted custody PCM. When
-admission is enabled, both accounting and capacity remain held until storage
-actually settles, including a caller cancelled while its queued/running thread
-continues. Flag 0 preserves the previous await/cancellation behavior and its
-observational gauge semantics. `omi_pusher_storage_pcm_budget_limit_bytes`
-reports the startup-configured limit (zero means off).
-`omi_pusher_storage_pcm_refusals_total{stage="live|tail|unknown"}` counts
-pre-submit refusals. The agent-tier chart alert
+admission is enabled, accounting and capacity remain held until storage actually
+settles, including a caller cancelled while its queued/running thread continues.
+An acquire accounting error rolls back its partial mutation and admits using the
+flag-0 dispatch path. A release error retires exactly its reservation and is
+swallowed. Neither reaches socket failure handling. Both are counted in
+`omi_pusher_storage_pcm_errors_total{reason="acquire|release"}` and logged at
+most once per reason per minute. Late post-cancellation storage failures use the
+same counter/log path with `reason="late_storage"`.
+
+Flag 0 preserves successful PCM bytes, frame checkpoints, receipt/opcode-203
+bytes, and the previous storage-await/cancellation dispatch and observational
+gauge semantics. It does **not** restore every prior failure-path behavior:
+the new `finish_receive` finalizer holds all unresolved owner fences and can
+defer inline finish after genuine storage failures even with the flag off.
+`omi_pusher_storage_pcm_budget_limit_bytes` reports the configured limit (zero
+means off). `omi_pusher_storage_pcm_refusals_total{stage="live|tail|unknown"}`
+counts pre-submit refusals. The agent-tier chart alert
 `omi-pusher-storage-pcm-refusals` fires for rate >0 sustained 30 minutes (fresh
 pusher samples only). Refusal means delayed custody, never evidence of storage.
 

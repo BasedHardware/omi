@@ -25,7 +25,26 @@ class StoragePcmBudget:
         self.limit = limit
         self.live_limit = limit - limit // 4
         self.used = 0
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
+
+    def admit(self, size: int, *, tail: bool = False) -> bool:
+        """Roll back a failed acquire, including an error after mutation."""
+        with self._lock:
+            before = self.used
+            try:
+                return self.acquire(size, tail=tail)
+            except Exception:
+                self.used = before
+                raise
+
+    def settle(self, size: int) -> None:
+        """Retire exactly this reservation even if release raises."""
+        with self._lock:
+            before = self.used
+            try:
+                self.release(size)
+            finally:
+                self.used = max(0, before - size)
 
     def acquire(self, size: int, *, tail: bool = False) -> bool:
         if self.limit == 0:
