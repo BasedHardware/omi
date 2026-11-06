@@ -1,6 +1,7 @@
 """Hermetic real SDK probe paths: no credentials, emulator, or network."""
 
 import asyncio
+import sys
 from types import SimpleNamespace
 
 import pytest
@@ -14,6 +15,7 @@ from google.rpc.status_pb2 import Status
 from database import firestore_document_probe as reads
 from database import firestore_write_probe as writes
 from database import plane_leak_probe as probe
+from database.directory import router as directory_router
 from database.firestore_read_origin import read_origin
 from utils.log_sanitizer import hash_log_identifier
 from utils.other import plane_routing as routing
@@ -202,8 +204,8 @@ def test_telemetry_fault_does_not_break_access(monkeypatch):
 def test_directory_cache_supplies_plane_without_request_context(monkeypatch):
     monkeypatch.setenv('DIRECTORY_ROUTING_MODE', 'new_owners')
     monkeypatch.setattr(routing, '_TEST_CELL_UIDS', frozenset())
-    monkeypatch.setattr(routing.router, '_cache', {})
-    routing.router._remember(CELL_UID, 'cell')
+    monkeypatch.setattr(directory_router, '_cache', {})
+    directory_router._remember(CELL_UID, 'cell')
     assert routing.plane_for(CELL_UID) == 'cell'
     before = count('read', 'memories')
     reads._record(('users', CELL_UID, 'memories', 'm'), True)
@@ -213,3 +215,13 @@ def test_directory_cache_supplies_plane_without_request_context(monkeypatch):
     monkeypatch.setenv('DIRECTORY_ROUTING_MODE', 'off')
     assert routing.plane_for(CELL_UID) == 'firestore'
     assert not routing.has_cell_plane()
+
+
+def test_probe_lookup_never_initializes_a_missing_or_partial_router(monkeypatch):
+    monkeypatch.setenv('DIRECTORY_ROUTING_MODE', 'new_owners')
+    monkeypatch.setattr(routing, '_TEST_CELL_UIDS', frozenset())
+    monkeypatch.delitem(sys.modules, 'database.directory.router', raising=False)
+    assert routing.plane_for(CELL_UID) == 'firestore'
+    assert 'database.directory.router' not in sys.modules
+    monkeypatch.setitem(sys.modules, 'database.directory.router', SimpleNamespace())
+    assert routing.plane_for(CELL_UID) == 'firestore'
