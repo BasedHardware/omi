@@ -252,6 +252,25 @@ def test_failed_token_read_never_serves_warm_cache(world, monkeypatch):
         check(db)
 
 
+def test_failed_shadow_read_is_not_a_completed_comparison(world, monkeypatch):
+    db, _, _, _ = world
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"privacy_negative_lookup_shadow":100}')
+    check(db)
+    hits = metrics.NEGATIVE_LOOKUPS.labels('account_deletions', 'shadow', 'hit')
+    before = hits._value.get()
+    original = StrictFirestoreDocument.get
+
+    def fail(reference, **kwargs):
+        if reference.path == MARKER:
+            raise RuntimeError('lookup unavailable')
+        return original(reference, **kwargs)
+
+    monkeypatch.setattr(StrictFirestoreDocument, 'get', fail)
+    with pytest.raises(RuntimeError, match='lookup unavailable'):
+        check(db)
+    assert hits._value.get() == before
+
+
 def test_lru_access_preserves_recent_hint(world):
     from database.privacy_ttl_cache import is_missing
 

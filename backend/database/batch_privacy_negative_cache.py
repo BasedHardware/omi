@@ -29,16 +29,22 @@ def read(client, uid, reference, collection, version, live_read, *, shadow, star
     A shadow hit always reads live, counts any newly existing doc as a mismatch,
     and invalidates the hint. No TTL grace exempts a privacy mismatch.
     """
+    mode = 'shadow' if shadow else 'enforce'
     if version is None:
+        metrics.negative_lookup(collection, mode, 'miss')
         return live_read(reference)
     key = (client, uid, reference.path)
     cached, _age = LOOKUPS.get(key)
     hit = not is_missing(cached) and cached == version
-    mode = 'shadow' if shadow else 'enforce'
-    metrics.negative_lookup(collection, mode, 'hit' if hit else 'miss')
     if hit and not shadow:
+        metrics.negative_lookup(collection, mode, 'hit')
         return _NOT_FOUND
+    if not hit:
+        metrics.negative_lookup(collection, mode, 'miss')
     snapshot = live_read(reference)
+    if hit:
+        # Qualification counts completed comparisons, never failed live reads.
+        metrics.negative_lookup(collection, mode, 'hit')
     if snapshot.exists:
         LOOKUPS.forget(key)
         if hit:
