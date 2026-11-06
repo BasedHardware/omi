@@ -5315,7 +5315,7 @@
     {
       "type": "stat",
       "title": "Health",
-      "description": "All-in cost counts every line: GCP net of committed-use credits (one-time incidents excluded), Vertex/Gemini LLM, OpenAI and Anthropic invoices, STT and SaaS. STT uses the dated $5.3K/month Soniox-console estimate as of 2026-10-16 until a measured FinOps line exists (the FinOps stt_vendor_low model overstated it ~2\u00d7). SaaS uses the dated fixed $4.8K/month estimate as of 2026-10-16 until a complete fresh Mercury row exists, then it is measured SaaS (Mercury). Measured lines are labeled by source; an estimate older than 35 days is marked stale under Margin by plan. All-in/day: the settled day D\u22122, every line of the all-in stack above (it excludes the margin-only lines OpenRouter and Pinecone). All-in/user: the 30-day all-in cost \u00f7 the window's average daily cost-active users (any cost in the 30 days; not qualified MAU). Relative % change; up is bad.",
+      "description": "All-in cost counts every line: GCP net of committed-use credits (one-time incidents excluded), Vertex/Gemini LLM, OpenAI and Anthropic invoices, STT and SaaS. STT uses the dated $5.3K/month Soniox-console estimate as of 2026-10-16 until a measured FinOps line exists (the FinOps stt_vendor_low model overstated it ~2\u00d7). SaaS uses the dated fixed $4.8K/month estimate as of 2026-10-16 until a complete fresh Mercury row exists, then it is measured SaaS (Mercury). Measured lines are labeled by source; an estimate older than 35 days is marked stale under Margin by plan. All-in/day: the settled day D\u22122, every line of the all-in stack above (it excludes the margin-only lines OpenRouter and Pinecone); relative % change, up is bad. Uptime: of every settled attempt in a core journey over the last 7 days, the share that went the way it should (attempt-weighted, so busy journeys weigh more). Journeys: live capture (an audio session not cut by a queue wait or application error), conversation saved (finalization job success), chat answer (server chat_response) and cloud push-to-talk. Cancelled, degraded and unknown outcomes are not settled. Same counters as Omi Core Features, read from in-cluster Prometheus by the board's own sidecar. Change below: percentage points vs the prior 7 days. ",
       "datasource": {
         "type": "yesoreyeram-infinity-datasource",
         "uid": "omi-admin-api"
@@ -5354,15 +5354,15 @@
           "source": "url",
           "format": "table",
           "parser": "backend",
-          "url": "http://127.0.0.1:8899/api/omi/stats/wall/series/headline",
+          "url": "http://127.0.0.1:8899/api/omi/stats/uptime",
           "url_options": {
             "method": "GET"
           },
-          "root_selector": "frames.costPerMau",
+          "root_selector": "frames.headline",
           "columns": [
             {
               "selector": "value",
-              "text": "All-in/user",
+              "text": "Uptime",
               "type": "number"
             }
           ]
@@ -5400,20 +5400,20 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "All-in/user"
+              "options": "Uptime"
             },
             "properties": [
               {
                 "id": "displayName",
-                "value": "All-in/user"
+                "value": "Uptime"
               },
               {
                 "id": "unit",
-                "value": "currencyUSD"
+                "value": "percent"
               },
               {
                 "id": "decimals",
-                "value": 2
+                "value": 1
               }
             ]
           }
@@ -5477,10 +5477,28 @@
               "selector": "netCost",
               "text": "netCost",
               "type": "string"
-            },
+            }
+          ]
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/uptime",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "frames.strip",
+          "columns": [
             {
-              "selector": "costPerMau",
-              "text": "costPerMau",
+              "selector": "uptime",
+              "text": "uptime",
               "type": "string"
             }
           ]
@@ -5492,7 +5510,7 @@
           "options": {
             "indexByName": {
               "netCost": 0,
-              "costPerMau": 1
+              "uptime": 1
             },
             "excludeByName": {},
             "renameByName": {}
@@ -6021,8 +6039,8 @@
     },
     {
       "type": "timeseries",
-      "title": "Unit economics",
-      "description": "Revenue and all-in cost per monthly user (qualified MAU), 30-day basis, one point per day. Revenue = Omi-plan MRR \u00f7 that day's monthly users (FinOps book, which has daily snapshots from 2026-09-18; the latest point is the Per user stat). TWO DENOMINATORS, NOT A MARGIN: revenue per qualified user (Revenue / qualified user, \u00f7 qualified MAU) and all-in cost per cost-active user (All-in cost / cost-active user, \u00f7 the 30-day average of users with any cost). The users differ, so the gap between the lines is not a per-user margin. Cost = all-in 30-day cost through D\u22122; a day with no book snapshot breaks the revenue line rather than being drawn.",
+      "title": "Uptime by journey",
+      "description": "Uptime: of every settled attempt in a core journey over the last 7 days, the share that went the way it should (attempt-weighted, so busy journeys weigh more). Journeys: live capture (an audio session not cut by a queue wait or application error), conversation saved (finalization job success), chat answer (server chat_response) and cloud push-to-talk. Cancelled, degraded and unknown outcomes are not settled. Same counters as Omi Core Features, read from in-cluster Prometheus by the board's own sidecar. Change below: percentage points vs the prior 7 days. One point per UTC day (that day's settled attempts); the white line is all journeys together. A journey with no settled attempts that day draws nothing, not 0%. Attempts and failures for the last 7 days are in the Health stat's source frame `journeys`.",
       "datasource": {
         "type": "yesoreyeram-infinity-datasource",
         "uid": "omi-admin-api"
@@ -6038,11 +6056,11 @@
           "source": "url",
           "format": "table",
           "parser": "backend",
-          "url": "http://127.0.0.1:8899/api/omi/stats/wall/series/revenue",
+          "url": "http://127.0.0.1:8899/api/omi/stats/uptime",
           "url_options": {
             "method": "GET"
           },
-          "root_selector": "frames.arpmau",
+          "root_selector": "frames.daily",
           "columns": [
             {
               "selector": "date",
@@ -6050,36 +6068,28 @@
               "type": "timestamp"
             },
             {
-              "selector": "arpmau",
-              "text": "Revenue / qualified user",
+              "selector": "all",
+              "text": "All journeys",
               "type": "number"
-            }
-          ]
-        },
-        {
-          "refId": "B",
-          "datasource": {
-            "type": "yesoreyeram-infinity-datasource",
-            "uid": "omi-admin-api"
-          },
-          "type": "json",
-          "source": "url",
-          "format": "table",
-          "parser": "backend",
-          "url": "http://127.0.0.1:8899/api/omi/stats/wall/series/health",
-          "url_options": {
-            "method": "GET"
-          },
-          "root_selector": "frames.costPerMau",
-          "columns": [
-            {
-              "selector": "date",
-              "text": "date",
-              "type": "timestamp"
             },
             {
-              "selector": "costPerMau",
-              "text": "All-in cost / cost-active user",
+              "selector": "capture",
+              "text": "Live capture",
+              "type": "number"
+            },
+            {
+              "selector": "saved",
+              "text": "Conversation saved",
+              "type": "number"
+            },
+            {
+              "selector": "chat",
+              "text": "Chat answer",
+              "type": "number"
+            },
+            {
+              "selector": "ptt",
+              "text": "Push-to-talk",
               "type": "number"
             }
           ]
@@ -6087,7 +6097,7 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "currencyUSD",
+          "unit": "percent",
           "color": {
             "mode": "fixed",
             "fixedColor": "#e8e6df"
@@ -6117,24 +6127,40 @@
             "insertNulls": 129600000
           },
           "noValue": "Loading\u2026",
-          "decimals": 2
+          "decimals": 1
         },
         "overrides": [
           {
             "matcher": {
               "id": "byName",
-              "options": "Revenue / qualified user"
+              "options": "All journeys"
             },
             "properties": [
               {
                 "id": "displayName",
-                "value": "Revenue / qualified user"
+                "value": "All journeys"
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Live capture"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Live capture"
               },
               {
                 "id": "color",
                 "value": {
                   "mode": "fixed",
-                  "fixedColor": "#9085e9"
+                  "fixedColor": "#d55181"
                 }
               }
             ]
@@ -6142,18 +6168,56 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "All-in cost / cost-active user"
+              "options": "Conversation saved"
             },
             "properties": [
               {
                 "id": "displayName",
-                "value": "All-in cost / cost-active user"
+                "value": "Conversation saved"
               },
               {
                 "id": "color",
                 "value": {
                   "mode": "fixed",
-                  "fixedColor": "#aab6c6"
+                  "fixedColor": "#008300"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Chat answer"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Chat answer"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#c4bdf4"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Push-to-talk"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Push-to-talk"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#a8a69e"
                 }
               }
             ]
@@ -6177,8 +6241,11 @@
           "options": {
             "indexByName": {
               "date": 0,
-              "Revenue / qualified user": 1,
-              "All-in cost / cost-active user": 2
+              "All journeys": 1,
+              "Live capture": 2,
+              "Conversation saved": 3,
+              "Chat answer": 4,
+              "Push-to-talk": 5
             },
             "excludeByName": {},
             "renameByName": {}
