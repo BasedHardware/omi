@@ -521,6 +521,7 @@ environment_shared:
       - memory.canonical.mutate
       values_file: backend/charts/pusher/{env}_omi_pusher_values.yaml
       env:
+        PUSHER_STORAGE_PCM_BUDGET_MB: {value: '0', category: ops_kill}
         CONVERSATION_TERMINAL_FAMILY_MODE: {value: 'on', category: ops_kill}
         HOSTED_LID_API_URL: {value: '', category: service_discovery}
         RECORD_SEAL_OVERLAP_TRIM_ENABLED: {value: 'true', category: ops_kill}

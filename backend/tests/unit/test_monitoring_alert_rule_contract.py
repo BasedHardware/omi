@@ -2220,3 +2220,18 @@ def test_pusher_storage_queue_and_memory_alerts_observe_fresh_current_state():
                 assert 'workload="prod-omi-pusher",workload_type=~"deployment"' in expr
                 assert expr.count('timestamp(') == 2  # memory AND workload-owner freshness
                 assert expr.endswith('/ 3758096384')  # chart limit: 3.5 GiB
+
+
+def test_pusher_pcm_refusals_are_sustained_agent_only_pressure():
+    for export_name, rules in _all_rule_exports().items():
+        rule = rules['omi-pusher-storage-pcm-refusals']
+        assert rule['for'] == '30m', export_name
+        assert rule['labels']['tier'] == 'agent' and rule['labels']['audience'] == 'agent'
+        assert rule['labels']['owner'] == 'omi-lifecycle'
+        assert rule['noDataState'] == 'OK'
+        expr = rule['data'][0]['model']['expr']
+        assert 'sum by (stage) (rate(omi_pusher_storage_pcm_refusals_total{job="pusher-metrics"}[5m])' in expr
+        assert 'timestamp(' in expr and '< 120' in expr
+        assert rule['data'][2]['model']['conditions'][0]['evaluator'] == {'params': [0], 'type': 'gt'}
+        assert 'no receipt' in rule['annotations']['user_impact']
+        assert 'PUSHER_STORAGE_PCM_BUDGET_MB' in rule['annotations']['safe_next_action']

@@ -167,6 +167,20 @@ def _validate_manifest_shape(env_config: ConfigDict, env: str) -> list[Validatio
     errors = validate_retired_memory_manifest(env, env_config)
     errors.extend(validate_batch_final_pass_hosts(env, env_config))
     errors.extend(_validate_redis_ports(env_config, env))
+    pusher = _as_config_dict((_as_config_dict(env_config.get('gke')) or {}).get('pusher')) or {}
+    value = _manifest_literal_env_value(pusher.get('env'), 'PUSHER_STORAGE_PCM_BUDGET_MB')
+    try:
+        valid = value is not None and int(value) >= 0
+    except ValueError:
+        valid = False
+    if not valid:
+        errors.append(
+            ValidationError(
+                f'{env}/gke/pusher',
+                'PUSHER_STORAGE_PCM_BUDGET_MB must be a non-negative integer (0 disables admission)',
+            )
+        )
+
     errors.extend(
         ValidationError('sync_lineage_rollout', message) for message in validate_sync_lineage_rollout(env, env_config)
     )

@@ -83,13 +83,24 @@ PUSHER_ACTIVE_WS_CONNECTIONS = Gauge(
 
 PUSHER_STORAGE_PCM_INFLIGHT_BYTES = Gauge(
     'omi_pusher_storage_pcm_inflight_bytes',
-    'PCM payload bytes submitted by pusher custody commits awaiting storage executor completion or cancellation',
+    'PCM payload bytes in custody storage awaits; enabled byte admission retains accounting until actual completion',
 )
 
 PUSHER_STORAGE_PCM_BUDGET_LIMIT_BYTES = Gauge(
     'omi_pusher_storage_pcm_budget_limit_bytes',
     'Pusher storage PCM byte budget limit; zero means no budget is enforced',
 )
+
+from utils.observability.reasons import PusherPcmStage, ReasonFamily, reason_label
+
+PUSHER_STORAGE_PCM_REFUSALS_TOTAL = Counter(
+    'omi_pusher_storage_pcm_refusals_total',
+    'Custody PCM submissions refused before storage; no receipt or ACK',
+    ['stage'],
+)
+
+for _pcm_stage in PusherPcmStage:
+    PUSHER_STORAGE_PCM_REFUSALS_TOTAL.labels(stage=reason_label(ReasonFamily.PUSHER_PCM, _pcm_stage, PusherPcmStage))
 
 PUSHER_QUEUE_DROPS = Counter(
     'pusher_queue_drops_total',

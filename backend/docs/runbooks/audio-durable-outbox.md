@@ -119,13 +119,56 @@ ACK. Socket future tracking shields queued and running storage work from caller
 cancellation and waits for actual settlement before abandonment. The closed-worker
 and coordinator count caps do not establish a PCM byte bound or pod RSS bound.
 
-Pusher exposes `omi_pusher_storage_pcm_inflight_bytes` for PCM payloads submitted
-through the custody window's `commit_pcm_window` await (queued plus running).
-The gauge is released in `finally`, including exceptions and caller cancellation;
-a cancelled await can leave an already-running storage thread finishing its write,
-so this is not a complete retained-memory or RSS bound.
-`omi_pusher_storage_pcm_budget_limit_bytes` is always **0: no budget enforced**.
-Neither metric changes admission, receipts, ACKs or socket closes.
+### Pusher PCM storage byte admission (default off)
+
+`PUSHER_STORAGE_PCM_BUDGET_MB` is a non-negative integer in MiB, default **0**
+(off / kill switch). All committed chart and manifest values remain 0. A
+positive value bounds only PCM submitted to `commit_pcm_window` through the
+shared storage executor, queued plus running, per process. No executor pool,
+projection read/upload, record barrier, seal, failure marker or abandonment
+admission changes. Live windows may use 75% of the limit; disconnect / shutdown
+tails can use the remaining 25% as well, always within the total limit. A large
+tail burst can still refuse: the reserve is headroom, not a durability promise.
+
+A full budget **returns without submitting storage**. It never raises, closes a
+socket or sends opcode 203. There is no receipt and no commit callback. Original
+socket PCM, owner, start time and exact frame checkpoints stay charged to the
+existing 20 MiB per-socket budget; boundary callers cannot erase or rebind them.
+The next data-driven flush boundary retries retained windows in order, at most
+one outstanding commit per socket. There is no admission waiter or detached
+retry loop. A shutdown-tail refusal keeps its producer fence and normal close
+code: no ACK means the source WAL must retain and replay. This does not measure
+listen's re-offer cadence or certify installed client WAL behavior. Continued
+intake can still hit the pre-existing 20 MiB last-resort socket bound; byte
+admission does not change that close path.
+
+`omi_pusher_storage_pcm_inflight_bytes` measures submitted custody PCM. When
+admission is enabled, both accounting and capacity remain held until storage
+actually settles, including a caller cancelled while its queued/running thread
+continues. Flag 0 preserves the previous await/cancellation behavior and its
+observational gauge semantics. `omi_pusher_storage_pcm_budget_limit_bytes`
+reports the startup-configured limit (zero means off).
+`omi_pusher_storage_pcm_refusals_total{stage="live|tail|unknown"}` counts
+pre-submit refusals. The agent-tier chart alert
+`omi-pusher-storage-pcm-refusals` fires for rate >0 sustained 30 minutes (fresh
+pusher samples only). Refusal means delayed custody, never evidence of storage.
+
+Proposed enabled size: **512 MiB**, with 384 MiB for ordinary admission and
+128 MiB reserved headroom. For sizing context, 128 storage workers each holding
+60 seconds of 16 kHz PCM use about 234 MiB (128 x 1,920,000 bytes). This is a
+planning calculation, not a live measurement or an RSS guarantee. The byte
+limit excludes per-socket buffers, projection debt, GCS client buffering and
+other process memory. Real socket counts, 48 kHz window prevalence and tail
+size distribution still need measurement before enablement.
+
+Enablement is a separate PR / approved train, owned by uicleanup
+(omi-lifecycle): dev chart first, then **one canary pod for 15 minutes**. Require
+socket kills <=15/15min and pod memory p99 <75% of the 3.5 GiB container limit;
+inspect live/tail refusal rates, GCS errors and capacity/abandon outcomes. The
+owner expands to the fleet within one day of a clean canary or records the
+failed gate. **Rollback: chart value `PUSHER_STORAGE_PCM_BUDGET_MB=0`**, applied
+through the ordinary chart rollout; no image rebuild, object deletion or token
+clear. This PR does not enable any environment or authorize that rollout.
 
 Chart alerts `omi-pusher-storage-queue-warning` (>256 queued storage tasks per
 pusher target for 10m, agent) and `omi-pusher-storage-queue-critical` (>512 for
@@ -136,8 +179,7 @@ Each excludes samples older than 120s before aggregation; absent data is not
 pressure. When they fire, compare queued/active storage tasks, the in-flight
 PCM gauge, pod working set and GCS latency/errors; attribute the pressure to
 the running release and escalate to the lifecycle lead for an approved rollback.
-Preserve client WAL and custody objects. There is no byte-budget refusal alert
-or admission control yet. These chart definitions require normal monitoring
+Preserve client WAL and custody objects. These chart definitions require normal monitoring
 provisioning before they become live.
 
 Rollback uses abandonment `off` and closed cap `32`. Coordinator cap `0` also

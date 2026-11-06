@@ -2361,7 +2361,8 @@
     "omi_transcription_final_pass_retry_terminal_total",
     "omi_transcription_final_pass_retry_terminal_observed_at_seconds",
     "omi_pusher_storage_pcm_inflight_bytes",
-    "omi_pusher_storage_pcm_budget_limit_bytes"
+    "omi_pusher_storage_pcm_budget_limit_bytes",
+    "omi_pusher_storage_pcm_refusals_total"
   ],
   "legacy_debt": {
     "bfobs1syncenq01": {
