@@ -37,7 +37,7 @@ class WallV2Contract(unittest.TestCase):
         self.assertEqual(load("omi-tv-v2"), build_wall_board())
 
     def test_wall_columns_plugins_and_utc(self):
-        from build_wall_dashboard import BASE, COLUMNS, GEOMETRY
+        from build_wall_dashboard import BASE, COLUMNS, GEOMETRY, UPTIME_URL
         board = load("omi-tv-v2")
         self.assertEqual(board["uid"], "omi-tv-v2")  # provisioning + embed links
         self.assertEqual(board["timezone"], "utc")
@@ -47,6 +47,9 @@ class WallV2Contract(unittest.TestCase):
         for panel in board["panels"]:
             self.assertLessEqual(panel["gridPos"]["x"] + panel["gridPos"]["w"], 24)
             for target in panel["targets"]:
+                if target["url"] == UPTIME_URL:  # the sidecar's fixed-PromQL route
+                    self.assertEqual(target["root_selector"].split(".")[0], "frames")
+                    continue
                 self.assertTrue(target["url"].startswith(BASE + "/"))
                 self.assertIn(target["url"].rsplit("/", 1)[1], names)
                 self.assertEqual(target["datasource"]["uid"], "omi-admin-api")
@@ -94,7 +97,7 @@ class WallV2Contract(unittest.TestCase):
         self.assertTrue(all("people" not in n.lower() for n in names), names)
         headline = [t["root_selector"] for p in stats.values() for t in p["targets"]]
         for key in ["wau", "dau", "mau", "activation", "capture", "retained", "established",
-                    "mrr", "arpmau", "hardware", "netCost", "costPerMau"]:
+                    "mrr", "arpmau", "hardware", "netCost"]:
             self.assertIn(f"frames.{key}", headline)
 
     def test_each_stat_has_an_api_delta_strip_in_field_order(self):
@@ -114,9 +117,12 @@ class WallV2Contract(unittest.TestCase):
             self.assertTrue(is_strip(strip))
             self.assertFalse(head["options"]["showPercentChange"])  # native change is relative only
             self.assertEqual(strip["gridPos"]["y"], STAT_H)
-            keys = [t["root_selector"].split(".")[-1] for t in head["targets"]]
-            self.assertEqual(keys, api[name.lower()])
+            keys = [t["root_selector"].split(".")[-1] for t in head["targets"] if "/wall/series/" in t["url"]]
+            self.assertEqual(keys, api[name.lower()][:len(keys)])
             self.assertEqual([c["selector"] for c in strip["targets"][0]["columns"]], keys)
+            if len(keys) < len(head["targets"]):  # Uptime brings its own change
+                self.assertEqual(strip["targets"][1]["root_selector"], "frames.strip")
+                self.assertEqual(strip["targets"][1]["columns"][0]["selector"], "uptime")
             colors = {m["options"]["pattern"]: m["options"]["result"]["color"]
                       for m in strip["fieldConfig"]["defaults"]["mappings"]}
             self.assertEqual(set(colors), {f".*{GOOD_MARK}.*", f".*{BAD_MARK}.*"})
@@ -215,14 +221,25 @@ class WallV2Contract(unittest.TestCase):
             self.assertIn("band", panel["description"])
             self.assertNotIn("Oct 24", panel["description"])  # cohorts roll daily: no release date
 
-    def test_unit_economics_is_daily_and_breaks_on_missing_days(self):
+    def test_uptime_by_journey_replaces_unit_economics(self):
+        from build_wall_dashboard import PLATFORM, UPTIME_URL
         board = load("omi-tv-v2")
-        panel = next(p for p in board["panels"] if p["title"] == "Unit economics")
+        titles = {p["title"] for p in board["panels"]}
+        self.assertNotIn("Unit economics", titles)  # redundant with Cost vs revenue (David 2026-11-06)
+        panel = next(p for p in board["panels"] if p["title"] == "Uptime by journey")
+        self.assertEqual(panel["gridPos"]["x"], 20)
+        target = panel["targets"][0]
+        self.assertEqual((target["url"], target["root_selector"]), (UPTIME_URL, "frames.daily"))
+        fields = [c["selector"] for c in target["columns"]]
+        self.assertEqual(fields, ["date", "all", "capture", "saved", "chat", "ptt"])
         custom = panel["fieldConfig"]["defaults"]["custom"]
-        self.assertLess(custom["insertNulls"], 2 * 86_400_000)  # a one-day hole is a gap
-        self.assertFalse(custom["spanNulls"])  # a gap is drawn as a gap
-        self.assertEqual(panel["timeFrom"], "35d")  # the FinOps book's daily history
-        self.assertIn("one point per day", panel["description"])
+        self.assertFalse(custom["spanNulls"])  # a day without attempts is a gap, not 0%
+        hues = {p["value"]["fixedColor"] for o in panel["fieldConfig"]["overrides"] for p in o["properties"]
+                if p["id"] == "color"}
+        self.assertFalse(hues & set(PLATFORM.values()))  # platform hues stay platforms
+        health = next(p for p in board["panels"] if p["title"] == "Health")
+        uptime = next(t for t in health["targets"] if t["url"] == UPTIME_URL)
+        self.assertEqual(uptime["root_selector"], "frames.headline")
 
     def test_margin_by_plan_keeps_its_frame_and_closes_the_column(self):
         from build_wall_dashboard import FREE, PLAN_NAMES
@@ -277,7 +294,8 @@ class WallV2Contract(unittest.TestCase):
         health = next(p for p in board["panels"] if p["title"] == "Health")
         blob = json.dumps(health, ensure_ascii=False)
         self.assertIn("All-in/day", blob)
-        self.assertIn("All-in/user", blob)
+        self.assertIn("Uptime", blob)
+        self.assertIn("attempt-weighted", blob)
         self.assertNotIn('"Cost / day"', blob)
         self.assertNotIn('"Cost / user"', blob)
 

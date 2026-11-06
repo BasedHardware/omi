@@ -25,6 +25,11 @@ MARGIN_GOAL_PCT = json.loads((HERE.parent / "lib/omi-tv-goals.json").read_text()
 GOAL_COST = f"{MARGIN_GOAL_PCT:g}% target cost"
 DS = {"type": "yesoreyeram-infinity-datasource", "uid": "omi-admin-api"}
 BASE = "http://127.0.0.1:8899/api/omi/stats/wall/series"
+# Uptime is served by the Grafana pod's stats sidecar from fixed PromQL
+# (backend/charts/monitoring/grafana/stats_proxy.py), not by the admin API.
+UPTIME_URL = "http://127.0.0.1:8899/api/omi/stats/uptime"
+JOURNEYS = {"Live capture": "#d55181", "Conversation saved": "#008300", "Chat answer": "#c4bdf4",
+            "Push-to-talk": "#a8a69e"}  # slots 6, 7, lilac, neutral: never a platform hue
 COLUMNS = ["Growth", "Activation", "Retention", "Revenue", "Health"]
 
 # Reference categorical palette, dark-surface steps (dataviz palette.md). Platform
@@ -76,8 +81,9 @@ STAT_VALUE_SIZE, STAT_LABEL_SIZE = 26, 13
 
 
 def target(series, frame, columns, ref="A"):
+    url = UPTIME_URL if series == "uptime" else f"{BASE}/{series}"
     return {"refId": ref, "datasource": DS, "type": "json", "source": "url", "format": "table",
-            "parser": "backend", "url": f"{BASE}/{series}", "url_options": {"method": "GET"},
+            "parser": "backend", "url": url, "url_options": {"method": "GET"},
             "root_selector": f"frames.{frame}",
             "columns": [{"selector": s, "text": t, "type": ty} for s, t, ty in columns]}
 
@@ -259,6 +265,14 @@ ALL_IN = ("All-in cost counts every line: GCP net of committed-use credits (one-
           "an estimate older than 35 days is marked stale under Margin by plan. ")
 
 
+UPTIME = ("Uptime: of every settled attempt in a core journey over the last 7 days, the share that went the "
+          "way it should (attempt-weighted, so busy journeys weigh more). Journeys: live capture (an audio "
+          "session not cut by a queue wait or application error), conversation saved (finalization job "
+          "success), chat answer (server chat_response) and cloud push-to-talk. Cancelled, degraded and "
+          "unknown outcomes are not settled. Same counters as Omi Core Features, read from in-cluster "
+          "Prometheus by the board's own sidecar. Change below: percentage points vs the prior 7 days. ")
+
+
 def columns():
     growth = [
         stat("Growth · active users", USERS + "Weekly, daily and monthly users over the trailing 7 / 1 / 30 complete UTC days (MCP-only included). Change below: relative % vs the prior 7 / 1 / 30 days.",
@@ -354,10 +368,10 @@ def columns():
         (8, margin_by_plan()),
     ]
     health = [
-        stat("Health", ALL_IN + "All-in/day: the settled day D−2, every line of the all-in stack above (it excludes the margin-only lines OpenRouter and Pinecone). "
-                       "All-in/user: the 30-day all-in cost ÷ the window's average daily cost-active users (any cost in the 30 days; not qualified MAU). Relative % change; up is bad.",
+        stat("Health", ALL_IN + "All-in/day: the settled day D−2, every line of the all-in stack above (it excludes the margin-only lines OpenRouter and Pinecone); relative % change, up is bad. "
+                       + UPTIME,
              [("headline", "netCost", "All-in/day", "currencyUSD", 2),
-              ("headline", "costPerMau", "All-in/user", "currencyUSD", 2)]),
+              ("uptime", "headline", "Uptime", "percent", 1)]),
         (12, chart("Cost vs revenue",
                    ALL_IN + "Settled through D−2. Measured/invoiced lines are solid blue-greys: STT measured is the Soniox prepaid-balance delta plus measured Deepgram usage only; STT cash is Mercury vendor cash; measured SaaS (Mercury) is the daily SaaS aggregate. Modulate modelled (measured volume × committed price), STT est. (Soniox console) and SaaS est. (fixed) are sand-colored because they are not measured. The stack top is the Cost / day stat. One-time GCP spikes (a service-day above 2× and $500 over its 14-day median, e.g. the 2026-09-07 Coldline migration) are excluded and shown in the tooltip. Revenue (violet line) = FinOps MRR ÷ 30.4.",
                    [target("health", "cost", [DATE, ("gcp", "GCP", "number"),
@@ -378,13 +392,19 @@ def columns():
                               *[estimate(n, h) for n, h in ESTIMATE.items()],
                               line("Revenue", REVENUE, 3),
                               hidden("One-time excluded"), hidden("All-in total")])),
-        (10, chart("Unit economics",
-                   "Revenue and all-in cost per monthly user (qualified MAU), 30-day basis, one point per day. Revenue = Omi-plan MRR ÷ that day's monthly users (FinOps book, which has daily snapshots from 2026-09-18; the latest point is the Per user stat). TWO DENOMINATORS, NOT A MARGIN: revenue per qualified user (Revenue / qualified user, ÷ qualified MAU) and all-in cost per cost-active user (All-in cost / cost-active user, ÷ the 30-day average of users with any cost). The users differ, so the gap between the lines is not a per-user margin. Cost = all-in 30-day cost through D−2; a day with no book snapshot breaks the revenue line rather than being drawn.",
-                   [target("revenue", "arpmau", [DATE, ("arpmau", "Revenue / qualified user", "number")], "A"),
-                    target("health", "costPerMau", [DATE, ("costPerMau", "All-in cost / cost-active user", "number")], "B")],
-                   unit="currencyUSD", decimals=2, time_from="35d", soft_min=None,  # the crossover is the story
-                   overrides=[color("Revenue / qualified user", REVENUE), color("All-in cost / cost-active user", COST["OpenAI"])],
-                   extra=disconnect_after(1.5))),  # any missing book day is a gap
+        (10, chart("Uptime by journey",
+                   UPTIME + "One point per UTC day (that day's settled attempts); the white line is all journeys "
+                   "together. A journey with no settled attempts that day draws nothing, not 0%. Attempts and "
+                   "failures for the last 7 days are in the Health stat's source frame `journeys`.",
+                   [target("uptime", "daily", [DATE, ("all", "All journeys", "number"),
+                                               ("capture", "Live capture", "number"),
+                                               ("saved", "Conversation saved", "number"),
+                                               ("chat", "Chat answer", "number"),
+                                               ("ptt", "Push-to-talk", "number")])],
+                   unit="percent", decimals=1, time_from="35d", soft_min=None,
+                   overrides=[prop("All journeys", ("displayName", "All journeys"), ("custom.lineWidth", 3)),
+                              *[color(n, h) for n, h in JOURNEYS.items()]],
+                   extra=disconnect_after(1.5))),
         (1, data_through()),
     ]
     return dict(zip(COLUMNS, [growth, activation, retention, revenue, health]))
@@ -574,10 +594,13 @@ def build_wall_board():
     for name, items in columns().items():
         x, w = GEOMETRY[name]
         head, *charts = items
-        keys = [t["root_selector"].split(".")[-1] for t in head["targets"]]
+        keys = [t["root_selector"].split(".")[-1] for t in head["targets"] if t["url"] != UPTIME_URL]
+        strip = delta_strip(name, keys, f"{name}: change vs the prior period, from the series API.")
+        if len(keys) < len(head["targets"]):  # Uptime's change comes with Uptime, from the sidecar
+            strip["targets"].append(target("uptime", "strip", [("uptime", "uptime", "string")], "B"))
+            strip["transformations"] = [organize(keys + ["uptime"])]
         panels.append({**head, "gridPos": {"x": x, "y": 0, "w": w, "h": STAT_H}})
-        panels.append({**delta_strip(name, keys, f"{name}: change vs the prior period, from the series API."),
-                       "gridPos": {"x": x, "y": STAT_H, "w": w, "h": STRIP_H}})
+        panels.append({**strip, "gridPos": {"x": x, "y": STAT_H, "w": w, "h": STRIP_H}})
         y = STAT_H + STRIP_H
         for h, panel in charts:
             panels.append({**panel, "gridPos": {"x": x, "y": y, "w": w, "h": h}})
