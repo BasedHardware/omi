@@ -50,10 +50,10 @@ def test_classify(data, expected):
     assert home_step.classify(data) == expected
 
 
-def test_restamped_finished_title_is_ready_not_processing_forever():
+def test_restamped_finished_title_is_never_processing_forever():
     """GLM P1 on #24732: neutralize re-stamps server_minimum on read for finished rows."""
-    finished = minimum('Thank you.', summary_due_at=None)
-    assert home_step.classify(finished) == 'ready'
+    settled = minimum('Thank you.', summary_due_at=None)
+    assert home_step.classify(settled) == 'noise', 'a final stand-in title is noise, not Processing'
     delivered = minimum('Thank you.', summary_completed_at=NOW.timestamp())
     assert home_step.classify(delivered) == 'ready'
     output = minimum('Thank you.', summary_output_present=True)
@@ -67,7 +67,28 @@ def test_restamped_finished_title_is_ready_not_processing_forever():
         )
     )
     assert projected['structured']['title_provenance'] == 'server_minimum'
-    assert home_step.classify(projected) == 'ready'
+    assert home_step.classify(projected) == 'noise'
+    assert home_step.classify(dict(projected, summary_output_present=True)) == 'ready'
+
+
+@pytest.mark.parametrize(
+    'title,seconds',
+    [('Yeah.', 0), ("We didn't Know.", 28 * 60), ('Recording · 3:37 PM', 58), ('Recording · 9:21 AM', 222)],
+)
+def test_davids_settled_junk_rows_are_noise(title, seconds):
+    """2026-11-06 screenshots: after the drain these rows owe nothing, so they leave Home."""
+    start = NOW - timedelta(hours=20)
+    data = minimum(title, started_at=start, finished_at=start + timedelta(seconds=seconds), summary_due_at=None)
+    assert home_step.classify(home_titles.neutralize_minimum_title(data)) == 'noise'
+
+
+@pytest.mark.parametrize('age_hours,expected', [(1, 'transcribing'), (3, 'failed')])
+def test_unstamped_empty_capture_cannot_stay_processing_forever(age_hours, expected):
+    finished = NOW - timedelta(hours=age_hours)
+    data = row(
+        structured={'title': '', 'overview': ''}, started_at=finished - timedelta(seconds=11), finished_at=finished
+    )
+    assert home_step.classify(data) == expected
 
 
 def test_empty_blocked_minimum_is_noise():

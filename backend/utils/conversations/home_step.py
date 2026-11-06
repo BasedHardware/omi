@@ -8,7 +8,9 @@ list wire as ``home_step`` so clients stop inferring it from titles.
 - ``ready``: finished; may show as its own row.
 - ``transcribing`` / ``writing_notes``: still being processed, at that step.
 - ``failed``: processing gave up; the client folds these into one row.
-- ``noise``: finished with nothing worth a Home row (no speech, below floor).
+- ``noise``: finished with nothing worth a Home row: no speech, below floor,
+  or a stand-in title (first sentence / "Recording · time") that no summary
+  will ever replace.
 
 Presentation only: nothing is stored, search and direct links are unaffected,
 and a curated row (user title, star, folder, photos) is always ``ready``.
@@ -17,6 +19,7 @@ and a curated row (user title, star, folder, photos) is always ``ready``.
 from __future__ import annotations
 
 from collections.abc import Mapping
+from datetime import datetime, timezone
 from typing import Any
 
 from config.episodes import home_step_projection_enabled
@@ -30,6 +33,9 @@ TRANSCRIBING = 'transcribing'
 WRITING_NOTES = 'writing_notes'
 FAILED = 'failed'
 NOISE = 'noise'
+
+# Matches the stamped HOME_TRANSCRIPTION_DEADLINE_SECONDS default and the batch SLA.
+LEGACY_TRANSCRIPTION_SECONDS = 2 * 60 * 60
 
 
 def _value(value: Any) -> Any:
@@ -70,14 +76,27 @@ def classify(row: Mapping[str, Any]) -> str | None:
     provisional = structured.get('title_provenance') == 'server_minimum'
     if is_completed_below_floor(row) or (provisional and row.get('summary_blocked_reason') in EMPTY_BLOCKED_REASONS):
         return NOISE
-    if provisional and summary_owed(row):
-        # Read projections re-stamp server_minimum on finished rows whose generated
-        # title echoes the transcript, so provenance alone never proves pending work.
-        return WRITING_NOTES
+    if provisional:
+        if summary_owed(row):
+            return WRITING_NOTES
+        if row.get('summary_output_present') or row.get('summary_completed_at'):
+            # A real summary landed; read projections may still re-stamp an echo title.
+            return READY
+        # The stand-in title is final: nothing will ever summarize this row.
+        return NOISE
     if not title and not str(structured.get('overview') or '').strip() and not row.get('transcript_segments'):
-        # A capture whose speech has not landed; unstamped legacy rows have no deadline.
-        return TRANSCRIBING
+        # A capture whose speech has not landed. Unstamped legacy rows get the same
+        # bound the stamped ones have, so none can stay Processing forever.
+        return FAILED if _older_than(row.get('finished_at'), LEGACY_TRANSCRIPTION_SECONDS) else TRANSCRIBING
     return READY
+
+
+def _older_than(moment: Any, seconds: float) -> bool:
+    if not isinstance(moment, datetime):
+        return False
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+    return (datetime.now(timezone.utc) - moment).total_seconds() >= seconds
 
 
 def project(row: dict[str, Any]) -> dict[str, Any]:
