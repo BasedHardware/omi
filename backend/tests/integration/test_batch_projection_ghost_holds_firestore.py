@@ -317,6 +317,9 @@ def test_transaction_retry_counts_only_one_committed_ghost(holds, monkeypatch):
         if transaction._write_pbs:
             attempts.append(True)
             if len(attempts) == 1:
+                # Model a server abort, including release of its read locks.
+                # Raising locally without rollback leaves a live emulator tx.
+                transaction._rollback()
                 raise Aborted('synthetic commit contention')
         return original(transaction)
 
