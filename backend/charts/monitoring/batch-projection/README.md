@@ -14,15 +14,54 @@ Target: process most batch audio within 30 minutes of admission, and alarm when 
 2 hours. Failed-held, quarantined and repair waits count, because that is how 165 segments were lost on 2026-11-01.
 
 The batch worker queue sample exports these series (`utils/batch_pipeline/metrics.py`, at most once per 5 minutes
-per process):
+per data namespace, across serving and GKE worker processes):
 
 | series | meaning |
 |---|---|
 | `omi_batch_timeliness_new_oldest_age_seconds{leg}` | oldest unpublished unit admitted at or after the epoch. `uncommitted`, `quarantined` and `assignment_held` clock from `enqueued_at`; `projection` and `quarantine_held_rows` clock from `committed_at`, a lower bound |
 | `omi_batch_timeliness_new_over_sla_units{leg}` | units admitted at or after the epoch and unpublished past 2 h, per leg |
-| `omi_batch_timeliness_backlog_units{leg}` | unpublished units from before the epoch; visible, never alarmed |
+| `omi_batch_timeliness_backlog_units{leg}` | unpublished units from before the epoch; each leg capped at 10,000 (a lower bound at the cap), visible, never alarmed |
 | `omi_batch_timeliness_scan_truncated{leg}` | 1 when a walk page is full and may hide an older admission (`uncommitted`, `projection`); the blind rule fires after 30 minutes, which is expected during large catch-up uploads |
 | `omi_batch_timeliness_samples_total{outcome}` | `ok`, `error`, `disabled` |
+
+The ship-on `FIRESTORE_READ_LEVERS` lever `batch_timeliness_leader` (default 100) uses the
+`LeaderLease` role `timeliness_metrics` in `{namespace}_leases`, independent of queue
+metrics and maintenance. Its TTL equals the sampling interval (default 300 s, 60–3600 s)
+so another holder waits a whole interval before takeover. Non-leaders execute no
+timeliness queries. Before a successful sample and after losing the lease, all
+sampler gauges (including drain/held ages and the observation timestamp) are absent.
+Failures retain the previous successful values and timestamp while the lease is
+current; they never refresh freshness. Collection also withdraws an expired leader
+sample if its supervisor stalls, so an old breach cannot borrow a new leader’s
+fresh timestamp. Lease-store errors fail open using the existing lease behavior.
+
+Each pre-epoch aggregation applies `limit(10000).count()`; a saturated value means
+**at least** 10,000 units. Post-epoch SLA counts and the oldest-unit queries retain
+their semantics. Backlog is kept visible, never alarmed. This bounds historical
+index entries per leg independently of stock size. For N healthy instances in one
+namespace, election removes approximately (N−1)/N of sampler queries, plus the
+historical count cap. Lease transactions are additional small reads, not samples.
+No measured production savings are claimed.
+
+Rollback: set `batch_timeliness_leader` to `0` in the existing `FIRESTORE_READ_LEVERS`
+JSON on both planes. This restores per-instance sampling and unbounded exact
+pre-epoch counts. No new environment key is added. The existing global
+`BATCH_PIPELINE_LEADER_LEASE_ENABLED=false` still bypasses election.
+
+The unchanged `batch-timeliness.json` rules use `max` across available series.
+Followers need not publish zeros. Freshness uses `time() - max(observed_at)` with
+`or vector(1e9)` when every sampler is absent; the stale rule retains its 900 s
+threshold and `noDataState: Alerting`. The breach rule retains its freshness gate,
+and the blind rule retains `noDataState: OK`. No alert thresholds change.
+
+Read attribution uses five fixed origins: `job:batch_pipeline_quarantine_recovery:held_candidates`,
+`job:batch_pipeline_quarantine_recovery:recovery_candidates`, `job:record_seal_cluster_repair:discover_jobs`,
+`job:record_seal_worker:pending_page`, and `job:batch_pipeline_store:timeliness_sample`.
+The existing opt-in Firestore probe records these on its origin-labelled billed-read
+counter when exported. GKE batch workers use a private metrics registry while the
+Firestore probe counters register globally; the worker endpoint does not export
+those counters. The repair CronJob has no metrics endpoint. Exporter work is scope B
+and is not included here; labels alone do not make those GKE reads visible.
 
 Legs:
 - `uncommitted`: `ready`, `leased`, `result_ready`, `retry`, `vendor_held`, skipping deliberate admission holds

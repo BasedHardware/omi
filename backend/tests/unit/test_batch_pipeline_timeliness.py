@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 from unittest.mock import Mock
 
+import pytest
+
 from prometheus_client import CollectorRegistry
 
 from config.batch_timeliness import TERMINAL_EMPTY_IS_PROCESSED
@@ -436,3 +438,152 @@ def test_drain_age_excludes_held_only_stock_but_includes_pre_epoch_pending(monke
     sample['drain_oldest'] = None
     metrics.refresh_timeliness(store, NOW + 301)
     assert registry.get_sample_value('omi_batch_projection_drain_oldest_age_seconds') == 0
+
+
+@pytest.mark.parametrize('enabled', [True, False])
+def test_historical_counts_apply_limit_before_aggregation(monkeypatch, enabled):
+    from database.batch_pipeline_store import TIMELINESS_BACKLOG_COUNT_LIMIT
+
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', json.dumps({'batch_timeliness_leader': 100 if enabled else 0}))
+    queries = []
+    original = _Query.count
+
+    def counted(query):
+        queries.append(query)
+        return original(query)
+
+    monkeypatch.setattr(_Query, 'count', counted)
+    stock = TIMELINESS_BACKLOG_COUNT_LIMIT + 123
+    sample = _sample(jobs=[{'state': 'quarantined', 'enqueued_at': EPOCH - 1}] * stock)
+    historical = [q for q in queries if any(op == '<' and value == EPOCH for _, op, value in q.filters)]
+    assert len(historical) == 7
+    assert all(q._limit == (TIMELINESS_BACKLOG_COUNT_LIMIT if enabled else None) for q in historical)
+    assert sample['backlog']['quarantined'] == (TIMELINESS_BACKLOG_COUNT_LIMIT if enabled else stock)
+    # Post-epoch counts remain exact and unbounded.
+    assert all(q._limit is None for q in queries if q not in historical)
+
+
+def _fleet(monkeypatch, interval=300):
+    from tests.unit.test_batch_pipeline_leader import Clock
+    from tests.unit.test_batch_pipeline_scheduler import MemoryStore
+    from utils.batch_pipeline.leader import LeaderLease, TIMELINESS_METRICS
+
+    monkeypatch.delenv('BATCH_PIPELINE_LEADER_LEASE_ENABLED', raising=False)
+    monkeypatch.delenv('FIRESTORE_READ_LEVERS', raising=False)
+    monkeypatch.setenv('BATCH_TIMELINESS_INTERVAL_SECONDS', str(interval))
+    clock, lease_store = Clock(NOW), MemoryStore()
+    metrics = [
+        QueueMetrics(
+            CollectorRegistry(),
+            timeliness_leader=LeaderLease(lease_store, TIMELINESS_METRICS, ttl_seconds=interval, clock=clock),
+        )
+        for _ in range(2)
+    ]
+    store = _store(monkeypatch, SAMPLE)
+    return metrics, store, clock
+
+
+@pytest.mark.parametrize('interval', [300, 3600])
+def test_fleet_sample_follower_zero_queries_and_handover(monkeypatch, interval):
+    metrics, store, clock = _fleet(monkeypatch, interval)
+    first, second = metrics
+    for m in metrics:
+        assert list(m.timeliness_observed_at.collect()) == []
+        assert list(m.drain_age.collect()) == []
+    first.refresh_timeliness(store, clock.now)
+    second.refresh_timeliness(store, clock.now + 1)
+    assert store.timeliness.call_count == 1
+    assert list(second.timeliness_age.collect()) == []
+    assert list(second.timeliness_observed_at.collect()) == []
+    # Restarted replicas cannot create an extra sample inside the fleet interval.
+    from utils.batch_pipeline.leader import LeaderLease, TIMELINESS_METRICS
+
+    restart = QueueMetrics(
+        CollectorRegistry(),
+        timeliness_leader=LeaderLease(
+            first.timeliness_leader.store, TIMELINESS_METRICS, ttl_seconds=interval, clock=clock
+        ),
+    )
+    clock.now += interval - 1
+    restart.refresh_timeliness(store, clock.now)
+    assert store.timeliness.call_count == 1
+    clock.now += 3
+    second.refresh_timeliness(store, clock.now)
+    first.refresh_timeliness(store, clock.now)
+    assert store.timeliness.call_count == 2
+    assert list(first.timeliness_age.collect()) == []
+    assert list(first.timeliness_observed_at.collect()) == []
+    assert list(first.held_age.collect()) == []
+    assert list(first.drain_age.collect()) == []
+    assert list(second.timeliness_observed_at.collect())[0].samples[0].value == clock.now
+
+
+def test_lever_zero_restores_per_instance_sampling_without_lease_reads(monkeypatch):
+    metrics, store, clock = _fleet(monkeypatch)
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"batch_timeliness_leader":0}')
+    for m in metrics:
+        m.timeliness_leader.acquire = Mock(side_effect=AssertionError('must bypass lease'))
+        m.refresh_timeliness(store, clock.now)
+    assert store.timeliness.call_count == 2
+
+
+def test_lease_outage_fails_open_and_samples(monkeypatch):
+    metrics, store, clock = _fleet(monkeypatch)
+    for m in metrics:
+        m.timeliness_leader.store = Mock(run=Mock(side_effect=RuntimeError('down')))
+        m.refresh_timeliness(store, clock.now)
+    assert store.timeliness.call_count == 2
+
+
+def test_alerts_aggregate_available_leader_and_keep_missing_sample_freshness():
+    rules = {rule['uid']: rule for rule in json.loads(PENDING.read_text())}
+    stale = rules['omi-batch-timeliness-sample-stale']
+    assert stale['noDataState'] == 'Alerting'
+    expression = stale['data'][0]['model']['expr']
+    assert 'max(omi_batch_timeliness_observed_at_seconds)' in expression
+    assert 'or vector(1e9)' in expression
+    assert any(q['model'].get('expression') == '$A >= 900' for q in stale['data'])
+    assert rules['omi-batch-timeliness-scan-blind']['noDataState'] == 'OK'
+
+
+def test_stalled_former_leader_expires_at_collection_without_refresh(monkeypatch):
+    from utils.batch_pipeline import metrics as metrics_module
+
+    metrics, store, clock = _fleet(monkeypatch)
+    monkeypatch.setattr(metrics_module.time, 'monotonic', clock)
+    first, second = metrics
+    first.refresh_timeliness(store, clock.now)
+    assert list(first.timeliness_age.collect())
+    clock.now += 301
+    second.refresh_timeliness(store, clock.now)
+    # A's supervisor never resumes: scraping alone must withdraw stale debt
+    # before max(age from A) can borrow max(timestamp from B)'s freshness.
+    for gauge in (
+        first.timeliness_age,
+        first.timeliness_over_sla,
+        first.timeliness_backlog,
+        first.timeliness_truncated,
+        first.timeliness_observed_at,
+        first.drain_age,
+        first.held_age,
+    ):
+        assert list(gauge.collect()) == []
+    assert list(second.timeliness_observed_at.collect())[0].samples[0].value == clock.now
+
+
+def test_lazy_election_uses_store_namespace_and_own_role_on_both_planes(monkeypatch):
+    from utils.batch_pipeline import metrics as metrics_module
+    from utils.batch_pipeline.leader import TIMELINESS_METRICS
+
+    factory = Mock(return_value=Mock(acquire=Mock(return_value=False)))
+    monkeypatch.setattr(metrics_module, 'LeaderLease', factory)
+    monkeypatch.delenv('FIRESTORE_READ_LEVERS', raising=False)
+    store = _store(monkeypatch, SAMPLE)
+    for scope in ('serving', 'worker'):
+        sampler = QueueMetrics(CollectorRegistry(), namespace=scope)
+        sampler.refresh_timeliness(store, NOW)
+    assert factory.call_count == 2
+    for call in factory.call_args_list:
+        assert call.args == (store, TIMELINESS_METRICS)
+        assert call.kwargs == {'ttl_seconds': 300.0}
+    store.timeliness.assert_not_called()

@@ -8,6 +8,7 @@ import uuid
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
+from database.firestore_read_origin import read_origin
 from database._client import run_transactional
 
 CLAIM_SECONDS = 360
@@ -16,6 +17,7 @@ PAGE_SIZE = 64
 ROW_FIELDS = ('status', 'finished_at', 'record_audio_closed', 'record_audio_partial', 'record_lane_owner')
 
 
+@read_origin('job:record_seal_worker:pending_page')
 def pending_page(client, namespace, *, horizon, after=None, limit=PAGE_SIZE):
     """Stable oldest-finish keyset; never scan the closed conversation history."""
     collection = client.collection(f'{namespace}_jobs')

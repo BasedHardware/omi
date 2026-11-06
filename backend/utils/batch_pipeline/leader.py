@@ -33,7 +33,8 @@ TABLE = 'leases'
 PUMP_RECOVERY = 'pump_recovery'
 SERVING_MAINTENANCE = 'serving_maintenance'
 QUEUE_METRICS = 'queue_metrics'
-ROLES = frozenset({PUMP_RECOVERY, SERVING_MAINTENANCE, QUEUE_METRICS})
+TIMELINESS_METRICS = 'timeliness_metrics'
+ROLES = frozenset({PUMP_RECOVERY, SERVING_MAINTENANCE, QUEUE_METRICS, TIMELINESS_METRICS})
 
 
 class LeaderLease:
@@ -46,7 +47,10 @@ class LeaderLease:
         holder: str | None = None,
         clock: Callable[[], float] = time.time,
     ):
-        if role not in ROLES or not 0 < ttl_seconds <= 600:
+        # Timeliness samples run at 60-3600s. Hold for the whole interval so
+        # a restart/follower cannot sample again between scheduled fleet turns.
+        max_ttl = 3600 if role == TIMELINESS_METRICS else 600
+        if role not in ROLES or not 0 < ttl_seconds <= max_ttl:
             raise ValueError('static role and bounded lease TTL required')
         self.store = store
         self.role = role
