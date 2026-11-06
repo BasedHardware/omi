@@ -506,3 +506,22 @@ def test_goal_purge_preserves_other_domain_receipts(domain_backend):
     h.goals(sid).create(GoalCreate(data={'title': 'Purge me'}), mutation_id='goal-once')
     h.goals(sid).purge(sid)
     assert h.folders(sid).create(FolderCreate(name='Retained'), mutation_id='folder-once').id == folder.id
+
+
+@pytest.mark.parametrize('domain', ['goals', 'workstreams'])
+def test_goal_and_workstream_creates_roll_back_with_uow(domain_backend, domain):
+    h = domain_backend
+    sid = h.space('rollback-' + domain)
+
+    def abort(tx):
+        if domain == 'goals':
+            tx.goals.create(GoalCreate(data={'id': 'aborted', 'title': 'Abort'}))
+        else:
+            tx.workstreams.create(
+                WorkstreamCreate(data={'workstream_id': 'aborted', 'title': 'Abort', 'objective': 'Abort'})
+            )
+        raise RuntimeError('abort domain write')
+
+    with pytest.raises(RuntimeError, match='abort domain write'):
+        h.store(sid).run(abort)
+    assert h.read(sid, domain, 'aborted') is None
