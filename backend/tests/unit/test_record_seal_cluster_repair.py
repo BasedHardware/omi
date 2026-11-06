@@ -1087,3 +1087,42 @@ def test_parent_row_and_summary_are_warning(event, monkeypatch):
     module.emit({'event': event, 'outcome': 'ok', 'stage_ms': {'walk': 12}})
     assert records[0].levelno == logging.WARNING
     assert json.loads(records[0].msg)['stage_ms']['walk'] == 12
+
+
+@pytest.mark.parametrize('stage', ['run', 'rebuild'])
+def test_job_failure_logs_exception_type_and_site_never_message(tmp_path, stage):
+    entrypoint = Path(__file__).resolve().parents[2] / 'scripts/record_seal_repair_job.py'
+    script = tmp_path / 'failure_boundary.py'
+    private = 'users/private-uid/conversations/private-cid private@example.invalid'
+    script.write_text(
+        'import runpy, sys, types\n'
+        f'entry = runpy.run_path({str(entrypoint)!r})\n'
+        'def boom(**kwargs):\n'
+        f'    raise RuntimeError({private!r})\n'
+        'def ok(**kwargs):\n'
+        '    return {"event": "record_seal_repair", "outcome": "ok", "rows": 0}\n'
+        f'if {stage!r} == "run":\n'
+        '    entry["repair"].run = boom\n'
+        'else:\n'
+        '    entry["repair"].run = ok\n'
+        '    sys.modules["utils.record_projection_rebuild"] = types.SimpleNamespace(run_job=lambda: boom())\n'
+        '    import utils\n'
+        '    utils.record_projection_rebuild = sys.modules["utils.record_projection_rebuild"]\n'
+        f'sys.argv = [{str(entrypoint)!r}]\n'
+        'raise SystemExit(entry["main"]())\n'
+    )
+    result = subprocess.run(
+        [sys.executable, str(script)],
+        capture_output=True,
+        text=True,
+        cwd=Path(__file__).resolve().parents[2],
+        env={**os.environ, 'OMI_LOG_FORMAT': 'json', 'RECORD_SEAL_REPAIR_ENABLED': 'true'},
+    )
+    assert private not in result.stdout and private not in result.stderr
+    messages = [json.loads(json.loads(line)['message']) for line in result.stdout.splitlines() if line.strip()]
+    event = 'record_seal_repair' if stage == 'run' else 'record_projection_rebuild'
+    failure = next(m for m in messages if m.get('event') == event and m.get('outcome') == 'error')
+    assert failure['exception_type'] == 'RuntimeError'
+    assert failure['error_site'].endswith('.py:' + failure['error_site'].rsplit(':', 1)[1])
+    assert set(failure) <= {'event', 'outcome', 'exception_type', 'error_site'}
+    assert result.returncode == (1 if stage == 'run' else 0)

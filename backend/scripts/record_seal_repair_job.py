@@ -35,6 +35,21 @@ def emit(payload):
     logger.handle(record)
 
 
+def failure(event, error):
+    """Error payload with the exception class and a static file:line, never its message (may hold user ids)."""
+    payload = {'event': event, 'outcome': 'error'}
+    try:
+        from utils.batch_pipeline.errors import error_site_field
+
+        payload['exception_type'] = type(error).__name__
+        site = error_site_field(error).strip().removeprefix('site=')
+        if site:
+            payload['error_site'] = site
+    except Exception:
+        pass
+    return payload
+
+
 def main():
     def terminate(*_):
         # Unwind the coordinator's finally block and reap all children.
@@ -62,13 +77,13 @@ def main():
                         report = record_projection_rebuild.run_job()
                         if report['outcome'] != 'disabled':
                             emit(report)
-                    except Exception:
-                        emit({'event': 'record_projection_rebuild', 'outcome': 'error'})
+                    except Exception as error:
+                        emit(failure('record_projection_rebuild', error))
                     emit(repair.run(progress=emit))
                 else:
                     raise ValueError('invalid arguments')
-            except BaseException:
-                emit({'event': 'record_seal_repair', 'outcome': 'error'})
+            except BaseException as error:
+                emit(failure('record_seal_repair', error))
                 return 1
     return 0
 
