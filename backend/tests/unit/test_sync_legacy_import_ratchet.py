@@ -81,7 +81,6 @@ RETIRING_MODULES: dict[str, str] = {
     'database.sync_dead_letters': 'C10',
     'utils.sync.redrive_policy': 'C10',
     'utils.sync.completed_status': 'C10',
-    'utils.sync.legacy_fresh': 'C9/C11',
     'utils.sync.wal_audio_coverage': 'C11',
     'utils.sync.wal_audio_coverage_metrics': 'C11',
     'utils.sync.safety_wal_coverage': 'C11',
@@ -264,6 +263,48 @@ def write_baseline() -> None:
     BASELINE_PATH.write_text(json.dumps(data, indent=2, sort_keys=False) + '\n', encoding='utf-8')
 
 
+@pytest.fixture(scope='module')
+def deleted_artifact_references():
+    """Permanent-dark cleanup: keep retired env/config/imports out of the backend.
+
+    Documentation and history are the audit trail. Construct the retired names
+    so this guard is subject to its own scan. Lane reason strings and the dark
+    mode's historical enum are not module references.
+    """
+    module = 'utils.sync.' + 'legacy_' + 'fresh'
+    module_path = _module_path(module)
+    needles = ('SYNC_LEGACY_' + 'FRESH', module, module_path, module_path.rsplit('/', 1)[1])
+    assert not (BACKEND_DIR / module_path).exists()
+    found = []
+    for root, dirs, files in os.walk(BACKEND_DIR):
+        dirs[:] = sorted(
+            d for d in dirs if not d.startswith('.') and d not in EXCLUDED_PARTS and d not in {'docs', 'history'}
+        )
+        for name in sorted(files):
+            path = Path(root, name)
+            if path.is_symlink():
+                continue
+            try:
+                source = path.read_text(encoding='utf-8')
+            except UnicodeDecodeError:
+                continue
+            relative = path.relative_to(BACKEND_DIR).as_posix()
+            if any(needle in source or needle in relative for needle in needles):
+                found.append(relative)
+            if name.endswith('.py') and module.rsplit('.', 1)[1] in source:
+                tree = ast.parse(source, filename=relative)
+                for node in ast.walk(tree):
+                    if isinstance(node, ast.ImportFrom):
+                        base = _resolve_from(node, relative)
+                        if any(f'{base}.{alias.name}' == module for alias in node.names):
+                            found.append(relative)
+    return sorted(set(found))
+
+
+def test_deleted_legacy_sync_artifacts_stay_absent(deleted_artifact_references):
+    assert not deleted_artifact_references, f'Retired legacy sync artifacts reintroduced: {deleted_artifact_references}'
+
+
 def test_retiring_modules_exist():
     missing = [m for m in RETIRING_MODULES if not (BACKEND_DIR / _module_path(m)).is_file()]
     assert not missing, (
@@ -326,31 +367,31 @@ def test_baseline_only_shrinks_stale_edges_are_removed(edges):
         ('from utils.sync.uid_sequencer import sweep', 'utils/x.py', {'utils.sync.uid_sequencer'}),
         ('def f():\n    from database import sync_redrive\n', 'services/x.py', {'database.sync_redrive'}),
         ('from .sync_dead_letters import x', 'database/other.py', {'database.sync_dead_letters'}),
-        ('from . import sync_empty_recovery', 'database/other.py', {'database.sync_empty_recovery'}),
+        ('from . import sync_dead_letters', 'database/other.py', {'database.sync_dead_letters'}),
         (
-            'import importlib\nimportlib.import_module("utils.sync.legacy_fresh")',
+            'import importlib\nimportlib.import_module("utils.sync.completed_status")',
             'utils/x.py',
-            {'utils.sync.legacy_fresh'},
+            {'utils.sync.completed_status'},
         ),
         (
-            'import importlib\nimportlib.import_module(name="utils.sync.legacy_fresh")',
+            'import importlib\nimportlib.import_module(name="utils.sync.completed_status")',
             'utils/x.py',
-            {'utils.sync.legacy_fresh'},
+            {'utils.sync.completed_status'},
         ),
         (
-            'from importlib import import_module as load\nload("utils.sync.legacy_fresh")',
+            'from importlib import import_module as load\nload("utils.sync.completed_status")',
             'utils/x.py',
-            {'utils.sync.legacy_fresh'},
+            {'utils.sync.completed_status'},
         ),
         (
-            'from importlib import import_module as load\nload(name="utils.sync.legacy_fresh")',
+            'from importlib import import_module as load\nload(name="utils.sync.completed_status")',
             'utils/x.py',
-            {'utils.sync.legacy_fresh'},
+            {'utils.sync.completed_status'},
         ),
         (
-            'import importlib as imp\nimp.import_module("utils.sync.legacy_fresh")',
+            'import importlib as imp\nimp.import_module("utils.sync.completed_status")',
             'utils/x.py',
-            {'utils.sync.legacy_fresh'},
+            {'utils.sync.completed_status'},
         ),
         # Relative targets resolve against the literal package argument.
         (
@@ -371,10 +412,10 @@ def test_baseline_only_shrinks_stale_edges_are_removed(edges):
         # Relative name without a literal package cannot be resolved.
         ('import importlib\nimportlib.import_module(".pipeline")', 'utils/x.py', set()),
         # Unproven bindings are not importlib.import_module.
-        ('from importlib import load  # not import_module\nload("utils.sync.legacy_fresh")', 'utils/x.py', set()),
-        ('import load\nload("utils.sync.legacy_fresh")', 'utils/x.py', set()),
-        ('obj.import_module("utils.sync.legacy_fresh")', 'utils/x.py', set()),
-        ('def import_module(n):\n    return None\nimport_module("utils.sync.legacy_fresh")', 'utils/x.py', set()),
+        ('from importlib import load  # not import_module\nload("utils.sync.completed_status")', 'utils/x.py', set()),
+        ('import load\nload("utils.sync.completed_status")', 'utils/x.py', set()),
+        ('obj.import_module("utils.sync.completed_status")', 'utils/x.py', set()),
+        ('def import_module(n):\n    return None\nimport_module("utils.sync.completed_status")', 'utils/x.py', set()),
         ('importlib.import_module(name=name_variable)', 'utils/x.py', set()),
         ('from utils.sync import reprocess, assignment', 'utils/x.py', set()),
         ('from utils.sync.pipeline_v2 import x', 'utils/x.py', set()),

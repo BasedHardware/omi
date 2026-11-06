@@ -247,7 +247,7 @@ from utils.sync.capture_manifest import (
     verify_capture_manifest,
 )
 from utils.sync.lanes import CaptureTimeTrust, SyncLane, classify_sync_lane
-from utils.sync import backfill_cutover, legacy_dark, legacy_fresh, stage as sync_stage, uid_sequencer
+from utils.sync import backfill_cutover, legacy_dark, stage as sync_stage, uid_sequencer
 from config.sync_owner_concurrency import preparation_width
 from utils.sync.owner_prefetch import warm_owner
 from utils.sync.provenance import capture_matches_server_conversation as _capture_matches_server_conversation
@@ -709,11 +709,7 @@ async def sync_local_files_v2(
     lane_decision = classify_sync_lane(
         filenames,
         client_device_id=client_device_context.client_device_id if has_server_capture_proof else None,
-        # Legacy-dark: the legacy fresh budget is never consulted outside ``on``.
-        allow_legacy_fresh=legacy_allowed and legacy_fresh.enabled_for(uid),
     )
-    if legacy_allowed and lane_decision.reason == 'recent_legacy_capture':
-        lane_decision = await run_blocking(db_executor, legacy_fresh.admit, uid, lane_decision, [f.size for f in files])
     # Fresh is optional for LEGACY uploads: a live-only refusal must preserve
     # their existing backfill acceptance. Resolve before recording the final lane.
     fresh_refused = False

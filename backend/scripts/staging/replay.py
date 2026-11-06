@@ -100,7 +100,7 @@ def check_plan_lanes(plans: list[pop.PlannedUpload], *, seed_capture: bool, unse
     if not seed_capture and not unseeded_fresh:
         raise ReplayRefused(
             f'plan has {len(fresh)} fresh uploads: pass --seed-capture (device-bound provenance), or '
-            '--unseeded-fresh only when the target admits legacy fresh (SYNC_LEGACY_FRESH_ENABLED)'
+            '--unseeded-fresh only when the target admits legacy fresh (retired; use --seed-capture)'
         )
 
 

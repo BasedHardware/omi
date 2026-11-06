@@ -3902,22 +3902,12 @@ def _restore_modules(saved_modules):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('legacy_fresh_admits', [False, True])
-async def test_over_cap_upload_in_the_final_fresh_lane_is_not_rejected_by_the_backfill_cap(legacy_fresh_admits):
+async def test_over_cap_upload_in_the_final_fresh_lane_is_not_rejected_by_the_backfill_cap():
     from starlette.datastructures import UploadFile
     from utils.sync.input_limits import MAX_BACKFILL_FILES
 
     module, saved_modules, _, BytesIO, _, _ = _load_sync_router_for_fast_path()
-    if legacy_fresh_admits:
-        module.classify_sync_lane = MagicMock(
-            return_value=_decision(module, module.SyncLane.BACKFILL, 'recent_legacy_capture')
-        )
-        module.legacy_fresh = types.SimpleNamespace(
-            enabled_for=MagicMock(return_value=True),
-            admit=MagicMock(return_value=_decision(module, module.SyncLane.FRESH, 'recent_legacy_capture')),
-        )
-    else:
-        module.classify_sync_lane = MagicMock(return_value=_decision(module, module.SyncLane.FRESH))
+    module.classify_sync_lane = MagicMock(return_value=_decision(module, module.SyncLane.FRESH))
     module.validate_backfill_uploads = MagicMock()
     try:
         # Admission limits apply to audio payloads; empty clips now complete as no-ops.
@@ -4011,30 +4001,14 @@ async def test_busy_upload_exposes_existing_owner_without_dispatching(owner_job_
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    'flag,percent,reply,expected',
-    [
-        ('false', '100', 1, 'backfill'),
-        ('true', '100', 1, 'fresh'),
-        ('true', '100', 0, 'backfill'),
-        ('true', '100', None, 'backfill'),
-        ('true', '0', 1, 'backfill'),
-    ],
-)
-async def test_legacy_fresh_budget_decides_persisted_and_dispatched_lane(monkeypatch, flag, percent, reply, expected):
-    """Exercise the production admission handler; proof stays LEGACY in both lanes."""
+async def test_recent_unbound_upload_stays_in_backfill(monkeypatch):
+    """Exercise admission through persisted job and task payload."""
     from starlette.datastructures import UploadFile
-    from utils.sync import lanes, legacy_fresh
+    from utils.sync import lanes
 
     monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
-    monkeypatch.setenv('SYNC_LEGACY_FRESH_ENABLED', flag)
-    monkeypatch.setenv('SYNC_LEGACY_FRESH_PERCENT', percent)
     monkeypatch.setattr(lanes, 'parse_sync_filename_timestamp', lambda _: time.time() - 60)
-    redis = MagicMock()
-    redis.eval.return_value = reply
-    monkeypatch.setattr(legacy_fresh, 'redis_client', redis)
     module, saved_modules, _, BytesIO, _, _ = _load_sync_router_for_fast_path()
-    module.legacy_fresh = legacy_fresh
     module.classify_sync_lane = lanes.classify_sync_lane
     module.verify_capture_manifest = MagicMock(return_value=None)
     module.start_background_task = MagicMock()
@@ -4042,16 +4016,12 @@ async def test_legacy_fresh_budget_decides_persisted_and_dispatched_lane(monkeyp
         upload = UploadFile(filename='recent.bin', file=BytesIO(b'\x00' * 10), size=10)
         response = await module.sync_local_files_v2(files=[upload], uid='test-uid')
         assert response.status_code == 202
-        assert json.loads(response.body)['lane'] == expected
-        assert module.create_sync_job.call_args.kwargs['lane'] == expected
+        assert json.loads(response.body)['lane'] == 'backfill'
+        assert module.create_sync_job.call_args.kwargs['lane'] == 'backfill'
         assert module.create_sync_job.call_args.kwargs['capture_time_trust'] == 'legacy'
-        assert module.enqueue_sync_job.call_args.args[0]['lane'] == expected
+        assert module.enqueue_sync_job.call_args.args[0]['lane'] == 'backfill'
         assert module.enqueue_sync_job.call_args.args[0]['capture_time_trust'] == 'legacy'
         module.start_background_task.assert_not_called()
-        if flag == 'false' or percent == '0':
-            redis.eval.assert_not_called()
-        else:
-            redis.eval.assert_called_once()
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
@@ -4063,25 +4033,16 @@ async def test_legacy_fresh_budget_decides_persisted_and_dispatched_lane(monkeyp
                 sys.modules[mod_name] = orig
 
 
-@pytest.mark.parametrize(
-    'reply,gate,expected',
-    [(1, None, 'fresh'), (0, None, 'backfill'), (1, 'hard_restriction', 'backfill'), (1, 'daily_ceiling', 'backfill')],
-)
-def test_legacy_fresh_http_multipart_measures_bytes_and_returns_lane(monkeypatch, reply, gate, expected):
+@pytest.mark.parametrize('gate', [None, 'hard_restriction', 'daily_ceiling'])
+def test_unbound_http_multipart_returns_backfill(monkeypatch, gate):
     """HTTP multipart -> actual handler -> persisted task, with synthetic storage/auth."""
     from fastapi import FastAPI, File, UploadFile
     from fastapi.testclient import TestClient
-    from utils.sync import lanes, legacy_fresh
+    from utils.sync import lanes
 
     monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
-    monkeypatch.setenv('SYNC_LEGACY_FRESH_ENABLED', 'true')
-    monkeypatch.setenv('SYNC_LEGACY_FRESH_PERCENT', '100')
     monkeypatch.setattr(lanes, 'parse_sync_filename_timestamp', lambda _: time.time() - 60)
-    redis = MagicMock()
-    redis.eval.return_value = reply
-    monkeypatch.setattr(legacy_fresh, 'redis_client', redis)
     module, saved_modules, _, _, _, _ = _load_sync_router_for_fast_path()
-    module.legacy_fresh = legacy_fresh
     module.classify_sync_lane = lanes.classify_sync_lane
     module.verify_capture_manifest = MagicMock(return_value=None)
     module.get_hard_restriction_status = MagicMock(return_value=(gate == 'hard_restriction', 600))
@@ -4104,9 +4065,8 @@ def test_legacy_fresh_http_multipart_measures_bytes_and_returns_lane(monkeypatch
             '/v2/sync-local-files', files={'files': ('recent.bin', b'\x01\x00\x00\x00\x42', 'audio/opus')}
         )
         assert response.status_code == 202
-        assert response.json()['lane'] == expected
-        assert module.enqueue_sync_job.call_args.args[0]['lane'] == expected
-        assert redis.eval.call_args.args[-1] == 1
+        assert response.json()['lane'] == 'backfill'
+        assert module.enqueue_sync_job.call_args.args[0]['lane'] == 'backfill'
         module._fair_use_restriction_response.assert_not_awaited()
     finally:
         sys.modules.pop('routers.sync', None)
@@ -4123,20 +4083,14 @@ def test_legacy_fresh_http_multipart_measures_bytes_and_returns_lane(monkeypatch
 @pytest.mark.parametrize('trust', ['legacy', 'device_bound'])
 @pytest.mark.parametrize('gate', ['hard_restriction', 'daily_ceiling'])
 async def test_fresh_only_refusal_demotes_legacy_but_keeps_device_bound_429(monkeypatch, trust, gate):
-    """Optional LEGACY promotion must never turn backfill acceptance into 429."""
+    """Unbound uploads retain backfill acceptance; device-bound fresh keeps 429."""
     from starlette.datastructures import UploadFile
-    from utils.sync import lanes, legacy_fresh
+    from utils.sync import lanes
 
     monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
-    monkeypatch.setenv('SYNC_LEGACY_FRESH_ENABLED', 'true')
-    monkeypatch.setenv('SYNC_LEGACY_FRESH_PERCENT', '100')
     monkeypatch.setenv('SYNC_BACKFILL_ENABLED', 'true')
     monkeypatch.setattr(lanes, 'parse_sync_filename_timestamp', lambda _: time.time() - 60)
-    redis = MagicMock()
-    redis.eval.return_value = 1
-    monkeypatch.setattr(legacy_fresh, 'redis_client', redis)
     module, saved_modules, _, BytesIO, _, _ = _load_sync_router_for_fast_path()
-    module.legacy_fresh = legacy_fresh
     module.classify_sync_lane = lanes.classify_sync_lane
     module.verify_capture_manifest = MagicMock(return_value=None if trust == 'legacy' else {})
     module.get_hard_restriction_status = MagicMock(return_value=(gate == 'hard_restriction', 600))
@@ -4160,7 +4114,7 @@ async def test_fresh_only_refusal_demotes_legacy_but_keeps_device_bound_429(monk
             assert payload['capture_time_trust'] == 'legacy'
             module._retrieve_file_paths_v2.assert_called_once()
             module._fair_use_restriction_response.assert_not_awaited()
-            reason = 'legacy_fresh_hard_restricted' if gate == 'hard_restriction' else 'legacy_fresh_daily_ceiling'
+            reason = 'unbound_capture_time'
             module.OMI_SYNC_LANE_ADMISSIONS_TOTAL.labels.assert_called_once_with(
                 lane='backfill', trust='legacy', reason=reason
             )
@@ -4177,11 +4131,10 @@ async def test_fresh_only_refusal_demotes_legacy_but_keeps_device_bound_429(monk
             module._retrieve_file_paths_v2.assert_not_called()
             module.create_sync_job.assert_not_called()
             module.enqueue_sync_job.assert_not_called()
-            redis.eval.assert_not_called()
             module.OMI_SYNC_LANE_ADMISSIONS_TOTAL.labels.assert_called_once_with(
                 lane='fresh', trust='device_bound', reason='recent_capture'
             )
-        if gate == 'hard_restriction':
+        if trust == 'legacy' or gate == 'hard_restriction':
             module.is_daily_audio_ceiling_exceeded.assert_not_called()
         else:
             module.is_daily_audio_ceiling_exceeded.assert_called_once_with('test-uid')
@@ -4198,20 +4151,14 @@ async def test_fresh_only_refusal_demotes_legacy_but_keeps_device_bound_429(monk
 
 
 @pytest.mark.asyncio
-async def test_legacy_fresh_refusal_preserves_backfill_pause_instead_of_429(monkeypatch):
+async def test_unbound_upload_preserves_backfill_pause_instead_of_429(monkeypatch):
     from starlette.datastructures import UploadFile
-    from utils.sync import lanes, legacy_fresh
+    from utils.sync import lanes
 
     monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
-    monkeypatch.setenv('SYNC_LEGACY_FRESH_ENABLED', 'true')
-    monkeypatch.setenv('SYNC_LEGACY_FRESH_PERCENT', '100')
     monkeypatch.setenv('SYNC_BACKFILL_ENABLED', 'false')
     monkeypatch.setattr(lanes, 'parse_sync_filename_timestamp', lambda _: time.time() - 60)
-    redis = MagicMock()
-    redis.eval.return_value = 1
-    monkeypatch.setattr(legacy_fresh, 'redis_client', redis)
     module, saved_modules, _, BytesIO, _, _ = _load_sync_router_for_fast_path()
-    module.legacy_fresh = legacy_fresh
     module.classify_sync_lane = lanes.classify_sync_lane
     module.verify_capture_manifest = MagicMock(return_value=None)
     module.get_hard_restriction_status = MagicMock(return_value=(True, 600))
