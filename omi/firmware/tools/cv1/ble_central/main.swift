@@ -165,7 +165,7 @@ final class Central: NSObject, NSApplicationDelegate, CBCentralManagerDelegate, 
         discoveryRemaining = wanted.count
         guard discoveryRemaining > 0 else { stop(.gatt, "Required Device Information service absent"); return }
         for service in wanted {
-            peripheral.discoverCharacteristics([UUIDs.firmware, UUIDs.serial, UUIDs.features, UUIDs.diagnostics, UUIDs.audioData].map { CBUUID(string: $0) }, for: service)
+            peripheral.discoverCharacteristics([UUIDs.firmware, UUIDs.serial, UUIDs.features, UUIDs.diagnostics, UUIDs.recovery, UUIDs.audioData].map { CBUUID(string: $0) }, for: service)
         }
     }
     func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
@@ -177,7 +177,7 @@ final class Central: NSObject, NSApplicationDelegate, CBCentralManagerDelegate, 
             if uuid == UUIDs.audioData && serviceUUID == UUIDs.audioService { audioCharacteristic = characteristic }
             let allowed = (serviceUUID == UUIDs.information && [UUIDs.firmware, UUIDs.serial].contains(uuid))
                 || (connectionNumber == 1 && ((serviceUUID == UUIDs.featuresService && uuid == UUIDs.features)
-                    || (serviceUUID == UUIDs.diagnosticsService && uuid == UUIDs.diagnostics)))
+                    || (serviceUUID == UUIDs.diagnosticsService && [UUIDs.diagnostics, UUIDs.recovery].contains(uuid))))
             if allowed && (connectionNumber == 1 || uuid == UUIDs.firmware) {
                 guard characteristic.properties.contains(.read) else { stop(.gatt, "Refused: \(uuid) requires an operation other than read"); return }
                 readQueue.append(characteristic)
@@ -252,6 +252,7 @@ final class Central: NSObject, NSApplicationDelegate, CBCentralManagerDelegate, 
         let uuid = characteristic.uuid.uuidString
         let decoded: DecodedValue
         if uuid == UUIDs.diagnostics { decoded = decodeDiagnostics(data) }
+        else if uuid == UUIDs.recovery { decoded = decodeRecovery(data) }
         else if uuid == UUIDs.features { decoded = decodeFeatures(data) }
         else {
             decoded = decodeText(data)
