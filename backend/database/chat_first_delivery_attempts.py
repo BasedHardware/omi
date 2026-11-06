@@ -60,15 +60,11 @@ def _resolve_client(firestore_client: Any = None) -> Any:
     """Resolve Firestore client with DI precedence and lazy fallback."""
     if firestore_client is not None:
         return firestore_client
-    try:
-        from database._client import db, get_firestore_client
+    from database._client import db, get_firestore_client
 
-        if db is not None:
-            return db
-        return get_firestore_client()
-    except Exception:
-        pass
-    return None
+    if db is not None:
+        return db
+    return get_firestore_client()
 
 
 class ChatFirstMalformedDeliveryAttempt(RuntimeError):
@@ -309,9 +305,12 @@ def repair_transient_dead_letters(
 ) -> bool:
     """Repair a bounded terminal window; return whether the serving query failed."""
 
-    client = _resolve_client(firestore_client)
-    if client is None:
-        logger.warning('Firestore client unavailable for repair_transient_dead_letters')
+    try:
+        client = _resolve_client(firestore_client)
+        if client is None:
+            raise RuntimeError('Firestore client unavailable for repair_transient_dead_letters')
+    except Exception as exc:
+        logger.exception('Failed to resolve Firestore client for repair_transient_dead_letters: %s', exc)
         return True
 
     cleaned_uid = _clean_id(uid)
