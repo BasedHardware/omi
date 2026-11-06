@@ -507,7 +507,7 @@ def test_fleet_sample_follower_zero_queries_and_handover(monkeypatch, interval):
     clock.now += interval - 1
     restart.refresh_timeliness(store, clock.now)
     assert store.timeliness.call_count == 1
-    clock.now += 3
+    clock.now += 63  # The bounded refresh grace has also expired.
     second.refresh_timeliness(store, clock.now)
     first.refresh_timeliness(store, clock.now)
     assert store.timeliness.call_count == 2
@@ -554,7 +554,7 @@ def test_stalled_former_leader_expires_at_collection_without_refresh(monkeypatch
     first, second = metrics
     first.refresh_timeliness(store, clock.now)
     assert list(first.timeliness_age.collect())
-    clock.now += 301
+    clock.now += first.timeliness_leader.ttl_seconds + 1
     second.refresh_timeliness(store, clock.now)
     # A's supervisor never resumes: scraping alone must withdraw stale debt
     # before max(age from A) can borrow max(timestamp from B)'s freshness.
@@ -585,7 +585,7 @@ def test_lazy_election_uses_store_namespace_and_own_role_on_both_planes(monkeypa
     assert factory.call_count == 2
     for call in factory.call_args_list:
         assert call.args == (store, TIMELINESS_METRICS)
-        assert call.kwargs == {'ttl_seconds': 300.0}
+        assert call.kwargs == {'ttl_seconds': 360.0}
     store.timeliness.assert_not_called()
 
 
@@ -596,7 +596,7 @@ def test_failed_fail_open_retry_does_not_revive_expired_former_leader(monkeypatc
     monkeypatch.setattr(metrics_module.time, 'monotonic', clock)
     first, second = metrics
     first.refresh_timeliness(store, clock.now)
-    clock.now += 301
+    clock.now += first.timeliness_leader.ttl_seconds + 1
     second.refresh_timeliness(store, clock.now)
     assert list(first.timeliness_age.collect()) == []
     first.timeliness_leader.store = Mock(run=Mock(side_effect=RuntimeError('lease store down')))
@@ -608,3 +608,27 @@ def test_failed_fail_open_retry_does_not_revive_expired_former_leader(monkeypatc
     assert list(first.timeliness_observed_at.collect()) == []
     assert list(second.timeliness_observed_at.collect())[0].samples[0].value == clock.now
     assert store.timeliness.call_count == 3  # Fail-open still attempts the sample.
+
+
+def test_refresh_jitter_and_rpc_time_do_not_break_continuous_breach_visibility(monkeypatch):
+    from utils.batch_pipeline import metrics as metrics_module
+
+    metrics, store, clock = _fleet(monkeypatch)
+    monkeypatch.setattr(metrics_module.time, 'monotonic', clock)
+    first = metrics[0]
+    first.refresh_timeliness(store, clock.now)
+
+    def slow_sample(*args, **kwargs):
+        # The sampler is on a supervised 15s tick and its RPCs also take time.
+        assert list(first.timeliness_age.collect())
+        clock.now += 10
+        assert list(first.timeliness_age.collect())
+        return SAMPLE
+
+    store.timeliness.side_effect = slow_sample
+    for _ in range(3):
+        clock.now = first._timeliness_due + 15
+        assert list(first.timeliness_age.collect())
+        first.refresh_timeliness(store, clock.now)
+        assert list(first.timeliness_age.collect())
+    assert store.timeliness.call_count == 4

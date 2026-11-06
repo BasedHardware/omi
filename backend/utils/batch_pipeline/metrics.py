@@ -17,7 +17,7 @@ from config.batch_timeliness import (
     timeliness_interval_seconds,
 )
 from database.batch_pipeline_store import Store, FirestoreStore, PROJECTION_OBLIGATION_STATES, timeliness_sample
-from utils.batch_pipeline.leader import TIMELINESS_METRICS, LeaderLease
+from utils.batch_pipeline.leader import TIMELINESS_LEASE_GRACE_SECONDS, TIMELINESS_METRICS, LeaderLease
 from utils.batch_pipeline.contracts import Priority, WORK_OUTCOMES
 from utils.observability.reasons import AdmissionHoldReason, ReasonFamily, reason_label
 from utils.lifecycle_metrics import PhaseMetrics
@@ -444,16 +444,19 @@ class QueueMetrics:
             self.timeliness_samples.labels('disabled').inc()
             return
         elected = lever_enabled('batch_timeliness_leader')
+        sample_expires = None
         if elected:
+            lease_seconds = interval + TIMELINESS_LEASE_GRACE_SECONDS
             if self.timeliness_leader is None:
                 # Lazy and shared by both planes, using the data namespace, not
                 # pod/release identity. No import-time or disabled-path IO.
-                self.timeliness_leader = LeaderLease(store, TIMELINESS_METRICS, ttl_seconds=interval)
-            self.timeliness_leader.ttl_seconds = interval
+                self.timeliness_leader = LeaderLease(store, TIMELINESS_METRICS, ttl_seconds=lease_seconds)
+            self.timeliness_leader.ttl_seconds = lease_seconds
             acquired_at = time.monotonic()
             if not self.timeliness_leader.acquire():
                 self._timeliness_visible = False
                 return
+            sample_expires = acquired_at + lease_seconds
         try:
             sample = timeliness_sample(
                 store.client,
@@ -481,10 +484,10 @@ class QueueMetrics:
         for leg, truncated in sample['truncated'].items():
             self.timeliness_truncated.labels(leg).set(1 if truncated else 0)
         self.timeliness_observed_at.set(now)
-        if elected:
+        if sample_expires is not None:
             # A lease renewal/fail-open result alone must not revive expired
             # debt beside another replica's fresh observation timestamp.
-            self._timeliness_expires = acquired_at + interval
+            self._timeliness_expires = sample_expires
         self._timeliness_visible = True
         self.timeliness_samples.labels('ok').inc()
 

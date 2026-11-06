@@ -26,8 +26,10 @@ per data namespace on healthy leases with election enabled, across serving and G
 
 The ship-on `FIRESTORE_READ_LEVERS` lever `batch_timeliness_leader` (default 100) uses the
 `LeaderLease` role `timeliness_metrics` in `{namespace}_leases`, independent of queue
-metrics and maintenance. Its TTL equals the sampling interval (default 300 s, 60–3600 s)
-so another holder waits a whole interval before takeover. Non-leaders execute no
+metrics and maintenance. Its TTL covers the sampling interval (default 300 s, 60–3600 s) plus a fixed 60 s
+refresh grace (default TTL 360 s, maximum 3660 s). This keeps a successful sample
+visible through normal supervised tick jitter and RPCs, preserving continuous
+5-minute breach evaluation. Another holder waits for that full TTL before takeover. Non-leaders execute no
 timeliness queries. Before a successful sample and after losing the lease, all
 sampler gauges (including drain/held ages and the observation timestamp) are absent.
 Failures retain the previous stored values and timestamp without extending their
@@ -55,7 +57,7 @@ threshold and `noDataState: Alerting`. The breach rule retains its freshness gat
 and the blind rule retains `noDataState: OK`. No alert thresholds change.
 
 An interval reduction across a restart can wait for the previous holder's stored TTL
-(up to 3600 s); it does not revoke a live lease. Use a stable interval across the
+(up to 3660 s); it does not revoke a live lease. Use a stable interval across the
 fleet and account for that handover window when changing it. Restarting with
 lever 0 bypasses the stored lease and restores per-instance queries.
 
