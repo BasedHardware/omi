@@ -34,3 +34,5 @@ Do not make a hard-delete primitive call back into conversation orchestration.
 
 Transaction tests use the strict Firestore fixture. It checks read-before-write
 ordering; it does not simulate production contention or external-service retries.
+
+- `ports/` contains storage-neutral typed protocols and entities. `space_store.py` supplies the Firestore per-space unit of work; folders/people repositories implement the ports while retaining typed module-function entry points. Transaction bodies are restartable and must finish all reads before the first write.

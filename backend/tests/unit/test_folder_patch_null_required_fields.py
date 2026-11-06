@@ -12,6 +12,8 @@ are dropped before persistence, while genuinely optional fields (e.g. `descripti
 a null through to allow clearing.
 """
 
+from database.ports.folders import FolderEntity, FolderUpdate
+
 from datetime import datetime, timezone
 import importlib.abc
 import importlib.machinery
@@ -104,6 +106,8 @@ finally:
     sys.meta_path.remove(_finder)
     _restore(_snap)
 
+folders_router.FolderUpdate = FolderUpdate
+
 EXISTING_FOLDER = {
     'id': 'folder-1',
     'name': 'Existing Folder',
@@ -131,10 +135,11 @@ class TestFolderPatchNullRequiredFields(unittest.TestCase):
         recorded_updates = []
 
         def fake_get_folder(uid, folder_id):
-            return dict(EXISTING_FOLDER)
+            return FolderEntity.model_construct(**EXISTING_FOLDER)
 
         def fake_update_folder(uid, folder_id, data):
-            recorded_updates.append(dict(data))
+            recorded_updates.append(data.model_dump(exclude_unset=True))
+            return FolderEntity.model_construct(**EXISTING_FOLDER)
 
         with patch.object(folders_router.folders_db, 'get_folder', side_effect=fake_get_folder), patch.object(
             folders_router.folders_db, 'update_folder', side_effect=fake_update_folder
@@ -163,10 +168,11 @@ class TestFolderPatchNullRequiredFields(unittest.TestCase):
             current = dict(EXISTING_FOLDER)
             if recorded_updates:
                 current.update(recorded_updates[-1])
-            return current
+            return FolderEntity.model_construct(**current)
 
         def fake_update_folder(uid, folder_id, data):
-            recorded_updates.append(dict(data))
+            recorded_updates.append(data.model_dump(exclude_unset=True))
+            return FolderEntity.model_construct(**EXISTING_FOLDER)
 
         with patch.object(folders_router.folders_db, 'get_folder', side_effect=fake_get_folder), patch.object(
             folders_router.folders_db, 'update_folder', side_effect=fake_update_folder

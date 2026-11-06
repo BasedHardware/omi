@@ -1430,6 +1430,33 @@ _add(
 )
 _add(DriverEntry('database.folders.update_folder_conversation_count', base={'uid': UID, 'folder_id': 'folder-1'}))
 
+# Query bodies moved into the typed repositories. Keep the established module
+# drivers as the caller contract and require that they actually reach these bodies.
+for _method, _drivers in (
+    ('_stream', ('get_folders', 'create_folder', 'initialize_system_folders', 'get_conversations_in_folder')),
+    ('list', ('get_folders',)),
+    ('create', ('create_folder',)),
+    ('delete', ('delete_folder',)),
+    ('initialize_system', ('initialize_system_folders',)),
+    ('conversations_in_folder', ('get_conversations_in_folder',)),
+    ('_count', ('update_folder_conversation_count',)),
+):
+    _add(
+        CoveredByEntry(
+            'database.folders.FirestoreFolders.' + _method,
+            covered_by=tuple('database.folders.' + name for name in _drivers),
+            reason='typed repository query body exercised through the retained application entry point',
+        )
+    )
+_add(
+    CoveredByEntry(
+        'database.people.FirestorePeople._get_or_create_raw',
+        covered_by=('database.people.get_or_create_person_by_name',),
+        reason='same-name transaction query moved into the typed People repository',
+    )
+)
+
+
 _FRAME_REQUEST_DOC = {
     'request_id': 'req-1',
     'uid': UID,
