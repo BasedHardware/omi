@@ -2919,7 +2919,14 @@ def _record_terminal_claim_refusal(family: str, reason: str) -> None:
         if not _terminal_claim_metric_registered:
             REGISTRY.register(TERMINAL_CLAIM_REFUSALS)
             _terminal_claim_metric_registered = True
-    TERMINAL_CLAIM_REFUSALS.labels(family=family, reason=reason).inc()
+    TERMINAL_CLAIM_REFUSALS.labels(
+        family=family,
+        reason=(
+            'terminal_failure'
+            if reason == 'terminal_failure'
+            else 'completed_status_regression' if reason == 'completed_status_regression' else 'unknown'
+        ),
+    ).inc()
 
 
 def _terminal_family_serving(uid: str) -> bool:

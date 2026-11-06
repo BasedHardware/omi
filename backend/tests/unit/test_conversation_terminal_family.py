@@ -404,3 +404,10 @@ def test_content_only_persist_does_not_count_as_a_status_regression(store):
     assert persist({'title': 'content without a status claim'})
     assert store.rows[PATH]['status'] == 'completed'
     assert metric._value.get() == before
+
+
+def test_refusal_metric_reason_is_a_closed_vocabulary():
+    metric = db.TERMINAL_CLAIM_REFUSALS.labels(family='success', reason='unknown')
+    before = metric._value.get()
+    db._record_terminal_claim_refusal('success', 'unexpected free text')
+    assert metric._value.get() == before + 1
