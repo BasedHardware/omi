@@ -1596,7 +1596,8 @@ def create_conversation_if_absent_with_lifecycle(uid: str, conversation_data: di
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_data['id'])
     summary_receipt = summary_delivery.creation_result(conversation_data, uid)
     delivery_outcome = summary_terminal_outcome({}, conversation_data)
-    created, summary_changed = conversation_recorded_time.create_if_absent(
+    created, summary_changed = transcript_pointer.run_preloaded_operation(
+        conversation_recorded_time.create_if_absent,
         uid,
         conversation_data,
         firestore_client=db,
