@@ -700,6 +700,13 @@ def projection_drain_privacy_backoff_enabled() -> bool:
     return kill_switch('PROJECTION_DRAIN_PRIVACY_BACKOFF')
 
 
+def projection_privacy_refusal_resume_enabled() -> bool:
+    """Default on; only off disables recovery from a stale privacy refusal."""
+    from config.policy import kill_switch
+
+    return kill_switch('PROJECTION_PRIVACY_REFUSAL_RESUME')
+
+
 def projection_drain_privacy_backoff_seconds() -> int:
     return _pump_bound(os.getenv('PROJECTION_DRAIN_PRIVACY_BACKOFF_SECONDS', '180'), 180, 900, 30)
 
