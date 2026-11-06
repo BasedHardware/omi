@@ -73,10 +73,14 @@ class QueueMetrics:
     ):
         self.scope = (worker_release, namespace)
         self.held_expired = Counter(
-            'omi_batch_held_expired_total', 'Unique fenced held-to-dead transitions; audio retained', registry=registry
+            'omi_batch_held_expired_total',
+            'Unique fenced held expirations across jobs and projection receipts; content retained',
+            registry=registry,
         )
         self.held_expired_stock = Gauge(
-            'omi_batch_held_expired_units', 'Retained dead(held_expired) stock across all ages', registry=registry
+            'omi_batch_held_expired_units',
+            'Retained held_expired job and projection receipt stock across all ages',
+            registry=registry,
         )
         self.held_expired_observed_at = Gauge(
             'omi_batch_held_expired_observed_at_seconds', 'Last successful held-expired stock sample', registry=registry

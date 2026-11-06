@@ -128,6 +128,7 @@ def test_new_units_alarm_while_backlog_before_the_epoch_is_only_counted():
         'assignment_held': 1,
         'projection': 0,
         'quarantine_held_rows': 1,
+        'held_expired_rows': 0,
         'terminal_empty': 0,
     }
     assert sample['backlog'] == {
@@ -136,6 +137,7 @@ def test_new_units_alarm_while_backlog_before_the_epoch_is_only_counted():
         'assignment_held': 1,
         'projection': 0,
         'quarantine_held_rows': 1,
+        'held_expired_rows': 0,
         'terminal_empty': 0,
     }
     assert sample['new_oldest']['projection'] is None
@@ -391,13 +393,16 @@ def test_held_stock_age_has_no_epoch_or_24h_cohort_cutoff(monkeypatch):
         'record_pending': old,
         'assignment_held': old + 10,
         'quarantine_held': old + 20,
+        'held_expired': None,
     }
     registry = CollectorRegistry()
     metrics = QueueMetrics(registry)
     store = _store(monkeypatch, sample)
     metrics.refresh_timeliness(store, NOW)
     for leg, started in sample['held_oldest'].items():
-        assert registry.get_sample_value('omi_batch_held_oldest_age_seconds', {'leg': leg}) == NOW - started
+        assert registry.get_sample_value('omi_batch_held_oldest_age_seconds', {'leg': leg}) == (
+            NOW - started if started is not None else 0
+        )
     # A subsequent empty stock must clear old series, rather than leave a latched age.
     sample['held_oldest'] = dict.fromkeys(sample['held_oldest'])
     metrics.refresh_timeliness(store, NOW + 301)

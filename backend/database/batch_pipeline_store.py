@@ -848,6 +848,12 @@ def timeliness_sample(
         'projection': (projection, 'committed_at'),
         # Ready receipts already in the conversation plus assignment holds; only the ledger waits. Visible only.
         'quarantine_held_rows': (results.where('projection_state', '==', 'quarantine_held'), 'committed_at'),
+        'held_expired_rows': (
+            results.where('projection_state', '==', 'quarantine_held').where(
+                'held_expired_reason', '==', 'held_expired'
+            ),
+            'committed_at',
+        ),
         # A subset of quarantined, matching is_terminal_empty. Visible only.
         'terminal_empty': (
             quarantined.where('recovery_state', '==', 'failed_held')
@@ -880,6 +886,7 @@ def timeliness_sample(
         'drain_oldest': first(projection, 'committed_at'),
         'held_oldest': {
             'quarantine_held': first(legs['quarantine_held_rows'][0], 'committed_at'),
+            'held_expired': first(legs['held_expired_rows'][0], 'committed_at'),
             'assignment_held': first(legs['assignment_held'][0], 'enqueued_at'),
             'record_pending': first(jobs.where('state', '==', 'record_pending'), 'enqueued_at'),
         },
@@ -888,6 +895,7 @@ def timeliness_sample(
             'quarantined': quarantined_oldest,
             'assignment_held': first(legs['assignment_held'][0].where('enqueued_at', '>=', epoch), 'enqueued_at'),
             'projection': projected,
+            'held_expired_rows': first(legs['held_expired_rows'][0].where('committed_at', '>=', epoch), 'committed_at'),
             'quarantine_held_rows': first(
                 legs['quarantine_held_rows'][0].where('committed_at', '>=', epoch), 'committed_at'
             ),

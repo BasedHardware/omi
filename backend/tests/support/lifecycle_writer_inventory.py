@@ -127,7 +127,7 @@ FIELD_SITES = {
                 'projection_release_attempts',
                 'projection_state',
             ),
-        )
+        ),
     ],
     'database/batch_pipeline_projection_session.py': [
         ('ProjectionSession.persist', 'projection_state', "'pending'", ('projection_state',)),
