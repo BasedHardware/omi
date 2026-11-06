@@ -1,7 +1,7 @@
 """Per-space envelope keys. No clients, credentials or IO are initialized on import.
 
 Wrapped keys live at space_keys/{space_id}, outside the user subtree. Account
-wipe must delete this document LAST (C4). A fresh document read precedes cache
+wipe must destroy the wrapped keys LAST, retaining the deletion tombstone (C4). A fresh document read precedes cache
 use so another worker's destroy cannot leave a cached key usable for a day.
 """
 
@@ -137,7 +137,9 @@ def _decode(data: dict, space_id: str) -> SpaceKey:
         raise ValueError('Invalid space key document')
     versions = tuple(SpaceKeyVersion(v['version'], v['wrapped'], v['wrapped_at'], v['state']) for v in data['versions'])
     if (
-        not versions
+        type(data['active_version']) is not int
+        or not isinstance(data['kms_key'], str)
+        or not versions
         or len({v.version for v in versions}) != len(versions)
         or any(
             type(v.version) is not int
