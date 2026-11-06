@@ -709,6 +709,9 @@ async def sync_local_files_v2(
     lane_decision = classify_sync_lane(
         filenames,
         client_device_id=client_device_context.client_device_id if has_server_capture_proof else None,
+        # Preserve allowed promotion in ON, including ramp-read failures, without
+        # the retired Redis budget. DARK/draining still pass False unchanged.
+        allow_legacy_fresh=legacy_allowed,
     )
     # Fresh is optional for LEGACY uploads: a live-only refusal must preserve
     # their existing backfill acceptance. Resolve before recording the final lane.

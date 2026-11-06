@@ -4001,13 +4001,62 @@ async def test_busy_upload_exposes_existing_owner_without_dispatching(owner_job_
 
 
 @pytest.mark.asyncio
-async def test_recent_unbound_upload_stays_in_backfill(monkeypatch):
-    """Exercise admission through persisted job and task payload."""
+@pytest.mark.parametrize('byok', [False, True])
+@pytest.mark.parametrize('mode_read', ['error', 'dark', 'draining'])
+async def test_ramp_read_failure_preserves_recent_unbound_upload_lane(monkeypatch, byok, mode_read):
+    """Use the real fail-safe mode reader; recent BYOK must keep its inline path."""
     from starlette.datastructures import UploadFile
     from utils.sync import lanes
 
     monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
     monkeypatch.setattr(lanes, 'parse_sync_filename_timestamp', lambda _: time.time() - 60)
+    module, saved_modules, _, BytesIO, _, _ = _load_sync_router_for_fast_path()
+    reader = MagicMock(return_value=mode_read)
+    if mode_read == 'error':
+        reader.side_effect = RuntimeError('synthetic ramp-read failure')
+    rollout = types.ModuleType('utils.rollout')
+    rollout.runtime_percent = types.SimpleNamespace(legacy_sync_mode=reader)
+    monkeypatch.setitem(sys.modules, 'utils.rollout', rollout)
+    monkeypatch.setattr(module.legacy_dark, 'read_ledger_row', lambda uid, content_id: None)
+    module.classify_sync_lane = MagicMock(wraps=lanes.classify_sync_lane)
+    module.verify_capture_manifest = MagicMock(return_value=None)
+    module.has_byok_keys = MagicMock(return_value=byok)
+    module.start_background_task = MagicMock(side_effect=lambda coro, **kwargs: coro.close())
+    try:
+        upload = UploadFile(filename='recent.bin', file=BytesIO(b'\x01\x00\x00\x00\x42'), size=5)
+        response = await module.sync_local_files_v2(files=[upload], uid='test-uid')
+        reader.assert_called_with('test-uid')
+        assert module.classify_sync_lane.call_args.kwargs['allow_legacy_fresh'] is (mode_read == 'error')
+        if mode_read != 'error':
+            assert response.status_code == 409
+            assert json.loads(response.body)['code'] == 'sync_content_retry_later'
+            module.create_sync_job.assert_not_called()
+            module.enqueue_sync_job.assert_not_called()
+            module.start_background_task.assert_not_called()
+            return
+        assert response.status_code == 202
+        assert json.loads(response.body)['lane'] == 'fresh'
+        assert module.create_sync_job.call_args.kwargs['lane'] == 'fresh'
+        assert module.create_sync_job.call_args.kwargs['capture_time_trust'] == 'legacy'
+        if byok:
+            module.enqueue_sync_job.assert_not_called()
+            module.start_background_task.assert_called_once()
+        else:
+            assert module.enqueue_sync_job.call_args.args[0]['lane'] == 'fresh'
+            assert module.enqueue_sync_job.call_args.args[0]['capture_time_trust'] == 'legacy'
+            module.start_background_task.assert_not_called()
+    finally:
+        _restore_modules(saved_modules)
+
+
+@pytest.mark.asyncio
+async def test_historical_unbound_upload_stays_in_backfill(monkeypatch):
+    """Exercise admission through persisted job and task payload."""
+    from starlette.datastructures import UploadFile
+    from utils.sync import lanes
+
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    monkeypatch.setattr(lanes, 'parse_sync_filename_timestamp', lambda _: time.time() - 86400)
     module, saved_modules, _, BytesIO, _, _ = _load_sync_router_for_fast_path()
     module.classify_sync_lane = lanes.classify_sync_lane
     module.verify_capture_manifest = MagicMock(return_value=None)
@@ -4034,14 +4083,14 @@ async def test_recent_unbound_upload_stays_in_backfill(monkeypatch):
 
 
 @pytest.mark.parametrize('gate', [None, 'hard_restriction', 'daily_ceiling'])
-def test_unbound_http_multipart_returns_backfill(monkeypatch, gate):
+def test_historical_unbound_http_multipart_returns_backfill(monkeypatch, gate):
     """HTTP multipart -> actual handler -> persisted task, with synthetic storage/auth."""
     from fastapi import FastAPI, File, UploadFile
     from fastapi.testclient import TestClient
     from utils.sync import lanes
 
     monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
-    monkeypatch.setattr(lanes, 'parse_sync_filename_timestamp', lambda _: time.time() - 60)
+    monkeypatch.setattr(lanes, 'parse_sync_filename_timestamp', lambda _: time.time() - 86400)
     module, saved_modules, _, _, _, _ = _load_sync_router_for_fast_path()
     module.classify_sync_lane = lanes.classify_sync_lane
     module.verify_capture_manifest = MagicMock(return_value=None)
@@ -4114,7 +4163,7 @@ async def test_fresh_only_refusal_demotes_legacy_but_keeps_device_bound_429(monk
             assert payload['capture_time_trust'] == 'legacy'
             module._retrieve_file_paths_v2.assert_called_once()
             module._fair_use_restriction_response.assert_not_awaited()
-            reason = 'unbound_capture_time'
+            reason = 'legacy_fresh_hard_restricted' if gate == 'hard_restriction' else 'legacy_fresh_daily_ceiling'
             module.OMI_SYNC_LANE_ADMISSIONS_TOTAL.labels.assert_called_once_with(
                 lane='backfill', trust='legacy', reason=reason
             )
@@ -4134,7 +4183,7 @@ async def test_fresh_only_refusal_demotes_legacy_but_keeps_device_bound_429(monk
             module.OMI_SYNC_LANE_ADMISSIONS_TOTAL.labels.assert_called_once_with(
                 lane='fresh', trust='device_bound', reason='recent_capture'
             )
-        if trust == 'legacy' or gate == 'hard_restriction':
+        if gate == 'hard_restriction':
             module.is_daily_audio_ceiling_exceeded.assert_not_called()
         else:
             module.is_daily_audio_ceiling_exceeded.assert_called_once_with('test-uid')
