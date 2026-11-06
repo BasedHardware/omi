@@ -74,6 +74,10 @@ run_proof "summary task recovery, concurrency and expiry" \
   tests/integration/test_summary_task_promotion_emulator.py \
   tests/integration/test_candidate_accept_expiry_emulator.py -q
 
+run_proof "projection ghost-hold release gaps and ready-hint repair follow-up" \
+  "$PYTHON" -m pytest -q -rxX -p no:cacheprovider \
+  tests/integration/test_batch_projection_ghost_holds_firestore.py
+
 run_proof "record replay (capture, admission, titling and scoped receipts)" \
   "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_replay_harness_firestore.py \
   tests/integration/test_replay_harness_titling_firestore.py
