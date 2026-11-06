@@ -184,7 +184,14 @@ def test_delete_is_idempotent_and_prefix_is_space_scoped(storage):
 def test_prefix_requires_verified_absence(storage):
     bucket, _ = storage
     put()
-    with patch.object(LocalBlob, 'delete', return_value=None):
+    original_delete = LocalBlob.delete
+
+    def resurrect(blob):
+        payload = blob.download_as_bytes()
+        original_delete(blob)
+        blob.upload_from_string(payload, if_generation_match=0)
+
+    with patch.object(LocalBlob, 'delete', resurrect):
         with pytest.raises(RuntimeError, match='left objects'):
             lake.delete_space_prefix('s')
     assert list(bucket.list_blobs())
