@@ -1710,14 +1710,19 @@ def test_backend_listen_rollout_wait_can_cover_a_real_rollout():
     )
 
 
-def test_deploy_script_argparse_percent_escapes():
+@pytest.mark.parametrize(
+    ('directory', 'pattern'),
+    [('backend/scripts', '*.py'), ('infra/rollout', '**/*.py'), ('.github/scripts', '**/*.py')],
+)
+def test_deploy_script_argparse_percent_escapes(directory, pattern):
     # Deploy run 42177595382: Python 3.14 rejects bare % while building the parser.
-    paths = sorted((BACKEND_DIR / 'scripts').glob('*.py'))
-    for directory in ('infra/rollout', '.github/scripts'):
-        paths.extend(sorted((REPOSITORY_ROOT / directory).rglob('*.py')))
+    paths = sorted((REPOSITORY_ROOT / directory).glob(pattern))
     for path in paths:
         source = path.read_text(encoding='utf-8')
         if '%' not in source:
+            continue
+        # Python can normalize Unicode identifiers to the keywords we scan for.
+        if source.isascii() and 'help' not in source and 'description' not in source:
             continue
         tree = ast.parse(source)
         for node in ast.walk(tree):
