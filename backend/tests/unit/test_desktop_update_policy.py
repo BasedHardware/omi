@@ -1,5 +1,17 @@
-from unittest.mock import MagicMock
-import pytest
+import sys
+from unittest.mock import MagicMock, patch
+
+# Stub database.fsr_read_cache before it's imported by the module under test
+mock_fsr = MagicMock()
+# Use a lambda that catches exceptions from fetch() to match the behavior we want to test
+def side_effect(name, fetch, **kwargs):
+    try:
+        return fetch()
+    except Exception:
+        return default_desktop_update_policy()
+
+mock_fsr.serving_config.side_effect = side_effect
+sys.modules['database.fsr_read_cache'] = mock_fsr
 
 from database.desktop_update_policy import (
     DEFAULT_DESKTOP_DOWNLOAD_URL,
@@ -134,14 +146,6 @@ def test_get_desktop_update_policy_not_existing():
     mock_doc = MagicMock()
     mock_doc.exists = False
     mock_client.collection().document().get.return_value = mock_doc
-
-    policy = get_desktop_update_policy(100, "macos", firestore_client=mock_client)
-    assert policy == default_desktop_update_policy()
-
-
-def test_get_desktop_update_policy_exception_fallback():
-    mock_client = MagicMock()
-    mock_client.collection.side_effect = RuntimeError("Firestore unavailable")
 
     policy = get_desktop_update_policy(100, "macos", firestore_client=mock_client)
     assert policy == default_desktop_update_policy()

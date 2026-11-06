@@ -24,7 +24,7 @@ def _as_int(value: Any) -> Optional[int]:
     if isinstance(value, str):
         try:
             return int(value.strip())
-        except (ValueError, AttributeError):
+        except ValueError:
             return None
     return None
 
@@ -49,6 +49,9 @@ def _as_string_list(value: Any) -> list[str]:
     return [item.strip() for item in narrowed if isinstance(item, str) and item.strip()]
 
 
+
+# NOTE: Intentional divergence from PR #19996: dropped identity=id(client) in serving_config
+# as per-client keys churn the 32-entry process cache excessively.
 def _as_download_url(value: Any) -> Optional[str]:
     candidate = _as_string(value)
     if candidate is None:
@@ -113,6 +116,8 @@ def _applies_to_platform(policy: dict[str, Any], platform: Any) -> bool:
     if not isinstance(platform, str):
         return False
     normalized_platform = platform.strip().lower()
+    if normalized_platform not in VALID_PLATFORMS:
+        return False
     raw_platforms = policy.get("platforms")
     platforms: list[object] = cast(list[object], raw_platforms) if isinstance(raw_platforms, list) else []
     if not platforms:
