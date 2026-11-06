@@ -500,3 +500,120 @@ def test_tail_refusal_and_exact_release():
     budget.release(budget.live_limit)
     budget.release(LIMIT // 4)
     assert budget.used == 0
+
+
+@pytest.mark.asyncio
+async def test_tiny_windows_pause_intake_at_metadata_bound_without_close_or_loss(inline_session, monkeypatch):
+    _, _, _, _ = inline_session
+    budget = configure(monkeypatch, LIMIT)
+    assert budget.acquire(LIMIT, tail=True)
+    monkeypatch.setattr(pusher, 'MAX_RETAINED_PCM_WINDOWS', 2)
+    monkeypatch.setattr(pusher, 'PRIVATE_CLOUD_CHUNK_DURATION', 0)
+    windows, at_bound = [], asyncio.Event()
+    factory = pusher.RetainedPcmWindow
+
+    def retain(*args):
+        window = factory(*args)
+        windows.append(window)
+        if len(windows) == 3:
+            at_bound.set()
+        return window
+
+    monkeypatch.setattr(pusher, 'RetainedPcmWindow', retain)
+    pcm = b'\x01\x00'
+    sock = Socket(_audio_frames('conversation', [pcm] * 5))
+    handler = asyncio.create_task(pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1))
+    released = False
+    try:
+        await asyncio.wait_for(at_bound.wait(), 5)
+        assert len(windows) == 3 and len(sock.frames) == 2
+        assert all(window.payload == pcm and len(window.frames) == 1 for window in windows)
+        assert not sock.sent and sock.close_code is None and not handler.done()
+        budget.release(LIMIT)
+        released = True
+        await asyncio.wait_for(handler, 5)
+        from tests.unit.test_audio_durable_outbox import _sent_receipts
+
+        receipts = _sent_receipts(sock)
+        assert len(receipts) == 5 and all(read_pcm('owner', receipt) == pcm for receipt in receipts)
+        assert sock.close_code == 1000 and budget.used == 0
+    finally:
+        if not released:
+            budget.release(LIMIT)
+        await asyncio.wait_for(handler, 5)
+
+
+@pytest.mark.asyncio
+async def test_enabled_legacy_window_checkpoint_count_is_bounded(inline_session, monkeypatch):
+    configure(monkeypatch, LIMIT)
+    monkeypatch.setattr(pusher, 'MAX_PCM_WINDOW_FRAMES', 2)
+    windows = []
+    commit = pusher._commit_durable_audio_window
+
+    async def record(**kwargs):
+        windows.append(list(kwargs['frames']))
+        return await commit(**kwargs)
+
+    monkeypatch.setattr(pusher, '_commit_durable_audio_window', record)
+    sock = Socket(_audio_frames('conversation', [b'\x01\x00'] * 5))
+    await asyncio.wait_for(pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1), 5)
+    assert [len(frames) for frames in windows] == [2, 2, 1]
+    assert sock.close_code == 1000
+
+
+@pytest.mark.asyncio
+async def test_retained_deleted_owner_is_not_retried_into_new_conversation(inline_session, monkeypatch):
+    client, path, _, _ = inline_session
+    configure(monkeypatch, LIMIT)
+    monkeypatch.setattr(pusher, 'PRIVATE_CLOUD_CHUNK_DURATION', 0)
+    client.rows[('users', 'owner', 'conversations', 'next')] = {'record_lane_owner': 'batch_live_v1'}
+    projected, refused = asyncio.Event(), asyncio.Event()
+    project = pusher.PusherAudioProjection.refresh
+    commit = pusher._commit_durable_audio_window
+    calls = []
+
+    def delete_on_projection(self, cid, *args, **kwargs):
+        if cid == 'conversation':
+            return False  # Production's gone-owner result populates the socket set.
+        return project(self, cid, *args, **kwargs)
+
+    async def refuse_second(**kwargs):
+        calls.append(kwargs['conversation_id'])
+        if len(calls) == 2:
+            refused.set()
+            return None
+        return await commit(**kwargs)
+
+    real_run = pusher.run_blocking
+
+    async def run(executor, fn, *args, **kwargs):
+        deleting = getattr(fn, '__func__', None) is delete_on_projection
+        if deleting:
+            await refused.wait()
+        result = await real_run(executor, fn, *args, **kwargs)
+        if deleting:
+            # This runs after the caller installs the returned gone-owner result.
+            asyncio.get_running_loop().call_soon(projected.set)
+        return result
+
+    monkeypatch.setattr(pusher, 'run_blocking', run)
+    monkeypatch.setattr(pusher.PusherAudioProjection, 'refresh', delete_on_projection)
+    monkeypatch.setattr(pusher, '_commit_durable_audio_window', refuse_second)
+    frames = _audio_frames('conversation', [b'\x01\x00', b'\x02\x00'])
+    frames += _audio_frames('next', [b'\x03\x00'])
+    sock = Socket(frames)
+    receive = sock.receive_bytes
+    reads = 0
+
+    async def sequenced():
+        nonlocal reads
+        if reads == 3:
+            await asyncio.wait_for(refused.wait(), 5)
+            await asyncio.wait_for(projected.wait(), 5)
+        reads += 1
+        return await receive()
+
+    monkeypatch.setattr(sock, 'receive_bytes', sequenced)
+    await asyncio.wait_for(pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1), 5)
+    assert calls == ['conversation', 'conversation', 'next']
+    assert sock.close_code == 1000

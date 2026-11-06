@@ -10,7 +10,14 @@ Admission is non-waiting immediately before custody storage submission. Live
 windows can use 75%; shutdown tails can use the full total. A refusal returns
 without a receipt, callback or ACK. Original buffers and checkpoints retain
 both byte charge and conversation identity across size, conversation, process,
-discontinuity and framed boundaries. Later flushes retry in order. Refused tails
+discontinuity and framed boundaries. Later flushes retry in order. Enabled admission caps each window at 4096
+checkpoints and retains at most 20 windows plus the boundary window. At that
+metadata cap the existing receive task pauses intake and probes non-waiting
+admission every50ms; no extra task, ACK, drop or error close is introduced.
+Shutdown tails bypass this pause. Every retained owner is checked against the
+socket gone-owner set before retry. These two safeguards address the independent
+review findings for tiny-window metadata growth and deletion after refusal.
+Refused tails
 retain the producer fence without changing the normal close code. Existing
 per-socket exhaustion remains the last-resort behavior. Queued/running storage
 keeps its byte reservation across caller cancellation until actual settlement.

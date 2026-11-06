@@ -135,8 +135,13 @@ socket or sends opcode 203. There is no receipt and no commit callback. Original
 socket PCM, owner, start time and exact frame checkpoints stay charged to the
 existing 20 MiB per-socket budget; boundary callers cannot erase or rebind them.
 The next data-driven flush boundary retries retained windows in order, at most
-one outstanding commit per socket. There is no admission waiter or detached
-retry loop. A shutdown-tail refusal keeps its producer fence and normal close
+one outstanding commit per socket. There is no detached retry task or global admission waiter list. With admission
+on, windows also cap at 4096 checkpoints. At 20 retained windows, the next
+boundary may retain one extra window and pauses that receive task, probing
+non-waiting admission every 50ms until a slot frees; this bounds tiny-window
+metadata without closing or dropping input. Shutdown tails never enter that
+capacity pause. Known-deleted retained owners use the existing gone-owner
+disposition before retry and cannot terminate a later conversation. A shutdown-tail refusal keeps its producer fence and normal close
 code: no ACK means the source WAL must retain and replay. This does not measure
 listen's re-offer cadence or certify installed client WAL behavior. Continued
 intake can still hit the pre-existing 20 MiB last-resort socket bound; byte

@@ -119,6 +119,8 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 _pcm_commits: set[asyncio.Task[Any]] = set()
+MAX_RETAINED_PCM_WINDOWS = 20
+MAX_PCM_WINDOW_FRAMES = 4096
 storage_pcm_budget = StoragePcmBudget(storage_pcm_budget_bytes())
 PUSHER_STORAGE_PCM_BUDGET_LIMIT_BYTES.set(storage_pcm_budget.limit)
 
@@ -1314,7 +1316,8 @@ async def _run_websocket_util_trigger(
                 audio_budget.release(len(private_cloud_sync_buffer))
                 _reset_private_cloud_buffer()
                 durable_window_frames.clear()
-                return
+                if not durable_audio:
+                    return
             if durable_audio:
                 if durable_commit_unresolved:
                     raise RuntimeError('custody commit unresolved; producer fence retained')
@@ -1333,7 +1336,24 @@ async def _run_websocket_util_trigger(
                     _reset_private_cloud_buffer()
                     durable_window_frames = []
                 while refused_windows:
+                    window = refused_windows[0]
+                    if window.conversation_id in deleted_conversations:
+                        # Apply the existing gone-owner disposition to each
+                        # retained owner, even after the socket switches owner.
+                        audio_budget.release(len(window.payload))
+                        refused_windows.popleft()
+                        window.payload.clear()
+                        window.frames.clear()
+                        continue
                     if await commit_durable_window(refused_windows[0], tail=tail) is None:
+                        if not tail and len(refused_windows) > MAX_RETAINED_PCM_WINDOWS:
+                            # A boundary can retain one additional window. At
+                            # that point pause this receive task, not storage
+                            # workers, so tiny windows cannot grow metadata
+                            # without bound below the PCM byte cap. Admission
+                            # itself remains non-waiting; no extra retry task.
+                            await asyncio.sleep(0.05)
+                            continue
                         break  # Next data-driven flush retries; no waiter task.
                 return
             if not (private_cloud_sync_enabled and current_conversation_id and len(private_cloud_sync_buffer) > 0):
@@ -1691,6 +1711,9 @@ async def _run_websocket_util_trigger(
                 # id, committed under 'unlinked' at the next flush boundary);
                 # the window itself commits in _queue_private_cloud_chunk.
                 if private_cloud_sync_enabled and (current_conversation_id or durable_audio):
+                    if storage_pcm_budget.limit and len(durable_window_frames) >= MAX_PCM_WINDOW_FRAMES:
+                        await _queue_private_cloud_chunk()
+                        _reset_private_cloud_buffer()
                     if (
                         framed_audio
                         and private_cloud_sync_buffer
