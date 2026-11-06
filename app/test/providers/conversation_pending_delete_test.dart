@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -222,6 +223,37 @@ void main() {
     await reopened.fetchConversations();
 
     expect(reopened.conversations.map((row) => row.id), ['keep']);
+  });
+
+  test('a second provider cannot restore a confirmed deletion from an older page', () async {
+    final a = _conversation('a');
+    final keep = _conversation('keep');
+    final prefs = SharedPreferencesUtil()..uid = 'fixture-owner';
+    await prefs.cacheConversations([a, keep]);
+    final day = makeProvider([a]);
+    final pendingPage = Completer<({List<ServerConversation> items, bool ok})>();
+    final home = ConversationProvider(conversationListFetcher: () => pendingPage.future, isSignedIn: () => true);
+    addTearDown(home.dispose);
+    home.conversations = [a, keep];
+    home.groupConversationsByDate();
+    final refresh = home.fetchConversations();
+
+    await day.deleteConversationLocally(a);
+    await day.deleteConversationOnServer(a.id);
+    expect(home.conversations.map((row) => row.id), ['keep']);
+    pendingPage.complete((items: [a, keep], ok: true));
+    await refresh;
+    await Future<void>.delayed(Duration.zero);
+
+    final reopened = makeProvider([]);
+    await reopened.fetchConversations();
+    expect(reopened.conversations.map((row) => row.id), ['keep']);
+    expect(home.conversations.map((row) => row.id), ['keep']);
+    expect(prefs.getStringList('cachedConversations'), [jsonEncode(keep.toJson())]);
+
+    prefs.uid = 'other-owner';
+    await prefs.cacheConversations([a, keep]);
+    expect((await prefs.loadCachedConversations()).map((row) => row.id), ['a', 'keep']);
   });
 
   test('a regroup during the window does not bring the row back', () {

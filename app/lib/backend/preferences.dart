@@ -103,6 +103,7 @@ class SharedPreferencesUtil {
   static Future<void> init({FlutterSecureStorage? secureStorage, bool? mirrorNativeAuthToken}) async {
     _conversationCacheReadSession++;
     _cachedConversationsGeneration++;
+    _confirmedConversationDeletes.clear();
     _preferences = await SharedPreferences.getInstance();
     if (!PhysicalQualification.enabled) await PreferenceQuarantine.restoreThenPrune(_preferences!);
     _appsListRevision++;
@@ -1181,12 +1182,12 @@ class SharedPreferencesUtil {
         saveBool('migratedMemories', true);
       }
     }
-    return _excludeFailedCacheEvictions(_decodeCachedList('cachedConversations', ServerConversation.fromJson));
+    return _excludeConfirmedConversationDeletes(_decodeCachedList('cachedConversations', ServerConversation.fromJson));
   }
 
   set cachedConversations(List<ServerConversation> value) {
     _cachedConversationsGeneration++;
-    final conversations = _excludeFailedCacheEvictions(value).map((row) => jsonEncode(row.toJson())).toList();
+    final conversations = _excludeConfirmedConversationDeletes(value).map((row) => jsonEncode(row.toJson())).toList();
     saveStringList('cachedConversations', conversations);
   }
 
@@ -1196,6 +1197,14 @@ class SharedPreferencesUtil {
   // Clear/init invalidate reads even while their asynchronous cleanup is still
   // running. Ordinary cache refreshes may instead retry the latest snapshot.
   static int _conversationCacheReadSession = 0;
+  static final _confirmedConversationDeletes = <String>{};
+
+  bool isConversationDeleteConfirmed(String id) => _confirmedConversationDeletes.contains(id);
+
+  /// Fence cache writes already admitted by another conversation provider.
+  void recordConfirmedConversationDelete(String id) {
+    if (_confirmedConversationDeletes.add(id)) _cachedConversationsGeneration++;
+  }
 
   @visibleForTesting
   // Raw JSON character budget, so one long transcript also uses the worker.
@@ -1244,7 +1253,7 @@ class SharedPreferencesUtil {
         if (session != _conversationCacheReadSession || uid != ownerUid) return [];
         if (_cachedConversationsGeneration != migrationGeneration) return [];
       }
-      return _excludeFailedCacheEvictions(decoded.conversations);
+      return _excludeConfirmedConversationDeletes(decoded.conversations);
     }
     // Concurrent live rows are reconciled by the provider. Never publish a
     // superseded cache snapshot merely to complete a best-effort fallback.
@@ -1260,7 +1269,7 @@ class SharedPreferencesUtil {
     final generation = ++_cachedConversationsGeneration;
     final session = _conversationCacheReadSession;
     final ownerUid = uid;
-    final snapshot = List<ServerConversation>.of(_excludeFailedCacheEvictions(value));
+    final snapshot = List<ServerConversation>.of(_excludeConfirmedConversationDeletes(value));
     final encoded = await offUiIsolate(() => [for (final c in snapshot) jsonEncode(c.toJson())],
         size: snapshot.length,
         threshold: cachedConversationsBackgroundEncodeThreshold,
@@ -1319,10 +1328,12 @@ class SharedPreferencesUtil {
     return false;
   }
 
-  List<ServerConversation> _excludeFailedCacheEvictions(List<ServerConversation> rows) {
+  List<ServerConversation> _excludeConfirmedConversationDeletes(List<ServerConversation> rows) {
     final ownerUid = uid;
-    if (ownerUid.isEmpty) return rows;
-    final ids = getStringList(_userScopedKey('failedConversationCacheEvictions', ownerUid)).toSet();
+    final ids = {
+      ..._confirmedConversationDeletes,
+      if (ownerUid.isNotEmpty) ...getStringList(_userScopedKey('failedConversationCacheEvictions', ownerUid)),
+    };
     return ids.isEmpty ? rows : rows.where((row) => !ids.contains(row.id)).toList();
   }
 
@@ -1681,7 +1692,10 @@ class SharedPreferencesUtil {
   }
 
   Future<bool> saveString(String key, String value) async {
-    if (key == 'uid') _appsListRevision++;
+    if (key == 'uid') {
+      _appsListRevision++;
+      if (value != uid) _confirmedConversationDeletes.clear();
+    }
     final changed = key == 'btDevice' && _preferences?.getString(key) != value;
     final write = _preferences?.setString(key, value);
     if (changed) _deviceChanges.add(null);
@@ -1708,6 +1722,7 @@ class SharedPreferencesUtil {
     _conversationCacheReadSession++;
     // Drop any in-flight background conversation cache write (sign-out, account deletion).
     _cachedConversationsGeneration++;
+    _confirmedConversationDeletes.clear();
     _authTokenCache = '';
     await _deleteSecureAuthToken();
     _appsListRevision++;

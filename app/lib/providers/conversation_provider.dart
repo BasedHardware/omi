@@ -284,6 +284,11 @@ class ConversationProvider extends ChangeNotifier {
         _conversationApi = conversationApi {
     _setupMergeListener();
     _loadSettings();
+    _confirmedDeleteSubscription = _confirmedDeletes.stream.listen((id) {
+      if (!SharedPreferencesUtil().isConversationDeleteConfirmed(id)) return;
+      if (_conversationServerLoadedIds.remove(id) && _conversationServerOffset > 0) _conversationServerOffset--;
+      if (_removeConfirmedDeleteFromLists(id)) notifyListeners();
+    });
   }
 
   static Future<({ServerConversation? item, bool ok})> _legacyLifecycleFromTyped(ConversationApi api, String id) async {
@@ -856,7 +861,7 @@ class ConversationProvider extends ChangeNotifier {
           conversation == null ||
           conversation.status != ConversationStatus.completed ||
           currentlyProcessingIds.contains(conversation.id) ||
-          memoriesToDelete.containsKey(conversation.id) ||
+          _isHiddenByDelete(conversation.id) ||
           !_matchesActiveConversationFilters(conversation)) {
         continue;
       }
@@ -875,7 +880,9 @@ class ConversationProvider extends ChangeNotifier {
           !pageConversationIds.contains(row.id) &&
           (coveredAfter == null || (row.startedAt ?? row.createdAt).isAfter(coveredAfter)));
     }
+    conversations.removeWhere((row) => _isHiddenByDelete(row.id));
     for (final conversation in completedById.values) {
+      if (_isHiddenByDelete(conversation.id)) continue;
       final index = conversations.indexWhere((existing) => existing.id == conversation.id);
       if (index == -1) {
         conversations.insert(0, conversation);
@@ -1006,7 +1013,7 @@ class ConversationProvider extends ChangeNotifier {
           conversation == null ||
           conversation.status != ConversationStatus.completed ||
           currentlyProcessingIds.contains(conversation.id) ||
-          memoriesToDelete.containsKey(conversation.id) ||
+          _isHiddenByDelete(conversation.id) ||
           !_matchesActiveConversationFilters(conversation)) {
         continue;
       }
@@ -1016,7 +1023,7 @@ class ConversationProvider extends ChangeNotifier {
     }
     for (final conversation in conversations) {
       if (conversation.status != ConversationStatus.completed) continue;
-      if (memoriesToDelete.containsKey(conversation.id) || !_matchesActiveConversationFilters(conversation)) {
+      if (_isHiddenByDelete(conversation.id) || !_matchesActiveConversationFilters(conversation)) {
         continue;
       }
       // A changed live object wins over a stale page object even when the
@@ -1026,6 +1033,7 @@ class ConversationProvider extends ChangeNotifier {
         completedById[conversation.id] = conversation;
       }
     }
+    completedById.removeWhere((id, _) => _isHiddenByDelete(id));
     conversations = completedById.values.toList()
       ..sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
     // Only use cache when no folder filter is applied
@@ -1104,7 +1112,7 @@ class ConversationProvider extends ChangeNotifier {
         .toSet();
     bool visible(ServerConversation conversation) =>
         !activeProcessingIds.contains(conversation.id) &&
-        !memoriesToDelete.containsKey(conversation.id) &&
+        !_isHiddenByDelete(conversation.id) &&
         _matchesActiveConversationFilters(conversation);
     // The fallback starts with an empty list. Rows delivered during decode
     // (including local phone rows) win over older cached objects with that ID.
@@ -1160,7 +1168,7 @@ class ConversationProvider extends ChangeNotifier {
 
   List<ServerConversation> _filterOutConvos(List<ServerConversation> convos) {
     return convos.where((convo) {
-      if (memoriesToDelete.containsKey(convo.id)) return false;
+      if (_isHiddenByDelete(convo.id)) return false;
       // Filter by discarded status
       // When showDiscardedConversations is true, show all conversations (including discarded)
       // When showDiscardedConversations is false, hide discarded conversations
@@ -1586,6 +1594,8 @@ class ConversationProvider extends ChangeNotifier {
   /// request so a concurrent refresh cannot reinsert them.
   Map<String, ServerConversation> memoriesToDelete = {};
   final Map<String, ({Timer timer, VoidCallback? onFailure})> _pendingDeletes = {};
+  static final _confirmedDeletes = StreamController<String>.broadcast();
+  late final StreamSubscription<String> _confirmedDeleteSubscription;
 
   Future<void> _restoreSiriAfterOptimisticDelete(ServerConversation conversation) async {
     final generation = _sessionGeneration;
@@ -1599,14 +1609,15 @@ class ConversationProvider extends ChangeNotifier {
   /// full time; the toast commits early via [commitPendingDelete] when it closes, so the usual
   /// delete still reaches the server about 5 s after the swipe.
   static const pendingDeleteWindow = Duration(seconds: 10);
+
+  bool _isHiddenByDelete(String id) =>
+      memoriesToDelete.containsKey(id) || SharedPreferencesUtil().isConversationDeleteConfirmed(id);
+
   List<ServerConversation> _filterPendingDeletes(List<ServerConversation> items) {
     _mergedAwayConversationIds.addAll(items.where((c) => c.isMergedDonor).map((c) => c.id));
     return items
         .where((c) =>
-            !c.deleted &&
-            !c.isMergedDonor &&
-            !memoriesToDelete.containsKey(c.id) &&
-            !_mergedAwayConversationIds.contains(c.id))
+            !c.deleted && !c.isMergedDonor && !_isHiddenByDelete(c.id) && !_mergedAwayConversationIds.contains(c.id))
         .toList();
   }
 
@@ -1675,6 +1686,7 @@ class ConversationProvider extends ChangeNotifier {
       return;
     }
 
+    prefs.recordConfirmedConversationDelete(conversationId);
     // Only a confirmed deletion changes the server cursor.
     if (wasLoadedFromServer && _conversationServerLoadedIds.remove(conversationId)) {
       if (_conversationServerOffset > 0) _conversationServerOffset--;
@@ -1683,13 +1695,8 @@ class ConversationProvider extends ChangeNotifier {
     if (_conversationLoadingRevision == invalidatedRevision) {
       setLoadingConversations(false);
     }
-    _phoneOnlyConversations.remove(conversationId);
-    conversations.removeWhere((conversation) => conversation.id == conversationId);
-    searchedConversations.removeWhere((conversation) => conversation.id == conversationId);
-    for (final group in groupedConversations.values) {
-      group.removeWhere((conversation) => conversation.id == conversationId);
-    }
-    groupedConversations.removeWhere((_, group) => group.isEmpty);
+    _removeConfirmedDeleteFromLists(conversationId);
+    _confirmedDeletes.add(conversationId);
 
     try {
       // Keep the row hidden through the cache write. The shared queue prevents
@@ -1707,6 +1714,28 @@ class ConversationProvider extends ChangeNotifier {
   }
 
   void _clearDeleteTombstone(String conversationId) => memoriesToDelete.remove(conversationId);
+
+  bool _removeConfirmedDeleteFromLists(String id) {
+    var removed = _phoneOnlyConversations.remove(id) != null;
+    List<ServerConversation> withoutDeleted(List<ServerConversation> rows) {
+      if (!rows.any((row) => row.id == id)) return rows;
+      removed = true;
+      return rows.where((row) => row.id != id).toList();
+    }
+
+    conversations = withoutDeleted(conversations);
+    searchedConversations = withoutDeleted(searchedConversations);
+    for (final entry in groupedConversations.entries.toList()) {
+      final rows = withoutDeleted(entry.value);
+      if (identical(rows, entry.value)) continue;
+      if (rows.isEmpty) {
+        groupedConversations.remove(entry.key);
+      } else {
+        groupedConversations[entry.key] = rows;
+      }
+    }
+    return removed;
+  }
 
   /// Puts a row hidden by [deleteConversationLocally] back in the list and in Siri: on Undo, and when
   /// the server refuses or fails the DELETE, since the conversation then still exists.
@@ -1730,6 +1759,7 @@ class ConversationProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    _confirmedDeleteSubscription.cancel();
     _cancelProcessingPlaceholderTimers();
     _processingReconcileTimer?.cancel();
     _sessionGeneration++;

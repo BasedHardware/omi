@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+// Exercise platform write failures, which SharedPreferences mocks cannot model.
+// ignore: depend_on_referenced_packages
 import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
 
 import 'package:omi/backend/preferences.dart';
@@ -35,7 +37,7 @@ Future<SharedPreferencesUtil> _prefs(Map<String, Object> values) async {
 }
 
 class _RejectingConversationCache extends InMemorySharedPreferencesStore {
-  _RejectingConversationCache(Map<String, Object> data, {required this.throwOnLegacyWrite}) : super.withData(data);
+  _RejectingConversationCache(super.data, {required this.throwOnLegacyWrite}) : super.withData();
 
   final bool throwOnLegacyWrite;
 
