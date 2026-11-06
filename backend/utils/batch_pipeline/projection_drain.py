@@ -47,6 +47,13 @@ DRAIN_STEP_SECONDS = 15.0
 MAX_DELAYED_OWNERS = 1024
 
 
+def is_privacy_stop(stop: str | None) -> bool:
+    """Zero-progress privacy stops the drain backs off: a ProjectionBlocked privacy
+    disposition ('blocked_privacy_*') or a BatchPrivacyBlocked fence ('privacy_blocked',
+    e.g. after the #24747 refusal fall-through re-fences assignment)."""
+    return bool(stop) and (stop == 'privacy_blocked' or stop.startswith('blocked_privacy_'))
+
+
 class OwnerDrains:
     def __init__(self, projector: Projector):
         self.projector = projector
@@ -190,7 +197,7 @@ class OwnerDrains:
             if owner not in self.privacy_heads:
                 # The TTL fired after the check returned but before this callback.
                 self.queue.append(owner)
-        elif stop and stop.startswith('blocked_privacy_') and projection_drain_privacy_backoff_enabled():
+        elif stop and is_privacy_stop(stop) and projection_drain_privacy_backoff_enabled():
             # run records privacy stops here only for zero-progress turns.
             if self.defer(owner, delay=projection_drain_privacy_backoff_seconds()):
                 self.privacy_heads[owner] = head
@@ -246,9 +253,9 @@ class OwnerDrains:
         finally:
             if prefetch is not None:
                 prefetch.close()
-        if stop == 'privacy_blocked' or stop.startswith('blocked_privacy_'):
+        if is_privacy_stop(stop):
             record_privacy_stop(stop)
-            if advanced == 0 and stop.startswith('blocked_privacy_'):
+            if advanced == 0:
                 self.stops[owner] = stop
                 self.stopped_heads[owner] = walk.blocked_head if walk is not None else None
         logger.info(
