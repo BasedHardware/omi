@@ -441,16 +441,8 @@ overlay:
             value: http://parakeet.omiapi.com
           HOSTED_SPEAKER_EMBEDDING_API_URL:
             value: http://diarizer.omiapi.com:80
-          SYNC_LEGACY_FRESH_ENABLED:
-            value: 'false'
           SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED:
             value: 'false'
-          SYNC_LEGACY_FRESH_PERCENT:
-            value: '0'
-          SYNC_LEGACY_FRESH_HOURLY_TOKENS:
-            value: '60'
-          SYNC_LEGACY_FRESH_BURST_TOKENS:
-            value: '10'
           POSTHOG_HOST:
             value: https://app.posthog.com
           OMI_SHAPED_AGENT_MODE:
@@ -531,16 +523,8 @@ overlay:
             value: http://parakeet.omiapi.com
           HOSTED_SPEAKER_EMBEDDING_API_URL:
             value: http://diarizer.omiapi.com:80
-          SYNC_LEGACY_FRESH_ENABLED:
-            value: 'false'
           SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED:
             value: 'false'
-          SYNC_LEGACY_FRESH_PERCENT:
-            value: '0'
-          SYNC_LEGACY_FRESH_HOURLY_TOKENS:
-            value: '60'
-          SYNC_LEGACY_FRESH_BURST_TOKENS:
-            value: '10'
           POSTHOG_HOST:
             value: https://app.posthog.com
           OMI_SHAPED_AGENT_MODE:
