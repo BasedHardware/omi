@@ -171,6 +171,8 @@ enum CaptureListeningLogic {
 
     screenAnalysisEnabled.wrappedValue = enabled
     AssistantSettings.shared.screenAnalysisEnabled = enabled
+    SettingsSyncManager.shared.pushPartialUpdate(
+      SettingsSyncManager.screenAnalysisEnabledUpdate(enabled))
     AnalyticsManager.shared.settingToggled(setting: "monitoring", enabled: enabled)
 
     if enabled {
@@ -181,6 +183,8 @@ enum CaptureListeningLogic {
           if !success {
             screenAnalysisEnabled.wrappedValue = false
             AssistantSettings.shared.screenAnalysisEnabled = false
+            SettingsSyncManager.shared.pushPartialUpdate(
+              SettingsSyncManager.screenAnalysisEnabledUpdate(false))
             isCaptureMonitoring.wrappedValue = false
           }
         }

@@ -162,6 +162,7 @@ class AssistantSettings {
     get { UserDefaults.standard.bool(forKey: screenAnalysisEnabledKey) }
     set {
       UserDefaults.standard.set(newValue, forKey: screenAnalysisEnabledKey)
+      SettingsSyncManager.shared.recordLocalScreenAnalysisPreference(newValue)
       NotificationCenter.default.post(name: .assistantSettingsDidChange, object: nil)
     }
   }

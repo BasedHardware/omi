@@ -58,6 +58,8 @@ extension RewindPage {
 
     screenAnalysisEnabled = enabled
     AssistantSettings.shared.screenAnalysisEnabled = enabled
+    SettingsSyncManager.shared.pushPartialUpdate(
+      SettingsSyncManager.screenAnalysisEnabledUpdate(enabled))
 
     if enabled {
       ProactiveAssistantsPlugin.shared.startMonitoring { success, _ in
@@ -69,6 +71,8 @@ extension RewindPage {
             // Revert persistent setting so UI and auto-start stay in sync
             screenAnalysisEnabled = false
             AssistantSettings.shared.screenAnalysisEnabled = false
+            SettingsSyncManager.shared.pushPartialUpdate(
+              SettingsSyncManager.screenAnalysisEnabledUpdate(false))
           }
         }
       }

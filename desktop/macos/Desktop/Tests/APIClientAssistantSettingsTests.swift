@@ -288,6 +288,39 @@ final class APIClientAssistantSettingsTests: XCTestCase {
     XCTAssertEqual(shared["screen_analysis_enabled"] as? Bool, true)
   }
 
+  @MainActor
+  func testRemoteSyncDoesNotReEnableLocallyDisabledScreenAnalysis() {
+    let originalEnabled = AssistantSettings.shared.screenAnalysisEnabled
+    defer { AssistantSettings.shared.screenAnalysisEnabled = originalEnabled }
+
+    AssistantSettings.shared.screenAnalysisEnabled = false
+    SettingsSyncManager.shared.applyRemoteSettings(
+      AssistantSettingsResponse(shared: SharedAssistantSettingsResponse(screenAnalysisEnabled: true))
+    )
+
+    XCTAssertFalse(
+      AssistantSettings.shared.screenAnalysisEnabled,
+      "A background server sync must not override a local screen-analysis off choice"
+    )
+  }
+
+  @MainActor
+  func testRemoteSyncCanReEnableScreenAnalysisWhenEarlierDisableCameFromRemoteSync() {
+    let originalEnabled = AssistantSettings.shared.screenAnalysisEnabled
+    defer { AssistantSettings.shared.screenAnalysisEnabled = originalEnabled }
+
+    AssistantSettings.shared.screenAnalysisEnabled = true
+    SettingsSyncManager.shared.applyRemoteSettings(
+      AssistantSettingsResponse(shared: SharedAssistantSettingsResponse(screenAnalysisEnabled: false))
+    )
+    XCTAssertFalse(AssistantSettings.shared.screenAnalysisEnabled)
+
+    SettingsSyncManager.shared.applyRemoteSettings(
+      AssistantSettingsResponse(shared: SharedAssistantSettingsResponse(screenAnalysisEnabled: true))
+    )
+    XCTAssertTrue(AssistantSettings.shared.screenAnalysisEnabled)
+  }
+
   func testAssistantSettingsDecodesValidSiblingsWhenOneKnownSectionIsMalformed() throws {
     let data = """
       {

@@ -220,6 +220,11 @@ struct RewindSettingsView: View {
         ) {
           Toggle("", isOn: $screenAnalysisEnabled)
             .toggleStyle(OmiToggleStyle())
+            .onChange(of: screenAnalysisEnabled) { _, newValue in
+              AssistantSettings.shared.screenAnalysisEnabled = newValue
+              SettingsSyncManager.shared.pushPartialUpdate(
+                SettingsSyncManager.screenAnalysisEnabledUpdate(newValue))
+            }
         }
 
         // Retention Period

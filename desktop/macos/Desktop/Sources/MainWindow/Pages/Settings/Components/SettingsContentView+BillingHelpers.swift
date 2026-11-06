@@ -751,6 +751,9 @@ extension SettingsContentView {
           if !success {
             permissionError = error ?? "Failed to start monitoring"
             isMonitoring = false
+            AssistantSettings.shared.screenAnalysisEnabled = false
+            SettingsSyncManager.shared.pushPartialUpdate(
+              SettingsSyncManager.screenAnalysisEnabledUpdate(false))
           }
         }
       }
@@ -761,6 +764,8 @@ extension SettingsContentView {
 
     // Persist the setting
     AssistantSettings.shared.screenAnalysisEnabled = enabled
+    SettingsSyncManager.shared.pushPartialUpdate(
+      SettingsSyncManager.screenAnalysisEnabledUpdate(enabled))
   }
 
   func startGlowPreview() {
