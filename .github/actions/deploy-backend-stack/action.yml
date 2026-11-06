@@ -945,7 +945,7 @@ runs:
           --memory=${{ inputs.runtime_env == 'prod' && '4Gi' || '2Gi' }}
           --concurrency=${{ inputs.runtime_env == 'prod' && '80' || '40' }}
           --min-instances=${{ inputs.runtime_env == 'prod' && '3' || '0' }}
-          --max-instances=50
+          --max-instances=${{ inputs.runtime_env == 'prod' && '35' || '50' }}
           --no-cpu-throttling
         env_vars: ${{ steps.runtime-env.outputs.backend_integration_env_vars }}
         secrets: ${{ steps.runtime-env.outputs.backend_integration_secrets }}

@@ -15373,6 +15373,12 @@ class AppLocalizationsDa extends AppLocalizations {
   }
 
   @override
+  String get hasLinkedTasksLabel => 'Har tilknyttede opgaver';
+
+  @override
+  String get hasTasksFilter => 'Med opgaver';
+
+  @override
   String firmwareUpdateNotInstalledMessage(String version) {
     return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
   }

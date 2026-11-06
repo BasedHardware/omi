@@ -4637,6 +4637,8 @@
     "referralClaimShort": "Λήψη",
     "paymentDeclinedTitle": "Η κάρτα σας απορρίφθηκε",
     "paymentDeclinedMessage": "Ενημερώστε την κάρτα για να αποκτήσετε ξανά το {plan}",
+    "hasLinkedTasksLabel": "Έχει συνδεδεμένες εργασίες",
+    "hasTasksFilter": "Με εργασίες",
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",

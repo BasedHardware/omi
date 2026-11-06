@@ -15417,6 +15417,12 @@ class AppLocalizationsBe extends AppLocalizations {
   }
 
   @override
+  String get hasLinkedTasksLabel => 'Ёсць звязаныя задачы';
+
+  @override
+  String get hasTasksFilter => 'З задачамі';
+
+  @override
   String firmwareUpdateNotInstalledMessage(String version) {
     return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
   }

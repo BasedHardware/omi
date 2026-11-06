@@ -15483,6 +15483,12 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
+  String get hasLinkedTasksLabel => 'Έχει συνδεδεμένες εργασίες';
+
+  @override
+  String get hasTasksFilter => 'Με εργασίες';
+
+  @override
   String firmwareUpdateNotInstalledMessage(String version) {
     return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
   }

@@ -18768,6 +18768,14 @@
     "@paymentDeclinedMessage": {
         "description": "Home row line under 'Your card was declined'. it = the card; plan = a product name such as Omi Pro"
     },
+    "hasLinkedTasksLabel": "Has linked tasks",
+    "@hasLinkedTasksLabel": {
+        "description": "Accessible conversation-row badge: at least one current canonical task is linked"
+    },
+    "hasTasksFilter": "Has tasks",
+    "@hasTasksFilter": {
+        "description": "Conversation search and browse filter: only conversations with current linked tasks"
+    },
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
     "@firmwareUpdateNotInstalledMessage": {
         "placeholders": {

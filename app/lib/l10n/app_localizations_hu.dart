@@ -15440,6 +15440,12 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
+  String get hasLinkedTasksLabel => 'Kapcsolódó feladatokat tartalmaz';
+
+  @override
+  String get hasTasksFilter => 'Feladatokkal';
+
+  @override
   String firmwareUpdateNotInstalledMessage(String version) {
     return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
   }

@@ -15393,6 +15393,12 @@ class AppLocalizationsUr extends AppLocalizations {
   }
 
   @override
+  String get hasLinkedTasksLabel => 'منسلک کام موجود ہیں';
+
+  @override
+  String get hasTasksFilter => 'کام والے';
+
+  @override
   String firmwareUpdateNotInstalledMessage(String version) {
     return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
   }

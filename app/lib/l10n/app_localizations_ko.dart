@@ -15161,6 +15161,12 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
+  String get hasLinkedTasksLabel => '연결된 작업 있음';
+
+  @override
+  String get hasTasksFilter => '작업 있음';
+
+  @override
   String firmwareUpdateNotInstalledMessage(String version) {
     return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
   }

@@ -73,8 +73,9 @@ live alert UID, page tier, receiver and absence of the agent mute interval.
 Do not test notification delivery by notifying users.
 
 Rollback: restore the prior worker image and guard chart and restore the Grafana
-rule backup through the documented importer. Preserve the audited worker HPA
-min 6 / max 12 and baseline 6; do not restore the stale 4/16 chart values.
+rule backup through the documented importer. Preserve the approved worker HPA
+min 4 / max 8 and baseline 4 (2026-11-06, David D4 / bc18db). Restore baseline/min
+6 and max 12 if GPU queue depth or ready_units climbs back past 50k.
 Disposition/redrive cannot be undone by
 resetting a paid token; stop further apply, preserve durable receipts, and
 replan after an uncertain result.

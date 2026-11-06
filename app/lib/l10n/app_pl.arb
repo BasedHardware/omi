@@ -4672,6 +4672,8 @@
     "referralClaimShort": "Odbierz",
     "paymentDeclinedTitle": "Twoja karta została odrzucona",
     "paymentDeclinedMessage": "Zaktualizuj kartę, aby odzyskać {plan}",
+    "hasLinkedTasksLabel": "Zawiera powiązane zadania",
+    "hasTasksFilter": "Z zadaniami",
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",

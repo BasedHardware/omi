@@ -15393,6 +15393,12 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
+  String get hasLinkedTasksLabel => 'Bağlı görevleri var';
+
+  @override
+  String get hasTasksFilter => 'Görev içerenler';
+
+  @override
   String firmwareUpdateNotInstalledMessage(String version) {
     return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
   }

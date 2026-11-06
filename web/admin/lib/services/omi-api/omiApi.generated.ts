@@ -1837,6 +1837,14 @@ export interface ConversationSyncState {
   visibility?: ConversationVisibility;
 }
 
+export interface ConversationTaskPresenceRequest {
+  conversation_ids: Array<string>;
+}
+
+export interface ConversationTaskPresenceResponse {
+  presence: Record<string, boolean>;
+}
+
 export interface ConversationTestPromptResponse {
   summary: string;
 }
@@ -5846,6 +5854,23 @@ export interface TaskCompleteCandidate {
   workstream_id?: string | null;
 }
 
+export interface TaskConversationPageRequest {
+  cursor?: string | null;
+  end_date?: string | null;
+  folder_id?: string | null;
+  include_discarded?: boolean;
+  limit?: number;
+  query?: string;
+  starred?: boolean | null;
+  start_date?: string | null;
+}
+
+export interface TaskConversationPageResponse {
+  items: Array<Conversation>;
+  next_cursor?: string | null;
+  partial?: boolean;
+}
+
 export interface TaskCreateCandidate {
   capture_confidence: number;
   compatibility?: CandidateCompatibilityMetadata | null;
@@ -6848,6 +6873,8 @@ export interface OmiApiSchemas {
   "ConversationSyncMutationRequest": ConversationSyncMutationRequest;
   "ConversationSyncMutationResponse": ConversationSyncMutationResponse;
   "ConversationSyncState": ConversationSyncState;
+  "ConversationTaskPresenceRequest": ConversationTaskPresenceRequest;
+  "ConversationTaskPresenceResponse": ConversationTaskPresenceResponse;
   "ConversationTestPromptResponse": ConversationTestPromptResponse;
   "ConversationTopicRequest": ConversationTopicRequest;
   "ConversationTopicResponse": ConversationTopicResponse;
@@ -7378,6 +7405,8 @@ export interface OmiApiSchemas {
   "TaskCardSpec": TaskCardSpec;
   "TaskChangePayload": TaskChangePayload;
   "TaskCompleteCandidate": TaskCompleteCandidate;
+  "TaskConversationPageRequest": TaskConversationPageRequest;
+  "TaskConversationPageResponse": TaskConversationPageResponse;
   "TaskCreateCandidate": TaskCreateCandidate;
   "TaskCreatePayload": TaskCreatePayload;
   "TaskDue": TaskDue;
@@ -8573,11 +8602,31 @@ export interface OmiApiPaths {
       };
     };
   };
+  "/v1/conversations/task-presence": {
+    post: {
+      operationId: "task_presence_v1_conversations_task_presence_post";
+      responses: {
+        "200": ConversationTaskPresenceResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
   "/v1/conversations/topic": {
     post: {
       operationId: "generate_conversation_topic_endpoint_v1_conversations_topic_post";
       responses: {
         "200": ConversationTopicResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/conversations/with-tasks/page": {
+    post: {
+      operationId: "conversations_with_tasks_v1_conversations_with_tasks_page_post";
+      responses: {
+        "200": TaskConversationPageResponse;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -15147,9 +15196,51 @@ export async function search_conversations_endpoint_v1_conversations_search_post
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function task_presence_v1_conversations_task_presence_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: ConversationTaskPresenceRequest, init?: OmiApiClientInit): Promise<ConversationTaskPresenceResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/conversations/task-presence`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function generate_conversation_topic_endpoint_v1_conversations_topic_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: ConversationTopicRequest, init?: OmiApiClientInit): Promise<ConversationTopicResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/conversations/topic`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function conversations_with_tasks_v1_conversations_with_tasks_page_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: TaskConversationPageRequest, init?: OmiApiClientInit): Promise<TaskConversationPageResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/conversations/with-tasks/page`;
   const _search = "";
   const _res = await fetch(`${_base}${_path}${_search}`, {
     method: "POST",
@@ -23742,4 +23833,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 542 client methods generated.
+// Total: 544 client methods generated.

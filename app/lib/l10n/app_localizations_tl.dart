@@ -15503,6 +15503,12 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
+  String get hasLinkedTasksLabel => 'May mga naka-link na gawain';
+
+  @override
+  String get hasTasksFilter => 'May mga gawain';
+
+  @override
   String firmwareUpdateNotInstalledMessage(String version) {
     return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
   }

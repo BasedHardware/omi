@@ -15377,6 +15377,12 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
+  String get hasLinkedTasksLabel => 'Má prepojené úlohy';
+
+  @override
+  String get hasTasksFilter => 'S úlohami';
+
+  @override
   String firmwareUpdateNotInstalledMessage(String version) {
     return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
   }
