@@ -4540,6 +4540,8 @@
     "chatAppsWaitingMessageIn": "Send beskeden i {app}. Denne skærm opdateres, så snart Omi modtager den.",
     "chatAppsCodeExpiredMessageIn": "Få en ny kode, og send den fra {app}.",
     "episodeWritingNotes": "Skriver noter…",
+    "homeStepTranscribing": "Transskriberer…",
+    "homeRecordingsCount": "{count, plural, one{{count} optagelse} other{{count} optagelser}}",
     "episodeWritingNotesDetail": "Vi gør først transskriptionen færdig. Du kan godt forlade siden.",
     "episodeCoversUpTo": "Dækker frem til {time} · fulde noter, når det er slut",
     "liveTranscribedUpTo": "Transskriberet frem til {time}",
@@ -4676,5 +4678,11 @@
     "referralRewardSecondDetail": "Når 3 venner mere køber",
     "referralClaimShort": "Indløs",
     "paymentDeclinedTitle": "Dit kort blev afvist",
-    "paymentDeclinedMessage": "Opdater kortet for at få {plan} tilbage"
+    "paymentDeclinedMessage": "Opdater kortet for at få {plan} tilbage",
+    "hasLinkedTasksLabel": "Har tilknyttede opgaver",
+    "hasTasksFilter": "Med opgaver",
+    "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
+    "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
+    "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
 }

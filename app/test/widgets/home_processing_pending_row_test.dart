@@ -59,10 +59,8 @@ void main() {
             conversationIds: const ['a', 'b', 'c'],
             members: [a, b, c],
             title: 'Dinner and plans',
-            moments: [
-              EpisodeMoment(
-                  id: 'm', conversationId: 'a', startedAt: now, endedAt: now, points: const [EpisodePoint('Point')])
-            ],
+            // Not composed yet: members still processing hold the row. A composed episode keeps
+            // its notes row instead (home_rows_test).
           );
       final provider = ConversationProvider(isSignedIn: () => false)
         ..isLoadingConversations = false

@@ -291,7 +291,6 @@ def test_direct_transaction_reads_are_named(monkeypatch):
     monkeypatch.setattr(batch_pipeline_store, 'first_pending', lambda *a, **k: None)
     monkeypatch.setattr(batch_pipeline_store, 'service_frontier', lambda *a, **k: 0.0)
     monkeypatch.setattr(batch_pipeline_store, 'assert_batch_write_allowed', lambda *a, **k: 1)
-    monkeypatch.setattr(batch_pipeline_store, 'lever_enabled', lambda *a, **k: False)
     view = batch_pipeline_store.FirestoreTransaction(Mock(), 'batch_pipeline_dev', Mock())
     batch_pipeline_store._note_direct_reads(view)
     assert batch_pipeline_store.contention_tables(view) == ('none', 'none')

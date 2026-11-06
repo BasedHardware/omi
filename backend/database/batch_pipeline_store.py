@@ -16,9 +16,8 @@ from google.cloud import firestore
 from google.api_core.exceptions import AlreadyExists, FailedPrecondition, Aborted
 
 from config.batch_pipeline import contention_retry_enabled, control_candidate_fanout
-from config.firestore_read_levers import lever_enabled
 from database._client import get_data_plane_firestore_client
-from database.batch_pipeline_privacy import assert_batch_write_allowed, BatchPrivacyMemo
+from database.batch_pipeline_privacy import assert_batch_write_allowed
 from database.batch_pipeline_recovery import quarantine_fenced
 from database.firestore_transaction_retry import FirestoreContentionExhausted, run_with_transaction_contention_retry
 from database.batch_pipeline_transaction_labels import (
@@ -180,11 +179,6 @@ class FirestoreTransaction:
 
     def check_privacy(self, uid: str, conversation_ids=(), expected_generation: int | None = None) -> int:
         options = {}
-        if lever_enabled('batch_privacy_memoize', uid):
-            # FirestoreStore.run creates this view anew on every callback retry.
-            if not hasattr(self, '_privacy_memo'):
-                self._privacy_memo = BatchPrivacyMemo(self.client, self.transaction, read_budget=self.read_budget)
-            options['memo'] = self._privacy_memo
         if self.read_budget is not None:
             options['read_budget'] = self.read_budget
         return assert_batch_write_allowed(
@@ -393,7 +387,7 @@ def projection_page(
         query = query.start_at({'committed_at': after[0]})
     elif after is not None:
         query = query.start_after({'committed_at': after[0], '__name__': collection.document(after[1])})
-    size = max(1, min(limit, 100))
+    size = max(1, min(limit, 200))
     docs = list(query.limit(size).stream())
     # Wrap even when blocked rows remain. Rows inserted behind the cursor are
     # revisited on the next cycle; no durable obligation is skipped or mutated.
@@ -892,6 +886,12 @@ def timeliness_sample(
         'projection': (projection, 'committed_at'),
         # Ready receipts already in the conversation plus assignment holds; only the ledger waits. Visible only.
         'quarantine_held_rows': (results.where('projection_state', '==', 'quarantine_held'), 'committed_at'),
+        'held_expired_rows': (
+            results.where('projection_state', '==', 'quarantine_held').where(
+                'held_expired_reason', '==', 'held_expired'
+            ),
+            'committed_at',
+        ),
         # A subset of quarantined, matching is_terminal_empty. Visible only.
         'terminal_empty': (
             quarantined.where('recovery_state', '==', 'failed_held')
@@ -924,6 +924,7 @@ def timeliness_sample(
         'drain_oldest': first(projection, 'committed_at'),
         'held_oldest': {
             'quarantine_held': first(legs['quarantine_held_rows'][0], 'committed_at'),
+            'held_expired': first(legs['held_expired_rows'][0], 'committed_at'),
             'assignment_held': first(legs['assignment_held'][0], 'enqueued_at'),
             'record_pending': first(jobs.where('state', '==', 'record_pending'), 'enqueued_at'),
         },
@@ -932,6 +933,7 @@ def timeliness_sample(
             'quarantined': quarantined_oldest,
             'assignment_held': first(legs['assignment_held'][0].where('enqueued_at', '>=', epoch), 'enqueued_at'),
             'projection': projected,
+            'held_expired_rows': first(legs['held_expired_rows'][0].where('committed_at', '>=', epoch), 'committed_at'),
             'quarantine_held_rows': first(
                 legs['quarantine_held_rows'][0].where('committed_at', '>=', epoch), 'committed_at'
             ),

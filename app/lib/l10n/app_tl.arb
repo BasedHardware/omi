@@ -11921,6 +11921,8 @@
     "chatAppsWaitingMessageIn": "Ipadala ang mensahe sa {app}. Mag-a-update ang screen na ito pagkatanggap ni Omi.",
     "chatAppsCodeExpiredMessageIn": "Kumuha ng bagong code at ipadala ito mula sa {app}.",
     "episodeWritingNotes": "Isinusulat ang mga tala…",
+    "homeStepTranscribing": "Tinatranscribe…",
+    "homeRecordingsCount": "{count, plural, one{1 recording} other{{count} na recording}}",
     "episodeWritingNotesDetail": "Tinatapos muna ang transcript. Maaari kang umalis sa pahinang ito.",
     "episodeCoversUpTo": "Hanggang {time} · buong tala kapag natapos",
     "liveTranscribedUpTo": "Na-transcribe hanggang {time}",
@@ -12191,5 +12193,11 @@
     "referralRewardSecondDetail": "Kapag bumili ang 3 pang kaibigan",
     "referralClaimShort": "Kunin",
     "paymentDeclinedTitle": "Tinanggihan ang iyong card",
-    "paymentDeclinedMessage": "I-update ang card para maibalik ang {plan}"
+    "paymentDeclinedMessage": "I-update ang card para maibalik ang {plan}",
+    "hasLinkedTasksLabel": "May mga naka-link na gawain",
+    "hasTasksFilter": "May mga gawain",
+    "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
+    "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
+    "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
 }

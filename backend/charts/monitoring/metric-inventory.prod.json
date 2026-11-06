@@ -2304,6 +2304,9 @@
     "workqueue_work_duration_seconds_sum"
   ],
   "declared_metrics": [
+    "omi_batch_held_expired_total",
+    "omi_batch_held_expired_units",
+    "omi_batch_held_expired_observed_at_seconds",
     "listen_finalization_byok_session_abandoned_last_24h",
     "listen_finalization_byok_session_abandoned_total",
     "listen_finalization_oldest_dead_letter_age_seconds",
@@ -2356,7 +2359,9 @@
     "omi_transcription_final_pass_owner_delta_ratio_sum",
     "omi_transcription_final_pass_unit_skips_total",
     "omi_transcription_final_pass_retry_terminal_total",
-    "omi_transcription_final_pass_retry_terminal_observed_at_seconds"
+    "omi_transcription_final_pass_retry_terminal_observed_at_seconds",
+    "omi_pusher_storage_pcm_inflight_bytes",
+    "omi_pusher_storage_pcm_budget_limit_bytes"
   ],
   "legacy_debt": {
     "bfobs1syncenq01": {

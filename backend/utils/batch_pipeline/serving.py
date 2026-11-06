@@ -18,6 +18,7 @@ from config.batch_pipeline import (
     projection_hold_recovery_enabled,
     serving_metrics_min_refresh_seconds,
     serving_projection_sweep_enabled,
+    serving_tick_seconds,
     projection_pump_enabled,
     projection_pump_sweep_pages,
     projection_pump_tick_seconds,
@@ -32,7 +33,8 @@ from utils.batch_pipeline.live import drain_recordings
 from utils.batch_pipeline.projection import HELD_PARTIAL_PAGE, Projector, error_type
 from utils.executors import db_executor, run_blocking, start_background_task, sync_executor
 from utils.batch_pipeline.contracts import PoolCapacity, WorkResult
-from utils.batch_pipeline.leader import SERVING_MAINTENANCE, LeaderLease
+from utils.batch_pipeline.leader import QUEUE_METRICS, SERVING_MAINTENANCE, LeaderLease
+from utils.batch_pipeline.held_dead_letter import HeldDeadLetter, ProjectionHeldDeadLetter
 from utils.batch_pipeline.merge import OrderedMerge
 from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.projection_shard_pump import TICK_SECONDS as SHARD_TICK_SECONDS, ShardPump
@@ -88,6 +90,8 @@ class Serving:
         self.recovery = recovery
         # Optional single-owner lease for periodic maintenance (see reconcile).
         self.leader = leader
+        self.held_dead_letter = HeldDeadLetter(store, metrics=metrics)
+        self.projection_held_dead_letter = ProjectionHeldDeadLetter(store, metrics=metrics)
         self.merge = OrderedMerge(store, metrics=metrics)
         # Held units change only on a recovery or operator settle: scan them
         # at a slow cadence, not every maintenance pass.
@@ -211,9 +215,8 @@ class Serving:
             # owner's chain now instead of waiting for the global cursor. The
             # wake is only a hint: on failure the generic sweep still runs.
             priority = self._reconcile_owner(owner_id, recovered)
-        # Projection and the local gauges stay per instance: projection is
-        # throughput (ordered and fenced in its own transactions) and every
-        # instance exports its own queue sample.
+        # Projection is throughput, ordered and fenced in its own transactions.
+        # Metrics elect their own queue sampler; local samplers stay per instance.
         if self.projector:
             pump = self.shard_pump
             if pump is not None and pump.engaged:
@@ -354,11 +357,25 @@ class Serving:
                 RELEASE_HELD_INTERVAL_SECONDS if projection_hold_recovery_enabled() else 900.0
             )
             try:
-                release_held()
+                release_counts = release_held()
+                if self.metrics is not None and isinstance(release_counts, dict):
+                    self.metrics.held_expired.inc(release_counts.get('expired', 0))
             except Exception as error:
                 logging.getLogger(__name__).error(
                     'event=batch_projection action=release_held outcome=retry exception_type=%s', type(error).__name__
                 )
+        try:
+            self.held_dead_letter.tick(time.time())
+        except Exception as error:
+            logging.getLogger(__name__).error(
+                'event=batch_held_dead_letter outcome=retry exception_type=%s', type(error).__name__
+            )
+        try:
+            self.projection_held_dead_letter.tick(time.time())
+        except Exception as error:
+            logging.getLogger(__name__).error(
+                'event=batch_projection action=redrive_expired outcome=retry exception_type=%s', type(error).__name__
+            )
         self.queue().recover(time.time())
         owners = set()
         for segment in self.store.due('result_ready', time.time(), 100):
@@ -386,6 +403,11 @@ def serving_for_stage(stage: str) -> Serving:
     projector = Projector(store, artifacts.load_result, fetch_audio=artifacts.fetch_audio)
     from utils.batch_pipeline.quarantine_recovery import QuarantineRecovery
 
+    metrics = _metrics()
+    # Reuse the existing lease implementation, with a separate role so a slow
+    # maintenance pass cannot strand metrics ownership. Default serving cadence
+    # is 40s (30s reservation + 20s ticks); 20s TTL hands over within 60s.
+    metrics.oldest_leader = LeaderLease(store, QUEUE_METRICS, ttl_seconds=20)
     shard_pump = None
     if projection_shards_enabled():
         shards = ProjectionShards(
@@ -399,7 +421,7 @@ def serving_for_stage(stage: str) -> Serving:
         store,
         shard_pump=shard_pump,
         recovery=QuarantineRecovery(store, artifacts),
-        metrics=_metrics(),
+        metrics=metrics,
         projector=projector,
         cleanup=cleanup_completed_artifacts,
         reap_staging=reap,
@@ -471,7 +493,7 @@ def start_serving_from_env():
                     'event=batch_serving outcome=retry exception_type=%s', type(error).__name__
                 )
             try:
-                await asyncio.wait_for(stop.wait(), timeout=20)
+                await asyncio.wait_for(stop.wait(), timeout=serving_tick_seconds())
             except asyncio.TimeoutError:
                 pass
 

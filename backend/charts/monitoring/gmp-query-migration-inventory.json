@@ -119,6 +119,46 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
+      "expression": "max(omi_batch_held_expired_units and (time() - omi_batch_held_expired_observed_at_seconds < 900)) or vector(0)",
+      "file": "alerts/batch-held-dead-letter.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_held_expired_observed_at_seconds",
+        "omi_batch_held_expired_units"
+      ],
+      "owner_title": "Retained held batch dead-letter volume",
+      "owner_uid": "omi-batch-held-expired-volume",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(increase(omi_batch_held_expired_total[30m])) or vector(0)",
+      "file": "alerts/batch-held-dead-letter.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_held_expired_total"
+      ],
+      "owner_title": "Retained held batch dead-letter volume",
+      "owner_uid": "omi-batch-held-expired-volume",
+      "panel": null,
+      "pointer": "/data/1/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "(time() - max(omi_batch_held_expired_observed_at_seconds)) or vector(1e9)",
+      "file": "alerts/batch-held-dead-letter.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_held_expired_observed_at_seconds"
+      ],
+      "owner_title": "Retained held batch dead-letter volume",
+      "owner_uid": "omi-batch-held-expired-volume",
+      "panel": null,
+      "pointer": "/data/2/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
       "expression": "((max(time() - omi_batch_pipeline_metrics_refreshed_at_seconds{namespace=\"prod-omi-backend\"}) >= bool 120) or vector(1)) + (count(count by (priority) (omi_batch_pipeline_oldest_age_seconds{namespace=\"prod-omi-backend\"} != omi_batch_pipeline_oldest_age_seconds{namespace=\"prod-omi-backend\"})) or vector(0)) + (count(count by (priority) (omi_batch_pipeline_retry_age_seconds{namespace=\"prod-omi-backend\"} != omi_batch_pipeline_retry_age_seconds{namespace=\"prod-omi-backend\"})) or vector(0))",
       "file": "alerts/batch-queue-safety.json",
       "issues": [],
@@ -1217,6 +1257,32 @@
       ],
       "owner_title": "Pusher - DB executor saturated",
       "owner_uid": "omi-pusher-db-executor-saturated",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum without (task) (omi_executor_task_queued{job=\"pusher-metrics\",executor=\"storage\"} and (time() - timestamp(omi_executor_task_queued{job=\"pusher-metrics\",executor=\"storage\"}) < 120))",
+      "file": "alerts/pusher.json",
+      "issues": [],
+      "metrics": [
+        "omi_executor_task_queued"
+      ],
+      "owner_title": "Pusher - Storage executor queue high",
+      "owner_uid": "omi-pusher-storage-queue-warning",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum without (task) (omi_executor_task_queued{job=\"pusher-metrics\",executor=\"storage\"} and (time() - timestamp(omi_executor_task_queued{job=\"pusher-metrics\",executor=\"storage\"}) < 120))",
+      "file": "alerts/pusher.json",
+      "issues": [],
+      "metrics": [
+        "omi_executor_task_queued"
+      ],
+      "owner_title": "Pusher - Storage executor queue critical",
+      "owner_uid": "omi-pusher-storage-queue-critical",
       "panel": null,
       "pointer": "/data/0/model/expr",
       "scope": "normalized-omi-consumer-source-review"
@@ -3738,7 +3804,7 @@
   ],
   "counts": {
     "explicit_bridge": 25,
-    "query_consumers": 248
+    "query_consumers": 253
   },
   "schema_version": 1,
   "source": "repository, not live Grafana export"

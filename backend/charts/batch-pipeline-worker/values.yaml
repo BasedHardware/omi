@@ -49,13 +49,14 @@ borrowedNodePools:
   # autoscaler's expendable cutoff (-10), so a Pending borrower is not ignored.
   priority: -1
 worker:
+  heldDeadLetterEnabled: true
   # Match the serving hosts; prod overrides this below the 120s guard blind window.
   servingMetricsMinRefreshSeconds: 30
   # Control-loop defaults; rollback independently with 64 / false / 2 / {}.
   controlCandidateFanout: 16
   admissionParallelCalls: true
   idlePollMaxSeconds: 10
-  firestoreReadLevers: '{"batch_privacy_memoize":100}'
+  firestoreReadLevers: '{}'
   # Fenced per-shard pulls and worker affinity; false restores legacy selection.
   shardSpreadEnabled: true
   # One shard transaction leases up to the pull batch; false leases one per transaction.
@@ -220,6 +221,7 @@ recordSealRepair:
   suspend: true
   runtimeEnabled: true
   jobsDiscovery: "on"
+  projectionDebtDurableEnabled: true
   mode: apply
   workers: 8
   rowSeconds: 270

@@ -28,6 +28,7 @@ from config.batch_pipeline import (
     projection_prefetch_depth,
     projection_hold_recovery_enabled,
     sweep_owner_chain_enabled,
+    serving_sweep_page_rows,
 )
 from database.batch_pipeline_projection import ProjectionBlocked, ProjectionReplay, ProjectionStore
 from database.batch_pipeline_projection_protocol import ProjectionGenerationAmbiguous
@@ -116,6 +117,8 @@ class Walk(NamedTuple):
     more: bool = False
     # Closed, log-safe token naming why the walk stopped (WALK_STOPS, or blocked_<token>).
     stop: str = ''
+    # Scheduling hint only: the privacy-blocked head and its observed row version.
+    blocked_head: tuple[str, object] | None = None
 
 
 def error_type(error: BaseException) -> str:
@@ -940,7 +943,13 @@ class Projector:
 
     def release_held_scan(self, limit: int | None = None) -> dict[str, int]:
         """One bounded page of held units whose record target may be restored."""
-        from database.batch_pipeline_projection_release import RELEASE_PAGE, RELEASE_TICK_SECONDS, release_scan_pass
+        from database.batch_pipeline_projection_release import (
+            RELEASE_PAGE,
+            RELEASE_TICK_SECONDS,
+            GHOST_SKIP_CLASSES,
+            GHOST_AGE_BUCKETS,
+            release_scan_pass,
+        )
 
         enabled = projection_hold_recovery_enabled()
         started = time.monotonic()
@@ -953,12 +962,16 @@ class Projector:
         )
         if counts.get('examined'):
             logger.info(
-                'event=batch_projection action=release_held outcome=summary released=%d examined=%d waiting=%d error=%d elapsed_ms=%d',
+                'event=batch_projection action=release_held outcome=summary released=%d examined=%d waiting=%d error=%d elapsed_ms=%d ghost_settled=%d classified=%d skipped_by_class=%s age_buckets=%s',
                 counts['released'],
                 counts['examined'],
                 counts['waiting'],
                 counts['error'],
                 int((time.monotonic() - started) * 1000),
+                counts['ghost_settled'],
+                counts['ghost_classified'],
+                ','.join(f'{name}:{counts[f"ghost_skipped_{name}"]}' for name in GHOST_SKIP_CLASSES),
+                ','.join(f'{name}:{counts[f"ghost_age_{name}"]}' for name in GHOST_AGE_BUCKETS),
             )
         return counts
 
@@ -1530,6 +1543,7 @@ class Projector:
         first = None
         advanced: list[str] = []
         more = False
+        blocked_head = snapshot = None
 
         def failed(error: BaseException) -> None:
             # Keep what this walk already persisted; the sweep resumes later.
@@ -1591,7 +1605,8 @@ class Projector:
                     segment_id = self.store.store.projection_successor(key, previous)
                 row = {}
                 if segment_id is not None:
-                    row = self.store.ref('results', segment_id).get().to_dict() or {}
+                    snapshot = self.store.ref('results', segment_id).get()
+                    row = snapshot.to_dict() or {}
             except Exception as error:
                 failed(error)
                 stop = 'read_error'
@@ -1640,10 +1655,12 @@ class Projector:
                 stop = 'step_deadline'
                 break
             except BatchPrivacyBlocked:
-                stop = 'privacy_blocked'
+                stop, blocked_head = 'privacy_blocked', (segment_id, getattr(snapshot, 'update_time', None))
                 break
             except ProjectionBlocked as error:
                 stop = walk_block_stop(error, projection_block_reason(error))
+                if stop.startswith('blocked_privacy_'):
+                    blocked_head = (segment_id, getattr(snapshot, 'update_time', None))
                 if not (
                     binding is not None
                     and job is not None
@@ -1709,16 +1726,17 @@ class Projector:
             stop = 'limit'
         ordered = [groups.pop(first)] if first is not None else []
         followups = list(dict.fromkeys(sid for group in ordered + list(groups.values()) for sid in group))
-        return Walk(followups, advanced, more, stop)
+        return Walk(followups, advanced, more, stop, blocked_head)
 
-    def sweep(self, limit: int = 100) -> dict[str, int]:
+    def sweep(self, limit: int | None = None) -> dict[str, int]:
         """Bounded durable-log recovery; no in-memory callback is an outbox."""
         from database.batch_pipeline_privacy import BatchPrivacyBlocked
 
         counts = {'completed': 0, 'waiting': 0, 'blocked': 0, 'error': 0}
         contention = False
         self.has_async_followups = False
-        size = max(1, min(limit, 100))
+        page_rows = serving_sweep_page_rows()
+        size = page_rows if limit is None else max(1, min(limit, page_rows))
         pending_page = projection_pending_page_enabled()
         chain = sweep_owner_chain_enabled()
         # The owner drain walks chains continuously; the sweep only discovers

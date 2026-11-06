@@ -4498,6 +4498,8 @@
     "chatAppsWaitingMessageIn": "Nosūtiet ziņu lietotnē {app}. Šis ekrāns atjaunosies, tiklīdz Omi to saņems.",
     "chatAppsCodeExpiredMessageIn": "Iegūstiet jaunu kodu un nosūtiet to no lietotnes {app}.",
     "episodeWritingNotes": "Rakstām piezīmes…",
+    "homeStepTranscribing": "Notiek transkribēšana…",
+    "homeRecordingsCount": "{count, plural, zero{{count} ierakstu} one{{count} ieraksts} other{{count} ieraksti}}",
     "episodeWritingNotesDetail": "Vispirms pabeidzam transkripciju. Varat pamest šo lapu.",
     "episodeCoversUpTo": "Līdz {time} · pilnas piezīmes beigās",
     "liveTranscribedUpTo": "Transkribēts līdz {time}",
@@ -4634,5 +4636,11 @@
     "referralRewardSecondDetail": "Kad vēl 3 draugi nopērk",
     "referralClaimShort": "Saņemt",
     "paymentDeclinedTitle": "Jūsu karte tika noraidīta",
-    "paymentDeclinedMessage": "Atjauniniet karti, lai atgūtu {plan}"
+    "paymentDeclinedMessage": "Atjauniniet karti, lai atgūtu {plan}",
+    "hasLinkedTasksLabel": "Ir saistīti uzdevumi",
+    "hasTasksFilter": "Ar uzdevumiem",
+    "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
+    "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
+    "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
 }
