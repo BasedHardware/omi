@@ -1,17 +1,6 @@
 import sys
 from unittest.mock import MagicMock, patch
 
-# Stub database.fsr_read_cache before it's imported by the module under test
-mock_fsr = MagicMock()
-# Use a lambda that catches exceptions from fetch() to match the behavior we want to test
-def side_effect(name, fetch, **kwargs):
-    try:
-        return fetch()
-    except Exception:
-        return default_desktop_update_policy()
-
-mock_fsr.serving_config.side_effect = side_effect
-sys.modules['database.fsr_read_cache'] = mock_fsr
 
 from database.desktop_update_policy import (
     DEFAULT_DESKTOP_DOWNLOAD_URL,
