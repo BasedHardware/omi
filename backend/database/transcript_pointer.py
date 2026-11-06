@@ -140,7 +140,8 @@ def resolve_pointer(uid: str, pointer: Mapping) -> list:
             value = memo.decoded[key]
         except KeyError:
             raise TranscriptPointerFetchError('Transcript preload expired before use') from None
-    memo.resolved.add(key)
+    if _client.in_transaction_body() and len(memo.resolved) < 32:
+        memo.resolved.add(key)
     if isinstance(value, Exception):
         # Cached failures must not accumulate caller tracebacks/plaintext frames.
         raise type(value)(str(value)) from None
