@@ -68,7 +68,7 @@ struct retained_boot {
     char fw[16];
     uint32_t dfu_pending;
     uint32_t persist_attempted;
-    uint32_t telemetry_blocked;
+    uint32_t telemetry_blocked; /* GUARD_* bits: set across a call that may hang */
     uint32_t total_boots;
     uint32_t telemetry_fatal;
     uint32_t total_seeded;
@@ -79,6 +79,9 @@ static volatile struct retained_boot retained __attribute__((section(".omi_retai
 #else
 static volatile struct retained_boot retained;
 #endif
+#define GUARD_TELEMETRY 1u
+#define GUARD_SD_INIT 2u
+
 _Static_assert(sizeof(retained) <= 64, "retained boot record exceeds reservation");
 _Static_assert(sizeof(retained) == 64 && offsetof(struct retained_boot, dfu_pending) == 36 &&
                    offsetof(struct retained_boot, crc) == 60,
@@ -130,9 +133,10 @@ static void retained_seal(void)
 static bool retained_valid(void)
 {
     return retained.magic == BOOT_MAGIC && retained.count <= BOOT_COUNT_MAX && retained.latch_reason <= 3 &&
-           retained.fatal <= 1 && retained.telemetry_blocked <= 1 && retained.telemetry_fatal <= 1 &&
-           retained.total_seeded <= 1 && retained.dfu_pending <= DFU_RETRY_ONE && retained.persist_attempted <= 1 &&
-           memcmp((const void *) retained.fw, FW, sizeof(FW)) == 0 && retained.crc == retained_crc();
+           retained.fatal <= 1 && retained.telemetry_blocked <= (GUARD_TELEMETRY | GUARD_SD_INIT) &&
+           retained.telemetry_fatal <= 1 && retained.total_seeded <= 1 && retained.dfu_pending <= DFU_RETRY_ONE &&
+           retained.persist_attempted <= 1 && memcmp((const void *) retained.fw, FW, sizeof(FW)) == 0 &&
+           retained.crc == retained_crc();
 }
 
 static void new_trial(void)
@@ -339,12 +343,12 @@ void safe_mode_persist(void)
     /* Preserve the mandatory no-backend boot between DFU resolve attempts.
      * Durable SAFE gets its existing attempt before optional telemetry IO.
      */
-    if (active && !retained.telemetry_blocked && retained.dfu_pending == DFU_IDLE) {
-        retained.telemetry_blocked = 1;
+    if (active && !(retained.telemetry_blocked & GUARD_TELEMETRY) && retained.dfu_pending == DFU_IDLE) {
+        retained.telemetry_blocked |= GUARD_TELEMETRY;
         retained_seal();
         omi_boot_telemetry_open();
         /* Returned backend errors are nonfatal; only a hang keeps the guard. */
-        retained.telemetry_blocked = 0;
+        retained.telemetry_blocked &= ~GUARD_TELEMETRY;
         retained_seal();
     }
     k_mutex_unlock(&bootstate_lock);
@@ -550,7 +554,25 @@ static bool secondary_readable(void)
 
 void safe_mode_run(void)
 {
-    safe_mode_sd_bus_init();
+    /* A hung SD init is cut by the watchdog; skip it on later SAFE boots so the
+     * same hang cannot keep recovery from advertising. NOR reads may then be
+     * noisy, but MCUboot still validates any staged image.
+     */
+    bool guarded = retained_valid();
+    if (!guarded || !(retained.telemetry_blocked & GUARD_SD_INIT)) {
+        if (guarded) {
+            retained.telemetry_blocked |= GUARD_SD_INIT;
+            retained_seal();
+        }
+        safe_mode_sd_bus_init();
+        if (guarded) {
+            retained.telemetry_blocked &= ~GUARD_SD_INIT;
+            retained_seal();
+        }
+    } else {
+        omi_boot_telemetry_sd_failure();
+        printk("Safe SD init skipped after an earlier hang\n");
+    }
     /* Keep the SD rail as the boot hog and MCUboot leave it (ON): with it off the
      * shared SPI3 bus times out and the DFU secondary slot in the external NOR is
      * unreachable, so SAFE could never stage an image. NOR shares SPI3, so never

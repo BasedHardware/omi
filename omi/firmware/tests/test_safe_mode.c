@@ -545,7 +545,7 @@ int main(void)
     telemetry_hang = false;
     boot(NRF_RESET_RESETREAS_DOG0_MASK, true);
     assert(active && telemetry_opens == 1 && disk.state == STATE_SAFE);
-    retained.telemetry_blocked = 2;
+    retained.telemetry_blocked = 4;
     retained_seal();
     assert(!retained_valid());
     new_trial();
