@@ -2189,3 +2189,34 @@ def test_held_dead_letter_volume_is_agent_only_and_uses_reasoned_stock_plus_uniq
         assert 'projection_state=quarantine_held with held_expired_reason=held_expired' in rule['annotations']['scope']
         assert 'restorable' in rule['annotations']['safe_next_action']
         assert 'Never delete' in rule['annotations']['safe_next_action']
+
+
+def test_pusher_storage_queue_and_memory_alerts_observe_fresh_current_state():
+    expected = {
+        'omi-pusher-storage-queue-warning': (256, '10m', 'agent'),
+        'omi-pusher-storage-queue-critical': (512, '10m', 'page'),
+        'omi-pusher-memory-working-set-high': (0.75, '15m', 'page'),
+    }
+    for export_name, rules in _all_rule_exports().items():
+        for uid, (threshold, pending, tier) in expected.items():
+            rule = rules[uid]
+            assert rule['for'] == pending, export_name
+            assert rule['labels']['tier'] == tier
+            assert rule['labels']['audience'] == ('agent' if tier == 'agent' else 'human')
+            assert rule['labels']['owner'] == 'omi-lifecycle'
+            assert rule['noDataState'] == 'OK'
+            assert rule['data'][2]['model']['conditions'][0]['evaluator'] == {'params': [threshold], 'type': 'gt'}
+            assert {'evaluated_bad', 'evaluated_good', 'threshold', 'runbook'} <= rule['annotations'].keys()
+            assert rule['annotations']['runbook'] == 'backend/docs/runbooks/audio-durable-outbox.md'
+            expr = rule['data'][0]['model']['expr']
+            assert 'rate(' not in expr and 'increase(' not in expr
+            assert 'time() - timestamp(' in expr and '< 120' in expr
+            if threshold > 1:
+                selector = 'omi_executor_task_queued{job="pusher-metrics",executor="storage"}'
+                assert expr == f'sum without (task) ({selector} and (time() - timestamp({selector}) < 120))'
+            else:
+                assert 'container_memory_working_set_bytes' in expr
+                assert 'namespace="prod-omi-backend",container!="",image!=""' in expr
+                assert 'workload="prod-omi-pusher",workload_type=~"deployment"' in expr
+                assert expr.count('timestamp(') == 2  # memory AND workload-owner freshness
+                assert expr.endswith('/ 3758096384')  # chart limit: 3.5 GiB

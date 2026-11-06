@@ -1262,6 +1262,32 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
+      "expression": "sum without (task) (omi_executor_task_queued{job=\"pusher-metrics\",executor=\"storage\"} and (time() - timestamp(omi_executor_task_queued{job=\"pusher-metrics\",executor=\"storage\"}) < 120))",
+      "file": "alerts/pusher.json",
+      "issues": [],
+      "metrics": [
+        "omi_executor_task_queued"
+      ],
+      "owner_title": "Pusher - Storage executor queue high",
+      "owner_uid": "omi-pusher-storage-queue-warning",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum without (task) (omi_executor_task_queued{job=\"pusher-metrics\",executor=\"storage\"} and (time() - timestamp(omi_executor_task_queued{job=\"pusher-metrics\",executor=\"storage\"}) < 120))",
+      "file": "alerts/pusher.json",
+      "issues": [],
+      "metrics": [
+        "omi_executor_task_queued"
+      ],
+      "owner_title": "Pusher - Storage executor queue critical",
+      "owner_uid": "omi-pusher-storage-queue-critical",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
       "expression": "sum(increase(omi_journey_terminal_total{journey=\"chat_response\",outcome=~\"success|failure\"}[30m]))",
       "file": "alerts/resilience.json",
       "issues": [],
@@ -3778,7 +3804,7 @@
   ],
   "counts": {
     "explicit_bridge": 25,
-    "query_consumers": 251
+    "query_consumers": 253
   },
   "schema_version": 1,
   "source": "repository, not live Grafana export"

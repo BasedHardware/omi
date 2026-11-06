@@ -119,6 +119,27 @@ ACK. Socket future tracking shields queued and running storage work from caller
 cancellation and waits for actual settlement before abandonment. The closed-worker
 and coordinator count caps do not establish a PCM byte bound or pod RSS bound.
 
+Pusher exposes `omi_pusher_storage_pcm_inflight_bytes` for PCM payloads submitted
+through the custody window's `commit_pcm_window` await (queued plus running).
+The gauge is released in `finally`, including exceptions and caller cancellation;
+a cancelled await can leave an already-running storage thread finishing its write,
+so this is not a complete retained-memory or RSS bound.
+`omi_pusher_storage_pcm_budget_limit_bytes` is always **0: no budget enforced**.
+Neither metric changes admission, receipts, ACKs or socket closes.
+
+Chart alerts `omi-pusher-storage-queue-warning` (>256 queued storage tasks per
+pusher target for 10m, agent) and `omi-pusher-storage-queue-critical` (>512 for
+10m, page) sum all task kinds, including `other`. These are 2x/4x the 128 storage
+workers. `omi-pusher-memory-working-set-high` pages above 75% of the 3.5 GiB
+limit (2.625 GiB) for 15m, using the pusher dashboard workload selectors.
+Each excludes samples older than 120s before aggregation; absent data is not
+pressure. When they fire, compare queued/active storage tasks, the in-flight
+PCM gauge, pod working set and GCS latency/errors; attribute the pressure to
+the running release and escalate to the lifecycle lead for an approved rollback.
+Preserve client WAL and custody objects. There is no byte-budget refusal alert
+or admission control yet. These chart definitions require normal monitoring
+provisioning before they become live.
+
 Rollback uses abandonment `off` and closed cap `32`. Coordinator cap `0` also
 refuses all new abandonment coordination. Ship by pusher train with one canary
 at 64 for 15 minutes: socket kills must be <=15/15min and memory p99 must stay
