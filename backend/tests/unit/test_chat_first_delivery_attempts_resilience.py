@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 import pytest
 from google.api_core.exceptions import GoogleAPICallError
 
@@ -128,3 +128,23 @@ def test_repair_transient_dead_letters_catches_general_exception():
         firestore_client=mock_client,
     )
     assert res is True
+
+
+def test_resolve_client_does_not_swallow_exceptions():
+    with patch("database._client.get_firestore_client", side_effect=RuntimeError("Client init error")):
+        with patch("database._client.db", None):
+            with pytest.raises(RuntimeError, match="Client init error"):
+                _resolve_client(None)
+
+
+def test_repair_transient_dead_letters_handles_client_failure():
+    with patch("database._client.get_firestore_client", side_effect=RuntimeError("Client init error")):
+        with patch("database._client.db", None):
+            res = repair_transient_dead_letters(
+                "user_123",
+                account_generation=1,
+                limit=10,
+                now=datetime.now(timezone.utc),
+            )
+            assert res is True
+
