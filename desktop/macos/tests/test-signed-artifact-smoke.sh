@@ -175,8 +175,10 @@ PLIST
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict><key>PROJECT_ID</key><string>based-hardware</string></dict></plist>
 PLIST
-  local pinned_node_version
-  pinned_node_version="$(sed -n 's/^NODE_VERSION="\${OMI_AGENT_NODE_VERSION:-\(v[0-9.]*\)}"$/\1/p' "$MACOS_DIR/scripts/prepare-agent-runtime.sh" | head -1)"
+  local pinned_node_version="${OMI_AGENT_NODE_VERSION:-}"
+  if [[ -z "$pinned_node_version" ]]; then
+    pinned_node_version="$(sed -n 's/^NODE_VERSION="\${OMI_AGENT_NODE_VERSION:-\(v[0-9.]*\)}"$/\1/p' "$MACOS_DIR/scripts/prepare-agent-runtime.sh" | head -1)"
+  fi
   printf '#!/usr/bin/env bash\nexit 0\n' > "$app/Contents/MacOS/Omi Computer"
   printf '#!/usr/bin/env bash\nprintf "%s\\n" "%s"\n' "$pinned_node_version" > "$app/Contents/Resources/Omi Computer_Omi Computer.bundle/Contents/Resources/node"
   printf '#!/usr/bin/env bash\nexit 0\n' > "$app/Contents/Resources/Omi Computer_Omi Computer.bundle/Contents/Resources/ffmpeg"

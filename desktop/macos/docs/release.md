@@ -69,7 +69,7 @@ Stable is manual: Codemagic never promotes Stable. `desktop_promote_prod.yml` re
 `desktop/macos/scripts/prepare-agent-runtime.sh` pins the universal macOS Node.js 22 LTS binary bundled at `Contents/Resources/Omi Computer_Omi Computer.bundle/Contents/Resources/node`. Check [Node.js Security Releases](https://nodejs.org/en/security/) before cutting a desktop release or immediately after an upstream Node.js 22 LTS security advisory lands:
 
 1. Fetch `https://nodejs.org/dist/v22.x.y/SHASUMS256.txt` for the latest patched Node.js 22 LTS release and update `NODE_VERSION`, `NODE_DARWIN_ARM64_SHA256` (`node-v22.x.y-darwin-arm64.tar.gz`), and `NODE_DARWIN_X64_SHA256` (`node-v22.x.y-darwin-x64.tar.gz`) in `desktop/macos/scripts/prepare-agent-runtime.sh`.
-2. Keep `NODE_MIN_VERSION` explicit as the minimum runtime compatibility floor required by maintained `pi` packages (`--strip-types` and `node:sqlite`), separate from the pinned `NODE_VERSION` security baseline.
+2. Keep `NODE_MIN_VERSION` explicit as the minimum runtime compatibility floor required by maintained `pi` packages (`--experimental-strip-types` and `node:sqlite`), separate from the pinned `NODE_VERSION` security baseline.
 3. Verify that `scripts/smoke-signed-desktop-artifact.sh` checks both the exact bundled `node --version` and its universal `arm64`/`x86_64` architectures, and that `python3 .github/scripts/desktop-changelog.py latest-release --format markdown` publishes `Bundled Node.js runtime: v22.x.y` in the candidate release notes.
 
 ## Backend deployment workflows

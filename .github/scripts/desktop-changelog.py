@@ -180,9 +180,7 @@ def with_bundled_runtime_note(changes: list[str], runtime_version: str | None = 
     if not version:
         return list(changes)
     note = f"Bundled Node.js runtime: {version}"
-    if any(entry == note or entry.startswith("Bundled Node.js runtime:") for entry in changes):
-        return list(changes)
-    return [*changes, note]
+    return [entry for entry in changes if not entry.startswith("Bundled Node.js runtime:")] + [note]
 
 
 def latest_release_changes(runtime_version: str | None = None) -> list[str]:
