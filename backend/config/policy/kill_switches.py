@@ -8,6 +8,7 @@ import logging
 import os
 
 KILL_SWITCHES = {
+    'CONVERSATION_TERMINAL_FAMILY_MODE': True,
     'BATCH_HELD_DEAD_LETTER_ENABLED': True,
     'BATCH_PIPELINE_LEADER_LEASE_ENABLED': True,
     'BATCH_PIPELINE_RECOVERY_TASKS_ENABLED': True,
@@ -49,6 +50,8 @@ def kill_switch(name: str, *, policy_id: str = 'control', flags=None) -> bool:
         'PROJECTION_PRIVACY_REFUSAL_RESUME',
     }:
         enabled = value != 'off'
+    elif name == 'CONVERSATION_TERMINAL_FAMILY_MODE':
+        enabled = value not in {'false', '0', 'off', 'no'}
     elif name == 'PARAKEET_WINDOW_STRANDED_DRIFT_SETTLE_ENABLED':
         enabled = value not in {'false', '0', 'off'}
     else:

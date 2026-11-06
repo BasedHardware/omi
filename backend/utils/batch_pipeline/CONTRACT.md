@@ -137,9 +137,15 @@ each table entry names the function after the alias:
 
 `none` means no such current mechanism, not an exemption from future work.
 Terminal rows have no normal automatic exit. Re-drive is a fenced recovery,
-never proof of transcript publication. `terminal_family` is **PLANNED phase 2
-vocabulary**, not a persisted field or an implemented classification; no table
-row below implies that it exists today.
+never proof of transcript publication. Phase 2a persists backend-only
+`terminal_family=success` and `terminal_family_at` through
+`database/conversations.py:claim_conversation_status_in_txn` for the status-claim
+wrapper and processor persist, under `CONVERSATION_TERMINAL_FAMILY_MODE` (on by
+default). Processor content and status commit together; a stored failure family
+or `finalization_status=dead_letter` refuses success while still merging content.
+Legacy rows may lack the classifier. Other writer-family routing remains
+**PLANNED phase 2b**; no API model, receipt, backfill, custody or drain change.
+Off restores legacy writes and leaves classifier fields inert.
 
 ### Batch job
 
@@ -212,7 +218,7 @@ archive/retained-tail evidence and the privacy transaction.
 | `conversation:in_progress` | `C:create_in_progress_conversation` | `C:request_finalization`, stale-content reconciler | No deadline for every capture | none | none | No held-specific switch | Keep capture custody separate |
 | `conversation:processing` | `C:admit_processing`, `C:create_processing_conversation` | `C:complete`, `C:fail_and_discard_processing`; fenced F terminal writers | Processing lease is not a universal dwell deadline | `listen_finalization_oldest_nonterminal_age_seconds` (job proxy) | `omi-capture-oldest-nonterminal` (agent) | Finalization switches above | Keep current generation and honest terminal outcome |
 | `conversation:merging` | `C:begin_merge` | `C:complete`, finalization reconciler | none | none | none | No held-specific switch | Keep merge lineage |
-| `conversation:completed` | `C:complete`, `F:_complete_server_batch_capture_txn`, fenced F terminal writers | Terminal status; late batch results can still arrive | none | none | none | No held-specific switch | Completed is not proof of closed audio, result publication or successful enrichment |
+| `conversation:completed` | `C:complete`, `database/conversations.py:persist_processing_result_with_lifecycle`, `F:_complete_server_batch_capture_txn`, fenced F terminal writers | Terminal status; late batch results can still arrive | none | none | none | `CONVERSATION_TERMINAL_FAMILY_MODE` for claim/persist only | Off restores legacy merge; completed is not proof of closed audio, result publication or successful enrichment. Phase 2a claim/persist stamp success; failure-marked late persist keeps status/family |
 | `conversation:failed` | `C:fail_and_discard_processing` | Terminal status | none | none | none | No held-specific switch | Retain failure/custody evidence |
 
 The read-only `conversation_phase` vocabulary (`capturing`, `sealed`,

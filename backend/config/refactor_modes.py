@@ -90,6 +90,8 @@ def mode(name: str, default: Mode = 'shadow', *, environ: Mapping[str, str] | No
     raw = (os.environ if environ is None else environ).get(name, '').strip().lower()
     if not raw:
         return default
+    if name == 'CONVERSATION_TERMINAL_FAMILY_MODE' and raw == 'on':
+        return 'serve'
     if raw in _MODES:
         return raw  # type: ignore[return-value]
     _warn_once(name, raw)

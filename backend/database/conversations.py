@@ -32,6 +32,8 @@ from database.account_deletion_policy import account_deletion_marker_blocks_acce
 from google.api_core.exceptions import AlreadyExists, Conflict, FailedPrecondition, NotFound
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
+from google.cloud.firestore_v1.field_path import FieldPath
+from prometheus_client import Counter
 import utils.other.hume as hume
 from models.audio_file import AudioFile
 from database.audio_file_projection import finalize_audio_file_group as _finalize_audio_file_group
@@ -1289,6 +1291,8 @@ def persist_processing_result_with_lifecycle(
     Deletion and stale sync transcript revisions are refused. Lifecycle state is not:
     processors re-derive their verdict from current content, so earlier discard or
     status bookkeeping must not strand rows a later sync filled with speech.
+    With terminal-family serving, content still merges over a terminal failure,
+    but that failure's status and classifier cannot become processor success.
 
     ``on_first_completion`` runs after a successful commit that transitioned the
     existing row onto ``completed``. It must not raise; the persist outcome is
@@ -1311,10 +1315,13 @@ def persist_processing_result_with_lifecycle(
     delivery_outcome = None
     summary_changed = False
     notes_refresh_state_write = None
+    terminal_refusal_family = None
+    family_enabled = _terminal_family_serving(uid)
 
     @firestore.transactional
     def _persist(transaction) -> bool:
-        nonlocal stale_sync_revision, first_completed, summary_receipt, summary_changed, notes_refresh_state_write, delivery_outcome
+        nonlocal stale_sync_revision, first_completed, summary_receipt, summary_changed, notes_refresh_state_write, delivery_outcome, terminal_refusal_family
+        terminal_refusal_family = None
         summary_changed = False
         summary_receipt = None
         delivery_outcome = None
@@ -1476,12 +1483,40 @@ def persist_processing_result_with_lifecycle(
         filter_processing_write(transaction, user_ref, write_data)
         guard_match_score_size(write_data, existing, getattr(conversation_ref, 'path', None))
 
+        if family_enabled:
+            requested_status = write_data.pop('status', None)
+            # Processor snapshots never own the terminal classifier, even when
+            # they were taken before another writer marked the row as failed.
+            write_data.pop('terminal_family', None)
+            write_data.pop('terminal_family_at', None)
+            if requested_status == ConversationStatus.completed:
+                family = existing.get('terminal_family')
+                if family in TERMINAL_FAILURE_FAMILIES or existing.get('finalization_status') == 'dead_letter':
+                    terminal_refusal_family = family if family in TERMINAL_FAILURE_FAMILIES else 'dead_letter'
+                    # Keep the legacy marker too if a stale payload carries it.
+                    write_data.pop('finalization_status', None)
+                else:
+                    updates = claim_conversation_status_in_txn(
+                        existing,
+                        expected_status=existing.get('status'),
+                        claimed_status=ConversationStatus.completed.value,
+                        extra_updates=write_data,
+                        allow_discarded=True,
+                        terminal_family='success',
+                        terminal_family_at=datetime.now(timezone.utc),
+                    )
+                    if updates is not None:
+                        write_data.update(updates)
+
         summary_receipt = summary_delivery.merge_result(existing, write_data, uid)
         delivery_outcome = summary_terminal_outcome(existing, write_data)
         summary_changed = processing_backlog.stage_transition(
             transaction, uid, conversation_data['id'], existing, write_data, firestore_client=db
         )
-        transaction.set(conversation_ref, write_data, merge=True)
+        if family_enabled:
+            transaction.update(conversation_ref, _processing_result_update_fields(write_data))
+        else:
+            transaction.set(conversation_ref, write_data, merge=True)
         if notes_refresh_state_write is not None:
             state_document, state_update = notes_refresh_state_write
             transaction.set(state_document, state_update)
@@ -1494,6 +1529,8 @@ def persist_processing_result_with_lifecycle(
         return True
 
     persisted = run_transactional(db, _persist)
+    if persisted and terminal_refusal_family is not None:
+        TERMINAL_CLAIM_REFUSALS.labels(family=terminal_refusal_family).inc()
     stop_quiet_check_for_conversation(uid, conversation_data['id'], firestore_client=db)
     summary_delivery.emit_result(uid, summary_changed, summary_receipt, delivery_outcome, _drop_summary_memo, persisted)
     if persisted:
@@ -2838,6 +2875,85 @@ def transition_conversation_status(uid: str, conversation_id: str, status: str):
     invalidate_people_stats_cache(uid)
 
 
+# Backend-only conversation classification; job/API terminal_outcome is separate.
+TERMINAL_FAILURE_FAMILIES = frozenset({'dead_letter', 'byok_abandoned', 'oversized', 'orphan_swept', 'deferred_retry'})
+TERMINAL_CLAIM_REFUSALS = Counter(
+    'omi_conversation_terminal_claim_refusals_total',
+    'Committed processor content merges whose success claim lost to a failure marker',
+    ['family'],
+)
+
+
+def _terminal_family_serving(uid: str) -> bool:
+    # The on|off operator surface maps on to the shared serve mode. The shared
+    # parser retains its cohort support for a later ramp without changing defaults.
+    return serving_for('CONVERSATION_TERMINAL_FAMILY_MODE', uid, default='serve')
+
+
+def _conversation_claim_matches(current, expected_status, expected_fields=None, *, allow_discarded=False):
+    if (current.get('discarded') and not allow_discarded) or current.get('status') != expected_status:
+        return False
+    return not any(
+        (bool(current.get(k)) if isinstance(v, bool) else current.get(k)) != v
+        for k, v in (expected_fields or {}).items()
+    )
+
+
+def claim_conversation_status_in_txn(
+    current: Mapping[str, Any],
+    *,
+    expected_status: str | None,
+    claimed_status: str,
+    extra_updates: Mapping[str, Any] | None = None,
+    expected_fields: Mapping[str, Any] | None = None,
+    allow_discarded: bool = False,
+    terminal_family: str | None = None,
+    terminal_family_at: datetime | None = None,
+) -> dict | None:
+    """Pure claim decision for a snapshot read by the caller's transaction.
+
+    No reads, writes, metrics or hooks. The caller binds client projections to
+    this snapshot before passing extra_updates, restores any quiet-check debt,
+    then writes the returned patch. None is CAS refusal. A supplied timestamp
+    keeps clock reads outside the core as well.
+    """
+    if not _conversation_claim_matches(current, expected_status, expected_fields, allow_discarded=allow_discarded):
+        return None
+    updates = {'status': claimed_status}
+    if extra_updates:
+        updates.update(extra_updates)
+    if claimed_status == ConversationStatus.completed:
+        from utils.conversations.terminal_relevance import terminal_decision
+
+        updates['relevance_decision'] = terminal_decision({**current, **updates}, path='lifecycle_terminal')
+        if terminal_family is not None:
+            if terminal_family_at is None:
+                raise ValueError('terminal family requires its claim timestamp')
+            updates['terminal_family'] = terminal_family
+            updates['terminal_family_at'] = terminal_family_at
+    return updates
+
+
+def _processing_result_update_fields(data: Mapping[str, Any]) -> dict:
+    """Preserve set(merge=True)'s recursive leaf mask in one update of an existing row.
+
+    Empty maps replace that map; arrays and scalars are leaves. FieldPath quotes
+    literal dotted/backtick keys rather than treating them as update paths.
+    """
+    fields = {}
+
+    def visit(value, path):
+        if isinstance(value, dict) and value:
+            for key, child in value.items():
+                visit(child, (*path, key))
+        else:
+            fields[FieldPath(*path).to_api_repr()] = value
+
+    for key, value in data.items():
+        visit(value, (key,))
+    return fields
+
+
 def claim_conversation_status(
     uid: str,
     conversation_id: str,
@@ -2862,35 +2978,43 @@ def claim_conversation_status(
         if not snapshot.exists:
             raise NotFound(f'Conversation {conversation_id} not found')
         current = snapshot.to_dict() or {}
-        if (current.get('discarded') and not allow_discarded) or current.get('status') != expected_status.value:
-            return False
-        if any(
-            (bool(current.get(k)) if isinstance(v, bool) else current.get(k)) != v
-            for k, v in (expected_fields or {}).items()
+        if not _conversation_claim_matches(
+            current, expected_status.value, expected_fields, allow_discarded=allow_discarded
         ):
             return False
-        updates = {'status': claimed_status.value}
+        bound_updates = None
         if extra_updates:
-            # Digest check against THIS snapshot, not a route-level read.
-            # A T1-validated projection must not land on a T2 transcript.
+            # Digest check against THIS snapshot, after the CAS guards and before
+            # any quiet-check write. Correction reads cannot follow txn writes.
             corrections = None
             if current.get('has_transcript_corrections'):
                 from utils.agent_capabilities.transcripts import load_entries
 
                 corrections = load_entries(uid, conversation_id, firestore_client=db, transaction=transaction)
-            updates.update(
-                extra_updates_with_bound_client_processing(
-                    uid, current, extra_updates, transcript_corrections=corrections
-                )
+            bound_updates = extra_updates_with_bound_client_processing(
+                uid, current, extra_updates, transcript_corrections=corrections
             )
+        family_enabled = _terminal_family_serving(uid)
+        updates = claim_conversation_status_in_txn(
+            current,
+            expected_status=expected_status.value,
+            claimed_status=claimed_status.value,
+            extra_updates=bound_updates,
+            expected_fields=expected_fields,
+            allow_discarded=allow_discarded,
+            terminal_family='success' if family_enabled else None,
+            terminal_family_at=datetime.now(timezone.utc) if family_enabled else None,
+        )
+        if updates is None:
+            return False
         if expected_status == ConversationStatus.processing and claimed_status == ConversationStatus.in_progress:
             restore_quiet_check_in_transaction(transaction, db, uid, conversation_id, current | updates)
         if claimed_status == ConversationStatus.completed:
             from utils.conversations.terminal_relevance import stamp_terminal_decision
 
-            result = {**current, **updates}
+            # Preserve the existing relevance metric outside the pure core.
+            result = {**current, 'status': claimed_status.value, **(bound_updates or {})}
             stamp_terminal_decision(result, path='lifecycle_terminal')
-            updates['relevance_decision'] = result['relevance_decision']
         transaction.update(conversation_ref, updates)
         return True
 

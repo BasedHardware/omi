@@ -339,7 +339,14 @@ STATES = (
             alert=Alert('omi-capture-oldest-nonterminal', 'agent'),
         ),
         row('conversation', 'merging', ('status',), exit=FINALIZER),
-        row('conversation', 'completed', ('status',), terminal=True, owner='utils/conversations/lifecycle.py'),
+        row(
+            'conversation',
+            'completed',
+            ('status', 'terminal_family', 'terminal_family_at'),
+            terminal=True,
+            owner='utils/conversations/lifecycle.py',
+            note='Phase 2a success classifier in claim/persist only; legacy and other terminal writers may lack it',
+        ),
         row(
             'conversation',
             'failed',
