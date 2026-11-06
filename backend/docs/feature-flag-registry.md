@@ -1,4 +1,4 @@
-<!-- feature-flag-registry as-of: 2026-11-05 -->
+<!-- feature-flag-registry as-of: 2026-11-06 -->
 
 # Feature-flag authority registry
 
@@ -108,7 +108,7 @@ entries are exempt: they are queued for removal, not running.
 | key | terminal | owner | prereg | review_by |
 | --- | --- | --- | --- | --- |
 | `DAY3_REENGAGEMENT_EMAIL_ENABLED` | undecided | dazheng | [backend/docs/experiments/EXP-001-day3-reengagement.md](../../backend/docs/experiments/EXP-001-day3-reengagement.md) | 2026-11-07 |
-| `MEETING_NOTES_EPISODE_CLAIMS_ENABLED` | undecided | dazheng | [backend/utils/conversations/EPISODE_EVIDENCE.md](../../backend/utils/conversations/EPISODE_EVIDENCE.md) | 2026-11-05 |
+| `MEETING_NOTES_EPISODE_CLAIMS_ENABLED` | undecided | dazheng | [backend/utils/conversations/EPISODE_EVIDENCE.md](../../backend/utils/conversations/EPISODE_EVIDENCE.md) | 2026-11-05 OVERDUE |
 | `onboarding-variant` | undecided | nik | [product/experiments/onboarding-variant.md](../../product/experiments/onboarding-variant.md) | 2026-11-13 |
 | `paywall-variant` | undecided | nik | [product/experiments/paywall-variant.md](../../product/experiments/paywall-variant.md) | 2026-11-12 |
 
@@ -165,12 +165,20 @@ exception is recorded for David.
 - `LIVE_CAPTURE_WINDOW_RETENTION` — review_by 2026-11-03 (dazheng)
 - `LIVE_CAPTURE_WINDOW_STRICT_PROJECTION` — review_by 2026-11-03 (dazheng)
 - `LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS` — review_by 2026-11-04 (dazheng)
+- `MEETING_NOTES_EPISODE_C6_TIMEOUT_SECONDS` — review_by 2026-11-05 (dazheng)
+- `MEETING_NOTES_EPISODE_CLAIMS_ENABLED` — review_by 2026-11-05 (dazheng)
+- `MEETING_NOTES_EPISODE_TIERED_ENABLED` — review_by 2026-11-05 (dazheng)
+- `MEETING_NOTES_EPISODE_TIER_MIN_SOURCE_KINDS` — review_by 2026-11-05 (dazheng)
+- `MEETING_NOTES_EPISODE_TIER_MIN_WORDS` — review_by 2026-11-05 (dazheng)
+- `MEETING_NOTES_EPISODE_WRITER_TIMEOUT_SECONDS` — review_by 2026-11-05 (dazheng)
+- `OMI_SHAPED_AGENT_MODE` — review_by 2026-11-05 (dazheng)
 - `PARAKEET_EXPLICIT_CUDA_GRAPHS` — review_by 2026-11-04 (dazheng)
 - `PARAKEET_PACKING_ENABLED` — review_by 2026-11-04 (dazheng)
 - `PARAKEET_WINDOW_DIARIZATION` — review_by 2026-11-04 (dazheng)
 - `SERVER_BATCH_ONLY_VISIBLE_RESTORE_PERCENT` — review_by 2026-11-03 (dazheng)
 - `SONIOX_CAPTURE_AXIS_DIAGNOSTICS` — review_by 2026-11-04 (dazheng)
 - `SONIOX_ELAPSED_AXIS` — review_by 2026-11-04 (dazheng)
+- `SONIOX_ORDERED_FINALIZE` — review_by 2026-11-05 (dazheng)
 - `SONIOX_WIRE_LEDGER` — review_by 2026-11-04 (dazheng)
 - `SPEAKER_MATCH_SCORES_ENABLED` — review_by 2026-11-04 (dazheng)
 - `STT_FAILOVER_RECOVERY_ENABLED` — review_by 2026-11-04 (backend)
@@ -198,6 +206,7 @@ exception is recorded for David.
 - `TRANSCRIPTION_SHADOW_ENABLED` — review_by 2026-11-04 (dazheng)
 - `TRANSCRIPTION_SHADOW_PERCENT` — review_by 2026-11-04 (dazheng)
 - `TRANSCRIPTION_SHADOW_UID_ALLOWLIST` — review_by 2026-11-04 (dazheng)
+- `onboarding-setup-rating-prompt` — review_by 2026-11-05 (nik)
 - `proactivity_v2` — review_by 2026-11-03 (dazheng)
 - `summary-generation-v2` — review_by 2026-11-04 (dazheng)
 
@@ -303,6 +312,8 @@ and an explicit empty literal renders as `''`.
 | `DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED` | Default-off demand processing control: surface reporting enabled | backend, macos, mobile | env | closed | {value: 'false', category: rollout} | false (backend-listen (chart), pusher (chart)); {value: 'false', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen, gke/pusher, job/notifications-job) | false (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, pusher (chart)); {value: 'false', category: rollout} (desktop-backend, gke/backend-listen, gke/pusher, job/notifications-job) | — | graduate | on | 2026-11-15 | dazheng |
 | `DEMAND_PROCESSING_TOOL_ENABLED` | Default-off demand processing control: tool enabled | backend | env | closed | {value: 'false', category: rollout} | false (backend-listen (chart), pusher (chart)); {value: 'false', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen, gke/pusher, job/notifications-job) | false (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, pusher (chart)); {value: 'false', category: rollout} (desktop-backend, gke/backend-listen, gke/pusher, job/notifications-job) | — | graduate | on | 2026-11-15 | dazheng |
 | `DEMAND_PROCESSING_UID_ALLOWLIST` | Default-off demand processing control: uid allowlist | backend | env | closed | {value: '', category: rollout} | '' (backend-listen (chart), pusher (chart)); {value: '', category: rollout} (gke/backend-listen, gke/pusher) | '' (backend-listen (chart), pusher (chart)); {value: '', category: rollout} (gke/backend-listen, gke/pusher) | — | kill | off | 2026-11-15 | dazheng |
+| `DIRECTORY_ROUTING_MODE` | Default off; sticky new-owner enrollment and per-request resolution; off is zero IO | backend | env | closed | — | — | — | — | pending | undecided | 2026-12-06 | dazheng |
+| `DIRECTORY_ROUTING_NEW_OWNER_PERCENT` | Default 0; env fallback for new-owner-cell1 runtime percent; enrollment only | backend | env | closed | — | — | — | — | pending | undecided | 2026-12-06 | dazheng |
 | `DREAM_AGENT_PAID_PERCENT` | Stable per-owner percent of paid owners eligible under ELIGIBILITY=paid; unset admits all paid owners, malformed admits none; listed owners always stay in | backend | env | closed | — | — | 100 | — | kill | off | 2026-11-04 | dazheng |
 | `DREAM_HISTORY_COMPACT_MODE` | Replace older large Dream tool results with a stub once the main prompt is large (seed and latest results kept): off/shadow/serve; default shadow measures elidable size only | backend | env | open | — | — | — | — | pending | undecided | 2026-11-04 | dazheng |
 | `DREAM_HISTORY_COMPACT_MODE_SERVE_PERCENT` | History-compaction serve cohort percentage under shadow mode; default 0 | backend | env | open | — | — | — | — | pending | undecided | 2026-11-04 | dazheng |
@@ -830,6 +841,7 @@ and an explicit empty literal renders as `''`.
 | `BATCH_VENDOR_OVERFLOW_MIN_READY_UNITS` | Default 300; admissible fresh units that must be waiting in the GPU ring before an old head counts as saturation for vendor overflow and the legacy capacity fallback; saturation ends below half of it (1-100000, else default) | backend | env | closed | — | — | — | — | keep | keep | — | two-lane lead |
 | `BATCH_VENDOR_ROUTE_TABLE` | JSON route table (vendor_route_contracts.RouteTable schema 1): per-route prices, caps, failover-only flags, GPU floor percent and per-language-class rows; unset serves today's routing | backend | env | closed | — | — | {value: '{"schema_version":1,"table_version":"en-overflow-1104b","selection":"ordered","gpu_floor_percent":0.0,"routes":{"gpu":{"price_usd_per_audio_hour":null,"daily_audio_hours_cap":null,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"},"modulate":{"price_usd_per_audio_hour":0.06,"daily_audio_hours_cap":3000.0,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"},"soniox":{"price_usd_per_audio_hour":null,"daily_audio_hours_cap":1000.0,"monthly_budget_usd":null,"failover_only":true,"speaker_turns":"discard"}},"rows":[{"language_class":"en","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"modulate","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"soniox","quality_tier":"accepted","quality_source":"staging_drill"}]},{"language_class":"gpu_supported","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"}]},{"language_class":"gpu_unsupported","options":[{"route":"modulate","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"soniox","quality_tier":"accepted","quality_source":"staging_drill"}]},{"language_class":"*","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"}]}]}', category: rollout} | — | keep | keep | — | two-lane lead |
 | `BILLING_WEBHOOK_LEDGER_ENABLED` | Durable Stripe webhook receipts, duplicate suppression and failed-schedule retries; default false; no deployment declaration or activation in INF sprint | backend | env | closed | — | — | — | — | pending | keep | — | dazheng |
+| `CELL_WIPE_WRITER_DRAIN_SECONDS` | Default 5 seconds; bounded 0..60 writer drain after directory wipe fence | backend | env | closed | — | — | — | — | keep | keep | — | dazheng |
 | `CLOUD_LIVE_STT_MODE` | Cloud live STT policy: stream default (today), when_watched forces #21481 demand routing on, off opens no cloud streaming STT session (vendor or Parakeet window) while audio is still received and persisted; BYOK custom STT never suppressed; invalid values fail safe to stream | backend | env | closed | — | — | — | — | keep | keep | — | dazheng |
 | `DIARIZATION_V2_ENABLED` | Enable the separate batch-only diarizer app; default false; startup loads models before readiness | backend | env | closed | — | — | — | — | keep | keep | — | dazheng |
 | `DREAM_AGENT_CANARY_UID` | Dedicated synthetic UID in dream-canary- namespace; unset disables canary | backend | env | closed | — | — | dream-canary-prod-01 | — | pending | keep | — | dazheng |
@@ -973,6 +985,8 @@ and an explicit empty literal renders as `''`.
 | `CLIENTS_FROM_SEGMENTS_CHUNKS_MODE_SERVE_PERCENT` | integrated synthetic and test cohort → 1% → 10% → 100% | Zero custody loss, duplicate session/chunk conversations, manual-label regressions, false frame acceptance or new upload failures; omi_clients_refactor_shadow_total errors stay zero | dazheng | 2026-10-26 |
 | `CLIENTS_FROM_SEGMENTS_CHUNKS_MODE_SERVE_UID_SHA256S` | integrated synthetic and test cohort → 1% → 10% → 100% | Zero custody loss, duplicate session/chunk conversations, manual-label regressions, false frame acceptance or new upload failures; omi_clients_refactor_shadow_total errors stay zero | dazheng | 2026-10-26 |
 | `CONVERSATION_LLM_INPUT_DEDUPE_ENABLED` | prod backend, backend-integration, backend-listen and pusher on (backend-sync/backfill already on) → 1h soak green on dedupe counters → leave on | conversation_llm_input_dedupe_checkpoint_errors_total stays under 1% of hits+misses with hits+misses non-zero per feature per host, and no rise in processing failure counters | dazheng (C5 cost lane) | 2026-11-04 |
+| `DIRECTORY_ROUTING_MODE` | off everywhere; B2 ships dark → staging synthetic owners after connection-budget, wipe-coverage and plane-leak gates → 1%, 10%, 100% new-owner cohorts only after W5 integration gates | plane_leak_total zero; wipe coverage green including outage; no new connections or request IO while off | dazheng through W5 integration; B2 authorizes no enrollment | 2026-12-06 |
+| `DIRECTORY_ROUTING_NEW_OWNER_PERCENT` | off everywhere; B2 ships dark → staging synthetic owners after connection-budget, wipe-coverage and plane-leak gates → 1%, 10%, 100% new-owner cohorts only after W5 integration gates | plane_leak_total zero; wipe coverage green including outage; no new connections or request IO while off | dazheng through W5 integration; B2 authorizes no enrollment | 2026-12-06 |
 | `DREAM_AGENT_PAID_PERCENT` | listed owner + 5% of paid owners, 1 h hold → 25%, 3 h hold → unset (all paid owners), 6 h soak | <2 failed Dream passes/h, no new Dream ERROR signatures on backend-sync, no probe_failed storm, undo rate under 0.2, zero 3.8 on-demand Dream spend | dazheng (Dream lane, deploys via the rollout lead) | 2026-10-22 |
 | `DREAM_HISTORY_COMPACT_MODE` | shadow: all paid owners, zero behavior change → 10% serve with 90% same-day shadow control → 50% serve → 100% serve after a 6 h soak | treatment vs control: applied edits per active owner >= 90% of control; undo rate not above control; failed passes < 2/h; zero new Dream ERROR lines; zero dream_telemetry_error; offline compaction eval first | dazheng | 2026-11-04 |
 | `DREAM_HISTORY_COMPACT_MODE_SERVE_PERCENT` | shadow: all paid owners, zero behavior change → 10% serve with 90% same-day shadow control → 50% serve → 100% serve after a 6 h soak | treatment vs control: applied edits per active owner >= 90% of control; undo rate not above control; failed passes < 2/h; zero new Dream ERROR lines; zero dream_telemetry_error | dazheng | 2026-11-04 |
@@ -1203,6 +1217,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `CAP_HOLD_LIVE_FRAGMENT_ENABLED` — Default on; persist fifteen-second encrypted live fragments and compose one immutable source per minute (fail: closed)
 - `CAP_HOLD_REDRIVE_PARALLEL_DRAIN_ENABLED` — Default on; visit up to eight existing processing choices concurrently and allow up to ten candidates per owner turn (fail: closed)
 - `CELL_STORE_MODE` — Default off; validates off, shadow, primary for the cell-store foundation; no serving callers in B1 (fail: closed)
+- `CELL_WIPE_WRITER_DRAIN_SECONDS` — Default 5 seconds; bounded 0..60 writer drain after directory wipe fence (fail: closed)
 - `CLIENTS_FROM_SEGMENTS_CHUNKS_MODE` — off/shadow/serve via refactor_modes; default shadow rejects continuation without acknowledging partial completion (fail: closed)
 - `CLIENTS_FROM_SEGMENTS_CHUNKS_MODE_SERVE_PERCENT` — Continuation serve cohort percentage; default zero (fail: closed)
 - `CLIENTS_FROM_SEGMENTS_CHUNKS_MODE_SERVE_UID_SHA256S` — Continuation digest serve cohort; default empty (fail: closed)
@@ -1224,6 +1239,8 @@ their code default (`fail` tells you which way a missing value resolves).
 - `DEEPGRAM_SELF_HOSTED_ENABLED` — Retired 2026-08-27 with the rest of Deepgram; env removed from all charts and forbidden_env on every Cloud Run owner (fail: closed)
 - `DESKTOP_LOOP_WATCHDOG_ENABLED` — Desktop event-loop stall warning and liveness signal; default on, false disables both (fail: open)
 - `DIARIZATION_V2_ENABLED` — Enable the separate batch-only diarizer app; default false; startup loads models before readiness (fail: closed)
+- `DIRECTORY_ROUTING_MODE` — Default off; sticky new-owner enrollment and per-request resolution; off is zero IO (fail: closed)
+- `DIRECTORY_ROUTING_NEW_OWNER_PERCENT` — Default 0; env fallback for new-owner-cell1 runtime percent; enrollment only (fail: closed)
 - `DREAM_AGENT_EXPECTED_TOKENS` — Expected session tokens for initial spend holds and derived concurrency; default 12000; actual turn reservations enforce ceilings (fail: closed)
 - `DREAM_DEFECT_REPORTS_ENABLED` — Default-on Dream report_defect tool storing k-anonymous harness defect patterns (dream_feedback); 0/false/off/no withdraws the tool from new sessions (fail: open)
 - `DREAM_GATEWAY_PROBE_ENABLED` — Default-on 3.8 reservation probe through the LLM gateway's reserved Dream route; 0/false/off/no makes no probe call and admission relies on fresh evidence from real Dream turns (fail: open)
