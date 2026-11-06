@@ -298,6 +298,16 @@ def deleted_artifact_references():
                         base = _resolve_from(node, relative)
                         if any(f'{base}.{alias.name}' == module for alias in node.names):
                             found.append(relative)
+    # These root registries also declare deployment/flag names. Keep the same
+    # retirement contract after pruning their stale classification exceptions.
+    for relative in (
+        'config/feature-flags.yaml',
+        'config/deployment-setting-classification.json',
+        'scripts/check_feature_flag_registry.py',
+    ):
+        source = (BACKEND_DIR.parent / relative).read_text(encoding='utf-8')
+        if any(needle in source for needle in needles):
+            found.append(relative)
     return sorted(set(found))
 
 
