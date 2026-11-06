@@ -6,8 +6,6 @@ so unrelated edits survive and conflicting later edits return 409. No deletes
 of memories or person records. Entity merges retain a redirect node.
 """
 
-from database import transcript_pointer
-
 import copy
 import hashlib
 import re
