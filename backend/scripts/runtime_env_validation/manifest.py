@@ -611,7 +611,23 @@ def _validate_directory_routing_bindings(env: str, env_config: ConfigDict) -> li
         )
         for scope, bindings in entries.items()
     }
-    if all(mode == 'off' for mode in modes.values()):
+
+    def any_declared_activation(node: object, scope: str = '') -> bool:
+        mapping = _as_config_dict(node)
+        if mapping is not None:
+            if 'DIRECTORY_ROUTING_MODE' in mapping:
+                entry = mapping['DIRECTORY_ROUTING_MODE']
+                mode = (
+                    value(scope, mapping, 'DIRECTORY_ROUTING_MODE') if isinstance(entry, dict) else str(entry).strip()
+                )
+                if mode != 'off':
+                    return True
+            return any(any_declared_activation(child, f'{scope}/{name}'.lstrip('/')) for name, child in mapping.items())
+        return any(any_declared_activation(child, scope) for child in (_as_config_list(node) or []))
+
+    # A job or integration cohost must not bypass admission for the five
+    # required surfaces by declaring its mode elsewhere in the environment.
+    if all(mode == 'off' for mode in modes.values()) and not any_declared_activation(env_config):
         return []
 
     errors: list[ValidationError] = []
