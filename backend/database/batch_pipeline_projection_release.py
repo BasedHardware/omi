@@ -16,7 +16,7 @@ tombstones keep the strict Firestore test fixture's sentinel contract intact.
 import logging
 import math
 import time
-from typing import Any
+from typing import Any, TypeGuard
 
 from google.cloud import firestore
 
@@ -355,7 +355,7 @@ def release_scan_pass(store, *, limit: int, after_id: str | None, now: float, de
     return counts, next_after
 
 
-def finite_timestamp(value):
+def finite_timestamp(value: Any) -> TypeGuard[int | float]:
     return type(value) in (int, float) and math.isfinite(value)
 
 
