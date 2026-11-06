@@ -228,11 +228,12 @@ def _transcript_writer_violations(tree: ast.Module, relative_path: str) -> list[
         'promote_final_pass_if_current': 'apply_manual_assignments',
         'assign_conversation_speaker': 'manual_assignment',
         # These rewrite current transactional content rather than caller snapshots.
-        'update_conversation_segment_text': 'prepare_conversation_for_read',
         'migrate_conversations_level_batch': 'decode_manual_speaker_assignments',
         'create_conversation_if_absent_with_lifecycle': None,
-        # Field-scoped display-only translation merge: reads the transaction
-        # snapshot inside _write and preserves raw text/projections (#15247).
+        # Result persistence is permitted only while reapplying the current receipt.
+        'persist_user_reprocess_app_results': 'apply_manual_assignments',
+        'persist_template_batch_results': 'apply_manual_assignments',
+        # Field-scoped display-only translation merge preserves raw text/projections.
         'materialize_translation': None,
     }
     errors = []

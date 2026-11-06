@@ -1,0 +1,3 @@
+{
+  "change": "Generate multiple summary templates for a conversation at once; allow explicit user reprocessing to recover visible dead-letter conversations"
+}

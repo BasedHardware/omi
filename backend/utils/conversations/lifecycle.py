@@ -225,11 +225,19 @@ def persist_processed_conversation(
     smart_merge_refresh: tuple[int, str] | None = None,
     expected_capture_group: tuple[str, int] | None = None,
     capture_group_notes_refresh: tuple[str, str] | None = None,
+    require_unlocked: bool = False,
+    preserve_app_results: bool = False,
+    allow_terminal_failure_recovery: bool = False,
+    expected_notes_snapshot: Mapping[str, Any] | None = None,
 ) -> bool:
     """Persist a processing result and report whether the conversation still exists.
 
-    ``False`` means deletion or a newer sync transcript revision. Callers must stop before emitting
-    derived side effects such as webhooks or integration fanout.
+    ``False`` means deletion, a newer sync transcript revision, or (when
+    ``require_unlocked`` is set) a concurrent lock. Callers must stop before
+    emitting derived side effects such as webhooks or integration fanout.
+    ``preserve_app_results`` keeps the transaction's latest app-result array.
+    ``allow_terminal_failure_recovery`` is reserved for explicit user reprocessing.
+    ``expected_notes_snapshot`` fences first-party overview/section edits during reprocessing.
     """
     _require_status(
         conversation_data,
@@ -247,6 +255,14 @@ def persist_processed_conversation(
         'on_first_completion': _observe_first_completion,
         'smart_merge_refresh': smart_merge_refresh,
     }
+    if require_unlocked:
+        kwargs['require_unlocked'] = True
+    if preserve_app_results:
+        kwargs['preserve_app_results'] = True
+    if allow_terminal_failure_recovery:
+        kwargs['allow_terminal_failure_recovery'] = True
+    if expected_notes_snapshot is not None:
+        kwargs['expected_notes_snapshot'] = expected_notes_snapshot
     if expected_capture_group is not None:
         kwargs['expected_capture_group'] = expected_capture_group
     if capture_group_notes_refresh is not None:

@@ -15744,7 +15744,7 @@ export async function assign_recording_speakers_v1_conversations__conversation_i
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function reprocess_conversation_v1_conversations__conversation_id__reprocess_post(path: { conversation_id: string }, query: { language_code?: string | null, app_id?: string | null, source?: "omi" | null }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<Conversation> {
+export async function reprocess_conversation_v1_conversations__conversation_id__reprocess_post(path: { conversation_id: string }, query: { language_code?: string | null, app_id?: string | null, app_ids?: Array<string> | null, source?: "omi" | null, speaker_summary_refresh?: boolean }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<Conversation> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/conversations/${path.conversation_id}/reprocess`;
   const _params = query ? Object.entries(query)

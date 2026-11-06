@@ -2568,11 +2568,23 @@ def update_conversation_endpoint(
         if request.discarded:
             lifecycle_service.discard(uid, conversation_id)
         else:
-            lifecycle_service.restore_discarded(uid, conversation_id)
+            restored = lifecycle_service.restore_discarded(uid, conversation_id)
+            if not restored:
+                current = conversations_db.get_conversation(uid, conversation_id)
+                if not current or current.get('deleted'):
+                    raise HTTPException(status_code=404, detail="Conversation not found")
+                if current.get('is_locked', False):
+                    raise HTTPException(
+                        status_code=402, detail="A paid plan is required to access this conversation."
+                    )
+                raise HTTPException(status_code=409, detail="Conversation changed. Please retry.")
 
     conversation = conversations_db.get_conversation(uid, conversation_id)
-    if conversation:
-        populate_folder_names(uid, [conversation])
+    if not conversation or conversation.get('deleted', False):
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    if conversation.get('is_locked', False):
+        raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
+    populate_folder_names(uid, [conversation])
     return conversation
 
 

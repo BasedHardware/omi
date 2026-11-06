@@ -65,6 +65,7 @@ _stubs = [
     'pusher',
     'modal',
     'utils.other.storage',
+    'utils.screen_frames.store',
     'utils.other.endpoints',
     'utils.stt.pre_recorded',
     'utils.stt.vad',
@@ -76,14 +77,20 @@ _stubs = [
     'utils.llm.memories',
     'utils.llm.chat',
     'utils.llm.knowledge_graph',
+    'services.conversation_frame_evidence',
     'database.dev_api_key',
 ]
 
 
 def _install_dev_api_lock_bypass_stubs() -> None:
     for mod_name in _stubs:
-        if mod_name not in sys.modules:
-            sys.modules[mod_name] = _AutoMockModule(mod_name)
+        stub = _AutoMockModule(mod_name)
+        sys.modules[mod_name] = stub
+        if '.' in mod_name:
+            parent_name, child_name = mod_name.rsplit('.', 1)
+            parent = sys.modules.get(parent_name)
+            if isinstance(parent, ModuleType):
+                setattr(parent, child_name, stub)
 
     sys.modules['firebase_admin.auth'].InvalidIdTokenError = type('InvalidIdTokenError', (Exception,), {})
     sys.modules['firebase_admin.auth'].ExpiredIdTokenError = type('ExpiredIdTokenError', (Exception,), {})
@@ -139,21 +146,32 @@ _DEV_API_REAL_IMPORT_MODULES = (
 )
 
 
-@pytest.fixture(scope="module", autouse=True)
+@pytest.fixture(autouse=True)
 def _dev_api_lock_bypass_import_isolation():
-    saved = snapshot_sys_modules(_DEV_API_LOCK_BYPASS_STUB_MODULE_NAMES)
-    _install_dev_api_lock_bypass_stubs()
+    tracked = tuple(
+        dict.fromkeys(
+            (
+                *_DEV_API_LOCK_BYPASS_STUB_MODULE_NAMES,
+                *_DEV_API_REAL_IMPORT_MODULES,
+                'google.api_core',
+                'google.api_core.exceptions',
+                'google.cloud',
+                'utils.cloud_tasks',
+                'utils.other.storage',
+                'utils.subscription',
+                'utils.memory.memory_service',
+            )
+        )
+    )
+    saved = snapshot_sys_modules(tracked)
+    sys.modules.pop('utils.memory.memory_service', None)
+    _repair_polluted_dev_api_lock_bypass_stubs()
     yield
     restore_sys_modules(saved)
 
 
 @pytest.fixture(autouse=True)
-def _reinstall_dev_api_lock_bypass_stubs():
-    _repair_polluted_dev_api_lock_bypass_stubs()
-
-
-@pytest.fixture(autouse=True)
-def _authorized_memory_developer_for_lock_tests(monkeypatch):
+def _authorized_memory_developer_for_lock_tests(monkeypatch, _dev_api_lock_bypass_import_isolation):
     import routers.developer as developer_module
 
     monkeypatch.setattr(
@@ -278,6 +296,29 @@ class TestDevApiConversationLockEnforcement:
         update_conversation_endpoint(conversation_id='conv-1', request=request, uid='test-uid')
         conversations_db.update_conversation_title.assert_called_once_with('test-uid', 'conv-1', 'New Title')
 
+
+    def test_patch_restore_fails_if_lock_wins_after_initial_read(self):
+        from fastapi import HTTPException
+        from routers import developer as dev_routes
+
+        with (
+            patch.object(
+                dev_routes.conversations_db,
+                'get_conversation',
+                side_effect=[_make_conversation(locked=False), _make_conversation(locked=True)],
+            ),
+            patch.object(dev_routes.lifecycle_service, 'restore_discarded', return_value=False) as restore,
+        ):
+            with pytest.raises(HTTPException) as exc_info:
+                dev_routes.update_conversation_endpoint(
+                    conversation_id='conv-1',
+                    request=dev_routes.UpdateConversationRequest(discarded=False),
+                    uid='test-uid',
+                )
+
+        assert exc_info.value.status_code == 402
+        restore.assert_called_once_with('test-uid', 'conv-1')
+
     def test_delete_conversation_rejects_locked(self):
         """D2: DELETE /v1/dev/user/conversations/{id} must raise 402 for locked."""
         import database.conversations as conversations_db
@@ -294,16 +335,30 @@ class TestDevApiConversationLockEnforcement:
 
     def test_delete_conversation_allows_unlocked(self):
         """D2: DELETE should proceed for unlocked conversations."""
-        import database.conversations as conversations_db
+        from routers import developer as dev_routes
+        from services import conversation_frame_evidence
+        from utils.screen_frames import store as screen_frame_store
 
-        conversations_db.get_conversation = MagicMock(return_value=_make_conversation(locked=False))
-        conversations_db.delete_conversation = MagicMock()
+        with (
+            patch.object(
+                dev_routes.conversations_db,
+                'get_conversation',
+                return_value=_make_conversation(locked=False),
+            ),
+            patch.object(dev_routes.conversations_db, 'delete_conversation') as delete,
+            patch.object(dev_routes.conversation_tombstones, 'record_deletion') as record_deletion,
+            patch.object(screen_frame_store, 'delete_conversation_screen_frames'),
+            patch.object(
+                conversation_frame_evidence,
+                'delete_conversation_and_frame_evidence',
+                side_effect=lambda uid, cid: delete(uid, cid),
+            ),
+        ):
+            result = dev_routes.delete_conversation_endpoint(conversation_id='conv-1', uid='test-uid')
 
-        from routers.developer import delete_conversation_endpoint
-
-        result = delete_conversation_endpoint(conversation_id='conv-1', uid='test-uid')
         assert result == {"success": True}
-        conversations_db.delete_conversation.assert_called_once_with('test-uid', 'conv-1')
+        delete.assert_called_once_with('test-uid', 'conv-1')
+        record_deletion.assert_called_once_with('test-uid', 'conv-1')
 
 
 # =============================================================================

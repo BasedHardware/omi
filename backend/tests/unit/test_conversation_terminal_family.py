@@ -248,6 +248,33 @@ def test_explicit_restore_supersedes_failure_in_atomic_completion(store, family)
     assert len(store.transactions[-1].updates) == 1
 
 
+def test_explicit_user_reprocess_recovers_visible_dead_letter(store):
+    store.rows[PATH].update(
+        status='failed',
+        discarded=False,
+        terminal_family='dead_letter',
+        terminal_family_at=NOW,
+        finalization_status='dead_letter',
+    )
+
+    assert persist(
+        {
+            'status': 'completed',
+            'discarded': False,
+            'title': 'regenerated notes',
+            'structured': {'overview': 'Updated by user reprocess'},
+        },
+        allow_terminal_failure_recovery=True,
+    )
+
+    row = store.rows[PATH]
+    assert row['status'] == 'completed'
+    assert row['terminal_family'] == 'success'
+    assert row['terminal_family_at'] > NOW
+    assert row['finalization_status'] is None
+    assert row['structured']['overview'] == 'Updated by user reprocess'
+
+
 def test_user_reprocess_commits_restore_authority_with_completion(store):
     # execute_reprocess restores after processing; its processor payload already
     # carries user_kept so the transaction must recognize that same authority.

@@ -106,8 +106,8 @@ ConversationDetailProvider summaryProvider(
 }) {
   final fakes = fetches ?? SummaryTemplateFetches();
   final provider = ConversationDetailProvider(
-    reprocess:
-        reprocess ?? (id, {appId, requireSpeakerReceipt = false, forceOmi = false}) async => const ReprocessFailed(),
+    reprocess: reprocess ??
+        (id, {appId, appIds, requireSpeakerReceipt = false, forceOmi = false}) async => const ReprocessFailed(),
     fetchConversation: (_) async => conversation,
     fetchEnabledSummaryApps: fakes.fetchEnabled,
     fetchSuggestedSummaryApps: fakes.fetchSuggested,

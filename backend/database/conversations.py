@@ -52,11 +52,13 @@ from utils.conversations.fragment_visibility import is_completed_rule_discard, i
 from utils.conversations.fragment_visibility import SETTLING_FIELDS, is_settling_fragment
 from utils.conversations.transcript_hash import (
     canonicalize_transcript_segments_for_storage,
+    transcript_fence_sha256,
     transcript_sha256_for_binding,
 )
 from utils.observability.speaker_identification import record_speaker_review
 from utils.open_loops.extraction import OPEN_LOOP_EXTRACTIONS_COMPRESSED_FIELD, OPEN_LOOP_EXTRACTIONS_FIELD
 from models.person_confidence import SOURCE_MANUAL
+from models.structured import Structured
 from utils.manual_speaker_assignments import (
     LIVE_TRANSCRIPT_REPLAY_RECEIPT_COMMIT_LIMIT,
     replay_receipt_commits,
@@ -94,7 +96,7 @@ from .firestore_read_origin import read_origin
 from .conversation_revisions import ensure_timezone_aware, firestore_revision_datetime
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read, with_photos
 from .people_stats_cache import invalidate_people_stats_cache
-from .read_boundary import parse_payload_strict
+from .read_boundary import MalformedDocError, parse_payload_strict
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 from utils.other.list_budget import (
     ListReadBudget,
@@ -1286,13 +1288,19 @@ def persist_processing_result_with_lifecycle(
     smart_merge_refresh: tuple[int, str] | None = None,
     expected_capture_group: tuple[str, int] | None = None,
     capture_group_notes_refresh: tuple[str, str] | None = None,
+    require_unlocked: bool = False,
+    preserve_app_results: bool = False,
+    allow_terminal_failure_recovery: bool = False,
+    expected_notes_snapshot: Mapping[str, Any] | None = None,
 ) -> bool:
     """Merge a processor result into its conversation.
 
     Deletion and stale sync transcript revisions are refused. With terminal-family
     serving, content merges without regressing completed status or superseding
-    failure state. Only explicit user-restore authority permits failure to become
-    success. Flag off retains the legacy lifecycle merge.
+    failure state. Only explicit user-restore or user-reprocess authority permits
+    failure to become success. Flag off retains the legacy lifecycle merge. The
+    current row may additionally need to remain unlocked, and current app results
+    are preserved rather than overwritten from the processor's stale snapshot.
 
     ``on_first_completion`` runs after a successful commit that transitioned the
     existing row onto ``completed``. It must not raise; the persist outcome is
@@ -1310,6 +1318,7 @@ def persist_processing_result_with_lifecycle(
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_data['id'])
 
     stale_sync_revision = False
+    owner_gone = False
     first_completed = False
     summary_receipt = None
     delivery_outcome = None
@@ -1320,12 +1329,14 @@ def persist_processing_result_with_lifecycle(
 
     @firestore.transactional
     def _persist(transaction) -> bool:
-        nonlocal stale_sync_revision, first_completed, summary_receipt, summary_changed, notes_refresh_state_write, delivery_outcome, terminal_refusal
+        nonlocal stale_sync_revision, owner_gone, first_completed, summary_receipt, summary_changed, \
+            notes_refresh_state_write, delivery_outcome, terminal_refusal
         terminal_refusal = None
         summary_changed = False
         summary_receipt = None
         delivery_outcome = None
         stale_sync_revision = False
+        owner_gone = False
         first_completed = False
         notes_refresh_state_write = None
         write_data = copy.deepcopy(conversation_data)
@@ -1338,9 +1349,38 @@ def persist_processing_result_with_lifecycle(
             # Deleting one is a decision its owner made, and a merge write to a
             # missing document would create it, so a late processor could bring
             # back what they removed and emit derived side effects from it.
+            owner_gone = True
             return False
-
         existing = existing_snapshot.to_dict() or {}
+
+        if is_soft_deleted(existing):
+            owner_gone = True
+            return False
+        if preserve_app_results:
+            if 'apps_results' in existing:
+                write_data['apps_results'] = existing['apps_results']
+            else:
+                write_data.pop('apps_results', None)
+        if expected_notes_snapshot is not None:
+            current_structured = existing.get('structured') or {}
+            if not isinstance(current_structured, dict):
+                return False
+            try:
+                current_notes = parse_payload_strict(
+                    Structured,
+                    current_structured,
+                    document_path=conversation_ref.path,
+                )
+                current_sections = [
+                    section.model_dump(mode='json', exclude_unset=True) for section in current_notes.sections
+                ]
+            except (MalformedDocError, TypeError, ValueError):
+                return False
+            if (
+                current_notes.overview != expected_notes_snapshot.get('overview', '')
+                or current_sections != expected_notes_snapshot.get('sections', [])
+            ):
+                return False
         if existing.get('arrival_at'):
             write_data['arrival_at'] = existing['arrival_at']
         if expected_capture_group is not None:
@@ -1368,13 +1408,18 @@ def persist_processing_result_with_lifecycle(
             write_data['record_audio_partial'] = existing['record_audio_partial']
         else:
             write_data.pop('record_audio_partial', None)
+        if require_unlocked and existing.get('is_locked'):
+            return False
         if (
-            existing.get('deleted')
-            or summary_delivery.repair_fenced(existing)
+            summary_delivery.repair_fenced(existing)
             or summary_delivery.processing_fenced(existing)
             or (evidence_refresh and effective_user_title(existing.get('user_title')))
         ):
             return False
+        if 'is_locked' in existing:
+            write_data['is_locked'] = existing['is_locked']
+        else:
+            write_data.pop('is_locked', None)
         if smart_merge_refresh is not None:
             expected_revision, expected_owner = smart_merge_refresh
             merge_state = existing.get('smart_merge') or {}
@@ -1503,7 +1548,7 @@ def persist_processing_result_with_lifecycle(
                 )
                 if not failure_family and existing.get('status') == ConversationStatus.failed:
                     failure_family = 'failed'
-                if failure_family and not user_restored:
+                if failure_family and not (user_restored or allow_terminal_failure_recovery):
                     terminal_refusal = (failure_family, 'terminal_failure')
                     # Keep the legacy marker too if a stale payload carries it.
                     write_data.pop('finalization_status', None)
@@ -1563,9 +1608,8 @@ def persist_processing_result_with_lifecycle(
         invalidate_people_stats_cache(uid)
     if persisted or stale_sync_revision:
         _sync_conversation_search_index(uid, conversation_data['id'])
-    else:
-        # A processor result for a conversation whose owner is already gone:
-        # converge the search index to absence too.
+    elif owner_gone:
+        # Only a missing or soft-deleted owner is absent from the search projection.
         _delete_conversation_search_index(uid, conversation_data['id'])
     if persisted and first_completed and on_first_completion is not None:
         try:
@@ -2304,6 +2348,192 @@ def update_conversation(
     if _SEARCH_INDEXED_FIELD_ROOTS.intersection(str(key).split('.', 1)[0] for key in update_data):
         _sync_conversation_search_index(uid, conversation_id)
     return True
+
+
+@after_write('conversations')
+def persist_user_reprocess_app_results(
+    uid: str,
+    conversation_id: str,
+    suggested_summarization_apps: list[str],
+    *,
+    selected_app_ids: set[str],
+    expected_selected_results: Mapping[str, Mapping[str, Any] | None],
+    results: list[dict[str, Any]],
+    expected_transcript_fence_sha256: str,
+    expected_speaker_receipt_sha256: str,
+) -> bool:
+    """Merge selected results if their source snapshot and owner remain current."""
+    if set(expected_selected_results) != selected_app_ids:
+        raise ValueError('selected app result expectations must cover every selected app')
+    result_ids = [row.get('app_id') for row in results]
+    if any(app_id not in selected_app_ids for app_id in result_ids) or len(result_ids) != len(set(result_ids)):
+        raise ValueError('user reprocess results must be unique selected app IDs')
+    conversation_ref = db.collection('users').document(uid).collection(conversations_collection).document(
+        conversation_id
+    )
+
+    @firestore.transactional
+    def _persist(transaction) -> bool:
+        snapshot = conversation_ref.get(transaction=transaction)
+        if not getattr(snapshot, 'exists', False):
+            return False
+        current = snapshot.to_dict() or {}
+        if current.get('is_locked') or not is_visible_conversation(current, include_discarded=True):
+            return False
+        try:
+            current_receipt = decode_manual_speaker_assignments(
+                uid,
+                current.get('manual_speaker_assignments'),
+                bool(current.get('manual_speaker_assignments_compressed')),
+            )
+            segments = _decode_transcript_segments_strict(
+                uid,
+                current.get('transcript_segments', []),
+                bool(current.get('transcript_segments_compressed')),
+                require_decryption=True,
+            )
+            if current.get('has_transcript_corrections'):
+                from utils.agent_capabilities.transcripts import apply_entries, load_entries
+
+                corrections = load_entries(uid, conversation_id, firestore_client=db, transaction=transaction)
+                segments = apply_entries(segments, corrections)
+            segments = apply_manual_assignments(segments, current_receipt)
+        except (TranscriptSegmentsDecodeError, ValueError, TypeError, json.JSONDecodeError, zlib.error):
+            return False
+        if (
+            transcript_fence_sha256(segments) != expected_transcript_fence_sha256
+            or manual_speaker_receipt_sha256(current_receipt) != expected_speaker_receipt_sha256
+        ):
+            return False
+        current_results = current.get('apps_results') or []
+        if not isinstance(current_results, list):
+            return False
+        requested = selected_app_ids
+        current_selected = {
+            row.get('app_id', row.get('appId')): {
+                'app_id': row.get('app_id', row.get('appId')),
+                'content': row.get('content'),
+            }
+            for row in current_results
+            if isinstance(row, dict) and row.get('app_id', row.get('appId')) in requested
+        }
+        if {app_id: current_selected.get(app_id) for app_id in requested} != dict(expected_selected_results):
+            return False
+        result_updates = {
+            'suggested_summarization_apps': suggested_summarization_apps,
+            'apps_results': [
+                *results,
+                *(
+                    row
+                    for row in current_results
+                    if not isinstance(row, dict) or row.get('app_id', row.get('appId')) not in requested
+                ),
+            ],
+        }
+        prepared = _prepare_conversation_for_write(
+            result_updates, uid, current.get('data_protection_level', 'standard')
+        )
+        transaction.update(conversation_ref, prepared)
+        return True
+
+    return run_transactional(db, _persist)
+
+
+def manual_speaker_receipt_sha256(receipt: Mapping[str, Any]) -> str:
+    return hashlib.sha256(
+        json.dumps(receipt, sort_keys=True, separators=(',', ':'), default=str).encode('utf-8')
+    ).hexdigest()
+
+
+def persist_template_batch_results(
+    uid: str,
+    conversation_id: str,
+    results: List[Dict[str, Any]],
+    *,
+    expected_transcript_fence_sha256: str,
+    expected_selected_results: Dict[str, Any],
+    expected_speaker_receipt_sha256: str,
+) -> bool:
+    """Atomically merge a completed template batch into the current visible conversation.
+
+    The transaction refuses deletion, transcript changes, and edits to any selected
+    result made while templates were running. Unselected results are merged from the
+    transaction's current snapshot so a concurrent user edit is never overwritten.
+    """
+    if not results or not expected_transcript_fence_sha256:
+        return False
+    result_ids = [item.get('app_id') for item in results]
+    if any(not isinstance(app_id, str) or not app_id for app_id in result_ids):
+        raise ValueError('template batch results require app IDs')
+    if len(result_ids) != len(set(result_ids)):
+        raise ValueError('template batch results require distinct app IDs')
+
+    conversation_ref = db.collection('users').document(uid).collection(conversations_collection).document(
+        conversation_id
+    )
+
+    @firestore.transactional
+    def _persist(transaction) -> bool:
+        snapshot = conversation_ref.get(transaction=transaction)
+        if not getattr(snapshot, 'exists', False):
+            return False
+        current = snapshot.to_dict() or {}
+        if is_soft_deleted(current) or current.get('is_locked'):
+            return False
+        try:
+            current_receipt = decode_manual_speaker_assignments(
+                uid,
+                current.get('manual_speaker_assignments'),
+                bool(current.get('manual_speaker_assignments_compressed')),
+            )
+        except (ValueError, TypeError, json.JSONDecodeError, zlib.error):
+            return False
+        receipt_sha256 = manual_speaker_receipt_sha256(current_receipt)
+        if receipt_sha256 != expected_speaker_receipt_sha256:
+            return False
+        try:
+            segments = _decode_transcript_segments_strict(
+                uid,
+                current.get('transcript_segments', []),
+                bool(current.get('transcript_segments_compressed')),
+                require_decryption=True,
+            )
+            if current.get('has_transcript_corrections'):
+                from utils.agent_capabilities.transcripts import apply_entries, load_entries
+
+                corrections = load_entries(uid, conversation_id, firestore_client=db, transaction=transaction)
+                segments = apply_entries(segments, corrections)
+        except (TranscriptSegmentsDecodeError, ValueError, TypeError, json.JSONDecodeError):
+            return False
+        segments = apply_manual_assignments(segments, current_receipt)
+        if transcript_fence_sha256(segments) != expected_transcript_fence_sha256:
+            return False
+
+        current_results = current.get('apps_results') or []
+        current_selected = {
+            row.get('app_id', row.get('appId')): {
+                'app_id': row.get('app_id', row.get('appId')),
+                'content': row.get('content'),
+            }
+            for row in current_results
+            if isinstance(row, dict) and row.get('app_id', row.get('appId')) in result_ids
+        }
+        if current_selected != expected_selected_results:
+            return False
+
+        requested = set(result_ids)
+        merged_results = [
+            *results,
+            *(
+                row
+                for row in current_results
+                if isinstance(row, dict) and row.get('app_id', row.get('appId')) not in requested
+            ),
+        ]
+        transaction.update(conversation_ref, {'apps_results': merged_results})
+        return True
+
+    return run_transactional(db, _persist)
 
 
 def claim_record_lane_owner(uid: str, conversation_id: str, owner: str, expected_updated_at, *, firestore_client=None):
@@ -3164,9 +3394,8 @@ def restore_conversation_from_discarded(uid: str, conversation_id: str):
         if not getattr(snapshot, 'exists', False):
             return False
         current = snapshot.to_dict() or {}
-        if is_soft_deleted(current):
-            # Redirect tombstones reuse discarded=True for the indexed hide.
-            # Restoring them would put a merged-away donor back on lists.
+        if is_soft_deleted(current) or current.get('is_locked'):
+            # A concurrent paid-lock transition fences transcript delivery too.
             return False
         # A restore is the user's verdict and outranks every later relevance
         # assessment (sync appends reassess the whole recording). Legacy review

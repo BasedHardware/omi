@@ -464,6 +464,39 @@ def test_fenced_completion_submits_nothing(monkeypatch, discarded, structured, d
     assert observed_persistence == [False]
 
 
+def test_user_reprocess_does_not_return_fenced_unsaved_output(monkeypatch):
+    input_conversation = MagicMock()
+    input_conversation.source = 'omi'
+    input_conversation.get_person_ids.return_value = []
+    completed_conversation = MagicMock()
+    completed_conversation.discarded = False
+    completed_conversation.deleted = False
+    completed_conversation.structured = MagicMock()
+    completed_conversation.id = 'conversation-user-reprocess-fenced'
+    completed_conversation.dict.return_value = {
+        'id': 'conversation-user-reprocess-fenced',
+        'status': 'completed',
+    }
+    persistence = MagicMock(return_value=False)
+    monkeypatch.setattr(process_conversation, '_get_structured', lambda *a, **k: (MagicMock(), False))
+    monkeypatch.setattr(process_conversation, '_get_conversation_obj', lambda *a, **k: completed_conversation)
+    monkeypatch.setattr(process_conversation.lifecycle_service, 'persist_processed_conversation', persistence)
+
+    with pytest.raises(HTTPException) as error:
+        process_conversation.process_conversation(
+            'uid',
+            'en',
+            input_conversation,
+            trigger=process_conversation.ProcessingTrigger.USER_REPROCESS,
+        )
+
+    assert error.value.status_code == 409
+    persistence.assert_called_once()
+    assert persistence.call_args.kwargs['require_unlocked'] is True
+    assert persistence.call_args.kwargs['preserve_app_results'] is True
+    assert persistence.call_args.kwargs['allow_terminal_failure_recovery'] is True
+
+
 def test_deferred_derived_effects_emit_nothing_until_runner_invoked(monkeypatch):
     """#10468 r5: with defer_derived_effects=True, process_conversation persists
     the result and hands back the entire derived-effect bundle as a deferred
@@ -620,12 +653,37 @@ def _run_explicit_selection_flow(monkeypatch, trigger_apps, update_calls, **proc
     )
     monkeypatch.setattr(process_conversation, "submit_with_context", MagicMock())
     monkeypatch.setattr(process_conversation, "trigger_conversation_apps", trigger_apps)
-    monkeypatch.setattr(process_conversation, "_extract_memories", MagicMock())
     monkeypatch.setattr(process_conversation, "_save_action_items", MagicMock())
+    monkeypatch.setattr(process_conversation, "_extract_memories", MagicMock())
+    monkeypatch.setattr(process_conversation.conversations_db, 'get_manual_speaker_receipt', lambda *_: {})
+    monkeypatch.setattr(process_conversation.conversations_db, 'manual_speaker_receipt_sha256', lambda *_: 'receipt')
+
+    def persist_app_results(_uid, _cid, *, suggested_summarization_apps, **kwargs):
+        assert kwargs['expected_transcript_fence_sha256']
+        assert kwargs['expected_speaker_receipt_sha256'] == 'receipt'
+        update_calls.append(
+            {
+                'suggested_summarization_apps': suggested_summarization_apps,
+                'apps_results': kwargs['results'],
+            }
+        )
+        return True
+
     monkeypatch.setattr(
         process_conversation.conversations_db,
-        "update_conversation",
+        'persist_user_reprocess_app_results',
+        persist_app_results,
+    )
+    monkeypatch.setattr(process_conversation, 'deserialize_conversation', lambda _row: completed)
+    monkeypatch.setattr(
+        process_conversation.conversations_db,
+        'update_conversation',
         lambda uid, cid, updates: update_calls.append(updates),
+    )
+    monkeypatch.setattr(
+        process_conversation,
+        '_current_user_reprocess_conversation',
+        lambda *_args: {'id': 'conversation-explicit-selection'},
     )
 
     return process_conversation.process_conversation(
@@ -1275,6 +1333,59 @@ def test_replace_mode_failure_keeps_every_prior_result_and_fails_closed(failure)
 
     assert conv.apps_results == _prior_results()
 
+def test_batch_replace_commits_all_results_and_usage_together():
+    apps = [_make_mock_app('first-app'), _make_mock_app('second-app')]
+    conv = _make_trigger_conversation()
+    conv.apps_results = _prior_results()
+    app_result_mock, p2, p4, p5, p6 = _trigger_apps_context()
+    app_result_mock.side_effect = lambda *_args, **kwargs: 'new summary'
+
+    with p2, p4, p5 as record_usage, p6:
+        process_conversation.trigger_conversation_apps(
+            'user-explicit',
+            conv,
+            is_reprocess=True,
+            app_ids=[app.id for app in apps],
+            explicit_apps={app.id: app for app in apps},
+            usage_attribution=process_conversation.AppUsageAttribution.EXPLICIT_SELECTION,
+            replace_selected_result=True,
+        )
+
+    assert [(result.app_id, result.content) for result in conv.apps_results] == [
+        ('first-app', 'new summary'),
+        ('second-app', 'new summary'),
+        ('other-app', 'OTHER TEMPLATE'),
+        ('selected-app', 'OLD SELECTED'),
+    ]
+    assert record_usage.call_count == 2
+
+
+@pytest.mark.parametrize('failure', ['raises', 'empty'])
+def test_batch_replace_failure_keeps_all_prior_results_and_records_no_usage(failure):
+    apps = [_make_mock_app('first-app'), _make_mock_app('second-app')]
+    conv = _make_trigger_conversation()
+    conv.apps_results = _prior_results()
+    app_result_mock, p2, p4, p5, p6 = _trigger_apps_context()
+    if failure == 'raises':
+        app_result_mock.side_effect = [RuntimeError('unavailable'), 'new summary']
+    else:
+        app_result_mock.side_effect = ['', 'new summary']
+
+    with p2, p4, p5 as record_usage, p6:
+        with pytest.raises(process_conversation.ExplicitAppSelectionFailedError):
+            process_conversation.trigger_conversation_apps(
+                'user-explicit',
+                conv,
+                is_reprocess=True,
+                app_ids=[app.id for app in apps],
+                explicit_apps={app.id: app for app in apps},
+                usage_attribution=process_conversation.AppUsageAttribution.EXPLICIT_SELECTION,
+                replace_selected_result=True,
+            )
+
+    assert conv.apps_results == _prior_results()
+    record_usage.assert_not_called()
+
 
 def test_replace_mode_without_any_app_clears_results_so_the_omi_summary_shows():
     """A plain regenerate asked for the Omi summary; a kept template would shadow it."""
@@ -1291,6 +1402,45 @@ def test_replace_mode_without_any_app_clears_results_so_the_omi_summary_shows():
     app_result_mock.assert_not_called()
     assert conv.apps_results == []
 
+
+def test_user_reprocess_without_preferred_app_preserves_existing_templates():
+    _setup_trigger_apps_mocks(preferred_app_id=None)
+    conv = _make_trigger_conversation()
+    conv.apps_results = _prior_results()
+    app_result_mock, p2, p4, p5, p6 = _trigger_apps_context()
+
+    with p2, p4, p5, p6:
+        process_conversation.trigger_conversation_apps(
+            'user-speaker-refresh',
+            conv,
+            is_reprocess=True,
+            replace_selected_result=True,
+            preserve_existing_results_if_no_app=True,
+        )
+
+    app_result_mock.assert_not_called()
+    assert conv.apps_results == _prior_results()
+
+
+
+def test_first_party_reprocess_preserves_existing_app_results():
+    _setup_trigger_apps_mocks(preferred_app_id='preferred-app')
+    conv = _make_trigger_conversation()
+    conv.apps_results = _prior_results()
+    app_result_mock, p2, p4, p5, p6 = _trigger_apps_context()
+
+    with p2, p4, p5, p6:
+        process_conversation.trigger_conversation_apps(
+            'user-omi',
+            conv,
+            is_reprocess=True,
+            preserve_existing_results=True,
+            replace_selected_result=True,
+            first_party_only=True,
+        )
+
+    app_result_mock.assert_not_called()
+    assert conv.apps_results == _prior_results()
 
 def test_replace_mode_preferred_app_leads_and_keeps_other_results():
     preferred = _make_mock_app('preferred-app', 'PreferredApp')
@@ -1384,6 +1534,18 @@ def test_user_reprocess_forwards_first_party_only(monkeypatch):
     assert seen_kwargs[0]['first_party_only'] is True
     assert seen_kwargs[0]['replace_selected_result'] is True
 
+
+def test_user_reprocess_only_preserves_results_for_explicit_speaker_refresh(monkeypatch):
+    seen_kwargs = []
+
+    def _trigger(_uid, _conversation, **kwargs):
+        seen_kwargs.append(kwargs)
+
+    _run_explicit_selection_flow(
+        monkeypatch, _trigger, [], app_id=None, explicit_app=None, speaker_summary_refresh=True
+    )
+
+    assert seen_kwargs[0]['preserve_existing_results_if_no_app'] is True
 
 def _goal_submissions():
     return [
@@ -1788,6 +1950,92 @@ def test_custom_stt_exhausted_processing_budget_skips_llm_work(monkeypatch):
     assert result.status == ConversationStatus.completed
 
 
+
+def test_custom_stt_batch_budget_denial_is_not_a_rate_limit(monkeypatch):
+    from fastapi import HTTPException
+
+    conversation = _ledger_gate_conversation('conversation-custom-stt-batch')
+    conversation.uses_custom_stt = True
+    monkeypatch.setattr(process_conversation, 'should_skip_omi_paid_postprocessing', lambda *a, **k: True)
+
+    with pytest.raises(HTTPException) as error:
+        process_conversation.process_conversation(
+            'uid',
+            'en',
+            conversation,
+            app_ids=['selected'],
+            trigger=process_conversation.ProcessingTrigger.USER_REPROCESS,
+        )
+
+    assert error.value.status_code == 402
+    assert error.value.detail == 'Summary processing budget unavailable'
+
+
+def test_funded_batch_budget_denial_is_not_a_rate_limit(monkeypatch):
+    from fastapi import HTTPException
+
+    conversation = _ledger_gate_conversation('conversation-funded-batch')
+    monkeypatch.setattr(process_conversation.funded_processing, 'enabled', lambda *_: True)
+    monkeypatch.setattr(process_conversation.funded_processing, 'processing_allowed', lambda *_: False)
+
+    with pytest.raises(HTTPException) as error:
+        process_conversation.process_conversation(
+            'uid',
+            'en',
+            conversation,
+            app_ids=['selected'],
+            trigger=process_conversation.ProcessingTrigger.USER_REPROCESS,
+        )
+
+    assert error.value.status_code == 402
+
+
+@pytest.mark.parametrize('budget_kind', ['funded', 'custom_stt'])
+def test_single_template_reprocess_budget_denial_is_not_stale_success(monkeypatch, budget_kind):
+    from fastapi import HTTPException
+
+    conversation = _ledger_gate_conversation(f'conversation-single-{budget_kind}')
+    if budget_kind == 'funded':
+        monkeypatch.setattr(process_conversation.funded_processing, 'enabled', lambda *_: True)
+        monkeypatch.setattr(process_conversation.funded_processing, 'processing_allowed', lambda *_: False)
+    else:
+        conversation.uses_custom_stt = True
+        monkeypatch.setattr(process_conversation, 'should_skip_omi_paid_postprocessing', lambda *a, **k: True)
+
+    with pytest.raises(HTTPException) as error:
+        process_conversation.process_conversation(
+            'uid',
+            'en',
+            conversation,
+            app_id='selected',
+            trigger=process_conversation.ProcessingTrigger.USER_REPROCESS,
+        )
+
+    assert error.value.status_code == 402
+
+
+@pytest.mark.parametrize('budget_kind', ['funded', 'custom_stt'])
+def test_plain_user_reprocess_budget_denial_is_not_success(monkeypatch, budget_kind):
+    from fastapi import HTTPException
+
+    conversation = _ledger_gate_conversation(f'conversation-plain-{budget_kind}')
+    if budget_kind == 'funded':
+        monkeypatch.setattr(process_conversation.funded_processing, 'enabled', lambda *_: True)
+        monkeypatch.setattr(process_conversation.funded_processing, 'processing_allowed', lambda *_: False)
+    else:
+        conversation.uses_custom_stt = True
+        monkeypatch.setattr(process_conversation, 'should_skip_omi_paid_postprocessing', lambda *a, **k: True)
+
+    with pytest.raises(HTTPException) as error:
+        process_conversation.process_conversation(
+            'uid',
+            'en',
+            conversation,
+            trigger=process_conversation.ProcessingTrigger.USER_REPROCESS,
+        )
+
+    assert error.value.status_code == 402
+
 def _ledger_gate_conversation(conversation_id: str) -> Conversation:
     return Conversation(
         id=conversation_id,
@@ -1810,6 +2058,36 @@ def _ledger_gate_conversation(conversation_id: str) -> Conversation:
         ],
         status=ConversationStatus.processing,
     )
+
+
+@pytest.mark.parametrize(
+    ('current', 'status_code'),
+    [({'deleted': True}, 404), ({'is_locked': True}, 402)],
+)
+def test_batch_reprocess_rechecks_current_visibility_after_commit(monkeypatch, current, status_code):
+    from fastapi import HTTPException
+
+    conversation = _ledger_gate_conversation(f'conversation-race-{status_code}')
+    conversation.status = ConversationStatus.completed
+    monkeypatch.setattr(process_conversation.funded_processing, 'enabled', lambda *_: False)
+    monkeypatch.setattr(process_conversation, 'should_skip_omi_paid_postprocessing', lambda *a, **k: False)
+    monkeypatch.setattr(process_conversation.conversations_db, 'get_manual_speaker_receipt', lambda *_: {})
+    monkeypatch.setattr(process_conversation.conversations_db, 'manual_speaker_receipt_sha256', lambda *_: 'receipt')
+    monkeypatch.setattr(process_conversation, 'trigger_conversation_apps', lambda *a, **k: None)
+    monkeypatch.setattr(process_conversation.conversations_db, 'persist_template_batch_results', lambda *a, **k: True)
+    monkeypatch.setattr(process_conversation.conversations_db, 'get_conversation', lambda *a, **k: current)
+    monkeypatch.setattr(process_conversation, 'record_app_usage', lambda *a, **k: None)
+
+    with pytest.raises(HTTPException) as error:
+        process_conversation.process_conversation(
+            'uid',
+            'en',
+            conversation,
+            app_ids=['selected'],
+            trigger=process_conversation.ProcessingTrigger.USER_REPROCESS,
+        )
+
+    assert error.value.status_code == status_code
 
 
 def test_ledger_writer_mode_skips_eager_extraction(monkeypatch):

@@ -7,6 +7,7 @@ import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart'
 ConversationReprocessCall conversationReprocess(
   Future<ServerConversation?> Function(String id, {String? appId, bool requireSpeakerReceipt}) fake,
 ) {
-  return (id, {appId, requireSpeakerReceipt = false, forceOmi = false}) async =>
-      ReprocessResult.fromConversation(await fake(id, appId: appId, requireSpeakerReceipt: requireSpeakerReceipt));
+  return (id, {appId, appIds, requireSpeakerReceipt = false, forceOmi = false}) async =>
+      ReprocessResult.fromConversation(
+          await fake(id, appId: appId ?? appIds?.first, requireSpeakerReceipt: requireSpeakerReceipt));
 }

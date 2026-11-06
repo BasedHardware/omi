@@ -117,6 +117,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from hashlib import sha256
+import json
 from typing import Any, cast
 
 from models.transcript_segment import TranscriptSegment
@@ -355,6 +356,34 @@ def transcript_sha256_for_binding(segments: Iterable[Any] | None) -> str | None:
         if len(scopes) > 1:
             return None
     return transcript_sha256(items)
+
+
+def transcript_fence_sha256(segments: Iterable[Any] | None) -> str:
+    """Version an effective transcript for a transactional write fence.
+
+    Unlike projection binding, this remains defined for legacy/non-canonical
+    rows. Raw rendered identity and scope are included so equal display hashes
+    cannot hide a concurrent source change.
+    """
+    source = []
+    for segment in segments or []:
+        kept = canonical_segment(segment)
+        raw_speaker = _raw_field(segment, 'speaker')
+        raw_person_id = _raw_field(segment, 'person_id')
+        raw_text = _raw_field(segment, 'text')
+        raw_scope = _raw_field(segment, 'speaker_id_scope')
+        source.append(
+            (
+                raw_speaker if isinstance(raw_speaker, str) and raw_speaker else kept.speaker,
+                raw_text if isinstance(raw_text, str) else kept.text,
+                kept.speaker_id,
+                kept.is_user,
+                raw_person_id if isinstance(raw_person_id, str) and raw_person_id else kept.person_id,
+                raw_scope if isinstance(raw_scope, str) else None,
+            )
+        )
+    payload = json.dumps(source, sort_keys=True, separators=(',', ':'), ensure_ascii=False, default=str)
+    return sha256(payload.encode('utf-8')).hexdigest()
 
 
 def _frame(value: str) -> bytes:

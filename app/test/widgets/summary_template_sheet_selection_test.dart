@@ -16,8 +16,9 @@ import '../helpers/summary_fixtures.dart';
 class _RecordingReprocess {
   final List<String?> appIds = [];
 
-  Future<ReprocessResult> call(String id, {String? appId, bool requireSpeakerReceipt = false, bool forceOmi = false}) {
-    appIds.add(appId);
+  Future<ReprocessResult> call(String id,
+      {String? appId, List<String>? appIds, bool requireSpeakerReceipt = false, bool forceOmi = false}) {
+    this.appIds.addAll(appIds ?? [appId]);
     return Future.value(const ReprocessFailed());
   }
 }
@@ -128,6 +129,64 @@ void main() {
 
       final button = tester.widget<OmiButton>(find.byKey(const Key('summary_template_confirm')));
       expect(button.onPressed, isNotNull);
+    });
+    testWidgets('multi-selection submits the visible templates in one request', (tester) async {
+      final fetches = SummaryTemplateFetches();
+      final reprocess = _RecordingReprocess();
+      final provider = summaryProvider(
+        summaryConversation(),
+        reprocess: reprocess.call,
+        fetches: fetches,
+        catalog: [summaryApp('one', 'One'), summaryApp('two', 'Two')],
+      );
+      addTearDown(provider.dispose);
+
+      await tester.pumpWidget(summaryHarness(provider, _sheetLauncher()));
+      await _openSheet(tester);
+      fetches.enabled.single.complete([summaryApp('one', 'One'), summaryApp('two', 'Two')]);
+      fetches.suggested.single.complete(const []);
+      await tester.pump();
+      await tester.pump();
+
+      await tester.tap(find.byKey(const Key('summary_template_multi_select')));
+      await tester.tap(find.byKey(const Key('summary_template_app_one')));
+      await tester.tap(find.byKey(const Key('summary_template_app_two')));
+      await tester.tap(find.byKey(const Key('summary_template_omi')));
+      await tester.pump();
+      expect(
+        tester.widget<OmiButton>(find.byKey(const Key('summary_template_confirm'))).label,
+        '${summaryL10n(tester).summarize} · ${summaryL10n(tester).selectedCount(2)}',
+      );
+
+      final button = tester.widget<OmiButton>(find.byKey(const Key('summary_template_confirm')));
+      expect(button.onPressed, isNotNull);
+      await tester.tap(find.byKey(const Key('summary_template_confirm')));
+      await tester.pump();
+
+      expect(reprocess.appIds, ['one', 'two']);
+    });
+    testWidgets('an uninstalled suggested template can be selected into a batch', (tester) async {
+      final fetches = SummaryTemplateFetches();
+      final provider = summaryProvider(
+        summaryConversation(),
+        reprocess: _RecordingReprocess().call,
+        fetches: fetches,
+        catalog: [summaryApp('suggested', 'Suggested', enabled: false)],
+      );
+      addTearDown(provider.dispose);
+
+      await tester.pumpWidget(summaryHarness(provider, _sheetLauncher()));
+      await _openSheet(tester);
+      fetches.enabled.single.complete(const []);
+      fetches.suggested.single.complete([summaryApp('suggested', 'Suggested', enabled: false)]);
+      await tester.pump();
+      await tester.pump();
+
+      await tester.tap(find.byKey(const Key('summary_template_multi_select')));
+      await tester.tap(find.byKey(const Key('summary_template_app_suggested')));
+      await tester.pump();
+
+      expect(tester.widget<OmiButton>(find.byKey(const Key('summary_template_confirm'))).onPressed, isNotNull);
     });
   });
 }

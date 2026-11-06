@@ -41,6 +41,53 @@ def _route_context(*, raw_app, available_app, enabled):
     )
 
 
+from fastapi.routing import APIRoute
+
+
+def test_reprocess_app_ids_are_repeated_query_parameters():
+    route = next(
+        route
+        for route in conv_router.router.routes
+        if isinstance(route, APIRoute) and route.path == '/v1/conversations/{conversation_id}/reprocess'
+    )
+    query_names = {field.name for field in route.dependant.query_params}
+    body_names = {field.name for field in route.dependant.body_params}
+    assert 'app_ids' in query_names
+    assert 'app_ids' not in body_names
+
+
+def test_batch_reprocess_rejects_more_than_the_template_fanout_limit():
+    with pytest.raises(HTTPException) as exc:
+        conv_router.reprocess_conversation(
+            conversation_id='c1',
+            app_ids=[f'app-{index}' for index in range(conv_router.MAX_REPROCESS_TEMPLATE_APPS + 1)],
+            uid='u1',
+        )
+    assert exc.value.status_code == 400
+
+
+def test_valid_batch_selection_reaches_processing_with_explicit_attribution(monkeypatch):
+    from database import processing_attention as attention
+
+    model, p1, p2, p3, p4, p5, p6, process_patch = _route_context(
+        raw_app=None,
+        available_app=None,
+        enabled=True,
+    )
+    selected = ['first-app', 'second-app']
+    monkeypatch.setattr(conv_router, '_validate_reprocess_app_selection', lambda _uid, app_id: _app(app_id=app_id))
+    monkeypatch.setattr(attention, 'generation', lambda _conversation: 1)
+    monkeypatch.setattr(attention, 'claim', lambda *args, **kwargs: ({'operation_id': 'batch'}, True))
+    monkeypatch.setattr(attention, 'owns_live_claim', lambda *args: True)
+    monkeypatch.setattr(attention, 'finish', lambda *args: None)
+
+    with p1, p2, p3, p4, p5, p6, process_patch as process:
+        conv_router.reprocess_conversation(conversation_id='c1', app_ids=selected, uid='u1')
+
+    assert process.call_args.kwargs['app_ids'] == selected
+    assert process.call_args.kwargs['app_usage_attribution'] is AppUsageAttribution.EXPLICIT_SELECTION
+
+
 @pytest.mark.parametrize(
     ('app_id', 'raw_app', 'available_app', 'enabled', 'status_code', 'detail'),
     [
@@ -242,11 +289,25 @@ def test_source_omi_asks_processing_for_first_party_notes_only():
     assert process.call_args.kwargs['first_party_only'] is True
 
 
+def test_speaker_refresh_signal_is_forwarded_without_changing_omi_source():
+    model, p1, p2, p3, p4, p5, p6, process_patch = _route_context(
+        raw_app=None, available_app=None, enabled=False
+    )
+    with p1, p2, p3, p4, p5, p6, process_patch as process:
+        assert conv_router.reprocess_conversation(
+            conversation_id='c1', speaker_summary_refresh=True, uid='u1'
+        ) is model
+
+    assert process.call_args.kwargs['first_party_only'] is False
+    assert process.call_args.kwargs['speaker_summary_refresh'] is True
+
+
 def test_legacy_plain_regenerate_keeps_the_preferred_app_path():
     model, p1, p2, p3, p4, p5, p6, process_patch = _route_context(raw_app=None, available_app=None, enabled=False)
     with p1, p2, p3, p4, p5, p6, process_patch as process:
         conv_router.reprocess_conversation(conversation_id='c1', uid='u1')
 
+    assert process.call_args.kwargs['speaker_summary_refresh'] is False
     assert process.call_args.kwargs['first_party_only'] is False
 
 
@@ -308,6 +369,100 @@ def test_http_reprocess_passes_explicit_restore_and_persisted_keep_to_classifica
     assert process.call_args.kwargs['user_kept'] is expected
     assert restore.call_count == int(discarded)
 
+
+
+def test_batch_reprocess_restores_discarded_conversation(monkeypatch):
+    from database import processing_attention as attention
+
+    model, p1, p2, p3, p4, p5, p6, process_patch = _route_context(
+        raw_app=None,
+        available_app=None,
+        enabled=True,
+    )
+    model.discarded = True
+    model.sync_relevance = 'review'
+    monkeypatch.setattr(
+        conv_router,
+        '_get_valid_conversation_by_id',
+        lambda *_args: {'id': 'c1', 'status': 'completed', 'discarded': True},
+    )
+    monkeypatch.setattr(conv_router, '_validate_reprocess_app_selection', lambda _uid, app_id: _app(app_id=app_id))
+    monkeypatch.setattr(attention, 'generation', lambda _conversation: 1)
+    monkeypatch.setattr(attention, 'claim', lambda *args, **kwargs: ({'operation_id': 'batch'}, True))
+    monkeypatch.setattr(attention, 'owns_live_claim', lambda *args: True)
+    monkeypatch.setattr(attention, 'finish', lambda *args: None)
+    with (
+        p2,
+        p3,
+        p4,
+        p5,
+        p6,
+        process_patch,
+        patch.object(conv_router.lifecycle_service, 'restore_discarded', return_value=True) as restore,
+    ):
+        result = conv_router.reprocess_conversation(conversation_id='c1', app_ids=['summary-app'], uid='u1')
+
+    restore.assert_called_once_with('u1', 'c1')
+    assert result.discarded is False
+    assert result.sync_relevance == 'keep'
+
+
+@pytest.mark.parametrize(('current_status', 'expected_status'), [(404, 404), (402, 402), (None, 409)])
+def test_discarded_reprocess_fails_if_current_restore_fence_is_lost(current_status, expected_status):
+    model = SimpleNamespace(discarded=True, sync_relevance='review')
+    current_state = (
+        HTTPException(status_code=current_status, detail='current state is unavailable')
+        if current_status is not None
+        else {'id': 'c1', 'status': 'completed', 'discarded': True}
+    )
+    with (
+        patch.object(conv_router, 'process_conversation', return_value=model),
+        patch.object(conv_router.lifecycle_service, 'restore_discarded', return_value=False),
+        patch.object(
+            conv_router,
+            '_get_valid_conversation_by_id',
+            side_effect=[current_state] if isinstance(current_state, dict) else current_state,
+        ) as current_read,
+    ):
+        with pytest.raises(HTTPException) as error:
+            conv_router.execute_reprocess(
+                'u1',
+                'c1',
+                {'id': 'c1'},
+                'en',
+                None,
+                None,
+                True,
+                None,
+                None,
+                app_ids=['selected'],
+            )
+
+    assert error.value.status_code == expected_status
+    current_read.assert_called_once_with('u1', 'c1')
+
+
+def test_budget_denied_plain_reprocess_keeps_discarded_conversation_hidden():
+    model = SimpleNamespace(discarded=True, sync_relevance='review')
+    with (
+        patch.object(conv_router, 'process_conversation', return_value=model),
+        patch.object(conv_router.lifecycle_service, 'restore_discarded') as restore,
+        patch.object(conv_router, 'schedule_reprocessed_learning', return_value=model),
+    ):
+        result = conv_router.execute_reprocess(
+            'u1',
+            'c1',
+            {'id': 'c1'},
+            'en',
+            None,
+            None,
+            True,
+            None,
+            None,
+        )
+
+    restore.assert_not_called()
+    assert result.discarded is True
 
 @pytest.mark.parametrize(
     ('app_id', 'overview', 'apps_results', 'expected'),

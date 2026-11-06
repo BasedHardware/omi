@@ -12,6 +12,7 @@ import httpx
 import pytest
 from fastapi import HTTPException
 from google.api_core.exceptions import AlreadyExists
+from google.cloud.firestore_v1.field_path import FieldPath
 
 import database.conversations as conversations_db
 from database import conversation_finalization_jobs as jobs_db
@@ -43,7 +44,15 @@ class _DocumentRef:
         return _Snapshot(self.firestore.documents.get(self.path))
 
     def update(self, updates: dict[str, Any]) -> None:
-        self.firestore.documents[self.path].update(copy.deepcopy(updates))
+        document = self.firestore.documents[self.path]
+        for field_path, value in copy.deepcopy(updates).items():
+            parts = FieldPath.from_api_repr(field_path).parts
+            parent = document
+            for part in parts[:-1]:
+                if not isinstance(parent.get(part), dict):
+                    parent[part] = {}
+                parent = parent[part]
+            parent[parts[-1]] = value
         self.firestore.write_log.append((self.path, copy.deepcopy(updates)))
 
     def create(self, data: dict[str, Any]) -> None:
@@ -287,7 +296,9 @@ def test_a_discard_does_not_fence_a_processing_result_or_completion(lifecycle_st
     assert stored['title'] == 'what the sync filled it with'
 
 
-def test_missing_conversation_fences_processing_result_without_resurrection(lifecycle_store):
+def test_missing_conversation_fences_processing_result_without_resurrection(monkeypatch, lifecycle_store):
+    deleted = []
+    monkeypatch.setattr(conversations_db, '_delete_conversation_search_index', lambda *args: deleted.append(args))
     persisted = lifecycle_service.persist_processed_conversation(
         'uid',
         {
@@ -301,7 +312,188 @@ def test_missing_conversation_fences_processing_result_without_resurrection(life
     assert persisted is False
     assert ('users', 'uid', 'conversations', 'deleted-conversation') not in lifecycle_store.documents
     assert lifecycle_store.write_log == []
+    assert deleted == [('uid', 'deleted-conversation')]
 
+
+def test_soft_deleted_processing_owner_removes_search_projection(monkeypatch, lifecycle_store):
+    deleted = []
+    monkeypatch.setattr(conversations_db, '_delete_conversation_search_index', lambda *args: deleted.append(args))
+    lifecycle_store.put_conversation(
+        'uid', 'tombstone', status=ConversationStatus.processing.value, deleted=True
+    )
+
+    assert (
+        lifecycle_service.persist_processed_conversation(
+            'uid',
+            {
+                'id': 'tombstone',
+                'status': ConversationStatus.completed,
+                'data_protection_level': 'standard',
+            },
+        )
+        is False
+    )
+    assert deleted == [('uid', 'tombstone')]
+
+
+@pytest.mark.parametrize(('require_unlocked', 'persisted'), [(True, False), (False, True)])
+def test_processing_preserves_current_lock_and_user_reprocess_fences_it(
+    monkeypatch, lifecycle_store, require_unlocked, persisted
+):
+    synced = []
+    deleted = []
+    monkeypatch.setattr(conversations_db, '_sync_conversation_search_index', lambda *args: synced.append(args))
+    monkeypatch.setattr(conversations_db, '_delete_conversation_search_index', lambda *args: deleted.append(args))
+    lifecycle_store.put_conversation(
+        'uid', 'locked-processing', status=ConversationStatus.processing.value, is_locked=True, discarded=False
+    )
+
+    result = lifecycle_service.persist_processed_conversation(
+        'uid',
+        {
+            'id': 'locked-processing',
+            'status': ConversationStatus.completed,
+            'discarded': False,
+            'is_locked': False,
+            'title': 'Synthetic processed title',
+            'data_protection_level': 'standard',
+        },
+        require_unlocked=require_unlocked,
+    )
+
+    assert result is persisted
+    assert lifecycle_store.conversation('uid', 'locked-processing')['is_locked'] is True
+    if require_unlocked:
+        assert synced == deleted == []
+
+
+
+def test_user_reprocess_canonical_write_preserves_latest_app_results(lifecycle_store):
+    latest = [{'app_id': 'selected', 'content': 'user edit before canonical commit'}]
+    lifecycle_store.put_conversation(
+        'uid',
+        'app-result-preservation',
+        status=ConversationStatus.processing.value,
+        discarded=False,
+        apps_results=latest,
+    )
+
+    persisted = lifecycle_service.persist_processed_conversation(
+        'uid',
+        {
+            'id': 'app-result-preservation',
+            'status': ConversationStatus.completed,
+            'discarded': False,
+            'apps_results': [{'app_id': 'selected', 'content': 'stale generation snapshot'}],
+            'data_protection_level': 'standard',
+        },
+        preserve_app_results=True,
+    )
+
+    assert persisted is True
+    assert lifecycle_store.conversation('uid', 'app-result-preservation')['apps_results'] == latest
+
+
+def test_user_reprocess_fences_concurrent_first_party_note_edit(monkeypatch, lifecycle_store):
+    edited = {'overview': 'user-edited overview', 'sections': []}
+    deleted = []
+    monkeypatch.setattr(conversations_db, '_delete_conversation_search_index', lambda *args: deleted.append(args))
+    lifecycle_store.put_conversation(
+        'uid',
+        'edited-notes',
+        status=ConversationStatus.processing.value,
+        discarded=False,
+        structured=edited,
+    )
+
+    persisted = lifecycle_service.persist_processed_conversation(
+        'uid',
+        {
+            'id': 'edited-notes',
+            'status': ConversationStatus.completed,
+            'discarded': False,
+            'structured': {'overview': 'generated overview', 'sections': []},
+            'data_protection_level': 'standard',
+        },
+        require_unlocked=True,
+        preserve_app_results=True,
+        expected_notes_snapshot={
+            'overview': 'original overview',
+            'sections': [{'heading': 'Original', 'body_markdown': 'Original content'}],
+        },
+    )
+
+    assert persisted is False
+    assert lifecycle_store.conversation('uid', 'edited-notes')['structured'] == edited
+    assert deleted == []
+
+
+
+def test_user_reprocess_rejects_malformed_stored_notes_without_logging_payload(monkeypatch, lifecycle_store, caplog):
+    monkeypatch.setattr(conversations_db, '_sync_conversation_search_index', lambda *_args: None)
+    malformed = {'overview': {'private': 'notes-marker'}, 'sections': []}
+    lifecycle_store.put_conversation(
+        'uid',
+        'malformed-notes',
+        status=ConversationStatus.processing.value,
+        discarded=False,
+        structured=malformed,
+    )
+
+    persisted = lifecycle_service.persist_processed_conversation(
+        'uid',
+        {
+            'id': 'malformed-notes',
+            'status': ConversationStatus.completed,
+            'discarded': False,
+            'structured': {'overview': 'Generated overview', 'sections': []},
+            'data_protection_level': 'standard',
+        },
+        require_unlocked=True,
+        preserve_app_results=True,
+        expected_notes_snapshot={'overview': 'original overview', 'sections': []},
+    )
+
+    assert persisted is False
+    assert lifecycle_store.conversation('uid', 'malformed-notes')['structured'] == malformed
+    assert 'notes-marker' not in caplog.text
+
+
+def test_user_reprocess_note_fence_normalizes_legacy_section_defaults(monkeypatch, lifecycle_store):
+    monkeypatch.setattr(conversations_db, '_sync_conversation_search_index', lambda *_args: None)
+    original = {
+        'overview': 'Original overview',
+        'sections': [{'heading': 'Original', 'body_markdown': 'Original content'}],
+    }
+    lifecycle_store.put_conversation(
+        'uid',
+        'legacy-sections',
+        status=ConversationStatus.processing.value,
+        discarded=False,
+        structured=original,
+    )
+
+    persisted = lifecycle_service.persist_processed_conversation(
+        'uid',
+        {
+            'id': 'legacy-sections',
+            'status': ConversationStatus.completed,
+            'discarded': False,
+            'structured': {'overview': 'Generated overview', 'sections': []},
+            'data_protection_level': 'standard',
+        },
+        require_unlocked=True,
+        preserve_app_results=True,
+        expected_notes_snapshot={
+            'overview': 'Original overview',
+            'sections': [
+                {'heading': 'Original', 'body_markdown': 'Original content'},
+            ],
+        },
+    )
+
+    assert persisted is True
+    assert lifecycle_store.conversation('uid', 'legacy-sections')['structured']['overview'] == 'Generated overview'
 
 def test_completed_conversation_creation_is_explicit_and_idempotent(lifecycle_store):
     created = lifecycle_service.create_completed_conversation(
@@ -833,6 +1025,16 @@ def test_legacy_restore_records_user_verdict_without_restoring_tombstones(lifecy
         assert row['relevance_decision']['decided_by'] == 'user'
         assert row['relevance_decision']['reason'] == 'restored'
 
+
+
+def test_restore_fences_a_concurrent_locked_conversation(lifecycle_store):
+    lifecycle_store.put_conversation(
+        'uid', 'locked-restore', status='completed', discarded=True, is_locked=True, relevance_decision={}
+    )
+
+    assert conversations_db.restore_conversation_from_discarded('uid', 'locked-restore') is False
+    assert lifecycle_store.conversation('uid', 'locked-restore')['discarded'] is True
+    assert lifecycle_store.write_log == []
 
 @pytest.mark.parametrize('entrypoint', ['transition', 'complete'])
 @pytest.mark.parametrize('reason', ['filler_only', 'empty_transcript'])

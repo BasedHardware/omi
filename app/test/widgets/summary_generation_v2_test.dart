@@ -23,8 +23,9 @@ class _Reprocess {
   Completer<ReprocessResult>? gate;
   ReprocessResult result = const ReprocessFailed();
 
-  Future<ReprocessResult> call(String id, {String? appId, bool requireSpeakerReceipt = false, bool forceOmi = false}) {
-    appIds.add(appId);
+  Future<ReprocessResult> call(String id,
+      {String? appId, List<String>? appIds, bool requireSpeakerReceipt = false, bool forceOmi = false}) {
+    this.appIds.addAll(appIds ?? [appId]);
     forcedOmi.add(forceOmi);
     return gate?.future ?? Future.value(result);
   }
