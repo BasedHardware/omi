@@ -865,6 +865,9 @@ def test_finalization_admission_preloads_before_outbox_writes(lake_world, monkey
         return SimpleNamespace(stream=stream)
 
     monkeypatch.setattr(StrictFirestoreCollection, 'limit', limit, raising=False)
+    # Projection transforms have their own tests; keep this fake focused on
+    # admission snapshot reads and durable outbox writes.
+    monkeypatch.setattr(jobs, '_record_projection_delta', lambda *a, **kw: None)
     monkeypatch.setattr(jobs, 'quiet_finalization_enabled', lambda: False)
     monkeypatch.setattr(jobs, 'stop_quiet_check_for_conversation', lambda *a, **kw: None)
     monkeypatch.setattr(jobs, 'invalidate_people_stats_cache', lambda *a: None)

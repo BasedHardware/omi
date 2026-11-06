@@ -67,6 +67,7 @@ class _Memo:
     decoded: TTLCache = field(default_factory=lambda: TTLCache(maxsize=32, ttl=120))
     uploaded: TTLCache = field(default_factory=lambda: TTLCache(maxsize=32, ttl=120))
     deferred: dict = field(default_factory=dict)
+    resolved: set = field(default_factory=set)
 
 
 _MEMO: ContextVar[_Memo | None] = ContextVar('transcript_pointer_memo', default=None)
@@ -139,6 +140,7 @@ def resolve_pointer(uid: str, pointer: Mapping) -> list:
             value = memo.decoded[key]
         except KeyError:
             raise TranscriptPointerFetchError('Transcript preload expired before use') from None
+    memo.resolved.add(key)
     if isinstance(value, Exception):
         # Cached failures must not accumulate caller tracebacks/plaintext frames.
         raise type(value)(str(value)) from None
@@ -198,6 +200,7 @@ def run_preloaded_operation(operation, *args, swap_client=None, **kwargs):
         for attempt in range(36):
             # Only the successful attempt may schedule a post-commit swap.
             memo.deferred.clear()
+            memo.resolved.clear()
             try:
                 with _client.transaction_body():
                     result = operation(*args, **kwargs)
@@ -205,15 +208,24 @@ def run_preloaded_operation(operation, *args, swap_client=None, **kwargs):
                 unloaded = error
                 ref = _ref(error.uid, error.pointer)
                 document = error.uid, ref.bucket, ref.key.rsplit('/', 1)[0]
-                previous = preloaded.get(document)
-                if previous is not None:
+                # Undo/merge may intentionally read multiple historical versions
+                # of one document. Keep every version used by this attempt;
+                # only an unused predecessor can be superseded by a new ref.
+                superseded = [
+                    key
+                    for key in preloaded
+                    if (key[0], key[1].bucket, key[1].key.rsplit('/', 1)[0]) == document and key not in memo.resolved
+                ]
+                if superseded:
                     content_changes += 1
-                    memo.decoded.pop(_memo_key(error.uid, previous), None)
+                    for key in superseded:
+                        memo.decoded.pop(key, None)
+                        preloaded.pop(key)
                 elif len(preloaded) >= 32:
                     raise TranscriptPointerFetchError('Transcript exceeds bounded preload document limit') from None
                 if content_changes > 3 or attempt == 35:
                     raise TranscriptPointerFetchError('Transcript changed during bounded preload retries') from None
-                preloaded[document] = ref
+                preloaded[_memo_key(error.uid, ref)] = ref
             else:
                 break
             preload_pointer(unloaded.uid, unloaded.pointer)
