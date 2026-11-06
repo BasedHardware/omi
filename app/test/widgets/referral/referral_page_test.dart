@@ -396,7 +396,7 @@ void main() {
     await tester.pumpWidget(host(const SizedBox()));
     await tester.pumpWidget(host(page()));
     await tester.pumpAndSettle();
-    expect(find.byKey(ValueKey('referral-qr:$link')), findsOneWidget);
+    expect(find.byKey(const ValueKey('referral-qr:$link')), findsOneWidget);
     expect(find.text(link), findsNothing);
     for (var i = 0; i < 3; i++) {
       await Scrollable.ensureVisible(tester.element(find.byKey(const Key('referral-copy'))), alignment: 0.5);
@@ -417,7 +417,7 @@ void main() {
       await tester.pumpWidget(host(const SizedBox()));
       await tester.pumpWidget(host(page()));
       await tester.pumpAndSettle();
-      expect(find.byKey(ValueKey('referral-qr:$link')), findsOneWidget);
+      expect(find.byKey(const ValueKey('referral-qr:$link')), findsOneWidget);
     }
     expect(loads, 5);
   });
@@ -475,7 +475,7 @@ void main() {
     auth.handleAuthUserChanged(null);
     gateway.user = null;
     await tester.pumpAndSettle();
-    expect(find.byKey(ValueKey('referral-qr:$link')), findsNothing);
+    expect(find.byKey(const ValueKey('referral-qr:$link')), findsNothing);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
     auth.markAuthenticatedUser('user-b');
@@ -501,8 +501,8 @@ void main() {
     await tester.pumpAndSettle();
     old.complete(campaign());
     await tester.pumpAndSettle();
-    expect(find.byKey(ValueKey('referral-qr:$link')), findsNothing);
-    expect(find.byKey(ValueKey('referral-qr:$otherLink')), findsOneWidget);
+    expect(find.byKey(const ValueKey('referral-qr:$link')), findsNothing);
+    expect(find.byKey(const ValueKey('referral-qr:$otherLink')), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
     await changes.close();
   });
