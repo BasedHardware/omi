@@ -90,7 +90,11 @@ def apply_cutover_transition(
             code='illegal_cutover_transition',
         )
 
-    data_plane = request.data_plane or record.data_plane
+    data_plane = (
+        'cell'
+        if request.data_plane == 'cell' or record.data_plane == 'cell'
+        else request.data_plane or record.data_plane
+    )
     cell_cutover = data_plane == 'cell'
     next_generation = record.account_generation
     if request.next_account_generation is not None:
@@ -152,7 +156,7 @@ def _refresh_same_state(
 ) -> AccountCutoverRecord:
     updates: dict[str, object] = {}
     if request.data_plane is not None:
-        updates['data_plane'] = request.data_plane
+        updates['data_plane'] = 'cell' if record.data_plane == 'cell' else request.data_plane
     if request.offline_queue_instruction is not None:
         _assert_offline_instruction_legal(record.state, request.offline_queue_instruction)
         updates['offline_queue_instruction'] = request.offline_queue_instruction
