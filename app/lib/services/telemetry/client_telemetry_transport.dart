@@ -15,7 +15,7 @@ import 'package:omi/utils/platform/platform_service.dart';
 /// migration flag is off; sending still no-ops until observations are enqueued.
 void installClientTelemetryTransport() {
   final telemetry = ClientTelemetry.instance;
-  telemetry.ownerId = () => FirebaseAuth.instance.currentUser?.uid;
+  telemetry.ownerId = () => AuthService.instance.currentUser?.uid;
   telemetry.platform = () {
     if (PlatformService.isIOS) return 'ios';
     if (PlatformService.isAndroid) return 'android';
@@ -30,9 +30,8 @@ void installClientTelemetryTransport() {
   };
   telemetry.outbox.attachStore(FileTelemetryStore(getApplicationSupportDirectory));
   telemetry.outbox.tokenFor = (ownerId, {required bool forceRefresh}) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null || user.uid != ownerId) return null;
-    if (forceRefresh) return user.getIdToken(true);
+    if (AuthService.instance.currentUser?.uid != ownerId) return null;
+    if (forceRefresh) return FirebaseAuth.instance.currentUser?.getIdToken(true);
     return AuthService.instance.getIdToken();
   };
   telemetry.outbox.post = _postBatch;

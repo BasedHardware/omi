@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/services/auth_service.dart';
@@ -31,7 +30,7 @@ abstract final class OnboardingSyncRuntime {
     service.setActive(true);
     // Invalidate immediately, including a same-account sign-out/sign-in (ABA).
     _generation = AuthService.instance.sessionGenerationEvents.listen((_) => service.bindSession(null));
-    _auth = FirebaseAuth.instance.authStateChanges().listen((_) => wake());
+    _auth = AuthService.instance.authStateChanges.listen((_) => wake());
     _connection = ConnectivityService().onConnectionChange.listen((connected) {
       if (connected) wake();
     });

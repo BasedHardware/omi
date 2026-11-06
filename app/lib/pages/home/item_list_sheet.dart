@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -22,6 +21,7 @@ import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/extensions/string.dart';
+import 'package:omi/services/auth_service.dart';
 
 /// One row of an `/items` list once loaded: exactly one of [conversation], [task] or [memory] is
 /// set, or none when the item is gone or not the reader's.
@@ -57,13 +57,13 @@ class ItemListLoader {
     var ownerRead = false;
     String? uidAtOpen() {
       if (!ownerRead) {
-        owner = FirebaseAuth.instance.currentUser?.uid;
+        owner = AuthService.instance.currentUser?.uid;
         ownerRead = true;
       }
       return owner;
     }
 
-    bool ownerIsCurrent() => uidAtOpen() != null && FirebaseAuth.instance.currentUser?.uid == uidAtOpen();
+    bool ownerIsCurrent() => uidAtOpen() != null && AuthService.instance.currentUser?.uid == uidAtOpen();
 
     final memoryIds = {
       for (final item in items)

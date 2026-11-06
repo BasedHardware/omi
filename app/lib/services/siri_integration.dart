@@ -27,6 +27,7 @@ import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart' as siri_events;
 import 'package:omi/utils/platform/platform_manager.dart';
+import 'package:omi/services/auth_service.dart';
 
 /// Small test seam for the conversation capture path used by Siri's foreground
 /// Start/Stop actions. Production resolves these callbacks from CaptureProvider.
@@ -1048,7 +1049,7 @@ class SiriIntegration extends SiriEventsApi {
       _testRouteOpener?.call(route, uid, generation) ??
       HomeNavigation.openRoute(
         route,
-        canOpen: () => _uid == uid && _nativeGeneration == generation && FirebaseAuth.instance.currentUser?.uid == uid,
+        canOpen: () => _uid == uid && _nativeGeneration == generation && AuthService.instance.currentUser?.uid == uid,
       );
 
   @override
