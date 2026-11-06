@@ -879,7 +879,9 @@ def _stage_notes_identity(transaction, user_ref, write_data, existing):
         existing,
         decode_segments=_decode_transcript_segments_strict,
         decode_receipt=decode_manual_speaker_assignments,
-        encode=_prepare_conversation_for_write,
+        encode=lambda data, owner, level: _prepare_conversation_for_write(
+            data, owner, level, conversation_id=write_data.get('id')
+        ),
     )
 
 
@@ -2280,7 +2282,7 @@ def update_conversation(
             **update_data,
             'audio_files': retain_aliases(update_data['audio_files'], doc_snapshot.to_dict().get('audio_files') or []),
         }
-    prepared_data = _prepare_conversation_for_write(update_data, uid, doc_level)
+    prepared_data = _prepare_conversation_for_write(update_data, uid, doc_level, conversation_id=conversation_id)
     guard_match_score_size(prepared_data, doc_snapshot.to_dict(), getattr(doc_ref, 'path', None))
     try:
         if expected_audio_files is None:
@@ -2346,7 +2348,9 @@ def update_conversation_chat(uid: str, conversation_id: str, expected: dict, upd
     raw = get_conversation_raw_snapshot(uid, conversation_id)
     if raw is None:
         raise PermissionError('Conversation removed')
-    prepared = _prepare_conversation_for_write(update_data, uid, raw.get('data_protection_level', 'standard'))
+    prepared = _prepare_conversation_for_write(
+        update_data, uid, raw.get('data_protection_level', 'standard'), conversation_id=conversation_id
+    )
     after = chat_edits.apply_update(uid, 'conversation', conversation_id, expected, prepared)
     refresh_conversation_after_chat_edit(uid, conversation_id)
     return after
@@ -2723,7 +2727,11 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
                     bool(current.get('manual_speaker_assignments_compressed')),
                 )
             prepared = _prepare_conversation_for_write(
-                payload, uid, target_level, preserve_transcript_identity=bool(current.get('has_transcript_corrections'))
+                payload,
+                uid,
+                target_level,
+                preserve_transcript_identity=bool(current.get('has_transcript_corrections')),
+                conversation_id=doc_snapshot.reference.id,
             )
             guard_match_score_size(prepared, current, getattr(doc_snapshot.reference, 'path', None))
             if had_match_scores and match_scores.FIELD not in prepared:
@@ -3762,6 +3770,7 @@ def assign_conversation_speaker(
             uid,
             raw.get('data_protection_level', 'standard'),
             preserve_transcript_identity=bool(raw.get('has_transcript_corrections')),
+            conversation_id=current_id,
         )
         clear_client_processing(payload)
         guard_match_score_size(payload, raw, getattr(ref, 'path', None))
@@ -4151,6 +4160,7 @@ def materialize_translation(
             uid,
             level,
             preserve_transcript_identity=bool(current.get('has_transcript_corrections')),
+            conversation_id=conversation_id,
         )
         payload['translation_materializations'] = _protect_json_value(metadata, uid, 'enhanced')
         payload['translation_materializations_compressed'] = True
@@ -4822,6 +4832,7 @@ def promote_final_pass_if_current(
             uid,
             current.get('data_protection_level') or 'standard',
             preserve_transcript_identity=bool(current.get('has_transcript_corrections')),
+            conversation_id=conversation_id,
         )
         guard_match_score_size(prepared, current, getattr(parent, 'path', None))
         transaction.update(parent, prepared)

@@ -14,7 +14,18 @@ from pydantic import ValidationError
 import pytest
 
 from database import conversations as db, transcript_pointer as pointer
-from database import owner_confirmation, review_overlay_merge, review_store, episodes
+from database import (
+    owner_confirmation,
+    review_overlay_merge,
+    review_store,
+    episodes,
+    speaker_resolution_updates,
+    review_transcript_changes,
+    speaker_learning_jobs,
+)
+from models.review import ReviewChange, ChangeRef
+from utils.conversations import transcript_chunks
+from utils.conversations.transcript_hash import transcript_sha256_for_binding
 from models.conversation import Conversation
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestoreDocument
 from tests.unit.test_transcript_pointer import lake_world, UID, CID, PATH, encode, speech, pointer_doc
@@ -246,8 +257,6 @@ def test_data_class_limits_bound_decompression_and_admission(lake_world, monkeyp
 @pytest.mark.parametrize('state', ['present', 'absent', 'shredded', 'outage'])
 @pytest.mark.parametrize('site', ['projection', 'translation', 'speaker_assignment', 'speaker_resolution'])
 def test_remaining_domain_transactions_use_preload(lake_world, monkeypatch, site, state):
-    from database import speaker_resolution_updates
-    from utils.conversations.transcript_hash import transcript_sha256_for_binding
 
     pointer_doc(lake_world)
     original_get = StrictFirestoreDocument.get
@@ -338,7 +347,6 @@ class _ReadSurface:
 
 @pytest.mark.parametrize('surface', ['detail', 'list', 'mcp', 'export', 'search', 'notifications'])
 def test_reader_surfaces_resolve_pointers(lake_world, monkeypatch, surface):
-    from utils.conversations import transcript_chunks
 
     doc = pointer_doc(lake_world)
     doc.update(
@@ -422,8 +430,6 @@ def test_unavailable_owner_authority_fails_closed(lake_world, monkeypatch):
 
 
 def test_review_overlay_apply_and_undo_preload_cold_pointers(lake_world, monkeypatch):
-    from database import review_transcript_changes, memory_ledger
-    from models.review import ReviewChange, ChangeRef
 
     doc = pointer_doc(lake_world)
     monkeypatch.setattr(review_store, 'get_firestore_client', lambda: lake_world.store)
@@ -469,7 +475,6 @@ def test_review_overlay_apply_and_undo_preload_cold_pointers(lake_world, monkeyp
 @pytest.mark.parametrize('site', ['legacy_learning', 'ensure_learning'])
 @pytest.mark.parametrize('state', ['present', 'absent', 'shredded', 'outage'])
 def test_learning_ledger_transactions_preload(lake_world, monkeypatch, site, state):
-    from database import speaker_learning_jobs
 
     doc = pointer_doc(lake_world)
     doc['manual_speaker_assignments'] = {
@@ -499,3 +504,34 @@ def test_learning_ledger_transactions_preload(lake_world, monkeypatch, site, sta
         operation()
     if state == 'present':
         assert lake_world.calls['get'] == 1
+
+
+def test_nontransactional_update_offloads_without_id_in_patch(lake_world, monkeypatch):
+    lake_world.store.rows[PATH] = {'id': CID, 'data_protection_level': 'standard', 'status': 'completed'}
+    monkeypatch.setattr(db, 'db', lake_world.store)
+    monkeypatch.setattr(db, '_sync_conversation_search_index', lambda *args: None)
+
+    def update(ref, payload):
+        assert isinstance(payload['transcript_segments'], dict)
+        assert lake_world.calls['put'] == 1  # upload completed before the doc write
+        lake_world.store.rows[ref.path].update(deepcopy(payload))
+
+    monkeypatch.setattr(StrictFirestoreDocument, 'update', update, raising=False)
+    assert db.update_conversation.__wrapped__(UID, CID, {'transcript_segments': speech()})
+    assert (
+        db.decode_transcript_segments_verified(UID, lake_world.store.rows[PATH]['transcript_segments'], True)
+        == speech()
+    )
+
+
+def test_translation_drains_deferred_offload_for_the_document_id(lake_world, monkeypatch):
+    pointer_doc(lake_world)
+    drain = Mock(return_value=True)
+    monkeypatch.setattr(pointer, 'offload_inline_transcript', drain)
+    assert db.materialize_translation(
+        UID, CID, 'segment-1', speech()[0]['text'], 'es', 'Synthetic translation', firestore_client=lake_world.store
+    )
+    drain.assert_called_once()
+    assert drain.call_args.args == (UID, CID)
+    assert drain.call_args.kwargs['firestore_client'] is lake_world.store
+    assert len(drain.call_args.kwargs['expected_sha256']) == 64
