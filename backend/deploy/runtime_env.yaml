@@ -376,6 +376,9 @@ environments:
         - memory.canonical.mutate
         values_file: backend/charts/pusher/dev_omi_pusher_values.yaml
         env:
+          PUSHER_STORAGE_PCM_BUDGET_MB:
+            value: '0'
+            category: ops_kill
           CONVERSATION_TERMINAL_FAMILY_MODE:
             value: 'on'
             category: ops_kill
@@ -2695,6 +2698,9 @@ environments:
         - memory.canonical.mutate
         values_file: backend/charts/pusher/prod_omi_pusher_values.yaml
         env:
+          PUSHER_STORAGE_PCM_BUDGET_MB:
+            value: '0'
+            category: ops_kill
           CONVERSATION_TERMINAL_FAMILY_MODE:
             value: 'on'
             category: ops_kill
