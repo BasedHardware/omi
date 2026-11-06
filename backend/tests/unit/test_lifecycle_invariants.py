@@ -68,16 +68,33 @@ def phase_metric_gauge_names(tree):
     return {prefix + suffix for prefix in prefixes for suffix in suffixes}
 
 
+def literal_gauge_names(tree):
+    """Include declared Gauge subclasses without treating counters as stock."""
+    gauge_types = {'Gauge'} | {
+        node.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ClassDef)
+        and any(isinstance(base, ast.Name) and base.id == 'Gauge' for base in node.bases)
+    }
+    return {
+        node.args[0].value
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id in gauge_types
+        and node.args
+        and isinstance(node.args[0], ast.Constant)
+        and isinstance(node.args[0].value, str)
+    }
+
+
 @lru_cache(maxsize=1)
 def gauge_names():
     result = set()
     for module in METRIC_MODULES:
         tree = ast.parse((BACKEND / module).read_text())
         result.update(phase_metric_gauge_names(tree))
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == 'Gauge' and node.args:
-                if isinstance(node.args[0], ast.Constant):
-                    result.add(node.args[0].value)
+        result.update(literal_gauge_names(tree))
     return result
 
 
@@ -87,6 +104,15 @@ def test_phase_metric_inventory_requires_declared_prefix_and_gauge_suffix():
     assert 'declared_new_oldest_age_seconds' in names
     assert 'made_up_prefix_new_oldest_age_seconds' not in names
     assert 'declared_made_up_suffix' not in names
+
+
+def test_gauge_inventory_recognizes_declared_subclasses_and_rejects_counters():
+    tree = ast.parse(
+        "class FreshGauge(Gauge): pass\n"
+        "class Events(Counter): pass\n"
+        "FreshGauge('stock'); Gauge('plain'); Counter('events'); Events('also_events')"
+    )
+    assert literal_gauge_names(tree) == {'stock', 'plain'}
 
 
 @lru_cache(maxsize=1)

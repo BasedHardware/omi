@@ -22,6 +22,7 @@ from typing import Any
 from utils.batch_pipeline import record_seal_profile
 from config import record_seal_repair as config
 from config import record_partial as partial_config
+from database.firestore_read_origin import read_origin
 from database.record_partial import finish_partial
 from utils.batch_pipeline.record_seal_reasons import PROOF_REASONS, TAIL_GAP_BUCKETS
 
@@ -318,6 +319,7 @@ def pending_blocker(row):
     return 'seal_eligible'
 
 
+@read_origin('job:record_seal_cluster_repair:discover_jobs')
 def discover_jobs(client, *, budget, after=None, max_rows=8, max_scan=128, selected_cursors=None):
     """Independent bounded state/name cursor: no completed-conversation predicate.
 

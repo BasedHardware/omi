@@ -17,6 +17,7 @@ from config.batch_timeliness import (
     timeliness_interval_seconds,
 )
 from database.batch_pipeline_store import Store, FirestoreStore, PROJECTION_OBLIGATION_STATES, timeliness_sample
+from utils.batch_pipeline.leader import TIMELINESS_LEASE_GRACE_SECONDS, TIMELINESS_METRICS, LeaderLease
 from utils.batch_pipeline.contracts import Priority, WORK_OUTCOMES
 from utils.observability.reasons import AdmissionHoldReason, ReasonFamily, reason_label
 from utils.lifecycle_metrics import PhaseMetrics
@@ -103,8 +104,13 @@ class QueueMetrics:
         capacity_sampling: bool = False,
         min_refresh_seconds: float = 0.0,
         oldest_leader=None,
+        timeliness_leader=None,
         oldest_min_refresh_seconds: float = 0.0,
     ):
+        self.timeliness_leader = timeliness_leader
+        self._timeliness_lock = threading.Lock()
+        self._timeliness_visible = False
+        self._timeliness_expires = 0.0
         self.scope = (worker_release, namespace)
         self.oldest_leader = oldest_leader
         self.oldest_min_refresh_seconds = oldest_min_refresh_seconds
@@ -146,45 +152,52 @@ class QueueMetrics:
             registry=registry,
         )
         # 2-hour timeliness alarm (David, 2026-11-02). Alert-only: no scheduler, ramp or rollback guard reads it.
-        self.timeliness_age = Gauge(
+        self.timeliness_age = _FreshQueueGauge(
             'omi_batch_timeliness_new_oldest_age_seconds',
             'Oldest unpublished unit admitted (projection legs: committed) at or after the epoch; alarm above 7200s',
             ['leg'],
             registry=registry,
+            fresh=self._timeliness_sample_visible,
         )
-        self.drain_age = Gauge(
+        self.drain_age = _FreshQueueGauge(
             'omi_batch_projection_drain_oldest_age_seconds',
             'Oldest runnable projection age across all epochs; excludes quarantine_held; alert-only',
             registry=registry,
+            fresh=self._timeliness_sample_visible,
         )
-        self.held_age = Gauge(
+        self.held_age = _FreshQueueGauge(
             'omi_batch_held_oldest_age_seconds',
             'Oldest held row age without an epoch or rolling cohort cutoff; alert-only',
             ['leg'],
             registry=registry,
+            fresh=self._timeliness_sample_visible,
         )
-        self.timeliness_over_sla = Gauge(
+        self.timeliness_over_sla = _FreshQueueGauge(
             'omi_batch_timeliness_new_over_sla_units',
             'Units admitted at or after the epoch and still unpublished past the 2h SLA, by counted leg',
             ['leg'],
             registry=registry,
+            fresh=self._timeliness_sample_visible,
         )
-        self.timeliness_backlog = Gauge(
+        self.timeliness_backlog = _FreshQueueGauge(
             'omi_batch_timeliness_backlog_units',
-            'Unpublished units from before the epoch, by leg; kept visible, never alarmed',
+            'Pre-epoch unpublished units by leg; capped at 10000 (lower bound) with batch_timeliness_leader; never alarmed',
             ['leg'],
             registry=registry,
+            fresh=self._timeliness_sample_visible,
         )
-        self.timeliness_truncated = Gauge(
+        self.timeliness_truncated = _FreshQueueGauge(
             'omi_batch_timeliness_scan_truncated',
             '1 when a leg\'s bounded walk may hide an older unpublished unit',
             ['leg'],
             registry=registry,
+            fresh=self._timeliness_sample_visible,
         )
-        self.timeliness_observed_at = Gauge(
+        self.timeliness_observed_at = _FreshQueueGauge(
             'omi_batch_timeliness_observed_at_seconds',
             'Last successful timeliness sample',
             registry=registry,
+            fresh=self._timeliness_sample_visible,
         )
         self.timeliness_samples = Counter(
             'omi_batch_timeliness_samples_total',
@@ -358,8 +371,8 @@ class QueueMetrics:
                 else:
                     self._refresh_queue(store, now)
                 self._oldest_due = now + self.oldest_min_refresh_seconds
-        # Timeliness, lifecycle and projection sampling keep their existing
-        # per-instance schedules, including on followers and GPU fallback ticks.
+        # Timeliness elects its own fleet role on serving and worker planes;
+        # lifecycle and projection keep their existing per-instance schedules.
         if isinstance(store, FirestoreStore):
             from database.lifecycle_metrics_queries import record_pending, nojob
 
@@ -409,14 +422,45 @@ class QueueMetrics:
             self.capacity_refreshed_at.labels(*self.scope).set(now)
             self._capacity_observed = observed
 
+    def _timeliness_sample_visible(self) -> bool:
+        # A stalled former leader must not combine its old breach with a new
+        # leader's fresh timestamp in max-based alerts. Expire at collection,
+        # even when no supervised refresh returns to discover the handover.
+        return self._timeliness_visible and (
+            not lever_enabled('batch_timeliness_leader') or time.monotonic() < self._timeliness_expires
+        )
+
     def refresh_timeliness(self, store: FirestoreStore, now: float) -> None:
-        """At most one sample per interval per process; a failed sample keeps last values and freshness."""
+        """One fleet sample per interval; errors preserve the last successful timestamp."""
+        with self._timeliness_lock:
+            self._refresh_timeliness(store, now)
+
+    def _refresh_timeliness(self, store: FirestoreStore, now: float) -> None:
         if now < self._timeliness_due:
             return
-        self._timeliness_due = now + timeliness_interval_seconds()
+        interval = timeliness_interval_seconds()
+        self._timeliness_due = now + interval
         if not batch_timeliness_alarm_enabled():
             self.timeliness_samples.labels('disabled').inc()
             return
+        elected = lever_enabled('batch_timeliness_leader')
+        sample_expires = None
+        if elected:
+            lease_seconds = interval + TIMELINESS_LEASE_GRACE_SECONDS
+            if self.timeliness_leader is None:
+                # Lazy and shared by both planes, using the data namespace, not
+                # pod/release identity. No import-time or disabled-path IO.
+                self.timeliness_leader = LeaderLease(store, TIMELINESS_METRICS, ttl_seconds=lease_seconds)
+            self.timeliness_leader.ttl_seconds = lease_seconds
+            acquired_at = time.monotonic()
+            if not self.timeliness_leader.acquire():
+                # Retry through the incumbent's refresh grace without waiting
+                # another full sample interval after it stops. Followers do
+                # at most one lease check per minute and never sample on loss.
+                self._timeliness_due = now + min(interval, TIMELINESS_LEASE_GRACE_SECONDS)
+                self._timeliness_visible = False
+                return
+            sample_expires = acquired_at + lease_seconds
         try:
             sample = timeliness_sample(
                 store.client,
@@ -444,6 +488,11 @@ class QueueMetrics:
         for leg, truncated in sample['truncated'].items():
             self.timeliness_truncated.labels(leg).set(1 if truncated else 0)
         self.timeliness_observed_at.set(now)
+        if sample_expires is not None:
+            # A lease renewal/fail-open result alone must not revive expired
+            # debt beside another replica's fresh observation timestamp.
+            self._timeliness_expires = sample_expires
+        self._timeliness_visible = True
         self.timeliness_samples.labels('ok').inc()
 
     def refresh_projection(self, store: FirestoreStore, now: float) -> None:

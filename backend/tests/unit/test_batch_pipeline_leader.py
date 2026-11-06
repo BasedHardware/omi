@@ -7,7 +7,7 @@ from unittest.mock import Mock
 import pytest
 
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore
-from utils.batch_pipeline.leader import PUMP_RECOVERY, SERVING_MAINTENANCE, TABLE, LeaderLease
+from utils.batch_pipeline.leader import PUMP_RECOVERY, SERVING_MAINTENANCE, TIMELINESS_METRICS, TABLE, LeaderLease
 
 
 class Clock:
@@ -132,3 +132,9 @@ def test_overlapping_acquires_on_one_lease_never_leave_a_stall():
     assert not LeaderLease(store, SERVING_MAINTENANCE, ttl_seconds=60, clock=clock).acquire()
     clock.now += 1
     assert lease.acquire()  # Still the holder on the next tick; no full-TTL stall.
+
+
+def test_timeliness_role_allows_only_the_bounded_interval_plus_refresh_grace():
+    assert LeaderLease(MemoryStore(), TIMELINESS_METRICS, ttl_seconds=3660).ttl_seconds == 3660
+    with pytest.raises(ValueError):
+        LeaderLease(MemoryStore(), TIMELINESS_METRICS, ttl_seconds=3661)

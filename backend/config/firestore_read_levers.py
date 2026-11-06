@@ -23,6 +23,7 @@ ENV_KEY = 'FIRESTORE_READ_LEVERS'
 # Every lever the code consults. Unknown names in the env are ignored (and logged once).
 KNOWN_LEVERS = frozenset(
     {
+        'batch_timeliness_leader',  # ship-on election and capped backlog counts; 0 restores legacy sampling
         'batch_metrics_oldest_leader',  # ship-on queue sample election; 0 restores per-instance reads
         'singleton_loops',
         'listen_poll',
@@ -63,7 +64,7 @@ KNOWN_LEVERS = frozenset(
 )
 
 
-DEFAULT_PERCENTAGES = {'batch_metrics_oldest_leader': 100}
+DEFAULT_PERCENTAGES = {'batch_metrics_oldest_leader': 100, 'batch_timeliness_leader': 100}
 
 
 @lru_cache(maxsize=4)
