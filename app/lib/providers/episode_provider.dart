@@ -42,6 +42,7 @@ class EpisodeProvider extends ChangeNotifier {
   DateTime? _homeFrom;
   DateTime? _homeTo;
   Timer? _homeHold;
+  int _homeHoldAttempts = 0;
   int _homeGeneration = 0;
   Future<bool>? _homeRead;
   String? _homeReadingKey;
@@ -187,13 +188,33 @@ class EpisodeProvider extends ChangeNotifier {
   }
 
   /// Nothing else rebuilds Home while a finished episode waits, so re-read until it settles.
-  /// A single member shows as its own conversation and never waits.
+  /// A single member shows as its own conversation and never waits. Re-reads back off and stop
+  /// after [homeHoldAttempts]; a read that brings the summary ends the hold.
   void _holdHome(DateTime from, DateTime to, String key) {
     _homeHold?.cancel();
-    if (!_homeEpisodes.any((e) => e.members.length != 1 && e.awaitingSummary(_clock()))) return;
-    _homeHold = Timer(pollInterval, () {
+    final now = _clock();
+    if (!_homeEpisodes.any((e) => _homeNeedsRead(e, now))) {
+      _homeHoldAttempts = 0;
+      return;
+    }
+    if (_homeHoldAttempts >= homeHoldAttempts) return;
+    final backoff = _homeHoldAttempts > 4 ? 4 : _homeHoldAttempts;
+    final seconds = pollInterval.inSeconds << backoff;
+    final delay = Duration(seconds: seconds > homeHoldMaxDelay.inSeconds ? homeHoldMaxDelay.inSeconds : seconds);
+    _homeHoldAttempts++;
+    _homeHold = Timer(delay, () {
       if (key == _homeKey) unawaited(refreshHome(from, to, force: true));
     });
+  }
+
+  /// A closed episode needs another read while its summary is pending, or while a member is still
+  /// processing: Home's pending hold keeps the uncomposed copy on screen until a read brings the
+  /// composed one.
+  bool _homeNeedsRead(Episode episode, DateTime now) {
+    if (episode.live || episode.composed || episode.members.length == 1) return false;
+    if (episode.awaitingSummary(now)) return true;
+    final processing = _homeConversations?.processingConversations;
+    return processing != null && processing.any((c) => episode.conversationIds.contains(c.id));
   }
 
   @visibleForTesting
@@ -211,6 +232,11 @@ class EpisodeProvider extends ChangeNotifier {
 
   /// How often a watcher (Home's live row, the live page) re-reads the live episode.
   static const pollInterval = Duration(seconds: 30);
+
+  /// A held closed episode is re-read every [pollInterval], then backs off to [homeHoldMaxDelay].
+  /// After [homeHoldAttempts] re-reads the hold gives up, and Home keeps the server's latest copy.
+  static const homeHoldAttempts = 10;
+  static const homeHoldMaxDelay = Duration(minutes: 5);
 
   /// Until a live episode shows up, a watcher re-reads sooner: the server opens one at the first
   /// words, and the row should switch to it (and hide its fragments) within seconds, not half a minute.
@@ -263,6 +289,7 @@ class EpisodeProvider extends ChangeNotifier {
     _previousBeforeCapture = null;
     _homeEpisodes = const [];
     _homeHold?.cancel();
+    _homeHoldAttempts = 0;
     _hiddenHomeMembers = {};
     _homeVisibilityRows = null;
     _homeKey = null;

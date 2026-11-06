@@ -203,6 +203,87 @@ void main() {
     });
   });
 
+  group('a closed episode held by a processing member is re-read until its summary lands', () {
+    final closedLongAgo = _t0.add(const Duration(hours: 2));
+    Episode closed({bool composed = false}) => Episode(
+          id: 'ep1',
+          live: false,
+          startedAt: _t0,
+          lastActivityAt: _t0,
+          title: 'Dinner',
+          conversationIds: const ['c1', 'c2'],
+          moments: composed
+              ? [
+                  EpisodeMoment(
+                      id: 'm',
+                      conversationId: 'c1',
+                      startedAt: _t0,
+                      endedAt: _t0,
+                      points: const [EpisodePoint('Picked a trail')])
+                ]
+              : const [],
+        );
+    ServerConversation processing(String id) => ServerConversation(
+          id: id,
+          createdAt: _t0,
+          startedAt: _t0,
+          status: ConversationStatus.processing,
+          structured: Structured('', ''),
+        );
+
+    test('re-reads with backoff and stops once the composed copy arrives', () {
+      fakeAsync((async) {
+        var reads = 0;
+        final history = _HomeHistory()..processingConversations = [processing('c2')];
+        final provider = EpisodeProvider(
+          clock: () => closedLongAgo,
+          fetchPage: (from, to, {cursor}) async {
+            reads++;
+            return ApiSuccess(EpisodePageRead(enabled: true, episodes: [closed(composed: reads >= 3)]));
+          },
+        )..debugSetLive(null);
+        provider.observeHomeConversations(history);
+        unawaited(provider.refreshHome(_t0, _t0));
+        async.flushMicrotasks();
+        expect(reads, 1);
+        async.elapse(const Duration(seconds: 30));
+        async.flushMicrotasks();
+        expect(reads, 2, reason: 'first re-read at the poll interval');
+        async.elapse(const Duration(seconds: 60));
+        async.flushMicrotasks();
+        expect(reads, 3, reason: 'second re-read after backing off');
+        expect(provider.homeEpisodes.single.composed, isTrue);
+        async.elapse(const Duration(hours: 1));
+        async.flushMicrotasks();
+        expect(reads, 3, reason: 'a composed copy ends the hold');
+        provider.dispose();
+        async.flushTimers();
+      });
+    });
+
+    test('gives up after the bounded number of re-reads', () {
+      fakeAsync((async) {
+        var reads = 0;
+        final history = _HomeHistory()..processingConversations = [processing('c2')];
+        final provider = EpisodeProvider(
+          clock: () => closedLongAgo,
+          fetchPage: (from, to, {cursor}) async {
+            reads++;
+            return ApiSuccess(EpisodePageRead(enabled: true, episodes: [closed()]));
+          },
+        )..debugSetLive(null);
+        provider.observeHomeConversations(history);
+        unawaited(provider.refreshHome(_t0, _t0));
+        async.flushMicrotasks();
+        async.elapse(const Duration(hours: 2));
+        async.flushMicrotasks();
+        expect(reads, 1 + EpisodeProvider.homeHoldAttempts);
+        provider.dispose();
+        async.flushTimers();
+      });
+    });
+  });
+
   for (final close in ['poll', 'finalize', 'wrapUp']) {
     test('Home refreshes immediately after close via $close and fences a stale in-flight read', () async {
       var closed = false;
