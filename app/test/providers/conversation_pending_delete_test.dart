@@ -207,6 +207,26 @@ void main() {
     expect(provider.conversations, isEmpty);
   });
 
+  test('live upserts cannot restore a row while undo or delete is pending', () async {
+    final row = _conversation('deleted');
+    final keep = _conversation('keep');
+    final provider = makeProvider([row, keep]);
+    final response = Completer<bool>();
+    provider.conversationDeleteFetcherOverride = (_) => response.future;
+
+    await provider.deleteConversationLocally(row);
+    provider.upsertConversation(row);
+    expect(provider.conversations, [keep]);
+
+    final deletion = provider.deleteConversationOnServer(row.id);
+    provider.upsertConversation(row);
+    expect(provider.conversations, [keep]);
+
+    response.complete(false);
+    await deletion;
+    expect(provider.conversations, unorderedEquals([row, keep]));
+  });
+
   test('confirmed deletes stay removed when an empty refresh restores cached rows', () async {
     final a = _conversation('a');
     final b = _conversation('b');

@@ -1509,7 +1509,7 @@ class ConversationProvider extends ChangeNotifier {
 
   final _phoneOnlyConversations = <String, ServerConversation>{};
   void upsertConversation(ServerConversation conversation) {
-    if (SharedPreferencesUtil().isConversationDeleteConfirmed(conversation.id)) return;
+    if (_isHiddenByDelete(conversation.id)) return;
     if (conversation.deleted || conversation.isMergedDonor) {
       updateConversationInSortedList(conversation);
       return;
