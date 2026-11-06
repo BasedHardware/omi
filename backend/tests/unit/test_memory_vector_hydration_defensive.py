@@ -53,10 +53,14 @@ def _isolate_test_environment(monkeypatch):
 # 1. vector_db.find_similar_memories defensive checks
 # ===========================================================================
 class TestVectorDbFindSimilarMemoriesDefensive:
-    def setup_method(self):
+    @pytest.fixture(autouse=True)
+    def _setup_pinecone(self, monkeypatch):
         self.mock_index = MagicMock()
         self.mock_embeddings = MagicMock()
         self.mock_embeddings.embed_query.return_value = [0.1, 0.2, 0.3]
+        monkeypatch.setenv("PINECONE_INDEX_NAME", "test-index")
+        monkeypatch.setattr(vector_db, "_pinecone_index_name", "test-index", raising=False)
+        monkeypatch.setattr(vector_db, "owner_index", lambda raw, uid, **kwargs: raw, raising=False)
 
     def test_find_similar_memories_null_metadata_fails_closed(self, monkeypatch):
         """When Pinecone returns a match with metadata=None, it fails closed without AttributeError."""
@@ -207,6 +211,34 @@ class TestVectorDbFindSimilarMemoriesDefensive:
 
         results = vector_db.find_similar_memories("uid-1", "query", threshold=0.8)
         assert results == []
+
+    def test_find_similar_memories_logs_warning_on_unhandled_match_exception(self, monkeypatch, caplog):
+        """When an individual match raises an unexpected exception during processing, it is logged and skipped."""
+        monkeypatch.setattr(vector_db, "index", self.mock_index)
+        monkeypatch.setattr(vector_db, "embeddings", self.mock_embeddings)
+
+        class ExceptionRaisingMatch:
+            @property
+            def metadata(self):
+                raise RuntimeError("failing metadata property")
+
+            @property
+            def score(self):
+                return 0.95
+
+        self.mock_index.query.return_value = {
+            "matches": [
+                ExceptionRaisingMatch(),
+                {"id": "vec-valid", "score": 0.90, "metadata": {"memory_id": "valid-1"}},
+            ]
+        }
+
+        with caplog.at_level("WARNING"):
+            results = vector_db.find_similar_memories("uid-1", "query", threshold=0.8)
+
+        assert len(results) == 1
+        assert results[0]["memory_id"] == "valid-1"
+        assert "find_similar_memories: skipping malformed or unhandled match" in caplog.text
 
 
 # ===========================================================================

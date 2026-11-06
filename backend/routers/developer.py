@@ -475,7 +475,7 @@ def search_memories_vector(
 
     matches = MemoryService(db_client=db).search(uid, query, limit=min(limit, 20))
     items = []
-    for match in (matches or []):
+    for match in matches or []:
         if match is None or getattr(match, 'memory', None) is None:
             continue
         memory = match.memory

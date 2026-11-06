@@ -547,7 +547,8 @@ def _extract_query_matches(resp: Any) -> List[Any]:
     elif callable(to_dict_resp):
         try:
             r_dict = to_dict_resp()
-        except Exception:
+        except Exception as exc:
+            logger.debug('_extract_query_matches: to_dict on query response failed: %s', exc)
             r_dict = None
         raw_matches = r_dict.get('matches') if isinstance(r_dict, dict) else getattr(resp, 'matches', None)
     else:
@@ -558,7 +559,8 @@ def _extract_query_matches(resp: Any) -> List[Any]:
     if raw_matches is not None and hasattr(raw_matches, '__iter__') and not isinstance(raw_matches, (str, bytes, dict)):
         try:
             return [m for m in cast(Any, raw_matches)]
-        except Exception:
+        except Exception as exc:
+            logger.debug('_extract_query_matches: iterating raw_matches failed: %s', exc)
             return []
     return []
 
@@ -594,7 +596,8 @@ def find_similar_memories(
             elif callable(to_dict_match):
                 try:
                     m_dict = to_dict_match()
-                except Exception:
+                except Exception as exc:
+                    logger.debug('find_similar_memories: to_dict on match failed: %s', exc)
                     m_dict = None
                 if isinstance(m_dict, dict):
                     raw_metadata = m_dict.get('metadata')
@@ -615,19 +618,22 @@ def find_similar_memories(
             elif callable(to_dict_meta):
                 try:
                     md = to_dict_meta()
-                except Exception:
+                except Exception as exc:
+                    logger.debug('find_similar_memories: to_dict on raw_metadata failed: %s', exc)
                     md = None
                 if isinstance(md, dict):
                     match_metadata = md
             elif raw_metadata is not None and hasattr(raw_metadata, 'get'):
                 try:
                     match_metadata = dict(cast(Any, raw_metadata))
-                except Exception:
+                except Exception as exc:
+                    logger.debug('find_similar_memories: dict(raw_metadata) failed: %s', exc)
                     match_metadata = {}
             elif hasattr(raw_metadata, '__dict__'):
                 try:
                     match_metadata = dict(vars(raw_metadata))
-                except Exception:
+                except Exception as exc:
+                    logger.debug('find_similar_memories: vars(raw_metadata) failed: %s', exc)
                     match_metadata = {}
 
             # Skip tombstoned or deleted vectors to prevent read misses in Firestore
@@ -655,7 +661,8 @@ def find_similar_memories(
                         'score': score,
                     }
                 )
-        except Exception:
+        except Exception as exc:
+            logger.warning('find_similar_memories: skipping malformed or unhandled match: %s', exc, exc_info=True)
             continue
 
     return results

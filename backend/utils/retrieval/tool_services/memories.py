@@ -230,16 +230,18 @@ def search_memories_text(
                     continue
                 memory = match.memory
                 raw_source_id = getattr(memory, 'memory_id', None) or getattr(memory, 'id', None) or 'unknown'
-                source_id_str = str(raw_source_id).strip() if raw_source_id is not None and str(raw_source_id).strip() else 'unknown'
+                source_id_str = (
+                    str(raw_source_id).strip()
+                    if raw_source_id is not None and str(raw_source_id).strip()
+                    else 'unknown'
+                )
                 source_sink.append(
                     {
                         'kind': 'memory',
                         'source_id': source_id_str,
                         'title': 'Memory',
                         'preview': str(getattr(memory, 'content', '') or '')[:600],
-                        'created_at': safe_isoformat(
-                            _memory_read_date(memory) or getattr(memory, 'created_at', None)
-                        ),
+                        'created_at': safe_isoformat(_memory_read_date(memory) or getattr(memory, 'created_at', None)),
                     }
                 )
 

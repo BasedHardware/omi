@@ -416,10 +416,8 @@ def _memory_ids_and_scores(
             if math.isnan(val) or math.isinf(val):
                 val = 0.0
             scores_by_id[clean_id] = val
-            scores_by_id[memory_id] = val
         except (TypeError, ValueError):
             scores_by_id[clean_id] = 0.0
-            scores_by_id[memory_id] = 0.0
     return memory_ids, scores_by_id
 
 
@@ -459,7 +457,7 @@ def _legacy_search_memories(uid: str, query: str, *, limit: int = 5) -> List[Mem
         except (ValidationError, TypeError, ValueError, AttributeError, KeyError):
             continue
         clean_id = memory_id.strip()
-        score_val: Any = scores_by_id.get(clean_id, scores_by_id.get(memory_id, 0.0))
+        score_val: Any = scores_by_id.get(clean_id, 0.0)
         try:
             score = float(score_val) if score_val is not None else 0.0
             if math.isnan(score) or math.isinf(score):
