@@ -14,7 +14,7 @@ from database import redis_db
 from database import account_cutover as account_cutover_db
 from database.read_boundary import MalformedDocError
 from models.account_cutover import AccountCutoverClientAction, AccountCutoverRecord, AccountCutoverState
-from utils.account_cutover.control import build_account_cutover_control, parse_client_build
+from utils.account_cutover.control import build_account_cutover_control, minimum_builds_projection, parse_client_build
 from utils.account_cutover.fence import background_job_should_skip_account
 from utils.account_cutover.telemetry import record_cutover_access_decision
 from utils.executors import db_executor, run_blocking
@@ -110,7 +110,9 @@ def evaluate_account_cutover_access(
     if is_cutover_control_path(path):
         return
 
-    if not force and redis_db.get_generic_cache(f'cutover-idle:{uid}'):
+    # A newly deployed upgrade floor must also override bits from older builds.
+    universally_open_builds = not any(build.minimum_supported_build > 0 for build in minimum_builds_projection())
+    if not force and universally_open_builds and redis_db.get_generic_cache(f'cutover-idle:{uid}'):
         return
 
     try:

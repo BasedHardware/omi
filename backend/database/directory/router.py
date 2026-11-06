@@ -74,11 +74,12 @@ def _remember(uid: str, plane: Plane) -> None:
 
 
 def _plane_of(space: Space) -> Plane:
-    if not isinstance(space.cell, str) or not space.cell:
+    cell = getattr(space, 'cell', None)  # Validate the driver result at the routing boundary.
+    if not isinstance(cell, str) or not cell:
         raise DirectoryRoutingUnavailable('malformed directory route')
-    if space.cell == 'disabled':
+    if cell == 'disabled':
         raise DirectoryRoutingUnavailable('directory route is fenced')
-    return 'firestore' if space.cell == 'firestore' else 'cell'
+    return 'firestore' if cell == 'firestore' else 'cell'
 
 
 def invalidate(uid: str) -> None:
@@ -113,7 +114,8 @@ def resolve(uid: str, *, signup_platform: str | None = None, signup_os: str | No
             percent = rollout_cohorts.runtime_percent(
                 'new-owner-cell1', env_default=directory_routing.new_owner_percent_env()
             )
-            platform, os_value = users_db._normalize_platform(signup_platform)
+            # B2 shares the existing signup wire contract; do not duplicate its mapping.
+            platform, os_value = users_db._normalize_platform(signup_platform)  # pyright: ignore[reportPrivateUsage]
             now = time.time()
             space = store.get_or_create_personal_space(
                 uid,

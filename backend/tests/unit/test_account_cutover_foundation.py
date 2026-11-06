@@ -25,6 +25,7 @@ from utils.account_cutover.access import (
     is_cutover_control_path,
     should_skip_background_account_mutation,
 )
+from utils.account_cutover import control as cutover_control
 from utils.account_cutover.control import build_account_cutover_control
 from utils.account_cutover.coordinator import AccountCutoverCoordinator
 from utils.account_cutover.fence import (
@@ -856,3 +857,18 @@ def test_idle_bit_never_bypasses_bridge_generation(monkeypatch, fake_db, idle_ca
             'u1', method='POST', path='/v1/conversations', headers={}, firestore_client=fake_db
         )
     assert error.value.code == 'account_generation_mismatch'
+
+
+def test_new_upgrade_floor_overrides_old_idle_bit(monkeypatch, fake_db, idle_cache):
+    monkeypatch.setenv('ACCOUNT_CUTOVER_ENFORCEMENT', 'on')
+    idle_cache['cutover-idle:u1'] = 1
+    monkeypatch.setattr(cutover_control, 'MINIMUM_SUPPORTED_BUILDS', {'ios': 20})
+    with pytest.raises(AccountCutoverAccessDenial) as error:
+        evaluate_account_cutover_access(
+            'u1',
+            method='GET',
+            path='/v1/conversations',
+            headers={'X-App-Platform': 'ios', 'X-App-Build': '19'},
+            firestore_client=fake_db,
+        )
+    assert error.value.code == 'force_upgrade_required'
