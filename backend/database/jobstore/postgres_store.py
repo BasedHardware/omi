@@ -335,6 +335,16 @@ class PostgresStore:
             ).fetchall()
         return [row[0] for row in rows]
 
+    def head_pending(self, owner_key: str) -> dict | None:
+        # A hint read outside any transaction; the merge commit re-verifies its candidate.
+        with self._read_conn() as conn:
+            row = conn.execute(
+                "SELECT doc FROM jobs WHERE namespace = %s AND owner_key = %s AND merge_pending "
+                'ORDER BY capture_at, key COLLATE "C" LIMIT 1',
+                (self.namespace, owner_key),
+            ).fetchone()
+        return row[0] if row else None
+
     def held_merge_owners(self, limit: int, *, after: str | None = None) -> list[tuple[str, str | None]]:
         """Owners whose catch-up commits are held: (owner key, owner id from the earliest pending job, or None)."""
         with self._read_conn() as conn:

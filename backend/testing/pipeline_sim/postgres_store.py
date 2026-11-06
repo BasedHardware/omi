@@ -155,6 +155,9 @@ class PgSimStore(SimStore):
     def fresh_pending(self, owner_key: str, limit: int) -> list[dict]:
         return self.pg.fresh_pending(owner_key, limit)
 
+    def head_pending(self, owner_key: str) -> dict | None:
+        return self.pg.head_pending(owner_key)
+
     def held_merge_owners(self, limit: int, *, after: str | None = None) -> list[tuple[str, str | None]]:
         return self.pg.held_merge_owners(limit, after=after)
 

@@ -152,7 +152,10 @@ BODY_DIGEST = {
     # Re-reviewed 2026-11-01: intake-outcome evidence kwarg only; no query or read added.
     'database.batch_ramp.ramp_admission_policy': '2d702e87308e65426820bbe9b4b89f492a966a01bc056fa39d63ed3a8545d649',
     'database.conversations._collect_cursor_conversation_page': '1d5fc817a402bd5bb5cb8fae5492d29b1e34cb4a15405bd06a784fc8730fa4e9',
-    'database.batch_pipeline_store.FirestoreTransaction.ready_predecessor': '345662386754d78758580d321467fcd012838fc0a9ae8194eeb7b3e6ede54f14',
+    'database.batch_pipeline_store.FirestoreTransaction.ready_predecessor': '2e0d064d5a984d22ec52e0ec550ccbce6dbeb3d3a805084187b1e23f340fe1ce',
+    # Re-reviewed 2026-11-05: the adapter gained the head_pending hint-read delegate; the
+    # covered query driver exercises the identical filter/order shape without the adapter.
+    'database.batch_pipeline_store.FirestoreStore.head_pending': '679059b9df92bafe11de34374fef09dfa8c595f41a2ac91e4449aefe012d385c',
     'database.batch_pipeline_store.projection_pending': '52cc913cca9086557133a8f7118b9980ce5f13649897207fafcfa221513a5629',
     'database.batch_pipeline_store.FirestoreStore.projection_page': 'bc9fe5cd08a05748eaa118af15031abdcb1a68d91d7f0b74bf177a27eb980a94',
     'database.batch_pipeline_store.FirestoreStore.projection_successor': '96adabf372104327c5a8065ef2ff06621648ee242b3415d04b047d50ded9e6b1',

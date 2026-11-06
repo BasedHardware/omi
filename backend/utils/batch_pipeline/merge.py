@@ -57,14 +57,19 @@ def _fresh_pick(rows: list[dict], now: float, wait: float) -> tuple[dict | None,
     return None, None
 
 
-def _awaiting_projection(tx, owner: dict) -> int:
-    """Committed rows not yet projected. A missing watermark row never holds a commit."""
-    sequence = owner.get('log_sequence', 0)
-    projected = owner.get('projection_watermark')
+def _unprojected(sequence: int, projected: str | None, fetch) -> int:
+    """Rows committed but not yet projected (``fetch`` reads one result row)."""
     if not projected:
         return sequence
-    done = tx.get('results', projected).get('log_sequence')
+    done = fetch(projected).get('log_sequence')
     return sequence - done if done else 0
+
+
+def _awaiting_projection(tx, owner: dict) -> int:
+    """Committed rows not yet projected. A missing watermark row never holds a commit."""
+    return _unprojected(
+        owner.get('log_sequence', 0), owner.get('projection_watermark'), lambda key: tx.get('results', key)
+    )
 
 
 class OrderedMerge:
@@ -101,6 +106,41 @@ class OrderedMerge:
         if time.monotonic() < self._fresh_first_retry_at:
             return 0
         return self.catch_up_depth if self.catch_up_depth is not None else merge_catch_up_depth()
+
+    def _probe_head(self, key: str) -> tuple[dict | None, Exception | None]:
+        """The owner's earliest pending row, read outside any transaction.
+
+        A blocked-head drain's strict transaction reads the hot head row —
+        the one document every lease heartbeat keeps writing — only to
+        conclude that nothing can commit; this probe decides that without
+        joining the row's abort set. ANY probe failure returns the error and
+        keeps the strict transaction as the authority: the gate may only
+        skip a transaction it has positively proven unnecessary.
+        """
+        try:
+            return self.store.head_pending(key), None
+        except Exception as error:  # A hint read may fail in ways the transaction would not.
+            return None, error
+
+    def _over_cap_probe(self, key: str, depth: int) -> bool:
+        """Probe-side twin of the strict body's ``over_cap`` test."""
+        if not depth:
+            return False
+        owner = self.store.probe('owners', key)
+        return (
+            _unprojected(
+                owner.get('log_sequence', 0),
+                owner.get('projection_watermark'),
+                lambda k: self.store.probe('results', k),
+            )
+            >= depth
+        )
+
+    def _depth_hold_owed(self, key: str, depth: int) -> bool:
+        """True when the strict transaction must run even though the head is blocked:
+        the owner sits at the projection depth cap with pending rows and its durable
+        hold marker is not yet written, so the transaction has a marker to set."""
+        return self._over_cap_probe(key, depth) and not self.store.probe('merge_holds', key).get('held')
 
     def release_hold(self, key: str, *, force: bool = False) -> None:
         """Clear an owner's durable hold marker once it is below the depth cap (or has nothing pending)."""
@@ -336,12 +376,41 @@ class OrderedMerge:
             tx.put('owners', key, owner)
             return entry
 
+        # Probe gate: the strict transaction below is the authority for every
+        # decision it makes, but when the probed head already proves the
+        # transaction can only conclude ``blocked`` — the common drain while a
+        # capture is in flight — opening it would join the hot head row's
+        # abort set (every lease heartbeat writes that row) for nothing. Skip
+        # it and record exactly what its body would have concluded.
+        probed_head, head_error = self._probe_head(key)
+        if head_error is None and not probed_head and not release:
+            # Provably nothing pending: the strict candidate would be None —
+            # it commits nothing and writes nothing.
+            self.held_owners.discard(owner_id)
+            return None
+        strict_skipped = False
+        if (
+            head_error is None
+            and probed_head is not None
+            and probed_head.get('state') != 'result_ready'
+            and not (depth and _catch_up(probed_head))
+        ):
+            # Plain blocked head. The transaction's only possible writes are
+            # the durable depth-cap hold marker; run it solely when that
+            # marker is actually owed.
+            strict_skipped = not self._depth_hold_owed(key, depth)
+            if strict_skipped:
+                blocked.update(head_state=probed_head.get('state'), catch_up=_catch_up(probed_head))
+                if self._over_cap_probe(key, depth):
+                    held['over_cap'] = True
+        entry: dict | None = None
         fenced: BatchPrivacyBlocked | None = None
-        try:
-            with store_operation('batch_merge_commit'):
-                entry = self.store.run(commit)
-        except BatchPrivacyBlocked as error:
-            entry, fenced = None, error
+        if not strict_skipped:
+            try:
+                with store_operation('batch_merge_commit'):
+                    entry = self.store.run(commit)
+            except BatchPrivacyBlocked as error:
+                entry, fenced = None, error
         strict_blocked, strict_catch_up = dict(blocked), bool(held.get('catch_up'))
         if held.get('over_cap'):
             self.held_owners.add(owner_id)

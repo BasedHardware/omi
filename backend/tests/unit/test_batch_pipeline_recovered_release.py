@@ -155,9 +155,10 @@ def test_a_fenced_release_commit_drops_the_row_and_returns_the_strict_result(mon
 
     def run(body, *, operation=None):
         calls.append(body)
-        # Calls: strict commit, then the release commit — the release
-        # pre-read probes outside the ladder and is not a run call here.
-        if len(calls) == 2:
+        # Calls: the release commit opens first now — the blocked-head gate skips
+        # the strict transaction (nothing to commit, no marker owed) — so the
+        # fence fires on the first run call.
+        if len(calls) == 1:
             raise BatchPrivacyBlocked('account_deleted')
         return original(body, operation=operation)
 

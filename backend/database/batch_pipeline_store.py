@@ -106,6 +106,7 @@ class Store(Protocol):
     def quarantine_fenced(self, segment_id: str, now: float) -> bool: ...
     def longest_ready_pending(self, owner_key: str) -> dict | None: ...
     def fresh_pending(self, owner_key: str, limit: int) -> list[dict]: ...
+    def head_pending(self, owner_key: str) -> dict | None: ...
     def held_merge_owners(self, limit: int, *, after: str | None = None) -> list[tuple[str, str | None]]: ...
 
 
@@ -471,6 +472,10 @@ class FirestoreStore:
         # A hint read outside any transaction; the fresh-first transaction re-verifies it.
         return fresh_pending(self.client, self.namespace, owner_key, limit)
 
+    def head_pending(self, owner_key: str) -> dict | None:
+        # A hint read outside any transaction; the merge commit re-verifies its candidate.
+        return head_pending(self.client, self.namespace, owner_key)
+
     def held_merge_owners(self, limit: int, *, after: str | None = None) -> list[tuple[str, str | None]]:
         return held_merge_owners(self.client, self.namespace, limit, after=after)
 
@@ -544,6 +549,26 @@ def first_pending(client: Any, namespace: str, owner_key: str, *, transaction: A
         .order_by('segment_id')
         .limit(1)
         .stream(transaction=transaction)
+    )
+    return docs[0].to_dict() if docs else None
+
+
+def head_pending(client: Any, namespace: str, owner_key: str) -> dict | None:
+    """The owner's earliest-captured pending row, read outside any transaction.
+
+    Non-transactional discovery hint for the merge gate: a blocked-head drain
+    decides from this read that no transaction can commit instead of joining
+    the hot head row's abort set. The acting transaction always re-verifies
+    its candidate.
+    """
+    docs = list(
+        client.collection(f'{namespace}_jobs')
+        .where('owner_key', '==', owner_key)
+        .where('merge_pending', '==', True)
+        .order_by('capture_at')
+        .order_by('segment_id')
+        .limit(1)
+        .stream()
     )
     return docs[0].to_dict() if docs else None
 

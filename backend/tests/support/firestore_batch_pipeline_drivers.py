@@ -120,9 +120,12 @@ def entries():
         CoveredByEntry(
             'database.batch_pipeline_store.FirestoreTransaction.ready_predecessor',
             covered_by=('database.batch_pipeline_store.ready_predecessor',),
-            reason='thin adapter forwards the transaction-bound predecessor query unchanged',
+            reason='thin adapter forwards the transaction-bound predecessor query unchanged; '
+            're-reviewed 2026-11-05: the fifo_array branch reads the queue document and job '
+            'rows through the transaction view (no query), the legacy next-link branch is '
+            'still the query this driver exercises',
             expect_observed=False,
-            body_digest='345662386754d78758580d321467fcd012838fc0a9ae8194eeb7b3e6ede54f14',
+            body_digest='2e0d064d5a984d22ec52e0ec550ccbce6dbeb3d3a805084187b1e23f340fe1ce',
         ),
         DriverEntry(
             'database.batch_pipeline_store.ready_predecessor',
@@ -340,6 +343,18 @@ def entries():
             base={'owner_key': 'owner-hash'},
             domains={'namespace': namespaces},
             neutrals={'limit': (8, 'bounded page size')},
+        ),
+        CoveredByEntry(
+            'database.batch_pipeline_store.FirestoreStore.head_pending',
+            covered_by=('database.batch_pipeline_store.head_pending',),
+            reason='thin store adapter delegates unchanged query arguments to the named query builder',
+            expect_observed=False,
+            body_digest='679059b9df92bafe11de34374fef09dfa8c595f41a2ac91e4449aefe012d385c',
+        ),
+        DriverEntry(
+            'database.batch_pipeline_store.head_pending',
+            base={'owner_key': 'owner-hash'},
+            domains={'namespace': namespaces},
         ),
         CoveredByEntry(
             'database.batch_pipeline_store.FirestoreStore.held_merge_owners',

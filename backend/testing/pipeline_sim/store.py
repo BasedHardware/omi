@@ -416,6 +416,9 @@ class SimStore:
         )
         return [deepcopy(self.rows[('jobs', segment_id)]) for _, segment_id in rows[:limit]]
 
+    def head_pending(self, owner_key: str) -> dict | None:
+        return self.first_pending(owner_key)
+
     def held_merge_owners(self, limit: int, *, after: str | None = None) -> list[tuple[str, str | None]]:
         keys = sorted(
             key
