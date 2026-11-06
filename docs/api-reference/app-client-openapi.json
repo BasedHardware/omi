@@ -134,6 +134,17 @@
         "title": "AccountCutoverClientAction",
         "type": "string"
       },
+      "AccountCutoverClientState": {
+        "description": "Cutover state as released clients decode it.\n\n``migrated`` (a cell cutover) is server-internal: routing is invisible to\nclients, so the control projection reports it as ``legacy``.",
+        "enum": [
+          "legacy",
+          "migrating",
+          "new",
+          "rolled_back_stranded"
+        ],
+        "title": "AccountCutoverClientState",
+        "type": "string"
+      },
       "AccountCutoverControl": {
         "additionalProperties": false,
         "description": "Authenticated bootstrap/control projection for bridge clients.",
@@ -158,21 +169,6 @@
           "client_action": {
             "$ref": "#/components/schemas/AccountCutoverClientAction",
             "default": "none"
-          },
-          "data_plane": {
-            "anyOf": [
-              {
-                "enum": [
-                  "legacy",
-                  "cell"
-                ],
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Data Plane"
           },
           "legacy_writes_allowed": {
             "default": true,
@@ -206,7 +202,7 @@
             "type": "integer"
           },
           "state": {
-            "$ref": "#/components/schemas/AccountCutoverState",
+            "$ref": "#/components/schemas/AccountCutoverClientState",
             "default": "legacy"
           },
           "stranded_new_data": {
@@ -277,18 +273,6 @@
         },
         "title": "AccountCutoverManifestSummary",
         "type": "object"
-      },
-      "AccountCutoverState": {
-        "description": "Legal whole-account cutover states.\n\n``rolled_back_stranded`` records that the account returned to the legacy\ndata plane after ``new`` while acknowledging that new-backend writes may\nremain stranded and are not automatically reconciled.",
-        "enum": [
-          "legacy",
-          "migrating",
-          "new",
-          "migrated",
-          "rolled_back_stranded"
-        ],
-        "title": "AccountCutoverState",
-        "type": "string"
       },
       "AccountDeletionActionResponse": {
         "properties": {

@@ -795,8 +795,10 @@ def test_cell_transitions_preserve_generation_and_project_open_control(fake_db, 
     assert control.client_action == AccountCutoverClientAction.none
     assert control.offline_queue_instruction == OfflineQueueInstruction.none
     assert control.product_traffic_allowed is True
-    assert control.legacy_writes_allowed is False
-    assert control.data_plane == 'cell'
+    # Released clients cannot decode `migrated`; the cell plane is invisible to them.
+    assert control.state.value == 'legacy'
+    assert control.legacy_writes_allowed is True
+    assert 'data_plane' not in control.model_dump()
     for method in ('GET', 'POST'):
         evaluate_account_cutover_access(
             'cell-owner', method=method, path='/v1/conversations', headers={}, firestore_client=fake_db, force=True
