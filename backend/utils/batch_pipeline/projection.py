@@ -1466,7 +1466,7 @@ class Projector:
                 stop = 'step_deadline'
                 break
             except BatchPrivacyBlocked:
-                stop = 'privacy_blocked'
+                stop, blocked_head = 'privacy_blocked', (segment_id, getattr(snapshot, 'update_time', None))
                 break
             except ProjectionBlocked as error:
                 stop = walk_block_stop(error, projection_block_reason(error))
