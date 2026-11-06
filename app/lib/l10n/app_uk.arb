@@ -4499,7 +4499,6 @@
     "chatAppsCodeExpiredMessageIn": "Отримайте новий код і надішліть його з застосунку «{app}».",
     "episodeWritingNotes": "Пишемо нотатки…",
     "homeStepTranscribing": "Транскрибуємо…",
-    "homeCouldntProcess": "Не вдалося обробити",
     "homeRecordingsCount": "{count, plural, one{{count} запис} few{{count} записи} many{{count} записів} other{{count} запису}}",
     "episodeWritingNotesDetail": "Спочатку завершуємо транскрипцію. Можете залишити цю сторінку.",
     "episodeCoversUpTo": "Охоплює до {time} · повні нотатки після завершення",

@@ -4499,7 +4499,6 @@
     "chatAppsCodeExpiredMessageIn": "新しいコードを取得して、{app}アプリから送信してください。",
     "episodeWritingNotes": "メモを作成中…",
     "homeStepTranscribing": "文字起こし中…",
-    "homeCouldntProcess": "処理できませんでした",
     "homeRecordingsCount": "{count, plural, other{{count}件の録音}}",
     "episodeWritingNotesDetail": "先に文字起こしを仕上げています。このページを離れても大丈夫です。",
     "episodeCoversUpTo": "{time}まで · 終了後に完全なメモ",

@@ -14751,9 +14751,6 @@ class AppLocalizationsTh extends AppLocalizations {
   String get homeStepTranscribing => 'กำลังถอดเสียง…';
 
   @override
-  String get homeCouldntProcess => 'ประมวลผลไม่สำเร็จ';
-
-  @override
   String homeRecordingsCount(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,

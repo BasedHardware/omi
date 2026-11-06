@@ -14819,9 +14819,6 @@ class AppLocalizationsFa extends AppLocalizations {
   String get homeStepTranscribing => 'در حال رونویسی…';
 
   @override
-  String get homeCouldntProcess => 'پردازش نشد';
-
-  @override
   String homeRecordingsCount(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,

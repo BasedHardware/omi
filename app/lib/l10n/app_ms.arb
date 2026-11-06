@@ -4499,7 +4499,6 @@
     "chatAppsCodeExpiredMessageIn": "Dapatkan kod baharu dan hantar daripada {app}.",
     "episodeWritingNotes": "Menulis nota…",
     "homeStepTranscribing": "Sedang mentranskrip…",
-    "homeCouldntProcess": "Tidak dapat diproses",
     "homeRecordingsCount": "{count, plural, other{{count} rakaman}}",
     "episodeWritingNotesDetail": "Menyiapkan transkrip dahulu. Anda boleh meninggalkan halaman ini.",
     "episodeCoversUpTo": "Meliputi sehingga {time} · nota penuh apabila selesai",

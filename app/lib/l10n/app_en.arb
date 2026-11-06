@@ -18136,10 +18136,6 @@
     "@homeStepTranscribing": {
         "description": "Home processing row subtitle while a recording is being transcribed."
     },
-    "homeCouldntProcess": "Couldn't process",
-    "@homeCouldntProcess": {
-        "description": "Home row title when recordings could not be processed."
-    },
     "homeRecordingsCount": "{count, plural, =1{1 recording} other{{count} recordings}}",
     "@homeRecordingsCount": {
         "description": "Home processing row subtitle giving how many recordings one row stands for.",

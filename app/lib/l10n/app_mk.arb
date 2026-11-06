@@ -11922,7 +11922,6 @@
     "chatAppsCodeExpiredMessageIn": "Добијте нов код и испратете го од {app}.",
     "episodeWritingNotes": "Пишуваме белешки…",
     "homeStepTranscribing": "Транскрибираме…",
-    "homeCouldntProcess": "Не можеше да се обработи",
     "homeRecordingsCount": "{count, plural, one{{count} запис} other{{count} записи}}",
     "episodeWritingNotesDetail": "Прво ја завршуваме транскрипцијата. Може да ја напуштите страницата.",
     "episodeCoversUpTo": "Опфаќа до {time} · целосни белешки на крајот",

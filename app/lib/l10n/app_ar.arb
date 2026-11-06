@@ -4499,7 +4499,6 @@
     "chatAppsCodeExpiredMessageIn": "احصل على رمز جديد وأرسله من {app}.",
     "episodeWritingNotes": "جارٍ كتابة الملاحظات…",
     "homeStepTranscribing": "جارٍ التفريغ…",
-    "homeCouldntProcess": "تعذّرت المعالجة",
     "homeRecordingsCount": "{count, plural, one{تسجيل واحد} two{تسجيلان} few{{count} تسجيلات} many{{count} تسجيلًا} other{{count} تسجيل}}",
     "episodeWritingNotesDetail": "ننهي النص أولًا. يمكنك مغادرة هذه الصفحة.",
     "episodeCoversUpTo": "يغطي حتى {time} · الملاحظات الكاملة عند الانتهاء",

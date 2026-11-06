@@ -14737,9 +14737,6 @@ class AppLocalizationsAr extends AppLocalizations {
   String get homeStepTranscribing => 'جارٍ التفريغ…';
 
   @override
-  String get homeCouldntProcess => 'تعذّرت المعالجة';
-
-  @override
   String homeRecordingsCount(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,

@@ -4499,7 +4499,6 @@
     "chatAppsCodeExpiredMessageIn": "Obtén un codi nou i envia'l des de {app}.",
     "episodeWritingNotes": "S'estan escrivint les notes…",
     "homeStepTranscribing": "Transcrivint…",
-    "homeCouldntProcess": "No s'ha pogut processar",
     "homeRecordingsCount": "{count, plural, one{{count} enregistrament} other{{count} enregistraments}}",
     "episodeWritingNotesDetail": "Primer acabem la transcripció. Pots sortir d'aquesta pàgina.",
     "episodeCoversUpTo": "Cobreix fins a les {time} · notes completes en acabar",

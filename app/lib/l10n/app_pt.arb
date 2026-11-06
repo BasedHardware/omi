@@ -4534,7 +4534,6 @@
     "chatAppsCodeExpiredMessageIn": "Gere um novo código e envie pelo app {app}.",
     "episodeWritingNotes": "Escrevendo notas…",
     "homeStepTranscribing": "Transcrevendo…",
-    "homeCouldntProcess": "Não foi possível processar",
     "homeRecordingsCount": "{count, plural, one{{count} gravação} other{{count} gravações}}",
     "episodeWritingNotesDetail": "Primeiro terminamos a transcrição. Você pode sair desta página.",
     "episodeCoversUpTo": "Cobre até {time} · notas completas ao terminar",

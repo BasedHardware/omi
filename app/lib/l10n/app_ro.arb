@@ -4499,7 +4499,6 @@
     "chatAppsCodeExpiredMessageIn": "Obține un cod nou și trimite-l din {app}.",
     "episodeWritingNotes": "Scriem notițele…",
     "homeStepTranscribing": "Se transcrie…",
-    "homeCouldntProcess": "Nu s-a putut procesa",
     "homeRecordingsCount": "{count, plural, one{{count} înregistrare} few{{count} înregistrări} other{{count} de înregistrări}}",
     "episodeWritingNotesDetail": "Mai întâi terminăm transcrierea. Poți părăsi această pagină.",
     "episodeCoversUpTo": "Până la {time} · notițe complete la final",

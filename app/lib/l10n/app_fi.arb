@@ -4499,7 +4499,6 @@
     "chatAppsCodeExpiredMessageIn": "Hae uusi koodi ja lähetä se {app}-sovelluksesta.",
     "episodeWritingNotes": "Kirjoitetaan muistiinpanoja…",
     "homeStepTranscribing": "Litteroidaan…",
-    "homeCouldntProcess": "Käsittely epäonnistui",
     "homeRecordingsCount": "{count, plural, one{{count} tallenne} other{{count} tallennetta}}",
     "episodeWritingNotesDetail": "Viimeistelemme ensin litteroinnin. Voit poistua tältä sivulta.",
     "episodeCoversUpTo": "Kattaa klo {time} asti · täydet muistiinpanot lopuksi",

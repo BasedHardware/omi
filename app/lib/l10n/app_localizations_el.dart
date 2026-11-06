@@ -14923,9 +14923,6 @@ class AppLocalizationsEl extends AppLocalizations {
   String get homeStepTranscribing => 'Μεταγραφή…';
 
   @override
-  String get homeCouldntProcess => 'Δεν ήταν δυνατή η επεξεργασία';
-
-  @override
   String homeRecordingsCount(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,

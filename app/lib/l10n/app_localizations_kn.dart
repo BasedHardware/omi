@@ -14873,9 +14873,6 @@ class AppLocalizationsKn extends AppLocalizations {
   String get homeStepTranscribing => 'ಪ್ರತಿಲೇಖನ ಮಾಡಲಾಗುತ್ತಿದೆ…';
 
   @override
-  String get homeCouldntProcess => 'ಪ್ರಕ್ರಿಯೆಗೊಳಿಸಲಾಗಲಿಲ್ಲ';
-
-  @override
   String homeRecordingsCount(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,

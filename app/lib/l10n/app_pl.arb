@@ -4534,7 +4534,6 @@
     "chatAppsCodeExpiredMessageIn": "Pobierz nowy kod i wyślij go z aplikacji {app}.",
     "episodeWritingNotes": "Piszemy notatki…",
     "homeStepTranscribing": "Transkrybujemy…",
-    "homeCouldntProcess": "Nie udało się przetworzyć",
     "homeRecordingsCount": "{count, plural, one{{count} nagranie} few{{count} nagrania} many{{count} nagrań} other{{count} nagrania}}",
     "episodeWritingNotesDetail": "Najpierw kończymy transkrypcję. Możesz opuścić tę stronę.",
     "episodeCoversUpTo": "Obejmuje do {time} · pełne notatki na końcu",

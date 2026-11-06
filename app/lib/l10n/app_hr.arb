@@ -11922,7 +11922,6 @@
     "chatAppsCodeExpiredMessageIn": "Dohvati novi kôd i pošalji ga iz aplikacije {app}.",
     "episodeWritingNotes": "Pišemo bilješke…",
     "homeStepTranscribing": "Transkribiramo…",
-    "homeCouldntProcess": "Obrada nije uspjela",
     "homeRecordingsCount": "{count, plural, one{{count} snimka} few{{count} snimke} other{{count} snimki}}",
     "episodeWritingNotesDetail": "Najprije dovršavamo transkript. Možete napustiti ovu stranicu.",
     "episodeCoversUpTo": "Pokriva do {time} · potpune bilješke po završetku",

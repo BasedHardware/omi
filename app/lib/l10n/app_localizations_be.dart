@@ -14858,9 +14858,6 @@ class AppLocalizationsBe extends AppLocalizations {
   String get homeStepTranscribing => 'Расшыфроўваем…';
 
   @override
-  String get homeCouldntProcess => 'Не ўдалося апрацаваць';
-
-  @override
   String homeRecordingsCount(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,

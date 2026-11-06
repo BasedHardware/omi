@@ -11922,7 +11922,6 @@
     "chatAppsCodeExpiredMessageIn": "Kumuha ng bagong code at ipadala ito mula sa {app}.",
     "episodeWritingNotes": "Isinusulat ang mga tala…",
     "homeStepTranscribing": "Tinatranscribe…",
-    "homeCouldntProcess": "Hindi na-process",
     "homeRecordingsCount": "{count, plural, one{1 recording} other{{count} na recording}}",
     "episodeWritingNotesDetail": "Tinatapos muna ang transcript. Maaari kang umalis sa pahinang ito.",
     "episodeCoversUpTo": "Hanggang {time} · buong tala kapag natapos",

@@ -4499,7 +4499,6 @@
     "chatAppsCodeExpiredMessageIn": "Získajte nový kód a pošlite ho z aplikácie {app}.",
     "episodeWritingNotes": "Píšeme poznámky…",
     "homeStepTranscribing": "Prepisujeme…",
-    "homeCouldntProcess": "Spracovanie zlyhalo",
     "homeRecordingsCount": "{count, plural, one{{count} nahrávka} few{{count} nahrávky} many{{count} nahrávok} other{{count} nahrávky}}",
     "episodeWritingNotesDetail": "Najprv dokončujeme prepis. Túto stránku môžete opustiť.",
     "episodeCoversUpTo": "Pokrýva do {time} · úplné poznámky po dokončení",

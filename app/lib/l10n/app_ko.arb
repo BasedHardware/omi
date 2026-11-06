@@ -4499,7 +4499,6 @@
     "chatAppsCodeExpiredMessageIn": "새 코드를 받아 {app} 앱에서 보내세요.",
     "episodeWritingNotes": "메모 작성 중…",
     "homeStepTranscribing": "음성 변환 중…",
-    "homeCouldntProcess": "처리하지 못했어요",
     "homeRecordingsCount": "{count, plural, other{녹음 {count}개}}",
     "episodeWritingNotesDetail": "먼저 대화 내용을 마무리하고 있어요. 이 페이지를 나가도 됩니다.",
     "episodeCoversUpTo": "{time}까지 · 끝나면 전체 메모 제공",

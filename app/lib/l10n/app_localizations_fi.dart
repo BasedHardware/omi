@@ -14828,9 +14828,6 @@ class AppLocalizationsFi extends AppLocalizations {
   String get homeStepTranscribing => 'Litteroidaan…';
 
   @override
-  String get homeCouldntProcess => 'Käsittely epäonnistui';
-
-  @override
   String homeRecordingsCount(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,

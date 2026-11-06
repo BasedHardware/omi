@@ -11922,7 +11922,6 @@
     "chatAppsCodeExpiredMessageIn": "కొత్త కోడ్ తీసుకుని {app} నుండి పంపండి.",
     "episodeWritingNotes": "నోట్స్ రాస్తున్నాం…",
     "homeStepTranscribing": "ట్రాన్స్‌క్రైబ్ చేస్తున్నాం…",
-    "homeCouldntProcess": "ప్రాసెస్ చేయలేకపోయాం",
     "homeRecordingsCount": "{count, plural, one{{count} రికార్డింగ్} other{{count} రికార్డింగ్‌లు}}",
     "episodeWritingNotesDetail": "ముందు ట్రాన్స్‌క్రిప్ట్ పూర్తి చేస్తున్నాం. మీరు ఈ పేజీ వదిలి వెళ్లవచ్చు.",
     "episodeCoversUpTo": "{time} వరకు · ముగిశాక పూర్తి నోట్స్",

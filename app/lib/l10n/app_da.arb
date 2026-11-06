@@ -4541,7 +4541,6 @@
     "chatAppsCodeExpiredMessageIn": "Få en ny kode, og send den fra {app}.",
     "episodeWritingNotes": "Skriver noter…",
     "homeStepTranscribing": "Transskriberer…",
-    "homeCouldntProcess": "Kunne ikke behandles",
     "homeRecordingsCount": "{count, plural, one{{count} optagelse} other{{count} optagelser}}",
     "episodeWritingNotesDetail": "Vi gør først transskriptionen færdig. Du kan godt forlade siden.",
     "episodeCoversUpTo": "Dækker frem til {time} · fulde noter, når det er slut",

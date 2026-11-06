@@ -14837,9 +14837,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get homeStepTranscribing => 'Metne dökülüyor…';
 
   @override
-  String get homeCouldntProcess => 'İşlenemedi';
-
-  @override
   String homeRecordingsCount(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,

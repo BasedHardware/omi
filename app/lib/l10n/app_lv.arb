@@ -4499,7 +4499,6 @@
     "chatAppsCodeExpiredMessageIn": "Iegūstiet jaunu kodu un nosūtiet to no lietotnes {app}.",
     "episodeWritingNotes": "Rakstām piezīmes…",
     "homeStepTranscribing": "Notiek transkribēšana…",
-    "homeCouldntProcess": "Neizdevās apstrādāt",
     "homeRecordingsCount": "{count, plural, zero{{count} ierakstu} one{{count} ieraksts} other{{count} ieraksti}}",
     "episodeWritingNotesDetail": "Vispirms pabeidzam transkripciju. Varat pamest šo lapu.",
     "episodeCoversUpTo": "Līdz {time} · pilnas piezīmes beigās",

@@ -11922,7 +11922,6 @@
     "chatAppsCodeExpiredMessageIn": "নতুন কোড নিন এবং {app} অ্যাপ থেকে পাঠান।",
     "episodeWritingNotes": "নোট লেখা হচ্ছে…",
     "homeStepTranscribing": "ট্রান্সক্রাইব করা হচ্ছে…",
-    "homeCouldntProcess": "প্রক্রিয়া করা যায়নি",
     "homeRecordingsCount": "{count, plural, one{1টি রেকর্ডিং} other{{count}টি রেকর্ডিং}}",
     "episodeWritingNotesDetail": "আগে ট্রান্সক্রিপ্ট শেষ করা হচ্ছে। আপনি এই পেজ ছেড়ে যেতে পারেন।",
     "episodeCoversUpTo": "{time} পর্যন্ত · শেষ হলে সম্পূর্ণ নোট",

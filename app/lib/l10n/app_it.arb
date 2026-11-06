@@ -4499,7 +4499,6 @@
     "chatAppsCodeExpiredMessageIn": "Ottieni un nuovo codice e invialo da {app}.",
     "episodeWritingNotes": "Scrittura delle note…",
     "homeStepTranscribing": "Trascrizione in corso…",
-    "homeCouldntProcess": "Impossibile elaborare",
     "homeRecordingsCount": "{count, plural, one{{count} registrazione} other{{count} registrazioni}}",
     "episodeWritingNotesDetail": "Prima completiamo la trascrizione. Puoi lasciare questa pagina.",
     "episodeCoversUpTo": "Fino alle {time} · note complete alla fine",

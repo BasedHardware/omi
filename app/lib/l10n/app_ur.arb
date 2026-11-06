@@ -11922,7 +11922,6 @@
     "chatAppsCodeExpiredMessageIn": "نیا کوڈ حاصل کریں اور اسے {app} سے بھیجیں۔",
     "episodeWritingNotes": "نوٹس لکھے جا رہے ہیں…",
     "homeStepTranscribing": "ٹرانسکرائب ہو رہا ہے…",
-    "homeCouldntProcess": "پروسیس نہیں ہو سکا",
     "homeRecordingsCount": "{count, plural, one{{count} ریکارڈنگ} other{{count} ریکارڈنگز}}",
     "episodeWritingNotesDetail": "پہلے ٹرانسکرپٹ مکمل کر رہے ہیں۔ آپ یہ صفحہ چھوڑ سکتے ہیں۔",
     "episodeCoversUpTo": "{time} تک · ختم ہونے پر مکمل نوٹس",

@@ -14593,9 +14593,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get homeStepTranscribing => '正在转录…';
 
   @override
-  String get homeCouldntProcess => '无法处理';
-
-  @override
   String homeRecordingsCount(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,

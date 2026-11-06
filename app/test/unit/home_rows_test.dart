@@ -235,14 +235,19 @@ void main() {
       expect(homeStepOf(done), isNull);
     });
 
-    test('failures fold into their own run and never merge with Processing', () {
+    test('failed rows never show on Home; the unfinished rows around them fold as one run', () {
       final rows = home([
         provisional('p', 0),
         provisional('f1', -10, step: 'failed'),
         provisional('f2', -20, step: 'failed'),
+        provisional('p2', -30),
       ]);
-      expect(rows.map((r) => r.step), [HomeStep.writingNotes, HomeStep.failed]);
-      expect(rows.last.count, 2);
+      expect(rows, hasLength(1));
+      expect(rows.single.step, HomeStep.writingNotes);
+      expect(rows.single.count, 2);
+      expect(rows.single.episodeConversationIds, {'p', 'p2'});
+      // Search and filtered views keep exact matches.
+      expect(buildHomeRows([provisional('f1', 0, step: 'failed')], [], enabled: false).single.conversation.id, 'f1');
     });
 
     test('runs never cross a day boundary', () {
@@ -264,7 +269,7 @@ void main() {
       expect(rows.single.episodeConversationIds, containsAll(['a', 'b', 'later']));
     });
 
-    test('summary-retryable and locked rows: retryable folds as failed, locked stays its own row', () {
+    test('summary-retryable classifies as failed (hidden on Home); locked stays its own row', () {
       final retry = ServerConversation(
           id: 'r', createdAt: start, startedAt: start, structured: Structured('Yeah.', ''), summaryRetryable: true);
       expect(homeStepOf(retry), HomeStep.failed);

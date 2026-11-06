@@ -4534,7 +4534,6 @@
     "chatAppsCodeExpiredMessageIn": "Dapatkan kode baru lalu kirim dari {app}.",
     "episodeWritingNotes": "Menulis catatan…",
     "homeStepTranscribing": "Sedang mentranskrip…",
-    "homeCouldntProcess": "Gagal memproses",
     "homeRecordingsCount": "{count, plural, other{{count} rekaman}}",
     "episodeWritingNotesDetail": "Menyelesaikan transkrip dulu. Anda boleh meninggalkan halaman ini.",
     "episodeCoversUpTo": "Mencakup hingga {time} · catatan lengkap saat selesai",

@@ -11922,7 +11922,6 @@
     "chatAppsCodeExpiredMessageIn": "کد جدید بگیرید و از {app} ارسال کنید.",
     "episodeWritingNotes": "در حال نوشتن یادداشت‌ها…",
     "homeStepTranscribing": "در حال رونویسی…",
-    "homeCouldntProcess": "پردازش نشد",
     "homeRecordingsCount": "{count, plural, other{{count} ضبط}}",
     "episodeWritingNotesDetail": "اول متن را کامل می‌کنیم. می‌توانید این صفحه را ترک کنید.",
     "episodeCoversUpTo": "تا {time} · یادداشت‌های کامل در پایان",

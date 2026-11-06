@@ -11922,7 +11922,6 @@
     "chatAppsCodeExpiredMessageIn": "ಹೊಸ ಕೋಡ್ ಪಡೆದು {app} ನಿಂದ ಕಳುಹಿಸಿ.",
     "episodeWritingNotes": "ಟಿಪ್ಪಣಿಗಳನ್ನು ಬರೆಯಲಾಗುತ್ತಿದೆ…",
     "homeStepTranscribing": "ಪ್ರತಿಲೇಖನ ಮಾಡಲಾಗುತ್ತಿದೆ…",
-    "homeCouldntProcess": "ಪ್ರಕ್ರಿಯೆಗೊಳಿಸಲಾಗಲಿಲ್ಲ",
     "homeRecordingsCount": "{count, plural, one{1 ರೆಕಾರ್ಡಿಂಗ್} other{{count} ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು}}",
     "episodeWritingNotesDetail": "ಮೊದಲು ಪ್ರತಿಲೇಖನ ಮುಗಿಸಲಾಗುತ್ತಿದೆ. ನೀವು ಈ ಪುಟದಿಂದ ಹೊರಡಬಹುದು.",
     "episodeCoversUpTo": "{time} ವರೆಗೆ · ಮುಗಿದಾಗ ಪೂರ್ಣ ಟಿಪ್ಪಣಿಗಳು",

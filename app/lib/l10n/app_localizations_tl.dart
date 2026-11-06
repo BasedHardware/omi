@@ -14943,9 +14943,6 @@ class AppLocalizationsTl extends AppLocalizations {
   String get homeStepTranscribing => 'Tinatranscribe…';
 
   @override
-  String get homeCouldntProcess => 'Hindi na-process';
-
-  @override
   String homeRecordingsCount(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,

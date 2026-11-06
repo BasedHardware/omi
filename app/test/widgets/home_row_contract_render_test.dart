@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:intl/intl.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
@@ -274,7 +275,7 @@ void main() {
     await _capture(tester, boundary, '002-mixed-steps');
   });
 
-  testWidgets('003-failed-run', (tester) async {
+  testWidgets('003-failed-hidden', (tester) async {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     DateTime at(int h, int m) => DateTime(today.year, today.month, today.day, h, m);
@@ -290,14 +291,13 @@ void main() {
     ];
     final boundary = await _pumpHome(tester, items);
 
-    expect(find.text(_couldntProcess), findsOneWidget);
-    expect(find.byKey(_processingKey), findsOneWidget);
-    expect(find.textContaining('2 recordings'), findsOneWidget);
+    // Failed rows are hidden on Home the way noise is; Activity's Needs attention section owns them.
     expect(find.text('Design sync notes'), findsOneWidget);
     expect(find.text('Lunch with the team'), findsOneWidget);
-    _expectAbsent(['Failed fixture one', 'Failed fixture two', _processing]);
+    expect(find.byKey(_processingKey), findsNothing);
+    _expectAbsent(['Failed fixture one', 'Failed fixture two', _couldntProcess, _processing]);
 
-    await _capture(tester, boundary, '003-failed-run');
+    await _capture(tester, boundary, '003-failed-hidden');
   });
 
   testWidgets('004-noise-hidden', (tester) async {
@@ -401,5 +401,101 @@ void main() {
     _expectAbsent(['Yeah.', 'Recording · 10:30 AM', 'Thank you.']);
 
     await _capture(tester, boundary, '007-all-processing');
+  });
+
+  /// David's Home on 2026-11-06: nothing today yet, yesterday's junk settled to noise or
+  /// failed (hidden), and Wednesday's finished rows.
+  testWidgets('008-davids-home-nov6', (tester) async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+    final wednesday = today.subtract(const Duration(days: 2));
+    DateTime at(DateTime day, int h, int m) => DateTime(day.year, day.month, day.day, h, m);
+    const prov = 'server_minimum';
+    final items = [
+      // Yesterday
+      _conv('y-rec-337', at(yesterday, 22, 37),
+          title: 'Recording · 3:37 PM', provenance: prov, homeStep: 'noise', length: const Duration(seconds: 58)),
+      _conv('y-didnt', at(yesterday, 21, 57),
+          title: "We didn't Know.", provenance: prov, homeStep: 'noise', length: const Duration(minutes: 28)),
+      _conv('y-family', at(yesterday, 21, 21),
+          title: 'Family Tensions and AI Consulting',
+          overview: 'Fixture overview',
+          length: const Duration(hours: 2, minutes: 12),
+          emoji: '🧠'),
+      _conv('y-pipeline', at(yesterday, 17, 38),
+          title: 'Project Work and Pipeline Friction',
+          overview: 'Fixture overview',
+          length: const Duration(hours: 2),
+          emoji: '🧩'),
+      _conv('y-failed', at(yesterday, 17, 0), homeStep: 'failed', length: const Duration(seconds: 11)),
+      _conv('y-rec-938', at(yesterday, 16, 38),
+          title: 'Recording · 9:38 AM', provenance: prov, homeStep: 'noise', length: const Duration(seconds: 58)),
+      _conv('y-yeah', at(yesterday, 13, 46),
+          title: 'Yeah.', provenance: prov, homeStep: 'noise', length: const Duration(minutes: 4)),
+      _conv('y-company', at(yesterday, 13, 37),
+          title: 'Company OS', overview: 'Fixture overview', length: const Duration(hours: 4), emoji: '🧠'),
+      // Wednesday
+      _conv('w-dessert', at(wednesday, 22, 47),
+          title: 'Dessert Talk', overview: 'Fixture overview', length: const Duration(minutes: 38), emoji: '🍰'),
+      _conv('w-lunch-gpu', at(wednesday, 20, 12),
+          title: 'Lunch, GPU Costs', overview: 'Fixture overview', length: const Duration(minutes: 72), emoji: '💻'),
+      _conv('w-scattered', at(wednesday, 18, 40),
+          title: 'Scattered Conversation Fragments',
+          overview: 'Fixture overview',
+          length: const Duration(minutes: 54),
+          emoji: '🧩'),
+      _conv('w-fragment', at(wednesday, 17, 55),
+          title: 'Fragment of an Incomplete Conversation',
+          overview: 'Fixture overview',
+          length: const Duration(minutes: 47),
+          emoji: '📝'),
+      _conv('w-unresolved', at(wednesday, 17, 20),
+          title: 'Unresolved Issue', overview: 'Fixture overview', length: const Duration(minutes: 33), emoji: '🔧'),
+      _conv('w-product-relo', at(wednesday, 16, 50),
+          title: 'Product, Relocation', overview: 'Fixture overview', length: const Duration(minutes: 65), emoji: '🧭'),
+      _conv('w-rec-921', at(wednesday, 16, 21),
+          title: 'Recording · 9:21 AM', provenance: prov, homeStep: 'noise', length: const Duration(seconds: 41)),
+      _conv('w-rec-835', at(wednesday, 15, 35),
+          title: 'Recording · 8:35 AM', provenance: prov, homeStep: 'noise', length: const Duration(seconds: 22)),
+    ];
+    final boundary = await _pumpHome(tester, items);
+
+    // Nothing recorded today; the list starts at Yesterday and reaches back to Wednesday.
+    expect(find.text('Today'), findsNothing);
+    expect(find.text('Yesterday'), findsOneWidget);
+    expect(find.text(DateFormat('EEE, MMM d').format(wednesday)), findsOneWidget);
+    // The failed empty capture is hidden: no Processing row at all on this Home.
+    expect(find.byKey(_processingKey), findsNothing);
+    for (final title in [
+      'Family Tensions and AI Consulting',
+      'Project Work and Pipeline Friction',
+      'Company OS',
+      'Dessert Talk',
+      'Lunch, GPU Costs',
+      'Scattered Conversation Fragments',
+      'Fragment of an Incomplete Conversation',
+      'Unresolved Issue',
+      'Product, Relocation',
+    ]) {
+      expect(find.text(title), findsOneWidget, reason: '"$title" is a finished row and must show');
+    }
+    _expectAbsent([
+      'Recording · 3:37 PM',
+      "We didn't Know.",
+      'Recording · 9:38 AM',
+      'Yeah.',
+      'Recording · 9:21 AM',
+      'Recording · 8:35 AM',
+      _couldntProcess,
+      _processing,
+    ]);
+    // Newest to oldest across the two days.
+    final family = _top(tester, find.text('Family Tensions and AI Consulting'));
+    final company = _top(tester, find.text('Company OS'));
+    final dessert = _top(tester, find.text('Dessert Talk'));
+    expect(family < company && company < dessert, isTrue);
+
+    await _capture(tester, boundary, '008-davids-home-nov6');
   });
 }

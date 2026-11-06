@@ -14883,9 +14883,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get homeStepTranscribing => 'Átírás folyamatban…';
 
   @override
-  String get homeCouldntProcess => 'Nem sikerült feldolgozni';
-
-  @override
   String homeRecordingsCount(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,

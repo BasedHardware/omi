@@ -26181,12 +26181,6 @@ abstract class AppLocalizations {
   /// **'Transcribing…'**
   String get homeStepTranscribing;
 
-  /// Home row title when recordings could not be processed.
-  ///
-  /// In en, this message translates to:
-  /// **'Couldn\'t process'**
-  String get homeCouldntProcess;
-
   /// Home processing row subtitle giving how many recordings one row stands for.
   ///
   /// In en, this message translates to:

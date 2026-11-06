@@ -14852,9 +14852,6 @@ class AppLocalizationsPt extends AppLocalizations {
   String get homeStepTranscribing => 'Transcrevendo…';
 
   @override
-  String get homeCouldntProcess => 'Não foi possível processar';
-
-  @override
   String homeRecordingsCount(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,

@@ -4499,7 +4499,6 @@
     "chatAppsCodeExpiredMessageIn": "Πάρε νέο κωδικό και στείλ' τον από τα {app}.",
     "episodeWritingNotes": "Γράφονται οι σημειώσεις…",
     "homeStepTranscribing": "Μεταγραφή…",
-    "homeCouldntProcess": "Δεν ήταν δυνατή η επεξεργασία",
     "homeRecordingsCount": "{count, plural, one{{count} εγγραφή} other{{count} εγγραφές}}",
     "episodeWritingNotesDetail": "Πρώτα ολοκληρώνεται η απομαγνητοφώνηση. Μπορείς να φύγεις από τη σελίδα.",
     "episodeCoversUpTo": "Καλύπτει έως τις {time} · πλήρεις σημειώσεις στο τέλος",

@@ -14899,9 +14899,6 @@ class AppLocalizationsCa extends AppLocalizations {
   String get homeStepTranscribing => 'Transcrivint…';
 
   @override
-  String get homeCouldntProcess => 'No s\'ha pogut processar';
-
-  @override
   String homeRecordingsCount(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,

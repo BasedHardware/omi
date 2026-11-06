@@ -14826,9 +14826,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get homeStepTranscribing => 'Đang chép lời…';
 
   @override
-  String get homeCouldntProcess => 'Không thể xử lý';
-
-  @override
   String homeRecordingsCount(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,

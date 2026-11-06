@@ -4499,7 +4499,6 @@
     "chatAppsCodeExpiredMessageIn": "Hämta en ny kod och skicka den från {app}.",
     "episodeWritingNotes": "Skriver anteckningar…",
     "homeStepTranscribing": "Transkriberar…",
-    "homeCouldntProcess": "Kunde inte bearbetas",
     "homeRecordingsCount": "{count, plural, one{{count} inspelning} other{{count} inspelningar}}",
     "episodeWritingNotesDetail": "Vi gör först klart transkriptionen. Du kan lämna den här sidan.",
     "episodeCoversUpTo": "Täcker fram till {time} · fullständiga anteckningar när det är klart",

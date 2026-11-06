@@ -14612,9 +14612,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get homeStepTranscribing => '文字起こし中…';
 
   @override
-  String get homeCouldntProcess => '処理できませんでした';
-
-  @override
   String homeRecordingsCount(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,

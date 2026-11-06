@@ -14839,9 +14839,6 @@ class AppLocalizationsId extends AppLocalizations {
   String get homeStepTranscribing => 'Sedang mentranskrip…';
 
   @override
-  String get homeCouldntProcess => 'Gagal memproses';
-
-  @override
   String homeRecordingsCount(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,

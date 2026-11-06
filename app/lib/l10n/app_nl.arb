@@ -4499,7 +4499,6 @@
     "chatAppsCodeExpiredMessageIn": "Vraag een nieuwe code aan en stuur die vanuit {app}.",
     "episodeWritingNotes": "Notities schrijven…",
     "homeStepTranscribing": "Transcriberen…",
-    "homeCouldntProcess": "Verwerken mislukt",
     "homeRecordingsCount": "{count, plural, one{{count} opname} other{{count} opnames}}",
     "episodeWritingNotesDetail": "Eerst maken we het transcript af. Je kunt deze pagina verlaten.",
     "episodeCoversUpTo": "Tot {time} · volledige notities aan het eind",

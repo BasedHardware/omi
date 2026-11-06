@@ -14618,9 +14618,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get homeStepTranscribing => '음성 변환 중…';
 
   @override
-  String get homeCouldntProcess => '처리하지 못했어요';
-
-  @override
   String homeRecordingsCount(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,

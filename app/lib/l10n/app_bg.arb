@@ -4499,7 +4499,6 @@
     "chatAppsCodeExpiredMessageIn": "Вземи нов код и го изпрати от {app}.",
     "episodeWritingNotes": "Пишем бележките…",
     "homeStepTranscribing": "Транскрибираме…",
-    "homeCouldntProcess": "Неуспешна обработка",
     "homeRecordingsCount": "{count, plural, one{{count} запис} other{{count} записа}}",
     "episodeWritingNotesDetail": "Първо довършваме транскрипцията. Можете да напуснете страницата.",
     "episodeCoversUpTo": "Обхваща до {time} · пълните бележки при приключване",

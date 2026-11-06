@@ -1,5 +1,4 @@
-/// The Home processing row names the current step and how many recordings one row stands for,
-/// and a failed step shows a static mark instead of the turning ring.
+/// The Home processing row names the current step and how many recordings one row stands for.
 library;
 
 import 'package:flutter/material.dart';
@@ -68,17 +67,6 @@ void main() {
     await _pumpRow(tester, step: HomeStep.writingNotes);
     expect(find.text('Writing notes… · 6m 31s'), findsOneWidget);
     expect(find.textContaining('recording'), findsNothing);
-    await tester.pumpWidget(const SizedBox.shrink());
-  });
-
-  testWidgets('failed step shows a static error mark and no ring', (tester) async {
-    await _pumpRow(tester, step: HomeStep.failed, count: 2);
-    expect(find.text("Couldn't process"), findsOneWidget);
-    expect(find.text('2 recordings'), findsOneWidget);
-    expect(find.byType(OmiActivityRing), findsNothing);
-    final icon = tester.widget<Icon>(find.byIcon(Icons.error_outline_rounded));
-    expect(icon.size, 20);
-    expect(icon.color, OmiColors.textTertiary);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 }

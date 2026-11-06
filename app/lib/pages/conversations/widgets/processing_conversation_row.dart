@@ -10,10 +10,9 @@ import 'package:omi/utils/other/temp.dart';
 
 /// A conversation or episode that just ended and is still processing, on Home under the live row:
 /// the same row in its middle state, a turning ring and "Writing notes… · 1h 36m". When several
-/// recordings in a row are processing, the row says how many it stands for, and a failed step
-/// shows a static error mark instead of the ring. It opens the same page the finished row will.
-/// The placeholder the app adds the moment the person ends a conversation is replaced by the
-/// server's row, then by the finished row.
+/// recordings in a row are processing, the row says how many it stands for. It opens the same
+/// page the finished row will. The placeholder the app adds the moment the person ends a
+/// conversation is replaced by the server's row, then by the finished row.
 class ProcessingConversationRow extends StatelessWidget {
   const ProcessingConversationRow({
     super.key,
@@ -57,7 +56,6 @@ class ProcessingConversationRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final failed = step == HomeStep.failed;
     final started = conversation.startedAt ?? conversation.createdAt;
     final seconds = conversation.finishedAt?.difference(started).inSeconds ?? 0;
     // A run's span is wall-clock, not recording time, so a run shows its count instead.
@@ -68,7 +66,7 @@ class ProcessingConversationRow extends StatelessWidget {
       if (step == HomeStep.writingNotes) l10n.episodeWritingNotes,
       if (size != null) size,
     ].join(' · ');
-    final shownTitle = failed ? l10n.homeCouldntProcess : l10n.wrappedProcessingDefault;
+    final shownTitle = l10n.wrappedProcessingDefault;
     return Padding(
       padding: const EdgeInsets.only(top: 8, left: 16, right: 16),
       child: Semantics(
@@ -92,9 +90,7 @@ class ProcessingConversationRow extends StatelessWidget {
                     height: 36,
                     alignment: Alignment.center,
                     decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
-                    child: failed
-                        ? Icon(Icons.error_outline_rounded, color: OmiColors.textTertiary, size: 20)
-                        : const OmiActivityRing(active: true, diameter: 18, child: SizedBox.shrink()),
+                    child: const OmiActivityRing(active: true, diameter: 18, child: SizedBox.shrink()),
                   ),
                   const SizedBox(width: 12),
                   Expanded(

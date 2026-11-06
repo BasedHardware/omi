@@ -11922,7 +11922,6 @@
     "chatAppsCodeExpiredMessageIn": "Атрымай новы код і адпраў яго з праграмы {app}.",
     "episodeWritingNotes": "Пішам нататкі…",
     "homeStepTranscribing": "Расшыфроўваем…",
-    "homeCouldntProcess": "Не ўдалося апрацаваць",
     "homeRecordingsCount": "{count, plural, one{{count} запіс} few{{count} запісы} many{{count} запісаў} other{{count} запісу}}",
     "episodeWritingNotesDetail": "Спачатку завяршаем транскрыпцыю. Можаце пакінуць гэту старонку.",
     "episodeCoversUpTo": "Ахоплівае да {time} · поўныя нататкі пасля завяршэння",
