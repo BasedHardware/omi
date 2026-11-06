@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import ast
 import importlib.util
 import json
+import re
 import subprocess
 from pathlib import Path
 import sys
@@ -1706,3 +1708,25 @@ def test_backend_listen_rollout_wait_can_cover_a_real_rollout():
         f'progressDeadlineSeconds={progress_deadline}s is below the {required_seconds}s a roll at '
         f'the HPA floor needs ({waves} waves x {per_pod_startup_seconds}s startup budget)'
     )
+
+
+def test_deploy_script_argparse_percent_escapes():
+    # Deploy run 42177595382: Python 3.14 rejects bare % while building the parser.
+    paths = sorted((BACKEND_DIR / 'scripts').glob('*.py'))
+    for directory in ('infra/rollout', '.github/scripts'):
+        paths.extend(sorted((REPOSITORY_ROOT / directory).rglob('*.py')))
+    for path in paths:
+        source = path.read_text(encoding='utf-8')
+        if '%' not in source:
+            continue
+        tree = ast.parse(source)
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            for keyword in node.keywords:
+                if keyword.arg not in ('help', 'description'):
+                    continue
+                for value in ast.walk(keyword.value):
+                    if isinstance(value, ast.Constant) and isinstance(value.value, str):
+                        remainder = re.sub(r'%%|%\([^)]+\)s', '', value.value)
+                        assert '%' not in remainder, f'{path}:{value.lineno}: escape literal percent as %%'
