@@ -11,16 +11,23 @@ The existing Show Discarded Conversations preference is forwarded to the server.
 `conversation_id` is this conversation. Completed and manually linked items count.
 Unaccepted/rejected Candidates and stale summary suggestions do not. Relinking or
 merging follows the canonical link; no historical count, task creation, task text,
-new projection or migration is introduced. Locked/deleted/missing/foreign parents
-do not expose badges or filtered results. Task-source backlinks remain #19859.
+new projection or migration is introduced. Deleted, missing or foreign parents
+are excluded. Locked parents are hidden from badges. A filtered page can return
+a locked parent only after the existing paid-access policy restores it.
+Task-source backlinks remain #19859.
 
 `conversation_task_links` owns the bounded metadata join for both surfaces.
 Browse discovery uses the existing chronological index and visibility/codec;
-textual discovery reuses the current conversation search owner. Filter cursors
+textual discovery reuses the current conversation search owner. Both scans are
+read-only. Access recovery checks eligibility for linked matches and writes only
+the selected response page. Text discovery advances by the raw index page even
+when hydration drops stale or inaccessible hits. Public search continues to
+report pagination from visible results. Filter cursors
 are signed, expire after one hour, and bind the owner and all filter inputs.
 Sparse scans may return an empty intermediate page **with continuation**, which
 the UI never labels “No results”. A budget failure without progress is retryable.
 The presence read uses existing task version invalidation and a 15-second cache.
+Its 120/hour limit is exempt from the global rate-limit multiplier.
 No new composite-index deployment is required; runtime query guards verify this.
 
 The mobile presence reader batches mounted row IDs (max 100 retained), invalidates
@@ -46,6 +53,8 @@ replacement cannot retain the prior account's results.
 - [x] Query/contract guards and all 31 selected mobile journeys.
 - [x] Final source review, including current canonical authority, cursor progress,
   redaction, async offload, account revocation and released-client compatibility.
+- [x] Guarded 401 refresh and replay across account replacement, raw index
+  pagination past hidden/stale results, and selected-page-only unlocks.
 - [ ] Final repository preflight and required CI for the submitted commit. Keep
   the PR draft until these pass.
 
@@ -60,8 +69,9 @@ the existing private-return-type info in `main.dart`; new sources have no errors
 
 The shared HTTP stale-error guards and regressions are reused from #24182
 (`e53adc5fd0`, `6fc6816804`), preserving current main's newer streaming behavior.
-They prevent old requests from refreshing/expiring a replacement account while
-preserving successful receipts. This is not verification of Firebase OAuth itself.
+The owner check extends through token refresh and replay so a delayed 401
+cannot expire a replacement session. Successful receipts remain available to
+their original callers. This is not verification of Firebase OAuth itself.
 
 ## Reproduce local native acceptance
 

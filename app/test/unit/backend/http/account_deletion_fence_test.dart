@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -111,6 +112,77 @@ void main() {
         expect(service.captureSessionSnapshot()?.ownerUid, 'replacement');
       });
     }
+
+    test('switching accounts during 401 refresh preserves the replacement session', () async {
+      final refreshStarted = Completer<void>();
+      final pendingRefresh = Completer<RefreshedAuthToken?>();
+      final gateway = _Gateway()
+        ..refresh = () {
+          refreshStarted.complete();
+          return pendingRefresh.future;
+        };
+      final service = AuthService.forTesting(tokenGateway: gateway, refreshDelay: (_) async {});
+      final owner = service.captureSessionSnapshot()!;
+      final events = <AuthSessionExpiredEvent>[];
+      service.sessionExpiredEvents.listen(events.add);
+      var sends = 0;
+      final call = executeApi(
+        request: const ApiRequest(
+          url: 'https://api.omi.me/v1/conversations/with-tasks/page',
+          method: 'POST',
+          body: '{}',
+        ),
+        decode: (body) => body,
+        canSend: () => service.isSessionSnapshotCurrent(owner),
+        execution: ApiExecutionSeams(
+          auth: service,
+          headers: (_) async => {'Authorization': 'Bearer old-owner'},
+          transport: (_) async {
+            sends++;
+            return http.Response('', HttpStatus.unauthorized);
+          },
+        ),
+      );
+      await refreshStarted.future;
+      gateway.user = const AuthUserSnapshot(uid: 'replacement');
+      service.handleAuthUserChanged('replacement');
+      pendingRefresh.complete(null);
+
+      expect(await call, isA<ApiFailure<String>>());
+      expect(sends, 1);
+      expect(events, isEmpty);
+      expect(gateway.signOutCalls, 0);
+      expect(service.captureSessionSnapshot()?.ownerUid, 'replacement');
+    });
+
+    test('a replayed 401 after account switch cannot expire the replacement', () async {
+      final gateway = _Gateway();
+      final service = AuthService.forTesting(tokenGateway: gateway, refreshDelay: (_) async {});
+      final owner = service.captureSessionSnapshot()!;
+      var sends = 0;
+      final response = await sendUncaughtApiCall(
+        url: 'https://api.omi.me/v1/conversations/with-tasks/page',
+        headers: {},
+        method: 'POST',
+        body: '{}',
+        canSend: () => service.isSessionSnapshotCurrent(owner),
+        execution: ApiExecutionSeams(
+          auth: service,
+          headers: (_) async => {'Authorization': 'Bearer old-owner'},
+          transport: (_) async {
+            if (++sends == 2) {
+              gateway.user = const AuthUserSnapshot(uid: 'replacement');
+              service.handleAuthUserChanged('replacement');
+            }
+            return http.Response('', HttpStatus.unauthorized);
+          },
+        ),
+      );
+      expect(response.statusCode, HttpStatus.unauthorized);
+      expect(sends, 2);
+      expect(gateway.signOutCalls, 0);
+      expect(service.captureSessionSnapshot()?.ownerUid, 'replacement');
+    });
 
     test('a stale replay response cannot expire the replacement account', () async {
       final gateway = _Gateway();
@@ -252,6 +324,7 @@ String _tokenWithExpiry(DateTime expiry) {
 final class _Gateway implements AuthTokenGateway {
   int signOutCalls = 0;
   int refreshCalls = 0;
+  Future<RefreshedAuthToken?> Function()? refresh;
   AuthUserSnapshot? user = const AuthUserSnapshot(uid: 'fence-user');
 
   @override
@@ -260,6 +333,8 @@ final class _Gateway implements AuthTokenGateway {
   @override
   Future<RefreshedAuthToken?> forceRefresh() async {
     refreshCalls++;
+    final pending = refresh;
+    if (pending != null) return pending();
     return RefreshedAuthToken(token: 'fresh-token', expirationTime: DateTime.now().add(const Duration(hours: 1)));
   }
 

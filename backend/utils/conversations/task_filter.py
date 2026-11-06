@@ -37,7 +37,9 @@ _Row = dict[str, Any]
 
 
 def _eligible_rows(
-    candidates: list[tuple[Optional[_Position], Optional[_Row]]], filters: TaskConversationPageRequest
+    candidates: list[tuple[Optional[_Position], Optional[_Row]]],
+    filters: TaskConversationPageRequest,
+    allow_locked: bool,
 ) -> list[_Row]:
     # The shared visibility owner is decorated with shadow-policy I/O. Keep
     # that existing boundary off the event loop, even for a small raw page.
@@ -47,10 +49,10 @@ def _eligible_rows(
         if row
         and row.get('id')
         and is_visible_conversation(row, include_discarded=filters.include_discarded)
-        and not row.get('is_locked')
         and row.get('status') in ('processing', 'completed')
         and (not filters.folder_id or row.get('folder_id') == filters.folder_id)
         and (filters.starred is None or bool(row.get('starred')) == filters.starred)
+        and (allow_locked or not row.get('is_locked'))
     ]
 
 
@@ -106,6 +108,7 @@ async def task_conversation_page(
     browse_page: Callable[[Optional[str], str], Awaitable[tuple[list[tuple[str, Optional[_Row]]], bool]]],
     search_page: Callable[[int], Awaitable[dict[str, Any]]],
     presence: Callable[[list[str]], Awaitable[dict[str, bool]]],
+    can_recover_locked: Callable[[_Row], bool] | None = None,
 ) -> dict[str, Any]:
     """Filter before pagination, retaining the exact raw position at every stop.
 
@@ -148,13 +151,20 @@ async def task_conversation_page(
                 candidates = [({'after': after}, row) for after, row in source]
                 source_next = {'after': source[-1][0]} if source and more else None
             budget.check()
-            eligible = await run_blocking(db_executor, _eligible_rows, candidates, filters)
+            eligible = await run_blocking(
+                db_executor, _eligible_rows, candidates, filters, can_recover_locked is not None
+            )
             linked = await presence(list(dict.fromkeys(row['id'] for row in eligible))) if eligible else {}
             eligible_ids = {row['id'] for row in eligible}
             for after, row in candidates:
                 budget.check()
+                matched = row and row.get('id') in eligible_ids and linked.get(row['id']) is True
+                if matched and row and row.get('is_locked'):
+                    matched = can_recover_locked is not None and await run_blocking(
+                        db_executor, can_recover_locked, row
+                    )
                 next_position = after
-                if row and row.get('id') in eligible_ids and linked.get(row['id']) is True:
+                if matched and row:
                     items.append(row)
                     if len(items) == filters.limit:
                         # At the end of a known terminal raw page there is no

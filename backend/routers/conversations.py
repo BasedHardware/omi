@@ -2186,6 +2186,8 @@ async def _search_exact_conversation_reference(
     uid: str,
     start_timestamp: Optional[int],
     end_timestamp: Optional[int],
+    *,
+    candidates_only: bool = False,
 ) -> Dict[str, Any]:
     exact_page, exact_per_page = clamp_conversation_search_pagination(search_request.page, search_request.per_page)
     conversations = await run_blocking(
@@ -2195,8 +2197,9 @@ async def _search_exact_conversation_reference(
         [exact_conversation_id],
         include_discarded=bool(search_request.include_discarded),
     )
-    await run_blocking(db_executor, _heal_locked_conversations_if_eligible, uid, conversations)
-    conversations = [conversation for conversation in conversations if not conversation.get('is_locked')]
+    if not candidates_only:
+        await run_blocking(db_executor, _heal_locked_conversations_if_eligible, uid, conversations)
+        conversations = [conversation for conversation in conversations if not conversation.get('is_locked')]
     conversations = [
         conversation
         for conversation in conversations
@@ -2205,8 +2208,9 @@ async def _search_exact_conversation_reference(
     ]
     if exact_page != 1:
         conversations = []
-    conversations = [transcribing_hold.project(row) for row in conversations]
-    redact_conversations_for_list(conversations)
+    if not candidates_only:
+        conversations = [transcribing_hold.project(row) for row in conversations]
+        redact_conversations_for_list(conversations)
     return {
         'items': conversations[:exact_per_page],
         'total_pages': 1,
@@ -2220,8 +2224,8 @@ async def _browse_speaker_conversations(
     uid: str,
     start_timestamp: Optional[int],
     end_timestamp: Optional[int],
-    request: Request,
-    response: Response,
+    request: Request | None,
+    response: Response | None,
 ) -> Dict[str, Any]:
     # Browsing one speaker's conversations: Typesense cannot filter by speaker, so walk Firestore
     # (a post-filter over Typesense's first page only ever found the latest 20 conversations).
@@ -2268,6 +2272,22 @@ async def search_conversations_endpoint(
     request: Request = None,  # type: ignore[assignment]
     response: Response = None,  # type: ignore[assignment]
 ):
+    return await _search_conversation_page(search_request, uid, request, response)
+
+
+async def search_task_conversation_candidates(search_request: SearchRequest, uid: str) -> Dict[str, Any]:
+    """Internal task discovery, with raw pagination and no access writes."""
+    return await _search_conversation_page(search_request, uid, None, None, candidates_only=True)
+
+
+async def _search_conversation_page(
+    search_request: SearchRequest,
+    uid: str,
+    request: Request | None,
+    response: Response | None,
+    *,
+    candidates_only: bool = False,
+) -> Dict[str, Any]:
     if search_request.speaker_id and search_request.speaker_id != 'user':
         person = await run_blocking(db_executor, users_db.get_person, uid, search_request.speaker_id)
         if person is None:
@@ -2281,10 +2301,15 @@ async def search_conversations_endpoint(
     exact_conversation_id = parse_exact_conversation_reference(search_request.query)
     if exact_conversation_id:
         return await _search_exact_conversation_reference(
-            exact_conversation_id, search_request, uid, start_timestamp, end_timestamp
+            exact_conversation_id,
+            search_request,
+            uid,
+            start_timestamp,
+            end_timestamp,
+            candidates_only=candidates_only,
         )
 
-    if search_request.speaker_id and not (search_request.query or '').strip():
+    if not candidates_only and search_request.speaker_id and not (search_request.query or '').strip():
         return await _browse_speaker_conversations(
             search_request, uid, start_timestamp, end_timestamp, request, response
         )
@@ -2356,9 +2381,10 @@ async def search_conversations_endpoint(
     by_id = {c.get('id'): c for c in conversations if c.get('id')}
     conversations = [by_id[cid] for cid in conversation_ids if cid in by_id]
     # The index can lag Firestore. Restore an eligible owner's historical
-    # access, then filter all remaining locks before returning any matches.
-    await run_blocking(db_executor, _heal_locked_conversations_if_eligible, uid, conversations)
-    conversations = [conversation for conversation in conversations if not conversation.get('is_locked')]
+    # access for public search. Task discovery defers writes to its selected page.
+    if not candidates_only:
+        await run_blocking(db_executor, _heal_locked_conversations_if_eligible, uid, conversations)
+        conversations = [conversation for conversation in conversations if not conversation.get('is_locked')]
     # Speaker filtering happens here, not in Typesense: the index has no transcript_segments field, so
     # asking Typesense for one 400'd and 500'd the request. The hydrated Firestore documents do carry
     # transcript_segments, so match against those.
@@ -2375,6 +2401,8 @@ async def search_conversations_endpoint(
     # clears segments on locked rows.
     if (search_request.query or '').strip():
         conversations = attach_match_snippets_to_conversations(conversations, search_request.query)
+    if candidates_only:
+        return {**search_results, 'items': conversations}
     conversations = [transcribing_hold.project(row) for row in conversations]
     redact_conversations_for_list(conversations)
     search_results['items'] = conversations

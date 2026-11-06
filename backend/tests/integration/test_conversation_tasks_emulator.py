@@ -7,6 +7,7 @@ FIRESTORE_EMULATOR_HOST=127.0.0.1:8798 GCLOUD_PROJECT=demo-fs-p1 \
 import os
 import time
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from urllib.parse import urlsplit
 from uuid import uuid4
 
@@ -14,7 +15,7 @@ import pytest
 from google.auth.credentials import AnonymousCredentials
 from google.cloud import firestore
 
-from database import conversation_task_links as links
+from database import _client, conversation_task_links as links
 from models.conversation import Conversation
 from models.conversation_tasks import TaskConversationPageRequest
 from models.structured import Structured
@@ -31,6 +32,7 @@ def store(monkeypatch):
     assert os.getenv('GCLOUD_PROJECT') == 'demo-fs-p1'
     client = firestore.Client(project='demo-fs-p1', credentials=AnonymousCredentials())
     uid = 'task-filter-' + uuid4().hex
+    monkeypatch.setattr(_client, '_firestore_client', client)
     monkeypatch.setattr(links, 'get_action_items_list_version', lambda uid: None)
     monkeypatch.setattr(links, 'get_firestore_client', lambda: client)
     monkeypatch.setenv('ENCRYPTION_SECRET', 'synthetic-local-task-filter-key')
@@ -165,3 +167,82 @@ async def test_production_http_routes_validate_scope_and_redact_task_contents(st
         assert changed.status_code == 400
         invalid = await http.post('/v1/conversations/task-presence', json={'conversation_ids': ['../other']})
         assert invalid.status_code == 422
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('query', [None, 'budget'])
+async def test_task_page_unlocks_only_selected_linked_rows(store, monkeypatch, query):
+    from fastapi import FastAPI
+    from httpx import ASGITransport, AsyncClient
+    from routers import conversation_tasks, conversations
+    from utils.conversations import paid_lock_recovery, search
+
+    client, uid = store
+    user = seed(client, uid)
+    records = user.collection('conversations')
+    records.document('c000').update({'is_locked': True, 'processing_deferred': True})
+    for cid in ('c001', 'c054', 'c055'):
+        records.document(cid).update({'is_locked': True})
+    monkeypatch.setattr(conversations.vector_db, 'index', None)
+    monkeypatch.setattr(paid_lock_recovery.redis_db, 'set_credits_invalidation_signal', lambda uid: None)
+    allow_recovery = False
+    monkeypatch.setattr(paid_lock_recovery, 'eligible', lambda owner: owner == uid and allow_recovery)
+    searched = []
+
+    def keyword_search(params):
+        assert params['filter_by'].startswith(f'userId:={uid}')
+        searched.append(params['page'])
+        ids = ['c000', 'c001', *[f'missing-{i}' for i in range(47)]] if params['page'] == 1 else ['c054', 'c055']
+        hits = [
+            {'document': {'id': cid, 'created_at': 1767225600, 'started_at': 1767225600, 'finished_at': 1767225600}}
+            for cid in ids
+        ]
+        if params['page'] == 1:
+            hits.append({'document': {'id': 'malformed'}})
+        return {'hits': hits}
+
+    monkeypatch.setattr(
+        search,
+        'client',
+        SimpleNamespace(
+            collections={'conversations': SimpleNamespace(documents=SimpleNamespace(search=keyword_search))}
+        ),
+    )
+    app = FastAPI()
+    app.include_router(conversation_tasks.router)
+    app.include_router(conversations.router)
+    for route in app.routes:
+        if getattr(route, 'path', None) in {'/v1/conversations/with-tasks/page', '/v1/conversations/search'}:
+            for dependency in route.dependant.dependencies:
+                app.dependency_overrides[dependency.call] = lambda: uid
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url='http://test') as http:
+        if query:
+            public_page = await http.post('/v1/conversations/search', json={'query': query, 'page': 1, 'per_page': 50})
+            assert public_page.status_code == 200, public_page.text
+            assert public_page.json()['items'] == []
+            assert public_page.json()['total_pages'] == 1
+            searched.clear()
+
+        allow_recovery = True
+        payload = {'limit': 1}
+        if query:
+            payload['query'] = query
+        response = await http.post('/v1/conversations/with-tasks/page', json=payload)
+        assert response.status_code == 200, response.text
+        first = response.json()
+        assert [row['id'] for row in first['items']] == ['c054']
+        assert first['items'][0]['is_locked'] is False
+        assert first['next_cursor']
+        assert searched == ([1, 2] if query else [])
+        assert records.document('c054').get().to_dict()['is_locked'] is False
+        for cid in ('c000', 'c001', 'c055'):
+            assert records.document(cid).get().to_dict()['is_locked'] is True
+
+        response = await http.post(
+            '/v1/conversations/with-tasks/page', json={**payload, 'cursor': first['next_cursor']}
+        )
+        assert response.status_code == 200, response.text
+        assert [row['id'] for row in response.json()['items']] == ['c055']
+        assert records.document('c055').get().to_dict()['is_locked'] is False
+        assert records.document('c001').get().to_dict()['is_locked'] is True

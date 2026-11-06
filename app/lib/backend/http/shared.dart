@@ -101,8 +101,14 @@ Future<String> getAuthHeader({
   bool expireTerminalSession = true,
   AuthSessionSnapshot? sessionSnapshot,
   AuthService? authService,
+  bool Function()? canSend,
 }) async {
   final service = authService ?? AuthService.instance;
+  void ensureCurrentOwner() {
+    if (canSend?.call() == false) throw AuthTokenUnavailableException(const AuthTokenMissingUser());
+  }
+
+  ensureCurrentOwner();
   if (sessionSnapshot != null) {
     if (!service.isSessionSnapshotCurrent(sessionSnapshot)) {
       throw AuthTokenUnavailableException(const AuthTokenMissingUser());
@@ -112,6 +118,7 @@ Future<String> getAuthHeader({
     // same session.
     final storedToken = SharedPreferencesUtil().authToken;
     final refreshResult = await service.refreshIdToken();
+    ensureCurrentOwner();
     if (!service.isSessionSnapshotCurrent(sessionSnapshot)) {
       throw AuthTokenUnavailableException(const AuthTokenMissingUser());
     }
@@ -159,7 +166,8 @@ Future<String> getAuthHeader({
       (expiry.isBefore(DateTime.now().add(const Duration(minutes: 5))) && expiry.isAfter(DateTime.now())));
 
   if (!hasAuthToken || !isExpirationDateValid) {
-    final refreshResult = await AuthService.instance.refreshIdToken();
+    final refreshResult = await service.refreshIdToken();
+    ensureCurrentOwner();
     switch (refreshResult) {
       case AuthTokenSuccess(:final token):
         SharedPreferencesUtil().authToken = token;
@@ -175,14 +183,14 @@ Future<String> getAuthHeader({
         throw AuthTokenUnavailableException(refreshResult);
       case AuthTokenMissingToken():
         if (expireTerminalSession) {
-          await AuthService.instance.expireSession(
+          await service.expireSession(
             const AuthSessionExpiredEvent(reason: AuthSessionExpirationReason.missingToken),
           );
         }
         throw AuthTokenUnavailableException(refreshResult);
       case AuthTokenTerminalFailure(:final code):
         if (expireTerminalSession) {
-          await AuthService.instance.expireSession(
+          await service.expireSession(
             AuthSessionExpiredEvent(reason: AuthSessionExpirationReason.terminalTokenFailure, code: code),
           );
         }
@@ -208,6 +216,7 @@ Future<Map<String, String>> buildHeaders({
   bool forWebSocket = false,
   AuthSessionSnapshot? sessionSnapshot,
   AuthService? authService,
+  bool Function()? canSend,
 }) async {
   final effectiveAuthCheck = shouldHonorRequestedOmiAuth(
     requested: requireAuthCheck,
@@ -255,6 +264,7 @@ Future<Map<String, String>> buildHeaders({
       expireTerminalSession: expireTerminalSession,
       sessionSnapshot: sessionSnapshot,
       authService: authService,
+      canSend: canSend,
     );
   }
 
@@ -548,9 +558,11 @@ Future<T> refreshAndReplayAfter401<T>({
   AuthService? authService,
   void Function(AuthTokenResult refresh)? onAuthRefresh,
   AuthSessionSnapshot? sessionSnapshot,
+  bool Function()? canSend,
 }) async {
   final service = authService ?? AuthService.instance;
-  bool sessionChanged() => sessionSnapshot != null && !service.isSessionSnapshotCurrent(sessionSnapshot);
+  bool snapshotChanged() => sessionSnapshot != null && !service.isSessionSnapshotCurrent(sessionSnapshot);
+  bool sessionChanged() => snapshotChanged() || canSend?.call() == false;
   Future<void> expireIfCurrent(AuthSessionExpiredEvent event) async {
     if (expireTerminalSession && !sessionChanged()) await service.expireSession(event);
   }
@@ -561,11 +573,11 @@ Future<T> refreshAndReplayAfter401<T>({
     return firstResponse;
   }
   final refresh = await service.refreshIdToken();
-  onAuthRefresh?.call(refresh);
   if (sessionChanged()) {
     service.recordAuthenticatedRequest401(recovered: false, outcome: 'session_changed');
     return firstResponse;
   }
+  onAuthRefresh?.call(refresh);
   switch (refresh) {
     case AuthTokenSuccess():
       if (sessionChanged()) {
@@ -579,7 +591,7 @@ Future<T> refreshAndReplayAfter401<T>({
         service.recordAuthenticatedRequest401(recovered: false, outcome: 'replay_failed');
         rethrow;
       }
-      if (sessionChanged()) {
+      if (snapshotChanged()) {
         service.recordAuthenticatedRequest401(recovered: false, outcome: 'session_changed');
         await (disposeStaleResponse ?? disposeUnauthorizedResponse)?.call(replayed);
         return firstResponse;
@@ -650,6 +662,7 @@ Future<http.Response> sendUncaughtApiCall({
         statusCode: (value) => value.statusCode,
         expireTerminalSession: signOutOn401,
         authService: execution.auth,
+        canSend: canSend,
         onAuthRefresh: onAuthRefresh,
         replay: () async {
           builtHeaders = await execution.headers(ApiRequest(url: url, method: method, headers: headers, body: body));
@@ -670,6 +683,7 @@ Future<http.Response> sendUncaughtApiCall({
     expireTerminalSession: signOutOn401,
     url: url,
     method: method,
+    canSend: canSend,
   );
 
   final effectiveTimeout = timeout ?? (method == 'GET' ? ApiClient.requestTimeoutRead : ApiClient.requestTimeoutWrite);
@@ -690,6 +704,7 @@ Future<http.Response> sendUncaughtApiCall({
       firstResponse: response,
       statusCode: (value) => value.statusCode,
       expireTerminalSession: signOutOn401,
+      canSend: canSend,
       onAuthRefresh: onAuthRefresh,
       replay: () async {
         builtHeaders = await buildHeaders(
@@ -698,6 +713,7 @@ Future<http.Response> sendUncaughtApiCall({
           expireTerminalSession: signOutOn401,
           url: url,
           method: method,
+          canSend: canSend,
         );
         return HttpPoolManager.instance.send(
           () {
@@ -740,7 +756,7 @@ Future<http.Response?> makeApiCall({
       canSend: canSend,
     );
   } on AuthTokenUnavailableException catch (e) {
-    await _handleAuthUnavailable(e, expireTerminalSession: signOutOn401);
+    await _handleAuthUnavailable(e, expireTerminalSession: signOutOn401 && (canSend?.call() ?? true));
     Logger.debug('Authenticated HTTP request blocked before send: ${e.result.runtimeType}');
     return null;
   } catch (e, stackTrace) {
