@@ -69,7 +69,7 @@ def delete_batch_object(uid: str, uri: str) -> None:
         pass
 
 
-def register_batch_artifact(
+def _register_batch_artifact(
     store: Any,
     uid: str,
     segment_id: str,
@@ -250,7 +250,7 @@ def register_batch_artifact(
     return artifact_id
 
 
-def expire_completed_segment(store: Any, uid: str, segment_id: str, now: float) -> bool:
+def _expire_completed_segment(store: Any, uid: str, segment_id: str, now: float) -> bool:
     """Arm cleanup only after C has durably checkpointed successful projection."""
     client, namespace = store.client, store.namespace
     completed_at = datetime.fromtimestamp(now, timezone.utc)
@@ -447,11 +447,10 @@ def cleanup_completed_artifacts(
     return cleaned
 
 
-def batch_artifact_authorize(store: Any, item: Any, *, snapshots: dict | None = None):
+def batch_artifact_authorize(store: Any, item: Any, *, snapshots: dict | None = None, read_budget=None):
     """Authorize artifact IO; full-row exports always use live transactional reads."""
     from utils.batch_pipeline.artifacts import ProtectionContext
 
-    @firestore.transactional
     def authorize(transaction):
         loaded = {}
         # The ordinary artifact callback returns only ProtectionContext, whose
@@ -472,13 +471,17 @@ def batch_artifact_authorize(store: Any, item: Any, *, snapshots: dict | None = 
             conversation_ids=(item.conversation_id,) if item.conversation_id else (),
             expected_generation=item.privacy_generation,
             snapshots=None if decision_only else loaded,
+            read_budget=read_budget,
         )
         if snapshots is not None:
             snapshots.clear()
             snapshots.update(loaded)
         user = (
             privacy_check_metrics.read_snapshot(
-                'batch', store.client.collection('users').document(item.owner_id), transaction=transaction
+                'batch',
+                store.client.collection('users').document(item.owner_id),
+                transaction=transaction,
+                read_budget=read_budget,
             ).to_dict()
             or {}
             if decision_only
@@ -486,7 +489,11 @@ def batch_artifact_authorize(store: Any, item: Any, *, snapshots: dict | None = 
         )
         return ProtectionContext(user.get('data_protection_level', 'enhanced'), generation)
 
-    return authorize(store.client.transaction())
+    if read_budget is not None:
+        from database.batch_pipeline_reads import read_snapshot
+
+        return read_snapshot(store, lambda tx: authorize(tx.transaction), read_budget)
+    return firestore.transactional(authorize)(store.client.transaction())
 
 
 def batch_artifact_register(store: Any, item: Any, uri: str, kind: str, context: Any) -> None:
@@ -511,3 +518,28 @@ def purge_batch_storage_owner(uid: str, namespace: str) -> None:
             pass
     if list(bucket.list_blobs(prefix=prefix, versions=True, max_results=1)):
         raise RuntimeError('batch owner storage purge did not converge')
+
+
+def register_batch_artifact(
+    store: Any,
+    uid: str,
+    segment_id: str,
+    uri: str,
+    kind: str,
+    expected_generation: int,
+    *,
+    item: Any = None,
+) -> str:
+    """Scoped entry point (lever bpp_attempt_scope, key = uid); see _register_batch_artifact."""
+    from database.batch_privacy_attempt import scoped_privacy_attempt
+
+    with scoped_privacy_attempt(uid):
+        return _register_batch_artifact(store, uid, segment_id, uri, kind, expected_generation, item=item)
+
+
+def expire_completed_segment(store: Any, uid: str, segment_id: str, now: float) -> bool:
+    """Scoped entry point (lever bpp_attempt_scope, key = uid); see _expire_completed_segment."""
+    from database.batch_privacy_attempt import scoped_privacy_attempt
+
+    with scoped_privacy_attempt(uid):
+        return _expire_completed_segment(store, uid, segment_id, now)

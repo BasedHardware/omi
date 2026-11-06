@@ -338,7 +338,7 @@ prometheus:
               names: [prod-omi-backend]
         relabel_configs:
           - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_instance]
-            regex: prod-omi-diarizer-batch
+            regex: prod-omi-diarizer-batch(-fallback)?
             action: keep
           - source_labels: [__meta_kubernetes_pod_container_port_name]
             regex: http

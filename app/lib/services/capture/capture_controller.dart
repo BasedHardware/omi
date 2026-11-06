@@ -1,3 +1,12 @@
+// Realtime capture execution engine: socket streaming, STT/codec configuration,
+// permissions, geolocation, and recording-preserving recovery for live sessions.
+//
+// Async work that can outlive a session checks a generation token and effects cross the
+// explicit seams in capture_seams.dart, because stale callbacks after stop or
+// device/account switches were the recurring capture-corruption incidents. The
+// ownership reducer lives in capture_coordinator.dart; this controller executes
+// (OWNERSHIP.md).
+import 'package:omi/services/capture/capture_speaker_assignment.dart';
 import 'package:omi/models/voice_question_result.dart';
 import 'package:omi/services/capture/live_held_audio_state.dart';
 import 'package:omi/models/stt_provider.dart';
@@ -22,6 +31,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:omi/services/capture/capture_evidence_identity.dart';
 
 import 'package:omi/backend/http/api/conversations.dart';
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
@@ -114,7 +124,7 @@ part 'capture_voice_questions.dart';
 enum _VoiceCommandTrigger { toggle, legacyLongPress }
 
 class CaptureController extends ChangeNotifier
-    with MessageNotifierMixin
+    with MessageNotifierMixin, CaptureSpeakerAssignment
     implements ITransctiptSegmentSocketServiceListener {
   static const MethodChannel _nativeBleTranscriptChannel = MethodChannel('com.friend.ios/native_ble_transcript');
   static const int _maxInProgressConversationRefreshAttempts = 30;
@@ -224,7 +234,9 @@ class CaptureController extends ChangeNotifier
     return _captureEvidenceIdentity.rootFor(sync, sync.captureEvidenceGeneration, _preferences.uid);
   }
 
+  @override
   CaptureExternalActions externalActions;
+  final Future<bool> Function(String, List<String>)? _excludeSpeaker;
   DeviceOnboardingProvider? deviceOnboardingProvider;
 
   // Cache refresh for backend-created persons
@@ -382,6 +394,7 @@ class CaptureController extends ChangeNotifier
 
   CaptureController({
     CaptureExternalActions? externalActions,
+    Future<bool> Function(String, List<String>)? excludeSpeaker,
     ConversationLocationCapture? conversationLocationCapture,
     Future<void> Function()? inProgressConversationLoader,
     Future<BleAudioCodec> Function(String deviceId)? audioCodecLoader,
@@ -410,7 +423,8 @@ class CaptureController extends ChangeNotifier
     CaptureWedgeMonitor? captureWedgeMonitor,
     CalendarCaptureGapMonitor? calendarGapMonitor,
     MobileStandardBatch? mobileStandardBatch,
-  })  : externalActions = externalActions ?? const NoopCaptureExternalActions(),
+  })  : _excludeSpeaker = excludeSpeaker,
+        externalActions = externalActions ?? const NoopCaptureExternalActions(),
         _conversationLocationCapture = conversationLocationCapture ?? ConversationLocationCapture(),
         _inProgressConversationLoader = inProgressConversationLoader,
         _audioCodecLoader = audioCodecLoader,
@@ -725,6 +739,10 @@ class CaptureController extends ChangeNotifier
   /// chat, people, usage). Only an actual change of the backing actions is a
   /// capture state change; re-notifying here would rebuild every capture
   /// listener, and DeviceProvider after it, on each chat token or list refresh.
+  /// Called from the proxy provider on every upstream notify (conversations,
+  /// chat, people, usage). Only an actual change of the backing actions is a
+  /// capture state change; re-notifying here would rebuild every capture
+  /// listener, and DeviceProvider after it, on each chat token or list refresh.
   void updateExternalActions(CaptureExternalActions? actions) {
     final next = actions ?? const NoopCaptureExternalActions();
     if (next == externalActions) return;
@@ -758,6 +776,7 @@ class CaptureController extends ChangeNotifier
 
   ServerConversation? _conversation;
   DateTime? get liveTranscriptStartedAt => _conversation?.startedAt;
+  @override
   List<TranscriptSegment> segments = [];
   List<ConversationPhoto> photos = [];
 
@@ -780,6 +799,7 @@ class CaptureController extends ChangeNotifier
   /// Per-recording identity is [activeRecordingId] (and the native mic session
   /// id). Downstream semantic controls must use that fresh identity, not this
   /// getter, as the authoritative live capture session.
+  @override
   String? get activeCaptureSessionId => _sessionStartSeconds == 0 ? null : 'live-$_sessionStartSeconds';
 
   /// Client-minted UUID shared by capture, `/v4/listen`, and the resulting
@@ -1019,8 +1039,24 @@ class CaptureController extends ChangeNotifier
   int _segmentsPhotosVersion = 0;
   int get segmentsPhotosVersion => _segmentsPhotosVersion;
   Map<String, SpeakerLabelSuggestionEvent> suggestionsBySegmentId = {};
-  final Map<int, String> _manualSpeakerDefaults = {};
-  List<String> taggingSegmentIds = [];
+  final Map<Object, String> _manualSpeakerDefaults = {};
+  final Set<int> _excludedSpeakers = {};
+
+  /// Monotonic decision epoch: bumped on every in-progress refresh request
+  /// start, every snapshot install, and every exclusion acknowledgement.
+  /// Exclusions record the epoch at their acknowledgement and each REST
+  /// refresh records the epoch at its request start, so a refresh whose
+  /// request predates the exclusion (its stale payload may still carry the
+  /// old manual label) can never retire it: only a refresh that started
+  /// after the acknowledgement — and therefore saw the committed exclusion
+  /// server-side — may retire it.
+  int _snapshotEpoch = 0;
+  final Map<int, int> _excludedAtEpoch = {};
+
+  /// Decision epoch as of now; lets hermetic scenarios construct installs
+  /// whose request predates a given exclusion acknowledgement.
+  @visibleForTesting
+  int get debugSnapshotEpoch => _snapshotEpoch;
 
   bool hasTranscripts = false;
 
@@ -1377,6 +1413,7 @@ class CaptureController extends ChangeNotifier
     hasTranscripts = false;
     suggestionsBySegmentId = {};
     _manualSpeakerDefaults.clear();
+    _excludedSpeakers.clear();
     _conversation = null;
     taggingSegmentIds = [];
     liveHeldAudio.reset();
@@ -2809,6 +2846,7 @@ class CaptureController extends ChangeNotifier
     _terminalTranscriptionFailure = null;
     suggestionsBySegmentId = {};
     _manualSpeakerDefaults.clear();
+    _excludedSpeakers.clear();
     taggingSegmentIds = [];
     notifyListeners();
   }
@@ -3619,6 +3657,67 @@ class CaptureController extends ChangeNotifier
     _loadInProgressConversation();
   }
 
+  /// One authoritative in-progress snapshot when the socket path cannot order
+  /// a decision by generation. Coalesced: a burst of segments triggers one
+  /// refresh, and a queued refresh never stacks behind itself. Bound to the
+  /// capture lifetime: a stop/replace/dispose during the delay or the load
+  /// cancels the reconcile instead of installing into a later session.
+  @visibleForTesting
+  static Duration exclusionReconcileDelay = const Duration(milliseconds: 300);
+
+  void _scheduleExclusionReconcileRefresh() {
+    if (_exclusionReconcileRefresh != null) {
+      // A conflict arrived while another reconcile is in flight: its GET may
+      // have read before this write committed, so queue one follow-up refresh
+      // instead of discarding the event (the coalescing invariant still holds
+      // — at most one queued refresh behind the running one).
+      _exclusionReconcileQueued = true;
+      return;
+    }
+    var cancelled = false;
+    final owned = lifetime.own(() => cancelled = true);
+    // Per-recording identity (owner token) at schedule time: a stop, replace,
+    // or dispose during the delay or the load must not install into a later
+    // capture. activeCaptureSessionId is deliberately NOT used here — it can
+    // stay identical across sequential phone-mic stop/next-start.
+    final sessionToken = _sessionOwner?.token;
+    bool stillCurrent() => !cancelled && !lifetime.isClosed && _captureSessionIsCurrent(sessionToken);
+    _exclusionReconcileRefresh = Future<void>(() async {
+      // Give the in-flight decision writes a moment to settle, then let the
+      // persisted snapshot reconcile the local exclusion.
+      await Future<void>.delayed(exclusionReconcileDelay);
+      if (!stillCurrent()) return;
+      await _loadInProgressConversation(stillCurrent: stillCurrent);
+    }).catchError((Object error, StackTrace stack) {
+      // The reconcile is best-effort: a failed refresh leaves the exclusion
+      // standing, which is the safe default; never surface it as a capture
+      // error.
+      Logger.debug('Exclusion reconcile refresh failed: ${error.runtimeType}');
+    }).whenComplete(() async {
+      // Decide before release(): release() runs the cancel callback, which
+      // flips this closure's own cancelled flag.
+      final queueFollowUp = _exclusionReconcileQueued && stillCurrent();
+      _exclusionReconcileQueued = false;
+      // Free the in-flight slot and schedule any follow-up synchronously,
+      // before the first await in this completion: once this closure yields
+      // (release awaits a microtask boundary), a conflict can arrive, see
+      // _exclusionReconcileRefresh still set, queue itself, and return —
+      // and would then be stranded when the slot is nulled afterwards with
+      // the earlier queueFollowUp == false. With the slot freed first, that
+      // conflict instead schedules a fresh refresh itself.
+      _exclusionReconcileRefresh = null;
+      if (queueFollowUp) {
+        _scheduleExclusionReconcileRefresh();
+      }
+      // The reconcile finished on its own: stop tracking this cancellation
+      // so one-shot entries do not accumulate in the lifetime ledger.
+      await owned.release();
+    });
+  }
+
+  Future<void>? _exclusionReconcileRefresh;
+  bool _exclusionReconcileQueued = false;
+
   bool get _canRefreshInProgressConversation =>
       recordingDeviceServiceReady ||
       recordingState == RecordingState.initialising ||
@@ -3727,28 +3826,119 @@ class CaptureController extends ChangeNotifier
     }
   }
 
-  Future _loadInProgressConversation() async {
+  Future _loadInProgressConversation({bool Function()? stillCurrent}) async {
     if (_inProgressConversationLoader != null) {
       await _inProgressConversationLoader!();
       return;
     }
-    final convos = await getConversations(statuses: [ConversationStatus.in_progress], limit: 1);
-    applyInProgressConversation(convos.isNotEmpty ? convos.first : null);
+    // Record the epoch at request start: a refresh whose request predates an
+    // exclusion acknowledgement may carry the old manual label, so its install
+    // must not retire that exclusion even though it lands later.
+    final requestEpoch = ++_snapshotEpoch;
+    final result = inProgressConversationFetchForTesting != null
+        ? await inProgressConversationFetchForTesting!()
+        : await getConversationsResult(statuses: [ConversationStatus.in_progress], limit: 1);
+    // A failed fetch is not an authoritative "no active conversation": the
+    // lossy wrapper used to convert transport/auth failure into an empty list,
+    // and installing null then cleared the live transcript, photos,
+    // suggestions and exclusions mid-capture. Skip the install instead and
+    // leave the current state standing.
+    if (!result.ok) return;
+    // The request may have straddled a stop/replace: installing a snapshot
+    // that landed after the session ended would mutate a later session's
+    // state, so the caller's session guard decides.
+    if (stillCurrent != null && !stillCurrent()) return;
+    applyInProgressConversation(result.items.isNotEmpty ? result.items.first : null, requestEpoch: requestEpoch);
+  }
+
+  /// Hermetic test seam for the in-progress snapshot fetch
+  /// ([getConversationsResult]): lets capture tests model authoritative
+  /// snapshots and transport failures without the non-injectable
+  /// [makeApiCall] singleton. Null in production.
+  @visibleForTesting
+  static Future<({List<ServerConversation> items, bool ok, bool truncated})> Function()?
+      inProgressConversationFetchForTesting;
+
+  /// Settings > Ignored Voices restoration signal for a live capture.
+  ///
+  /// Restoring a voice removes the ignored-voice marker and the rejection
+  /// receipt server-side but intentionally writes no positive label, so no
+  /// later snapshot can satisfy the manual-positive retirement condition in
+  /// [applyInProgressConversation] — without this signal the local exclusion
+  /// would keep blanking the voice and suppressing its suggestions until the
+  /// conversation changes. Retire the local exclusion for this conversation so
+  /// the voice is undecided again (unlabeled, eligible for prompts).
+  void onIgnoredVoiceRestored(String conversationId, int speakerId) {
+    if (_conversation?.id != conversationId) return;
+    if (_excludedSpeakers.remove(speakerId)) {
+      _excludedAtEpoch.remove(speakerId);
+      notifyListeners();
+    }
   }
 
   /// Install an acknowledged server snapshot. Shared by REST refresh and
   /// hermetic capture scenarios that control the conversation boundary.
-  void applyInProgressConversation(ServerConversation? nextConversation) {
+  /// [requestEpoch] is the decision epoch observed when the refresh's HTTP
+  /// request started; a null value means a direct install that began now
+  /// (hermetic scenario / test seam) and is treated as fresh.
+  void applyInProgressConversation(ServerConversation? nextConversation, {int? requestEpoch}) {
+    final isSameConversation = _conversation?.id == nextConversation?.id;
     if (_conversation?.id != nextConversation?.id) {
       suggestionsBySegmentId.clear();
       _manualSpeakerDefaults.clear();
+      _excludedSpeakers.clear();
+      _excludedAtEpoch.clear();
     } else if (nextConversation != null) {
       retainManualLiveLabels(segments, nextConversation.transcriptSegments, _manualSpeakerDefaults);
     }
+    _snapshotEpoch++;
+    final startedAt = requestEpoch ?? _snapshotEpoch;
     _conversation = nextConversation;
     if (_conversation != null) {
       segments = List<TranscriptSegment>.of(_conversation!.transcriptSegments)
         ..sort((a, b) => a.start.compareTo(b.start));
+      if (isSameConversation) {
+        // A persisted positive label only retires the exclusion when it
+        // carries whole-voice authority. The server's `excluded_speakers`
+        // projection IS that authority: it mirrors the manual receipt's
+        // still-winning whole-voice not_a_person set, which alone distinguishes
+        // a range-only positive (segment_only; the exclusion stands — its
+        // in-range manual label must not drop the speaker-wide exclusion) from
+        // a selected-segment superseder (bulk assign; the receipt already
+        // retired the exclusion even though only its segments project a
+        // manual label). Only a refresh that *started* after the exclusion's
+        // acknowledgement may retire it: one requested earlier can still be
+        // carrying the pre-exclusion manual label when it installs.
+        // Older servers without the projection fall back to the whole-cluster
+        // projection heuristic: a whole-voice positive labels EVERY segment of
+        // the speaker, so requiring full coverage never retires on a range-only
+        // label; it just cannot see selected-segment superseders.
+        final receiptExcluded = _conversation?.excludedSpeakers;
+        for (final speakerId in List<int>.of(_excludedSpeakers)) {
+          if (startedAt <= (_excludedAtEpoch[speakerId] ?? 0)) continue;
+          bool retire;
+          if (receiptExcluded != null) {
+            retire = !receiptExcluded.contains(speakerId);
+          } else {
+            final cluster = segments.where((segment) => segment.speakerId == speakerId).toList();
+            retire = cluster.isNotEmpty &&
+                cluster.every((segment) =>
+                    segment.speakerLabelSource == 'manual' &&
+                    (segment.isUser || (segment.personId?.isNotEmpty ?? false)));
+          }
+          if (retire) {
+            _excludedSpeakers.remove(speakerId);
+            _excludedAtEpoch.remove(speakerId);
+          }
+        }
+        for (final segment in segments) {
+          if (_excludedSpeakers.contains(segment.speakerId)) {
+            segment.isUser = false;
+            segment.personId = null;
+            segment.speakerLabelSource = null;
+          }
+        }
+      }
       // Merge server photos with locally-captured temp photos to avoid losing
       // photos that haven't been processed server-side yet.
       final serverPhotos = _conversation!.photos;
@@ -4319,63 +4509,115 @@ class CaptureController extends ChangeNotifier
     notifyListeners();
   }
 
-  Future<bool> assignSpeakerToConversation(
-    int speakerId,
-    String personId,
-    String personName,
-    List<String> segmentIds, {
-    bool applyToSpeaker = false,
-  }) async {
-    final conversationId = _conversation?.id;
-    final sessionId = activeCaptureSessionId;
-    if (segmentIds.isEmpty || conversationId == null || taggingSegmentIds.isNotEmpty) return false;
-    final targets = List<String>.of(segmentIds);
-    taggingSegmentIds = targets;
-    notifyListeners();
-    try {
-      final finalPersonId = personId.isEmpty ? (await externalActions.createPerson(personName))?.id : personId;
-      if (finalPersonId == null || finalPersonId.isEmpty) return false;
-      final saved = await externalActions.assignSpeaker(
-        conversationId,
-        targets,
-        finalPersonId,
-        speakerId: applyToSpeaker ? speakerId : null,
+  @override
+  ServerConversation? get speakerAssignmentConversation => _conversation;
+  @override
+  bool get speakerAssignmentClosed => lifetime.isClosed;
+  @override
+  Object get speakerAssignmentIdentity =>
+      (_preferences.uid, _sessionOwner?.token.generation, _sessionOwner?.token.identity);
+  @override
+  void speakerLabelsChanged() => _segmentsPhotosVersion++;
+  @override
+  void publishSpeakerAssignment(int speakerId, String finalPersonId, String personName, List<String> targets,
+      bool applyToSpeaker, int generation) {
+    final anchor = segments.where((line) => targets.contains(line.id)).firstOrNull;
+    final voiceKey = anchor?.recordingVoice ?? speakerId;
+    if (applyToSpeaker) {
+      _manualSpeakerDefaults[voiceKey] = finalPersonId;
+    } else {
+      _manualSpeakerDefaults.remove(voiceKey);
+    }
+    if (_socket?.state == SocketServiceState.connected &&
+        !OnDeviceTranscriptionController.instance.shouldKeepAudioLocal) {
+      _socket?.send(
+        jsonEncode({
+          'type': 'speaker_assigned',
+          'speaker_id': speakerId,
+          'person_id': finalPersonId,
+          'person_name': personName,
+          'segment_ids': targets,
+        }),
       );
+    }
+    suggestionsBySegmentId.removeWhere((key, value) => targets.contains(key));
+  }
+
+  @override
+  Future<bool> excludeSpeakerFromConversation(int speakerId, List<String> segmentIds) async {
+    final conversationId = speakerAssignmentConversation?.id;
+    final sessionId = activeCaptureSessionId;
+    if (segmentIds.isEmpty || conversationId == null || speakerAssignmentClosed) return false;
+    final targets = [
+      for (final segment in segments)
+        if (segment.speakerId == speakerId) segment.id,
+    ];
+    if (targets.isEmpty) return false;
+    taggingSegmentIds = [...taggingSegmentIds, ...targets];
+    speakerLabelsChanged();
+    if (!speakerAssignmentClosed) notifyListeners();
+    try {
+      final saved = await _excludeMediaSpeaker(conversationId, targets);
       if (!saved) return false;
       if (_conversation?.id != conversationId || activeCaptureSessionId != sessionId) return true;
-      if (applyToSpeaker) {
-        _manualSpeakerDefaults[speakerId] = finalPersonId;
-      } else {
-        _manualSpeakerDefaults.remove(speakerId);
+      _excludedSpeakers.add(speakerId);
+      // The acknowledgement is itself a decision event: bump the epoch so
+      // any refresh that starts afterwards is strictly newer and may retire
+      // this exclusion, while one already in flight (requestEpoch recorded
+      // earlier) stays fenced.
+      _excludedAtEpoch[speakerId] = ++_snapshotEpoch;
+      _manualSpeakerDefaults.remove(speakerId);
+      for (final voice in {
+        for (final segment in segments)
+          if (segment.speakerId == speakerId) segment.recordingVoice,
+      }) {
+        _manualSpeakerDefaults.remove(voice);
       }
       for (final segment in segments) {
-        if (applyToSpeaker ? segment.speakerId == speakerId : targets.contains(segment.id)) {
-          segment.isUser = finalPersonId == 'user';
-          segment.personId = segment.isUser ? null : finalPersonId;
-          segment.speakerLabelSource = 'manual';
+        if (segment.speakerId == speakerId) {
+          segment.isUser = false;
+          segment.personId = null;
+          segment.speakerLabelSource = null;
         }
       }
       _segmentsPhotosVersion++;
-      if (_socket?.state == SocketServiceState.connected &&
-          !OnDeviceTranscriptionController.instance.shouldKeepAudioLocal) {
+      if (_socket?.state == SocketServiceState.connected) {
         _socket?.send(
           jsonEncode({
             'type': 'speaker_assigned',
             'speaker_id': speakerId,
-            'person_id': finalPersonId,
-            'person_name': personName,
+            'person_id': null,
+            'assign_type': 'not_a_person',
+            'person_name': '',
             'segment_ids': targets,
           }),
         );
       }
-      suggestionsBySegmentId.removeWhere((key, value) => targets.contains(key));
+      suggestionsBySegmentId.removeWhere((key, value) => targets.contains(key) || value.speakerId == speakerId);
       return true;
     } catch (_) {
       return false;
     } finally {
-      taggingSegmentIds = [];
-      notifyListeners();
+      final remaining = List<String>.of(taggingSegmentIds);
+      for (final id in targets) {
+        remaining.remove(id);
+      }
+      taggingSegmentIds = remaining;
+      if (!speakerAssignmentClosed) notifyListeners();
     }
+  }
+
+  Future<bool> _excludeMediaSpeaker(String conversationId, List<String> segmentIds) async {
+    if (_excludeSpeaker != null) return _excludeSpeaker!(conversationId, segmentIds);
+    final result = await executeApi<ServerConversation>(
+      request: ApiRequest(
+        url: '${Env.apiBaseUrl}v1/conversations/${Uri.encodeComponent(conversationId)}/segments/assign-bulk',
+        method: 'PATCH',
+        body: jsonEncode({'segment_ids': segmentIds, 'assign_type': 'not_a_person'}),
+      ),
+      decode: (body) => ServerConversation.fromJson(jsonDecode(body) as Map<String, dynamic>),
+    );
+    return result is ApiSuccess<ServerConversation>;
   }
 
   @override

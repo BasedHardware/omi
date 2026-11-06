@@ -1,3 +1,13 @@
+"""Payments surface: plan catalog serving, checkout/upgrade/cancel, Stripe
+webhooks and Connect onboarding, PayPal details, and the customer portal.
+
+Prices come only from the generated plan catalog -- current Stripe amounts are
+import-blocked and must never be published or rebound from a code-change
+workflow -- and webhook handlers answer replays, so mutations stay idempotent
+under event re-delivery (.github/agent-docs/plan-source-of-truth.md,
+backend/docs/checkout-admission.md).
+"""
+
 from config.plan_catalog import configured_ladder_prices, validate_ladder_price
 from database.fsr_read_cache import fresh_reader, fresh_reads
 import os

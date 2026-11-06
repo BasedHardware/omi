@@ -15,8 +15,14 @@ from config.batch_pipeline import (
     recovery_dispatch_interval_seconds,
     projection_hold_recovery_enabled,
     serving_metrics_min_refresh_seconds,
+    serving_projection_sweep_enabled,
+    serving_tick_seconds,
+    projection_pump_enabled,
+    projection_pump_sweep_pages,
+    projection_pump_tick_seconds,
 )
 from database.outbox import OutboxKind, outbox_for
+from database.batch_privacy_attempt import with_batch_privacy_attempt
 from database.batch_pipeline_store import FirestoreStore
 from database.batch_pipeline_shadow_hook import shadow_from_env
 from database.batch_pipeline_staging import reap
@@ -25,7 +31,8 @@ from utils.batch_pipeline.live import drain_recordings
 from utils.batch_pipeline.projection import HELD_PARTIAL_PAGE, Projector, error_type
 from utils.executors import run_blocking, start_background_task, sync_executor
 from utils.batch_pipeline.contracts import PoolCapacity, WorkResult
-from utils.batch_pipeline.leader import SERVING_MAINTENANCE, LeaderLease
+from utils.batch_pipeline.leader import QUEUE_METRICS, SERVING_MAINTENANCE, LeaderLease
+from utils.batch_pipeline.held_dead_letter import HeldDeadLetter, ProjectionHeldDeadLetter
 from utils.batch_pipeline.merge import OrderedMerge
 from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.scheduler import Scheduler
@@ -50,6 +57,8 @@ HELD_PARTIAL_WINDOW_SECONDS = 3600.0
 # Re-examine landed targets at most once per minute on the maintenance leader.
 # One page has its own inter-row time budget, so fresh projection resumes.
 RELEASE_HELD_INTERVAL_SECONDS = 60.0
+# Count keys of one held-partial pass, summed across its budget-resumed segments.
+HELD_PASS_COUNT_KEYS = ('pages', 'units', 'partial', 'waiting', 'error', 'reads')
 
 
 class Serving:
@@ -74,6 +83,8 @@ class Serving:
         self.recovery = recovery
         # Optional single-owner lease for periodic maintenance (see reconcile).
         self.leader = leader
+        self.held_dead_letter = HeldDeadLetter(store, metrics=metrics)
+        self.projection_held_dead_letter = ProjectionHeldDeadLetter(store, metrics=metrics)
         self.merge = OrderedMerge(store, metrics=metrics)
         # Held units change only on a recovery or operator settle: scan them
         # at a slow cadence, not every maintenance pass.
@@ -83,6 +94,13 @@ class Serving:
         # (monotonic instant, reads charged) pairs: the hourly read governor.
         # Per serving instance; the maintenance lease usually pins one leader.
         self.held_partial_reads: list[tuple[float, int]] = []
+        # The held-partial pass across budget-resumed segments: the first
+        # segment's monotonic start and its summed counts. A wrapped scan
+        # (``more == 0``) closes it; deferred ticks and failed sweeps leave an
+        # in-flight pass alone.
+        self.held_pass_started: float | None = None
+        self.held_pass_counts = dict.fromkeys(HELD_PASS_COUNT_KEYS, 0)
+        self.held_pass_segments = 0
 
     def queue(self, pool='batch'):
         return Scheduler(self.store, metrics=self.metrics, pool=pool)
@@ -109,6 +127,7 @@ class Serving:
             if self.merge.commit_next(owner_id, time.time(), release=release) is None:
                 break
 
+    @with_batch_privacy_attempt
     async def reconcile_async(
         self, *, recover_quarantine=False, periodic=False, owner_id=None, recovered=None, owner_only=False
     ):
@@ -175,10 +194,9 @@ class Serving:
             # owner's chain now instead of waiting for the global cursor. The
             # wake is only a hint: on failure the generic sweep still runs.
             priority = self._reconcile_owner(owner_id, recovered)
-        # Projection and the local gauges stay per instance: projection is
-        # throughput (ordered and fenced in its own transactions) and every
-        # instance exports its own queue sample.
-        if self.projector:
+        # Projection is throughput, ordered and fenced in its own transactions.
+        # Metrics elect their own queue sampler; local samplers stay per instance.
+        if self.projector and serving_projection_sweep_enabled():
             self.projector.sweep()
         # Catch-up rows this instance held for projection depth may now fit.
         for held_owner in list(self.merge.held_owners):
@@ -214,6 +232,50 @@ class Serving:
         spent = sum(reads for _, reads in self.held_partial_reads)
         return (HELD_PARTIAL_READS_PER_HOUR - spent) // (HELD_PARTIAL_PAGE * HELD_PARTIAL_READS_PER_UNIT)
 
+    def _log_held_partial_segment(self, counts: dict, segment_started: float, budget_pages: int) -> None:
+        """One INFO line per sweep segment; a wrapped scan closes the pass with
+        one summed line. Counts and durations only, never an id."""
+
+        def count(key: str) -> int:
+            value = counts.get(key)
+            return value if isinstance(value, int) and value >= 0 else 0
+
+        now = time.monotonic()
+        if self.held_pass_started is None:
+            self.held_pass_started = segment_started
+            self.held_pass_segments = 0
+            self.held_pass_counts = dict.fromkeys(HELD_PASS_COUNT_KEYS, 0)
+        for key in HELD_PASS_COUNT_KEYS:
+            self.held_pass_counts[key] += count(key)
+        self.held_pass_segments += 1
+        logging.getLogger(__name__).info(
+            'event=batch_held_partial action=segment pages=%d units=%d partial=%d waiting=%d error=%d reads=%d '
+            'more=%d elapsed_ms=%d budget_pages=%d',
+            count('pages'),
+            count('units'),
+            count('partial'),
+            count('waiting'),
+            count('error'),
+            count('reads'),
+            1 if counts.get('more') else 0,
+            int((now - segment_started) * 1000),
+            budget_pages,
+        )
+        if not counts.get('more'):
+            logging.getLogger(__name__).info(
+                'event=batch_held_partial action=pass outcome=completed segments=%d pages=%d units=%d partial=%d '
+                'waiting=%d error=%d reads=%d pass_seconds=%.1f',
+                self.held_pass_segments,
+                self.held_pass_counts['pages'],
+                self.held_pass_counts['units'],
+                self.held_pass_counts['partial'],
+                self.held_pass_counts['waiting'],
+                self.held_pass_counts['error'],
+                self.held_pass_counts['reads'],
+                now - self.held_pass_started,
+            )
+            self.held_pass_started = None
+
     def _maintain(self, *, recover_quarantine: bool):
         """Idempotent, transaction-fenced maintenance: cleanup, sweeps, discovery, recovery, drain."""
         if self.cleanup:
@@ -239,9 +301,11 @@ class Serving:
                     # costs no reads, and the backlog resumes as it refills.
                     self.held_partial_due = time.monotonic()
                 else:
-                    counts = sweep_held(deadline=time.monotonic() + HELD_PARTIAL_TICK_SECONDS, max_pages=pages)
+                    segment_started = time.monotonic()
+                    counts = sweep_held(deadline=segment_started + HELD_PARTIAL_TICK_SECONDS, max_pages=pages)
                     if isinstance(counts, dict):
                         self._charge_held_partial_reads(counts)
+                        self._log_held_partial_segment(counts, segment_started, pages)
                         if counts.get('more'):
                             # The tick or read budget stopped the pass mid-backlog.
                             self.held_partial_due = time.monotonic()
@@ -255,11 +319,25 @@ class Serving:
                 RELEASE_HELD_INTERVAL_SECONDS if projection_hold_recovery_enabled() else 900.0
             )
             try:
-                release_held()
+                release_counts = release_held()
+                if self.metrics is not None and isinstance(release_counts, dict):
+                    self.metrics.held_expired.inc(release_counts.get('expired', 0))
             except Exception as error:
                 logging.getLogger(__name__).error(
                     'event=batch_projection action=release_held outcome=retry exception_type=%s', type(error).__name__
                 )
+        try:
+            self.held_dead_letter.tick(time.time())
+        except Exception as error:
+            logging.getLogger(__name__).error(
+                'event=batch_held_dead_letter outcome=retry exception_type=%s', type(error).__name__
+            )
+        try:
+            self.projection_held_dead_letter.tick(time.time())
+        except Exception as error:
+            logging.getLogger(__name__).error(
+                'event=batch_projection action=redrive_expired outcome=retry exception_type=%s', type(error).__name__
+            )
         self.queue().recover(time.time())
         owners = set()
         for segment in self.store.due('result_ready', time.time(), 100):
@@ -287,10 +365,15 @@ def serving_for_stage(stage: str) -> Serving:
     projector = Projector(store, artifacts.load_result, fetch_audio=artifacts.fetch_audio)
     from utils.batch_pipeline.quarantine_recovery import QuarantineRecovery
 
+    metrics = _metrics()
+    # Reuse the existing lease implementation, with a separate role so a slow
+    # maintenance pass cannot strand metrics ownership. Default serving cadence
+    # is 40s (30s reservation + 20s ticks); 20s TTL hands over within 60s.
+    metrics.oldest_leader = LeaderLease(store, QUEUE_METRICS, ttl_seconds=20)
     return Serving(
         store,
         recovery=QuarantineRecovery(store, artifacts),
-        metrics=_metrics(),
+        metrics=metrics,
         projector=projector,
         cleanup=cleanup_completed_artifacts,
         reap_staging=reap,
@@ -307,9 +390,50 @@ def _metrics() -> QueueMetrics:
 
 def start_serving_from_env():
     """Separate drain switch stays on when BATCH_PIPELINE_ENABLED rolls back."""
-    if os.getenv('BATCH_PIPELINE_SERVING_ENABLED', 'false').strip().lower() != 'true':
+    pump_enabled = projection_pump_enabled()
+    if not pump_enabled and os.getenv('BATCH_PIPELINE_SERVING_ENABLED', 'false').strip().lower() != 'true':
         return None
     stop = asyncio.Event()
+
+    async def projection_pump():
+        # Dedicated instances only discover and drain owners. They never enter
+        # reconcile or either leader-leased maintenance/recovery path.
+        metrics = _metrics()
+        while not stop.is_set():
+            started = time.monotonic()
+            sweeps = owners_requested = 0
+            try:
+                service = await run_blocking(sync_executor, serving_for_stage, current_stage())
+                projector = service.projector
+                if projector is None:
+                    raise RuntimeError('projection pump requires a projector')
+                for _ in range(projection_pump_sweep_pages()):
+                    await run_blocking(sync_executor, projector.sweep)
+                    sweeps += 1
+                    if projector.has_async_followups or getattr(projector, 'owes_followups', False) is True:
+                        await projector.start_followups(())
+                    if getattr(projector, 'owes_index', False) is True:
+                        projector.schedule_index_flush()
+                if projector.owes_drains:
+                    with projector.handoff:
+                        owners_requested = len(projector.drain_requests)
+                    projector.start_drains()
+            except Exception as error:
+                logging.getLogger(__name__).error(
+                    'event=batch_projection_pump outcome=retry exception_type=%s', type(error).__name__
+                )
+            finally:
+                metrics.projection_pump_last_tick.set(time.time())
+                logging.getLogger(__name__).info(
+                    'event=batch_projection_pump outcome=tick sweeps=%d owners_requested=%d elapsed_seconds=%.3f',
+                    sweeps,
+                    owners_requested,
+                    time.monotonic() - started,
+                )
+            try:
+                await asyncio.wait_for(stop.wait(), timeout=projection_pump_tick_seconds())
+            except asyncio.TimeoutError:
+                pass
 
     async def supervise():
         while not stop.is_set():
@@ -321,18 +445,22 @@ def start_serving_from_env():
                     'event=batch_serving outcome=retry exception_type=%s', type(error).__name__
                 )
             try:
-                await asyncio.wait_for(stop.wait(), timeout=20)
+                await asyncio.wait_for(stop.wait(), timeout=serving_tick_seconds())
             except asyncio.TimeoutError:
                 pass
+
+    @with_batch_privacy_attempt
+    async def drain_tick():
+        service = await run_blocking(sync_executor, serving_for_stage, current_stage())
+        return await drain_recordings(
+            service.store, provider_outbox_factory=lambda: outbox_for(OutboxKind.PROVIDER_STT)
+        )
 
     async def drain():
         # Record admission must not wait for a full reconciliation pass.
         while not stop.is_set():
             try:
-                service = await run_blocking(sync_executor, serving_for_stage, current_stage())
-                if await drain_recordings(
-                    service.store, provider_outbox_factory=lambda: outbox_for(OutboxKind.PROVIDER_STT)
-                ):
+                if await drain_tick():
                     # Keep draining a backlog without the idle poll delay, but
                     # always yield so shutdown and sibling loops can progress.
                     await asyncio.sleep(0)
@@ -366,9 +494,14 @@ def start_serving_from_env():
                 pass
 
     async def run():
-        await asyncio.gather(supervise(), drain(), dispatch_recovery())
+        if pump_enabled:
+            await projection_pump()
+        else:
+            await asyncio.gather(supervise(), drain(), dispatch_recovery())
 
-    return stop, start_background_task(run(), name='batch_pipeline_serving')
+    return stop, start_background_task(
+        run(), name='batch_projection_pump' if pump_enabled else 'batch_pipeline_serving'
+    )
 
 
 async def stop_serving(runtime):

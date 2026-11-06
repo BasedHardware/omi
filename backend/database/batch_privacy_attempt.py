@@ -95,6 +95,27 @@ def batch_privacy_attempt():
         _ATTEMPT.reset(token)
 
 
+@contextmanager
+def scoped_privacy_attempt(lever_key: str):
+    """Open a fresh attempt for one store call when none is current (lever bpp_attempt_scope).
+
+    The attempt memo only certifies reuse with the memo token read inside the
+    authorizing transaction, so an authority write (revoke/delete/purge) between two
+    decisions in this scope rotates the token and the next decision walks live. An
+    outer attempt, when present, is reused unchanged. Lever off: no-op.
+    """
+    if current_attempt() is not None:
+        yield
+        return
+    from config.firestore_read_levers import lever_enabled
+
+    if not lever_enabled('bpp_attempt_scope', lever_key):
+        yield
+        return
+    with batch_privacy_attempt():
+        yield
+
+
 def with_batch_privacy_attempt(function):
     if inspect.iscoroutinefunction(function):
 

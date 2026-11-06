@@ -285,10 +285,15 @@ if [[ "$use_file_isolation" == "1" || "$use_file_isolation" == "true" ]]; then
           fi
           unset test_source
         fi
+        # Bash's clock avoids starting extra Python processes for every file.
+        # Include collection/import and process shutdown, which pytest's
+        # call-phase duration summary omits. Precision is one second.
+        file_started=$SECONDS
         set +e
         "${runner[@]}" -m pytest "${file_pytest_args[@]}" "$test_path"
         status=$?
         set -e
+        echo "BACKEND-UNIT-FILE-WALL $((SECONDS - file_started))s $test_path"
         if [[ "$status" -eq 124 ]]; then
           echo "::error title=Backend unit file timed out::$test_path exceeded ${file_budget}s (TERM, then KILL) and was terminated"
         fi

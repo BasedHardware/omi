@@ -3,7 +3,7 @@ import XCTest
 @testable import Omi_Computer
 
 final class OmiFlagStoreTests: XCTestCase {
-  func testUnlistedKeysFallBackToPostHog() {
+  func testUnlistedKeysRemainUnknownForCallerDefaults() {
     let store = OmiFlagStore()
     store.apply([OmiFlag(key: "screen_task_jev_gate", enabled: false)], generation: 0)
     XCTAssertNil(store.value("desktop-plan-storefront"))

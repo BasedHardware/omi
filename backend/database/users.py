@@ -1604,7 +1604,14 @@ def update_user_subscription(uid: str, subscription_data: dict):
     user_ref = db.collection('users').document(uid)
     invalidate_subscription(uid)
     try:
-        user_ref.update({'subscription': subscription_data_to_store})
+        from config.referral_campaign import campaign_enabled
+
+        if campaign_enabled():
+            from database.referral_campaign import write_commercial_subscription
+
+            write_commercial_subscription(uid, subscription_data_to_store, client=db)
+        else:
+            user_ref.update({'subscription': subscription_data_to_store})
     finally:
         invalidate_subscription(uid)
 
@@ -2021,7 +2028,7 @@ def set_user_training_data_opt_in(uid: str, status: str):
 
 
 def get_user_valid_subscription(
-    uid: str, *, firestore_client: Any | None = None, provision: bool = True
+    uid: str, *, firestore_client: Any | None = None, provision: bool = True, include_promotions: bool = True
 ) -> Optional[Subscription]:
     """
     Gets the user's subscription if it is currently valid for use.
@@ -2049,6 +2056,19 @@ def get_user_valid_subscription(
         subscription = get_existing_user_subscription(uid, firestore_client=firestore_client)
         if subscription is None:
             subscription = get_default_basic_subscription()
+
+    # Promotional access is separate authority; billing readers above keep the
+    # commercial subscription/price/version untouched. Expiry is checked on
+    # every admission, outside the commercial subscription cache.
+    from utils.referral_campaign import GRANT_FIELD, campaign_enabled, effective_subscription_payload
+
+    if include_promotions and campaign_enabled():
+        grant_doc = user_snapshot(uid, firestore_client or db, [GRANT_FIELD])
+        grant = (grant_doc.to_dict() or {}).get(GRANT_FIELD)
+        original = subscription.model_dump()
+        projected = effective_subscription_payload(original, grant)
+        if projected != original:
+            subscription = parse_payload_strict(Subscription, projected, document_path=f'users/{uid}')
 
     # Basic (free) plans are only valid if their status is active.
     if subscription.plan == PlanType.basic:

@@ -67,6 +67,16 @@ BATCH_PIPELINE_INDEX_REQUIREMENTS = (
         )
         for stage in ('prod', 'dev')
     ),
+    # Additive expiry markers retain the legacy quarantine_held state.
+    *(
+        FirestoreIndexRequirement(
+            f'{stage}_batch_projection_expired_age',
+            f'batch_pipeline_{stage}_results',
+            'COLLECTION',
+            (_asc('held_expired_reason'), _asc('projection_state'), _asc('committed_at'), _asc('__name__')),
+        )
+        for stage in ('prod', 'dev')
+    ),
     # Its terminal_empty count: failed held, empty_asr, no measured held VAD speech.
     *(
         FirestoreIndexRequirement(

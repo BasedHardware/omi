@@ -7,6 +7,7 @@ exhausted tasks in bounded batches, including a crash between mark and enqueue.
 
 from __future__ import annotations
 from utils.observability.delivery import record_delivery
+from utils.observability.sweep_age import skip_ancient
 from utils.observability.fallback import record_fallback
 
 import hashlib
@@ -41,7 +42,7 @@ from config.sync_reprocess import settle_seconds
 from utils.sync import processing_hold
 from config.repeat_work import revision_reuse
 from database._client import get_firestore_client
-from database.summary_processing import record_empty_failure, EMPTY_BLOCKED_REASON
+from database.summary_processing import record_empty_failure, EmptyFailureOutcome
 
 Row: TypeAlias = dict[str, Any]
 ResultT = TypeVar('ResultT')
@@ -249,7 +250,7 @@ def _recent_conversation(uid: str, conversation_id: str, now: float) -> bool:
         return False
 
 
-def _dispatch_binding(
+def dispatch_binding(
     *, backfill: bool = False, effects_only: bool = False, recent: bool = False
 ) -> dict[str, str] | None:
     if enrichment_config.route() == 'enrichment_queue':
@@ -419,10 +420,14 @@ def mark_update(
     recent: bool | None = None
 
     def update(old: Row | None) -> tuple[Row, tuple[Row, bool]]:
+        from utils.enrichment.age_gate import parked
+
+        if old and parked(old):
+            return old, ({**old, '_wake': False}, True)
         nonlocal candidate, recent
         if stamps is not None:
             stamps.clear()  # A CAS or transaction retry re-runs this operation.
-        if old and old.get('summary_blocked_reason') == EMPTY_BLOCKED_REASON:
+        if old and old.get('summary_blocked_reason') in summary_delivery.EMPTY_BLOCKED_REASONS:
             return old, ({**old, '_wake': False}, True)
         row = dict(old or {})
         row.pop('_wake', None)  # Dispatch intent belongs to this CAS result, not its persisted replay.
@@ -443,6 +448,10 @@ def mark_update(
         # Timestamp every durable obligation, even before rollout. Neither an
         # append nor a retry owns the original acceptance time.
         row['first_pending_at'] = current if old and old.get('dormant') else row.get('first_pending_at', current)
+        # New coalesced work must not inherit an ancient obligation's sweep admission age.
+        row['latest_pending_at'] = (
+            current if old and old.get('dormant') else max(row.get('latest_pending_at', current), current)
+        )
         if snapshot_summary and (not old or old.get('dormant') or row.get('first_summary_policy') is None):
             if candidate is None:
                 candidate = resolve_stage_policy(
@@ -498,10 +507,10 @@ def mark_update(
                 task_due_at=row['due_at'],
                 lease_until=0,
                 dispatch=(new_dispatch() if new_dispatch else None)
-                or _dispatch_binding(backfill=backfill, effects_only=effects_only, recent=bool(recent)),
+                or dispatch_binding(backfill=backfill, effects_only=effects_only, recent=bool(recent)),
             )
         elif old.get('dormant'):
-            row['dispatch'] = _dispatch_binding(backfill=backfill, effects_only=effects_only, recent=bool(recent))
+            row['dispatch'] = dispatch_binding(backfill=backfill, effects_only=effects_only, recent=bool(recent))
         elif not valid_dispatch_binding(row.get('dispatch')):
             row['dispatch'] = None
         wake = old is None
@@ -701,12 +710,18 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
                 raise
             held_reason = HELD_DOCUMENT_SIZE_LIMIT
         except summary_delivery.SummaryOutputUnavailable:
-            if not process_context or not record_empty_failure(
-                get_firestore_client(), COLLECTION, document_id, owner, task_token
-            ):
+            if not process_context:
                 raise
-            record_delivery('summary', 'failed')
-            empty_blocked = True
+            empty_outcome = record_empty_failure(get_firestore_client(), COLLECTION, document_id, owner, task_token)
+            if empty_outcome is EmptyFailureOutcome.STALE:
+                return 'stale'
+            if empty_outcome is EmptyFailureOutcome.RETRY:
+                raise
+            if empty_outcome is EmptyFailureOutcome.OWNER_MISMATCH:
+                process_context.update(defer_reason='summary_owner_changed', defer_until=current + LIVE_DEFER_SECONDS)
+            else:
+                record_delivery('summary', 'failed')
+                empty_blocked = True
         finally:
             ADMITTED_OWNER.reset(admitted_token)
             summary_delivery.REPAIR_CONTEXT.reset(context_token)
@@ -838,6 +853,17 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
     return 'superseded' if superseded else 'processed'
 
 
+def _skip_ancient_fresh(row: Row, *, now: float) -> bool:
+    queue = enrichment_config.fresh_queue()
+    dispatch = row.get('dispatch')
+    return bool(
+        queue
+        and isinstance(dispatch, dict)
+        and dispatch.get('queue') == queue
+        and skip_ancient(row, 'enrichment-fresh', now=now)
+    )
+
+
 def sweep(
     *,
     now: float | None = None,
@@ -912,6 +938,8 @@ def sweep(
             nonlocal recent
             if old is None or old.get('dormant') or old.get('lease_until', 0) > current:
                 return old, ('skipped', None)
+            if _skip_ancient_fresh(old, now=current):
+                return old, ('skipped', None)
             row = dict(old)
             promoted = False
             # A valid old wake can wait hours behind historical enrichment.
@@ -930,7 +958,7 @@ def sweep(
             ):
                 if recent is None:
                     recent = _recent_conversation(row['uid'], row['conversation_id'], current)
-                desired = _dispatch_binding(recent=recent)
+                desired = dispatch_binding(recent=recent)
                 previous = row['dispatch']
                 if (
                     desired is not None
@@ -961,7 +989,7 @@ def sweep(
             if not expired and row.get('wake_check_after', 0) > current:
                 return old, ('skipped', None)
             if not injected and not valid_effects_binding(row):
-                binding = _dispatch_binding(
+                binding = dispatch_binding(
                     backfill=row.get('summary_lane') == 'backfill' and not first_summary_pending(row),
                     effects_only=bool(row.get('effects_only')),
                     recent=(
@@ -975,6 +1003,8 @@ def sweep(
                 # Claim and fence the repaired binding in the same CAS. Any old
                 # task delivery becomes stale; valid backfill bindings stay put.
                 row.update(dispatch=binding, task_token=uuid.uuid4().hex, task_due_at=current)
+            if _skip_ancient_fresh(row, now=current):
+                return old, ('skipped', None)
             if expired:
                 # Fence the old holder (invariant 1) and retire its delivery: its task already ran.
                 row.update(owner=None, lease_until=0, task_token=uuid.uuid4().hex, task_due_at=current)
@@ -997,6 +1027,19 @@ def sweep(
             return update
 
         try:
+            # Privacy/deletion owns retirement, even when an ancient row would otherwise be held.
+            if discard is not None and discard(snapshot.id):
+                counts['discarded'] += 1
+                continue
+            if not injected:
+                from utils.enrichment.age_gate import park_if_expired
+
+                if park_if_expired(snapshot.id, None, now=current, client=bound):
+                    continue
+            # The existing privacy/parking policies take precedence; gate only remaining open debt.
+            candidate = getattr(snapshot, 'to_dict', lambda: {})() or {}
+            if _skip_ancient_fresh(candidate, now=current):
+                continue
             status, row = mutate(snapshot.id, repair)
             if status == 'expired' and 'expired' in counts:
                 counts['expired'] += 1
@@ -1025,9 +1068,6 @@ def sweep(
                 row = mutate(snapshot.id, replace)
             if status == 'unbound':
                 UNBOUND.labels(action='repair').inc()
-            if row is not None and discard is not None and discard(snapshot.id):
-                counts['discarded'] += 1
-                row = None
             if row is not None:
                 try:
                     enqueue(row)
@@ -1047,6 +1087,7 @@ def sweep(
             break
     if cursor:
         enrichment_scan.finish(previous, last, exhausted)
+    enrichment_scan.observe(client, current)
     return counts
 
 
@@ -1107,7 +1148,7 @@ def mark_effects(uid: str, conversation_id: str, language: str, *, immediate: bo
 
 
 def _effects_binding() -> dict[str, str]:
-    binding = _dispatch_binding(backfill=summary_delivery.lane({}) == 'backfill', effects_only=True)
+    binding = dispatch_binding(backfill=summary_delivery.lane({}) == 'backfill', effects_only=True)
     if binding is not None:
         return binding
     # Listen/pusher already have the durable finalization queue, identity and

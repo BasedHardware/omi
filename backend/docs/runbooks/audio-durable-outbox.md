@@ -84,7 +84,8 @@ loss has issued no audio or coverage custody ACK for that uncommitted window.
 After a record socket closes, inline finish waits up to 20 seconds for its
 projection. The existing socket drain gets another 30 seconds. If durable work
 still remains, pusher transfers that same worker to a tracked process owner
-(at most 32 closed drains per process). No projection is restarted or certified
+(`PUSHER_MAX_CLOSED_RECORD_DRAINS`, default 32, clamped 8..128; prod values 64).
+No projection is restarted or certified
 by the transfer. Queue accounting and close checks are per conversation;
 a later recording on the socket cannot keep the earlier close waiting for
 the whole socket queue to empty. Each pass consumes a bounded queue snapshot.
@@ -93,13 +94,62 @@ Transient close metadata errors keep retrying at the drain's one-second cadence,
 including after the old three-attempt limit. Permanent projection/tail failures
 retain their producer token. A `producer_pending` seal refusal means another
 producer remains; the successfully drained caller has already released its own
-token. At closed-drain capacity, cleanup cancels the worker as before and leaves
-the immutable receipts and token for repair. SIGTERM cancels tracked drain owners
-and their workers; no cancellation or timer releases a token. Repair still needs
-the existing pod-death proof after process exit.
+token. At closed-drain capacity, cleanup cancels the worker as before. With
+`PUSHER_ABANDON_EVICTED_TOKENS` on (anything except `off`), one of at most four tracked coordinators
+waits for the worker and every socket storage/barrier executor future, then marks
+each exact owned token `abandoned_at` and forgets its recovery hint. The immutable
+receipts and token remain for repair. Inherited pending clears from another socket are excluded because its writer settlement is not proven by this eviction. Admission refusal/failure retries with
+bounded exponential jitter while the process lives. Abandonment proves stoppage,
+never tail durability: repair still requires archive discovery, retained-tail
+validation and its privacy transaction gate. A reconnect's new token stays live,
+and normal clears cannot remove abandoned tokens. SIGTERM cancels tracked drain
+owners and workers; process death retains the existing pod-death proof fallback.
+Overflow coordination is independently bounded by
+`PUSHER_MAX_ABANDON_RECORD_DRAINS` (default/prod 4, clamped 0..16; invalid uses 4).
+At capacity, no new coordinator starts: `outcome=abandon_overflow` leaves the
+durable token fenced for the existing process/pod-death proof.
+Refusal removes its local recovery hint, preventing a later producer from
+certifying it while the evicted writer is still running. Slots return only when
+coordinators finish, including metadata retries.
+
+Durable custody, PCM reads, uploads and projection refresh use the original
+shared `storage_executor` (128 workers) and its existing queue behavior. There
+is no separate recording pool, routing override or pool-specific refusal before
+ACK. Socket future tracking shields queued and running storage work from caller
+cancellation and waits for actual settlement before abandonment. The closed-worker
+and coordinator count caps do not establish a PCM byte bound or pod RSS bound.
+
+Pusher exposes `omi_pusher_storage_pcm_inflight_bytes` for PCM payloads submitted
+through the custody window's `commit_pcm_window` await (queued plus running).
+The gauge is released in `finally`, including exceptions and caller cancellation;
+a cancelled await can leave an already-running storage thread finishing its write,
+so this is not a complete retained-memory or RSS bound.
+`omi_pusher_storage_pcm_budget_limit_bytes` is always **0: no budget enforced**.
+Neither metric changes admission, receipts, ACKs or socket closes.
+
+Chart alerts `omi-pusher-storage-queue-warning` (>256 queued storage tasks per
+pusher target for 10m, agent) and `omi-pusher-storage-queue-critical` (>512 for
+10m, page) sum all task kinds, including `other`. These are 2x/4x the 128 storage
+workers. `omi-pusher-memory-working-set-high` pages above 75% of the 3.5 GiB
+limit (2.625 GiB) for 15m, using the pusher dashboard workload selectors.
+Each excludes samples older than 120s before aggregation; absent data is not
+pressure. When they fire, compare queued/active storage tasks, the in-flight
+PCM gauge, pod working set and GCS latency/errors; attribute the pressure to
+the running release and escalate to the lifecycle lead for an approved rollback.
+Preserve client WAL and custody objects. There is no byte-budget refusal alert
+or admission control yet. These chart definitions require normal monitoring
+provisioning before they become live.
+
+Rollback uses abandonment `off` and closed cap `32`. Coordinator cap `0` also
+refuses all new abandonment coordination. Ship by pusher train with one canary
+at 64 for 15 minutes: socket kills must be <=15/15min and memory p99 must stay
+below 75% of the unchanged 3.5 GiB limit before fleet expansion. Also review
+capacity/abandoned/abandon_overflow outcomes and repair `upload_pending`. These
+production gates have not been measured by the local regression suite. Do not
+raise prod to 128 without a retained-PCM byte budget.
 
 `event=record_closed_finish` uses only closed outcomes: `retained`, `completed`,
-`failed`, `cancelled`, `capacity`. `completed` means the drain settled, not that
+`failed`, `cancelled`, `capacity`, `abandoned`, `abandon_overflow`. `completed` means the drain settled, not that
 every seal succeeded; projection failures and seal refusals retain their existing
 failure/refusal events. These events contain no recording or producer identity.
 

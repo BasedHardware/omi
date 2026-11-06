@@ -120,7 +120,8 @@ WRITERS = [
 
 
 @pytest.mark.parametrize('writer', WRITERS)
-def test_actual_writer_rotates_token_in_source_commit_and_revalidates(world, monkeypatch, writer):
+@pytest.mark.parametrize('negative_lookups', [False, True])
+def test_actual_writer_rotates_token_in_source_commit_and_revalidates(world, monkeypatch, writer, negative_lookups):
     from google.cloud import firestore
     from database import speaker_auto_enroll, conversation_tombstones, from_segments_chunks, batch_pipeline_purge
     from database import (
@@ -134,6 +135,8 @@ def test_actual_writer_rotates_token_in_source_commit_and_revalidates(world, mon
     from utils.sync.assignment import assign_in_transaction
 
     w = world
+    if negative_lookups:
+        monkeypatch.setattr(w.privacy, 'lever_enabled', lambda name, uid: name == 'privacy_negative_lookup_cache')
     denial = None
     # Establish the before-state without counting setup commits as writer proof.
     if writer.startswith('lifecycle_create'):

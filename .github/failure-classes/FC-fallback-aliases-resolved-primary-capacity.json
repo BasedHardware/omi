@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "id": "FC-fallback-aliases-resolved-primary-capacity",
+  "violated_contract": "A fallback advertised as independent capacity must not resolve to any primary pool selected by the active deployment topology. Checking an overridden base selector can allow the fallback to share the same unavailable capacity it is meant to replace.",
+  "canonical_prevention": "Resolve the primary instances first, then reject a fallback pool that matches any resolved primary selector. Test both balanced primary pools with base and resolved selectors deliberately different, and retain a positive case for independent capacity.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_batch_pipeline_chart.py"
+  ],
+  "evidence_prs": [24286],
+  "scope_hints": ["backend/charts/batch-pipeline-worker/**"],
+  "status": "open"
+}

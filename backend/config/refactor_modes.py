@@ -53,6 +53,7 @@ WAVE2_COHORT_SALT = 'capture-speaker-notes:wave2'
 
 
 # Typed bindings make the generic cohort reader visible to registry validation.
+CONVERSATION_TERMINAL_FAMILY_MODE_ENV = 'CONVERSATION_TERMINAL_FAMILY_MODE'
 CAPTURE_COVERAGE_MODE_ENV = 'CAPTURE_COVERAGE_MODE'
 CAPTURE_COVERAGE_SERVE_PERCENT_ENV = 'CAPTURE_COVERAGE_MODE_SERVE_PERCENT'
 CAPTURE_COVERAGE_SERVE_UID_SHA256S_ENV = 'CAPTURE_COVERAGE_MODE_SERVE_UID_SHA256S'
@@ -90,6 +91,8 @@ def mode(name: str, default: Mode = 'shadow', *, environ: Mapping[str, str] | No
     raw = (os.environ if environ is None else environ).get(name, '').strip().lower()
     if not raw:
         return default
+    if name == CONVERSATION_TERMINAL_FAMILY_MODE_ENV and raw == 'on':
+        return 'serve'
     if raw in _MODES:
         return raw  # type: ignore[return-value]
     _warn_once(name, raw)

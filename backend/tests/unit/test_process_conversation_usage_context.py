@@ -147,7 +147,8 @@ def _build_fakes() -> dict[str, ModuleType]:
         add(name, AutoMockModule(name))
 
     task_intelligence = ModuleType("utils.task_intelligence")
-    task_intelligence.__path__ = []  # type: ignore[attr-defined]
+    # Keep pure policy modules importable while persistence adapters stay stubbed.
+    task_intelligence.__path__ = [str(BACKEND_DIR / 'utils' / 'task_intelligence')]  # type: ignore[attr-defined]
     add("utils.task_intelligence", task_intelligence)
     conversation_capture = AutoMockModule("utils.task_intelligence.conversation_capture")
     conversation_capture.capture_enabled = MagicMock(return_value=False)
@@ -160,6 +161,13 @@ def _build_fakes() -> dict[str, ModuleType]:
     workstream_association = AutoMockModule("utils.task_intelligence.workstream_association")
     workstream_association.associate_canonical_evidence = MagicMock()
     add("utils.task_intelligence.workstream_association", workstream_association)
+
+    # Speaker providers/custody are outside this usage/persistence fixture.
+    # Stub the processing boundary, including its on_persist keyword, rather
+    # than importing diarization against the deliberately fake Firebase SDK.
+    speakers = AutoMockModule("utils.conversations.processing_speakers")
+    speakers.resolve_speakers_for_processing = MagicMock(return_value=False)
+    add("utils.conversations.processing_speakers", speakers)
 
     # --- firebase / pinecone / typesense / anthropic / stripe --------------
     firebase_admin = ModuleType("firebase_admin")
@@ -731,7 +739,7 @@ def test_deferred_fresh_creation_uses_the_explicit_processing_lifecycle_owner(mo
     deferred_conversation.dict.return_value = {'id': 'deferred-conversation', 'status': 'processing'}
     created = MagicMock(return_value=True)
     persisted = MagicMock()
-    monkeypatch.setattr(process_conversation, '_build_deferred_structured', lambda *args: MagicMock())
+    monkeypatch.setattr(process_conversation, 'build_deferred_structured', lambda *args: MagicMock())
     monkeypatch.setattr(process_conversation, '_get_conversation_obj', lambda *args, **kwargs: deferred_conversation)
     monkeypatch.setattr(process_conversation.lifecycle_service, 'create_processing_conversation', created)
     monkeypatch.setattr(process_conversation.lifecycle_service, 'persist_processed_conversation', persisted)
@@ -758,7 +766,7 @@ def test_deferred_desktop_filler_is_discarded_by_the_free_rules(monkeypatch):
     deferred_conversation.id = 'deferred-filler'
     deferred_conversation.dict.return_value = {'id': 'deferred-filler', 'status': 'processing'}
     created = MagicMock(return_value=True)
-    monkeypatch.setattr(process_conversation, '_build_deferred_structured', lambda *args: MagicMock())
+    monkeypatch.setattr(process_conversation, 'build_deferred_structured', lambda *args: MagicMock())
     monkeypatch.setattr(process_conversation, '_get_conversation_obj', lambda *args, **kwargs: deferred_conversation)
     monkeypatch.setattr(process_conversation, '_calendar_overlap_retains_conversation', lambda *args: False)
     monkeypatch.setattr(process_conversation.lifecycle_service, 'create_processing_conversation', created)

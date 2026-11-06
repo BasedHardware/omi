@@ -25,9 +25,10 @@ from database.legal_holds import DestructiveOperationInProgress
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreDocument
 from tests.unit.test_sync_size_rollover import _RejectingStore
 from utils.conversations.size_limit import projected_document_bytes
+from utils.observability.finalization import finalization_diagnostic_id
 from utils.conversations import finalizer
 from utils.conversations import lifecycle as lifecycle_service
-from utils.conversations import smart_merge
+from utils.conversations import smart_merge, smart_merge_policy, summary_delivery
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils import metrics
 
@@ -657,7 +658,7 @@ def test_resumed_absorb_logs_ok_and_a_repeat_is_a_read_only_no_op(world, caplog,
     assert world.store.transactions[-1].has_written is False
     assert world.retracted == ['n'] and world.copied == [('n', 'p')] and world.processed == [('p', 4)]
     assert [r.getMessage() for r in caplog.records if 'resumed_ok' in r.getMessage()] == [
-        'event=smart_merge outcome=resumed_ok'
+        f'event=smart_merge outcome=resumed_ok job_hash={finalization_diagnostic_id("job")}'
     ] * 2
 
 
@@ -772,7 +773,7 @@ async def test_failed_refresh_is_finished_by_the_finalization_retry_exactly_once
     assert world.raw('n')['sync_bridge_cleaned_revision'] == world.raw('n')['sync_content_revision']
     messages = [r.getMessage() for r in caplog.records]
     assert messages.count('event=smart_merge outcome=incomplete step=refresh cause=RuntimeError') == 1
-    assert messages.count('event=smart_merge outcome=resumed_ok') == 2
+    assert messages.count(f'event=smart_merge outcome=resumed_ok job_hash={finalization_diagnostic_id(JOB)}') == 2
 
 
 def test_success_never_uses_the_failure_lease_release(world, monkeypatch):
@@ -1115,3 +1116,41 @@ def test_smart_absorb_cap_checks_retained_donor_patch(world, caplog):
     assert world.raw('p') == before
     assert not world.raw('n').get('deleted')
     assert world.raw('n')['smart_merge_decision']['reason'] == 'size_cap_stop'
+
+
+@pytest.mark.parametrize('rearms', [0, 2])
+def test_absorb_rearms_exhausted_survivor_transactionally_with_lifetime_cap(world, monkeypatch, rearms):
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
+    exhausted = dict(
+        structured={'title': 'Synthetic minimum', 'overview': '', 'title_provenance': 'server_minimum'},
+        sync_content_revision=3,
+        summary_first_pending_at=100,
+        summary_due_at=None,
+        summary_empty_failures=3,
+        summary_empty_rearms=rearms,
+        summary_blocked_reason=summary_delivery.EMPTY_BLOCKED_REASON,
+    )
+    world.add('p', 0, 10, **exhausted)
+    world.add('n', 15, 10, **exhausted)
+
+    def plan(survivor, segments, donor, donor_segments, ancestors, last_fragment):
+        survivor_update, donor_update = smart_merge_policy.absorb_payloads(
+            survivor, segments, donor, donor_segments, merged_at=T0, decision={}
+        )
+        return None, survivor_update, donor_update, {}
+
+    result = smart_merge_db.absorb_conversation(UID, 'p', 'n', expected_revision=0, plan=plan)
+    assert result.outcome == 'absorbed'
+    row = world.raw('p')
+    assert row['sync_content_revision'] == 4
+    assert row['summary_empty_rearms'] == min(rearms + 1, 2)
+    assert row['summary_empty_failures'] == (0 if rearms == 0 else 3)
+    assert (row['summary_due_at'] is not None) is (rearms == 0)
+    assert row['summary_blocked_reason'] == (None if rearms == 0 else summary_delivery.EMPTY_LIFETIME_BLOCKED_REASON)
+    assert world.raw('n')['summary_due_at'] is None
+    assert world.raw('n')['summary_empty_rearms'] == rearms
+    before = deepcopy(row)
+    replay = smart_merge_db.absorb_conversation(UID, 'p', 'n', expected_revision=0, plan=plan)
+    assert replay.outcome == 'already_absorbed'
+    assert world.raw('p') == before

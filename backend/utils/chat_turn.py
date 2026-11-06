@@ -741,12 +741,14 @@ class _LeasedReplySink:
     def __init__(self, delegate, store, uid, token):
         self.delegate, self.store, self.uid, self.token = delegate, store, uid, token
 
-    def _release_after_stop(self):
+    def release_after_interruption(self):
         try:
             self.store.release(self.uid, 'app', self.token)
         except PermissionError:
-            # A newer turn already took the lease over: nothing of ours to free.
-            logger.info('App turn lease already taken over at stop')
+            logger.info('App turn lease already taken over during cleanup')
+        except Exception as error:
+            # Cleanup must preserve the preparation or streaming failure.
+            logger.warning('App turn lease cleanup failed error_type=%s', type(error).__name__)
 
     def response(self, stream, *, media_type):
         async def leased():
@@ -765,7 +767,7 @@ class _LeasedReplySink:
                     # awaited: this runs while the stream is being cancelled.
                     from utils.executors import submit_with_context  # lazy: tests stub utils.executors
 
-                    submit_with_context(db_executor, self._release_after_stop)
+                    submit_with_context(db_executor, self.release_after_interruption)
 
         return self.delegate.response(leased(), media_type=media_type)
 
@@ -794,5 +796,11 @@ def run_chat_turn(uid, surface, session, message, reply_sink, *, principal, opti
         store, lease = _acquire_app_turn(uid)
         if store is not None:
             options = replace(options, app_store=store, app_lease=lease)
-            reply_sink = _LeasedReplySink(reply_sink, store, uid, lease)
+            leased_sink = _LeasedReplySink(reply_sink, store, uid, lease)
+            try:
+                return _run_chat_turn(uid, surface, session, message, leased_sink, principal=principal, options=options)
+            except Exception:
+                # Preparation failed before the stream could own cleanup.
+                leased_sink.release_after_interruption()
+                raise
     return _run_chat_turn(uid, surface, session, message, reply_sink, principal=principal, options=options)

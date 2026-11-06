@@ -12,6 +12,7 @@ from typing import Any, Dict, List
 
 import pytest
 from google.api_core.exceptions import InvalidArgument
+from google.cloud.firestore_v1._helpers import DocumentExtractorForUpdate
 
 from database import conversations as conversations_db
 
@@ -77,6 +78,10 @@ class _FakeTransaction:
 
     def set(self, _doc_ref: Any, payload: Dict[str, Any], merge: bool = False) -> None:
         self.payload = payload
+
+    def update(self, _doc_ref: Any, payload: Dict[str, Any]) -> None:
+        # Use the real SDK's field-path parser for the atomic persist update.
+        self.payload = DocumentExtractorForUpdate(payload).set_fields
 
     def _commit(self) -> None:
         if self._client.commit_errors:

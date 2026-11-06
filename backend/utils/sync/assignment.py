@@ -30,6 +30,7 @@ from utils.conversations.size_limit import (
     projected_document_bytes,
     projected_size_bucket,
 )
+from utils.conversations.summary_delivery import rearm_on_revision_change
 from utils.observability.fallback import record_fallback
 from utils.sync.size_telemetry import (
     finish_size_attempt,
@@ -48,6 +49,7 @@ from utils.conversations.fragment_visibility import is_automatic_discard, supers
 from config.occasion_relevance import enabled as occasion_relevance_enabled
 from utils.conversations.recorded_time import recorded_span, sync_recorded_end, write_span
 from utils.conversations.relevance import sync_intake_decision
+from utils.conversations.terminal_relevance import stamp_terminal_decision
 from utils.conversations.smart_merge_policy import user_managed as _policy_user_managed
 from utils.conversations.relevance_rules import deterministic_relevance
 from utils.batch_pipeline.live_projection import replace_record
@@ -347,6 +349,8 @@ def assign_in_transaction(
             raise SyncAssignmentConflict('record target missing', subtype=Reason.RECORD_TARGET_MISSING)
         current = decode(target)
         result, survivors = replace_record(current, incoming, record_span)
+        if result.get('transcript_segments') != current.get('transcript_segments'):
+            rearm_on_revision_change(current, result)
         invalidate(result)
         encoded = encode(result)
         estimated = _stored_document_bytes(collection.document(target_id), encoded, target, invalidate)
@@ -921,6 +925,12 @@ def assign_in_transaction(
             result['relevance_decision'] = sync_intake_decision(rule)
         elif superseded_intake_discard(result, bool(survivors or transfers)):
             result['relevance_decision'] = None
+        elif created and not result.get('relevance_decision'):
+            # A new row never leaves intake without an explicit decision, but
+            # merged rows keep whatever the retention/promotion machinery
+            # decided for them: a transport replay retains its assessed
+            # verdict, and a promotion deliberately clears the receipt.
+            stamp_terminal_decision(result, path='sync_intake')
         result['is_locked'] = bool(incoming.get('is_locked'))
         result['private_cloud_sync_enabled'] = any(
             row.get('private_cloud_sync_enabled') for row in [incoming, *records]
@@ -986,6 +996,8 @@ def assign_in_transaction(
         # Read all occupied day buckets before the first write.
         index.read(extent)
         result.update(write_span(result, arrival_at=incoming.get('arrival_at')))
+        if survivors or transfers:
+            rearm_on_revision_change(current or {}, result)
         payload = encode(result)
         payload.pop('photos', None)
         if current is not None:
