@@ -1,7 +1,7 @@
 # C2 round 2 implementation result
 
-Status: implementation complete. All selected files are covered; one repeatable failure remains in unchanged main Parakeet code. Final frozen preflight is pending after the last rebase.
-Updated: 2026-11-06T22:48:54.428088+00:00
+Status: implementation complete. All selected files are covered; one repeatable failure remains in unchanged main Parakeet code. Final frozen preflight passed all 43 checks on the rebased tree.
+Updated: 2026-11-06T22:53:58.189926+00:00
 Repository: BasedHardware/omi. Branch: lane/pgf-c2.
 Initial tested base: 4b1c40b5ef03242b82013a64c1dc941728715bab. Final fetched/rebased base: 34125ccd5fbd6c47885d23abe70e9a1448b7515e.
 Implementation checkpoint: d486b48fbdd58938499a9ffc023f8a4a650274f1.
@@ -75,7 +75,7 @@ GCP tier: none. No production/API/customer-data access, push, PR, deploy, or fla
 - `backend/utils/person_evidence_backfill.py`
 - `backend/utils/sync/assignment.py`
 
-The tracked `.agent-artifacts/pgf-result.md` is restored to origin/main (empty branch diff). This lane's report and draft PR body are under `.agent-artifacts/pgf/`. The unrelated app/analysis_options.yaml and app/pubspec.lock edits are preserved; the temporary preflight stash was restored and its exact binary patch hash matched. The first preflight stash was dropped after restoration. The earlier exact-OID stash was restored and its binary patch hash matched. A new exact-OID backup is held only while the final frozen preflight runs; it will be restored and verified before handoff. Backup objects are retained to avoid a race on the shared stash stack; no app edits were committed.
+The tracked `.agent-artifacts/pgf-result.md` is restored to origin/main (empty branch diff). This lane's report and draft PR body are under `.agent-artifacts/pgf/`. The unrelated app/analysis_options.yaml and app/pubspec.lock edits are preserved; the temporary preflight stash was restored and its exact binary patch hash matched. The first preflight stash was dropped after restoration. The earlier exact-OID stash was restored and its binary patch hash matched. The final exact-OID backup (eb0b876a43459be22cbc5e45da82b64200433908) was restored after preflight and its binary patch SHA-256 matched the pre-stash value. Backup objects are retained to avoid a race on the shared stash stack; no app edits were committed.
 
 ## Deviations and scope extensions taken
 
@@ -97,7 +97,7 @@ No round-2 edits were made under .github/, database/jobstore/, database/cells/, 
 
 The final fetch also brought upstream episode F-join and pusher admission work. Rebase preserved their code. The only conflict was the People inventory: main's new previous_transcript fingerprint and C2's nine audited hashes are both retained. The nine scopes were re-audited against the final base; generation/document-write calls remain identical. The 14-file post-rebase run covers all four newly selected upstream files and the two modified upstream test files, plus the overlapping C2 tests. No new upstream feature policy was changed.
 
-The original no-argument run-unit-ci.sh command now requires a mode, so it is run with --changed-files. Its selector requires the full backend suite for database/_client.py. test.sh is executed by that CI runner with the selected list; there is no redundant second all-suite run.
+The original no-argument run-unit-ci.sh command now requires a mode, so it is run with --changed-files. Its selector requires the full backend suite for database/_client.py. test.sh executes the exact CI-selected files across the checkpointed phases; no selected file is omitted. The final same-mode selector adds four upstream tests; all are covered in the post-rebase run.
 
 No anx writes or messages were made, per the implementation task's escalation rule. The earlier scope ask is superseded by fix-r1.md and was not used as an approval gate.
 
@@ -121,17 +121,18 @@ Current wrapper: `python3 .agent-artifacts/pgf-c2-test-env.py /Users/dazheng/wor
 | `env BACKEND_UNIT_TEST_FILE_LIST="$PWD/.agent-artifacts/pgf/c2-memory-product-fixture-tests.txt" DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib bash backend/test.sh` | **6 passed**, exit 0 after the fixture correction. |
 | `env BACKEND_UNIT_TEST_FILE_LIST="$PWD/.agent-artifacts/pgf/c2-people-generation-tests.txt" DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib bash backend/test.sh` | Initial 13 strict writer tests passed / inventory 1 failed, 3 passed (run before refresh). After audit/refresh: **17 passed**, exit 0. |
 | `env -u FIREBASE_TOKEN -u GOOGLE_OAUTH_ACCESS_TOKEN CI=1 FIREBASE_CLI_DISABLE_TELEMETRY=1 PYTHONPATH="$PWD/backend" firebase emulators:exec --only firestore --project demo-wq20-people --config "$PWD/.agent-artifacts/pgf/c2-people-firebase.json" 'backend/.venv/bin/python backend/scripts/fsr_people_generation_emulator_test.py'` | **31 checks passed**, exit 0; only owned loopback/demo resources; emulator stopped and ports closed. |
+| `.venv/bin/python -m pyright --pythonpath .venv/bin/python database/episodes.py` (backend/) | Post-rebase: **0 errors**, 381 warnings, exit 0. |
 | `.venv/bin/python -m pyright --pythonpath .venv/bin/python database/conversation_terminal_title.py` (backend/) | **0 errors**, 20 warnings. |
 | `bash test-preflight.sh` (backend/) | **18 passed, 8 optional warnings, 0 failed**. |
 | `.venv/bin/python scripts/scan_import_time_side_effects.py` (backend/) | Exit 0. |
-| `.venv/bin/python scripts/check_module_stub_pollution.py` (backend/) | Exit 0 before the final fixture-only edits; final preflight rechecks it. |
+| `.venv/bin/python scripts/check_module_stub_pollution.py` (backend/) | Exit 0; the final 43-check preflight rechecked it after all fixture changes. |
 | `.venv/bin/python scripts/scan_async_blockers.py --dirs routers utils` (backend/) | Exit 0. |
 | `make runtime-image-source-closure` | Exit 0, **19 registered images**. |
 | `backend/.venv/bin/python backend/scripts/runtime_image_contracts.py check-third-party` | Exit 0; worker KMS gap resolved. Existing open dependency-set exemptions are unchanged. |
 | `.venv/bin/python -m pytest tests/integration/test_recurring_voice_privacy_firestore.py -q` (backend/) | **14 skipped** without an emulator/credentials. A later owned loopback rerun passed **14 tests**, exit 0; emulator stopped. |
 | `uv pip compile backend/diarizer/requirements-batch-pipeline.txt --format pylock.toml --python 3.11.15 --python-platform x86_64-unknown-linux-gnu --output-file backend/diarizer/pylock.batch-pipeline.toml` | Exit 0. Only google-cloud-kms==3.6.0 added; no existing version changed or was removed. |
 | `bash backend/scripts/update-python-lock.sh` | Exit 0; all six managed locks regenerated with **no Git changes**; no upgrade flag. |
-| `env OMI_PR_BODY_FILE="$PWD/.agent-artifacts/pgf/c2-pr-body.md" BACKEND_UNIT_FILE_BUDGET_SECONDS=900 make preflight` | Four earlier frozen runs each passed **41 checks**. Latest: **41 passed in 258.78s** on 0bfe7a13cf1. A final run is pending on the rebased tree with all fixture/inventory corrections. |
+| `env OMI_PR_BODY_FILE="$PWD/.agent-artifacts/pgf/c2-pr-body.md" BACKEND_UNIT_FILE_BUDGET_SECONDS=900 make preflight` | Four earlier frozen runs each passed **41 checks**. Final rebased frozen run: **43 passed in 196.87s**, exit 0 on cac0edb73e7a55d1e2b0d640d5b6753d84dc7995. Only receipt text changes follow this gate. |
 | `env BACKEND_UNIT_TEST_FILE_LIST="$PWD/.agent-artifacts/pgf/c2-users-sample-tests.txt" DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib bash backend/test.sh` | **5 passed**, exit 0 after the sample fixture correction. |
 | `env BACKEND_UNIT_TEST_FILE_LIST="$PWD/.agent-artifacts/pgf/c2-soniox-tests.txt" DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib bash backend/test.sh` | Original full-selection result: 15 passed / 1 timing failure. Unchanged isolated rerun: **16 passed**, exit 0. |
 | `env BACKEND_UNIT_TEST_FILE_LIST="$PWD/.agent-artifacts/pgf/c2-parakeet-route-tests.txt" DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib bash backend/test.sh` | **33 passed / 1 failed**, exit 1, same as the continuation. Test, receipt helper and streaming implementation are byte-identical to tested main. Unresolved, not attributed to C2. |
@@ -139,8 +140,8 @@ Current wrapper: `python3 .agent-artifacts/pgf-c2-test-env.py /Users/dazheng/wor
 | `env -u FIREBASE_TOKEN -u GOOGLE_OAUTH_ACCESS_TOKEN CI=1 FIREBASE_CLI_DISABLE_TELEMETRY=1 PYTHONPATH="$PWD/backend" npm run test:listen-lifecycle:emulator -- --config "$PWD/.agent-artifacts/pgf/c2-people-firebase.json"` | **PASS**, exit 0: fenced cleanup races and fresh-generation listen replay; emulator stopped. |
 | `env -u FIREBASE_TOKEN -u GOOGLE_OAUTH_ACCESS_TOKEN CI=1 FIREBASE_CLI_DISABLE_TELEMETRY=1 PYTHONPATH="$PWD/backend" firebase emulators:exec --only firestore --project demo-batch-pipeline-d --config "$PWD/.agent-artifacts/pgf/c2-people-firebase.json" 'backend/.venv/bin/python -m pytest backend/tests/integration/test_recurring_voice_privacy_firestore.py -q'` | **14 passed**, exit 0; emulator stopped. |
 | `scripts/pr-preflight --suggest` | Ran; required invariant citation: none. |
-| `scripts/pr-preflight --lane local --pr-body-file .agent-artifacts/pgf/c2-pr-body.md --metadata-only` | Latest completed body validation: **4 passed**; final receipt body will be revalidated. |
-| Pinned Black 26.5.1, `--check --line-length 120 --skip-string-normalization`, all 41 then-changed backend Python files; pinned pre-commit hook on later edits | Passed. The venv lacks a Black entry point, so uvx/pinned hook was used. |
+| `scripts/pr-preflight --lane local --pr-body-file .agent-artifacts/pgf/c2-pr-body.md --metadata-only` | Final metadata-only body validation: **4 passed in 18.27s**, exit 0. |
+| Pinned Black 26.5.1, `--check --line-length 120 --skip-string-normalization`, all **48 current changed backend Python files**; pinned pre-commit hooks | Passed, exit 0. The venv lacks a Black entry point, so uvx/pinned hook was used. |
 | `git diff --check` | Passed. |
 
 The exact checkpoint, atomic per-file exit statuses, continuation selection and stopped owned process groups are in c2-run-partition-checkpoint.json. No other agent's process was stopped. The continuation repeats every first-phase failure, including already-corrected fixtures; it does not hide the earlier failures. Static commands, working directories, timestamps and exit codes are in c2-static-receipts.jsonl. Logs are c2-*.log.
@@ -169,7 +170,7 @@ Fresh production decoder and runner greps are retained in `c2-decode-site-audit.
 
 - Full-unit green is not claimed: the unchanged main Parakeet timeout test remains red, including its isolated rerun. This is reported to the lead; no external ask or contact was made.
 
-- Docker image smoke is waived by fix-r1.md because Docker is unavailable. Runtime source and third-party closure remain required.
+- Docker image smoke is waived by fix-r1.md because Docker is unavailable. Runtime source and third-party closure both passed in the final preflight.
 - Listen lifecycle, privacy and People writer loopback emulator contracts were rerun in round 2 and passed; all emulators stopped. The offline HTTP harness was not started because local Docker is unavailable. Hermetic reader/domain tests are not a provider-backed or deployed round trip.
 - No deployment, real-provider round trip, production write admission, or C4 wipe qualification is claimed. O1 keeps writing off/0 until C4 is green; the dev-first ramp follows C1's registry metadata.
 - C3 owns backfill, orphan cleanup and registry/receipt; C4 owns wipe/prefix purge and keys last; B/W2 logs pointer field changes; A6 ports the seam after C2.
@@ -192,13 +193,13 @@ none
 
 ## How it was verified
 
-Hermetic/local verification only; GCP tier: none. Credential scrubber removes GOOGLE_APPLICATION_CREDENTIALS and CLOUDSDK_* before every command. No production access, API calls, customer data, push, PR or deploy. Exact commands and phase results are in .agent-artifacts/pgf/c2-result.md.
+Hermetic/local verification only; GCP tier: none. Credential scrubber removes GOOGLE_APPLICATION_CREDENTIALS and CLOUDSDK_* before every command. No production access or calls to api.omi.me; no customer data, push, PR or deploy. Exact commands and phase results are in .agent-artifacts/pgf/c2-result.md.
 
-After the final rebase, 625 tests passed across 14 files, covering the C2 core, overlapping episode code, new upstream episode/pusher tests, People inventory and monitoring. Earlier focused runs passed 280 C2/terminal tests, 66 episode caller tests, 114 desktop tests, 70 memory/feedback tests, 7 focus tests (12 slow cases deselected), 6 memory-product tests and 5 sample-transaction tests. Full type checking reported 0 errors. Owned loopback checks passed listen lifecycle, 14 privacy tests and 31 People writer checks; every emulator stopped. Runtime source and third-party closure passed. Docker image smoke is waived by fix-r1.md; the Docker offline-stack round trip remains unverified. The local ASGI detail route tests cover pointer 200/404/500 outcomes.
+After the final rebase, 625 tests passed across 14 files, covering the C2 core, overlapping episode code, new upstream episode/pusher tests, People inventory and monitoring. Earlier focused runs passed 280 C2/terminal tests, 66 episode caller tests, 114 desktop tests, 70 memory/feedback tests, 7 focus tests (12 slow cases deselected), 6 memory-product tests and 5 sample-transaction tests. Full type checking reported 0 errors; post-rebase episodes.py checking also reported 0 errors (381 warnings). Owned loopback checks passed listen lifecycle, 14 privacy tests and 31 People writer checks; every emulator stopped. Runtime source and third-party closure passed. Docker image smoke is waived by fix-r1.md; the Docker offline-stack round trip remains unverified. The local ASGI detail route tests cover pointer 200/404/500 outcomes.
 
 The original 2,677-file CI selection was covered in two phases (1,332 atomic results, then 1,386 files with 41 deliberate repeats), followed by corrective reruns. The initial command was intentionally checkpointed/interrupted (exit 137); the continuation exited 1 with six failing files, all retained in the receipt. Corrections and upstream monitoring repair clear five of those. Soniox's 80ms timing assertion passed its unchanged isolated rerun (16 passed). The current selection adds four upstream files, all covered by the post-rebase run: 2,681 unique files covered, 2,680 exit 0 (including marker-only skips), one unresolved file. test_qualify_parakeet_route::test_stream_timeout_retains_diagnostics reproducibly fails in unchanged main code (33 passed / 1 failed on both runs); this PR does not claim full-unit green.
 
-Final frozen preflight: pending. Metadata-only receipt validation follows its completion.
+Final frozen preflight passed **43 checks in 196.87s** on `cac0edb73e7a55d1e2b0d640d5b6753d84dc7995`. Pinned Black 26.5.1 passed all 48 changed backend Python files. Final receipt metadata-only preflight passed **4 checks in 18.27s**.
 
 ## Tests
 
