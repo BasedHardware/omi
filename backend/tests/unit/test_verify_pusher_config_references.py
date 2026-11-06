@@ -188,6 +188,7 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
     assert preflight.direct_pusher_bindings(deployment) == expected
     assert {name: preflight.literal_pusher_values(deployment)[name] for name in literals} == literals
     assert literals == {
+        "CONVERSATION_TERMINAL_FAMILY_MODE": "on",
         "HOME_TRANSCRIPTION_PRESENTATION_GATE": "true",
         "HOME_TRANSCRIPTION_DEADLINE_SECONDS": "7200",
         "RECORD_SEAL_OVERLAP_TRIM_ENABLED": "true",
@@ -225,6 +226,12 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "AUDIO_MERGE_WORKER_URL": "",
         "ACTION_ITEM_REFRESH_PRESERVE_ENABLED": "true",
         "BUCKET_SCREEN_FRAMES": "based-hardware-prod-screen-frames",
+        "BUCKET_OBJECT_LAKE": "omi-dev-object-lake-uc1",
+        "OBJECT_LAKE_KMS_KEY": "projects/based-hardware-dev/locations/us-central1/keyRings/object-lake/cryptoKeys/space-deks",
+        "OBJECT_LAKE_WRITE_ENABLED": "false",
+        "OBJECT_LAKE_WRITE_PERCENT": "0",
+        "OBJECT_LAKE_READ_ENABLED": "true",
+        "OBJECT_LAKE_INLINE_MAX_BYTES": "4096",
         "CONVERSATION_RELEVANCE_JEV_PERCENT": "0",
         "DREAM_AGENT_ELIGIBILITY": "allowlist",
         "DREAM_AGENT_UID_ALLOWLIST": "",
@@ -233,7 +240,7 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "OMI_SHAPED_AGENT_MODE": "on",
         "CAPTURE_GROUP_CONTAINMENT_MODE": "shadow",
         "CLIENT_SUMMARIES_AT_CAP_ENABLED": "true",
-        "FIRESTORE_READ_LEVERS": '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"bpp_decision_cache":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":5,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":0,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0}',
+        "FIRESTORE_READ_LEVERS": '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":5,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":0,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0}',
         "FSR_QUEUE_AGE_PUBLISHER": "0",
         "FSR_QUEUE_AGE_LEASE_SECONDS": "120",
         "FSR_LEADER_LEASE_TTL_SECONDS": "0",

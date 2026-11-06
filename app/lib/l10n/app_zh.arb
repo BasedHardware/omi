@@ -4498,6 +4498,8 @@
     "chatAppsWaitingMessageIn": "在“{app}”中发送这条消息。Omi 一收到，此屏幕就会更新。",
     "chatAppsCodeExpiredMessageIn": "获取新验证码，并从“{app}”中发送。",
     "episodeWritingNotes": "正在撰写笔记…",
+    "homeStepTranscribing": "正在转录…",
+    "homeRecordingsCount": "{count, plural, other{{count} 条录音}}",
     "episodeWritingNotesDetail": "正在先完成转录。你可以离开此页面。",
     "episodeCoversUpTo": "涵盖至 {time} · 结束后提供完整笔记",
     "liveTranscribedUpTo": "已转录至 {time}",
@@ -4634,5 +4636,11 @@
     "referralRewardSecondDetail": "再有 3 位好友购买后",
     "referralClaimShort": "领取",
     "paymentDeclinedTitle": "您的银行卡被拒绝",
-    "paymentDeclinedMessage": "更新银行卡以恢复使用 {plan}"
+    "paymentDeclinedMessage": "更新银行卡以恢复使用 {plan}",
+    "hasLinkedTasksLabel": "包含关联任务",
+    "hasTasksFilter": "有任务",
+    "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
+    "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
+    "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
 }

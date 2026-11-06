@@ -1401,18 +1401,15 @@ def _claim_finalization_fanout_txn(
     conversation_ref = conversation_ref_for_job(uid, conversation_id)
     conversation_snapshot = conversation_ref.get(transaction=transaction)
     conversation = conversation_snapshot.to_dict() if getattr(conversation_snapshot, 'exists', False) else None
-    if not isinstance(conversation, Mapping):
+    if not isinstance(conversation, Mapping) or not _conversation_admits_fanout(conversation, job, job_ref.id):
         transaction.update(job_ref, _fenced_finalization_update(now))
         _record_projection_delta(transaction, projection_collection, job, leased=-1, completed=1, stale=1)
         return _fanout_claim('fenced', fanout_key)
 
-    if expected_discarded and not conversation.get('discarded'):
+    # Only an otherwise current, restored generation needs registration replay.
+    # Missing/discarded/superseded rows retain the terminal stale outcome above.
+    if expected_discarded:
         return _fanout_claim('lease_conflict', fanout_key)
-
-    if not _conversation_admits_fanout(conversation, job, job_ref.id):
-        transaction.update(job_ref, _fenced_finalization_update(now))
-        _record_projection_delta(transaction, projection_collection, job, leased=-1, completed=1, stale=1)
-        return _fanout_claim('fenced', fanout_key)
 
     transaction.update(
         job_ref,

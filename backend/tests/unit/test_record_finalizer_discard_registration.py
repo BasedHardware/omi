@@ -25,6 +25,7 @@ async def test_processing_registration_uses_persisted_discard_result(
         'status': conversation.status,
         'discarded': conversation.discarded,
     }
+
     def deserialize(data):
         if isinstance(data, dict):
             conversation.status = data.get('status', conversation.status)
@@ -117,6 +118,7 @@ async def test_concurrent_restore_before_fanout_retries_and_retains_obligation(h
         'status': conversation.status,
         'discarded': conversation.discarded,
     }
+
     def deserialize(data):
         if isinstance(data, dict):
             conversation.status = data.get('status', conversation.status)

@@ -45,7 +45,7 @@ Future<ApiResult<List<ServerConversation>>> _listHomeConversations(
   );
   if (sent case ApiFailure(:final problem)) return ApiFailure(problem);
   final success = sent as ApiSuccess<String>;
-  final decoded = await ConversationApi._decodeOffUi(success.data, conversationRowsDecoder);
+  final decoded = await ConversationApi.decodeOffUi(success.data, conversationRowsDecoder);
   if (decoded case ApiFailure(:final problem)) return ApiFailure(problem);
   final rows = decoded as ApiSuccess<List<ServerConversation>>;
   onStorageCount

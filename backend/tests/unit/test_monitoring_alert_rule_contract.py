@@ -1302,6 +1302,12 @@ EXTERNAL_ALERT_METRICS = {
         "prometheus-stackdriver-exporter"
     ),
     "stackdriver_monitoring_last_scrape_error": "prometheus-stackdriver-exporter",
+    # Cloud Logging declarations, queried directly through GMP (never the local exporter).
+    "logging_googleapis_com:user_omi_pipeline_upload_admission_503": "batch-projection/log-metrics.json",
+    "logging_googleapis_com:user_omi_pipeline_firestore_contention_exhausted": "batch-projection/log-metrics.json",
+    "logging_googleapis_com:user_omi_pipeline_owner_drain_advanced_count": "batch-projection/log-metrics.json",
+    "logging_googleapis_com:user_omi_pipeline_owner_drain_advanced_sum": "batch-projection/log-metrics.json",
+    "logging_googleapis_com:user_omi_pipeline_owner_drain_claim_busy": "batch-projection/log-metrics.json",
     # deepgram self-hosted deployment exporter
     "engine_stream_latency_bucket": "deepgram self-hosted deployment exporter",
 }
@@ -2163,3 +2169,54 @@ def test_pair_page_uses_recent_jobs_and_stock_stays_agent_tier():
         assert repair['data'][0]['model']['expr'] == 'max(omi_enrichment_summary_repair_count)'
         assert repair['data'][2]['model']['conditions'][0]['evaluator']['params'] == [100]
         assert 'not retry attempts or a retry cap' in repair['annotations']['scope']
+
+
+def test_held_dead_letter_volume_is_agent_only_and_uses_reasoned_stock_plus_unique_expiry_rate():
+    for export_name, rules in _all_rule_exports().items():
+        rule = rules['omi-batch-held-expired-volume']
+        nodes = {node['refId']: node['model'] for node in rule['data']}
+        assert nodes['A']['expr'] == (
+            'max(omi_batch_held_expired_units and '
+            '(time() - omi_batch_held_expired_observed_at_seconds < 900)) or vector(0)'
+        ), export_name
+        assert nodes['B']['expr'] == 'sum(increase(omi_batch_held_expired_total[30m])) or vector(0)'
+        assert nodes['C']['expr'] == '(time() - max(omi_batch_held_expired_observed_at_seconds)) or vector(1e9)'
+        assert nodes['D']['expression'] == '($A > 100 && $C < 900) || $B > 10'
+        assert rule['labels']['tier'] == rule['labels']['audience'] == 'agent'
+        assert rule['notification_settings']['mute_time_intervals'] == ['omi-tier-silent']
+        assert rule['for'] == '5m' and not rule['isPaused']
+        assert 'legacy' in rule['annotations']['scope']
+        assert 'projection_state=quarantine_held with held_expired_reason=held_expired' in rule['annotations']['scope']
+        assert 'restorable' in rule['annotations']['safe_next_action']
+        assert 'Never delete' in rule['annotations']['safe_next_action']
+
+
+def test_pusher_storage_queue_and_memory_alerts_observe_fresh_current_state():
+    expected = {
+        'omi-pusher-storage-queue-warning': (256, '10m', 'agent'),
+        'omi-pusher-storage-queue-critical': (512, '10m', 'page'),
+        'omi-pusher-memory-working-set-high': (0.75, '15m', 'page'),
+    }
+    for export_name, rules in _all_rule_exports().items():
+        for uid, (threshold, pending, tier) in expected.items():
+            rule = rules[uid]
+            assert rule['for'] == pending, export_name
+            assert rule['labels']['tier'] == tier
+            assert rule['labels']['audience'] == ('agent' if tier == 'agent' else 'human')
+            assert rule['labels']['owner'] == 'omi-lifecycle'
+            assert rule['noDataState'] == 'OK'
+            assert rule['data'][2]['model']['conditions'][0]['evaluator'] == {'params': [threshold], 'type': 'gt'}
+            assert {'evaluated_bad', 'evaluated_good', 'threshold', 'runbook'} <= rule['annotations'].keys()
+            assert rule['annotations']['runbook'] == 'backend/docs/runbooks/audio-durable-outbox.md'
+            expr = rule['data'][0]['model']['expr']
+            assert 'rate(' not in expr and 'increase(' not in expr
+            assert 'time() - timestamp(' in expr and '< 120' in expr
+            if threshold > 1:
+                selector = 'omi_executor_task_queued{job="pusher-metrics",executor="storage"}'
+                assert expr == f'sum without (task) ({selector} and (time() - timestamp({selector}) < 120))'
+            else:
+                assert 'container_memory_working_set_bytes' in expr
+                assert 'namespace="prod-omi-backend",container!="",image!=""' in expr
+                assert 'workload="prod-omi-pusher",workload_type=~"deployment"' in expr
+                assert expr.count('timestamp(') == 2  # memory AND workload-owner freshness
+                assert expr.endswith('/ 3758096384')  # chart limit: 3.5 GiB

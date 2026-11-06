@@ -25,9 +25,13 @@ if str(BACKEND_DIR) not in sys.path:
 
 from google.cloud import firestore
 
+from config.record_audio import record_identity
+from database import conversation_finalization_jobs as finalization_jobs_db
 from database import conversations as conversations_db
 from database import recording_sessions as recording_sessions_db
+from database.batch_pipeline_store import FirestoreStore
 from models.conversation_photo import ConversationPhoto
+from utils.batch_pipeline.live import register_recording
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.live_content import retry_fenced_live_content_once
 
@@ -366,6 +370,111 @@ def _assert_legacy_photo_only_finalization_is_admitted(client: Any, uid: str) ->
         raise AssertionError(f'legacy photo-only conversation was not admitted to durable finalization: {intent}')
 
 
+def _assert_restore_fences_fanout_until_record_registration(client: Any, uid: str) -> None:
+    """A real restore transaction holds the parent ahead of a concurrent claim."""
+    conversation_id = f'restore-fanout-{uuid.uuid4().hex}'
+    job_id = f'finalization-{uuid.uuid4().hex}'
+    conversation_ref = _conversation_ref(client, uid, conversation_id)
+    client.collection('users').document(uid).set({'data_protection_level': 'standard'})
+    conversation_ref.set(
+        {
+            'id': conversation_id,
+            'status': 'completed',
+            'discarded': True,
+            'record_lane_owner': 'batch_live_v1',
+            'private_cloud_sync_enabled': True,
+            'finalization_job_id': job_id,
+            'finalization_revision': 1,
+        }
+    )
+    job_ref = client.collection(finalization_jobs_db.FINALIZATION_JOBS_COLLECTION).document(job_id)
+    job = {
+        'uid': uid,
+        'conversation_id': conversation_id,
+        'status': 'leased',
+        'dispatch_generation': 1,
+        'lease_epoch': 1,
+        'finalization_revision': 1,
+        'fanout_status': 'pending',
+        'projection_generation': finalization_jobs_db.FINALIZATION_PROJECTION_GENERATION,
+        'projection_shard': 0,
+    }
+    job_ref.set(job)
+    projection_ref = client.collection(finalization_jobs_db.FINALIZATION_PROJECTION_COLLECTION).document(
+        finalization_jobs_db._projection_shard_id(finalization_jobs_db.FINALIZATION_PROJECTION_GENERATION, 0)
+    )
+    projection_ref.set({'leased': 1, 'completed': 0, 'stale': 0, 'success': 0})
+    restore_transaction = _hold_cleanup_parent_lock(uid, conversation_id)
+    started, finished = threading.Event(), threading.Event()
+    result: dict[str, Any] = {}
+
+    def claim_behind_restore() -> None:
+        started.set()
+        try:
+            result['claim'] = lifecycle_service.claim_finalization_fanout(
+                job_id, 1, 1, expected_discarded=True, firestore_client=client
+            )
+        except BaseException as error:
+            result['error'] = error
+        finally:
+            finished.set()
+
+    claimant = threading.Thread(target=claim_behind_restore, name='listen-restore-fanout-claim')
+    claimant.start()
+    try:
+        assert started.wait(timeout=5), 'fanout claimant did not start'
+        assert not finished.wait(timeout=0.25), 'fanout claim bypassed the restore transaction lock'
+        _emulator_post(
+            ':commit',
+            {
+                'transaction': restore_transaction,
+                'writes': [
+                    {
+                        'update': {
+                            'name': _document_name(uid, conversation_id),
+                            'fields': {
+                                'discarded': {'booleanValue': False},
+                                'sync_relevance_user_kept': {'booleanValue': True},
+                            },
+                        },
+                        'updateMask': {'fieldPaths': ['discarded', 'sync_relevance_user_kept']},
+                    }
+                ],
+            },
+        )
+        restore_transaction = ''
+    finally:
+        if restore_transaction:
+            _emulator_post(':rollback', {'transaction': restore_transaction})
+        claimant.join(timeout=15)
+    assert not claimant.is_alive(), 'fanout claimant did not finish after restore'
+    if 'error' in result:
+        raise result['error']
+    assert result['claim']['status'] == 'lease_conflict'
+    assert job_ref.get().to_dict() == job, 'restore conflict mutated the pending job'
+    assert projection_ref.get().to_dict() == {'leased': 1, 'completed': 0, 'stale': 0, 'success': 0}
+
+    store = FirestoreStore(f'batch_pipeline_test_{uuid.uuid4().hex}', firestore_client=client)
+    _, segment_id = record_identity(uid, conversation_id)
+    record_ref = client.collection(f'{store.namespace}_jobs').document(segment_id)
+    assert not record_ref.get().exists, 'discarded pass registered an audio obligation'
+    restored = conversation_ref.get().to_dict()
+    assert register_recording(uid, restored, store=store, server_flags={})
+    assert record_ref.get().to_dict()['state'] == 'record_pending'
+    assert lifecycle_service.claim_finalization_fanout(job_id, 1, 1, firestore_client=client)['status'] == 'claimed'
+    assert finalization_jobs_db.mark_finalization_fanout_completed(job_id, 1, 1, firestore_client=client)
+    assert finalization_jobs_db.mark_finalization_completed(job_id, 1, 1, firestore_client=client)
+    projection = projection_ref.get().to_dict()
+    assert {key: projection[key] for key in ('leased', 'completed', 'stale', 'success')} == {
+        'leased': 0,
+        'completed': 1,
+        'stale': 0,
+        'success': 1,
+    }
+    assert finalization_jobs_db.mark_finalization_completed(job_id, 1, 1, firestore_client=client)
+    assert projection_ref.get().to_dict() == projection, 'completion replay double-counted the terminal outcome'
+
+
 def main() -> int:
     if not os.environ.get('FIRESTORE_EMULATOR_HOST'):
         raise RuntimeError('FIRESTORE_EMULATOR_HOST is required; run through Firebase emulators:exec')
@@ -376,6 +485,7 @@ def main() -> int:
     _assert_photo_content_contract(client, uid)
     _assert_photo_only_finalization_is_admitted(client, uid)
     _assert_legacy_photo_only_finalization_is_admitted(client, uid)
+    _assert_restore_fences_fanout_until_record_registration(client, uid)
     print('PASS: Firestore emulator fenced cleanup races and preserved listen content through fresh-generation replay')
     return 0
 

@@ -10,16 +10,15 @@ dataPlaneProject: based-hardware
 stage: prod
 namespace: batch_pipeline_prod
 secretName: prod-omi-backend-secrets
-# Preserve the audited live floor/ceiling through the next Helm roll (lead
-# af6df5, 2026-11-03). replicaCount and autoscaling.minReplicas are one floor
-# setting; change both. The chart's former 4/16 would reset live 6/12.
-# OD-first: all replicas pin to the on-demand pool; Spot stays opportunistic.
-# Rollback of this source correction must not scale the live floor down.
-replicaCount: 6
+# Preserve the 2026-11-06 live 4/8 bounds (David D4, coordinator ask bc18db).
+# replicaCount and autoscaling.minReplicas are one floor setting; change both.
+# Rollback: restore both floors to 6 and maxReplicas to 12 if GPU queue depth
+# or ready_units climbs back past 50k. OD-first placement stays unchanged.
+replicaCount: 4
 autoscaling:
   enabled: true
-  minReplicas: 6
-  maxReplicas: 12
+  minReplicas: 4
+  maxReplicas: 8
   balancedPools:
     enabled: false
 # OD-first placement: the worker pins to the on-demand pool so the guaranteed
@@ -55,6 +54,7 @@ borrowedNodePools:
   enabled: false
   pools: [parakeet-pool, parakeet-pool-b, parakeet-pool-v2]
 worker:
+  heldDeadLetterEnabled: true
   # Two pump processes share each L4 (cl2-gpueff 2026-11-04, data/run-2026-11-04-gpueff
   # in omi-workspace): prod is claim-path bound (GPU util 16%, ~1.6 units per
   # 3.2s pull), so a second independent pump doubles concurrent claims per GPU.
@@ -81,7 +81,7 @@ worker:
   controlCandidateFanout: 16
   admissionParallelCalls: true
   idlePollMaxSeconds: 10
-  firestoreReadLevers: '{"batch_privacy_memoize":100}'
+  firestoreReadLevers: '{}'
   # Preserve the measured profiling-on state across the scaler Helm upgrade.
   stageProfilingEnabled: true
   # #24213 IO 5 did not run in qualification (NO-GO 2026-11-01); hold the prior 3.
@@ -112,6 +112,8 @@ recordSealRepair:
   suspend: false
   mode: apply
   rowSeconds: 270
+  # 48 workers (2026-11-05 #24729) pushed every row past the 270 s cap (budget_exhausted); per-row I/O, not
+  # pod resources, saturates. Back to 16 until the per-row bottleneck is profiled.
   workers: 16
   serverFlags:
     K_SERVICE: backend

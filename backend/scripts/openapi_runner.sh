@@ -7,7 +7,7 @@ DEFAULT_VENV_DIR="$BACKEND_DIR/.openapi-venv"
 VENV_DIR="${OPENAPI_RUNNER_VENV:-$DEFAULT_VENV_DIR}"
 PYTHON_VERSION="$(cat "$BACKEND_DIR/.python-version")"
 PYTHON_MINOR="${PYTHON_VERSION%.*}"
-PYTHON_BIN="${OPENAPI_RUNNER_PYTHON:-python$PYTHON_MINOR}"
+PYTHON_BIN="${OPENAPI_RUNNER_PYTHON:-$PYTHON_MINOR}"
 
 find_venv_python() {
   local candidate
@@ -30,10 +30,6 @@ if ! command -v uv >/dev/null 2>&1; then
   exit 1
 fi
 
-if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
-  PYTHON_BIN=python3
-fi
-
 VENV_PYTHON="$(find_venv_python || true)"
 if [ -n "$VENV_PYTHON" ]; then
   VENV_PYTHON_VERSION="$("$VENV_PYTHON" -c 'import sys; print(".".join(map(str, sys.version_info[:2])))')"
@@ -48,12 +44,18 @@ if [ -n "$VENV_PYTHON" ]; then
 fi
 
 if [ -z "$VENV_PYTHON" ]; then
-  "$PYTHON_BIN" -m venv "$VENV_DIR"
+  uv venv --python "$PYTHON_BIN" "$VENV_DIR"
   VENV_PYTHON="$(find_venv_python || true)"
 fi
 
 if [ -z "$VENV_PYTHON" ]; then
   echo "FAIL: OpenAPI runner venv has no supported Python executable under $VENV_DIR" >&2
+  exit 1
+fi
+
+VENV_PYTHON_VERSION="$("$VENV_PYTHON" -c 'import sys; print(".".join(map(str, sys.version_info[:2])))')"
+if [ "$VENV_PYTHON_VERSION" != "$PYTHON_MINOR" ]; then
+  echo "FAIL: OpenAPI runner venv at $VENV_DIR uses Python $VENV_PYTHON_VERSION; expected $PYTHON_MINOR (backend/.python-version)." >&2
   exit 1
 fi
 

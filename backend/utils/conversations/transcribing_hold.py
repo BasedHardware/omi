@@ -54,15 +54,19 @@ def applies(row: Mapping[str, Any], *, stored: bool = False) -> bool:
     )
 
 
+def deadline(row: Mapping[str, Any]) -> datetime:
+    """The stamped deadline of a row ``applies`` accepted, as an aware datetime."""
+    value = row['home_transcription_deadline_at']
+    return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value
+
+
 def project(row: dict[str, Any], *, now: datetime | None = None) -> dict[str, Any]:
     """Return a wire copy; expired/error captures stay visible as completed rows."""
     if not applies(row):
         return row
-    deadline = row['home_transcription_deadline_at']
-    if deadline.tzinfo is None:
-        deadline = deadline.replace(tzinfo=timezone.utc)
+    deadline_at = deadline(row)
     title, status = transcription_presentation(
-        deadline,
+        deadline_at,
         failed=bool(row.get('record_upload_failed') or row.get('finalization_status') == 'dead_letter'),
         now=now,
     )

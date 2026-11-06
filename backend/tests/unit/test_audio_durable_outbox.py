@@ -1,6 +1,7 @@
 """Fault injection for the capture -> immutable receipt custody boundary."""
 
 from utils import pusher_audio_projection
+from utils.batch_pipeline import record_projection_rebuild as projection_rebuild
 import asyncio
 from concurrent.futures import Future
 from collections import deque
@@ -106,6 +107,7 @@ class Bucket:
 @pytest.fixture
 def remote(monkeypatch):
     monkeypatch.setenv('PUSHER_AUDIO_FILE_INCREMENTAL_ENABLED', '0')
+    monkeypatch.setattr(pusher_audio_projection.record_projection_rebuild, 'mark_many', MagicMock())
     monkeypatch.setattr(pusher_audio_projection.conversations_db, 'get_conversation_raw_snapshot', lambda *a, **kw: {})
     bucket = Bucket()
     monkeypatch.setattr(record_audio_db, 'seal_record_audio', MagicMock(return_value='not_batch_owner'))
@@ -2272,7 +2274,7 @@ async def test_notfound_on_tombstoned_conversation_drops_refs_without_custody_fa
     failures = _projection_harness(remote, monkeypatch, MagicMock(return_value=[]))
     monkeypatch.setattr(pusher, 'read_pcm', purged_read)
     monkeypatch.setattr(
-        pusher_audio_projection.conversation_tombstones, 'is_deleted', lambda uid, conv_id: tombstoned['now']
+        projection_rebuild.conversation_tombstones, 'is_deleted', lambda uid, conv_id: tombstoned['now']
     )
     failure_marker = record_audio_db.mark_record_upload_failed  # the fixture's MagicMock
     sock = Socket([struct.pack('<I', 103) + b'conversation', struct.pack('<Id', 101, 1000) + pcm])
@@ -2319,9 +2321,7 @@ async def test_notfound_on_hard_deleted_conversation_doc_drops_refs(remote, monk
     failures = _projection_harness(remote, monkeypatch, MagicMock(return_value=[]))
     monkeypatch.setattr(pusher, 'read_pcm', purged_read)
     # The remote fixture already pins conversation_tombstones.is_deleted to False.
-    monkeypatch.setattr(
-        pusher_audio_projection, 'get_firestore_client', lambda: _firestore_client_with_conversation(False)
-    )
+    monkeypatch.setattr(projection_rebuild, 'get_firestore_client', lambda: _firestore_client_with_conversation(False))
     failure_marker = record_audio_db.mark_record_upload_failed
     sock = Socket([struct.pack('<I', 103) + b'conversation', struct.pack('<Id', 101, 1000) + pcm])
     real_receive = sock.receive_bytes
@@ -2369,9 +2369,7 @@ async def test_notfound_on_live_conversation_keeps_transient_retry_and_terminal_
     failures = _projection_harness(remote, monkeypatch, MagicMock(return_value=[]))
     monkeypatch.setattr(pusher, 'read_pcm', purged_read)
     # The remote fixture already pins conversation_tombstones.is_deleted to False.
-    monkeypatch.setattr(
-        pusher_audio_projection, 'get_firestore_client', lambda: _firestore_client_with_conversation(True)
-    )
+    monkeypatch.setattr(projection_rebuild, 'get_firestore_client', lambda: _firestore_client_with_conversation(True))
     seal = MagicMock(return_value=None)
     monkeypatch.setattr(record_audio_db, 'seal_record_audio', seal)
     sock = Socket([struct.pack('<I', 103) + b'conversation', struct.pack('<Id', 101, 1000) + pcm])

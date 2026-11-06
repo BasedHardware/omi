@@ -8,12 +8,14 @@ from typing import TYPE_CHECKING, Any
 from google.cloud import firestore
 from prometheus_client import Counter
 
-from config.batch_pipeline import projection_source_deleted_enabled
+from config.batch_pipeline import (
+    projection_source_deleted_enabled,
+    batch_held_dead_letter_enabled,
+    HELD_DEAD_LETTER_SECONDS,
+)
 
-from config.firestore_read_levers import lever_enabled
 from database.batch_pipeline_privacy import (
     assert_batch_write_allowed,
-    BatchPrivacyMemo,
     BatchPrivacyBlocked,
     BatchPrivacyReason,
 )
@@ -105,9 +107,6 @@ class ProjectionSession:
         transaction.update(self.result_ref, changes)
 
     def guard(self, transaction, conversation_ids=()):
-        options = {}
-        if lever_enabled('batch_privacy_memoize', self.binding.owner_id):
-            options['memo'] = getattr(self, '_privacy_memo', None)
         snapshots: dict[str, Any] = {}
         try:
             return assert_batch_write_allowed(
@@ -117,7 +116,6 @@ class ProjectionSession:
                 conversation_ids=conversation_ids,
                 expected_generation=self.binding.privacy_generation,
                 snapshots=snapshots,
-                **options,
             )
         except BatchPrivacyBlocked as error:
             if error.conversation_id:
@@ -241,12 +239,6 @@ class ProjectionSession:
         self._source_deletion_transaction = None
         self._source_deleted = False
         self._privacy_fence_ids = set()
-        if lever_enabled('batch_privacy_memoize', self.binding.owner_id):
-            # A session may survive the pre-check and assignment retries. Only
-            # prepare and validate_plan within this attempt may share snapshots.
-            self._privacy_memo = BatchPrivacyMemo(self.client, transaction)
-        elif hasattr(self, '_privacy_memo'):
-            del self._privacy_memo
         self.job = self.store.ref('jobs', self.segment_id).get(transaction=transaction).to_dict() or {}
         self.entry = self.result_ref.get(transaction=transaction).to_dict() or {}
         owner = self.owner_ref.get(transaction=transaction).to_dict() or {}
@@ -404,6 +396,8 @@ class ProjectionSession:
             receipt['privacy_reason'] = 'conversation_deleted'
             if self._source_deleted:
                 receipt['disposition'] = 'source_deleted'
+        if quarantined and batch_held_dead_letter_enabled():
+            receipt['held_deadline_at'] = self.now + HELD_DEAD_LETTER_SECONDS
         if quarantined:
             receipt.update(
                 state='quarantined',
@@ -428,6 +422,14 @@ class ProjectionSession:
                 # Old projector binaries require result protocol 1. Fence them
                 # before they can turn an unknown held receipt into ready.
                 changes.update(protocol_version=2, lineage_quarantine_version=1)
+                if batch_held_dead_letter_enabled():
+                    if self.entry.get('projection_state') == 'pending' and self.entry.get('held_expired_reason'):
+                        changes.update(held_expired_at=None, held_expired_reason=None)
+                    changes['held_deadline_at'] = (
+                        receipt['held_deadline_at']
+                        if self.entry.get('projection_state') == 'pending'
+                        else self.entry.get('held_deadline_at') or receipt['held_deadline_at']
+                    )
             if assigned.get('id'):
                 changes['conversation_ids'] = firestore.ArrayUnion(output_ids)
                 transaction.update(
@@ -488,6 +490,18 @@ class ProjectionSession:
                     'projection': receipt,
                     'projection_state': 'quarantine_held' if quarantined else receipt['state'],
                     **({'protocol_version': 2, 'lineage_quarantine_version': 1} if quarantined else {}),
+                    **(
+                        {
+                            'held_deadline_at': receipt['held_deadline_at'],
+                            **(
+                                {'held_expired_at': None, 'held_expired_reason': None}
+                                if self.entry.get('held_expired_reason')
+                                else {}
+                            ),
+                        }
+                        if quarantined and batch_held_dead_letter_enabled()
+                        else {}
+                    ),
                     **completed_checkpoint_fields(self.entry, quarantined=quarantined),
                     **(
                         {'projection_release_attempts': 0}

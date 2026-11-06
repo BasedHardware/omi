@@ -68,6 +68,11 @@
     "omi-finalization-pair-drift-stale",
     "omi-finalization-pair-drift-blind",
     "omi-enrichment-summary-repair-stock",
-    "omi-enrichment-repair-stock-stale"
+    "omi-enrichment-repair-stock-stale",
+    "omi-batch-held-backlog-growing",
+    "omi-enrichment-queue-depth-page",
+    "omi-stt-vendor-benched-page",
+    "omi-incluster-guard-unsafe-page",
+    "omi-modulate-credit-page"
   ]
 }

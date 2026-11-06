@@ -6424,26 +6424,17 @@ and the server conversation window. A present device header alone is not proof.
 Pure offline capture has no such server window; partial conversation drains
 cannot claim the existing immutable manifest either.
 
-`SYNC_LEGACY_FRESH_ENABLED=true` (code/dev/prod default false) lets whole LEGACY
-batches whose oldest capture is within `SYNC_FRESH_MAX_AGE_SECONDS` enter fresh
-capacity only for private `sync-legacy-fresh` cohort members (the old UID env
-list is a migration fallback), or a stable SHA-256 UID bucket in
-`SYNC_LEGACY_FRESH_PERCENT` (default
-zero). Buckets match transcription final pass; the master flag disables both.
-Malformed/non-finite percentages select nobody beyond the allowlist; finite
-percentages clamp to 0–100. The atomic Redis token reservation still applies to
-every selected account. Existing historical jobs are never moved. Trust remains LEGACY. Each
-request costs `max(1, ceil(actual multipart bytes / MiB))`; defaults refill 60
-tokens/hour with a ten-token burst per account across replicas and devices.
-`SYNC_LEGACY_FRESH_HOURLY_TOKENS` supports 1–120 and
-`SYNC_LEGACY_FRESH_BURST_TOKENS` 1–60. Bad config, unknown file size or Redis
-failure demotes to backfill. Budget Redis connect/read I/O has a one-second
-timeout and runs off the event loop. Upload retries spend again; timestamp/session-id
-changes cannot reset the account budget. The budget bounds work admission,
-not billed speech. A fresh-only hard restriction or daily ceiling demotes a
-promoted LEGACY batch to backfill before persistence and final admission metrics,
-so optional promotion never introduces a fair-use 429. DEVICE_BOUND fresh keeps
-its existing 429 response. Trusted manifests retain their existing route.
+When legacy mode is `on`, whole LEGACY batches whose oldest capture is within
+`SYNC_FRESH_MAX_AGE_SECONDS` can enter fresh capacity. This includes the
+fail-safe `on` path when the ramp read fails, preserving recent unbound BYOK
+uploads' fresh route. In `draining` or `dark`, this promotion is disabled.
+The optional promotion flags, cohort gate and Redis upload/byte budget were
+retired in [#24754](https://github.com/BasedHardware/omi/pull/24754); they no
+longer control admission. Existing historical jobs are never moved, and trust
+remains LEGACY. A fresh-only hard restriction or daily ceiling still demotes a
+promoted LEGACY batch to backfill before persistence and final admission metrics.
+DEVICE_BOUND fresh keeps its existing 429 response. Trusted manifests retain
+their existing route.
 Capture times ahead of the server clock within the shared
 `SYNC_CAPTURE_MAX_FUTURE_SKEW_SECONDS` window (default 600s; phone clocks drift
 minutes and app files are named after the audio START, so ahead-of-server stamps
@@ -6492,8 +6483,7 @@ jobs carry receipt time in their durable payload. Setting the switch to `false`
 restores pre-2024 rejection; deprecated V1 keeps its original rejection policy.
 
 `omi_sync_lane_admissions_total{lane,trust,reason}` and `sync_lane_admission`
-record the final budget and fresh-gate decision. New reasons: `recent_legacy_capture`,
-`legacy_fresh_budget_exceeded`, `legacy_fresh_budget_unavailable`,
+record the final fresh-gate decision. Reasons include `recent_legacy_capture`,
 `legacy_fresh_hard_restricted`, `legacy_fresh_daily_ceiling`. Per-file
 capture-time admission dispositions (accepted, `accepted_future_skew`, `accepted_early_clamped`,
 `rejected_future`, `rejected_early`, `rejected_malformed`) are counted in
@@ -6502,7 +6492,7 @@ every non-plain-accepted outcome. No account
 labels are added. Optional final-pass logs now include `lane` and
 `duration_seconds`, covering decoding, embedding triage, diarization and naming
 inside the adapter. These times exclude the preceding WAV download and are
-not whole-job latency. See [drain qualification](runbooks/sync-legacy-fresh-drain.md).
+not whole-job latency. See the [retired drain qualification record](runbooks/sync-legacy-fresh-drain.md).
 
 ### Sync assignment contention retry
 
@@ -9319,10 +9309,99 @@ the claim and a concurrent refresh commit. An all-rejected pass may still refres
 late OCR/calendar context, but rejected frame bytes never reach notes. This
 refresh does not run derived memory, app, embedding, or speech-learning jobs.
 
-### Restore-aware discard fence for batch recording obligations
+### Dedicated projection pump
 
-When a live capture is discarded during processing, finalization skips recording registration (
-egister_recording) only when the durable row remains discarded, avoiding retry churn on intentional discards.
-To prevent racing with concurrent user restores before finalization completes, claim_finalization_fanout verifies expected_discarded: if a concurrent restore revived the conversation (discarded: false) before the fanout transaction commits, the claim fails with a lease_conflict.
-The finalizer catches this conflict and retries, re-evaluating the now-restored state so that the recording obligation (
-ecord_pending) is properly registered and retained without losing audio obligations.
+`BATCH_PIPELINE_PROJECTION_PUMP_ENABLED` defaults to `false`; only `true`
+selects one projection-only loop in place of the serving runtime's three loops,
+even when `BATCH_PIPELINE_SERVING_ENABLED` is unset/false. It uses the same
+stage/store/artifact construction and never calls reconcile, maintenance or
+recovery dispatch. `BATCH_PIPELINE_PUMP_SWEEP_PAGES` defaults to 1 (clamped
+1-4) and `BATCH_PIPELINE_PUMP_TICK_SECONDS` to 20 seconds (clamped 2-60).
+Malformed numeric values use those defaults. Each tick sweeps pages through
+`sync_executor`, schedules discovered or owed projection follow-ups with
+`start_followups()` and schedules the owed index flush after each sweep, starts
+owed owner drains on the event loop after the pages, and sleeps. Each completed
+tick, including an error tick, updates the Unix timestamp gauge
+`omi_batch_projection_pump_last_tick_seconds`; zero means never observed.
+Scope the missing/stale alert to the dedicated pump service.
+
+`BATCH_PIPELINE_SERVING_PROJECTION_SWEEP` defaults on; only `off` skips the
+serving reconcile sweep. Owner wakes, held drains, metrics refresh, maintenance
+and recovery dispatch keep their existing behavior. The pump ignores this
+serving-only switch. `BATCH_PIPELINE_MAX_OWNER_DRAINS` sets the process's
+owner drain capacity at import (default 8, clamped 1-16; malformed uses 8).
+[Change and ramp](listen_pusher_pipeline/changes/2026-11-05-projection-pump.md).
+
+
+
+## Batch projection drain admission
+
+`PROJECTION_DRAIN_CLAIM_AWARE` defaults on; only `off` disables it. Initial
+owner-drain admissions use a read-only Redis claim GET and fail open on errors.
+Claim-busy re-requests through `again` back off 5–15 seconds; productive
+`more=True` continuations retain immediate FIFO progress without the peek.
+The advisory claim and transactional ordering fences remain unchanged.
+
+
+### Durable playback projection rebuild debt
+
+`PUSHER_PROJECTION_DEBT_DURABLE_ENABLED` defaults **on**; `0`, `false`, or `off`
+disables pusher handoff and repair consumption. Pusher receives the flag through
+its existing `runtimeConfigMapName` `envFrom` binding; no literal env entry
+shadows that ConfigMap key. The repair CronJob declares it independently through
+`recordSealRepair.projectionDebtDurableEnabled` (default `true`). Rollback sets
+the consumer option `false` first, then the Pusher runtime ConfigMap flag off.
+Re-enabling resumes retained markers. Consumption also requires the existing
+repair CronJob to be enabled, unsuspended and runtime-enabled; this contract
+does not activate it.
+
+Exhausted close retries, empty close discovery, socket cleanup, and terminal
+transient/InvalidArgument batch failures hand off one
+`record_projection_rebuild_due` marker per user/conversation into
+`record_projection_rebuild_jobs/{sha256(JSON([uid,cid]))}`. Fields are `kind`,
+`owner_id`, `conversation_id`, and UTC `requested_at`; no content or conversation
+status is stored. Successful handoffs coalesce. Terminal handoffs enqueue into
+one metadata-only background task and never await Firestore or change recording
+completion. A separate bounded retry inventory holds up to 128 overflow owners;
+cleanup can add the 128 cached owners (256 total). Each task attempts at most two
+batch writes with a one-second SDK timeout and 1.25-second async attempt budget.
+Cleanup shares one three-second total budget across every marker and retry;
+marker failure never gates socket close or recording completion. Failure emits
+`marker_write_failed`; inventory saturation emits `marker_retry_overflow`, with
+sanitized logs and `omi_pusher_projection_debt_total` outcomes. Persistent storage
+failure, saturation, or process death before commit can still prevent handoff;
+the marker is not a WAL.
+
+The existing repair CronJob runs a separate 60-second metadata-only pass over
+at most 128 markers ordered by request time. A bounded collection scan reads at
+most 10,001 markers; the maintenance ceiling is 10,000. A confirmed empty
+inventory retires as `retired_no_objects` after seven days from Firestore document
+creation (request-time rotation and coalesced writes do not reset that age), or
+immediately under collection pressure. Retiring deletes only the observed marker,
+never audio. Empty retirement rereads the observed marker version and the
+conversation's `record_upload_sessions` in the same transaction as marker deletion.
+Only an explicit empty producer map permits retirement; nonempty, missing or
+malformed maps retain and rotate the marker. A producer mint or marker replacement
+before commit conflicts with deletion. No producer token is changed or declared
+dead. Nonempty or privacy-held debt remains due even above the ceiling;
+capacity is enforced by retiring confirmed empty work, not discarding useful debt.
+The aggregate report and Prometheus gauges expose marker count (saturated at
+10,001), oldest age in that bounded scan, and capacity state. `capacity_exceeded`
+is alertable. `omi_projection_rebuild_pressure_blocked` plus aggregate
+`pressure_fenced_count`/`pressure_blocked` reports a pass whose empty candidates
+could not be evicted because their producer fences were not clear. These gauges
+are bounded observations, not an exact count/oldest
+claim when the collection is above the ceiling. Apply rotates discovered markers
+before validation/discovery, so refusal, interruption or malformed ordered
+markers cannot monopolize the page. Preview never rebuilds or writes. Full
+rebuild refuses a tombstone or absent conversation before discovery, then
+transactionally rechecks privacy/deletion and the prior `audio_files` revision.
+Only `audio_files` may change. Temporary privacy/generation holds retain debt
+without metadata writes. Nonempty existing producer fences retain the marker
+even after metadata refresh, until their existing owner settles them. No seal
+or token authority is added. Raw-index failure retains debt; confirmed empty
+discovery uses the bounded retirement policy above.
+Successful final rebuild or permanent owner revocation clears only the observed
+marker version; a replacement marker always wins. No PCM or audio-object
+mutation occurs. The [phase 5C change note](./listen_pusher_pipeline/changes/2026-11-06-durable-projection-debt.md)
+records scope and verification limits.

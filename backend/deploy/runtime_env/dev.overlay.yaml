@@ -78,6 +78,10 @@ overlay:
           category: rollout
         DREAM_AGENT_UID_ALLOWLIST:
           value: ''
+        BUCKET_OBJECT_LAKE:
+          value: 'omi-dev-object-lake-uc1'
+        OBJECT_LAKE_KMS_KEY:
+          value: 'projects/based-hardware-dev/locations/us-central1/keyRings/object-lake/cryptoKeys/space-deks'
         BUCKET_SCREEN_FRAMES:
           value: based-hardware-prod-screen-frames
         TRANSCRIPTION_SHADOW_ENABLED:
@@ -132,6 +136,10 @@ overlay:
           category: rollout
         DREAM_AGENT_UID_ALLOWLIST:
           value: ''
+        BUCKET_OBJECT_LAKE:
+          value: 'omi-dev-object-lake-uc1'
+        OBJECT_LAKE_KMS_KEY:
+          value: 'projects/based-hardware-dev/locations/us-central1/keyRings/object-lake/cryptoKeys/space-deks'
         BUCKET_SCREEN_FRAMES:
           value: based-hardware-prod-screen-frames
         TRANSCRIPTION_SHADOW_ENABLED:
@@ -369,6 +377,10 @@ overlay:
           OMI_SHAPED_AGENT_MODE:
             value: 'on'
             category: rollout
+          BUCKET_OBJECT_LAKE:
+            value: 'omi-dev-object-lake-uc1'
+          OBJECT_LAKE_KMS_KEY:
+            value: 'projects/based-hardware-dev/locations/us-central1/keyRings/object-lake/cryptoKeys/space-deks'
           BUCKET_SCREEN_FRAMES:
             value: based-hardware-prod-screen-frames
           OMI_CUSTOMER_DATA_PROJECT:
@@ -441,21 +453,17 @@ overlay:
             value: http://parakeet.omiapi.com
           HOSTED_SPEAKER_EMBEDDING_API_URL:
             value: http://diarizer.omiapi.com:80
-          SYNC_LEGACY_FRESH_ENABLED:
-            value: 'false'
           SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED:
             value: 'false'
-          SYNC_LEGACY_FRESH_PERCENT:
-            value: '0'
-          SYNC_LEGACY_FRESH_HOURLY_TOKENS:
-            value: '60'
-          SYNC_LEGACY_FRESH_BURST_TOKENS:
-            value: '10'
           POSTHOG_HOST:
             value: https://app.posthog.com
           OMI_SHAPED_AGENT_MODE:
             value: 'on'
             category: rollout
+          BUCKET_OBJECT_LAKE:
+            value: 'omi-dev-object-lake-uc1'
+          OBJECT_LAKE_KMS_KEY:
+            value: 'projects/based-hardware-dev/locations/us-central1/keyRings/object-lake/cryptoKeys/space-deks'
           BUCKET_SCREEN_FRAMES:
             value: based-hardware-prod-screen-frames
           TRANSCRIPTION_SHADOW_ENABLED:
@@ -531,16 +539,8 @@ overlay:
             value: http://parakeet.omiapi.com
           HOSTED_SPEAKER_EMBEDDING_API_URL:
             value: http://diarizer.omiapi.com:80
-          SYNC_LEGACY_FRESH_ENABLED:
-            value: 'false'
           SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED:
             value: 'false'
-          SYNC_LEGACY_FRESH_PERCENT:
-            value: '0'
-          SYNC_LEGACY_FRESH_HOURLY_TOKENS:
-            value: '60'
-          SYNC_LEGACY_FRESH_BURST_TOKENS:
-            value: '10'
           POSTHOG_HOST:
             value: https://app.posthog.com
           OMI_SHAPED_AGENT_MODE:

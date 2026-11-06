@@ -31,6 +31,7 @@ from threading import RLock
 from typing import Any
 
 from google.cloud.firestore_v1.transforms import Increment
+from google.cloud.firestore_v1.field_path import FieldPath
 
 
 class ReadAfterWriteError(RuntimeError):
@@ -367,7 +368,16 @@ class StrictFirestoreTransaction:
             raise RuntimeError('missing row')
         payload = deepcopy(patch)
         self.updates.append((ref.path, payload))
-        self._database.rows[ref.path].update(payload)
+        # Emulator proof: test_conversation_terminal_family_firestore.py covers
+        # nested updates, quoted keys, and replacement of non-map ancestors.
+        for key, value in payload.items():
+            parts = FieldPath.from_api_repr(key).parts
+            parent = self._database.rows[ref.path]
+            for part in parts[:-1]:
+                if not isinstance(parent.get(part), dict):
+                    parent[part] = {}
+                parent = parent[part]
+            parent[parts[-1]] = value
 
     def delete(self, ref: StrictFirestoreDocument) -> None:
         self._assert_reference_belongs(ref)

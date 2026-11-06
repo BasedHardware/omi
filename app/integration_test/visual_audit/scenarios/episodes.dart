@@ -55,7 +55,9 @@ final episodeScenarios = <AuditScenario>[
     state: 'Fictional dinner episode with two processing members, followed by completion',
     run: (a) async {
       final now = DateTime.now();
-      final closed = _closedFixture(day: DateTime(now.year, now.month, now.day), composed: true);
+      // Uncomposed while members process: only an uncomposed episode holds one processing row.
+      // A composed episode keeps its notes row instead (home_rows_test).
+      var closed = _closedFixture(day: DateTime(now.year, now.month, now.day), composed: false);
       final pending = [
         for (final member in closed.members)
           ServerConversation(
@@ -84,6 +86,9 @@ final episodeScenarios = <AuditScenario>[
       expect(find.byKey(const Key('home_processing_row')), findsOneWidget);
       expect(find.text('Dinner and plans for the weekend'), findsNothing);
       await a.shot('Episode ended; both members processing in one row', step: 'processing');
+      // The summary lands: the same episode is now composed, so its row shows the title.
+      closed = _closedFixture(day: DateTime(now.year, now.month, now.day), composed: true);
+      episodes.debugSetHomeEpisodes([closed]);
       history
         ..processingConversations = []
         ..conversations = closed.members

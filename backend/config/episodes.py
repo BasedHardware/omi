@@ -57,6 +57,7 @@ HOME_HIDE_BELOW_FLOOR_ROWS_ENV = 'HOME_HIDE_BELOW_FLOOR_ROWS'
 HOME_HIDE_EPISODE_MEMBERS_ENV = 'HOME_HIDE_EPISODE_MEMBERS'
 HOME_NEUTRAL_MINIMUM_TITLES_ENV = 'HOME_NEUTRAL_MINIMUM_TITLES'
 HOME_TRANSCRIPTION_PRESENTATION_GATE_ENV = 'HOME_TRANSCRIPTION_PRESENTATION_GATE'
+HOME_STEP_PROJECTION_ENV = 'HOME_STEP_PROJECTION'
 EPISODE_CARRY_ON_SESSION_END_ENV = 'EPISODE_CARRY_ON_SESSION_END'
 EPISODE_MOMENT_OUTPUT_VALIDATOR_ENV = 'EPISODE_MOMENT_OUTPUT_VALIDATOR'
 EPISODE_COMPOSER_ENV = 'EPISODE_COMPOSER'
@@ -117,6 +118,11 @@ def home_hide_episode_members_enabled() -> bool:
 def home_neutral_minimum_titles_enabled() -> bool:
     """Replace provisional transcript-echo Home titles without changing storage."""
     return modes_default_on(HOME_NEUTRAL_MINIMUM_TITLES_ENV)
+
+
+def home_step_projection_enabled() -> bool:
+    """Default-on Home row contract field on list reads; off omits ``home_step``."""
+    return modes_default_on(HOME_STEP_PROJECTION_ENV)
 
 
 def home_transcription_presentation_gate_enabled() -> bool:
