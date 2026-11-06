@@ -85,7 +85,10 @@ def validate_runtime_binding(document: Mapping, contract: Mapping) -> list[str]:
             # Empty, unprovisioned bindings are intentional while write admission is off.
             write = bindings.get('OBJECT_LAKE_WRITE_ENABLED', {})
             percent = bindings.get('OBJECT_LAKE_WRITE_PERCENT', {})
-            if write.get('value') == 'true' and percent.get('value') != '0':
+            if (
+                str(write.get('value', '')).strip().lower() in ('true', '1', 'on', 'yes')
+                and percent.get('value') != '0'
+            ):
                 for name in ('BUCKET_OBJECT_LAKE', 'OBJECT_LAKE_KMS_KEY'):
                     if not str(bindings.get(name, {}).get('value') or '').strip():
                         errors.append(f'{env_name}/{service} enabled writes require a real {name}')

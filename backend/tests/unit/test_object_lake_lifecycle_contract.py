@@ -124,10 +124,11 @@ def test_missing_service_binding_is_rejected(plane, service):
     assert validator.validate_runtime_binding(document, contract())
 
 
-def test_enabled_write_requires_real_bindings():
+@pytest.mark.parametrize('enabled', ['true', 'TRUE', True, 'on', '1', 'yes', ' TRUE ', ' YES '])
+def test_enabled_write_requires_real_bindings(enabled):
     document = runtime()
     bindings = document['environments']['prod']['gke']['pusher']['env']
-    bindings['OBJECT_LAKE_WRITE_ENABLED']['value'] = 'true'
+    bindings['OBJECT_LAKE_WRITE_ENABLED']['value'] = enabled
     bindings['OBJECT_LAKE_WRITE_PERCENT']['value'] = '1'
     assert len(validator.validate_runtime_binding(document, contract())) == 2
 
