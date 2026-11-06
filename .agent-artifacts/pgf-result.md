@@ -1,6 +1,6 @@
-# B2 implementation result (in progress)
+# B2 implementation result (core implemented; final verification in progress)
 
-Repository: BasedHardware/omi. Worktree: `/Volumes/Ephemeral/scratch/worktrees/omi/omi-lane-pgf-b2-upstream-keep-clean`. Branch: `lane/pgf-b2`. Base: `d47819297e39` (contains B1 #24790 and M9 #24778). No push or PR. No GCP tier or production access used. Pre-existing `app/analysis_options.yaml` and `app/pubspec.lock` changes remain untouched and uncommitted.
+Repository: BasedHardware/omi. Worktree: `/Volumes/Ephemeral/scratch/worktrees/omi/omi-lane-pgf-b2-upstream-keep-clean`. Branch: `lane/pgf-b2`. Initial base: `d47819297e39` (contains B1 #24790 and M9 #24778); rebased onto current main `c536dbb41bbd` after the shared result artifact caused a synthetic-merge conflict. All B2 Python/SQL/test blobs are unchanged by the rebase; only the three shared registry/classification blobs incorporate upstream C1. Both pre-existing app files retain their saved SHA-256 hashes, including the lockfile whose bytes were restored after autostash. No push or PR. No GCP tier or production access used. Pre-existing `app/analysis_options.yaml` and `app/pubspec.lock` changes remain untouched and uncommitted.
 
 ## Built
 
@@ -62,7 +62,7 @@ Files committed:
 
 ## Known gaps / required lead actions
 
-- Runtime bindings are pending: the brief forbids guessing PG host/database/IAM users and requires values from the deploy owner; none were supplied. The base now generates `backend/deploy/runtime_env.yaml` from files outside B2's exact file list. A clarification asks for values and permission to update owning compose sources. No guessed or generated-only manifest edits made.
+- Runtime bindings are pending: the brief forbids guessing PG host/database/IAM users and requires values from the deploy owner; none were supplied. The base now generates `backend/deploy/runtime_env.yaml` from files outside B2's exact file list. A clarification asks for values and permission to update owning compose sources. No guessed or generated-only manifest edits made; the new binding validator fixtures also remain unimplemented. This leaves acceptance criterion 8 incomplete. ANX ask: `event:ev_77757863d2f3cbfc70593225b023691f`. Its answer waiter exited with HTTP 401 (expired/revoked token); no answer was retrieved and no credentials changed.
 - No loopback Firestore emulator was available: both named integration suites skipped, not verified.
 - No provisioning, deployment, positive ramp, prod connection-budget measurement or serving-domain integration authorized. W5 must gate before its first 1% enrollment. The PR draft records the connection arithmetic and gate.
 - Lead owns the separate INV-CUTOVER-1 revision note for `migrated`; invariant files remain untouched.
@@ -90,8 +90,8 @@ Every command below ran through `/Volumes/Ephemeral/scratch/pgf-b2-test`, which 
 | `python backend/scripts/scan_async_blockers.py --dirs backend/routers backend/utils` | Pass (exit 0) |
 | `black --line-length 120 --skip-string-normalization <changed Python files>` | Pass; commit hook pinned formatter also passes (initial `.venv/bin/python -m black` unavailable; used installed black CLI) |
 | `scripts/pr-preflight --suggest` | Pass, demands INV-CUTOVER-1; draft also cites INV-DATA-1 and wipe-triggered INV-MEM-3 |
-| `bash backend/scripts/run-unit-ci.sh --changed-files /Volumes/Ephemeral/scratch/pgf-b2-changed-files.txt` (with `BACKEND_UNIT_FILE_BUDGET_SECONDS=900`) | First attempt: stopped before tests, 2 router type errors (defensive row validation and spec-required private normalizer reuse). Corrected full type-check: 0 errors, 74888 warnings. Retry selects 2669 files and is in flight; two early failing files are repaired and rerun below |
-| `OMI_PR_BODY_FILE=/Volumes/Ephemeral/scratch/pgf-b2-pr-body.md BACKEND_UNIT_FILE_BUDGET_SECONDS=900 make preflight` | First run: 44 checks pass, 0 checks fail; overall FAIL because I edited tracked files during its parallel run. Second attempt canceled before completion for the persisted-cell-kind correction; final frozen rerun pending. |
+| `bash backend/scripts/run-unit-ci.sh --changed-files /Volumes/Ephemeral/scratch/pgf-b2-changed-files.txt` (with `BACKEND_UNIT_FILE_BUDGET_SECONDS=900`) | First attempt: stopped before tests, 2 router type errors (defensive row validation and spec-required private normalizer reuse). Corrected full type-check: 0 errors, 74888 warnings. Retry completed on the initial base: 2669 file sessions, 2656 nonfailing files, 12 failed/error files and 1 file timeout (13 nonzero total); exit 1. Repaired and diagnostic replays are separate below. The broad run spans intermediate B2 commits; it is not a frozen-final-tree green run |
+| `OMI_PR_BODY_FILE=/Volumes/Ephemeral/scratch/pgf-b2-pr-body.md BACKEND_UNIT_FILE_BUDGET_SECONDS=900 make preflight` | First run: 44 checks pass, 0 checks fail; overall FAIL because I edited tracked files during its parallel run. Other attempts were canceled for scoped corrections. Frozen attempt on the old base: 25 checks pass, 1 fails, 3 canceled after first failure, 15 not started; the failure is a synthetic-merge conflict on the shared result report after main advanced. Rebased onto c536dbb41bbd; a fresh frozen rerun is pending. |
 
 Named keep-green witness sweep: one `cd backend && .venv/bin/python -m pytest tests/unit/<name>.py -q` process per brief witness. All 19 files finished: 1402 passed, 1 skipped, 0 failed. The one referral skip is intentional: the two-purchase first-claim case has no unconsumed slot.
 
@@ -119,7 +119,7 @@ Named keep-green witness sweep: one `cd backend && .venv/bin/python -m pytest te
 
 Caller search includes `backend/tests/support`, `backend/tests/routers`, all coordinator begin callers, auth paths, ramp readers and purge-shape witnesses; no jobstore, .github, or testing/store_fixtures.py edits.
 
-Product code frozen at `86676e802de4`; only handoff/report metadata may be finalized after the frozen preflight completes.
+Product code frozen at `9bda55ffb323` (same Python/SQL blobs as pre-rebase `86676e802de4`); only handoff/report metadata may be finalized after the frozen preflight completes.
 
 ANX outcome note: `event:3aa44637-2cff-47c7-a4ac-616b4178fd57` on `card:backend-target-architecture`, using the anx-participant skill.
 
@@ -163,11 +163,19 @@ Additional broad-selector qualifications (original assertions and budgets retain
 
 The raw broad selector retains its original failing results even where repaired or diagnostic replays pass. These replays are separate evidence, not a green full-suite claim.
 
+Final diagnostic replays before rebasing (no assertions or intrinsic deadlines changed):
+
+| Exact command (from backend; `omi-heavy run --no-priority --`) | Result |
+| --- | --- |
+| `.venv/bin/python -m pytest tests/unit/test_record_seal_cluster_repair.py -q` | 89 pass; original background run had 1 fail/88 pass at the child checkpoint deadline |
+| `.venv/bin/python -m pytest tests/unit/test_executors.py -q && .venv/bin/python -m pytest tests/unit/test_live_evidence_settlement.py -q && .venv/bin/python -m pytest tests/unit/test_live_router_hardening.py -q` | 36 + 44 + 158 pass; full files, separate Python processes, no dependency prewarm |
+| `BACKEND_UNIT_TEST_FILE_LIST=/Volumes/Ephemeral/scratch/pgf-b2-late-failures.txt BACKEND_UNIT_FILE_BUDGET_SECONDS=900 BACKEND_FAST_UNIT_WARN_SECONDS=0.1 BACKEND_FAST_UNIT_FAIL_SECONDS=1.0 BACKEND_PYTEST_FILE_ISOLATION=1 BACKEND_PYTEST_MARK_EXPR="not integration and not slow" BACKEND_PYTEST_XDIST=auto BACKEND_PYTEST_WORKERS=1 PYTHON=.venv/bin/python bash test.sh` | Vision stream: 11 pass (original 1 fail/10 pass at 50 ms health budget). Cross-service deploy contract: original 900s timeout; this replay was deliberately stopped for the rebase and is pending a new replay. File list contains exactly test_vision_stream_async.py and test_cross_service_deploy_contract.py. |
+
 ## Draft PR body
 
 ## What changed and why
 
-Add sticky directory enrollment and fail-closed request resolution, generation-zero cell cutovers, and the required fenced cell/directory account-wipe step. Ships with DIRECTORY_ROUTING_MODE=off and new-owner-cell1 at zero; B2 authorizes no positive serving ramp. Domain adapters and traffic migration remain W5 work.
+Add sticky directory enrollment and fail-closed request resolution, generation-zero cell cutovers, and the required fenced cell/directory account-wipe step. Ships with DIRECTORY_ROUTING_MODE=off and new-owner-cell1 at zero; B2 authorizes no positive serving ramp. Domain adapters and traffic migration remain W5 work. Runtime bindings and their validator fixtures are incomplete pending deploy-owner values and scope authorization; this draft is not merge-ready.
 
 ## Product invariants affected
 
@@ -182,7 +190,7 @@ Local hermetic checks only, with GOOGLE_APPLICATION_CREDENTIALS and all CLOUDSDK
 - Account cutover + plane-leak probes: final 82 pass, including cached-bit/new-upgrade-floor, persisted-cell-kind and missing/partial-router regressions.
 - Account deletion + single executor: 106 pass.
 - Batch/ramp/MCP/sync-worker witness command: 408 pass.
-- All 19 named witness files: 1,402 pass, one intentional referral-case skip. Registry render/check passes. Hermetic pre-deploy checks: 36 source-admission tests and 456 deploy tests pass. First preflight: all 44 selected checks pass, but its tracked-file guard detects implementer edits during the run; a frozen rerun is pending. Full type-check passes with zero errors; the 2,669-file selector run continues. Its two early worker/shadow failures are fixed: eager probe imports entered a jobstore cycle; current reruns pass 55 worker and 8 shadow tests. Final changed-module typing: zero errors/warnings. Auth async-boundary witness: 12 pass. Seven isolated auth/wipe/transcription fixture files migrated and pass 182 tests. Native-audio replay: 68 pass after exposing the installed Opus library in this task venv. Two executor cold-import timeouts reproduce on the pinned baseline; SDK/classifier-preloaded replay passes all 36 without code/assertion changes.
+- All 19 named witness files: 1,402 pass, one intentional skip. Registry render/check passes; hermetic pre-deploy check: 36 source-admission and 456 deploy tests pass on the initial base. Full type-check: zero errors. The initial-base 2,669-file selector exits 1 with 13 nonzero files (12 failures/errors, one 900s timeout); repairs and separate diagnostic replays are detailed in the result report. Full normal-priority replay files pass 36 executor, 44 live-evidence, 158 live-router and 89 checkpoint tests without deadline/assertion changes. No frozen-final-tree full-suite green claim. Rebased onto c536dbb41bbd to resolve the shared result-artifact merge conflict; final preflight and post-rebase core/deploy qualification are pending.
 - Firestore emulator integrations: 107 skipped because no loopback emulator was running; these are not acceptance evidence.
 
 Operations runbook:
