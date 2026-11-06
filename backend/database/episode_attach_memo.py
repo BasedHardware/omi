@@ -5,6 +5,7 @@ from google.cloud import firestore
 from config.episode_attach import content_gate_enabled
 from database._client import get_firestore_client
 from database import transcript_pointer
+from database.transcript_pointer import run_preloaded_transactional
 from database.conversations import decode_transcript_segments_verified
 from utils.conversations.episode_attach_key import content_key, memo_eligible
 from utils.conversations.fragment_visibility import is_relevance_discarded
@@ -52,7 +53,7 @@ def matches(uid, cid, row, *, firestore_client=None, finalized=False):
         return current.get('episode_id') == link['episode_id'] and current_key(uid, current) == key
 
     try:
-        return transcript_pointer.run_preloaded_transactional(client, check, transient=True)
+        return run_preloaded_transactional(client, check, transient=True)
     except transcript_pointer.TranscriptPointerError:
         raise
     except Exception:
@@ -105,7 +106,7 @@ def complete(uid, cid, row, owner, *, firestore_client=None, finalized=False):
             transaction.update(ref, {marker: key})
 
     try:
-        transcript_pointer.run_preloaded_transactional(client, finish, transient=True)
+        run_preloaded_transactional(client, finish, transient=True)
     except transcript_pointer.TranscriptPointerError:
         raise
     except Exception:

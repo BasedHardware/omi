@@ -277,7 +277,7 @@ def test_memo_read_failure_falls_through(lane, monkeypatch):
     store, _, _ = lane
     member = seed(store)
     monkeypatch.setattr(
-        episode_attach_memo.transcript_pointer,
+        episode_attach_memo,
         'run_preloaded_transactional',
         Mock(side_effect=RuntimeError('synthetic outage')),
     )
