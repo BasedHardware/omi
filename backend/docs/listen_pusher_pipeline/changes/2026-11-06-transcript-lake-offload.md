@@ -16,7 +16,13 @@ Redeploy every reader, including desktop-backend, before admitting pointers.
 A put precedes the document write that references it. Transactional reads choose
 the pointer from their own snapshot; cold references abort the attempt, preload
 outside Firestore, and retry with a bounded plaintext memo. The full reference
-and digest identify memo entries. Transactional encodes stay inline and queue a
+and digest identify memo entries. The retry boundary admits at most 32 distinct
+conversation preloads plus three content changes, with 36 total attempts and
+superseded versions evicted before preloading their replacement. Finalization
+admission, empty-recording deletion, sync candidate/canonical selection, voice
+publication, and episode memo/timeline owners all use this boundary. Missing
+objects are filtered from list/MCP results; transport failures abort decisions.
+Transactional encodes stay inline and queue a
 post-commit upload and update-time CAS; live `in_progress` rows are skipped.
 Failed swaps retain readable inline data. Orphan cleanup belongs to C3.
 
