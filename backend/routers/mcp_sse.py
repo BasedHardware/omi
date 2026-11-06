@@ -319,15 +319,18 @@ async def mcp_register_client(request: Request, registration: McpClientRegistrat
             content={"error": "server_error", "error_description": "An error occurred during client registration"},
         )
     created_at = cast(datetime, client["created_at"])
-    return {
-        "client_id": client["id"],
-        "client_id_issued_at": int(created_at.timestamp()),
-        "redirect_uris": client["allowed_redirect_uris"],
-        "client_name": client["name"],
-        "token_endpoint_auth_method": "none",
-        "grant_types": registration.grant_types,
-        "response_types": ["code"],
-    }
+    return JSONResponse(
+        status_code=201,
+        content={
+            "client_id": client["id"],
+            "client_id_issued_at": int(created_at.timestamp()),
+            "redirect_uris": client["allowed_redirect_uris"],
+            "client_name": client["name"],
+            "token_endpoint_auth_method": "none",
+            "grant_types": registration.grant_types,
+            "response_types": ["code"],
+        },
+    )
 
 
 @router.get("/v1/mcp/sse/info", tags=["mcp"], response_model=McpSseInfoResponse)
