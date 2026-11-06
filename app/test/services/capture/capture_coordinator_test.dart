@@ -2105,6 +2105,8 @@ void main() {
       expect(connection.openAudioSubscriptions, 1);
       expect(connection.openButtonSubscriptions, 1);
       expect(world.controller.liveCaptureSource, 'omi');
+      expect(world.controller.isPaused, isFalse);
+      expect(world.controller.recordingState, RecordingState.deviceRecord);
     });
   });
 
