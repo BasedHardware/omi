@@ -13,7 +13,6 @@ import asyncio
 import json
 import os
 import shutil
-import signal
 import socket
 import subprocess
 import sys
@@ -21,7 +20,6 @@ import tempfile
 import time
 import uuid
 from contextlib import suppress
-from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 from pathlib import Path
@@ -38,6 +36,7 @@ from websockets.exceptions import ConnectionClosed
 from testing.listen_pusher_stack.recorded_clock import age_conversation
 from testing.lifecycle_sim.faults import validate_fault_selector
 from testing.listen_pusher_stack.cloud_tasks import FINALIZATION_HANDLER_PATH, LOCAL_TASK_TOKEN_ENV, TASK_EVENTS_FILE
+from testing.listen_pusher_stack.cleanup import Child, stop_child
 
 ROOT = Path(__file__).resolve().parents[3]
 BACKEND = ROOT / 'backend'
@@ -58,13 +57,6 @@ RECORDING_LIFECYCLE_FAULT_KEYS = frozenset({'uid', 'recording_session_id', 'conv
 
 class StackFailure(AssertionError):
     """An actionable scenario assertion failure."""
-
-
-@dataclass
-class Child:
-    name: str
-    process: subprocess.Popen[bytes]
-    log_path: Path
 
 
 def _free_ports(count: int) -> list[int]:
@@ -313,17 +305,19 @@ class Stack:
             process_env.pop(key, None)
         if extra_env:
             process_env.update(extra_env)
-        output = log_path.open('ab')
-        process = subprocess.Popen(
-            command,
-            cwd=BACKEND,
-            env=process_env,
-            stdin=subprocess.DEVNULL,
-            stdout=output,
-            stderr=subprocess.STDOUT,
-            start_new_session=True,
-        )
-        child = Child(name, process, log_path)
+        # Identify the launch without storing argument values or local test tokens.
+        identity = f'{Path(command[0]).name}:{sha256(json.dumps(command).encode()).hexdigest()}'
+        with log_path.open('ab') as output:
+            process = subprocess.Popen(
+                command,
+                cwd=BACKEND,
+                env=process_env,
+                stdin=subprocess.DEVNULL,
+                stdout=output,
+                stderr=subprocess.STDOUT,
+                start_new_session=True,
+            )
+        child = Child(name, process, log_path, BACKEND, identity, os.getuid())
         self.children[name] = child
         return child
 
@@ -447,21 +441,21 @@ class Stack:
         self._start_backend(enable_rest_finalization_race=False)
 
     def stop(self, name: str) -> None:
-        child = self.children.pop(name, None)
-        if not child or child.process.poll() is not None:
+        child = self.children.get(name)
+        if child is None:
             return
-        with suppress(ProcessLookupError):
-            os.killpg(child.process.pid, signal.SIGTERM)
-        try:
-            child.process.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            with suppress(ProcessLookupError):
-                os.killpg(child.process.pid, signal.SIGKILL)
-            child.process.wait(timeout=5)
+        stop_child(child, self.state_dir / 'cleanup.jsonl')
+        del self.children[name]
 
     def close(self) -> None:
+        failures = []
         for name in reversed(list(self.children)):
-            self.stop(name)
+            try:
+                self.stop(name)
+            except BaseException as error:
+                failures.append(error)
+        if failures:
+            raise BaseExceptionGroup('listen-pusher stack cleanup failed; child handles retained', failures)
 
     @property
     def pusher_events(self) -> list[dict[str, Any]]:
@@ -1857,7 +1851,13 @@ def _run_stack_scenario(
     try:
         stack.start()
         asyncio.run(scenario(stack))
-    finally:
+    except BaseException as primary:
+        try:
+            stack.close()
+        except BaseException as cleanup_error:
+            primary.add_note(f'Secondary stack cleanup failure: {cleanup_error!r}')
+        raise
+    else:
         stack.close()
 
 

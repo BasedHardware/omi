@@ -19,3 +19,17 @@ registration refusal, silent backfill, and terminal fencing. The listen lifecycl
 Firestore emulator harness holds a real restore transaction ahead of a concurrent
 fanout claim, then verifies refusal and durable recording registration before a
 successful retry. These are local lifecycle guarantees, not deployment evidence.
+
+The hermetic listen-stack supervisor retains child handles until the leader is
+reaped and its original process group is proved absent. Cleanup checks session
+and UID ownership before each group signal, attempts every registered child,
+and preserves a primary scenario exception alongside secondary cleanup errors.
+Sanitized cleanup JSONL records launch identity, membership and poll/wait stages.
+Signal denials remain failures; the earlier Darwin EPERM cause is unproven and
+no denial-as-exit recovery is enabled. A first Darwin regression run exposed
+`getsid` returning ESRCH for an enumerated unreaped zombie, and a separate bounded
+`ps` timeout whose cause is unknown. Cleanup now polls/reaps its direct child
+before metadata inspection and proves group absence with a kernel probe; unknown
+zombie SID data never authorizes a signal. The finite zombie fixture captures
+its live session before exit. Corrected regression and kernel-probe execution
+remain pending; the historical EPERM mechanism has not been reproduced.
