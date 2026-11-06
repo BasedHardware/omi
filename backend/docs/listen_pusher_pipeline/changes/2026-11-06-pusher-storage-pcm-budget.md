@@ -58,3 +58,9 @@ retention, and accounting faults both before and after counter mutation. Flag 0
 preserves successful PCM/checkpoint/receipt/ACK bytes and storage dispatch; the
 new unresolved-owner finalizer may still hold fences and defer inline finish on
 genuine failure at flag 0. It is not a claim of identical failure finalization.
+
+The handler-cancellation regression was added before its fix and failed with no
+tail receipt: cancellation of the endpoint left its private receive task paused.
+An explicit admission-wait state now routes outer cancellation through the same
+receive finalizer as projection-capacity cancellation. The test requires the
+reserved-lane tail receipt before the existing cancellation close completes.

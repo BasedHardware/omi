@@ -545,7 +545,7 @@ def test_minimum_enabled_budget_can_admit_the_largest_socket_window():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('outcome', ['recover', 'cancel_to_tail'])
+@pytest.mark.parametrize('outcome', ['recover', 'cancel_to_tail', 'cancel_handler'])
 async def test_first_refusal_stops_30_minute_windows_before_socket_budget_can_fill(
     inline_session, monkeypatch, outcome
 ):
@@ -554,6 +554,7 @@ async def test_first_refusal_stops_30_minute_windows_before_socket_budget_can_fi
 
     _, _, barrier, _ = inline_session
     budget = configure(monkeypatch, LIMIT)
+    monkeypatch.setattr(pusher, 'RECORD_INLINE_FINISH_TIMEOUT', 0.1)
     held = budget.live_limit
     assert budget.acquire(held)
     pcm = b'\x01\x00' * (16000 * 60)
@@ -612,22 +613,33 @@ async def test_first_refusal_stops_30_minute_windows_before_socket_budget_can_fi
         if outcome == 'recover':
             budget.release(held)
             released = True
-        else:
+        elif outcome == 'cancel_to_tail':
             # The sleep is cancellable; the receive finalizer immediately uses
             # the reserved lane, even though live capacity remains saturated.
             tasks[0].cancel()
-        await asyncio.wait_for(handler, 5)
+        else:
+            handler.cancel()  # SIGTERM cancels the endpoint, not its private receive task.
+        if outcome == 'cancel_handler':
+            with pytest.raises(asyncio.CancelledError):
+                await asyncio.wait_for(handler, 5)
+        else:
+            await asyncio.wait_for(handler, 5)
         receipts = _sent_receipts(sock)
         assert len(receipts) == 1 and read_pcm('owner', receipts[0]) == pcm
         assert len(sock.frames) == 29 and client_wal == [pcm] * 30
-        assert sock.close_code == 1000 and budget.used == (0 if released else held)
-        assert attempts[-1][0] is (outcome == 'cancel_to_tail')
+        assert sock.close_code == (1006 if outcome == 'cancel_handler' else 1000)
+        assert budget.used == (0 if released else held)
+        assert attempts[-1][0] is (outcome != 'recover')
     finally:
         if not released:
             budget.release(held)
         if not handler.done():
             stop_source.set()
-        await asyncio.wait_for(handler, 5)
+        else:
+            for task in tasks:
+                if not task.done():
+                    task.cancel()
+        await asyncio.wait_for(asyncio.gather(handler, *tasks, return_exceptions=True), 5)
 
 
 @pytest.mark.asyncio

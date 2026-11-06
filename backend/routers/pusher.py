@@ -546,6 +546,7 @@ async def _run_websocket_util_trigger(
     # existing per-conversation playback index, independent of this process.
     durable_queue = RecordProjectionQueue(maxsize=PRIVATE_CLOUD_QUEUE_MAX_SIZE)
     refused_windows: deque[RetainedPcmWindow] = deque()
+    pcm_admission_wait_active = False
     queue_wait_timeout = WS_RECEIVE_TIMEOUT if _projection_wait_bound_enabled() else None
     inline_finish_conversation: Optional[str] = None
     inline_projection_drained = asyncio.Event()
@@ -1345,7 +1346,7 @@ async def _run_websocket_util_trigger(
                 raise
 
         async def _queue_private_cloud_chunk(*, skip_if_silent: bool = False, tail: bool = False) -> None:
-            nonlocal durable_window_frames
+            nonlocal durable_window_frames, pcm_admission_wait_active
             if current_conversation_id in deleted_conversations:
                 # A gone-owner result is terminal for both encoded projection
                 # and future raw custody windows in this socket.
@@ -1387,7 +1388,11 @@ async def _run_websocket_util_trigger(
                             # window must never consume the socket's remaining
                             # byte budget while pod admission is full. Sleep
                             # is cancellable; tails and metadata never wait.
-                            await asyncio.sleep(0.05)
+                            pcm_admission_wait_active = True
+                            try:
+                                await asyncio.sleep(0.05)
+                            finally:
+                                pcm_admission_wait_active = False
                             continue
                         break  # Tail refusal leaves the producer unacknowledged.
                 return
@@ -1953,9 +1958,10 @@ async def _run_websocket_util_trigger(
     except asyncio.CancelledError:
         websocket_close_code = 1006
         observation.reason = 'cancelled'
-        if durable_queue.capacity_wait_active and receive_task is not None:
-            # Only interrupt the capacity wait, after custody and slot ownership
-            # are known. Let normal receive cleanup and the same worker drain.
+        if receive_task is not None and (durable_queue.capacity_wait_active or pcm_admission_wait_active):
+            # Interrupt projection capacity after custody, or PCM admission
+            # before storage submission. The same receive finalizer flushes
+            # its retained tail through the reserve; the same worker drains.
             receive_task.cancel()
             try:
                 await receive_task

@@ -144,7 +144,9 @@ that window commits. Refused windows therefore cannot accumulate toward the
 socket byte limit. There is no detached retry task or global admission waiter
 list. Enabled windows also cap at 4096 checkpoints.
 
-The pause is cancellable. Shutdown tails bypass it and try the reserved lane;
+The pause is cancellable, including cancellation of the outer socket handler:
+the receive finalizer still flushes through the reserved tail lane. Shutdown
+tails bypass the pause and try the reserve;
 a full tail budget retains the producer fence without selecting an error close.
 Known-deleted retained owners use the existing gone-owner disposition before
 retry. Close, abandon and marker operations remain ungated on their metadata
