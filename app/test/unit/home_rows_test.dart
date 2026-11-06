@@ -227,7 +227,7 @@ void main() {
     test('processing owns one episode slot with live=$live, even before retained metadata arrives', () {
       final a = conversation('a');
       final b = conversation('b');
-      final e = episode(live: live);
+      final e = episode(live: live, moments: const []);
       final rows =
           buildHomeRows([conversation('later', hours: 4), a], [e], enabled: true, processingConversations: [a, b]);
       expect(rows.map((r) => r.conversation.id), ['later', 'episode:e']);
@@ -237,6 +237,24 @@ void main() {
       expect(buildHomeRows([], [e], enabled: true, processingConversations: [b]).single.isProcessing, isTrue);
     });
   }
+  test('a composed episode keeps its notes row while a member is still processing', () {
+    // David's Home, 2026-11-06: "Code Review, Coffee, and a Game Platform" had notes, yet Home
+    // showed "Finishing up… Writing notes · 3h 45m" because one member sat in the processing list.
+    final a = conversation('a');
+    final b = conversation('b', hours: 2);
+    final rows = buildHomeRows(
+        [a, b],
+        [
+          episode(members: [a, b])
+        ],
+        enabled: true,
+        finishingTitle: 'Finishing up…',
+        processingConversations: [b]);
+    expect(rows.single.isProcessing, isFalse);
+    expect(rows.single.conversation.id, 'episode:e');
+    expect(rows.single.conversation.structured.title, 'Evening planning');
+    expect(rows.single.episodeConversationIds, {'a', 'b'});
+  });
   test('deleted pending member cannot hold a retained episode in processing', () {
     final a = conversation('a');
     final b = conversation('b');
@@ -255,13 +273,13 @@ void main() {
     test('discarded pending member releases retained rows with metadata=$hasMetadata', () {
       final a = conversation('a');
       final pendingB = conversation('b');
-      final closing = episode();
+      final closing = episode(moments: const []);
       final processing = buildHomeRows([a], [closing], enabled: true, processingConversations: [pendingB]);
       expect(processing.single.isProcessing, isTrue);
 
       // The server has retained only a, or the local processing entry learned
       // that b was discarded before retained metadata arrived.
-      final reconciled = hasMetadata ? episode(members: [a]) : closing;
+      final reconciled = hasMetadata ? episode(members: [a], moments: const []) : closing;
       final stalePending = hasMetadata ? pendingB : conversation('b', discarded: true);
       for (final pending in [
         <ServerConversation>[stalePending],

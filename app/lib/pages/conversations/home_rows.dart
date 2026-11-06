@@ -93,7 +93,10 @@ List<HomeRow> buildHomeRows(List<ServerConversation> conversations, List<Episode
     if (episode.live && (pending.isEmpty || episode.conversationIds.any(liveConversationIds.contains))) continue;
     final members = <ServerConversation>[];
     hidden.addAll(episode.conversationIds);
-    if (pending.isNotEmpty) {
+    // Notes that already landed stay on Home: a member still processing (a late joiner, or a
+    // stale local processing entry) never turns a composed episode back into "Finishing up…".
+    // The episode page applies the same rule, so the row and its page agree.
+    if (pending.isNotEmpty && !episode.composed) {
       rows.add(HomeRow(
         ServerConversation(
           id: 'episode:${episode.id}',
