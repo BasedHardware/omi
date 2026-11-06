@@ -1874,8 +1874,6 @@ class FirestoreWorkstreams:
 
         The module's resumable, per-link transaction policy remains unchanged.
         """
-        if len(request.links) > 200:
-            raise WorkstreamConflictError('atomic import is limited to 200 links')
         receipt_ref, prior, request_hash = _begin_mutation(
             self.transaction,
             uid=self.space_id,

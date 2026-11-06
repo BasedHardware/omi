@@ -525,3 +525,15 @@ def test_goal_and_workstream_creates_roll_back_with_uow(domain_backend, domain):
     with pytest.raises(RuntimeError, match='abort domain write'):
         h.store(sid).run(abort)
     assert h.read(sid, domain, 'aborted') is None
+
+
+def test_atomic_import_retains_the_existing_request_limit(domain_backend):
+    h = domain_backend
+    sid = h.space('import-limit')
+    request = {'links': [{'task_id': f'missing-task-{i}', 'goal_id': 'missing-goal'} for i in range(201)]}
+    report = h.store(sid).run(
+        lambda tx: tx.workstreams.import_task_goal_links(
+            request, idempotency_key='bounded-import', account_generation=0
+        )
+    )
+    assert report['failed'] == 201 and report['imported'] == report['unchanged'] == 0
