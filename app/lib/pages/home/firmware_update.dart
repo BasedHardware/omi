@@ -145,7 +145,11 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
 
   Widget _buildProgressSection() {
     final progress = isInstalling ? installProgress : downloadProgress;
-    final statusText = isDownloading ? context.l10n.downloadingFirmware : context.l10n.installingFirmware;
+    final statusText = isVerifying
+        ? context.l10n.firmwareVerifyingInstallation
+        : isDownloading
+            ? context.l10n.downloadingFirmware
+            : context.l10n.installingFirmware;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -191,6 +195,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
   }
 
   Widget _buildSuccessSection() {
+    final observedVersion = observedFirmwareVersion ?? '';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -208,7 +213,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
               Semantics(header: true, child: Text(context.l10n.firmwareUpdated, style: OmiType.title3)),
               const SizedBox(height: OmiSpacing.xs),
               Text(
-                context.l10n.restartDeviceToComplete(widget.device?.name ?? 'Omi'),
+                '${context.l10n.currentVersion}: $observedVersion',
                 textAlign: TextAlign.center,
                 style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, height: 1.4),
               ),
@@ -237,6 +242,9 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
     final message = switch (failure) {
       FirmwareUpdateFailure.download => context.l10n.firmwareDownloadFailedMessage,
       FirmwareUpdateFailure.install => context.l10n.firmwareUpdateFailedMessage,
+      FirmwareUpdateFailure.notInstalled =>
+        context.l10n.firmwareUpdateNotInstalledMessage(observedFirmwareVersion ?? ''),
+      FirmwareUpdateFailure.noReconnect => context.l10n.firmwareUpdateUnconfirmedMessage,
     };
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -250,11 +258,27 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
                 Container(
                   width: 80,
                   height: 80,
-                  decoration: BoxDecoration(color: OmiColors.dangerSurface, shape: BoxShape.circle),
-                  child: Center(child: FaIcon(FontAwesomeIcons.xmark, color: OmiColors.danger, size: 32)),
+                  decoration: BoxDecoration(
+                      color:
+                          failure == FirmwareUpdateFailure.noReconnect ? OmiColors.surface2 : OmiColors.dangerSurface,
+                      shape: BoxShape.circle),
+                  child: Center(
+                      child: FaIcon(
+                          failure == FirmwareUpdateFailure.noReconnect
+                              ? FontAwesomeIcons.circleQuestion
+                              : FontAwesomeIcons.xmark,
+                          color:
+                              failure == FirmwareUpdateFailure.noReconnect ? OmiColors.textSecondary : OmiColors.danger,
+                          size: 32)),
                 ),
                 const SizedBox(height: OmiSpacing.xl),
-                Semantics(header: true, child: Text(context.l10n.firmwareUpdateFailedTitle, style: OmiType.title3)),
+                Semantics(
+                    header: true,
+                    child: Text(
+                        failure == FirmwareUpdateFailure.noReconnect
+                            ? context.l10n.firmwareUpdateUnconfirmedTitle
+                            : context.l10n.firmwareUpdateFailedTitle,
+                        style: OmiType.title3)),
                 const SizedBox(height: OmiSpacing.xs),
                 Text(
                   message,

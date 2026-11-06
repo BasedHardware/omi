@@ -18754,5 +18754,16 @@
     "paymentDeclinedMessage": "Update it to get {plan} back",
     "@paymentDeclinedMessage": {
         "description": "Home row line under 'Your card was declined'. it = the card; plan = a product name such as Omi Pro"
-    }
+    },
+    "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
+    "@firmwareUpdateNotInstalledMessage": {
+        "placeholders": {
+            "version": {
+                "type": "String"
+            }
+        }
+    },
+    "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
+    "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
 }

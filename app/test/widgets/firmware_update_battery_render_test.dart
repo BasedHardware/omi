@@ -20,6 +20,7 @@ import 'package:omi/env/env.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/utils/firmware_update_battery.dart';
 import 'package:omi/pages/home/firmware_update.dart';
+import 'package:omi/pages/home/firmware_mixin.dart';
 import 'package:omi/pages/home/firmware_update_dialog.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/services/services.dart';
@@ -161,6 +162,37 @@ void main() {
       await Directory(output).create(recursive: true);
       await File('$output/$filename').writeAsBytes(bytes!.buffer.asUint8List());
       image.dispose();
+    });
+  }
+
+  for (final status in ['verifying', 'not-installed', 'no-reconnect', 'installed']) {
+    testWidgets('OTA outcome renders $status', (tester) async {
+      await pumpPage(tester, _DeviceProvider(batteryLevel: 80));
+      final dynamic state = tester.state(find.byType(FirmwareUpdate));
+      state.setState(() {
+        state.isInstalling = status == 'verifying';
+        state.isVerifying = status == 'verifying';
+        state.installProgress = 100;
+        state.isInstalled = status == 'installed';
+        state.observedFirmwareVersion = status == 'no-reconnect'
+            ? null
+            : status == 'installed'
+                ? '3.0.1'
+                : '2.0.10';
+        state.updateFailure = switch (status) {
+          'not-installed' => FirmwareUpdateFailure.notInstalled,
+          'no-reconnect' => FirmwareUpdateFailure.noReconnect,
+          _ => null,
+        };
+      });
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+      if (status == 'not-installed') expect(find.text(en.firmwareUpdateNotInstalledMessage('2.0.10')), findsOneWidget);
+      if (status == 'no-reconnect') expect(find.text(en.firmwareUpdateUnconfirmedMessage), findsOneWidget);
+      if (status == 'verifying') expect(find.text(en.firmwareVerifyingInstallation), findsOneWidget);
+      if (status == 'installed') expect(find.text('${en.currentVersion}: 3.0.1'), findsOneWidget);
+      await capture(tester, 'ota-$status.png');
+      debugDefaultTargetPlatformOverride = null;
     });
   }
 
