@@ -208,8 +208,13 @@ application stops with `privacy_cache:unverified_fault`.
 
 `transition_results` records each row's applicability, actual application,
 completion, verification status and bounded evidence. Redis injection counters
-prove calls were refused; BEGIN loss also requires a successful END. Request memo
-cases require a warmed entry, a real memo hit and writer-driven clearing.
+prove calls were refused; BEGIN loss also requires a successful END. Subscription
+request memo cases require a warmed entry, a real memo hit and writer-driven clearing.
+Deletion-marker `request_memo` cases instead prove the absence of request memoization:
+both warm reads must consult fenced Redis, a real writer runs in a separate request
+scope, and every probe in the original open scope must consult Redis and immediately
+observe the updated marker. Reintroducing the request memo fails this proof, including
+when the writer would have cleared a memo in its own request.
 Overlap cases require every writer to reach real FSR BEGIN, or (for batch and
 uncached protection) a nonempty Firestore SDK Commit, before the overlapping read.
 The Commit barrier delegates to the saved real method, retaining the product
