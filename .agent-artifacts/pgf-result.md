@@ -8,6 +8,7 @@ Sticky lazy directory enrollment before platform telemetry; process/Redis/PG rou
 
 Files committed:
 
+- `.agent-artifacts/pgf-result.md`
 - `backend/config/directory_routing.py`
 - `backend/database/account_cutover.py`
 - `backend/database/cells/serving.py`
@@ -45,6 +46,9 @@ Files committed:
 - `get_current_user_uid_ws` is synchronous in this base; it resolves synchronously in FastAPI's dependency thread pool. The two actual async WS dependencies offload on db_executor.
 - Real Postgres was initially unavailable (9 router/wipe cases and 9 directory cases skipped). Installed `pgserver==0.1.4` only into this worktree's test venv and reran with `OMI_REQUIRE_STORE_BACKENDS=postgres`; the final Postgres cases pass without skips. No dependency/lock files changed.
 
+- Probe lookup checks the already-loaded router in `sys.modules` rather than eagerly importing serving code. The eager graph entered a jobstore initialization cycle in the real worker and also exhausted a cold shadow-planning time budget. The pinned baseline passes; current code failed the worker repeatably; the lazy lookup fixes both original suites without changing jobstore or weakening tests. Missing/partial-module tests preserve the no-IO/no-raise probe contract.
+- Cell kind is sticky when either the request or existing record is cell, including same-state refreshes; a later legacy request cannot reintroduce a generation bump.
+
 ## Known gaps / required lead actions
 
 - Runtime bindings are pending: the brief forbids guessing PG host/database/IAM users and requires values from the deploy owner; none were supplied. The base now generates `backend/deploy/runtime_env.yaml` from files outside B2's exact file list. A clarification asks for values and permission to update owning compose sources. No guessed or generated-only manifest edits made.
@@ -62,7 +66,7 @@ Every command below ran through `/Volumes/Ephemeral/scratch/pgf-b2-test`, which 
 | --- | --- |
 | `bash backend/test-preflight.sh` | 17 pass, 9 optional warnings, 0 fail |
 | `cd backend && .venv/bin/python -m pytest tests/unit/test_directory_router.py tests/unit/test_cell_wipe_step.py -q` | Initial 17 pass, 9 skip; final with `OMI_REQUIRE_STORE_BACKENDS=postgres`: 28 pass, 0 skip; post-type-fix rerun also 28 pass |
-| `cd backend && .venv/bin/python -m pytest tests/unit/test_account_cutover_foundation.py tests/unit/test_plane_leak_probe.py -q` | Initial 72 pass; after T3 additions 79 pass; final upgrade-floor guard: 80 pass |
+| `cd backend && .venv/bin/python -m pytest tests/unit/test_account_cutover_foundation.py tests/unit/test_plane_leak_probe.py -q` | Initial 72 pass; after T3 additions 79 pass; upgrade-floor guard: 80 pass; persisted-cell-kind: 81 pass; final lazy probe/missing-router guard: 82 pass |
 | `cd backend && .venv/bin/python -m pytest tests/services/users/test_account_deletion.py tests/unit/test_account_deletion_single_executor.py -q` | 106 pass |
 | `cd backend && .venv/bin/python -m pytest tests/unit/test_directory_store.py -q` | Initial 9 skip (no local PG); final standalone rerun with required Postgres: 9 pass, 0 skip |
 | `cd backend && OMI_REQUIRE_STORE_BACKENDS=postgres .venv/bin/python -m pytest tests/unit/test_directory_router.py tests/unit/test_cell_wipe_step.py tests/unit/test_directory_store.py -q` | 35 pass, 0 skip (before 2 additional IAM pool cases) |
@@ -73,8 +77,8 @@ Every command below ran through `/Volumes/Ephemeral/scratch/pgf-b2-test`, which 
 | `python backend/scripts/scan_async_blockers.py --dirs backend/routers backend/utils` | Pass (exit 0) |
 | `black --line-length 120 --skip-string-normalization <changed Python files>` | Pass; commit hook pinned formatter also passes (initial `.venv/bin/python -m black` unavailable; used installed black CLI) |
 | `scripts/pr-preflight --suggest` | Pass, demands INV-CUTOVER-1; draft also cites INV-DATA-1 and wipe-triggered INV-MEM-3 |
-| `bash backend/scripts/run-unit-ci.sh --changed-files /Volumes/Ephemeral/scratch/pgf-b2-changed-files.txt` (with `BACKEND_UNIT_FILE_BUDGET_SECONDS=900`) | First attempt: stopped before tests, 2 router type errors (defensive row validation and spec-required private normalizer reuse). Corrected and retry in flight; selector expands to 2668 files |
-| `OMI_PR_BODY_FILE=/Volumes/Ephemeral/scratch/pgf-b2-pr-body.md BACKEND_UNIT_FILE_BUDGET_SECONDS=900 make preflight` | First run: 44 checks pass, 0 checks fail; overall FAIL because I edited tracked files during its parallel run. Frozen rerun pending. |
+| `bash backend/scripts/run-unit-ci.sh --changed-files /Volumes/Ephemeral/scratch/pgf-b2-changed-files.txt` (with `BACKEND_UNIT_FILE_BUDGET_SECONDS=900`) | First attempt: stopped before tests, 2 router type errors (defensive row validation and spec-required private normalizer reuse). Corrected full type-check: 0 errors, 74888 warnings. Retry selects 2669 files and is in flight; two early failing files are repaired and rerun below |
+| `OMI_PR_BODY_FILE=/Volumes/Ephemeral/scratch/pgf-b2-pr-body.md BACKEND_UNIT_FILE_BUDGET_SECONDS=900 make preflight` | First run: 44 checks pass, 0 checks fail; overall FAIL because I edited tracked files during its parallel run. Second attempt canceled before completion for the persisted-cell-kind correction; final frozen rerun pending. |
 
 Named keep-green witness sweep: one `cd backend && .venv/bin/python -m pytest tests/unit/<name>.py -q` process per brief witness. All 19 files finished: 1402 passed, 1 skipped, 0 failed. The one referral skip is intentional: the two-purchase first-claim case has no unconsumed slot.
 
@@ -102,9 +106,21 @@ Named keep-green witness sweep: one `cd backend && .venv/bin/python -m pytest te
 
 Caller search includes `backend/tests/support`, `backend/tests/routers`, all coordinator begin callers, auth paths, ramp readers and purge-shape witnesses; no jobstore, .github, or testing/store_fixtures.py edits.
 
-Product code frozen at `f90ce409cc9f`; only handoff/report metadata may be finalized after the frozen preflight completes.
+Product code frozen at `86676e802de4`; only handoff/report metadata may be finalized after the frozen preflight completes.
 
 ANX outcome note: `event:3aa44637-2cff-47c7-a4ac-616b4178fd57` on `card:backend-target-architecture`, using the anx-participant skill.
+
+Additional exact diagnostic/regression commands:
+
+| Command | Result |
+| --- | --- |
+| `cd backend && .venv/bin/python -m pytest tests/unit/test_dependency_async_boundaries.py -q` | 12 pass; witness migrated, including event-loop responsiveness |
+| `cd backend && .venv/bin/python -m pytest tests/unit/test_batch_pipeline_runtime.py -q` | Before lazy probe fix: 1 fail, 54 pass (twice: full selector and isolated replay); after: 55 pass |
+| `cd backend && .venv/bin/python -m pytest tests/unit/test_batch_pipeline_shadow_projection.py -q` | Full selector before lazy fix: 1 fail, 7 pass; after: 8 pass |
+| `backend/.venv/bin/python /Volumes/Ephemeral/scratch/pgf-b2-baseline-tests.py backend/tests/unit/test_batch_pipeline_runtime.py -q` | Baseline production source import overlay: 55 pass; final baseline pinned to d47819297e39, without modifying the worktree |
+| `cd backend && .venv/bin/python -m pyright utils/account_cutover/state.py --pythonpath .venv/bin/python` | 0 errors, 0 warnings |
+| `cd backend && .venv/bin/python -m pyright utils/account_cutover/state.py utils/other/plane_routing.py --pythonpath .venv/bin/python` | Final delta: 0 errors, 0 warnings |
+| `scripts/pr-preflight --pr-body-file /Volumes/Ephemeral/scratch/pgf-b2-pr-body.md --metadata-only` | Pass |
 
 ## Draft PR body
 
@@ -122,10 +138,10 @@ Local hermetic checks only, with GOOGLE_APPLICATION_CREDENTIALS and all CLOUDSDK
 
 - backend/test-preflight.sh: 17 pass, 9 optional warnings, 0 fail.
 - Postgres router/wipe/store suites: 35 pass; final router/wipe with IAM-pool cases: 28 pass. Real local pgserver, synthetic owners, separate databases; no skips.
-- Account cutover + plane-leak probes: 80 pass, including a cached-bit/new-upgrade-floor regression.
+- Account cutover + plane-leak probes: final 82 pass, including cached-bit/new-upgrade-floor, persisted-cell-kind and missing/partial-router regressions.
 - Account deletion + single executor: 106 pass.
 - Batch/ramp/MCP/sync-worker witness command: 408 pass.
-- All 19 named witness files: 1,402 pass, one intentional referral-case skip. Registry render/check passes. Hermetic pre-deploy checks: 36 source-admission tests and 456 deploy tests pass. First preflight: all 44 selected checks pass, but its tracked-file guard detects implementer edits during the run; a frozen rerun and corrected type-check/full-selector contract are pending.
+- All 19 named witness files: 1,402 pass, one intentional referral-case skip. Registry render/check passes. Hermetic pre-deploy checks: 36 source-admission tests and 456 deploy tests pass. First preflight: all 44 selected checks pass, but its tracked-file guard detects implementer edits during the run; a frozen rerun is pending. Full type-check passes with zero errors; the 2,669-file selector run continues. Its two early worker/shadow failures are fixed: eager probe imports entered a jobstore cycle; current reruns pass 55 worker and 8 shadow tests. Final changed-module typing: zero errors/warnings. Auth async-boundary witness: 12 pass.
 - Firestore emulator integrations: 107 skipped because no loopback emulator was running; these are not acceptance evidence.
 
 Operations runbook:
