@@ -16,6 +16,7 @@ from config.batch_pipeline import (
     publish_concurrency as configured_publish_concurrency,
     admission_parallel_calls_enabled,
     idle_poll_max_seconds,
+    maintenance_contention_continuation_enabled,
 )
 from config.stt_cap_dispatch import offline_admission_enabled as cap_dispatch_enabled
 from utils.batch_pipeline.contracts import (
@@ -259,28 +260,31 @@ class Pump:
             # its own completions after each flight. The lease fails open on
             # store errors.
             if self.leader is None or await self._run_blocking('maintenance', db_executor, self.leader.acquire):
-                if self.project_pending:
-                    await self._run_blocking('projection', sync_executor, self.project_pending)
-                await self._run_blocking('maintenance', db_executor, self.scheduler.recover, time.time())
-                ready = await self._run_blocking(
-                    'maintenance', db_executor, self.scheduler.store.due, 'result_ready', time.time(), 100
-                )
-                try:
-                    await self._drain_ready_owners(ready)
-                except Exception as error:
-                    # A fenced head on the page must not stop the held-owner re-offer below.
-                    self._log_held_retry('ready_page', error)
-                # Durable hold markers outlive the in-memory set below (restarts).
-                marked = await self._run_blocking('maintenance', db_executor, self.merge.marked_page, 50)
-                for key, owner_id in marked:
+                if maintenance_contention_continuation_enabled():
+                    await self._maintain_leader_steps()
+                else:
+                    if self.project_pending:
+                        await self._run_blocking('projection', sync_executor, self.project_pending)
+                    await self._run_blocking('maintenance', db_executor, self.scheduler.recover, time.time())
+                    ready = await self._run_blocking(
+                        'maintenance', db_executor, self.scheduler.store.due, 'result_ready', time.time(), 100
+                    )
                     try:
-                        if owner_id:
-                            await self.drain_owner(owner_id)
-                        await self._run_blocking(
-                            'maintenance', db_executor, self.merge.release_hold, key, force=not owner_id
-                        )
+                        await self._drain_ready_owners(ready)
                     except Exception as error:
-                        self._log_held_retry('marker', error)
+                        # A fenced head on the page must not stop the held-owner re-offer below.
+                        self._log_held_retry('ready_page', error)
+                    # Durable hold markers outlive the in-memory set below (restarts).
+                    marked = await self._run_blocking('maintenance', db_executor, self.merge.marked_page, 50)
+                    for key, owner_id in marked:
+                        try:
+                            if owner_id:
+                                await self.drain_owner(owner_id)
+                            await self._run_blocking(
+                                'maintenance', db_executor, self.merge.release_hold, key, force=not owner_id
+                            )
+                        except Exception as error:
+                            self._log_held_retry('marker', error)
             # Every pump re-offers the owners its merge held for projection
             # depth; their rows may never surface in the 100-row page above.
             for owner_id in list(self.merge.held_owners):
@@ -292,6 +296,50 @@ class Pump:
         if self.inline_metrics and self.metrics and sampled_at - self._last_metrics >= 15:
             await self.sample_metrics()
             self._last_metrics = sampled_at
+
+    async def _maintenance_step(self, log_step: str, stage: str, executor, function, *args):
+        """Run one maintenance step under its own outcome; a loss never suppresses siblings.
+
+        The loss is logged under the step's stable name and retried at the next
+        sweep (>=5s later): the sweep cadence bounds the re-strike and the
+        store-level storm damper spaces it, so a hot document costs one bounded
+        wait instead of a 1s whole-sweep re-strike that starves every later
+        step. Returns the step's result, or None when the step lost.
+        """
+        try:
+            return await self._run_blocking(stage, executor, function, *args)
+        except Exception as error:
+            logger.error(
+                'event=batch_maintenance outcome=retry step=%s exception_type=%s%s',
+                log_step,
+                type(error).__name__,
+                error_site_field(error),
+            )
+            return None
+
+    async def _maintain_leader_steps(self) -> None:
+        """The leader-gated maintenance steps, each under its own outcome."""
+        if self.project_pending is not None:
+            await self._maintenance_step('projection', 'projection', sync_executor, self.project_pending)
+        await self._maintenance_step('recover', 'maintenance', db_executor, self.scheduler.recover, time.time())
+        ready = await self._maintenance_step(
+            'ready_due', 'maintenance', db_executor, self.scheduler.store.due, 'result_ready', time.time(), 100
+        )
+        if ready is not None:
+            try:
+                await self._drain_ready_owners(ready)
+            except Exception as error:
+                # A fenced head on the page must not stop the held-owner re-offer below.
+                self._log_held_retry('ready_page', error)
+        # Durable hold markers outlive the in-memory set below (restarts).
+        marked = await self._maintenance_step('marked_page', 'maintenance', db_executor, self.merge.marked_page, 50)
+        for key, owner_id in marked or []:
+            try:
+                if owner_id:
+                    await self.drain_owner(owner_id)
+                await self._run_blocking('maintenance', db_executor, self.merge.release_hold, key, force=not owner_id)
+            except Exception as error:
+                self._log_held_retry('marker', error)
 
     def _authorize_call(self, leases: list[LeasedWork]) -> dict:
         """One fail-closed HTTP leaf; serialize shared owners across all flights."""

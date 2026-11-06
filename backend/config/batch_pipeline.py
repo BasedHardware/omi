@@ -296,6 +296,26 @@ def contention_storm_damper_enabled() -> bool:
     )
 
 
+def maintenance_contention_continuation_enabled() -> bool:
+    """Continue the maintenance sweep past a contended step or item by default; false is the kill switch.
+
+    The maintenance tick (``utils/batch_pipeline/pump.py`` ``_maintain``) and the
+    lease-expiry recovery loop (``utils/batch_pipeline/scheduler.py``
+    ``recover``) run independent steps and per-item transactions in a fixed
+    order. One exhausted contention budget used to abort the whole sweep at the
+    failing step, so the 1-second loop re-struck the same hot document while
+    every step behind it — the result_ready drain, the durable hold markers,
+    every expired lease behind the failing item — stayed starved. With this
+    gate on, the step or item logs its own bounded outcome and the sweep
+    continues; the lost work retries at the next sweep (>=5s later) and the
+    store-level storm damper spaces the re-strike.
+    """
+    return rollout_default_on(
+        'BATCH_PIPELINE_MAINTENANCE_CONTINUATION_ENABLED',
+        os.getenv('BATCH_PIPELINE_MAINTENANCE_CONTINUATION_ENABLED', 'true').strip().lower() != 'false',
+    )
+
+
 def fifo_array_link_enabled() -> bool:
     """Keep the owner FIFO link on the queue document by default; false is the kill switch.
 

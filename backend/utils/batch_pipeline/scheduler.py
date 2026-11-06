@@ -17,6 +17,7 @@ from config.batch_pipeline import (
     SCHEDULER_SHARDS,
     control_candidate_fanout,
     fifo_array_link_enabled,
+    maintenance_contention_continuation_enabled,
     pull_multi_lease_enabled,
     scheduler_control_key,
     shard_spread_enabled,
@@ -1019,7 +1020,18 @@ class Scheduler:
 
     def recover(self, now: float, limit: int = 100) -> int:
         with store_operation('batch_recover'):
-            self.store.run(lambda tx: migrate_legacy(tx, now))
+            try:
+                self.store.run(lambda tx: migrate_legacy(tx, now))
+            except FirestoreContentionExhausted as error:
+                # A lost migration budget is one bounded retry at the next
+                # sweep, not a reason to starve every expired lease behind it.
+                if not maintenance_contention_continuation_enabled():
+                    raise
+                logger.warning(
+                    'event=batch_recover outcome=retry scope=migrate exception_type=%s%s',
+                    type(error).__name__,
+                    error_site_field(error),
+                )
             recovered = 0
             candidates, observations = {}, []
             for state in ('leased', 'retry'):
@@ -1053,6 +1065,20 @@ class Scheduler:
                         record_policy_observations(observations)
                     except BatchPrivacyBlocked:
                         self.store.quarantine_fenced(segment_id, now)
+                        continue
+                    except FirestoreContentionExhausted as error:
+                        # One hot item loses its budget; the item stays due and
+                        # the next sweep re-decides it, so the leases behind it
+                        # recover this pass instead of never. The store-level
+                        # damper spaces the re-strike; the sweep cadence (>=5s)
+                        # bounds it.
+                        if not maintenance_contention_continuation_enabled():
+                            raise
+                        logger.warning(
+                            'event=batch_recover outcome=retry scope=item exception_type=%s%s',
+                            type(error).__name__,
+                            error_site_field(error),
+                        )
                         continue
                     if outcome:
                         recovered += 1
