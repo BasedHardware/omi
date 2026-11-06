@@ -484,7 +484,14 @@ def test_kept_recovery_preserves_encoded_capture_and_later_audio(pipeline, level
     text = 'The synthetic release meeting agreed to ship the tested repair tomorrow.'
     transcript = [{'text': text, 'start': 0, 'end': 30, 'legacy_capture_metadata': list(range(100))}]
     speaker_metadata = {'status': 'capture', 'version': 1, 'participant_speaker_ids': [7]}
-    blob = _seed(pipeline, level=level, transcript=transcript, speaker_resolution=speaker_metadata, status=status)
+    blob = _seed(
+        pipeline,
+        level=level,
+        transcript=transcript,
+        speaker_resolution=speaker_metadata,
+        status=status,
+        sync_relevance_user_kept=status == 'failed',
+    )
     row = pipeline.store.rows[CONVERSATION_PATH]
     row['audio_files'].append({'id': 'later-audio'})
     stored_audio = deepcopy(row['audio_files'])
@@ -517,12 +524,30 @@ def test_kept_recovery_preserves_encoded_capture_and_later_audio(pipeline, level
     assert remaining == [] and counters['verified'] == 1 and counters['refused'] == 0
 
 
+@pytest.mark.asyncio
+async def test_server_recovery_of_failed_row_is_fenced_before_processor_persist(pipeline, monkeypatch):
+    _seed(pipeline, status='failed', discarded=True)
+    process = MagicMock(side_effect=AssertionError('failed terminal must not re-enter processing'))
+    monkeypatch.setattr(finalizer, 'process_conversation', process)
+
+    async def payload():
+        return {'job_id': JOB, 'dispatch_generation': 1}
+
+    response = await worker.run_listen_finalization_job(SimpleNamespace(json=payload), task_retry_count=0)
+    assert response.status_code == 200
+    assert pipeline.store.rows[CONVERSATION_PATH]['status'] == 'failed'
+    assert pipeline.store.rows[CONVERSATION_PATH]['discarded'] is True
+    process.assert_not_called()
+    assert not any(path == CONVERSATION_PATH for path, _ in pipeline.writes)
+
+
 @pytest.mark.parametrize(
     'trigger,has_audio,expected_calls',
     [
         ('server_recovery', True, 0),
         ('server_recovery', False, 0),
         ('capture_end', True, 1),
+        ('user_reprocess', True, 0),
     ],
 )
 def test_recovery_does_not_regenerate_admitted_audio(pipeline, monkeypatch, trigger, has_audio, expected_calls):
@@ -530,7 +555,14 @@ def test_recovery_does_not_regenerate_admitted_audio(pipeline, monkeypatch, trig
     from utils.conversations.processing_trigger import ProcessingTrigger
     from utils.conversations.relevance import RelevanceDecision
 
-    _seed(pipeline, private_cloud_sync_enabled=True, folder_id='existing-folder')
+    restoring = trigger == 'user_reprocess'
+    _seed(
+        pipeline,
+        private_cloud_sync_enabled=True,
+        folder_id='existing-folder',
+        status='failed' if restoring else 'processing',
+        discarded=restoring,
+    )
     if not has_audio:
         pipeline.store.rows[CONVERSATION_PATH]['audio_files'] = []
     conversation = Conversation(**conversations_db.get_conversation(UID, CID))
@@ -553,11 +585,16 @@ def test_recovery_does_not_regenerate_admitted_audio(pipeline, monkeypatch, trig
         'en',
         conversation,
         trigger=trigger,
+        user_kept=restoring,
         recovery_transcript_decoded=True,
         defer_derived_effects=True,
         derived_effects_observer=effects.append,
     )
     assert result.status.value == 'completed'
+    if restoring:
+        stored = pipeline.store.rows[CONVERSATION_PATH]
+        assert stored['sync_relevance_user_kept'] is True
+        assert stored['status'] == 'completed' and stored['terminal_family'] == 'success'
     effects[0]()
     assert factory.call_count == expected_calls
 

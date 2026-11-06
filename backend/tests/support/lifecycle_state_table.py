@@ -345,7 +345,7 @@ STATES = (
             ('status', 'terminal_family', 'terminal_family_at'),
             terminal=True,
             owner='utils/conversations/lifecycle.py',
-            note='Phase 2a claim/persist success; failure-marked late persist refuses except explicit restore; unclassified failed rows allow named retries; legacy and other writers may lack classifier',
+            note='Phase 2a claim/persist success; only explicit restore supersedes failure; persist never regresses completed status; legacy and other writers may lack classifier',
         ),
         row(
             'conversation',

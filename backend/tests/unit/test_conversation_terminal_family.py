@@ -154,7 +154,7 @@ def test_late_persist_keeps_failure_and_merges_content(store, family, status):
     )
     store.rows[PATH].update(status=status, **marker)
     label = family or 'dead_letter'
-    metric = db.TERMINAL_CLAIM_REFUSALS.labels(family=label)
+    metric = db.TERMINAL_CLAIM_REFUSALS.labels(family=label, reason='terminal_failure')
     before = metric._value.get()
     callbacks = []
     assert persist(
@@ -218,7 +218,7 @@ def test_flag_off_persist_write_golden(store, monkeypatch, existing):
 @pytest.mark.parametrize('discarded', [False, True])
 def test_late_completed_payload_cannot_erase_unclassified_failed_row(store, discarded):
     store.rows[PATH].update(status='failed', discarded=discarded)
-    metric = db.TERMINAL_CLAIM_REFUSALS.labels(family='failed')
+    metric = db.TERMINAL_CLAIM_REFUSALS.labels(family='failed', reason='terminal_failure')
     before = metric._value.get()
     assert persist({'status': 'completed', 'discarded': False, 'title': 'late content'})
     row = store.rows[PATH]
@@ -237,7 +237,7 @@ def test_explicit_restore_supersedes_failure_in_atomic_completion(store, family)
     assert db.restore_conversation_from_discarded('synthetic', 'capture')
     assert store.rows[PATH]['sync_relevance_user_kept'] is True
     assert store.rows[PATH]['finalization_status'] == 'dead_letter'
-    metric = db.TERMINAL_CLAIM_REFUSALS.labels(family=family or 'dead_letter')
+    metric = db.TERMINAL_CLAIM_REFUSALS.labels(family=family or 'dead_letter', reason='terminal_failure')
     before = metric._value.get()
     assert persist({'status': 'completed', 'title': 'restored notes', 'finalization_status': 'dead_letter'})
     row = store.rows[PATH]
@@ -260,21 +260,25 @@ def test_user_reprocess_commits_restore_authority_with_completion(store):
 
 
 @pytest.mark.parametrize('trigger', ['server_recovery', 'silent_backfill', 'user_reprocess', 'backlog_choice'])
-def test_intentional_failed_retries_keep_their_legacy_completion_path(store, trigger):
+@pytest.mark.parametrize('restored', [False, True])
+def test_retry_triggers_never_replace_explicit_restore_authority(store, trigger, restored):
     from utils.conversations.relevance import RelevanceDecision
     from utils.conversations.processing_trigger import ProcessingTrigger
     from utils.conversations import lifecycle
 
     store.rows[PATH].update(status='failed', discarded=True)
     decision = RelevanceDecision('keep', 'policy', 'explicit_retry', ProcessingTrigger(trigger)).as_record()
-    # Use the lifecycle wrapper: its terminal stamp must retain the processor's
-    # trigger, which is the same record process_conversation passes at persist.
-    assert lifecycle.persist_processed_conversation(
-        'synthetic', {'id': 'capture', 'status': 'completed', 'discarded': False, 'relevance_decision': decision}
-    )
-    assert store.rows[PATH]['status'] == 'completed'
-    assert store.rows[PATH]['terminal_family'] == 'success'
-    assert store.rows[PATH]['relevance_decision']['trigger'] == trigger
+    payload = {'id': 'capture', 'status': 'completed', 'discarded': False, 'relevance_decision': decision}
+    if restored:
+        payload['sync_relevance_user_kept'] = True
+    metric = db.TERMINAL_CLAIM_REFUSALS.labels(family='failed', reason='terminal_failure')
+    before = metric._value.get()
+    assert lifecycle.persist_processed_conversation('synthetic', payload)
+    row = store.rows[PATH]
+    assert row['status'] == ('completed' if restored else 'failed')
+    assert row['discarded'] is not restored
+    assert row.get('terminal_family') == ('success' if restored else None)
+    assert metric._value.get() == before + int(not restored)
 
 
 @pytest.mark.parametrize('trigger', ['capture_end', 'sync_update', 'lifecycle_terminal'])
@@ -312,9 +316,15 @@ def test_mode_default_and_operator_kill_switch(monkeypatch, mode, expected):
     assert db._terminal_family_serving('synthetic') is expected
 
 
-def test_refusal_counter_is_not_emitted_on_failed_commit(store, monkeypatch):
-    store.rows[PATH]['finalization_status'] = 'dead_letter'
-    metric = db.TERMINAL_CLAIM_REFUSALS.labels(family='dead_letter')
+@pytest.mark.parametrize('reason', ['terminal_failure', 'completed_status_regression'])
+def test_refusal_counter_is_not_emitted_on_failed_commit(store, monkeypatch, reason):
+    if reason == 'terminal_failure':
+        store.rows[PATH]['finalization_status'] = 'dead_letter'
+        family, requested = 'dead_letter', 'completed'
+    else:
+        store.rows[PATH]['status'] = 'completed'
+        family, requested = 'success', 'processing'
+    metric = db.TERMINAL_CLAIM_REFUSALS.labels(family=family, reason=reason)
     before = metric._value.get()
 
     def failed_commit(client, callback):
@@ -323,12 +333,12 @@ def test_refusal_counter_is_not_emitted_on_failed_commit(store, monkeypatch):
 
     monkeypatch.setattr(db, 'run_transactional', failed_commit)
     with pytest.raises(RuntimeError, match='synthetic commit failure'):
-        persist({'status': 'completed', 'title': 'late'})
+        persist({'status': requested, 'title': 'late'})
     assert metric._value.get() == before
 
 
 def test_transaction_retry_resets_refusal_outcome(store, monkeypatch):
-    metric = db.TERMINAL_CLAIM_REFUSALS.labels(family='dead_letter')
+    metric = db.TERMINAL_CLAIM_REFUSALS.labels(family='dead_letter', reason='terminal_failure')
     before = metric._value.get()
     store.rows[PATH]['finalization_status'] = 'dead_letter'
 
@@ -352,3 +362,45 @@ def test_noncompletion_persist_keeps_legacy_status_writes(store, status):
     assert store.rows[PATH]['status'] == status
     assert 'terminal_family' not in store.rows[PATH]
     assert 'terminal_family_at' not in store.rows[PATH]
+
+
+@pytest.mark.parametrize('status', ['processing', 'in_progress', 'failed', None])
+@pytest.mark.parametrize('mode', ['on', 'off'])
+@pytest.mark.parametrize('classified', [False, True])
+def test_completed_row_cannot_regress_but_flag_off_keeps_legacy_write(store, monkeypatch, status, mode, classified):
+    monkeypatch.setenv('CONVERSATION_TERMINAL_FAMILY_MODE', mode)
+    store.rows[PATH]['status'] = 'completed'
+    if classified:
+        store.rows[PATH].update(terminal_family='success', terminal_family_at=NOW)
+    metric = db.TERMINAL_CLAIM_REFUSALS.labels(family='success', reason='completed_status_regression')
+    before = metric._value.get()
+    payload = {'status': status, 'title': 'deferred content'}
+    if mode == 'off':
+        captured = []
+        tx = store.transaction()
+        monkeypatch.setattr(store, 'transaction', lambda: tx)
+        monkeypatch.setattr(tx, 'set', lambda ref, data, **kwargs: captured.append((ref.path, data, kwargs)))
+        assert persist(payload)
+        assert captured == [(PATH, {'id': 'capture', **payload}, {'merge': True})]
+        assert tx.updates == []
+        assert metric._value.get() == before
+    else:
+        assert persist(payload)
+        row = store.rows[PATH]
+        assert row['status'] == 'completed' and row['title'] == 'deferred content'
+        if classified:
+            assert row['terminal_family'] == 'success' and row['terminal_family_at'] == NOW
+        else:
+            assert 'terminal_family' not in row and 'terminal_family_at' not in row
+        assert metric._value.get() == before + 1
+        assert len(store.transactions[-1].updates) == 1
+        assert 'status' not in store.transactions[-1].updates[0][1]
+
+
+def test_content_only_persist_does_not_count_as_a_status_regression(store):
+    store.rows[PATH]['status'] = 'completed'
+    metric = db.TERMINAL_CLAIM_REFUSALS.labels(family='success', reason='completed_status_regression')
+    before = metric._value.get()
+    assert persist({'title': 'content without a status claim'})
+    assert store.rows[PATH]['status'] == 'completed'
+    assert metric._value.get() == before

@@ -1289,11 +1289,10 @@ def persist_processing_result_with_lifecycle(
 ) -> bool:
     """Merge a processor result into its conversation.
 
-    Deletion and stale sync transcript revisions are refused. Lifecycle state is not:
-    processors re-derive their verdict from current content, so earlier discard or
-    status bookkeeping must not strand rows a later sync filled with speech.
-    With terminal-family serving, content still merges over a terminal failure,
-    but that failure's status and classifier cannot become processor success.
+    Deletion and stale sync transcript revisions are refused. With terminal-family
+    serving, content merges without regressing completed status or superseding
+    failure state. Only explicit user-restore authority permits failure to become
+    success. Flag off retains the legacy lifecycle merge.
 
     ``on_first_completion`` runs after a successful commit that transitioned the
     existing row onto ``completed``. It must not raise; the persist outcome is
@@ -1316,13 +1315,13 @@ def persist_processing_result_with_lifecycle(
     delivery_outcome = None
     summary_changed = False
     notes_refresh_state_write = None
-    terminal_refusal_family = None
+    terminal_refusal = None
     family_enabled = _terminal_family_serving(uid)
 
     @firestore.transactional
     def _persist(transaction) -> bool:
-        nonlocal stale_sync_revision, first_completed, summary_receipt, summary_changed, notes_refresh_state_write, delivery_outcome, terminal_refusal_family
-        terminal_refusal_family = None
+        nonlocal stale_sync_revision, first_completed, summary_receipt, summary_changed, notes_refresh_state_write, delivery_outcome, terminal_refusal
+        terminal_refusal = None
         summary_changed = False
         summary_receipt = None
         delivery_outcome = None
@@ -1499,18 +1498,13 @@ def persist_processing_result_with_lifecycle(
                 user_restored = bool(existing.get('sync_relevance_user_kept')) or bool(
                     write_data.get('sync_relevance_user_kept')
                 )
-                decision = write_data.get('relevance_decision')
-                retry_trigger = decision.get('trigger') if isinstance(decision, Mapping) else None
-                # These server-generated decisions describe intentional retries
-                # that can persist directly from failed without readmission.
-                retry_failed = isinstance(retry_trigger, str) and retry_trigger in TERMINAL_FAILED_RETRY_TRIGGERS
                 failure_family = (
                     family if family in TERMINAL_FAILURE_FAMILIES else 'dead_letter' if dead_letter else None
                 )
-                if not failure_family and existing.get('status') == ConversationStatus.failed and not retry_failed:
+                if not failure_family and existing.get('status') == ConversationStatus.failed:
                     failure_family = 'failed'
                 if failure_family and not user_restored:
-                    terminal_refusal_family = failure_family
+                    terminal_refusal = (failure_family, 'terminal_failure')
                     # Keep the legacy marker too if a stale payload carries it.
                     write_data.pop('finalization_status', None)
                     write_data.pop('discarded', None)
@@ -1530,6 +1524,15 @@ def persist_processing_result_with_lifecycle(
                     )
                     if updates is not None:
                         write_data.update(updates)
+            elif 'status' in write_data and existing.get('status') == ConversationStatus.completed:
+                # A deferred result may have started before enrichment finished.
+                # It may refresh content, but cannot reopen the completed row.
+                write_data.pop('status', None)
+                family = existing.get('terminal_family')
+                terminal_refusal = (
+                    family if family in TERMINAL_FAILURE_FAMILIES else 'success',
+                    'completed_status_regression',
+                )
 
         summary_receipt = summary_delivery.merge_result(existing, write_data, uid)
         delivery_outcome = summary_terminal_outcome(existing, write_data)
@@ -1552,8 +1555,8 @@ def persist_processing_result_with_lifecycle(
         return True
 
     persisted = run_transactional(db, _persist)
-    if persisted and terminal_refusal_family is not None:
-        _record_terminal_claim_refusal(terminal_refusal_family)
+    if persisted and terminal_refusal is not None:
+        _record_terminal_claim_refusal(*terminal_refusal)
     stop_quiet_check_for_conversation(uid, conversation_data['id'], firestore_client=db)
     summary_delivery.emit_result(uid, summary_changed, summary_receipt, delivery_outcome, _drop_summary_memo, persisted)
     if persisted:
@@ -2900,24 +2903,23 @@ def transition_conversation_status(uid: str, conversation_id: str, status: str):
 
 # Backend-only conversation classification; job/API terminal_outcome is separate.
 TERMINAL_FAILURE_FAMILIES = frozenset({'dead_letter', 'byok_abandoned', 'oversized', 'orphan_swept', 'deferred_retry'})
-TERMINAL_FAILED_RETRY_TRIGGERS = frozenset({'server_recovery', 'silent_backfill', 'user_reprocess', 'backlog_choice'})
 TERMINAL_CLAIM_REFUSALS = Counter(
     'omi_conversation_terminal_claim_refusals_total',
-    'Committed processor content merges whose success claim lost to a failure marker',
-    ['family'],
+    'Committed processor content merges whose lifecycle status change was refused',
+    ['family', 'reason'],
     registry=None,
 )
 _TERMINAL_CLAIM_METRIC_LOCK = Lock()
 _terminal_claim_metric_registered = False
 
 
-def _record_terminal_claim_refusal(family: str) -> None:
+def _record_terminal_claim_refusal(family: str, reason: str) -> None:
     global _terminal_claim_metric_registered
     with _TERMINAL_CLAIM_METRIC_LOCK:
         if not _terminal_claim_metric_registered:
             REGISTRY.register(TERMINAL_CLAIM_REFUSALS)
             _terminal_claim_metric_registered = True
-    TERMINAL_CLAIM_REFUSALS.labels(family=family).inc()
+    TERMINAL_CLAIM_REFUSALS.labels(family=family, reason=reason).inc()
 
 
 def _terminal_family_serving(uid: str) -> bool:
