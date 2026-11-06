@@ -142,6 +142,14 @@ async def test_50_sockets_plateau_refuse_without_ack_then_retry_once(monkeypatch
             assert sock.commits == 0 and sock.budget.used == PCM_SIZE
             sock.websocket.send_bytes.assert_not_awaited()
             sock.queue.stage_committed.assert_not_called()
+        for _ in range(3):
+            # Repeated data-driven boundaries during the same GCS outage do
+            # not grow submissions, allocate waiting tasks or trim input.
+            for sock in refused:
+                assert await sock.flush() is None
+                assert sock.buffer == sock.original and sock.frames == sock.checkpoints
+            assert pusher.PUSHER_STORAGE_PCM_INFLIGHT_BYTES._value.get() == inflight
+            assert gcs.peak <= LIMIT * 3 // 4
         for sock in sockets:
             sock.websocket.close.assert_not_awaited()
             assert len(sock.buffer) < 20 * MIB
@@ -163,6 +171,12 @@ async def test_50_sockets_plateau_refuse_without_ack_then_retry_once(monkeypatch
         assert len(gcs.calls) == 50 and max(gcs.max_per_socket.values()) == 1
         assert gcs.bytes == 0 and budget.used == 0
         assert pusher.PUSHER_STORAGE_PCM_INFLIGHT_BYTES._value.get() == 0
+        gcs.calls.clear()  # The test recorder must not retain the settled PCM.
+        import gc
+
+        gc.collect()
+        drained, _ = tracemalloc.get_traced_memory()
+        assert drained < peak
     finally:
         gcs.release.set()
         await asyncio.gather(*tasks, return_exceptions=True)
