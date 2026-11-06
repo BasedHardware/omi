@@ -15,6 +15,7 @@ from cachetools import TTLCache
 
 from database import _client, conversations as conversations_db, transcript_pointer as pointer
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreDocument
+from tests.unit.memory_import_isolation import make_database_client_stub
 from utils import encryption
 from utils.other import object_lake as lake, space_keys
 from utils.other.local_storage import LocalStorageClient, LocalBlob
@@ -437,3 +438,18 @@ def test_transaction_can_read_multiple_historical_versions_of_one_document(lake_
     assert pointer.run_preloaded_transactional(lake_world.store, body) == [speech(n) for n in range(18000, 18003)]
     assert len(attempts) == 4
     assert lake_world.calls['get'] == 3
+
+
+def test_legacy_memory_client_stub_preserves_pointer_transaction_guard(lake_world, monkeypatch):
+    doc = pointer_doc(lake_world)
+    client = make_database_client_stub()
+    monkeypatch.setattr(pointer, '_client', client)
+
+    def body(transaction):
+        assert client.in_transaction_body()
+        with pytest.raises(pointer.TranscriptPointerUnloaded):
+            pointer.resolve_pointer(UID, doc['transcript_segments'])
+
+    client.run_transactional(lake_world.store, body)
+    assert not client.in_transaction_body()
+    assert lake_world.calls['get'] == 0
