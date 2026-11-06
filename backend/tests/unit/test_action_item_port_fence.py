@@ -1,19 +1,27 @@
 """Real port and standalone commit boundaries keep Redis tickets across exits."""
 
 from datetime import datetime, timezone
+import importlib
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import fakeredis
 import pytest
 from google.api_core.exceptions import Aborted
+from google.auth.credentials import AnonymousCredentials
+from google.cloud import firestore
 
 from database import action_item_versions as versions, action_items, action_item_completion_backfill as backfill
 from database import candidates, candidate_integration_outbox as outbox, chat_edits, staged_tasks, review_changes
-from database import locked_content, legal_holds, review_store, action_item_refresh
+from database import locked_content, legal_holds, review_store, action_item_refresh, user_data_deletion
+from database import batch_pipeline_purge, goals, workstreams
+from database.ports.action_items import ActionItemTransactionLimitError
+from models.goal import GoalStatus, GoalRelationshipDisposition
+from models.candidate import CandidateSubjectKind
+from models.workstream import TaskGoalLinkImportRequest
 from database.action_item_fence import ActionItemCommitFence, fenced_action_item_commit
 from database.ports.action_items import ActionItemDraft
-from database.space_store import FirestoreSpaceStore
+from database.space_store import FirestoreSpaceStore, FirestoreSpaceTx
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreTransaction
 
 UID = 'port-test-fence'
@@ -152,7 +160,7 @@ def loose_client():
     'surface',
     [
         'candidate',
-        'outbox',
+        'account-wipe',
         'chat-update',
         'chat-restore',
         'staged-recovery',
@@ -179,8 +187,13 @@ def test_each_standalone_writer_fences_its_actual_commit(redis, monkeypatch, sur
     monkeypatch.setattr(chat_edits, 'run_with_transaction_contention_retry', commit)
     # Direct @transactional surfaces still execute their owning runner. Stop at
     # its commit boundary to isolate fence placement from domain fixture data.
-    if surface == 'outbox':
-        monkeypatch.setattr(outbox.firestore, 'transactional', lambda body: commit)
+    if surface == 'account-wipe':
+        monkeypatch.setattr(batch_pipeline_purge, 'purge_batch_owner', lambda uid: None)
+        monkeypatch.setattr(user_data_deletion, 'get_data_plane_firestore_client', lambda: loose_client())
+        monkeypatch.setattr(user_data_deletion, 'search_apps_db', lambda *a, **k: [])
+        monkeypatch.setattr(user_data_deletion, 'delete_generic_cache', lambda *a: None)
+        client.collections.return_value = [SimpleNamespace(id='action_items')]
+        client.get.return_value = SimpleNamespace(exists=False)
     if surface == 'unlock':
         monkeypatch.setattr(action_items, 'db', client)
         monkeypatch.setattr(locked_content, 'unlock_query_rows', commit)
@@ -199,8 +212,8 @@ def test_each_standalone_writer_fences_its_actual_commit(redis, monkeypatch, sur
     with pytest.raises(AtCommit):
         if surface == 'candidate':
             candidates.resolve_task_candidate(UID, 'candidate', account_generation=0)
-        elif surface == 'outbox':
-            outbox.claim_candidate_integration_dispatch(UID, 'candidate', account_generation=0, firestore_client=client)
+        elif surface == 'account-wipe':
+            user_data_deletion.purge_user_subtree.__wrapped__(UID, client, commit)
         elif surface == 'chat-update':
             chat_edits.apply_update(UID, 'task', 'task', {}, {'description': 'Synthetic'}, firestore_client=client)
         elif surface == 'chat-restore':
@@ -323,3 +336,203 @@ def test_failing_cleanup_does_not_leak_any_attempt_ticket(redis, monkeypatch, re
     assert finished == ([False, True] if retry else [True])
     assert versions.version(UID) is not None
     assert redis.hlen(versions._key(UID) + ':writers') == 0
+
+
+@pytest.mark.parametrize('writes_task', [False, True])
+def test_outbox_claim_takes_ticket_only_for_task_commit(redis, monkeypatch, writes_task):
+    before = versions.version(UID)
+    payload = {'account_generation': 0, 'status': 'pending', 'attempt_count': 0, 'task_id': 'task'}
+    if writes_task:
+        payload['external_task_id'] = 'external'
+    client = StrictFirestore(
+        {
+            ('users', UID, 'candidate_integration_outbox', 'candidate'): payload,
+            ('users', UID, 'action_items', 'task'): {'description': 'Synthetic'},
+        }
+    )
+    begins = []
+    original = versions.begin
+
+    def begin(uid):
+        begins.append(uid)
+        return original(uid)
+
+    monkeypatch.setattr(versions, 'begin', begin)
+    monkeypatch.setattr(outbox, 'bump_action_items_list_version', lambda uid: None)
+    monkeypatch.setattr(outbox.dream_dirty, 'notify', lambda *a: None)
+
+    def commit(tx):
+        assert (versions.version(UID) is None) == writes_task
+
+    monkeypatch.setattr(StrictFirestoreTransaction, '_commit', commit)
+    token = outbox.claim_candidate_integration_dispatch(UID, 'candidate', account_generation=0, firestore_client=client)
+    assert bool(token) != writes_task
+    assert begins == ([UID] if writes_task else [])
+    assert (versions.version(UID) != before) == writes_task
+
+
+@pytest.mark.parametrize('operation', ['ids', 'conversation'])
+@pytest.mark.parametrize('count,staged,reject', [(501, 0, True), (500, 1, True), (500, 0, False), (499, 1, False)])
+def test_atomic_bulk_delete_checks_entire_transaction_before_staging(
+    redis, monkeypatch, operation, count, staged, reject
+):
+    # Use the real SDK write buffer, with anonymous credentials and no RPCs.
+    client = firestore.Client(project='demo-omi-isolated-tests', credentials=AnonymousCredentials())
+    transaction = client.transaction()
+    tx = FirestoreSpaceTx(UID, client, transaction)
+    for i in range(staged):
+        transaction.set(client.document(f'users/{UID}/folders/other-{i}'), {'name': 'Synthetic'})
+    ids = [f'task-{i}' for i in range(count)]
+    docs = [SimpleNamespace(id=i, reference=client.document(f'users/{UID}/action_items/{i}')) for i in ids]
+    monkeypatch.setattr(tx.action_items, '_stream', lambda query: iter(docs))
+
+    def apply():
+        return (
+            tx.action_items.delete_batch(ids)
+            if operation == 'ids'
+            else tx.action_items.delete_conversation_documents('conversation')
+        )
+
+    if reject:
+        with pytest.raises(ActionItemTransactionLimitError):
+            apply()
+        assert len(transaction._write_pbs) == staged
+        assert tx._fences == [] and tx._effects == []
+    else:
+        apply()
+        assert len(transaction._write_pbs) == staged + count
+    client.close()
+
+
+@pytest.mark.parametrize('operation', ['ids', 'conversation'])
+def test_standalone_bulk_delete_keeps_chunking(redis, monkeypatch, operation):
+    client = firestore.Client(project='demo-omi-isolated-tests', credentials=AnonymousCredentials())
+    repo = action_items.FirestoreActionItems(UID, firestore_client=client)
+    ids = [f'task-{i}' for i in range(1001)]
+    monkeypatch.setattr(
+        repo,
+        '_stream',
+        lambda query: iter(
+            [SimpleNamespace(id=i, reference=client.document(f'users/{UID}/action_items/{i}')) for i in ids]
+        ),
+    )
+    monkeypatch.setattr(action_items, '_purge_proactivity_source', lambda *a: None)
+    sizes = []
+
+    def commit(batch):
+        assert versions.version(UID) is None
+        sizes.append(len(batch._write_pbs))
+
+    monkeypatch.setattr(firestore.WriteBatch, 'commit', commit)
+    if operation == 'ids':
+        assert repo.delete_batch(ids) == ids
+    else:
+        assert repo.delete_conversation_documents('conversation') == len(ids)
+    assert sizes == [499, 499, 3]
+    client.close()
+
+
+@pytest.mark.parametrize(
+    'repo_type', [action_items.FirestoreActionItems, goals.FirestoreGoals, workstreams.FirestoreWorkstreams]
+)
+def test_raw_transaction_cannot_silently_drop_post_commit_effect(repo_type):
+    repo = repo_type(UID, firestore_client=loose_client(), transaction=object())
+    with pytest.raises(RuntimeError, match='commit context'):
+        repo._post_commit(lambda: pytest.fail('effect executed before commit'))
+
+
+@pytest.mark.parametrize('repo_type', [goals.FirestoreGoals, workstreams.FirestoreWorkstreams])
+def test_raw_transaction_rejects_task_write_before_running_body(repo_type):
+    repo = repo_type(UID, firestore_client=loose_client(), transaction=object())
+    with pytest.raises(RuntimeError, match='commit context'):
+        repo._apply_transaction(lambda tx: pytest.fail('task writes were staged'), None, task_writes=True)
+
+
+@pytest.mark.parametrize('repo_type', [goals.FirestoreGoals, workstreams.FirestoreWorkstreams])
+def test_workflow_task_writer_forwards_uow_commit_context(redis, monkeypatch, repo_type):
+    client = StrictFirestore({('users', UID, 'action_items', 'task'): {'description': 'Synthetic'}})
+
+    def body(tx):
+        repo = tx.goals if repo_type is goals.FirestoreGoals else tx.workstreams
+        repo._task_write(tx.transaction, 'update', client.document(f'users/{UID}/action_items/task'), {'goal_id': None})
+
+    def commit(tx):
+        assert versions.version(UID) is None
+
+    before = versions.version(UID)
+    monkeypatch.setattr(StrictFirestoreTransaction, '_commit', commit)
+    FirestoreSpaceStore(UID, firestore_client=client).run(body)
+    assert versions.version(UID) not in (before, None)
+
+
+@pytest.mark.parametrize('surface', ['goal-detach', 'resolve-candidate', 'resolve-intent', 'import-links'])
+def test_workflow_standalone_task_writes_are_fenced(redis, monkeypatch, surface):
+    before = versions.version(UID)
+    calls = []
+
+    def transactional(fn):
+        def run(tx):
+            if fn.__name__ == 'reserve':
+                return None
+            assert versions.version(UID) is None, surface
+            calls.append(surface)
+            raise AtCommit(surface)
+
+        return run
+
+    monkeypatch.setattr(goals.firestore, 'transactional', transactional)
+    client = loose_client()
+    with pytest.raises(AtCommit):
+        if surface == 'goal-detach':
+            goals.FirestoreGoals(UID, firestore_client=client).transition_lifecycle_document(
+                'goal',
+                status=GoalStatus.paused,
+                relationship_disposition=GoalRelationshipDisposition.detach,
+                idempotency_key='detach',
+                account_generation=0,
+            )
+        elif surface == 'resolve-candidate':
+            candidate = SimpleNamespace(
+                subject_kind=CandidateSubjectKind.workstream, workstream_proposal=object(), candidate_id='candidate'
+            )
+            workstreams.FirestoreWorkstreams(UID, firestore_client=client).resolve_candidate_document(candidate, 0)
+        elif surface == 'resolve-intent':
+            request = SimpleNamespace(model_dump=lambda **k: {})
+            workstreams.FirestoreWorkstreams(UID, firestore_client=client).resolve_intent_document(
+                request, idempotency_key='intent', account_generation=0
+            )
+        else:
+            request = TaskGoalLinkImportRequest(links=[{'task_id': 'task', 'goal_id': 'goal'}])
+            workstreams.FirestoreWorkstreams(UID, firestore_client=client).import_links_documents(
+                request, idempotency_key='import', account_generation=0
+            )
+    assert calls == [surface]
+    assert versions.version(UID) not in (before, None)
+
+
+@pytest.mark.parametrize('surface', ['legacy-migration', 'soft-cap-unlock'])
+def test_operator_task_writers_fence_commits(redis, monkeypatch, surface):
+    before = versions.version(UID)
+    client = loose_client()
+
+    def commit():
+        assert versions.version(UID) is None
+        if surface == 'legacy-migration':
+            assert versions.version('second-synthetic-owner') is None
+        raise AtCommit(surface)
+
+    client.commit.side_effect = commit
+    with pytest.raises(AtCommit):
+        if surface == 'legacy-migration':
+            migration = importlib.import_module('migrations.004_migrate_action_items_to_collection')
+            migration._commit_action_item_batch(client, [UID, 'second-synthetic-owner'])
+        else:
+            operator = importlib.import_module('scripts.unlock_soft_cap_locked')
+            operator.unlock_collection(client, UID, 'action_items')
+    assert versions.version(UID) not in (before, None)
+
+
+def test_non_task_operator_unlock_takes_no_task_ticket(redis, monkeypatch):
+    operator = importlib.import_module('scripts.unlock_soft_cap_locked')
+    monkeypatch.setattr(versions, 'begin', lambda uid: pytest.fail('non-task ticket'))
+    operator.unlock_collection(loose_client(), UID, 'memories')
