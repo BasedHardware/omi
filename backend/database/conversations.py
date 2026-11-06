@@ -33,7 +33,8 @@ from google.api_core.exceptions import AlreadyExists, Conflict, FailedPreconditi
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 from google.cloud.firestore_v1.field_path import FieldPath
-from prometheus_client import Counter
+from prometheus_client import Counter, REGISTRY
+from threading import Lock
 import utils.other.hume as hume
 from models.audio_file import AudioFile
 from database.audio_file_projection import finalize_audio_file_group as _finalize_audio_file_group
@@ -1531,7 +1532,7 @@ def persist_processing_result_with_lifecycle(
 
     persisted = run_transactional(db, _persist)
     if persisted and terminal_refusal_family is not None:
-        TERMINAL_CLAIM_REFUSALS.labels(family=terminal_refusal_family).inc()
+        _record_terminal_claim_refusal(terminal_refusal_family)
     stop_quiet_check_for_conversation(uid, conversation_data['id'], firestore_client=db)
     summary_delivery.emit_result(uid, summary_changed, summary_receipt, delivery_outcome, _drop_summary_memo, persisted)
     if persisted:
@@ -2882,13 +2883,29 @@ TERMINAL_CLAIM_REFUSALS = Counter(
     'omi_conversation_terminal_claim_refusals_total',
     'Committed processor content merges whose success claim lost to a failure marker',
     ['family'],
+    registry=None,
 )
+_TERMINAL_CLAIM_METRIC_LOCK = Lock()
+_terminal_claim_metric_registered = False
+
+
+def _record_terminal_claim_refusal(family: str) -> None:
+    global _terminal_claim_metric_registered
+    with _TERMINAL_CLAIM_METRIC_LOCK:
+        if not _terminal_claim_metric_registered:
+            REGISTRY.register(TERMINAL_CLAIM_REFUSALS)
+            _terminal_claim_metric_registered = True
+    TERMINAL_CLAIM_REFUSALS.labels(family=family).inc()
 
 
 def _terminal_family_serving(uid: str) -> bool:
     # The on|off operator surface maps on to the shared serve mode. The shared
     # parser retains its cohort support for a later ramp without changing defaults.
-    return serving_for('CONVERSATION_TERMINAL_FAMILY_MODE', uid, default='serve')
+    from config.policy import kill_switch
+
+    return kill_switch('CONVERSATION_TERMINAL_FAMILY_MODE') and serving_for(
+        'CONVERSATION_TERMINAL_FAMILY_MODE', uid, default='serve'
+    )
 
 
 def _conversation_claim_matches(current, expected_status, expected_fields=None, *, allow_discarded=False):

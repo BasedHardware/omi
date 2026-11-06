@@ -8,6 +8,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
+from google.cloud.firestore_v1._helpers import DocumentExtractorForUpdate
 
 from database import conversations as conversations_db, conversation_finalization_jobs as jobs_db
 from database import redis_db
@@ -45,6 +46,7 @@ def pipeline(monkeypatch):
     # Keep the fixture's reference ownership and read-before-write enforcement.
     # This boundary also needs Firestore's merge=True document-set semantics.
     original_set = StrictFirestoreTransaction.set
+    original_update = StrictFirestoreTransaction.update
     writes = []
 
     def merge_set(transaction, ref, data, *, merge=False):
@@ -52,6 +54,14 @@ def pipeline(monkeypatch):
         payload = {**store.rows.get(ref.path, {}), **data} if merge else data
         original_set(transaction, ref, payload)
 
+    def record_update(transaction, ref, data):
+        # This observer tracks processor result writes. Fenced terminal repair
+        # already used update (and was never part of the legacy set observer).
+        if data.get('terminal_family') == 'success':
+            writes.append((ref.path, deepcopy(DocumentExtractorForUpdate(data).set_fields)))
+        original_update(transaction, ref, data)
+
+    monkeypatch.setattr(StrictFirestoreTransaction, 'update', record_update)
     monkeypatch.setattr(StrictFirestoreTransaction, 'set', merge_set)
     monkeypatch.setattr(StrictFirestoreDocument, 'id', property(lambda ref: ref.path[-1]), raising=False)
     monkeypatch.setattr(conversations_db, 'db', store)
