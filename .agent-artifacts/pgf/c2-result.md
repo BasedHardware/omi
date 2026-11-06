@@ -1,16 +1,16 @@
 # C2 round 2 implementation result
 
-Status: C2 focused and frozen-tree gates are green; the full CI-shaped unit run remains in progress.
-Updated: 2026-11-06T19:20:50.397193+00:00
+Status: implementation and corrective focused gates are green. Full selection continuation and final frozen preflight remain pending.
+Updated: 2026-11-06T21:13:39.102707+00:00
 Repository: BasedHardware/omi. Branch: lane/pgf-c2.
 Base after the required fetch/rebase: 4b1c40b5ef03242b82013a64c1dc941728715bab.
-Implementation checkpoint: 0b11e281de8935610f57356c62f3177db47d20be.
+Implementation checkpoint: 362578ce0cf12faf0bccc3c0ef998d01f3d66ad7.
 GCP tier: none. No production/API/customer-data access, push, PR, deploy, or flag expansion.
 
 ## What was built
 
 - Single transcript pointer-or-inline codec, typed read outcomes, request/context memo, upload-before-reference writes, and post-commit revision-checked swaps.
-- Cold-pointer transaction preloads for processing, review, speaker/voice publication, episodes, live transcript updates, translation, sync assignment, final-pass promotion, finalization admission, privacy scrubs, and empty-recording cleanup.
+- Cold-pointer transaction preloads for processing, review, speaker/voice publication, episodes, live transcript updates, translation, sync assignment, final-pass promotion, finalization admission, privacy scrubs, and empty-recording cleanup. Cosmetic terminal helpers locally set the memo-only guard even when their parent uses the SDK directly; cold pointers preserve the existing conservative title/keep behavior without lake IO.
 - Bounded retries: 32 distinct active preloads plus three content-change retries, at most 36 outer attempts. Versions read by the current attempt are retained for legacy undo; superseded unused versions are evicted.
 - Deleted-blob results are filtered from list and MCP collections. Sync candidates/canonicals are checked at load before selection. Transport/key outages abort decisions; absent/shredded retain each domain's refusal policy.
 - Existing branch C1 review hardening is retained: deletion/key tombstones, encrypted envelope bounds, consent stamps, and authority checks. Pusher and batch worker include KMS; batch lock adds only google-cloud-kms==3.6.0, with no existing version changed or removed.
@@ -50,11 +50,16 @@ GCP tier: none. No production/API/customer-data access, push, PR, deploy, or fla
 - `backend/tests/integration/test_recurring_voice_privacy_firestore.py`
 - `backend/tests/support/dream_firestore.py`
 - `backend/tests/support/firestore_query_driver_registry.py`
+- `backend/tests/unit/memory_import_isolation.py`
 - `backend/tests/unit/test_conversation_archive_filter_contract.py`
 - `backend/tests/unit/test_conversation_terminal_family.py`
 - `backend/tests/unit/test_conversation_transcript_offload.py`
+- `backend/tests/unit/test_desktop_migration.py`
 - `backend/tests/unit/test_episode_attach_cost.py`
 - `backend/tests/unit/test_episode_attach_review.py`
+- `backend/tests/unit/test_focus_sessions_adversarial_challenge.py`
+- `backend/tests/unit/test_focus_sessions_read_boundary.py`
+- `backend/tests/unit/test_focus_sessions_stress_harness.py`
 - `backend/tests/unit/test_live_transcript_merge.py`
 - `backend/tests/unit/test_live_transcript_replay.py`
 - `backend/tests/unit/test_object_lake.py`
@@ -66,13 +71,20 @@ GCP tier: none. No production/API/customer-data access, push, PR, deploy, or fla
 - `backend/utils/person_evidence_backfill.py`
 - `backend/utils/sync/assignment.py`
 
-The tracked `.agent-artifacts/pgf-result.md` is restored to origin/main (empty branch diff). This lane's report and draft PR body are under `.agent-artifacts/pgf/`. The unrelated app/analysis_options.yaml and app/pubspec.lock edits are preserved; the temporary preflight stash was restored and its exact binary patch hash matched. The task stash was dropped after restoration.
+The tracked `.agent-artifacts/pgf-result.md` is restored to origin/main (empty branch diff). This lane's report and draft PR body are under `.agent-artifacts/pgf/`. The unrelated app/analysis_options.yaml and app/pubspec.lock edits are preserved; the temporary preflight stash was restored and its exact binary patch hash matched. The first preflight stash was dropped after restoration. A later exact-OID stash is still held for the final frozen preflight; it must be restored and hash-verified before handoff.
 
 ## Deviations and scope extensions taken
 
 All eight corrections in fix-r1.md were implemented under the lead's explicit approval: helpers collection filtering; finalization admission; recording cleanup; sync load validation; bounded retry amendment; batch worker KMS pin/lock; speaker authority/auto-enroll/users publication; episode memo/timeline owners.
 
-Additional necessary test caller migration: test_episode_attach_cost.py and test_episode_attach_review.py inject their existing operational failures through the locally imported run_preloaded_transactional, replacing the retired runner seam. This keeps failure injection scoped to memo operations while timeline transactions use the shared runner normally. Assertions remain unchanged; no compatibility wrapper was added.
+Scope extensions taken (necessary test import/caller migrations; assertions remain unchanged):
+
+- `test_episode_attach_cost.py`, `test_episode_attach_review.py`: inject existing operational failures through the locally imported preload runner, scoped to memo operations.
+- `test_desktop_migration.py`: open the real local `utils.other` package path before importing user/codec code; the closed package stub caused a C2 collection failure.
+- `memory_import_isolation.py`: model the generic transaction marker, and snapshot/evict the new client-binding codec/terminal modules along with their callers. A real-codec no-IO test guards the fixture's behavior.
+- `test_focus_sessions_adversarial_challenge.py`, `test_focus_sessions_read_boundary.py`, `test_focus_sessions_stress_harness.py`: preload the real, import-pure codec before closing external cloud package paths. No production IO is performed by these focus-only fixtures.
+
+Additional correction within the original brief's file list: `conversation_terminal_title.py` had direct-SDK terminal callers without the generic runner marker. Both transactional cosmetic helpers now mark their local decode scope. Four cold/warm-pointer tests reproduce the unmarked SDK boundary and verify zero in-transaction lake fetches. Queue state and terminal policy are unchanged.
 
 No round-2 edits were made under .github/, database/jobstore/, database/cells/, database/directory/, or testing/store_fixtures.py. The pre-existing branch's dead-code allowlist removal and C1 review files are retained, as recorded in the round-1 receipt. No new C1 API changes were required.
 
@@ -84,29 +96,38 @@ No anx writes or messages were made, per the implementation task's escalation ru
 
 Every test command uses `python3 .agent-artifacts/pgf-c2-test-env.py`, which removes GOOGLE_APPLICATION_CREDENTIALS, every CLOUDSDK_* variable, service-account/Firebase credential paths and inherited project bindings; it supplies only demo hints and a closed loopback metadata endpoint. Python is backend/.venv (3.11.15). Heavy commands run through `/Users/dazheng/workspace/omi/bin/omi-heavy run --wait 3600 --`.
 
-Current wrapper: `python3 .agent-artifacts/pgf-c2-test-env.py /Users/dazheng/workspace/omi/bin/omi-heavy run --wait 3600 -- <payload>`
+Current wrapper: `python3 .agent-artifacts/pgf-c2-test-env.py /Users/dazheng/workspace/omi/bin/omi-heavy run --wait 3600 -- <payload>` (the long continuation uses `--wait 7200`).
 
 | Exact payload / command | Result |
 | --- | --- |
-| `backend/.venv/bin/python -m pytest backend/tests/unit/test_transcript_pointer.py backend/tests/unit/test_conversation_transcript_offload.py -q` | Initial: 186 passed, 3 failed. Corrected rerun on the final implementation: **190 passed, 0 failed**. The historical-version eviction regression and two unrelated projection-fake failures were corrected. |
+| `backend/.venv/bin/python -m pytest backend/tests/unit/test_transcript_pointer.py backend/tests/unit/test_conversation_transcript_offload.py -q` | Initial 186 passed / 3 failed; corrected 190 passed. The later HTTP/wire guard expansion passed 194. |
+| Same two files plus `backend/tests/unit/test_conversation_terminal_family.py -q` | Terminal correction: 279 passed. Final shared-fixture guard expansion: **280 passed, 0 failed**. |
 | `backend/.venv/bin/python -m pytest backend/tests/unit/test_episode_attach_cost.py backend/tests/unit/test_episode_attach_review.py -q` | **66 passed, 0 failed**. |
-| `env DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib bash backend/scripts/run-unit-ci.sh --changed-files "$PWD/.agent-artifacts/pgf/c2-changed-files.txt"` | Environment: 18 passed, 8 optional warnings, 0 failed. Full type check: **0 errors**, 75,445 warnings. `test.sh` is running the selected **2,677 files**; terminal counts pending. PID 81323, command session 32410, log c2-unit-ci.log; 50-minute heartbeat is armed and touched on wakes. |
+| `backend/.venv/bin/python -m pytest backend/tests/unit/test_desktop_migration.py -q` | **114 passed, 0 failed** after the collection-boundary correction. |
+| `env BACKEND_UNIT_TEST_FILE_LIST="$PWD/.agent-artifacts/pgf/c2-memory-fixture-tests.txt" DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib bash backend/test.sh` | Two isolated files: feedback speaker roles **46 passed**, memory replacement policy **24 passed** (70 total). |
+| `env BACKEND_UNIT_TEST_FILE_LIST="$PWD/.agent-artifacts/pgf/c2-focus-fixture-tests.txt" DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib bash backend/test.sh` | Focus read-boundary **7 passed**; adversarial/stress **12 deselected** by `not integration and not slow`; all three files collected successfully, exit 0. |
+| `env PYTHONPATH="$PWD/backend" backend/.venv/bin/python -m pytest -p tests.conftest -p tests.unit.conftest -c backend/pyproject.toml --confcutdir=backend .agent-artifacts/pgf/test_c2_http_acceptance.py -q` | Manual real-router ASGI probe: initial 1 failed / 3 passed (sparse fixture omitted required is_user), corrected **4 passed**. The four cases are now committed in the 280-test run. |
+| `env DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib bash backend/scripts/run-unit-ci.sh --changed-files "$PWD/.agent-artifacts/pgf/c2-changed-files.txt"` | Environment: 18 passed, 8 optional warnings, 0 failed. Full type check: **0 errors**, 75,445 warnings. Intentionally stopped with exit 137 after **1,332 atomic file results**, to free this task's admission slot for corrective gates. It is not a green full-CI claim. |
+| `env BACKEND_UNIT_TEST_FILE_LIST="$PWD/.agent-artifacts/pgf/c2-remaining-tests.txt" DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib bash backend/test.sh` | Pending continuation: **1,386 files**, including 41 intentional reruns. All unconfirmed files, every failure, changed tests, shared-fixture consumers and recent files are included. Union with the atomic checkpoint is exactly **2,677 selected files**, with no omission. |
+| `.venv/bin/python -m pyright --pythonpath .venv/bin/python database/conversation_terminal_title.py` (backend/) | **0 errors**, 20 warnings. |
 | `bash test-preflight.sh` (backend/) | **18 passed, 8 optional warnings, 0 failed**. |
 | `.venv/bin/python scripts/scan_import_time_side_effects.py` (backend/) | Exit 0. |
-| `.venv/bin/python scripts/check_module_stub_pollution.py` (backend/) | Exit 0. |
+| `.venv/bin/python scripts/check_module_stub_pollution.py` (backend/) | Exit 0 before the final fixture-only edits; final preflight rechecks it. |
 | `.venv/bin/python scripts/scan_async_blockers.py --dirs routers utils` (backend/) | Exit 0. |
 | `make runtime-image-source-closure` | Exit 0, **19 registered images**. |
 | `backend/.venv/bin/python backend/scripts/runtime_image_contracts.py check-third-party` | Exit 0; worker KMS gap resolved. Existing open dependency-set exemptions are unchanged. |
-| `.venv/bin/python -m pytest tests/integration/test_recurring_voice_privacy_firestore.py -q` (backend/) | **14 skipped** without an emulator/credentials; not counted as a pass. |
-| `uv pip compile backend/diarizer/requirements-batch-pipeline.txt --format pylock.toml --python 3.11.15 --python-platform x86_64-unknown-linux-gnu --output-file backend/diarizer/pylock.batch-pipeline.toml` | Exit 0. Only `google-cloud-kms==3.6.0` added; no package changed version or was removed. |
-| `bash backend/scripts/update-python-lock.sh` | Exit 0; all six managed locks regenerated with **no Git changes**. No upgrade flag used. |
-| `env OMI_PR_BODY_FILE="$PWD/.agent-artifacts/pgf/c2-pr-body.md" BACKEND_UNIT_FILE_BUDGET_SECONDS=900 make preflight` | **41 checks passed**, exit 0, frozen clean tree at `0b11e281de8935610f57356c62f3177db47d20be`; 637.81 s. User's app edits were stashed for this command, then restored and hash-verified. |
+| `.venv/bin/python -m pytest tests/integration/test_recurring_voice_privacy_firestore.py -q` (backend/) | **14 skipped** without an emulator/credentials, not counted as passing. |
+| `uv pip compile backend/diarizer/requirements-batch-pipeline.txt --format pylock.toml --python 3.11.15 --python-platform x86_64-unknown-linux-gnu --output-file backend/diarizer/pylock.batch-pipeline.toml` | Exit 0. Only google-cloud-kms==3.6.0 added; no existing version changed or was removed. |
+| `bash backend/scripts/update-python-lock.sh` | Exit 0; all six managed locks regenerated with **no Git changes**; no upgrade flag. |
+| `env OMI_PR_BODY_FILE="$PWD/.agent-artifacts/pgf/c2-pr-body.md" BACKEND_UNIT_FILE_BUDGET_SECONDS=900 make preflight` | Three earlier frozen runs each passed **41 checks**. Latest passed on 774f45ef5d4 before the memory/focus fixture-only edits. Final run pending. |
 | `scripts/pr-preflight --suggest` | Ran; required invariant citation: none. |
-| `scripts/pr-preflight --lane local --pr-body-file .agent-artifacts/pgf/c2-pr-body.md --metadata-only` | **4 checks passed** before final receipt text updates. Final body validation remains to be refreshed. |
-| `uvx --from black==26.5.1 black --line-length 120 --skip-string-normalization <round-2 Python files>` + pinned pre-commit formatter | Passed; every changed Python file was formatted by the pinned hook. The backend venv does not expose a Black executable, so the pinned tool/hook is used. |
+| `scripts/pr-preflight --lane local --pr-body-file .agent-artifacts/pgf/c2-pr-body.md --metadata-only` | Latest completed body validation: **4 passed**; final receipt body will be revalidated. |
+| Pinned Black 26.5.1, `--check --line-length 120 --skip-string-normalization`, all 41 then-changed backend Python files; pinned pre-commit hook on later edits | Passed. The venv lacks a Black entry point, so uvx/pinned hook was used. |
 | `git diff --check` | Passed. |
 
-The static batch is `.agent-artifacts/pgf/c2-static-checks.py`; its exact commands, working directories, UTC epoch start times, elapsed times and exit codes are in c2-static-receipts.jsonl. Logs remain under `.agent-artifacts/pgf/c2-*.log`. The full suite is the only implementation validation still in flight.
+The exact checkpoint, atomic per-file exit statuses, continuation selection and stopped owned process groups are in c2-run-partition-checkpoint.json. No other agent's process was stopped. The continuation repeats every first-phase failure, including already-corrected fixtures; it does not hide the earlier failures. Static commands, working directories, timestamps and exit codes are in c2-static-receipts.jsonl. Logs are c2-*.log.
+
+First-phase baseline failures: the daily-summary monitoring contract is a pure JSON check; its test and alert-rule blob are byte-identical to origin/main, and the main JSON reproduces two forbidden PromQL rules. Executor failures match fix-r1.md's known future.result(timeout=2) main/load failures; both owning files are unchanged. Evidence: c2-main-baseline-failures.json. C2 fixture failures (desktop, feedback and focus imports) are corrected and their isolated reruns pass. These are not represented as baseline failures.
 
 ## Known gaps
 
@@ -133,12 +154,14 @@ none
 
 ## How it was verified
 
-Hermetic local tests only. GCP tier: none. Credential scrubber removes GOOGLE_APPLICATION_CREDENTIALS and CLOUDSDK_* before each command. No production access, API calls or customer data. Exact commands and final counts are recorded in .agent-artifacts/pgf/c2-result.md. Docker is unavailable locally; image smoke is waived by the lead. Runtime source and third-party closure guards are required. The focused codec/domain run passed 190 tests; the two migrated episode caller files passed 66 tests. Full type checking reported 0 errors. Frozen-tree make preflight passed 41 checks, and source plus third-party runtime closure passed. The 2,677-file CI-shaped unit selection remains in progress; 14 privacy integration tests skipped without an emulator. No offline HTTP harness or deployed acceptance is claimed.
+Hermetic local tests only. GCP tier: none. Credential scrubber removes GOOGLE_APPLICATION_CREDENTIALS and CLOUDSDK_* before each command. No production access, API calls or customer data. Exact commands and final counts are recorded in .agent-artifacts/pgf/c2-result.md. Docker is unavailable locally; image smoke is waived by the lead. Runtime source and third-party closure guards are required. The current codec/domain and terminal-family run passed 280 tests; episode caller tests passed 66, desktop migration 114, memory/feedback 70, and focus read-boundary 7 (12 slow cases deselected by the standard fast-unit filter). Full type checking reported 0 errors; the later terminal module check also reported 0 errors. Source and third-party runtime closure passed. Earlier frozen-tree preflight runs passed 41 checks; a final run is required after the fixture-only corrections.
+
+The full CI-shaped unit selection is being completed in two local phases to free the admission slot for corrective gates: 1,332 atomic file results are checkpointed, and a 1,386-file continuation includes 41 intentional reruns. Their union is exactly all 2,677 selected files. Initial main/load failures and corrected fixture failures remain recorded; the interrupted first command is not claimed green. 14 privacy integration tests skipped without an emulator.
 
 ## Tests
 
 backend/tests/unit/test_transcript_pointer.py: codec round trips, flag-off golden encodings, compressed-byte threshold, no-IO transaction guard, preload retries, decode taxonomy, memo hygiene, consent and deferred CAS.
-backend/tests/unit/test_conversation_transcript_offload.py: pointer reader surfaces, domain refusals, oversized transcripts, tombstone races, malformed keys and authority read budgets.
+backend/tests/unit/test_conversation_transcript_offload.py: pointer reader surfaces, actual HTTP detail 200/404/500 outcomes, domain refusals, direct-SDK terminal no-IO guards, oversized transcripts, tombstone races, malformed keys and authority read budgets.
 
 ## UI evidence
 

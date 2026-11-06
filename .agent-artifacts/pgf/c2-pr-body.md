@@ -14,12 +14,14 @@ none
 
 ## How it was verified
 
-Hermetic local tests only. GCP tier: none. Credential scrubber removes GOOGLE_APPLICATION_CREDENTIALS and CLOUDSDK_* before each command. No production access, API calls or customer data. Exact commands and final counts are recorded in .agent-artifacts/pgf/c2-result.md. Docker is unavailable locally; image smoke is waived by the lead. Runtime source and third-party closure guards are required. The focused codec/domain run passed 190 tests; the two migrated episode caller files passed 66 tests. Full type checking reported 0 errors. Frozen-tree make preflight passed 41 checks, and source plus third-party runtime closure passed. The 2,677-file CI-shaped unit selection remains in progress; 14 privacy integration tests skipped without an emulator. No offline HTTP harness or deployed acceptance is claimed.
+Hermetic local tests only. GCP tier: none. Credential scrubber removes GOOGLE_APPLICATION_CREDENTIALS and CLOUDSDK_* before each command. No production access, API calls or customer data. Exact commands and final counts are recorded in .agent-artifacts/pgf/c2-result.md. Docker is unavailable locally; image smoke is waived by the lead. Runtime source and third-party closure guards are required. The current codec/domain and terminal-family run passed 280 tests; episode caller tests passed 66, desktop migration 114, memory/feedback 70, and focus read-boundary 7 (12 slow cases deselected by the standard fast-unit filter). Full type checking reported 0 errors; the later terminal module check also reported 0 errors. Source and third-party runtime closure passed. Earlier frozen-tree preflight runs passed 41 checks; a final run is required after the fixture-only corrections.
+
+The full CI-shaped unit selection is being completed in two local phases to free the admission slot for corrective gates: 1,332 atomic file results are checkpointed, and a 1,386-file continuation includes 41 intentional reruns. Their union is exactly all 2,677 selected files. Initial main/load failures and corrected fixture failures remain recorded; the interrupted first command is not claimed green. 14 privacy integration tests skipped without an emulator.
 
 ## Tests
 
 backend/tests/unit/test_transcript_pointer.py: codec round trips, flag-off golden encodings, compressed-byte threshold, no-IO transaction guard, preload retries, decode taxonomy, memo hygiene, consent and deferred CAS.
-backend/tests/unit/test_conversation_transcript_offload.py: pointer reader surfaces, domain refusals, oversized transcripts, tombstone races, malformed keys and authority read budgets.
+backend/tests/unit/test_conversation_transcript_offload.py: pointer reader surfaces, actual HTTP detail 200/404/500 outcomes, domain refusals, direct-SDK terminal no-IO guards, oversized transcripts, tombstone races, malformed keys and authority read budgets.
 
 ## UI evidence
 
