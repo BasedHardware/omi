@@ -38,6 +38,20 @@ PROJECTION_DRAIN_PRIVACY_ROW_CHANGED = Counter(
 )
 
 
+PROJECTION_PRIVACY_RESUMES_ATTEMPTED = Counter(
+    'omi_batch_projection_privacy_resumes_attempted_total', 'Fenced privacy refusal replays attempted'
+)
+PROJECTION_PRIVACY_RESUMES_SUCCEEDED = Counter(
+    'omi_batch_projection_privacy_resumes_succeeded_total', 'Fenced privacy refusal replays completed'
+)
+PROJECTION_PRIVACY_FALLTHROUGHS = Counter(
+    'omi_batch_projection_privacy_fallthroughs_total', 'Stale privacy refusals retried without a stored refusal'
+)
+PROJECTION_PRIVACY_STILL_REFUSED = Counter(
+    'omi_batch_projection_privacy_still_refused_total', 'Applicable privacy refusals held, including unchanged holds'
+)
+
+
 def record_privacy_stop(stop: str) -> None:
     PROJECTION_DRAIN_PRIVACY_STOPS.labels(
         reason=(
