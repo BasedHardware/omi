@@ -12,6 +12,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
+import re
 
 from config import record_seal_repair as config
 from utils.batch_pipeline import record_seal_nojob as nojob, record_seal_cluster_repair as cluster
@@ -1123,6 +1124,49 @@ def test_job_failure_logs_exception_type_and_site_never_message(tmp_path, stage)
     event = 'record_seal_repair' if stage == 'run' else 'record_projection_rebuild'
     failure = next(m for m in messages if m.get('event') == event and m.get('outcome') == 'error')
     assert failure['exception_type'] == 'RuntimeError'
-    assert failure['error_site'].endswith('.py:' + failure['error_site'].rsplit(':', 1)[1])
+    assert re.fullmatch(r'[a-z0-9_]{1,64}\.py:\d+', failure['error_site'])
     assert set(failure) <= {'event', 'outcome', 'exception_type', 'error_site'}
     assert result.returncode == (1 if stage == 'run' else 0)
+
+
+def _job_module(monkeypatch):
+    import importlib.util
+
+    import omi_logging
+
+    path = Path(__file__).resolve().parents[2] / 'scripts/record_seal_repair_job.py'
+    spec = importlib.util.spec_from_file_location('seal_job_failure_redaction', path)
+    module = importlib.util.module_from_spec(spec)
+    monkeypatch.setattr(omi_logging, 'configure_logging', lambda *a, **kw: None)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_failure_redacts_dynamic_exception_class_name(monkeypatch):
+    module = _job_module(monkeypatch)
+    private = type('uid_9f8e7d6c5b4a_conversation', (RuntimeError,), {'__module__': 'private_payload'})
+    try:
+        raise private('users/private/conversations/private')
+    except RuntimeError as error:
+        payload = module.failure('record_seal_repair', error)
+    assert payload['exception_type'] == 'other'
+    assert 'uid_9f8e7d6c5b4a' not in json.dumps(payload)
+
+
+def test_failure_drops_site_from_dynamically_compiled_frame(monkeypatch):
+    module = _job_module(monkeypatch)
+    code = compile('raise RuntimeError("x")', '/tmp/users/private-uid/conversation.py', 'exec')
+    try:
+        exec(code, {})
+    except RuntimeError as error:
+        payload = module.failure('record_seal_repair', error)
+    assert payload['exception_type'] == 'RuntimeError'
+    assert 'private-uid' not in json.dumps(payload)
+    assert 'error_site' not in payload or 'conversation.py' not in payload['error_site']
+
+
+def test_failure_falls_back_when_fields_cannot_be_built(monkeypatch):
+    module = _job_module(monkeypatch)
+    monkeypatch.setattr(module, '_error_site', lambda error: (_ for _ in ()).throw(ImportError('boom')))
+    payload = module.failure('record_seal_repair', RuntimeError('users/private'))
+    assert payload == {'event': 'record_seal_repair', 'outcome': 'error', 'exception_type': 'RuntimeError'}

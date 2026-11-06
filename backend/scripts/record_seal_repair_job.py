@@ -2,6 +2,8 @@
 """Counts-only entrypoint for the isolated repair CronJob and its row children."""
 
 import json
+import traceback
+import re
 import logging
 import os
 from pathlib import Path
@@ -35,14 +37,62 @@ def emit(payload):
     logger.handle(record)
 
 
+_SAFE_NAME = re.compile(r'[A-Za-z_][A-Za-z0-9_]{0,63}')
+_SAFE_FILE = re.compile(r'[a-z0-9_]{1,64}\.py')
+_KNOWN_MODULES = (
+    'builtins',
+    'asyncio',
+    'concurrent',
+    'json',
+    'ssl',
+    'socket',
+    'subprocess',
+    'google',
+    'grpc',
+    'firebase_admin',
+    'requests',
+    'urllib3',
+    'httpx',
+    'redis',
+    'utils',
+    'database',
+    'config',
+    'models',
+    'routers',
+    'scripts',
+)
+_BACKEND_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def _exception_type(error):
+    cls = type(error)
+    module = (getattr(cls, '__module__', '') or '').split('.', 1)[0]
+    name = getattr(cls, '__name__', '')
+    return name if module in _KNOWN_MODULES and _SAFE_NAME.fullmatch(name or '') else 'other'
+
+
+def _error_site(error):
+    """Innermost first-party frame as file.py:line, only for a real file inside the backend tree."""
+    try:
+        frames = traceback.extract_tb(error.__traceback__)
+    except Exception:
+        return ''
+    for frame in reversed(frames):
+        path = os.path.realpath(frame.filename or '')
+        if not path.startswith(_BACKEND_ROOT + os.sep) or 'site-packages' in path or not os.path.isfile(path):
+            continue
+        base = os.path.basename(path)
+        if _SAFE_FILE.fullmatch(base) and isinstance(frame.lineno, int):
+            return f'{base}:{frame.lineno}'
+    return ''
+
+
 def failure(event, error):
-    """Error payload with the exception class and a static file:line, never its message (may hold user ids)."""
+    """Error payload: a known exception class and a first-party file:line, never the message (may hold user ids)."""
     payload = {'event': event, 'outcome': 'error'}
     try:
-        from utils.batch_pipeline.errors import error_site_field
-
-        payload['exception_type'] = type(error).__name__
-        site = error_site_field(error).strip().removeprefix('site=')
+        payload['exception_type'] = _exception_type(error)
+        site = _error_site(error)
         if site:
             payload['error_site'] = site
     except Exception:
