@@ -936,6 +936,9 @@ PRIVACY_STOPS = [
     ('blocked_privacy_disposition_requires_a_source_deletion_tombstone', 'tombstone'),
     ('blocked_privacy_refusal_no_longer_applies', 'refusal_no_longer_applies'),
     ('blocked_privacy_future_reason', 'other'),
+    # BatchPrivacyBlocked from the assignment fence (e.g. after the #24747 refusal
+    # fall-through). 2026-11-06 05:16Z: un-backed-off, it starved drain to 0.2 rows/s.
+    ('privacy_blocked', 'other'),
 ]
 
 
@@ -1040,7 +1043,7 @@ def test_privacy_backoff_ttl_is_clamped(monkeypatch, value, expected):
 
 
 @pytest.mark.asyncio
-async def test_generic_privacy_stop_is_counted_as_other(monkeypatch, drain_timers):
+async def test_fence_privacy_stop_is_counted_as_other_and_backed_off(monkeypatch, drain_timers):
     from utils.batch_pipeline.metrics import PROJECTION_DRAIN_PRIVACY_STOPS
 
     projector = projector_for(ResultLog())
@@ -1051,7 +1054,7 @@ async def test_generic_privacy_stop_is_counted_as_other(monkeypatch, drain_timer
     drains.request([BURST])
     await settle(projector)
     assert counter._value.get() == before + 1
-    assert not drains.delayed and not drain_timers
+    assert BURST in drains.delayed and len(drain_timers) == 1
 
 
 def privacy_version_drain(monkeypatch):
@@ -1192,6 +1195,32 @@ def test_walk_privacy_block_carries_the_observed_head_version(monkeypatch):
     walk = projector.drain_step(BURST, 30)
     assert walk.blocked_head == (ids[0], 123)
     assert not walk.advanced and walk.stop == PRIVACY_STOPS[0][0]
+
+
+def test_walk_fence_privacy_block_carries_the_observed_head_version(monkeypatch):
+    from types import SimpleNamespace
+    from database.batch_pipeline_privacy import BatchPrivacyBlocked, BatchPrivacyReason
+
+    log = ResultLog()
+    ids = chain(log, BURST, 'fence-version', 2)
+    projector = projector_for(log)
+    original = log.ref
+
+    def ref(table, sid):
+        wrapped = original(table, sid)
+        return (
+            SimpleNamespace(get=lambda: SimpleNamespace(to_dict=lambda: log.results[sid], update_time=456))
+            if table == 'results'
+            else wrapped
+        )
+
+    monkeypatch.setattr(log, 'ref', ref)
+    monkeypatch.setattr(projector, 'chain_prefetch', lambda owner: None)
+    reason = next(iter(BatchPrivacyReason))
+    monkeypatch.setattr(projector, '_persist_read', Mock(side_effect=BatchPrivacyBlocked(reason)))
+    walk = projector.drain_step(BURST, 30)
+    assert walk.stop == 'privacy_blocked' and not walk.advanced
+    assert walk.blocked_head == (ids[0], 456)
 
 
 @pytest.mark.asyncio
