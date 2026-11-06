@@ -39,6 +39,19 @@ class AccountCutoverState(str, Enum):
     rolled_back_stranded = 'rolled_back_stranded'
 
 
+class AccountCutoverClientState(str, Enum):
+    """Cutover state as released clients decode it.
+
+    ``migrated`` (a cell cutover) is server-internal: routing is invisible to
+    clients, so the control projection reports it as ``legacy``.
+    """
+
+    legacy = 'legacy'
+    migrating = 'migrating'
+    new = 'new'
+    rolled_back_stranded = 'rolled_back_stranded'
+
+
 class OfflineQueueInstruction(str, Enum):
     """Server instruction for legacy offline/outbox queues on clients.
 
@@ -137,8 +150,7 @@ class AccountCutoverControl(BaseModel):
     model_config = ConfigDict(extra='forbid', frozen=True)
 
     schema_version: Literal[1] = 1
-    data_plane: Optional[Literal['legacy', 'cell']] = None
-    state: AccountCutoverState = AccountCutoverState.legacy
+    state: AccountCutoverClientState = AccountCutoverClientState.legacy
     account_generation: int = Field(default=0, ge=0)
     ui_generation: int = Field(default=0, ge=0)
     api_generation: int = Field(default=0, ge=0)
