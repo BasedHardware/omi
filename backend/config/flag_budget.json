@@ -24,8 +24,9 @@
   },
   "seed_review_by": "2026-11-15",
   "budget": 165,
-  "count": 262,
+  "count": 263,
   "names": {
+    "CONVERSATION_TERMINAL_FAMILY_MODE": {"owner": "uicleanup / omi-lifecycle", "review_by": "2026-12-06", "registry": "config/feature-flags.yaml"},
     "BATCH_HELD_DEAD_LETTER_ENABLED": {"owner": "uicleanup / omi-lifecycle", "review_by": "2026-12-06", "registry": "config/feature-flags.yaml"},
     "BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS": {"owner": "omi-pipeline / lead2", "review_by": "2026-12-06"},
     "BATCH_PIPELINE_SERVING_TICK_SECONDS": {"owner": "omi-pipeline / lead2", "review_by": "2026-12-06"},

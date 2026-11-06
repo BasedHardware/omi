@@ -343,6 +343,21 @@ def test_production_terminal_assessment_call_sites_are_pinned():
                     observed[relative] = observed.get(relative, 0) + 1
                     assert 'assess' not in {kw.arg for kw in call.keywords}
                 elif call.func.id == 'terminal_decision':
+                    if str(file.relative_to(root)) == 'database/conversations.py':
+                        core = next(
+                            node
+                            for node in ast.walk(ast.parse(file.read_text()))
+                            if isinstance(node, ast.FunctionDef) and node.name == 'claim_conversation_status_in_txn'
+                        )
+                        assert any(ast.dump(call) == ast.dump(node) for node in ast.walk(core))
+                        assert any(
+                            kw.arg == 'path'
+                            and isinstance(kw.value, ast.Constant)
+                            and kw.value.value == 'lifecycle_terminal'
+                            for kw in call.keywords
+                        )
+                        assert 'assess' not in {kw.arg for kw in call.keywords}
+                        continue
                     assert str(file.relative_to(root)) == 'database/conversation_terminal_title.py'
                     assert any(
                         kw.arg == 'assess' and isinstance(kw.value, ast.Constant) and kw.value.value is True

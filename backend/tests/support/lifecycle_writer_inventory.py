@@ -1165,7 +1165,11 @@ FIELD_SITES = {
     ],
     'database/conversations.py': [
         ('claim_conversation_status._claim', 'status', 'claimed_status.value', ('status',)),
+        ('claim_conversation_status_in_txn', 'status', 'claimed_status', ('status',)),
+        ('claim_conversation_status_in_txn', 'terminal_family', 'terminal_family', ('terminal_family',)),
+        ('claim_conversation_status_in_txn', 'terminal_family_at', 'terminal_family_at', ('terminal_family_at',)),
         ('get_conversations_finished_after', 'status', 'status', ('finished_after', 'status')),
+        ('persist_processing_result_with_lifecycle._persist', 'finalization_status', 'None', ('finalization_status',)),
         (
             'persist_processing_result_with_lifecycle._persist',
             'record_audio_partial',
@@ -3978,6 +3982,7 @@ KNOWN_TERMINAL_WRITERS = {
         ('database/conversation_terminal_title.py', 'fit_document_limit'): 'known_extra_writer: oversized',
         ('database/conversation_terminal_title.py', 'recover_deferred_processing_failure_txn'): 'unclassified',
         ('database/conversations.py', 'claim_conversation_status._claim'): 'owner',
+        ('database/conversations.py', 'claim_conversation_status_in_txn'): 'owner',
         ('database/conversations.py', 'persist_processing_result_with_lifecycle._persist'): 'unclassified',
         ('database/conversations.py', 'transition_conversation_status'): 'unclassified',
         ('database/conversations.py', 'upsert_conversation_with_lifecycle._write_processing_result'): 'unclassified',

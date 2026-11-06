@@ -19,6 +19,7 @@ environment_shared:
       - conversation.finalize.persisted
       - memory.canonical.mutate
       env:
+        CONVERSATION_TERMINAL_FAMILY_MODE: {value: 'on', category: ops_kill}
         LISTEN_PREVIEW_BATCH_CUSTODY_ENABLED: {value: 'true', category: rollout}
         SERVER_BATCH_UNSUPPORTED_LANGUAGES: {value: '', category: ops_kill}
         STALE_IN_PROGRESS_RECOVERY_ENABLED: {value: 'true', category: rollout}
@@ -520,6 +521,7 @@ environment_shared:
       - memory.canonical.mutate
       values_file: backend/charts/pusher/{env}_omi_pusher_values.yaml
       env:
+        CONVERSATION_TERMINAL_FAMILY_MODE: {value: 'on', category: ops_kill}
         HOSTED_LID_API_URL: {value: '', category: service_discovery}
         RECORD_SEAL_OVERLAP_TRIM_ENABLED: {value: 'true', category: ops_kill}
         LISTEN_QUIET_FINALIZATION_ENABLED: {value: 'true', category: ops_kill}
@@ -896,6 +898,7 @@ environment_shared:
             secret: SCREEN_FRAME_SIGNING_SECRET
             version: latest
         env:
+          CONVERSATION_TERMINAL_FAMILY_MODE: {value: 'on', category: ops_kill}
           STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
           STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
           STT_CAP_DISPATCH_LANES: {value: 'live', category: rollout}
@@ -1295,6 +1298,7 @@ environment_shared:
             secret: GOOGLE_MAPS_API_KEY
             version: latest
         env:
+          CONVERSATION_TERMINAL_FAMILY_MODE: {value: 'on', category: ops_kill}
           STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
           STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
           STT_CAP_DISPATCH_LANES: {value: 'live', category: rollout}
@@ -1648,6 +1652,7 @@ environment_shared:
             secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
             version: latest
         env:
+          CONVERSATION_TERMINAL_FAMILY_MODE: {value: 'on', category: ops_kill}
           STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
           STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
           STT_CAP_DISPATCH_LANES: {value: 'live', category: rollout}
@@ -1999,6 +2004,7 @@ environment_shared:
             secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
             version: latest
         env:
+          CONVERSATION_TERMINAL_FAMILY_MODE: {value: 'on', category: ops_kill}
           STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
           STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
           STT_CAP_DISPATCH_LANES: {value: 'live', category: rollout}
