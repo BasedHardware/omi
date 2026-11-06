@@ -1,3 +1,5 @@
+// Owns push-token acquisition, retry and durable write ordering.
+// Auth generation changes revoke outstanding registration work.
 import 'dart:async';
 
 import 'package:omi/backend/preferences.dart';
