@@ -38,12 +38,14 @@ PROJECTION_DRAIN_PRIVACY_ROW_CHANGED = Counter(
 )
 
 
-def privacy_stop_reason(stop: str) -> str:
-    if stop == 'blocked_privacy_disposition_requires_a_source_deletion_tombstone':
-        return 'tombstone'
-    if stop == 'blocked_privacy_refusal_no_longer_applies':
-        return 'refusal_no_longer_applies'
-    return 'other'
+def record_privacy_stop(stop: str) -> None:
+    PROJECTION_DRAIN_PRIVACY_STOPS.labels(
+        reason=(
+            'tombstone'
+            if stop == 'blocked_privacy_disposition_requires_a_source_deletion_tombstone'
+            else ('refusal_no_longer_applies' if stop == 'blocked_privacy_refusal_no_longer_applies' else 'other')
+        )
+    ).inc()
 
 
 LABELS = {Priority.FRESH: 'fresh', Priority.RECENT: 'recent', Priority.DEEP: 'deep'}

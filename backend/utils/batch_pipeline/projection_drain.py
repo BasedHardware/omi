@@ -27,10 +27,9 @@ from database.batch_pipeline_projection_claim import projection_claim_held
 from utils.batch_pipeline.metrics import (
     PROJECTION_DRAIN_CLAIM_HELD,
     PROJECTION_DRAIN_CLAIM_BUSY_BACKOFFS,
-    PROJECTION_DRAIN_PRIVACY_STOPS,
     PROJECTION_DRAIN_PRIVACY_BACKOFFS,
     PROJECTION_DRAIN_PRIVACY_ROW_CHANGED,
-    privacy_stop_reason,
+    record_privacy_stop,
 )
 from utils.batch_pipeline.scheduler import owner_key
 from utils.executors import run_blocking, start_background_task, sync_executor
@@ -215,6 +214,7 @@ class OwnerDrains:
         advanced = steps = 0
         more = False
         stop = 'end'
+        walk = None
         # One read-ahead per turn, so a step boundary does not discard it.
         prefetch = None
         try:
@@ -248,10 +248,10 @@ class OwnerDrains:
             if prefetch is not None:
                 prefetch.close()
         if stop == 'privacy_blocked' or stop.startswith('blocked_privacy_'):
-            PROJECTION_DRAIN_PRIVACY_STOPS.labels(reason=privacy_stop_reason(stop)).inc()
+            record_privacy_stop(stop)
             if advanced == 0 and stop.startswith('blocked_privacy_'):
                 self.stops[owner] = stop
-                self.stopped_heads[owner] = walk.blocked_head
+                self.stopped_heads[owner] = walk.blocked_head if walk is not None else None
         logger.info(
             'event=batch_projection action=owner_drain outcome=turn steps=%d advanced=%d more=%s stop=%s elapsed_ms=%d',
             steps,

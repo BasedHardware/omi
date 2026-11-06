@@ -1354,7 +1354,7 @@ class Projector:
         first = None
         advanced: list[str] = []
         more = False
-        blocked_head = None
+        blocked_head = snapshot = None
 
         def failed(error: BaseException) -> None:
             # Keep what this walk already persisted; the sweep resumes later.
