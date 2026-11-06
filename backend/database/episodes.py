@@ -691,6 +691,24 @@ def reopen_episode(
     )
 
 
+def _member_recorded_after(raw: Mapping[str, Any], extra: Mapping[str, Any], split_after: datetime) -> bool:
+    """Whether a member that stays in the episode after this split recorded past ``split_after``.
+
+    Read from the transaction's own snapshot, so a member that attached between the split's planning
+    and this close is seen rather than erased.
+    """
+    activity = raw.get('member_activity') or {}
+    remaining = extra['conversation_ids'] if 'conversation_ids' in extra else raw.get('conversation_ids') or []
+    limit = split_after if split_after.tzinfo else split_after.replace(tzinfo=timezone.utc)
+    for cid in remaining:
+        at = activity.get(cid)
+        if isinstance(at, datetime):
+            at = at if at.tzinfo else at.replace(tzinfo=timezone.utc)
+            if at > limit:
+                return True
+    return False
+
+
 @firestore.transactional
 def _close(
     transaction: Any,
@@ -701,6 +719,8 @@ def _close(
     closed_at: datetime,
     extra: Mapping[str, Any],
     expected_activity_at: Optional[datetime],
+    expected_conversation_ids: Optional[Sequence[str]] = None,
+    split_after: Optional[datetime] = None,
 ) -> Optional[dict[str, Any]]:
     timeline_enabled = recorded_episodes_enabled()
     timeline_row = None
@@ -714,6 +734,14 @@ def _close(
         return None
     if reason == 'idle' and expected_activity_at is not None and raw.get('last_activity_at') != expected_activity_at:
         return None  # Speech won the race with a lazy reader's stale idle decision.
+    if expected_conversation_ids is not None and set(raw.get('conversation_ids') or []) != set(
+        expected_conversation_ids
+    ):
+        # The split was planned from an older read; the membership it would write is stale.
+        raise EpisodeConflict('split_membership_changed')
+    if split_after is not None and _member_recorded_after(raw, extra, split_after):
+        # A member that stays would keep this episode's window past the successor's start.
+        raise EpisodeConflict('split_member_recorded_later')
     merged = {**(unseal(uid, raw) or {}), **extra, **_closed_fields(reason, closed_at)}
     # Finalize arrival is bookkeeping. Recorded ownership ends at retained member evidence.
     # A detached member (``extra`` rewrites membership) no longer extends this episode's window.
@@ -771,9 +799,16 @@ def close_episode(
     closed_at: Optional[datetime] = None,
     extra: Optional[Mapping[str, Any]] = None,
     expected_activity_at: Optional[datetime] = None,
+    expected_conversation_ids: Optional[Sequence[str]] = None,
+    split_after: Optional[datetime] = None,
     firestore_client: Any = None,
 ) -> Optional[dict[str, Any]]:
-    """Close a live episode once. Returns the closed state, or None when it was not live."""
+    """Close a live episode once. Returns the closed state, or None when it was not live.
+
+    ``expected_conversation_ids`` and ``split_after`` guard a split (``extra`` removes a member): the close
+    raises ``EpisodeConflict`` unless the membership is still the one planned and no remaining member
+    recorded past ``split_after``. The caller then decides again from a fresh read.
+    """
     client = _client(firestore_client)
     return run_transactional(
         client,
@@ -785,6 +820,8 @@ def close_episode(
         closed_at or datetime.now(timezone.utc),
         dict(extra or {}),
         expected_activity_at,
+        expected_conversation_ids,
+        split_after,
     )
 
 

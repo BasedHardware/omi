@@ -354,6 +354,29 @@ def test_a_member_that_attaches_while_jev_answers_keeps_the_join(store):
     assert 'c2' not in episode['pending_boundary']
 
 
+def test_a_member_attaching_between_the_split_plan_and_its_close_is_kept_not_erased(store, monkeypatch):
+    first = _first_episode(store)
+    assert _attach(store, 'c2', minutes=12) == 'joined'
+    real_close = service.episodes_db.close_episode
+    raced = []
+
+    def racing_close(*args, **kwargs):
+        if not raced:
+            raced.append(True)
+            # c3 attaches after the split was planned from c1 and c2, before the close transaction runs.
+            assert _attach(store, 'c3', minutes=14) == 'joined'
+        return real_close(*args, **kwargs)
+
+    monkeypatch.setattr(service.episodes_db, 'close_episode', racing_close)
+    ask = lambda *a, **k: SimpleNamespace(noul=lambda name: 0.05)  # noqa: E731
+    service.record_moment(UID, _moment('c2', minutes=12, text=SECOND), _c(store, minutes=13, ask=ask))
+    assert raced == [True]
+    episode = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert episode['id'] == first['id'] and episode['conversation_ids'] == ['c1', 'c2', 'c3']
+    assert 'c2' not in episode['pending_boundary']
+    assert episodes_db.get_episode(UID, first['id'], firestore_client=store)['status'] == 'live'
+
+
 @pytest.mark.parametrize('error', [EpisodeConflict('lost the compare-and-swap'), RuntimeError('storage down')])
 def test_a_failed_f_marker_records_the_shared_fallback_and_keeps_todays_join(monkeypatch, error):
     fallbacks = []

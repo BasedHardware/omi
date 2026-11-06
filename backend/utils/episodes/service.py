@@ -339,6 +339,7 @@ def _close(
     carried_items: Optional[list[dict[str, Any]]] = None,
     preserve_for_reconciliation: bool = False,
     extra_fields: Optional[Mapping[str, Any]] = None,
+    split_after: Optional[datetime] = None,
 ) -> Optional[dict[str, Any]]:
     """Close once, returning committed state; None when the compare-and-swap loses.
 
@@ -402,6 +403,8 @@ def _close(
         closed_at=closed_at,
         extra=extra,
         expected_activity_at=expected_activity_at,
+        expected_conversation_ids=episode.get('conversation_ids') if split_after is not None else None,
+        split_after=split_after,
         firestore_client=c.firestore_client,
     )
     if closed is not None:
@@ -787,6 +790,7 @@ def _settle_boundary(
             carry_to_successor=moment.conversation_id if carry_previous_state else None,
             carried_items=carried_items if carry_previous_state else None,
             preserve_for_reconciliation=carry_previous_state,
+            split_after=facts.started_at if pending is not None and pending.get('variant') == F_JOIN_VARIANT else None,
         )
         episode = None
     elif decision.action == policy.NEW:
