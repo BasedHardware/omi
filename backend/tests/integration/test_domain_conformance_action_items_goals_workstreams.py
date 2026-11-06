@@ -537,3 +537,35 @@ def test_atomic_import_retains_the_existing_request_limit(domain_backend):
         )
     )
     assert report['failed'] == 201 and report['imported'] == report['unchanged'] == 0
+
+
+@pytest.mark.parametrize('abort_body', [False, True])
+def test_fence_cleanup_failure_finishes_all_and_resets_uow(domain_backend, abort_body):
+    h = domain_backend
+    sid = h.space('cleanup-error')
+    events = []
+
+    class Fence:
+        def __init__(self, fail):
+            self.fail = fail
+
+        def before_commit(self):
+            pass
+
+        def after_commit(self, committed):
+            events.append(committed)
+            if self.fail:
+                raise RuntimeError('cleanup failed')
+
+    def body(tx):
+        tx.register_commit_fence(Fence(True))
+        tx.register_commit_fence(Fence(False))
+        if abort_body:
+            raise ValueError('abort body')
+        return tx.action_items.create(ActionItemDraft(data={'description': 'Synthetic'}), document_id='task')
+
+    with pytest.raises(RuntimeError, match='cleanup failed'):
+        h.store(sid).run(body)
+    assert events == [not abort_body, not abort_body]
+    assert (h.action_items(sid).get('task') is not None) is (not abort_body)
+    assert h.store(sid).run(lambda tx: tx.action_items.read_control()) == {}

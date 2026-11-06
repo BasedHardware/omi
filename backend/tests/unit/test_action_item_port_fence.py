@@ -283,3 +283,43 @@ def test_refresh_writer_tickets_cover_real_commit(redis, monkeypatch, operation)
             action_item_refresh.claim_delivery(UID, 'conversation', ['existing'], firestore_client=client)
     assert calls == [operation]
     assert versions.version(UID) not in (before, None)
+
+
+@pytest.mark.parametrize('retry', [False, True])
+def test_failing_cleanup_does_not_leak_any_attempt_ticket(redis, monkeypatch, retry):
+    client = StrictFirestore({})
+    original = client.transaction
+    commits = []
+    finished = []
+
+    def transaction(*args, **kwargs):
+        tx = original(*args, **kwargs)
+        tx._max_attempts = 2
+        return tx
+
+    def commit(tx):
+        assert versions.version(UID) is None
+        commits.append(tx)
+        if retry and len(commits) == 1:
+            raise Aborted('synthetic retry')
+
+    class Fence:
+        def before_commit(self):
+            pass
+
+        def after_commit(self, committed):
+            finished.append(committed)
+            if len(finished) == 1:
+                raise RuntimeError('cleanup failed')
+
+    def body(tx):
+        tx.register_commit_fence(Fence())
+        tx.action_items.stage_write('set', 'task', {'description': 'Synthetic'})
+
+    monkeypatch.setattr(client, 'transaction', transaction)
+    monkeypatch.setattr(StrictFirestoreTransaction, '_commit', commit)
+    with pytest.raises(RuntimeError, match='cleanup failed'):
+        FirestoreSpaceStore(UID, firestore_client=client).run(body)
+    assert finished == ([False, True] if retry else [True])
+    assert versions.version(UID) is not None
+    assert redis.hlen(versions._key(UID) + ':writers') == 0

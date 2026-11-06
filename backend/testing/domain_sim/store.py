@@ -7,6 +7,7 @@ import base64
 import hashlib
 import json
 import uuid
+from contextlib import ExitStack
 from copy import deepcopy
 from datetime import datetime, timezone
 from functools import wraps
@@ -131,13 +132,16 @@ class SimSpaceStore:
                 self.state = before
                 raise
             finally:
-                for fence in self._fences:
-                    if fence == 'task':
-                        if committed:
-                            self.fence_log.append('after_commit:True')
-                    else:
-                        fence.after_commit(committed)
-                self._fences = parent
+                try:
+                    with ExitStack() as cleanup:
+                        for fence in reversed(self._fences):
+                            if fence == 'task':
+                                if committed:
+                                    cleanup.callback(self.fence_log.append, 'after_commit:True')
+                            else:
+                                cleanup.callback(fence.after_commit, committed)
+                finally:
+                    self._fences = parent
 
     def run_with_contention_retry(self, body: Callable[[SpaceTx], T], *, operation_name: str) -> T:
         return self.run(body)

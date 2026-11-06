@@ -4,6 +4,7 @@ Bodies are restartable and obey SDK read-before-write ordering. Standalone
 repositories retain each domain operation's original retry policy.
 """
 
+from contextlib import ExitStack
 from typing import Any, Callable, TypeVar
 
 from google.cloud import firestore
@@ -57,8 +58,9 @@ class FirestoreSpaceTx:
 
     def finish_commit(self, committed: bool) -> None:
         try:
-            for fence in self._fences:
-                fence.after_commit(committed)
+            with ExitStack() as cleanup:
+                for fence in reversed(self._fences):
+                    cleanup.callback(fence.after_commit, committed)
         finally:
             if committed:
                 for effect in self._effects:
@@ -100,8 +102,9 @@ class FirestoreSpaceStore:
         finally:
             # A failed attempt retains its tickets until the whole retry run
             # exits. Only the final committed attempt publishes side effects.
-            for index, tx in enumerate(attempts):
-                tx.finish_commit(completed and index == len(attempts) - 1)
+            with ExitStack() as cleanup:
+                for index in reversed(range(len(attempts))):
+                    cleanup.callback(attempts[index].finish_commit, completed and index == len(attempts) - 1)
 
     def run(self, body: Callable[[SpaceTx], T]) -> T:
         return self._run(body)
