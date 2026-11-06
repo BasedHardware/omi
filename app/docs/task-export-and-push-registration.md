@@ -20,10 +20,15 @@ Provider grants are unchanged.
 - Cloud destination resolution does not call or wait for EventKit. An Apple
   destination still requires native permission; an unavailable status read
   offers retry instead of claiming a connected provider needs reconnecting.
-- Explicit individual exports and updates/deletion of existing linked reminders
-  retain their existing behavior. This change does not move or delete historical
-  tasks, create a distributed export transaction, or repair unrelated provider
-  authorization failures.
+- Automatic task export and explicit bulk export use the same EventKit
+  identity derived from the account and task. EventKit saves the identity
+  alongside the reminder. A retry finds it across readable lists, including
+  completed reminders, then writes the same identifier to the backend.
+  Reminders are matched by identity so existing edits and unrelated reminders
+  with the same title stay intact. An unavailable lookup defers export.
+- The direct task-create route leaves Apple export to the phone. Native
+  push-driven sync for other task sources and changes to linked reminders
+  keep their existing paths.
 
 ## Registration ownership
 
@@ -65,6 +70,11 @@ cannot replace that accepted token with an older cached value.
       is covered separately. Storage/auth and final provider I/O are synthetic.
 - [x] Loopback HTTP and Firestore proof for delayed token writes, idempotent
       retries, schedule preservation and compatibility with released clients.
+- [x] `integration_test/apple_reminders_retry_test.dart` on an isolated iPhone 16
+      Pro simulator with iOS 26.5 and Reminders permission. Real EventKit
+      preserved the edited reminder when the loopback server withheld the
+      acknowledgement after saving the task link. Concurrent first exports
+      also produced one reminder per task.
 - [ ] Repository mobile journeys, preflight, final diff and CI for the current commit.
 - [ ] Merge, then release the backend before the mobile build so that ordered
       requests are enforced. The optional Firestore field requires no backfill.

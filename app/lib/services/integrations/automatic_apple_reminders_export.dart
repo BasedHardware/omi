@@ -23,13 +23,7 @@ class AutomaticAppleRemindersExport {
         _isCurrent = isCurrent ?? ((owner) => AuthService.instance.isSessionSnapshotCurrent(owner)),
         _status = status ?? ((current) => getTaskIntegrations(canSend: current)),
         _permission = permission ?? (() => AppleRemindersService().hasPermission()),
-        _create = create ??
-            ((item) => AppleRemindersService().addReminder(
-                  title: item.description,
-                  notes: 'From Omi',
-                  dueDate: item.dueAt,
-                  completed: item.completed,
-                )),
+        _create = create,
         _acknowledge = acknowledge ??
             ((id, reminder, current) async =>
                 await tasks.updateActionItem(id,
@@ -45,7 +39,7 @@ class AutomaticAppleRemindersExport {
   final bool Function(AuthSessionSnapshot) _isCurrent;
   final Future<TaskIntegrationsResponse?> Function(bool Function()) _status;
   final Future<bool> Function() _permission;
-  final Future<String?> Function(ActionItemWithMetadata) _create;
+  final Future<String?> Function(ActionItemWithMetadata)? _create;
   final Future<bool> Function(String, String, bool Function()) _acknowledge;
 
   Future<bool> export(ActionItemWithMetadata item, {required bool Function() canContinue}) async {
@@ -65,7 +59,8 @@ class AutomaticAppleRemindersExport {
         return false;
       }
       if (!await _permission() || !current()) return false;
-      final reminder = await _create(item);
+      final reminder =
+          await (_create?.call(item) ?? AppleRemindersService().exportTaskReminder(item, ownerUid: owner.ownerUid));
       if (reminder == null || !current()) return false;
       return await _acknowledge(item.id, reminder, current) && current();
     } catch (error) {

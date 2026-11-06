@@ -1,14 +1,17 @@
+import CryptoKit
 import Foundation
 import EventKit
 import Flutter
 
 class AppleRemindersService {
     private let eventStore = EKEventStore()
+    // Method-channel handlers and all mutations of this table run on the main queue.
+    private var pendingTaskExports: [URL: [FlutterResult]] = [:]
 
-    private func hasRemindersAccess() -> Bool {
+    private func hasRemindersAccess(readRequired: Bool = false) -> Bool {
         let status = EKEventStore.authorizationStatus(for: .reminder)
         if #available(iOS 17.0, *) {
-            return status == .fullAccess || status == .writeOnly || status == .authorized
+            return status == .fullAccess || status == .authorized || (!readRequired && status == .writeOnly)
         } else {
             return status == .authorized
         }
@@ -24,6 +27,8 @@ class AppleRemindersService {
             requestRemindersPermission(result: result)
         case "addReminder":
             addReminder(call: call, result: result)
+        case "exportTaskReminder":
+            exportTaskReminder(call: call, result: result)
         case "getReminders":
             getReminders(call: call, result: result)
         case "completeReminder":
@@ -276,7 +281,59 @@ class AppleRemindersService {
 
     // MARK: - Single Reminder CRUD
 
-    private func addReminder(call: FlutterMethodCall, result: @escaping FlutterResult) {
+    /// The task marker is saved with the reminder, so a missing server receipt
+    /// or an EventKit identifier change cannot make a retry create a second one.
+    private func exportTaskReminder(call: FlutterMethodCall, result: @escaping FlutterResult) {
+        guard let args = call.arguments as? [String: Any],
+              let owner = args["ownerUid"] as? String, !owner.isEmpty,
+              let taskID = args["actionItemId"] as? String, !taskID.isEmpty,
+              owner == UserDefaults.standard.string(forKey: "flutter.uid"),
+              hasRemindersAccess(readRequired: true) else {
+            result(FlutterError(code: "EXPORT_UNAVAILABLE", message: "Task reminder export is unavailable", details: nil))
+            return
+        }
+
+        let identity = Data("\(owner.utf8.count):\(owner)\(taskID)".utf8)
+        let digest = SHA256.hash(data: identity).map { String(format: "%02x", $0) }.joined()
+        guard let marker = URL(string: "omi-reminder://task/\(digest)") else {
+            result(FlutterError(code: "EXPORT_UNAVAILABLE", message: "Invalid task reminder identity", details: nil))
+            return
+        }
+        if pendingTaskExports[marker] != nil {
+            pendingTaskExports[marker]?.append(result)
+            return
+        }
+        pendingTaskExports[marker] = [result]
+
+        // Search readable lists, including completed reminders and reminders
+        // moved out of the original list. A failed lookup is ambiguous.
+        let predicate = eventStore.predicateForReminders(in: nil)
+        eventStore.fetchReminders(matching: predicate) { reminders in
+            let existingID = reminders?.first { $0.url == marker }?.calendarItemIdentifier
+            let lookupSucceeded = reminders != nil
+            DispatchQueue.main.async {
+                let waiters = self.pendingTaskExports.removeValue(forKey: marker) ?? []
+                let finish: FlutterResult = { receipt in waiters.forEach { $0(receipt) } }
+                guard lookupSucceeded,
+                      owner == UserDefaults.standard.string(forKey: "flutter.uid"),
+                      self.hasRemindersAccess(readRequired: true) else {
+                    finish(FlutterError(code: "EXPORT_UNAVAILABLE", message: "Task reminder lookup is unavailable", details: nil))
+                    return
+                }
+                if let existingID {
+                    finish(existingID)
+                    return
+                }
+                self.addReminder(call: call, marker: marker, result: finish)
+            }
+        }
+    }
+
+    private func addReminder(
+        call: FlutterMethodCall,
+        marker: URL? = nil,
+        result: @escaping FlutterResult
+    ) {
         guard let args = call.arguments as? [String: Any] else {
             result(FlutterError(code: "INVALID_ARGUMENTS", message: "Invalid arguments", details: nil))
             return
@@ -320,6 +377,7 @@ class AppleRemindersService {
         let reminder = EKReminder(eventStore: eventStore)
         reminder.title = title
         reminder.notes = notes
+        reminder.url = marker
         reminder.calendar = calendar
         if completed {
             reminder.isCompleted = true
