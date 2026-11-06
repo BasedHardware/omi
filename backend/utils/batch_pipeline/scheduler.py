@@ -24,7 +24,11 @@ from config.batch_pipeline import (
 )
 from config.policy import resolve_batch_policy
 from config.stt_cap_dispatch import offline_admission_enabled as cap_dispatch_enabled
-from database.batch_pipeline_policy import stage_in_transaction, record_policy_observations
+from database.batch_pipeline_policy import (
+    flush_anchor_stage_pins,
+    stage_in_transaction,
+    record_policy_observations,
+)
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
 from utils.batch_pipeline.contracts import LeasedWork, Priority, WorkItem, WorkResult, PoolCapacity, attach_held_vad
 from utils.batch_pipeline.capacity import within_unit_ceiling
@@ -288,6 +292,7 @@ def _prefer_merge_head(
     max_seconds: float,
     shared_gpu: bool,
     candidates=None,
+    pins: list | None = None,
 ) -> dict:
     """Promote an indexed capture head with O(1) queries, independent of FIFO depth.
 
@@ -332,7 +337,9 @@ def _prefer_merge_head(
             )
     except BatchPrivacyBlocked:
         return job
-    if not stage_in_transaction(tx, head, 'scheduler', observations=observations, candidates=candidates).head_priority:
+    if not stage_in_transaction(
+        tx, head, 'scheduler', observations=observations, candidates=candidates, pins=pins
+    ).head_priority:
         return job
     if queue.get('link_mode') == 'fifo_array':
         # Promote in the array alone: no predecessor or successor job document
@@ -615,6 +622,7 @@ class Scheduler:
 
     def _pull_shard(self, now, shard, priority, max_seconds, shared_gpu_id, max_leases=1):
         candidates = {}
+        pins: list = []
         started = monotonic()
         spread = shard_spread_enabled()
         claim_token = uuid.uuid4().hex
@@ -681,7 +689,7 @@ class Scheduler:
                     else:
                         privacy_checked_segment = job['segment_id']
                         policy = stage_in_transaction(
-                            tx, job, 'scheduler', observations=observations, candidates=candidates
+                            tx, job, 'scheduler', observations=observations, candidates=candidates, pins=pins
                         )
                         if policy.head_priority:
                             job = _prefer_merge_head(
@@ -694,6 +702,7 @@ class Scheduler:
                                 max_seconds=max_seconds,
                                 shared_gpu=bool(gpu_key),
                                 candidates=candidates,
+                                pins=pins,
                             )
                         job.setdefault('unit_kind', 'conversation')
                         park = None
@@ -704,7 +713,7 @@ class Scheduler:
                                     (job['conversation_id'],) if job.get('conversation_id') else (),
                                     job.get('privacy_generation'),
                                 )
-                            policy = stage_in_transaction(tx, job, 'scheduler', candidates=candidates)
+                            policy = stage_in_transaction(tx, job, 'scheduler', candidates=candidates, pins=pins)
                             allowed = _pool_allows(job, max_seconds, bool(gpu_key)) and (
                                 not gpu_key or policy.shared_live
                             )
@@ -798,6 +807,7 @@ class Scheduler:
 
         with pull_operation('pull', shard):
             receipts, eligible, observations = self.store.run(commit)
+        flush_anchor_stage_pins(self.store, pins)
         try:
             record_policy_observations(observations)
         except Exception:
@@ -883,13 +893,16 @@ class Scheduler:
 
         candidates = {}
         observations = []
+        pins: list = []
 
         def commit(tx):
             observations.clear()
             job = tx.get('jobs', segment_id)
             if not owns_lease(job, token, now):
                 return None
-            policy = stage_in_transaction(tx, job, 'scheduler', candidates=candidates, observations=observations)
+            policy = stage_in_transaction(
+                tx, job, 'scheduler', candidates=candidates, observations=observations, pins=pins
+            )
             attach_held_vad(job, measured_held_vad_speech_seconds, worker_vad_receipt)
             if quarantine or worker_failure is not None or job['attempt'] >= policy.max_attempts:
                 quarantine_job(tx, job, now, 'worker_failed')
@@ -904,6 +917,7 @@ class Scheduler:
 
         with store_operation('batch_fail'):
             outcome = self.store.run(commit)
+        flush_anchor_stage_pins(self.store, pins)
         record_policy_observations(observations)
         if outcome:
             state, attempt, seconds = outcome

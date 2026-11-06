@@ -6,6 +6,7 @@ from uuid import uuid4
 
 from database.batch_pipeline_policy import (
     PROCESS_ENVIRONMENT,
+    flush_anchor_stage_pins,
     load_stage_policy,
     stage_in_transaction,
     record_policy_observations,
@@ -658,13 +659,20 @@ class SilenceDispositionStore(RecoveryStore):
         if not empty_asr_disposition_enabled():
             raise ProjectionBlocked('disposition disabled')
         candidates, observations = {}, []
+        pins: list = []
         token = uuid4().hex
 
         def commit(tx):
             observations.clear()
             job, binding = self.checked(tx, segment_id, allow_completed_silence=True)
             policy = stage_in_transaction(
-                tx, job, 'recovery', candidates=candidates, observations=observations, server_flags=self.server_flags
+                tx,
+                job,
+                'recovery',
+                candidates=candidates,
+                observations=observations,
+                server_flags=self.server_flags,
+                pins=pins,
             )
             if not policy.recovery_enabled:
                 raise ProjectionBlocked('disposition disabled')
@@ -707,6 +715,7 @@ class SilenceDispositionStore(RecoveryStore):
             return job
 
         result = self.store.run(commit, operation='batch_recovery_silence_prepare')
+        flush_anchor_stage_pins(self.store, pins)
         record_policy_observations(observations)
         return result
 

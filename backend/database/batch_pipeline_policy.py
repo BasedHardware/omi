@@ -1,7 +1,7 @@
 """Persist a unit's first fallback through a canonical sibling fence."""
 
 import logging
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from typing import Any, Literal, overload
 from collections.abc import Iterable
 
@@ -27,6 +27,28 @@ logger = logging.getLogger(__name__)
 # is the serving role's live settings. An operator never pins its own env.
 PROCESS_ENVIRONMENT: Any = object()
 UNPINNED_REFUSAL = 'unpinned_policy_requires_server_flags'
+ANCHOR_STAGE_PIN_OPERATION = 'batch_anchor_stage_pin'
+ADMISSION_STAGE = 'admission'
+
+
+@dataclass(frozen=True)
+class AnchorStagePin:
+    """A canonical owner part resolved by one sibling, pinned separately.
+
+    The staging transaction self-stages the resolved part on the calling
+    job's own row and defers the canonical anchor write to
+    ``flush_anchor_stage_pins``. A sibling that wrote the shared anchor row
+    inside its own transition collided with every concurrently publishing
+    sibling on that single document and burned whole retry budgets
+    (``operation=... attempt=5/5 outcome=exhausted``). The pin lands in its
+    own single-document transaction: the first writer wins, every later
+    staging call copies from the anchor, and convergence is unchanged.
+    """
+
+    segment_id: str
+    stage: str
+    part: dict
+    source: str
 
 
 class UnpinnedPolicyRefused(ProjectionBlocked):
@@ -44,7 +66,9 @@ def recorded_policy(job: dict) -> dict | None:
     return raw
 
 
-def policy_in_transaction(tx, job: dict, *, observations=None, candidates=None) -> BatchUnitPolicy:
+def policy_in_transaction(
+    tx, job: dict, *, observations=None, candidates=None, pins: list | None = None
+) -> BatchUnitPolicy:
     raw = recorded_policy(job)
     if raw is not None:
         policy = BatchUnitPolicy.from_dict(raw)
@@ -66,7 +90,16 @@ def policy_in_transaction(tx, job: dict, *, observations=None, candidates=None) 
     )
     if observations is not None:
         observations.append(('policy_fallback', policy.policy_id))
-    for sibling in ([job] if raw is not None or anchor['segment_id'] == job['segment_id'] else [anchor, job]):
+    siblings = [job] if raw is not None or anchor['segment_id'] == job['segment_id'] else [anchor, job]
+    if pins is not None and len(siblings) == 2:
+        # A sibling transition must not write the shared anchor row: every
+        # concurrently publishing sibling of the same owner would read-modify-
+        # write that one document inside its own retry budget and exhaust it.
+        # The sibling self-stages the same resolution; the canonical pin lands
+        # after commit in flush_anchor_stage_pins's single-document txn.
+        siblings = [job]
+        pins.append(AnchorStagePin(anchor['segment_id'], ADMISSION_STAGE, policy.to_dict(), 'fallback'))
+    for sibling in siblings:
         sibling['policy'] = policy.to_dict()
         sibling['policy_source'] = 'fallback'
         tx.put('jobs', sibling['segment_id'], sibling)
@@ -90,6 +123,63 @@ def candidate_once(candidates, key, resolve):
     if key not in candidates:
         candidates[key] = resolve()
     return candidates[key]
+
+
+def flush_anchor_stage_pins(store, pins) -> int:
+    """Land deferred canonical pins, one single-document transaction each.
+
+    Best-effort by contract: every caller's transition is already durable when
+    this runs, so a contended, refused or raced pin is simply deferred to the
+    next staging touch, which re-emits it and converges on the anchor's part.
+    Duplicate descriptors from retried transaction bodies collapse on
+    ``(segment_id, stage)``; the first emitted resolution wins the anchor and
+    later CAS attempts observe the pinned part and no-op. Never raises.
+    Returns the number of anchors pinned.
+    """
+    pinned = 0
+    seen = set()
+    while pins:
+        pin = pins.pop(0)
+        key = (pin.segment_id, pin.stage)
+        if key in seen:
+            continue
+        seen.add(key)
+
+        def commit(tx, pin=pin):
+            anchor = tx.get('jobs', pin.segment_id)
+            if not anchor:
+                return False
+            if pin.stage == ADMISSION_STAGE:
+                if recorded_policy(anchor) is not None:
+                    return False
+                anchor['policy'] = dict(pin.part)
+                anchor['policy_source'] = pin.source
+            else:
+                raw = (anchor.get('policy_parts') or {}).get(pin.stage)
+                if raw is not None:
+                    # Another writer pinned first (a retried sibling body, a
+                    # concurrent publisher or a partial stamp): it wins.
+                    return False
+                anchor['policy_parts'] = {**(anchor.get('policy_parts') or {}), pin.stage: dict(pin.part)}
+                if recorded_policy(anchor) is None:
+                    anchor['policy_part_sources'] = {
+                        **(anchor.get('policy_part_sources') or {}),
+                        pin.stage: pin.source,
+                    }
+            tx.put('jobs', pin.segment_id, anchor)
+            return True
+
+        try:
+            if store.run(commit, operation='batch_anchor_stage_pin'):
+                pinned += 1
+        except Exception as error:
+            logger.warning(
+                'event=batch_anchor_stage_pin outcome=deferred segment_id=%s stage=%s exception_type=%s',
+                pin.segment_id,
+                pin.stage,
+                type(error).__name__,
+            )
+    return pinned
 
 
 def check_unit_privacy(tx, job):
@@ -131,35 +221,79 @@ def unit_anchor(tx, job):
 
 @overload
 def stage_in_transaction(
-    tx, job, stage: Literal['projection'], *, observations=None, candidates=None, server_flags=PROCESS_ENVIRONMENT
+    tx,
+    job,
+    stage: Literal['projection'],
+    *,
+    observations=None,
+    candidates=None,
+    server_flags=PROCESS_ENVIRONMENT,
+    pins: list | None = None,
 ) -> ProjectionPolicy: ...
 
 
 @overload
 def stage_in_transaction(
-    tx, job, stage: Literal['scheduler'], *, observations=None, candidates=None, server_flags=PROCESS_ENVIRONMENT
+    tx,
+    job,
+    stage: Literal['scheduler'],
+    *,
+    observations=None,
+    candidates=None,
+    server_flags=PROCESS_ENVIRONMENT,
+    pins: list | None = None,
 ) -> SchedulerPolicy: ...
 
 
 @overload
 def stage_in_transaction(
-    tx, job, stage: Literal['recovery'], *, observations=None, candidates=None, server_flags=PROCESS_ENVIRONMENT
+    tx,
+    job,
+    stage: Literal['recovery'],
+    *,
+    observations=None,
+    candidates=None,
+    server_flags=PROCESS_ENVIRONMENT,
+    pins: list | None = None,
 ) -> RecoveryPolicy: ...
 
 
 @overload
 def stage_in_transaction(
-    tx, job, stage: Literal['first_summary'], *, observations=None, candidates=None, server_flags=PROCESS_ENVIRONMENT
+    tx,
+    job,
+    stage: Literal['first_summary'],
+    *,
+    observations=None,
+    candidates=None,
+    server_flags=PROCESS_ENVIRONMENT,
+    pins: list | None = None,
 ) -> FirstSummaryPolicy: ...
 
 
 @overload
 def stage_in_transaction(
-    tx, job, stage: str, *, observations=None, candidates=None, server_flags=PROCESS_ENVIRONMENT
+    tx,
+    job,
+    stage: str,
+    *,
+    observations=None,
+    candidates=None,
+    server_flags=PROCESS_ENVIRONMENT,
+    pins: list | None = None,
 ) -> PolicyPart: ...
 
 
-def stage_in_transaction(tx, job, stage, *, observations=None, candidates=None, server_flags=PROCESS_ENVIRONMENT):
+def stage_in_transaction(
+    tx,
+    job,
+    stage: str,
+    *,
+    observations=None,
+    candidates=None,
+    server_flags=PROCESS_ENVIRONMENT,
+    pins: list | None = None,
+):
     """CAS one owner part, serializing sibling segments through the same anchor.
 
     An absent part is expected on new work. No other role's values are filled
@@ -203,7 +337,17 @@ def stage_in_transaction(tx, job, stage, *, observations=None, candidates=None, 
         source = (anchor.get('policy_part_sources') or {}).get(stage, 'fallback')
     else:
         source = 'operator_server_flags'
-    for sibling in ([job] if raw is not None or anchor['segment_id'] == job['segment_id'] else [anchor, job]):
+    siblings = [job] if raw is not None or anchor['segment_id'] == job['segment_id'] else [anchor, job]
+    if pins is not None and len(siblings) == 2:
+        # A sibling transition must not write the shared anchor row: every
+        # concurrently publishing sibling of the same owner would read-modify-
+        # write that one document inside its own retry budget and exhaust it
+        # (the batch_completion outcome=retry exhaustion). The sibling
+        # self-stages the same resolution; the canonical pin lands after
+        # commit in flush_anchor_stage_pins's single-document txn.
+        siblings = [job]
+        pins.append(AnchorStagePin(anchor['segment_id'], stage, policy.to_dict(), source))
+    for sibling in siblings:
         # Copy only this part; retain every concurrent/previous owner's receipt.
         sibling['policy_parts'] = {**(sibling.get('policy_parts') or {}), stage: policy.to_dict()}
         if recorded_policy(sibling) is None:
@@ -217,6 +361,7 @@ def stage_in_transaction(tx, job, stage, *, observations=None, candidates=None, 
 def load_stage_policy(store, segment_id, stage, *, server_flags=PROCESS_ENVIRONMENT):
     observations = []
     candidates = {}
+    pins: list = []
 
     def commit(tx):
         observations.clear()  # Retried callbacks publish only the committed attempt.
@@ -224,11 +369,18 @@ def load_stage_policy(store, segment_id, stage, *, server_flags=PROCESS_ENVIRONM
         if not job:
             return job, None
         policy = stage_in_transaction(
-            tx, job, stage, observations=observations, candidates=candidates, server_flags=server_flags
+            tx,
+            job,
+            stage,
+            observations=observations,
+            candidates=candidates,
+            server_flags=server_flags,
+            pins=pins,
         )
         return job, policy
 
     job, policy = store.run(commit, operation='batch_stage_policy_load')
+    flush_anchor_stage_pins(store, pins)
     record_policy_observations(observations)
     return job, policy
 
@@ -282,16 +434,18 @@ def record_policy_observations(observations: Iterable[tuple[str, Any]]) -> None:
 
 def load_job_policy(store, segment_id: str):
     candidates = {}
+    pins: list = []
 
     def commit(tx):
         job = tx.get('jobs', segment_id)
         if not job:
             return job, None, False
         missing = recorded_policy(job) is None
-        policy = policy_in_transaction(tx, job, candidates=candidates)
+        policy = policy_in_transaction(tx, job, candidates=candidates, pins=pins)
         return job, policy, missing
 
     job, policy, fallback = store.run(commit, operation='batch_job_policy_load')
+    flush_anchor_stage_pins(store, pins)
     if fallback:
         from config.policy.telemetry import record_policy_source
 

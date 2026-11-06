@@ -12,7 +12,12 @@ from config.batch_language_recovery import (
     REPAIR_EPOCH,
     REPAIR_PROVIDER,
 )
-from database.batch_pipeline_policy import load_stage_policy, stage_in_transaction, record_policy_observations
+from database.batch_pipeline_policy import (
+    flush_anchor_stage_pins,
+    load_stage_policy,
+    stage_in_transaction,
+    record_policy_observations,
+)
 from database.batch_pipeline_terminal_empty import spent_canary
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
 from database.batch_pipeline_quarantine_recovery import RecoveryStore
@@ -163,13 +168,20 @@ class SpeechRedriveStore:
         ordinary_empty_independent=False,
     ):
         candidates, observations = {}, []
+        pins: list = []
         token = uuid4().hex
 
         def commit(tx):
             observations.clear()
             job, binding = self.checked(tx, segment_id)
             policy = stage_in_transaction(
-                tx, job, 'recovery', candidates=candidates, observations=observations, server_flags=self.server_flags
+                tx,
+                job,
+                'recovery',
+                candidates=candidates,
+                observations=observations,
+                server_flags=self.server_flags,
+                pins=pins,
             )
             if not policy.recovery_enabled or (
                 not repair and not policy.speech_empty_multilingual and not independent_redrive(job)
@@ -251,6 +263,7 @@ class SpeechRedriveStore:
             return job
 
         result = self.store.run(commit, operation='batch_speech_redrive_prepare')
+        flush_anchor_stage_pins(self.store, pins)
         record_policy_observations(observations)
         return result
 

@@ -4,7 +4,12 @@ from copy import deepcopy
 from uuid import uuid4
 from config.batch_language_recovery import guarded_exhausted, language_guarded
 
-from database.batch_pipeline_policy import load_stage_policy, stage_in_transaction, record_policy_observations
+from database.batch_pipeline_policy import (
+    flush_anchor_stage_pins,
+    load_stage_policy,
+    stage_in_transaction,
+    record_policy_observations,
+)
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
 from database.batch_pipeline_quarantine_recovery import RecoveryStore
 from utils.batch_pipeline.contracts import WorkResult, held_vad_census, held_silence_allowed
@@ -83,13 +88,20 @@ class TerminalEmptyStore:
 
     def prepare(self, sid, uid, plan, snapshot, outcome, historical_attestation, now):
         candidates, observations = {}, []
+        pins: list = []
         token = uuid4().hex
 
         def commit(tx):
             observations.clear()
             job, binding = self.checked(tx, sid)
             policy = stage_in_transaction(
-                tx, job, 'recovery', candidates=candidates, observations=observations, server_flags=self.server_flags
+                tx,
+                job,
+                'recovery',
+                candidates=candidates,
+                observations=observations,
+                server_flags=self.server_flags,
+                pins=pins,
             )
             if not policy.terminal_empty_disposition or not policy.recovery_enabled:
                 raise ProjectionBlocked('terminal disposition disabled')
@@ -149,6 +161,7 @@ class TerminalEmptyStore:
             return job
 
         result = self.store.run(commit, operation='batch_terminal_empty_prepare')
+        flush_anchor_stage_pins(self.store, pins)
         record_policy_observations(observations)
         return result
 
