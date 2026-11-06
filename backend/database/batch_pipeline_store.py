@@ -30,7 +30,7 @@ from utils.sync.stage import collection_name
 # Every state an obligation can drain from. Assignment needs only ``pending``;
 # completion of persisted/ready rows has its own page. All share one index.
 PROJECTION_DISCOVERY_STATES = ('pending', 'persisted', 'ready')
-PROJECTION_OBLIGATION_STATES = (*PROJECTION_DISCOVERY_STATES, 'quarantine_held', 'held_expired')
+PROJECTION_OBLIGATION_STATES = (*PROJECTION_DISCOVERY_STATES, 'quarantine_held')
 PROJECTION_ASSIGNMENT_STATES = ('pending',)
 PROJECTION_FINISH_STATES = ('persisted', 'ready')
 
@@ -848,7 +848,12 @@ def timeliness_sample(
         'projection': (projection, 'committed_at'),
         # Ready receipts already in the conversation plus assignment holds; only the ledger waits. Visible only.
         'quarantine_held_rows': (results.where('projection_state', '==', 'quarantine_held'), 'committed_at'),
-        'held_expired_rows': (results.where('projection_state', '==', 'held_expired'), 'committed_at'),
+        'held_expired_rows': (
+            results.where('projection_state', '==', 'quarantine_held').where(
+                'held_expired_reason', '==', 'held_expired'
+            ),
+            'committed_at',
+        ),
         # A subset of quarantined, matching is_terminal_empty. Visible only.
         'terminal_empty': (
             quarantined.where('recovery_state', '==', 'failed_held')

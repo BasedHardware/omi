@@ -435,6 +435,8 @@ class ProjectionSession:
                 # before they can turn an unknown held receipt into ready.
                 changes.update(protocol_version=2, lineage_quarantine_version=1)
                 if batch_held_dead_letter_enabled():
+                    if self.entry.get('projection_state') == 'pending' and self.entry.get('held_expired_reason'):
+                        changes.update(held_expired_at=None, held_expired_reason=None)
                     changes['held_deadline_at'] = (
                         receipt['held_deadline_at']
                         if self.entry.get('projection_state') == 'pending'
@@ -501,7 +503,14 @@ class ProjectionSession:
                     'projection_state': 'quarantine_held' if quarantined else receipt['state'],
                     **({'protocol_version': 2, 'lineage_quarantine_version': 1} if quarantined else {}),
                     **(
-                        {'held_deadline_at': receipt['held_deadline_at']}
+                        {
+                            'held_deadline_at': receipt['held_deadline_at'],
+                            **(
+                                {'held_expired_at': None, 'held_expired_reason': None}
+                                if self.entry.get('held_expired_reason')
+                                else {}
+                            ),
+                        }
                         if quarantined and batch_held_dead_letter_enabled()
                         else {}
                     ),

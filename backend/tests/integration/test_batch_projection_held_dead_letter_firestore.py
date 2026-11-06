@@ -34,9 +34,11 @@ def held(monkeypatch):
     client.close()
 
 
-def test_expiry_content_preserved_and_nightly_flag_off_release_cas(held, monkeypatch):
+@pytest.mark.parametrize('attempts', [0, 3])
+def test_expiry_content_preserved_and_nightly_flag_off_release_cas(held, monkeypatch, attempts):
     store, projection = held
     result = projection.ref('results', 'held')
+    result.update({'projection_release_attempts': attempts, 'projection_redriven_at': 0.5 if attempts else None})
     before = deepcopy(result.get().to_dict())
     job = projection.ref('jobs', 'held').get().to_dict()
 
@@ -50,9 +52,9 @@ def test_expiry_content_preserved_and_nightly_flag_off_release_cas(held, monkeyp
     expired = result.get().to_dict()
     assert expired == {
         **before,
-        'projection_state': 'held_expired',
-        'dead_letter_reason': 'held_expired',
+        'held_expired_reason': 'held_expired',
         'held_expired_at': 2,
+        **({'held_expired_release_attempts': 3, 'projection_release_attempts': 0} if attempts == 3 else {}),
     }
     assert projection.ref('jobs', 'held').get().to_dict() == job
     assert held_expired_stock(store.client, store.namespace) == 1
@@ -82,3 +84,31 @@ def test_duplicate_nightly_release_increments_attempts_once(held):
         )
     assert sorted(released) == [False, True]
     assert result.get().to_dict()['projection_release_attempts'] == 1
+
+
+@pytest.mark.parametrize('attempts', [0, 3])
+def test_pre_change_scan_and_release_recovers_expired_row_with_flag_off(held, monkeypatch, attempts):
+    from tests.unit.fixtures.legacy_projection_release import (
+        ProjectionReleaseStore as LegacyReleaseStore,
+        held_page_ids,
+    )
+
+    store, projection = held
+    result = projection.ref('results', 'held')
+    result.update({'projection_release_attempts': attempts, 'projection_redriven_at': 0.5 if attempts else None})
+    payload = result.get().to_dict()['payload']
+    assert not ProjectionReleaseStore(projection).release('held', 2)
+    expired = result.get().to_dict()
+    assert expired['projection_state'] == 'quarantine_held'
+    assert expired['held_expired_reason'] == 'held_expired'
+    monkeypatch.setenv('BATCH_HELD_DEAD_LETTER_ENABLED', 'false')
+    assert held_page_ids(store.client, store.namespace, 128, None) == ['held']
+    assert not LegacyReleaseStore(projection).release('held', 3)
+    assert result.get().to_dict() == expired
+    projection.client.collection('users').document(OWNER).collection('conversations').document(TARGET).update(
+        {'discarded': False}
+    )
+    assert LegacyReleaseStore(projection).release('held', 4)
+    assert result.get().to_dict()['projection_state'] == 'pending'
+    assert result.get().to_dict()['payload'] == payload
+    assert held_expired_stock(store.client, store.namespace) == 0

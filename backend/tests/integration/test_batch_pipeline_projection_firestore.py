@@ -2000,12 +2000,18 @@ def test_assignment_hold_stamps_deadline_on_result_and_receipt(lane, monkeypatch
     monkeypatch.setenv('BATCH_HELD_DEAD_LETTER_ENABLED', str(enabled).lower())
     batch = multipart(lane, 3)
     ambiguous_manifest(lane, batch, monkeypatch, ambiguous_index=0)
+    # A pre-change release preserves additive markers; a fresh hold must renew them.
+    lane.projector.store.ref('results', batch.ids[0]).update(
+        {'held_expired_at': 1, 'held_expired_reason': 'held_expired'}
+    )
     lane.projector.project(batch.ids[0])
     row = lane.projector.store.ref('results', batch.ids[0]).get().to_dict()
     assert row['projection_state'] == 'quarantine_held'
     if enabled:
+        assert row['held_expired_at'] is None and row['held_expired_reason'] is None
         assert row['held_deadline_at'] == lane.clock() + HELD_DEAD_LETTER_SECONDS
         assert row['projection_parts']['0']['held_deadline_at'] == row['held_deadline_at']
     else:
+        assert row['held_expired_at'] == 1 and row['held_expired_reason'] == 'held_expired'
         assert 'held_deadline_at' not in row
         assert 'held_deadline_at' not in row['projection_parts']['0']

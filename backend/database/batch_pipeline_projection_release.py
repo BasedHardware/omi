@@ -97,7 +97,9 @@ class ProjectionReleaseStore:
                 ),
                 None,
             )
-            expired = entry.get('projection_state') == 'held_expired'
+            expired = entry.get('held_expired_reason') == 'held_expired' and finite_timestamp(
+                entry.get('held_expired_at')
+            )
             attempts = entry.get('projection_release_attempts', int(entry.get('projection_redriven_at') is not None))
             if (
                 binding is None
@@ -105,12 +107,13 @@ class ProjectionReleaseStore:
                 or job.get('owner_id') != binding.owner_id
                 or entry.get('owner_key') != owner_key(binding.owner_id)
                 or job.get('recovery_state') != 'held'
-                or entry.get('projection_state') not in {'quarantine_held', 'persisted', 'held_expired'}
+                or entry.get('projection_state') not in {'quarantine_held', 'persisted'}
                 or (entry.get('projection_state') == 'persisted' and not projection_hold_recovery_enabled())
                 or held_receipt is None
                 or (not projection_hold_recovery_enabled() and entry.get('projection_redriven_at') is not None)
                 or type(attempts) is not int
-                or not 0 <= attempts < MAX_RELEASE_ATTEMPTS
+                or attempts < 0
+                or (attempts >= MAX_RELEASE_ATTEMPTS and not batch_held_dead_letter_enabled())
                 or entry.get('projection_privacy_refusal')
                 or not assignment_held_without_recovery(job, {**entry, 'projection': held_receipt})
                 or (
@@ -119,20 +122,19 @@ class ProjectionReleaseStore:
                 )
             ):
                 return False
-            if expired:
+            if dead_before is not None:
                 expired_at = entry.get('held_expired_at')
-                if (
-                    dead_before is None
-                    or entry.get('dead_letter_reason') != 'held_expired'
-                    or not finite_timestamp(expired_at)
-                    or expired_at >= dead_before
-                ):
+                if not expired or not finite_timestamp(expired_at) or expired_at >= dead_before:
                     return False
             restorable = self._target_restorable(transaction, binding)
             if not restorable:
                 # Only settled assignment holds expire. Persisted multipart
                 # suffixes still owe follow-ups; privacy holds never qualify.
-                if entry.get('projection_state') == 'quarantine_held' and batch_held_dead_letter_enabled():
+                if (
+                    not expired
+                    and entry.get('projection_state') == 'quarantine_held'
+                    and batch_held_dead_letter_enabled()
+                ):
                     deadline = entry.get('held_deadline_at')
                     if deadline is None:
                         transaction.update(
@@ -142,15 +144,19 @@ class ProjectionReleaseStore:
                             },
                         )
                     elif finite_timestamp(deadline) and deadline <= now:
-                        transaction.update(
-                            self.store.ref('results', segment_id),
-                            {
-                                'projection_state': 'held_expired',
-                                'dead_letter_reason': 'held_expired',
-                                'held_expired_at': now,
-                            },
-                        )
+                        expiry = {'held_expired_reason': 'held_expired', 'held_expired_at': now}
+                        if attempts >= MAX_RELEASE_ATTEMPTS:
+                            # Keep the old reader's state AND attempt eligibility.
+                            # This bounded, one-time CAS re-arms only an aged hold;
+                            # retain the previous counter for custody/audit.
+                            expiry.update(
+                                held_expired_release_attempts=attempts,
+                                projection_release_attempts=0,
+                            )
+                        transaction.update(self.store.ref('results', segment_id), expiry)
                         return 'expired'
+                return False
+            if attempts >= MAX_RELEASE_ATTEMPTS:
                 return False
             reset: dict[str, Any] = {
                 'projection_state': 'pending',
@@ -163,7 +169,7 @@ class ProjectionReleaseStore:
             if 'held_deadline_at' in entry and (expired or batch_held_dead_letter_enabled()):
                 reset['held_deadline_at'] = None
             if expired:
-                reset.update(held_expired_at=None, dead_letter_reason=None)
+                reset.update(held_expired_at=None, held_expired_reason=None)
             if entry.get('lineage_quarantine_version') == 1:
                 # Old-binaries fence for the held receipt; the receipt is gone.
                 reset['protocol_version'] = 1
@@ -361,7 +367,11 @@ def finite_timestamp(value: Any) -> TypeGuard[int | float]:
 
 def expired_page_ids(client, namespace, limit, after_id):
     collection = client.collection(f'{namespace}_results')
-    query = collection.where('projection_state', '==', 'held_expired').order_by('__name__')
+    query = (
+        collection.where('projection_state', '==', 'quarantine_held')
+        .where('held_expired_reason', '==', 'held_expired')
+        .order_by('__name__')
+    )
     if after_id is not None:
         query = query.start_after({'__name__': collection.document(after_id)})
     return [doc.id for doc in query.limit(max(1, min(limit, RELEASE_PAGE))).stream()]

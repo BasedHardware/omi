@@ -675,27 +675,12 @@ STATES = (
                 )
             ),
             note=(
-                'Assignment holds get held_deadline_at, bounded expiry and nightly re-drive. Privacy holds are excluded.'
+                'Assignment holds retain quarantine_held with held_deadline_at, held_expired_at and held_expired_reason; nightly re-drive; omi_batch_held_expired_units and omi-batch-held-expired-volume (agent). Privacy holds are excluded.'
                 if name == 'quarantine_held'
                 else 'Result projection receipt state, distinct from batch job state'
             ),
         )
         for name in ('pending', 'persisted', 'ready', 'quarantine_held', 'completed', 'erased')
-    )
-    + (
-        row(
-            'batch_projection',
-            'held_expired',
-            ('projection_state',),
-            terminal=True,
-            owner='database/batch_pipeline_projection_release.py',
-            deadline='held_deadline_at',
-            exit=Exit('sweeper', 'utils/batch_pipeline/held_dead_letter.py:ProjectionHeldDeadLetter.tick'),
-            metric='omi_batch_held_expired_units',
-            alert=Alert('omi-batch-held-expired-volume', 'agent'),
-            alert_required=True,
-            note='Retained result and quarantined receipt; reason held_expired; nightly target-eligible re-drive even with expiry off.',
-        ),
     )
     + tuple(
         row(

@@ -518,7 +518,7 @@ def test_required_legacy_machines_are_present():
             'privacy_blocked',
             'partial_retired',
         },
-        'batch_projection': {'pending', 'persisted', 'ready', 'quarantine_held', 'held_expired', 'completed', 'erased'},
+        'batch_projection': {'pending', 'persisted', 'ready', 'quarantine_held', 'completed', 'erased'},
         'record_audio': {
             'capturing',
             'seal_refused',

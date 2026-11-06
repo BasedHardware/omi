@@ -1,24 +1,22 @@
 # Retained projection hold expiry and nightly re-drive
 
-Assignment-held projection receipts receive a seven-day `held_deadline_at`.
-The existing release transaction backfills older eligible holds with a full
-window and marks over-age, still-unrestorable settled holds `held_expired`,
-retaining the result, quarantined receipt and per-row reason. A bounded nightly
-pass rechecks the original release eligibility and target restorability. Its
-durable cursor continues across UTC midnight rather than restarting at a large
-blocked prefix. Existing release scan cursors and privacy/custody fences remain.
+Assignment-held receipts receive a seven-day `held_deadline_at`. The release
+transaction backfills legacy holds and marks aged, still-unrestorable holds with
+`held_expired_at` and `held_expired_reason=held_expired`, retaining the physical
+`quarantine_held` state, result and receipt. At the release-attempt cap, the same
+CAS retains the old count in `held_expired_release_attempts` and resets the active
+counter so the unchanged pre-4b release implementation can still recover the row.
 
-The existing default-on `BATCH_HELD_DEAD_LETTER_ENABLED` switch stops new stamps
-and expiry. The new nightly helper continues recovering already expired rows
-with the switch off. Pre-4b release code does not recognize `held_expired`, so a
-full binary revert requires retaining this helper; that limitation is explicit
-in the [runbook](../../runbooks/batch-held-dead-letter.md). The inherited full
-legacy-recoverability requirement and the explicit flag-off nightly alternative
-need a lead ruling before this draft is ready.
+The default-on `BATCH_HELD_DEAD_LETTER_ENABLED` switch stops new stamps and
+expiry. Frozen pre-change scan/release tests prove flag-off rollback recovery,
+including the capped case, only when the target becomes restorable. The bounded
+nightly helper also recovers marked rows with the switch off. Its durable cursor
+continues across UTC midnight. Existing release cursors and privacy/custody fences
+are unchanged. See the [runbook](../../runbooks/batch-held-dead-letter.md).
 
-The existing agent-only volume alert includes reasoned projection stock and
-excludes unrelated legacy holds. No deletion, conversation status, BYOK or
-finalization change is included. Local unit, contract and loopback Firestore
-tests cover retained payload, CAS, target-gated flag-off recovery, entry stamps,
-backfill and bounded scans. Production stock, live re-drive and alert delivery
-were not measured. See the [pipeline contract](../../listen_pusher_pipeline.mdx).
+The agent-only volume alert keys on additive expiry markers and excludes
+unrelated legacy holds. No deletion, conversation status, BYOK or finalization
+change is included. Synthetic and loopback tests cover payload retention, CAS,
+legacy recovery, entry stamps, backfill and bounded scans. Production stock,
+live re-drive and alert delivery were not measured. See the
+[pipeline contract](../../listen_pusher_pipeline.mdx).

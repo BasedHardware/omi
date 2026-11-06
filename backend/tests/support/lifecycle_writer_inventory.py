@@ -118,12 +118,6 @@ FIELD_SITES = {
         (
             'ProjectionReleaseStore.release.commit',
             'projection_state',
-            "'held_expired'",
-            ('dead_letter_reason', 'held_expired_at', 'projection_state'),
-        ),
-        (
-            'ProjectionReleaseStore.release.commit',
-            'projection_state',
             "'pending'",
             (
                 'projection',

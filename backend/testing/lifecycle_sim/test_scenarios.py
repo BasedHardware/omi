@@ -28,6 +28,7 @@ from tests.integration.test_batch_projection_held_dead_letter_firestore import (
     held,  # noqa: F401
     test_expiry_content_preserved_and_nightly_flag_off_release_cas,  # noqa: F401
     test_duplicate_nightly_release_increments_attempts_once,  # noqa: F401
+    test_pre_change_scan_and_release_recovers_expired_row_with_flag_off,  # noqa: F401
 )
 from tests.support.lifecycle_state_table import durable_titling_rearm
 from testing.listen_pusher_stack.run import Stack, _wait_for_port
