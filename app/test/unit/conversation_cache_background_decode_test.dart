@@ -2,8 +2,6 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-// Exercise platform write failures, which SharedPreferences mocks cannot model.
-// ignore: depend_on_referenced_packages
 import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
 
 import 'package:omi/backend/preferences.dart';

@@ -9,6 +9,7 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/gen/siri_pigeon.g.dart';
+import 'package:omi/services/capture/optimistic_processing.dart';
 import 'package:omi/services/siri_integration.dart';
 import 'package:omi/ui/feedback/omi_feedback.dart';
 
@@ -256,6 +257,28 @@ void main() {
     expect((await prefs.loadCachedConversations()).map((row) => row.id), ['a', 'keep']);
   });
 
+  test('a confirmed delete removes matching processing cards and rejects late updates', () async {
+    final row = _conversation('deleted');
+    final processing = _conversation('deleted', status: ConversationStatus.processing);
+    final placeholder = OptimisticProcessingPlaceholder.conversation(targetConversationId: row.id);
+    final keep = _conversation('keep', status: ConversationStatus.processing);
+    final day = makeProvider([row]);
+    final home = makeProvider([]);
+    home.addProcessingConversation(placeholder);
+    home.addProcessingConversation(processing);
+    home.addProcessingConversation(keep);
+
+    await day.deleteConversationLocally(row);
+    await day.deleteConversationOnServer(row.id);
+
+    expect(home.processingConversations, [keep]);
+    home.addProcessingConversation(processing);
+    home.addProcessingConversation(placeholder);
+    home.upsertConversation(row);
+    expect(home.processingConversations, [keep]);
+    expect(home.conversations, isEmpty);
+  });
+
   test('a regroup during the window does not bring the row back', () {
     final a = _conversation('a');
     final provider = makeProvider([a]);
@@ -268,9 +291,10 @@ void main() {
   });
 }
 
-ServerConversation _conversation(String id) => ServerConversation(
+ServerConversation _conversation(String id, {ConversationStatus status = ConversationStatus.completed}) =>
+    ServerConversation(
       id: id,
       createdAt: DateTime(2026, 9, 20, 10),
       structured: Structured('Title $id', 'Overview'),
-      status: ConversationStatus.completed,
+      status: status,
     );

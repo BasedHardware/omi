@@ -565,6 +565,7 @@ class ConversationProvider extends ChangeNotifier {
   }
 
   void addProcessingConversation(ServerConversation conversation, {bool freshProcessingAttempt = false}) {
+    if (SharedPreferencesUtil().isConversationDeleteConfirmed(_processingTargetId(conversation))) return;
     if (conversation.id == OptimisticProcessingPlaceholder.id) {
       _cancelProcessingPlaceholderTimers();
       // The request or WAL drain may never resolve. Expire only this local
@@ -1507,6 +1508,7 @@ class ConversationProvider extends ChangeNotifier {
 
   final _phoneOnlyConversations = <String, ServerConversation>{};
   void upsertConversation(ServerConversation conversation) {
+    if (SharedPreferencesUtil().isConversationDeleteConfirmed(conversation.id)) return;
     if (conversation.deleted || conversation.isMergedDonor) {
       updateConversationInSortedList(conversation);
       return;
@@ -1733,6 +1735,17 @@ class ConversationProvider extends ChangeNotifier {
       } else {
         groupedConversations[entry.key] = rows;
       }
+    }
+    final matchingProcessing = processingConversations.where((row) => _processingTargetId(row) == id);
+    if (matchingProcessing.isNotEmpty) {
+      if (matchingProcessing.any((row) => row.id == OptimisticProcessingPlaceholder.id)) {
+        _cancelProcessingPlaceholderTimers();
+        _bumpProcessingStateRevision(OptimisticProcessingPlaceholder.id);
+      }
+      _bumpProcessingStateRevision(id);
+      processingConversations = processingConversations.where((row) => _processingTargetId(row) != id).toList();
+      _syncProcessingReconcileTimer();
+      removed = true;
     }
     return removed;
   }
