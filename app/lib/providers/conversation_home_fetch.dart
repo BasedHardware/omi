@@ -2,6 +2,20 @@ part of 'conversation_provider.dart';
 
 /// Home fetch projection keeps its held replacements and storage cursor in one boundary.
 extension _ConversationHomeFetch on ConversationProvider {
+  int _recordServerPageIds(List<ServerConversation> rows, int storageCount) {
+    final prefs = SharedPreferencesUtil();
+    var retained = storageCount;
+    for (final row in rows) {
+      if (prefs.isConversationDeleteConfirmed(row.id)) {
+        // This response still counted a row that is gone from the next page's storage cursor.
+        retained--;
+      } else {
+        _conversationServerLoadedIds.add(row.id);
+      }
+    }
+    return retained < 0 ? 0 : retained;
+  }
+
   /// A newest-page refresh proves nothing about cached pages older than its boundary.
   Iterable<ServerConversation> _cachedRowsBeforePage(
       List<ServerConversation> page, Iterable<ServerConversation> cached) sync* {
