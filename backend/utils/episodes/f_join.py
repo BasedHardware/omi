@@ -198,6 +198,8 @@ def _split_still_clear(
         logger.warning('event=episode_f_join outcome=recheck_failed exception_type=%s', type(error).__name__)
         _fallback('other')
         return False
+    if fresh is None:
+        return False
     return policy.is_live(fresh) and not later_member(fresh, conversation_id, started_at)
 
 
