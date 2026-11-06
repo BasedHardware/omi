@@ -2,10 +2,14 @@ import 'dart:async';
 
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/pages/settings/sign_out.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/services/auth/auth_token_result.dart';
 import 'package:omi/services/notifications/fcm_token_registration.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   const alice = AuthSessionSnapshot(ownerUid: 'alice', generation: 1);
   late AuthSessionSnapshot? owner;
   late String? apns;
@@ -48,6 +52,21 @@ void main() {
         deadline: const Duration(seconds: 2),
         retryDelays: const [Duration(seconds: 1), Duration(seconds: 2), Duration(seconds: 4), Duration(seconds: 8)],
       );
+
+  test('overlapping registrations reserve durable orders even after a clock rollback and sign-out', () async {
+    final previous = DateTime.now().add(const Duration(days: 1)).microsecondsSinceEpoch;
+    SharedPreferences.setMockInitialValues({SharedPreferencesUtil.fcmRegistrationOrderKey: previous});
+    await SharedPreferencesUtil.init();
+    final prefs = SharedPreferencesUtil();
+    final first = prefs.reserveFcmRegistrationOrder();
+    final second = prefs.reserveFcmRegistrationOrder();
+    expect(await first, previous + 1);
+    expect(await second, previous + 2);
+
+    await clearPreferencesForSignOut();
+    await SharedPreferencesUtil.init();
+    expect(await prefs.reserveFcmRegistrationOrder(), previous + 3);
+  });
 
   test('launch with a restored owner registers without a token-refresh event', () async {
     final service = registrar();

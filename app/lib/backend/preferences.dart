@@ -60,6 +60,9 @@ class SharedPreferencesUtil {
   /// Native capture implementations read this same SharedPreferences value
   /// when Dart is backgrounded or suspended.
   static const String capturePolicyKey = 'capturePolicy';
+
+  /// Device-local push order, with no account identifiers or token contents.
+  static const String fcmRegistrationOrderKey = 'fcmRegistrationOrder';
   static const String _legacyDeviceMutedKey = 'deviceMuted';
   static const String _legacyBatchMutedKey = 'batchMuted';
   static const MethodChannel _capturePolicyChannel = MethodChannel('com.omi/capture_policy');
@@ -1634,6 +1637,15 @@ class SharedPreferencesUtil {
   }
 
   Future<bool> saveInt(String key, int value) async => await _preferences?.setInt(key, value) ?? false;
+
+  Future<int?> reserveFcmRegistrationOrder() async {
+    final now = DateTime.now().microsecondsSinceEpoch;
+    final previous = getInt(fcmRegistrationOrderKey);
+    final next = now > previous ? now : previous + 1;
+    // Legacy SharedPreferences updates its isolate-local cache synchronously.
+    // Reserve before awaiting disk so overlapping attempts receive unique orders.
+    return await saveInt(fcmRegistrationOrderKey, next) ? next : null;
+  }
 
   Future<bool> saveBool(String key, bool value) async => await _preferences?.setBool(key, value) ?? false;
 

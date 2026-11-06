@@ -1,7 +1,8 @@
 # Task export routing and push registration
 
 These client paths reuse the saved task-integration status and authenticated
-session generation. They do not add a backend contract or change provider grants.
+session generation. The registration request carries an optional order field.
+Provider grants are unchanged.
 
 ## Routing authority
 
@@ -40,6 +41,12 @@ pending reads and retries, and guarded HTTP sends cannot borrow a replacement
 account. Guarded HTTP responses recheck the owner before refresh or account
 deletion side effects, including replay responses. Intercom remains best effort and cannot block Omi's accepted receipt.
 Tokens and task contents are excluded from the new diagnostic logs.
+The client reserves a device-local order before each registration attempt and
+reuses it for transport retries. The backend compares it with the stored device
+order in the same Firestore transaction that saves the token and updates the
+summary timezone. A superseded request receives 409. An identical retry
+acknowledges the existing write without replaying the timezone update.
+Unversioned requests retain the released-client behavior.
 A rotation consumed while APNs is pending satisfies the coalesced wake. Only a
 later, unconsumed rotation triggers another attempt, so an unnecessary SDK read
 cannot replace that accepted token with an older cached value.
@@ -56,8 +63,11 @@ cannot replace that accepted token with an older cached value.
       adapter → export marker, without FCM registration, including refused and
       disconnected providers. Token-save refusal → retry → shared push sender
       is covered separately. Storage/auth and final provider I/O are synthetic.
-- [ ] Repository mobile journeys, preflight, final diff and exact-head CI.
-- [ ] Merge and mobile store release (no backend deployment/schema change).
+- [x] Loopback HTTP and Firestore proof for delayed token writes, idempotent
+      retries, schedule preservation and compatibility with released clients.
+- [ ] Repository mobile journeys, preflight, final diff and CI for the current commit.
+- [ ] Merge, then release the backend before the mobile build so that ordered
+      requests are enforced. The optional Firestore field requires no backfill.
 
 The integration target `integration_test/task_notification_recovery_capture.dart`
 uses the production providers, export service, HTTP codecs and AuthService
