@@ -438,23 +438,22 @@ class QueueMetrics:
     def _refresh_timeliness(self, store: FirestoreStore, now: float) -> None:
         if now < self._timeliness_due:
             return
-        self._timeliness_due = now + timeliness_interval_seconds()
+        interval = timeliness_interval_seconds()
+        self._timeliness_due = now + interval
         if not batch_timeliness_alarm_enabled():
             self.timeliness_samples.labels('disabled').inc()
             return
-        if lever_enabled('batch_timeliness_leader'):
+        elected = lever_enabled('batch_timeliness_leader')
+        if elected:
             if self.timeliness_leader is None:
                 # Lazy and shared by both planes, using the data namespace, not
                 # pod/release identity. No import-time or disabled-path IO.
-                self.timeliness_leader = LeaderLease(
-                    store, TIMELINESS_METRICS, ttl_seconds=timeliness_interval_seconds()
-                )
-            self.timeliness_leader.ttl_seconds = timeliness_interval_seconds()
+                self.timeliness_leader = LeaderLease(store, TIMELINESS_METRICS, ttl_seconds=interval)
+            self.timeliness_leader.ttl_seconds = interval
             acquired_at = time.monotonic()
             if not self.timeliness_leader.acquire():
                 self._timeliness_visible = False
                 return
-            self._timeliness_expires = acquired_at + timeliness_interval_seconds()
         try:
             sample = timeliness_sample(
                 store.client,
@@ -482,6 +481,10 @@ class QueueMetrics:
         for leg, truncated in sample['truncated'].items():
             self.timeliness_truncated.labels(leg).set(1 if truncated else 0)
         self.timeliness_observed_at.set(now)
+        if elected:
+            # A lease renewal/fail-open result alone must not revive expired
+            # debt beside another replica's fresh observation timestamp.
+            self._timeliness_expires = acquired_at + interval
         self._timeliness_visible = True
         self.timeliness_samples.labels('ok').inc()
 

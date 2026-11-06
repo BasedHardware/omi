@@ -587,3 +587,24 @@ def test_lazy_election_uses_store_namespace_and_own_role_on_both_planes(monkeypa
         assert call.args == (store, TIMELINESS_METRICS)
         assert call.kwargs == {'ttl_seconds': 300.0}
     store.timeliness.assert_not_called()
+
+
+def test_failed_fail_open_retry_does_not_revive_expired_former_leader(monkeypatch):
+    from utils.batch_pipeline import metrics as metrics_module
+
+    metrics, store, clock = _fleet(monkeypatch)
+    monkeypatch.setattr(metrics_module.time, 'monotonic', clock)
+    first, second = metrics
+    first.refresh_timeliness(store, clock.now)
+    clock.now += 301
+    second.refresh_timeliness(store, clock.now)
+    assert list(first.timeliness_age.collect()) == []
+    first.timeliness_leader.store = Mock(run=Mock(side_effect=RuntimeError('lease store down')))
+    store.timeliness.side_effect = RuntimeError('sample failed')
+    first.refresh_timeliness(store, clock.now)
+    # Preserve the last stored timestamp without extending its visibility.
+    assert first.timeliness_observed_at._value.get() == NOW
+    assert list(first.timeliness_age.collect()) == []
+    assert list(first.timeliness_observed_at.collect()) == []
+    assert list(second.timeliness_observed_at.collect())[0].samples[0].value == clock.now
+    assert store.timeliness.call_count == 3  # Fail-open still attempts the sample.

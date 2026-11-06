@@ -14,7 +14,7 @@ Target: process most batch audio within 30 minutes of admission, and alarm when 
 2 hours. Failed-held, quarantined and repair waits count, because that is how 165 segments were lost on 2026-11-01.
 
 The batch worker queue sample exports these series (`utils/batch_pipeline/metrics.py`, at most once per 5 minutes
-per data namespace, across serving and GKE worker processes):
+per data namespace on healthy leases with election enabled, across serving and GKE worker processes):
 
 | series | meaning |
 |---|---|
@@ -30,12 +30,12 @@ metrics and maintenance. Its TTL equals the sampling interval (default 300 s, 60
 so another holder waits a whole interval before takeover. Non-leaders execute no
 timeliness queries. Before a successful sample and after losing the lease, all
 sampler gauges (including drain/held ages and the observation timestamp) are absent.
-Failures retain the previous successful values and timestamp while the lease is
-current; they never refresh freshness. Collection also withdraws an expired leader
+Failures retain the previous stored values and timestamp without extending their
+collection deadline; expired samples stay absent even after a fail-open lease retry. Collection also withdraws an expired leader
 sample if its supervisor stalls, so an old breach cannot borrow a new leader’s
 fresh timestamp. Lease-store errors fail open using the existing lease behavior.
 
-Each pre-epoch aggregation applies `limit(10000).count()`; a saturated value means
+With `batch_timeliness_leader` enabled, each pre-epoch aggregation applies `limit(10000).count()`; a saturated value means
 **at least** 10,000 units. Post-epoch SLA counts and the oldest-unit queries retain
 their semantics. Backlog is kept visible, never alarmed. This bounds historical
 index entries per leg independently of stock size. For N healthy instances in one
@@ -53,6 +53,11 @@ Followers need not publish zeros. Freshness uses `time() - max(observed_at)` wit
 `or vector(1e9)` when every sampler is absent; the stale rule retains its 900 s
 threshold and `noDataState: Alerting`. The breach rule retains its freshness gate,
 and the blind rule retains `noDataState: OK`. No alert thresholds change.
+
+An interval reduction across a restart can wait for the previous holder's stored TTL
+(up to 3600 s); it does not revoke a live lease. Use a stable interval across the
+fleet and account for that handover window when changing it. Restarting with
+lever 0 bypasses the stored lease and restores per-instance queries.
 
 Read attribution uses five fixed origins: `job:batch_pipeline_quarantine_recovery:held_candidates`,
 `job:batch_pipeline_quarantine_recovery:recovery_candidates`, `job:record_seal_cluster_repair:discover_jobs`,
