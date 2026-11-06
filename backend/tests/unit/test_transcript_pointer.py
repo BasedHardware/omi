@@ -127,6 +127,23 @@ def test_threshold_uses_compressed_bytes(lake_world, monkeypatch, level):
     assert isinstance(encode(segments, level)['transcript_segments'], dict)
 
 
+@pytest.mark.parametrize('binding', ['BUCKET_OBJECT_LAKE', 'OBJECT_LAKE_RELEASE'])
+@pytest.mark.parametrize('value', [None, '', '   '])
+def test_incomplete_lake_bindings_close_write_admission(lake_world, monkeypatch, binding, value):
+    if value is None:
+        monkeypatch.delenv(binding)
+    else:
+        monkeypatch.setenv(binding, value)
+    if binding == 'OBJECT_LAKE_RELEASE' and value is None:
+        assert pointer.config.write_admitted(UID)  # release defaults to v1
+        return
+    assert not pointer.config.write_admitted(UID)
+    put = Mock(side_effect=AssertionError('put attempted without lake bindings'))
+    monkeypatch.setattr(lake, 'put_space_object', put)
+    assert isinstance(encode()['transcript_segments'], bytes)
+    put.assert_not_called()
+
+
 def test_cold_transaction_reloads_outside_body(lake_world):
     doc = pointer_doc(lake_world)
     attempts = []
@@ -142,15 +159,14 @@ def test_cold_transaction_reloads_outside_body(lake_world):
     assert pointer._MEMO.get() is None
 
 
-def test_direct_transaction_guard_cold_read_and_deferred_encode(lake_world):
+def test_direct_transaction_guard_cold_read_and_candidate_upload(lake_world):
     doc = pointer_doc(lake_world)
 
     def body(transaction):
         with pytest.raises(pointer.TranscriptPointerUnloaded):
             pointer.resolve_pointer(UID, doc['transcript_segments'])
-        result = encode(speech(22000))
-        assert isinstance(result['transcript_segments'], bytes)
-        assert pointer._memo().deferred
+        with pytest.raises(pointer.TranscriptUploadRequired):
+            encode(speech(22000))
 
     _client.run_transactional(lake_world.store, body)
     assert lake_world.calls['get'] == 0
@@ -188,6 +204,34 @@ def test_preload_churn_is_bounded_and_typed(lake_world):
         pointer.run_preloaded_transactional(lake_world.store, body)
     assert len(attempts) == 5
     assert lake_world.calls['get'] == 4
+
+
+def test_candidate_upload_churn_is_bounded_and_never_commits(lake_world):
+    attempts = []
+
+    def body(transaction):
+        attempts.append(1)
+        result = encode(speech(18000 + len(attempts)))
+        transaction.set(
+            lake_world.store.collection('users').document(UID).collection('conversations').document(CID), result
+        )
+
+    with pytest.raises(pointer.TranscriptPointerFetchError, match='bounded upload retries'):
+        pointer.run_preloaded_transactional(lake_world.store, body)
+    assert len(attempts) == 5
+    assert lake_world.calls['put'] == 4
+    assert PATH not in lake_world.store.rows
+    assert pointer._MEMO.get() is None
+
+
+def test_candidate_upload_failure_aborts_without_inline_write(lake_world, monkeypatch):
+    doc = {'status': 'in_progress', 'transcript_segments': []}
+    lake_world.store.rows[PATH] = deepcopy(doc)
+    monkeypatch.setattr(lake, 'put_space_object', Mock(side_effect=lake.LakeFetchError('synthetic')))
+    with pytest.raises(lake.LakeFetchError):
+        conversations_db.update_conversation_segments(UID, CID, speech(), firestore_client=lake_world.store)
+    assert lake_world.store.rows[PATH] == doc
+    assert pointer._MEMO.get() is None
 
 
 @pytest.mark.parametrize(
@@ -320,16 +364,49 @@ def test_explicit_preload_cannot_fetch_inside_transaction(lake_world):
     assert lake_world.calls['get'] == 0
 
 
-def test_nested_runner_does_not_fetch_or_discard_outer_deferred_notes(lake_world):
+def test_nested_runner_leaves_io_to_outer_boundary(lake_world):
     doc = pointer_doc(lake_world)
     with _client.transaction_body():
-        encode(speech(21000))
-        notes = dict(pointer._memo().deferred)
         assert pointer.run_preloaded_operation(lambda: 'nested') == 'nested'
-        assert pointer._memo().deferred == notes
+        with pytest.raises(pointer.TranscriptUploadRequired):
+            pointer.run_preloaded_operation(lambda: encode(speech(21000)))
         with pytest.raises(pointer.TranscriptPointerUnloaded):
             pointer.run_preloaded_operation(lambda: pointer.resolve_pointer(UID, doc['transcript_segments']))
     assert lake_world.calls['get'] == 0
+
+
+def test_decoded_memo_aggregate_byte_budget_is_retryable(lake_world, monkeypatch):
+    first = encode(speech(18000))
+    second = encode(speech(18001))
+    pointer.clear_memo()
+    # Exercise the production aggregate accounting without allocating 64 MiB.
+    monkeypatch.setattr(pointer, 'MAX_MEMO_DECODED_BYTES', 2 * pointer._decoded_bytes(speech(18000)) - 1)
+    attempts = []
+
+    def body(transaction):
+        attempts.append(1)
+        for doc in (first, second):
+            pointer.resolve_pointer(UID, doc['transcript_segments'])
+
+    with pytest.raises(pointer.TranscriptMemoBudgetExceeded, match='byte budget') as failure:
+        pointer.run_preloaded_transactional(lake_world.store, body)
+    assert isinstance(failure.value, pointer.TranscriptPointerFetchError)
+    assert len(attempts) == 2
+    assert lake_world.calls['get'] == 2
+    assert pointer._MEMO.get() is None
+
+
+def test_decoded_memo_replacement_and_expiry_release_byte_budget(lake_world, monkeypatch):
+    monkeypatch.setattr(pointer, 'MAX_MEMO_DECODED_BYTES', pointer._decoded_bytes(speech(100)))
+    memo = pointer._memo().decoded
+    memo['same'] = speech(100)
+    memo['same'] = speech(100)
+    assert memo.currsize == memo.maxsize
+    memo.pop('same')
+    memo['next'] = speech(100)
+    memo.expire(memo.timer() + 121)
+    assert memo.currsize == 0
+    memo['after-expiry'] = speech(100)
 
 
 def test_cached_failure_does_not_retain_caller_tracebacks(lake_world, monkeypatch):

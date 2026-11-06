@@ -1,8 +1,8 @@
 """Transcript pointer codec and two-phase Firestore/lake boundary.
 
 The transactional snapshot chooses the content-addressed reference; IO happens
-only after an unloaded attempt has aborted. Inline writes can be swapped after
-commit using the snapshot's update-time precondition.
+only after an unloaded attempt has aborted. Oversized candidates are uploaded
+before retrying the entire transaction against a fresh source snapshot.
 """
 
 from __future__ import annotations
@@ -15,6 +15,7 @@ from datetime import datetime
 import hashlib
 import json
 import logging
+import sys
 import threading
 from typing import Any, Callable, List, Mapping
 import zlib
@@ -51,6 +52,58 @@ class TranscriptPointerUnloaded(TranscriptPointerError):
         self.uid, self.pointer = uid, dict(pointer)
 
 
+class TranscriptUploadRequired(TranscriptPointerError):
+    """Abort before writing; the owning boundary uploads outside Firestore."""
+
+    def __init__(self, uid, conversation_id, plaintext):
+        super().__init__('Transcript candidate must be uploaded outside the transaction')
+        self.uid, self.conversation_id, self.plaintext = uid, conversation_id, plaintext
+
+
+class TranscriptMemoBudgetExceeded(TranscriptPointerFetchError):
+    """Retryable operation memory limit; never evict a required read silently."""
+
+
+MAX_MEMO_DECODED_BYTES = 64 * 1024 * 1024
+
+
+def _decoded_bytes(value):
+    # Account for decoded Python containers and strings, not compressed bytes.
+    # Counting shared objects twice is deliberately conservative and avoids an
+    # unbounded auxiliary set while measuring adversarial JSON.
+    size = sys.getsizeof(value)
+    if isinstance(value, dict):
+        for key, item in value.items():
+            size += _decoded_bytes(key) + _decoded_bytes(item)
+            if size > MAX_MEMO_DECODED_BYTES:
+                break
+    elif isinstance(value, list):
+        for item in value:
+            size += _decoded_bytes(item)
+            if size > MAX_MEMO_DECODED_BYTES:
+                break
+    return size
+
+
+class _DecodedMemo(TTLCache):
+    """Both 32 entries and 64 MiB, with the same plaintext TTL."""
+
+    def __init__(self):
+        super().__init__(maxsize=MAX_MEMO_DECODED_BYTES, ttl=120, getsizeof=_decoded_bytes)
+
+    def check_budget(self, key, value):
+        self.expire()
+        previous_bytes = self.getsizeof(self[key]) if key in self else 0
+        if self.currsize - previous_bytes + self.getsizeof(value) > self.maxsize:
+            raise TranscriptMemoBudgetExceeded('Transcript exceeds bounded decoded memo byte budget')
+
+    def __setitem__(self, key, value):
+        self.check_budget(key, value)
+        if key not in self and len(self) >= 32:
+            self.popitem()
+        super().__setitem__(key, value)
+
+
 def _owner():
     try:
         task = asyncio.current_task()
@@ -64,9 +117,8 @@ class _Memo:
     # Context-local, TTL bounded plaintext; copies prevent privacy filters and
     # caller mutations from altering the content fetched for a later attempt.
     owner: tuple = field(default_factory=_owner)
-    decoded: TTLCache = field(default_factory=lambda: TTLCache(maxsize=32, ttl=120))
+    decoded: TTLCache = field(default_factory=_DecodedMemo)
     uploaded: TTLCache = field(default_factory=lambda: TTLCache(maxsize=32, ttl=120))
-    deferred: dict = field(default_factory=dict)
     resolved: set = field(default_factory=set)
 
 
@@ -171,40 +223,63 @@ def offload_or_inline(uid, conversation_id, segments: list, protect: Callable) -
     plaintext = json.dumps(segments).encode('utf-8')
     if len(zlib.compress(plaintext)) <= config.inline_max_bytes():
         return inline
-    digest = hashlib.sha256(plaintext).hexdigest()
-    if _client.in_transaction_body():
-        _memo().deferred[(uid, conversation_id)] = digest
-        return inline
     memo = _memo()
-    key = uid, conversation_id, digest
+    key = uid, conversation_id, hashlib.sha256(plaintext).hexdigest()
     try:
         ref = memo.uploaded[key]
     except KeyError:
-        ref = object_lake.put_space_object(uid, 'transcript', conversation_id, plaintext, consent=_consent_stamp(uid))
-        memo.uploaded[key] = ref
-    memo.decoded[_memo_key(uid, ref)] = copy.deepcopy(segments)
+        if _client.in_transaction_body():
+            # No inline commit: even the first live write may exceed 1 MiB.
+            # A replay recomputes this digest from its own transactional reads,
+            # so a changed source cannot publish a stale uploaded candidate.
+            raise TranscriptUploadRequired(uid, conversation_id, plaintext)
+        ref = _upload_candidate(uid, conversation_id, plaintext)
+    if not _client.in_transaction_body() and _memo_key(uid, ref) not in memo.decoded:
+        if isinstance(memo.decoded, _DecodedMemo):
+            memo.decoded.check_budget(_memo_key(uid, ref), segments)
+        memo.decoded[_memo_key(uid, ref)] = copy.deepcopy(segments)
     return ref.to_pointer_dict()
 
 
-def run_preloaded_operation(operation, *args, swap_client=None, **kwargs):
+def _upload_candidate(uid, conversation_id, plaintext):
+    if _client.in_transaction_body():
+        raise TranscriptUploadRequired(uid, conversation_id, plaintext)
+    ref = object_lake.put_space_object(uid, 'transcript', conversation_id, plaintext, consent=_consent_stamp(uid))
+    _memo().uploaded[(uid, conversation_id, hashlib.sha256(plaintext).hexdigest())] = ref
+    return ref
+
+
+def run_preloaded_operation(operation, *args, **kwargs):
     """Also supports transaction owners (e.g. ledger) with their own runner."""
     if _client.in_transaction_body():
-        # The outer owner must abort before any preload or deferred drain.
+        # The outer owner must abort before any preload or candidate upload.
         return operation(*args, **kwargs)
     memo = _memo()
     result: Any = None
     try:
         preloaded = {}
+        uploaded = {}
+        upload_changes = 0
         content_changes = 0
-        # At most 32 cold documents, three changed versions, and one commit
-        # attempt. New documents must not consume the content-change allowance.
-        for attempt in range(36):
-            # Only the successful attempt may schedule a post-commit swap.
-            memo.deferred.clear()
+        # Each of 32 documents may need both a read preload and a candidate
+        # upload, plus the existing three content changes and a final commit.
+        for attempt in range(68):
             memo.resolved.clear()
             try:
                 with _client.transaction_body():
                     result = operation(*args, **kwargs)
+            except TranscriptUploadRequired as error:
+                document = error.uid, error.conversation_id
+                digest = hashlib.sha256(error.plaintext).hexdigest()
+                if document in uploaded:
+                    upload_changes += 1
+                elif len(uploaded) >= 32:
+                    raise TranscriptPointerFetchError('Transcript exceeds bounded upload document limit') from None
+                if content_changes + upload_changes > 3 or attempt == 67:
+                    raise TranscriptPointerFetchError('Transcript changed during bounded upload retries') from None
+                uploaded[document] = digest
+                _upload_candidate(error.uid, error.conversation_id, error.plaintext)
+                continue
             except TranscriptPointerUnloaded as error:
                 unloaded = error
                 ref = _ref(error.uid, error.pointer)
@@ -224,19 +299,12 @@ def run_preloaded_operation(operation, *args, swap_client=None, **kwargs):
                         preloaded.pop(key)
                 elif len(preloaded) >= 32:
                     raise TranscriptPointerFetchError('Transcript exceeds bounded preload document limit') from None
-                if content_changes > 3 or attempt == 35:
+                if content_changes + upload_changes > 3 or attempt == 67:
                     raise TranscriptPointerFetchError('Transcript changed during bounded preload retries') from None
                 preloaded[_memo_key(error.uid, ref)] = ref
             else:
                 break
             preload_pointer(unloaded.uid, unloaded.pointer)
-        notes = list(memo.deferred.items())
-        memo.deferred.clear()
-        if not _client.in_transaction_body():
-            for (uid, cid), digest in notes:
-                offload_inline_transcript(
-                    uid, cid, firestore_client=swap_client or kwargs.get('firestore_client'), expected_sha256=digest
-                )
         return result
     finally:
         # A worker thread must not retain plaintext for the next request.
@@ -244,7 +312,7 @@ def run_preloaded_operation(operation, *args, swap_client=None, **kwargs):
 
 
 def run_preloaded_transactional(client, fn, *args, **kwargs):
-    return run_preloaded_operation(_client.run_transactional, client, fn, *args, swap_client=client, **kwargs)
+    return run_preloaded_operation(_client.run_transactional, client, fn, *args, **kwargs)
 
 
 def offload_inline_transcript(uid, conversation_id, *, firestore_client=None, expected_sha256=None) -> bool:

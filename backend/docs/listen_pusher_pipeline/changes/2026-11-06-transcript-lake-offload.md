@@ -17,19 +17,31 @@ A put precedes the document write that references it. Transactional reads choose
 the pointer from their own snapshot; cold references abort the attempt, preload
 outside Firestore, and retry with a bounded plaintext memo. The full reference
 and digest identify memo entries. The retry boundary admits at most 32 distinct
-conversation preloads plus three content changes, with 36 total attempts and
-superseded versions evicted before preloading their replacement. Finalization
+conversation preloads and 32 candidate uploads, plus three content changes
+across reads/uploads, with 68 total attempts. Superseded read versions are evicted before
+preloading their replacement. The decoded memo holds at most 32 entries and
+64 MiB of decoded Python containers/strings; exceeding the byte budget raises
+retryable `TranscriptMemoBudgetExceeded` instead of silently evicting required
+content. Plaintext expires after 120 seconds and is cleared at operation end. Finalization
 admission, empty-recording deletion, sync candidate/canonical selection, voice
 publication, and episode memo/timeline owners all use this boundary. Missing
 objects are filtered from list/MCP results; transport failures abort decisions.
-Transactional encodes stay inline and queue a
-post-commit upload and update-time CAS; live `in_progress` rows are skipped.
-Failed swaps retain readable inline data. Orphan cleanup belongs to C3.
+Admitted transactional encodes above the compressed inline threshold abort
+before staging the transcript write. The boundary uploads the candidate outside
+Firestore, then reruns the entire transaction from a fresh snapshot. Only the
+exact recomputed content digest may use that pointer. This includes live
+`in_progress` rows, whose transcript may already exceed Firestore's 1 MiB limit.
+The C3 backfill primitive still uses an update-time CAS and skips live rows;
+failed backfill swaps retain readable inline data. Orphan cleanup belongs to C3.
+Missing bucket or release bindings close write admission; unset KMS deliberately
+selects the existing offline FakeKMS. Production write admission stays off under O1.
 
 Lake transport/key availability failures raise `TranscriptPointerFetchError`;
 they never become empty speech or ciphertext. An absent blob denotes a deleted
 conversation. Destroyed keys raise the distinct `TranscriptShredded` state;
-transactional domain operations refuse them as unavailable. Corruption retains
+transactional domain operations refuse them as unavailable. An absent/shredded
+transcript removes only the transcript content signal: photos and the durable
+`has_content` marker still prevent empty-recording deletion. Corruption retains
 the strict decoder's existing error. Turning lake reads off fails closed even
 on warm memo entries. The bounded public-chat decoder remains inline-only, so
 pointer documents are excluded from public-chat candidates.
@@ -45,6 +57,13 @@ unwrap reads key authority once; each put reads it twice (before encryption and
 after upload), including retries, plus two uncached account-deletion marker reads per put. KMS work alone is cached across operations.
 Transcript plaintext expansion is capped at 32 MiB; future data classes need an
 explicit size limit before admission. No env bindings or migrations are added.
+
+`object_lake.verify_space_object(ref, deep=True)` returns `False` for a destroyed
+key and propagates `SpaceKeyUnavailable` for a temporarily unavailable key.
+Shallow verification can still return `True` in both cases: it checks stored
+metadata/size, not decryptability. Consumers needing the distinct shredded state
+must use the transcript decoder; a deep-verify `False` alone is not proof that
+the object is absent and must never authorize deletion.
 
 Evidence: [codec/transaction mechanics](../../../tests/unit/test_transcript_pointer.py),
 [reader/domain/fence contracts](../../../tests/unit/test_conversation_transcript_offload.py),
