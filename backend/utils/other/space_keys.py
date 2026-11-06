@@ -131,13 +131,22 @@ def _key_errors():
 
 
 def _decode(data: dict, space_id: str) -> SpaceKey:
+    if data.get('space_id') == space_id and data.get('state') == 'destroyed':
+        raise SpaceKeyDestroyed('Space key is durably destroyed')
     if data['space_id'] != space_id or data['algo'] != 'AES-256-GCM':
         raise ValueError('Invalid space key document')
     versions = tuple(SpaceKeyVersion(v['version'], v['wrapped'], v['wrapped_at'], v['state']) for v in data['versions'])
     if (
         not versions
         or len({v.version for v in versions}) != len(versions)
-        or any(type(v.version) is not int or v.version < 1 or v.state not in ('active', 'retired') for v in versions)
+        or any(
+            type(v.version) is not int
+            or v.version < 1
+            or v.state not in ('active', 'retired')
+            or not isinstance(v.wrapped_b64, str)
+            or not base64.b64decode(v.wrapped_b64, validate=True)
+            for v in versions
+        )
         or [v.version for v in versions if v.state == 'active'] != [data['active_version']]
     ):
         raise ValueError('Invalid space key versions')
@@ -241,6 +250,12 @@ def unwrap_space_dek(space_id: str, version: int, *, firestore_client=None) -> b
         keys = get_space_keys(space_id, firestore_client=client)
         if keys is None:
             raise SpaceKeyDestroyed('Space key no longer exists')
+        return _unwrap_keys(client, keys, version)
+
+
+def _unwrap_keys(client, keys: SpaceKey, version: int) -> bytes:
+    with _key_errors():
+        space_id = keys.space_id
         stored = next((v for v in keys.versions if v.version == version), None)
         if stored is None:
             raise SpaceKeyDestroyed('Space key version no longer exists')
@@ -282,14 +297,25 @@ def destroy_space_keys(space_id: str, *, firestore_client=None) -> int:
             @transactional
             def destroy(transaction):
                 snapshot = ref.get(transaction=transaction)
-                if not snapshot.exists:
+                data = snapshot.to_dict() or {}
+                if data.get('state') == 'destroyed':
                     return 0
-                keys = _decode(snapshot.to_dict(), space_id)
-                transaction.delete(ref)
-                return len(keys.versions)
+                # Content-free tombstone survives even a never-created key.
+                # Malformed live rows are retryable, never treated as shredded.
+                count = len(_decode(data, space_id).versions) if snapshot.exists else 0
+                transaction.set(
+                    ref,
+                    {
+                        'space_id': space_id,
+                        'state': 'destroyed',
+                        'destroyed_at': datetime.now(timezone.utc).isoformat(),
+                    },
+                )
+                return count
 
             count = destroy(client.transaction())
-            if ref.get().exists:
+            verified = ref.get().to_dict() or {}
+            if verified.get('space_id') != space_id or verified.get('state') != 'destroyed':
                 raise SpaceKeyUnavailable('Space key deletion not verified')
             return count
     finally:
