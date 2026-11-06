@@ -1435,9 +1435,6 @@ async def _run_websocket_util_trigger(
             try:
                 await _queue_private_cloud_chunk(tail=True)
                 tail_committed = durable_audio and not refused_windows
-                for window in refused_windows:
-                    if window.conversation_id:
-                        record_barrier.hold_recording(window.conversation_id)
             except ProjectionQueueWaitTimeout:
                 observation.reason = 'queue_wait_timeout'
                 websocket_close_code = 1011
@@ -1461,6 +1458,20 @@ async def _run_websocket_util_trigger(
                         # queue delivery failed. Keep the producer token, but
                         # do not permanently poison retained custody.
                         record_barrier.hold_recording(current_conversation_id, tail_committed=durable_tail_has_receipt)
+            finally:
+                # Every unresolved owner must stay fenced on every exit,
+                # including a prior owner's storage failure, cancellation or
+                # ACK departure before later retained windows are attempted.
+                # A receipt for A can never certify the buffered tail of B.
+                if durable_audio:
+                    if refused_windows:
+                        tail_committed = False
+                    for window in refused_windows:
+                        if window.conversation_id:
+                            record_barrier.hold_recording(window.conversation_id)
+                    if private_cloud_sync_buffer and current_conversation_id:
+                        tail_committed = False
+                        record_barrier.hold_recording(current_conversation_id)
             if private_cloud_sync_enabled and current_conversation_id and len(record_close_requests) < 128:
                 record_close_requests.add(current_conversation_id)
             if (

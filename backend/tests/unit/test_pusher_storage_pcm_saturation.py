@@ -617,3 +617,53 @@ async def test_retained_deleted_owner_is_not_retried_into_new_conversation(inlin
     await asyncio.wait_for(pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1), 5)
     assert calls == ['conversation', 'conversation', 'next']
     assert sock.close_code == 1000
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('failure', ['storage', 'ack_departure'])
+async def test_retained_previous_owner_and_later_tail_stay_fenced_on_failure(inline_session, monkeypatch, failure):
+    from fastapi.websockets import WebSocketDisconnect
+
+    client, path, barrier, _ = inline_session
+    next_path = ('users', 'owner', 'conversations', 'next')
+    client.rows[next_path] = {'record_lane_owner': 'batch_live_v1'}
+    budget = configure(monkeypatch, LIMIT)
+    assert budget.acquire(LIMIT, tail=True)
+    monkeypatch.setattr(pusher, 'PRIVATE_CLOUD_CHUNK_DURATION', 0)
+    frames = _audio_frames('conversation', [b'\x01\x00']) + _audio_frames('next', [b'\x02\x00'])
+    sock = Socket(frames)
+    receive = sock.receive_bytes
+    reads, released = 0, False
+
+    async def sequenced():
+        nonlocal reads, released
+        # Storage failure during B's live flush; ACK departure during A's
+        # shutdown flush, with B still waiting in the same retained deque.
+        if reads == (3 if failure == 'storage' else 4):
+            budget.release(LIMIT)
+            released = True
+        reads += 1
+        return await receive()
+
+    monkeypatch.setattr(sock, 'receive_bytes', sequenced)
+    if failure == 'storage':
+        monkeypatch.setattr(pusher, 'commit_pcm_window', MagicMock(side_effect=OSError('synthetic storage failure')))
+    else:
+        monkeypatch.setattr(sock, 'send_bytes', AsyncMock(side_effect=WebSocketDisconnect(1006)))
+    try:
+        await asyncio.wait_for(pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1), 5)
+        assert client.rows[next_path]['record_upload_sessions']
+        assert not client.rows[next_path]['record_audio_closed']
+        assert 'next' in barrier.failed_recordings
+        if failure == 'storage':
+            assert client.rows[path]['record_upload_sessions']
+            assert not client.rows[path]['record_audio_closed']
+            assert 'conversation' in barrier.failed_recordings
+            assert sock.close_code == 1011  # Existing genuine storage-error policy.
+        else:
+            assert sock.close_code == 1006
+            assert client.rows[path]['record_audio_closed']  # Only A really committed.
+        assert budget.used == 0
+    finally:
+        if not released:
+            budget.release(LIMIT)
