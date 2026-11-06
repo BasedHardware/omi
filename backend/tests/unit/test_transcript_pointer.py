@@ -422,3 +422,17 @@ def test_superseded_versions_do_not_evict_other_cold_documents(lake_world, monke
     result, rest = pointer.run_preloaded_transactional(lake_world.store, body)
     assert result == speech() and len(rest) == 31
     assert len(attempts) == 36
+
+
+def test_transaction_can_read_multiple_historical_versions_of_one_document(lake_world):
+    versions = [encode(speech(n))['transcript_segments'] for n in range(18000, 18003)]
+    pointer.clear_memo()
+    attempts = []
+
+    def body(transaction):
+        attempts.append(1)
+        return [pointer.resolve_pointer(UID, ref) for ref in versions]
+
+    assert pointer.run_preloaded_transactional(lake_world.store, body) == [speech(n) for n in range(18000, 18003)]
+    assert len(attempts) == 4
+    assert lake_world.calls['get'] == 3
