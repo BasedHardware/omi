@@ -33,7 +33,7 @@ from pydantic import ValidationError
 from database import _client
 from database.action_items_cache import bump_action_items_list_version
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
-from database.read_boundary import parse_snapshot_strict, parse_snapshots
+from database.read_boundary import parse_payload_strict, parse_snapshot_strict, parse_snapshots
 from models.goal import (
     GoalMetric,
     GoalProgressEvent,
@@ -1345,7 +1345,9 @@ class FirestoreGoals:
     ) -> GoalProgressEventEntity:
         result = self.append_progress_document(
             goal_id,
-            GoalProgressEventCreate.model_validate(event),
+            parse_payload_strict(
+                GoalProgressEventCreate, event, document_path=f'users/{self.space_id}/goals/{goal_id}/events/<input>'
+            ),
             idempotency_key=idempotency_key,
             account_generation=account_generation,
         )

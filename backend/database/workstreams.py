@@ -33,7 +33,7 @@ from database.action_items_cache import bump_action_items_list_version
 from database import candidates as candidates_db
 from database._client import get_firestore_client
 from database.staged_promote_cache import invalidate_around_write
-from database.read_boundary import parse_snapshot_or_none, parse_snapshot_strict, parse_snapshots
+from database.read_boundary import parse_payload_strict, parse_snapshot_or_none, parse_snapshot_strict, parse_snapshots
 from models.action_item import ActionItemResponse, TaskOwner, TaskPriority, TaskStatus
 from models.candidate import CandidateRecord, CandidateResolutionReceipt, CandidateStatus, CandidateSubjectKind
 from models.goal import GoalResponse, GoalStatus
@@ -1726,7 +1726,11 @@ class FirestoreWorkstreams:
     ) -> WorkstreamEntity:
         result = self.update_document(
             workstream_id,
-            WorkstreamUpdate.model_validate(patch.data),
+            parse_payload_strict(
+                WorkstreamUpdate,
+                patch.data,
+                document_path=f'users/{self.space_id}/workstreams/{workstream_id}/<update>',
+            ),
             idempotency_key=idempotency_key,
             account_generation=account_generation,
         )
@@ -1737,7 +1741,11 @@ class FirestoreWorkstreams:
     ) -> WorkstreamEventEntity:
         result = self.append_event_document(
             workstream_id,
-            WorkstreamEventCreate.model_validate(event),
+            parse_payload_strict(
+                WorkstreamEventCreate,
+                event,
+                document_path=f'users/{self.space_id}/workstreams/{workstream_id}/events/<input>',
+            ),
             idempotency_key=idempotency_key,
             account_generation=account_generation,
         )
@@ -1758,7 +1766,11 @@ class FirestoreWorkstreams:
     ) -> ArtifactDescriptorEntity:
         result = self.create_artifact_document(
             workstream_id,
-            ArtifactDescriptorCreate.model_validate(proposal),
+            parse_payload_strict(
+                ArtifactDescriptorCreate,
+                proposal,
+                document_path=f'users/{self.space_id}/workstreams/{workstream_id}/artifact_refs/<input>',
+            ),
             idempotency_key=idempotency_key,
             account_generation=account_generation,
         )
@@ -1776,7 +1788,11 @@ class FirestoreWorkstreams:
         result = self.transition_artifact_document(
             workstream_id,
             artifact_id,
-            ArtifactStatusTransitionRequest.model_validate(request),
+            parse_payload_strict(
+                ArtifactStatusTransitionRequest,
+                request,
+                document_path=f'users/{self.space_id}/workstreams/{workstream_id}/artifact_refs/<transition>',
+            ),
             idempotency_key=idempotency_key,
             account_generation=account_generation,
         )
@@ -1795,7 +1811,11 @@ class FirestoreWorkstreams:
     ) -> ContinuationCheckpointEntity:
         result = self.upsert_checkpoint_document(
             workstream_id,
-            ContinuationCheckpointUpsert.model_validate(checkpoint),
+            parse_payload_strict(
+                ContinuationCheckpointUpsert,
+                checkpoint,
+                document_path=f'users/{self.space_id}/workstreams/{workstream_id}/continuation_checkpoints/<input>',
+            ),
             idempotency_key=idempotency_key,
             account_generation=account_generation,
         )
@@ -1809,7 +1829,8 @@ class FirestoreWorkstreams:
 
     def resolve_candidate(self, candidate: dict[str, Any], account_generation: int) -> dict[str, Any]:
         return self.resolve_candidate_document(
-            CandidateRecord.model_validate(candidate), account_generation
+            parse_payload_strict(CandidateRecord, candidate, document_path=f'users/{self.space_id}/candidates/<input>'),
+            account_generation,
         ).model_dump(mode='python')
 
     def resolve_work_intent(
@@ -1817,7 +1838,9 @@ class FirestoreWorkstreams:
     ) -> dict[str, Any]:
         model = TaskOriginWorkIntent if request.get('origin') == 'task' else GoalOriginWorkIntent
         return self.resolve_intent_document(
-            model.model_validate(request), idempotency_key=idempotency_key, account_generation=account_generation
+            parse_payload_strict(model, request, document_path=f'users/{self.space_id}/work_intent_receipts/<input>'),
+            idempotency_key=idempotency_key,
+            account_generation=account_generation,
         ).model_dump(mode='python')
 
     def import_task_goal_links(
@@ -1825,10 +1848,16 @@ class FirestoreWorkstreams:
     ) -> dict[str, Any]:
         if self.transaction is not None:
             return self._import_links_atomic(
-                TaskGoalLinkImportRequest.model_validate(request), idempotency_key, account_generation
+                parse_payload_strict(
+                    TaskGoalLinkImportRequest, request, document_path=f'users/{self.space_id}/workstreams/<import>'
+                ),
+                idempotency_key,
+                account_generation,
             )
         return self.import_links_documents(
-            TaskGoalLinkImportRequest.model_validate(request),
+            parse_payload_strict(
+                TaskGoalLinkImportRequest, request, document_path=f'users/{self.space_id}/workstreams/<import>'
+            ),
             idempotency_key=idempotency_key,
             account_generation=account_generation,
         ).model_dump(mode='python')
