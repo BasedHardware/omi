@@ -112,7 +112,13 @@ def evaluate_account_cutover_access(
 
     # A newly deployed upgrade floor must also override bits from older builds.
     universally_open_builds = not any(build.minimum_supported_build > 0 for build in minimum_builds_projection())
-    if not force and universally_open_builds and redis_db.get_generic_cache(f'cutover-idle:{uid}'):
+    cache_epoch = account_cutover_db.cutover_cache_epoch(uid)
+    if (
+        not force
+        and cache_epoch is not None
+        and universally_open_builds
+        and redis_db.get_generic_cache(f'cutover-idle:{uid}')
+    ):
         return
 
     try:
@@ -160,7 +166,7 @@ def evaluate_account_cutover_access(
                 },
             )
         if not any(build.minimum_supported_build > 0 for build in control.minimum_supported_builds):
-            redis_db.set_generic_cache(f'cutover-idle:{uid}', 1, 60)
+            account_cutover_db.publish_cutover_idle(uid, cache_epoch)
         return
 
     if control.client_action == AccountCutoverClientAction.force_upgrade:
@@ -222,7 +228,7 @@ def evaluate_account_cutover_access(
         and record.account_generation == 0
         and not any(build.minimum_supported_build > 0 for build in control.minimum_supported_builds)
     ):
-        redis_db.set_generic_cache(f'cutover-idle:{uid}', 1, 60)
+        account_cutover_db.publish_cutover_idle(uid, cache_epoch)
 
 
 def enforce_account_cutover_http_access(
