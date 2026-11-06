@@ -20,16 +20,18 @@ The unit saturation harness was written and run before admission code:
 `d47819297e390e0e16971b1f43ad0573ccd324bb`, its first run produced two passing
 flag-zero characterizations and one strict xfail for unbounded submissions;
 the expanded test-first run produced two passes and seven strict xfails.
-50 synthetic producers each submit a 64 KiB window to the real commit helper
+The final harness scales to 50 synthetic producers each submitting a 512 KiB window to the real commit helper
 and executor, with `commit_pcm_window` replaced by an event-controlled GCS stub.
-At a 1 MiB budget, ordinary admission must hold at 768 KiB and refuse 38/50;
+At an 8 MiB budget, ordinary admission must hold at 6 MiB and refuse 38/50;
 recovery must commit every window exactly once. 50 x 4 KiB tails fit inside
 the reserved quarter during live saturation. Events model long GCS stalls
 without real 30-120 second sleeps. The harness also covers failures, buffer and
 checkpoint retention, real-router boundaries and record metadata liveness.
 
-Local Python allocation / RSS high-water checks are synthetic bounds; RSS
-high-water cannot demonstrate RSS drainage. Live accounting must drain to zero.
+Local Python allocation, current RSS and RSS high-water checks are synthetic
+bounds. Allocator pages need not return immediately: current RSS must stay on
+its plateau after recovery, while live allocations fall and submitted bytes
+drain to zero. The earlier test-first runs used 64 KiB windows / 1 MiB budget.
 Not measured: listen re-offer cadence, projection debt aggregate, GCS SDK
 internal buffering, real sockets/pod or production tail distribution. Existing
 projection-debt contract and executor pools remain unchanged. Neither this

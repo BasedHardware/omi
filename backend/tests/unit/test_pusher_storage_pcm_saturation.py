@@ -8,8 +8,11 @@ deployed socket counts. Run in the normal isolated unit-file lane.
 
 import asyncio
 from collections import Counter
+import os
+from pathlib import Path
 import resource
 import struct
+import subprocess
 import threading
 import tracemalloc
 from types import SimpleNamespace
@@ -24,8 +27,18 @@ from utils.other.audio_outbox import read_pcm
 from utils.pusher_storage_budget import StoragePcmBudget, storage_pcm_budget_bytes
 
 MIB = 1024 * 1024
-LIMIT = MIB
-PCM_SIZE = 64 * 1024
+LIMIT = 8 * MIB
+PCM_SIZE = 512 * 1024
+
+
+def current_rss_bytes():
+    status = Path('/proc/self/status')
+    if status.exists():
+        return next(
+            int(line.split()[1]) * 1024 for line in status.read_text().splitlines() if line.startswith('VmRSS:')
+        )
+    # macOS has no /proc; ps reports resident KiB for this exact test process.
+    return int(subprocess.check_output(['/bin/ps', '-o', 'rss=', '-p', str(os.getpid())], text=True)) * 1024
 
 
 def configure(monkeypatch, limit):
@@ -129,6 +142,7 @@ async def test_50_sockets_plateau_refuse_without_ack_then_retry_once(monkeypatch
     tracemalloc.start()
     baseline, _ = tracemalloc.get_traced_memory()
     rss_before = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    resident_before = current_rss_bytes()
     tasks = [asyncio.create_task(sock.flush()) for sock in sockets]
     try:
         await settled_admissions(tasks)
@@ -162,6 +176,8 @@ async def test_50_sockets_plateau_refuse_without_ack_then_retry_once(monkeypatch
         rss_scale = 1 if sys.platform == 'darwin' else 1024
         assert (resource.getrusage(resource.RUSAGE_SELF).ru_maxrss - rss_before) * rss_scale < 32 * MIB
         assert allocated >= 0
+        resident_saturated = current_rss_bytes()
+        assert resident_saturated <= resident_before + LIMIT + 50 * PCM_SIZE + 16 * MIB
         gcs.release.set()
         await asyncio.gather(*tasks)
         for sock in refused:  # The next per-socket flush boundary, after recovery.
@@ -177,6 +193,10 @@ async def test_50_sockets_plateau_refuse_without_ack_then_retry_once(monkeypatch
         gc.collect()
         drained, _ = tracemalloc.get_traced_memory()
         assert drained < peak
+        # Resident allocator pages need not immediately return to the OS. The
+        # live RSS must stay on its plateau after all copies/buffers drain;
+        # exact submitted bytes and Python live allocations are checked above.
+        assert current_rss_bytes() <= resident_saturated + 4 * MIB
     finally:
         gcs.release.set()
         await asyncio.gather(*tasks, return_exceptions=True)
