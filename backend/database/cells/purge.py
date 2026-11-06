@@ -6,7 +6,7 @@ Enrollment must fence new writes before invoking this primitive (B2).
 from database.cells._validation import validate_id
 from database.jobstore.connection import Pool
 
-TABLES = ('space_heads', 'cell_docs', 'change_log', 'sync_cursors')
+TABLES = ('space_heads', 'cell_docs', 'change_log', 'sync_cursors', 'mutation_receipts')
 
 
 class Purge:

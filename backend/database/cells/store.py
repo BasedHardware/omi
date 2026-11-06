@@ -11,6 +11,7 @@ import random
 import time
 from copy import deepcopy
 from dataclasses import dataclass
+from hashlib import sha256
 from typing import Any, Callable, Generic, TypeVar
 
 from database.cells.errors import BaseRevisionMismatch, CellContentionExhausted, MutationIdReused
@@ -20,6 +21,7 @@ from database.jobstore.connection import Pool
 from database.cells._validation import validate_address, validate_document, validate_id
 from database.cells.feed import Feed
 from database.cells.purge import Purge
+from database.cells.receipts import Receipts
 
 T = TypeVar('T')
 MAX_SERIALIZATION_RETRIES = 8
@@ -46,6 +48,11 @@ class _Mutation:
     @property
     def op(self) -> str:
         return 'delete' if self.doc is None else 'upsert'
+
+    @property
+    def receipt_fingerprint(self) -> str:
+        # Bind caller semantics to the address/op without retaining document content.
+        return sha256(dumps((self.entity, self.entity_id, self.op, self.fingerprint)).encode()).hexdigest()
 
 
 class CellTransaction:
@@ -164,7 +171,7 @@ class CellTransaction:
             receipts = {
                 r[0]: r[1:]
                 for r in self.conn.execute(
-                    'SELECT client_mutation_id, seq, fingerprint, entity, entity_id, op FROM change_log '
+                    'SELECT client_mutation_id, seq, fingerprint FROM mutation_receipts '
                     'WHERE space_id=%s AND client_mutation_id=ANY(%s)',
                     (self.space_id, ids),
                 ).fetchall()
@@ -176,13 +183,8 @@ class CellTransaction:
             mid = mutation.client_mutation_id
             if mid is not None:
                 if mid in receipts:
-                    seq, fingerprint, entity, entity_id, op = receipts[mid]
-                    if (fingerprint, entity, entity_id, op) != (
-                        mutation.fingerprint,
-                        mutation.entity,
-                        mutation.entity_id,
-                        mutation.op,
-                    ):
+                    seq, fingerprint = receipts[mid]
+                    if fingerprint != mutation.receipt_fingerprint:
                         raise MutationIdReused(self.space_id, mid)
                     replayed[mid] = seq
                     continue
@@ -240,10 +242,16 @@ class CellTransaction:
                     self.now,
                 ),
             )
+            if mutation.client_mutation_id is not None:
+                self.conn.execute(
+                    'INSERT INTO mutation_receipts (space_id, client_mutation_id, seq, fingerprint, created_at) '
+                    'VALUES (%s,%s,%s,%s,%s)',
+                    (self.space_id, mutation.client_mutation_id, seq, mutation.receipt_fingerprint, self.now),
+                )
         return replayed
 
 
-class CellStore(Feed, Purge):
+class CellStore(Feed, Purge, Receipts):
     def __init__(self, pool: Pool):
         self.pool = pool
 
@@ -265,7 +273,7 @@ class CellStore(Feed, Purge):
             except Exception as exc:
                 replay_race = (
                     getattr(exc, 'sqlstate', None) == '23505'
-                    and getattr(getattr(exc, 'diag', None), 'constraint_name', None) == 'change_log_mutation'
+                    and getattr(getattr(exc, 'diag', None), 'constraint_name', None) == 'mutation_receipts_pkey'
                 )
                 if getattr(exc, 'sqlstate', None) not in {'40001', '40P01', '55P03'} and not replay_race:
                     raise

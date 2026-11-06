@@ -14,7 +14,8 @@ import pytest
 from config import cell_store
 from database.cells import AdapterRegistry, CellStore
 from database.cells.errors import BaseRevisionMismatch, CellContentionExhausted, MutationIdReused
-from database.cells.feed import DEVICE_STALE_S, FEED_RETENTION_S, ResyncRequired
+from database.cells.feed import CursorAhead, DEVICE_STALE_S, FEED_RETENTION_S, ResyncRequired
+from database.cells.receipts import MUTATION_RECEIPT_RETENTION_SECONDS
 from database.cells import store as store_module
 from database.jobstore.connection import Pool, dial
 from database.jobstore.migrate import current_version, migrate
@@ -33,7 +34,7 @@ def harness():
 
 @pytest.fixture
 def space(harness, request):
-    return harness.uid(request.node.name)
+    return harness.uid(request.node.name.replace('[', '-').replace(']', ''))
 
 
 def write(store, space, key, *, now=NOW, **kwargs):
@@ -266,16 +267,121 @@ def test_cursor_retention_and_monotonicity(harness, space):
     assert store.floor(space, now=NOW + DEVICE_STALE_S + 1) == 2
 
 
+@pytest.mark.parametrize('head', [0, 1])
+def test_future_cursors_rejected_and_head_accepted(harness, space, head):
+    store = harness.store
+    if head:
+        write(store, space, 'a')
+    for cursor in (head + 1, head + 100):
+        with pytest.raises(CursorAhead) as error:
+            store.pull(space, cursor=cursor, now=NOW)
+        assert (error.value.space_id, error.value.head, error.value.epoch) == (space, head, int(bool(head)))
+        with pytest.raises(CursorAhead):
+            store.set_cursor(space, 'device', last_seq=cursor, now=NOW)
+    with store.pool.connection() as conn:
+        assert conn.execute('SELECT count(*) FROM sync_cursors WHERE space_id=%s', (space,)).fetchone()[0] == 0
+    page = store.pull(space, cursor=head, now=NOW)
+    assert (page.next_cursor, page.head, page.entries) == (head, head, [])
+    store.set_cursor(space, 'device', last_seq=head, now=NOW)
+    with store.pool.connection() as conn:
+        assert conn.execute('SELECT last_seq FROM sync_cursors WHERE space_id=%s', (space,)).fetchone() == (head,)
+
+
+@pytest.mark.parametrize('op,feed', [('upsert', True), ('upsert', False), ('delete', True)])
+def test_replay_survives_feed_compaction(harness, space, op, feed):
+    store = harness.store
+    old = NOW - 40 * 86400
+
+    def original(tx):
+        if op == 'upsert':
+            tx.put('notes', 'a', {'old': True}, client_mutation_id='mid', fingerprint='fp', feed=feed)
+        else:
+            tx.delete('notes', 'a', client_mutation_id='mid', fingerprint='fp', feed=feed)
+
+    store.run(space, original, actor_uid=space, now=old)
+    write(store, space, 'filler', now=old)
+    write(store, space, 'a')
+    assert store.compact(space, now=NOW) == int(op == 'upsert')
+    before = store.read_doc(space, 'notes', 'a')
+    assert store.run(space, original, actor_uid=space, now=NOW).replayed == {'mid': 1}
+    assert store.head(space) == (3, 1)
+    assert store.read_doc(space, 'notes', 'a') == before
+    with store.pool.connection() as conn:
+        assert conn.execute(
+            'SELECT seq, created_at FROM mutation_receipts WHERE space_id=%s AND client_mutation_id=%s',
+            (space, 'mid'),
+        ).fetchone() == (1, old)
+    with pytest.raises(MutationIdReused):
+        write(store, space, 'other', client_mutation_id='mid', fingerprint='fp')
+
+
+def test_receipt_purge_is_bounded_and_independent_of_feed(harness, space):
+    store = harness.store
+    cutoff = NOW - MUTATION_RECEIPT_RETENTION_SECONDS
+    other = harness.uid('receipt-neighbor')
+    write(store, other, 'a', now=cutoff - 1, client_mutation_id='neighbor', fingerprint='fp')
+    for key, ts in [('expired-1', cutoff - 2), ('expired-2', cutoff - 1), ('boundary', cutoff), ('recent', NOW)]:
+        write(store, space, key, now=ts, client_mutation_id=key, fingerprint='fp')
+    with store.pool.connection() as conn:
+        before = conn.execute('SELECT * FROM change_log WHERE space_id=%s ORDER BY seq', (space,)).fetchall()
+    assert store.purge_mutation_receipts(space, now=NOW, limit=1) == 1
+    assert store.purge_mutation_receipts(space, now=NOW, limit=1) == 1
+    assert store.purge_mutation_receipts(space, now=NOW) == 0
+    with store.pool.connection() as conn:
+        assert conn.execute('SELECT * FROM change_log WHERE space_id=%s ORDER BY seq', (space,)).fetchall() == before
+        assert conn.execute(
+            'SELECT client_mutation_id FROM mutation_receipts WHERE space_id=%s ORDER BY client_mutation_id', (space,)
+        ).fetchall() == [('boundary',), ('recent',)]
+        assert conn.execute('SELECT count(*) FROM mutation_receipts WHERE space_id=%s', (other,)).fetchone()[0] == 1
+    # After independent receipt expiry, the retained log must not impose replay uniqueness.
+    assert write(store, space, 'expired-1', client_mutation_id='expired-1', fingerprint='fp').replayed == {}
+    assert store.head(space) == (5, 1)
+
+
+def test_receipt_insert_failure_rolls_back_whole_write(harness, space, monkeypatch):
+    store = harness.store
+    original = store.pool.connection
+
+    class Proxy:
+        def __init__(self, conn):
+            self.conn = conn
+
+        def transaction(self):
+            return self.conn.transaction()
+
+        def execute(self, sql, args=None):
+            result = self.conn.execute(sql, args)
+            if sql.startswith('INSERT INTO mutation_receipts'):
+                raise RuntimeError('injected receipt failure')
+            return result
+
+    @contextmanager
+    def connection():
+        with original() as conn:
+            yield Proxy(conn)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(store.pool, 'connection', connection)
+        with pytest.raises(RuntimeError, match='injected receipt failure'):
+            write(store, space, 'a', client_mutation_id='mid', fingerprint='fp')
+    assert store.head(space) == (0, 0)
+    assert store.read_doc(space, 'notes', 'a') == {}
+    with store.pool.connection() as conn:
+        for table in ('change_log', 'mutation_receipts'):
+            assert conn.execute(f'SELECT count(*) FROM {table} WHERE space_id=%s', (space,)).fetchone()[0] == 0
+
+
 def test_purge_is_complete_and_isolated(harness, space):
     store = harness.store
     other = harness.uid('purge-neighbor')
     for sid in (space, other):
-        write(store, sid, 'a')
+        write(store, sid, 'a', client_mutation_id='mid', fingerprint='fp')
         store.set_cursor(sid, 'device', last_seq=1, now=NOW)
-    assert store.purge_space(space) == 4
+    assert store.purge_space(space) == 5
     with store.pool.connection() as conn:
-        for table in ('space_heads', 'cell_docs', 'change_log', 'sync_cursors'):
+        for table in ('space_heads', 'cell_docs', 'change_log', 'sync_cursors', 'mutation_receipts'):
             assert conn.execute(f'SELECT count(*) FROM {table} WHERE space_id=%s', (space,)).fetchone()[0] == 0
+        assert conn.execute('SELECT count(*) FROM mutation_receipts WHERE space_id=%s', (other,)).fetchone()[0] == 1
     assert store.read_doc(other, 'notes', 'a')
     assert store.purge_space(space) == 0
 

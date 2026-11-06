@@ -23,6 +23,15 @@ class ResyncRequired(CellWriteError):
         self.epoch = epoch
 
 
+class CursorAhead(CellWriteError):
+    """The cursor exceeds committed history; the future HTTP layer requests resync."""
+
+    def __init__(self, space_id: str, head: int, epoch: int):
+        super().__init__(space_id, 'cursor is ahead of space head')
+        self.head = head
+        self.epoch = epoch
+
+
 @dataclass(frozen=True)
 class ChangeEntry:
     seq: int
@@ -44,7 +53,7 @@ class PullPage:
     epoch: int
 
 
-def _floor(conn: Any, space_id: str, now: float) -> tuple[int, int]:
+def _floor(conn: Any, space_id: str, now: float) -> tuple[int, int, int]:
     row = conn.execute(
         'SELECT h.next_seq, h.epoch, '
         '(SELECT min(last_seq) FROM sync_cursors WHERE space_id=h.space_id AND last_seen_at>%s), '
@@ -53,12 +62,12 @@ def _floor(conn: Any, space_id: str, now: float) -> tuple[int, int]:
         (now - DEVICE_STALE_S, now - FEED_RETENTION_S, space_id),
     ).fetchone()
     if row is None:
-        return 0, 0
+        return 0, 0, 0
     head, epoch, device, first_recent = row
     # A cursor is the last APPLIED seq: cursor=first_recent-1 can still
     # consume every retained entry. Using first_recent rejects initial pulls.
     time_floor = max(0, first_recent - 1) if first_recent is not None else head
-    return min(device, time_floor) if device is not None else time_floor, epoch
+    return min(device, time_floor) if device is not None else time_floor, epoch, head
 
 
 class Feed:
@@ -74,7 +83,9 @@ class Feed:
         if cursor < 0:
             raise ValueError('cursor must be nonnegative')
         with self.pool.connection() as conn:
-            floor, epoch = _floor(conn, space_id, now)
+            floor, epoch, head_seq = _floor(conn, space_id, now)
+            if cursor > head_seq:
+                raise CursorAhead(space_id, head_seq, epoch)
             if cursor < floor:
                 raise ResyncRequired(space_id, floor, epoch)
             raw = conn.execute(
@@ -113,7 +124,9 @@ class Feed:
         if last_seq < 0:
             raise ValueError('last_seq must be nonnegative')
         with self.pool.connection() as conn, conn.transaction():
-            floor, epoch = _floor(conn, space_id, now)
+            floor, epoch, head = _floor(conn, space_id, now)
+            if last_seq > head:
+                raise CursorAhead(space_id, head, epoch)
             if last_seq < floor:
                 raise ResyncRequired(space_id, floor, epoch)
             conn.execute(
@@ -127,7 +140,7 @@ class Feed:
     def compact(self, space_id: str, *, now: float) -> int:
         validate_id(space_id)
         with self.pool.connection() as conn, conn.transaction():
-            floor, _epoch = _floor(conn, space_id, now)
+            floor, _epoch, _head = _floor(conn, space_id, now)
             return conn.execute(
                 "DELETE FROM change_log WHERE space_id=%s AND seq<%s AND op='upsert'",
                 (space_id, floor),

@@ -50,9 +50,18 @@ CREATE TABLE change_log (
     CONSTRAINT change_log_rev_positive CHECK (rev >= 1),
     CONSTRAINT change_log_fingerprint_with_mutation CHECK (client_mutation_id IS NULL OR fingerprint IS NOT NULL)
 );
--- Exactly-once per (space, client_mutation_id) — the replay backstop (R8).
-CREATE UNIQUE INDEX change_log_mutation ON change_log (space_id, client_mutation_id)
-    WHERE client_mutation_id IS NOT NULL;
+-- Content-free replay receipts have an independent 90-day retention domain.
+-- No FK to change_log: feed compaction must never remove a replay receipt.
+CREATE TABLE mutation_receipts (
+    space_id           text COLLATE "C" NOT NULL,
+    client_mutation_id text COLLATE "C" NOT NULL,
+    seq                bigint NOT NULL,
+    fingerprint        text COLLATE "C" NOT NULL,
+    created_at         float8 NOT NULL,
+    PRIMARY KEY (space_id, client_mutation_id),
+    CONSTRAINT mutation_receipts_seq_positive CHECK (seq >= 1)
+);
+CREATE INDEX mutation_receipts_retention ON mutation_receipts (space_id, created_at, client_mutation_id);
 
 -- Device pull cursors live in the cell (space-scoped) so compaction needs no cross-database call.
 CREATE TABLE sync_cursors (
