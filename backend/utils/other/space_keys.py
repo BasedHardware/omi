@@ -130,8 +130,21 @@ def _key_errors():
         raise SpaceKeyUnavailable('Space key operation unavailable') from None
 
 
+def _destroyed_tombstone(data: dict, space_id: str) -> bool:
+    if data.get('state') != 'destroyed':
+        return False
+    if (
+        set(data) != {'space_id', 'state', 'destroyed_at'}
+        or data.get('space_id') != space_id
+        or not isinstance(data.get('destroyed_at'), str)
+        or not data.get('destroyed_at')
+    ):
+        raise ValueError('Malformed destroyed space-key authority')
+    return True
+
+
 def _decode(data: dict, space_id: str) -> SpaceKey:
-    if data.get('space_id') == space_id and data.get('state') == 'destroyed':
+    if _destroyed_tombstone(data, space_id):
         raise SpaceKeyDestroyed('Space key is durably destroyed')
     if data['space_id'] != space_id or data['algo'] != 'AES-256-GCM':
         raise ValueError('Invalid space key document')
@@ -309,7 +322,7 @@ def destroy_space_keys(space_id: str, *, firestore_client=None) -> int:
             def destroy(transaction):
                 snapshot = ref.get(transaction=transaction)
                 data = snapshot.to_dict() or {}
-                if data.get('state') == 'destroyed':
+                if _destroyed_tombstone(data, space_id):
                     return 0
                 # Content-free tombstone survives even a never-created key.
                 # Malformed live rows are retryable, never treated as shredded.
@@ -326,7 +339,7 @@ def destroy_space_keys(space_id: str, *, firestore_client=None) -> int:
 
             count = destroy(client.transaction())
             verified = ref.get().to_dict() or {}
-            if verified.get('space_id') != space_id or verified.get('state') != 'destroyed':
+            if not _destroyed_tombstone(verified, space_id):
                 raise SpaceKeyUnavailable('Space key deletion not verified')
             return count
     finally:
