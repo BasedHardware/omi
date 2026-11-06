@@ -104,6 +104,10 @@ _CHECKPOINT_FORWARD: dict[AccountCutoverCheckpointPhase, frozenset[AccountCutove
 
 _MAX_CHECKPOINT_TOKEN_LEN = 128
 
+# W6 must wait this long after begin(cell) before backfill/flip, in addition to
+# draining admitted writers. It exceeds the idle TTL even for pre-epoch builds.
+CELL_CUTOVER_QUIESCE_SECONDS = account_cutover_db.CUTOVER_IDLE_TTL_SECONDS + 5
+
 
 @dataclass(frozen=True)
 class CoordinatorResult:

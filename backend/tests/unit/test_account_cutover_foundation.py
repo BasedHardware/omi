@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import fakeredis
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -27,7 +28,7 @@ from utils.account_cutover.access import (
 )
 from utils.account_cutover import control as cutover_control
 from utils.account_cutover.control import build_account_cutover_control
-from utils.account_cutover.coordinator import AccountCutoverCoordinator
+from utils.account_cutover.coordinator import AccountCutoverCoordinator, CELL_CUTOVER_QUIESCE_SECONDS
 from utils.account_cutover.fence import (
     AccountCutoverGenerationMismatchError,
     assert_legacy_product_write_allowed,
@@ -41,11 +42,9 @@ from utils.other import endpoints as auth
 
 @pytest.fixture(autouse=True)
 def idle_cache(monkeypatch):
-    cache = {}
-    monkeypatch.setattr(redis_db, 'get_generic_cache', lambda key: cache.get(key))
-    monkeypatch.setattr(redis_db, 'set_generic_cache', lambda key, value, ttl: cache.update({key: value}))
-    monkeypatch.setattr(redis_db, 'delete_generic_cache', lambda key: cache.pop(key, None))
-    return cache
+    client = fakeredis.FakeRedis()
+    monkeypatch.setattr(redis_db, 'r', client)
+    return client
 
 
 @pytest.fixture
@@ -811,7 +810,7 @@ def test_cell_migrating_reads_open_mutations_and_ws_denied(monkeypatch, fake_db,
     record = AccountCutoverRecord(uid='u1', state=AccountCutoverState.migrating, data_plane='cell')
     account_cutover_db.set_account_cutover_record('u1', record, firestore_client=fake_db)
     evaluate_account_cutover_access('u1', method='GET', path='/v1/conversations', headers={}, firestore_client=fake_db)
-    assert 'cutover-idle:u1' not in idle_cache
+    assert redis_db.get_generic_cache('cutover-idle:u1') is None
     with pytest.raises(AccountCutoverAccessDenial) as error:
         evaluate_account_cutover_access(
             'u1', method='POST', path='/v1/conversations', headers={}, firestore_client=fake_db
@@ -826,24 +825,24 @@ def test_cell_migrating_reads_open_mutations_and_ws_denied(monkeypatch, fake_db,
 def test_idle_bit_gates_read_and_both_write_seams_delete(monkeypatch, fake_db, idle_cache):
     monkeypatch.setenv('ACCOUNT_CUTOVER_ENFORCEMENT', 'on')
     evaluate_account_cutover_access('u1', method='GET', path='/v1/conversations', headers={}, firestore_client=fake_db)
-    assert idle_cache == {'cutover-idle:u1': 1}
+    assert redis_db.get_generic_cache('cutover-idle:u1') == 1
     original = account_cutover_db.get_account_cutover_record
     monkeypatch.setattr(account_cutover_db, 'get_account_cutover_record', lambda *a, **k: pytest.fail('idle read'))
     evaluate_account_cutover_access('u1', method='POST', path='/v1/conversations', headers={}, firestore_client=fake_db)
     monkeypatch.setattr(account_cutover_db, 'get_account_cutover_record', original)
     record = AccountCutoverRecord(uid='u1', data_plane='cell', state=AccountCutoverState.migrating)
     account_cutover_db.set_account_cutover_record('u1', record, firestore_client=fake_db)
-    assert not idle_cache
+    assert redis_db.get_generic_cache('cutover-idle:u1') is None
     with pytest.raises(AccountCutoverAccessDenial):
         evaluate_account_cutover_access(
             'u1', method='POST', path='/v1/conversations', headers={}, firestore_client=fake_db
         )
-    assert not idle_cache
-    idle_cache['cutover-idle:u1'] = 1
+    assert redis_db.get_generic_cache('cutover-idle:u1') is None
+    redis_db.set_generic_cache('cutover-idle:u1', 1, 60)
     account_cutover_db.cas_set_account_cutover_record(
         'u1', record, expected_account_generation=0, firestore_client=fake_db
     )
-    assert not idle_cache
+    assert redis_db.get_generic_cache('cutover-idle:u1') is None
 
 
 def test_idle_bit_never_bypasses_bridge_generation(monkeypatch, fake_db, idle_cache):
@@ -851,7 +850,7 @@ def test_idle_bit_never_bypasses_bridge_generation(monkeypatch, fake_db, idle_ca
     record = AccountCutoverRecord(uid='u1', state=AccountCutoverState.rolled_back_stranded, account_generation=2)
     account_cutover_db.set_account_cutover_record('u1', record, firestore_client=fake_db)
     evaluate_account_cutover_access('u1', method='GET', path='/v1/conversations', headers={}, firestore_client=fake_db)
-    assert not idle_cache
+    assert redis_db.get_generic_cache('cutover-idle:u1') is None
     with pytest.raises(AccountCutoverAccessDenial) as error:
         evaluate_account_cutover_access(
             'u1', method='POST', path='/v1/conversations', headers={}, firestore_client=fake_db
@@ -861,7 +860,7 @@ def test_idle_bit_never_bypasses_bridge_generation(monkeypatch, fake_db, idle_ca
 
 def test_new_upgrade_floor_overrides_old_idle_bit(monkeypatch, fake_db, idle_cache):
     monkeypatch.setenv('ACCOUNT_CUTOVER_ENFORCEMENT', 'on')
-    idle_cache['cutover-idle:u1'] = 1
+    redis_db.set_generic_cache('cutover-idle:u1', 1, 60)
     monkeypatch.setattr(cutover_control, 'MINIMUM_SUPPORTED_BUILDS', {'ios': 20})
     with pytest.raises(AccountCutoverAccessDenial) as error:
         evaluate_account_cutover_access(
@@ -898,3 +897,83 @@ def test_persisted_cell_kind_wins_over_a_later_legacy_request():
     )
     assert refreshed.data_plane == 'cell'
     assert refreshed.account_generation == 0
+
+
+@pytest.mark.parametrize('seam', ['set', 'cas'])
+def test_stale_open_read_cannot_publish_after_pause(monkeypatch, fake_db, seam):
+    monkeypatch.setenv('ACCOUNT_CUTOVER_ENFORCEMENT', 'on')
+    original = account_cutover_db.get_account_cutover_record
+    paused = AccountCutoverRecord(uid='u1', state=AccountCutoverState.migrating, data_plane='cell')
+    publication = account_cutover_db.publish_cutover_idle
+    published = []
+
+    def interleaved_read(uid, **kwargs):
+        stale = original(uid, **kwargs)
+        if seam == 'set':
+            account_cutover_db.set_account_cutover_record(uid, paused, firestore_client=fake_db)
+        else:
+            account_cutover_db.cas_set_account_cutover_record(
+                uid, paused, expected_account_generation=0, firestore_client=fake_db
+            )
+        return stale
+
+    def publish(uid, epoch):
+        accepted = publication(uid, epoch)
+        published.append(accepted)
+        return accepted
+
+    with monkeypatch.context() as patch:
+        patch.setattr(account_cutover_db, 'get_account_cutover_record', interleaved_read)
+        patch.setattr(account_cutover_db, 'publish_cutover_idle', publish)
+        evaluate_account_cutover_access(
+            'u1', method='POST', path='/v1/conversations', headers={}, firestore_client=fake_db
+        )
+    assert published == [False]
+    assert redis_db.get_generic_cache('cutover-idle:u1') is None
+    with pytest.raises(AccountCutoverAccessDenial, match='migration_maintenance'):
+        evaluate_account_cutover_access(
+            'u1', method='POST', path='/v1/conversations', headers={}, firestore_client=fake_db
+        )
+
+
+def test_reader_during_commit_and_crashed_writer_cannot_cache(monkeypatch, fake_db):
+    monkeypatch.setenv('ACCOUNT_CUTOVER_ENFORCEMENT', 'on')
+    before = account_cutover_db.cutover_cache_epoch('u1')
+    keys = account_cutover_db._cache_keys('u1')
+    redis_db.r.eval(account_cutover_db._BEGIN_CACHE_WRITE, 3, *keys, '1')
+    assert account_cutover_db.cutover_cache_epoch('u1') is None
+    assert not account_cutover_db.publish_cutover_idle('u1', before)
+    # A process crash before the post-commit hook leaves this pending bit in
+    # Redis. Even an open authoritative doc must not create an idle bit.
+    evaluate_account_cutover_access('u1', method='GET', path='/v1/conversations', headers={}, firestore_client=fake_db)
+    assert redis_db.get_generic_cache('cutover-idle:u1') is None
+    redis_db.r.eval(account_cutover_db._END_CACHE_WRITE, 3, *keys)
+    assert account_cutover_db.cutover_cache_epoch('u1') != before
+    assert not account_cutover_db.publish_cutover_idle('u1', before)
+
+
+def test_redis_outage_keeps_authoritative_reads_and_refuses_unfenced_pause(monkeypatch, fake_db):
+    monkeypatch.setenv('ACCOUNT_CUTOVER_ENFORCEMENT', 'on')
+    monkeypatch.setattr(redis_db.r, 'eval', lambda *args: (_ for _ in ()).throw(ConnectionError('offline')))
+    assert account_cutover_db.cutover_cache_epoch('u1') is None
+    assert not account_cutover_db.publish_cutover_idle('u1', '0')
+    evaluate_account_cutover_access('u1', method='GET', path='/v1/conversations', headers={}, firestore_client=fake_db)
+    paused = AccountCutoverRecord(uid='u1', state=AccountCutoverState.migrating, data_plane='cell')
+    with pytest.raises(ConnectionError):
+        account_cutover_db.set_account_cutover_record('u1', paused, firestore_client=fake_db)
+    assert (
+        account_cutover_db.get_account_cutover_record('u1', firestore_client=fake_db).state
+        == AccountCutoverState.legacy
+    )
+
+
+def test_cell_quiesce_exceeds_idle_ttl():
+    assert CELL_CUTOVER_QUIESCE_SECONDS > account_cutover_db.CUTOVER_IDLE_TTL_SECONDS
+
+
+def test_redis_key_loss_cannot_republish_an_old_epoch(idle_cache):
+    epoch = account_cutover_db.cutover_cache_epoch('u1')
+    idle_cache.flushall()
+    assert not account_cutover_db.publish_cutover_idle('u1', epoch)
+    assert account_cutover_db.cutover_cache_epoch('u1') != epoch
+    assert not account_cutover_db.publish_cutover_idle('u1', epoch)
