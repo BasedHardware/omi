@@ -27,10 +27,14 @@ Future<FirmwareInstallResult> verifyFirmwareInstallation({
   final subscription = observations.listen((observation) {
     if (result.isCompleted || observation.deviceId != deviceId || !isKnownFirmwareVersion(observation.version)) return;
     final observed = observation.version.trim();
-    final changed = isKnownFirmwareVersion(fromVersion) && observed != fromVersion.trim();
+    final knownBefore = isKnownFirmwareVersion(fromVersion);
     final matchesTarget = isKnownFirmwareVersion(targetVersion) && observed == targetVersion!.trim();
     result.complete(FirmwareInstallResult(
-      changed || matchesTarget ? FirmwareInstallOutcome.installed : FirmwareInstallOutcome.notInstalled,
+      // A known unchanged revision is never proof of installation, including
+      // a rollback whose target was already running before this attempt.
+      (knownBefore ? observed != fromVersion.trim() : matchesTarget)
+          ? FirmwareInstallOutcome.installed
+          : FirmwareInstallOutcome.notInstalled,
       observed,
     ));
   });

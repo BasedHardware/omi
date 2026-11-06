@@ -28,6 +28,13 @@
       "description": "Firmware update installed; hermetic production-widget render at 393x852 using product fonts",
       "captured_by": "agent",
       "source": "visual-audit"
+    },
+    {
+      "file": "005-mobile-ios-ota-already-stable.png",
+      "platform": "mobile-ios",
+      "description": "Rollback already on the stable version shows no installation offer; hermetic production-widget render at 393x852",
+      "captured_by": "agent",
+      "source": "visual-audit"
     }
   ]
 }

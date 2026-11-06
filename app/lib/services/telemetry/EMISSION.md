@@ -57,7 +57,9 @@ use `AnalyticsManager.track` and its consent/identity/retry queue, then
 on that route when `posthogRetirementEnabled` is true; the frozen client-batch
 schema has no firmware family. One random attempt id joins the funnel. Only a
 fresh DIS revision after DFU can produce Completed (`verified: true`);
-`to_version` is observed, never the requested version.
+`to_version` is observed, never the requested version. A known starting
+revision must change, even when it equals the target. Only an unknown starting
+revision may be verified by matching the target.
 
 Device Connected/Paired carry `firmware_revision`, `model`, `hardware_family`.
 Device Session Ended deliberately remains on PostHog with retirement enabled:

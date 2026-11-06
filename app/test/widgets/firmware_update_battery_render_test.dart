@@ -107,7 +107,10 @@ void main() {
   });
 
   Future<void> pumpPage(WidgetTester tester, _DeviceProvider provider,
-      {bool rollback = false, Locale locale = const Locale('en')}) async {
+      {bool rollback = false,
+      Locale locale = const Locale('en'),
+      String firmwareVersion = '2.0.10',
+      bool expectOffer = true}) async {
     debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
     addTearDown(() => debugDefaultTargetPlatformOverride = null);
     tester.view.physicalSize = const Size(393, 852);
@@ -139,14 +142,14 @@ void main() {
                 type: DeviceType.omi,
                 rssi: -50,
                 modelNumber: 'Omi',
-                firmwareRevision: '2.0.10'),
+                firmwareRevision: firmwareVersion),
           ),
         ),
       ),
     ));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
-    expect(find.byKey(const Key('firmware_update_start')), findsOneWidget);
+    expect(find.byKey(const Key('firmware_update_start')), expectOffer ? findsOneWidget : findsNothing);
   }
 
   OmiButton startButton(WidgetTester tester) => tester.widget(find.byKey(const Key('firmware_update_start')));
@@ -195,6 +198,14 @@ void main() {
       debugDefaultTargetPlatformOverride = null;
     });
   }
+
+  testWidgets('rollback already on stable suppresses the installation offer', (tester) async {
+    await pumpPage(tester, _DeviceProvider(batteryLevel: 80),
+        rollback: true, firmwareVersion: '3.0.1', expectOffer: false);
+    expect(find.text(en.alreadyOnStableFirmware), findsOneWidget);
+    await capture(tester, 'ota-already-stable.png');
+    debugDefaultTargetPlatformOverride = null;
+  });
 
   for (final rollback in [false, true]) {
     testWidgets('unknown battery renders waiting message and refreshes (rollback=$rollback)', (tester) async {

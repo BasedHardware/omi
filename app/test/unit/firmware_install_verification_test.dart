@@ -5,18 +5,26 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/utils/firmware_install_verification.dart';
 
 void main() {
-  for (final (observed, target, expected) in [
-    ('3.2.0', '3.2.0', FirmwareInstallOutcome.installed),
-    ('3.1.1', '3.2.0', FirmwareInstallOutcome.installed),
-    ('3.1.0', '3.2.0', FirmwareInstallOutcome.notInstalled),
-    ('3.1.0', '3.1.0', FirmwareInstallOutcome.installed),
+  for (final (before, observed, target, expected) in [
+    ('3.1.0', '3.2.0', '3.2.0', FirmwareInstallOutcome.installed),
+    ('3.1.0', '3.1.1', '3.2.0', FirmwareInstallOutcome.installed),
+    ('3.1.0', '3.1.0', '3.2.0', FirmwareInstallOutcome.notInstalled),
+    ('3.1.0', '3.1.0', '3.1.0', FirmwareInstallOutcome.notInstalled),
+    (' 3.1.0 ', '3.1.0', '3.1.0', FirmwareInstallOutcome.notInstalled),
+    ('', '3.2.0', '3.2.0', FirmwareInstallOutcome.installed),
+    ('unknown', '3.2.0', '3.2.0', FirmwareInstallOutcome.installed),
+    (' Unknown ', '3.2.0', '3.2.0', FirmwareInstallOutcome.installed),
+    ('', '3.1.0', '3.2.0', FirmwareInstallOutcome.notInstalled),
+    ('unknown', '3.1.0', '3.2.0', FirmwareInstallOutcome.notInstalled),
+    ('unknown', '3.1.0', null, FirmwareInstallOutcome.notInstalled),
+    ('unknown', '3.1.0', 'Unknown', FirmwareInstallOutcome.notInstalled),
   ]) {
-    test('fresh DIS $observed with target $target yields $expected', () async {
+    test('fresh DIS $observed from $before with target $target yields $expected', () async {
       final device = _FakeReconnect();
       final result = verifyFirmwareInstallation(
         observations: device.reads.stream,
         deviceId: 'pendant',
-        fromVersion: '3.1.0',
+        fromVersion: before,
         targetVersion: target,
       );
       device.read('other-pendant', '3.2.0');
