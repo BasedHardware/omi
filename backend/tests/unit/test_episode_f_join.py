@@ -8,9 +8,10 @@ import pytest
 from config import episodes as config
 from database import episode_timeline
 from database import episodes as episodes_db
+from database.episodes import EpisodeConflict
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils import omi_flags
-from utils.episodes import f_join, incremental, metrics, service
+from utils.episodes import f_join, incremental, metrics, policy, service
 from utils.episodes.service import Collaborators, MomentInput
 
 UID = 'uid-f-join'
@@ -320,3 +321,32 @@ def test_the_arm_is_the_one_live_when_the_episode_opened(store, monkeypatch):
     f_join.record_closed_size({**episode, 'closed_at': T0 + timedelta(minutes=5), 'conversation_ids': ['c1']})
     assert metrics.EPISODE_CLOSED_MEMBERS.labels(arm='f')._sum.get() == before + 1
     f_join.record_closed_size({'conversation_ids': ['c1']})
+
+
+def test_a_later_member_keeps_the_candidate_without_a_question_so_no_overlapping_split(store):
+    first = _first_episode(store)
+    assert _attach(store, 'c2', minutes=12) == 'joined'
+    assert _attach(store, 'c3', minutes=14) == 'joined'
+    asked = []
+    service.record_moment(
+        UID, _moment('c2', minutes=12, text=SECOND), _c(store, minutes=15, ask=lambda *a, **k: asked.append(a))
+    )
+    assert asked == []
+    episode = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert episode['id'] == first['id'] and episode['conversation_ids'] == ['c1', 'c2', 'c3']
+    assert 'c2' not in episode['pending_boundary']
+
+
+@pytest.mark.parametrize('error', [EpisodeConflict('lost the compare-and-swap'), RuntimeError('storage down')])
+def test_a_failed_f_marker_records_the_shared_fallback_and_keeps_todays_join(monkeypatch, error):
+    fallbacks = []
+    monkeypatch.setattr(f_join, 'record_fallback', lambda **kwargs: fallbacks.append(kwargs))
+
+    def fail(*_a, **_k):
+        raise error
+
+    monkeypatch.setattr(f_join.episodes_db, 'commit_moment', fail)
+    live = {'id': 'e1', 'status': 'live', 'state_version': 1, 'conversation_ids': ['c1']}
+    decision = policy.Boundary(policy.ASK, gap_seconds=720.0, source_changed=False)
+    f_join.mark_pending(UID, live, live, 'c2', decision, {}, firestore_client=None)
+    assert [item['component'] for item in fallbacks] == ['episode_f_join']

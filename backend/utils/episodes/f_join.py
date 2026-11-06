@@ -136,8 +136,10 @@ def mark_pending(
         metrics.record_boundary('f_pending')
     except EpisodeConflict:
         metrics.record_boundary('f_pending_conflict')
+        _fallback('other')
     except Exception as error:
         metrics.record_boundary('f_pending_error')
+        _fallback('other')
         logger.warning('event=episode_f_join outcome=pending_failed exception_type=%s', type(error).__name__)
 
 
@@ -169,6 +171,22 @@ def _fallback(reason: str) -> None:
     )
 
 
+def later_member(episode: Mapping[str, Any], conversation_id: str, started_at: datetime) -> bool:
+    """Another member recorded past the candidate's start. A split would leave the episode's recorded end
+    past the successor's start (recorded_window_overlap), so such a join keeps today's shape."""
+    start = policy.utc(started_at)
+    if start is None:
+        return False
+    activity = episode.get('member_activity') or {}
+    for cid in episode.get('conversation_ids') or []:
+        if cid == conversation_id:
+            continue
+        at = policy.utc(activity.get(cid))
+        if at is not None and at > start:
+            return True
+    return False
+
+
 def settle(
     uid: str,
     episode: Mapping[str, Any],
@@ -177,6 +195,8 @@ def settle(
     named: Sequence[Mapping[str, Any]],
     name: Callable[[Sequence[Mapping[str, Any]]], Sequence[Mapping[str, Any]]],
     c: Any,
+    *,
+    started_at: datetime,
 ) -> policy.Boundary:
     """F's answer for a marked join. Killed, no answer, an error or a timeout keeps today's join."""
     gap = float(pending.get('gap_seconds') or 0.0)
@@ -184,6 +204,10 @@ def settle(
     keep = policy.Boundary(policy.CONTINUE, gap_seconds=gap, source_changed=source_changed)
     if not admitted(uid):
         metrics.record_boundary('f_disabled')
+        return keep
+    if later_member(episode, conversation_id, started_at):
+        # Settled without a question: the candidate's split would overlap a member that recorded later.
+        metrics.record_boundary('f_later_member')
         return keep
     try:
         previous = previous_transcript(uid, episode, conversation_id, pending, name, c.firestore_client)

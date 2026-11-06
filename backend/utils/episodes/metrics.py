@@ -88,6 +88,7 @@ BOUNDARY_OUTCOMES = frozenset(
         'f_close',
         'f_no_answer',
         'f_disabled',
+        'f_later_member',
     }
 )
 

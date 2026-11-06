@@ -728,7 +728,14 @@ def _settle_boundary(
         # keeps the join unchanged.
         if decision.action == policy.CONTINUE and not short:
             decision = f_join.settle(
-                uid, episode, moment.conversation_id, pending, named, lambda rows: _named_segments(uid, rows, c), c
+                uid,
+                episode,
+                moment.conversation_id,
+                pending,
+                named,
+                lambda rows: _named_segments(uid, rows, c),
+                c,
+                started_at=facts.started_at,
             )
     elif episode and pending is not None and decision.action == policy.CONTINUE:
         # It joined provisionally at its first words; with its text in hand, settle it now.
