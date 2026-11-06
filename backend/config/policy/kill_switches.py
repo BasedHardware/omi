@@ -25,7 +25,6 @@ KILL_SWITCHES = {
     'BATCH_PIPELINE_PROJECTION_PUMP_ENABLED': False,
     'PROJECTION_DRAIN_CLAIM_AWARE': True,
     'PROJECTION_DRAIN_PRIVACY_BACKOFF': True,
-    'PROJECTION_PRIVACY_REFUSAL_RESUME': True,
     'BATCH_PIPELINE_PROJECTION_INDEX_DEFERRED_ENABLED': True,
     'PARAKEET_WINDOW_STRANDED_DRIFT_SETTLE_ENABLED': True,
     'BATCH_PIPELINE_HELD_TERMINAL_STATUS_ENABLED': True,
@@ -46,7 +45,6 @@ def kill_switch(name: str, *, policy_id: str = 'control', flags=None) -> bool:
         'BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED',
         'PROJECTION_DRAIN_CLAIM_AWARE',
         'PROJECTION_DRAIN_PRIVACY_BACKOFF',
-        'PROJECTION_PRIVACY_REFUSAL_RESUME',
     }:
         enabled = value != 'off'
     elif name == 'PARAKEET_WINDOW_STRANDED_DRIFT_SETTLE_ENABLED':
@@ -63,7 +61,6 @@ def kill_switch(name: str, *, policy_id: str = 'control', flags=None) -> bool:
         'BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED',
         'PROJECTION_DRAIN_CLAIM_AWARE',
         'PROJECTION_DRAIN_PRIVACY_BACKOFF',
-        'PROJECTION_PRIVACY_REFUSAL_RESUME',
     }:
         enabled = default_on(name, enabled, environ=env)
     logger.info('event=batch_policy_kill_switch policy_id=%s switch=%s enabled=%s count=1', policy_id, name, enabled)

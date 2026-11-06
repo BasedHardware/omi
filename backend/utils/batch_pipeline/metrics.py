@@ -33,11 +33,8 @@ PROJECTION_DRAIN_PRIVACY_STOPS = Counter(
 PROJECTION_DRAIN_PRIVACY_BACKOFFS = Counter(
     'omi_batch_projection_privacy_backoffs_total', 'Zero-progress privacy owner drain backoffs applied'
 )
-PROJECTION_PRIVACY_RESUMES_ATTEMPTED = Counter(
-    'omi_batch_projection_privacy_resumes_attempted_total', 'Fenced privacy refusal resume attempts'
-)
-PROJECTION_PRIVACY_RESUMES_SUCCEEDED = Counter(
-    'omi_batch_projection_privacy_resumes_succeeded_total', 'Fenced privacy refusal resumes returned successfully'
+PROJECTION_DRAIN_PRIVACY_ROW_CHANGED = Counter(
+    'omi_batch_projection_privacy_row_changed_total', 'Early owner re-requests after a blocked head row changes'
 )
 
 
