@@ -33,7 +33,11 @@ class AutomaticAppleRemindersExport {
         _acknowledge = acknowledge ??
             ((id, reminder, current) async =>
                 await tasks.updateActionItem(id,
-                    exported: true, exportPlatform: 'apple_reminders', appleReminderId: reminder, canSend: current) !=
+                    exported: true,
+                    exportPlatform: 'apple_reminders',
+                    exportDate: DateTime.now(),
+                    appleReminderId: reminder,
+                    canSend: current) !=
                 null);
 
   final bool Function() _available;
