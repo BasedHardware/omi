@@ -1,7 +1,8 @@
 """2-hour batch timeliness alarm (David, 2026-11-02): default on; BATCH_TIMELINESS_ALARM_ENABLED=false turns it off.
 
-Units admitted before the epoch are backlog: exported as counts, never alarmed, so the alarm can be enabled on
-day one without firing permanently on rows that were already late when the target was set.
+Units admitted before the epoch are backlog: excluded from the 2-hour delivery alarm, so it can be enabled on
+day one without firing permanently on rows already late. A separate alert watches assignment-held backlog
+growth or saturation of its bounded count.
 """
 
 import datetime as dt

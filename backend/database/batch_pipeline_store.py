@@ -767,7 +767,8 @@ def timeliness_sample(
 ) -> dict[str, Any]:
     """Unpublished units by wait leg: oldest ``enqueued_at`` at or after ``epoch``, counts past ``sla`` for the
     new cohort, and backlog counts before ``epoch``. With ``batch_timeliness_leader`` on, each backlog
-    count is capped at 10,000 index entries: values at the cap are lower bounds, never alarm inputs.
+    count is capped at 10,000 index entries: values at the cap are lower bounds. The assignment-held
+    backlog alert treats saturation as actionable stock, independently of its one-hour growth condition.
     Lever 0 restores the exact, unbounded historical counts. Post-epoch counts stay exact.
 
     ``terminal_empty`` is always counted. With ``terminal_empty_processed`` those units leave the quarantined

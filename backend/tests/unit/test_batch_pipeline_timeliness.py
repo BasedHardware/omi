@@ -10,6 +10,7 @@ from prometheus_client import CollectorRegistry
 
 from config.batch_timeliness import TERMINAL_EMPTY_IS_PROCESSED
 from database.batch_pipeline_store import TIMELINESS_HOLD_SCAN_LIMIT, timeliness_sample
+from utils.batch_pipeline.leader import TIMELINESS_LEASE_GRACE_SECONDS
 from utils.batch_pipeline.metrics import QueueMetrics
 
 BACKEND = Path(__file__).resolve().parents[2]
@@ -441,7 +442,11 @@ def test_drain_age_excludes_held_only_stock_but_includes_pre_epoch_pending(monke
 
 
 @pytest.mark.parametrize('enabled', [True, False])
-def test_historical_counts_apply_limit_before_aggregation(monkeypatch, enabled):
+@pytest.mark.parametrize(
+    'row,leg',
+    [({'state': 'quarantined'}, 'quarantined'), ({'state': 'committed', 'recovery_state': 'held'}, 'assignment_held')],
+)
+def test_historical_counts_apply_limit_before_aggregation(monkeypatch, enabled, row, leg):
     from database.batch_pipeline_store import TIMELINESS_BACKLOG_COUNT_LIMIT
 
     monkeypatch.setenv('FIRESTORE_READ_LEVERS', json.dumps({'batch_timeliness_leader': 100 if enabled else 0}))
@@ -454,11 +459,16 @@ def test_historical_counts_apply_limit_before_aggregation(monkeypatch, enabled):
 
     monkeypatch.setattr(_Query, 'count', counted)
     stock = TIMELINESS_BACKLOG_COUNT_LIMIT + 123
-    sample = _sample(jobs=[{'state': 'quarantined', 'enqueued_at': EPOCH - 1}] * stock)
+    sample = _sample(jobs=[{**row, 'enqueued_at': EPOCH - 1}] * stock)
     historical = [q for q in queries if any(op == '<' and value == EPOCH for _, op, value in q.filters)]
     assert len(historical) == 7
     assert all(q._limit == (TIMELINESS_BACKLOG_COUNT_LIMIT if enabled else None) for q in historical)
-    assert sample['backlog']['quarantined'] == (TIMELINESS_BACKLOG_COUNT_LIMIT if enabled else stock)
+    assert sample['backlog'][leg] == (TIMELINESS_BACKLOG_COUNT_LIMIT if enabled else stock)
+    if leg == 'assignment_held':
+        rules = json.loads((BACKEND / 'charts/monitoring/alerts/critical-failures.json').read_text())
+        alarm = next(rule for rule in rules if rule['uid'] == 'omi-batch-held-backlog-growing')
+        stock_metric = 'max(omi_batch_timeliness_backlog_units{leg="assignment_held"})'
+        assert f'({stock_metric} >= {TIMELINESS_BACKLOG_COUNT_LIMIT})' in alarm['data'][0]['model']['expr']
     # Post-epoch counts remain exact and unbounded.
     assert all(q._limit is None for q in queries if q not in historical)
 
@@ -600,15 +610,28 @@ def test_alerts_aggregate_available_leader_and_keep_missing_sample_freshness():
     assert rules['omi-batch-timeliness-scan-blind']['noDataState'] == 'OK'
 
 
-def test_stalled_former_leader_expires_at_collection_without_refresh(monkeypatch):
+@pytest.mark.parametrize('interval', [60, 300, 3600])
+@pytest.mark.parametrize('mode', ['elected', 'lever_zero', 'rollback'])
+def test_stalled_replica_expires_at_collection_without_refresh(monkeypatch, interval, mode):
     from utils.batch_pipeline import metrics as metrics_module
 
-    metrics, store, clock = _fleet(monkeypatch)
+    metrics, store, clock = _fleet(monkeypatch, interval)
     monkeypatch.setattr(metrics_module.time, 'monotonic', clock)
     first, second = metrics
+    if mode == 'lever_zero':
+        monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"batch_timeliness_leader":0}')
+        for sampler in metrics:
+            sampler.timeliness_leader.acquire = Mock(side_effect=AssertionError('must bypass lease'))
     first.refresh_timeliness(store, clock.now)
     assert list(first.timeliness_age.collect())
-    clock.now += first.timeliness_leader.ttl_seconds + 1
+    if mode == 'rollback':
+        # The old replica never refreshes after the lever changes. Collection
+        # must still enforce the deadline set by its elected sample.
+        monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"batch_timeliness_leader":0}')
+        second.timeliness_leader.acquire = Mock(side_effect=AssertionError('must bypass lease'))
+    clock.now += interval + TIMELINESS_LEASE_GRACE_SECONDS - 1
+    assert list(first.timeliness_age.collect())
+    clock.now += 1  # Expiry is exclusive, even with election off.
     second.refresh_timeliness(store, clock.now)
     # A's supervisor never resumes: scraping alone must withdraw stale debt
     # before max(age from A) can borrow max(timestamp from B)'s freshness.
@@ -623,6 +646,7 @@ def test_stalled_former_leader_expires_at_collection_without_refresh(monkeypatch
     ):
         assert list(gauge.collect()) == []
     assert list(second.timeliness_observed_at.collect())[0].samples[0].value == clock.now
+    assert store.timeliness.call_count == 2
 
 
 def test_lazy_election_uses_store_namespace_and_own_role_on_both_planes(monkeypatch):
@@ -643,13 +667,18 @@ def test_lazy_election_uses_store_namespace_and_own_role_on_both_planes(monkeypa
     store.timeliness.assert_not_called()
 
 
-def test_failed_fail_open_retry_does_not_revive_expired_former_leader(monkeypatch):
+@pytest.mark.parametrize('mode', ['elected', 'lever_zero', 'rollback'])
+def test_failed_retry_does_not_revive_expired_replica(monkeypatch, mode):
     from utils.batch_pipeline import metrics as metrics_module
 
     metrics, store, clock = _fleet(monkeypatch)
     monkeypatch.setattr(metrics_module.time, 'monotonic', clock)
     first, second = metrics
+    if mode == 'lever_zero':
+        monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"batch_timeliness_leader":0}')
     first.refresh_timeliness(store, clock.now)
+    if mode == 'rollback':
+        monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"batch_timeliness_leader":0}')
     clock.now += first.timeliness_leader.ttl_seconds + 1
     second.refresh_timeliness(store, clock.now)
     assert list(first.timeliness_age.collect()) == []

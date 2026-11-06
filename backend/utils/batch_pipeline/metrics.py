@@ -181,7 +181,7 @@ class QueueMetrics:
         )
         self.timeliness_backlog = _FreshQueueGauge(
             'omi_batch_timeliness_backlog_units',
-            'Pre-epoch unpublished units by leg; capped at 10000 (lower bound) with batch_timeliness_leader; never alarmed',
+            'Pre-epoch unpublished units by leg; capped at 10000 (lower bound) with batch_timeliness_leader',
             ['leg'],
             registry=registry,
             fresh=self._timeliness_sample_visible,
@@ -423,12 +423,10 @@ class QueueMetrics:
             self._capacity_observed = observed
 
     def _timeliness_sample_visible(self) -> bool:
-        # A stalled former leader must not combine its old breach with a new
-        # leader's fresh timestamp in max-based alerts. Expire at collection,
-        # even when no supervised refresh returns to discover the handover.
-        return self._timeliness_visible and (
-            not lever_enabled('batch_timeliness_leader') or time.monotonic() < self._timeliness_expires
-        )
+        # A stalled replica must not combine its old breach with another
+        # replica's fresh timestamp in max-based alerts. Expire at collection
+        # in every election mode, including rollback to per-instance sampling.
+        return self._timeliness_visible and time.monotonic() < self._timeliness_expires
 
     def refresh_timeliness(self, store: FirestoreStore, now: float) -> None:
         """One fleet sample per interval; errors preserve the last successful timestamp."""
@@ -444,15 +442,14 @@ class QueueMetrics:
             self.timeliness_samples.labels('disabled').inc()
             return
         elected = lever_enabled('batch_timeliness_leader')
-        sample_expires = None
+        lease_seconds = interval + TIMELINESS_LEASE_GRACE_SECONDS
+        sample_expires = time.monotonic() + lease_seconds
         if elected:
-            lease_seconds = interval + TIMELINESS_LEASE_GRACE_SECONDS
             if self.timeliness_leader is None:
                 # Lazy and shared by both planes, using the data namespace, not
                 # pod/release identity. No import-time or disabled-path IO.
                 self.timeliness_leader = LeaderLease(store, TIMELINESS_METRICS, ttl_seconds=lease_seconds)
             self.timeliness_leader.ttl_seconds = lease_seconds
-            acquired_at = time.monotonic()
             if not self.timeliness_leader.acquire():
                 # Retry through the incumbent's refresh grace without waiting
                 # another full sample interval after it stops. Followers do
@@ -460,7 +457,6 @@ class QueueMetrics:
                 self._timeliness_due = now + min(interval, TIMELINESS_LEASE_GRACE_SECONDS)
                 self._timeliness_visible = False
                 return
-            sample_expires = acquired_at + lease_seconds
         try:
             sample = timeliness_sample(
                 store.client,
@@ -488,10 +484,9 @@ class QueueMetrics:
         for leg, truncated in sample['truncated'].items():
             self.timeliness_truncated.labels(leg).set(1 if truncated else 0)
         self.timeliness_observed_at.set(now)
-        if sample_expires is not None:
-            # A lease renewal/fail-open result alone must not revive expired
-            # debt beside another replica's fresh observation timestamp.
-            self._timeliness_expires = sample_expires
+        # Only a successful sample extends visibility, including with election
+        # disabled. A lease renewal/fail-open result alone cannot revive debt.
+        self._timeliness_expires = sample_expires
         self._timeliness_visible = True
         self.timeliness_samples.labels('ok').inc()
 

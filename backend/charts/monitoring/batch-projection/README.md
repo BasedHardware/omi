@@ -20,7 +20,7 @@ per data namespace on healthy leases with election enabled, across serving and G
 |---|---|
 | `omi_batch_timeliness_new_oldest_age_seconds{leg}` | oldest unpublished unit admitted at or after the epoch. `uncommitted`, `quarantined` and `assignment_held` clock from `enqueued_at`; `projection` and `quarantine_held_rows` clock from `committed_at`, a lower bound |
 | `omi_batch_timeliness_new_over_sla_units{leg}` | units admitted at or after the epoch and unpublished past 2 h, per leg |
-| `omi_batch_timeliness_backlog_units{leg}` | unpublished units from before the epoch; each leg capped at 10,000 (a lower bound at the cap), visible, never alarmed |
+| `omi_batch_timeliness_backlog_units{leg}` | unpublished units from before the epoch; each leg capped at 10,000 with election enabled (a lower bound at the cap); assignment-held growth or saturation feeds a separate page |
 | `omi_batch_timeliness_scan_truncated{leg}` | 1 when a walk page is full and may hide an older admission (`uncommitted`, `projection`); the blind rule fires after 30 minutes, which is expected during large catch-up uploads |
 | `omi_batch_timeliness_samples_total{outcome}` | `ok`, `error`, `disabled` |
 
@@ -38,13 +38,18 @@ each retry, so non-leaders execute no timeliness queries. Before a successful sa
 and after losing the lease, all
 sampler gauges (including drain/held ages and the observation timestamp) are absent.
 Failures retain the previous stored values and timestamp without extending their
-collection deadline; expired samples stay absent even after a fail-open lease retry. Collection also withdraws an expired leader
-sample if its supervisor stalls, so an old breach cannot borrow a new leader’s
-fresh timestamp. Lease-store errors fail open using the existing lease behavior.
+collection deadline; expired samples stay absent even after a fail-open lease retry. In every election mode,
+including lever 0, samples expire at collection after the interval plus 60 s from the start of the attempt
+that last succeeded. Changing the lever cannot revive them. A stalled replica's old breach cannot borrow
+another replica's fresh timestamp. Lease-store errors fail open using the existing lease behavior.
 
 With `batch_timeliness_leader` enabled, each pre-epoch aggregation applies `limit(10000).count()`; a saturated value means
 **at least** 10,000 units. Post-epoch SLA counts and the oldest-unit queries retain
-their semantics. Backlog is kept visible, never alarmed. This bounds historical
+their semantics. The separate `omi-batch-held-backlog-growing` page fires on assignment-held stock >1000
+with 1h growth >50, **or stock >=10,000**, with a <900 s fresh sample for 15 minutes. Saturation is actionable
+held debt, not proof of growth: a flat capped count must keep paging. The saturation branch needs no
+growth history. Drain below the cap and inspect the held leg; do not infer exact stock or drain rate from
+the capped value. See [critical failures](../critical-failures.md). This bounds historical
 index entries per leg independently of stock size. For N healthy instances in one
 namespace, election removes approximately (N−1)/N of sampler queries, plus the
 historical count cap. Lease transactions are additional small reads, not samples.
@@ -52,14 +57,16 @@ No measured production savings are claimed.
 
 Rollback: set `batch_timeliness_leader` to `0` in the existing `FIRESTORE_READ_LEVERS`
 JSON on both planes. This restores per-instance sampling and unbounded exact
-pre-epoch counts. No new environment key is added. The existing global
+pre-epoch counts. Collection expiry remains bounded and the >=10,000 alert condition still applies to
+exact counts. No new environment key is added. The existing global
 `BATCH_PIPELINE_LEADER_LEASE_ENABLED=false` still bypasses election.
 
 The unchanged `batch-timeliness.json` rules use `max` across available series.
 Followers need not publish zeros. Freshness uses `time() - max(observed_at)` with
 `or vector(1e9)` when every sampler is absent; the stale rule retains its 900 s
 threshold and `noDataState: Alerting`. The breach rule retains its freshness gate,
-and the blind rule retains `noDataState: OK`. No alert thresholds change.
+and the blind rule retains `noDataState: OK`. The separate held-backlog page adds the saturation condition
+above; its existing growth thresholds, freshness gate and 15-minute pending duration remain unchanged.
 
 An interval reduction across a restart can wait for the previous holder's stored TTL
 (up to 3660 s); it does not revoke a live lease. Use a stable interval across the
