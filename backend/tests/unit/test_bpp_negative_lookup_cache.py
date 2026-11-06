@@ -9,7 +9,8 @@ import pytest
 from database import batch_pipeline_privacy as privacy, batch_privacy_negative_cache as cache
 from database import privacy_check_metrics as metrics
 from database.batch_privacy_attempt import batch_privacy_attempt
-from database.privacy_ttl_cache import BoundedTTLCache
+from config.firestore_read_levers import KNOWN_LEVERS, lever_enabled
+from database.privacy_ttl_cache import BoundedTTLCache, is_missing
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreDocument
 
 UID = 'negative-owner'
@@ -151,7 +152,7 @@ def test_shadow_compares_live_and_counts_bypass_mismatch_even_with_generation_me
         json.dumps(
             {
                 'privacy_negative_lookup_cache': 100,
-                'privacy_negative_lookup_shadow': 100,
+                'privacy_checks_shadow': 100,
                 'bpp_generation_memo': 100,
             }
         ),
@@ -187,18 +188,6 @@ def test_full_row_exports_stay_live_and_do_not_seed(world):
     assert len(cache.LOOKUPS) == 0
     assert snapshots['conversations']['source'] == {}
     assert reads == [MARKER, ('users', UID), TOKEN, TOMBSTONE, CONVERSATION]
-
-
-def test_wq12_memo_never_seeds_negative_cache_or_reuses_token(world, monkeypatch):
-    db, reads, _, _ = world
-    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"privacy_negative_lookup_cache":100,"batch_privacy_memoize":100}')
-    tx = db.transaction()
-    memo = privacy.BatchPrivacyMemo(db, tx)
-    memo.get(db.collection('account_deletions').document(UID))
-    memo.get(db.collection('batch_pipeline_privacy').document(TOKEN[1]))
-    reads.clear()
-    privacy.assert_batch_write_allowed(db, tx, UID, conversation_ids=['source'], memo=memo)
-    assert Counter(reads)[MARKER] == Counter(reads)[TOKEN] == 1
 
 
 def test_cache_isolated_by_client_owner_and_document(world):
@@ -254,7 +243,7 @@ def test_failed_token_read_never_serves_warm_cache(world, monkeypatch):
 
 def test_failed_shadow_read_is_not_a_completed_comparison(world, monkeypatch):
     db, _, _, _ = world
-    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"privacy_negative_lookup_shadow":100}')
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"privacy_negative_lookup_cache":100,"privacy_checks_shadow":100}')
     check(db)
     hits = metrics.NEGATIVE_LOOKUPS.labels('account_deletions', 'shadow', 'hit')
     before = hits._value.get()
@@ -272,8 +261,6 @@ def test_failed_shadow_read_is_not_a_completed_comparison(world, monkeypatch):
 
 
 def test_lru_access_preserves_recent_hint(world):
-    from database.privacy_ttl_cache import is_missing
-
     bounded = BoundedTTLCache(max_entries=2, clock=lambda: 0)
     bounded.put('first', 'v', started=0)
     bounded.put('second', 'v', started=0)
@@ -284,9 +271,34 @@ def test_lru_access_preserves_recent_hint(world):
 
 
 def test_percent_cohorts_use_existing_mechanics(world, monkeypatch):
-    from config.firestore_read_levers import lever_enabled
-
     monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"privacy_negative_lookup_cache":10}')
     decisions = [lever_enabled('privacy_negative_lookup_cache', f'owner-{i}') for i in range(2000)]
     assert 0.07 < sum(decisions) / len(decisions) < 0.13
     assert decisions == [lever_enabled('privacy_negative_lookup_cache', f'owner-{i}') for i in range(2000)]
+
+
+def test_repeated_decision_in_same_transaction_rereads_token(world):
+    db, reads, _, _ = world
+    tx = db.transaction()
+    for _ in range(2):
+        privacy.assert_batch_write_allowed(db, tx, UID, conversation_ids=['source'])
+    assert Counter(reads)[TOKEN] == 2
+    assert Counter(reads)[MARKER] == 1
+    assert len(reads) == 7
+
+
+def test_one_new_lever_replaces_wq12_and_off_preserves_existing_shadow(world, monkeypatch):
+    assert 'privacy_negative_lookup_cache' in KNOWN_LEVERS
+    assert 'batch_privacy_memoize' not in KNOWN_LEVERS
+    assert 'privacy_negative_lookup_shadow' not in KNOWN_LEVERS
+    db, _, _, _ = world
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"privacy_checks_shadow":100}')
+
+    def unexpected_cache(*args, **kwargs):
+        raise AssertionError('lever 0 must disable the negative cache even in existing decision shadow')
+
+    monkeypatch.setattr(cache, 'read', unexpected_cache)
+    with batch_privacy_attempt():
+        assert check(db) == 7
+        assert check(db) == 7
+    assert len(cache.LOOKUPS) == 0

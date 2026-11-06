@@ -16,9 +16,8 @@ from google.cloud import firestore
 from google.api_core.exceptions import AlreadyExists, FailedPrecondition, Aborted
 
 from config.batch_pipeline import contention_retry_enabled, control_candidate_fanout
-from config.firestore_read_levers import lever_enabled
 from database._client import get_data_plane_firestore_client
-from database.batch_pipeline_privacy import assert_batch_write_allowed, BatchPrivacyMemo
+from database.batch_pipeline_privacy import assert_batch_write_allowed
 from database.batch_pipeline_recovery import quarantine_fenced
 from database.firestore_transaction_retry import FirestoreContentionExhausted, run_with_transaction_contention_retry
 from database.batch_pipeline_transaction_labels import (
@@ -180,11 +179,6 @@ class FirestoreTransaction:
 
     def check_privacy(self, uid: str, conversation_ids=(), expected_generation: int | None = None) -> int:
         options = {}
-        if lever_enabled('batch_privacy_memoize', uid):
-            # FirestoreStore.run creates this view anew on every callback retry.
-            if not hasattr(self, '_privacy_memo'):
-                self._privacy_memo = BatchPrivacyMemo(self.client, self.transaction, read_budget=self.read_budget)
-            options['memo'] = self._privacy_memo
         if self.read_budget is not None:
             options['read_budget'] = self.read_budget
         return assert_batch_write_allowed(

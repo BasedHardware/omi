@@ -91,13 +91,6 @@ def test_instrumentation_preserves_closed_historical_sdk_caller_labels(world, mo
         'database.conversation_tombstones:is_deleted',
     ]
     assert metrics.current_read_caller() is None
-    callers.clear()
-    enable(monkeypatch, 'batch_privacy_memoize')
-    transaction = db.transaction()
-    privacy.assert_batch_write_allowed(
-        db, transaction, UID, conversation_ids=['source'], memo=privacy.BatchPrivacyMemo(db, transaction)
-    )
-    assert callers == ['database.batch_pipeline_privacy:get'] * 5
 
 
 def test_shadow_detects_unfenced_writer_and_keeps_live_block(world, monkeypatch):

@@ -14,10 +14,8 @@ from config.batch_pipeline import (
     HELD_DEAD_LETTER_SECONDS,
 )
 
-from config.firestore_read_levers import lever_enabled
 from database.batch_pipeline_privacy import (
     assert_batch_write_allowed,
-    BatchPrivacyMemo,
     BatchPrivacyBlocked,
     BatchPrivacyReason,
 )
@@ -109,9 +107,6 @@ class ProjectionSession:
         transaction.update(self.result_ref, changes)
 
     def guard(self, transaction, conversation_ids=()):
-        options = {}
-        if lever_enabled('batch_privacy_memoize', self.binding.owner_id):
-            options['memo'] = getattr(self, '_privacy_memo', None)
         snapshots: dict[str, Any] = {}
         try:
             return assert_batch_write_allowed(
@@ -121,7 +116,6 @@ class ProjectionSession:
                 conversation_ids=conversation_ids,
                 expected_generation=self.binding.privacy_generation,
                 snapshots=snapshots,
-                **options,
             )
         except BatchPrivacyBlocked as error:
             if error.conversation_id:
@@ -245,12 +239,6 @@ class ProjectionSession:
         self._source_deletion_transaction = None
         self._source_deleted = False
         self._privacy_fence_ids = set()
-        if lever_enabled('batch_privacy_memoize', self.binding.owner_id):
-            # A session may survive the pre-check and assignment retries. Only
-            # prepare and validate_plan within this attempt may share snapshots.
-            self._privacy_memo = BatchPrivacyMemo(self.client, transaction)
-        elif hasattr(self, '_privacy_memo'):
-            del self._privacy_memo
         self.job = self.store.ref('jobs', self.segment_id).get(transaction=transaction).to_dict() or {}
         self.entry = self.result_ref.get(transaction=transaction).to_dict() or {}
         owner = self.owner_ref.get(transaction=transaction).to_dict() or {}

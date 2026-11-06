@@ -191,12 +191,10 @@ def negative_lookup(collection, mode, result):
         pass
 
 
-def read_snapshot(family, reference, *, memo_read=False, read_budget=None, **kwargs):
+def read_snapshot(family, reference, *, read_budget=None, **kwargs):
     """Count issued reads, including failures, without inspecting paths or payloads."""
     _count(family, 'reads')
-    caller = (
-        'database.batch_pipeline_privacy:get' if family == 'batch' and memo_read else _READ_CALLERS[_family(family)]
-    )
+    caller = _READ_CALLERS[_family(family)]
     caller_token = _READ_CALLER.set(caller)
     try:
         if read_budget is not None:

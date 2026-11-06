@@ -397,16 +397,6 @@ def test_missing_or_malformed_server_revision_never_reuses_token(monkeypatch, re
     assert len(reads) == 10
 
 
-def test_cached_hit_preserves_foreign_wq12_memo_validation(monkeypatch, reads):
-    monkeypatch.setattr(privacy, 'lever_enabled', lambda *a: True)
-    db = database()
-    with batch_privacy_attempt():
-        check(db)
-        foreign = privacy.BatchPrivacyMemo(db, db.transaction())
-        with pytest.raises(ValueError, match='another transaction'):
-            check(db, memo=foreign)
-
-
 @pytest.mark.parametrize('export_snapshots', [False, True])
 def test_actual_artifact_authorize_path_read_counts_and_exact_off_order(monkeypatch, reads, export_snapshots):
     from types import SimpleNamespace
