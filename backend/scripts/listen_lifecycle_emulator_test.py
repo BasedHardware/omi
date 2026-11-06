@@ -371,7 +371,7 @@ def _assert_legacy_photo_only_finalization_is_admitted(client: Any, uid: str) ->
 
 
 def _assert_restore_fences_fanout_until_record_registration(client: Any, uid: str) -> None:
-    """A real restore transaction holds the parent ahead of a concurrent claim."""
+    """Restore commits while a real claim transaction is paused before its parent read."""
     conversation_id = f'restore-fanout-{uuid.uuid4().hex}'
     job_id = f'finalization-{uuid.uuid4().hex}'
     conversation_ref = _conversation_ref(client, uid, conversation_id)
@@ -405,25 +405,40 @@ def _assert_restore_fences_fanout_until_record_registration(client: Any, uid: st
     )
     projection_ref.set({'leased': 1, 'completed': 0, 'stale': 0, 'success': 0})
     restore_transaction = _hold_cleanup_parent_lock(uid, conversation_id)
-    started, finished = threading.Event(), threading.Event()
+    started, restored_committed = threading.Event(), threading.Event()
     result: dict[str, Any] = {}
 
-    def claim_behind_restore() -> None:
+    def conversation_after_restore(*_args: Any) -> Any:
+        # The claim has already read its job in a real SDK transaction. A
+        # parent read lock alone does not serialize two readers in Firestore;
+        # explicitly order the restore before this conversation snapshot.
         started.set()
+        assert restored_committed.wait(timeout=10), 'restore did not release the conversation read'
+        return conversation_ref
+
+    @firestore.transactional
+    def claim_transaction(transaction: Any) -> Any:
+        return finalization_jobs_db._claim_finalization_fanout_txn(
+            transaction,
+            job_ref,
+            1,
+            1,
+            datetime.now(timezone.utc),
+            conversation_after_restore,
+            client.collection(finalization_jobs_db.FINALIZATION_PROJECTION_COLLECTION),
+            expected_discarded=True,
+        )
+
+    def claim_behind_restore() -> None:
         try:
-            result['claim'] = lifecycle_service.claim_finalization_fanout(
-                job_id, 1, 1, expected_discarded=True, firestore_client=client
-            )
+            result['claim'] = claim_transaction(client.transaction())
         except BaseException as error:
             result['error'] = error
-        finally:
-            finished.set()
 
     claimant = threading.Thread(target=claim_behind_restore, name='listen-restore-fanout-claim')
     claimant.start()
     try:
         assert started.wait(timeout=5), 'fanout claimant did not start'
-        assert not finished.wait(timeout=0.25), 'fanout claim bypassed the restore transaction lock'
         _emulator_post(
             ':commit',
             {
@@ -446,6 +461,7 @@ def _assert_restore_fences_fanout_until_record_registration(client: Any, uid: st
     finally:
         if restore_transaction:
             _emulator_post(':rollback', {'transaction': restore_transaction})
+        restored_committed.set()
         claimant.join(timeout=15)
     assert not claimant.is_alive(), 'fanout claimant did not finish after restore'
     if 'error' in result:
