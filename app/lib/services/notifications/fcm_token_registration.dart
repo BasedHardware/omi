@@ -139,7 +139,10 @@ class FcmTokenRegistration {
       if (_offeredToken == token) _again = false;
       final zone = await _bounded(readTimeZone);
       if (!_current(owner, epoch)) return false;
-      if (_saved == (token, zone)) return true;
+      if (_saved == (token, zone)) {
+        if (_offeredToken == token) _offeredToken = null;
+        return true;
+      }
       final accepted = await _bounded(() => persist(token, zone, owner));
       if (!_current(owner, epoch) || !accepted) return false;
       _saved = (token, zone);

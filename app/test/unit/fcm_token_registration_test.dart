@@ -79,6 +79,18 @@ void main() {
     expect(saves.last.$2, zone);
   });
 
+  test('a duplicate token event cannot mask the next SDK token', () async {
+    final service = registrar();
+    addTearDown(service.dispose);
+    await service.refresh();
+    await service.refresh(token: 'synthetic-fcm');
+    expect(saves, hasLength(1));
+
+    token = 'new-sdk-token';
+    await service.refresh();
+    expect(saves.map((row) => row.$1), ['synthetic-fcm', 'new-sdk-token']);
+  });
+
   test('APNs arriving after the former ten-second window retries without rotation', () {
     fakeAsync((clock) {
       apns = null;
