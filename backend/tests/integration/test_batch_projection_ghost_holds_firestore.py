@@ -11,6 +11,7 @@ from dataclasses import asdict
 import pytest
 
 from config.batch_pipeline import HELD_DEAD_LETTER_SECONDS
+from database import batch_pipeline_projection_release as release_module
 from database.batch_pipeline_projection_release import (
     RELEASE_PAGE,
     RELEASE_TICK_SECONDS,
@@ -99,22 +100,36 @@ def snapshot(lane, kind):
     return {doc.id: doc.to_dict() for doc in lane.client.collection(f'{lane.store.namespace}_{kind}').stream()}
 
 
-def scan(lane, now):
+def scan(lane, now, caplog):
+    caplog.clear()
     counts, _ = release_scan_pass(lane.projector.store, limit=RELEASE_PAGE, after_id=None, now=now)
-    if counts['error']:
-        pytest.fail(f'release scan had {counts["error"]} errors; this is not the expected selector gap')
+    # release_page's fetch failure returns zero counts; it does not increment
+    # error. Neither a swallowed fetch failure nor a transaction failure is the
+    # selector gap. RuntimeError deliberately falls outside raises=AssertionError.
+    if counts['error'] or any(
+        record.name == release_module.__name__ and 'outcome=retry' in record.getMessage() for record in caplog.records
+    ):
+        raise RuntimeError('release scan retry/error is not the expected selector gap')
+    if not counts['examined']:
+        raise RuntimeError('release scan examined no rows; this is not the expected selector gap')
     return counts
 
 
-def test_real_hold_releases_missing_target_waits_then_expires_privacy_is_fenced(holds):
+def test_real_hold_releases_missing_target_waits_then_expires_privacy_is_fenced(holds, caplog):
     projection = holds.projector.store
     before = snapshot(holds, 'results')
+    before_jobs = snapshot(holds, 'jobs')
     privacy_job = projection.ref('jobs', PRIVACY).get().to_dict()
+    # Passing mixed-page control: all five result classes are actually examined.
+    # Ghost exit expectations belong only in the strict xfails below.
+    assert scan(holds, NOW, caplog)['examined'] >= 5
     release = ProjectionReleaseStore(projection)
-    assert release.release(RESTORABLE, NOW)
     released = projection.ref('results', RESTORABLE).get().to_dict()
     assert released['projection_state'] == 'pending' and released['projection'] == {}
-    assert projection.ref('jobs', RESTORABLE).get().to_dict()['recovery_state'] is None
+    assert projection.ref('jobs', RESTORABLE).get().to_dict() == {
+        **before_jobs[RESTORABLE],
+        'recovery_state': None,
+    }
     assert released['payload'] == before[RESTORABLE]['payload']
     assert not release.release(MISSING, NOW) and not release.expired
     waiting = projection.ref('results', MISSING).get().to_dict()
@@ -142,8 +157,8 @@ def test_real_hold_releases_missing_target_waits_then_expires_privacy_is_fenced(
     raises=AssertionError,
     reason='GAP ghost_hold_release_ineligible: ready receipts with recovery none/recovered fail release gates',
 )
-def test_gap_ghost_hold_release_ineligible(holds, segment):
-    scan(holds, NOW)
+def test_gap_ghost_hold_release_ineligible(holds, segment, caplog):
+    scan(holds, NOW, caplog)
     # Desired automatic ready-hint repair; current main leaves the ghost held.
     assert holds.projector.store.ref('results', segment).get().to_dict()['projection_state'] in {
         'ready',
@@ -158,9 +173,9 @@ def test_gap_ghost_hold_release_ineligible(holds, segment):
     raises=AssertionError,
     reason='GAP ghost_hold_expiry_ineligible: receipt/job gates precede deadline stamping and held expiry',
 )
-def test_gap_ghost_hold_expiry_ineligible(holds, segment):
-    scan(holds, NOW)
-    scan(holds, NOW + HELD_DEAD_LETTER_SECONDS)
+def test_gap_ghost_hold_expiry_ineligible(holds, segment, caplog):
+    scan(holds, NOW, caplog)
+    scan(holds, NOW + HELD_DEAD_LETTER_SECONDS, caplog)
     ProjectionHeldDeadLetter(holds.store).tick(NOW + HELD_DEAD_LETTER_SECONDS + 86400)
     entry = holds.projector.store.ref('results', segment).get().to_dict()
     # Aged ghosts need an automatic exit, whether repaired or dead-lettered.
@@ -168,6 +183,19 @@ def test_gap_ghost_hold_expiry_ineligible(holds, segment):
         entry['projection_state'] in {'ready', 'pending', 'completed'}
         or entry.get('held_expired_reason') == 'held_expired'
     )
+
+
+@pytest.mark.parametrize('failure', ['fetch', 'transaction'])
+def test_expected_gap_cannot_hide_scan_failures(holds, monkeypatch, caplog, failure):
+    def fail(*args, **kwargs):
+        raise RuntimeError('synthetic scan failure')
+
+    if failure == 'fetch':
+        monkeypatch.setattr(release_module, 'held_page_ids', fail)
+    else:
+        monkeypatch.setattr(ProjectionReleaseStore, 'release', fail)
+    with pytest.raises(RuntimeError, match='scan retry/error'):
+        scan(holds, NOW, caplog)
 
 
 def test_reconcile_only_repairs_ghost_hints_and_is_idempotent(holds):
