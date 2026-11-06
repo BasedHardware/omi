@@ -113,6 +113,47 @@ def test_stage_catches_stale_deletion_marker(monkeypatch):
     assert result.details['mismatches'] == 2 and result.details['probes'] == 6
 
 
+@pytest.mark.parametrize('kind', ['grace_intent', 'wipe_intent', 'restore'])
+def test_deletion_marker_request_scope_rechecks_redis_after_another_request_writes(kind):
+    from testing.replay_harness.stages.privacy_cache import PrivacyCacheDriver
+
+    result = asyncio.run(PrivacyCacheDriver().run(single_case(kind, fault='request_memo', family='deletion_marker')))
+    assert result.status == 'pass', result
+    assert result.details['verified_transitions'] == 1
+    evidence = result.details['transition_results'][0]['evidence']
+    assert evidence['request_memo_absent']
+    assert evidence['independent_writer_scope'] and evidence['reader_scope_preserved']
+    assert evidence['request_redis_warm_reads'] == 2
+    assert evidence['request_redis_probe_reads'] == [1] * 6
+    assert evidence['request_deletion_observed']
+    if kind != 'restore':
+        assert result.details['cache_events']['deletion_marker_cache:hit'] == 1
+
+
+def test_stage_rejects_reintroduced_deletion_marker_request_memo(monkeypatch):
+    from database import account_deletion_marker as marker, fsr_read_cache as cache
+    from testing.replay_harness.stages.privacy_cache import PrivacyCacheDriver
+
+    original = marker.get_user_deletion_wipe_status
+
+    def memoized(uid, **kwargs):
+        return cache.memo(uid, ('deletion-status',), lambda: original(uid, **kwargs))
+
+    monkeypatch.setattr(marker, 'get_user_deletion_wipe_status', memoized)
+    result = asyncio.run(
+        PrivacyCacheDriver().run(single_case('wipe_intent', fault='request_memo', family='deletion_marker'))
+    )
+    assert result.reason == 'privacy_cache:staleness_bound_exceeded', result
+    assert result.details['mismatches'] == 3
+    evidence = result.details['transition_results'][0]['evidence']
+    assert not evidence['request_memo_absent']
+    assert evidence['independent_writer_scope'] and evidence['reader_scope_preserved']
+    assert evidence['request_redis_warm_reads'] == 1
+    assert evidence['request_redis_probe_reads'] == [0] * 6
+    assert not evidence['request_deletion_observed']
+    assert not result.details['transition_results'][0]['fault_applied']
+
+
 def test_fake_clock_controls_redis_expiry_and_lua_time():
     from collections import Counter
     from testing.replay_harness.env import replay_environment

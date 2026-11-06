@@ -7,12 +7,11 @@ the shared Redis negative cache (with writer generation fencing) and must never 
 memoized in request scope.
 """
 
-import asyncio
 import json
 import fakeredis
 import pytest
 
-from database import _client, account_deletion_marker as deletion
+from database import account_deletion_marker as deletion
 from database import fsr_read_cache as cache
 from database.account_deletion_marker import account_deletion_blocks_user_work
 from tests.unit.test_fsr_s4_caches import Store
