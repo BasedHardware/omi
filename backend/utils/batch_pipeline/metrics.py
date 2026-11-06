@@ -25,6 +25,30 @@ PROJECTION_DRAIN_CLAIM_BUSY_BACKOFFS = Counter(
     'omi_batch_projection_claim_busy_backoffs_total', 'Owner drain turns deferred after losing the fleet claim race'
 )
 
+PROJECTION_DRAIN_PRIVACY_STOPS = Counter(
+    'omi_batch_projection_privacy_blocked_stops_total',
+    'Owner drain turns stopped by privacy, with bounded reasons',
+    ['reason'],
+)
+PROJECTION_DRAIN_PRIVACY_BACKOFFS = Counter(
+    'omi_batch_projection_privacy_backoffs_total', 'Zero-progress privacy owner drain backoffs applied'
+)
+PROJECTION_PRIVACY_RESUMES_ATTEMPTED = Counter(
+    'omi_batch_projection_privacy_resumes_attempted_total', 'Fenced privacy refusal resume attempts'
+)
+PROJECTION_PRIVACY_RESUMES_SUCCEEDED = Counter(
+    'omi_batch_projection_privacy_resumes_succeeded_total', 'Fenced privacy refusal resumes returned successfully'
+)
+
+
+def privacy_stop_reason(stop: str) -> str:
+    if stop == 'blocked_privacy_disposition_requires_a_source_deletion_tombstone':
+        return 'tombstone'
+    if stop == 'blocked_privacy_refusal_no_longer_applies':
+        return 'refusal_no_longer_applies'
+    return 'other'
+
+
 LABELS = {Priority.FRESH: 'fresh', Priority.RECENT: 'recent', Priority.DEEP: 'deep'}
 AGE_TARGETS = {Priority.FRESH: 30, Priority.RECENT: 300, Priority.DEEP: 3600}
 PARK_REASONS = frozenset({'privacy', 'pool_duration', 'pool_unit_kind', 'shared_live_policy'})

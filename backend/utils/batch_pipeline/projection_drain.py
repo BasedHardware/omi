@@ -17,9 +17,20 @@ import random
 import time
 from typing import TYPE_CHECKING
 
-from config.batch_pipeline import max_owner_drains, projection_drain_claim_aware_enabled
+from config.batch_pipeline import (
+    max_owner_drains,
+    projection_drain_claim_aware_enabled,
+    projection_drain_privacy_backoff_enabled,
+    projection_drain_privacy_backoff_seconds,
+)
 from database.batch_pipeline_projection_claim import projection_claim_held
-from utils.batch_pipeline.metrics import PROJECTION_DRAIN_CLAIM_HELD, PROJECTION_DRAIN_CLAIM_BUSY_BACKOFFS
+from utils.batch_pipeline.metrics import (
+    PROJECTION_DRAIN_CLAIM_HELD,
+    PROJECTION_DRAIN_CLAIM_BUSY_BACKOFFS,
+    PROJECTION_DRAIN_PRIVACY_STOPS,
+    PROJECTION_DRAIN_PRIVACY_BACKOFFS,
+    privacy_stop_reason,
+)
 from utils.batch_pipeline.scheduler import owner_key
 from utils.executors import run_blocking, start_background_task, sync_executor
 
@@ -87,20 +98,23 @@ class OwnerDrains:
             return False
         return await self.run(owner)
 
-    def defer(self, owner: str) -> None:
+    def defer(self, owner: str, *, delay: float | None = None) -> bool:
         if owner in self.delayed or self.closed:
-            return
+            return False
         if len(self.delayed) >= MAX_DELAYED_OWNERS:
             # Return overflow intent to the next serving pass; no extra timers,
             # immediate busy loop, or delay for productive FIFO continuations.
             self.projector.request_drain(owner)
-            return
+            return False
 
         def retry():
             self.delayed.pop(owner, None)
             self.request([owner])
 
-        self.delayed[owner] = asyncio.get_running_loop().call_later(random.uniform(5.0, 15.0), retry)
+        self.delayed[owner] = asyncio.get_running_loop().call_later(
+            random.uniform(5.0, 15.0) if delay is None else delay, retry
+        )
+        return True
 
     def close(self) -> None:
         self.closed = True
@@ -128,6 +142,10 @@ class OwnerDrains:
         if more:
             self.continuations.add(owner)
             self.queue.append(owner)  # Productive turns always continue at the FIFO tail.
+        elif stop and stop.startswith('blocked_privacy_') and projection_drain_privacy_backoff_enabled():
+            # run records privacy stops here only for zero-progress turns.
+            if self.defer(owner, delay=projection_drain_privacy_backoff_seconds()):
+                PROJECTION_DRAIN_PRIVACY_BACKOFFS.inc()
         elif projection_drain_claim_aware_enabled() and stop == 'claim_held':
             self.defer(owner)
         elif owner in self.again and owner not in self.queue:
@@ -178,6 +196,10 @@ class OwnerDrains:
         finally:
             if prefetch is not None:
                 prefetch.close()
+        if stop == 'privacy_blocked' or stop.startswith('blocked_privacy_'):
+            PROJECTION_DRAIN_PRIVACY_STOPS.labels(reason=privacy_stop_reason(stop)).inc()
+            if advanced == 0 and stop.startswith('blocked_privacy_'):
+                self.stops[owner] = stop
         logger.info(
             'event=batch_projection action=owner_drain outcome=turn steps=%d advanced=%d more=%s stop=%s elapsed_ms=%d',
             steps,

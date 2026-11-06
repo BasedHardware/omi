@@ -693,6 +693,24 @@ def projection_drain_claim_aware_enabled() -> bool:
     return kill_switch('PROJECTION_DRAIN_CLAIM_AWARE')
 
 
+def projection_drain_privacy_backoff_enabled() -> bool:
+    """Default on; only off disables zero-progress privacy turn backoff."""
+    from config.policy import kill_switch
+
+    return kill_switch('PROJECTION_DRAIN_PRIVACY_BACKOFF')
+
+
+def projection_drain_privacy_backoff_seconds() -> int:
+    return _pump_bound(os.getenv('PROJECTION_DRAIN_PRIVACY_BACKOFF_SECONDS', '180'), 180, 900, 30)
+
+
+def projection_privacy_refusal_resume_enabled() -> bool:
+    """Default on; only off disables stale privacy-refusal settlement."""
+    from config.policy import kill_switch
+
+    return kill_switch('PROJECTION_PRIVACY_REFUSAL_RESUME')
+
+
 def projection_index_deferred_enabled() -> bool:
     """Kill switch: walks converge search/people-stats after the chain, once per conversation."""
     from config.policy import kill_switch

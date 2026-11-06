@@ -227,3 +227,224 @@ def test_control_receipt_cannot_impersonate_completed_assignment_or_ordering_pro
     with pytest.raises(ProjectionBlocked):
         resume(store, 'head', binding, 2001, policy=POLICY)
     assert client.rows == before
+
+
+def decorated_assignment(store, binding):
+    """Exercise the decorator with the real transactional session fences."""
+    from unittest.mock import Mock
+    from database.batch_pipeline_store import FirestoreTransaction
+    from utils.batch_pipeline.projection_privacy import settle_refusals
+
+    def run_policy(operation):
+        view = FirestoreTransaction(store.client, store.store.namespace, store.client.transaction())
+        result = operation(view)
+        view.flush()
+        return result
+
+    store.store.run = run_policy
+    store.client.rows[('privacy_hold_jobs', 'head')]['segment_id'] = 'head'
+    coordinator = SimpleNamespace(store=store, clock=lambda: 4000)
+    assigned = Mock()
+
+    @settle_refusals(assignment=True)
+    def assign(self, sid, job, entry, binding):
+        transaction = store.client.transaction()
+        policy = ProjectionPolicy.from_dict(job['policy_parts']['projection'])
+        session = store.session(sid, binding, 4000, policy=policy)
+        session.prepare(transaction)
+        session.speech_seconds = 4
+        session.persist(transaction, ({'id': 'synthetic-resumed'}, True, []))
+        assigned(entry, policy)
+        return 'proceeded'
+
+    job = store.ref('jobs', 'head').get().to_dict()
+    job['policy_parts'] = {'projection': POLICY.to_dict()}
+    return coordinator, assign, assigned, job
+
+
+@pytest.mark.parametrize('existing_refusal', [False, True])
+def test_stale_hint_proceeds_through_fenced_resume_or_assignment(lane, monkeypatch, existing_refusal):
+    from unittest.mock import Mock
+    from utils.batch_pipeline import projection_privacy
+    from utils.batch_pipeline.metrics import PROJECTION_PRIVACY_RESUMES_ATTEMPTED, PROJECTION_PRIVACY_RESUMES_SUCCEEDED
+
+    monkeypatch.delenv('PROJECTION_PRIVACY_REFUSAL_RESUME', raising=False)
+    client, store, binding = lane
+    reason = BatchPrivacyReason.DATA_PROTECTION_CHANGED
+    if existing_refusal:
+        fence(client, binding, reason)
+        hold(store, 'head', binding, 2000, reason, policy=POLICY)
+        client.rows[('users', binding.owner_id)].pop('migration_status')
+    coordinator, assign, assigned, job = decorated_assignment(store, binding)
+    job['_projection_privacy_refusal'] = reason
+    entry = store.ref('results', 'head').get().to_dict()
+    replay = Mock(wraps=resume)
+    monkeypatch.setattr(projection_privacy, 'resume', replay)
+    before_attempts = PROJECTION_PRIVACY_RESUMES_ATTEMPTED._value.get()
+    before_success = PROJECTION_PRIVACY_RESUMES_SUCCEEDED._value.get()
+    assert assign(coordinator, 'head', job, entry, binding) == 'proceeded'
+    assert replay.call_count == int(existing_refusal)
+    assert PROJECTION_PRIVACY_RESUMES_ATTEMPTED._value.get() == before_attempts + int(existing_refusal)
+    assert PROJECTION_PRIVACY_RESUMES_SUCCEEDED._value.get() == before_success + int(existing_refusal)
+    assigned.assert_called_once()
+    persisted = store.ref('results', 'head').get().to_dict()
+    assert persisted['projection']['conversation_id'] == 'synthetic-resumed'
+    assert not persisted.get('projection_privacy_refusal')
+
+
+@pytest.mark.parametrize('hint', [False, True])
+def test_decorator_still_holds_an_applicable_refusal_without_writes(lane, monkeypatch, hint):
+    from utils.batch_pipeline.projection_privacy import PRIVACY_HELD
+
+    monkeypatch.delenv('PROJECTION_PRIVACY_REFUSAL_RESUME', raising=False)
+    client, store, binding = lane
+    reason = BatchPrivacyReason.DATA_PROTECTION_CHANGED
+    fence(client, binding, reason)
+    hold(store, 'head', binding, 2000, reason, policy=POLICY)
+    coordinator, assign, assigned, job = decorated_assignment(store, binding)
+    if hint:
+        job['_projection_privacy_refusal'] = reason
+    entry = store.ref('results', 'head').get().to_dict()
+    before = deepcopy(client.rows)
+    assert assign(coordinator, 'head', job, entry, binding) is PRIVACY_HELD
+    assigned.assert_not_called()
+    assert client.rows == before
+
+
+@pytest.mark.parametrize('existing_refusal', [False, True])
+def test_stale_hint_switch_off_preserves_block(lane, monkeypatch, existing_refusal):
+    monkeypatch.setenv('PROJECTION_PRIVACY_REFUSAL_RESUME', 'off')
+    client, store, binding = lane
+    reason = BatchPrivacyReason.DATA_PROTECTION_CHANGED
+    if existing_refusal:
+        fence(client, binding, reason)
+        hold(store, 'head', binding, 2000, reason, policy=POLICY)
+        client.rows[('users', binding.owner_id)].pop('migration_status')
+    coordinator, assign, assigned, job = decorated_assignment(store, binding)
+    job['_projection_privacy_refusal'] = reason
+    before = deepcopy(client.rows)
+    with pytest.raises(ProjectionBlocked, match='^privacy refusal no longer applies$'):
+        assign(coordinator, 'head', job, store.ref('results', 'head').get().to_dict(), binding)
+    assigned.assert_not_called()
+    assert client.rows == before
+
+
+def test_resume_race_reholds_without_authorizing_assignment(lane, monkeypatch):
+    from utils.batch_pipeline import projection_privacy
+
+    monkeypatch.delenv('PROJECTION_PRIVACY_REFUSAL_RESUME', raising=False)
+    client, store, binding = lane
+    reason = BatchPrivacyReason.DATA_PROTECTION_CHANGED
+    fence(client, binding, reason)
+    hold(store, 'head', binding, 2000, reason, policy=POLICY)
+    client.rows[('users', binding.owner_id)].pop('migration_status')
+    coordinator, assign, assigned, job = decorated_assignment(store, binding)
+    job['_projection_privacy_refusal'] = reason
+
+    def raced_resume(*args, **kwargs):
+        fence(client, binding, reason)
+        return resume(*args, **kwargs)
+
+    monkeypatch.setattr(projection_privacy, 'resume', raced_resume)
+    assert (
+        assign(coordinator, 'head', job, store.ref('results', 'head').get().to_dict(), binding)
+        is projection_privacy.PRIVACY_HELD
+    )
+    assigned.assert_not_called()
+    assert store.ref('results', 'head').get().to_dict()['projection_privacy_refusal']
+
+
+@pytest.mark.parametrize('tombstone', [False, True])
+def test_decorator_does_not_bypass_deletion_or_missing_tombstone(lane, monkeypatch, tombstone):
+    monkeypatch.delenv('PROJECTION_PRIVACY_REFUSAL_RESUME', raising=False)
+    client, store, binding = lane
+    coordinator, assign, assigned, job = decorated_assignment(store, binding)
+    job['_projection_privacy_refusal'] = BatchPrivacyReason.DATA_PROTECTION_CHANGED
+    cid = chunk_identity(binding.owner_id, binding.source, binding.client_device_id, binding.is_locked, 1000)
+    client.rows[('users', binding.owner_id, 'conversations', cid)] = {'deleted': True}
+    if tombstone:
+        client.rows[('users', binding.owner_id, 'deleted_conversations', cid)] = {}
+    before = deepcopy(client.rows)
+    with pytest.raises(BatchPrivacyBlocked) as error:
+        assign(coordinator, 'head', job, store.ref('results', 'head').get().to_dict(), binding)
+    assert error.value.reason == BatchPrivacyReason.CONVERSATION_DELETED
+    assigned.assert_not_called()
+    assert client.rows == before
+
+
+@pytest.mark.parametrize(
+    'message',
+    [
+        'privacy disposition requires a source deletion tombstone',
+        'immutable result binding mismatch',
+        'privacy ordering checkpoint required',
+    ],
+)
+def test_decorator_does_not_swallow_other_projection_blocks(lane, monkeypatch, message):
+    from unittest.mock import Mock
+    from utils.batch_pipeline import projection_privacy
+
+    monkeypatch.delenv('PROJECTION_PRIVACY_REFUSAL_RESUME', raising=False)
+    client, store, binding = lane
+    coordinator, assign, assigned, job = decorated_assignment(store, binding)
+    job['_projection_privacy_refusal'] = BatchPrivacyReason.DATA_PROTECTION_CHANGED
+    replay = Mock(side_effect=AssertionError('must not resume'))
+    monkeypatch.setattr(projection_privacy, 'resume', replay)
+    monkeypatch.setattr(projection_privacy, 'hold', Mock(side_effect=ProjectionBlocked(message)))
+    before = deepcopy(client.rows)
+    with pytest.raises(ProjectionBlocked, match=f'^{message}$'):
+        assign(coordinator, 'head', job, store.ref('results', 'head').get().to_dict(), binding)
+    assigned.assert_not_called()
+    replay.assert_not_called()
+    assert client.rows == before
+
+
+@pytest.mark.parametrize('existing_refusal', [False, True])
+def test_real_read_stale_hint_pins_serving_policy_before_assignment(lane, monkeypatch, existing_refusal):
+    monkeypatch.delenv('PROJECTION_PRIVACY_REFUSAL_RESUME', raising=False)
+    monkeypatch.setenv('BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED', 'true')
+    client, store, binding = lane
+    coordinator, assign, assigned, _ = decorated_assignment(store, binding)
+    reason = BatchPrivacyReason.DATA_PROTECTION_CHANGED
+    fence(client, binding, reason)
+    if existing_refusal:
+        hold(store, 'head', binding, 2000, reason, policy=POLICY)
+    job, entry, current_binding = store.read('head')
+    assert job['_projection_privacy_refusal'] == reason.value
+    assert not job['policy_parts']['projection']['require_live_target']
+    assert not store.ref('jobs', 'head').get().to_dict().get('policy_parts')
+    client.rows[('users', binding.owner_id)].pop('migration_status')
+    assert assign(coordinator, 'head', job, entry, current_binding) == 'proceeded'
+    pinned = store.ref('jobs', 'head').get().to_dict()['policy_parts']['projection']
+    assert pinned['require_live_target'] and pinned['async_projection']
+    assert assigned.call_args.args[1].to_dict() == pinned
+
+
+def test_wider_policy_refusal_remains_authoritative_after_session_resume(lane, monkeypatch):
+    monkeypatch.delenv('PROJECTION_PRIVACY_REFUSAL_RESUME', raising=False)
+    client, store, binding = lane
+    coordinator, assign, assigned, _ = decorated_assignment(store, binding)
+    reason = BatchPrivacyReason.DATA_PROTECTION_CHANGED
+    fence(client, binding, reason)
+    hold(store, 'head', binding, 2000, reason, policy=POLICY)
+    client.rows[('users', binding.owner_id)].pop('migration_status')
+    job = store.ref('jobs', 'head').get().to_dict()
+    job['policy_parts'] = {'projection': POLICY.to_dict()}
+    job['_projection_privacy_refusal'] = reason.value
+    entry = store.ref('results', 'head').get().to_dict()
+    current_binding = binding
+    # Fault-inject a refusal at the wider policy boundary after session
+    # settlement. The decorator may clear the refusal but cannot assign.
+    from unittest.mock import Mock
+
+    pin = Mock(side_effect=BatchPrivacyBlocked(reason))
+    monkeypatch.setattr(store, 'policy', pin)
+    with pytest.raises(ProjectionBlocked, match='^privacy refusal no longer applies$'):
+        assign(coordinator, 'head', job, entry, current_binding)
+    pin.assert_called_once_with('head')
+    assigned.assert_not_called()
+    assert not store.ref('jobs', 'head').get().to_dict().get('policy_parts')
+    restored = store.ref('results', 'head').get().to_dict()
+    assert not restored.get('projection_privacy_refusal')
+    assert not restored.get('projection')  # no content authorized by settlement

@@ -50,6 +50,8 @@ FEATURE_FLAGS_PATH = BACKEND_DIR.parent / 'config' / 'feature-flags.yaml'
 SEED_BUDGET = 170  # 2026-10-25 seed; lower it when the surface shrinks, never raise it.
 HELPER_KILL_SWITCHES = {
     'PROJECTION_DRAIN_CLAIM_AWARE',
+    'PROJECTION_DRAIN_PRIVACY_BACKOFF',
+    'PROJECTION_PRIVACY_REFUSAL_RESUME',
     'BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED',
     'CONVERSATION_OCCASION_RELEVANCE_ENABLED',
     'LATE_AUDIO_SYNC_INTAKE_ENABLED',
@@ -238,7 +240,10 @@ def test_helper_kill_switch_budget_entries_match_the_default_on_registry():
         entry = names[name]
         flag = flags[name]
         assert entry['registry'] == 'config/feature-flags.yaml'
-        if name == 'PROJECTION_DRAIN_CLAIM_AWARE':
+        if name in {'PROJECTION_DRAIN_PRIVACY_BACKOFF', 'PROJECTION_PRIVACY_REFUSAL_RESUME'}:
+            assert entry['owner'] == 'omi-pipeline / privblock'
+            assert entry['review_by'] == '2026-12-06'
+        elif name == 'PROJECTION_DRAIN_CLAIM_AWARE':
             assert entry['owner'] == 'two-lane lead'
             assert entry['review_by'] == '2026-12-05'
         else:

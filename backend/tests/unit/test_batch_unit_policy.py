@@ -94,6 +94,8 @@ def test_cohort_registry_and_live_switch_contract():
                 'BATCH_PIPELINE_SERVING_PROJECTION_SWEEP',
                 'BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED',
                 'PROJECTION_DRAIN_CLAIM_AWARE',
+                'PROJECTION_DRAIN_PRIVACY_BACKOFF',
+                'PROJECTION_PRIVACY_REFUSAL_RESUME',
             }
             else 'false'
         )
