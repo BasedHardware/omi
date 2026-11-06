@@ -92,7 +92,8 @@ up to 32 expired receipts per five-minute tick during a nightly UTC pass. Only
 previous-day expirations qualify, and the transaction rechecks the cutoff and
 **the same target-restorability predicate** as ordinary release. Unrestorable
 rows remain expired. Page checkpoints follow work, so crashes replay safely;
-malformed rows cannot pin a page. Release returns only held parts to pending,
+malformed rows cannot pin a page. Unfinished scans retain their cursor across UTC
+midnight, so a large blocked prefix cannot starve the tail. Release returns only held parts to pending,
 retains proven suffixes and increments the existing capped release attempts.
 
 `BATCH_HELD_DEAD_LETTER_ENABLED=false` stops new projection deadline stamps and

@@ -134,7 +134,9 @@ class ProjectionHeldDeadLetter:
         released = 0
         updated = {**state, 'next_at': now + INTERVAL_SECONDS}
         if state.get('redrive_day') != day or not state.get('redrive_done'):
-            after = state.get('after_id') if state.get('redrive_day') == day else None
+            # Large unrestorable prefixes must not starve the tail when a
+            # bounded pass takes more than a day. Only completed passes restart.
+            after = state.get('after_id') if not state.get('redrive_done', True) else None
             page = expired_page_ids(self.store.client, self.store.namespace, PAGE_SIZE, after)
             projection = ProjectionReleaseStore(ProjectionStore(self.store))
             deadline = time.monotonic() + 5.0

@@ -215,3 +215,21 @@ def test_expired_stock_is_visible_but_not_a_runnable_projection():
     assert sample['new_oldest']['held_expired_rows'] == EPOCH + 100
     assert sample['drain_oldest'] is None
     assert 'held_expired' in PROJECTION_OBLIGATION_STATES
+
+
+def test_unfinished_nightly_pass_keeps_cursor_across_midnight(monkeypatch):
+    from database import batch_pipeline_projection_release as release_module
+    from utils.batch_pipeline.held_dead_letter import ProjectionHeldDeadLetter
+
+    _, projection = store_for(rows())
+    seen = []
+
+    def page(_client, _namespace, limit, after):
+        seen.append(after)
+        return [f'blocked-{i}' for i in range(32)] if after is None else ['restored-tail']
+
+    monkeypatch.setattr(release_module, 'expired_page_ids', page)
+    monkeypatch.setattr(release_module.ProjectionReleaseStore, 'release', lambda *a, **kw: a[1] == 'restored-tail')
+    assert ProjectionHeldDeadLetter(projection.store).tick(172790) == 0
+    assert ProjectionHeldDeadLetter(projection.store).tick(173090) == 1
+    assert seen == [None, 'blocked-31']
