@@ -405,6 +405,10 @@ jobs:
           sudo docker image prune --all --force
           df -h /
 
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -540,6 +544,10 @@ jobs:
         shell: bash
         run: git ls-files -- . ':!omi/**' ':!omiGlass/**' > /tmp/nightly-all-files.txt
 
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
