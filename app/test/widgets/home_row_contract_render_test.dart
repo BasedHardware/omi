@@ -27,7 +27,7 @@ import '../support/typed_conversation_screen.dart';
 const _output = String.fromEnvironment('HOME_ROW_RENDER_OUTPUT');
 const _phone = Size(393, 852);
 const _tall = Size(393, 3200);
-final _processingKey = const Key('home_processing_row');
+const _processingKey = Key('home_processing_row');
 
 // English strings the rows render (lib/l10n/app_en.arb).
 const _processing = 'Processing…';
@@ -339,7 +339,7 @@ void main() {
     expect(find.byKey(_processingKey), findsNWidgets(2));
     expect(find.text('Middle finished review'), findsOneWidget);
     expect(find.text(_processing), findsNWidgets(2));
-    expect(find.textContaining('$_transcribing'), findsNWidgets(0));
+    expect(find.textContaining(_transcribing), findsNWidgets(0));
     // Newest run first, the finished row between them, the earliest run last.
     final runs = find.byKey(_processingKey);
     final late = _top(tester, runs.at(0));
