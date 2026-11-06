@@ -8,19 +8,24 @@ from copy import deepcopy
 import hashlib
 import logging
 import os
+import random
 import re
+import threading
 import time
 from typing import Any, Callable, Protocol, TypeVar
 
 from google.cloud import firestore
 from google.api_core.exceptions import AlreadyExists, FailedPrecondition, Aborted
 
-from config.batch_pipeline import contention_retry_enabled, control_candidate_fanout
+from config.batch_pipeline import contention_retry_enabled, contention_storm_damper_enabled, control_candidate_fanout
 from config.firestore_read_levers import lever_enabled
 from database._client import get_data_plane_firestore_client
 from database.batch_pipeline_privacy import assert_batch_write_allowed, BatchPrivacyMemo
 from database.batch_pipeline_recovery import quarantine_fenced
-from database.firestore_transaction_retry import run_with_transaction_contention_retry
+from database.firestore_transaction_retry import (
+    FirestoreContentionExhausted,
+    run_with_transaction_contention_retry,
+)
 from database.batch_pipeline_transaction_labels import (
     current_operation,
     pull_operation as pull_operation,
@@ -225,8 +230,108 @@ class FirestoreTransaction:
             self.transaction.set(ref, value)
 
 
+class _ContentionStormDamper:
+    """Bounded per-operation re-strike spacing shared by one store instance.
+
+    The bounded contention chain gives one operation five immediate attempts
+    across roughly one to three seconds. During a real contention storm every
+    caller that exhausts re-strikes the same hot document at once, so the
+    whole process burns its budgets in lockstep — the ``x2239/30m``
+    ``operation=... outcome=exhausted`` production signature. After an
+    exhaustion this damper arms a bounded, jittered residual window for that
+    operation label; the next entry of the same label waits it out before
+    opening another chain, while every other label keeps running untouched.
+
+    One store instance is one process's view of one namespace, and the
+    scheduler shards, the pump, intake and maintenance all share it — arming
+    here damps all of them, not just the caller that exhausted. A successful
+    commit clears the ladder, but only if no concurrent arm happened since
+    the entry consulted (generation guard, mirroring the pull loop's
+    generation-based reset).
+    """
+
+    def __init__(
+        self,
+        *,
+        monotonic: Callable[[], float] = time.monotonic,
+        sleeper: Callable[[float], None] = time.sleep,
+        random_value: Callable[[], float] = random.random,
+    ):
+        self._monotonic = monotonic
+        self._sleeper = sleeper
+        self._random_value = random_value
+        self._lock = threading.Lock()
+        self._armed_until: dict[str, float] = {}
+        self._failures: dict[str, int] = {}
+        self._generations: dict[str, int] = {}
+
+    def consult(self, label: str) -> tuple[float, int]:
+        """Sleep out the residual backoff for ``label``; return ``(waited, generation)``.
+
+        The sleep runs outside the lock so a damped entry never blocks a
+        concurrent arm, consult or success. ``waited`` is ``0.0`` when no
+        backoff is armed (or already expired) and no sleep happens.
+        """
+        with self._lock:
+            residual = self._armed_until.get(label, 0.0) - self._monotonic()
+            generation = self._generations.get(label, 0)
+        if residual <= 0.0:
+            return 0.0, generation
+        self._sleeper(residual)
+        return residual, generation
+
+    def arm(self, label: str) -> float:
+        """Record one exhaustion for ``label``; return the applied retry-after seconds."""
+        with self._lock:
+            if label not in self._generations and len(self._generations) >= (
+                FirestoreStore.STORM_DAMPER_MAX_TRACKED_LABELS
+            ):
+                return 0.0  # fail-open: run undamped rather than grow state forever
+            failures = self._failures.get(label, 0) + 1
+            self._failures[label] = failures
+            maximum = min(
+                FirestoreStore.STORM_DAMPER_CAP_SECONDS,
+                FirestoreStore.STORM_DAMPER_BASE_SECONDS
+                * (2 ** min(failures - 1, FirestoreStore.STORM_DAMPER_LADDER_STEPS)),
+            )
+            delay = maximum * (0.5 + 0.5 * self._random_value())
+            until = max(self._armed_until.get(label, 0.0), self._monotonic() + delay)
+            self._armed_until[label] = until
+            self._generations[label] = self._generations.get(label, 0) + 1
+            return until - self._monotonic()
+
+    def note_success(self, label: str, generation: int) -> None:
+        """Clear the ladder only if no concurrent arm happened since consult."""
+        with self._lock:
+            if self._generations.get(label, 0) != generation:
+                return
+            self._armed_until.pop(label, None)
+            self._failures.pop(label, None)
+            self._generations.pop(label, None)
+
+    def tracked_labels(self) -> int:
+        with self._lock:
+            return len(self._generations)
+
+
 class FirestoreStore:
-    def __init__(self, namespace: str, *, firestore_client: Any = None):
+    # Storm-damper ladder shape. Delays mirror the worker pull loop's damper
+    # (exponential ladder under an equal jitter) but cap well below the pull
+    # loop's 30s ceiling: a store entry is on the record-latency path, so the
+    # damper trades at most a few seconds of wait for skipping a doomed
+    # immediate collision with the same hot documents.
+    STORM_DAMPER_BASE_SECONDS = 0.25
+    STORM_DAMPER_CAP_SECONDS = 4.0
+    STORM_DAMPER_LADDER_STEPS = 4
+    # Operation labels are static literals, but nothing in the label grammar
+    # bounds how many distinct ones a process can mint; stop damping new
+    # labels beyond this (fail-open) instead of growing state forever.
+    STORM_DAMPER_MAX_TRACKED_LABELS = 64
+
+    def __init__(
+        self, namespace: str, *, firestore_client: Any = None, storm_damper: '_ContentionStormDamper | None' = None
+    ):
+        self._storm_damper = storm_damper if storm_damper is not None else _ContentionStormDamper()
         # Require a stage-qualified name; never infer dev from the customer project.
         if namespace not in {'batch_pipeline_prod', 'batch_pipeline_dev'} and not re.fullmatch(
             r'batch_pipeline_test_[a-z0-9_]{1,40}', namespace
@@ -261,8 +366,21 @@ class FirestoreStore:
         any client is touched. The anonymous ``batch_pipeline_store`` default
         let dozens of unrelated call sites blend into one unattributable
         ``outcome=exhausted`` storm.
+
+        Under the retry ladder the store's storm damper also applies: an
+        exhausted label arms a bounded, jittered re-strike window and the
+        next entry of that same label waits it out (logged at INFO as
+        ``event=batch_store_backoff``), while every other label runs
+        untouched. The damper is dormant when either contention kill switch
+        is off.
         """
         label = require_operation_label(operation if operation is not None else current_operation())
+        damper = self._storm_damper if (contention_retry_enabled() and contention_storm_damper_enabled()) else None
+        generation = 0
+        if damper is not None:
+            waited, generation = damper.consult(label)
+            if waited > 0:
+                logger.info('event=batch_store_backoff operation=%s waited_ms=%d', label, round(waited * 1000))
         client = self.client
 
         @firestore.transactional
@@ -276,11 +394,21 @@ class FirestoreStore:
             return commit(client.transaction())
         # The outer budget owns fresh transaction IDs and all retries. The
         # SDK's same-ID commit loop would multiply the contention window.
-        return run_with_transaction_contention_retry(
-            lambda: client.transaction(max_attempts=1),
-            commit,
-            operation_name=label,
-        )
+        try:
+            result = run_with_transaction_contention_retry(
+                lambda: client.transaction(max_attempts=1),
+                commit,
+                operation_name=label,
+            )
+        except FirestoreContentionExhausted:
+            # This label just burned its whole budget against hot documents;
+            # space out the next re-strike instead of colliding immediately.
+            if damper is not None:
+                damper.arm(label)
+            raise
+        if damper is not None:
+            damper.note_success(label, generation)
+        return result
 
     def probe(self, table: str, key: str) -> dict:
         """Strongly consistent single-document read outside any transaction.

@@ -70,6 +70,13 @@ record. Live transcription is a preview; the batch result is the record.
   backoff; one token per lease).
   `BATCH_PULL_MULTI_LEASE_ENABLED=false` restores one lease per transaction
   (Helm: `worker.pullMultiLeaseEnabled=false`).
+  Beyond the pull loop's own instance backoff, every labeled
+  `FirestoreStore.run` entry rides a per-label storm damper: an
+  `outcome=exhausted` arms a bounded, jittered residual window (0.125–4s
+  ladder) so the same operation's next entry waits it out instead of
+  re-striking immediately; a success clears the ladder (`event=batch_store_backoff`
+  logs the waits at INFO; `BATCH_PIPELINE_CONTENTION_STORM_DAMPER_ENABLED=false`
+  restores immediate re-strikes).
   The existing Sync Cloud Tasks batch emulator gate runs the three-puller
   concurrency regression after its process-level batch scenarios.
 - **Receipts**: durable upload status via `intake.py:durable_status`

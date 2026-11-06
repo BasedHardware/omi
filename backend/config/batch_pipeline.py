@@ -279,6 +279,23 @@ def contention_retry_enabled() -> bool:
     )
 
 
+def contention_storm_damper_enabled() -> bool:
+    """Space re-strikes of an exhausted operation by default; false is the kill switch.
+
+    The bounded retry chain gives one operation five immediate attempts across
+    roughly one to three seconds; during a real contention storm every caller
+    that exhausts re-strikes the same hot document at once and the whole fleet
+    burns budget in lockstep. The store-level storm damper (see
+    ``database/batch_pipeline_store.py``) arms a bounded, jittered per-label
+    backoff after an exhaustion so the next entry of that same operation waits
+    out the residual window instead of colliding again.
+    """
+    return rollout_default_on(
+        'BATCH_PIPELINE_CONTENTION_STORM_DAMPER_ENABLED',
+        os.getenv('BATCH_PIPELINE_CONTENTION_STORM_DAMPER_ENABLED', 'true').strip().lower() != 'false',
+    )
+
+
 def fifo_array_link_enabled() -> bool:
     """Keep the owner FIFO link on the queue document by default; false is the kill switch.
 
