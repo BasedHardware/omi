@@ -63,6 +63,8 @@ Future<ApiResult<EpisodePageRead>> getEpisodes(DateTime from, DateTime to, {Stri
           url: Uri.parse('${Env.apiBaseUrl}v1/episodes').replace(queryParameters: {
             'from': from.toUtc().toIso8601String(),
             'to': to.toUtc().toIso8601String(),
+            // The server's page cap: Home reads every page before it paints, so fewer round trips.
+            'limit': '100',
             if (cursor != null) 'cursor': cursor,
           }).toString(),
           method: 'GET'),
