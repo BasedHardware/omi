@@ -1991,3 +1991,21 @@ def test_local_repair_cli_refuses_invalid_namespace_non_loopback_and_prod_overri
     refusals(['--stage', 'local'], dict(base, FIRESTORE_EMULATOR_HOST='10.9.8.7:8080'), 'loopback emulator')
     refusals(['--stage', 'local'], base, 'loopback emulator')
     refusals(['--stage', 'prod'], base, 'wrong identity')
+
+
+@pytest.mark.parametrize('enabled', [True, False])
+def test_assignment_hold_stamps_deadline_on_result_and_receipt(lane, monkeypatch, enabled):
+    from config.batch_pipeline import HELD_DEAD_LETTER_SECONDS
+
+    monkeypatch.setenv('BATCH_HELD_DEAD_LETTER_ENABLED', str(enabled).lower())
+    batch = multipart(lane, 3)
+    ambiguous_manifest(lane, batch, monkeypatch, ambiguous_index=0)
+    lane.projector.project(batch.ids[0])
+    row = lane.projector.store.ref('results', batch.ids[0]).get().to_dict()
+    assert row['projection_state'] == 'quarantine_held'
+    if enabled:
+        assert row['held_deadline_at'] == lane.clock() + HELD_DEAD_LETTER_SECONDS
+        assert row['projection_parts']['0']['held_deadline_at'] == row['held_deadline_at']
+    else:
+        assert 'held_deadline_at' not in row
+        assert 'held_deadline_at' not in row['projection_parts']['0']

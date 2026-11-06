@@ -70,3 +70,40 @@ proof of user-visible recovery; verify real transcript publication separately.
 Not measured here: production stock, dwell distribution, vendor spend, live
 nightly execution, alert delivery or deployed behavior. Tests use synthetic
 identities and offline/emulator paths only.
+
+## Projection receipts (phase 4b)
+
+Assignment-quarantined result receipts get the same seven-day `held_deadline_at`
+when persisted. The existing release scan backfills legacy eligible holds with a
+full window from first examination. Only settled `quarantine_held` assignment
+receipts expire: the original release eligibility, attempt cap, operator-intent
+and privacy-refusal checks still apply. A restorable target releases immediately
+instead. Persisted multipart suffixes still owe follow-ups and never age-expire.
+Privacy holds are never eligible.
+
+Expiry changes only result-row metadata: `projection_state=held_expired`,
+`dead_letter_reason=held_expired`, `held_expired_at`. Result/transcript payload,
+quarantined receipt, proven parts, audio references, job and owner watermark are
+retained. No TTL, deletion, conversation-status or custody-fence change occurs.
+The state remains visible in obligation ages and the `held_expired_rows` leg.
+
+On the existing serving maintenance leader, a separate durable cursor attempts
+up to 32 expired receipts per five-minute tick during a nightly UTC pass. Only
+previous-day expirations qualify, and the transaction rechecks the cutoff and
+**the same target-restorability predicate** as ordinary release. Unrestorable
+rows remain expired. Page checkpoints follow work, so crashes replay safely;
+malformed rows cannot pin a page. Release returns only held parts to pending,
+retains proven suffixes and increments the existing capped release attempts.
+
+`BATCH_HELD_DEAD_LETTER_ENABLED=false` stops new projection deadline stamps and
+expiry. **Recovery of already expired projection rows continues nightly with
+that flag off.** Keep this recovery helper installed when rolling back expiry:
+pre-4b release code does not recognize `held_expired`. No drain or data rewrite
+is needed to turn the flag off. A full code revert must retain this helper or
+restore the held-state metadata through a separately reviewed operator change;
+do not strand retained receipts by reverting the helper alone.
+
+The existing agent-only `omi-batch-held-expired-volume` alert and transported
+metrics include reasoned job **and projection receipt** stock. Legacy unrelated
+holds do not count. The stock sample must be fresh; the thresholds remain the
+initial synthetic 4a defaults, not measured production levels. No human paging.

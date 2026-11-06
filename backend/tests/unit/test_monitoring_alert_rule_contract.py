@@ -2186,4 +2186,6 @@ def test_held_dead_letter_volume_is_agent_only_and_uses_reasoned_stock_plus_uniq
         assert rule['notification_settings']['mute_time_intervals'] == ['omi-tier-silent']
         assert rule['for'] == '5m' and not rule['isPaused']
         assert 'legacy' in rule['annotations']['scope']
+        assert 'projection_state=held_expired' in rule['annotations']['scope']
+        assert 'restorable' in rule['annotations']['safe_next_action']
         assert 'Never delete' in rule['annotations']['safe_next_action']

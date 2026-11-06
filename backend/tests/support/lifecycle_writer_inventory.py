@@ -118,6 +118,12 @@ FIELD_SITES = {
         (
             'ProjectionReleaseStore.release.commit',
             'projection_state',
+            "'held_expired'",
+            ('dead_letter_reason', 'held_expired_at', 'projection_state'),
+        ),
+        (
+            'ProjectionReleaseStore.release.commit',
+            'projection_state',
             "'pending'",
             (
                 'projection',
@@ -127,7 +133,7 @@ FIELD_SITES = {
                 'projection_release_attempts',
                 'projection_state',
             ),
-        )
+        ),
     ],
     'database/batch_pipeline_projection_session.py': [
         ('ProjectionSession.persist', 'projection_state', "'pending'", ('projection_state',)),

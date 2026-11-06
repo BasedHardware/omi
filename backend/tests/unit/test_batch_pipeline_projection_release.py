@@ -27,6 +27,7 @@ BINDING = ProjectionBinding(OWNER, 'bp_upload', 'content', ('held',), target_con
 @pytest.fixture(autouse=True)
 def runtime_stage(monkeypatch):
     monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    monkeypatch.setenv('BATCH_HELD_DEAD_LETTER_ENABLED', 'false')
 
 
 def rows(*, discarded=False, target_missing=False, **result_extra):
@@ -350,7 +351,7 @@ def test_assignment_scan_reaches_persisted_held_job(monkeypatch):
     monkeypatch.setattr(release, 'held_page_ids', lambda *a: [])
     monkeypatch.setattr(release, 'assignment_held_page_ids', lambda *a: ['held'])
     counts, _ = release.release_scan_pass(store, limit=2, after_id=None, now=500.0)
-    assert counts == {'released': 1, 'waiting': 0, 'error': 0, 'examined': 1}
+    assert counts == {'released': 1, 'waiting': 0, 'error': 0, 'examined': 1, 'expired': 0}
     assert client.rows[('batch_pipeline_prod_results', 'held')]['projection_state'] == 'pending'
 
 

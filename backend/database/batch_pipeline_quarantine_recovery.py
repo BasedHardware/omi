@@ -654,7 +654,9 @@ def dead_held_candidates(client, namespace, limit=32, *, after_id=None):
 
 def held_expired_stock(client, namespace):
     query = client.collection(f'{namespace}_jobs').where('state', '==', 'dead')
-    return query.where('dead_letter_reason', '==', 'held_expired').count().get()[0][0].value
+    jobs = query.where('dead_letter_reason', '==', 'held_expired').count().get()[0][0].value
+    results = client.collection(f'{namespace}_results').where('projection_state', '==', 'held_expired')
+    return jobs + results.where('dead_letter_reason', '==', 'held_expired').count().get()[0][0].value
 
 
 def recovery_candidates(client, namespace: str, owner_id: str | None, limit: int = 10, *, after_id: str | None = None):

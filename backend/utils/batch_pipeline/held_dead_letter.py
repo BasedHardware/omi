@@ -6,6 +6,7 @@ lease, own correctness. No audio/storage, conversation or retention mutations.
 
 import logging
 import math
+import time
 
 from config.batch_pipeline import batch_held_dead_letter_enabled
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
@@ -108,3 +109,61 @@ class HeldDeadLetter:
             self.metrics.held_expired_observed_at.set(now)
         logger.info('event=batch_held_dead_letter expired=%d requeued=%d', counts['expired'], counts['requeued'])
         return counts
+
+
+class ProjectionHeldDeadLetter:
+    """Nightly retained-receipt re-drive, including while new expiry is killed.
+
+    This is the flag-off recovery path for rows already written as held_expired.
+    It uses the same leader, cadence, bounded pages and checkpoint CAS as 4a.
+    """
+
+    CURSOR = 'projection_held_dead_letter'
+
+    def __init__(self, store, *, metrics=None):
+        self.store, self.metrics = store, metrics
+
+    def tick(self, now):
+        from database.batch_pipeline_projection import ProjectionStore
+        from database.batch_pipeline_projection_release import ProjectionReleaseStore, expired_page_ids
+
+        state = self.store.run(lambda tx: tx.get('leases', self.CURSOR))
+        if state.get('next_at', 0) > now:
+            return 0
+        day = int(now // 86400)
+        released = 0
+        updated = {**state, 'next_at': now + INTERVAL_SECONDS}
+        if state.get('redrive_day') != day or not state.get('redrive_done'):
+            after = state.get('after_id') if state.get('redrive_day') == day else None
+            page = expired_page_ids(self.store.client, self.store.namespace, PAGE_SIZE, after)
+            projection = ProjectionReleaseStore(ProjectionStore(self.store))
+            deadline = time.monotonic() + 5.0
+            processed = 0
+            for sid in page:
+                if time.monotonic() >= deadline:
+                    break
+                processed += 1
+                try:
+                    if projection.release(sid, now, dead_before=day * 86400):
+                        released += 1
+                except Exception as error:
+                    logger.warning(
+                        'event=batch_projection action=redrive_expired outcome=retry exception_type=%s',
+                        type(error).__name__,
+                    )
+            updated.update(
+                redrive_day=day,
+                redrive_done=processed == len(page) and len(page) < PAGE_SIZE,
+                after_id=page[processed - 1] if processed else after,
+            )
+
+        def checkpoint(tx):
+            if tx.get('leases', self.CURSOR) == state:
+                tx.put('leases', self.CURSOR, updated)
+
+        self.store.run(checkpoint)
+        if self.metrics is not None:
+            stock = held_expired_stock(self.store.client, self.store.namespace)
+            self.metrics.held_expired_stock.set(stock)
+            self.metrics.held_expired_observed_at.set(now)
+        return released

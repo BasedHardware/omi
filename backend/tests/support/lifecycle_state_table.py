@@ -648,14 +648,54 @@ STATES = (
             'batch_projection',
             name,
             ('projection_state',),
-            exit=BATCH,
+            exit=(
+                Exit('sweeper', 'database/batch_pipeline_projection_release.py:ProjectionReleaseStore.release')
+                if name == 'quarantine_held'
+                else BATCH
+            ),
+            deadline='held_deadline_at' if name == 'quarantine_held' else None,
             terminal=name in ('completed', 'erased'),
             owner='database/batch_pipeline_projection.py' if name in ('completed', 'erased') else None,
-            metric=None if name in ('completed', 'erased') else 'omi_batch_timeliness_new_oldest_age_seconds',
-            alert=None if name in ('completed', 'erased') else Alert('omi-batch-unit-unpublished-2h', 'page'),
-            note='Result projection receipt state, distinct from batch job state',
+            metric=(
+                None
+                if name in ('completed', 'erased')
+                else (
+                    'omi_batch_held_oldest_age_seconds'
+                    if name == 'quarantine_held'
+                    else 'omi_batch_timeliness_new_oldest_age_seconds'
+                )
+            ),
+            alert=(
+                None
+                if name in ('completed', 'erased')
+                else (
+                    Alert('omi-pipeline-held-row-age', 'page')
+                    if name == 'quarantine_held'
+                    else Alert('omi-batch-unit-unpublished-2h', 'page')
+                )
+            ),
+            note=(
+                'Assignment holds get held_deadline_at, bounded expiry and nightly re-drive. Privacy holds are excluded.'
+                if name == 'quarantine_held'
+                else 'Result projection receipt state, distinct from batch job state'
+            ),
         )
         for name in ('pending', 'persisted', 'ready', 'quarantine_held', 'completed', 'erased')
+    )
+    + (
+        row(
+            'batch_projection',
+            'held_expired',
+            ('projection_state',),
+            terminal=True,
+            owner='database/batch_pipeline_projection_release.py',
+            deadline='held_deadline_at',
+            exit=Exit('sweeper', 'utils/batch_pipeline/held_dead_letter.py:ProjectionHeldDeadLetter.tick'),
+            metric='omi_batch_held_expired_units',
+            alert=Alert('omi-batch-held-expired-volume', 'agent'),
+            alert_required=True,
+            note='Retained result and quarantined receipt; reason held_expired; nightly target-eligible re-drive even with expiry off.',
+        ),
     )
     + tuple(
         row(

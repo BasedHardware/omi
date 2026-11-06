@@ -8,7 +8,11 @@ from typing import TYPE_CHECKING, Any
 from google.cloud import firestore
 from prometheus_client import Counter
 
-from config.batch_pipeline import projection_source_deleted_enabled
+from config.batch_pipeline import (
+    projection_source_deleted_enabled,
+    batch_held_dead_letter_enabled,
+    HELD_DEAD_LETTER_SECONDS,
+)
 
 from config.firestore_read_levers import lever_enabled
 from database.batch_pipeline_privacy import (
@@ -404,6 +408,8 @@ class ProjectionSession:
             receipt['privacy_reason'] = 'conversation_deleted'
             if self._source_deleted:
                 receipt['disposition'] = 'source_deleted'
+        if quarantined and batch_held_dead_letter_enabled():
+            receipt['held_deadline_at'] = self.now + HELD_DEAD_LETTER_SECONDS
         if quarantined:
             receipt.update(
                 state='quarantined',
@@ -428,6 +434,12 @@ class ProjectionSession:
                 # Old projector binaries require result protocol 1. Fence them
                 # before they can turn an unknown held receipt into ready.
                 changes.update(protocol_version=2, lineage_quarantine_version=1)
+                if batch_held_dead_letter_enabled():
+                    changes['held_deadline_at'] = (
+                        receipt['held_deadline_at']
+                        if self.entry.get('projection_state') == 'pending'
+                        else self.entry.get('held_deadline_at') or receipt['held_deadline_at']
+                    )
             if assigned.get('id'):
                 changes['conversation_ids'] = firestore.ArrayUnion(output_ids)
                 transaction.update(
@@ -488,6 +500,11 @@ class ProjectionSession:
                     'projection': receipt,
                     'projection_state': 'quarantine_held' if quarantined else receipt['state'],
                     **({'protocol_version': 2, 'lineage_quarantine_version': 1} if quarantined else {}),
+                    **(
+                        {'held_deadline_at': receipt['held_deadline_at']}
+                        if quarantined and batch_held_dead_letter_enabled()
+                        else {}
+                    ),
                     **completed_checkpoint_fields(self.entry, quarantined=quarantined),
                     **(
                         {'projection_release_attempts': 0}
