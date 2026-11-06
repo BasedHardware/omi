@@ -109,7 +109,7 @@ enum UUIDs {
     static let audioService = "19B10000" + suffix, audioData = "19B10001" + suffix
     static let featuresService = "19B10020" + suffix, features = "19B10021" + suffix
     static let diagnosticsService = "19B10040" + suffix, diagnostics = "19B10041" + suffix
-    /// Safe-mode recovery state (16 bytes) from 3.0.23; SAFE exposes only this.
+    /// Safe-mode recovery state: v1 is 16 bytes; v2 appends boot telemetry (96 bytes total).
     static let recovery = "19B10042" + suffix
     static let information = "180A", firmware = "2A26", serial = "2A25"
 }

@@ -248,6 +248,12 @@ Resolve tests cover transient read failure followed by TRIAL, three-attempt
 exhaustion for read/init errors, watchdog resets inside read/init with a mandatory
 SAFE boot after each hang, successful non-TRIAL cancellation, deferred SAFE
 persistence, and retry range validation with recomputed CRCs.
+The suite also exercises the boot-record codec, image-outcome classification,
+saturating counters, NVS checkpoint throttling (including failed writes),
+lifetime boot-count restoration, telemetry backend-hang bypass, and coherent
+recovery long reads. The SD seam checks host → MMC → disk ordering for both SD
+host drivers with the injected hang device present, returned errors, and NOR
+read errors/mismatches. These checks do not measure driver latency on hardware.
 The suite also runs the existing audio-packet and nine-milestone parser tests,
 slot geometry and the release build guard. It does not emulate torn NVS writes,
 WDT enforcement, Nordic faults, Bluetooth or MCUboot.
