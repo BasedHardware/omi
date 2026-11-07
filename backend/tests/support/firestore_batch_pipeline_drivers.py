@@ -162,6 +162,20 @@ def entries():
             neutrals={'transaction': (None, 'transaction binding only')},
         ),
         CoveredByEntry(
+            'database.batch_pipeline_store.reseed_hinted_activation',
+            covered_by=('database.batch_pipeline_store.service_frontier',),
+            reason='post-commit re-seed: the frontier query unchanged (no transaction) plus one direct control doc get',
+            expect_observed=False,
+            body_digest='7683b3c3042a17f4275ce0964bdc7ec4248de18b1be646e036c2221261b69a69',
+        ),
+        CoveredByEntry(
+            'database.batch_pipeline_store.FirestoreStore.run',
+            covered_by=('database.batch_pipeline_store.service_frontier',),
+            reason='queries only through reseed_hinted_activation after the body transaction commits',
+            expect_observed=False,
+            body_digest='d7cced46951bbfea06f7c501288ee41c76d972f6149aa7ead6e3c31573055b52',
+        ),
+        CoveredByEntry(
             'database.batch_pipeline_store.FirestoreTransaction.service_frontier',
             covered_by=('database.batch_pipeline_store.service_frontier',),
             reason='thin adapter forwards the frontier query unchanged; lever admission_frontier_hint (default on) drops only the transaction binding',

@@ -165,6 +165,8 @@ BODY_DIGEST = {
     'database.batch_pipeline_store.FirestoreStore.projection_page': 'bc9fe5cd08a05748eaa118af15031abdcb1a68d91d7f0b74bf177a27eb980a94',
     'database.batch_pipeline_store.FirestoreStore.projection_successor': '96adabf372104327c5a8065ef2ff06621648ee242b3415d04b047d50ded9e6b1',
     'database.batch_pipeline_store.FirestoreTransaction.service_frontier': '56b1e013fd6925c981be2186d76458211b724187b771ddc5ebb0eaa47820c44b',
+    'database.batch_pipeline_store.reseed_hinted_activation': '7683b3c3042a17f4275ce0964bdc7ec4248de18b1be646e036c2221261b69a69',
+    'database.batch_pipeline_store.FirestoreStore.run': 'd7cced46951bbfea06f7c501288ee41c76d972f6149aa7ead6e3c31573055b52',
     'database.batch_pipeline_store.FirestoreStore.control_candidates': 'c1ce9e8170a7fde0e6a82c44a2db0c0c18909cba723e9cefd402cfe1f7993df9',
     'database.batch_pipeline_store.FirestoreStore.control_candidate': 'd82ee8b1c03be61b104e25304d6a0a732a9b59453fd302f4e7794a75622d65ad',
     'database.batch_pipeline_store.FirestoreStore.oldest_retry': '8d77904364b37100b5816f0252831ef6cf8807930dba8671cdc56bf603340315',

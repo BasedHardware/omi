@@ -77,10 +77,14 @@ record. Live transcription is a preview; the batch result is the record.
   `admission_frontier_hint`, default on; 0 restores the transactional query).
   The transactional query locked the top control doc and made admissions exhaust
   their retries (sync 503 storm, 2026-11-07). Trade-off: a pull that commits
-  during the admission transaction can leave the joiner below the true frontier
-  by at most the service those concurrent pulls committed (one pull leases at
-  most a pull batch), so the joiner may be served ahead by about one pull batch;
-  credit it already earned is never lowered (`max(own, frontier)`).
+  during the admission transaction can leave the joiner below the true frontier,
+  so activation stamps `p{prio}_frontier_hint` and the store re-seeds the shard
+  right after the admission commits (`reseed_hinted_activation`: a fresh
+  non-transactional frontier read, then a lift on the shard's own control doc only
+  while the marker is set). A pull that reaches the shard first just consumes the
+  marker (`consume_frontier_hint`) and never lifts: waiting is not charged to the
+  joiner. Residual gap: pulls committed between the admission commit and the
+  re-read (milliseconds). Earned credit is never lowered (`max(own, frontier)`).
   A pull stops at a claimed fresh shard only on a pump's first lane. Its other
   lanes, finding every eligible fresh shard claimed, lease recent/deep backfill
   instead of returning empty: the claimant is serving that fresh work, and the
