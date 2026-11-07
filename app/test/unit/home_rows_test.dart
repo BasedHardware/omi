@@ -552,4 +552,22 @@ void main() {
       expect(row.isProcessing, isFalse);
     });
   });
+
+  test('standalone discarded and merged-donor rows are hidden on default Home but kept in filtered views', () {
+    final kept = conversation('kept');
+    final discarded = conversation('discarded', discarded: true, hours: 1);
+    final donor = ServerConversation(
+      id: 'donor',
+      createdAt: start.add(const Duration(hours: 2)),
+      startedAt: start.add(const Duration(hours: 2)),
+      finishedAt: start.add(const Duration(hours: 3)),
+      syncMergedInto: 'kept',
+      structured: Structured('Donor', ''),
+    );
+    final defaultRows = buildHomeRows([discarded, donor, kept], [],
+        enabled: false, groupAwaitingTranscript: true, processingTitle: 'Processing');
+    expect(defaultRows.map((r) => r.conversation.id), ['kept']);
+    final filteredRows = buildHomeRows([discarded, kept], [], enabled: false, groupAwaitingTranscript: false);
+    expect(filteredRows.map((r) => r.conversation.id), ['discarded', 'kept']);
+  });
 }

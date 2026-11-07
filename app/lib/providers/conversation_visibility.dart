@@ -19,10 +19,12 @@ extension _ConversationVisibility on ConversationProvider {
 
   void _updateConversationProjections(ServerConversation conversation) {
     if (conversation.isMergedDonor) _mergedAwayConversationIds.add(conversation.id);
+    if (conversation.isHiddenFromDefaultList || conversation.status == ConversationStatus.completed) {
+      processingConversations.removeWhere((row) => row.id == conversation.id);
+    }
     if (conversation.deleted || conversation.isMergedDonor) {
       conversations.removeWhere((row) => row.id == conversation.id);
       searchedConversations.removeWhere((row) => row.id == conversation.id);
-      processingConversations.removeWhere((row) => row.id == conversation.id);
     }
     final canonicalIndex = conversations.indexWhere((element) => element.id == conversation.id);
     if (canonicalIndex != -1) {
@@ -50,7 +52,9 @@ extension _ConversationVisibility on ConversationProvider {
 
   void _replaceBridgedProjections(String donorId, ServerConversation survivor) {
     _mergedAwayConversationIds.add(donorId);
-    final completed = survivor.status == ConversationStatus.completed && !survivor.deleted && !survivor.isMergedDonor;
+    final completed = survivor.status == ConversationStatus.completed && _matchesActiveConversationFilters(survivor);
+    processingConversations
+        .removeWhere((conversation) => conversation.id == donorId || (!completed && conversation.id == survivor.id));
     conversations
         .removeWhere((conversation) => conversation.id == donorId || (!completed && conversation.id == survivor.id));
     final survivorIndex = conversations.indexWhere((conversation) => conversation.id == survivor.id);

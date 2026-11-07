@@ -1516,6 +1516,9 @@ class ConversationProvider extends ChangeNotifier {
       return;
     }
     if (_mergedAwayConversationIds.contains(conversation.id)) return;
+    if (conversation.status == ConversationStatus.completed || conversation.discarded) {
+      processingConversations.removeWhere((row) => row.id == conversation.id);
+    }
     conversation = OnDeviceTranscriptionController.instance.displayConversation(conversation);
     if (conversation.id.startsWith('ondevice-')) _phoneOnlyConversations[conversation.id] = conversation;
     int idx = conversations.indexWhere((m) => m.id == conversation.id);
@@ -1533,11 +1536,16 @@ class ConversationProvider extends ChangeNotifier {
 
   (int, DateTime) addConversationWithDateGrouped(ServerConversation conversation) {
     conversations.insert(0, conversation);
-    SiriIntegration.current.queueUpsertConversations([conversation]);
+    if (!conversation.isHiddenFromDefaultList) {
+      SiriIntegration.current.queueUpsertConversations([conversation]);
+    }
     conversations.sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
-    int idx;
     var effectiveDate = conversation.startedAt ?? conversation.createdAt;
     var memDate = conversationLocalDayKey(effectiveDate);
+    if (!_matchesActiveConversationFilters(conversation)) {
+      return (0, memDate);
+    }
+    int idx;
     if (groupedConversations.containsKey(memDate)) {
       var convoEffectiveDate = conversation.startedAt ?? conversation.createdAt;
       idx = groupedConversations[memDate]!.indexWhere(

@@ -149,7 +149,9 @@ List<String> _violations(_Scenario s, List<ServerConversation> members, Episode 
     }
     if (row.episode == null &&
         !row.isProcessing &&
-        (isHomeNoise(row.conversation) || homeStepOf(row.conversation) == HomeStep.failed)) {
+        (row.conversation.isHiddenFromDefaultList ||
+            isHomeNoise(row.conversation) ||
+            homeStepOf(row.conversation) == HomeStep.failed)) {
       out.add('standalone-noise-or-failed-shown');
     }
     final episodeMembers = row.episode?.members ?? const <ServerConversation>[];

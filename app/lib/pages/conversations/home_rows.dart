@@ -195,10 +195,13 @@ List<HomeRow> buildHomeRows(List<ServerConversation> conversations, List<Episode
   ]);
   rows.sort((a, b) => b.startedAt.compareTo(a.startedAt));
   if (!groupAwaitingTranscript) return rows;
-  // Noise (no speech worth a row) never shows on Home; search and direct links still reach it.
-  // Failed rows duplicate Activity's Needs attention section, so Home hides them too.
+  // Noise (no speech worth a row), failed rows, and discarded/deleted/donor rows never show on
+  // the default Home; search and direct links still reach them.
   rows.removeWhere((row) =>
-      row.episode == null && (isHomeNoise(row.conversation) || homeStepOf(row.conversation) == HomeStep.failed));
+      row.episode == null &&
+      (row.conversation.isHiddenFromDefaultList ||
+          isHomeNoise(row.conversation) ||
+          homeStepOf(row.conversation) == HomeStep.failed));
   return foldProcessingRuns(rows, processingTitle: processingTitle ?? '');
 }
 
