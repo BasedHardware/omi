@@ -189,7 +189,7 @@ Uint8List _createWavFile(Uint8List pcmData) {
 #### iOS App (`Info.plist`)
 ```xml
 <key>NSMicrophoneUsageDescription</key>
-<string>We need access to your microphone so you can share audio explanations of Bugs you find.</string>
+<string>Omi uses your phone's microphone to record conversations when no Omi is connected, and for voice input.</string>
 ```
 
 ### 2. WatchConnectivity Setup
