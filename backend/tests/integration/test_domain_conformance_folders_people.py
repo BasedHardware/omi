@@ -318,3 +318,25 @@ def test_noop_initialization_reserves_mutation_id_across_domains(domain_backend)
     assert [f.id for f in repo.initialize_system(mutation_id='shared')] == [f.id for f in first]
     with pytest.raises(MutationConflict):
         h.people(sid).get_or_create_by_name(PersonDraft(id='p', name='Different operation'), mutation_id='shared')
+
+
+def test_legacy_folder_and_person_ids_come_from_document_keys(domain_backend):
+    h = domain_backend
+    sid = h.space('legacy-ids')
+    h.seed(sid, 'folders', 'folder-key', {'name': 'Legacy', 'order': 0})
+    folders = h.folders(sid)
+    assert 'id' not in h.read(sid, 'folders', 'folder-key')
+    assert folders.get('folder-key').id == 'folder-key'
+    assert folders.list().items[0].id == 'folder-key'
+    assert folders.update('folder-key', FolderUpdate(name='Changed')).id == 'folder-key'
+    assert 'id' not in h.read(sid, 'folders', 'folder-key')
+
+    h.seed(sid, 'people', 'person-key', {'name': 'Legacy person'})
+    people = h.people(sid)
+    draft = PersonDraft(id='unused', name='Legacy person')
+    assert 'id' not in h.read(sid, 'people', 'person-key')
+    assert people.get_or_create_by_name(draft, mutation_id='legacy-person').id == 'person-key'
+    assert people.get_or_create_by_name(draft, mutation_id='legacy-person').id == 'person-key'
+    assert people.set_pinned('person-key', True, mutation_id='pin').id == 'person-key'
+    assert people.set_pinned('person-key', True, mutation_id='pin').id == 'person-key'
+    assert 'id' not in h.read(sid, 'people', 'person-key')

@@ -28,7 +28,7 @@ class CellGoals(WorkflowRepo):
 
     @atomic
     def get(self, goal_id: str) -> GoalEntity | None:
-        return self._entity(self._read(goal_id))
+        return self._entity(self._read(goal_id), entity_id=goal_id)
 
     @atomic
     def create(self, draft: GoalCreate, *, mutation_id: str | None = None) -> GoalEntity:
@@ -116,7 +116,8 @@ class CellGoals(WorkflowRepo):
             return row
 
         return self._entity(
-            self._idempotent('goals.update', mutation_id, [goal_id, patch.data, expected_revision], build)
+            self._idempotent('goals.update', mutation_id, [goal_id, patch.data, expected_revision], build),
+            entity_id=goal_id,
         )
 
     @atomic
@@ -138,15 +139,15 @@ class CellGoals(WorkflowRepo):
                 raise GoalNotFoundError(goal_id)
             if row.get('status') in ('achieved', 'abandoned'):
                 raise GoalConflictError('ended goals cannot be focused')
-            focused = [r for r in self._rows().values() if r.get('status') == 'focused' and r['id'] != goal_id]
+            focused = {eid: r for eid, r in self._rows().items() if r.get('status') == 'focused' and eid != goal_id}
             if row.get('status') == 'focused' and focus_rank in (None, row.get('focus_rank')):
                 return row
             replacement = None
             if len(focused) >= focus_cap:
-                replacement = next((r for r in focused if r['id'] == replacement_goal_id), None)
+                replacement = focused.get(replacement_goal_id)
                 if replacement is None:
                     raise GoalConflictError('focus set is full; replacement_goal_id is required')
-            occupied = {r.get('focus_rank') for r in focused if r is not replacement}
+            occupied = {r.get('focus_rank') for r in focused.values() if r is not replacement}
             rank = focus_rank if focus_rank is not None else next((r for r in range(focus_cap) if r not in occupied), 0)
             if rank in occupied:
                 raise GoalConflictError('focus_rank is already occupied')
@@ -161,7 +162,8 @@ class CellGoals(WorkflowRepo):
                 f'focus:{goal_id}:{idempotency_key}',
                 [account_generation, replacement_goal_id, focus_rank],
                 build,
-            )
+            ),
+            entity_id=goal_id,
         )
 
     @atomic
@@ -176,7 +178,8 @@ class CellGoals(WorkflowRepo):
             return row
 
         return self._entity(
-            self._idempotent('goals.unfocus', f'unfocus:{goal_id}:{idempotency_key}', [account_generation], build)
+            self._idempotent('goals.unfocus', f'unfocus:{goal_id}:{idempotency_key}', [account_generation], build),
+            entity_id=goal_id,
         )
 
     @atomic
@@ -216,7 +219,8 @@ class CellGoals(WorkflowRepo):
                 f'lifecycle:{goal_id}:{idempotency_key}',
                 [status, relationship_disposition, account_generation],
                 build,
-            )
+            ),
+            entity_id=goal_id,
         )
 
     @atomic

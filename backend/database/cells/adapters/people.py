@@ -37,23 +37,24 @@ class CellPeople(Repo):
                 row.update(pinned=pinned, pinned_at=now if pinned else None, updated_at=now, revision=revision + 1)
                 self.store.state['generation'] += 1
             self.save(mutation_id, digest, person_id)
-        return PersonEntity.model_construct(**deepcopy(row))
+        return PersonEntity.model_construct(**{**deepcopy(row), 'id': person_id})
 
     @atomic
     def get_or_create_by_name(self, draft: PersonDraft, *, mutation_id: str | None = None) -> PersonEntity:
         digest, prior = self.receipt(mutation_id, 'people.create', draft.model_dump())
         if prior is not None:
-            return PersonEntity.model_construct(**self._project(self.store.state['people'][prior]))
+            return PersonEntity.model_construct(**self._project({**self.store.state['people'][prior], 'id': prior}))
         matches = self.store.query(
             'people', "doc->>'name'=%s AND doc->'is_dismissed' IS DISTINCT FROM 'true'::jsonb", [draft.name], limit=1
         )
-        existing = self.store.state['people'].get(matches[0][0]) if matches else None
+        existing_id = matches[0][0] if matches else None
+        existing = self.store.state['people'].get(existing_id) if matches else None
         if existing is None:
             data: dict[str, Any] = {**draft.model_dump(), 'revision': 1}
             self.store.state['people'][draft.id] = {**data, 'is_user_created': True}
             self.store.state['generation'] += 1
         else:
-            data = self._project(existing)
+            data = self._project({**existing, 'id': existing_id})
         self.save(mutation_id, digest, data['id'])
         return PersonEntity.model_construct(**data)
 

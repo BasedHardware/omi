@@ -178,7 +178,7 @@ class SimFolders(_Repo):
         if limit is not None and limit <= 0:
             raise ValueError('limit must be positive')
         rows = sorted(
-            (row for row in self.store.state['folders'].values() if 'order' in row),
+            ({**row, 'id': eid} for eid, row in self.store.state['folders'].items() if 'order' in row),
             key=lambda row: (_scalar_order(row['order']), row['id'].encode()),
         )
         if cursor is not None:
@@ -199,7 +199,7 @@ class SimFolders(_Repo):
     @_locked
     def get(self, folder_id: str) -> FolderEntity | None:
         row = self.store.state['folders'].get(folder_id)
-        return self.entity(row) if row is not None else None
+        return self.entity({**row, 'id': folder_id}) if row is not None else None
 
     @_locked
     def create(self, draft: FolderCreate, *, mutation_id: str | None = None) -> FolderEntity:
@@ -248,7 +248,7 @@ class SimFolders(_Repo):
         if data:
             row.update(data, updated_at=datetime.now(timezone.utc), revision=revision + 1)
         self.save(mutation_id, digest, folder_id)
-        return self.entity(row)
+        return self.entity({**row, 'id': folder_id})
 
     @_locked
     def get_by_category_mapping(self, category_mapping: str) -> FolderEntity | None:
@@ -398,27 +398,28 @@ class SimPeople(_Repo):
                 row.update(pinned=pinned, pinned_at=now if pinned else None, updated_at=now, revision=revision + 1)
                 self.store.state['generation'] += 1
             self.save(mutation_id, digest, person_id)
-        return PersonEntity.model_construct(**deepcopy(row))
+        return PersonEntity.model_construct(**{**deepcopy(row), 'id': person_id})
 
     @_locked
     def get_or_create_by_name(self, draft: PersonDraft, *, mutation_id: str | None = None) -> PersonEntity:
         digest, prior = self.receipt(mutation_id, 'people.create', draft.model_dump())
         if prior is not None:
-            return PersonEntity.model_construct(**self._project(self.store.state['people'][prior]))
-        existing = next(
+            return PersonEntity.model_construct(**self._project({**self.store.state['people'][prior], 'id': prior}))
+        existing_id = next(
             (
-                row
-                for row in sorted(self.store.state['people'].values(), key=lambda value: value['id'].encode())
+                eid
+                for eid, row in sorted(self.store.state['people'].items(), key=lambda pair: pair[0].encode())
                 if row.get('name') == draft.name and row.get('is_dismissed') is not True
             ),
             None,
         )
+        existing = self.store.state['people'].get(existing_id) if existing_id is not None else None
         if existing is None:
             data = {**draft.model_dump(), 'revision': 1}
             self.store.state['people'][draft.id] = {**data, 'is_user_created': True}
             self.store.state['generation'] += 1
         else:
-            data = self._project(existing)
+            data = self._project({**existing, 'id': existing_id})
         self.save(mutation_id, digest, data['id'])
         return PersonEntity.model_construct(**data)
 
@@ -446,8 +447,13 @@ class _WorkflowRepo(_Repo):
     entity_type = None
     collection = ''
 
-    def _entity(self, row):
-        return self.entity_type.model_construct(**deepcopy(row)) if row is not None else None
+    def _entity(self, row, *, entity_id=None):
+        if row is None:
+            return None
+        data = deepcopy(row)
+        if entity_id is not None:
+            data['id'] = entity_id
+        return self.entity_type.model_construct(**data)
 
     def _rows(self):
         return self.store.state[self.collection]
@@ -540,15 +546,15 @@ class SimActionItems(_WorkflowRepo):
             raise ValueError('document_id must not be empty')
         generation = self.read_control().get('account_generation', 0)
         if idempotency_key:
-            for row in sorted(self._rows().values(), key=lambda r: r['id'].encode()):
+            for entity_id, row in sorted(self._rows().items(), key=lambda pair: pair[0].encode()):
                 if (
                     row.get('idempotency_key') == idempotency_key
                     and row.get('account_generation', 0) == generation
                     and not row.get('deleted')
                 ):
                     if reuse_finished or (not row.get('completed') and row.get('status', 'active') == 'active'):
-                        self.save(mutation_id, digest, row['id'])
-                        return row['id']
+                        self.save(mutation_id, digest, entity_id)
+                        return entity_id
         if document_id is not None and document_id in self._rows():
             if self._rows()[document_id].get('account_generation', 0) != generation:
                 raise TaskRelationshipConflictError('document id belongs to another account generation')
@@ -678,12 +684,12 @@ class SimActionItems(_WorkflowRepo):
         self, conversation_id: str, *, active_ids: list[str], replacements: dict[str, str] | None = None
     ) -> int:
         rows = [
-            row
-            for row in self._rows().values()
-            if row.get('conversation_id') == conversation_id and row['id'] not in active_ids
+            (entity_id, row)
+            for entity_id, row in self._rows().items()
+            if row.get('conversation_id') == conversation_id and entity_id not in active_ids
         ]
-        for row in rows:
-            replacement = (replacements or {}).get(row['id'])
+        for entity_id, row in rows:
+            replacement = (replacements or {}).get(entity_id)
             self._write_task()
             row.update(
                 deleted=True,
@@ -698,7 +704,11 @@ class SimActionItems(_WorkflowRepo):
     @_locked
     def get(self, action_item_id: str) -> ActionItemEntity | None:
         row = self._read(action_item_id)
-        return self._entity(prepare_action_item_for_read(deepcopy(row))) if row is not None else None
+        return (
+            self._entity(prepare_action_item_for_read(deepcopy(row)), entity_id=action_item_id)
+            if row is not None
+            else None
+        )
 
     def get_by_ids(self, ids: list[str]) -> list[ActionItemEntity]:
         return [row for row in (self.get(i) for i in ids) if row is not None]
@@ -803,7 +813,7 @@ class SimGoals(_WorkflowRepo):
     generation_error = GoalConflictError
 
     def get(self, goal_id: str) -> GoalEntity | None:
-        return self._entity(self._read(goal_id))
+        return self._entity(self._read(goal_id), entity_id=goal_id)
 
     @_locked
     def create(self, draft: GoalCreate, *, mutation_id: str | None = None) -> GoalEntity:
@@ -849,8 +859,8 @@ class SimGoals(_WorkflowRepo):
 
     def get_user_goals(self, limit: int = 3) -> list[GoalEntity]:
         rows = [
-            r
-            for r in self._rows().values()
+            {**r, 'id': eid}
+            for eid, r in self._rows().items()
             if r.get('is_active') is True and r.get('status') not in ('achieved', 'abandoned')
         ]
         rows.sort(key=lambda r: r.get('created_at') or datetime.min.replace(tzinfo=timezone.utc))
@@ -858,8 +868,8 @@ class SimGoals(_WorkflowRepo):
 
     def get_all(self, *, include_inactive: bool = False, limit: int | None = None) -> list[GoalEntity]:
         rows = [
-            r
-            for r in self._rows().values()
+            {**r, 'id': eid}
+            for eid, r in self._rows().items()
             if include_inactive or (r.get('is_active') is True and r.get('status') not in ('achieved', 'abandoned'))
         ]
         rows.sort(key=lambda r: r.get('created_at') or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
@@ -883,7 +893,8 @@ class SimGoals(_WorkflowRepo):
             return row
 
         return self._entity(
-            self._idempotent('goals.update', mutation_id, [goal_id, patch.data, expected_revision], build)
+            self._idempotent('goals.update', mutation_id, [goal_id, patch.data, expected_revision], build),
+            entity_id=goal_id,
         )
 
     @_locked
@@ -905,15 +916,15 @@ class SimGoals(_WorkflowRepo):
                 raise GoalNotFoundError(goal_id)
             if row.get('status') in ('achieved', 'abandoned'):
                 raise GoalConflictError('ended goals cannot be focused')
-            focused = [r for r in self._rows().values() if r.get('status') == 'focused' and r['id'] != goal_id]
+            focused = {eid: r for eid, r in self._rows().items() if r.get('status') == 'focused' and eid != goal_id}
             if row.get('status') == 'focused' and focus_rank in (None, row.get('focus_rank')):
                 return row
             replacement = None
             if len(focused) >= focus_cap:
-                replacement = next((r for r in focused if r['id'] == replacement_goal_id), None)
+                replacement = focused.get(replacement_goal_id)
                 if replacement is None:
                     raise GoalConflictError('focus set is full; replacement_goal_id is required')
-            occupied = {r.get('focus_rank') for r in focused if r is not replacement}
+            occupied = {r.get('focus_rank') for r in focused.values() if r is not replacement}
             rank = focus_rank if focus_rank is not None else next((r for r in range(focus_cap) if r not in occupied), 0)
             if rank in occupied:
                 raise GoalConflictError('focus_rank is already occupied')
@@ -928,7 +939,8 @@ class SimGoals(_WorkflowRepo):
                 f'focus:{goal_id}:{idempotency_key}',
                 [account_generation, replacement_goal_id, focus_rank],
                 build,
-            )
+            ),
+            entity_id=goal_id,
         )
 
     def unfocus(self, goal_id: str, *, idempotency_key: str, account_generation: int) -> GoalEntity:
@@ -942,7 +954,8 @@ class SimGoals(_WorkflowRepo):
             return row
 
         return self._entity(
-            self._idempotent('goals.unfocus', f'unfocus:{goal_id}:{idempotency_key}', [account_generation], build)
+            self._idempotent('goals.unfocus', f'unfocus:{goal_id}:{idempotency_key}', [account_generation], build),
+            entity_id=goal_id,
         )
 
     def transition_lifecycle(
@@ -979,7 +992,8 @@ class SimGoals(_WorkflowRepo):
                 f'lifecycle:{goal_id}:{idempotency_key}',
                 [status, relationship_disposition, account_generation],
                 build,
-            )
+            ),
+            entity_id=goal_id,
         )
 
     def append_progress_event(
@@ -1110,7 +1124,7 @@ class SimWorkstreams(_WorkflowRepo):
         return row
 
     def get(self, workstream_id: str) -> WorkstreamEntity | None:
-        return self._entity(self._read(workstream_id))
+        return self._entity(self._read(workstream_id), entity_id=workstream_id)
 
     @_locked
     def create(self, draft: WorkstreamCreate, *, mutation_id: str | None = None) -> WorkstreamEntity:
@@ -1142,8 +1156,8 @@ class SimWorkstreams(_WorkflowRepo):
 
     def list_open(self, *, limit: int = 500, account_generation: int | None = None) -> list[WorkstreamEntity]:
         rows = [
-            r
-            for r in self._rows().values()
+            {**r, 'id': eid}
+            for eid, r in self._rows().items()
             if r.get('status') == 'open'
             and (account_generation is None or r.get('account_generation', 0) == account_generation)
         ]
@@ -1153,7 +1167,9 @@ class SimWorkstreams(_WorkflowRepo):
         self, goal_id: str, *, include_archived: bool = False, limit: int = 100
     ) -> list[WorkstreamEntity]:
         rows = [
-            r for r in sorted(self._rows().values(), key=lambda r: r['id'].encode()) if r.get('goal_id') == goal_id
+            {**r, 'id': eid}
+            for eid, r in sorted(self._rows().items(), key=lambda pair: pair[0].encode())
+            if r.get('goal_id') == goal_id
         ][:limit]
         rows = [r for r in rows if include_archived or r.get('status') != 'archived']
         return [self._entity(r) for r in sorted(rows, key=lambda r: r['updated_at'], reverse=True)]
@@ -1174,7 +1190,8 @@ class SimWorkstreams(_WorkflowRepo):
                 f'ws-update:{workstream_id}:{idempotency_key}',
                 [patch.data, account_generation],
                 build,
-            )
+            ),
+            entity_id=workstream_id,
         )
 
     def _event(self, workstream_id, event):
@@ -1390,7 +1407,7 @@ class SimWorkstreams(_WorkflowRepo):
                 if task.get('account_generation', 0) not in (0, account_generation):
                     raise WorkstreamGenerationMismatchError('task account generation mismatch')
                 gid = task.get('goal_id')
-                tid = task['id']
+                tid = request['task_id']
             else:
                 gid = request.get('goal_id')
                 task = None

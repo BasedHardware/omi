@@ -77,8 +77,13 @@ class WorkflowRepo(Repo):
     generation_error: type[Exception]
     collection = ''
 
-    def _entity(self, row: Any) -> Any:
-        return self.entity_type.model_construct(**deepcopy(row)) if row is not None else None
+    def _entity(self, row: Any, *, entity_id: str | None = None) -> Any:
+        if row is None:
+            return None
+        data = deepcopy(row)
+        if entity_id is not None:
+            data['id'] = entity_id
+        return self.entity_type.model_construct(**data)
 
     def _rows(self):
         return self.store.state[self.collection]

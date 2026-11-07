@@ -209,12 +209,12 @@ class CellActionItems(WorkflowRepo):
         self, conversation_id: str, *, active_ids: list[str], replacements: dict[str, str] | None = None
     ) -> int:
         rows = [
-            row
-            for row in self._rows().values()
-            if row.get('conversation_id') == conversation_id and row['id'] not in active_ids
+            (entity_id, row)
+            for entity_id, row in self._rows().items()
+            if row.get('conversation_id') == conversation_id and entity_id not in active_ids
         ]
-        for row in rows:
-            replacement = (replacements or {}).get(row['id'])
+        for entity_id, row in rows:
+            replacement = (replacements or {}).get(entity_id)
             self._write_task()
             row.update(
                 deleted=True,
@@ -229,7 +229,11 @@ class CellActionItems(WorkflowRepo):
     @atomic
     def get(self, action_item_id: str) -> ActionItemEntity | None:
         row = self._read(action_item_id)
-        return self._entity(prepare_action_item_for_read(deepcopy(row))) if row is not None else None
+        return (
+            self._entity(prepare_action_item_for_read(deepcopy(row)), entity_id=action_item_id)
+            if row is not None
+            else None
+        )
 
     @atomic
     def get_by_ids(self, ids: list[str]) -> list[ActionItemEntity]:

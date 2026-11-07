@@ -42,7 +42,7 @@ class CellWorkstreams(WorkflowRepo):
 
     @atomic
     def get(self, workstream_id: str) -> WorkstreamEntity | None:
-        return self._entity(self._read(workstream_id))
+        return self._entity(self._read(workstream_id), entity_id=workstream_id)
 
     @atomic
     def create(self, draft: WorkstreamCreate, *, mutation_id: str | None = None) -> WorkstreamEntity:
@@ -116,7 +116,8 @@ class CellWorkstreams(WorkflowRepo):
                 f'ws-update:{workstream_id}:{idempotency_key}',
                 [patch.data, account_generation],
                 build,
-            )
+            ),
+            entity_id=workstream_id,
         )
 
     def _event(self, workstream_id, event):
@@ -335,7 +336,7 @@ class CellWorkstreams(WorkflowRepo):
                 if task.get('account_generation', 0) not in (0, account_generation):
                     raise WorkstreamGenerationMismatchError('task account generation mismatch')
                 gid = task.get('goal_id')
-                tid = task['id']
+                tid = request['task_id']
             else:
                 gid = request.get('goal_id')
                 task = None

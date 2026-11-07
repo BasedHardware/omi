@@ -569,3 +569,78 @@ def test_fence_cleanup_failure_finishes_all_and_resets_uow(domain_backend, abort
     assert events == [not abort_body, not abort_body]
     assert (h.action_items(sid).get('task') is not None) is (not abort_body)
     assert h.store(sid).run(lambda tx: tx.action_items.read_control()) == {}
+
+
+def test_legacy_workflow_ids_and_retirement_use_document_keys(domain_backend):
+    h = domain_backend
+    sid = h.space('legacy-workflow-ids')
+    for tid in ('active', 'retire', 'replace'):
+        h.seed(
+            sid,
+            'action_items',
+            tid,
+            {
+                'description': tid,
+                'conversation_id': 'conversation',
+                'updated_at': NOW,
+            },
+        )
+        assert 'id' not in h.read(sid, 'action_items', tid)
+    tasks = h.action_items(sid)
+    assert tasks.get('active').id == 'active'
+    assert [r.id for r in tasks.get_by_ids(['retire', 'active'])] == ['retire', 'active']
+    assert {r.id for r in tasks.iter_all()} == {'active', 'retire', 'replace'}
+    assert {r.id for r in tasks.list().items} == {'active', 'retire', 'replace'}
+    assert {r.id for r in tasks.sync_page().items} == {'active', 'retire', 'replace'}
+    assert (
+        tasks.retire_for_conversation(
+            'conversation',
+            active_ids=['active'],
+            replacements={'replace': 'active'},
+        )
+        == 2
+    )
+    assert not tasks.get('active').deleted
+    assert tasks.get('retire').status == 'cancelled'
+    assert tasks.get('replace').status == 'superseded'
+    assert tasks.get('replace').superseded_by == 'active'
+    assert [r.id for r in tasks.list().items] == ['active']
+    assert {r.id for r in tasks.sync_page().items} == {'active', 'retire', 'replace'}
+    assert 'id' not in h.read(sid, 'action_items', 'retire')
+
+    h.seed(sid, 'goals', 'goal-key', {'title': 'Legacy goal', 'is_active': True})
+    goals = h.goals(sid)
+    assert goals.get('goal-key').id == 'goal-key'
+    assert goals.get_user_goal().id == 'goal-key'
+    assert goals.get_user_goals()[0].id == 'goal-key'
+    assert goals.get_all()[0].id == 'goal-key'
+    assert goals.update('goal-key', GoalUpdate(data={'title': 'Changed'})).id == 'goal-key'
+    assert goals.focus('goal-key', idempotency_key='focus', account_generation=0).id == 'goal-key'
+    assert goals.unfocus('goal-key', idempotency_key='unfocus', account_generation=0).id == 'goal-key'
+    assert 'id' not in h.read(sid, 'goals', 'goal-key')
+
+    h.seed(
+        sid,
+        'workstreams',
+        'ws-key',
+        {
+            'title': 'Legacy workstream',
+            'status': 'open',
+            'goal_id': 'goal-key',
+            'updated_at': NOW,
+        },
+    )
+    streams = h.workstreams(sid)
+    assert streams.get('ws-key').id == 'ws-key'
+    assert streams.list_open()[0].id == 'ws-key'
+    assert streams.list_for_goal('goal-key')[0].id == 'ws-key'
+    assert (
+        streams.update(
+            'ws-key',
+            WorkstreamUpdate(data={'title': 'Changed'}),
+            idempotency_key='update',
+            account_generation=0,
+        ).id
+        == 'ws-key'
+    )
+    assert 'id' not in h.read(sid, 'workstreams', 'ws-key')

@@ -127,10 +127,10 @@ class DomainHarness:
             raise ValueError('seed must belong to this harness')
         self.store(space_id)
         if self.name == 'sim':
-            self._stores[space_id].state[entity][entity_id] = {**data, 'id': entity_id}
+            self._stores[space_id].state[entity][entity_id] = dict(data)
         elif self.name == 'postgres':
             self._stores[space_id].cell.run(
-                space_id, lambda tx: tx.put(entity, entity_id, {**data, 'id': entity_id}), actor_uid=space_id, now=0
+                space_id, lambda tx: tx.put(entity, entity_id, data), actor_uid=space_id, now=0
             )
         else:
             self._entity_ref(space_id, entity, entity_id).set(data)

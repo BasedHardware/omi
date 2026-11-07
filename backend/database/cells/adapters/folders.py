@@ -66,7 +66,7 @@ class CellFolders(Repo):
     @atomic
     def get(self, folder_id: str) -> FolderEntity | None:
         row = self.store.state['folders'].get(folder_id)
-        return self.entity(row) if row is not None else None
+        return self.entity({**row, 'id': folder_id}) if row is not None else None
 
     @atomic
     def create(self, draft: FolderCreate, *, mutation_id: str | None = None) -> FolderEntity:
@@ -119,7 +119,7 @@ class CellFolders(Repo):
         if data:
             row.update(data, updated_at=datetime.now(timezone.utc), revision=revision + 1)
         self.save(mutation_id, digest, folder_id)
-        return self.entity(row)
+        return self.entity({**row, 'id': folder_id})
 
     @atomic
     def get_by_category_mapping(self, category_mapping: str) -> FolderEntity | None:
