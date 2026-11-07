@@ -9,8 +9,11 @@ the recurring-voice scrub continue to write inline.
 `OBJECT_LAKE_WRITE_ENABLED=false` and `OBJECT_LAKE_WRITE_PERCENT=0` remain the
 admission defaults. With admission closed, encoding is byte-identical to the
 previous JSON/zlib (and enhanced encryption) codec. O1 keeps production writing
-off until C4's wipe-coverage test passes. Dev qualification precedes the ramp
-already recorded in the [feature flag registry](../../feature-flag-registry.md).
+off until C4's wipe-coverage test passes. The merge-owner crypto fence also
+blocks writes outside explicit local/offline stages until per-object DEKs land;
+neither a provisioned KMS key nor either write flag can bypass it. Both runtime
+and deploy validation enforce this prerequisite before the ramp recorded in the
+[feature flag registry](../../feature-flag-registry.md).
 Redeploy every reader, including desktop-backend, before admitting pointers.
 
 A put precedes the document write that references it. Transactional reads choose
@@ -39,6 +42,13 @@ the actual upload JSON, never a later encryption of the same source. This includ
 `in_progress` rows, whose transcript may already exceed Firestore's 1 MiB limit.
 The C3 backfill primitive still uses an update-time CAS and skips live rows;
 failed backfill swaps retain readable inline data. Orphan cleanup belongs to C3.
+Normal writes and backfill share the same privacy gate: only explicitly shared
+or public, non-deleted, unlocked rows may offload; private/unknown visibility
+stays inline. Partial writes consult the stored policy as well as the payload.
+Lifecycle decorators encode inline until the transaction passes its current-row
+guards and recurring-voice privacy filter, then request a candidate through the
+preupload/replay boundary. Refused deleted/stale/missing-owner writes and existing
+create-if-absent rows never upload before those guards.
 Missing bucket or release bindings close write admission; unset KMS deliberately
 selects the existing offline FakeKMS. Production write admission stays off under O1.
 

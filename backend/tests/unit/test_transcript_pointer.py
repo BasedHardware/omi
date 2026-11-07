@@ -74,13 +74,16 @@ def lake_world(tmp_path, monkeypatch):
 
 def encode(segments=None, level='standard'):
     return conversations_db.encode_conversation_for_write(
-        UID, {'id': CID, 'transcript_segments': segments or speech()}, level
+        UID,
+        {'id': CID, 'transcript_segments': segments or speech()},
+        level,
+        conversation_state={'visibility': 'shared'},
     )
 
 
 def pointer_doc(world, segments=None):
     doc = encode(segments)
-    doc.update(status='completed', data_protection_level='standard')
+    doc.update(status='completed', data_protection_level='standard', visibility='shared')
     world.store.rows[PATH] = deepcopy(doc)
     pointer.clear_memo()
     return doc
@@ -154,7 +157,9 @@ def test_deployed_stage_without_kms_key_closes_write_admission(lake_world, monke
     assert isinstance(encode()['transcript_segments'], bytes)
     put.assert_not_called()
     monkeypatch.setenv('OBJECT_LAKE_KMS_KEY', 'projects/p/locations/l/keyRings/r/cryptoKeys/k')
-    assert pointer.config.write_admitted(UID)
+    assert not pointer.config.write_admitted(UID)
+    assert isinstance(encode()['transcript_segments'], bytes)
+    put.assert_not_called()
 
 
 def test_cold_transaction_reloads_outside_body(lake_world):
@@ -324,6 +329,7 @@ def test_deferred_swap_cas_and_skip_policy(lake_world, monkeypatch, state):
     doc = encode(segments)
     doc['status'] = 'in_progress' if state == 'in_progress' else 'completed'
     doc['deleted'] = state == 'deleted'
+    doc['visibility'] = 'shared'
     monkeypatch.setenv('OBJECT_LAKE_WRITE_ENABLED', 'true')
     if state == 'pointer':
         doc = encode(segments)
@@ -543,3 +549,49 @@ def test_legacy_memory_client_stub_preserves_pointer_transaction_guard(lake_worl
     client.run_transactional(lake_world.store, body)
     assert not client.in_transaction_body()
     assert lake_world.calls['get'] == 0
+
+
+@pytest.mark.parametrize(
+    'state',
+    [
+        {'visibility': 'private'},
+        {},
+        {'visibility': 'unknown'},
+        {'visibility': 'shared', 'deleted': True},
+        {'visibility': 'public', 'is_locked': True},
+    ],
+)
+def test_privacy_policy_precedes_codec_and_backfill_upload(lake_world, monkeypatch, state):
+    doc = {'id': CID, 'transcript_segments': speech(), **state}
+    encoded = conversations_db.encode_conversation_for_write(UID, doc)
+    assert isinstance(encoded['transcript_segments'], bytes)
+    lake_world.store.rows[PATH] = {**encoded, 'status': 'completed'}
+    assert not pointer.offload_inline_transcript(UID, CID, firestore_client=lake_world.store)
+    assert lake_world.calls == {'get': 0, 'put': 0}
+    assert ('space_keys', UID) not in lake_world.store.rows
+
+
+@pytest.mark.parametrize('visibility', ['shared', 'public'])
+def test_privacy_policy_permits_explicit_shared_visibility(lake_world, visibility):
+    doc = conversations_db.encode_conversation_for_write(
+        UID, {'id': CID, 'visibility': visibility, 'transcript_segments': speech()}
+    )
+    assert isinstance(doc['transcript_segments'], dict)
+    assert lake_world.calls['put'] == 1
+
+
+@pytest.mark.parametrize(
+    'current,patch',
+    [
+        ({'visibility': 'private'}, {'visibility': 'shared'}),
+        ({'visibility': 'shared'}, {'visibility': 'private'}),
+        ({'visibility': 'shared', 'deleted': True}, {'deleted': False}),
+        ({'visibility': 'shared'}, {'deleted': True}),
+    ],
+)
+def test_stale_or_partial_payload_cannot_bypass_current_privacy(lake_world, current, patch):
+    encoded = conversations_db.encode_conversation_for_write(
+        UID, {'id': CID, 'transcript_segments': speech(), **patch}, conversation_state=current
+    )
+    assert isinstance(encoded['transcript_segments'], bytes)
+    assert lake_world.calls == {'get': 0, 'put': 0}

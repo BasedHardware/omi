@@ -262,10 +262,35 @@ def _source_digest(segments):
     return digest.hexdigest()
 
 
+def conversation_allows_offload(conversation: Mapping, current: Mapping | None = None) -> bool:
+    """Private/unknown visibility, tombstones and locked content stay inline."""
+    if current is not None:
+        if not conversation_allows_offload(current):
+            return False
+        conversation = {**current, **conversation}
+    return (
+        conversation.get('visibility') in ('shared', 'public')
+        and not conversation.get('deleted')
+        and not conversation.get('is_locked')
+    )
+
+
 def offload_or_inline(
-    uid, conversation_id, segments: list, protect: Callable, *, prepare_segments: Callable | None = None
+    uid,
+    conversation_id,
+    segments: list,
+    protect: Callable,
+    *,
+    conversation_state: Mapping,
+    current_state: Mapping | None = None,
+    prepare_segments: Callable | None = None,
 ) -> bytes | str | dict:
-    admitted = bool(segments and conversation_id and config.write_admitted(uid))
+    admitted = bool(
+        segments
+        and conversation_id
+        and conversation_allows_offload(conversation_state, current_state)
+        and config.write_admitted(uid)
+    )
     # Retry identity precedes randomized sidecar protection. The reference's
     # own sha256 still authenticates the actual protected JSON in the lake.
     source_digest = _source_digest(segments) if admitted else ''
@@ -384,7 +409,12 @@ def offload_inline_transcript(uid, conversation_id, *, firestore_client=None, ex
         snapshot = ref.get()
         data = snapshot.to_dict() or {}
         raw = data.get('transcript_segments')
-        if not snapshot.exists or data.get('deleted') or data.get('status') == 'in_progress' or isinstance(raw, dict):
+        if (
+            not snapshot.exists
+            or not conversation_allows_offload(data)
+            or data.get('status') == 'in_progress'
+            or isinstance(raw, dict)
+        ):
             return False
         segments = decode_stored_transcript(
             uid, raw, bool(data.get('transcript_segments_compressed')), require_decryption=True
@@ -392,7 +422,7 @@ def offload_inline_transcript(uid, conversation_id, *, firestore_client=None, ex
         plaintext = json.dumps(segments).encode('utf-8')
         if expected_sha256 is not None and hashlib.sha256(plaintext).hexdigest() != expected_sha256:
             return False
-        pointer = offload_or_inline(uid, conversation_id, segments, lambda _: raw)
+        pointer = offload_or_inline(uid, conversation_id, segments, lambda _: raw, conversation_state=data)
         if not isinstance(pointer, dict):
             return False
         ref.update(

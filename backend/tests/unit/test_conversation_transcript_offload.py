@@ -120,7 +120,13 @@ def test_live_in_progress_transcript_crosses_document_limit(lake_world, monkeypa
     monkeypatch.setenv('OBJECT_LAKE_WRITE_ENABLED', str(admitted).lower())
     monkeypatch.setattr(db.encryption, 'encrypt', lambda value, uid: 'encrypted:' + value)
     segments = speech(1100000)
-    doc = {'id': CID, 'status': 'in_progress', 'data_protection_level': level, 'transcript_segments': []}
+    doc = {
+        'id': CID,
+        'status': 'in_progress',
+        'data_protection_level': level,
+        'transcript_segments': [],
+        'visibility': 'shared',
+    }
     lake_world.store.rows[PATH] = deepcopy(doc)
     inline = db._protect_json_value(segments, UID, level)
     assert estimate_firestore_document_bytes({**doc, 'transcript_segments': inline}, '/'.join(PATH)) > (
@@ -156,7 +162,12 @@ def test_live_in_progress_transcript_crosses_document_limit(lake_world, monkeypa
 
 
 def test_transaction_candidate_rechecks_source_after_upload(lake_world, monkeypatch):
-    lake_world.store.rows[PATH] = {'id': CID, 'status': 'in_progress', 'transcript_segments': []}
+    lake_world.store.rows[PATH] = {
+        'id': CID,
+        'status': 'in_progress',
+        'transcript_segments': [],
+        'visibility': 'shared',
+    }
     original_put = lake.put_space_object
     incoming = speech()
     concurrent = {**speech(100)[0], 'id': 'concurrent-segment', 'start': 13.0, 'end': 14.0}
@@ -615,7 +626,12 @@ def test_learning_ledger_transactions_preload(lake_world, monkeypatch, site, sta
 
 
 def test_nontransactional_update_offloads_without_id_in_patch(lake_world, monkeypatch):
-    lake_world.store.rows[PATH] = {'id': CID, 'data_protection_level': 'standard', 'status': 'completed'}
+    lake_world.store.rows[PATH] = {
+        'id': CID,
+        'data_protection_level': 'standard',
+        'status': 'completed',
+        'visibility': 'shared',
+    }
     monkeypatch.setattr(db, 'db', lake_world.store)
     monkeypatch.setattr(db, '_sync_conversation_search_index', lambda *args: None)
 
@@ -647,7 +663,9 @@ def test_translation_preuploads_the_candidate_for_the_document_id(lake_world):
 
 def test_create_if_absent_preloads_and_preuploads_notes_identity_reencode(lake_world, monkeypatch):
     doc = encode()
-    doc.update(data_protection_level='standard', status='completed', created_at=NOW, _notes_identity={})
+    doc.update(
+        data_protection_level='standard', status='completed', created_at=NOW, _notes_identity={}, visibility='shared'
+    )
     pointer.clear_memo()
     monkeypatch.setattr(db, 'db', lake_world.store)
     monkeypatch.setattr(db, '_sync_conversation_search_index', lambda *args: None)
@@ -657,7 +675,13 @@ def test_create_if_absent_preloads_and_preuploads_notes_identity_reencode(lake_w
         segments = db.decode_transcript_segments_verified(UID, data['transcript_segments'], True)
         segments[0]['is_user'] = True
         data.update(
-            db._prepare_conversation_for_write({'transcript_segments': segments}, UID, 'standard', conversation_id=CID)
+            db._prepare_conversation_for_write(
+                {'transcript_segments': segments},
+                UID,
+                'standard',
+                conversation_id=CID,
+                conversation_state=data,
+            )
         )
         data.pop('_notes_identity', None)
 
@@ -835,7 +859,9 @@ def test_privacy_scrub_transaction_resolves_pointer_but_writes_inline(lake_world
 def test_legacy_review_undo_preloads_pointer_field_states(lake_world, monkeypatch, state):
     before = encode()
     after = db.encode_conversation_for_write(UID, {'id': CID, 'transcript_segments': speech(21000)})
-    after.update(data_protection_level='standard', status='completed', has_transcript_corrections=True)
+    after.update(
+        data_protection_level='standard', status='completed', has_transcript_corrections=True, visibility='shared'
+    )
     lake_world.store.rows[PATH] = after
     change = ReviewChange(change_id='legacy-change', kind='other', title='Synthetic', created_at=NOW)
     journal = {
@@ -880,7 +906,10 @@ def test_legacy_review_undo_preloads_pointer_field_states(lake_world, monkeypatc
 
 def test_explicit_document_identity_wins_over_payload_identity(lake_world):
     encoded = db._prepare_conversation_for_write(
-        {'id': 'payload-alias', 'transcript_segments': speech()}, UID, 'standard', conversation_id=CID
+        {'id': 'payload-alias', 'transcript_segments': speech(), 'visibility': 'shared'},
+        UID,
+        'standard',
+        conversation_id=CID,
     )
     assert f'/transcript/{CID}/' in encoded['transcript_segments']['key']
     assert lake_world.calls['put'] == 1
@@ -1256,6 +1285,7 @@ def test_grouping_sidecars_do_not_churn_live_upload_retries(lake_world, level):
         'status': 'in_progress',
         'data_protection_level': level,
         'transcript_segments': [],
+        'visibility': 'shared',
     }
     assert db.update_conversation_segments(UID, CID, segments, firestore_client=lake_world.store) is True
     stored = lake_world.store.rows[PATH]['transcript_segments']
@@ -1306,7 +1336,12 @@ def test_invalid_optional_grouping_evidence_does_not_block_transcript(lake_world
     if invalid == 'cycle':
         bad['self'] = bad
     segments[0]['speaker_grouping_shadow'] = bad
-    lake_world.store.rows[PATH] = {'id': CID, 'status': 'in_progress', 'transcript_segments': []}
+    lake_world.store.rows[PATH] = {
+        'id': CID,
+        'status': 'in_progress',
+        'transcript_segments': [],
+        'visibility': 'shared',
+    }
     assert db.update_conversation_segments(UID, CID, segments, firestore_client=lake_world.store) is True
     stored = lake_world.store.rows[PATH]['transcript_segments']
     assert isinstance(stored, dict)
@@ -1331,3 +1366,85 @@ def test_grouping_protection_rechecks_write_kill_switch(lake_world, monkeypatch)
     segments[0]['provider_speaker'] = {'id': 0, 'scope': 'final:batch:c2-probe'}
     assert isinstance(encode(segments)['transcript_segments'], bytes)
     assert lake_world.calls == {'get': 0, 'put': 0}
+
+
+@pytest.mark.parametrize('writer', ['persist', 'upsert', 'create'])
+@pytest.mark.parametrize('reason', ['deleted', 'private', 'locked', 'missing', 'stale'])
+def test_lifecycle_decorator_never_uploads_before_guard(lake_world, monkeypatch, writer, reason):
+    client = DreamFirestore()
+    existing = {'id': CID, 'status': 'processing', 'visibility': 'shared', 'transcript_segments': []}
+    if reason == 'deleted':
+        existing['deleted'] = True
+    elif reason == 'private':
+        existing['visibility'] = 'private'
+    elif reason == 'locked':
+        existing['is_locked'] = True
+    elif reason == 'stale':
+        existing['sync_content_revision'] = 7
+    if reason != 'missing' or writer == 'upsert':
+        client.rows[PATH] = deepcopy(existing)
+    payload = {
+        'id': CID,
+        'status': 'completed',
+        'visibility': 'shared',
+        'data_protection_level': 'standard',
+        'transcript_segments': speech(),
+    }
+    monkeypatch.setenv('DREAM_MODE', 'off')
+    monkeypatch.setattr(db, 'db', client)
+    monkeypatch.setattr(db, '_sync_conversation_search_index', lambda *a: None)
+    monkeypatch.setattr(db, '_delete_conversation_search_index', lambda *a: None)
+    monkeypatch.setattr(db, 'stop_quiet_check_for_conversation', lambda *a, **kw: None)
+    operation = {
+        'persist': db.persist_processing_result_with_lifecycle,
+        'upsert': db.upsert_conversation_with_lifecycle,
+        'create': db.create_conversation_if_absent_with_lifecycle,
+    }[writer]
+    result = operation(UID, deepcopy(payload))
+    refused = (writer == 'persist' and reason in {'deleted', 'missing', 'stale'}) or (
+        writer == 'create' and reason != 'missing'
+    )
+    if refused:
+        assert result is False
+    if refused or reason in {'deleted', 'private', 'locked'}:
+        assert lake_world.calls['put'] == 0
+    if refused or (writer == 'upsert' and reason == 'deleted'):
+        assert client.rows.get(PATH) == (existing if reason != 'missing' or writer == 'upsert' else None)
+
+
+def test_processing_upload_follows_recurring_privacy_filter(lake_world, monkeypatch):
+    client = DreamFirestore()
+    client.rows[PATH] = {'id': CID, 'status': 'processing', 'visibility': 'shared', 'transcript_segments': []}
+    monkeypatch.setattr(db, 'db', client)
+    monkeypatch.setattr(db, '_sync_conversation_search_index', lambda *a: None)
+    monkeypatch.setattr(db, 'stop_quiet_check_for_conversation', lambda *a, **kw: None)
+    checked = []
+
+    def filter_write(transaction, user, data):
+        assert pointer._client.in_transaction_body()
+        assert isinstance(data['transcript_segments'], bytes)
+        checked.append(True)
+        segments = db.decode_transcript_segments_verified(UID, data['transcript_segments'], True)
+        segments[0].pop('recurring_voice_id', None)
+        data['transcript_segments'] = db._protect_json_value(segments, UID, 'standard')
+
+    monkeypatch.setattr(recurring_voice_privacy, 'filter_processing_write', filter_write)
+    original = lake.put_space_object
+
+    def put(*args, **kwargs):
+        assert checked and not pointer._client.in_transaction_body()
+        assert 'recurring_voice_id' not in json.loads(args[3])[0]
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(lake, 'put_space_object', put)
+    payload = {
+        'id': CID,
+        'status': 'completed',
+        'visibility': 'shared',
+        'data_protection_level': 'standard',
+        'transcript_segments': [dict(speech()[0], recurring_voice_id='revoked')],
+    }
+    assert db.persist_processing_result_with_lifecycle(UID, payload)
+    assert lake_world.calls['put'] == 1
+    assert len(checked) == 2  # guard/filter re-run against a fresh snapshot after upload
+    assert isinstance(client.rows[PATH]['transcript_segments'], dict)

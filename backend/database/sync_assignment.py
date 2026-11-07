@@ -65,6 +65,7 @@ def encode_sync_assignment_plan(uid: str, client: Any, transaction: Any, payload
         uid,
         payload.get('data_protection_level') or 'enhanced',
         preserve_transcript_identity=bool(current and current.get('has_transcript_corrections')),
+        conversation_state=current,
     )
     if current is not None and OPEN_LOOP_EXTRACTIONS_FIELD in current:
         # The decoded plan never carries retained extractions (the encoded blob

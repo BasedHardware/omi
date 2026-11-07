@@ -491,7 +491,9 @@ def absorb_conversation(
         survivor_update.update(write_span({**survivor, **survivor_update}))
         if 'transcript_segments' in survivor_update:
             rearm_on_revision_change(survivor_raw, survivor_update)
-        payload = conversations_db.encode_conversation_for_write(uid, survivor_update, level)
+        payload = conversations_db.encode_conversation_for_write(
+            uid, survivor_update, level, conversation_state=survivor_raw
+        )
         conversations_db.guard_match_score_size(payload, survivor_raw)
         if (
             'speaker_match_scores' in survivor_raw

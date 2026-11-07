@@ -23,7 +23,7 @@ import logging
 import uuid
 import zlib
 from collections.abc import Mapping
-from functools import wraps
+from functools import partial, wraps
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Dict, Any, Callable, Tuple
 from database import chat_edits
@@ -363,6 +363,8 @@ def _prepare_conversation_for_write(
     *,
     preserve_transcript_identity: bool = False,
     conversation_id: Optional[str] = None,
+    conversation_state: Optional[Mapping[str, Any]] = None,
+    allow_offload: bool = True,
 ) -> Dict[str, Any]:
     data = copy.deepcopy(data)
 
@@ -411,6 +413,8 @@ def _prepare_conversation_for_write(
             data['transcript_segments'],
             lambda value: _protect_json_value(value, uid, level),
             prepare_segments=lambda value: protect_segments(value, uid),
+            conversation_state=data if allow_offload else {},
+            current_state=conversation_state if allow_offload else None,
         )
         data['transcript_segments_compressed'] = True
     if match_scores.FIELD in data:
@@ -459,7 +463,11 @@ def _prepare_conversation_for_write(
 
 
 def encode_conversation_for_write(
-    uid: str, conversation_data: Dict[str, Any], level: str = 'standard'
+    uid: str,
+    conversation_data: Dict[str, Any],
+    level: str = 'standard',
+    *,
+    conversation_state: Optional[Mapping[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Encode a conversation exactly as the write path stores it.
 
@@ -467,7 +475,24 @@ def encode_conversation_for_write(
     document with a plain ``transcript_segments`` list is a state production
     never writes, and seeding one hides encoding-aware guard bugs.
     """
-    return _prepare_conversation_for_write(conversation_data, uid, level)
+    return _prepare_conversation_for_write(conversation_data, uid, level, conversation_state=conversation_state)
+
+
+def _offload_processing_transcript(uid: str, data: dict, current: Optional[Mapping[str, Any]] = None) -> None:
+    """Called after lifecycle/privacy guards; replay uploads outside the txn."""
+    if not transcript_pointer.conversation_allows_offload(
+        data, current
+    ) or not transcript_pointer.config.write_admitted(uid):
+        return
+    raw = data.get('transcript_segments')
+    if raw is None or isinstance(raw, dict):
+        return
+    segments = decode_transcript_segments_blob(
+        uid, raw, bool(data.get('transcript_segments_compressed')), require_decryption=True
+    )
+    data['transcript_segments'] = transcript_pointer.offload_or_inline(
+        uid, data.get('id'), segments, lambda _: raw, conversation_state=data, current_state=current
+    )
 
 
 def _decode_transcript_segments_strict(
@@ -870,7 +895,9 @@ def _reapply_current_manual_assignments(uid: str, write_data: dict, existing: di
     if owner_diagnostics.FIELD in write_data:
         payload[owner_diagnostics.FIELD] = write_data.pop(owner_diagnostics.FIELD)
         _merge_owner_diagnostics(payload, existing)
-    write_data.update(_prepare_conversation_for_write(payload, uid, level, conversation_id=write_data.get('id')))
+    write_data.update(
+        _prepare_conversation_for_write(payload, uid, level, conversation_id=write_data.get('id'), allow_offload=False)
+    )
     write_data['data_protection_level'] = level
 
 
@@ -883,7 +910,7 @@ def _stage_notes_identity(transaction, user_ref, write_data, existing):
         decode_segments=_decode_transcript_segments_strict,
         decode_receipt=decode_manual_speaker_assignments,
         encode=lambda data, owner, level: _prepare_conversation_for_write(
-            data, owner, level, conversation_id=write_data.get('id')
+            data, owner, level, conversation_id=write_data.get('id'), allow_offload=False
         ),
     )
 
@@ -1158,7 +1185,9 @@ def _drop_summary_memo(uid: str) -> None:
 
 
 @set_data_protection_level(data_arg_name='conversation_data')
-@prepare_for_write(data_arg_name='conversation_data', prepare_func=_prepare_conversation_for_write)
+@prepare_for_write(
+    data_arg_name='conversation_data', prepare_func=partial(_prepare_conversation_for_write, allow_offload=False)
+)
 @after_write('conversations')
 def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
     from database.recurring_voice_privacy import filter_processing_write
@@ -1191,6 +1220,8 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
         existing_snapshot = conversation_ref.get(transaction=transaction)
         if getattr(existing_snapshot, 'exists', False):
             existing = existing_snapshot.to_dict() or {}
+            if existing.get('deleted'):
+                return
             preserve_duplicate_hint(write_data, existing)
             if existing.get('arrival_at'):
                 write_data['arrival_at'] = existing['arrival_at']
@@ -1246,6 +1277,8 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
             filter_processing_write(transaction, user_ref, write_data)
             guard_match_score_size(write_data, existing, getattr(conversation_ref, 'path', None))
 
+            _offload_processing_transcript(uid, write_data, existing)
+
             summary_receipt = summary_delivery.merge_result(existing, write_data, uid)
             delivery_outcome = summary_terminal_outcome(existing, write_data)
             summary_changed = processing_backlog.stage_transition(
@@ -1257,6 +1290,7 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
         write_data.setdefault('has_photos', False)
         _stage_notes_identity(transaction, user_ref, write_data, {})
         filter_processing_write(transaction, user_ref, write_data)
+        _offload_processing_transcript(uid, write_data)
 
         summary_receipt = summary_delivery.creation_result(write_data, uid)
         delivery_outcome = summary_terminal_outcome({}, write_data)
@@ -1275,7 +1309,7 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
 @set_data_protection_level(data_arg_name='conversation_data')
 @prepare_for_write(
     data_arg_name='conversation_data',
-    prepare_func=_prepare_conversation_for_write,
+    prepare_func=partial(_prepare_conversation_for_write, allow_offload=False),
     preserve_result=True,
 )
 @after_write('conversations')
@@ -1535,6 +1569,7 @@ def persist_processing_result_with_lifecycle(
                     'completed_status_regression',
                 )
 
+        _offload_processing_transcript(uid, write_data, existing)
         summary_receipt = summary_delivery.merge_result(existing, write_data, uid)
         delivery_outcome = summary_terminal_outcome(existing, write_data)
         summary_changed = processing_backlog.stage_transition(
@@ -1582,7 +1617,7 @@ def persist_processing_result_with_lifecycle(
 @set_data_protection_level(data_arg_name='conversation_data')
 @prepare_for_write(
     data_arg_name='conversation_data',
-    prepare_func=_prepare_conversation_for_write,
+    prepare_func=partial(_prepare_conversation_for_write, allow_offload=False),
     preserve_result=True,
 )
 @after_write('conversations')
@@ -1599,16 +1634,18 @@ def create_conversation_if_absent_with_lifecycle(uid: str, conversation_data: di
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_data['id'])
     summary_receipt = summary_delivery.creation_result(conversation_data, uid)
     delivery_outcome = summary_terminal_outcome({}, conversation_data)
+
+    def stage_create(transaction, data):
+        if '_notes_identity' in data:
+            _stage_notes_identity(transaction, user_ref, data, {})
+        _offload_processing_transcript(uid, data)
+
     created, summary_changed = transcript_pointer.run_preloaded_operation(
         conversation_recorded_time.create_if_absent,
         uid,
         conversation_data,
         firestore_client=db,
-        stage_identity=(
-            (lambda transaction, data: _stage_notes_identity(transaction, user_ref, data, {}))
-            if '_notes_identity' in conversation_data
-            else None
-        ),
+        stage_identity=stage_create,
     )
     if not created:
         _sync_conversation_search_index(uid, conversation_data['id'])
@@ -2286,7 +2323,9 @@ def update_conversation(
             **update_data,
             'audio_files': retain_aliases(update_data['audio_files'], doc_snapshot.to_dict().get('audio_files') or []),
         }
-    prepared_data = _prepare_conversation_for_write(update_data, uid, doc_level, conversation_id=conversation_id)
+    prepared_data = _prepare_conversation_for_write(
+        update_data, uid, doc_level, conversation_id=conversation_id, conversation_state=doc_snapshot.to_dict()
+    )
     guard_match_score_size(prepared_data, doc_snapshot.to_dict(), getattr(doc_ref, 'path', None))
     try:
         if expected_audio_files is None:
@@ -3775,6 +3814,7 @@ def assign_conversation_speaker(
             raw.get('data_protection_level', 'standard'),
             preserve_transcript_identity=bool(raw.get('has_transcript_corrections')),
             conversation_id=current_id,
+            conversation_state=raw,
         )
         clear_client_processing(payload)
         guard_match_score_size(payload, raw, getattr(ref, 'path', None))
@@ -4003,6 +4043,7 @@ def update_conversation_segments(
             doc_level,
             preserve_transcript_identity=bool(current.get('has_transcript_corrections')),
             conversation_id=conversation_id,
+            conversation_state=current,
         )
         if invalidate_client_processing:
             clear_client_processing(prepared_payload)
@@ -4165,6 +4206,7 @@ def materialize_translation(
             level,
             preserve_transcript_identity=bool(current.get('has_transcript_corrections')),
             conversation_id=conversation_id,
+            conversation_state=current,
         )
         payload['translation_materializations'] = _protect_json_value(metadata, uid, 'enhanced')
         payload['translation_materializations_compressed'] = True
@@ -4837,6 +4879,7 @@ def promote_final_pass_if_current(
             current.get('data_protection_level') or 'standard',
             preserve_transcript_identity=bool(current.get('has_transcript_corrections')),
             conversation_id=conversation_id,
+            conversation_state=current,
         )
         guard_match_score_size(prepared, current, getattr(parent, 'path', None))
         transaction.update(parent, prepared)

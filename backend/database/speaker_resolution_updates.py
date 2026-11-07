@@ -76,7 +76,10 @@ def persist_speaker_resolution_if_current(
         )
         patch['transcript_segments'] = conversations.apply_manual_assignments(patch['transcript_segments'], receipt)
         prepared = conversations.encode_conversation_for_write(
-            uid, dict(patch, id=conversation_data['id']), current.get('data_protection_level') or 'standard'
+            uid,
+            dict(patch, id=conversation_data['id']),
+            current.get('data_protection_level') or 'standard',
+            conversation_state=current,
         )
         identities = None
         if on_committed_identity is not None:
