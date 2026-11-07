@@ -249,6 +249,29 @@ def test_no_destructive_work_without_explicit_enrollment(monkeypatch, route, enr
         cell.close()
 
 
+def test_interrupted_wipe_with_disabled_route_resumes_from_cell_tombstone(monkeypatch):
+    directory, cell = make_directory(), make_cell_store()
+    uid = directory.uid()
+    cell.seeded.add(uid)
+    try:
+        directory.store.get_or_create_personal_space(uid, cell='cell1', now=1)
+        cell.store.enroll_space(uid, now=1)
+        cell.store.run(uid, lambda tx: tx.put('memories', 'm1', {'text': 'synthetic'}), actor_uid=uid, now=1)
+        # An earlier wipe fenced the cell and disabled the route, then stopped before any owner tombstone row.
+        cell.store.tombstone_space(uid)
+        directory.store.set_routing(uid, cell='disabled', bump_epoch=True, now=2)
+        monkeypatch.setattr(router, 'directory_store', lambda **kwargs: directory.store)
+        monkeypatch.setattr(wipe, 'cell_store', lambda **kwargs: cell.store)
+        assert wipe.purge_owner_planes(uid, now=3) == {'status': 'purged'}
+        assert directory.store.get_space(uid) is None
+        with cell.store.pool.connection() as conn:
+            assert conn.execute('SELECT count(*) FROM cell_docs WHERE space_id=%s', (uid,)).fetchone()[0] == 0
+        assert wipe.purge_owner_planes(uid, now=4) == {'status': 'purged'}
+    finally:
+        directory.close()
+        cell.close()
+
+
 @pytest.mark.parametrize('routing_mode', ['off', 'new_owners'])
 def test_configured_directory_outage_fails_in_every_mode(monkeypatch, routing_mode):
     monkeypatch.setenv('DIRECTORY_ROUTING_MODE', routing_mode)

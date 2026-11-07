@@ -30,9 +30,16 @@ def purge_owner_planes(uid: str, *, now: float | None = None) -> dict:
         store.purge_owner(uid, now=now)
         router.invalidate(uid)
         return {'status': 'absent' if cell is None else 'purged'}
-    if not cell or cell == 'disabled':
+    if not cell:
         raise RuntimeError('cell purge requires explicit directory cell enrollment')
     cells = cell_store(for_wipe=True)
+    if cell == 'disabled':
+        # An interrupted earlier wipe disabled the route before this fence row
+        # existed. Its retained cell-head tombstone is the durable proof to resume.
+        with cells.pool.connection() as conn:
+            head = conn.execute('SELECT tombstoned FROM space_heads WHERE space_id=%s', (uid,)).fetchone()
+        if head is None or not head[0]:
+            raise RuntimeError('cell purge requires explicit directory cell enrollment or wipe tombstone')
     # A directory enrollment may have committed before its first cell head.
     # The directory fence now excludes that delayed enrollment; tombstone the
     # head even when missing, so old cell writers also remain fenced forever.
