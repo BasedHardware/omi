@@ -2324,6 +2324,7 @@
     "omi_batch_timeliness_new_oldest_age_seconds",
     "omi_batch_timeliness_observed_at_seconds",
     "omi_batch_timeliness_scan_truncated",
+    "omi_capture_retry_cap_total",
     "omi_delivery_outcome_total",
     "omi_enrichment_obligation_count",
     "omi_enrichment_obligation_new_oldest_age_seconds",
