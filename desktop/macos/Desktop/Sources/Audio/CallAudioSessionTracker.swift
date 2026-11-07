@@ -32,6 +32,9 @@ struct CallAudioSessionTracker {
     var pending: PendingRelease?
     var lastReleaseAt: Date?
     var hadInputRelease = false
+    /// Set when a mic release is classified as a call end; consumed by the next
+    /// reacquire to advance the generation even if the pending record was cleared.
+    var hadReleasedCallEnd = false
     var generation = 0
   }
 
@@ -132,13 +135,18 @@ struct CallAudioSessionTracker {
     let justReleased = wasInput && !input
     if justReleased {
       state.lastReleaseAt = now
-      state.hadInputRelease = true
       state.pending = PendingRelease(
         at: now,
         outputWasRunning: output,
         outputStoppedAt: nil,
         latestOutputOnAt: output ? now : nil,
         inputReturnedAt: nil)
+      // A speaker that was already off when the mic stopped is a call end immediately;
+      // record the stop time so the ≤1s rule still applies if output is seen to stop
+      // later in the same sample window.
+      if !output {
+        state.pending?.outputStoppedAt = now
+      }
     }
 
     if !wasInput && input {
@@ -150,13 +158,30 @@ struct CallAudioSessionTracker {
         state.lastReleaseAt = nil
       }
       if CallAppReleasePolicy.releaseEndsCall(bundleID: bundle) {
-        if state.hadInputRelease {
+        // Only a release that classifies as a call end starts a new generation. A device
+        // switch or mute-like release is the same call continuing after a mic handoff,
+        // and must not split the conversation. The classification is not final until
+        // 2s after the release; at reacquire time a device change inside the ±2s window
+        // already decides, and call-end is evaluable immediately (speaker state at the
+        // stop). Mute-like (speaker held past the window) can only be ruled out once the
+        // window has passed — treat an undecided release as mute-like, not a call end.
+        let releaseEnds: Bool
+        if let pending = state.pending {
+          releaseEnds =
+            !isDeviceSwitchRelease(pending: pending, at: now)
+            && isCallEndRelease(pending: pending, at: now)
+        } else {
+          // No pending release record: the previous release was already classified
+          // (e.g. call end) and cleared, so a reacquire after it starts a new call.
+          releaseEnds = state.hadReleasedCallEnd
+        }
+        if releaseEnds {
           state.generation = max(state.generation, 1) + 1
         } else if state.generation == 0 {
           state.generation = 1
         }
+        state.hadReleasedCallEnd = false
       }
-      state.hadInputRelease = false
     }
 
     if var pending = state.pending {
@@ -169,8 +194,13 @@ struct CallAudioSessionTracker {
         }
       }
       state.pending = pending
+      let decidedCallEnd =
+        isCallEndRelease(pending: pending, at: now)
+        && !isDeviceSwitchRelease(pending: pending, at: now)
+        && now >= pending.at.addingTimeInterval(2)
       if finalize(bundle: bundle, pending: pending, at: now) {
         state.pending = nil
+        if decidedCallEnd { state.hadReleasedCallEnd = true }
       }
     }
 
@@ -182,23 +212,40 @@ struct CallAudioSessionTracker {
   /// already inside the ±2s window decides immediately and wins over call-end
   /// and mute. Anything else waits until 2s after the stop.
   private mutating func finalize(bundle: String, pending: PendingRelease, at now: Date) -> Bool {
-    let stop = pending.at
-    let windowEnd = stop.addingTimeInterval(2)
-    let deviceSwitched = deviceChangeTimes.contains { change in
-      change >= stop.addingTimeInterval(-2) && change <= windowEnd && change <= now
-    }
+    let windowEnd = pending.at.addingTimeInterval(2)
+    let deviceSwitched = isDeviceSwitchRelease(pending: pending, at: now)
     if deviceSwitched {
       update(bundle) { $0.releasesDeviceSwitch += 1 }
       return true
     }
     guard now >= windowEnd else { return false }
-
-    if !pending.outputWasRunning
-      || pending.outputStoppedAt.map({ $0.timeIntervalSince(stop) <= 1 }) == true
-    {
+    if isCallEndRelease(pending: pending, at: now) {
       update(bundle) { $0.releasesCallEnd += 1 }
       return true
     }
+    finalizeMuteLike(bundle: bundle, pending: pending, at: now)
+    return true
+  }
+
+  /// A device change inside the ±2s window around the release decides immediately and
+  /// wins over call-end and mute. Exposed for the generation decision on reacquire.
+  private func isDeviceSwitchRelease(pending: PendingRelease, at now: Date) -> Bool {
+    let stop = pending.at
+    let windowEnd = stop.addingTimeInterval(2)
+    return deviceChangeTimes.contains { change in
+      change >= stop.addingTimeInterval(-2) && change <= windowEnd && change <= now
+    }
+  }
+
+  /// Call end: the speaker was not running at the release, or stopped within 1s of it.
+  /// Evaluable at reacquire time, before the 2s classification window closes.
+  private func isCallEndRelease(pending: PendingRelease, at now: Date) -> Bool {
+    !pending.outputWasRunning
+      || pending.outputStoppedAt.map({ $0.timeIntervalSince(pending.at) <= 1 }) == true
+  }
+
+  private mutating func finalizeMuteLike(bundle: String, pending: PendingRelease, at now: Date) {
+    let windowEnd = pending.at.addingTimeInterval(2)
     // Mute requires output still running at least 2s after the stop, observed
     // while the mic was still released. Input coming back earlier is not enough.
     let returnedAt = pending.inputReturnedAt
@@ -216,7 +263,6 @@ struct CallAudioSessionTracker {
     if outputStillReleased || heldPastWindow {
       update(bundle) { $0.releasesMuteLike += 1 }
     }
-    return true
   }
 
   private mutating func recordGap(bundle: String, gap: TimeInterval) {

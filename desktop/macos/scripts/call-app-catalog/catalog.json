@@ -12,6 +12,42 @@
   },
   "release_ends_call": [
     {
+      "bundle_id": "cisco-systems.spark",
+      "added": "2026-11-05",
+      "source": "catalog",
+      "evidence": "Dedicated conferencing app in ConferencingApps.nativeCallBundleIDs; native call apps hold the mic while muted, so a mic release means the call ended, like the measured Zoom probe (#19063). Pending call-audio-probe confirmation on this app's hardware; score.py removes the entry if fleet mute-like releases exceed 10% (min_mute_like_ratio_to_remove)"
+    },
+    {
+      "bundle_id": "com.apple.facetime",
+      "added": "2026-11-05",
+      "source": "catalog",
+      "evidence": "Dedicated conferencing app in ConferencingApps.nativeCallBundleIDs; native call apps hold the mic while muted, so a mic release means the call ended, like the measured Zoom probe (#19063). Pending call-audio-probe confirmation on this app's hardware; score.py removes the entry if fleet mute-like releases exceed 10% (min_mute_like_ratio_to_remove)"
+    },
+    {
+      "bundle_id": "com.cisco.webexmeetingsapp",
+      "added": "2026-11-05",
+      "source": "catalog",
+      "evidence": "Dedicated conferencing app in ConferencingApps.nativeCallBundleIDs; native call apps hold the mic while muted, so a mic release means the call ended, like the measured Zoom probe (#19063). Pending call-audio-probe confirmation on this app's hardware; score.py removes the entry if fleet mute-like releases exceed 10% (min_mute_like_ratio_to_remove)"
+    },
+    {
+      "bundle_id": "com.logmein.gotomeeting",
+      "added": "2026-11-05",
+      "source": "catalog",
+      "evidence": "Dedicated conferencing app in ConferencingApps.nativeCallBundleIDs; native call apps hold the mic while muted, so a mic release means the call ended, like the measured Zoom probe (#19063). Pending call-audio-probe confirmation on this app's hardware; score.py removes the entry if fleet mute-like releases exceed 10% (min_mute_like_ratio_to_remove)"
+    },
+    {
+      "bundle_id": "com.microsoft.teams",
+      "added": "2026-11-05",
+      "source": "catalog",
+      "evidence": "Dedicated conferencing app in ConferencingApps.nativeCallBundleIDs; native call apps hold the mic while muted, so a mic release means the call ended, like the measured Zoom probe (#19063). Pending call-audio-probe confirmation on this app's hardware; score.py removes the entry if fleet mute-like releases exceed 10% (min_mute_like_ratio_to_remove)"
+    },
+    {
+      "bundle_id": "com.microsoft.teams2",
+      "added": "2026-11-05",
+      "source": "catalog",
+      "evidence": "Dedicated conferencing app in ConferencingApps.nativeCallBundleIDs; native call apps hold the mic while muted, so a mic release means the call ended, like the measured Zoom probe (#19063). Pending call-audio-probe confirmation on this app's hardware; score.py removes the entry if fleet mute-like releases exceed 10% (min_mute_like_ratio_to_remove)"
+    },
+    {
       "bundle_id": "us.zoom.xos",
       "added": "2026-09-26",
       "source": "probe",

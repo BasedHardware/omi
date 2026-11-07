@@ -1,0 +1,3 @@
+{
+  "change": "Fixed back-to-back meetings in Teams, Webex, FaceTime and GoTo being saved into the same conversation"
+}
