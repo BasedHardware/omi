@@ -146,6 +146,8 @@ final class Central: NSObject, NSApplicationDelegate, CBCentralManagerDelegate, 
         guard !stopped, receipt.progress.phase == .scanning,
               let name = advertisementData[CBAdvertisementDataLocalNameKey] as? String,
               matches(name: name, prefix: options.prefix) else { return }
+        // A pinned run never records, counts or connects any other peripheral.
+        if let pin = options.expectPeripheral, peripheral.identifier.uuidString != pin { return }
         let services = ((advertisementData[CBAdvertisementDataServiceUUIDsKey] as? [CBUUID] ?? [])
             + (advertisementData[CBAdvertisementDataOverflowServiceUUIDsKey] as? [CBUUID] ?? []))
             .map { $0.uuidString }.sorted()
@@ -165,6 +167,10 @@ final class Central: NSObject, NSApplicationDelegate, CBCentralManagerDelegate, 
     }
     func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
         guard !stopped else { return }
+        // Every connection, including reconnects, must be the pinned peripheral.
+        if let pin = options.expectPeripheral, peripheral.identifier.uuidString != pin {
+            stop(.gatt, "Identity check failed: peripheral identifier was wrong"); return
+        }
         connectionNumber += 1
         disconnectRequested = false
         phase(.gatt)
@@ -173,10 +179,15 @@ final class Central: NSObject, NSApplicationDelegate, CBCentralManagerDelegate, 
             maximumWriteWithoutResponse: peripheral.maximumWriteValueLength(for: .withoutResponse)))
         readQueue = []; pendingRead = nil; audioCharacteristic = nil
         smpCharacteristic = nil
+        receipt.peripheralIdentifier = peripheral.identifier.uuidString
         if options.command.isSMP {
             smpPlan.endConnection()
-            receipt.identity = IdentityCheck(expectedSerial: options.expectSerial)
+            receipt.identity = IdentityCheck(expectedSerial: options.expectSerial, expectedPeripheral: options.expectPeripheral)
+            receipt.identity.connected(to: peripheral.identifier.uuidString)
+        } else if connectionNumber == 1 {
+            receipt.identity.connected(to: peripheral.identifier.uuidString)
         }
+        if let detail = receipt.identity.failureDetail { stop(.gatt, detail); return }
         peripheral.discoverServices(options.command.isSMP ? [UUIDs.smpService, UUIDs.information].map { CBUUID(string: $0) } : nil)
     }
     func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
@@ -224,7 +235,7 @@ final class Central: NSObject, NSApplicationDelegate, CBCentralManagerDelegate, 
             if discoveryRemaining == 0 {
                 do {
                     let discovered = Set(readQueue.map { $0.uuid.uuidString })
-                    try smpPlan.beginConnection(discovered: discovered)
+                    try smpPlan.beginConnection(discovered: discovered, peripheral: peripheral.identifier.uuidString)
                     receipt.connections[connectionNumber - 1].absentOptionalCharacteristics = discovered.contains(UUIDs.serial) ? [] : [UUIDs.serial]
                     readNext(peripheral)
                 } catch { stop(.gatt, String(describing: error)) }
@@ -357,7 +368,7 @@ final class Central: NSObject, NSApplicationDelegate, CBCentralManagerDelegate, 
             if connectionNumber > 1 && uuid == UUIDs.firmware { receipt.postResetFirmware = decoded }
             do { try smpPlan.consumeDIS(uuid: uuid, data: data) }
             catch {
-                receipt.identity = smpPlan.access?.identity ?? IdentityCheck(expectedSerial: options.expectSerial)
+                receipt.identity = smpPlan.access?.identity ?? IdentityCheck(expectedSerial: options.expectSerial, expectedPeripheral: options.expectPeripheral)
                 stop(.gatt, String(describing: error)); return
             }
             receipt.identity = smpPlan.access!.identity
@@ -487,7 +498,7 @@ do {
     let file = try exclusiveFile(options.output)
     var receipt = Receipt(startedAt: now(), requestedSeconds: options.seconds, deadlineSeconds: options.deadlineSeconds,
                           progress: Progress(command: options.command, permissionPending: true))
-    receipt.identity = IdentityCheck(expectedSerial: options.expectSerial)
+    receipt.identity = IdentityCheck(expectedSerial: options.expectSerial, expectedPeripheral: options.expectPeripheral)
     let writer = ReceiptWriter(receipt: receipt, file: file, path: options.output)
     signal(SIGINT, SIG_IGN); signal(SIGTERM, SIG_IGN)
     let signals = [SIGINT, SIGTERM].map { value -> DispatchSourceSignal in
@@ -510,6 +521,6 @@ do {
     withExtendedLifetime((central, signals)) { app.run() }
     central.stop(.interrupted, "Application run loop ended")
 } catch {
-    stderr("\(error)\nUsage: CV1BLECentral scan|session|audio|image-state|image-upload --seconds N --output NEW.json [--name-prefix Omi] [--expect-serial VALUE] [--keep-audio NEW.bin]\naudio requires --expect-serial VALUE; image-upload requires --expect-serial VALUE --file F.bin --mode test|confirm [--no-reset]")
+    stderr("\(error)\nUsage: CV1BLECentral scan|session|audio|image-state|image-upload --seconds N --output NEW.json [--name-prefix Omi] [--expect-serial VALUE] [--expect-peripheral UUID] [--keep-audio NEW.bin]\naudio and image-upload require --expect-serial VALUE or --expect-peripheral UUID; image-upload requires --file F.bin --mode test|confirm [--no-reset]")
     exit(2) // Invalid invocations/file collisions never initialize CoreBluetooth.
 }

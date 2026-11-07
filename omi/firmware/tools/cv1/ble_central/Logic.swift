@@ -21,6 +21,7 @@ struct Options {
     let output: String
     let keepAudio: String?
     let expectSerial: String?
+    let expectPeripheral: String?
     let upload: UploadImage?
     let mode: String?
     let noReset: Bool
@@ -39,7 +40,7 @@ struct Options {
                 guard flags[key] == nil else { throw InputError.invalid("Repeated --no-reset") }
                 flags[key] = "true"; index += 1; continue
             }
-            guard ["--file", "--mode", "--seconds", "--name-prefix", "--output", "--keep-audio", "--expect-serial"].contains(key),
+            guard ["--file", "--mode", "--seconds", "--name-prefix", "--output", "--keep-audio", "--expect-serial", "--expect-peripheral"].contains(key),
                   flags[key] == nil, index + 1 < args.count, !args[index + 1].hasPrefix("--") else {
                 throw InputError.invalid("Unknown, repeated, or incomplete option: \(key)")
             }
@@ -67,8 +68,15 @@ struct Options {
                 throw InputError.invalid("--expect-serial requires a nonempty value without controls, for session, audio, image-state or image-upload")
             }
         }
-        if (command == .audio || command == .imageUpload) && expectSerial == nil {
-            throw InputError.invalid("\(command.rawValue) requires --expect-serial before Bluetooth can start")
+        var expectPeripheral: String?
+        if let text = flags["--expect-peripheral"] {
+            guard command != .scan, let uuid = UUID(uuidString: text) else {
+                throw InputError.invalid("--expect-peripheral requires a CoreBluetooth peripheral UUID, for session, audio, image-state or image-upload")
+            }
+            expectPeripheral = uuid.uuidString
+        }
+        if (command == .audio || command == .imageUpload) && expectSerial == nil && expectPeripheral == nil {
+            throw InputError.invalid("\(command.rawValue) requires --expect-serial or --expect-peripheral before Bluetooth can start")
         }
         if let keep = flags["--keep-audio"], keep.isEmpty || URL(fileURLWithPath: keep).standardizedFileURL == URL(fileURLWithPath: output).standardizedFileURL {
             throw InputError.invalid("Audio and receipt paths must be distinct and nonempty")
@@ -90,22 +98,33 @@ struct Options {
             throw InputError.invalid("--output already exists")
         }
         return Options(command: command, seconds: seconds, prefix: prefix, output: output,
-                       keepAudio: flags["--keep-audio"], expectSerial: expectSerial, upload: upload, mode: flags["--mode"], noReset: flags["--no-reset"] != nil)
+                       keepAudio: flags["--keep-audio"], expectSerial: expectSerial, expectPeripheral: expectPeripheral, upload: upload, mode: flags["--mode"], noReset: flags["--no-reset"] != nil)
     }
 }
 
 // A baseline session may omit serial. An explicitly requested identity must pass before reconnect/audio.
+// A peripheral pin (CoreBluetooth's per-host identifier) is for images without a DIS serial, such as 3.0.21.
+// Discovery never connects to another identifier; connected(to:) records and re-checks it.
 struct IdentityCheck: Codable {
     enum Status: String, Codable { case notRequested = "not_requested", pending, matched, wrong, absent }
     let expectedSerial: String?
+    let expectedPeripheral: String?
     private(set) var checked = false
+    private(set) var peripheralMismatch = false
     private(set) var status: Status
-    init(expectedSerial: String?) {
+    init(expectedSerial: String?, expectedPeripheral: String? = nil) {
         self.expectedSerial = expectedSerial
-        status = expectedSerial == nil ? .notRequested : .pending
+        self.expectedPeripheral = expectedPeripheral
+        status = expectedSerial == nil && expectedPeripheral == nil ? .notRequested : .pending
+    }
+    mutating func connected(to identifier: String) {
+        guard let expectedPeripheral, status == .pending else { return }
+        checked = true
+        if identifier != expectedPeripheral { peripheralMismatch = true; status = .wrong }
+        else if expectedSerial == nil { status = .matched }
     }
     mutating func evaluate(serial: String?) {
-        guard let expectedSerial else { return }
+        guard let expectedSerial, status == .pending else { return }
         checked = true
         guard let serial, !serial.isEmpty else { status = .absent; return }
         status = serial == expectedSerial ? .matched : .wrong
@@ -113,7 +132,7 @@ struct IdentityCheck: Codable {
     var allowsContinuation: Bool { status == .notRequested || status == .matched }
     var failureDetail: String? {
         switch status {
-        case .wrong: return "Identity check failed: DIS serial was wrong"
+        case .wrong: return peripheralMismatch ? "Identity check failed: peripheral identifier was wrong" : "Identity check failed: DIS serial was wrong"
         case .absent: return "Identity check failed: DIS serial was absent"
         default: return nil
         }
@@ -129,9 +148,11 @@ struct SMPAccessGate {
     private var failed = false
     var nextRead: String? { failed ? nil : remaining.first }
     var allowsSMP: Bool { !failed && firmware != nil && remaining.isEmpty && identity.allowsContinuation }
-    init(discovered: Set<String>, expectedSerial: String?) throws {
+    init(discovered: Set<String>, expectedSerial: String?, expectedPeripheral: String? = nil, connected: String = "") throws {
         guard discovered.contains(UUIDs.firmware) else { throw InputError.invalid("Required firmware revision characteristic absent") }
-        identity = IdentityCheck(expectedSerial: expectedSerial)
+        identity = IdentityCheck(expectedSerial: expectedSerial, expectedPeripheral: expectedPeripheral)
+        identity.connected(to: connected)
+        if let detail = identity.failureDetail { throw InputError.invalid(detail) }
         remaining = [UUIDs.firmware, UUIDs.serial].filter { discovered.contains($0) }
     }
     mutating func consume(uuid: String, data: Data) throws {
@@ -304,6 +325,8 @@ struct Receipt: Encodable {
     var resetRequested = false, postResetStateRead = false
     var postResetFirmware: DecodedValue?
     var identity = IdentityCheck(expectedSerial: nil)
+    /// CoreBluetooth's per-host identifier of the connected peripheral; private like the serial.
+    var peripheralIdentifier: String?
     let limitations = "CoreBluetooth exposes maximumWriteValueLength, not raw ATT MTU or read offsets. No long-read offset or MTU claim is made."
 }
 
@@ -529,19 +552,20 @@ struct SMPPlan {
     let image: UploadImage?
     let sha: Data
     let confirm: Bool, noReset: Bool
-    private let expectedSerial: String?
+    private let expectedSerial: String?, expectedPeripheral: String?
     private(set) var access: SMPAccessGate?
     mutating func endConnection() { access = nil }
-    mutating func beginConnection(discovered: Set<String>) throws {
+    mutating func beginConnection(discovered: Set<String>, peripheral: String = "") throws {
         access = nil
-        access = try SMPAccessGate(discovered: discovered, expectedSerial: expectedSerial)
+        access = try SMPAccessGate(discovered: discovered, expectedSerial: expectedSerial,
+                                   expectedPeripheral: expectedPeripheral, connected: peripheral)
     }
     mutating func consumeDIS(uuid: String, data: Data) throws {
         guard access != nil else { throw InputError.invalid("SMP DIS discovery incomplete") }
         try access!.consume(uuid: uuid, data: data)
     }
     init(options: Options, sha: Data) {
-        expectedSerial = options.expectSerial
+        expectedSerial = options.expectSerial; expectedPeripheral = options.expectPeripheral
         image = options.upload; self.sha = sha; confirm = options.mode == "confirm"; noReset = options.noReset
         step = image == nil ? .boot : .initialState
     }

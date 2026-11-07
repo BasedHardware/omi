@@ -57,6 +57,8 @@ def main(executable):
             ('image-upload', image_flags + ['--no-reset', '--no-reset']),
             ('image-state', ['--no-reset']), ('image-state', ['--mode', 'test']),
             ('image-state', expected + expected), ('scan', image_flags),
+            ('image-state', ['--expect-peripheral', 'not-a-uuid']),
+            ('scan', ['--expect-peripheral', '8E3B7C1A-2F4D-4B6E-9A1C-0D2E3F405162']),
         ]:
             run([command, '--seconds', '1', '--output', str(fresh)] + flags + (expected if command == 'image-upload' else []), 2)
             assert not fresh.exists()
@@ -76,7 +78,8 @@ def main(executable):
         assert result.stdout.strip() == str(fresh)
         assert receipt['outcome'] == 'audio_failed'
         assert not receipt['advertisements'] and not receipt['connections']
-        assert receipt['identity'] == {'expectedSerial': 'synthetic-bench', 'checked': False, 'status': 'pending'}
+        assert receipt['identity'] == {'expectedSerial': 'synthetic-bench', 'checked': False,
+                                       'peripheralMismatch': False, 'status': 'pending'}
         assert existing.read_text() == 'preserve me'
         assert fresh.stat().st_mode & 0o777 == 0o600
     print(f'PASS: {cases} pre-Bluetooth refusal cases')
