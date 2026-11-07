@@ -140,6 +140,8 @@ env:
     value: "10"
   - name: SERVER_BATCH_UNSUPPORTED_LANGUAGES
     value: ""
+  - name: BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT
+    value: "g1"
   - name: BATCH_HELD_DEAD_LETTER_ENABLED
     value: "true"
   - name: BATCH_PIPELINE_ENABLED

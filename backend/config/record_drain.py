@@ -34,3 +34,23 @@ def record_drain_privacy_defer_seconds() -> int:
     except ValueError:
         value = 900
     return max(0, min(value, 86400))
+
+
+# A record_pending row whose capture upload/finalization barrier is still open cannot be
+# admitted until its conversation completes and its upload sessions close. Retrying every
+# 60 s re-read ~19k such rows per minute (2026-11-07). Young rows keep the fast retry.
+BARRIER_RETRY_STEPS = ((600, 60), (86400, 900))
+BARRIER_RETRY_MAX_SECONDS = 3600
+
+
+def record_drain_barrier_backoff_enabled() -> bool:
+    """Kill switch: RECORD_DRAIN_BARRIER_BACKOFF=off restores the flat 60 s retry."""
+    return os.getenv('RECORD_DRAIN_BARRIER_BACKOFF', 'on').strip().lower() != 'off'
+
+
+def barrier_retry_delay(age_seconds: float) -> int:
+    """Retry delay for a barrier-blocked row by its record_pending age."""
+    for limit, delay in BARRIER_RETRY_STEPS:
+        if age_seconds < limit:
+            return delay
+    return BARRIER_RETRY_MAX_SECONDS

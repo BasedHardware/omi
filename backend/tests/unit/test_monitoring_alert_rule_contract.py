@@ -1279,6 +1279,7 @@ def test_alert_rules_do_not_read_chain_only_series_without_documenting_the_depen
 # adding a new external metric to a rule requires naming it here.
 EXTERNAL_ALERT_METRICS = {
     "up": "Prometheus builtin target health",
+    "scrape_samples_scraped": "Prometheus builtin per-scrape sample count",
     # kube-state-metrics
     "kube_deployment_status_replicas": "kube-state-metrics",
     "kube_deployment_status_replicas_ready": "kube-state-metrics",

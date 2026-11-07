@@ -114,6 +114,8 @@ envFrom:
 runtimeConfigMapName: prod-omi-backend-config
 
 env:
+  - name: BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT
+    value: "g1"
   # Default off. 512 MiB is a proposed canary size, not enabled here.
   - name: PUSHER_STORAGE_PCM_BUDGET_MB
     value: '0'

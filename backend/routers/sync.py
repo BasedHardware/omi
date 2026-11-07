@@ -237,7 +237,7 @@ from utils.sync.backfill import (
     retry_after_next_utc_day,
     try_acquire_backfill_slot,
 )
-from utils.batch_pipeline.live_upload import RecordUploadRoute, registered_record_response
+from utils.batch_pipeline.live_upload import RecordUploadRoute, memoized_record_wait, registered_record_response
 from utils.sync.content_id import compute_sync_content_id
 from utils.sync.failure_reason import stamped_failure_kwargs
 from utils.sync.capture_manifest import (
@@ -651,6 +651,10 @@ async def sync_local_files_v2(
                 },
             )
         return JSONResponse(status_code=200, content={'new_memories': [], 'updated_memories': []})
+    if repair_identity is None and (recent_wait := await memoized_record_wait(uid, conversation_id)) is not None:
+        # The same conversation-level custody wait answered moments ago: repeat
+        # it before saving, archiving or decoding these bytes (audio retained).
+        return recent_wait
     if isinstance(recording_session_id, str):
         recording_session_id = recording_session_id.strip() or None
     else:
