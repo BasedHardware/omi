@@ -622,20 +622,15 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     final paired = provider.pairedDevice;
     final connected = provider.connectedDevice;
     // Audio metrics/transcript notifications must not rebuild the settings page.
-    final (deviceSource, devicePaused, canPause, pendantYielded) =
-        context.select<CaptureProvider?, (String?, bool, bool, bool)>(
+    final (deviceStreaming, devicePaused, canPause) = context.select<CaptureProvider?, (bool, bool, bool)>(
       (c) => (
-        c?.liveCaptureSource,
+        c != null && EpisodePresentation.hasActiveOrPausedPendantCapture(c, connectedDevice: connected),
         c?.isPaused ?? false,
         c != null && EpisodePresentation.canPause(c, connectedDevice: connected),
-        (c?.pendantPausedForPhone ?? false) || (c?.isCallActive ?? false),
       ),
     );
     const gap = SizedBox(height: OmiSpacing.xxl);
 
-    final deviceStreaming = capture != null &&
-        ((deviceSource != null && deviceSource != 'phone') ||
-            (connected != null && deviceSource == null && !pendantYielded));
     final controlsVisible = deviceStreaming && canPause;
 
     return Scaffold(

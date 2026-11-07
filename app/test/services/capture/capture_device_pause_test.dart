@@ -138,6 +138,14 @@ void main() {
     await world.reconstructProcess();
     world.deviceConnection = ScriptedDeviceConnection();
 
+    // Before streamDeviceRecording runs, connected Omi pendant while paused is restorable,
+    // whereas an unsupported device type (e.g. limitless) is not pause-capable.
+    expect(world.controller.liveCaptureSource, isNull);
+    expect(EpisodePresentation.hasActiveOrPausedPendantCapture(world.controller, connectedDevice: pendant), isTrue);
+    expect(EpisodePresentation.canPause(world.controller, connectedDevice: pendant), isTrue);
+    final limitless = pendant.copyWith(type: DeviceType.limitless);
+    expect(EpisodePresentation.canPause(world.controller, connectedDevice: limitless), isFalse);
+
     await world.controller.streamDeviceRecording(device: pendant);
     await world.settle();
 
@@ -155,6 +163,14 @@ void main() {
     expect(world.controller.liveCaptureSource, 'omi');
     expect(EpisodePresentation.canPause(world.controller), isTrue);
     expect(world.deviceConnection!.openAudioSubscriptions, 1);
+
+    await world.controller.stopStreamDeviceRecording();
+    await world.settle();
+    world.controller.updateRecordingDevice(pendant);
+    expect(world.controller.liveCaptureSource, isNull);
+    expect(world.controller.isPaused, isFalse);
+    expect(EpisodePresentation.hasActiveOrPausedPendantCapture(world.controller, connectedDevice: pendant), isFalse);
+    expect(EpisodePresentation.canPause(world.controller, connectedDevice: pendant), isFalse);
   });
 
   test('capabilityNormalizedDevice ignores empty or disconnected pairedDevice sentinel on relaunch', () {

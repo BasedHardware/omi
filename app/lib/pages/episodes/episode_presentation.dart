@@ -121,13 +121,30 @@ abstract final class EpisodePresentation {
       state == CaptureDisplayState.capturing ||
       state == CaptureDisplayState.recording;
 
+  static bool hasActiveOrPausedPendantCapture(CaptureProvider provider, {BtDevice? connectedDevice}) {
+    final source = provider.liveCaptureSource;
+    if (source != null && source != 'phone') return true;
+    final device = provider.recordingDevice ?? connectedDevice;
+    final isRestorablePendant = device != null &&
+        device.id.isNotEmpty &&
+        (device.type == DeviceType.omi || device.type == DeviceType.openglass);
+    if (!isRestorablePendant || provider.pendantPausedForPhone || provider.isCallActive) {
+      return false;
+    }
+    return provider.isPaused ||
+        provider.recordingState == RecordingState.deviceRecord ||
+        provider.recordingState == RecordingState.pause;
+  }
+
   static bool canPause(CaptureProvider provider, {BtDevice? connectedDevice}) {
     final device = provider.recordingDevice ?? connectedDevice;
     final source = provider.liveCaptureSource ??
-        ((provider.havingRecordingDevice || connectedDevice != null) &&
-                !provider.pendantPausedForPhone &&
-                !provider.isCallActive
-            ? (device?.type == DeviceType.openglass ? 'openglass' : 'omi')
+        (hasActiveOrPausedPendantCapture(provider, connectedDevice: connectedDevice)
+            ? switch (device?.type) {
+                DeviceType.omi => 'omi',
+                DeviceType.openglass => 'openglass',
+                _ => null,
+              }
             : null);
     return source != null && LiveCaptureCard.canPause(device, source: source);
   }
