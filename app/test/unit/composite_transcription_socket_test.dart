@@ -551,7 +551,7 @@ void main() {
       final primary = PureStreamingSttSocket(
         config: StreamingSttConfig.schemaBased(
           wsUrl: 'wss://stt.example.test/live',
-          schema: SttResponseSchema.deepgram,
+          schema: SttResponseSchema.deepgramLive,
           serviceId: 'customLive',
           minBytesBeforeSend: 0,
         ),
@@ -599,7 +599,7 @@ void main() {
       final primary = PureStreamingSttSocket(
         config: StreamingSttConfig.schemaBased(
           wsUrl: 'wss://stt.example.test/live',
-          schema: SttResponseSchema.deepgram,
+          schema: SttResponseSchema.deepgramLive,
           serviceId: 'customLive',
           minBytesBeforeSend: 0,
         ),
@@ -721,7 +721,7 @@ void main() {
       final primary = PureStreamingSttSocket(
         config: StreamingSttConfig.schemaBased(
           wsUrl: 'wss://stt.example.test/live',
-          schema: SttResponseSchema.deepgram,
+          schema: SttResponseSchema.deepgramLive,
           serviceId: 'deepgramLive',
           minBytesBeforeSend: 0,
           sendKeepAlive: true,
@@ -753,8 +753,8 @@ void main() {
               {
                 'transcript': 'hello world',
                 'words': [
-                  {'word': 'hello', 'start': 0.0, 'end': 0.4, 'speaker': 0},
-                  {'word': 'world', 'start': 0.4, 'end': 0.8, 'speaker': 0},
+                  {'word': 'hello', 'punctuated_word': 'hello', 'start': 0.0, 'end': 0.4, 'speaker': 0},
+                  {'word': 'world', 'punctuated_word': 'world', 'start': 0.4, 'end': 0.8, 'speaker': 0},
                 ],
               },
             ],
