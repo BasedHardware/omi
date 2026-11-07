@@ -1,0 +1,3 @@
+{
+  "change": "Stop routing Omi-only control JSON messages to audio-only Custom Live STT sockets and prevent unpaired capture-evidence frames when raw-audio forwarding is disabled."
+}

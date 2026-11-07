@@ -451,6 +451,13 @@ class GeminiStreamingSttSocket implements IPureSocket {
   }
 }
 
+typedef StreamingWebSocketChannelFactory = WebSocketChannel Function(
+  String url, {
+  Map<String, dynamic>? headers,
+  Duration? pingInterval,
+  Duration? connectTimeout,
+});
+
 /// Streaming STT socket that sends audio immediately and receives transcripts in real-time
 class PureStreamingSttSocket implements IPureSocket {
   Timer? _keepAliveTimer;
@@ -458,6 +465,7 @@ class PureStreamingSttSocket implements IPureSocket {
   WebSocketChannel? _channel;
 
   final StreamingSttConfig config;
+  final StreamingWebSocketChannelFactory? _channelFactory;
 
   PureSocketStatus _status = PureSocketStatus.notConnected;
   @override
@@ -469,7 +477,10 @@ class PureStreamingSttSocket implements IPureSocket {
   final List<Uint8List> _frameBuffer = [];
   int _bufferedBytes = 0;
 
-  PureStreamingSttSocket({required this.config});
+  PureStreamingSttSocket({
+    required this.config,
+    StreamingWebSocketChannelFactory? channelFactory,
+  }) : _channelFactory = channelFactory;
 
   @override
   void setListener(IPureSocketListener listener) {
@@ -486,7 +497,7 @@ class PureStreamingSttSocket implements IPureSocket {
     _status = PureSocketStatus.connecting;
 
     try {
-      _channel = IOWebSocketChannel.connect(
+      _channel = (_channelFactory ?? IOWebSocketChannel.connect)(
         config.url,
         headers: config.headers,
         pingInterval: const Duration(seconds: 20),
