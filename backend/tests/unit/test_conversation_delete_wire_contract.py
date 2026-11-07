@@ -267,6 +267,7 @@ def test_verified_absence_failure_is_http_503_and_retains_documents(monkeypatch,
     with _delete_client(monkeypatch) as client:
         bucket, doc, deleted = _real_lake_delete(monkeypatch, tmp_path)
         object_lake.put_space_object('uid-delete-contract', 'transcript', 'conversation-1', b'private')
+        original_delete = LocalBlob.delete
         monkeypatch.setattr(LocalBlob, 'delete', lambda *args, **kwargs: None)
         response = client.delete('/v1/conversations/conversation-1')
         assert response.status_code == 503
@@ -274,6 +275,11 @@ def test_verified_absence_failure_is_http_503_and_retains_documents(monkeypatch,
         assert doc.get().exists and list(bucket.list_blobs())
         deleted.assert_not_called()
         conversations.conversation_tombstones.record_deletion.assert_called_once()
+        monkeypatch.setattr(LocalBlob, 'delete', original_delete)
+        response = client.delete('/v1/conversations/conversation-1')
+        assert response.status_code == 204 and response.content == b''
+        assert not doc.get().exists and not list(bucket.list_blobs())
+        deleted.assert_called_once()
 
 
 def test_upload_finishing_after_http_delete_final_listing_leaves_no_object(monkeypatch, tmp_path):
