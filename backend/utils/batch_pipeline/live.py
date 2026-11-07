@@ -22,7 +22,12 @@ from config.policy import resolve_batch_policy
 from config.audio_archive import derived_audio_bucket
 from config.record_audio import require_record_audio_barrier, record_identity
 from config.record_partial import UNIT_SECONDS, UNIT_REFERENCES, INVENTORY_POLL_SECONDS
-from config.record_drain import record_drain_batch, record_drain_concurrency, record_drain_lease_seconds
+from config.record_drain import (
+    record_drain_batch,
+    record_drain_concurrency,
+    record_drain_lease_seconds,
+    record_drain_privacy_defer_seconds,
+)
 from database.batch_pipeline_policy import load_job_policy
 from database.batch_ramp import ramp_admission_policy
 from config.batch_pipeline import Priority, RecordOwnerContention, record_capture_eligible
@@ -486,14 +491,29 @@ async def drain_recordings(store, *, provider_outbox_factory=None) -> bool:
                 lease = await run_blocking(db_executor, store.run, lambda tx: claim(tx, segment))
             except BatchPrivacyBlocked:
                 # The claim write meets the same privacy fence as admission;
-                # erasure owns the row and this worker moves on.
-                privacy_blocked = True
+                # erasure owns the row and this worker moves on. A fence-exempt
+                # available_at-only defer takes it off the oldest page, so the
+                # rows behind it are not starved; an undeferred row stays due.
+                privacy_blocked = not await defer_privacy_blocked(segment) or privacy_blocked
                 return
             if lease is None:
                 return
             await admit_and_defer(segment, pending, lease)
         finally:
             busy_owners.discard(owner)
+
+    async def defer_privacy_blocked(segment):
+        delay = record_drain_privacy_defer_seconds()
+        if not delay:
+            return False
+        now = time.time()
+        try:
+            return await run_blocking(db_executor, store.defer_privacy_blocked_record, segment, now + delay, now)
+        except Exception as error:
+            logger.warning(
+                'event=batch_live_admission outcome=privacy_defer_failed exception_type=%s', type(error).__name__
+            )
+            return False
 
     def claim(tx, segment):
         # Every replica selects the same oldest page. Without a claim, each one

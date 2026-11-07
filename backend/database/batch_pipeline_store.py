@@ -20,7 +20,7 @@ from config.batch_pipeline import contention_retry_enabled, control_candidate_fa
 from database.firestore_read_origin import read_origin
 from database._client import get_data_plane_firestore_client
 from database.batch_pipeline_privacy import assert_batch_write_allowed
-from database.batch_pipeline_recovery import quarantine_fenced
+from database.batch_pipeline_recovery import defer_privacy_blocked_record, quarantine_fenced
 from database.firestore_transaction_retry import FirestoreContentionExhausted, run_with_transaction_contention_retry
 from database.batch_pipeline_transaction_labels import (
     current_operation,
@@ -64,6 +64,7 @@ class Store(Protocol):
     ) -> list[str]: ...
     def acquire_pull_claim(self, shard: str, token: str, now: float, ttl: float) -> bool: ...
     def quarantine_fenced(self, segment_id: str, now: float) -> bool: ...
+    def defer_privacy_blocked_record(self, segment_id: str, until: float, now: float) -> bool: ...
     def longest_ready_pending(self, owner_key: str) -> dict | None: ...
     def fresh_pending(self, owner_key: str, limit: int) -> list[dict]: ...
     def held_merge_owners(self, limit: int, *, after: str | None = None) -> list[tuple[str, str | None]]: ...
@@ -332,6 +333,9 @@ class FirestoreStore:
 
     def quarantine_fenced(self, segment_id: str, now: float) -> bool:
         return quarantine_fenced(self.client, self.namespace, segment_id, now)
+
+    def defer_privacy_blocked_record(self, segment_id: str, until: float, now: float) -> bool:
+        return defer_privacy_blocked_record(self.client, self.namespace, segment_id, until, now)
 
     def longest_ready_pending(self, owner_key: str) -> dict | None:
         # A hint read outside any transaction; the bypass transaction re-verifies it.

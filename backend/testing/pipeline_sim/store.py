@@ -321,6 +321,20 @@ class SimStore:
         self.apply(('jobs', segment_id), revoked)
         return True
 
+    def defer_privacy_blocked_record(self, segment_id: str, until: float, now: float) -> bool:
+        """Model of database/batch_pipeline_recovery.defer_privacy_blocked_record (available_at only)."""
+        job = self.rows.get(('jobs', segment_id))
+        if not job or job.get('state') != 'record_pending' or job.get('available_at', 0) > now:
+            return False
+        if not self.customer.blocked(
+            job['owner_id'],
+            (job['conversation_id'],) if job.get('conversation_id') else (),
+            job.get('privacy_generation'),
+        ):
+            return False
+        self.apply(('jobs', segment_id), {**job, 'available_at': float(until)})
+        return True
+
     # -- Query helpers --------------------------------------------------
     def first_pending(self, owner_key: str, *, ready_only: bool = False) -> dict | None:
         best = None
