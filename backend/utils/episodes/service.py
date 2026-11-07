@@ -1502,6 +1502,10 @@ def _synced_f_verdict(
     if sum(len(str(s.get('text') or '').split()) for s in segments) < MOMENT_MIN_WORDS:
         # Too little speech to ask about: the join stays as today's, as a short moment keeps it.
         return None
+    if episodes_db.get_episode_owner_snapshot(uid, conversation_id, firestore_client=c.firestore_client) is not None:
+        # Already placed (a retry or a changed re-attach): F answers only a first placement, and nothing moves.
+        # Checked after the cheap gates, so only an admitted join with enough speech pays this read.
+        return None
     rows = episode_timeline.recorded_candidates(
         uid,
         started,
@@ -1525,10 +1529,6 @@ def _synced_f_verdict(
     source = getattr(row.get('source'), 'value', row.get('source')) or None
     marker = f_join.uncertain(uid, owner, conversation_id, source, started, firestore_client=c.firestore_client)
     if marker is None:
-        return None
-    if episodes_db.get_episode_owner_snapshot(uid, conversation_id, firestore_client=c.firestore_client) is not None:
-        # Already placed (a retry or a changed re-attach): F answers only a first placement, and nothing moves.
-        # Checked after the cheap gates, so only an admitted, ambiguous join pays this read.
         return None
     pending = {
         'gap_seconds': marker.gap_seconds or 0.0,

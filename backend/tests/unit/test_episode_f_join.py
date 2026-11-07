@@ -689,6 +689,26 @@ def test_a_conversation_already_placed_is_never_asked_about_again(store, monkeyp
     monkeypatch.setattr(f_join, 'settle', lambda *a, **k: pytest.fail('a placed conversation was asked about again'))
     row = store.rows[('users', UID, 'conversations', 'c2')]
     span = conversation_span(row)
+    with monkeypatch.context() as retry:
+        retry.setattr(
+            episode_timeline,
+            'recorded_candidates',
+            lambda *a, **k: pytest.fail('a placed conversation queried recorded candidates again'),
+        )
+        retry.setattr(
+            episodes_db,
+            'get_episode',
+            lambda *a, **k: pytest.fail('a placed conversation read the recorded episode again'),
+        )
+        retry.setattr(
+            f_join,
+            'uncertain',
+            lambda *a, **k: pytest.fail('a placed conversation evaluated the boundary again'),
+        )
+        assert (
+            service._synced_f_verdict(UID, 'c2', row, span.recorded_start, span.recorded_end, _c(store, minutes=13))
+            is None
+        )
     service._attach_recorded_synced(UID, 'c2', row, span.recorded_start, span.recorded_end, _c(store, minutes=13))
     episode = episodes_db.get_current_episode(UID, firestore_client=store)
     assert episode['id'] == first['id'] and episode['conversation_ids'] == ['c1', 'c2']
