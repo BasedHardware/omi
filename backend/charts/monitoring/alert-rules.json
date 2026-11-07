@@ -17584,7 +17584,7 @@
     "updated": "2026-10-18T00:00:00Z",
     "noDataState": "OK",
     "execErrState": "KeepLast",
-    "for": "15m",
+    "for": "30m",
     "keep_firing_for": "0s",
     "annotations": {
       "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
