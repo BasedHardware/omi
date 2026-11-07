@@ -40,6 +40,7 @@ def test_bad_percent_admits_nobody(monkeypatch, raw):
 
 
 def test_deterministic_separate_salt_and_master_gate(monkeypatch):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'offline')
     monkeypatch.setenv('BUCKET_OBJECT_LAKE', 'test-lake')
     monkeypatch.setenv('OBJECT_LAKE_KMS_KEY', 'test-key')
     monkeypatch.setenv('OBJECT_LAKE_WRITE_ENABLED', 'true')
@@ -67,3 +68,25 @@ def test_env_is_read_at_call_time(monkeypatch):
     assert object_lake.inline_max_bytes() == 17
     monkeypatch.setenv('OBJECT_LAKE_INLINE_MAX_BYTES', '-1')
     assert object_lake.inline_max_bytes() == 4096
+
+
+@pytest.mark.parametrize('stage', ['', 'dev', 'prod', 'staging', 'unknown'])
+@pytest.mark.parametrize('enabled,percent', [('true', '0'), ('false', '1'), ('true', '100')])
+def test_deployed_writes_blocked_even_with_real_kms(monkeypatch, stage, enabled, percent):
+    monkeypatch.setenv('OMI_ENV_STAGE', stage)
+    monkeypatch.setenv('BUCKET_OBJECT_LAKE', 'bound-lake')
+    monkeypatch.setenv('OBJECT_LAKE_KMS_KEY', 'projects/p/locations/l/keyRings/r/cryptoKeys/k')
+    monkeypatch.setenv('OBJECT_LAKE_WRITE_ENABLED', enabled)
+    monkeypatch.setenv('OBJECT_LAKE_WRITE_PERCENT', percent)
+    assert object_lake.validate_write_settings(stage, enabled, percent)
+    assert not object_lake.write_admitted('owner')
+
+
+@pytest.mark.parametrize('stage', ['local', 'offline', ' LOCAL '])
+def test_local_write_settings_remain_available(monkeypatch, stage):
+    monkeypatch.setenv('OMI_ENV_STAGE', stage)
+    monkeypatch.setenv('BUCKET_OBJECT_LAKE', 'local-lake')
+    monkeypatch.setenv('OBJECT_LAKE_WRITE_ENABLED', 'true')
+    monkeypatch.setenv('OBJECT_LAKE_WRITE_PERCENT', '100')
+    assert object_lake.validate_write_settings(stage, 'true', '100') == []
+    assert object_lake.write_admitted('owner')

@@ -61,13 +61,31 @@ def fake_kms_allowed() -> bool:
 
 
 def write_admitted(space_id: str) -> bool:
-    # Incomplete bindings keep writes inline. FakeKMS may stand in for the
-    # regional key only on explicitly local/offline stages, never deployed ones.
+    # TODO(#24811, per-object DEK follow-up): remove this stage fence only after each
+    # object has its own DEK; a configured KMS key does not bound nonce reuse.
     return (
-        bool(space_id)
+        fake_kms_allowed()
+        and bool(space_id)
         and write_enabled()
         and bool(bucket())
         and bool(release())
         and (bool(kms_key()) or fake_kms_allowed())
         and cohort_bucket(space_id, 'object-lake', bits=64) < write_percent()
     )
+
+
+def validate_write_settings(stage: str, enabled: object, percent: object) -> list[str]:
+    """Deployment gate independent of cohort admission or provisioned bindings."""
+    if stage.strip().lower() in _FAKE_KMS_STAGES:
+        return []
+    errors = []
+    reason = 'must stay off outside local/offline until per-object DEKs are implemented'
+    if str(enabled).strip().lower() in {'true', '1', 'on', 'yes'}:
+        errors.append(f'OBJECT_LAKE_WRITE_ENABLED {reason}')
+    try:
+        positive = float(str(percent)) > 0
+    except ValueError:
+        positive = False
+    if positive:
+        errors.append(f'OBJECT_LAKE_WRITE_PERCENT {reason}')
+    return errors
