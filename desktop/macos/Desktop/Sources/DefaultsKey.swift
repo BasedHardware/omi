@@ -108,12 +108,15 @@ enum DefaultsKey: String {
   case onboardingSystemAudioSkipped = "onboardingSystemAudioSkipped"
   case screenAnalysisEnabled = "screenAnalysisEnabled"
   /// Account owner ID that explicitly disabled screen analysis on this Mac, or `"local"` when
-  /// disabled while signed out. Preserves local `screenAnalysisEnabled == false` across background
-  /// server syncs while still allowing a newly signed-in second account on the same Mac to hydrate.
+  /// disabled while signed out. When a disable is recorded under a signed-in account, a different
+  /// account signing in later can still hydrate from remote settings, whereas a disable recorded
+  /// while signed out (`"local"` owner) intentionally stays off across subsequent sign-ins as a
+  /// privacy-conservative default.
   case screenAnalysisDisabledOwner = "screenAnalysisDisabledOwner"
-  /// Marker set only when `SettingsSyncManager.applyRemoteSettings` sets `screenAnalysisEnabled`
-  /// to `false`, so a remote-authored `false` does not masquerade as a local user disable if the
-  /// account later re-enables screen analysis on another device.
+  /// Marker recording that local `screenAnalysisEnabled == false` is not user-authored (set by
+  /// `SettingsSyncManager.applyRemoteSettings` when remote is `false` or by
+  /// `AssistantSettings.revertScreenAnalysisAfterFailedStart`), so a non-user-authored `false`
+  /// does not masquerade as a local user disable when a later sync re-enables screen analysis.
   case screenAnalysisSetByRemoteSync = "screenAnalysisSetByRemoteSync"
   case ratingPromptQuestionCount = "ratingPromptQuestionCount"
   case ratingPromptSubmittedRating = "ratingPromptSubmittedRating"

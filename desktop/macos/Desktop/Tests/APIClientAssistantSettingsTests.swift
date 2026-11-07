@@ -389,6 +389,49 @@ final class APIClientAssistantSettingsTests: XCTestCase {
     }
   }
 
+  @MainActor
+  func testSignedOutLocalDisableSurvivesSubsequentSignIn() {
+    withScreenAnalysisSyncState {
+      // omi-test-quality: shared-defaults -- integration: exercises SettingsSyncManager singleton
+      UserDefaults.standard.removeObject(forKey: .authUserId)
+      AssistantSettings.shared.screenAnalysisEnabled = false
+      SettingsSyncManager.shared.recordLocalScreenAnalysisPreference(false)
+
+      // omi-test-quality: shared-defaults -- integration: exercises SettingsSyncManager singleton
+      UserDefaults.standard.set("owner-a", forKey: .authUserId)
+      SettingsSyncManager.shared.applyRemoteSettings(
+        AssistantSettingsResponse(shared: SharedAssistantSettingsResponse(screenAnalysisEnabled: true))
+      )
+
+      XCTAssertFalse(
+        AssistantSettings.shared.screenAnalysisEnabled,
+        "A signed-out local disable should stay off across subsequent sign-ins"
+      )
+    }
+  }
+
+  @MainActor
+  func testFailedStartRollbackAllowsSubsequentRemoteReEnable() {
+    withScreenAnalysisSyncState {
+      // omi-test-quality: shared-defaults -- integration: exercises SettingsSyncManager singleton
+      UserDefaults.standard.set("owner-a", forKey: .authUserId)
+      AssistantSettings.shared.screenAnalysisEnabled = false
+      SettingsSyncManager.shared.recordLocalScreenAnalysisPreference(false)
+
+      AssistantSettings.shared.revertScreenAnalysisAfterFailedStart()
+      XCTAssertFalse(AssistantSettings.shared.screenAnalysisEnabled)
+
+      SettingsSyncManager.shared.applyRemoteSettings(
+        AssistantSettingsResponse(shared: SharedAssistantSettingsResponse(screenAnalysisEnabled: true))
+      )
+
+      XCTAssertTrue(
+        AssistantSettings.shared.screenAnalysisEnabled,
+        "A failed capture start rollback is not a user disable and should allow remote sync to re-enable"
+      )
+    }
+  }
+
   func testAssistantSettingsDecodesValidSiblingsWhenOneKnownSectionIsMalformed() throws {
     let data = """
       {
