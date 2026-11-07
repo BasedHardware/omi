@@ -63,7 +63,7 @@ class VoiceSetupTask extends StatelessWidget {
                       children: [
                         Text(l10n.teachOmiYourVoice, style: OmiType.body),
                         const SizedBox(height: 2),
-                        OmiBalancedText(
+                        Text(
                           l10n.voiceSetupTaskSubline,
                           style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
                         ),
@@ -72,7 +72,7 @@ class VoiceSetupTask extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: OmiSpacing.xs),
-                OmiGlyph(OmiGlyphs.chevronRight, size: 14, color: OmiColors.textTertiary),
+                Icon(Icons.chevron_right, size: 18, color: OmiColors.textTertiary),
                 const SizedBox(width: OmiSpacing.xs),
               ],
             ),

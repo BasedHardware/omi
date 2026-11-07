@@ -41,6 +41,7 @@ void main() {
     expect(find.text(en.teachOmiYourVoice), findsOneWidget);
     expect(find.text(en.voiceSetupTaskSubline), findsOneWidget);
     expect(find.byType(TaskCompletionMark), findsOneWidget);
+    expect(find.byIcon(Icons.chevron_right), findsOneWidget);
     final labelFinder = find.bySemanticsLabel('${en.teachOmiYourVoice}, ${en.voiceSetupTaskSubline}');
     expect(labelFinder, findsOneWidget);
     expect(tester.getSemantics(labelFinder).getSemanticsData().hasAction(SemanticsAction.tap), isTrue);

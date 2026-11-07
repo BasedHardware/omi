@@ -18787,8 +18787,8 @@
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
     "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
-  "voiceSetupTaskSubline": "So Omi knows it’s you · about a minute",
-  "@voiceSetupTaskSubline": {
-    "description": "Subline of the To do setup task \"Teach Omi your voice\": why it helps and how long it takes"
-  }
+    "voiceSetupTaskSubline": "So Omi knows it’s you · about a minute",
+    "@voiceSetupTaskSubline": {
+        "description": "Subline of the To do setup task \"Teach Omi your voice\": why it helps and how long it takes"
+    }
 }
