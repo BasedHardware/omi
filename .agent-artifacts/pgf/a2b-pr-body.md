@@ -10,13 +10,13 @@ Promote doc-mode storage with expand-only generated query columns that decode ta
 
 ## How it was verified
 
-Simulator, real disposable Postgres and Firestore emulator: 165 conformance tests passed; 12 legacy emulator regressions passed. Final public API/cell contract/signature checks: 62 passed. Task/query/lifecycle guard replay: 2,436 passed. Core adapters also passed 120 tests with B2's write-fenced store, with 55 optional emulator cases skipped in that Postgres-focused run. OpenAPI is byte-identical to the fetched main baseline.
+Simulator, real disposable Postgres and Firestore emulator: 165 conformance tests passed; 12 legacy emulator regressions passed. Public API/cell contract/signature checks: 62 passed; the final 12-test cell-contract file also passes after correcting parallel-worker safety in the timestamp decoder. Task/query/lifecycle guard replay: 2,436 passed. Core adapters also passed 120 tests with B2's write-fenced store, with 55 optional emulator cases skipped in that Postgres-focused run. OpenAPI is byte-identical to the fetched main baseline.
 
 The full 2,676-file backend command exited 1 (65,747 passed / 2 failed): a stale migration-version assertion and a two-second executor dependency-initialization timeout. Both files are corrected and pass isolated replay (25 cell-store tests; 36 executor tests). No full-run green is claimed. Both full preflights are being rerun after adding the public lazy export required by the dead-code ratchet; the focused backend ratchet passes. Exact commands and all outcomes are in `.agent-artifacts/pgf/a2b-result.md`. No production access or GCP tier was used.
 
 ## Tests
 
-Run the shared domain suites with OMI_REQUIRE_STORE_BACKENDS=all. New `test_cells_task_workflow_migration.py` exercises a fresh schema, idempotent migration replay, SQL paging over pending UoW writes, task commit fences and native replay records. Protocol/adapter signature pairs cover all five cell adapters and CellSpaceStore. A fresh-process import test rejects pool construction and verifies the low-level package does not load domain composition until requested.
+Run the shared domain suites with OMI_REQUIRE_STORE_BACKENDS=all. New `test_cells_task_workflow_migration.py` exercises a fresh schema, idempotent migration replay, SQL paging over pending UoW writes, task commit fences and native replay records. Protocol/adapter signature pairs cover all five cell adapters and CellSpaceStore. A forced-parallel Postgres regression protects the timestamp decoder exception handler. A fresh-process import test rejects pool construction and verifies the low-level package does not load domain composition until requested.
 
 ## UI evidence
 
