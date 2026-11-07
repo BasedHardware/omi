@@ -28,6 +28,20 @@ class Space:
     signup_platform_at: float | None
     created_at: float
     updated_at: float
+    ramp_bucket: float | None = None
+    ramp_revision: int | None = None
+
+
+@dataclass(frozen=True)
+class OwnerTombstone:
+    uid: str
+    wipe_epoch: int
+    cell: str | None
+    created_at: float
+
+
+class OwnerTombstoned(RuntimeError):
+    """A wiped identity cannot enroll again, even from an admitted old request."""
 
 
 @dataclass(frozen=True)
@@ -75,15 +89,20 @@ class DirectoryStore:
         uid: str,
         *,
         now: float,
+        cell: str,
+        ramp_bucket: float | None = None,
+        ramp_revision: int | None = None,
         signup_platform: str | None = None,
         signup_os: str | None = None,
         signup_platform_at: float | None = None,
     ) -> Space:
         def body(conn: Any) -> Space:
+            self._lock_live_owner(conn, uid)
             conn.execute(
-                'INSERT INTO spaces (space_id, signup_platform, signup_os, signup_platform_at, created_at, updated_at) '
-                'VALUES (%s,%s,%s,%s,%s,%s) ON CONFLICT (space_id) DO NOTHING',
-                (uid, signup_platform, signup_os, signup_platform_at, now, now),
+                'INSERT INTO spaces (space_id, cell, ramp_bucket, ramp_revision, signup_platform, signup_os, '
+                'signup_platform_at, created_at, updated_at) '
+                'VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (space_id) DO NOTHING',
+                (uid, cell, ramp_bucket, ramp_revision, signup_platform, signup_os, signup_platform_at, now, now),
             )
             conn.execute(
                 "INSERT INTO memberships (space_id, uid, role, created_at) VALUES (%s,%s,'owner',%s) "
@@ -91,6 +110,46 @@ class DirectoryStore:
                 (uid, uid, now),
             )
             return Space(*conn.execute('SELECT * FROM spaces WHERE space_id=%s', (uid,)).fetchone())
+
+        return self._run(body)
+
+    @staticmethod
+    def _lock_owner(conn: Any, uid: str) -> None:
+        # Also serializes absent-row enrollment against the durable wipe fence.
+        conn.execute('SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))', ('owner:' + uid,))
+
+    @classmethod
+    def _lock_live_owner(cls, conn: Any, uid: str) -> None:
+        cls._lock_owner(conn, uid)
+        if conn.execute('SELECT 1 FROM owner_tombstones WHERE uid=%s', (uid,)).fetchone():
+            raise OwnerTombstoned('directory owner is tombstoned')
+
+    def enroll_cell(self, uid: str, enroll: Callable[[], None]) -> None:
+        """Hold admission through cell enrollment so a missing head cannot race wipe."""
+
+        def body(conn: Any) -> None:
+            self._lock_live_owner(conn, uid)
+            enroll()
+
+        self._run(body)
+
+    def tombstone_owner(self, uid: str, *, now: float) -> OwnerTombstone:
+        """Retain the original route and wipe epoch across purge and retries."""
+
+        def body(conn: Any) -> OwnerTombstone:
+            self._lock_owner(conn, uid)
+            space = conn.execute('SELECT cell, epoch FROM spaces WHERE space_id=%s FOR UPDATE', (uid,)).fetchone()
+            conn.execute(
+                'INSERT INTO owner_tombstones (uid, wipe_epoch, cell, created_at) VALUES (%s,%s,%s,%s) '
+                'ON CONFLICT (uid) DO NOTHING',
+                (uid, space[1] + 1 if space else 1, space[0] if space else None, now),
+            )
+            fence = OwnerTombstone(*conn.execute('SELECT * FROM owner_tombstones WHERE uid=%s', (uid,)).fetchone())
+            conn.execute(
+                "UPDATE spaces SET cell='disabled', epoch=greatest(epoch,%s), updated_at=%s WHERE space_id=%s",
+                (fence.wipe_epoch, now, uid),
+            )
+            return fence
 
         return self._run(body)
 
@@ -109,6 +168,7 @@ class DirectoryStore:
         now: float,
     ) -> Space:
         def body(conn: Any) -> Space:
+            self._lock_live_owner(conn, space_id)
             row = conn.execute(
                 'UPDATE spaces SET cell=coalesce(%s,cell), region=coalesce(%s,region), epoch=epoch+%s, '
                 'updated_at=%s WHERE space_id=%s RETURNING *',
@@ -121,13 +181,16 @@ class DirectoryStore:
         return self._run(body)
 
     def add_member(self, space_id: str, uid: str, *, now: float, role: str = 'member') -> None:
-        self._run(
-            lambda conn: conn.execute(
+        def body(conn: Any) -> None:
+            for owner in sorted({space_id, uid}):
+                self._lock_live_owner(conn, owner)
+            conn.execute(
                 'INSERT INTO memberships (space_id, uid, role, created_at) VALUES (%s,%s,%s,%s) '
                 "ON CONFLICT (space_id, uid) DO UPDATE SET role=EXCLUDED.role, state='active', revoked_at=NULL",
                 (space_id, uid, role, now),
             )
-        )
+
+        self._run(body)
 
     def revoke_member(self, space_id: str, uid: str, *, now: float) -> bool:
         return self._run(
@@ -164,6 +227,7 @@ class DirectoryStore:
         time_zone: str | None = None,
     ) -> None:
         def body(conn: Any) -> None:
+            self._lock_live_owner(conn, uid)
             # Serialize recycled-token moves even when no row exists yet; a unique
             # index alone would reject one of two concurrent first registrations.
             conn.execute('SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))', ('fcm:' + token,))
@@ -195,14 +259,16 @@ class DirectoryStore:
         visibility: str,
         now: float,
     ) -> None:
-        self._run(
-            lambda conn: conn.execute(
+        def body(conn: Any) -> None:
+            self._lock_live_owner(conn, owner_space_id)
+            conn.execute(
                 'INSERT INTO public_conversations (conversation_id, owner_space_id, visibility, created_at, updated_at) '
                 'VALUES (%s,%s,%s,%s,%s) ON CONFLICT (conversation_id) DO UPDATE SET '
                 'owner_space_id=EXCLUDED.owner_space_id, visibility=EXCLUDED.visibility, updated_at=EXCLUDED.updated_at',
                 (conversation_id, owner_space_id, visibility, now, now),
             )
-        )
+
+        self._run(body)
 
     def unregister_public_conversation(self, conversation_id: str) -> None:
         self._run(
@@ -219,8 +285,8 @@ class DirectoryStore:
     def purge_owner(self, uid: str, *, now: float) -> int:
         """Raise on any error; FK cascades and cross-space memberships commit atomically.
 
-        As with cells, the future enrollment/wipe admission fence must quiesce writers.
-        ``now`` is part of the operator API; hard deletion has no timestamped row.
+        The caller tombstones admission and drains writers first. Owner tombstones
+        deliberately survive this content purge, preventing identity resurrection.
         """
 
         def body(conn: Any) -> int:
