@@ -232,7 +232,9 @@ class _ContentionStormDamper:
     """Bounded per-operation re-strike spacing shared by one store instance.
 
     The bounded contention chain gives one operation five immediate attempts
-    across roughly one to three seconds. During a real contention storm every
+    whose inter-attempt gaps now sum to 1.5-3.0 s (the wave-bridge cap in
+    ``database/firestore_transaction_retry.py``). During a real
+    contention storm every
     caller that exhausts re-strikes the same hot document at once, so the
     whole process burns its budgets in lockstep — the ``x2239/30m``
     ``operation=... outcome=exhausted`` production signature. After an

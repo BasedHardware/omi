@@ -7,9 +7,10 @@ restores immediate re-strikes).
 ## What problem this solves
 
 The bounded contention chain (`database/firestore_transaction_retry.py`) gives
-one Firestore transaction five immediate attempts across roughly one to three
-seconds. During a real contention storm — many workers converging on the same
-hot job/queue/owner documents — every caller that exhausts its budget
+one Firestore transaction five immediate attempts whose inter-attempt gaps sum
+to 1.5-3.0 s (the wave-bridge cap). During a real contention storm —
+many workers converging on the same hot job/queue/owner documents — every
+caller that exhausts its budget
 re-strikes the same documents immediately. The whole process burns its
 budgets in lockstep and every storm member ends at
 `firestore_transaction_contention operation=... attempt=5/5 outcome=exhausted`.

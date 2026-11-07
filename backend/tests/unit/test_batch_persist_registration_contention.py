@@ -305,7 +305,7 @@ def test_replays_wait_equal_jitter_between_attempts(retry_sleeps, monkeypatch):
     store = make_store(leased_rows())
     script_reads(store.client, monkeypatch, abort={1, 2, 3, 4})
     assert register_result(store) == artifact_id()
-    assert retry_sleeps == [pytest.approx(0.1), pytest.approx(0.2), pytest.approx(0.4), pytest.approx(0.5)]
+    assert retry_sleeps == [pytest.approx(0.1), pytest.approx(0.2), pytest.approx(0.4), pytest.approx(0.8)]
 
 
 def test_jitter_is_capped_at_one_second(monkeypatch):
@@ -319,7 +319,7 @@ def test_jitter_is_capped_at_one_second(monkeypatch):
     monkeypatch.setattr(firestore_transaction_retry, 'run_with_transaction_contention_retry', capped_random_retry)
     script_reads(store.client, monkeypatch, abort={1, 2, 3, 4})
     assert register_result(store) == artifact_id()
-    assert sleeps == [0.2, 0.4, 0.8, 1.0]
+    assert sleeps == [0.2, 0.4, 0.8, 1.6]
 
 
 def test_recovered_outcome_is_logged_with_the_register_label(retry_sleeps, monkeypatch, caplog):

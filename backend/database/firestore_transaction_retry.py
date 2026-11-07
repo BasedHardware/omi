@@ -46,7 +46,21 @@ T = TypeVar("T")
 
 DEFAULT_MAX_ATTEMPTS = 5
 _INITIAL_MAX_DELAY_SECONDS = 0.2
-_MAX_DELAY_SECONDS = 1.0
+# The jitter cap is the wave-bridge window. The first four gaps of the default
+# five-attempt chain sum to 1.5-3.0 s (attempt 5 starts up to 3.0 s after the
+# first abort, versus 2.4 s under the former 1.0 s cap), so a chain whose wave
+# dies in that window now lands after it instead of exhausting inside it. The
+# early rungs stay sub-second: a transient single-abort collision still
+# recovers immediately. From the sixth attempt onward the former cap flattened
+# every rung to 1.0 s; the 4.0 s cap restores the doubling ladder's tail for
+# the longer opt-in budgets (``max_attempts`` >= 6) and matches the rung
+# ceiling the store-level storm damper
+# (``FirestoreStore.STORM_DAMPER_CAP_SECONDS``) already ships for
+# post-exhaustion spacing. Without the wider tail the whole budget lands
+# inside one storm window, exhausts, and only the NEXT entry is spaced:
+#
+# Failure-Class: FC-contention-chain-spends-its-budget-inside-one-abort-wave
+_MAX_DELAY_SECONDS = 4.0
 # Firestore retires any transaction chain after 270 seconds (the documented
 # transaction lifetime quota — the same retirement that surfaces as
 # "transaction has expired"), so an attempt that already started cannot run
@@ -143,8 +157,15 @@ def transaction_retry_deadline_scope(deadline: float | None) -> Iterator[None]:
 def equal_jitter_delay(attempt: int, random_value: Callable[[], float] = random.random) -> float:
     """Equal-jitter delay for one failed attempt. ``attempt`` is 1-based.
 
-    Two delays at the default schedule stay under half a second, so a
-    three-attempt caller finishes well inside a few seconds.
+    The high bound doubles per attempt — ``0.2s, 0.4s, 0.8s, 1.6s, 3.2s`` —
+    capped at ``_MAX_DELAY_SECONDS`` (which binds from the sixth rung). The
+    first three rungs stay sub-second so a transient single-abort collision
+    recovers immediately; the grown fourth rung is the wave bridge: the
+    default chain's four gaps now sum to 1.5-3.0 s, so attempt 5 can land
+    after a wave that ended inside the old 2.4 s budget (see the cap comment
+    above). Every delay is drawn uniformly from ``[high / 2, high)`` (equal
+    jitter), so two early delays stay under half a second and a three-attempt
+    caller still finishes well inside a few seconds.
     """
     if attempt < 1:
         raise ValueError("attempt must be positive")
@@ -189,7 +210,12 @@ def run_with_transaction_contention_retry(
     already started cannot be stopped, and Firestore retires any chain at
     270 s; callers keep a post-transaction margin (the sync handler's 120 s)
     to absorb that tail.  Callers without a deadline keep the attempt-only
-    bound — expiry at three fresh chains, Aborted at ``max_attempts``.
+    bound — expiry at three fresh chains, Aborted at ``max_attempts`` — and
+    the default chain's inter-attempt gaps now span 1.5-3.0 s so attempt 5
+    can land after a contention wave that the former schedule exhausted
+    inside; deadline-scoped callers are unchanged because the reserve gate
+    and the never-past-deadline sleep bound their wall clock exactly as
+    before.
     """
 
     if max_attempts < 1:

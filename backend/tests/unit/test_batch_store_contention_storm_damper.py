@@ -1,7 +1,7 @@
 """Store-level contention storm damper (x2239/30m ``outcome=exhausted`` family).
 
-The bounded contention chain gives one operation five immediate attempts across
-roughly one to three seconds. During a real contention storm every caller that
+The bounded contention chain gives one operation five immediate attempts whose
+inter-attempt gaps sum to 1.5-3.0 s. During a real contention storm every caller that
 exhausts re-strikes the same hot documents at once, so the whole process burns
 its budgets in lockstep — the production signature
 ``firestore_transaction_contention operation=... attempt=5/5 outcome=exhausted``

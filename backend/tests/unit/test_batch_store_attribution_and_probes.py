@@ -197,11 +197,11 @@ def test_expired_chains_keep_the_three_chain_ceiling_without_a_deadline():
 
 
 def test_equal_jitter_delay_stays_bounded_for_labeled_attempts():
-    from database.firestore_transaction_retry import equal_jitter_delay
+    from database.firestore_transaction_retry import _MAX_DELAY_SECONDS, equal_jitter_delay
 
     assert equal_jitter_delay(1, random_value=lambda: 1.0) == 0.2
     assert equal_jitter_delay(3, random_value=lambda: 1.0) == 0.8
-    assert equal_jitter_delay(9, random_value=lambda: 1.0) == 1.0
+    assert equal_jitter_delay(9, random_value=lambda: 1.0) == _MAX_DELAY_SECONDS
 
 
 def test_docs_declare_the_failure_class():

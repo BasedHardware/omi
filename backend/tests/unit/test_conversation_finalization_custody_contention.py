@@ -1334,7 +1334,7 @@ def test_budget_delays_cap_at_the_max_delay():
     )
 
     assert delays == [0.1, 0.2, 0.4], 'equal-jitter low bound doubles per attempt'
-    assert _MAX_DELAY_SECONDS == 1.0, 'the schedule stays bounded no matter how long contention lasts'
+    assert _MAX_DELAY_SECONDS == 4.0, 'the wave-bridge schedule stays bounded by the damper-ceiling cap'
 
 
 # ---------------------------------------------------------------------------
