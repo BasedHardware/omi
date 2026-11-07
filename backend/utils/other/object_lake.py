@@ -57,6 +57,10 @@ class LakeFetchError(ObjectLakeError):
     """Storage operation failed; the pointer must remain unresolved."""
 
 
+class LakePurgeIncomplete(LakeFetchError):
+    """Verified absence failed; retain documents and retry deletion."""
+
+
 class LakeObjectCorrupt(ObjectLakeError):
     """Envelope, authentication or plaintext digest verification failed."""
 
@@ -185,7 +189,7 @@ def put_space_object(
     key = (
         f'{_segment(config.release())}/spaces/{_segment(space_id)}/{_class(data_class)}/{_segment(entity_id)}/{digest}'
     )
-    _assert_owner_write_allowed(space_id)
+    _assert_owner_write_allowed(space_id, entity_id)
     keys, kek = space_keys.active_space_dek(space_id)
     # Two authority reads per put: get/create before encryption and a fresh
     # post-upload check. Share the first snapshot with unwrap, never cache authority.
@@ -236,9 +240,9 @@ def put_space_object(
                 _parse_ref(ref)
             except (KeyError, TypeError, ValueError, LakeObjectCorrupt):
                 raise LakeObjectConflict('Existing lake object metadata is invalid') from None
-            _check_put_authority(space_id, blob)
+            _check_put_authority(space_id, entity_id, blob, created=False)
             return ref
-        _check_put_authority(space_id, blob)
+        _check_put_authority(space_id, entity_id, blob, created=True)
     except (space_keys.SpaceKeyDestroyed, space_keys.SpaceKeyUnavailable):
         raise
     except ObjectLakeError:
@@ -275,29 +279,40 @@ def _record_upload_candidate(bucket: str, key: str) -> None:
         raise LakeObjectConflict('Existing lake upload candidate is invalid')
 
 
-def _assert_owner_write_allowed(space_id):
+def _assert_owner_write_allowed(space_id, entity_id):
     try:
         # Same customer plane as the key authority, never a cached negative.
-        marker = space_keys.space_key_firestore_client().collection('account_deletions').document(space_id).get()
+        client = space_keys.space_key_firestore_client()
+        marker = client.collection('account_deletions').document(space_id).get()
         if account_deletion_marker_blocks_access(
             marker_exists=marker.exists, raw_status=(marker.to_dict() or {}).get('wipe_status')
         ):
             raise LakeWriteFenced('Owner deletion fences lake writes')
+        tombstone = (
+            client.collection('users').document(space_id).collection('deleted_conversations').document(entity_id)
+        )
+        if tombstone.get().exists:
+            raise LakeWriteFenced('Conversation deletion fences lake writes')
     except LakeWriteFenced:
         raise
     except Exception:
         raise LakeFetchError('Lake owner write authority unavailable') from None
 
 
-def _check_put_authority(space_id, blob):
+def _check_put_authority(space_id, entity_id, blob, *, created):
     try:
-        _assert_owner_write_allowed(space_id)
+        _assert_owner_write_allowed(space_id, entity_id)
         if space_keys.get_space_keys(space_id) is None:
             raise space_keys.SpaceKeyDestroyed('Space key disappeared during upload')
     except (space_keys.SpaceKeyDestroyed, LakeWriteFenced):
-        # An in-flight upload must not outlive a durable destroy fence.
+        # Only this newly created candidate is ours to remove. A create-only
+        # retry may have reused a referenced object; the purge owns that object.
+        # The candidate cannot acquire a live reference after the durable
+        # account/conversation fence, and its pointer has not been returned.
+        if not created:
+            raise
         try:
-            blob.delete()
+            blob.delete(if_generation_match=blob.generation)
         except NotFound:
             pass
         except Exception:
@@ -312,7 +327,8 @@ def get_space_object(ref: LakeObjectRef) -> bytes:
         kek = space_keys.unwrap_space_dek(sid, ref.dek_version)
     except space_keys.SpaceKeyDestroyed:
         # A fabricated version in a live space is corrupt, while a destroyed
-        # authority remains the explicit shredded state.
+        # authority remains the explicit shredded state. get_space_keys raises
+        # SpaceKeyDestroyed again for a tombstone; only live/missing rows return.
         keys = space_keys.get_space_keys(sid)
         if keys is not None and all(version.version != ref.dek_version for version in keys.versions):
             raise LakeObjectCorrupt('Invalid lake key version') from None
@@ -380,18 +396,18 @@ def delete_space_prefix(space_id: str, *, data_class=None, entity_id=None) -> in
         prefix += _class(data_class) + '/'
     if entity_id is not None:
         prefix += _segment(entity_id) + '/'
-    return _purge_prefix(None, prefix)
+    return _purge_prefix(prefix)
 
 
 def delete_space_entity(space_id: str, entity_id: str) -> int:
     prefix = f'{_segment(config.release())}/spaces/{_segment(space_id)}/'
     entity_id = _segment(entity_id)
-    return sum(_purge_prefix(None, f'{prefix}{data_class}/{entity_id}/') for data_class in DATA_CLASSES)
+    return sum(_purge_prefix(f'{prefix}{data_class}/{entity_id}/') for data_class in DATA_CLASSES)
 
 
-def _purge_prefix(bucket, prefix: str) -> int:
+def _purge_prefix(prefix: str) -> int:
     try:
-        bucket = bucket if bucket is not None else _lake_bucket()
+        bucket = _lake_bucket()
         count = 0
         for blob in bucket.list_blobs(prefix=prefix):
             try:
@@ -400,7 +416,7 @@ def _purge_prefix(bucket, prefix: str) -> int:
             except NotFound:
                 pass
         if any(bucket.list_blobs(prefix=prefix)):
-            raise RuntimeError('Lake prefix deletion left objects behind')
+            raise LakePurgeIncomplete('Lake prefix deletion left objects behind')
         return count
     except (ObjectLakeError, RuntimeError):
         raise

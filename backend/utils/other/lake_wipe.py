@@ -1,6 +1,9 @@
 """Required lake erasure steps, outside database transactions and behind owner fences."""
 
 import time
+from datetime import datetime, timezone
+
+from google.cloud import firestore
 
 from config import object_lake as config
 from database import users as users_db
@@ -33,8 +36,28 @@ def purge_conversation_lake_objects(uid: str, conversation_id: str, source_ids=(
     """Purge the conversation and merge donors before deleting their documents."""
     if not config.bucket():
         return 0
-    count = 0
-    for entity_id in dict.fromkeys([conversation_id, *source_ids]):
-        if entity_id:
-            count += object_lake.delete_space_entity(uid, entity_id)
-    return count
+    entity_ids = [entity_id for entity_id in dict.fromkeys([conversation_id, *source_ids]) if entity_id]
+    # Fence every donor before the first listing, including callers that do not
+    # record the public route's intent. Preserve existing tombstone bindings.
+    for entity_id in entity_ids:
+        _fence_conversation_uploads(uid, entity_id)
+    return sum(object_lake.delete_space_entity(uid, entity_id) for entity_id in entity_ids)
+
+
+def _fence_conversation_uploads(uid: str, conversation_id: str) -> None:
+    try:
+        client = space_keys.space_key_firestore_client()
+        tombstone = (
+            client.collection('users').document(uid).collection('deleted_conversations').document(conversation_id)
+        )
+
+        @firestore.transactional
+        def fence(transaction):
+            if not tombstone.get(transaction=transaction).exists:
+                transaction.create(
+                    tombstone, {'conversation_id': conversation_id, 'deleted_at': datetime.now(timezone.utc)}
+                )
+
+        fence(client.transaction())
+    except Exception:
+        raise object_lake.LakeFetchError('Lake conversation deletion fence unavailable') from None

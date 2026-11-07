@@ -376,7 +376,7 @@ def test_prefix_requires_verified_absence(storage):
         blob.upload_from_string(payload, if_generation_match=0)
 
     with patch.object(LocalBlob, 'delete', resurrect):
-        with pytest.raises(RuntimeError, match='left objects'):
+        with pytest.raises(lake.LakePurgeIncomplete, match='left objects'):
             lake.delete_space_prefix('s')
     assert list(bucket.list_blobs())
 
@@ -506,7 +506,7 @@ def test_delete_space_entity_scopes_all_classes_and_is_idempotent(storage, monke
 def test_delete_space_entity_verifies_absence(storage, monkeypatch):
     put()
     monkeypatch.setattr(LocalBlob, 'delete', lambda self: None)
-    with pytest.raises(RuntimeError, match='left objects behind'):
+    with pytest.raises(lake.LakePurgeIncomplete, match='left objects behind'):
         lake.delete_space_entity('s', 'c')
 
 
@@ -533,3 +533,84 @@ def test_disabled_kms_key_with_live_authority_remains_shredded(storage, monkeypa
     monkeypatch.setattr(space_keys, '_kms', lambda: kms)
     with pytest.raises(space_keys.SpaceKeyDestroyed):
         lake.get_space_object(ref)
+
+
+def test_conversation_fence_refuses_put_before_storage_or_keys(storage, monkeypatch):
+    _, store = storage
+    store.collection('users').document('s').collection('deleted_conversations').document('c').create({})
+    with patch.object(space_keys, 'active_space_dek') as keys, patch.object(lake, '_lake_bucket') as bucket:
+        with pytest.raises(lake.LakeWriteFenced, match='Conversation'):
+            put()
+    keys.assert_not_called()
+    bucket.assert_not_called()
+
+
+def test_late_upload_self_deletes_after_conversation_purge_final_listing(storage, monkeypatch):
+    from utils.other import lake_wipe
+
+    bucket, store = storage
+    original = LocalBlob.upload_from_string
+    events = []
+
+    def upload_after_purge(blob, *args, **kwargs):
+        assert lake_wipe.purge_conversation_lake_objects('s', 'c') == 0
+        assert not list(bucket.list_blobs())
+        events.append('absence-verified')
+        original(blob, *args, **kwargs)
+        events.append('upload-finished')
+
+    monkeypatch.setattr(LocalBlob, 'upload_from_string', upload_after_purge)
+    with pytest.raises(lake.LakeWriteFenced, match='Conversation'):
+        put()
+    assert events == ['absence-verified', 'upload-finished']
+    assert not list(bucket.list_blobs())
+    assert store.collection('users').document('s').collection('deleted_conversations').document('c').get().exists
+    # Retry is still fenced; a sibling is unaffected.
+    with pytest.raises(lake.LakeWriteFenced):
+        put()
+    monkeypatch.setattr(LocalBlob, 'upload_from_string', original)
+    lake.put_space_object('s', 'transcript', 'sibling', b'live sibling')
+
+
+def test_create_only_retry_does_not_delete_reused_referenced_object(storage, monkeypatch):
+    bucket, store = storage
+    ref = put()
+    store.collection('users').document('s').collection('conversations').document('c').create(
+        {'transcript_segments': ref.to_pointer_dict()}
+    )
+    original = LocalBlob.reload
+
+    def fence_during_retry(blob, *args, **kwargs):
+        original(blob, *args, **kwargs)
+        store.collection('users').document('s').collection('deleted_conversations').document('c').create({})
+
+    monkeypatch.setattr(LocalBlob, 'reload', fence_during_retry)
+    with pytest.raises(lake.LakeWriteFenced):
+        put()
+    assert bucket.blob(ref.key).exists()
+    # The deleting orchestrator, rather than the retry, owns referenced content.
+    assert lake.delete_space_entity('s', 'c') == 1
+
+
+def test_conversation_fence_failure_never_lists_or_purges(storage, monkeypatch):
+    from utils.other import lake_wipe
+
+    bucket, _ = storage
+    monkeypatch.setattr(space_keys, 'space_key_firestore_client', Mock(side_effect=OSError('unavailable')))
+    listing = Mock(side_effect=AssertionError('listed before fence'))
+    monkeypatch.setattr(bucket, 'list_blobs', listing)
+    with pytest.raises(lake.LakeFetchError, match='fence unavailable'):
+        lake_wipe.purge_conversation_lake_objects('s', 'c')
+    listing.assert_not_called()
+
+
+def test_conversation_fences_all_donors_and_preserves_existing_bindings(storage):
+    from utils.other import lake_wipe
+
+    _, store = storage
+    row = {'conversation_id': 'c', 'client_session_id': 'session', 'created_at': 'original'}
+    ref = store.collection('users').document('s').collection('deleted_conversations').document('c')
+    ref.create(row)
+    assert lake_wipe.purge_conversation_lake_objects('s', 'c', ['c', 'donor', 'donor', '']) == 0
+    assert ref.get().to_dict() == row
+    assert store.collection('users').document('s').collection('deleted_conversations').document('donor').get().exists

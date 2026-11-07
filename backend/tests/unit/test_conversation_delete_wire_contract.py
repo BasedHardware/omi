@@ -149,8 +149,9 @@ def test_cascade_gate_precedes_intent_and_covers_retraction_and_cleanup(monkeypa
 @pytest.mark.parametrize('cascade', ['false', 'true'])
 def test_lake_failure_answers_retryable_503_with_intent_and_documents_intact(monkeypatch, cascade):
     from services import conversation_frame_evidence
-    from utils.other import object_lake
+    from utils.other import object_lake, lake_wipe
 
+    monkeypatch.setattr(lake_wipe, '_fence_conversation_uploads', lambda *args: None)
     with _delete_client(monkeypatch) as client:
         monkeypatch.setenv('BUCKET_OBJECT_LAKE', 'synthetic-lake')
         monkeypatch.setattr(
@@ -211,3 +212,86 @@ def test_cascade_retry_preserves_canonical_audio_donors_after_partial_lake_purge
     conversations.delete_privacy_conversation_audio.assert_called_once_with(
         'uid-delete-contract', 'conversation-1', source_ids=['donor-a', 'donor-b']
     )
+
+
+def _real_lake_delete(monkeypatch, tmp_path):
+    from services import conversation_frame_evidence
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+    from utils.other import object_lake, space_keys
+    from utils.other.local_storage import LocalStorageClient
+
+    store = StrictFirestore()
+    bucket = LocalStorageClient(tmp_path).bucket('synthetic-lake')
+    for key, value in {
+        'BUCKET_OBJECT_LAKE': bucket.name,
+        'OBJECT_LAKE_WRITE_ENABLED': 'true',
+        'OBJECT_LAKE_WRITE_PERCENT': '100',
+        'OBJECT_LAKE_RELEASE': 'v1',
+        'OMI_ENV_STAGE': 'offline',
+    }.items():
+        monkeypatch.setenv(key, value)
+    monkeypatch.delenv('OBJECT_LAKE_KMS_KEY', raising=False)
+    monkeypatch.setattr(space_keys, 'space_key_firestore_client', lambda: store)
+    monkeypatch.setattr(object_lake, '_lake_bucket', lambda: bucket)
+    monkeypatch.setattr(conversation_frame_evidence.conversations_db, 'get_conversation_photos', lambda *args: [])
+    monkeypatch.setattr(
+        conversation_frame_evidence.frame_requests_db, 'list_all_frame_request_storage_ids', lambda *args, **kw: []
+    )
+    for name in ('persist_conversation_frame_deletion_outbox', 'delete_frame_requests_for_conversation'):
+        monkeypatch.setattr(conversation_frame_evidence.frame_requests_db, name, MagicMock())
+    doc = (
+        store.collection('users').document('uid-delete-contract').collection('conversations').document('conversation-1')
+    )
+    doc.create({'id': 'conversation-1'})
+    monkeypatch.setattr(
+        conversation_frame_evidence.conversations_db, 'get_conversation_raw_snapshot', lambda *args: doc.get().to_dict()
+    )
+    deleted = MagicMock(side_effect=lambda *args: store.rows.pop(doc.path, None))
+    monkeypatch.setattr(
+        conversations,
+        'delete_conversation_and_frame_evidence',
+        lambda uid, cid: conversation_frame_evidence.delete_conversation_and_frame_evidence(
+            uid, cid, delete_conversation=deleted
+        ),
+    )
+    return bucket, doc, deleted
+
+
+def test_verified_absence_failure_is_http_503_and_retains_documents(monkeypatch, tmp_path):
+    from utils.other import object_lake
+    from utils.other.local_storage import LocalBlob
+
+    with _delete_client(monkeypatch) as client:
+        bucket, doc, deleted = _real_lake_delete(monkeypatch, tmp_path)
+        object_lake.put_space_object('uid-delete-contract', 'transcript', 'conversation-1', b'private')
+        monkeypatch.setattr(LocalBlob, 'delete', lambda *args, **kwargs: None)
+        response = client.delete('/v1/conversations/conversation-1')
+        assert response.status_code == 503
+        assert response.json()['detail'] == 'Conversation storage deletion is busy, please retry'
+        assert doc.get().exists and list(bucket.list_blobs())
+        deleted.assert_not_called()
+        conversations.conversation_tombstones.record_deletion.assert_called_once()
+
+
+def test_upload_finishing_after_http_delete_final_listing_leaves_no_object(monkeypatch, tmp_path):
+    from utils.other import object_lake
+    from utils.other.local_storage import LocalBlob
+
+    with _delete_client(monkeypatch) as client:
+        bucket, doc, deleted = _real_lake_delete(monkeypatch, tmp_path)
+        upload = LocalBlob.upload_from_string
+        statuses = []
+
+        def finish_after_delete(blob, *args, **kwargs):
+            response = client.delete('/v1/conversations/conversation-1')
+            statuses.append(response.status_code)
+            assert response.status_code == 204 and response.content == b''
+            assert not list(bucket.list_blobs())
+            upload(blob, *args, **kwargs)
+
+        monkeypatch.setattr(LocalBlob, 'upload_from_string', finish_after_delete)
+        with pytest.raises(object_lake.LakeWriteFenced):
+            object_lake.put_space_object('uid-delete-contract', 'transcript', 'conversation-1', b'late candidate')
+        assert statuses == [204]
+        assert not doc.get().exists and not list(bucket.list_blobs())
+        deleted.assert_called_once()

@@ -119,6 +119,9 @@ def test_conversation_frame_deletion_defaults_to_sync_sources_deleter(monkeypatc
 
 
 def _stub_frame_delete(monkeypatch, events):
+    from utils.other import lake_wipe
+
+    monkeypatch.setattr(lake_wipe, '_fence_conversation_uploads', lambda *args: None)
     monkeypatch.setattr(conversation_frame_evidence.conversations_db, 'get_conversation_photos', lambda *args: [])
     monkeypatch.setattr(
         conversation_frame_evidence.frame_requests_db, 'list_all_frame_request_storage_ids', lambda *args, **kwargs: []
