@@ -33,6 +33,12 @@ void main() {
         OptimisticProcessingPlaceholder.conversation(targetConversationId: 'target'),
       );
       await provider.forceRefreshConversations();
+      if (status == ConversationStatus.in_progress) {
+        // The person just ended this conversation and the Process Now request has not landed yet, so the
+        // server still reads it as in progress. The placeholder holds the Home row; its timeout still expires it.
+        expect(provider.processingConversations.map((row) => row.id), ['0']);
+        return;
+      }
       expect(provider.processingConversations.any((row) => row.id == '0'), isFalse);
       final active = status == ConversationStatus.processing || status == ConversationStatus.merging;
       expect(provider.processingConversations.map((row) => row.id), active ? ['target'] : isEmpty);
