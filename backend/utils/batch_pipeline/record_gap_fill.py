@@ -28,7 +28,10 @@ import time
 import wave
 from datetime import datetime
 
+from google.api_core.exceptions import PreconditionFailed
 from prometheus_client import Counter
+
+from config import audio_archive
 
 from config.record_audio import record_identity, require_record_audio_barrier
 from config.record_gap_fill import (
@@ -40,13 +43,14 @@ from config.record_gap_fill import (
     gap_fill_enabled,
 )
 from database import users as users_db
+from database.audio_timeline import span_blob_metadata
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.sync_record_wait_cache import claim_gap_fill_marker
 from utils import encryption
 from utils.batch_pipeline.capture_decode import decode_units
 from utils.batch_pipeline.live import retained_record_units
 from utils.other.local_storage import create_storage_client
-from utils.other.storage import create_gap_fill_chunk, list_audio_chunks
+from utils.other.storage import list_audio_chunks, owner_storage_write_gate, private_cloud_sync_bucket
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +74,58 @@ GAP_FILL_TOTAL = Counter(
     'Closed-record gap fills from the owner WAL by outcome (dark unless RECORD_GAP_FILL is on)',
     ['outcome'],
 )
+
+
+def gap_fill_chunk_path(uid: str, conversation_id: str, timestamp: float, protection_level: str) -> str:
+    """Key of a phone-WAL gap-fill object; no other writer can produce it.
+
+    Every other ``chunks/`` writer names objects with a 3-decimal timestamp
+    (``{ts:.3f}.opus``/``.enc``/``.bin`` and ``{a:.3f}-{b:.3f}.batch.*``). Six
+    decimals can never equal one of those names, so a later pusher or sync
+    upload never targets (or overwrites) a gap-fill object, and a gap-fill write
+    never targets theirs. The suffix is lossless PCM16 (``.bin``/``.enc``),
+    which admission and playback already decode.
+    """
+    suffix = 'enc' if protection_level == 'enhanced' else 'bin'
+    return f'chunks/{uid}/{conversation_id}/{timestamp:.6f}.{suffix}'
+
+
+def gap_fill_bucket(uid: str, client=None):
+    """The bucket ``upload_audio_chunk`` would use; both are listed and admitted."""
+    client = client if client is not None else create_storage_client()
+    return client.bucket(
+        audio_archive.regional_bucket(uid, private_cloud_sync_bucket)
+        if audio_archive.admitted(uid, 'SYNC')
+        else private_cloud_sync_bucket
+    )
+
+
+def create_gap_fill_chunk(
+    pcm: bytes, uid: str, conversation_id: str, timestamp: float, protection_level: str, metadata: dict, *, bucket
+) -> str | None:
+    """Create-only write of one gap-fill PCM16 object; None if the key exists.
+
+    Unlike ``upload_audio_chunk`` there is no overwrite fallback: an existing
+    object at the key always wins and this write is skipped.
+    """
+    if not pcm or len(pcm) % 2:
+        raise ValueError('gap fill needs aligned PCM16')
+    path = gap_fill_chunk_path(uid, conversation_id, timestamp, protection_level)
+    payload = encryption.encrypt_audio_chunk(pcm, uid) if protection_level == 'enhanced' else pcm
+    with owner_storage_write_gate(uid, bucket):
+        blob = bucket.blob(path)
+        blob.metadata = {
+            **span_blob_metadata({'start': timestamp, 'samples': len(pcm) // 2, 'sample_rate': RATE}),
+            **metadata,
+            'canonical': 'false',
+            'codec': 'pcm16',
+            'record_sample_rate': str(RATE),
+        }
+        try:
+            blob.upload_from_string(payload, content_type='application/octet-stream', if_generation_match=0)
+        except PreconditionFailed:
+            return None
+    return path
 
 
 def _epoch(value) -> float | None:
@@ -190,6 +246,8 @@ def _fill(uid, conversation_id, row, paths, record, wal, store, now, storage_cli
     if protection_level is None:
         protection_level = users_db.get_data_protection_level(uid)
     metadata = {'source': 'phone_wal', 'rendition': RENDITION, 'record': record[:16], 'wal': wal[:16]}
+    if bucket is None:
+        bucket = gap_fill_bucket(uid, client)
     written, collisions, seconds = _write_window(
         uid, conversation_id, paths, lower, finish + FINISH_SLACK_SECONDS, protection_level, metadata, bucket
     )

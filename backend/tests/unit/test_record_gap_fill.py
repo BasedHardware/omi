@@ -331,11 +331,11 @@ def test_racing_writer_at_the_key_wins_and_is_never_overwritten(world, monkeypat
 
 def test_create_only_writer_has_no_overwrite_fallback():
     bucket = FakeBucket()
-    first = storage.create_gap_fill_chunk(
+    first = record_gap_fill.create_gap_fill_chunk(
         tone(1, 1), UID, CID, 105.0, 'standard', {'source': 'phone_wal'}, bucket=bucket
     )
     stored = dict(bucket.objects[first])
-    again = storage.create_gap_fill_chunk(
+    again = record_gap_fill.create_gap_fill_chunk(
         tone(1, 2), UID, CID, 105.0, 'standard', {'source': 'phone_wal'}, bucket=bucket
     )
     assert again is None
@@ -345,7 +345,7 @@ def test_create_only_writer_has_no_overwrite_fallback():
 @pytest.mark.parametrize('timestamp', [105.0, 105.123, 1730000000.5, 1730000000.123456])
 def test_gap_fill_keys_never_equal_another_writers_keys(timestamp):
     """(b) Who wins: no other writer can ever address a gap-fill object."""
-    gap = {storage.gap_fill_chunk_path(UID, CID, timestamp, level) for level in ('standard', 'enhanced')}
+    gap = {record_gap_fill.gap_fill_chunk_path(UID, CID, timestamp, level) for level in ('standard', 'enhanced')}
     others = {f'chunks/{UID}/{CID}/{timestamp:.3f}.{ext}' for ext in ('opus', 'opus.enc', 'bin', 'enc')} | {
         f'chunks/{UID}/{CID}/{timestamp:.3f}-{timestamp + 1:.3f}.batch.{ext}' for ext in ('bin', 'enc')
     }
