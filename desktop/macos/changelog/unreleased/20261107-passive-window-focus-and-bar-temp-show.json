@@ -1,0 +1,5 @@
+{
+  "changes": [
+    "Keep passive Floating Bar and display-recovery updates from stealing keyboard focus or leaving a snoozed bar visible while you work in another app."
+  ]
+}

@@ -33,9 +33,12 @@ enum FloatingBarPreferenceMutation: Equatable {
 
 extension FloatingControlBarWindow {
   var shouldOrderOutAfterConversationClose: Bool {
-    !FloatingControlBarManager.shared.isEnabled
-      && state.currentNotification == nil
-      && !state.showingAIConversation
+    FloatingBarDurableVisibilityPolicy.shouldOrderOutAfterConversationClose(
+      isEnabled: FloatingControlBarManager.shared.isEnabled,
+      isSnoozed: FloatingControlBarManager.shared.isSnoozed,
+      hasCurrentNotification: state.currentNotification != nil,
+      showingAIConversation: state.showingAIConversation
+    )
   }
 
   /// Starts the token-fenced retraction after presentation eligibility has
@@ -155,7 +158,15 @@ extension FloatingControlBarManager {
     hasRevealedNotchThisSession = true
     window?.applySurfaceLevel()
     window?.normalizeForTemporaryShow()
-    window?.makeKeyAndOrderFront(nil)
+    let showingInput = window?.state.showingAIConversation == true && window?.state.showingAIResponse == false
+    if FloatingBarPresentationPolicy.shouldMakeKeyOnPresent(
+      request: request,
+      showingAIConversationInput: showingInput
+    ) {
+      window?.makeKeyAndOrderFront(nil)
+    } else {
+      window?.orderFrontRegardless()
+    }
     if shouldPlayNotchReveal {
       window?.playNotchRevealAnimation()
     }
