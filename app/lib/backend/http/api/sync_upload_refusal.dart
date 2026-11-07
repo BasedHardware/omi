@@ -82,3 +82,15 @@ String? syncUploadServerWaitReasonCode(http.Response response) {
   } catch (_) {}
   return null;
 }
+
+/// The server's per-recording pacing for a recording-scoped 5xx wait, else null.
+int? syncUploadServerWaitSeconds(http.Response response) {
+  try {
+    final decoded = jsonDecode(response.body);
+    if (decoded is Map<String, dynamic> && isRecordingScopedSyncWaitReasonCode(decoded['code'] as String?)) {
+      final seconds = decoded['retry_after_seconds'];
+      if (seconds is int && seconds > 0) return seconds;
+    }
+  } catch (_) {}
+  return null;
+}

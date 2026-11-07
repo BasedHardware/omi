@@ -18,6 +18,16 @@ def explicit_stage(monkeypatch):
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
 
 
+@pytest.fixture(autouse=True)
+def record_wait_memo(monkeypatch):
+    memo = {}
+    monkeypatch.setattr(
+        live_upload, 'remember_record_wait', lambda uid, cid, reason: memo.__setitem__((uid, cid), reason)
+    )
+    monkeypatch.setattr(live_upload, 'cached_record_wait', lambda uid, cid: memo.get((uid, cid)))
+    return memo
+
+
 @pytest.mark.parametrize(
     'case,expected',
     [
@@ -100,6 +110,7 @@ async def test_record_wait_reason_retains_custody_without_alias(monkeypatch, cap
     assert json.loads(response.body) == {
         'code': 'record_capture_pending',
         'detail': 'Retain local audio until the registered record is complete',
+        'retry_after_seconds': 30,
     }
     if case == 'status_failed':
         # The alias committed before the read failed; the client still keeps
@@ -113,6 +124,33 @@ async def test_record_wait_reason_retains_custody_without_alias(monkeypatch, cap
         assert store.rows == before
     messages = [record.getMessage() for record in caplog.records]
     assert messages == [f'event=sync_record_upload outcome=pending reason={expected}']
+
+
+async def test_conversation_level_wait_is_memoized_and_repeated_without_upload_work(record_wait_memo):
+    response = await live_upload._conversation_pending(
+        live_upload.RecordUploadWait.RECORD_JOBS_MISSING, 'synthetic-owner', 'synthetic-conversation'
+    )
+    assert response.status_code == 503
+    repeated = await live_upload.memoized_record_wait('synthetic-owner', 'synthetic-conversation')
+    assert repeated is not None and repeated.status_code == 503
+    assert 'retry-after' not in repeated.headers
+    assert json.loads(repeated.body)['code'] == 'record_capture_pending'
+    # Another conversation of the same owner is never held by this memo.
+    assert await live_upload.memoized_record_wait('synthetic-owner', 'other-conversation') is None
+
+
+async def test_content_level_wait_is_not_memoized(record_wait_memo):
+    await live_upload._conversation_pending(
+        live_upload.RecordUploadWait.AUDIO_COVERAGE_UNPROVEN, 'synthetic-owner', 'synthetic-conversation'
+    )
+    assert record_wait_memo == {}
+    assert await live_upload.memoized_record_wait('synthetic-owner', 'synthetic-conversation') is None
+
+
+async def test_unknown_or_missing_memo_falls_through(record_wait_memo):
+    record_wait_memo[('synthetic-owner', 'synthetic-conversation')] = 'not-a-reason'
+    assert await live_upload.memoized_record_wait('synthetic-owner', 'synthetic-conversation') is None
+    assert await live_upload.memoized_record_wait('synthetic-owner', None) is None
 
 
 async def test_intake_contention_logs_phase_and_monotonic_elapsed_without_error_text(monkeypatch, caplog):

@@ -17,6 +17,17 @@ It stays pending without spending its retry budget, is skipped for the rest of
 that drain pass, and the drain continues with other recordings after the
 client's own short pause (2–30s, reset by a success).
 
+Server-side pacing that never pauses the account (review, Luna):
+
+- The 503 body carries `retry_after_seconds: 30`. New apps hold only that
+  conversation's WALs out of the drain for that long (in memory, capped at
+  300s); other recordings keep draining.
+- Conversation-level waits (`record_jobs_missing`, `reservation_pending`) are
+  memoized in Redis for 30s per (uid, conversation). A repeat upload for that
+  conversation inside the window gets the same 503 before any file save,
+  archive or decode, so a hot client loop costs almost nothing. Content-level
+  waits are not memoized. A Redis error is a cache miss and runs the full check.
+
 New app builds read the closed body code `record_capture_pending` on a 5xx and
 never turn it into an account pause, whatever headers arrive. They mirror it as
 a `deferred` upload, not a failure.
