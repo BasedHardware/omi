@@ -289,14 +289,14 @@
       "scope": "explicit-bridge"
     },
     {
-      "expression": "(max(omi_batch_timeliness_backlog_units{leg=\"assignment_held\"}) > bool 1000) * on() (delta((max(omi_batch_timeliness_backlog_units{leg=\"assignment_held\"}))[1h:5m]) > bool 50) * on() ((time() - max(omi_batch_timeliness_observed_at_seconds)) < bool 900)",
+      "expression": "(((max(omi_batch_timeliness_backlog_units{leg=\"assignment_held\"} and ignoring(leg) ((time() - omi_batch_timeliness_observed_at_seconds) < 900)) > 1000) and on() (delta((max(omi_batch_timeliness_backlog_units{leg=\"assignment_held\"} and ignoring(leg) ((time() - omi_batch_timeliness_observed_at_seconds) < 900)))[1h:5m]) > 50)) or (max(omi_batch_timeliness_backlog_units{leg=\"assignment_held\"} and ignoring(leg) ((time() - omi_batch_timeliness_observed_at_seconds) < 900)) >= 10000) or on() vector(0))",
       "file": "alerts/critical-failures.json",
       "issues": [],
       "metrics": [
         "omi_batch_timeliness_backlog_units",
         "omi_batch_timeliness_observed_at_seconds"
       ],
-      "owner_title": "Held batch backlog is growing while owners wait",
+      "owner_title": "Held batch backlog is growing or at least 10000 units",
       "owner_uid": "omi-batch-held-backlog-growing",
       "panel": null,
       "pointer": "/data/0/model/expr",

@@ -3,10 +3,16 @@
 import importlib.util
 import json
 import logging
+import os
 from pathlib import Path
 import runpy
+import shutil
+import subprocess
 
 import pytest
+import yaml
+
+from config.batch_timeliness import timeliness_interval_seconds
 
 ROOT = Path(__file__).resolve().parents[3]
 MON = ROOT / 'backend/charts/monitoring'
@@ -69,6 +75,179 @@ def test_batch_alarm_requires_freshness_and_keeps_the_two_hour_contract():
     assert hit(7201, 30) == 1
     assert hit(7200, 30) == 0
     assert hit(7201, 900) == 0
+
+
+def test_held_backlog_growth_or_saturation_contract_and_mirrors():
+    rule = RULES['omi-batch-held-backlog-growing']
+    stock = (
+        'max(omi_batch_timeliness_backlog_units{leg="assignment_held"} '
+        'and ignoring(leg) ((time() - omi_batch_timeliness_observed_at_seconds) < 900))'
+    )
+    assert rule['data'][0]['model']['expr'] == (
+        f'((({stock} > 1000) and on() (delta(({stock})[1h:5m]) > 50)) ' f'or ({stock} >= 10000) or on() vector(0))'
+    )
+    assert rule['for'] == '15m'
+    assert rule['data'][2]['model']['conditions'][0]['evaluator'] == {'params': [0.5], 'type': 'gt'}
+    combined = {r['uid']: r for r in json.loads((MON / 'alert-rules.json').read_text())}
+    assert combined[rule['uid']] == rule
+    inventory = json.loads((MON / 'gmp-query-migration-inventory.json').read_text())
+    # The migration inventory must describe the same executable query.
+    entry = next(row for row in inventory['consumers'] if row['owner_uid'] == rule['uid'])
+    assert entry['expression'] == rule['data'][0]['model']['expr']
+    assert entry['owner_title'] == rule['title']
+
+
+def test_held_backlog_saturation_promql_and_pending_window(tmp_path, monkeypatch):
+    executable = os.environ.get('PROMTOOL_BIN') or shutil.which('promtool')
+    if not executable:
+        pytest.skip('set PROMTOOL_BIN to run the offline Prometheus semantic regression')
+    rule = RULES['omi-batch-held-backlog-growing']
+    expr = rule['data'][0]['model']['expr']
+    threshold = rule['data'][2]['model']['conditions'][0]['evaluator']['params'][0]
+    alert = {'alert': 'HeldBacklog', 'expr': f'({expr}) > {threshold}', 'for': rule['for']}
+    (tmp_path / 'rules.yaml').write_text(yaml.safe_dump({'groups': [{'name': 'held', 'rules': [alert]}]}))
+
+    def cadence_observed(configured):
+        monkeypatch.setenv('BATCH_TIMELINESS_INTERVAL_SECONDS', str(configured))
+        cadence = timeliness_interval_seconds()
+        assert cadence == 600  # Includes the formerly supported 3600s configuration.
+        # Scrapes every minute, successful samples every ten minutes. Timestamps
+        # stay flat between samples; a per-scrape advancing timestamp hides P1.
+        return ' '.join(str(int(minute * 60 // cadence * cadence)) for minute in range(91))
+
+    worst_observed = cadence_observed(600)
+
+    def series(metric, values, labels):
+        selector = ','.join(f'{key}={json.dumps(value)}' for key, value in sorted(labels.items()))
+        return {'series': f'{metric}{{{selector}}}', 'values': values}
+
+    def replica(stock, observed, labels):
+        result = [series('omi_batch_timeliness_backlog_units', stock, {**labels, 'leg': 'assignment_held'})]
+        if observed is not None:
+            result.append(series('omi_batch_timeliness_observed_at_seconds', observed, labels))
+        return result
+
+    def case(name, stock, expected, *, observed=None, when='90m', firing=False, inputs=None, checkpoints=None):
+        if inputs is None:
+            # Keep the original growth/drain controls at a valid 60s cadence;
+            # worst-cadence pending proofs below use explicit 600s stair steps.
+            inputs = replica(stock, '0+60x90' if observed is None else observed, {})
+        checks = checkpoints if checkpoints is not None else [(when, expected, firing)]
+        return {
+            'name': name,
+            'interval': '1m',
+            'input_series': inputs,
+            'promql_expr_test': [
+                {'expr': expr, 'eval_time': at, 'exp_samples': [{'labels': '{}', 'value': value}]}
+                for at, value, _ in checks
+            ],
+            'alert_rule_test': [
+                {
+                    'eval_time': at,
+                    'alertname': 'HeldBacklog',
+                    'exp_alerts': [{'exp_labels': {}, 'exp_annotations': {}}] if active else [],
+                }
+                for at, _, active in checks
+            ],
+        }
+
+    tests = [
+        case('flat capped stock still pages after 1h delta reaches zero', '10000x90', 10000, firing=True),
+        case('saturation needs no growth history', '_ _ 10000x88', 10000, when='2m'),
+        case('saturation respects pending duration', '10000x90', 10000, when='14m'),
+        case('saturation fires after pending duration', '10000x90', 10000, when='15m', firing=True),
+        case('below cap flat stock is quiet', '9999x90', 0),
+        case('small growing stock stays quiet', '0+1x90', 0),
+        case('below cap growing stock still pages', '2000+2x90', 2180, firing=True),
+        case('lever zero exact stock above cap pages', '10123x90', 10123, firing=True),
+        case('saturated but stale sample is quiet', '10000x90', 0, observed='0x90'),
+        case('freshness boundary excludes saturation', '10000x90', 0, observed='0+60x75 4500x14'),
+        case('draining below cap resolves without requiring measured growth', '10000x70 9999x19', 0),
+    ]
+    for configured in (600, 3600):
+        tests.append(
+            case(
+                f'configured {configured}s uses worst 600s cadence throughout full pending window',
+                '10000x90',
+                10000,
+                observed=cadence_observed(configured),
+                checkpoints=[(f'{minute}m', 10000, minute >= 15) for minute in range(31)],
+            )
+        )
+
+    # The producer adds only leg to stock; local scrapes attach namespace/pod
+    # and job/instance. GMP/bridged targets can also carry these resource labels.
+    # Match every shared label, rather than hard-coding a smaller identity list.
+    identity = {
+        'project_id': 'fixture-project',
+        'location': 'fixture-location',
+        'cluster': 'fixture-cluster',
+        'namespace': 'fixture-namespace',
+        'job': 'batch-pipeline-worker-metrics',
+        'instance': 'replica-a:9090',
+        'pod': 'replica-a',
+        'service': 'fixture-service',
+    }
+    peer_identity = {**identity, 'instance': 'replica-b:9090', 'pod': 'replica-b'}
+    healthy_peer = replica('9999x90', worst_observed, peer_identity)
+    tests.extend(
+        [
+            case(
+                'fresh matching resource identity at saturation pages',
+                None,
+                10000,
+                inputs=replica('10000x90', worst_observed, identity),
+                checkpoints=[('14m', 10000, False), ('15m', 10000, True), ('90m', 10000, True)],
+            ),
+            case(
+                'stale 10000 cannot borrow fresh 9999 peer timestamp at the 900s boundary',
+                None,
+                0,
+                inputs=replica('10000x90', '0x90', identity) + healthy_peer,
+                checkpoints=[('899s', 10000, False), ('900s', 0, False), ('30m', 0, False), ('90m', 0, False)],
+            ),
+            case(
+                'stale high stock does not mask fresh below-cap growth',
+                None,
+                2180,
+                inputs=replica('10000x90', '0x90', identity) + replica('2000+2x90', '0+60x90', peer_identity),
+                firing=True,
+            ),
+            case(
+                'fresh healthy peer cannot revive a missing observation',
+                None,
+                0,
+                inputs=replica('10000x90', None, identity) + healthy_peer,
+            ),
+            case('no observations returns fallback zero', None, 0, inputs=replica('10000x90', None, identity)),
+            case('no stock returns fallback zero', None, 0, inputs=replica('10000x90', worst_observed, identity)[1:]),
+            case('no series returns fallback zero', None, 0, inputs=[]),
+        ]
+    )
+    for label in identity:
+        # Change or omit one identity/resource label at a time. An unrelated
+        # healthy peer must not make an unmatched 10000 stock actionable.
+        for mismatch in (
+            {**identity, label: 'different'},
+            {key: value for key, value in identity.items() if key != label},
+        ):
+            tests.append(
+                case(
+                    f'fresh healthy peer cannot revive mismatched {label}: {mismatch.get(label, "missing")}',
+                    None,
+                    0,
+                    inputs=replica('10000x90', None, identity)
+                    + [series('omi_batch_timeliness_observed_at_seconds', worst_observed, mismatch)]
+                    + healthy_peer,
+                )
+            )
+    (tmp_path / 'test.yaml').write_text(
+        yaml.safe_dump({'rule_files': ['rules.yaml'], 'evaluation_interval': '1m', 'tests': tests})
+    )
+    result = subprocess.run(
+        [executable, 'test', 'rules', 'test.yaml'], cwd=tmp_path, capture_output=True, text=True, timeout=30
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
 
 
 @pytest.mark.parametrize(

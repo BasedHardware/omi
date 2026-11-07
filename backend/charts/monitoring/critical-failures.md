@@ -19,7 +19,7 @@ the executable definitions. Every rule contains the action, scope and threshold.
 | Rule | Condition and pending duration | First action |
 | --- | --- | --- |
 | `omi-batch-unit-unpublished-2h` | New unpublished unit >7200 seconds, sample <900 seconds old; 5m | Inspect the overdue leg and use the custody/recovery runbook; retain staged audio. |
-| `omi-batch-held-backlog-growing` | Assignment-held stock >1000 and 1h growth >50, sample <900 seconds old; 15m | Inspect assignment/projection recovery and compare inflow with drain rate. |
+| `omi-batch-held-backlog-growing` | Pre-epoch assignment-held stock >1000 with 1h growth >50, OR stock >=10,000; sample <900 seconds old; 15m | Inspect assignment/projection recovery; at the count cap, drain held debt below the cap rather than infer a rate. |
 | `omi-enrichment-queue-depth-page` | Native Cloud Tasks enrichment depth, 5m maximum >6000; 15m | Check dispatch, worker responses and drain rate before adding capacity. |
 | `omi-stt-vendor-benched-page` | Soniox or Modulate minimum stage <=25; 15m | Inspect provider errors and GateState; get recovery approval before clearing a bench. |
 | `omi-modulate-credit-page` | Any Modulate `provider_budget_exhausted` close in 15m; 1m | Billing owner verifies and restores credits before an account-circuit reset. |
@@ -28,6 +28,22 @@ the executable definitions. Every rule contains the action, scope and threshold.
 
 Batch stocks are replicated global gauges: take `max`, never
 `sum` across worker/listen pods. Summing multiplies the backlog by replica count.
+With `batch_timeliness_leader` enabled, historical counts stop at 10,000 per leg: a saturated value means
+**at least** 10,000, not exact stock or measured growth. The held-backlog page therefore also fires on
+stock >=10,000 without requiring growth history or a positive delta. It stays actionable while capped
+stock is flat, including when the true stock is falling but still above the cap. Below the cap, the
+original >1000 stock and >50/hour growth condition applies. Lever 0 restores exact counts; the >=10,000
+stock condition still applies. Each stock is joined to its matching observation with `and ignoring(leg)`
+before the fleet maximum; all replica/resource labels must match and the <900 comparison omits `bool`.
+Both branches, including the growth subquery, use that fresh fleet stock and retain the zero fallback.
+Both branches require a fresh sample for 15 minutes. The sampling interval is clamped to 60–600 seconds
+(default 300), keeping successful recurring observations below the 900-second freshness boundary
+through the full pending window. Configured 3600 now clamps to 600. Inspect aggregate
+recovery progress and repair the held leg without deleting audio or removing the Firestore read bound.
+All sampler gauges expire at collection after the configured sampling interval plus 60 seconds even
+with election disabled; failed refreshes and lever changes do not extend that deadline. Existing leases
+from older hourly samplers expire at their original deadline; this change does not revoke them.
+
 The low-stage selector names the two serving paid targets; retired Parakeet's
 persistent low stage must not cause this page. A pristine NaN stage does not
 satisfy `<=25`. The credit alert uses the emitted closed `provider` and `reason`

@@ -29254,7 +29254,7 @@
     "orgID": 1,
     "folderUID": "betdycdziadc0e",
     "ruleGroup": "Critical pipeline failures",
-    "title": "Held batch backlog is growing while owners wait",
+    "title": "Held batch backlog is growing or at least 10000 units",
     "condition": "C",
     "data": [
       {
@@ -29270,7 +29270,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "(max(omi_batch_timeliness_backlog_units{leg=\"assignment_held\"}) > bool 1000) * on() (delta((max(omi_batch_timeliness_backlog_units{leg=\"assignment_held\"}))[1h:5m]) > bool 50) * on() ((time() - max(omi_batch_timeliness_observed_at_seconds)) < bool 900)",
+          "expr": "(((max(omi_batch_timeliness_backlog_units{leg=\"assignment_held\"} and ignoring(leg) ((time() - omi_batch_timeliness_observed_at_seconds) < 900)) > 1000) and on() (delta((max(omi_batch_timeliness_backlog_units{leg=\"assignment_held\"} and ignoring(leg) ((time() - omi_batch_timeliness_observed_at_seconds) < 900)))[1h:5m]) > 50)) or (max(omi_batch_timeliness_backlog_units{leg=\"assignment_held\"} and ignoring(leg) ((time() - omi_batch_timeliness_observed_at_seconds) < 900)) >= 10000) or on() vector(0))",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -29349,12 +29349,12 @@
     "keep_firing_for": "0s",
     "annotations": {
       "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
-      "summary": "Held batch backlog is growing while owners wait",
+      "summary": "Held batch backlog is growing or at least 10000 units",
       "user_impact": "Recorded audio is accumulating without reaching its owner.",
-      "scope": "Fleet-max assignment_held stock (replicas expose the same global census), 1h growth and sample freshness.",
+      "scope": "Fleet-max pre-epoch assignment_held stock: growth below the 10000 count cap, or stock at/above it; fresh samples only.",
       "verification": "Run the exact query in this rule on its declared datasource and compare sample freshness and the replay coverage in the runbook.",
-      "safe_next_action": "Inspect assignment/projection recovery and the batch custody census using aggregate counts; repair the stalled leg without deleting audio.",
-      "threshold": "Stock >1000 AND growth >50 units/hour AND sample age <900s for 15m. Today stock 4300..4461; 1h growth p95 74, max 83. No pre-incident retained batch sample: normal control is synthetic, not a claimed healthy day.",
+      "safe_next_action": "Inspect assignment/projection recovery and the aggregate batch custody census. At 10000 the bounded count means at least 10000, not measured growth; repair the held leg and drain below the cap without deleting audio.",
+      "threshold": "(Stock >1000 AND 1h growth >50) OR stock >=10000, with sample age <900s for 15m. Saturation is actionable stock, not proof of growth; a capped flat series must keep paging. Lever 0 reports exact stock and keeps the same >=10000 condition. Normal control is synthetic, not a claimed healthy day.",
       "runbook": "backend/charts/monitoring/critical-failures.md"
     },
     "labels": {
