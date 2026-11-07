@@ -112,9 +112,6 @@ void main() {
       await tester.tap(find.byKey(const Key('conversation_star')));
       await tester.pump();
       await tester.tap(find.byKey(const Key('conversation_share')));
-      await tester.pump();
-      // Share asks before making a private conversation public; leave it private.
-      await tester.tap(find.text('Cancel'));
       await tester.pumpAndSettle();
 
       await tester.tap(find.byKey(const Key('conversation_more')));

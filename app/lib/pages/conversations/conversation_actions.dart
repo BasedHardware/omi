@@ -20,6 +20,7 @@ import 'package:omi/utils/analytics/registry/events.g.dart' show ConversationUnt
 import 'package:omi/utils/conversations/capture_groups.dart';
 import 'package:omi/utils/conversations/conversation_title.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
@@ -171,20 +172,16 @@ Future<void> toggleConversationStarred(BuildContext context, ServerConversation 
 }
 
 /// Shares [conversation]'s link, the same way the conversation page does: a private conversation
-/// first asks ("Anyone with the link can view"), becomes shared, and goes back to private when the
-/// share sheet is dismissed without sharing.
+/// becomes shared for the link, and goes back to private when the share sheet is dismissed without
+/// sharing.
 Future<void> shareConversation(BuildContext context, ServerConversation conversation) async {
   final l10n = context.l10n;
   final wasPrivate = conversation.visibility != ConversationVisibility.shared;
   if (wasPrivate) {
-    final confirmed = await showOmiConfirm(
-      context,
-      title: l10n.shareConversationQuestion,
-      message: l10n.anyoneWithLinkCanView,
-      confirmLabel: l10n.share,
-    );
-    if (!confirmed || !context.mounted) return;
-    final ok = await setConversationVisibility(conversation.id);
+    final ok = await setConversationVisibility(conversation.id).catchError((Object e) {
+      Logger.debug('Failed to share conversation: $e');
+      return false;
+    });
     if (!context.mounted) return;
     if (!ok) {
       OmiFeedback.error(context, l10n.conversationUrlNotShared);
@@ -201,7 +198,10 @@ Future<void> shareConversation(BuildContext context, ServerConversation conversa
     final reverted = await setConversationVisibility(
       conversation.id,
       visibility: ConversationVisibility.private_.value,
-    );
+    ).catchError((Object e) {
+      Logger.debug('Failed to revert conversation visibility: $e');
+      return false;
+    });
     if (reverted) conversation.visibility = ConversationVisibility.private_;
   }
 }

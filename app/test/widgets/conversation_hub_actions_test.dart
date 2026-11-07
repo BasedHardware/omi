@@ -213,7 +213,7 @@ void main() {
     expect(separated, ['b'], reason: 'the other recording, never the row itself');
   });
 
-  testWidgets('Share on a private row asks before making it public', (tester) async {
+  testWidgets('Share on a private row does not ask a confirmation dialog first', (tester) async {
     final a = _conversation('a');
     provider.conversations = [a];
     await pump(tester, ConversationListItem(conversation: a, date: DateTime(2026, 9, 20), conversationIdx: 0));
@@ -221,10 +221,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('conversation_action_share')));
     await tester.pumpAndSettle();
-    expect(find.text('Anyone with the link can view'), findsOneWidget);
-    await tester.tap(find.text('Cancel'));
-    await tester.pumpAndSettle();
-    expect(a.visibility, isNot(ConversationVisibility.shared));
+    expect(find.text('Share Conversation?'), findsNothing);
+    expect(find.text('Anyone with the link can view'), findsNothing);
   });
 
   group('row titles (hub audit #21)', () {
