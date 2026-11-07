@@ -198,6 +198,174 @@ void main() {
       });
     });
 
+    test('a second episode does not reset the first episode call budget', () {
+      fakeAsync((async) {
+        var reads = 0;
+        var includeSecond = false;
+        final now = _t0.add(const Duration(hours: 2));
+        final history = _HomeHistory()
+          ..processingConversations = [
+            ServerConversation(
+                id: 'a',
+                createdAt: _t0,
+                startedAt: _t0,
+                status: ConversationStatus.processing,
+                structured: Structured('', '')),
+          ];
+        Episode pending(String id) => Episode(
+              id: id,
+              live: false,
+              startedAt: _t0,
+              lastActivityAt: _t0,
+              closedAt: id == 'ep1' ? _t0 : now,
+              title: 'read-$reads',
+              conversationIds: const ['a', 'b'],
+            );
+        final provider = EpisodeProvider(
+          clock: () => now,
+          fetchPage: (from, to, {cursor}) async {
+            reads++;
+            return ApiSuccess(
+                EpisodePageRead(enabled: true, episodes: [pending('ep1'), if (includeSecond) pending('ep2')]));
+          },
+        )..debugSetLive(null);
+        provider.observeHomeConversations(history);
+        unawaited(provider.refreshHome(_t0, _t0));
+        async.flushMicrotasks();
+        async.elapse(const Duration(minutes: 13));
+        expect(reads, 6, reason: 'the old processing hold has spent five calls');
+        includeSecond = true;
+        unawaited(provider.refreshHome(_t0, _t0, force: true));
+        async.flushMicrotasks();
+        async.elapse(const Duration(hours: 2));
+        expect(reads, 17, reason: '5 first-only, 5 shared, 5 second-only calls, plus 2 explicit loads');
+        expect(provider.homeEpisodes.first.title, 'read-12', reason: 'ep1 stops after its own 10 calls');
+        expect(provider.homeEpisodes.last.title, 'read-17', reason: 'ep2 receives its own remaining budget');
+        provider.dispose();
+        history.dispose();
+        async.flushTimers();
+      });
+    });
+
+    test('new held episodes cannot exceed the per-user window call ceiling', () {
+      fakeAsync((async) {
+        var reads = 0;
+        var episodeId = 'ep1';
+        final provider = EpisodeProvider(
+          clock: () => _t0,
+          fetchPage: (from, to, {cursor}) async {
+            reads++;
+            return ApiSuccess(EpisodePageRead(enabled: true, episodes: [
+              Episode(
+                  id: episodeId,
+                  live: false,
+                  startedAt: _t0,
+                  lastActivityAt: _t0,
+                  closedAt: _t0,
+                  conversationIds: const ['a', 'b']),
+            ]));
+          },
+        )..debugSetLive(null);
+        for (final id in ['ep1', 'ep2', 'ep3']) {
+          episodeId = id;
+          unawaited(provider.refreshHome(_t0, _t0, force: true));
+          async.flushMicrotasks();
+          async.elapse(const Duration(hours: 2));
+        }
+        expect(reads, 3 + EpisodeProvider.homeHoldWindowCalls);
+        // Returning to an old window must retain its ceiling as well.
+        unawaited(provider.refreshHome(_t0.add(const Duration(days: 1)), _t0.add(const Duration(days: 1))));
+        async.flushMicrotasks();
+        provider.invalidateHome();
+        unawaited(provider.refreshHome(_t0, _t0));
+        async.flushMicrotasks();
+        async.elapse(const Duration(hours: 2));
+        expect(reads, 5 + EpisodeProvider.homeHoldWindowCalls);
+        provider.dispose();
+        async.flushTimers();
+      });
+    });
+
+    test('multi-page holds count backend calls and preserve unread window membership', () {
+      fakeAsync((async) {
+        final calls = <String?>[];
+        Episode pending(String id) => Episode(
+              id: id,
+              live: false,
+              startedAt: _t0,
+              lastActivityAt: _t0,
+              closedAt: _t0,
+              conversationIds: const ['a', 'b'],
+              moments: id == 'ep2' && calls.length >= 5
+                  ? [
+                      EpisodeMoment(
+                          id: 'm',
+                          conversationId: 'a',
+                          startedAt: _t0,
+                          endedAt: _t0,
+                          points: const [EpisodePoint('Notes landed')]),
+                    ]
+                  : const [],
+            );
+        final provider = EpisodeProvider(
+          clock: () => _t0,
+          fetchPage: (from, to, {cursor}) async {
+            calls.add(cursor);
+            return ApiSuccess(switch (cursor) {
+              null => EpisodePageRead(enabled: true, episodes: [_episode(id: 'live')], nextCursor: 'page-2'),
+              'page-2' => EpisodePageRead(enabled: true, episodes: [pending('ep2')], nextCursor: 'page-3'),
+              _ => EpisodePageRead(enabled: true, episodes: [pending('ep3')]),
+            });
+          },
+        )..debugSetLive(null);
+        unawaited(provider.refreshHome(_t0, _t0));
+        async.flushMicrotasks();
+        async.elapse(EpisodeProvider.pollInterval);
+        expect(calls, [null, 'page-2', 'page-3', null, 'page-2', 'page-3']);
+        expect(provider.homeEpisodes.map((e) => e.id), ['live', 'ep2', 'ep3']);
+        expect(provider.homeEpisodes.singleWhere((e) => e.id == 'ep2').composed, isTrue);
+        async.elapse(const Duration(hours: 2));
+        expect(calls.length, 3 + EpisodeProvider.homeHoldAttempts,
+            reason: '10 extra backend calls, not 10 full-window scans');
+        expect(calls.where((c) => c == 'page-3').length, 4,
+            reason: 'older held episodes remain reachable; the last retry stops when its call budget runs out');
+        expect(provider.homeEpisodes.map((e) => e.id), ['live', 'ep2', 'ep3']);
+        provider.dispose();
+        async.flushTimers();
+      });
+    });
+
+    test('a same-window episode closure cancels the old timer and reschedules from the new read', () {
+      fakeAsync((async) {
+        var reads = 0;
+        final provider = EpisodeProvider(
+          clock: () => _t0,
+          wrapUp: (_, {conversationId}) async => ApiSuccess(_episode(id: 'ep2', live: false)),
+          fetchPage: (from, to, {cursor}) async {
+            reads++;
+            return ApiSuccess(EpisodePageRead(enabled: true, episodes: [waiting, _episode(id: 'ep2')]));
+          },
+        )..debugSetLive(_episode(id: 'ep2'));
+        unawaited(provider.refreshHome(_t0, _t0));
+        async.flushMicrotasks();
+        async.elapse(const Duration(seconds: 20));
+        provider.onLiveFinalized();
+        expect(provider.homeEpisodes.last.live, isFalse);
+        async.flushMicrotasks();
+        async.elapse(const Duration(seconds: 10));
+        expect(reads, 1, reason: 'the invalidated generation must not fire at 30 seconds');
+        unawaited(provider.refreshHome(_t0, _t0));
+        async.flushMicrotasks();
+        expect(reads, 2);
+        async.elapse(const Duration(seconds: 29));
+        expect(reads, 2);
+        async.elapse(const Duration(seconds: 1));
+        expect(reads, 3, reason: 'the current generation has its own timer');
+        provider.dispose();
+        async.flushTimers();
+      });
+    });
+
     test('a device clock far behind does not wait forever', () {
       expect(waiting.awaitingSummary(_t0.subtract(const Duration(hours: 1))), isFalse);
     });
