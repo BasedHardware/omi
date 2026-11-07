@@ -524,6 +524,7 @@ def test_pending_sync_dedupes_only_fully_listed_recordings(monkeypatch, enabled)
 
 @pytest.mark.parametrize('attached', [False, True])
 def test_live_owner_hides_recordings_and_observes_attach_gap(caplog, attached):
+    caplog.set_level('INFO')
     from utils.episodes import home_processing, metrics
 
     owner = {
@@ -558,6 +559,7 @@ def test_pending_work_endpoint_dedupes_live_and_listed_owners(http_client, monke
     from database import sync_jobs
     from utils.episodes import home_processing
 
+    monkeypatch.setattr(home_processing.conversations, 'get_conversations_by_id_without_photos', lambda *a: [])
     monkeypatch.setenv('HOME_PROCESSING_OWNERSHIP_ENABLED', 'true')
     monkeypatch.setattr(store, 'list_items', lambda *args, **kwargs: [])
     monkeypatch.setattr(
@@ -594,7 +596,7 @@ def test_pending_work_endpoint_dedupes_live_and_listed_owners(http_client, monke
             'result': {'new_memories': {'live': ['c1'], 'listed': ['outside'], 'unowned': ['new']}[jid]},
         },
     )
-    response = http_client.get('/v1/pending-work')
+    response = http_client.get('/v1/pending-work', headers={'X-Omi-App-Channel': 'beta', 'X-Omi-Home-Ownership': '1'})
     assert response.status_code == 200
     assert [item['id'] for item in response.json()['items']] == ['conv:outside', 'sync:unowned']
 
@@ -627,3 +629,55 @@ def test_inflight_sync_uses_admission_target_and_recording_count(monkeypatch, en
     assert items[0]['conversation_ids'] == (['c1'] if enabled else [])
     assert items[0].get('recording_count', 1) == (3 if enabled else 1)
     assert len(sync_jobs.pending_sync_jobs(UID, listed_conversation_ids={'c1'})) == (0 if enabled else 1)
+
+
+def test_pending_conversations_fills_visible_page_after_owned_page(monkeypatch):
+    query = Mock()
+    query.where.return_value = query
+    query.limit.return_value = query
+    query.start_after.return_value = query
+    owned = [SimpleNamespace(id=str(i), to_dict=lambda: dict(ROW, status='processing')) for i in range(store.LIMIT)]
+    outside = SimpleNamespace(id='outside', to_dict=lambda: dict(ROW, status='processing'))
+    query.stream.side_effect = [owned, [outside]]
+    client = Mock()
+    client.collection.return_value.document.return_value.collection.return_value = query
+    monkeypatch.setattr(store, 'db', client)
+    result = store.pending_conversations(UID, exclude=lambda row: row['id'] != 'outside')
+    assert [item['id'] for item in result] == ['conv:outside']
+    query.start_after.assert_called_once_with(owned[-1])
+
+
+def test_pending_sync_default_reader_retains_live_writer_jobs(monkeypatch):
+    from database import sync_jobs
+
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    monkeypatch.setenv('HOME_PROCESSING_OWNERSHIP_ENABLED', 'true')
+    redis = Mock()
+    redis.zrevrange.return_value = ['job']
+    monkeypatch.setattr(sync_jobs, 'r', redis)
+    monkeypatch.setattr(
+        sync_jobs,
+        'get_sync_job',
+        lambda _: {
+            'uid': UID,
+            'status': 'processing',
+            'created_at': NOW.timestamp(),
+            'updated_at': NOW.timestamp(),
+            'target_conversation_id': 'c1',
+            'result': None,
+        },
+    )
+    assert len(sync_jobs.pending_sync_jobs(UID)) == 1  # Rehome lease probes must see writers.
+    assert sync_jobs.pending_sync_jobs(UID, listed_conversation_ids={'c1'}) == []
+
+
+def test_unlinked_sync_target_inside_live_window_never_reappears_as_a_job(monkeypatch, caplog):
+    from utils.episodes import home_processing
+
+    caplog.set_level('INFO')
+    owner = {'id': 'e', 'started_at': NOW, 'last_activity_at': NOW + timedelta(minutes=10), 'conversation_ids': []}
+    row = {'id': 'gap', 'recorded_start': NOW + timedelta(minutes=1), 'recorded_end': NOW + timedelta(minutes=2)}
+    monkeypatch.setattr(home_processing.conversations, 'get_conversations_by_id_without_photos', lambda *a: [row])
+    item = {'id': 'sync:job', 'conversation_ids': ['gap']}
+    assert home_processing.suppress_owned_syncs(UID, [item], owner, set()) == []
+    assert 'event=episode_attach_gap' in caplog.text

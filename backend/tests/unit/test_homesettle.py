@@ -537,3 +537,37 @@ def test_batch_placeholders_coexist_with_neutral_titles_and_floor_holding(deadli
     assert (by_id['pending']['title'], by_id['pending']['status']) == (title, status)
     assert 'floor' not in by_id
     assert members == before
+
+
+@pytest.mark.parametrize(
+    'channel,bound,hidden',
+    [
+        (None, None, False),
+        ('store', None, False),
+        ('beta', 'start_date', False),
+        ('beta', 'end_date', False),
+        ('beta', None, True),
+    ],
+)
+def test_live_home_suppression_requires_this_clients_unfiltered_capability(monkeypatch, channel, bound, hidden):
+    from types import SimpleNamespace
+
+    monkeypatch.setenv('HOME_PROCESSING_OWNERSHIP_ENABLED', 'true')
+    read = Mock(return_value={'id': 'e', 'conversation_ids': ['a']})
+    monkeypatch.setattr(home_membership, 'live_owner', read)
+    headers = {'X-Omi-Home-Ownership': '1', **({'X-Omi-App-Channel': channel} if channel else {})}
+    request = SimpleNamespace(headers=headers, query_params={bound: NOW.isoformat()} if bound else {})
+    response = SimpleNamespace(headers={})
+    rows = [floor(id='a', episode_id='e')]
+    assert home_membership.project_list('u', rows, request, response, filtered=False) == ([] if hidden else rows)
+    assert read.call_count == int(hidden)
+    assert response.headers.get(home_membership.SUPPRESSED_HEADER, '') == ''  # Only acknowledged held omissions use it.
+    assert home_membership.live_suppression_for('u', request) == hidden  # Version cache must be bypassed when dynamic.
+
+
+def test_old_beta_client_does_not_opt_into_live_home_suppression(monkeypatch):
+    from types import SimpleNamespace
+
+    monkeypatch.setenv('HOME_PROCESSING_OWNERSHIP_ENABLED', 'true')
+    request = SimpleNamespace(headers={'X-Omi-App-Channel': 'beta'}, query_params={})
+    assert not home_membership.live_suppression_for('u', request)

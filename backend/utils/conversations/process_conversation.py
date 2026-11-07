@@ -9,6 +9,7 @@ vs custom-STT credit gates sit here so one path cannot bill the wrong budget
 """
 
 from utils import funded_processing
+from utils.episodes import member_notes
 from utils.sync import processing_hold
 from utils.conversations.summary_delivery import PROCESS_CONTEXT
 from utils.processing_backlog import defer_estimate
@@ -2615,9 +2616,7 @@ def process_conversation(
     ``first_party_only`` requests Omi notes; the derived-effects digest identifies
     the transcript last used for memories, tasks and goal progress.
     """
-    from utils.episodes.member_notes import before_notes as defer_live_member_notes
-
-    defer_live_member_notes(uid, conversation, trigger, finalization_fence=finalization_fence)
+    member_notes.before_notes(uid, conversation, trigger, finalization_fence=finalization_fence)
     generated_conversation_id = str(uuid.uuid4()) if _is_ingress_create(conversation) else None
     bind_generation(uid, generated_conversation_id)
     silent_backfill = trigger is ProcessingTrigger.SILENT_BACKFILL

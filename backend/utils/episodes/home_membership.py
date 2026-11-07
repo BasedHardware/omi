@@ -8,9 +8,12 @@ Suppression happens after paging; the raw page size remains the storage cursor.
 import logging
 import re
 
-from config.episodes import home_hide_episode_members_enabled, episodes_enabled_for
+from config.app_channel import APP_CHANNEL_HEADER
+from config.episodes import home_hide_episode_members_enabled, episodes_enabled_for, client_channel_admitted
+from config.home_processing import ownership_enabled
 from database import episodes
 from utils.episodes import client_gate
+from utils.episodes.home_processing import live_owner, owns_recording, OWNERSHIP_HEADER
 
 logger = logging.getLogger(__name__)
 HELD_EPISODES_HEADER = 'X-Omi-Home-Episode-Ids'
@@ -67,20 +70,31 @@ def held_for(request) -> str:
     return request.headers.get(HELD_EPISODES_HEADER, '')
 
 
+def live_suppression_for(uid: str, request) -> bool:
+    if request is None or not ownership_enabled(uid):
+        return False
+    query = getattr(request, 'query_params', {})
+    return (
+        request.headers.get(OWNERSHIP_HEADER) == '1'
+        and not query.get('start_date')
+        and not query.get('end_date')
+        and client_channel_admitted(request.headers.get(APP_CHANNEL_HEADER))
+    )
+
+
 def project_list(uid: str, rows: list[dict], request, response, *, filtered: bool) -> list[dict]:
     """Home-only suppression retains the original storage count for pagination."""
     held = held_for(request)
     if filtered:
         return rows
-    from utils.episodes.home_processing import live_owner, owns_recording
-
-    owner = live_owner(uid)
+    owner = live_owner(uid) if live_suppression_for(uid, request) else None
     if not held and owner is None:
         return rows
     if response is not None:
         response.headers[PAGE_SIZE_HEADER] = str(len(rows))
-    retained = [row for row in suppress_held_members(uid, rows, held) if not owns_recording(owner, row)]
+    held_retained = suppress_held_members(uid, rows, held)
+    retained = [row for row in held_retained if not owns_recording(owner, row)]
     if response is not None:
-        kept = {row['id'] for row in retained}
+        kept = {row['id'] for row in held_retained}
         response.headers[SUPPRESSED_HEADER] = ','.join(row['id'] for row in rows if row['id'] not in kept)
     return retained

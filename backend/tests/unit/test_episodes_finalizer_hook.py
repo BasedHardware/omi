@@ -182,7 +182,7 @@ def test_recording_detail_escalates_only_that_recording(monkeypatch, has_existin
 
 
 @pytest.mark.asyncio
-async def test_live_member_finalization_yields_before_closing_or_paid_work(monkeypatch):
+async def test_live_member_finalization_closes_boundary_before_budget_free_wait(monkeypatch):
     from types import SimpleNamespace
     from unittest.mock import Mock
     from utils.episodes import member_notes
@@ -196,10 +196,75 @@ async def test_live_member_finalization_yields_before_closing_or_paid_work(monke
     monkeypatch.setattr(member_notes, 'waits', lambda *args: True)
     yielded = Mock(return_value=True)
     monkeypatch.setattr(finalizer.finalization_jobs_db, 'mark_finalization_retryable', yielded)
-    monkeypatch.setattr(finalizer, 'run_blocking', _run_blocking_recorder([]))
+    calls = []
+    close = Mock(return_value='kept_open')
+    monkeypatch.setattr(finalizer, 'close_episode_now', close)
+    monkeypatch.setattr(finalizer, 'run_blocking', _run_blocking_recorder(calls))
     result = await finalizer.finalize_persisted_conversation(
         'u', 'c1', finalization_job_id='job', dispatch_generation=2, lease_epoch=3
     )
     assert result is finalizer.ConversationFinalizationDisposition.deferred
     assert yielded.call_args.args == ('job', 2, 3, 'live_episode_notes')
     assert yielded.call_args.kwargs == {'count_attempt': False}
+
+    assert [call[0] for call in calls] == [close, member_notes.waits, yielded]
+
+
+@pytest.mark.parametrize('failure', ['get', 'set', 'enqueue'])
+def test_live_detail_dependency_failure_preserves_read_and_retry(monkeypatch, failure):
+    from unittest.mock import Mock
+    from utils.episodes import member_notes
+
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    monkeypatch.setenv('HOME_LIVE_MEMBER_NOTES_DEFERRED_ENABLED', 'true')
+    monkeypatch.setattr(
+        member_notes.episodes, 'get_episode_owner_snapshot', lambda *a: {'status': 'live', 'conversation_ids': ['c1']}
+    )
+    redis = Mock()
+    redis.get.return_value = None
+    enqueue = Mock()
+    monkeypatch.setattr(member_notes.demand_processing, 'client', lambda: redis)
+    monkeypatch.setattr(member_notes.ENRICHMENT_OUTBOX, 'enqueue', enqueue)
+    {'get': redis.get, 'set': redis.set, 'enqueue': enqueue}[failure].side_effect = TimeoutError('unavailable')
+    row = {'id': 'c1', 'status': 'completed', 'transcript_segments': [{'text': 'text'}]}
+    member_notes.open_recording('u', row)  # Optional escalation never fails detail.
+    if failure == 'get':
+        assert not member_notes.waits('u', row)
+        enqueue.assert_not_called()
+    elif failure == 'enqueue':
+        redis.set.assert_not_called()  # Next read can retry without a stale lease.
+    else:
+        enqueue.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_boundary_close_releases_live_member_without_another_client_read(monkeypatch):
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+    from utils.episodes import member_notes
+    from models.conversation import ConversationStatus
+
+    monkeypatch.setenv('HOME_LIVE_MEMBER_NOTES_DEFERRED_ENABLED', 'true')
+    owner = {'status': 'live', 'conversation_ids': ['c1']}
+    monkeypatch.setattr(member_notes.episodes, 'get_episode_owner_snapshot', lambda *a: owner)
+
+    async def loaded(*args):
+        return None, {'id': 'c1'}, SimpleNamespace(status=ConversationStatus.processing)
+
+    monkeypatch.setattr(finalizer, '_load_admitted_conversation', loaded)
+    close = Mock(side_effect=lambda *a: owner.update(status='closed'))
+    monkeypatch.setattr(finalizer, 'close_episode_now', close)
+    monkeypatch.setattr(finalizer, 'run_blocking', _run_blocking_recorder([]))
+
+    async def paid_seam(*a, **k):
+        raise RuntimeError('reached-after-boundary-close')
+
+    monkeypatch.setattr(finalizer, 'await_meeting_evidence', paid_seam)
+    retry = Mock()
+    monkeypatch.setattr(finalizer.finalization_jobs_db, 'mark_finalization_retryable', retry)
+    with pytest.raises(RuntimeError, match='reached-after-boundary-close'):
+        await finalizer.finalize_persisted_conversation(
+            'u', 'c1', finalization_job_id='job', dispatch_generation=2, lease_epoch=3
+        )
+    close.assert_called_once()
+    retry.assert_not_called()

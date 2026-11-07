@@ -131,7 +131,10 @@ Future<({List<ServerConversation> items, bool ok, bool truncated})> getConversat
     if (pairs.length == 50) break;
   }
   var response = await makeApiCall(
-      url: url, headers: {if (pairs.isNotEmpty) 'X-Omi-Home-Episode-Ids': pairs.join(',')}, method: 'GET', body: '');
+      url: url,
+      headers: {'X-Omi-Home-Ownership': '1', if (pairs.isNotEmpty) 'X-Omi-Home-Episode-Ids': pairs.join(',')},
+      method: 'GET',
+      body: '');
   if (response == null) return (items: <ServerConversation>[], ok: false, truncated: false);
   if (response.statusCode == 200) {
     final bodyBytes = response.bodyBytes;

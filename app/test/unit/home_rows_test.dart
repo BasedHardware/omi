@@ -54,6 +54,14 @@ ServerConversation waiting(String id, int minute,
     );
 
 void main() {
+  test('capture stopped with a stale live snapshot retains completed members', () {
+    final members = [conversation('a'), conversation('b')];
+    final rows =
+        buildHomeRows(members, [episode(live: true, members: members)], enabled: true, groupAwaitingTranscript: true);
+    expect(rows, hasLength(1));
+    expect(rows.single.episodeConversationIds, {'a', 'b'});
+  });
+
   for (final processingCount in [0, 3]) {
     test('live snapshot owns every member with $processingCount processing recordings', () {
       final members = [for (var i = 0; i < 3; i++) waiting('closed-$i', i, status: ConversationStatus.processing)];

@@ -1061,11 +1061,7 @@ async def sync_local_files_v2(
             job_id=job_id,
             # Live WAL uploads already supply their target and recording session.
             # Session-only uploads keep an unknown target; do not infer membership.
-            recording_ids=(
-                [recording_session_id]
-                if recording_session_id
-                else [conversation_id] if isinstance(conversation_id, str) else []
-            ),
+            recording_ids=[recording_session_id] if recording_session_id else [],
             target_conversation_id=conversation_id if isinstance(conversation_id, str) else None,
             lane=lane_decision.lane.value,
             capture_time_trust=lane_decision.trust.value,

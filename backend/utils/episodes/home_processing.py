@@ -5,7 +5,7 @@ from typing import Mapping
 
 from config.home_processing import ownership_enabled
 from config.episodes import episodes_enabled_for
-from database import episodes
+from database import episodes, conversations
 from utils.conversations.recorded_time import conversation_span
 from utils.episodes import client_gate, metrics
 from utils.episodes.policy import utc
@@ -13,6 +13,7 @@ from utils.episodes.timeline import ownership_end
 from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
+OWNERSHIP_HEADER = 'X-Omi-Home-Ownership'
 
 
 def live_owner(uid: str, *, firestore_client=None) -> dict | None:
@@ -45,6 +46,32 @@ def owns_recording(owner: Mapping | None, row: Mapping) -> bool:
         return False
     # This is an observation of missing membership, not a synthetic attachment.
     # Its recording remains reachable from detail reads and attachment repair.
-    metrics.EPISODE_HOME_ATTACH_GAP_TOTAL.inc()
-    logger.warning('event=episode_attach_gap outcome=home_suppressed')
+    metrics.record_home_attach_gap()
+    logger.info(
+        'event=episode_attach_gap outcome=home_suppressed conversation_id=%s episode_id=%s',
+        row.get('id'),
+        owner.get('id'),
+    )
     return True
+
+
+def suppress_owned_syncs(uid: str, items: list[dict], owner: dict | None, represented: set[str]) -> list[dict]:
+    """Resolve unlinked targets outside processing status without changing writer leases."""
+    if not owner or not items:
+        return items
+    unknown = {cid for item in items for cid in item['conversation_ids']} - represented
+    if unknown:
+        try:
+            rows = conversations.get_conversations_by_id_without_photos(uid, sorted(unknown))
+            represented.update(row['id'] for row in rows if owns_recording(owner, row))
+        except Exception as error:
+            record_fallback(
+                component='firestore_read', from_mode='none', to_mode='none', reason='other', outcome='degraded'
+            )
+            logger.warning('event=home_sync_owner outcome=unavailable exception_type=%s', type(error).__name__)
+            return items
+    return [
+        item
+        for item in items
+        if not item['conversation_ids'] or not set(item['conversation_ids']).issubset(represented)
+    ]

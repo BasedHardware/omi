@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, Callable
 
 from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
@@ -314,32 +314,34 @@ def finish(uid: str, operation: dict[str, Any], state: str, attention_id: str | 
     )
 
 
-def pending_conversations(uid: str) -> list[dict[str, Any]]:
-    from utils.episodes.home_processing import live_owner, owns_recording
-
-    owner = live_owner(uid, firestore_client=db)
+def pending_conversations(uid: str, *, exclude: Callable[[dict[str, Any]], bool] | None = None) -> list[dict[str, Any]]:
+    """Project processing rows; an optional caller policy may omit represented work."""
     collection = db.collection('users').document(uid).collection('conversations')
-    rows = collection.where(filter=FieldFilter('status', '==', 'processing')).limit(LIMIT).stream()
+    query = collection.where(filter=FieldFilter('status', '==', 'processing')).limit(LIMIT)
     result = []
-    for snapshot in rows:
-        row = snapshot.to_dict() or {}
-        excluded = (
-            row.get('deleted')
-            or row.get('is_deleted')
-            or row.get('discarded')
-            or row.get('finalization_status') in {'dead_letter', 'completed'}
-        )
-        phase_shadow.observe('processing_attention', row, not excluded)
-        if excluded or owns_recording(owner, dict(row, id=snapshot.id)):
-            continue
-        result.append(
-            {
-                'id': 'conv:' + snapshot.id,
-                'kind': 'conversation',
-                'state': 'queued' if row.get('finalization_status') == 'queued' else 'summarizing',
-                'conversation_ids': [snapshot.id],
-                **timing(row),
-                'updated_at': row.get('updated_at') or row.get('processing_admitted_at') or row.get('created_at'),
-            }
-        )
-    return result
+    while True:
+        page = list(query.stream())
+        for snapshot in page:
+            row = snapshot.to_dict() or {}
+            excluded = (
+                row.get('deleted')
+                or row.get('is_deleted')
+                or row.get('discarded')
+                or row.get('finalization_status') in {'dead_letter', 'completed'}
+            )
+            phase_shadow.observe('processing_attention', row, not excluded)
+            if excluded or (exclude is not None and exclude(dict(row, id=snapshot.id))):
+                continue
+            result.append(
+                {
+                    'id': 'conv:' + snapshot.id,
+                    'kind': 'conversation',
+                    'state': 'queued' if row.get('finalization_status') == 'queued' else 'summarizing',
+                    'conversation_ids': [snapshot.id],
+                    **timing(row),
+                    'updated_at': row.get('updated_at') or row.get('processing_admitted_at') or row.get('created_at'),
+                }
+            )
+        if exclude is None or len(page) < LIMIT or len(result) >= LIMIT:
+            return result[:LIMIT]
+        query = query.start_after(page[-1])

@@ -170,7 +170,7 @@ List<String> _violations(_Scenario s, List<ServerConversation> members, Episode 
     final state = s.states[i];
     if (!_shownStates.contains(state)) continue;
     final covering = rows.where((r) => _covers(r, members[i].id)).length;
-    if (covering == 0 && !episode.live) out.add('recording-dropped-from-home');
+    if (covering == 0) out.add('recording-dropped-from-home');
     if (covering > 1) out.add('recording-shown-more-than-once');
   }
   return out;

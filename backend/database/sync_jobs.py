@@ -28,9 +28,11 @@ import os
 import time
 import uuid
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, Optional, Set, cast
 
+from config.home_processing import ownership_enabled
 from config.sync_telemetry import bounded_correlation_ref, bounded_exception_class, bounded_sync_phase
 from database import sync_dead_letters
 from database.redis_db import r
@@ -1378,13 +1380,7 @@ def try_mark_once(job_id: str, tag: str) -> bool:
 
 def pending_sync_jobs(uid: str, *, listed_conversation_ids: set[str] | None = None) -> list[dict[str, Any]]:
     """Read at most 100 owner-indexed Redis jobs, without scanning global keys."""
-    from datetime import datetime, timezone
-
-    from utils.episodes.home_processing import live_owner
-    from config.home_processing import ownership_enabled
-
-    owner = live_owner(uid)
-    represented = set(listed_conversation_ids or ()) | set((owner or {}).get('conversation_ids') or ())
+    represented = set(listed_conversation_ids or ())
     index_key = _key(f'pending_sync_jobs:{uid}')
     ids = r.zrevrange(index_key, 0, 99) or []
     result = []
@@ -1405,7 +1401,7 @@ def pending_sync_jobs(uid: str, *, listed_conversation_ids: set[str] | None = No
                 conversations = sorted(set(conversations) | {target})
             # Suppress only a completely represented job. Empty and partial
             # ownership cannot prove that its remaining recordings are listed.
-            if conversations and set(conversations).issubset(represented):
+            if listed_conversation_ids is not None and conversations and set(conversations).issubset(represented):
                 continue
         result.append(
             {

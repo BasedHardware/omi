@@ -1,15 +1,18 @@
 # Home processing ownership (dark)
 
 A live episode owns its Home members. The Flutter fix always hides membership
-before skipping its row and excludes the same members from local processing
+before skipping a row owned by active Listening and excludes the same members from local processing
 insertion. Closed episodes still composing keep their Processing row.
 
-Backend switches, all evaluated per call:
+Backend switches, all evaluated per call and both defaulting to false. The behavior below applies when enabled:
 
-- `HOME_PROCESSING_OWNERSHIP_ENABLED=false`: read-only Home/pending-work suppression
+- `HOME_PROCESSING_OWNERSHIP_ENABLED=true`: read-only Home/pending-work suppression
   of live members and jobs whose full target set is already represented. Partially
   represented and unknown-target jobs remain visible. No job is retired by hiding it.
-- `HOME_LIVE_MEMBER_NOTES_DEFERRED_ENABLED=false`: automatic notes for a linked
+  Live suppression requires an admitted request channel and `X-Omi-Home-Ownership: 1`;
+  older clients and date-filtered Home lists retain their recordings. Writer-lease
+  probes remain unfiltered. Live-state-dependent lists bypass version caching.
+- `HOME_LIVE_MEMBER_NOTES_DEFERRED_ENABLED=true`: automatic notes for a linked
   live member wait for episode close. Durable finalization yields without spending
   a processing attempt; enrichment uses its existing deferred settlement.
   An authenticated recording detail read grants that recording a five-minute
@@ -21,7 +24,7 @@ Backend switches, all evaluated per call:
 The notes switch narrows Phase 2's watched-Home behavior: a Home/watch lease or
 owner-wide promotion cannot override it. Recording detail can. Phase 2 retains
 its own seal, patient deadline, close and composer controls. The finalizer hook is
-immediately before `_episode_at_finalization_start`, after batch registration.
+after `_episode_at_finalization_start` and batch registration, so automatic boundary closure cannot wait on notes.
 Never enable this switch until both owners review the combined scheduling policy.
 
 `create_sync_job` persists supplied `recording_ids` and `target_conversation_id`

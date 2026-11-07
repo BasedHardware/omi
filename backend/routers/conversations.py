@@ -1000,7 +1000,9 @@ def get_conversations(
 
     held_request = home_membership.held_for(request)
     # Reader-enforced expiry changes the body without a writer-version bump.
-    time_dependent = home_transcription_presentation_gate_enabled()
+    time_dependent = home_transcription_presentation_gate_enabled() or home_membership.live_suppression_for(
+        uid, request
+    )
     version_check = ListVersionCheck.start(None if held_request or time_dependent else request, uid, 'conversations')
     if version_check.not_modified is not None:
         return version_check.not_modified

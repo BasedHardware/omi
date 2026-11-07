@@ -68,6 +68,7 @@ from utils.conversations.factory import deserialize_conversation
 from utils.conversations.summary_delivery import PROCESS_CONTEXT, present as summary_present
 from config.merge_ancestry import flatten_updates
 from utils.conversations.merge_conversations import copy_sync_bridge_audio, retract_sync_bridge_source
+from utils.episodes import member_notes
 from utils.conversations.process_conversation import process_conversation, save_structured_vector
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.smart_merge_policy import (
@@ -962,6 +963,8 @@ def _refresh_claimed(uid: str, survivor_id: str, claimed: int, *, owner: str, sk
                 persistence_observer=lambda owned: persistence.__setitem__('owned', owned),
                 smart_merge_refresh=(claimed, owner),
             )
+        except member_notes.LiveMemberNotesDeferred:
+            raise  # Outer custody owner releases the lease and schedules the wait.
         except Exception:
             record_conversation_smart_merge_refresh('failed')
             raise

@@ -56,6 +56,8 @@ from utils.conversations.process_conversation import (
 )
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.lifecycle_clocks import overlap_snapshot
+from config.home_processing import live_member_notes_enabled
+from utils.episodes import member_notes
 from utils.episodes.client_gate import client_seen as episode_client_seen
 from utils.episodes.finalize import close_now as close_episode_now
 from utils.episodes.finalize import skip_unchanged_schedule
@@ -244,6 +246,19 @@ def _record_registration_required(row: dict[str, Any]) -> bool:
     )
 
 
+async def _yield_live_member_notes(job_id: str, generation: int, lease_epoch: int):
+    yielded = await run_blocking(
+        db_executor,
+        finalization_jobs_db.mark_finalization_retryable,
+        job_id,
+        generation,
+        lease_epoch,
+        'live_episode_notes',
+        count_attempt=False,
+    )
+    return ConversationFinalizationDisposition.deferred if yielded else ConversationFinalizationDisposition.fenced
+
+
 async def finalize_persisted_conversation(
     uid: str,
     conversation_id: str,
@@ -307,23 +322,11 @@ async def finalize_persisted_conversation(
         if completion != 'completed':
             raise RuntimeError('desktop batch completion fenced')
         return ConversationFinalizationDisposition.completed
-    from config.home_processing import live_member_notes_enabled
-    from utils.episodes.member_notes import waits as live_member_waits
-
-    if live_member_notes_enabled(uid) and await run_blocking(
-        db_executor, live_member_waits, uid, conversation_data, trigger
-    ):
-        yielded = await run_blocking(
-            db_executor,
-            finalization_jobs_db.mark_finalization_retryable,
-            finalization_job_id,
-            dispatch_generation,
-            lease_epoch,
-            'live_episode_notes',
-            count_attempt=False,
-        )
-        return ConversationFinalizationDisposition.deferred if yielded else ConversationFinalizationDisposition.fenced
     await _episode_at_finalization_start(uid, conversation_id, conversation_data, trigger)
+    if live_member_notes_enabled(uid) and await run_blocking(
+        db_executor, member_notes.waits, uid, conversation_data, trigger
+    ):
+        return await _yield_live_member_notes(finalization_job_id, dispatch_generation, lease_epoch)
 
     silent_backfill = trigger is ProcessingTrigger.SILENT_BACKFILL
 
@@ -704,6 +707,10 @@ async def finalize_persisted_conversation(
         schedule_person_voice_learning_retry(uid, conversation_id)
         await _episode_after_finalization(uid, conversation_id, episode_row, trigger)
         return ConversationFinalizationDisposition.completed
+    except member_notes.LiveMemberNotesDeferred:
+        # A smart-merge survivor can become linked after the initial admission
+        # check. Keep its new wait out of the provider-failure attempt budget.
+        return await _yield_live_member_notes(finalization_job_id, dispatch_generation, lease_epoch)
     except ConversationAbsorbed:
         # The absorb transaction fenced the job lease and replaced the donor
         # with a redirect. Close via the normal transactional fanout fence.
