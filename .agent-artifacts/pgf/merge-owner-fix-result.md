@@ -6,6 +6,14 @@ The initial 24 branch commits were rebased onto `origin/main` at `0433d12e05d3b9
 
 Checkpoint UTC: 2026-11-07T04:52:46.922655+00:00
 
+Verification update UTC: 2026-11-07T05:22:09.945366+00:00
+
+- Initial focused root invocation: **158 passed, 1 failed**, no skips. The existing independent-process wipe witness could not import `database` because the invocation used the repository root; the canonical runner uses `backend/`. Its assertions are unchanged. The frozen job reruns these files separately from `backend/`.
+- Backend environment preflight: **17 passed, 9 optional warnings, 0 failed**.
+- `138a3d4b06a2` preserves invalid-mode HTTP 503 / WS 1013 mapping at all six async entry points: only literal `off` bypasses resolution, while every other mode is validated inside the transport helper. Six invalid-mode regressions were added alongside the existing off/on assertions.
+- The first full-selector run was deliberately stopped in its type-check phase, before any pytest file ran, so the new correction can be qualified coherently. Its environment phase passed; no type-check success is claimed.
+- The queued frozen job now runs the eight focused files separately, the exact requested `make preflight`, and the complete changed-file backend selector sequentially at one captured, tracked-clean commit. All phase outcomes are pending until its receipt is complete.
+
 ## Required items and commits
 
 1. Mode off must add no resolver coroutine/executor submission, and no wipe heartbeat: `c078158a3b80` gates all four async HTTP and two async WebSocket routing sites synchronously; `ef525bf9ce55` gates the entire account-deletion step before heartbeat. Regression families: `test_async_http_routing_submits_only_when_on`, `test_async_ws_routing_submits_only_when_on`, `test_off_wipe_never_enters_cell_step`, `test_worker_heartbeats_at_major_operation_boundaries`.
@@ -60,7 +68,7 @@ In flight / queued through `/Users/dazheng/workspace/omi/bin/omi-heavy run`:
 
 - The short focused auth/core invocation (`-k 'routing_submits or core_migrated'`) hit the shared gate's 900-second queue deadline before any tests ran (exit 75); the complete four-file focused invocation below includes every one of these regressions and has a 7,200-second queue deadline.
 - Four focused directory/wipe/cutover/plane-probe files; real local Postgres via pgserver.
-- Backend environment preflight.
+- Backend environment preflight: completed, 17 passed / 9 optional warnings / 0 failed.
 - `BACKEND_UNIT_FILE_BUDGET_SECONDS=900 bash backend/scripts/run-unit-ci.sh --changed-files <absolute changed-files artifact>`.
 - Frozen `OMI_PR_BODY_FILE=.agent-artifacts/pgf/b2-pr-body.md BACKEND_UNIT_FILE_BUDGET_SECONDS=900 make preflight` at the committed product head captured on admission (product source at `c26882f49bf7`, with executor witness migration `fe1d84ebcc9a`; guarded head + tracked-clean checks before/after).
 
