@@ -685,7 +685,7 @@ class _AiAppGeneratorPageState extends State<_AiAppGeneratorPageView> {
   }
 
   Widget _buildCreateButton(AiAppGeneratorProvider provider) {
-    final isDisabled = provider.isLoading || provider.generatedIconBytes == null;
+    final isDisabled = provider.isLoading;
     return Padding(
       padding: const EdgeInsets.fromLTRB(OmiSpacing.lg, OmiSpacing.sm, OmiSpacing.lg, OmiSpacing.lg),
       child: OmiButton(

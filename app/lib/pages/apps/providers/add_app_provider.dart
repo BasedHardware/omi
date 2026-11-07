@@ -448,43 +448,53 @@ class AddAppProvider extends ChangeNotifier {
   }
 
   bool isFormValid() {
-    if (capabilitySelected() && (imageFile != null || imageUrl != null) && appCategory != null) {
-      if (metadataKey.currentState != null && metadataKey.currentState!.validate()) {
-        bool isValid = false;
-        for (var capability in selectedCapabilities) {
-          if (capability.id == 'external_integration') {
-            isValid = true;
-            if (triggerEvent == null && actions.isEmpty) {
-              isValid = false;
-            } else if (triggerEvent != null) {
-              isValid = true;
-              if (externalIntegrationKey.currentState != null) {
-                isValid = externalIntegrationKey.currentState!.validate();
-              } else {
-                isValid = false;
-              }
-            }
-          }
-          if (capability.id == 'chat') {
-            isValid = chatPromptController.text.isNotEmpty;
-          }
-          if (capability.id == 'memories') {
-            isValid = conversationPromptController.text.isNotEmpty;
-          }
-          if (capability.id == 'proactive_notification') {
-            isValid = selectedScopes.isNotEmpty && selectedCapabilities.length > 1;
-          }
-        }
-        if (isPaid) {
-          isValid = formKey.currentState!.validate() && selectePaymentPlan != null;
-        }
-        return isValid;
-      } else {
-        return false;
-      }
-    } else {
+    if (!capabilitySelected() || (imageFile == null && imageUrl == null) || appCategory == null) {
       return false;
     }
+
+    if (metadataKey.currentState != null && !metadataKey.currentState!.validate()) {
+      return false;
+    }
+
+    if (selectedCapabilities.isEmpty) return false;
+
+    for (var capability in selectedCapabilities) {
+      final capId = capability.id.toLowerCase();
+      final capTitle = capability.title.toLowerCase();
+
+      if (capId == 'external_integration' || capTitle == 'external_integration') {
+        if (triggerEvent == null && actions.isEmpty) {
+          return false;
+        } else if (triggerEvent != null) {
+          if (externalIntegrationKey.currentState != null && !externalIntegrationKey.currentState!.validate()) {
+            return false;
+          }
+        }
+      } else if (capId == 'chat' || capTitle == 'chat') {
+        if (chatPromptController.text.trim().isEmpty) {
+          return false;
+        }
+      } else if (capId == 'memories' || capTitle == 'memories') {
+        if (conversationPromptController.text.trim().isEmpty) {
+          return false;
+        }
+      } else if (capId == 'proactive_notification' || capTitle == 'proactive_notification') {
+        if (selectedScopes.isEmpty || selectedCapabilities.length <= 1) {
+          return false;
+        }
+      }
+    }
+
+    if (isPaid) {
+      if (formKey.currentState != null && !formKey.currentState!.validate()) {
+        return false;
+      }
+      if (selectePaymentPlan == null) {
+        return false;
+      }
+    }
+
+    return true;
   }
 
   bool validateForm() {
@@ -528,24 +538,26 @@ class AddAppProvider extends ChangeNotifier {
         return false;
       }
       for (var capability in selectedCapabilities) {
-        if (capability.title == 'chat') {
-          if (chatPromptController.text.isEmpty) {
+        final capId = capability.id.toLowerCase();
+        final capTitle = capability.title.toLowerCase();
+        if (capId == 'chat' || capTitle == 'chat') {
+          if (chatPromptController.text.trim().isEmpty) {
             AppSnackbar.showSnackbarError(globalNavigatorKey.currentContext!.l10n.addAppEnterChatPrompt);
             return false;
           }
         }
-        if (capability.title == 'memories') {
-          if (conversationPromptController.text.isEmpty) {
+        if (capId == 'memories' || capTitle == 'memories') {
+          if (conversationPromptController.text.trim().isEmpty) {
             AppSnackbar.showSnackbarError(globalNavigatorKey.currentContext!.l10n.addAppEnterConversationPrompt);
             return false;
           }
         }
-        if (capability.title == 'external_integration') {
+        if (capId == 'external_integration' || capTitle == 'external_integration') {
           if (triggerEvent == null) {
             AppSnackbar.showSnackbarError(globalNavigatorKey.currentContext!.l10n.addAppSelectTriggerEvent);
             return false;
           }
-          if (webhookUrlController.text.isEmpty) {
+          if (webhookUrlController.text.trim().isEmpty) {
             AppSnackbar.showSnackbarError(globalNavigatorKey.currentContext!.l10n.addAppEnterWebhookUrl);
             return false;
           }
