@@ -1,5 +1,7 @@
 """C4 erasure acceptance: real encrypted lake and key authority, synthetic ceremony deps."""
 
+import hashlib
+import zlib
 from pathlib import Path
 from types import ModuleType
 from unittest.mock import Mock
@@ -239,8 +241,22 @@ def ceremony(monkeypatch, world):
 def test_o1_wipe_coverage_gate_and_crash_retry(world, ceremony):
     bucket, store = world
     service, events = ceremony
-    retained = lake.put_space_object('owner', 'transcript', 'c1', b'[{"text":"one"}]').to_pointer_dict()
+    retained = [lake.put_space_object('owner', 'transcript', 'c1', b'[{"text":"one"}]').to_pointer_dict()]
     lake.put_space_object('owner', 'transcript', 'c2', b'[{"text":"two"}]')
+    # Existing v1 pointers must report the same shredded state as new v2 ones.
+    plaintext = b'[{"text":"legacy"}]'
+    digest = hashlib.sha256(plaintext).hexdigest()
+    key = f'v1/spaces/owner/transcript/legacy/{digest}'
+    nonce = b'0' * 12
+    dek = space_keys.unwrap_space_dek('owner', 1)
+    payload = lake._HEADER.pack(b'OLK1', 1, 1, nonce) + lake.AESGCM(dek).encrypt(
+        nonce, zlib.compress(plaintext), key.encode()
+    )
+    blob = bucket.blob(key)
+    blob.upload_from_string(payload, if_generation_match=0)
+    legacy = lake.LakeObjectRef(bucket.name, key, digest, len(payload), 'transcript', 1).to_pointer_dict()
+    assert pointer.decode_stored_transcript('owner', legacy, True) == [{"text": "legacy"}]
+    retained.append(legacy)
     for _ in range(2):
         events.clear()
         assert service.background_wipe_user_data('owner') is True
@@ -269,8 +285,9 @@ def test_o1_wipe_coverage_gate_and_crash_retry(world, ceremony):
         assert tombstone['space_id'] == 'owner' and tombstone['state'] == 'destroyed' and tombstone['destroyed_at']
         assert store.collection('account_deletions').document('owner').get().to_dict()['wipe_status'] == 'completed'
         pointer.clear_memo()
-        with pytest.raises(pointer.TranscriptShredded):
-            pointer.decode_stored_transcript('owner', retained, True)
+        for stale in retained:
+            with pytest.raises(pointer.TranscriptShredded):
+                pointer.decode_stored_transcript('owner', stale, True)
         with pytest.raises(lake.LakeWriteFenced):
             lake.put_space_object('owner', 'transcript', 'late', b'[]')
 
