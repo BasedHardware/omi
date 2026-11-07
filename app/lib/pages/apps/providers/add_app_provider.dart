@@ -449,7 +449,11 @@ class AddAppProvider extends ChangeNotifier {
 
   bool _isCapability(AppCapability cap, String key) {
     final lowerKey = key.toLowerCase();
-    return cap.id.toLowerCase() == lowerKey || cap.title.toLowerCase() == lowerKey;
+    final id = cap.id.trim().toLowerCase();
+    if (id.isNotEmpty) {
+      return id == lowerKey;
+    }
+    return cap.title.trim().toLowerCase() == lowerKey;
   }
 
   bool isFormValid() {
@@ -465,7 +469,10 @@ class AddAppProvider extends ChangeNotifier {
 
     for (var capability in selectedCapabilities) {
       if (_isCapability(capability, 'external_integration')) {
-        if (triggerEvent == null) {
+        if (triggerEvent == null && actions.isEmpty) {
+          return false;
+        }
+        if (triggerEvent != null && webhookUrlController.text.trim().isEmpty) {
           return false;
         }
         if (externalIntegrationKey.currentState != null && !externalIntegrationKey.currentState!.validate()) {
@@ -490,7 +497,10 @@ class AddAppProvider extends ChangeNotifier {
       if (formKey.currentState != null && !formKey.currentState!.validate()) {
         return false;
       }
-      if (selectePaymentPlan == null) {
+      if (pricingKey.currentState != null && !pricingKey.currentState!.validate()) {
+        return false;
+      }
+      if (priceController.text.trim().isEmpty || selectePaymentPlan == null) {
         return false;
       }
     }
@@ -499,7 +509,8 @@ class AddAppProvider extends ChangeNotifier {
   }
 
   bool validateForm() {
-    if (formKey.currentState!.validate()) {
+    final l10n = globalNavigatorKey.currentContext?.l10n;
+    if (formKey.currentState?.validate() ?? true) {
       if (promptKey.currentState != null) {
         if (!promptKey.currentState!.validate()) {
           return false;
@@ -522,49 +533,49 @@ class AddAppProvider extends ChangeNotifier {
       }
       if (selectedCapabilities.length == 1 && _isCapability(selectedCapabilities.first, 'proactive_notification')) {
         if (selectedScopes.isEmpty) {
-          AppSnackbar.showSnackbarError(globalNavigatorKey.currentContext!.l10n.addAppSelectCoreCapability);
+          if (l10n != null) AppSnackbar.showSnackbarError(l10n.addAppSelectCoreCapability);
           return false;
         }
       }
-      if (isPaid && (priceController.text.isEmpty || selectePaymentPlan == null)) {
-        AppSnackbar.showSnackbarError(globalNavigatorKey.currentContext!.l10n.addAppSelectPaymentPlan);
+      if (isPaid && (priceController.text.trim().isEmpty || selectePaymentPlan == null)) {
+        if (l10n != null) AppSnackbar.showSnackbarError(l10n.addAppSelectPaymentPlan);
         return false;
       }
       if (!capabilitySelected()) {
-        AppSnackbar.showSnackbarError(globalNavigatorKey.currentContext!.l10n.addAppSelectCapability);
+        if (l10n != null) AppSnackbar.showSnackbarError(l10n.addAppSelectCapability);
         return false;
       }
       if (imageFile == null && imageUrl == null) {
-        AppSnackbar.showSnackbarError(globalNavigatorKey.currentContext!.l10n.addAppSelectLogo);
+        if (l10n != null) AppSnackbar.showSnackbarError(l10n.addAppSelectLogo);
         return false;
       }
       for (var capability in selectedCapabilities) {
         if (_isCapability(capability, 'chat')) {
           if (chatPromptController.text.trim().isEmpty) {
-            AppSnackbar.showSnackbarError(globalNavigatorKey.currentContext!.l10n.addAppEnterChatPrompt);
+            if (l10n != null) AppSnackbar.showSnackbarError(l10n.addAppEnterChatPrompt);
             return false;
           }
         }
         if (_isCapability(capability, 'memories')) {
           if (conversationPromptController.text.trim().isEmpty) {
-            AppSnackbar.showSnackbarError(globalNavigatorKey.currentContext!.l10n.addAppEnterConversationPrompt);
+            if (l10n != null) AppSnackbar.showSnackbarError(l10n.addAppEnterConversationPrompt);
             return false;
           }
         }
         if (_isCapability(capability, 'external_integration')) {
-          if (triggerEvent == null) {
-            AppSnackbar.showSnackbarError(globalNavigatorKey.currentContext!.l10n.addAppSelectTriggerEvent);
+          if (triggerEvent == null && actions.isEmpty) {
+            if (l10n != null) AppSnackbar.showSnackbarError(l10n.addAppSelectTriggerEvent);
             return false;
           }
-          if (webhookUrlController.text.trim().isEmpty) {
-            AppSnackbar.showSnackbarError(globalNavigatorKey.currentContext!.l10n.addAppEnterWebhookUrl);
+          if (triggerEvent != null && webhookUrlController.text.trim().isEmpty) {
+            if (l10n != null) AppSnackbar.showSnackbarError(l10n.addAppEnterWebhookUrl);
             return false;
           }
           // Setup completed URL is optional, so we don't validate it here
         }
       }
       if (appCategory == null) {
-        AppSnackbar.showSnackbarError(globalNavigatorKey.currentContext!.l10n.addAppSelectCategory);
+        if (l10n != null) AppSnackbar.showSnackbarError(l10n.addAppSelectCategory);
         return false;
       }
       // Require source code URL for external integration or proactive notification apps
@@ -572,12 +583,12 @@ class AddAppProvider extends ChangeNotifier {
         (cap) => _isCapability(cap, 'external_integration') || _isCapability(cap, 'proactive_notification'),
       );
       if (needsSourceCode && sourceCodeUrlController.text.trim().isEmpty) {
-        AppSnackbar.showSnackbarError(globalNavigatorKey.currentContext!.l10n.githubRepositoryUrlRequired);
+        if (l10n != null) AppSnackbar.showSnackbarError(l10n.githubRepositoryUrlRequired);
         return false;
       }
       return true;
     } else {
-      AppSnackbar.showSnackbarError(globalNavigatorKey.currentContext!.l10n.addAppFillRequiredFields);
+      if (l10n != null) AppSnackbar.showSnackbarError(l10n.addAppFillRequiredFields);
       return false;
     }
   }

@@ -715,9 +715,7 @@ class _AiAppGeneratorPageState extends State<_AiAppGeneratorPageView> {
     FocusScope.of(context).unfocus();
     PlatformManager.instance.analytics.aiAppGeneratorPromptSubmitted(promptLength: _promptController.text.length);
     await provider.generateApp(_promptController.text);
-    PlatformManager.instance.analytics.aiAppGeneratorAppGenerated(
-      success: provider.hasGeneratedApp && provider.generatedIconBytes != null,
-    );
+    PlatformManager.instance.analytics.aiAppGeneratorAppGenerated(success: provider.hasGeneratedApp);
   }
 
   Future<void> _submitApp(AiAppGeneratorProvider provider) async {
