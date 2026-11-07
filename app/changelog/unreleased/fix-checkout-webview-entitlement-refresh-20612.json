@@ -1,0 +1,3 @@
+{
+  "change": "Checkout keeps payment inputs interactive after the initial page load, surfaces a retryable error state when checkout fails over HTTP, and refreshes subscription entitlements immediately when a plan upgrade completes."
+}

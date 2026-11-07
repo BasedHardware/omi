@@ -47,19 +47,36 @@ class _PaymentWebViewPageState extends State<PaymentWebViewPage> {
           },
           onPageStarted: (String url) {
             if (!mounted) return;
-            setState(() {
-              _isLoading = true;
-            });
+            final scheme = Uri.tryParse(url)?.scheme;
+            if (scheme != 'https' && scheme != 'http') return;
             _failedHttpUrls.clear();
+            if (!_reportedLoaded) {
+              setState(() {
+                _isLoading = true;
+              });
+            }
           },
           onHttpError: (HttpResponseError error) {
             final uri = error.request?.uri ?? error.response?.uri;
             if (uri != null) _failedHttpUrls.add(uri.toString());
           },
           onPageFinished: (String url) {
+            if (!mounted) return;
             final scheme = Uri.tryParse(url)?.scheme;
-            if (!mounted || _hasError || _reportedLoaded || _failedHttpUrls.contains(url)) return;
             if (scheme != 'https' && scheme != 'http') return;
+            if (_failedHttpUrls.contains(url)) {
+              setState(() {
+                _hasError = true;
+                _isLoading = false;
+              });
+              return;
+            }
+            if (_isLoading) {
+              setState(() {
+                _isLoading = false;
+              });
+            }
+            if (_hasError || _reportedLoaded) return;
             _reportedLoaded = true;
             widget.onLoaded?.call();
           },
@@ -93,6 +110,8 @@ class _PaymentWebViewPageState extends State<PaymentWebViewPage> {
   }
 
   Future<void> _retry() async {
+    _failedHttpUrls.clear();
+    _reportedLoaded = false;
     setState(() {
       _hasError = false;
       _isLoading = true;
