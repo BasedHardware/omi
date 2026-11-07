@@ -144,6 +144,7 @@ def _first_episode(store):
 
 def test_uncertain_recorded_join_is_marked_for_f_and_moved_on_splits_it_off(store):
     first = _first_episode(store)
+    _store_row(store, 'c2', SECOND, minutes=12)
     assert _attach(store, 'c2', minutes=12) == 'joined'
     joined = episodes_db.get_current_episode(UID, firestore_client=store)
     assert joined['id'] == first['id'] and joined['conversation_ids'] == ['c1', 'c2']
@@ -276,6 +277,7 @@ def test_f_state_caps_each_side_and_marks_empty_speech():
 def test_closed_episode_size_is_recorded_by_arm(store):
     before = metrics.EPISODE_CLOSED_MEMBERS.labels(arm='f')._sum.get()
     _first_episode(store)
+    _store_row(store, 'c2', SECOND, minutes=12)
     _attach(store, 'c2', minutes=12)
     move = lambda *a, **k: SimpleNamespace(noul=lambda name: 0.0)  # noqa: E731
     service.record_moment(UID, _moment('c2', minutes=12, text=SECOND), _c(store, minutes=13, ask=move))
@@ -346,6 +348,7 @@ def test_a_later_member_keeps_the_candidate_without_a_question_so_no_overlapping
 
 def test_a_member_that_attaches_while_jev_answers_keeps_the_join(store):
     first = _first_episode(store)
+    _store_row(store, 'c2', SECOND, minutes=12)
     assert _attach(store, 'c2', minutes=12) == 'joined'
     attached = []
 
@@ -363,6 +366,7 @@ def test_a_member_that_attaches_while_jev_answers_keeps_the_join(store):
 
 def test_a_member_attaching_between_the_split_plan_and_its_close_is_kept_not_erased(store, monkeypatch):
     first = _first_episode(store)
+    _store_row(store, 'c2', SECOND, minutes=12)
     assert _attach(store, 'c2', minutes=12) == 'joined'
     real_close = service.episodes_db.close_episode
     raced = []
@@ -498,3 +502,99 @@ def test_a_conversation_already_placed_is_never_asked_about_again(store, monkeyp
     service._attach_recorded_synced(UID, 'c2', row, span.recorded_start, span.recorded_end, _c(store, minutes=13))
     episode = episodes_db.get_current_episode(UID, firestore_client=store)
     assert episode['id'] == first['id'] and episode['conversation_ids'] == ['c1', 'c2']
+
+
+EXCLUDED_CLASSES = [
+    ('locked', {'is_locked': True}),
+    ('discarded', {'discarded': True}),
+    ('deleted', {'deleted': True}),
+    ('deferred', {'deferred': True}),
+    ('processing_deferred', {'processing_deferred': True}),
+    ('local_pending', {'processing_state': 'local_pending'}),
+    ('client_processing', {'client_processing': True}),
+    ('local_only', {'summary_blocked_reason': 'local_only'}),
+    ('held', {f_join.HOLD_FIELD: {'held': True}}),
+    ('another_owner', {'owner_uid': 'someone-else'}),
+    ('failed_status', {'status': 'failed'}),
+    ('unknown_protection', {'data_protection_level': 'none'}),
+]
+
+
+@pytest.mark.parametrize('name, change', EXCLUDED_CLASSES, ids=[n for n, _ in EXCLUDED_CLASSES])
+def test_a_synced_candidate_that_may_not_feed_the_llm_is_never_sent_to_jev(store, name, change):
+    first = _first_episode(store)
+    _store_row(store, 'c2', SECOND, minutes=12)
+    row = store.rows[('users', UID, 'conversations', 'c2')]
+    row.update(change)
+    span = conversation_span(row)
+    asked = []
+    c = _c(store, minutes=13, ask=lambda *a, **k: asked.append(a) or SimpleNamespace(noul=lambda n: 0.05))
+    try:
+        service._attach_recorded_synced(UID, 'c2', row, span.recorded_start, span.recorded_end, c)
+    except EpisodeConflict as error:
+        # Placement itself refuses a hidden conversation, after F has already declined to ask.
+        assert str(error) == 'conversation_hidden' and name in {'discarded', 'deleted'}
+        assert asked == []
+        return
+    assert asked == []
+    episode = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert episode['id'] == first['id'] and 'c2' in episode['conversation_ids']
+
+
+@pytest.mark.parametrize('name, change', EXCLUDED_CLASSES, ids=[n for n, _ in EXCLUDED_CLASSES])
+def test_settle_reads_the_candidate_and_never_asks_about_an_excluded_one(store, name, change):
+    first = _first_episode(store)
+    _store_row(store, 'c2', SECOND, minutes=12)
+    store.rows[('users', UID, 'conversations', 'c2')].update(change)
+    asked = []
+    c = _c(store, minutes=13, ask=lambda *a, **k: asked.append(a) or SimpleNamespace(noul=lambda n: 0.05))
+    pending = {'gap_seconds': 720.0, 'source_changed': False, 'previous': 'c1'}
+    decision = f_join.settle(UID, first, 'c2', pending, [], c, started_at=T0 + timedelta(minutes=12))
+    assert decision.action == policy.CONTINUE and asked == []
+
+
+def test_settle_without_the_candidate_document_fails_closed_and_never_asks(store):
+    first = _first_episode(store)
+    asked = []
+    c = _c(store, minutes=13, ask=lambda *a, **k: asked.append(a) or SimpleNamespace(noul=lambda n: 0.05))
+    pending = {'gap_seconds': 720.0, 'source_changed': False, 'previous': 'c1'}
+    decision = f_join.settle(UID, first, 'c2', pending, [], c, started_at=T0 + timedelta(minutes=12))
+    assert decision.action == policy.CONTINUE and asked == []
+
+
+def test_candidate_head_keeps_the_spec_head_and_names_only_its_first_voices():
+    segments = [
+        {'text': 'x' * 5000, 'start': 0.0, 'person_id': 'a'},
+        {'text': 'y' * 5000, 'start': 10.0, 'person_id': 'b'},
+        {'text': 'z', 'start': 20.0, 'person_id': 'c'},
+    ]
+    head = f_join.candidate_head(segments)
+    assert [len(s['text']) for s in head] == [5000, config.F_JOIN_NEW_CHARS - 5001]
+    voices = [{'text': 'hi', 'start': float(i), 'person_id': f'p{i}'} for i in range(20)]
+    named = f_join.candidate_head(voices)
+    assert sum(1 for s in named if s.get('person_id')) == config.F_JOIN_PEOPLE_READ_LIMIT
+    assert [s.get('person_id') for s in named[: config.F_JOIN_PEOPLE_READ_LIMIT]] == [
+        f'p{i}' for i in range(config.F_JOIN_PEOPLE_READ_LIMIT)
+    ]
+
+
+def test_a_long_synced_candidate_names_at_most_the_people_read_limit(store):
+    first = _first_episode(store)
+    _store_row(store, 'c2', SECOND, minutes=12)
+    row = store.rows[('users', UID, 'conversations', 'c2')]
+    row['transcript_segments'] = [
+        {'text': 'word ' * 60, 'start': 720.0 + i * 60.0, 'end': 750.0 + i * 60.0, 'person_id': f'p{i}'}
+        for i in range(40)
+    ]
+    span = conversation_span(row)
+    lookups, asked = [], []
+    c = _c(store, minutes=13, ask=lambda state, *a, **k: asked.append(state) or SimpleNamespace(noul=lambda n: 0.9))
+    c.people_names = lambda uid, ids: lookups.append(list(ids)) or {}
+    service._attach_recorded_synced(UID, 'c2', row, span.recorded_start, span.recorded_end, c)
+    assert asked, 'the candidate must reach Jev for the cap to matter'
+    assert lookups and all(len(ids) <= config.F_JOIN_PEOPLE_READ_LIMIT for ids in lookups)
+    assert sorted(lookups[-1]) == sorted(f'p{i}' for i in range(config.F_JOIN_PEOPLE_READ_LIMIT))
+    new_speech = asked[0].split('NEW speech (full transcript):\n', 1)[1]
+    assert len(new_speech) <= config.F_JOIN_NEW_CHARS
+    episode = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert episode['id'] == first['id'] and 'c2' in episode['conversation_ids']

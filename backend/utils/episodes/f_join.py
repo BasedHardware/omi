@@ -30,6 +30,7 @@ from config.episodes import (
     f_join_enabled,
     f_join_env_admitted,
     EPISODE_F_JOIN_PERCENT_ENV,
+    F_JOIN_NEW_CHARS,
     F_JOIN_PREVIOUS_CHARS,
     F_JOIN_PEOPLE_READ_LIMIT,
 )
@@ -191,7 +192,7 @@ def previous_transcript(
     ):
         return ''
     row = conversations_db.get_conversation_raw_snapshot(uid, str(previous), firestore_client=c.firestore_client)
-    if not row or not _may_feed_llm(uid, row):
+    if not row or not may_feed_llm(uid, row):
         return ''
     segments = conversations_db.decode_transcript_segments_blob(
         uid, row.get('transcript_segments'), bool(row.get('transcript_segments_compressed')), require_decryption=True
@@ -213,7 +214,11 @@ def previous_transcript(
     return incremental.render_f_transcript(moment_render.name_segments(selected, names))
 
 
-def _may_feed_llm(uid: str, row: Mapping[str, Any]) -> bool:
+def may_feed_llm(uid: str, row: Mapping[str, Any]) -> bool:
+    """The privacy gate for any conversation whose speech F may send to Jev, as predecessor or candidate.
+
+    Fail-closed: a missing required field is not permission (``is_locked`` and ``discarded`` must be False).
+    """
     # Reuse the episode composer/build visibility predicates. Missing required processing metadata
     # is unknown, not permission; optional tombstone/redirect fields retain their schema defaults.
     if row.get('owner_uid', uid) != uid or row.get('uid', uid) != uid:
@@ -255,6 +260,42 @@ def _transcript_tail(segments: Sequence[Any]) -> list[dict[str, Any]]:
         selected.append({**segment, 'text': text})
         remaining -= len(text) + 1
     return list(reversed(selected))
+
+
+def candidate_head(segments: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """The candidate's first ``F_JOIN_NEW_CHARS`` of speech, naming at most ``F_JOIN_PEOPLE_READ_LIMIT`` voices.
+
+    Bounded before any name lookup, so a long transcript costs the spec's reads and not one per voice.
+    Only the head reaches Jev (``f_boundary_state``), so the rest is never needed for naming.
+    """
+    rows = sorted(
+        (s for s in segments if str(s.get('text') or '').strip()),
+        key=lambda s: float(s.get('start') or 0.0),
+    )
+    head: list[dict[str, Any]] = []
+    remaining = F_JOIN_NEW_CHARS
+    for segment in rows:
+        if remaining <= 0:
+            break
+        text = str(segment['text']).strip()[:remaining]
+        head.append({**segment, 'text': text})
+        remaining -= len(text) + 1
+    named_ids = list(dict.fromkeys(str(s['person_id']) for s in head if s.get('person_id')))
+    allowed = set(named_ids[:F_JOIN_PEOPLE_READ_LIMIT])
+    capped: list[dict[str, Any]] = []
+    for segment in head:
+        person = str(segment.get('person_id') or '')
+        if person and person not in allowed:
+            segment = {key: value for key, value in segment.items() if key != 'person_id'}
+        capped.append(segment)
+    return capped
+
+
+def _candidate_may_feed(uid: str, conversation_id: str, row: Optional[Mapping[str, Any]], c: Any) -> bool:
+    """The candidate's own privacy gate. A caller that holds the row passes it; otherwise one snapshot read."""
+    if row is None:
+        row = conversations_db.get_conversation_raw_snapshot(uid, conversation_id, firestore_client=c.firestore_client)
+    return bool(row) and may_feed_llm(uid, row)
 
 
 def _fallback(reason: str) -> None:
@@ -320,6 +361,7 @@ def settle(
     *,
     started_at: datetime,
     member: bool = True,
+    candidate_row: Optional[Mapping[str, Any]] = None,
 ) -> policy.Boundary:
     """F's answer for a marked join. Killed, no answer, an error or a timeout keeps today's join.
 
@@ -335,6 +377,17 @@ def settle(
     if later_member(episode, conversation_id, started_at):
         # Settled without a question: the candidate's split would overlap a member that recorded later.
         metrics.record_boundary('f_later_member')
+        return keep
+    try:
+        allowed = _candidate_may_feed(uid, conversation_id, candidate_row, c)
+    except Exception as error:
+        logger.warning('event=episode_f_join outcome=gate_failed exception_type=%s', type(error).__name__)
+        metrics.record_boundary('f_no_answer')
+        _fallback('other')
+        return keep
+    if not allowed:
+        # Locked, deferred, local-only, held or another owner's conversation: its speech never reaches Jev.
+        metrics.record_boundary('f_no_answer')
         return keep
     try:
         previous = previous_transcript(uid, episode, conversation_id, pending, c)

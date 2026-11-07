@@ -1468,6 +1468,9 @@ def _synced_f_verdict(
     if not f_join.admitted(uid):
         # Outside the cohort or killed: no owner read and no model call, so today's placement is untouched.
         return None
+    if not f_join.may_feed_llm(uid, row):
+        # Locked, deferred, local-only, held or another owner's conversation: its speech never reaches Jev.
+        return None
     segments = [s for s in row.get('transcript_segments') or [] if isinstance(s, Mapping)]
     if sum(len(str(s.get('text') or '').split()) for s in segments) < MOMENT_MIN_WORDS:
         # Too little speech to ask about: the join stays as today's, as a short moment keeps it.
@@ -1489,8 +1492,11 @@ def _synced_f_verdict(
         'variant': F_JOIN_VARIANT,
         'previous': f_join.latest_member(owner, conversation_id),
     }
-    named = _named_segments(uid, segments, c)
-    return owner, f_join.settle(uid, owner, conversation_id, pending, named, c, started_at=started, member=False)
+    # Only the spec's head of speech and at most its people reads are looked up; the gate above saw the whole row.
+    named = _named_segments(uid, f_join.candidate_head(segments), c)
+    return owner, f_join.settle(
+        uid, owner, conversation_id, pending, named, c, started_at=started, member=False, candidate_row=row
+    )
 
 
 def _attach_recorded_synced(
