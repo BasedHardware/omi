@@ -10,7 +10,9 @@ A2a only: cell adapters and migrations follow in A2b. No routing, deployment or 
 
 ## How it was verified
 
-Credential-scrubbed backend Python 3.11; no production access or GCP tier. Focused task fences: 67 passed. Sim/emulator conformance: 110 passed. Legacy emulator regressions: 12 passed. Workflow/query/lifecycle guards: 2,344 passed; People inventory: 4 passed; selector E2E: 8 passed. Both 44-check repository preflights passed. OpenAPI is byte-identical to main. The full backend run is still in flight; its prefetch failure replays 18/18 and local Opus-loader failures replay 68/68 with the installed native-library path restored. Exact results are recorded in `.agent-artifacts/pgf/a2a-result.md`.
+Credential-scrubbed backend Python 3.11; no production access or GCP tier. Focused task fences: 67 passed; sim/emulator conformance: 110 passed; legacy emulator regressions: 12 passed; workflow/query/lifecycle guards: 2,344 passed; People inventory: 4 passed; selector E2E: 8 passed. OpenAPI is byte-identical to the measured main baseline. Both 44-check repository preflights passed on frozen source.
+
+The full 2,675-file backend run exited 1: 2,672 files passed, 3 failed/timed out (65,636 tests passed, 8 failed, one file timed out). All three files passed isolated replays: prefetch 18 passed; Opus-dependent empty capture 68 passed after restoring the installed native-library lookup path; cross-service deployment audit 26 passed and 3 optional historical replays skipped. No whole-run green is claimed. Exact commands, outcomes and integration baseline are in `.agent-artifacts/pgf/a2a-result.md`.
 
 ## Tests
 
