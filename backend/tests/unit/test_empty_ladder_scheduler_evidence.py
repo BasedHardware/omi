@@ -161,20 +161,33 @@ def test_no_owned_diagnosis_names_itself_in_the_terminal_record(caplog):
     assert 'worker_reason=no_owned_words' in caplog.text
 
 
-def test_terminal_record_names_only_the_current_call_diagnosis(caplog):
+def test_terminal_record_names_the_preserved_diagnosis_when_the_call_has_none(caplog):
     store, queue, lease = leased()
     queue.fail('a', lease.token, 10.0, worker_failure_evidence={'stage': 'vad_windows', 'reason': 'vad_bounds'})
     store.rows['jobs', 'a'].update(state='leased', token='t2', lease_until=100.0, attempt=99)
     with caplog.at_level(logging.ERROR):
         queue.fail('a', 't2', 60.0)
     record = next(r.getMessage() for r in caplog.records if 'event=batch_quarantined' in r.getMessage())
-    # The terminal naming reads the current call's diagnosis only; the job row
-    # still carries the retained ladder evidence for the fenced recovery lane.
-    assert 'stage=unknown worker_reason=unclassified' in record
+    # The terminal naming prefers the current call's diagnosis, then the
+    # diagnosis earlier ladder attempts preserved on the job (an exhausting
+    # attempt may arrive evidence-less), and only a never-diagnosed unit
+    # records the historical anonymous shape. The job row keeps the retained
+    # ladder evidence for the fenced recovery lane either way.
+    assert 'stage=vad_windows worker_reason=vad_bounds' in record
     assert store.rows['jobs', 'a']['worker_failure_evidence'] == {
         'stage': 'vad_windows',
         'reason': 'vad_bounds',
     }
+
+
+def test_terminal_record_prefers_the_current_call_diagnosis_over_the_preserved_one(caplog):
+    store, queue, lease = leased()
+    queue.fail('a', lease.token, 10.0, worker_failure_evidence={'stage': 'vad_windows', 'reason': 'vad_bounds'})
+    store.rows['jobs', 'a'].update(state='leased', token='t2', lease_until=100.0, attempt=99)
+    with caplog.at_level(logging.ERROR):
+        queue.fail('a', 't2', 60.0, worker_failure_evidence={'stage': 'fetch_decode', 'reason': 'word_clock'})
+    record = next(r.getMessage() for r in caplog.records if 'event=batch_quarantined' in r.getMessage())
+    assert 'stage=fetch_decode worker_reason=word_clock' in record
 
 
 def test_never_diagnosed_units_keep_the_historical_unknown_shape(caplog):
@@ -313,9 +326,11 @@ def test_ladder_evidence_retention_never_replaces_the_terminal_diagnosis(caplog)
     with caplog.at_level(logging.ERROR):
         queue.fail('a', 't2', 60.0, quarantine=True, padded_retry='empty', padded_retry_empty=True)
     record = next(r.getMessage() for r in caplog.records if 'event=batch_quarantined' in r.getMessage())
-    # Without a same-call worker_failure the record keeps the historical
-    # unknown shape even while the job row retains the ladder evidence.
-    assert 'stage=unknown worker_reason=unclassified' in record
+    # Without a same-call worker_failure the record names the diagnosis the
+    # ladder preserved (asr_recovery/unknown here) instead of collapsing to
+    # the historical anonymous shape; the job row retains the evidence for
+    # the fenced recovery lane either way.
+    assert 'stage=asr_recovery worker_reason=unknown' in record
     job = store.rows['jobs', 'a']
     assert job['worker_failure_evidence'] == {'stage': 'asr_recovery', 'reason': 'unknown'}
     assert 'worker_failure' not in job

@@ -265,6 +265,15 @@ def test_bucket_misconfiguration_stays_retryable():
     assert not isinstance(error.value, RetainedAudioInvalid)
 
 
+def test_bucket_misconfiguration_is_named_not_anonymous():
+    """The fault is typed so the boundary names it instead of reason=unclassified."""
+    from utils.batch_pipeline.source_audio import RetainedAudioOutsideAdmittedSource
+
+    misplaced = {'bucket': 'other', 'path': 'chunks/o/c/x.bin', 'generation': 1}
+    with pytest.raises(RetainedAudioOutsideAdmittedSource):
+        read_reference(Mock(), misplaced, 'o', 'c', {'b'}, KEY)
+
+
 @pytest.mark.parametrize(
     'build',
     [

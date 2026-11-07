@@ -941,8 +941,16 @@ class Scheduler:
         candidates = {}
         observations = []
         pins: list = []
+        # The job's accumulated diagnosis, read inside the transaction. The
+        # terminal record below must name the stage/reason this ladder
+        # actually collected — not the anonymous unknown/unclassified shape —
+        # even when the exhausting attempt arrives evidence-less (a missing
+        # worker result or an untyped stage), because the commit above already
+        # preserved earlier attempts' evidence on the job.
+        preserved_diagnosis: dict | None = None
 
         def commit(tx):
+            nonlocal preserved_diagnosis
             observations.clear()
             job = tx.get('jobs', segment_id)
             if not owns_lease(job, token, now):
@@ -957,6 +965,7 @@ class Scheduler:
                 # the previous diagnosis rather than erasing it.
                 job['worker_failure_evidence'] = dict(worker_failure_evidence)
             if quarantine or worker_failure is not None or job['attempt'] >= policy.max_attempts:
+                preserved_diagnosis = job.get('worker_failure_evidence')
                 quarantine_job(tx, job, now, 'worker_failed')
                 if quarantine and padded_retry in {'empty', 'skipped_oversize', 'skipped_long_speech'}:
                     job['worker_empty_evidence'] = {'padded_retry': padded_retry, 'version': 1}
@@ -993,19 +1002,14 @@ class Scheduler:
                 try:
                     # A terminal quarantine names the strongest diagnosis it
                     # holds: the structured worker_failure of a validation or
-                    # recovery handoff, else the evidence the ladder's
-                    # ordinary failures carried, else the historical
+                    # recovery handoff, else the evidence this attempt
+                    # carried, else the diagnosis earlier ladder attempts
+                    # preserved on the job (the exhausting attempt may arrive
+                    # evidence-less), else the historical
                     # unknown/unclassified shape for a never-diagnosed unit.
-                    terminal_stage = (
-                        worker_failure['stage']
-                        if worker_failure
-                        else (worker_failure_evidence or {}).get('stage', 'unknown')
-                    )
-                    terminal_reason = (
-                        worker_failure['reason']
-                        if worker_failure
-                        else (worker_failure_evidence or {}).get('reason', 'unclassified')
-                    )
+                    diagnosis = worker_failure or worker_failure_evidence or preserved_diagnosis or {}
+                    terminal_stage = diagnosis.get('stage', 'unknown')
+                    terminal_reason = diagnosis.get('reason', 'unclassified')
                     logger.error(
                         'event=batch_quarantined reason=worker_failed attempt=%d recovery=held stage=%s worker_reason=%s',
                         attempt,
@@ -1192,6 +1196,9 @@ class Scheduler:
             raise ValueError('verified missing-input repair required')
         control = read_control(tx, scheduler_control_key(job['owner_key']))
         job.update(state='ready', available_at=now, merge_pending=True, token='', lease_until=0.0)
+        # A restored ladder collects its own diagnosis; the quarantined
+        # epoch's evidence must not name the new one.
+        job.pop('worker_failure_evidence', None)
         _append(tx, control, job, now, frontier)
         tx.put('jobs', job['segment_id'], job)
 
@@ -1210,6 +1217,8 @@ class Scheduler:
             lease_until=0.0,
             retry_started_at=job.get('retry_started_at', now),
         )
+        # A redriven ladder collects its own diagnosis too.
+        job.pop('worker_failure_evidence', None)
         _append(tx, control, job, now, frontier)
         tx.put('jobs', job['segment_id'], job)
         return True

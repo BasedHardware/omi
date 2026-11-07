@@ -43,6 +43,23 @@ class InvalidRetainedManifest(RetainedAudioInvalid):
     """The stored manifest itself can never materialize; a retry reads the same bytes."""
 
 
+class RetainedAudioOutsideAdmittedSource(ValueError):
+    """A retained manifest names a source this deployment does not admit.
+
+    Deliberately NOT a ``RetainedAudioInvalid`` subclass: the bytes may be
+    perfectly sound — the *deploy's* admitted bucket set is what rejects
+    them, and a later deploy can admit them, so the bounded retry ladder
+    keeps walking. It is typed anyway so the fetch_decode boundary never has
+    to guess: the worker evidence, the per-attempt failure record and the
+    terminal quarantine all name ``outside_admitted_source`` instead of
+    collapsing the whole cohort into ``unclassified`` ValueErrors (the
+    x386/30m production signature family that could not be told apart from
+    any other bare fault).
+
+    Failure-Class: FC-retained-source-mismatch-anonymous-on-fetch-boundary
+    """
+
+
 def decode_source(raw: bytes, ref: dict, owner_key: bytes) -> bytes:
     if not raw or len(raw) > MAX_SOURCE_BYTES:
         raise RetainedAudioInvalid('invalid retained audio size')
@@ -89,16 +106,29 @@ def decode_source(raw: bytes, ref: dict, owner_key: bytes) -> bytes:
 
 
 def validate_reference(ref: dict, uid: str, conversation_id: str, allowed_buckets: set[str]) -> None:
-    if ref.get('bucket') not in allowed_buckets:
-        # The allowed set is deploy configuration, not the manifest: stay retryable.
-        raise ValueError('retained audio reference is outside admitted source')
+    bucket = ref.get('bucket')
+    # A non-string bucket is never admitted — and must not raise TypeError on
+    # the set membership probe (unhashable dict/list shapes), which would
+    # surface as one more anonymous fault class at the fetch_decode boundary.
+    if not isinstance(bucket, str) or bucket not in allowed_buckets:
+        # The allowed set is deploy configuration, not the manifest: stay
+        # retryable — but typed, so the fetch_decode boundary names the fault
+        # instead of collapsing it into the anonymous ValueError bucket.
+        raise RetainedAudioOutsideAdmittedSource('retained audio reference is outside admitted source')
     path = ref.get('path', '')
+    # Generations arrive as JSON numbers or zero-padded strings; both were
+    # accepted by the former str().isdigit() guard. isdigit() also accepts
+    # unicode digits ('²') that int() then rejects with a bare ValueError
+    # past this validator, so the string arm admits ASCII digits only.
+    generation = ref.get('generation')
+    generation_ok = isinstance(generation, int) and not isinstance(generation, bool) and generation > 0
+    if not generation_ok and isinstance(generation, str):
+        generation_ok = bool(generation) and all(char in '0123456789' for char in generation) and int(generation) > 0
     if (
         not isinstance(path, str)
         or not path.startswith((f'chunks/{uid}/{conversation_id}/', f'raw-live/{uid}/{conversation_id}/'))
         or any(part in {'.', '..'} for part in path.split('/'))
-        or not str(ref.get('generation', '')).isdigit()
-        or int(ref['generation']) <= 0
+        or not generation_ok
     ):
         raise InvalidRetainedManifest('retained audio reference is outside admitted source')
 

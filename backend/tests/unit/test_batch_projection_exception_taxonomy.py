@@ -69,6 +69,12 @@ TAXONOMY = {
     # A ValueError subclass family: retained audio that can never decode from
     # these pinned bytes (checksum, authentication, PCM shape, digest drift).
     'RetainedAudioInvalid': 'payload contract: quarantine_held (never contention)',
+    # A bare ValueError subclass that is deliberately NOT a RetainedAudioInvalid:
+    # the manifest names a bucket this deployment does not admit, so a retry
+    # may succeed after a config rollout. Named so the fetch_decode evidence
+    # and the terminal record carry 'outside_admitted_source' instead of the
+    # anonymous ValueError/unclassified shape; rides the bounded retry ladder.
+    'RetainedAudioOutsideAdmittedSource': 'named retryable evidence (FailedWork ladder rung; never contention)',
     # A ValueError subclass: a staged artifact read that can never succeed
     # from its pinned generation (size, envelope, reference, authentication).
     'StagedArtifactInvalid': 'payload contract: quarantine_held (never contention)',

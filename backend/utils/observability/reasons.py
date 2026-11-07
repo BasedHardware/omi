@@ -567,6 +567,11 @@ class WorkerValidationReason(StrEnum):
     EMPTY_ASR = 'empty_asr'
     NO_OWNED_WORDS = 'no_owned_words'
     UNSUPPORTED_LANGUAGE = 'unsupported_language'
+    # A retained manifest naming a source this deploy does not admit. Retryable
+    # by design (deploy config, not bytes), but named end to end so the
+    # fetch_decode evidence, the per-attempt failure record and the terminal
+    # quarantine never collapse it into 'unknown'/'unclassified' again.
+    OUTSIDE_ADMITTED_SOURCE = 'outside_admitted_source'
 
 
 class RecoveryFailureStage(StrEnum):

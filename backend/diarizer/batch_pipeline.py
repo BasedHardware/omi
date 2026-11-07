@@ -67,7 +67,7 @@ from utils.batch_pipeline.word_validation import (
 )
 from utils.batch_pipeline.language_metrics import record_route
 from utils.batch_pipeline.stage_timings import StageTimings
-from utils.batch_pipeline.source_audio import RetainedAudioInvalid
+from utils.batch_pipeline.source_audio import RetainedAudioInvalid, RetainedAudioOutsideAdmittedSource
 from utils.batch_pipeline.worker_io import DecodeBudget, FirstDecode, PendingResults, PreparedFlight
 from utils.batch_pipeline import worker_metrics
 from utils.batch_pipeline.artifacts import StagedArtifactInvalid
@@ -696,7 +696,15 @@ class PipelineWorker:
             if item.segment_id not in failed:
                 failed.add(item.segment_id)
                 self.counts['failed'] += 1
-                reason = exc.reason if isinstance(exc, BatchValidationError) else 'unclassified'
+                reason = (
+                    exc.reason
+                    if isinstance(exc, BatchValidationError)
+                    else (
+                        WorkerValidationReason.OUTSIDE_ADMITTED_SOURCE.value
+                        if isinstance(exc, RetainedAudioOutsideAdmittedSource)
+                        else 'unclassified'
+                    )
+                )
                 # Staged audio that can never decode is deterministic on the
                 # pinned stored bytes: a retry re-reads the same bytes and
                 # fails the same way, so it must end the chain instead of

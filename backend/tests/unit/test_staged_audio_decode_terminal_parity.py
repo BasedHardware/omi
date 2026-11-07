@@ -348,15 +348,20 @@ def test_retained_raw_live_capture_wraps_decode_value_errors_into_the_retained_t
     assert not isinstance(raised.value, StagedAudioInvalid)
 
 
-def test_bucket_allowlist_refusal_stays_a_bare_retryable_value_error():
+def test_bucket_allowlist_refusal_stays_retryable_and_off_the_terminal_path():
     # The allowlist is deploy configuration, not the manifest: a retry
     # may legitimately succeed after a config rollout, so this refusal
-    # must stay plain and off the terminal path.
-    from utils.batch_pipeline.source_audio import validate_reference
+    # stays off the terminal path — but it is NAMED now, so the fetch_decode
+    # evidence and the terminal record can tell it apart from bare faults.
+    from utils.batch_pipeline.source_audio import (
+        RetainedAudioOutsideAdmittedSource,
+        validate_reference,
+    )
 
     with pytest.raises(ValueError) as raised:
         validate_reference({'bucket': 'elsewhere', 'path': 'chunks/o/c/x', 'generation': 1}, 'o', 'c', {'allowed'})
-    assert type(raised.value) is ValueError
+    assert isinstance(raised.value, RetainedAudioOutsideAdmittedSource)
+    assert type(raised.value) is not ValueError
     assert not isinstance(raised.value, StagedAudioInvalid)
     assert not isinstance(raised.value, RetainedAudioInvalid)
 

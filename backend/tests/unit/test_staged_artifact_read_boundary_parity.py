@@ -934,16 +934,22 @@ def test_storage_download_runtime_error_stays_untyped():
     client.blob = real_blob
 
 
-def test_bucket_allowlist_refusal_stays_a_bare_value_error():
-    """Deploy configuration is not the manifest: it must stay retryable."""
-    from utils.batch_pipeline.source_audio import read_reference
+def test_bucket_allowlist_refusal_stays_retryable_and_is_named_now():
+    """Deploy configuration is not the manifest: it must stay retryable — and
+    it is typed so the fetch_decode evidence names it instead of collapsing
+    into the anonymous ValueError bucket."""
+    from utils.batch_pipeline.source_audio import RetainedAudioOutsideAdmittedSource, read_reference
 
     with pytest.raises(ValueError) as raised:
         read_reference(
             Mock(), {'bucket': 'not-admitted', 'path': 'chunks/o/c/x.bin', 'generation': 1}, 'o', 'c', {'admitted'}, KEY
         )
+    from utils.batch_pipeline.source_audio import InvalidRetainedManifest, RetainedAudioInvalid
+
+    assert isinstance(raised.value, RetainedAudioOutsideAdmittedSource)
     assert not isinstance(raised.value, StagedArtifactInvalid)
-    assert type(raised.value) is ValueError
+    assert not isinstance(raised.value, RetainedAudioInvalid)
+    assert not isinstance(raised.value, InvalidRetainedManifest)
 
 
 def test_retained_manifest_faults_keep_their_own_family():
