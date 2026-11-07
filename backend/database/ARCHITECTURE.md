@@ -35,4 +35,16 @@ Do not make a hard-delete primitive call back into conversation orchestration.
 Transaction tests use the strict Firestore fixture. It checks read-before-write
 ordering; it does not simulate production contention or external-service retries.
 
-- `ports/` contains storage-neutral typed protocols and entities. `space_store.py` supplies the Firestore per-space unit of work; folders/people repositories implement the ports while retaining typed module-function entry points. Transaction bodies are restartable and must finish all reads before the first write.
+- `ports/` contains storage-neutral typed protocols and entities. `space_store.py` supplies the Firestore per-space unit of work; folders/people repositories implement the ports while retaining typed module-function entry points. Action items, goals and workstreams implement typed repository ports while preserving their existing module dict/wire-model signatures. Transaction bodies are restartable and must finish all reads before the first write.
+
+- `action_item_fence.py` supplies explicit Redis writer tickets at task commits.
+  `SpaceStore.run` starts per-attempt commit fences after the body returns and
+  releases every attempt on exit; only the final committed attempt publishes
+  effects. Standalone writers own their fence context and existing retry policy.
+  The task SDK monkey patch is retired; memory heads, list projection and batch
+  privacy SDK hooks remain unchanged. Goal lifecycle detaches and refresh
+  delivery claims also fence their task writes.
+- The simulator in `testing/domain_sim/store.py` independently models task
+  workflow state. Sim/emulator conformance covers cross-domain relationships,
+  rollback, revisions, receipts, list and sync keysets, lifecycle and journals.
+  Cell adapters are deferred to A2b; no runtime selector or serving flag is added.

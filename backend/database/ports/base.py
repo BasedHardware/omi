@@ -6,6 +6,9 @@ from dataclasses import dataclass
 from typing import Callable, Generic, Protocol, TypeVar, TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from .action_items import ActionItemsTx
+    from .goals import GoalsTx
+    from .workstreams import WorkstreamsTx
     from .folders import FoldersTx
     from .people import PeopleTx
 
@@ -32,6 +35,12 @@ class Page(Generic[T]):
     next_cursor: str | None
 
 
+class CommitFence(Protocol):
+    def before_commit(self) -> None: ...
+
+    def after_commit(self, committed: bool) -> None: ...
+
+
 class SpaceTx(Protocol):
     """Restartable transaction body; complete all reads before the first write.
 
@@ -47,6 +56,17 @@ class SpaceTx(Protocol):
 
     @property
     def people(self) -> PeopleTx: ...
+
+    @property
+    def action_items(self) -> ActionItemsTx: ...
+
+    @property
+    def goals(self) -> GoalsTx: ...
+
+    @property
+    def workstreams(self) -> WorkstreamsTx: ...
+
+    def register_commit_fence(self, fence: CommitFence) -> None: ...
 
 
 class SpaceStore(Protocol):
