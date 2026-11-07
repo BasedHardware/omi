@@ -1144,6 +1144,7 @@ Future<UploadFilesResult> uploadLocalFilesV2(
         response.statusCode,
         'Server is temporarily unavailable',
         retryAfterSeconds: _parseRetryAfterSeconds(response),
+        reasonCode: syncUploadServerWaitReasonCode(response),
       );
     }
     throw SyncUploadHttpException(response.statusCode, 'Upload failed unexpectedly');

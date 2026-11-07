@@ -95,7 +95,8 @@ async def test_record_wait_reason_retains_custody_without_alias(monkeypatch, cap
             policy=BatchUnitPolicy(batch_enabled=True, live_admission_enabled=True, live_record_enabled=True),
         )
     assert response.status_code == 503
-    assert response.headers['retry-after'] == '30'
+    # A conversation-scoped wait must not pause the account's whole drain.
+    assert 'retry-after' not in response.headers
     assert json.loads(response.body) == {
         'code': 'record_capture_pending',
         'detail': 'Retain local audio until the registered record is complete',

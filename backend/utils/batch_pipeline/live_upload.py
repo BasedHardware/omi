@@ -64,10 +64,13 @@ class RecordUploadWait(Enum):
 def _pending(reason: RecordUploadWait):
     # These are custody waits, not evidence of Cloud Run refusing a request.
     # Keep the branch vocabulary static and omit identities/audio/error text.
+    # No Retry-After: shipped clients read any 5xx carrying one as an
+    # account-wide pause, so one conversation's wait stalled every other WAL
+    # on the phone (2026-11-07 503 storm). Without it the drain skips this
+    # recording for the pass and keeps uploading the rest; the WAL is kept.
     logger.info('event=sync_record_upload outcome=pending reason=%s', reason.value)
     return JSONResponse(
         status_code=503,
-        headers={'Retry-After': '30'},
         content={
             'code': 'record_capture_pending',
             'detail': 'Retain local audio until the registered record is complete',

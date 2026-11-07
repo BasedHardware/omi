@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:omi/backend/http/api_result.dart';
 
@@ -65,4 +66,21 @@ ApiResult<SyncUploadRefusalBody> decodeSyncUploadRefusal(http.Response response)
   } on FormatException {
     return ApiFailure(ApiProblem(ApiProblemKind.decode, statusCode: response.statusCode));
   }
+}
+
+/// A 5xx that holds one recording, never the account: the server still waits
+/// for that conversation's registered record before it can prove coverage.
+bool isRecordingScopedSyncWaitReasonCode(String? reasonCode) => reasonCode == 'record_capture_pending';
+
+/// The closed recording-scoped wait code from a 5xx upload body, else null.
+@visibleForTesting
+String? syncUploadServerWaitReasonCode(http.Response response) {
+  try {
+    final decoded = jsonDecode(response.body);
+    if (decoded is Map<String, dynamic>) {
+      final code = decoded['code'];
+      if (code is String && isRecordingScopedSyncWaitReasonCode(code)) return code;
+    }
+  } catch (_) {}
+  return null;
 }
