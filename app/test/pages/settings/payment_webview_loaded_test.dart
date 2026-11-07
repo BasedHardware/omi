@@ -9,6 +9,7 @@ import 'package:omi/env/env.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/settings/payment_webview_page.dart';
 import 'package:omi/providers/usage_provider.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
 class _WebView extends WebViewPlatform {
@@ -48,15 +49,17 @@ class _View extends PlatformWebViewWidget {
 
 class _Navigation extends PlatformNavigationDelegate {
   _Navigation(super.params) : super.implementation();
+  late PageEventCallback started;
   late PageEventCallback finished;
+  late ProgressCallback progress;
   late WebResourceErrorCallback failed;
   late HttpResponseErrorCallback httpFailed;
   @override
-  Future<void> setOnPageStarted(PageEventCallback callback) async {}
+  Future<void> setOnPageStarted(PageEventCallback callback) async => started = callback;
   @override
   Future<void> setOnPageFinished(PageEventCallback callback) async => finished = callback;
   @override
-  Future<void> setOnProgress(ProgressCallback callback) async {}
+  Future<void> setOnProgress(ProgressCallback callback) async => progress = callback;
   @override
   Future<void> setOnWebResourceError(WebResourceErrorCallback callback) async => failed = callback;
   @override
@@ -108,13 +111,42 @@ void main() {
     await tester.pump();
   });
 
-  testWidgets('HTTP failure pages never report portal opened', (tester) async {
+  testWidgets('HTTP failure pages never report portal opened and surface retryable error state', (tester) async {
     var loaded = 0;
     await pump(tester, () => loaded++);
     webView.navigation.httpFailed(HttpResponseError(
       request: WebResourceRequest(uri: Uri.parse('https://billing.stripe.com/portal')),
     ));
     webView.navigation.finished('https://billing.stripe.com/portal');
+    await tester.pump();
     expect(loaded, 0);
+    expect(find.byType(OmiErrorState), findsOneWidget);
+    expect(find.byType(OmiSpinner), findsNothing);
+  });
+
+  testWidgets('portal page finish clears spinner and sub-navigations do not restart loading', (tester) async {
+    var loaded = 0;
+    await pump(tester, () => loaded++);
+    expect(find.byType(OmiSpinner), findsOneWidget);
+    webView.navigation.progress(100);
+    await tester.pump();
+    expect(find.byType(OmiSpinner), findsNothing);
+
+    webView.navigation.started('about:blank');
+    await tester.pump();
+    expect(loaded, 0);
+    expect(find.byType(OmiSpinner), findsNothing);
+
+    webView.navigation.started('https://billing.stripe.com/portal');
+    await tester.pump();
+    expect(find.byType(OmiSpinner), findsOneWidget);
+    webView.navigation.finished('https://billing.stripe.com/portal');
+    await tester.pump();
+    expect(loaded, 1);
+    expect(find.byType(OmiSpinner), findsNothing);
+
+    webView.navigation.started('https://billing.stripe.com/portal/payment-methods');
+    await tester.pump();
+    expect(find.byType(OmiSpinner), findsNothing);
   });
 }

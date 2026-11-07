@@ -8,22 +8,80 @@ import 'package:omi/backend/http/plan_storefront_api.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/env/env.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/models/plan_storefront.dart';
 import 'package:omi/models/subscription.dart';
+import 'package:omi/pages/settings/payment_webview_page.dart';
 import 'package:omi/pages/settings/widgets/plans_sheet.dart';
 import 'package:omi/pages/settings/widgets/plans/storefront_plans_content.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
+// ignore: depend_on_referenced_packages
+import 'package:webview_flutter_platform_interface/webview_flutter_platform_interface.dart';
 import 'storefront_plans_content_test.dart' as renders;
 
 StorefrontTier _plan(PlanStorefront data, String planId) => data.tiers.firstWhere((tier) => tier.planId == planId);
+
+class _FakeWebView extends WebViewPlatform {
+  @override
+  PlatformWebViewController createPlatformWebViewController(PlatformWebViewControllerCreationParams params) =>
+      _FakeWebViewController(params);
+
+  @override
+  PlatformNavigationDelegate createPlatformNavigationDelegate(PlatformNavigationDelegateCreationParams params) =>
+      _FakeNavigationDelegate(params);
+
+  @override
+  PlatformWebViewWidget createPlatformWebViewWidget(PlatformWebViewWidgetCreationParams params) =>
+      _FakeWebViewWidget(params);
+}
+
+class _FakeWebViewController extends PlatformWebViewController {
+  _FakeWebViewController(super.params) : super.implementation();
+  @override
+  Future<void> setJavaScriptMode(JavaScriptMode mode) async {}
+  @override
+  Future<void> setPlatformNavigationDelegate(PlatformNavigationDelegate handler) async {}
+  @override
+  Future<void> loadRequest(LoadRequestParams params) async {}
+}
+
+class _FakeWebViewWidget extends PlatformWebViewWidget {
+  _FakeWebViewWidget(super.params) : super.implementation();
+  @override
+  Widget build(BuildContext context) => const SizedBox.expand();
+}
+
+class _FakeNavigationDelegate extends PlatformNavigationDelegate {
+  _FakeNavigationDelegate(super.params) : super.implementation();
+  @override
+  Future<void> setOnPageStarted(PageEventCallback callback) async {}
+  @override
+  Future<void> setOnPageFinished(PageEventCallback callback) async {}
+  @override
+  Future<void> setOnProgress(ProgressCallback callback) async {}
+  @override
+  Future<void> setOnWebResourceError(WebResourceErrorCallback callback) async {}
+  @override
+  Future<void> setOnHttpError(HttpResponseErrorCallback callback) async {}
+  @override
+  Future<void> setOnNavigationRequest(NavigationRequestCallback callback) async {}
+}
 
 class _Usage extends UsageProvider {
   String? checkedOutPrice;
   String? sessionPrice;
   String? upgradedPrice;
+  Map<String, dynamic>? checkoutSessionResult;
+  int fetchSubscriptionCalls = 0;
+
+  @override
+  Future<void> fetchSubscription() async {
+    fetchSubscriptionCalls++;
+  }
+
   @override
   Future<Map<String, dynamic>?> upgradeUserSubscription({required String priceId, String? promotionCode}) async {
     upgradedPrice = priceId;
@@ -38,7 +96,7 @@ class _Usage extends UsageProvider {
       {required String priceId, String? promotionCode, int? trialDays}) async {
     sessionPrice = priceId;
     checkedOutPrice = priceId;
-    return null; // No browser or real payment in hermetic tests.
+    return checkoutSessionResult; // No browser or real payment in hermetic tests.
   }
 }
 
@@ -720,4 +778,64 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   }
+  testWidgets('completing Operator checkout refreshes subscription entitlement', (tester) async {
+    tester.view.physicalSize = const Size(1000, 2200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    Env.overrideApiBaseUrl('http://127.0.0.1:1/');
+    addTearDown(Env.clearApiBaseUrlOverrideForTesting);
+    WebViewPlatform.instance = _FakeWebView();
+    final usage = _Usage()..checkoutSessionResult = const {'url': 'https://checkout.stripe.com/c/pay/cs_test_operator'};
+    addTearDown(usage.dispose);
+    final json = jsonDecode(File('test/fixtures/storefront_v2/plus_monthly_yearly_toggle.json').readAsStringSync())
+        as Map<String, dynamic>;
+    json['current'] = null;
+    final data = PlanStorefront.fromJson(json);
+    final price = _plan(data, 'operator').priceFor('month')!;
+    usage.debugSetSubscription(UserSubscriptionResponse(
+      subscription: Subscription(plan: PlanType.basic, status: SubscriptionStatus.inactive),
+      transcriptionSecondsUsed: 0,
+      transcriptionSecondsLimit: 0,
+      wordsTranscribedUsed: 0,
+      wordsTranscribedLimit: 0,
+      insightsGainedUsed: 0,
+      insightsGainedLimit: 0,
+      availablePlans: [
+        SubscriptionPlan(id: 'operator', title: 'Operator', prices: [
+          PricingOption(id: price.id!, title: 'Monthly', priceString: price.headline),
+        ])
+      ],
+    ));
+    usage.debugSetAvailablePlans({
+      'plans': [
+        {
+          'id': price.id,
+          'plan_id': 'operator',
+          'title': 'Operator',
+          'interval': 'month',
+          'unit_amount': price.amountMinor,
+          'price_string': price.headline,
+          'is_active': false,
+        },
+      ],
+    });
+    await tester.pumpWidget(ChangeNotifierProvider<UsageProvider>.value(
+        value: usage,
+        child: MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: Scaffold(body: _Host(data)))));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('storefront_buy_operator')));
+    await tester.tap(find.byKey(const Key('storefront_buy_operator')).hitTestable());
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.byType(PaymentWebViewPage), findsOneWidget);
+    Navigator.of(tester.element(find.byType(PaymentWebViewPage))).pop(true);
+    await tester.pumpAndSettle();
+    expect(usage.sessionPrice, price.id);
+    expect(usage.fetchSubscriptionCalls, 1);
+    expect(tester.takeException(), isNull);
+  });
 }
