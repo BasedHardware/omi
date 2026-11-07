@@ -192,7 +192,7 @@ def test_uow_atomicity_and_cross_domain_composition(domain_backend):
 
 @pytest.mark.parametrize('default', [True, False])
 @pytest.mark.parametrize('in_uow', [True, False])
-@pytest.mark.parametrize('user_set', [None, False], ids=['unset', 'false'])
+@pytest.mark.parametrize('user_set', [None, False, True], ids=['unset', 'false', 'true'])
 def test_delete_rehomes_and_refreshes_count(domain_backend, default, in_uow, user_set):
     h = domain_backend
     sid = h.space('delete')
@@ -219,10 +219,11 @@ def test_delete_rehomes_and_refreshes_count(domain_backend, default, in_uow, use
     target = 'default' if default else None
     rehomed = h.read(sid, 'conversations', 'c')
     assert rehomed['folder_id'] == target
-    assert rehomed['folder_user_set'] is True
+    assert rehomed.get('folder_user_set') is user_set
+    assert ('folder_user_set' in rehomed) is (user_set is not None)
     if default:
         assert repo.get(target).conversation_count == 1
-        assert repo.conversations_in_folder(target)[0]['folder_user_set'] is True
+        assert repo.conversations_in_folder(target)[0].get('folder_user_set') is user_set
     # Moving from either target/unfiled proves the old pointer is safe.
     dest = repo.create(FolderCreate(name='Destination'))
     assert repo.move_conversation('c', dest.id)
