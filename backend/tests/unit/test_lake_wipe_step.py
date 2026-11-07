@@ -354,3 +354,44 @@ def test_merge_pointer_sources_get_independent_survivor_objects(world, monkeypat
         'donor-a',
         'donor-b',
     ]
+
+
+def test_conversation_retry_uses_raw_inventory_after_blob_already_purged(world, merge_modules, monkeypatch):
+    from services import conversation_frame_evidence as evidence
+
+    conversations_db, _, merge, _ = merge_modules
+    bucket, _ = world
+    parent = lake.put_space_object('owner', 'transcript', 'parent', b'[]')
+    lake.put_space_object('owner', 'transcript', 'donor', b'[]')
+    rows = {
+        'parent': {'id': 'parent', 'transcript_segments': parent.to_pointer_dict(), 'sync_merged_from': ['donor']},
+        'donor': {'id': 'donor'},
+    }
+    # Previous attempt purged the parent, then failed before donor/doc deletion.
+    lake.delete_space_entity('owner', 'parent')
+    pointer.clear_memo()
+    events = []
+    monkeypatch.setattr(conversations_db, 'get_conversation_raw_snapshot', lambda uid, cid: rows.get(cid))
+    monkeypatch.setattr(
+        conversations_db, 'get_conversation', Mock(side_effect=AssertionError('decoded deletion inventory'))
+    )
+    monkeypatch.setattr(conversations_db, 'get_conversation_photos', lambda *args: [])
+    monkeypatch.setattr(evidence.frame_requests_db, 'list_all_frame_request_storage_ids', lambda *args, **kwargs: [])
+    monkeypatch.setattr(
+        evidence.frame_requests_db, 'persist_conversation_frame_deletion_outbox', lambda *args: events.append('outbox')
+    )
+    monkeypatch.setattr(evidence.frame_requests_db, 'delete_frame_requests_for_conversation', lambda *args: None)
+    monkeypatch.setattr(merge.conversation_tombstones, 'record_deletion', lambda *args: None)
+    monkeypatch.setattr(merge, 'record_survivor_deleted', lambda *args: None)
+
+    def delete(uid, cid, **kwargs):
+        # Both lake entities must already be absent before any metadata deletion.
+        assert not list(bucket.list_blobs(prefix='v1/spaces/owner/'))
+        events.append(cid)
+        rows.pop(cid, None)
+
+    monkeypatch.setattr(merge, '_delete_conversation_and_related_data', delete)
+    monkeypatch.setattr(conversations_db, 'delete_conversation', delete)
+    evidence.delete_conversation_and_frame_evidence('owner', 'parent')
+    assert rows == {}
+    assert events == ['outbox', 'donor', 'parent']

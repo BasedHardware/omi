@@ -63,11 +63,17 @@ def delete_conversation_and_frame_evidence(
     )
     storage_ids = list(dict.fromkeys(photo_storage_ids + request_storage_ids))
     frame_requests_db.persist_conversation_frame_deletion_outbox(uid, conversation_id, storage_ids)
+    conversation = None
     if lake_wipe.config.bucket():
-        conversation = conversations_db.get_conversation(uid, conversation_id) or {}
+        # Deletion inventory must survive a previous attempt that removed the
+        # pointer's blob but failed before metadata cleanup.
+        conversation = conversations_db.get_conversation_raw_snapshot(uid, conversation_id) or {}
         source_ids = [sid for sid in (conversation.get("sync_merged_from") or []) if sid != conversation_id]
         lake_wipe.purge_conversation_lake_objects(uid, conversation_id, source_ids)
-    deleter(uid, conversation_id)
+    if delete_conversation is None and conversation is not None:
+        delete_conversation_with_sync_sources(uid, conversation_id, conversation_row=conversation)
+    else:
+        deleter(uid, conversation_id)
     for storage_id in storage_ids:
         try:
             delete_frame_request_pixels_for_user(uid, [storage_id])

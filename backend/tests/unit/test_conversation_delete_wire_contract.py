@@ -152,6 +152,9 @@ def test_lake_failure_answers_retryable_503_with_intent_and_documents_intact(mon
 
     with _delete_client(monkeypatch) as client:
         monkeypatch.setenv('BUCKET_OBJECT_LAKE', 'synthetic-lake')
+        monkeypatch.setattr(
+            conversation_frame_evidence.conversations_db, 'get_conversation_raw_snapshot', lambda *args: {}
+        )
         deleted = MagicMock()
         monkeypatch.setattr(
             conversations,

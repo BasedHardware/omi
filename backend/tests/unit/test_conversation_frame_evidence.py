@@ -143,7 +143,7 @@ def test_lake_purge_precedes_doc_delete_and_includes_deduped_donors(monkeypatch)
     monkeypatch.setenv('BUCKET_OBJECT_LAKE', 'synthetic-lake')
     monkeypatch.setattr(
         conversation_frame_evidence.conversations_db,
-        'get_conversation',
+        'get_conversation_raw_snapshot',
         lambda *args: {'sync_merged_from': ['c', 'd', 'd', '', 'e']},
     )
     monkeypatch.setattr(object_lake, 'delete_space_entity', lambda uid, cid: events.append(('lake', uid, cid)) or 1)
@@ -163,7 +163,7 @@ def test_lake_dark_deletion_does_no_lake_or_conversation_inventory_io(monkeypatc
     def forbidden(*args):
         raise AssertionError('lake-dark delete performed IO')
 
-    monkeypatch.setattr(conversation_frame_evidence.conversations_db, 'get_conversation', forbidden)
+    monkeypatch.setattr(conversation_frame_evidence.conversations_db, 'get_conversation_raw_snapshot', forbidden)
     monkeypatch.setattr(object_lake, 'delete_space_entity', forbidden)
     conversation_frame_evidence.delete_conversation_and_frame_evidence(
         'u', 'c', delete_conversation=lambda *args: events.append('delete')
@@ -178,7 +178,7 @@ def test_lake_failure_prevents_doc_delete(monkeypatch):
     events = []
     _stub_frame_delete(monkeypatch, events)
     monkeypatch.setenv('BUCKET_OBJECT_LAKE', 'synthetic-lake')
-    monkeypatch.setattr(conversation_frame_evidence.conversations_db, 'get_conversation', lambda *args: {})
+    monkeypatch.setattr(conversation_frame_evidence.conversations_db, 'get_conversation_raw_snapshot', lambda *args: {})
 
     def unavailable(*args):
         raise object_lake.LakeFetchError('lake down')
