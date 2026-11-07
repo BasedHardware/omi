@@ -1535,7 +1535,12 @@ class ConversationProvider extends ChangeNotifier {
   void updateConversationInSortedList(ServerConversation conversation) => _updateConversationProjections(conversation);
 
   (int, DateTime) addConversationWithDateGrouped(ServerConversation conversation) {
-    conversations.insert(0, conversation);
+    final existingIndex = conversations.indexWhere((element) => element.id == conversation.id);
+    if (existingIndex == -1) {
+      conversations.insert(0, conversation);
+    } else {
+      conversations[existingIndex] = conversation;
+    }
     if (!conversation.isHiddenFromDefaultList) {
       SiriIntegration.current.queueUpsertConversations([conversation]);
     }

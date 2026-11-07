@@ -6,6 +6,7 @@ extension _ConversationVisibility on ConversationProvider {
     if (conversation.deleted || conversation.isMergedDonor || (!showDiscardedConversations && conversation.discarded)) {
       return false;
     }
+    if (!showShortConversations && conversation.getDurationInSeconds() < shortConversationThreshold) return false;
     if (showStarredOnly && !conversation.starred) return false;
     if (selectedStartDate != null && selectedEndDate != null) {
       final conversationDate = conversationLocalDayKey(conversation.startedAt ?? conversation.createdAt);
@@ -53,8 +54,10 @@ extension _ConversationVisibility on ConversationProvider {
   void _replaceBridgedProjections(String donorId, ServerConversation survivor) {
     _mergedAwayConversationIds.add(donorId);
     final completed = survivor.status == ConversationStatus.completed && _matchesActiveConversationFilters(survivor);
-    processingConversations
-        .removeWhere((conversation) => conversation.id == donorId || (!completed && conversation.id == survivor.id));
+    processingConversations.removeWhere((conversation) =>
+        conversation.id == donorId ||
+        (conversation.id == survivor.id &&
+            (survivor.status == ConversationStatus.completed || !_matchesActiveConversationFilters(survivor))));
     conversations
         .removeWhere((conversation) => conversation.id == donorId || (!completed && conversation.id == survivor.id));
     final survivorIndex = conversations.indexWhere((conversation) => conversation.id == survivor.id);

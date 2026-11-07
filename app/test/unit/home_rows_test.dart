@@ -567,7 +567,7 @@ void main() {
     final defaultRows = buildHomeRows([discarded, donor, kept], [],
         enabled: false, groupAwaitingTranscript: true, processingTitle: 'Processing');
     expect(defaultRows.map((r) => r.conversation.id), ['kept']);
-    final filteredRows = buildHomeRows([discarded, kept], [], enabled: false, groupAwaitingTranscript: false);
-    expect(filteredRows.map((r) => r.conversation.id), ['discarded', 'kept']);
+    final filteredRows = buildHomeRows([discarded, donor, kept], [], enabled: false, groupAwaitingTranscript: false);
+    expect(filteredRows.map((r) => r.conversation.id), ['discarded', 'donor', 'kept']);
   });
 }

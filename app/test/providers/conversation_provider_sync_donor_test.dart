@@ -84,6 +84,8 @@ void main() {
     final provider = ConversationProvider(isSignedIn: () => true);
     addTearDown(provider.dispose);
     provider.addConversationWithDateGrouped(row('discarded', discarded: true));
+    provider.addConversationWithDateGrouped(row('discarded', discarded: true));
+    expect(provider.conversations.map((c) => c.id), ['discarded']);
     expect(provider.groupedConversations.values.expand((g) => g), isEmpty);
   });
 

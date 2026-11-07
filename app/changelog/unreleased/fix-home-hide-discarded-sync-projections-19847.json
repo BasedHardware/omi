@@ -1,3 +1,3 @@
 {
-  "change": "Discarded and merged-away synced recordings stay hidden on the default Home feed and clear their processing rows as soon as sync finishes."
+  "change": "Discarded or merged recordings no longer briefly appear on your default Home feed after syncing, and their processing entries disappear when syncing finishes."
 }
