@@ -192,7 +192,7 @@ def previous_transcript(
     ):
         return ''
     row = conversations_db.get_conversation_raw_snapshot(uid, str(previous), firestore_client=c.firestore_client)
-    if not row or not may_feed_llm(uid, row):
+    if not row or not _may_feed_llm(uid, row):
         return ''
     segments = conversations_db.decode_transcript_segments_blob(
         uid, row.get('transcript_segments'), bool(row.get('transcript_segments_compressed')), require_decryption=True
@@ -243,6 +243,11 @@ def may_feed_llm(uid: str, row: Mapping[str, Any]) -> bool:
     if not isinstance(hold, Mapping) or hold.get('held', False) is not False:
         return False
     return not hidden_member(dict(row)) and conversations_db.is_visible_conversation(row)
+
+
+# ``previous_transcript`` is a pinned People-reader body (backend/docs/people-generation-writers.json), so it keeps
+# calling the private name. Changing that call would invalidate the audit without changing what is checked.
+_may_feed_llm = may_feed_llm
 
 
 def _transcript_tail(segments: Sequence[Any]) -> list[dict[str, Any]]:
