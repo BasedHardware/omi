@@ -138,6 +138,17 @@ def validate_batch_final_pass_hosts(env: str, config: ConfigDict) -> list[Valida
                     f'{flag} must stay true on a host with {HOSTED_DIARIZATION_URL_ENV} unless every production host is off',
                 )
             )
+        # An exempt Cloud Run host must also list the URL in forbidden_env, so the
+        # live service state is checked for it and an undeclared binding cannot hide.
+        if value == 'false' and platform == 'cloud_run' and not has_url:
+            forbidden = config.get('cloud_run', {}).get('services', {}).get(name, {}).get('forbidden_env') or []
+            if HOSTED_DIARIZATION_URL_ENV not in forbidden:
+                errors.append(
+                    ValidationError(
+                        f'{platform}/{name}',
+                        f'{flag}=false needs {HOSTED_DIARIZATION_URL_ENV} in forbidden_env so the live service is checked for it',
+                    )
+                )
     return errors
 
 

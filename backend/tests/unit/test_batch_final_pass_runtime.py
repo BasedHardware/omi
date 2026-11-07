@@ -75,9 +75,20 @@ def test_literal_chart_override_cannot_defeat_shared_configmap(config, monkeypat
 
 def test_host_without_diarizer_url_can_be_switched_off_alone(config):
     # backend-integration has no HOSTED_DIARIZATION_API_URL: its pass can only fall back.
-    assert HOSTED_URL not in config['cloud_run']['services']['backend-integration']['env']
-    config['cloud_run']['services']['backend-integration']['env'][FLAG]['value'] = 'false'
+    service = config['cloud_run']['services']['backend-integration']
+    assert HOSTED_URL not in service['env']
+    service['env'][FLAG]['value'] = 'false'
+    service.setdefault('forbidden_env', []).append(HOSTED_URL)
     assert validate_batch_final_pass_hosts('prod', config) == []
+
+
+def test_exempt_cloud_run_host_must_forbid_the_diarizer_url(config):
+    # Without forbidden_env, an undeclared live binding would not be checked.
+    service = config['cloud_run']['services']['backend-integration']
+    service['env'][FLAG]['value'] = 'false'
+    service['forbidden_env'] = [name for name in service.get('forbidden_env', []) if name != HOSTED_URL]
+    errors = validate_batch_final_pass_hosts('prod', config)
+    assert any('forbidden_env' in error.message for error in errors)
 
 
 def test_host_with_diarizer_url_cannot_be_switched_off_alone(config):
