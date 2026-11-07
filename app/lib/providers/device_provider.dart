@@ -55,6 +55,7 @@ import 'package:omi/ui/feedback/omi_dialogs.dart';
 
 typedef BleDiagnosticsLoader = Future<BleDeviceDiagnostics> Function(String deviceId);
 typedef FindDeviceRunner = Future<bool> Function(BtDevice device);
+enum DeviceStorageCapability { disconnected, checking, supported, unsupported }
 
 class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption {
   CaptureProvider? captureProvider;
@@ -63,7 +64,22 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   bool isConnecting = false;
   bool isConnected = false;
   bool isDeviceStorageSupport = false;
+  DeviceStorageCapability _storageCapability = DeviceStorageCapability.disconnected;
   bool supportsMultiFileSync = SharedPreferencesUtil().deviceSupportsMultiFileSync;
+
+  DeviceStorageCapability get storageCapability {
+    if (connectedDevice == null || (!isConnected && !isConnecting)) return DeviceStorageCapability.disconnected;
+    if (isDeviceStorageSupport) return DeviceStorageCapability.supported;
+    return _storageCapability == DeviceStorageCapability.disconnected
+        ? DeviceStorageCapability.checking
+        : _storageCapability;
+  }
+
+  @visibleForTesting
+  set storageCapabilityForTesting(DeviceStorageCapability value) {
+    _storageCapability = value;
+    isDeviceStorageSupport = value == DeviceStorageCapability.supported;
+  }
 
   // Latest on-device ring-buffer storage snapshot (firmware 3.0.20+ only).
   // Surfaced on the Auto Sync page as a storage-usage indicator. Null when the
@@ -285,6 +301,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     _latestOmiGlassFirmwareDetails = {};
     _ringStatus = null;
     isConnecting = false;
+    isDeviceStorageSupport = false;
+    _storageCapability = DeviceStorageCapability.disconnected;
     _detachAccountOwnedDeviceBindings();
     notifyListeners();
   }
@@ -367,7 +385,11 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         !SharedPreferencesUtil().batchModeEnabled;
     final endedSessionWasIntentional = endedDevice != null && _intentionalDisconnectDevices.remove(endedDevice.id);
     final isNewConnection = device != null && connectedDevice?.id != device.id;
-    if (isNewConnection || device == null) _resetBatteryState();
+    if (isNewConnection || device == null) {
+      _resetBatteryState();
+      isDeviceStorageSupport = false;
+      _storageCapability = device == null ? DeviceStorageCapability.disconnected : DeviceStorageCapability.checking;
+    }
     connectedDevice = device;
     pairedDevice = device;
     if (isNewConnection) {
@@ -561,9 +583,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
     late final Future<bool> request;
     request = _runFindDevice(device).whenComplete(() {
-      if (identical(_findDeviceRequest, request)) {
-        _findDeviceRequest = null;
-      }
+      if (identical(_findDeviceRequest, request)) _findDeviceRequest = null;
     });
     _findDeviceRequest = request;
     return request;
@@ -589,44 +609,39 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     return await connection?.playFindDevicePattern() ?? false;
   }
 
-  Future _bleDisconnectDevice(BtDevice btDevice) async {
-    await ServiceManager.instance().device.disconnectDevice(btDevice.id);
-  }
+  Future _bleDisconnectDevice(BtDevice btDevice) => ServiceManager.instance().device.disconnectDevice(btDevice.id);
 
-  Future<int> _retrieveBatteryLevel(String deviceId) async {
-    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
-    if (connection == null) {
-      return -1;
-    }
-    return connection.retrieveBatteryLevel();
-  }
+  Future<int> _retrieveBatteryLevel(String deviceId) async =>
+      (await ServiceManager.instance().device.ensureConnection(deviceId))?.retrieveBatteryLevel() ?? -1;
 
   Future<StreamSubscription<List<int>>?> _getBleBatteryLevelListener(
     String deviceId, {
     void Function(int)? onBatteryLevelChange,
   }) async {
-    {
-      var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
-      if (connection == null) {
-        return Future.value(null);
-      }
-      return connection.getBleBatteryLevelListener(onBatteryLevelChange: onBatteryLevelChange);
-    }
+    final connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    return connection?.getBleBatteryLevelListener(onBatteryLevelChange: onBatteryLevelChange);
   }
 
-  Future<List<int>> _getStorageList(String deviceId) async {
-    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
-    if (connection == null) {
-      return [];
+  Future<DeviceStorageCapability> _probeStorageCapability(BtDevice device) async {
+    try {
+      final connection = await _deviceInfoConnectionLoader(device.id);
+      if (connection == null || !await connection.isConnected()) return DeviceStorageCapability.checking;
+      final storageFiles = await connection.getStorageList();
+      if (storageFiles.isNotEmpty) return DeviceStorageCapability.supported;
+      final normalized = capabilityNormalizedDevice ?? device;
+      final isCv1 = normalized.type == DeviceType.omi &&
+          DeviceUtils.isOmiCv1(modelNumber: normalized.modelNumber, deviceName: normalized.name);
+      return (connection.lastStorageListReadFailed || connection.advertisesStorageCharacteristic || isCv1)
+          ? DeviceStorageCapability.checking
+          : DeviceStorageCapability.unsupported;
+    } catch (_) {
+      return DeviceStorageCapability.checking;
     }
-    return connection.getStorageList();
   }
 
   initiateBleBatteryListener() async {
     final generation = _sessionGeneration;
-    if (!_isCurrent(generation) || connectedDevice == null) {
-      return;
-    }
+    if (!_isCurrent(generation) || connectedDevice == null) return;
     final batteryDeviceId = connectedDevice!.id;
     final batterySession = _batterySession;
     _bleBatteryLevelListener?.cancel();
@@ -910,17 +925,13 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     final generation = _sessionGeneration;
     updateConnectingStatus(true);
     if (!_isCurrent(generation)) return;
-    if (isConnected && connectedDevice != null) {
-      updateConnectingStatus(false);
-      return;
-    }
+    if (isConnected && connectedDevice != null) return updateConnectingStatus(false);
 
     ServiceManager.instance().device.clearStaleBondRecoveryRequirement();
 
     final pairedDeviceId = SharedPreferencesUtil().btDevice.id;
     if (pairedDeviceId.isEmpty) {
-      if (!_isCurrent(generation)) return;
-      updateConnectingStatus(false);
+      if (_isCurrent(generation)) updateConnectingStatus(false);
       return;
     }
 
@@ -957,9 +968,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       _admittedLink = null;
       _resetBatteryState();
     }
-    if (isConnected) {
-      _discoveryTimer?.cancel();
-    }
+    if (isConnected) _discoveryTimer?.cancel();
     notifyListeners();
   }
 
@@ -974,9 +983,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     _deviceHealthTimer = null;
     _admittedConnectGeneration = -1;
     _firmwareUpdatePromptCoordinator.invalidatePresentation();
-    if (BleBridge.instance.pairingLostCallback == _handlePairingLost) {
-      BleBridge.instance.pairingLostCallback = null;
-    }
+    if (BleBridge.instance.pairingLostCallback == _handlePairingLost) BleBridge.instance.pairingLostCallback = null;
     _bleBatteryLevelListener?.cancel();
     _bleChargingStatusListener?.cancel();
     _fullyChargedAlert.dispose();
@@ -1091,9 +1098,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   }
 
   Future<(String, bool, String, Map)> shouldUpdateFirmware() async {
-    if (pairedDevice == null || connectedDevice == null) {
-      return ('No paired device is connected', false, '', {});
-    }
+    if (pairedDevice == null || connectedDevice == null) return ('No paired device is connected', false, '', {});
 
     var device = pairedDevice!;
     if (device.firmwareRevision.isEmpty) {
@@ -1140,9 +1145,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     }
 
     final normalizedDevice = pairedDevice ?? device;
-    if (captureProvider != null) {
-      captureProvider?.updateRecordingDevice(normalizedDevice);
-    }
+    captureProvider?.updateRecordingDevice(normalizedDevice);
 
     await setisDeviceStorageSupport();
     if (!_isCurrentBatterySession(generation, batterySession, device.id)) return;
@@ -1174,9 +1177,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     if (!_isCurrentBatterySession(generation, batterySession, device.id)) return;
     await initiateBleBatteryListener();
     if (!_isCurrentBatterySession(generation, batterySession, device.id)) return;
-    if (batteryLevel != -1 && batteryLevel < 20) {
-      _hasLowBatteryAlerted = false;
-    }
+    if (batteryLevel != -1 && batteryLevel < 20) _hasLowBatteryAlerted = false;
     updateConnectingStatus(false);
     await captureProvider?.streamDeviceRecording(device: normalizedDevice);
     if (!_isCurrent(generation)) return;
@@ -1195,9 +1196,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     // device (e.g. the Omi button-actions gate) see the same identity as
     // pairedDevice instead of the raw advertising-time object.
     final normalizedPairedDevice = pairedDevice ?? normalizedDevice;
-    if (captureProvider != null) {
-      captureProvider?.updateRecordingDevice(normalizedPairedDevice);
-    }
+    captureProvider?.updateRecordingDevice(normalizedPairedDevice);
 
     // Wals — pass the firmware resolved by getDeviceInfo() above so background
     // discovery routes ring-buffer devices correctly; `device` here is the raw
@@ -1233,9 +1232,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     // Check firmware updates
     _checkFirmwareUpdates(generation);
 
-    if (Platform.isAndroid) {
-      unawaited(_ensureCompanionAssociation(device, generation));
-    }
+    if (Platform.isAndroid) unawaited(_ensureCompanionAssociation(device, generation));
 
     onDeviceConnected?.call(device);
 
@@ -1343,11 +1340,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     }
     final free = status.freeBytes > 0 ? status.freeBytes : infoFree;
     return RingStatus(
-      usedBytes: status.usedBytes,
-      unreadPackets: status.unreadPackets,
-      freeBytes: free,
-      rtcValid: status.rtcValid,
-    );
+        usedBytes: status.usedBytes, unreadPackets: status.unreadPackets, freeBytes: free, rtcValid: status.rtcValid);
   }
 
   Future<void> _ensureCompanionAssociation(BtDevice device, int generation) async {
@@ -1590,11 +1583,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         _firmwareUpdatePromptCoordinator.attachDismissal(prompt, () {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (!dialogContext.mounted || route == null || !route.isActive) return;
-            if (route.isCurrent) {
-              navigator.pop();
-            } else {
-              navigator.removeRoute(route);
-            }
+            route.isCurrent ? navigator.pop() : navigator.removeRoute(route);
           });
         });
 
@@ -1619,26 +1608,26 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
             }
           },
           onCancel: () {
-            if (_firmwareUpdatePromptCoordinator.defer(prompt)) {
-              Logger.info('Firmware update prompt deferred by user');
-            }
+            if (_firmwareUpdatePromptCoordinator.defer(prompt)) Logger.info('Firmware update prompt deferred by user');
           },
         );
       },
-    ).whenComplete(() {
-      _firmwareUpdatePromptCoordinator.complete(prompt);
-    });
+    ).whenComplete(() => _firmwareUpdatePromptCoordinator.complete(prompt));
   }
 
   Future setisDeviceStorageSupport() async {
     final generation = _sessionGeneration;
-    if (connectedDevice == null) {
+    final device = connectedDevice;
+    if (device == null) {
       if (!_isCurrent(generation)) return;
       isDeviceStorageSupport = false;
+      _storageCapability = DeviceStorageCapability.disconnected;
     } else {
-      var storageFiles = await _getStorageList(connectedDevice!.id);
-      if (!_isCurrent(generation)) return;
-      isDeviceStorageSupport = storageFiles.isNotEmpty;
+      _storageCapability = DeviceStorageCapability.checking;
+      final capability = await _probeStorageCapability(device);
+      if (!_isCurrent(generation) || connectedDevice?.id != device.id) return;
+      _storageCapability = capability;
+      isDeviceStorageSupport = capability == DeviceStorageCapability.supported;
     }
     if (!_isCurrent(generation)) return;
     notifyListeners();
@@ -1707,9 +1696,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   void onStatusChanged(DeviceServiceStatus status) {}
 
   prepareDFU() {
-    if (!FirmwareUpdateBuildPolicy.current.allowsOmiFirmwareUpdate || connectedDevice == null) {
-      return;
-    }
+    if (!FirmwareUpdateBuildPolicy.current.allowsOmiFirmwareUpdate || connectedDevice == null) return;
     setFirmwareUpdateInProgress(true);
     _bleDisconnectDevice(connectedDevice!);
   }
@@ -1726,9 +1713,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   void setFirmwareUpdateInProgress(bool inProgress) {
     _isFirmwareUpdateInProgress = inProgress;
     ServiceManager.instance().device.reconnectPaused = inProgress;
-    if (inProgress) {
-      _firmwareUpdatePromptCoordinator.invalidatePresentation();
-    }
+    if (inProgress) _firmwareUpdatePromptCoordinator.invalidatePresentation();
     notifyListeners();
   }
 }

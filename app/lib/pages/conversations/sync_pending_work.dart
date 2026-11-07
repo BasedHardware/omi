@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
@@ -126,6 +128,61 @@ abstract final class SyncPendingWork {
   }
 }
 
+/// Opens the Offline Sync page behind the shared capability gate:
+/// - Disconnected devices prompt to connect or reconnect instead of claiming
+///   hardware lack of support.
+/// - Pending or failed capability reads re-probe once and offer a retry prompt.
+/// - Connected devices known to lack storage show the capability alert.
+Future<void> openOfflineSyncForDevice(
+  BuildContext context,
+  DeviceProvider provider, {
+  bool? multiFileSync,
+}) async {
+  if (provider.storageCapability == DeviceStorageCapability.checking) {
+    await provider.setisDeviceStorageSupport();
+    if (!context.mounted) return;
+  }
+  switch (provider.storageCapability) {
+    case DeviceStorageCapability.supported:
+      final multi = multiFileSync ?? provider.supportsMultiFileSync;
+      routeToPage(context, multi ? const AutoSyncPage() : const SyncPage());
+    case DeviceStorageCapability.disconnected:
+      final hasRememberedDevice =
+          (provider.pairedDevice?.id.isNotEmpty ?? false) || SharedPreferencesUtil().btDevice.id.isNotEmpty;
+      if (hasRememberedDevice) {
+        final confirmed = await showOmiConfirm(
+          context,
+          title: context.l10n.deviceNotConnected,
+          message: context.l10n.deviceDisconnectedNotificationBody,
+          confirmLabel: context.l10n.reconnect,
+        );
+        if (confirmed) unawaited(provider.scanAndConnectToDevice());
+      } else {
+        await showOmiAlert(
+          context,
+          title: context.l10n.deviceNotConnected,
+          message: context.l10n.connectDeviceMessage,
+        );
+      }
+    case DeviceStorageCapability.checking:
+      final retry = await showOmiConfirm(
+        context,
+        title: context.l10n.activityAttentionStorageUnknownTitle,
+        message: context.l10n.anErrorOccurredTryAgain,
+        confirmLabel: context.l10n.tryAgain,
+      );
+      if (retry && context.mounted) {
+        await openOfflineSyncForDevice(context, provider, multiFileSync: multiFileSync);
+      }
+    case DeviceStorageCapability.unsupported:
+      await showOmiAlert(
+        context,
+        title: context.l10n.v2Undetected,
+        message: context.l10n.v2UndetectedMessage,
+      );
+  }
+}
+
 /// Opens the Offline Sync page the device settings open, behind the same gate:
 /// work that lives on a storage-less pendant has no Offline Sync screen.
 ///
@@ -134,13 +191,18 @@ abstract final class SyncPendingWork {
 /// page even when unrelated device recordings wait on a disconnected wearable.
 /// The page still renders device rows read-only without the wearable, which is
 /// exactly what a phone problem needs.
-void openOfflineSyncDetails(BuildContext context, SyncProvider p, {bool? multiFileSync, bool phoneLocal = false}) {
+Future<void> openOfflineSyncDetails(
+  BuildContext context,
+  SyncProvider p, {
+  bool? multiFileSync,
+  bool phoneLocal = false,
+}) async {
   final hidden = SyncPendingWork.hiddenDeviceTwinIds(p.allWals);
   final hasDeviceWork = p.allWals.any((w) => w.status == WalStatus.miss && walIsOnDevice(w) && !hidden.contains(w.id));
-  if (!phoneLocal && hasDeviceWork && !context.read<DeviceProvider>().isDeviceStorageSupport) {
-    showOmiAlert(context, title: context.l10n.v2Undetected, message: context.l10n.v2UndetectedMessage);
+  final multi = multiFileSync ?? SharedPreferencesUtil().deviceSupportsMultiFileSync;
+  if (!phoneLocal && hasDeviceWork) {
+    await openOfflineSyncForDevice(context, context.read<DeviceProvider>(), multiFileSync: multi);
     return;
   }
-  final multi = multiFileSync ?? SharedPreferencesUtil().deviceSupportsMultiFileSync;
   routeToPage(context, multi ? const AutoSyncPage() : const SyncPage());
 }

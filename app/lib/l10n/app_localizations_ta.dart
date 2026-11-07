@@ -564,11 +564,11 @@ class AppLocalizationsTa extends AppLocalizations {
   String get hardwareSection => 'ஹார்ட்வேர்';
 
   @override
-  String get v2Undetected => 'V2 கண்டுபிடிக்கப்படவில்லை';
+  String get v2Undetected => 'ஆஃப்லைன் ஒத்திசைவு கிடைக்கவில்லை';
 
   @override
   String get v2UndetectedMessage =>
-      'உங்களுக்கு V1 சாதனம் அல்லது உங்கள் சாதனம் இணைக்கப்படவில்லை என்பதைக் கண்டோம். SD கார்ட் செயல்பாடு V2 சாதனங்களுக்கு மட்டுமே கிடைக்கிறது.';
+      'ஆஃப்லைன் ஒத்திசைவுக்கு SD கார்டு சேமிப்பகத்துடன் இணைக்கப்பட்ட Omi சாதனம் தேவை. உங்கள் தற்போதைய சாதனம் இதை ஆதரிக்கவில்லை.';
 
   @override
   String get endConversation => 'உரையாடல் முடிக்கவும்';

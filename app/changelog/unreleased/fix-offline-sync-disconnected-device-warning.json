@@ -1,0 +1,3 @@
+{
+  "change": "Fixed Offline Sync showing a false unsupported-device or V1/V2 hardware warning when a paired Omi device is disconnected or still checking storage capability, and updated Offline Sync unavailable translations across all 48 non-English locales."
+}

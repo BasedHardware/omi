@@ -457,12 +457,18 @@ class OmiDeviceConnection extends DeviceConnection {
     throw StateError('OmiDeviceConnection: Failed to read valid audio codec from peripheral after retries');
   }
 
+  bool _lastStorageListReadFailed = false;
+
+  @override
+  bool get lastStorageListReadFailed => _lastStorageListReadFailed;
+
   @override
   Future<List<int>> getStorageList() async {
     if (await isConnected()) {
       Logger.debug('storage list called');
       return await performGetStorageList();
     }
+    _lastStorageListReadFailed = true;
     Logger.debug('storage list error');
     return Future.value(<int>[]);
   }
@@ -470,6 +476,7 @@ class OmiDeviceConnection extends DeviceConnection {
   @override
   Future<List<int>> performGetStorageList() async {
     Logger.debug('perform storage list called');
+    _lastStorageListReadFailed = false;
     try {
       final storageValue = await transport.readCharacteristic(
         storageDataStreamServiceUuid,
@@ -495,6 +502,7 @@ class OmiDeviceConnection extends DeviceConnection {
       Logger.debug('Storage lengths: ${storageLengths.length} items: ${storageLengths.join(', ')}');
       return storageLengths;
     } catch (e) {
+      _lastStorageListReadFailed = true;
       Logger.debug('OmiDeviceConnection: Error reading storage list: $e');
       return <int>[];
     }

@@ -562,11 +562,11 @@ class AppLocalizationsTe extends AppLocalizations {
   String get hardwareSection => 'హార్డ్‌వేర్';
 
   @override
-  String get v2Undetected => 'V2 గుర్తించబడలేదు';
+  String get v2Undetected => 'ఆఫ్‌లైన్ సింక్ అందుబాటులో లేదు';
 
   @override
   String get v2UndetectedMessage =>
-      'V1 డివైస్ ఉందని లేదా మీ డివైస్ కనెక్ట్ చేయబడలేదని మేము చూస్తున్నాము. SD కార్డ్ కార్యకలాపం V2 డివైసెస్‌కు మాత్రమే అందుబాటులో ఉంది.';
+      'ఆఫ్‌లైన్ సింక్ కోసం SD కార్డ్ స్టోరేజ్ ఉన్న కనెక్ట్ చేయబడిన Omi పరికరం అవసరం. మీ ప్రస్తుత పరికరం దీనికి మద్దతు ఇవ్వదు.';
 
   @override
   String get endConversation => 'సంభాషణను ముగించండి';

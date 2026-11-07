@@ -563,11 +563,11 @@ class AppLocalizationsHu extends AppLocalizations {
   String get hardwareSection => 'Hardver';
 
   @override
-  String get v2Undetected => 'V2 nem észlelhető';
+  String get v2Undetected => 'Az offline szinkronizálás nem érhető el';
 
   @override
   String get v2UndetectedMessage =>
-      'Úgy látjuk, hogy vagy V1 eszközöd van, vagy az eszközöd nincs csatlakoztatva. Az SD kártya funkció csak V2 eszközökön érhető el.';
+      'Az offline szinkronizáláshoz SD-kártyás tárhellyel rendelkező csatlakoztatott Omi eszközre van szükség. A jelenlegi eszközöd ezt nem támogatja.';
 
   @override
   String get endConversation => 'Beszélgetés befejezése';

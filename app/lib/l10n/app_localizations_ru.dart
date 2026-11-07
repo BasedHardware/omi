@@ -561,11 +561,11 @@ class AppLocalizationsRu extends AppLocalizations {
   String get hardwareSection => 'Оборудование';
 
   @override
-  String get v2Undetected => 'V2 не обнаружено';
+  String get v2Undetected => 'Офлайн-синхронизация недоступна';
 
   @override
   String get v2UndetectedMessage =>
-      'Мы видим, что у вас либо устройство V1, либо ваше устройство не подключено. Функция SD-карты доступна только для устройств V2.';
+      'Для офлайн-синхронизации нужно подключённое устройство Omi с SD-картой. Ваше текущее устройство её не поддерживает.';
 
   @override
   String get endConversation => 'Завершить разговор';

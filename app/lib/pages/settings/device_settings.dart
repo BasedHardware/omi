@@ -9,11 +9,9 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/gen/pigeon_communicator.g.dart';
-import 'package:omi/pages/conversations/auto_sync_page.dart';
 import 'package:omi/pages/conversations/on_the_way_page.dart';
 import 'package:omi/pages/settings/device/device_catching_up_card.dart';
 import 'package:omi/services/pending_work/pending_work_store.dart';
-import 'package:omi/pages/conversations/sync_page.dart';
 import 'package:omi/pages/conversations/sync_pending_work.dart';
 import 'package:omi/pages/home/firmware_update.dart';
 import 'package:omi/pages/home/omiglass_ota_update.dart';
@@ -310,13 +308,8 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     routeToPage(context, FirmwareUpdate(device: provider.pairedDevice, isRollback: true));
   }
 
-  void _openOfflineSync(DeviceProvider provider) {
-    if (!provider.isDeviceStorageSupport) {
-      showOmiAlert(context, title: context.l10n.v2Undetected, message: context.l10n.v2UndetectedMessage);
-      return;
-    }
-    routeToPage(context, provider.supportsMultiFileSync ? const AutoSyncPage() : const SyncPage());
-  }
+  Future<void> _openOfflineSync(DeviceProvider provider) =>
+      openOfflineSyncForDevice(context, provider, multiFileSync: provider.supportsMultiFileSync);
 
   Future<void> _openChargingHelp(DeviceProvider provider) async {
     final deviceName = provider.pairedDevice?.name ?? 'DevKit1';

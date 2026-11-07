@@ -560,11 +560,11 @@ class AppLocalizationsBe extends AppLocalizations {
   String get hardwareSection => 'Апаратнае забеспячэнне';
 
   @override
-  String get v2Undetected => 'V2 не знойдзена';
+  String get v2Undetected => 'Афлайн-сінхранізацыя недаступная';
 
   @override
   String get v2UndetectedMessage =>
-      'Мы бачым, што ў вас ёсць V1 прылада або ваша прылада не падключана. Функцыянальнасць SD карты даступна толькі для V2 прыладаў.';
+      'Для афлайн-сінхранізацыі патрабуецца падключаная прылада Omi з SD-картай памяці. Ваша бягучая прылада гэта не падтрымлівае.';
 
   @override
   String get endConversation => 'Завяршыць размову';

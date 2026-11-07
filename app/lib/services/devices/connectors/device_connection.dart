@@ -604,6 +604,14 @@ abstract class DeviceConnection {
 
   // --- Legacy storage protocol ---
 
+  bool get advertisesStorageCharacteristic {
+    final t = transport;
+    return t is NativeBleTransport &&
+        t.hasCharacteristic(storageDataStreamServiceUuid, storageReadControlCharacteristicUuid);
+  }
+
+  bool get lastStorageListReadFailed => false;
+
   Future<List<int>> getStorageList() async {
     if (await isConnected()) {
       return await performGetStorageList();

@@ -556,11 +556,11 @@ class AppLocalizationsHe extends AppLocalizations {
   String get hardwareSection => 'חומרה';
 
   @override
-  String get v2Undetected => 'V2 לא זוהה';
+  String get v2Undetected => 'סנכרון לא מקוון אינו זמין';
 
   @override
   String get v2UndetectedMessage =>
-      'אנו רואים שיש לך מכשיר V1 או שהמכשיר שלך לא מחובר. פונקציונליות כרטיס SD זמינה רק למכשירי V2.';
+      'סנכרון לא מקוון דורש מכשיר Omi מחובר עם אחסון בכרטיס SD. המכשיר הנוכחי שלך אינו תומך בכך.';
 
   @override
   String get endConversation => 'סיים שיחה';

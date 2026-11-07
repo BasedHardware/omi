@@ -559,11 +559,11 @@ class AppLocalizationsBn extends AppLocalizations {
   String get hardwareSection => 'হার্ডওয়্যার';
 
   @override
-  String get v2Undetected => 'V2 সনাক্ত হয়নি';
+  String get v2Undetected => 'অফলাইন সিঙ্ক উপলব্ধ নয়';
 
   @override
   String get v2UndetectedMessage =>
-      'আমরা দেখছি যে আপনার কাছে একটি V1 ডিভাইস রয়েছে বা আপনার ডিভাইস সংযুক্ত নয়। SD কার্ড কার্যকারিতা শুধুমাত্র V2 ডিভাইসের জন্য উপলব্ধ।';
+      'অফলাইন সিঙ্কের জন্য SD কার্ড স্টোরেজ সহ একটি সংযুক্ত Omi ডিভাইস প্রয়োজন। আপনার বর্তমান ডিভাইসটি এটি সমর্থন করে না।';
 
   @override
   String get endConversation => 'কথোপকথন শেষ করুন';

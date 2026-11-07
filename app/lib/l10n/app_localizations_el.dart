@@ -564,11 +564,11 @@ class AppLocalizationsEl extends AppLocalizations {
   String get hardwareSection => 'Υλικό';
 
   @override
-  String get v2Undetected => 'Δεν ανιχνεύτηκε V2';
+  String get v2Undetected => 'Ο συγχρονισμός εκτός σύνδεσης δεν είναι διαθέσιμος';
 
   @override
   String get v2UndetectedMessage =>
-      'Βλέπουμε ότι είτε έχετε συσκευή V1 είτε η συσκευή σας δεν είναι συνδεδεμένη. Η λειτουργικότητα κάρτας SD είναι διαθέσιμη μόνο για συσκευές V2.';
+      'Ο συγχρονισμός εκτός σύνδεσης απαιτεί συνδεδεμένη συσκευή Omi με αποθηκευτικό χώρο κάρτας SD. Η τρέχουσα συσκευή σας δεν το υποστηρίζει.';
 
   @override
   String get endConversation => 'Τερματισμός Συνομιλίας';
