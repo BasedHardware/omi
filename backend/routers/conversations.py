@@ -130,6 +130,7 @@ from utils.llm.conversation_processing import SummaryProviderError, generate_sum
 from utils.speaker_assignment_teaching import commit_manual_assignment
 from utils.ignored_voice_markers import record_exclusion_markers, retire_exclusion_markers
 from utils.speaker_learning_jobs import schedule_reprocessed_learning
+from utils.other import object_lake
 from utils.other import endpoints as auth
 from utils.other.storage import get_conversation_recording_if_exists
 from utils.app_integrations import trigger_external_integrations
@@ -1525,7 +1526,10 @@ def _delete_conversation_under_gate(
     # is gone.
     delete_conversation_screen_frames(uid, conversation_id)
 
-    delete_conversation_and_frame_evidence(uid, conversation_id)
+    try:
+        delete_conversation_and_frame_evidence(uid, conversation_id)
+    except object_lake.LakeFetchError as error:
+        raise HTTPException(503, 'Conversation storage deletion is busy, please retry') from error
 
     delete_vector(uid, conversation_id)
     delete_transcript_chunk_vectors(uid, conversation_id)

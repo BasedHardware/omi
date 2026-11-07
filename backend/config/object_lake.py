@@ -1,5 +1,6 @@
 """Object-lake admission and codec settings; environment is read at call time."""
 
+import math
 import os
 
 from config.policy.batch import cohort_bucket
@@ -96,3 +97,10 @@ def validate_write_settings(stage: str, enabled: object, percent: object) -> lis
     if positive:
         errors.append(f'OBJECT_LAKE_WRITE_PERCENT {reason}')
     return errors
+
+
+def wipe_drain_seconds() -> float:
+    value = float(os.getenv('OBJECT_LAKE_WIPE_DRAIN_SECONDS', '5'))
+    if not math.isfinite(value):
+        raise ValueError('OBJECT_LAKE_WIPE_DRAIN_SECONDS must be finite')
+    return max(0.0, min(60.0, value))

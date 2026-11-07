@@ -307,44 +307,52 @@ def _check_put_authority(space_id, blob):
 
 def get_space_object(ref: LakeObjectRef) -> bytes:
     _, sid, data_class, _, digest = _parse_ref(ref)
+    # Destroyed authority wins over missing blobs for retained stale pointers.
     try:
-        payload = _bucket_for(ref).blob(ref.key).download_as_bytes()
-    except ObjectLakeError:
+        kek = space_keys.unwrap_space_dek(sid, ref.dek_version)
+    except space_keys.SpaceKeyDestroyed:
+        # get_space_keys raises for a tombstone; a live missing version is corrupt.
+        if space_keys.get_space_keys(sid) is not None:
+            raise LakeObjectCorrupt('Invalid lake key version') from None
         raise
-    except NotFound:
-        raise LakeObjectAbsent('Lake object is absent') from None
-    except Exception:
-        raise LakeFetchError('Lake download unavailable') from None
-    if len(payload) != ref.bytes or len(payload) < _HEADER.size + 16:
-        raise LakeObjectCorrupt('Lake envelope length mismatch')
-    magic, envelope_version = _PREFIX.unpack_from(payload)
-    if magic != b'OLK1' or envelope_version not in (1, 2):
-        raise LakeObjectCorrupt('Invalid lake envelope header')
-    header = _HEADER if envelope_version == 1 else _HEADER_V2
-    if len(payload) < header.size + 16:
-        raise LakeObjectCorrupt('Lake envelope length mismatch')
-    _, _, dek_version, nonce, *wrapped = header.unpack_from(payload)
-    if dek_version != ref.dek_version:
-        raise LakeObjectCorrupt('Invalid lake envelope header')
-    kek = space_keys.unwrap_space_dek(sid, dek_version)
     try:
-        # v1 used the space key directly. v2 uses it only for nonce-less AES-KW;
-        # each random object DEK performs exactly one GCM encryption.
-        dek = kek if envelope_version == 1 else aes_key_unwrap(kek, wrapped[0])
         try:
-            compressed = AESGCM(dek).decrypt(nonce, payload[header.size :], ref.key.encode('utf-8'))
-        finally:
-            del dek
-        decoder = zlib.decompressobj()
-        limit = MAX_PLAINTEXT_BYTES[data_class]
-        plaintext = decoder.decompress(compressed, limit + 1)
-        if len(plaintext) > limit or decoder.unconsumed_tail:
-            raise LakeObjectCorrupt('Lake plaintext exceeds data-class limit')
-        if not decoder.eof or decoder.unused_data or hashlib.sha256(plaintext).hexdigest() != digest:
-            raise LakeObjectCorrupt('Lake plaintext digest or compression mismatch')
-        return plaintext
-    except (InvalidTag, InvalidUnwrap, ValueError, zlib.error):
-        raise LakeObjectCorrupt('Lake authentication or decompression failed') from None
+            payload = _bucket_for(ref).blob(ref.key).download_as_bytes()
+        except ObjectLakeError:
+            raise
+        except NotFound:
+            raise LakeObjectAbsent('Lake object is absent') from None
+        except Exception:
+            raise LakeFetchError('Lake download unavailable') from None
+        if len(payload) != ref.bytes or len(payload) < _HEADER.size + 16:
+            raise LakeObjectCorrupt('Lake envelope length mismatch')
+        magic, envelope_version = _PREFIX.unpack_from(payload)
+        if magic != b'OLK1' or envelope_version not in (1, 2):
+            raise LakeObjectCorrupt('Invalid lake envelope header')
+        header = _HEADER if envelope_version == 1 else _HEADER_V2
+        if len(payload) < header.size + 16:
+            raise LakeObjectCorrupt('Lake envelope length mismatch')
+        _, _, dek_version, nonce, *wrapped = header.unpack_from(payload)
+        if dek_version != ref.dek_version:
+            raise LakeObjectCorrupt('Invalid lake envelope header')
+        try:
+            # v1 used the space key directly. v2 uses it only for nonce-less AES-KW;
+            # each random object DEK performs exactly one GCM encryption.
+            dek = kek if envelope_version == 1 else aes_key_unwrap(kek, wrapped[0])
+            try:
+                compressed = AESGCM(dek).decrypt(nonce, payload[header.size :], ref.key.encode('utf-8'))
+            finally:
+                del dek
+            decoder = zlib.decompressobj()
+            limit = MAX_PLAINTEXT_BYTES[data_class]
+            plaintext = decoder.decompress(compressed, limit + 1)
+            if len(plaintext) > limit or decoder.unconsumed_tail:
+                raise LakeObjectCorrupt('Lake plaintext exceeds data-class limit')
+            if not decoder.eof or decoder.unused_data or hashlib.sha256(plaintext).hexdigest() != digest:
+                raise LakeObjectCorrupt('Lake plaintext digest or compression mismatch')
+            return plaintext
+        except (InvalidTag, InvalidUnwrap, ValueError, zlib.error):
+            raise LakeObjectCorrupt('Lake authentication or decompression failed') from None
     finally:
         del kek
 
@@ -370,8 +378,18 @@ def delete_space_prefix(space_id: str, *, data_class=None, entity_id=None) -> in
         prefix += _class(data_class) + '/'
     if entity_id is not None:
         prefix += _segment(entity_id) + '/'
+    return _purge_prefix(None, prefix)
+
+
+def delete_space_entity(space_id: str, entity_id: str) -> int:
+    prefix = f'{_segment(config.release())}/spaces/{_segment(space_id)}/'
+    entity_id = _segment(entity_id)
+    return sum(_purge_prefix(None, f'{prefix}{data_class}/{entity_id}/') for data_class in DATA_CLASSES)
+
+
+def _purge_prefix(bucket, prefix: str) -> int:
     try:
-        bucket = _lake_bucket()
+        bucket = bucket if bucket is not None else _lake_bucket()
         count = 0
         for blob in bucket.list_blobs(prefix=prefix):
             try:

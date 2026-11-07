@@ -143,3 +143,39 @@ def test_cascade_gate_precedes_intent_and_covers_retraction_and_cleanup(monkeypa
 
     assert response.status_code == 204
     assert events == ['gate', 'intent', 'retract', 'delete', 'release']
+
+
+@pytest.mark.parametrize('cascade', ['false', 'true'])
+def test_lake_failure_answers_retryable_503_with_intent_and_documents_intact(monkeypatch, cascade):
+    from services import conversation_frame_evidence
+    from utils.other import object_lake
+
+    with _delete_client(monkeypatch) as client:
+        monkeypatch.setenv('BUCKET_OBJECT_LAKE', 'synthetic-lake')
+        deleted = MagicMock()
+        monkeypatch.setattr(
+            conversations,
+            'delete_conversation_and_frame_evidence',
+            lambda uid, cid: conversation_frame_evidence.delete_conversation_and_frame_evidence(
+                uid, cid, delete_conversation=deleted
+            ),
+        )
+        monkeypatch.setattr(conversation_frame_evidence.conversations_db, 'get_conversation_photos', lambda *args: [])
+        monkeypatch.setattr(
+            conversation_frame_evidence.frame_requests_db,
+            'list_all_frame_request_storage_ids',
+            lambda *args, **kwargs: [],
+        )
+        monkeypatch.setattr(
+            conversation_frame_evidence.frame_requests_db, 'persist_conversation_frame_deletion_outbox', MagicMock()
+        )
+        monkeypatch.setattr(
+            object_lake, 'delete_space_entity', MagicMock(side_effect=object_lake.LakeFetchError('lake down'))
+        )
+        response = client.delete(f'/v1/conversations/conversation-1?cascade={cascade}')
+    assert response.status_code == 503
+    assert response.json()['detail'] == 'Conversation storage deletion is busy, please retry'
+    conversations.conversation_tombstones.record_deletion.assert_called_once_with(
+        'uid-delete-contract', 'conversation-1'
+    )
+    deleted.assert_not_called()

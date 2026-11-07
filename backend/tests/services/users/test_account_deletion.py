@@ -100,6 +100,8 @@ def _default_to_no_legal_hold(monkeypatch):
     for suffix in ('DSN', 'HOST', 'DATABASE', 'USER'):
         monkeypatch.delenv(f'DIRECTORY_PG_{suffix}', raising=False)
     monkeypatch.setattr(account_deletion, 'purge_owner_planes', lambda uid: {'status': 'noop'})
+    monkeypatch.setattr(account_deletion, 'purge_owner_lake_content', MagicMock())
+    monkeypatch.setattr(account_deletion, 'destroy_owner_lake_keys', MagicMock())
     monkeypatch.setenv('ACCOUNT_DELETION_GRACE_ENABLED', 'false')
     monkeypatch.setattr(account_deletion.deletion_grace_db, 'promote_grace_to_immediate', lambda _uid: None)
     monkeypatch.setattr(account_deletion, 'acquire_destructive_operation', MagicMock())
@@ -1515,6 +1517,10 @@ def test_account_deletion_status_reports_pre_delete_policy(monkeypatch, enabled,
 def test_background_wipe_user_data_preserves_order(monkeypatch, routing_on):
     calls = []
     monkeypatch.setenv('DIRECTORY_ROUTING_MODE', 'new_owners' if routing_on else 'off')
+
+
+    monkeypatch.setattr(account_deletion, 'purge_owner_lake_content', lambda uid: calls.append(('lake_prefix', uid)))
+    monkeypatch.setattr(account_deletion, 'destroy_owner_lake_keys', lambda uid: calls.append(('lake_keys', uid)))
     if routing_on:
         monkeypatch.setenv('DIRECTORY_PG_DSN', 'synthetic-configured-directory')
         monkeypatch.setattr(account_deletion, 'purge_owner_planes', lambda uid: calls.append(('cell', uid)))
@@ -1562,9 +1568,11 @@ def test_background_wipe_user_data_preserves_order(monkeypatch, routing_on):
         ('twilio', 'uid1'),
         ('purge', 'uid1'),
         *([('cell', 'uid1')] if routing_on else []),
+        ('lake_prefix', 'uid1'),
         ('firestore', 'uid1'),
         ('typesense', 'uid1'),
         ('memory_registry', 'uid1'),
+        ('lake_keys', 'uid1'),
         ('wipe_done', 'uid1'),
     ]
 
@@ -2626,3 +2634,17 @@ def test_configured_purge_precedes_firestore_in_every_mode(monkeypatch, routing_
     )
     assert account_deletion.background_wipe_user_data('uid1') is True
     assert events == ['cell', 'firestore']
+
+
+@pytest.mark.parametrize('step', ['purge_owner_lake_content', 'destroy_owner_lake_keys'])
+def test_required_lake_step_failure_retries(monkeypatch, step):
+    from utils.other.object_lake import LakeFetchError
+
+    _stub_wipe_steps_after_billing(monkeypatch)
+    monkeypatch.setattr(account_deletion, step, MagicMock(side_effect=LakeFetchError('lake down')))
+    assert account_deletion.background_wipe_user_data('uid1') is False
+    account_deletion.users_db.mark_user_deletion_wipe_failed.assert_called_once_with('uid1')
+    account_deletion.users_db.mark_user_deletion_wipe_completed.assert_not_called()
+    if step == 'purge_owner_lake_content':
+        account_deletion.users_db.delete_user_data.assert_not_called()
+        account_deletion.destroy_owner_lake_keys.assert_not_called()

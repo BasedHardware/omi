@@ -485,3 +485,40 @@ def test_bucket_client_is_lazy_and_reused(monkeypatch):
         assert lake._lake_bucket() is expected
         create.assert_called_once_with()
         create.return_value.bucket.assert_called_once_with('lazy-lake')
+
+
+def test_delete_space_entity_scopes_all_classes_and_is_idempotent(storage, monkeypatch):
+    bucket, _ = storage
+    put()
+    lake.put_space_object('s', 'transcript', 'c-sibling', b'sibling')
+    lake.put_space_object('other', 'transcript', 'c', b'other owner')
+    # Exercise every registered class, including a future class without admitting
+    # it to put_space_object's codec. Prefix deletion must cover it too.
+    monkeypatch.setattr(lake, 'DATA_CLASSES', ('transcript', 'future'))
+    bucket.blob('v1/spaces/s/future/c/digest').upload_from_string(b'synthetic')
+    assert lake.delete_space_entity('s', 'c') == 2
+    assert lake.delete_space_entity('s', 'c') == 0
+    assert len(list(bucket.list_blobs())) == 2
+    assert all('/c/' not in blob.name or '/other/' in blob.name for blob in bucket.list_blobs())
+
+
+def test_delete_space_entity_verifies_absence(storage, monkeypatch):
+    put()
+    monkeypatch.setattr(LocalBlob, 'delete', lambda self: None)
+    with pytest.raises(RuntimeError, match='left objects behind'):
+        lake.delete_space_entity('s', 'c')
+
+
+def test_delete_space_entity_transport_failure_is_retryable(storage, monkeypatch):
+    bucket, _ = storage
+    monkeypatch.setattr(bucket, 'list_blobs', lambda **kwargs: (_ for _ in ()).throw(OSError('down')))
+    with pytest.raises(lake.LakeFetchError):
+        lake.delete_space_entity('s', 'c')
+
+
+def test_shredded_key_wins_over_purged_blob(storage):
+    ref = put()
+    lake.delete_space_prefix('s')
+    space_keys.destroy_space_keys('s')
+    with pytest.raises(space_keys.SpaceKeyDestroyed):
+        lake.get_space_object(ref)

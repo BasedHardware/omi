@@ -44,6 +44,8 @@ def delete_conversation_and_frame_evidence(
     need a complete ``utils.memory.retraction_scope``.
     """
 
+    from utils.other import lake_wipe
+
     deleter = delete_conversation
     if deleter is None:
         from utils.conversations.merge_conversations import delete_conversation_with_sync_sources
@@ -61,6 +63,10 @@ def delete_conversation_and_frame_evidence(
     )
     storage_ids = list(dict.fromkeys(photo_storage_ids + request_storage_ids))
     frame_requests_db.persist_conversation_frame_deletion_outbox(uid, conversation_id, storage_ids)
+    if lake_wipe.config.bucket():
+        conversation = conversations_db.get_conversation(uid, conversation_id) or {}
+        source_ids = [sid for sid in (conversation.get("sync_merged_from") or []) if sid != conversation_id]
+        lake_wipe.purge_conversation_lake_objects(uid, conversation_id, source_ids)
     deleter(uid, conversation_id)
     for storage_id in storage_ids:
         try:

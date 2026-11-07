@@ -44,17 +44,40 @@ verified absence, and key destroy causing `SpaceKeyDestroyed`. Record commands,
 resource identities and results in that provisioning PR. C1 runs only hermetic
 FakeKMS/local-storage tests, with no cloud credentials or production calls.
 
-C2 owns codec integration, inline threshold/read kill switch and
-`owner_storage_write_gate(space_id, bucket)` around puts/deletes. C3 owns offload,
-backfill, current-consent export filtering, registry and janitor. C4 must explicitly
-purge lake content with verified absence and destroy `space_keys/{sid}` **LAST**.
-The top-level key collection is invisible to today's generic user-subtree wipe.
-Before purge, C4 must durably fence deleted owners and quiesce in-flight puts to prevent object/key recreation.
-Until C4 ships, no production key documents or lake objects may be created.
+C2 owns codec integration, inline threshold/read kill switch and the lake's
+pre-upload/post-upload deletion-marker and key-authority checks. C3 owns offload,
+backfill, current-consent export filtering, registry and orphan janitor.
 
-Destroy evicts local raw keys and every unwrap rechecks document existence before
-using the bounded TTL KMS cache, so other workers observe document deletion too.
-An already-running read/write still requires C4's account quiescence/write fence.
+C4 ships required, retry-safe account wipe steps in this order: cell/directory
+purge, **lake_prefix_purge**, Firestore user subtree, Typesense, memory registry,
+then **lake_key_destroy LAST**, before the completed marker. The prefix step
+requires a running wipe and rechecks the blocking deletion fence, drains writers
+for `OBJECT_LAKE_WIPE_DRAIN_SECONDS` (default 5, bounded 0..60), then deletes and
+verifies absence. A put that passed its initial fence before deletion rechecks
+authority after upload and self-deletes when fenced. Transport or verified-absence
+failures fail the wipe for retry; keys survive any earlier step failure.
+
+An unset `BUCKET_OBJECT_LAKE` skips prefix purge with zero marker/storage IO.
+A configured bucket is purged even after writer rollback (false/percent 0).
+Key destruction runs unconditionally, including with no bucket: the top-level
+`space_keys/{sid}` collection is outside the generic user-subtree wipe. It retains
+a permanent content-free `{space_id, state: destroyed, destroyed_at}` tombstone,
+evicts local raw keys, and fresh authority reads fence cached unwraps on other
+workers. Retained pointers report `TranscriptShredded` after key destruction.
+
+Explicit conversation deletion synchronously purges every lake class for that
+conversation and its deduplicated `sync_merged_from` donors before document
+deletion, with verified absence. Storage unavailability returns retryable 503,
+retaining the durable conversation tombstone and primary documents; success
+remains 204. Merge targets encode their own objects; merge-internal donor cleanup
+and developer tooling still rely on C3's orphan janitor for abandoned objects.
+
+The O1 activation precondition is the green wipe-coverage test
+`backend/tests/unit/test_lake_wipe_step.py::test_o1_wipe_coverage_gate_and_crash_retry`,
+plus separately authorized dev round-trip/shred qualification and provisioning.
+No flag is activated by C4. Purge covers only the configured release: the `v1`
+pin is load-bearing. A future release bump must widen purge to a release list.
+
 Wrapped-DEK Firestore backups/PITR can restore readability for about seven days
 while the regional KMS key remains usable. This is R13's accepted deletion tail;
 per-space KMS keys were rejected on cost. Retired DEKs are retained until no object
