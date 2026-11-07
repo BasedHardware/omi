@@ -44,6 +44,7 @@ from utils.conversations.summary_delivery import (
     PROCESS_CONTEXT,
     REPAIR_CONTEXT,
     SummaryRepairSuperseded,
+    SummaryOutputUnavailable,
     present as summary_output_present,
     refusal as summary_repair_refusal,
     repair_fenced,
@@ -280,6 +281,15 @@ def enrich_conversation(uid: str, conversation_id: str, language: str):
             return sync_result('deferred')
         canonical = conversations_db.get_sync_redirected_conversation(uid, conversation_id)
         return sync_result('deferred', deserialize_conversation(canonical) if canonical else None)
+
+    if (
+        context
+        and context.get('pipeline_seal')
+        and not context.get('hold_budget_denied_at_max')
+        and not processed_conversation.discarded
+        and not summary_output_present(processed_conversation.structured)
+    ):
+        raise SummaryOutputUnavailable('pipeline notes output is pending')
 
     if context is not None and context.get('hold_budget_denied_at_max'):
         if not conversations_db.complete_sync_processing_hold(

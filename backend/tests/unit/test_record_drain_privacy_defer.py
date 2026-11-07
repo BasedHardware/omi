@@ -69,20 +69,26 @@ def test_oldest_reserve_counts_distinct_eligible_owners(fast_records):
 def test_seal_wakes_parked_record_but_never_steals_active_lease(fast_records):
     records, redis = fast_records
     from config.record_audio import record_identity
-    from tests.unit.test_pipeline_attention import sealed
 
     store = MemoryStore()
+    sealed = {
+        'status': 'completed',
+        'record_lane_owner': 'batch_live_v1',
+        'finished_at': 90,
+        'record_audio_closed': True,
+        'record_upload_revision': 2,
+    }
     segment = record_identity('u', 'c')[1]
     store.rows['jobs', segment] = pending(
         owner_id='u', conversation_id='c', enqueued_at=1, available_at=1000, pipeline_record_deferred=True
     )
-    assert records.sealed('u', 'c', sealed(), store=store, now=100)
+    assert records.sealed('u', 'c', sealed, store=store, now=100)
     assert store.rows['jobs', segment]['available_at'] == 100
     store.rows['jobs', segment].update(available_at=500, pipeline_record_lease_until=500)
-    assert records.sealed('u', 'c', sealed(), store=store, now=101)
+    assert records.sealed('u', 'c', sealed, store=store, now=101)
     assert store.rows['jobs', segment]['available_at'] == 500
     assert records.select([], 4, redis=redis, now=102) == []
-    assert not records.sealed('u', 'c', sealed(record_audio_partial=True), store=store, now=102)
+    assert not records.sealed('u', 'c', {**sealed, 'record_audio_partial': True}, store=store, now=102)
 
 
 def test_record_fast_off_is_exact_legacy_selection(fast_records, monkeypatch):

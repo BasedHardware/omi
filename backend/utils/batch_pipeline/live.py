@@ -197,7 +197,7 @@ def register_recording(
     registered = store.run(commit)
     if registered:
         record_attention.register(uid, conversation['id'], now)
-        if pipeline_policy.seal_snapshot(conversation) is not None:
+        if pipeline_policy.seal_snapshot(conversation, require_content_revision=False) is not None:
             record_attention.sealed(uid, conversation['id'], conversation, store=store, now=now)
     return registered
 

@@ -8,6 +8,51 @@ from tests.unit.test_conversation_smart_merge_finalizer import harness, _Convers
 
 
 @pytest.mark.asyncio
+async def test_pipeline_batch_covered_preview_hands_off_before_any_paid_notes(harness, monkeypatch):
+    calls, row = harness
+    preview = [{'text': 'Synthetic foreground preview', 'start': 0, 'end': 1}]
+    row.update(
+        record_lane_owner='batch_live_v1',
+        server_batch_only=True,
+        server_batch_audio_closed=True,
+        server_batch_audio_received=True,
+        private_cloud_sync_enabled=True,
+        transcript_segments=preview,
+        status='processing',
+        has_content=True,
+        server_batch_audio_start=0,
+        server_batch_audio_end=1,
+    )
+    conversation = _Conversation()
+    conversation.status = finalizer.ConversationStatus.processing
+    conversation.transcript_segments = preview
+    conversation.photos = []
+    monkeypatch.setattr(finalizer, 'deserialize_conversation', lambda _: conversation)
+    original = finalizer.run_blocking
+
+    async def run(executor, function, *args, **kwargs):
+        if function is finalizer.pipeline_attention.serving:
+            return True
+        if function is finalizer.register_recording:
+            calls.append(function)
+            assert args[1]['transcript_segments'] == preview
+            return True
+        if function is finalizer.lifecycle_service.complete_server_batch_capture:
+            calls.append(function)
+            return 'completed'
+        if function is finalizer.process_with_episode_budget:
+            pytest.fail('preview must not buy notes before canonical batch projection')
+        return await original(executor, function, *args, **kwargs)
+
+    monkeypatch.setattr(finalizer, 'run_blocking', run)
+    assert await _finalize() is finalizer.ConversationFinalizationDisposition.completed
+    assert calls.index(finalizer.register_recording) < calls.index(
+        finalizer.lifecycle_service.complete_server_batch_capture
+    )
+    assert row['transcript_segments'] == preview
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize('trigger', [ProcessingTrigger.CAPTURE_END, ProcessingTrigger.SILENT_BACKFILL])
 @pytest.mark.parametrize(
     'change,proven_empty',

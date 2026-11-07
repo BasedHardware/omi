@@ -59,8 +59,9 @@ def capture_end(row: Mapping) -> float | None:
     return seconds(row.get('recorded_end'))
 
 
-def seal_snapshot(row: Mapping) -> dict | None:
+def seal_snapshot(row: Mapping, *, require_content_revision: bool = True) -> dict | None:
     revision = row.get('record_upload_revision')
+    content_revision = row.get('sync_content_revision')
     if (
         row.get('record_lane_owner') not in {'batch_live_v1', 'batch_sync_v1'}
         or row.get('status') != 'completed'
@@ -73,12 +74,14 @@ def seal_snapshot(row: Mapping) -> dict | None:
         or row.get('discarded')
         or type(revision) is not int
         or revision < 0
+        or require_content_revision
+        and (type(content_revision) is not int or content_revision < 1)
     ):
         return None
     return {
         'owner': row['record_lane_owner'],
         'upload_revision': revision,
-        'content_revision': row.get('sync_content_revision'),
+        'content_revision': content_revision,
         'finished_at': seconds(row['finished_at']),
     }
 

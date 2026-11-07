@@ -60,6 +60,16 @@ def complete(db, admitted=None, generation=2, epoch=4):
     )
 
 
+def test_atomic_capture_handoff_preserves_preview_and_retained_audio_metadata():
+    preview = [{'text': 'Synthetic retained preview', 'start': 0, 'end': 1}]
+    row = {**capture(), 'transcript_segments': preview, 'raw_audio_receipt': 'retained'}
+    db = StrictFirestore({ROW: row, JOB_ROW: job()})
+    assert complete(db, admitted=row) == 'completed'
+    assert db.rows[ROW]['transcript_segments'] == preview
+    assert db.rows[ROW]['raw_audio_receipt'] == 'retained'
+    assert db.rows[ROW]['home_transcription_pending_at'] == NOW
+
+
 @pytest.mark.parametrize('gate,seconds', [('on', 7200), ('off', 600)])
 def test_atomic_terminal_preserves_relevance_and_replay_does_not_repeat_delta(monkeypatch, gate, seconds):
     monkeypatch.setenv('HOME_TRANSCRIPTION_PRESENTATION_GATE', gate)

@@ -216,7 +216,13 @@ def creation_result(write: Row, uid: str) -> Row | None:
 
 def merge_result(existing: Row, write: Row, uid: str, *, now: float | None = None) -> Row | None:
     current = time.time() if now is None else now
-    pipeline = prepare_notes_receipt(existing, write, uid, now=current, context=PROCESS_CONTEXT.get())
+    context = PROCESS_CONTEXT.get()
+    if context and context.get('pipeline_seal'):
+        write.setdefault('summary_output_present', present(write.get('structured')))
+        if not write['summary_output_present'] and (existing.get('pipeline_attention') or {}).get('notes_versions'):
+            if existing.get('structured'):
+                write['structured'] = deepcopy(existing['structured'])  # Keep old text while its correction is pending.
+    pipeline = prepare_notes_receipt(existing, write, uid, now=current, context=context)
     receipt = _merge_result(existing, write, uid, now=current)
     return {**(receipt or {}), 'pipeline': pipeline} if pipeline else receipt
 

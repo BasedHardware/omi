@@ -49,7 +49,11 @@ def register(uid, conversation_id, enqueued_at, *, redis=None):
 
 def sealed(uid, conversation_id, row, *, store=None, now=None):
     """Wake a parked deterministic obligation only after a committed full seal."""
-    if not policy.record_fast_enabled() or not attention.serving(uid) or policy.seal_snapshot(row) is None:
+    if (
+        not policy.record_fast_enabled()
+        or not attention.serving(uid)
+        or policy.seal_snapshot(row, require_content_revision=False) is None
+    ):
         return False
     now = time.time() if now is None else now
     _, segment = record_identity(uid, conversation_id)

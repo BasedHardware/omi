@@ -52,6 +52,8 @@ def serving(monkeypatch):
         {'record_lane_owner': 'legacy'},
         {'record_upload_revision': None},
         {'record_upload_revision': True},
+        {'sync_content_revision': None},
+        {'sync_content_revision': True},
     ],
 )
 def test_every_incomplete_seal_refuses_hold_bypass(serving, updates):
@@ -152,6 +154,27 @@ def test_note_version_receipt_is_replay_idempotent_and_durable(serving):
     second = {'summary_output_present': True}
     receipt = runtime.prepare_notes_receipt(row, second, 'u', now=2200, context=context)
     assert receipt['rewrites'] == 1 and second[policy.FIELD]['notes_versions'] == 2
+
+
+def test_pipeline_receipts_do_not_depend_on_legacy_summary_rollout(serving, monkeypatch):
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'false')
+    row = sealed()
+    context = {
+        'pipeline_seal': policy.seal_snapshot(row),
+        'pipeline_fingerprint': runtime.notes_fingerprint(row),
+        'pipeline_attention': 'unwatched',
+    }
+    token = summary_delivery.PROCESS_CONTEXT.set(context)
+    try:
+        write = {'status': 'completed', 'structured': {'title': 'Synthetic', 'overview': 'Durable generated notes'}}
+        receipt = summary_delivery.merge_result(row, write, 'u', now=2000)
+        assert receipt['pipeline']['first'] and write[policy.FIELD]['notes_versions'] == 1
+        banked = {**row, **write}
+        minimum = {'status': 'completed', 'structured': {'title': 'Pending'}}
+        assert summary_delivery.merge_result(banked, minimum, 'u', now=2100) is None
+        assert minimum['structured'] == banked['structured'] and not minimum['summary_output_present']
+    finally:
+        summary_delivery.PROCESS_CONTEXT.reset(token)
 
 
 def test_pending_episode_deadline_preserved_and_unresolved_sibling_never_sealed(serving, monkeypatch):

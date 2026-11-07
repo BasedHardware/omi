@@ -503,6 +503,8 @@ def mark_update(
             )
 
         deadline = pipeline_policy.dispatch_at(pipeline_snapshot or {}, row)
+        if pipeline_snapshot is not None:
+            row['sync_hold'] = True  # Independent of the older summary-delivery rollout.
         if deadline is not None and (pipeline_snapshot or row.get('pipeline_dispatch_at')):
             row['pipeline_dispatch_at'] = deadline
             row['due_at'] = min(row['due_at'], max(current, deadline))

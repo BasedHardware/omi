@@ -106,6 +106,15 @@ def test_patient_dispatch_deadline_clamps_the_existing_durable_outbox(state, mon
     assert rows[key]['due_at'] == 1780
 
 
+def test_pipeline_obligation_keeps_processing_context_with_unknown_capture_clock(state, monkeypatch):
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'false')
+    monkeypatch.setattr(outbox, 'pipeline_snapshot', lambda *_: {'record_lane_owner': 'batch_sync_v1'})
+    rows, _ = state
+    outbox.mark('u', 'c', 'en', now=100)
+    assert rows[outbox.key('u', 'c')]['sync_hold'] is True
+    assert 'pipeline_dispatch_at' not in rows[outbox.key('u', 'c')]
+
+
 def test_kill_switch_drains_already_held_obligation_without_waiting(state, monkeypatch):
     rows, tasks = state
     outbox.mark('u', 'c', 'en', now=100, sync_hold=True)
