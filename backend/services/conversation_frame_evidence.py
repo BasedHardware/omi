@@ -47,10 +47,12 @@ def delete_conversation_and_frame_evidence(
     from utils.other import lake_wipe
 
     deleter = delete_conversation
+    default_deleter = None
     if deleter is None:
         from utils.conversations.merge_conversations import delete_conversation_with_sync_sources
 
-        deleter = delete_conversation_with_sync_sources
+        default_deleter = delete_conversation_with_sync_sources
+        deleter = default_deleter
 
     photo_storage_ids = [
         str(photo.get("storage_id"))
@@ -70,8 +72,8 @@ def delete_conversation_and_frame_evidence(
         conversation = conversations_db.get_conversation_raw_snapshot(uid, conversation_id) or {}
         source_ids = [sid for sid in (conversation.get("sync_merged_from") or []) if sid != conversation_id]
         lake_wipe.purge_conversation_lake_objects(uid, conversation_id, source_ids)
-    if delete_conversation is None and conversation is not None:
-        delete_conversation_with_sync_sources(uid, conversation_id, conversation_row=conversation)
+    if default_deleter is not None and conversation is not None:
+        default_deleter(uid, conversation_id, conversation_row=conversation)
     else:
         deleter(uid, conversation_id)
     for storage_id in storage_ids:
