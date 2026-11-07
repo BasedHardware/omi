@@ -358,6 +358,28 @@ def test_file_selector_accounts_for_the_provider_that_will_actually_run(monkeypa
     assert lid.resolve_file('multi', tmp_path / 'missing', selector=stt.get_prerecorded_service)[0] == 'modulate'
 
 
+def test_file_selector_preserves_multilingual_when_user_language_unsupported_by_parakeet(monkeypatch, tmp_path):
+    client = detector(monkeypatch, 'en')
+    path = tmp_path / 'synthetic.wav'
+    path.write_bytes(wav())
+    # User's primary language is Japanese ('ja'), which Parakeet does not support.
+    # Must preserve multilingual provider (Modulate) instead of misrouting to Parakeet (#22487).
+    assert lid.resolve_file('multi', path, selector=stt.get_prerecorded_service, user_language='ja')[0] == 'modulate'
+    client.post.assert_not_called()
+    assert (
+        lid.select_decision(
+            'multi', lid.LanguageDecision('en', 1.0, 'audio_lid'), stt.get_prerecorded_service, user_language='ja'
+        )[0]
+        == 'modulate'
+    )
+    assert (
+        lid.resolve_url(
+            'multi', 'http://example.com/audio.wav', selector=stt.get_prerecorded_service, user_language='ja'
+        )[0]
+        == 'modulate'
+    )
+
+
 def test_route_metric_records_provider_ordering_after_supported_detection(monkeypatch, tmp_path):
     from utils.batch_pipeline.language_metrics import ROUTES
 

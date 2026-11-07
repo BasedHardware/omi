@@ -530,6 +530,65 @@ class TestProcessSegmentPreferences:
     @patch('utils.sync.pipeline.prerecorded')
     @patch('utils.sync.pipeline.delete_syncing_temporal_file')
     @patch('utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='http://example.com/audio.wav')
+    def test_multi_language_japanese_preserves_user_language_hint(
+        self, mock_url, mock_delete, mock_dg, mock_ts, mock_closest
+    ):
+        """In multi-language mode with Japanese, pass user_language hint and fallback (#22487)."""
+        from utils.sync.pipeline import process_segment
+
+        mock_dg.return_value = (self._make_mock_words(), 'multi')
+        prefs = {'vocabulary': [], 'language': 'ja', 'single_language_mode': False}
+
+        response = {'new_memories': set(), 'updated_memories': set()}
+        lock = threading.Lock()
+        errors = []
+        assigned = _make_assigned_conversation()
+
+        with patch(
+            'utils.conversations.lifecycle.ingest_sync_conversation',
+            return_value=(assigned, True, assigned['transcript_segments']),
+        ) as mock_intake:
+            process_segment('test/path.bin', 'uid123', response, lock, errors, transcription_prefs=prefs)
+
+        _, kwargs = mock_dg.call_args
+        assert kwargs['language'] == 'multi'
+        assert kwargs.get('user_language') == 'ja'
+        incoming = mock_intake.call_args[0][1]
+        assert incoming['language'] == 'ja'
+
+    @patch('utils.sync.pipeline.get_closest_conversation_to_timestamps', return_value=None)
+    @patch('utils.sync.pipeline.get_timestamp_from_path', return_value=1700000000)
+    @patch('utils.sync.pipeline.prerecorded')
+    @patch('utils.sync.pipeline.delete_syncing_temporal_file')
+    @patch('utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='http://example.com/audio.wav')
+    def test_multi_language_distinct_detection_preserved(
+        self, mock_url, mock_delete, mock_dg, mock_ts, mock_closest
+    ):
+        """In multi-language mode, concrete detected foreign language is preserved."""
+        from utils.sync.pipeline import process_segment
+
+        mock_dg.return_value = (self._make_mock_words(), 'en')
+        prefs = {'vocabulary': [], 'language': 'ja', 'single_language_mode': False}
+
+        response = {'new_memories': set(), 'updated_memories': set()}
+        lock = threading.Lock()
+        errors = []
+        assigned = _make_assigned_conversation()
+
+        with patch(
+            'utils.conversations.lifecycle.ingest_sync_conversation',
+            return_value=(assigned, True, assigned['transcript_segments']),
+        ) as mock_intake:
+            process_segment('test/path.bin', 'uid123', response, lock, errors, transcription_prefs=prefs)
+
+        incoming = mock_intake.call_args[0][1]
+        assert incoming['language'] == 'en'
+
+    @patch('utils.sync.pipeline.get_closest_conversation_to_timestamps', return_value=None)
+    @patch('utils.sync.pipeline.get_timestamp_from_path', return_value=1700000000)
+    @patch('utils.sync.pipeline.prerecorded')
+    @patch('utils.sync.pipeline.delete_syncing_temporal_file')
+    @patch('utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='http://example.com/audio.wav')
     def test_private_cloud_sync_flag_passed_to_new_conversation(
         self, mock_url, mock_delete, mock_dg, mock_ts, mock_closest
     ):

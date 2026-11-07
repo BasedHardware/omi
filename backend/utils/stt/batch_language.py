@@ -23,7 +23,12 @@ from config.prerecorded_language import (
     language_guard_enabled,
     self_lid_confidence_floor,
 )
-from config.stt_provider_policy import MODULATE_SUPPORTED_LANGUAGES, normalized_stt_language
+from config.stt_provider_policy import (
+    MODULATE_SUPPORTED_LANGUAGES,
+    STTServingSurface,
+    normalized_stt_language,
+    parakeet_supports_language,
+)
 from utils.stt import language_gate
 from utils.stt.prerecorded_health import CREDIT_AUTH, PROVIDER_ERROR, note_provider_failure
 from utils.stt.vendor_guard import (
@@ -394,8 +399,17 @@ def resolve_language(
     return decision
 
 
-def select_decision(language, decision, selector):
-    resolved = decision.language if decision.parakeet_safe else language
+def user_language_forces_multilingual(user_language: str | None) -> bool:
+    norm_user_lang = normalized_stt_language(user_language) if user_language else ''
+    return bool(norm_user_lang and not parakeet_supports_language(STTServingSurface.PRERECORDED, norm_user_lang))
+
+
+def select_decision(language, decision, selector, *, user_language=None):
+    resolved = (
+        decision.language
+        if decision.parakeet_safe and not user_language_forces_multilingual(user_language)
+        else language
+    )
     selected = selector(resolved)
     from utils.batch_pipeline.language_metrics import record_route
 
@@ -403,10 +417,14 @@ def select_decision(language, decision, selector):
     return selected
 
 
-def resolve_file(language, path, *, selector, before_probe=None, cohort_key=None):
+def resolve_file(language, path, *, selector, before_probe=None, cohort_key=None, user_language=None):
     """Return the final provider before a sync segment's dispatch/accounting."""
     if not language_guard_enabled() or language_class(language) != 'unknown':
         return selector(language)
+    if user_language_forces_multilingual(user_language):
+        return select_decision(
+            language, LanguageDecision('und', 0.0, 'unavailable'), selector, user_language=user_language
+        )
     try:
         with wave.open(str(path), 'rb') as source:
             body, _ = probe_wav_from_reader(source)
@@ -415,7 +433,7 @@ def resolve_file(language, path, *, selector, before_probe=None, cohort_key=None
         )
     except Exception:
         decision = LanguageDecision('und', 0.0, 'unavailable')
-    return select_decision(language, decision, selector)
+    return select_decision(language, decision, selector, user_language=user_language)
 
 
 def probe_wav_from_reader(source):
@@ -426,9 +444,13 @@ def probe_wav_from_reader(source):
     return output.getvalue(), 0
 
 
-def resolve_url(language, url, *, selector):
+def resolve_url(language, url, *, selector, user_language=None):
     if not language_guard_enabled() or language_class(language) != 'unknown':
         return selector(language)
+    if user_language_forces_multilingual(user_language):
+        return select_decision(
+            language, LanguageDecision('und', 0.0, 'unavailable'), selector, user_language=user_language
+        )
     try:
         chunks, size = [], 0
         with httpx.Client(timeout=httpx.Timeout(10, connect=2)) as client:
@@ -443,4 +465,4 @@ def resolve_url(language, url, *, selector):
         decision = resolve_language(language, b''.join(chunks))
     except Exception:
         decision = LanguageDecision('und', 0.0, 'unavailable')
-    return select_decision(language, decision, selector)
+    return select_decision(language, decision, selector, user_language=user_language)
