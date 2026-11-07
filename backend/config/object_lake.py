@@ -53,13 +53,21 @@ def key_cache_ttl_seconds() -> int:
     return max(0, value)
 
 
+_FAKE_KMS_STAGES = frozenset({'local', 'offline'})
+
+
+def fake_kms_allowed() -> bool:
+    return os.getenv('OMI_ENV_STAGE', '').strip().lower() in _FAKE_KMS_STAGES
+
+
 def write_admitted(space_id: str) -> bool:
-    # KMS may deliberately be unset for offline FakeKMS. A bucket and release
-    # are required even there; incomplete bindings must keep writes inline.
+    # Incomplete bindings keep writes inline. FakeKMS may stand in for the
+    # regional key only on explicitly local/offline stages, never deployed ones.
     return (
         bool(space_id)
         and write_enabled()
         and bool(bucket())
         and bool(release())
+        and (bool(kms_key()) or fake_kms_allowed())
         and cohort_bucket(space_id, 'object-lake', bits=64) < write_percent()
     )

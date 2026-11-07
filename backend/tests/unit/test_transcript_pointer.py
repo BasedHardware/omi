@@ -42,6 +42,7 @@ def lake_world(tmp_path, monkeypatch):
     }.items():
         monkeypatch.setenv(name, value)
     monkeypatch.delenv('OBJECT_LAKE_KMS_KEY', raising=False)
+    monkeypatch.setenv('OMI_ENV_STAGE', 'offline')  # FakeKMS is admitted only offline
     monkeypatch.delenv('OBJECT_LAKE_KMS_FAKE_SECRET', raising=False)
     monkeypatch.delenv('OBJECT_LAKE_INLINE_MAX_BYTES', raising=False)
     store = StrictFirestore()
@@ -142,6 +143,18 @@ def test_incomplete_lake_bindings_close_write_admission(lake_world, monkeypatch,
     monkeypatch.setattr(lake, 'put_space_object', put)
     assert isinstance(encode()['transcript_segments'], bytes)
     put.assert_not_called()
+
+
+@pytest.mark.parametrize('stage', ['', 'dev', 'prod'])
+def test_deployed_stage_without_kms_key_closes_write_admission(lake_world, monkeypatch, stage):
+    monkeypatch.setenv('OMI_ENV_STAGE', stage)
+    assert not pointer.config.write_admitted(UID)
+    put = Mock(side_effect=AssertionError('put attempted under FakeKMS on a deployed stage'))
+    monkeypatch.setattr(lake, 'put_space_object', put)
+    assert isinstance(encode()['transcript_segments'], bytes)
+    put.assert_not_called()
+    monkeypatch.setenv('OBJECT_LAKE_KMS_KEY', 'projects/p/locations/l/keyRings/r/cryptoKeys/k')
+    assert pointer.config.write_admitted(UID)
 
 
 def test_cold_transaction_reloads_outside_body(lake_world):

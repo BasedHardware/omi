@@ -20,6 +20,7 @@ def storage(tmp_path, monkeypatch):
     monkeypatch.setenv('OBJECT_LAKE_RELEASE', 'v1')
     monkeypatch.delenv('OBJECT_LAKE_KMS_KEY', raising=False)
     monkeypatch.delenv('OBJECT_LAKE_KMS_FAKE_SECRET', raising=False)
+    monkeypatch.setenv('OMI_ENV_STAGE', 'offline')  # FakeKMS is admitted only offline
     store = StrictFirestore()
     space_keys.clear_space_key_cache()
     monkeypatch.setattr(
