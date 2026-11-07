@@ -318,7 +318,7 @@ def test_merge_pointer_sources_get_independent_survivor_objects(world, monkeypat
             'started_at': now + timedelta(seconds=index * 20),
             'finished_at': now + timedelta(seconds=20 + index * 20),
             'language': 'en',
-            'transcript_segments': [{'text': cid, 'start': 0.0, 'end': 10.0, 'speaker_id': 0}],
+            'transcript_segments': [{'text': cid, 'start': 0.0, 'end': 10.0, 'speaker_id': 0, 'is_user': True}],
         }
         rows[cid] = conversations_db.encode_conversation_for_write('owner', row, 'standard')
         assert isinstance(rows[cid]['transcript_segments'], dict)
