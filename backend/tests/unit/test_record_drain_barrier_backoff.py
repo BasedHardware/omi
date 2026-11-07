@@ -72,3 +72,15 @@ def test_barrier_text_matches_the_raise_site():
     with pytest.raises(ValueError) as raised:
         require_record_audio_barrier({'status': 'in_progress'})
     assert str(raised.value) == BARRIER_NOT_CLOSED
+
+
+def test_retry_line_groups_by_segment_prefix_without_owner(drained, caplog):
+    import logging
+
+    run, live = drained
+    with caplog.at_level(logging.WARNING, logger=live.__name__):
+        run(100000.0 - 30, ValueError(live.BARRIER_NOT_CLOSED))
+    line = next(r.getMessage() for r in caplog.records if 'event=batch_live_admission outcome=retry' in r.getMessage())
+    # Segment ids are content hashes: the prefix lets a log read count retries per recording.
+    assert line.endswith(' segment=s')
+    assert 'synthetic-owner' not in line

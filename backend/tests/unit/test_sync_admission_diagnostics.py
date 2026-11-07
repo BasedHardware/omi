@@ -123,7 +123,10 @@ async def test_record_wait_reason_retains_custody_without_alias(monkeypatch, cap
     else:
         assert store.rows == before
     messages = [record.getMessage() for record in caplog.records]
-    assert messages == [f'event=sync_record_upload outcome=pending reason={expected}']
+    # A hashed record key groups waits per recording; raw ids never reach the log.
+    record = '-' if case == 'mismatch' else content[:16]
+    assert messages == [f'event=sync_record_upload outcome=pending reason={expected} record={record}']
+    assert uid not in messages[0] and conversation not in messages[0]
 
 
 async def test_conversation_level_wait_is_memoized_and_repeated_without_upload_work(record_wait_memo):

@@ -556,10 +556,12 @@ async def drain_recordings(store, *, provider_outbox_factory=None) -> bool:
             if pending.get('partial_coordinator'):
                 record_partial_failure(error, run=pending.get('partial_run'))
             logger.warning(
-                'event=batch_live_admission outcome=retry exception_type=%s reason=%s tables=%s',
+                'event=batch_live_admission outcome=retry exception_type=%s reason=%s tables=%s segment=%s',
                 type(error).__name__,
                 _retry_reason(error),
                 getattr(error, 'store_tables', 'n/a'),
+                # Segment ids are content hashes, so a prefix groups retries per recording without ids.
+                str(segment)[:16],
             )
 
         def defer(tx):

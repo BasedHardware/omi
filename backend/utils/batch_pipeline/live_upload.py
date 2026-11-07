@@ -62,16 +62,18 @@ class RecordUploadWait(Enum):
     RECEIPT_STATUS_READ_FAILED = 'receipt_status_read_failed'
 
 
-def _pending(reason: RecordUploadWait):
+def _pending(reason: RecordUploadWait, record: str | None = None):
     # These are custody waits, not evidence of Cloud Run refusing a request.
     # Keep the branch vocabulary static and omit identities/audio/error text.
+    # ``record`` is a 16-hex prefix of the record content hash (the intake key
+    # bp_<content>), so repeated waits can be grouped per recording without ids.
     # No Retry-After: shipped clients read any 5xx carrying one as an
     # account-wide pause, so one conversation's wait stalled every other WAL
     # on the phone (2026-11-07 503 storm). Without it the drain skips this
     # recording for the pass and keeps uploading the rest, after the client's
     # own short unscoped-5xx pause (2-30s, reset by a success); the WAL is kept.
     # The body's retry_after_seconds paces only this recording in new apps.
-    logger.info('event=sync_record_upload outcome=pending reason=%s', reason.value)
+    logger.info('event=sync_record_upload outcome=pending reason=%s record=%s', reason.value, (record or '-')[:16])
     return JSONResponse(
         status_code=503,
         content={
@@ -91,7 +93,11 @@ _MEMOIZED_WAITS = frozenset({RecordUploadWait.RECORD_JOBS_MISSING, RecordUploadW
 async def conversation_pending(reason: RecordUploadWait, uid: str, conversation_id: str | None):
     if reason in _MEMOIZED_WAITS and isinstance(conversation_id, str) and conversation_id:
         await run_blocking(db_executor, remember_record_wait, uid, conversation_id, reason.value)
-    return _pending(reason)
+    return _pending(reason, _record_key(uid, conversation_id))
+
+
+def _record_key(uid: str, conversation_id: str | None) -> str | None:
+    return record_identity(uid, conversation_id)[0] if isinstance(conversation_id, str) and conversation_id else None
 
 
 async def memoized_record_wait(uid, conversation_id) -> JSONResponse | None:
@@ -105,7 +111,7 @@ async def memoized_record_wait(uid, conversation_id) -> JSONResponse | None:
         reason = RecordUploadWait(cached)
     except ValueError:
         return None
-    return _pending(reason) if reason in _MEMOIZED_WAITS else None
+    return _pending(reason, _record_key(uid, conversation_id)) if reason in _MEMOIZED_WAITS else None
 
 
 def _pcm(wav):
@@ -338,9 +344,9 @@ async def registered_record_response(
         )
     if prior.get('dispatch_protocol') == 'batch_v1' and prior.get('job_id') == 'bp_' + content:
         status = await run_blocking(db_executor, durable_status, store, uid, prior['job_id'])
-        return start_response(status) if status else _pending(RecordUploadWait.RECEIPT_STATUS_MISSING)
+        return start_response(status) if status else _pending(RecordUploadWait.RECEIPT_STATUS_MISSING, content)
     if prior:
-        return _pending(RecordUploadWait.CONTENT_RECEIPT_CONFLICT)
+        return _pending(RecordUploadWait.CONTENT_RECEIPT_CONFLICT, content)
     if not jobs:
         return await conversation_pending(RecordUploadWait.RECORD_JOBS_MISSING, uid, conversation_id)
     failure_reason = RecordUploadWait.ARTIFACT_LOOKUP_FAILED
@@ -348,7 +354,7 @@ async def registered_record_response(
         artifacts = await run_blocking(storage_executor, artifacts_for, store)
         failure_reason = RecordUploadWait.COVERAGE_CHECK_FAILED
         if not await run_blocking(sync_executor, _covered, paths, jobs, artifacts):
-            return _pending(RecordUploadWait.AUDIO_COVERAGE_UNPROVEN)
+            return _pending(RecordUploadWait.AUDIO_COVERAGE_UNPROVEN, content)
 
         def alias(tx):
             current = tx.get('content', f'{uid}/{content_id}')
@@ -369,11 +375,11 @@ async def registered_record_response(
 
         failure_reason = RecordUploadWait.ALIAS_WRITE_FAILED
         if not await run_blocking(db_executor, store.run, alias):
-            return _pending(RecordUploadWait.ALIAS_CONFLICT)
+            return _pending(RecordUploadWait.ALIAS_CONFLICT, content)
         failure_reason = RecordUploadWait.RECEIPT_STATUS_READ_FAILED
         status = await run_blocking(db_executor, durable_status, store, uid, 'bp_' + content)
-        return start_response(status) if status else _pending(RecordUploadWait.RECEIPT_STATUS_MISSING)
+        return start_response(status) if status else _pending(RecordUploadWait.RECEIPT_STATUS_MISSING, content)
     except Exception:
         # An erased/missing manifest cannot prove WAL coverage. Retain it;
         # never translate a storage/privacy failure into legacy compute.
-        return _pending(failure_reason)
+        return _pending(failure_reason, content)
