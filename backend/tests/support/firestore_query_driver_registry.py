@@ -149,7 +149,9 @@ _DEV_KEY = 'omi_dev_' + 'a' * 32
 _MCP_KEY = 'omi_mcp_' + 'a' * 32
 
 BODY_DIGEST = {
-    'database.memory_ledger._iter_privacy_history_candidates': 'd28853e7e81806c51d52aa4c7d45fffdffff5b796aca9a91b04126dc94e7f013',
+    # Re-reviewed 2026-11-07: both switch profiles exercise the parent purges;
+    # all terminal queries remain delegated to _iter_collection_documents.
+    'database.memory_ledger._iter_privacy_history_candidates': '9c671fa89532ed5cbfae41d1d19c656026b46db524c09a376eb3b86b09a89677',
     'database.lifecycle_metrics_queries._where': '51d3e38b20df6800101fbf671471d2538c487d9c702698c6a9ad221c43f89a79',
     'database.batch_pipeline_store.FirestoreStore.ready_for_capacity': '975eabd92f43ba5da3d847439f4d8e3592525ccd31c11dcac6463365535eac10',
     'database.batch_pipeline_store.FirestoreStore.oldest_admissible_ready': '293687cc6708d7ab2f673cb2984e6bb8cbfe581fa526db8c1040fd011dc00107',
