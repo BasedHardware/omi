@@ -130,6 +130,17 @@ def test_ambiguous_upload_retains_durable_candidate(storage, monkeypatch):
     )
 
 
+@pytest.mark.parametrize('field', ['bucket', 'key', 'created_at'])
+def test_invalid_existing_candidate_refuses_upload(storage, monkeypatch, field):
+    bucket, store = storage
+    lake._record_upload_candidate(bucket.name, 'v1/spaces/s/transcript/c/' + hashlib.sha256(b'new').hexdigest())
+    row = next(row for path, row in store.rows.items() if path[0] == 'lake_upload_candidates')
+    row[field] = None
+    with pytest.raises(lake.LakeObjectConflict, match='candidate is invalid'):
+        put(b'new')
+    assert not list(bucket.list_blobs(prefix='v1/spaces/'))
+
+
 def legacy_object(bucket, plaintext=b'legacy transcript'):
     digest = hashlib.sha256(plaintext).hexdigest()
     key = f'v1/spaces/s/transcript/c/{digest}'

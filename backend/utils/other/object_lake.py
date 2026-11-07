@@ -257,13 +257,22 @@ def _record_upload_candidate(bucket: str, key: str) -> None:
     """
     candidate_id = hashlib.sha256(f'{bucket}/{key}'.encode('utf-8')).hexdigest()
     candidate = space_keys.space_key_firestore_client().collection('lake_upload_candidates').document(candidate_id)
-    if candidate.get().exists:
-        return
-    try:
-        candidate.create({'bucket': bucket, 'key': key, 'created_at': datetime.now(timezone.utc)})
-    except AlreadyExists:
-        # A concurrent writer has already made the same intent durable.
-        pass
+    snapshot = candidate.get()
+    if not snapshot.exists:
+        try:
+            candidate.create({'bucket': bucket, 'key': key, 'created_at': datetime.now(timezone.utc)})
+            return
+        except AlreadyExists:
+            # A concurrent writer must have made the SAME intent durable.
+            snapshot = candidate.get()
+    existing = snapshot.to_dict() or {}
+    if (
+        existing.get('bucket') != bucket
+        or existing.get('key') != key
+        or not isinstance(existing.get('created_at'), datetime)
+        or existing['created_at'].tzinfo is None
+    ):
+        raise LakeObjectConflict('Existing lake upload candidate is invalid')
 
 
 def _assert_owner_write_allowed(space_id):
