@@ -135,6 +135,81 @@ def test_bucket_mapping_and_modelled_cash_preference_and_tooling_cap(modules, tm
         modules.parity.verify(artifact['rows'])
 
 
+@pytest.mark.parametrize('vendor', ['anthropic', 'replicate', 'xai', 'openrouter'])
+def test_split_cash_never_enters_saas_or_all_in_with_retained_history(modules, tmp_path, vendor):
+    baseline = replay(modules, tmp_path / 'baseline')
+    raw = tmp_path / 'raw'
+    shutil.copytree(FIXTURE, raw)
+    cash_path = raw / 'mercury_vendor_spend_daily.json'
+    cash = json.loads(cash_path.read_text())
+    config = modules.assemble.load_map()
+    charge = dict(
+        date=DAY, vendor=vendor, category=config['vendors'][vendor]['category'], amount_usd='7000', transaction_count=1
+    )
+    cash['rows'].append(charge)
+    write(cash_path, cash)
+    out = tmp_path / 'out'
+
+    def totals(artifact):
+        rows = [r for r in artifact['rows'] if r['date'] == DAY]
+        return (
+            next(r['usd'] for r in rows if r['line'] == 'saas_tooling'),
+            sum(r['usd'] for r in rows if r['in_all_in']),
+        )
+
+    offline = modules.assemble.assemble(raw, out, DAY, DAY, DAY)
+    assert totals(offline) == pytest.approx(totals(baseline))
+    line = 'saas_anthropic_seats' if vendor == 'anthropic' else vendor
+    separate = next(r for r in offline['rows'] if r['date'] == DAY and r['line'] == line)
+    assert separate['usd'] == 7000 and separate['in_all_in'] is False
+
+    # Exercise the real loader path too: a prior annual charge must be filtered
+    # before the retained-history rates are written and used for reassembly.
+    history = [dict(charge, date='2025-11-04')]
+    loaded = {}
+    modules.assemble.load_mercury.load(
+        raw,
+        'run',
+        't',
+        lambda _: None,
+        lambda name, rows, dates: loaded.update({name: rows}) or len(rows),
+        lambda *a, **kw: json.dumps(history),
+        derived=out,
+    )
+    rates = json.loads((out / 'mercury_run_rates.json').read_text())
+    assert next(r['amount_usd'] for r in rates['saas'] if r['date'] == DAY) == '750.500000000'
+    modules.loader.load_spend_daily(raw, out, 'run', 't', lambda _: None, lambda *a, **kw: 0)
+    assert totals(json.loads((out / 'spend_daily.json').read_text())) == pytest.approx(totals(baseline))
+    if vendor in {'anthropic', 'replicate'}:
+        assert float(next(r['amount_usd'] for r in loaded['mercury_saas_daily'] if r['date'] == DAY)) > 750.5
+
+
+@pytest.mark.parametrize('kind,line', [('saas', 'saas_tooling'), ('infra', 'infra_non_gcp')])
+def test_incomplete_mercury_rate_with_full_coverage_never_publishes(modules, tmp_path, kind, line):
+    replay(modules, tmp_path)
+    rates = {
+        name: [
+            dict(
+                date=DAY, amount_usd='800', coverage_days=30, annual_history_complete=True, inputs_complete=name != kind
+            )
+        ]
+        for name in ('saas', 'infra')
+    }
+    write(tmp_path / 'mercury_run_rates.json', rates)
+    written = []
+    modules.loader.load_spend_daily(
+        FIXTURE,
+        tmp_path,
+        'run',
+        't',
+        lambda _: None,
+        lambda name, rows, dates, **kw: written.extend(rows) or len(rows),
+    )
+    assert not any(r.get('line') == line for r in written)
+    other = 'infra_non_gcp' if kind == 'saas' else 'saas_tooling'
+    assert next(r['usd'] for r in written if r.get('line') == other) == 800
+
+
 def test_source_scoped_replacement_is_idempotent_and_preserves_live_writer(modules, tmp_path):
     artifact = replay(modules, tmp_path)
     live = dict(date=DAY, source='meter_live', line='llm_openai', status='provisional', usd=9)
@@ -235,6 +310,51 @@ def test_backfill_bounds_and_warnings(modules, monkeypatch, capsys):
     )
     assert entry.subprocess_run(DAY) == 0
     assert capsys.readouterr().err.count('WARNING:') == 3
+
+
+@pytest.mark.parametrize('present', [set(), None, {'2026-09-30'}])
+def test_backfill_lease_contention_is_incomplete_until_owner_finishes(modules, monkeypatch, capsys, present):
+    entry = load('cloudrun_entry')
+    monkeypatch.setattr(
+        entry,
+        'dt',
+        SimpleNamespace(
+            datetime=SimpleNamespace(now=lambda tz: dt.datetime(2026, 11, 8, tzinfo=tz)),
+            date=dt.date,
+            timedelta=dt.timedelta,
+            timezone=dt.timezone,
+        ),
+    )
+    # Outside the normal 14-day gap-fill window: a false success strands a hole.
+    day = '2026-10-01'
+    monkeypatch.setenv('FINOPS_BACKFILL_FROM', day)
+    monkeypatch.delenv('FINOPS_DATE', raising=False)
+    monkeypatch.setattr(entry.cloudrun, 'assert_runtime_identity', lambda: 'test-writer')
+    monkeypatch.setattr(entry, 'acquire_lease', lambda date: False)
+    monkeypatch.setattr(entry, 'takeover_if_stale', lambda date: False)
+    reads, runs, releases = [], [], []
+
+    def discover(start, end):
+        reads.append((start, end))
+        return present
+
+    monkeypatch.setattr(entry, 'load_present_days', discover)
+    monkeypatch.setattr(entry, 'subprocess_run', lambda date: runs.append(date) or 0)
+    monkeypatch.setattr(entry, 'release_lease', releases.append)
+    assert entry.main() != 0
+    assert reads == [(day, day)]
+    assert not runs and not releases  # never execute or release another owner's lease
+    assert 'retry required' in capsys.readouterr().err
+
+    monkeypatch.setattr(entry, 'load_present_days', lambda start, end: {day})
+    assert entry.run_one(day) == 0
+    assert 'already completed' in capsys.readouterr().err
+    assert not runs and not releases
+
+    # Alternatively the owner fails/releases: the retry must really run the date.
+    monkeypatch.setattr(entry, 'acquire_lease', lambda date: True)
+    assert entry.run_one(day) == 0
+    assert runs == [day]
 
 
 def test_openai_429_retries_only_once_and_honours_retry_after(modules, monkeypatch):

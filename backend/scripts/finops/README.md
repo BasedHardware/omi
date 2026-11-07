@@ -743,8 +743,14 @@ reader changes ship here. `assemble_spend_daily.py` is offline; the loader
 reassembles with the exact Mercury run rates computed by `load_mercury.py`,
 including retained annual history, through `derived/mercury_run_rates.json`.
 Raw-only replay uses only the cash history in the run directory. Mercury run
-rates with fewer than 30 covered days are omitted rather than publishing a
-partial-window undercount. Annual/incomplete-history caveats stay in `note`.
+rates with fewer than 30 covered days or `inputs_complete=false` are omitted
+rather than publishing an undercount as measured/settled. Annual-history
+caveats stay in `note`.
+
+Ledger SaaS rates filter Anthropic, Replicate, xAI and OpenRouter before cadence
+detection, including retained annual history. Those vendors have separate cash
+rows with their own basis flags and never enter `saas_tooling` or all-in through
+that aggregate. The existing sibling `mercury_saas_daily` calculation is unchanged.
 
 `spend_daily` is partitioned on `date` without expiry and clustered on
 `line, source`. Key `(date, line, source, status)` is NOT NULL with a
@@ -846,7 +852,10 @@ Cloud Logging through both subprocess layers.
    lease; it is mutually exclusive with `FINOPS_DATE`. Existing successful
    leases remain valid for six hours: wait for expiry rather than removing
    another execution's lock. Failures stop the loop and release that date's
-   lease. Retries skip still-owned completed dates.
+   lease. Retries skip still-owned dates only after verifying a matching settled
+   billing-spend run and unit-cost total. An active lease without verified
+   completion returns nonzero, including when completion discovery fails, so a
+   contending backfill cannot report a hole as success.
 
    The existing job has a **3600-second task timeout**. For a long single
    backfill, the deploy owner must first select a sufficient bounded task

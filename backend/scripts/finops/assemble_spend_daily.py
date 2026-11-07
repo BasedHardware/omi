@@ -11,7 +11,7 @@ import math
 import pathlib
 import re
 
-from mercury_costs import days, infra_rows, load_map, saas_rows
+from mercury_costs import days, infra_rows, load_map, spend_saas_rows
 import load_mercury
 
 HERE = pathlib.Path(__file__).resolve().parent
@@ -151,12 +151,12 @@ def assemble(
         # The loader supplies the exact rates it just computed with retained annual
         # history. Offline assembly derives the same rates from the raw window alone.
         rates = mercury_rates or {
-            'saas': saas_rows(cash['rows'], window, config),
+            'saas': spend_saas_rows(cash['rows'], window, config),
             'infra': infra_rows(cash['rows'], window, config),
         }
         for kind, line in (('saas', 'saas_tooling'), ('infra', 'infra_non_gcp')):
             for r in rates[kind]:
-                if r['date'] not in window or r['coverage_days'] < 30:
+                if r['date'] not in window or r['coverage_days'] < 30 or not r['inputs_complete']:
                     continue  # no partial-window zero or undercount dressed as measured
                 note = 'Mercury run rate; annual_history_complete=%s; inputs_complete=%s' % (
                     r['annual_history_complete'],

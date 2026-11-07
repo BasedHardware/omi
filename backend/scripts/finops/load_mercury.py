@@ -16,6 +16,7 @@ from mercury_costs import (
     load_map,
     money,
     saas_rows,
+    spend_saas_rows,
 )
 
 META = [('run_id', 'STRING'), ('computed_at', 'TIMESTAMP')]
@@ -131,7 +132,11 @@ def load(raw: pathlib.Path, run_id: str, computed_at: str, ensure_table, load_re
     if derived is not None:
         derived.mkdir(parents=True, exist_ok=True)
         (derived / 'mercury_run_rates.json').write_text(
-            json.dumps({'saas': cost_rows, 'infra': infra_cost_rows}, indent=1) + '\n'
+            json.dumps(
+                {'saas': spend_saas_rows(history + snapshot['rows'], window, config), 'infra': infra_cost_rows},
+                indent=1,
+            )
+            + '\n'
         )
     metadata = {'run_id': run_id, 'computed_at': computed_at}
     vendors = [dict(row, **metadata) for row in snapshot['rows']]

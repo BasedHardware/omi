@@ -13,8 +13,9 @@ Contract (matches the laptop cron shim, minus laptop-only paths):
   * overlap = one producer run per date, globally. A GCS lease object
               (``gs://<FINOPS_LOCK_BUCKET>/locks/unit-cost/<date>.lock``) is created
               with a generation precondition; a second concurrent run loses the race
-              and skips that date. A failed run releases its lease so a Cloud Run
-              retry can acquire it.
+              verifies completion before skipping that date. An active lease
+              without completed output returns nonzero so Cloud Run retries.
+              A failed run releases its lease so a retry can acquire it.
   * auth    = ADC of the job's runtime service account (FINOPS_AUTH=cloudrun).
   * failure = non-zero exit so Cloud Run Job reports the execution as failed.
               Child pull stderr is copied onto this process's stderr (Cloud Logging).
@@ -247,8 +248,12 @@ def main() -> int:
 def run_one(date: str) -> int:
     if not acquire_lease(date):
         if not takeover_if_stale(date):
-            sys.stderr.write("another run owns %s; skipping (overlap protection)\n" % date)
-            return 0
+            present = load_present_days(date, date)
+            if present is not None and date in present:
+                sys.stderr.write("already completed %s; skipping (matching settled spend run)\n" % date)
+                return 0
+            sys.stderr.write("another run owns %s; completion unverified, retry required\n" % date)
+            return 1
         sys.stderr.write("took over a stale lease for %s\n" % date)
     rc = subprocess_run(date)
     if rc != 0:
