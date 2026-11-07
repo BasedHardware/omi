@@ -11,6 +11,9 @@ from utils.enrichment.admission import SyncConversationPersistenceFenced
 from utils.enrichment.admission import require_current_persistence as _require_current_conversation_persistence
 from utils.enrichment.admission import run_created_webhook as _run_conversation_created_webhook
 
+from utils.conversations import pipeline_attention
+from config import pipeline_attention as pipeline_policy
+from utils.episodes import pipeline_settlement
 from utils.conversations.silent_redrive import is_silent_redrive
 from utils.observability.sync_phases import sync_phase, sync_attempt
 from database.sync_snapshot_resolve_cache import sync_snapshot_resolve_job
@@ -63,6 +66,7 @@ from utils.conversations.summary_delivery import (
     REPAIR_CONTEXT,
     PROCESS_CONTEXT,
     SummaryRepairSuperseded,
+    SummaryOutputUnavailable,
     present as summary_output_present,
 )
 from database import users as users_db
@@ -1118,12 +1122,42 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
         # finalizer skips processing that later content.
         return sync_defer(context, 'open_live_target')
 
+    pipeline_fast = False
+    if context is not None and (pipeline_attention.admitted(uid) or context.get('pipeline_dispatch_at')):
+        deadline = pipeline_policy.dispatch_at(conversation_data, context)
+        settled = (
+            pipeline_settlement.settle(uid, conversation_id, conversation_data, deadline)
+            if pipeline_attention.serving(uid) or context.get('pipeline_dispatch_at')
+            else False
+        )
+        pipeline_fast, pipeline_due, proof = pipeline_attention.hold_decision(
+            uid, conversation_data, context, settled=settled
+        )
+        if pipeline_due is not None:
+            context.update(defer_reason='quiet_wait', defer_until=pipeline_due)
+            return sync_result('deferred')
+        if proof is not None:
+            digest = pipeline_attention.notes_fingerprint(conversation_data)
+            if (conversation_data.get(pipeline_policy.FIELD) or {}).get('notes_fingerprint') == digest:
+                # Complete the existing obligation without a second paid run.
+                if processing_hold.FIELD in conversation_data and not conversations_db.complete_sync_processing_hold(
+                    uid, conversation_id, conversation_data.get('sync_content_revision'), None
+                ):
+                    raise SyncConversationPersistenceFenced('hold completion snapshot changed')
+                context['hold_skipped'] = True
+                return sync_result('no_op')
+            context.update(
+                pipeline_seal=proof,
+                pipeline_fingerprint=digest,
+                pipeline_attention=pipeline_attention.attention(uid),
+            )
+
     if context is not None and (context.get('sync_hold') or processing_hold.FIELD in conversation_data):
         context['sync_hold'] = True
         # Rollback bypasses admission, but still settles stored hold metadata
         # after success so lazy effects do not remain fenced indefinitely.
         outcome, due = (
-            processing_hold.admission(conversation_data, context, now=time.time())
+            processing_hold.admission(conversation_data, context, now=time.time(), sealed_fast=pipeline_fast)
             if processing_hold.enabled_for(context)
             else ('ready', None)
         )
@@ -1231,6 +1265,8 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
     # finalization, so discarded -> visible still accepts once.
     already_visible_finalized = already_sync_processed and not was_discarded
     started = time.monotonic()
+    if context and context.get('pipeline_seal'):
+        pipeline_attention.metrics.event('notes_attempt')
     try:
         processed_conversation = process_conversation(
             uid=uid,
@@ -1250,6 +1286,15 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
             return sync_result('deferred')
         canonical = conversations_db.get_sync_redirected_conversation(uid, conversation_id)
         return sync_result('deferred', deserialize_conversation(canonical) if canonical else None)
+
+    if (
+        context
+        and context.get('pipeline_seal')
+        and not context.get('hold_budget_denied_at_max')
+        and not processed_conversation.discarded
+        and not summary_output_present(processed_conversation.structured)
+    ):
+        raise SummaryOutputUnavailable('pipeline notes output is pending')
 
     if context is not None and context.get('hold_budget_denied_at_max'):
         if not conversations_db.complete_sync_processing_hold(
@@ -1272,6 +1317,8 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
     ):
         raise SyncConversationPersistenceFenced('hold completion snapshot changed')
     elapsed = time.monotonic() - started
+    if context and context.get('pipeline_seal'):
+        pipeline_attention.metrics.stage('notes_work', elapsed, context.get('pipeline_attention', 'unknown'))
     # Persistence is guaranteed here: a fenced write raises before return.
     # client_platform is the Conversation field set at sync intake; None -> unknown.
     client_kind = resolve_client_kind(x_app_platform=getattr(conversation, 'client_platform', None), user_agent=None)
@@ -1309,7 +1356,7 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
     if episode_cohort:
         record_feature(uid, processed_conversation, 'episode_attach', 'scheduled' if schedule_episode else 'unchanged')
 
-    logger.info(f'Successfully reprocessed conversation {conversation_id}')
+    logger.info('event=sync_reprocess_callback outcome=processed')
     return sync_done(processed_conversation)
 
 

@@ -3,6 +3,7 @@
 import json
 import time
 import asyncio
+from typing import Any
 
 from config import pipeline_attention as policy
 from config.record_audio import record_identity
@@ -127,10 +128,10 @@ def select(legacy, batch_size, *, redis=None, now=None):
         decode = lambda value: value.decode() if isinstance(value, bytes) else value
         aged = [decode(value) for value in r.zrange(base() + 'age', 0, batch_size * 4 - 1)]
         fresh = [decode(value) for value in r.zrevrange(base() + 'fresh', 0, batch_size * 4 - 1)]
-        metadata = {}
+        metadata: dict[str, dict[str, Any]] = {}
         for segment in dict.fromkeys(list(legacy) + aged + fresh):
             raw = r.get(base() + segment)
-            meta = json.loads(raw) if raw else {'uid': segment, 'enqueued_at': float('-inf')}
+            meta: dict[str, Any] = json.loads(raw) if raw else {'uid': segment, 'enqueued_at': float('-inf')}
             if segment not in legacy and (
                 not raw or not attention.serving(meta['uid']) or (r.zscore(base() + 'due', segment) or 0) > now
             ):

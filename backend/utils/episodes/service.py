@@ -435,6 +435,13 @@ def _close(
     if recorded_episodes_enabled():
         if reason == 'gap':
             closed_at = _idle_closed_at(episode, now)
+    close_options: dict[str, Any] = {}
+    if retained_member_window:
+        close_options['retained_member_window'] = True
+    if synced_f:
+        close_options['synced_f'] = True
+    if pipeline_snapshot:
+        close_options['pipeline_seals'] = pipeline_seals
     closed = episodes_db.close_episode(
         uid,
         str(episode['id']),
@@ -447,9 +454,7 @@ def _close(
         ),
         split_after=split_after,
         firestore_client=c.firestore_client,
-        **({'retained_member_window': True} if retained_member_window else {}),
-        **({'synced_f': True} if synced_f else {}),
-        **({'pipeline_seals': pipeline_seals} if pipeline_snapshot else {}),
+        **close_options,
     )
     if closed is not None:
         if (

@@ -38,9 +38,12 @@ def settle(uid, conversation_id, row, deadline, *, now=None):
     if not ids or len(ids) > 64:
         return False
     members = [row if cid == conversation_id else conversations.get_conversation_raw_snapshot(uid, cid) for cid in ids]
-    if any(not member or policy.seal_snapshot(member) is None for member in members):
-        return False
+    proofs = {}
+    for cid, member in zip(ids, members):
+        proof = policy.seal_snapshot(member) if member else None
+        if proof is None:
+            return False
+        proofs[cid] = proof
     # The service re-reads membership and activity before its CAS. F-join and
     # provisional-item reconciliation stay on the canonical close path.
-    proofs = {cid: policy.seal_snapshot(member) for cid, member in zip(ids, members)}
     return service.close_pipeline_snapshot(uid, episode, deadline, proofs, now=now) is not None

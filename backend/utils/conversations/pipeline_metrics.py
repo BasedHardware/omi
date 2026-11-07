@@ -1,11 +1,21 @@
 """Content-free clocks; committed note counts come from durable receipts."""
 
 from functools import cache
+from typing import TypedDict
 from prometheus_client import Counter, Histogram
 
 
+class Collectors(TypedDict):
+    stage: Histogram
+    notes: Histogram
+    closed: Histogram
+    open: Histogram
+    rewrites: Histogram
+    events: Counter
+
+
 @cache
-def collectors():
+def collectors() -> Collectors:
     buckets = (1, 5, 10, 30, 60, 120, 300, 600, 1200, 1800, 3600, 7200, 21600, 86400)
     return {
         'stage': Histogram(
