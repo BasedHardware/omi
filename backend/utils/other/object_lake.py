@@ -324,11 +324,9 @@ def _check_put_authority(space_id, entity_id, blob, *, created):
             pass
         except Exception:
             raise LakeFetchError('Fenced lake upload cleanup unavailable') from None
-        try:
-            candidate_id = hashlib.sha256(f'{blob.bucket.name}/{blob.name}'.encode('utf-8')).hexdigest()
-            space_keys.space_key_firestore_client().collection('lake_upload_candidates').document(candidate_id).delete()
-        except Exception:
-            raise LakeFetchError('Fenced lake candidate cleanup unavailable') from None
+        # Keep the shared discovery intent: another pre-fence writer may still
+        # be uploading this name. Owner wipe erases intents after its fence;
+        # conversation-only deletion leaves them discoverable for the janitor.
         raise
 
 

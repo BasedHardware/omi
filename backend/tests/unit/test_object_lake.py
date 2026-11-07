@@ -554,7 +554,7 @@ def test_late_upload_self_deletes_after_conversation_purge_final_listing(storage
         put()
     assert events == ['absence-verified', 'upload-finished']
     assert not list(bucket.list_blobs())
-    assert not any(path[0] == 'lake_upload_candidates' for path in store.rows)
+    assert any(path[0] == 'lake_upload_candidates' for path in store.rows)
     assert store.collection('users').document('s').collection('deleted_conversations').document('c').get().exists
     # Retry is still fenced; a sibling is unaffected.
     with pytest.raises(lake.LakeWriteFenced):

@@ -105,8 +105,9 @@ identifiers and plaintext digests, so they are user-derived data. The required
 under the owner's pinned release prefix, including abandoned intents and old
 bucket bindings, before Firestore deletion or key destruction. Its single-field
 `key` range uses the automatic collection index. A newly created upload fenced
-at its post-put check removes its blob and candidate, including a candidate
-written after the wipe's final scan. Failed cleanup fails closed and retries.
+at its post-put check removes its own blob generation. The shared discovery
+intent stays for other pre-fence uploads and C3; account wipe erases it after
+its durable fence. Failed cleanup fails closed and retries.
 
 Candidate admission reads the owner and conversation fences in the same
 Firestore transaction that creates the candidate. A writer delayed until after

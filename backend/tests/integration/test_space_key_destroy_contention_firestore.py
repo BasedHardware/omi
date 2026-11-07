@@ -175,7 +175,7 @@ def test_conversation_upload_after_purge_final_listing_self_deletes(state, monke
             release.set()
         writer.result(timeout=60)
     assert not list(bucket.list_blobs(prefix=f'v1/spaces/{uid}/'))
-    assert lake.delete_space_upload_candidates(uid) == 0
+    assert lake.delete_space_upload_candidates(uid) == 1
 
 
 def test_candidate_range_erases_only_owner_including_abandoned_intents(state):
