@@ -26,9 +26,15 @@ from database.account_deletion_policy import (
 def test_normalize_account_deletion_status_rejects_non_bool_marker_exists(invalid_marker):
     """Verify normalize_account_deletion_status and marker helper reject non-boolean marker_exists."""
     with pytest.raises(TypeError, match='marker_exists must be a boolean'):
-        normalize_account_deletion_status(marker_exists=invalid_marker, raw_status='active')  # type: ignore[arg-type]
+        normalize_account_deletion_status(
+            marker_exists=invalid_marker,  # type: ignore[arg-type]
+            raw_status='active',
+        )
     with pytest.raises(TypeError, match='marker_exists must be a boolean'):
-        account_deletion_marker_blocks_access(marker_exists=invalid_marker, raw_status='active')  # type: ignore[arg-type]
+        account_deletion_marker_blocks_access(
+            marker_exists=invalid_marker,  # type: ignore[arg-type]
+            raw_status='active',
+        )
 
 
 def test_normalize_account_deletion_status_returns_none_when_marker_absent():
@@ -49,14 +55,16 @@ def test_normalize_account_deletion_status_trims_valid_strings():
 @pytest.mark.parametrize('malformed', ['', '   ', None, 12345, {'status': 'ok'}, ['failed']])
 def test_normalize_account_deletion_status_maps_malformed_or_empty_to_invalid_sentinel(malformed):
     """Verify empty, whitespace, or non-string values resolve to ACCOUNT_DELETION_INVALID_STATUS."""
-    assert normalize_account_deletion_status(marker_exists=True, raw_status=malformed) == ACCOUNT_DELETION_INVALID_STATUS
+    normalized = normalize_account_deletion_status(marker_exists=True, raw_status=malformed)
+    assert normalized == ACCOUNT_DELETION_INVALID_STATUS
     assert account_deletion_marker_blocks_access(marker_exists=True, raw_status=malformed) is True
 
 
 def test_normalize_account_deletion_status_bounds_oversized_status():
     """Verify statuses exceeding MAX_ACCOUNT_DELETION_STATUS_CHARS map to invalid sentinel."""
     oversized = 'a' * (MAX_ACCOUNT_DELETION_STATUS_CHARS + 1)
-    assert normalize_account_deletion_status(marker_exists=True, raw_status=oversized) == ACCOUNT_DELETION_INVALID_STATUS
+    normalized = normalize_account_deletion_status(marker_exists=True, raw_status=oversized)
+    assert normalized == ACCOUNT_DELETION_INVALID_STATUS
     assert account_deletion_marker_blocks_access(marker_exists=True, raw_status=oversized) is True
 
 
