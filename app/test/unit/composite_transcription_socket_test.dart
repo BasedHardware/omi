@@ -5,11 +5,15 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:stream_channel/stream_channel.dart';
+import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/models/stt_provider.dart';
+import 'package:omi/services/audio_sources/audio_source.dart';
+import 'package:omi/services/custom_stt_log_service.dart';
 import 'package:omi/services/sockets/pure_socket.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
 
@@ -87,7 +91,7 @@ void main() {
       });
     });
 
-    test('keeps forwarding non-audio control messages to Omi when audio forwarding is disabled', () async {
+    test('routes Omi-only control messages exclusively to Omi even when audio forwarding is disabled', () async {
       final primary = _FakeSocket();
       final secondary = _FakeSocket();
       final socket = CompositeTranscriptionSocket(
@@ -100,7 +104,7 @@ void main() {
       final controlMessage = jsonEncode({'type': 'speaker_assigned', 'speaker_id': 1});
       socket.send(controlMessage);
 
-      expect(primary.sent, [controlMessage]);
+      expect(primary.sent, isEmpty);
       expect(secondary.sent, [controlMessage]);
     });
 
@@ -534,6 +538,245 @@ void main() {
       expect(service.deliversToOmi, isTrue);
     });
   });
+
+  group('Custom Live STT control vs audio routing (#24191)', () {
+    setUp(() async {
+      SharedPreferences.setMockInitialValues({});
+      await SharedPreferencesUtil.init();
+      CustomSttLogService.instance.clear();
+    });
+
+    test('Omi controls and capture_evidence_frame do not reach PureStreamingSttSocket or emit String warnings', () async {
+      final channel = _FakeWebSocketChannel();
+      final primary = PureStreamingSttSocket(
+        config: StreamingSttConfig.schemaBased(
+          wsUrl: 'wss://stt.example.test/live',
+          schema: SttResponseSchema.deepgramLive,
+          serviceId: 'customLive',
+          minBytesBeforeSend: 0,
+        ),
+        channelFactory: (url, {headers, pingInterval, connectTimeout}) => channel,
+      );
+      final secondary = _FakeSocket();
+      final composite = CompositeTranscriptionSocket(
+        primarySocket: primary,
+        secondarySocket: secondary,
+        forwardRawAudioToSecondary: true,
+        sttProvider: 'customLive',
+      );
+
+      expect(await composite.connect(), isTrue);
+
+      final clientState = jsonEncode({'type': 'client_state', 'in_foreground': true});
+      final speakerAssigned = jsonEncode({'type': 'speaker_assigned', 'speaker_id': 2});
+      final audio = Uint8List.fromList([10, 20, 30, 40]);
+      final evidence = jsonEncode({
+        'type': 'capture_evidence_frame',
+        'version': 1,
+        'capture_root': 'root-1',
+        'clock_epoch': 7,
+        'source_frame': 42,
+        'byte_length': audio.length,
+      });
+
+      composite.send(clientState);
+      composite.send(speakerAssigned);
+      composite.send(evidence);
+      composite.send(audio);
+
+      expect(channel.sent, [audio]);
+      expect(secondary.sent, [clientState, speakerAssigned, evidence, same(audio)]);
+      expect(
+        CustomSttLogService.instance.logs.where((entry) => entry.message.contains('Unsupported message type')),
+        isEmpty,
+      );
+
+      await composite.stop();
+    });
+
+    test('sendEvidenceFrame keeps secondary evidence and audio paired and suppresses unpaired claims when forwarding is off', () async {
+      final channel = _FakeWebSocketChannel();
+      final primary = PureStreamingSttSocket(
+        config: StreamingSttConfig.schemaBased(
+          wsUrl: 'wss://stt.example.test/live',
+          schema: SttResponseSchema.deepgramLive,
+          serviceId: 'customLive',
+          minBytesBeforeSend: 0,
+        ),
+        channelFactory: (url, {headers, pingInterval, connectTimeout}) => channel,
+      );
+      final secondary = _FakeSocket();
+      final composite = CompositeTranscriptionSocket(
+        primarySocket: primary,
+        secondarySocket: secondary,
+        forwardRawAudioToSecondary: false,
+        sttProvider: 'customLive',
+      );
+      final service = TranscriptSegmentSocketService.withSocket(
+        16000,
+        BleAudioCodec.pcm16,
+        'en',
+        composite,
+        customSttMode: true,
+      );
+
+      await service.start();
+      // Clear initial _sendClientState emitted on connect so we inspect frame traffic cleanly.
+      secondary.sent.clear();
+
+      final payload = Uint8List.fromList([1, 2, 3, 4, 5, 6]);
+      service.sendEvidenceFrame(
+        WalFrame(
+          payload: payload,
+          captureRoot: 'cap-root',
+          sourceClockEpoch: 3,
+          sourceFramePosition: 9,
+        ),
+      );
+
+      expect(channel.sent, [payload]);
+      expect(secondary.sent, isEmpty, reason: 'raw forwarding off must not leak audio or emit unpaired evidence claims');
+      expect(service.binaryAudioBytesSent, payload.length);
+      expect(
+        CustomSttLogService.instance.logs.where((entry) => entry.message.contains('Unsupported message type')),
+        isEmpty,
+      );
+
+      await service.stop();
+    });
+
+    test('interleaved Omi control between staged capture_evidence_frame and audio preserves secondary frame pairing', () async {
+      final primary = _FakeSocket();
+      final secondary = _FakeSocket();
+      final composite = CompositeTranscriptionSocket(
+        primarySocket: primary,
+        secondarySocket: secondary,
+        forwardRawAudioToSecondary: true,
+      );
+
+      expect(await composite.connect(), isTrue);
+      final audio = Uint8List.fromList([9, 8, 7]);
+      final evidence = jsonEncode({
+        'type': 'capture_evidence_frame',
+        'version': 1,
+        'capture_root': 'root-a',
+        'clock_epoch': 1,
+        'source_frame': 1,
+        'byte_length': audio.length,
+      });
+      final speakerControl = jsonEncode({'type': 'speaker_assigned', 'speaker_id': 5});
+
+      composite.send(evidence);
+      composite.send(speakerControl);
+      composite.send(audio);
+
+      expect(primary.sent, [same(audio)]);
+      expect(secondary.sent, [speakerControl, evidence, same(audio)]);
+      await composite.stop();
+    });
+
+    test('secondary outage drops staged evidence claim and preserves primary audio', () async {
+      final primary = _ScriptedSocket();
+      final secondary = _ScriptedSocket(connectResults: [true, true]);
+      final composite = CompositeTranscriptionSocket(
+        primarySocket: primary,
+        secondarySocket: secondary,
+        forwardRawAudioToSecondary: true,
+        keepPrimaryWhenSecondaryFails: true,
+        secondaryRetryInitialDelay: const Duration(milliseconds: 10),
+        secondaryRetryMaxDelay: const Duration(milliseconds: 40),
+      );
+
+      expect(await composite.connect(), isTrue);
+      final degradedAudio = Uint8List.fromList([1, 2]);
+      final degradedEvidence = jsonEncode({
+        'type': 'capture_evidence_frame',
+        'version': 1,
+        'capture_root': 'root-deg',
+        'clock_epoch': 1,
+        'source_frame': 1,
+        'byte_length': degradedAudio.length,
+      });
+
+      // Stage evidence just before secondary drops.
+      composite.send(degradedEvidence);
+      secondary.emitClosed(1011);
+      expect(composite.secondaryDegraded, isTrue);
+
+      composite.send(degradedAudio);
+      expect(primary.sent, [same(degradedAudio)]);
+      expect(secondary.sent, isEmpty);
+
+      await Future<void>.delayed(const Duration(milliseconds: 40));
+      expect(composite.secondaryDegraded, isFalse);
+
+      final healthyAudio = Uint8List.fromList([3, 4]);
+      composite.send(healthyAudio);
+      expect(secondary.sent, [same(healthyAudio)], reason: 'stale evidence from before outage must not leak');
+      await composite.stop();
+    });
+
+    test('provider keepalive, CloseStream on disconnect, and transcript reception continue working', () async {
+      final channel = _FakeWebSocketChannel();
+      final primary = PureStreamingSttSocket(
+        config: StreamingSttConfig.schemaBased(
+          wsUrl: 'wss://stt.example.test/live',
+          schema: SttResponseSchema.deepgramLive,
+          serviceId: 'deepgramLive',
+          minBytesBeforeSend: 0,
+          sendKeepAlive: true,
+          keepAliveInterval: const Duration(milliseconds: 15),
+        ),
+        channelFactory: (url, {headers, pingInterval, connectTimeout}) => channel,
+      );
+      final secondary = _FakeSocket();
+      final composite = CompositeTranscriptionSocket(
+        primarySocket: primary,
+        secondarySocket: secondary,
+        forwardRawAudioToSecondary: false,
+        sttProvider: 'deepgramLive',
+      );
+
+      expect(await composite.connect(), isTrue);
+
+      await Future<void>.delayed(const Duration(milliseconds: 25));
+      expect(
+        channel.sent.whereType<String>().map(jsonDecode),
+        contains({'type': 'KeepAlive'}),
+      );
+
+      channel.emitIncoming(
+        jsonEncode({
+          'type': 'Results',
+          'channel': {
+            'alternatives': [
+              {
+                'transcript': 'hello world',
+                'words': [
+                  {'word': 'hello', 'punctuated_word': 'hello', 'start': 0.0, 'end': 0.4, 'speaker': 0},
+                  {'word': 'world', 'punctuated_word': 'world', 'start': 0.4, 'end': 0.8, 'speaker': 0},
+                ],
+              },
+            ],
+          },
+          'is_final': true,
+        }),
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      expect(secondary.sent, hasLength(1));
+      final forwarded = jsonDecode(secondary.sent.single as String) as Map<String, dynamic>;
+      expect(forwarded['type'], 'suggested_transcript');
+      expect(forwarded['stt_provider'], 'deepgramLive');
+      expect((forwarded['segments'] as List).first['text'], contains('hello world'));
+
+      await composite.disconnect();
+      expect(
+        channel.sent.whereType<String>().map(jsonDecode),
+        contains({'type': 'CloseStream'}),
+      );
+    });
+  });
 }
 
 class _TestEnvFields implements EnvFields {
@@ -754,4 +997,68 @@ class _GatedSocket implements IPureSocket {
 
   @override
   void onMessage(dynamic message) => _listener?.onMessage(message);
+}
+
+class _FakeWebSocketSink implements WebSocketSink {
+  _FakeWebSocketSink(this._sent, this._incoming);
+
+  final List<dynamic> _sent;
+  final StreamController<dynamic> _incoming;
+  final Completer<void> _done = Completer<void>();
+
+  @override
+  void add(dynamic data) {
+    _sent.add(data);
+  }
+
+  @override
+  void addError(Object error, [StackTrace? stackTrace]) {}
+
+  @override
+  Future addStream(Stream stream) async {
+    await for (final event in stream) {
+      _sent.add(event);
+    }
+  }
+
+  @override
+  Future close([int? closeCode, String? closeReason]) async {
+    if (!_done.isCompleted) _done.complete();
+    if (!_incoming.isClosed) await _incoming.close();
+  }
+
+  @override
+  Future get done => _done.future;
+}
+
+class _FakeWebSocketChannel with StreamChannelMixin<dynamic> implements WebSocketChannel {
+  _FakeWebSocketChannel() {
+    _sink = _FakeWebSocketSink(sent, _incoming);
+  }
+
+  final List<dynamic> sent = [];
+  final StreamController<dynamic> _incoming = StreamController<dynamic>.broadcast();
+  late final _FakeWebSocketSink _sink;
+
+  @override
+  int? get closeCode => 1000;
+
+  @override
+  String? get closeReason => null;
+
+  @override
+  String? get protocol => null;
+
+  @override
+  Future<void> get ready => Future.value();
+
+  @override
+  WebSocketSink get sink => _sink;
+
+  @override
+  Stream<dynamic> get stream => _incoming.stream;
+
+  void emitIncoming(dynamic message) {
+    if (!_incoming.isClosed) _incoming.add(message);
+  }
 }

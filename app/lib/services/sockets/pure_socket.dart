@@ -35,13 +35,20 @@ abstract class IPureSocket {
   void onError(Object err, StackTrace trace);
 }
 
+/// Capability for sockets that accept Omi backend control messages and paired
+/// capture-evidence audio frames separately from raw audio-only streams.
+abstract interface class IOmiControlSocket {
+  void sendOmiControl(String message);
+  void sendEvidenceAudioFrame(String evidenceControl, List<int> audio);
+}
+
 class PureSocketMessage {
   String? raw;
 }
 
 typedef SocketHeadersProvider = Future<Map<String, String>> Function();
 
-class PureSocket implements IPureSocket {
+class PureSocket implements IPureSocket, IOmiControlSocket {
   WebSocketChannel? _channel;
   StreamSubscription<dynamic>? _subscription;
   int _connectionGeneration = 0;
@@ -246,5 +253,16 @@ class PureSocket implements IPureSocket {
   @override
   void send(message) {
     _channel?.sink.add(message);
+  }
+
+  @override
+  void sendOmiControl(String message) {
+    send(message);
+  }
+
+  @override
+  void sendEvidenceAudioFrame(String evidenceControl, List<int> audio) {
+    send(evidenceControl);
+    send(audio);
   }
 }

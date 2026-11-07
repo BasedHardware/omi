@@ -9,7 +9,7 @@ import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/hard_secret_detector.dart';
 import 'package:omi/utils/logger.dart';
 
-class CompositeTranscriptionSocket implements IPureSocket {
+class CompositeTranscriptionSocket implements IPureSocket, IOmiControlSocket {
   final IPureSocket primarySocket;
   final IPureSocket secondarySocket;
 
@@ -49,6 +49,11 @@ class CompositeTranscriptionSocket implements IPureSocket {
   /// Bound transcript-only buffering during a long backend outage (about
   /// 8 MiB in UTF-16); raw audio is never stored in this queue.
   static const int _maxPendingSuggestedTranscriptCharacters = 4 * 1024 * 1024;
+
+  /// Staged `capture_evidence_frame` control waiting for its matching binary
+  /// audio frame on the Omi secondary socket.
+  String? _pendingCaptureEvidence;
+  int? _pendingCaptureEvidenceByteLength;
 
   /// Bumped whenever degraded state is cleared (connect, stop, disconnect,
   /// primary teardown, restore). A background retry that started in an older
@@ -172,6 +177,12 @@ class CompositeTranscriptionSocket implements IPureSocket {
   void _clearPendingSuggestedTranscripts() {
     _pendingSuggestedTranscripts.clear();
     _pendingSuggestedTranscriptCharacters = 0;
+    _clearPendingCaptureEvidence();
+  }
+
+  void _clearPendingCaptureEvidence() {
+    _pendingCaptureEvidence = null;
+    _pendingCaptureEvidenceByteLength = null;
   }
 
   void _continueWithPrimary(String reason) {
@@ -215,6 +226,7 @@ class CompositeTranscriptionSocket implements IPureSocket {
   }
 
   void _enterDegraded(String reason) {
+    _clearPendingCaptureEvidence();
     if (_secondaryDegraded) return;
     _secondaryDegraded = true;
     _secondaryRetryAttempts = 0;
@@ -229,6 +241,7 @@ class CompositeTranscriptionSocket implements IPureSocket {
 
   void _clearDegraded() {
     _degradedEpoch++;
+    _clearPendingCaptureEvidence();
     _secondaryRetryInFlight = false;
     _secondaryRetryTimer?.cancel();
     _secondaryRetryTimer = null;
@@ -333,13 +346,91 @@ class CompositeTranscriptionSocket implements IPureSocket {
     if (_status != PureSocketStatus.connected) {
       return;
     }
-    primarySocket.send(message);
-    if (_secondaryDegraded) {
+    if (message is List<int>) {
+      sendAudio(message);
       return;
     }
-    if (forwardRawAudioToSecondary || message is! List<int>) {
-      secondarySocket.send(message);
+    if (message is String) {
+      sendOmiControl(message);
+      return;
     }
+    primarySocket.send(message);
+  }
+
+  /// Sends binary audio to the custom STT primary socket and, when raw-audio
+  /// forwarding is enabled and the Omi secondary socket is healthy, forwards
+  /// the frame (preceded by any staged `capture_evidence_frame` control) to Omi.
+  void sendAudio(List<int> audio) {
+    if (_status != PureSocketStatus.connected) {
+      _clearPendingCaptureEvidence();
+      return;
+    }
+    primarySocket.send(audio);
+    if (_secondaryDegraded || !forwardRawAudioToSecondary) {
+      _clearPendingCaptureEvidence();
+      return;
+    }
+    final pendingEvidence = _pendingCaptureEvidence;
+    final expectedLength = _pendingCaptureEvidenceByteLength;
+    _clearPendingCaptureEvidence();
+    if (pendingEvidence != null && (expectedLength == null || expectedLength == audio.length)) {
+      secondarySocket.send(pendingEvidence);
+    }
+    secondarySocket.send(audio);
+  }
+
+  /// Routes Omi-only control JSON (`client_state`, `speaker_assigned`,
+  /// `capture_evidence_frame`, etc.) exclusively to the Omi secondary socket,
+  /// never to the audio-only custom STT primary socket.
+  @override
+  void sendOmiControl(String message) {
+    if (_status != PureSocketStatus.connected || _secondaryDegraded) {
+      _clearPendingCaptureEvidence();
+      return;
+    }
+    final inspection = _inspectControlMessage(message);
+    if (inspection.isEvidenceFrame) {
+      if (!forwardRawAudioToSecondary) {
+        _clearPendingCaptureEvidence();
+        return;
+      }
+      _pendingCaptureEvidence = message;
+      _pendingCaptureEvidenceByteLength = inspection.byteLength;
+      return;
+    }
+    secondarySocket.send(message);
+  }
+
+  /// Atomically pairs a `capture_evidence_frame` control message with its
+  /// matching binary audio frame so the primary receives only audio and the
+  /// Omi secondary receives `[evidenceControl, audio]` only when raw-audio
+  /// forwarding is enabled and the secondary is healthy.
+  @override
+  void sendEvidenceAudioFrame(String evidenceControl, List<int> audio) {
+    if (_status != PureSocketStatus.connected) {
+      _clearPendingCaptureEvidence();
+      return;
+    }
+    _clearPendingCaptureEvidence();
+    primarySocket.send(audio);
+    if (_secondaryDegraded || !forwardRawAudioToSecondary) {
+      return;
+    }
+    secondarySocket.send(evidenceControl);
+    secondarySocket.send(audio);
+  }
+
+  ({bool isEvidenceFrame, int? byteLength}) _inspectControlMessage(String message) {
+    try {
+      final decoded = jsonDecode(message);
+      if (decoded is Map && decoded['type'] == 'capture_evidence_frame') {
+        final rawLength = decoded['byte_length'];
+        return (isEvidenceFrame: true, byteLength: rawLength is int ? rawLength : null);
+      }
+    } catch (_) {
+      // Non-JSON or opaque control strings are routed to Omi as normal controls.
+    }
+    return (isEvidenceFrame: false, byteLength: null);
   }
 
   void _onPrimaryMessage(dynamic message) {

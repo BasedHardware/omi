@@ -269,22 +269,33 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
       return;
     }
     if (_socket.status != PureSocketStatus.connected) return;
-    _socket.send(jsonEncode({
+    final evidence = jsonEncode({
       'type': 'capture_evidence_frame',
       'version': 1,
       'capture_root': root,
       'clock_epoch': epoch,
       'source_frame': ordinal,
       'byte_length': frame.payload.length,
-    }));
-    _socket.send(frame.payload);
+    });
+    final socket = _socket;
+    if (socket is IOmiControlSocket) {
+      (socket as IOmiControlSocket).sendEvidenceAudioFrame(evidence, frame.payload);
+    } else {
+      socket.send(evidence);
+      socket.send(frame.payload);
+    }
     if (_socket.status == PureSocketStatus.connected) {
       _binaryAudioBytesSent += frame.payload.length;
     }
   }
 
   Future sendText(String message) async {
-    _socket.send(message);
+    final socket = _socket;
+    if (socket is IOmiControlSocket) {
+      (socket as IOmiControlSocket).sendOmiControl(message);
+    } else {
+      socket.send(message);
+    }
     return;
   }
 
@@ -296,7 +307,13 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     if (_socket.status != PureSocketStatus.connected) return;
     final state = ListenClientState.instance.value.toJson();
     if (!customSttMode && !onboardingMode) state['mobile_batch_capability_v1'] = true;
-    _socket.send(jsonEncode(state));
+    final encoded = jsonEncode(state);
+    final socket = _socket;
+    if (socket is IOmiControlSocket) {
+      (socket as IOmiControlSocket).sendOmiControl(encoded);
+    } else {
+      socket.send(encoded);
+    }
   }
 
   void _attachClientState() {
