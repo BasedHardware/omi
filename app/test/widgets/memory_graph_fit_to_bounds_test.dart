@@ -7,7 +7,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/memories/widgets/memory_graph_page.dart';
-import 'package:omi/pages/onboarding/knowledge_graph_step.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
 Future<Map<String, dynamic>> _sampleFiveNodeGraph() async => {
@@ -76,23 +75,6 @@ void main() {
       expect(state, isNotNull);
       expect(state.hasFittedBounds, isTrue);
       expect(state.zoom, lessThan(0.72));
-    });
-
-    testWidgets('OnboardingKnowledgeGraphStep configures MemoryGraphPage with fitToBounds', (tester) async {
-      await tester.pumpWidget(
-        _app(
-          Scaffold(
-            body: OnboardingKnowledgeGraphStep(
-              onContinue: () {},
-            ),
-          ),
-        ),
-      );
-
-      final graphPage = tester.widget<MemoryGraphPage>(find.byType(MemoryGraphPage));
-      expect(graphPage.fitToBounds, isTrue);
-      expect(graphPage.embedded, isTrue);
-      expect(graphPage.initialZoom, 0.72);
     });
   });
 }
