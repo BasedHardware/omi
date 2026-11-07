@@ -164,9 +164,9 @@ def entries():
         CoveredByEntry(
             'database.batch_pipeline_store.FirestoreTransaction.service_frontier',
             covered_by=('database.batch_pipeline_store.service_frontier',),
-            reason='thin adapter forwards the transaction-bound frontier query unchanged',
+            reason='thin adapter forwards the frontier query unchanged; lever admission_frontier_hint (default on) drops only the transaction binding',
             expect_observed=False,
-            body_digest='74aa1993996cdc9ca93a1141de64dfc7e05a9d831a67860ddbb8a64d55520a02',
+            body_digest='56b1e013fd6925c981be2186d76458211b724187b771ddc5ebb0eaa47820c44b',
         ),
         CoveredByEntry(
             'database.batch_pipeline_staging.reap',
