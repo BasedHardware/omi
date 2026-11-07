@@ -77,6 +77,7 @@ def _delete_client(monkeypatch) -> TestClient:
     monkeypatch.setattr(conversations.conversation_tombstones, 'record_deletion', MagicMock())
     monkeypatch.setattr(conversations, 'destructive_operation_gate', lambda *args, **kwargs: nullcontext())
     monkeypatch.setattr(conversations.conversations_db, 'get_conversation', lambda *args: {})
+    monkeypatch.setattr(conversations.conversations_db, 'get_conversation_raw_snapshot', lambda *args: {})
     monkeypatch.setattr(conversations, 'retraction_can_be_skipped', lambda *args, **kwargs: True)
     monkeypatch.setattr(conversations.action_items_db, 'get_action_items_by_conversation', lambda *args, **kwargs: [])
     monkeypatch.setattr(conversations.action_items_db, 'delete_action_items_for_conversation', MagicMock())
@@ -182,3 +183,31 @@ def test_lake_failure_answers_retryable_503_with_intent_and_documents_intact(mon
         'uid-delete-contract', 'conversation-1'
     )
     deleted.assert_not_called()
+
+
+def test_cascade_retry_preserves_canonical_audio_donors_after_partial_lake_purge(monkeypatch):
+    from utils.other import object_lake
+
+    with _delete_client(monkeypatch) as client:
+        monkeypatch.setenv('BUCKET_CANONICAL_AUDIO', 'synthetic-canonical')
+        # A partial lake purge makes the decoded read return no conversation,
+        # while the raw parent still owns its retained donor inventory.
+        decoded = MagicMock(return_value=None)
+        monkeypatch.setattr(conversations.conversations_db, 'get_conversation', decoded)
+        monkeypatch.setattr(
+            conversations.conversations_db,
+            'get_conversation_raw_snapshot',
+            lambda *args: {'sync_merged_from': ['donor-a', 'donor-b']},
+        )
+        conversations.delete_conversation_and_frame_evidence.side_effect = [
+            object_lake.LakeFetchError('lake down'),
+            None,
+        ]
+        assert client.delete('/v1/conversations/conversation-1?cascade=true').status_code == 503
+        conversations.delete_privacy_conversation_audio.assert_not_called()
+        assert client.delete('/v1/conversations/conversation-1?cascade=true').status_code == 204
+
+    decoded.assert_not_called()
+    conversations.delete_privacy_conversation_audio.assert_called_once_with(
+        'uid-delete-contract', 'conversation-1', source_ids=['donor-a', 'donor-b']
+    )

@@ -1509,8 +1509,9 @@ def _delete_conversation_under_gate(
                     'event=conversation_delete action=task_vectors outcome=error exception_type=%s', type(e).__name__
                 )
         # Snapshot retained bridge donors before shared metadata cleanup removes them.
+        # A previous lake-purge attempt may already have removed the transcript blob.
         source_ids = (
-            (conversations_db.get_conversation(uid, conversation_id) or {}).get('sync_merged_from', [])
+            (conversations_db.get_conversation_raw_snapshot(uid, conversation_id) or {}).get('sync_merged_from', [])
             if os.getenv('BUCKET_CANONICAL_AUDIO')
             else []
         )
