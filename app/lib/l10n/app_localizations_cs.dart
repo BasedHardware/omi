@@ -560,11 +560,11 @@ class AppLocalizationsCs extends AppLocalizations {
   String get hardwareSection => 'Hardware';
 
   @override
-  String get v2Undetected => 'V2 nedetekováno';
+  String get v2Undetected => 'Offline synchronizace nen? k dispozici';
 
   @override
   String get v2UndetectedMessage =>
-      'Vidíme, že máte buď zařízení V1, nebo vaše zařízení není připojeno. Funkce SD karty je dostupná pouze pro zařízení V2.';
+      'Offline synchronizace vy?aduje p?ipojen? za??zen? Omi s ?lo?i?t?m na SD kart?. Va?e sou?asn? za??zen? ji nepodporuje.';
 
   @override
   String get endConversation => 'Ukončit konverzaci';

@@ -551,10 +551,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get hardwareSection => '硬件';
 
   @override
-  String get v2Undetected => '未检测到 V2';
+  String get v2Undetected => '???????';
 
   @override
-  String get v2UndetectedMessage => '我们发现您使用的是 V1 设备或设备未连接。SD 卡功能仅适用于 V2 设备。';
+  String get v2UndetectedMessage => '???????????? SD ???? Omi ????????????????';
 
   @override
   String get endConversation => '结束对话';

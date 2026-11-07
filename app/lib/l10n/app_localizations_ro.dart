@@ -563,11 +563,11 @@ class AppLocalizationsRo extends AppLocalizations {
   String get hardwareSection => 'Hardware';
 
   @override
-  String get v2Undetected => 'V2 nedetectat';
+  String get v2Undetected => 'Sincronizarea offline nu este disponibil?';
 
   @override
   String get v2UndetectedMessage =>
-      'Vedem că ai fie un dispozitiv V1, fie dispozitivul tău nu este conectat. Funcționalitatea card SD este disponibilă doar pentru dispozitivele V2.';
+      'Sincronizarea offline necesit? un dispozitiv Omi conectat cu stocare pe card SD. Dispozitivul t?u actual nu o accept?.';
 
   @override
   String get endConversation => 'Încheie conversația';

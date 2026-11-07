@@ -562,11 +562,11 @@ class AppLocalizationsNl extends AppLocalizations {
   String get hardwareSection => 'Hardware';
 
   @override
-  String get v2Undetected => 'V2 niet gedetecteerd';
+  String get v2Undetected => 'Offline synchronisatie niet beschikbaar';
 
   @override
   String get v2UndetectedMessage =>
-      'We zien dat je een V1-apparaat hebt of je apparaat is niet verbonden. SD-kaartfunctionaliteit is alleen beschikbaar voor V2-apparaten.';
+      'Offline synchronisatie vereist een verbonden Omi-apparaat met SD-kaartopslag. Je huidige apparaat ondersteunt dit niet.';
 
   @override
   String get endConversation => 'Gesprek beëindigen';

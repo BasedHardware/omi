@@ -565,11 +565,11 @@ class AppLocalizationsFr extends AppLocalizations {
   String get hardwareSection => 'Matériel';
 
   @override
-  String get v2Undetected => 'V2 non détecté';
+  String get v2Undetected => 'Synchronisation hors ligne indisponible';
 
   @override
   String get v2UndetectedMessage =>
-      'Nous voyons que vous avez soit un appareil V1, soit votre appareil n\'est pas connecté. La fonctionnalité carte SD n\'est disponible que pour les appareils V2.';
+      'La synchronisation hors ligne n?cessite un appareil Omi connect? avec stockage sur carte SD. Votre appareil actuel ne la prend pas en charge.';
 
   @override
   String get endConversation => 'Terminer la conversation';

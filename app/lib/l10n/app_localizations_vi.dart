@@ -562,11 +562,11 @@ class AppLocalizationsVi extends AppLocalizations {
   String get hardwareSection => 'Phần cứng';
 
   @override
-  String get v2Undetected => 'Không phát hiện V2';
+  String get v2Undetected => '??ng b? Ngo?i tuy?n kh?ng kh? d?ng';
 
   @override
   String get v2UndetectedMessage =>
-      'Chúng tôi thấy rằng bạn có thiết bị V1 hoặc thiết bị của bạn chưa được kết nối. Chức năng thẻ SD chỉ khả dụng cho thiết bị V2.';
+      '??ng b? Ngo?i tuy?n c?n thi?t b? Omi ?? k?t n?i c? b? nh? th? SD. Thi?t b? hi?n t?i c?a b?n kh?ng h? tr? t?nh n?ng n?y.';
 
   @override
   String get endConversation => 'Kết thúc cuộc trò chuyện';

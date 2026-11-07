@@ -560,11 +560,11 @@ class AppLocalizationsBs extends AppLocalizations {
   String get hardwareSection => 'Hardver';
 
   @override
-  String get v2Undetected => 'V2 nije detektovano';
+  String get v2Undetected => 'Offline sinhronizovanje nije dostupno';
 
   @override
   String get v2UndetectedMessage =>
-      'Vidimo da imate V1 uređaj ili vaš uređaj nije povezan. Funkcionalnost SD kartice dostupna je samo za V2 uređaje.';
+      'Offline sinhronizovanje zahtijeva povezani Omi ure?aj sa SD-karticom. Va? trenutni ure?aj to ne podr?ava.';
 
   @override
   String get endConversation => 'Završi razgovor';

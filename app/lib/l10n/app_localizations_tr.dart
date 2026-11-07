@@ -561,11 +561,11 @@ class AppLocalizationsTr extends AppLocalizations {
   String get hardwareSection => 'Donanım';
 
   @override
-  String get v2Undetected => 'V2 algılanamadı';
+  String get v2Undetected => '?evrimd??? Senkronizasyon kullan?lam?yor';
 
   @override
   String get v2UndetectedMessage =>
-      'V1 cihazınız olduğunu veya cihazınızın bağlı olmadığını görüyoruz. SD Kart işlevi yalnızca V2 cihazlar için mevcuttur.';
+      '?evrimd??? Senkronizasyon i?in SD kart depolamas?na sahip ba?l? bir Omi cihaz? gerekir. Mevcut cihaz?n?z bunu desteklemiyor.';
 
   @override
   String get endConversation => 'Konuşmayı Sonlandır';

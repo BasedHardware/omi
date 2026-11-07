@@ -559,11 +559,11 @@ class AppLocalizationsSl extends AppLocalizations {
   String get hardwareSection => 'Strojna oprema';
 
   @override
-  String get v2Undetected => 'V2 ni zaznan';
+  String get v2Undetected => 'Sinhroniziranje brez povezave ni na voljo';
 
   @override
   String get v2UndetectedMessage =>
-      'Vidimo, da imate V1 napravo ali pa je vaša naprava nepriključena. Funkcionalnost SD kartice je dostopna samo za naprave V2.';
+      'Sinhroniziranje brez povezave potrebuje povezano napravo Omi s pomnilnikom na kartici SD. Va?a trenutna naprava tega ne podpira.';
 
   @override
   String get endConversation => 'Končaj pogovor';
