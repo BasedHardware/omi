@@ -32,7 +32,7 @@ import 'widgets/action_item_form_sheet.dart';
 import 'widgets/action_item_shimmer_widget.dart';
 import 'widgets/task_row_parts.dart';
 import 'widgets/task_suggestions_section.dart';
-
+import 'widgets/voice_setup_task.dart';
 // Re-export Goal from goals.dart for use in this file
 export 'package:omi/backend/http/api/goals.dart' show Goal;
 
@@ -508,10 +508,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                               physics: const AlwaysScrollableScrollPhysics(),
                               slivers: [
                                 SliverToBoxAdapter(child: TaskSuggestionsSection(controller: provider.suggestions)),
+                                const SliverToBoxAdapter(child: VoiceSetupTask()),
                                 SliverFillRemaining(
-                                  hasScrollBody: false,
-                                  child: Center(child: ActionItemsApiStatus(provider: provider)),
-                                ),
+                                    hasScrollBody: false, child: Center(child: ActionItemsApiStatus(provider: provider))),
                               ],
                             )
                           : categorizedItems.values.every((l) => l.isEmpty)
@@ -549,6 +548,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       physics: const AlwaysScrollableScrollPhysics(),
       slivers: [
         SliverToBoxAdapter(child: TaskSuggestionsSection(controller: provider.suggestions)),
+        const SliverToBoxAdapter(child: VoiceSetupTask()),
         if (provider.suggestions?.items.isEmpty ?? true)
           SliverFillRemaining(hasScrollBody: false, child: Center(child: _buildEmptyTasksContent())),
         SliverPadding(padding: EdgeInsets.only(bottom: homeBottomClearance(context))),
@@ -577,7 +577,6 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   ) {
     final isSearching = provider.isSearching;
     final filteredItems = isSearching ? provider.filteredActionItems : const <ActionItemWithMetadata>[];
-
     return CustomScrollView(
       controller: _scrollController,
       physics: const AlwaysScrollableScrollPhysics(),
@@ -585,7 +584,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         const SliverPadding(padding: EdgeInsets.only(top: 8)),
         SliverToBoxAdapter(child: _buildPageHeader(provider)),
         if (!isSearching) SliverToBoxAdapter(child: TaskSuggestionsSection(controller: provider.suggestions)),
-
+        if (!isSearching) const SliverToBoxAdapter(child: VoiceSetupTask()),
         if (isSearching) ...[
           if (filteredItems.isEmpty)
             SliverFillRemaining(hasScrollBody: false, child: Center(child: _buildNoSearchResultsContent()))

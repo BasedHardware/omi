@@ -15395,4 +15395,6 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+  @override
+  String get voiceSetupTaskSubline => 'যাতে Omi জানে এটা আপনি · প্রায় এক মিনিট';
 }

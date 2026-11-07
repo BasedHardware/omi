@@ -882,7 +882,6 @@ class _ConversationsPageState extends State<ConversationsPage>
               ),
               // A declined renewal the user can still pay: one row, Update opens Stripe's billing portal.
               const SliverToBoxAdapter(child: PaymentIssueRow()),
-              const SliverToBoxAdapter(child: SpeechProfileCardWidget()),
               const SliverToBoxAdapter(child: UpdateFirmwareCardWidget()),
               // Review absorbs the voice prompts; the old card shows only while Review is off.
               const SliverToBoxAdapter(child: ReviewEntryCard()),

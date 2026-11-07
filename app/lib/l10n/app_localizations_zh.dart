@@ -15150,4 +15150,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+  @override
+  String get voiceSetupTaskSubline => '让 Omi 认出你的声音 · 大约一分钟';
 }

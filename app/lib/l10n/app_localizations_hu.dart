@@ -15459,4 +15459,6 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+  @override
+  String get voiceSetupTaskSubline => 'Hogy az Omi felismerje a hangját · kb. egy perc';
 }
