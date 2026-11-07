@@ -1,5 +1,6 @@
-import sys
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 
 from database.desktop_update_policy import (
@@ -189,3 +190,12 @@ def test_get_desktop_update_policy_inactive():
 
     policy = get_desktop_update_policy(100, "macos", firestore_client=mock_client)
     assert policy == default_desktop_update_policy()
+
+
+def test_get_desktop_update_policy_propagates_firestore_exception():
+    mock_client = MagicMock()
+    mock_client.collection().document().get.side_effect = RuntimeError("Firestore unavailable")
+
+    with pytest.raises(RuntimeError, match="Firestore unavailable"):
+        get_desktop_update_policy(100, "macos", firestore_client=mock_client)
+

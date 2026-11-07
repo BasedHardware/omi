@@ -1,11 +1,8 @@
 from typing import Any, Optional, cast
 from urllib.parse import urlparse
-import logging
 
 from database._client import get_firestore_client
 from database.fsr_read_cache import serving_config
-
-logger = logging.getLogger(__name__)
 
 # Keep the default live until the stable-promotion workflow has published the
 # static repair page. Operators can point an active recovery policy at that
@@ -49,9 +46,6 @@ def _as_string_list(value: Any) -> list[str]:
     return [item.strip() for item in narrowed if isinstance(item, str) and item.strip()]
 
 
-
-# NOTE: Intentional divergence from PR #19996: dropped identity=id(client) in serving_config
-# as per-client keys churn the 32-entry process cache excessively.
 def _as_download_url(value: Any) -> Optional[str]:
     candidate = _as_string(value)
     if candidate is None:
@@ -130,11 +124,15 @@ def get_desktop_update_policy(
 ) -> dict[str, Any]:
     client: Any = firestore_client if firestore_client is not None else get_firestore_client()
 
-    doc = client.collection("desktop_update_policy").document("current").get()
-    if not getattr(doc, "exists", False):
-        return default_desktop_update_policy()
+    def fetch():
+        doc = client.collection("desktop_update_policy").document("current").get()
+        if not getattr(doc, "exists", False):
+            return None
+        return doc.to_dict()
 
-    raw_doc: object = doc.to_dict()
+    raw_doc: object = serving_config('desktop_update_policy', fetch, identity=id(client))
+    if raw_doc is None:
+        return default_desktop_update_policy()
     policy = _normalize_policy(raw_doc)
 
     if not _applies_to_platform(policy, platform):
