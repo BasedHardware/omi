@@ -1,0 +1,3 @@
+{
+  "change": "Fix Android BLE connection and reconnect to public-address peripherals such as OMI Glass by preserving scanned device context and persisting verified address types."
+}
