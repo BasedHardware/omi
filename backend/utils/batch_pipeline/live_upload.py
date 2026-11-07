@@ -25,6 +25,7 @@ from database.conversations import claim_record_lane_owner
 from database.batch_pipeline_store import FirestoreStore
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.sync_ledger import LEDGER_RETENTION_DAYS
+from database.sync_record_wait_cache import RECORD_WAIT_CACHE_SECONDS, cached_record_wait, remember_record_wait
 from utils.batch_pipeline.contracts import WorkItem
 from utils.batch_pipeline.intake import durable_status, start_response
 from utils.batch_pipeline.artifact_policy import artifacts_for
@@ -64,15 +65,47 @@ class RecordUploadWait(Enum):
 def _pending(reason: RecordUploadWait):
     # These are custody waits, not evidence of Cloud Run refusing a request.
     # Keep the branch vocabulary static and omit identities/audio/error text.
+    # No Retry-After: shipped clients read any 5xx carrying one as an
+    # account-wide pause, so one conversation's wait stalled every other WAL
+    # on the phone (2026-11-07 503 storm). Without it the drain skips this
+    # recording for the pass and keeps uploading the rest, after the client's
+    # own short unscoped-5xx pause (2-30s, reset by a success); the WAL is kept.
+    # The body's retry_after_seconds paces only this recording in new apps.
     logger.info('event=sync_record_upload outcome=pending reason=%s', reason.value)
     return JSONResponse(
         status_code=503,
-        headers={'Retry-After': '30'},
         content={
             'code': 'record_capture_pending',
             'detail': 'Retain local audio until the registered record is complete',
+            'retry_after_seconds': RECORD_WAIT_CACHE_SECONDS,
         },
     )
+
+
+# Conversation-level waits: any WAL for the conversation gets the same answer
+# until record state changes. Content-level waits (coverage, receipts) are not
+# memoized, since another WAL of the same conversation may already be provable.
+_MEMOIZED_WAITS = frozenset({RecordUploadWait.RECORD_JOBS_MISSING, RecordUploadWait.RESERVATION_PENDING})
+
+
+async def conversation_pending(reason: RecordUploadWait, uid: str, conversation_id: str | None):
+    if reason in _MEMOIZED_WAITS and isinstance(conversation_id, str) and conversation_id:
+        await run_blocking(db_executor, remember_record_wait, uid, conversation_id, reason.value)
+    return _pending(reason)
+
+
+async def memoized_record_wait(uid, conversation_id) -> JSONResponse | None:
+    """Repeat a recent conversation-level custody wait before any upload work."""
+    if not isinstance(conversation_id, str) or not conversation_id:
+        return None
+    cached = await run_blocking(db_executor, cached_record_wait, uid, conversation_id)
+    if cached is None:
+        return None
+    try:
+        reason = RecordUploadWait(cached)
+    except ValueError:
+        return None
+    return _pending(reason) if reason in _MEMOIZED_WAITS else None
 
 
 def _pcm(wav):
@@ -231,7 +264,7 @@ async def registered_record_response(
             and record_capture_eligible(uid, row, policy=policy)
         )
         if awaiting_reservation or (snapshot is not None and not snapshot.exists and policy.live_record_enabled):
-            return _pending(RecordUploadWait.RESERVATION_PENDING)
+            return await conversation_pending(RecordUploadWait.RESERVATION_PENDING, uid, conversation_id)
         if snapshot is not None and snapshot.exists and not row.get('record_lane_owner'):
             # Only enabled admission may establish a new dispatcher. BYOK takes the
             # batch owner like any upload (David, 10-19): no request-scoped keys needed.
@@ -309,7 +342,7 @@ async def registered_record_response(
     if prior:
         return _pending(RecordUploadWait.CONTENT_RECEIPT_CONFLICT)
     if not jobs:
-        return _pending(RecordUploadWait.RECORD_JOBS_MISSING)
+        return await conversation_pending(RecordUploadWait.RECORD_JOBS_MISSING, uid, conversation_id)
     failure_reason = RecordUploadWait.ARTIFACT_LOOKUP_FAILED
     try:
         artifacts = await run_blocking(storage_executor, artifacts_for, store)

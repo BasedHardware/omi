@@ -2,15 +2,44 @@
 
 from __future__ import annotations
 
+import os
 import base64
 import hashlib
 import json
 import uuid
+from contextlib import ExitStack
 from copy import deepcopy
 from datetime import datetime, timezone
 from functools import wraps
 from threading import RLock
-from typing import Callable, TypeVar
+from typing import Any, Callable, Iterator, TypeVar
+from zoneinfo import ZoneInfo
+from database.action_item_codec import prepare_action_item_for_read, prepare_action_item_for_write
+from database.ports.action_items import (
+    ActionItemDraft,
+    ActionItemEntity,
+    TaskRelationshipRule,
+    TaskRelationshipConflictError,
+)
+from database.ports.goals import (
+    GoalCreate,
+    GoalUpdate,
+    GoalEntity,
+    GoalProgressEventEntity,
+    GoalConflictError,
+    GoalNotFoundError,
+)
+from database.ports.workstreams import (
+    WorkstreamCreate,
+    WorkstreamUpdate,
+    WorkstreamEntity,
+    WorkstreamEventEntity,
+    ArtifactDescriptorEntity,
+    ContinuationCheckpointEntity,
+    WorkstreamNotFoundError,
+    WorkstreamConflictError,
+    WorkstreamGenerationMismatchError,
+)
 
 from database.ports.base import MutationConflict, Page, RevisionConflict, SpaceTx
 from database.ports.folders import FolderCreate, FolderEntity, FolderUpdate, SYSTEM_FOLDERS
@@ -48,17 +77,71 @@ class SimSpaceStore:
         self.space_id = space_id
         self.lock = RLock()
         self.state = {'folders': {}, 'people': {}, 'conversations': {}, 'receipts': {}, 'generation': 0}
+        for entity in (
+            'action_items',
+            'goals',
+            'workstreams',
+            'goal_events',
+            'goal_history',
+            'workstream_events',
+            'workstream_artifacts',
+            'workstream_checkpoints',
+            'task_intelligence_control',
+            'workflow_mutation_receipts',
+            'users',
+            'receipt_domains',
+        ):
+            self.state[entity] = {}
+        self.fence_log = []
+        self._fences = None
+        self.action_items = SimActionItems(self)
+        self.goals = SimGoals(self)
+        self.workstreams = SimWorkstreams(self)
         self.folders = SimFolders(self)
         self.people = SimPeople(self)
+
+    def register_commit_fence(self, fence) -> None:
+        if self._fences is None:
+            raise RuntimeError('commit fences require a unit of work')
+        self._fences.append(fence)
+
+    def _task_write(self):
+        if self._fences is None:
+            self.fence_log.extend(['before_commit', 'after_commit:True'])
+        elif 'task' not in self._fences:
+            self._fences.append('task')
 
     def run(self, body: Callable[[SpaceTx], T]) -> T:
         with self.lock:
             before = deepcopy(self.state)
-            try:
+            parent = self._fences
+            if parent is not None:
                 return body(self)
+            self._fences = []
+            committed = False
+            try:
+                result = body(self)
+                for fence in self._fences:
+                    if fence == 'task':
+                        self.fence_log.append('before_commit')
+                    else:
+                        fence.before_commit()
+                committed = True
+                return result
             except BaseException:
                 self.state = before
                 raise
+            finally:
+                try:
+                    with ExitStack() as cleanup:
+                        for fence in reversed(self._fences):
+                            if fence == 'task':
+                                if committed:
+                                    cleanup.callback(self.fence_log.append, 'after_commit:True')
+                            else:
+                                cleanup.callback(fence.after_commit, committed)
+                finally:
+                    self._fences = parent
 
     def run_with_contention_retry(self, body: Callable[[SpaceTx], T], *, operation_name: str) -> T:
         return self.run(body)
@@ -356,3 +439,1073 @@ class SimPeople(_Repo):
     def read_generation(self) -> GenerationFence | None:
         generation = self.store.state['generation']
         return GenerationFence(value=generation, token=str(generation)) if generation else None
+
+
+# Workflow reference state is domain-shaped, independently modeled from SDK IO.
+class _WorkflowRepo(_Repo):
+    entity_type = None
+    collection = ''
+
+    def _entity(self, row):
+        return self.entity_type.model_construct(**deepcopy(row)) if row is not None else None
+
+    def _rows(self):
+        return self.store.state[self.collection]
+
+    def _read(self, entity_id):
+        return self._rows().get(entity_id)
+
+    def _write_task(self):
+        self.store._task_write()
+
+    def _generation(self, expected=None):
+        control = self.store.state['task_intelligence_control'].get('state', {})
+        generation = control.get('account_generation', 0)
+        if expected is not None and (generation != expected or control.get('writes_blocked')):
+            raise self.generation_error('account generation mismatch')
+        return generation
+
+    def _idempotent(self, operation, key, request, body):
+        digest, prior = self.receipt(key, operation, request)
+        if prior is not None:
+            return deepcopy(prior)
+        result = body()
+        self.save(key, digest, result)
+        return result
+
+    def save(self, mutation_id, digest, result):
+        super().save(mutation_id, digest, result)
+        if mutation_id is not None:
+            self.store.state['receipt_domains'][mutation_id] = self.collection
+
+    def purge(self, space_id: str) -> int:
+        if space_id != self.store.space_id:
+            raise ValueError('purge must belong to this space')
+        count = len(self._rows())
+        self._rows().clear()
+        for key, domain in list(self.store.state['receipt_domains'].items()):
+            if domain == self.collection:
+                self.store.state['receipts'].pop(key, None)
+                del self.store.state['receipt_domains'][key]
+                count += 1
+        if self.collection == 'action_items':
+            count += len(self.store.state['task_intelligence_control'])
+            self.store.state['task_intelligence_control'].clear()
+        return count
+
+
+class SimActionItems(_WorkflowRepo):
+    entity_type = ActionItemEntity
+    collection = 'action_items'
+
+    def read_control(self) -> dict[str, Any]:
+        return deepcopy(self.store.state['task_intelligence_control'].get('state', {}))
+
+    def validate_task_relationship(self, rule: TaskRelationshipRule) -> None:
+        if rule.goal_id is not None:
+            goal = self.store.goals.get(rule.goal_id)
+            if goal is None:
+                raise TaskRelationshipConflictError('goal does not exist')
+            if rule.account_generation is not None and goal.account_generation != rule.account_generation:
+                raise TaskRelationshipConflictError('goal account generation mismatch')
+            if not rule.allow_ended_goal and (
+                goal.status in ('achieved', 'abandoned')
+                or (goal.status is None and goal.model_extra.get('is_active') is False)
+            ):
+                raise TaskRelationshipConflictError('ended goal cannot receive new task links')
+        if rule.workstream_id is not None:
+            workstream = self.store.workstreams.get(rule.workstream_id)
+            if workstream is None:
+                raise TaskRelationshipConflictError('workstream does not exist')
+            if rule.account_generation is not None and workstream.account_generation != rule.account_generation:
+                raise TaskRelationshipConflictError('workstream account generation mismatch')
+            if workstream.goal_id != rule.goal_id:
+                raise TaskRelationshipConflictError('task goal_id must match workstream goal_id')
+
+    @_locked
+    def create(
+        self,
+        draft: ActionItemDraft,
+        *,
+        idempotency_key: str | None = None,
+        document_id: str | None = None,
+        reuse_finished: bool = True,
+        mutation_id: str | None = None,
+    ) -> str:
+        request = [draft.data, idempotency_key, document_id, reuse_finished]
+        digest, prior = self.receipt(mutation_id, 'action_items.create', request)
+        if prior is not None:
+            return prior
+        if document_id is not None and not document_id:
+            raise ValueError('document_id must not be empty')
+        generation = self.read_control().get('account_generation', 0)
+        if idempotency_key:
+            for row in sorted(self._rows().values(), key=lambda r: r['id'].encode()):
+                if (
+                    row.get('idempotency_key') == idempotency_key
+                    and row.get('account_generation', 0) == generation
+                    and not row.get('deleted')
+                ):
+                    if reuse_finished or (not row.get('completed') and row.get('status', 'active') == 'active'):
+                        self.save(mutation_id, digest, row['id'])
+                        return row['id']
+        if document_id is not None and document_id in self._rows():
+            if self._rows()[document_id].get('account_generation', 0) != generation:
+                raise TaskRelationshipConflictError('document id belongs to another account generation')
+            return document_id
+        data = prepare_action_item_for_write(draft.data)
+        self.validate_task_relationship(
+            TaskRelationshipRule(
+                goal_id=data.get('goal_id'), workstream_id=data.get('workstream_id'), account_generation=generation
+            )
+        )
+        now = datetime.now(timezone.utc)
+        for field in ('created_at', 'updated_at'):
+            if not data.get(field):
+                data[field] = now
+        if data.get('completed') and not data.get('completed_at'):
+            data['completed_at'] = now
+        entity_id = document_id or uuid.uuid4().hex
+        if idempotency_key:
+            data['idempotency_key'] = idempotency_key
+        self._write_task()
+        self._rows()[entity_id] = {**data, 'id': entity_id, 'account_generation': generation}
+        self.save(mutation_id, digest, entity_id)
+        return entity_id
+
+    @_locked
+    def create_batch(self, drafts: list[ActionItemDraft], *, document_ids: list[str | None] | None = None) -> list[str]:
+        if len(drafts) > 400 or (document_ids is not None and len(drafts) != len(document_ids)):
+            raise ValueError('invalid task batch')
+        generation = int(self.read_control().get('account_generation', 0))
+        prepared = []
+        now = datetime.now(timezone.utc)
+        for i, draft in enumerate(drafts):
+            data = prepare_action_item_for_write(draft.data)
+            self.validate_task_relationship(
+                TaskRelationshipRule(
+                    goal_id=data.get('goal_id'), workstream_id=data.get('workstream_id'), account_generation=generation
+                )
+            )
+            entity_id = document_ids[i] if document_ids is not None else None
+            if entity_id == '':
+                raise ValueError('document id must not be empty')
+            entity_id = entity_id or uuid.uuid4().hex
+            for field in ('created_at', 'updated_at'):
+                if not data.get(field):
+                    data[field] = now
+            if data.get('completed') and not data.get('completed_at'):
+                data['completed_at'] = now
+            prepared.append((entity_id, {**data, 'id': entity_id, 'account_generation': generation}))
+        for entity_id, data in prepared:
+            self._write_task()
+            # The existing Firestore batch uses set, including occupied ids.
+            self._rows()[entity_id] = data
+        return [entity_id for entity_id, _ in prepared]
+
+    @_locked
+    def update(
+        self,
+        action_item_id: str,
+        patch: dict[str, Any],
+        *,
+        expected_chat_state: dict[str, Any] | None = None,
+        expected_revision: int | None = None,
+        mutation_id: str | None = None,
+    ) -> bool:
+        digest, prior = self.receipt(mutation_id, 'action_items.update', [action_item_id, patch, expected_revision])
+        if prior is not None:
+            return prior
+        row = self._read(action_item_id)
+        if row is None:
+            return False
+        revision = self.check('action_items', action_item_id, row, expected_revision)
+        payload = prepare_action_item_for_write(patch, partial=True)
+        goal_id, workstream_id = payload.get('goal_id', row.get('goal_id')), payload.get(
+            'workstream_id', row.get('workstream_id')
+        )
+        if 'goal_id' in payload or 'workstream_id' in payload:
+            self.validate_task_relationship(
+                TaskRelationshipRule(
+                    goal_id=goal_id,
+                    workstream_id=workstream_id,
+                    allow_ended_goal=(goal_id, workstream_id) == (row.get('goal_id'), row.get('workstream_id')),
+                )
+            )
+        if payload.get('exported') is True:
+            payload['sync_requested'] = False
+        if payload.get('completed') is True and row.get('completed') is True:
+            payload['completed_at'] = row.get('completed_at')
+        if (
+            expected_chat_state is None
+            and os.getenv('OMI_DEV_ACTION_ITEMS_SKIP_NOOP_WRITES_ENABLED', '').lower() != 'false'
+            and 'updated_at' not in payload
+            and all(
+                k in row
+                and type(row[k]) is type(v)
+                and type(v) in (type(None), bool, int, float, str, datetime)
+                and row[k] == v
+                for k, v in payload.items()
+            )
+        ):
+            self.save(mutation_id, digest, True)
+            return True
+        self._write_task()
+        row.update(
+            payload,
+            updated_at=datetime.now(timezone.utc),
+            revision=(revision + 1 if expected_revision is not None else row.get('revision', 0) + 2),
+        )
+        self.save(mutation_id, digest, True)
+        return True
+
+    @_locked
+    def delete(self, action_item_id: str) -> bool:
+        if action_item_id not in self._rows():
+            return False
+        self._write_task()
+        del self._rows()[action_item_id]
+        return True
+
+    @_locked
+    def delete_batch(self, ids: list[str]) -> list[str]:
+        for entity_id in ids:
+            self.delete(entity_id)
+        return list(ids)
+
+    @_locked
+    def retire_for_conversation(
+        self, conversation_id: str, *, active_ids: list[str], replacements: dict[str, str] | None = None
+    ) -> int:
+        rows = [
+            row
+            for row in self._rows().values()
+            if row.get('conversation_id') == conversation_id and row['id'] not in active_ids
+        ]
+        for row in rows:
+            replacement = (replacements or {}).get(row['id'])
+            self._write_task()
+            row.update(
+                deleted=True,
+                status='superseded' if replacement else 'cancelled',
+                completed=False,
+                completed_at=None,
+                superseded_by=replacement,
+                updated_at=datetime.now(timezone.utc),
+            )
+        return len(rows)
+
+    @_locked
+    def get(self, action_item_id: str) -> ActionItemEntity | None:
+        row = self._read(action_item_id)
+        return self._entity(prepare_action_item_for_read(deepcopy(row))) if row is not None else None
+
+    def get_by_ids(self, ids: list[str]) -> list[ActionItemEntity]:
+        return [row for row in (self.get(i) for i in ids) if row is not None]
+
+    def iter_all(self) -> Iterator[ActionItemEntity]:
+        for entity_id in sorted(self._rows(), key=lambda v: v.encode()):
+            if not self._rows()[entity_id].get('deleted'):
+                yield self.get(entity_id)
+
+    def list(
+        self,
+        *,
+        conversation_id: str | None = None,
+        completed: bool | None = None,
+        start_date: datetime | None = None,
+        end_date: datetime | None = None,
+        due_start_date: datetime | None = None,
+        due_end_date: datetime | None = None,
+        limit: int | None = None,
+        cursor: str | None = None,
+    ) -> Page[ActionItemEntity]:
+        if limit is not None and limit <= 0:
+            raise ValueError('limit must be positive')
+        rows = [
+            r
+            for r in self.iter_all()
+            if (conversation_id is None or r.conversation_id == conversation_id)
+            and (completed is None or bool(r.completed) == completed)
+        ]
+        for field, lower, upper in [('created_at', start_date, end_date), ('due_at', due_start_date, due_end_date)]:
+            rows = [
+                r
+                for r in rows
+                if (lower is None or (getattr(r, field) is not None and getattr(r, field) >= lower))
+                and (upper is None or (getattr(r, field) is not None and getattr(r, field) <= upper))
+            ]
+
+        def key(r):
+            return (
+                bool(r.completed),
+                r.due_at is None,
+                (r.due_at or datetime.max.replace(tzinfo=timezone.utc)).timestamp(),
+                -(r.created_at or datetime.min.replace(tzinfo=timezone.utc)).timestamp(),
+                r.id,
+            )
+
+        rows.sort(key=key)
+        if cursor is not None:
+            prior = json.loads(base64.urlsafe_b64decode(cursor))
+            rows = [r for r in rows if list(key(r)) > prior]
+        items = rows if limit is None else rows[:limit]
+        next_cursor = (
+            base64.urlsafe_b64encode(json.dumps(list(key(items[-1]))).encode()).decode()
+            if items and len(items) < len(rows)
+            else None
+        )
+        return Page(items, next_cursor)
+
+    def find_active_by_description(self, description: str) -> ActionItemEntity | None:
+        def normalized(value):
+            return value.strip().removeprefix('[screen] ').removesuffix(' [screen]').strip().lower()
+
+        target = normalized(description)
+        return (
+            next((r for r in self.list(completed=False).items if normalized(r.description) == target), None)
+            if target
+            else None
+        )
+
+    def list_ids(self, *, completed: bool | None = None) -> list[str]:
+        return (
+            sorted(self._rows(), key=lambda v: v.encode())
+            if completed is None
+            else [r.id for r in self.list(completed=completed).items]
+        )
+
+    def sync_page(
+        self, *, updated_since: datetime | None = None, limit: int = 100, cursor: str | None = None
+    ) -> Page[ActionItemEntity]:
+        if limit <= 0:
+            raise ValueError('limit must be positive')
+        rows = [self.get(key) for key, raw in self._rows().items() if raw.get('updated_at') is not None]
+        rows = [row for row in rows if updated_since is None or row.updated_at >= updated_since]
+        rows.sort(key=lambda row: (row.updated_at, row.id.encode()))
+        if cursor is not None:
+            timestamp, entity_id = json.loads(base64.urlsafe_b64decode(cursor))
+            rows = [
+                row for row in rows if (row.updated_at.timestamp(), row.id.encode()) > (timestamp, entity_id.encode())
+            ]
+        items = rows[:limit]
+        resume = (
+            base64.urlsafe_b64encode(json.dumps([items[-1].updated_at.timestamp(), items[-1].id]).encode()).decode()
+            if items and len(rows) > limit
+            else None
+        )
+        return Page(items, resume)
+
+
+class SimGoals(_WorkflowRepo):
+    entity_type = GoalEntity
+    collection = 'goals'
+    generation_error = GoalConflictError
+
+    def get(self, goal_id: str) -> GoalEntity | None:
+        return self._entity(self._read(goal_id))
+
+    @_locked
+    def create(self, draft: GoalCreate, *, mutation_id: str | None = None) -> GoalEntity:
+        def build():
+            data = deepcopy(draft.data)
+            if not data.get('title') or not (data.get('desired_outcome') or data.get('title')):
+                raise ValueError('goal title and desired_outcome are required')
+            if data.get('status') == 'focused':
+                raise GoalConflictError('use explicit focus management after creating a goal')
+            gid = data.get('goal_id') or data.get('id') or 'goal_' + uuid.uuid4().hex[:12]
+            now = datetime.now(timezone.utc)
+            row = {
+                **data,
+                'id': gid,
+                'goal_id': gid,
+                'status': data.get('status', 'background'),
+                'focus_rank': None,
+                'account_generation': self._generation(),
+                'latest_progress_sequence': 0,
+                'is_active': data.get('status') not in ('achieved', 'abandoned'),
+                'created_at': now,
+                'updated_at': now,
+            }
+            self._rows()[gid] = row
+            return row
+
+        return self._entity(self._idempotent('goals.create', mutation_id, draft.data, build))
+
+    def create_idempotent(self, draft: GoalCreate, *, idempotency_key: str, account_generation: int) -> GoalEntity:
+        self._generation(account_generation)
+        return self.create(draft, mutation_id='goal-create:' + str(account_generation) + ':' + idempotency_key)
+
+    def get_user_goal(self) -> GoalEntity | None:
+        rows = self.get_user_goals(100)
+        rows.sort(
+            key=lambda r: (
+                0 if r.status == 'focused' else 1,
+                r.model_extra.get('focus_rank') if r.model_extra.get('focus_rank') is not None else 5,
+                r.model_extra.get('created_at') or datetime.min.replace(tzinfo=timezone.utc),
+            )
+        )
+        return rows[0] if rows else None
+
+    def get_user_goals(self, limit: int = 3) -> list[GoalEntity]:
+        rows = [
+            r
+            for r in self._rows().values()
+            if r.get('is_active') is True and r.get('status') not in ('achieved', 'abandoned')
+        ]
+        rows.sort(key=lambda r: r.get('created_at') or datetime.min.replace(tzinfo=timezone.utc))
+        return [self._entity(r) for r in rows[: max(0, limit)]]
+
+    def get_all(self, *, include_inactive: bool = False, limit: int | None = None) -> list[GoalEntity]:
+        rows = [
+            r
+            for r in self._rows().values()
+            if include_inactive or (r.get('is_active') is True and r.get('status') not in ('achieved', 'abandoned'))
+        ]
+        rows.sort(key=lambda r: r.get('created_at') or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
+        return [self._entity(r) for r in (rows if limit is None else rows[:limit])]
+
+    @_locked
+    def update(
+        self, goal_id: str, patch: GoalUpdate, *, expected_revision: int | None = None, mutation_id: str | None = None
+    ) -> GoalEntity | None:
+        def build():
+            row = self._read(goal_id)
+            if row is None:
+                return None
+            revision = self.check('goals', goal_id, row, expected_revision)
+            data = {k: v for k, v in patch.data.items() if k not in ('status', 'focus_rank')}
+            row.update(
+                data,
+                updated_at=datetime.now(timezone.utc),
+                revision=revision + 1 if expected_revision is not None else row.get('revision', 0) + 2,
+            )
+            return row
+
+        return self._entity(
+            self._idempotent('goals.update', mutation_id, [goal_id, patch.data, expected_revision], build)
+        )
+
+    @_locked
+    def focus(
+        self,
+        goal_id: str,
+        *,
+        idempotency_key: str,
+        account_generation: int,
+        replacement_goal_id: str | None = None,
+        focus_rank: int | None = None,
+        focus_cap: int = 5,
+    ) -> GoalEntity:
+        self._generation(account_generation)
+
+        def build():
+            row = self._read(goal_id)
+            if row is None:
+                raise GoalNotFoundError(goal_id)
+            if row.get('status') in ('achieved', 'abandoned'):
+                raise GoalConflictError('ended goals cannot be focused')
+            focused = [r for r in self._rows().values() if r.get('status') == 'focused' and r['id'] != goal_id]
+            if row.get('status') == 'focused' and focus_rank in (None, row.get('focus_rank')):
+                return row
+            replacement = None
+            if len(focused) >= focus_cap:
+                replacement = next((r for r in focused if r['id'] == replacement_goal_id), None)
+                if replacement is None:
+                    raise GoalConflictError('focus set is full; replacement_goal_id is required')
+            occupied = {r.get('focus_rank') for r in focused if r is not replacement}
+            rank = focus_rank if focus_rank is not None else next((r for r in range(focus_cap) if r not in occupied), 0)
+            if rank in occupied:
+                raise GoalConflictError('focus_rank is already occupied')
+            if replacement is not None:
+                replacement.update(status='background', focus_rank=None, updated_at=datetime.now(timezone.utc))
+            row.update(status='focused', focus_rank=rank, is_active=True, updated_at=datetime.now(timezone.utc))
+            return row
+
+        return self._entity(
+            self._idempotent(
+                'goals.focus',
+                f'focus:{goal_id}:{idempotency_key}',
+                [account_generation, replacement_goal_id, focus_rank],
+                build,
+            )
+        )
+
+    def unfocus(self, goal_id: str, *, idempotency_key: str, account_generation: int) -> GoalEntity:
+        self._generation(account_generation)
+
+        def build():
+            row = self._read(goal_id)
+            if row is None:
+                raise GoalNotFoundError(goal_id)
+            row.update(status='background', focus_rank=None, updated_at=datetime.now(timezone.utc))
+            return row
+
+        return self._entity(
+            self._idempotent('goals.unfocus', f'unfocus:{goal_id}:{idempotency_key}', [account_generation], build)
+        )
+
+    def transition_lifecycle(
+        self, goal_id: str, *, status: str, relationship_disposition: str, idempotency_key: str, account_generation: int
+    ) -> GoalEntity:
+        self._generation(account_generation)
+        if status not in ('paused', 'achieved', 'abandoned'):
+            raise ValueError('invalid goal lifecycle target')
+
+        def build():
+            row = self._read(goal_id)
+            if row is None:
+                raise GoalNotFoundError(goal_id)
+            if relationship_disposition == 'detach':
+                for task in self.store.state['action_items'].values():
+                    if task.get('goal_id') == goal_id:
+                        self._write_task()
+                        task['goal_id'] = None
+                for workstream in self.store.state['workstreams'].values():
+                    if workstream.get('goal_id') == goal_id:
+                        workstream['goal_id'] = None
+            row.update(
+                status=status,
+                focus_rank=None,
+                is_active=status not in ('achieved', 'abandoned'),
+                relationship_disposition=relationship_disposition,
+                updated_at=datetime.now(timezone.utc),
+            )
+            return row
+
+        return self._entity(
+            self._idempotent(
+                'goals.lifecycle',
+                f'lifecycle:{goal_id}:{idempotency_key}',
+                [status, relationship_disposition, account_generation],
+                build,
+            )
+        )
+
+    def append_progress_event(
+        self, goal_id: str, event: dict[str, Any], *, idempotency_key: str, account_generation: int
+    ) -> GoalProgressEventEntity:
+        self._generation(account_generation)
+
+        def build():
+            row = self._read(goal_id)
+            if row is None:
+                raise GoalNotFoundError(goal_id)
+            now = datetime.now(timezone.utc)
+            sequence = row.get('latest_progress_sequence', 0) + 1
+            eid = 'gpe_' + uuid.uuid4().hex
+            data = {**deepcopy(event), 'event_id': eid, 'goal_id': goal_id, 'sequence': sequence, 'created_at': now}
+            self.store.state['goal_events'][goal_id + '/' + eid] = data
+            row.update(latest_progress_sequence=sequence, updated_at=now)
+            if event.get('metric') is not None:
+                row['metric'] = deepcopy(event['metric'])
+                zone = self.store.state['users'].get('profile', {}).get('time_zone', 'UTC')
+                day = now.astimezone(ZoneInfo(zone)).strftime('%Y-%m-%d')
+                self.store.state['goal_history'][goal_id + '/' + day] = {
+                    'date': day,
+                    'value': event['metric']['current'],
+                    'recorded_at': now,
+                }
+            return data
+
+        return GoalProgressEventEntity.model_construct(
+            **self._idempotent('goals.event', f'event:{goal_id}:{idempotency_key}', [event, account_generation], build)
+        )
+
+    def list_progress_events(self, goal_id: str, *, limit: int = 100) -> list[GoalProgressEventEntity]:
+        rows = [v for k, v in self.store.state['goal_events'].items() if k.startswith(goal_id + '/')]
+        return [
+            GoalProgressEventEntity.model_construct(**deepcopy(r))
+            for r in sorted(rows, key=lambda r: r['sequence'], reverse=True)[:limit]
+        ]
+
+    def update_progress(
+        self,
+        goal_id: str,
+        current_value: float,
+        *,
+        idempotency_key: str | None = None,
+        account_generation: int | None = None,
+    ) -> GoalEntity | None:
+        row = self._read(goal_id)
+        if row is None:
+            return None
+        metric = {**(row.get('metric') or {'type': 'numeric', 'target': 0}), 'current': current_value}
+        self.append_progress_event(
+            goal_id,
+            {'kind': 'metric_update', 'summary': 'Metric updated', 'metric': metric},
+            idempotency_key=idempotency_key or uuid.uuid4().hex,
+            account_generation=self._generation() if account_generation is None else account_generation,
+        )
+        return self.get(goal_id)
+
+    def get_history(self, goal_id: str, *, days: int = 30) -> list[dict[str, Any]]:
+        rows = [deepcopy(v) for k, v in self.store.state['goal_history'].items() if k.startswith(goal_id + '/')]
+        return sorted(rows, key=lambda r: r['date'], reverse=True)[:days]
+
+    def delete(self, goal_id: str) -> bool:
+        row = self._read(goal_id)
+        if row is None:
+            return False
+        row.update(
+            status='abandoned',
+            focus_rank=None,
+            is_active=False,
+            relationship_disposition='retain',
+            updated_at=datetime.now(timezone.utc),
+            ended_at=datetime.now(timezone.utc),
+        )
+        return True
+
+    def read_control(self) -> dict[str, Any]:
+        return deepcopy(self.store.state['task_intelligence_control'].get('state', {}))
+
+    def write_control(self, patch: dict[str, Any]) -> None:
+        self.store.state['task_intelligence_control'].setdefault('state', {}).update(deepcopy(patch))
+
+    def begin_mutation(
+        self, *, operation: str, idempotency_key: str, account_generation: int, request: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        self._generation(account_generation)
+        _, prior = self.receipt(f'{operation}:{account_generation}:{idempotency_key}', operation, request)
+        return prior
+
+    def finish_mutation(
+        self,
+        *,
+        operation: str,
+        idempotency_key: str,
+        account_generation: int,
+        request: dict[str, Any],
+        result: dict[str, Any],
+    ) -> None:
+        digest, _ = self.receipt(f'{operation}:{account_generation}:{idempotency_key}', operation, request)
+        self.save(f'{operation}:{account_generation}:{idempotency_key}', digest, result)
+
+    def purge(self, space_id: str) -> int:
+        count = super().purge(space_id)
+        for entity in (
+            'goal_events',
+            'goal_history',
+            'task_intelligence_control',
+            'workflow_mutation_receipts',
+        ):
+            count += len(self.store.state[entity])
+            self.store.state[entity].clear()
+        return count
+
+
+class SimWorkstreams(_WorkflowRepo):
+    entity_type = WorkstreamEntity
+    collection = 'workstreams'
+    generation_error = WorkstreamGenerationMismatchError
+
+    def _require(self, workstream_id, generation):
+        self._generation(generation)
+        row = self._read(workstream_id)
+        if row is None:
+            raise WorkstreamNotFoundError(workstream_id)
+        if row.get('account_generation', 0) != generation:
+            raise WorkstreamGenerationMismatchError('workstream account generation mismatch')
+        return row
+
+    def get(self, workstream_id: str) -> WorkstreamEntity | None:
+        return self._entity(self._read(workstream_id))
+
+    @_locked
+    def create(self, draft: WorkstreamCreate, *, mutation_id: str | None = None) -> WorkstreamEntity:
+        def build():
+            data = deepcopy(draft.data)
+            generation = self._generation()
+            self.store.action_items.validate_task_relationship(
+                TaskRelationshipRule(goal_id=data.get('goal_id'), account_generation=generation)
+            )
+            wid = data.get('workstream_id') or data.get('id') or 'workstream_' + uuid.uuid4().hex
+            now = datetime.now(timezone.utc)
+            row = {
+                **data,
+                'id': wid,
+                'workstream_id': wid,
+                'objective': data.get('objective', data.get('title', 'Work')),
+                'status': data.get('status', 'open'),
+                'current_state_summary': data.get('current_state_summary', ''),
+                'latest_event_sequence': 0,
+                'account_generation': generation,
+                'revision': 1,
+                'created_at': now,
+                'updated_at': now,
+            }
+            self._rows()[wid] = row
+            return row
+
+        return self._entity(self._idempotent('workstreams.create', mutation_id, draft.data, build))
+
+    def list_open(self, *, limit: int = 500, account_generation: int | None = None) -> list[WorkstreamEntity]:
+        rows = [
+            r
+            for r in self._rows().values()
+            if r.get('status') == 'open'
+            and (account_generation is None or r.get('account_generation', 0) == account_generation)
+        ]
+        return [self._entity(r) for r in sorted(rows, key=lambda r: r['updated_at'], reverse=True)[:limit]]
+
+    def list_for_goal(
+        self, goal_id: str, *, include_archived: bool = False, limit: int = 100
+    ) -> list[WorkstreamEntity]:
+        rows = [
+            r for r in sorted(self._rows().values(), key=lambda r: r['id'].encode()) if r.get('goal_id') == goal_id
+        ][:limit]
+        rows = [r for r in rows if include_archived or r.get('status') != 'archived']
+        return [self._entity(r) for r in sorted(rows, key=lambda r: r['updated_at'], reverse=True)]
+
+    @_locked
+    def update(
+        self, workstream_id: str, patch: WorkstreamUpdate, *, idempotency_key: str, account_generation: int
+    ) -> WorkstreamEntity:
+        row = self._require(workstream_id, account_generation)
+
+        def build():
+            row.update(deepcopy(patch.data), updated_at=datetime.now(timezone.utc))
+            return row
+
+        return self._entity(
+            self._idempotent(
+                'workstreams.update',
+                f'ws-update:{workstream_id}:{idempotency_key}',
+                [patch.data, account_generation],
+                build,
+            )
+        )
+
+    def _event(self, workstream_id, event):
+        row = self._rows()[workstream_id]
+        sequence = row.get('latest_event_sequence', 0) + 1
+        eid = 'wse_' + uuid.uuid4().hex
+        now = datetime.now(timezone.utc)
+        result = {
+            **deepcopy(event),
+            'event_id': eid,
+            'workstream_id': workstream_id,
+            'sequence': sequence,
+            'created_at': now,
+            'sensitivity': event.get('sensitivity', 'normal'),
+        }
+        self.store.state['workstream_events'][workstream_id + '/' + eid] = result
+        row.update(latest_event_sequence=sequence, updated_at=now, last_meaningful_progress_at=now)
+        return result
+
+    @_locked
+    def append_event(
+        self, workstream_id: str, event: dict[str, Any], *, idempotency_key: str, account_generation: int
+    ) -> WorkstreamEventEntity:
+        self._require(workstream_id, account_generation)
+        result = self._idempotent(
+            'workstreams.event',
+            f'ws-event:{workstream_id}:{idempotency_key}',
+            [event, account_generation],
+            lambda: self._event(workstream_id, event),
+        )
+        return WorkstreamEventEntity.model_construct(**result)
+
+    def list_events(
+        self, workstream_id: str, *, after_sequence: int = 0, limit: int = 100
+    ) -> list[WorkstreamEventEntity]:
+        rows = [
+            v
+            for k, v in self.store.state['workstream_events'].items()
+            if k.startswith(workstream_id + '/') and v['sequence'] > after_sequence
+        ]
+        return [
+            WorkstreamEventEntity.model_construct(**deepcopy(r))
+            for r in sorted(rows, key=lambda r: r['sequence'])[:limit]
+        ]
+
+    @_locked
+    def create_artifact_descriptor(
+        self, workstream_id: str, proposal: dict[str, Any], *, idempotency_key: str, account_generation: int
+    ) -> ArtifactDescriptorEntity:
+        self._require(workstream_id, account_generation)
+
+        def build():
+            rows = [
+                r
+                for r in self.store.state['workstream_artifacts'].values()
+                if r['workstream_id'] == workstream_id and r['logical_key'] == proposal['logical_key']
+            ]
+            head = max(rows, key=lambda r: r['version']) if rows else None
+            if head is None and (proposal['version'] != 1 or proposal.get('supersedes_artifact_id') is not None):
+                raise WorkstreamConflictError(
+                    'the first logical artifact version must be version 1 without supersession'
+                )
+            if head is not None and (
+                proposal['version'] != head['version'] + 1
+                or proposal.get('supersedes_artifact_id') != head['artifact_id']
+                or not proposal.get('evidence_event_ids')
+            ):
+                raise WorkstreamConflictError('artifact version must advance and supersede the current logical head')
+            for eid in proposal.get('evidence_event_ids', []):
+                if workstream_id + '/' + eid not in self.store.state['workstream_events']:
+                    raise WorkstreamConflictError('artifact references a missing workstream event')
+            aid = 'artifact_' + uuid.uuid4().hex
+            row = {
+                **deepcopy(proposal),
+                'artifact_id': aid,
+                'workstream_id': workstream_id,
+                'status': 'draft',
+                'created_at': datetime.now(timezone.utc),
+            }
+            self.store.state['workstream_artifacts'][workstream_id + '/' + aid] = row
+            if head is not None:
+                head['status'] = 'superseded'
+            self._event(workstream_id, {'kind': 'artifact_version', 'summary': 'Artifact version created'})
+            return row
+
+        return ArtifactDescriptorEntity.model_construct(
+            **self._idempotent(
+                'workstreams.artifact',
+                f'artifact:{workstream_id}:{idempotency_key}',
+                [proposal, account_generation],
+                build,
+            )
+        )
+
+    @_locked
+    def transition_artifact_status(
+        self,
+        workstream_id: str,
+        artifact_id: str,
+        request: dict[str, Any],
+        *,
+        idempotency_key: str,
+        account_generation: int,
+    ) -> ArtifactDescriptorEntity:
+        self._require(workstream_id, account_generation)
+
+        def build():
+            row = self.store.state['workstream_artifacts'].get(workstream_id + '/' + artifact_id)
+            if row is None:
+                raise WorkstreamNotFoundError(artifact_id)
+            target = request['status']
+            if row['status'] != target:
+                if {'draft': 'awaiting_review', 'awaiting_review': 'approved', 'approved': 'delivered'}.get(
+                    row['status']
+                ) != target:
+                    raise WorkstreamConflictError('artifact status transition is not allowed')
+                row['status'] = target
+                self._event(workstream_id, {'kind': 'system', 'summary': 'Artifact status changed'})
+            return row
+
+        return ArtifactDescriptorEntity.model_construct(
+            **self._idempotent(
+                'workstreams.artifact-status',
+                f'artifact-status:{artifact_id}:{idempotency_key}',
+                [request, account_generation],
+                build,
+            )
+        )
+
+    def list_artifact_descriptors(self, workstream_id: str, *, limit: int = 100) -> list[ArtifactDescriptorEntity]:
+        rows = [r for r in self.store.state['workstream_artifacts'].values() if r['workstream_id'] == workstream_id]
+        return [
+            ArtifactDescriptorEntity.model_construct(**deepcopy(r))
+            for r in sorted(rows, key=lambda r: r['created_at'], reverse=True)[:limit]
+        ]
+
+    @_locked
+    def upsert_continuation_checkpoint(
+        self, workstream_id: str, checkpoint: dict[str, Any], *, idempotency_key: str, account_generation: int
+    ) -> ContinuationCheckpointEntity:
+        row = self._require(workstream_id, account_generation)
+
+        def build():
+            if checkpoint['last_event_sequence'] > row.get('latest_event_sequence', 0):
+                raise WorkstreamConflictError('checkpoint is ahead of journal')
+            cid = 'checkpoint_' + hashlib.sha256((workstream_id + checkpoint['runtime_id']).encode()).hexdigest()[:32]
+            key = workstream_id + '/' + cid
+            previous = self.store.state['workstream_checkpoints'].get(key)
+            if previous is not None and checkpoint['last_event_sequence'] < previous['last_event_sequence']:
+                raise WorkstreamConflictError('checkpoint cannot move backward')
+            result = {
+                **deepcopy(checkpoint),
+                'checkpoint_id': cid,
+                'workstream_id': workstream_id,
+                'updated_at': datetime.now(timezone.utc),
+            }
+            self.store.state['workstream_checkpoints'][key] = result
+            return result
+
+        return ContinuationCheckpointEntity.model_construct(
+            **self._idempotent(
+                'workstreams.checkpoint',
+                f'checkpoint:{workstream_id}:{idempotency_key}',
+                [checkpoint, account_generation],
+                build,
+            )
+        )
+
+    def list_continuation_checkpoints(self, workstream_id: str) -> list[ContinuationCheckpointEntity]:
+        return [
+            ContinuationCheckpointEntity.model_construct(**deepcopy(r))
+            for r in self.store.state['workstream_checkpoints'].values()
+            if r['workstream_id'] == workstream_id
+        ]
+
+    def resolve_candidate(self, candidate: dict[str, Any], account_generation: int) -> dict[str, Any]:
+        self._generation(account_generation)
+        if candidate.get('subject_kind') != 'workstream' or candidate.get('workstream_proposal') is None:
+            raise WorkstreamConflictError('Candidate is not a workstream create proposal')
+        proposal = candidate['workstream_proposal']
+        receipt = self.resolve_work_intent(
+            {
+                'origin': 'goal',
+                'goal_id': candidate.get('goal_id'),
+                'title': proposal['title'],
+                'objective': proposal['objective'],
+                'anchor_task_description': proposal['anchor_task']['description'],
+            },
+            idempotency_key='candidate:' + candidate['candidate_id'],
+            account_generation=account_generation,
+        )
+        return {
+            'candidate_id': candidate['candidate_id'],
+            'status': 'accepted',
+            'receipt_id': receipt['receipt_id'],
+            'task_id': receipt['task_id'],
+            'workstream_id': receipt['workstream_id'],
+            'newly_resolved': receipt['newly_created'],
+            'resolved_at': receipt['created_at'],
+        }
+
+    @_locked
+    def resolve_work_intent(
+        self, request: dict[str, Any], *, idempotency_key: str, account_generation: int
+    ) -> dict[str, Any]:
+        self._generation(account_generation)
+
+        def build():
+            if request.get('origin') == 'task':
+                task = self.store.state['action_items'].get(request['task_id'])
+                if task is None:
+                    raise WorkstreamNotFoundError(request['task_id'])
+                if task.get('account_generation', 0) not in (0, account_generation):
+                    raise WorkstreamGenerationMismatchError('task account generation mismatch')
+                gid = task.get('goal_id')
+                tid = task['id']
+            else:
+                gid = request.get('goal_id')
+                task = None
+            self.store.action_items.validate_task_relationship(
+                TaskRelationshipRule(goal_id=gid, account_generation=account_generation)
+            )
+            if task is not None and task.get('workstream_id'):
+                wid = task['workstream_id']
+                created = False
+            else:
+                ws = self.create(
+                    WorkstreamCreate(
+                        data={
+                            'title': request.get('title') or task.get('description', 'Work'),
+                            'objective': request.get('objective') or task.get('description', 'Work'),
+                            'goal_id': gid,
+                        }
+                    )
+                )
+                wid = ws.workstream_id
+                if task is None:
+                    tid = self.store.action_items.create(
+                        ActionItemDraft(
+                            data={
+                                'description': request['anchor_task_description'],
+                                'goal_id': gid,
+                                'workstream_id': wid,
+                            }
+                        )
+                    )
+                else:
+                    self._write_task()
+                    task.update(workstream_id=wid, account_generation=account_generation)
+                self._event(wid, {'kind': 'system', 'summary': 'Work initiated'})
+                created = True
+            return {
+                'receipt_id': 'intent_' + uuid.uuid4().hex,
+                'workstream_id': wid,
+                'task_id': tid,
+                'goal_id': gid,
+                'newly_created': created,
+                'created_at': datetime.now(timezone.utc),
+            }
+
+        return self._idempotent('workstreams.intent', 'intent:' + idempotency_key, [request, account_generation], build)
+
+    @_locked
+    def import_task_goal_links(
+        self, request: dict[str, Any], *, idempotency_key: str, account_generation: int
+    ) -> dict[str, Any]:
+        self._generation(account_generation)
+
+        def build():
+            imported = unchanged = 0
+            failed = []
+            for link in request['links']:
+                task = self.store.state['action_items'].get(link['task_id'])
+                goal = self.store.state['goals'].get(link['goal_id'])
+                valid = (
+                    task is not None
+                    and goal is not None
+                    and task.get('account_generation', 0) in (0, account_generation)
+                    and goal.get('account_generation', 0) == account_generation
+                    and task.get('goal_id') in (None, link['goal_id'])
+                )
+                if valid and task.get('workstream_id'):
+                    ws = self._rows().get(task['workstream_id'])
+                    valid = (
+                        ws is not None
+                        and ws.get('goal_id') == link['goal_id']
+                        and ws.get('account_generation', 0) == account_generation
+                    )
+                if not valid:
+                    failed.append(link['task_id'])
+                elif task.get('goal_id') == link['goal_id']:
+                    unchanged += 1
+                    if task.get('account_generation', 0) == 0:
+                        self._write_task()
+                        task['account_generation'] = account_generation
+                else:
+                    imported += 1
+                    self._write_task()
+                    task.update(
+                        goal_id=link['goal_id'],
+                        account_generation=account_generation,
+                        updated_at=datetime.now(timezone.utc),
+                    )
+            return {'imported': imported, 'unchanged': unchanged, 'failed': len(failed), 'failure_task_ids': failed}
+
+        return self._idempotent('workstreams.import', 'import:' + idempotency_key, [request, account_generation], build)
+
+    def get_goal_detail(self, goal_id: str) -> dict[str, Any]:
+        goal = self.store.goals.get(goal_id)
+        if goal is None:
+            raise GoalNotFoundError(goal_id)
+        return {
+            'goal': goal.model_dump(),
+            'active_threads': [r.model_dump() for r in self.list_for_goal(goal_id)],
+            'tasks': [r.model_dump() for r in self.store.action_items.iter_all() if r.goal_id == goal_id],
+            'progress_events': [r.model_dump() for r in self.store.goals.list_progress_events(goal_id)],
+        }
+
+    def get_workstream_detail(self, workstream_id: str) -> dict[str, Any]:
+        row = self.get(workstream_id)
+        if row is None:
+            raise WorkstreamNotFoundError(workstream_id)
+        return {
+            'workstream': row.model_dump(),
+            'recent_events': [r.model_dump() for r in self.list_events(workstream_id)],
+            'tasks': [r.model_dump() for r in self.store.action_items.iter_all() if r.workstream_id == workstream_id],
+        }
+
+    def purge(self, space_id: str) -> int:
+        count = super().purge(space_id)
+        for entity in ('workstream_events', 'workstream_artifacts', 'workstream_checkpoints'):
+            count += len(self.store.state[entity])
+            self.store.state[entity].clear()
+        return count

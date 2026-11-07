@@ -136,18 +136,6 @@ def _install_document_write_probe() -> None:
 _install_document_write_probe()
 
 
-def _install_action_item_write_fences() -> None:
-    # Match the SDK read probe's import-isolation seam. No clients or IO here.
-    try:
-        from database.action_item_write_fence import install_write_fences
-    except ImportError:
-        return
-    install_write_fences()
-
-
-_install_action_item_write_fences()
-
-
 def _install_memory_change_heads() -> None:
     try:
         from database.memory_change_head import install_write_heads

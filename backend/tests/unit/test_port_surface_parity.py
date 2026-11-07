@@ -6,6 +6,13 @@ from pathlib import Path
 
 import pytest
 
+from database.action_items import FirestoreActionItems
+from database.goals import FirestoreGoals
+from database.workstreams import FirestoreWorkstreams
+from database.ports.action_items import ActionItemsTx, ActionItemsRepo
+from database.ports.goals import GoalsTx, GoalsRepo
+from database.ports.workstreams import WorkstreamsTx, WorkstreamsRepo
+from testing.domain_sim.store import SimActionItems, SimGoals, SimWorkstreams
 from database.folders import FirestoreFolders
 from database.people import FirestorePeople
 from database.ports.base import SpaceStore
@@ -21,6 +28,15 @@ from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, Re
 @pytest.mark.parametrize(
     'protocol,adapter',
     [
+        (ActionItemsTx, FirestoreActionItems),
+        (ActionItemsRepo, FirestoreActionItems),
+        (GoalsTx, FirestoreGoals),
+        (GoalsRepo, FirestoreGoals),
+        (WorkstreamsTx, FirestoreWorkstreams),
+        (WorkstreamsRepo, FirestoreWorkstreams),
+        (ActionItemsRepo, SimActionItems),
+        (GoalsRepo, SimGoals),
+        (WorkstreamsRepo, SimWorkstreams),
         (FoldersRepo, FirestoreFolders),
         (FoldersTx, FirestoreFolders),
         (PeopleTx, FirestorePeople),
@@ -55,9 +71,10 @@ def test_ports_are_pure():
         tree = ast.parse(path.read_text())
         for node in ast.walk(tree):
             if isinstance(node, ast.ImportFrom):
-                assert (node.level == 1 and node.module in {'base', 'folders', 'people'}) or (
-                    node.level == 0 and (node.module or '').split('.')[0] in allowed
-                ), (path, node.module)
+                assert (
+                    node.level == 1
+                    and node.module in {'base', 'folders', 'people', 'action_items', 'goals', 'workstreams'}
+                ) or (node.level == 0 and (node.module or '').split('.')[0] in allowed), (path, node.module)
             elif isinstance(node, ast.Import):
                 assert all(alias.name.split('.')[0] in allowed for alias in node.names), path
     sim = root.parents[1] / 'testing' / 'domain_sim' / 'store.py'
