@@ -119,6 +119,7 @@ def test_live_member_notes_wait_for_close_or_recording_detail(monkeypatch, enabl
     from utils.episodes import member_notes
     from utils.conversations import demand_processing
     from utils.sync.processing_hold import ProcessingDeferred
+    from utils.enrichment import outbox
     from types import SimpleNamespace
 
     monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
@@ -129,12 +130,15 @@ def test_live_member_notes_wait_for_close_or_recording_detail(monkeypatch, enabl
     redis = Mock()
     redis.get.return_value = None
     monkeypatch.setattr(demand_processing, 'client', lambda: redis)
+    mark = Mock()
+    monkeypatch.setattr(outbox, 'mark', mark)
     row = {'id': 'c1'}
     assert member_notes.waits('u', row) is enabled
     assert not member_notes.waits('u', row, ProcessingTrigger.FIRST_OPEN)
     if enabled:
         with pytest.raises(ProcessingDeferred, match='live_episode_notes'):
             member_notes.before_notes('u', SimpleNamespace(id='c1'), ProcessingTrigger.SYNC_UPDATE)
+        mark.assert_called_once_with('u', 'c1', 'en', sync_hold=True)
         redis.get.return_value = 'detail-open'
         assert not member_notes.waits('u', row)
         redis.get.return_value = None

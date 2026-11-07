@@ -2199,6 +2199,10 @@ def _reprocess_merged_conversations(
                     from utils.conversations.demand_processing import promote_conversation_effects
 
                     promote_conversation_effects(uid, conversation_id)
+        except processing_hold.ProcessingDeferred:
+            # The live-member notes gate enrolled durable enrichment before
+            # yielding this legacy direct path. Audio/transcript intake succeeded.
+            logger.info('event=sync_conversation_reprocess outcome=deferred')
         except SyncConversationPersistenceFenced:
             fenced_ids.add(conversation_id)
             response.setdefault(_RESPONSE_FENCED_CONVERSATION_IDS, set()).add(conversation_id)

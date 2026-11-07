@@ -2617,7 +2617,7 @@ def process_conversation(
     """
     from utils.episodes.member_notes import before_notes as defer_live_member_notes
 
-    defer_live_member_notes(uid, conversation, trigger)
+    defer_live_member_notes(uid, conversation, trigger, finalization_fence=finalization_fence)
     generated_conversation_id = str(uuid.uuid4()) if _is_ingress_create(conversation) else None
     bind_generation(uid, generated_conversation_id)
     silent_backfill = trigger is ProcessingTrigger.SILENT_BACKFILL

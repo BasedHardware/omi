@@ -37,8 +37,15 @@ def waits(uid: str, row: dict, trigger=ProcessingTrigger.SYNC_UPDATE) -> bool:
     return not bool(client().get(_key(uid, row['id'])))
 
 
-def before_notes(uid, conversation, trigger):
+def before_notes(uid, conversation, trigger, *, finalization_fence=None):
     if live_member_notes_enabled(uid) and waits(uid, {'id': getattr(conversation, 'id', None)}, trigger):
+        from utils.conversations.summary_delivery import PROCESS_CONTEXT
+        from utils.enrichment import outbox
+
+        if PROCESS_CONTEXT.get() is None and finalization_fence is None:
+            # Legacy direct sync has no durable notes owner yet. Enroll it before
+            # yielding; the same key coalesces with any concurrent outbox writer.
+            outbox.mark(uid, conversation.id, getattr(conversation, 'language', None) or 'en', sync_hold=True)
         raise processing_hold.ProcessingDeferred('live_episode_notes', time.time() + 60)
 
 
