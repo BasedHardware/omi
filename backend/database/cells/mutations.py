@@ -130,7 +130,6 @@ def apply_space_mutation(
         conn.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY')
         read_enrolled_head(conn, space_id)
         seq = CellTransaction(conn, space_id, actor_uid, now).receipt_seq(client_mutation_id)
-        row = _current_row(conn, space_id, entity, entity_id) if replayed else None
     return (
         dict(
             status='ok',
@@ -138,7 +137,7 @@ def apply_space_mutation(
             entity=entity,
             entity_id=entity_id,
             seq=seq,
-            rev=row['rev'] if row else seq,
+            rev=seq,  # Receipts retain the original applied revision even after later writes.
             replayed=replayed,
         ),
         replayed,

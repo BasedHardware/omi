@@ -166,6 +166,7 @@ def snapshot(
     """Set the post-snapshot cursor to page 1's head, never the last page's head.
     Restart the snapshot if epoch changes between pages; then pull from that
     first head to catch concurrent updates, including rows on earlier pages.
+    Apply rows and deletion entries on every page, including snapshot?since.
     """
     _serving_space(sid, uid)
     after = _decode_page_token(page_token)

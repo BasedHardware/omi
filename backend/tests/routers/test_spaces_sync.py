@@ -308,6 +308,20 @@ def test_snapshot_pagination_since_epoch_and_page_one_head(api):
     assert request(api, 'snapshot', params={'page_token': first['next_page_token']}).json()['epoch'] != first['epoch']
 
 
+def test_snapshot_since_includes_feed_shaped_delete(api):
+    enroll(api)
+    since = api.cell.head(api.sid)[0]
+    payload = mutation()
+    payload['operation'] = {'type': 'delete'}
+    assert request(api, 'mutations', json=payload).status_code == 200
+    snapshot = request(api, 'snapshot', params={'since': since}).json()
+    changes = request(api, 'changes', params={'cursor': since}).json()
+    assert snapshot['rows'] == []
+    assert snapshot['entries'] == changes['entries']
+    assert [(entry['entity_id'], entry['op'], entry['seq']) for entry in snapshot['entries']] == [('a', 'delete', 2)]
+    assert snapshot['next_page_token'] is None
+
+
 @pytest.mark.parametrize(
     'token',
     [
@@ -364,6 +378,29 @@ def test_mutation_apply_replay_conflicts_delete_and_events(api):
         'replayed',
     ]
     assert all(c.args == ('space_sync_mutation',) for c in api.events.call_args_list)
+
+
+@pytest.mark.parametrize('operation', [{'type': 'patch', 'fields': {'text': 'first'}}, {'type': 'delete'}])
+def test_replay_retains_original_revision_after_concurrent_advance(api, operation):
+    enroll(api)
+    payload = mutation()
+    payload['operation'] = operation
+    first = request(api, 'mutations', json=payload)
+    assert first.status_code == 200
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        executor.submit(
+            api.cell.run,
+            api.sid,
+            lambda tx: tx.put('notes', 'a', {'text': 'later'}),
+            actor_uid=api.sid,
+            now=time.time(),
+        ).result(timeout=10)
+    replay = request(api, 'mutations', json=payload)
+    assert replay.status_code == 200
+    assert replay.json() == {**first.json(), 'replayed': True}
+    assert replay.json()['rev'] == replay.json()['seq'] == 2
+    assert api.cell.head(api.sid)[0] == 3
+    assert api.cell.read_doc(api.sid, 'notes', 'a') == {'text': 'later'}
 
 
 def test_datetime_revision_history_ties_and_compaction(api):

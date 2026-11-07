@@ -37,6 +37,7 @@ class SpaceChangesResponse(BaseModel):
 
 class SpaceSnapshotResponse(BaseModel):
     rows: list[SpaceRow]
+    entries: list[SpaceChangeEntry]
     next_page_token: str | None
     head: int
     epoch: int

@@ -669,6 +669,36 @@ def test_snapshot_keyset_since_and_page_one_head(harness, space):
     assert store.bump_epoch(space, now=NOW) != page.epoch
 
 
+def test_snapshot_since_pages_rows_and_latest_tombstones(harness, space):
+    store = harness.store
+    for key in ['a', 'b', 'é', 'old']:
+        write(store, space, key)
+    store.run(space, lambda tx: tx.delete('notes', 'old'), actor_uid=space, now=NOW)
+    since = store.head(space)[0]
+    for key in ['a', 'é', 'a']:
+        store.run(space, lambda tx: tx.delete('notes', key, feed=False), actor_uid=space, now=NOW)
+    write(store, space, 'b')
+    write(store, space, 'é')  # Recreated rows suppress older deletion records.
+    store.compact(space, now=NOW + FEED_RETENTION_S + 1)
+
+    after, addresses, rows, entries = None, [], [], []
+    while True:
+        page = store.snapshot(space, since=since, after=after, limit=1, now=NOW)
+        assert len(page.rows) + len(page.entries) <= 1
+        rows.extend(page.rows)
+        entries.extend(page.entries)
+        addresses.extend(r['entity_id'] for r in page.rows)
+        addresses.extend(e.entity_id for e in page.entries)
+        if page.next_page_token is None:
+            break
+        after = tuple(json.loads(base64.b64decode(page.next_page_token)))
+    assert addresses == ['a', 'b', 'é']
+    assert [r['entity_id'] for r in rows] == ['b', 'é']
+    assert [(e.entity_id, e.op, e.seq) for e in entries] == [('a', 'delete', 8)]
+    assert all(e.rev == e.seq for e in entries)
+    assert store.snapshot(space, since=store.head(space)[0], now=NOW).entries == []
+
+
 def test_protocol_transaction_reads(harness, space):
     store = harness.store
     write(store, space, 'a', now=NOW - 2, client_mutation_id='read-mid', fingerprint='fp')

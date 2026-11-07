@@ -59,6 +59,7 @@ class PullPage:
 @dataclass
 class SnapshotPage:
     rows: list[dict[str, Any]]
+    entries: list[ChangeEntry]
     next_page_token: str | None
     head: int
     epoch: int
@@ -160,6 +161,9 @@ class Feed:
         sequences ensure every change through page 1's head is reflected in
         later pages; a subsequent pull catches changes to earlier pages.
         A purge racing a page may yield a stale page; the next hits the fence.
+        Rows and latest deletion entries share one address-keyed page budget.
+        Recreated rows suppress older tombstones. Deletes are retained by
+        compaction, so snapshot?since alone can reconcile deleted local rows.
         """
         validate_id(space_id)
         if since < 0:
@@ -169,13 +173,29 @@ class Feed:
             conn.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY')
             read_enrolled_head(conn, space_id)
             found = conn.execute(
-                'SELECT entity, entity_id, author_id, rev, doc, updated_at FROM cell_docs '
-                'WHERE space_id=%s AND rev>%s '
-                'AND (%s::text IS NULL OR (entity, entity_id)>(%s,%s)) '
+                'SELECT entity, entity_id, author_id, rev, doc, updated_at, '
+                'seq, op, actor_uid, client_mutation_id, ts FROM ('
+                'SELECT entity, entity_id, author_id, rev, doc, updated_at, '
+                'NULL::bigint AS seq, NULL::text AS op, NULL::text AS actor_uid, '
+                'NULL::text AS client_mutation_id, NULL::float8 AS ts '
+                'FROM cell_docs WHERE space_id=%s AND rev>%s '
+                'UNION ALL '
+                'SELECT d.entity, d.entity_id, NULL, d.rev, NULL::jsonb, NULL::float8, '
+                'd.seq, d.op, d.actor_uid, d.client_mutation_id, d.ts FROM ('
+                'SELECT DISTINCT ON (entity, entity_id) '
+                'entity, entity_id, seq, op, rev, actor_uid, client_mutation_id, ts '
+                "FROM change_log WHERE space_id=%s AND seq>%s AND op='delete' "
+                'ORDER BY entity, entity_id, seq DESC) d '
+                'WHERE NOT EXISTS (SELECT 1 FROM cell_docs c '
+                'WHERE c.space_id=%s AND c.entity=d.entity AND c.entity_id=d.entity_id)'
+                ') state WHERE (%s::text IS NULL OR (entity, entity_id)>(%s,%s)) '
                 'ORDER BY entity, entity_id LIMIT %s',
                 (
                     space_id,
                     since,
+                    space_id,
+                    since,
+                    space_id,
                     after[0] if after else None,
                     after[0] if after else None,
                     after[1] if after else None,
@@ -183,9 +203,14 @@ class Feed:
                 ),
             ).fetchall()
             head, epoch = read_enrolled_head(conn, space_id)
-        rows = [dict(entity=e, entity_id=i, author_id=a, rev=r, doc=d, updated_at=u) for e, i, a, r, d, u in found]
+        rows = [
+            dict(entity=r[0], entity_id=r[1], author_id=r[2], rev=r[3], doc=r[4], updated_at=r[5])
+            for r in found
+            if r[6] is None
+        ]
+        entries = [ChangeEntry(r[6], r[0], r[1], r[7], r[3], r[8], r[9], r[10]) for r in found if r[6] is not None]
         token = base64.b64encode(json.dumps(list(found[-1][:2])).encode()).decode() if len(found) == limit else None
-        return SnapshotPage(rows, token, head, epoch)
+        return SnapshotPage(rows, entries, token, head, epoch)
 
     def set_cursor(self, space_id: str, device_id: str, *, last_seq: int, now: float) -> None:
         validate_id(space_id)
