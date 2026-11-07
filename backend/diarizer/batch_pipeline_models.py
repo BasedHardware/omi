@@ -29,11 +29,10 @@ except ImportError:
 from config.batch_pipeline_providers import provider_config
 from config.batch_pipeline_empty_asr import safety_net_enabled
 from utils.batch_pipeline.audio import StagedAudioInvalid
-from utils.batch_pipeline.word_validation import validate_words
+from utils.batch_pipeline.word_validation import bounded_window_words, validate_words
 from diarizer.batch_pipeline import (
     PipelineWorker,
     SAMPLE_RATE,
-    bounded_window_words,
     crop_model_vad_spans,
     padded_retry_fits,
     padded_retry_seconds,

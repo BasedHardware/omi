@@ -362,9 +362,10 @@ def test_reversed_clocks_exactly_at_the_boundary_still_raise():
         bounded_window_words([word('bad', 0.5, 0.4)], 0.5)
 
 
-def test_negative_end_still_raises():
-    with pytest.raises(BatchValidationError, match='word_clock'):
-        bounded_window_words([word('bad', -0.4, -0.1)], 0.5)
+def test_wholly_pre_window_clock_drops_as_an_unowned_ghost():
+    # The padded retry documents TDT start-state ghosts; a clock that ends
+    # before the window begins is a word the window never contained.
+    assert bounded_window_words([word('ghost', -0.4, -0.1)], 0.5) == []
 
 
 def test_negative_end_past_the_window_still_raises():
@@ -372,9 +373,8 @@ def test_negative_end_past_the_window_still_raises():
         bounded_window_words([word('bad', 0.6, -0.1)], 0.5)
 
 
-def test_zero_end_with_negative_start_still_raises():
-    with pytest.raises(BatchValidationError, match='word_clock'):
-        bounded_window_words([word('bad', -0.1, 0.0)], 0.5)
+def test_zero_end_with_negative_start_drops_as_an_unowned_ghost():
+    assert bounded_window_words([word('ghost', -0.1, 0.0)], 0.5) == []
 
 
 def test_malformed_raise_survives_a_dropped_tail_sibling():
@@ -637,8 +637,16 @@ def test_publishing_unit_log_has_no_word_clocks_token(caplog):
 
 
 def test_malformed_word_still_fails_at_word_clocks_in_pipeline():
-    results, saved, _worker = window_result([word('bad', -1, 0)])
+    results, saved, _worker = window_result([word('bad', 3, 2)])
     assert results == [ValidationFailureWork('synthetic-window', 'word_clocks', 'word_clock')]
+    assert saved == []
+
+
+def test_wholly_pre_window_ghost_leaves_the_empty_asr_lane_in_the_pipeline():
+    # A ghost-only hypothesis owns no words: the unit rides the ordinary
+    # empty_asr lane instead of a word_clock quarantine.
+    results, saved, _worker = window_result([word('ghost', -1, 0)])
+    assert results == [ValidationFailureWork('synthetic-window', 'assemble_words', 'empty_asr')]
     assert saved == []
 
 

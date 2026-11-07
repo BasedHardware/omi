@@ -9,6 +9,7 @@ from config.prerecorded_stt import missing_provider_environment
 from config.stt_provider_policy import provider_is_enabled, STTServingSurface
 from utils.executors import run_blocking, sync_executor
 from utils.batch_pipeline.contracts import projection_speech_spans, worker_vad_word_spans
+from utils.batch_pipeline.word_validation import bounded_window_words
 from utils.batch_pipeline.recovery_disposition import (
     inspect_audio,
     silence_payload,
@@ -169,14 +170,16 @@ def recovery_audio(pcm):
 
 
 def validate_response(response, duration, spans, *, multilingual):
-    from utils.batch_pipeline.word_validation import validate_words
-
     if not isinstance(response, tuple) or len(response) != 2:
         raise ValueError('response shape')
     raw, language = response
     if not isinstance(language, str) or not language:
         raise ValueError('response language')
-    words = validate_words([{**word, 'word': word['text']} for word in raw], duration)
+    # Same ownership contract as the GPU window seam and the vendor lane:
+    # clocks wholly outside the capture drop, edge-straddlers clamp into it,
+    # malformed in-domain clocks still fail. A ghost-only response classifies
+    # as empty (the capture owns no words) instead of a word_clock failure.
+    words = bounded_window_words([{**word, 'word': word['text']} for word in raw], duration)
     if not words:
         if multilingual:
             raise MultilingualEmpty(duration, spans)

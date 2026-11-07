@@ -281,7 +281,7 @@ async def test_end_to_end_vad_failure_evidence_names_the_stage(monkeypatch):
 async def test_end_to_end_word_clock_failure_evidence_names_the_closed_reason(monkeypatch):
     class BrokenWords:
         def transcribe_batch(self, samples):
-            return [[{'word': 'hi', 'timestamp': [-1, 0]}] for _ in samples]
+            return [[{'word': 'hi', 'timestamp': [1.0, 0.5]}] for _ in samples]
 
     worker, *_ = setup_worker(words_providers={'parakeet': BrokenWords()})
     store = MemoryStore()

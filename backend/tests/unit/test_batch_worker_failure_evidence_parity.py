@@ -93,7 +93,7 @@ def _broken_words(words):
 
 
 def test_word_clock_validation_error_evidence_carries_the_closed_reason(monkeypatch):
-    worker, *_ = setup_worker(**_broken_words([{'word': 'hi', 'timestamp': [-1, 0]}]))
+    worker, *_ = setup_worker(**_broken_words([{'word': 'hi', 'timestamp': [1.0, 0.5]}]))
     result = _first_failed_work(worker.process_batch([item(duration=60)]))
     assert result.worker_failure == {'stage': 'word_clocks', 'reason': 'word_clock'}
 
@@ -113,7 +113,7 @@ def test_word_sequence_validation_error_evidence_carries_the_closed_reason(monke
 
 
 def test_word_clocks_evidence_failure_counts_once(monkeypatch):
-    worker, *_ = setup_worker(**_broken_words([{'word': 'hi', 'timestamp': [-1, 0]}]))
+    worker, *_ = setup_worker(**_broken_words([{'word': 'hi', 'timestamp': [1.0, 0.5]}]))
     result = _first_failed_work(worker.process_batch([item(duration=60)]))
     assert worker.counts['failed'] == 1
     assert result.worker_failure['stage'] == 'word_clocks'
@@ -296,7 +296,7 @@ def test_worker_failed_log_keeps_its_shape_and_stays_message_free(monkeypatch, c
 
 
 def test_closed_reason_log_keeps_its_shape(monkeypatch, caplog):
-    worker, *_ = setup_worker(**_broken_words([{'word': 'hi', 'timestamp': [-1, 0]}]))
+    worker, *_ = setup_worker(**_broken_words([{'word': 'hi', 'timestamp': [1.0, 0.5]}]))
     with caplog.at_level(0):
         _first_failed_work(worker.process_batch([item(duration=60)]))
     records = [record for record in caplog.records if 'event=batch_worker_failed' in record.getMessage()]
@@ -335,7 +335,7 @@ def test_safety_net_off_produces_no_evidence_payload(monkeypatch):
 
 def test_safety_net_off_word_clocks_still_drops_without_disposition(monkeypatch):
     monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED', 'false')
-    worker, *_ = setup_worker(**_broken_words([{'word': 'hi', 'timestamp': [-1, 0]}]))
+    worker, *_ = setup_worker(**_broken_words([{'word': 'hi', 'timestamp': [1.0, 0.5]}]))
     assert worker.process_batch([item(duration=60)]) == []
 
 

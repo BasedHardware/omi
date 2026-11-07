@@ -61,6 +61,7 @@ from utils.batch_pipeline.recovery_disposition import (
 )
 from utils.batch_pipeline.scheduler import owner_key
 from utils.batch_pipeline.provider_stt_admission import PENDING, SttRoute
+from utils.batch_pipeline.word_validation import bounded_window_words
 from utils.batch_pipeline.vendor_route_contracts import (
     ATTEMPTS_FIELD,
     HOLD_FIELD,
@@ -582,8 +583,6 @@ def vendor_turns(words: list[dict], duration: float, *, fallback: bool = False) 
 async def transcribe_async(item: WorkItem, language: str | None, inspected: tuple, *, service: str) -> dict:
     """One vendor call, awaited on the event loop: Velma batch has no submit/poll mode, so the
     open request holds a socket, never an executor thread. No client retry (one paid POST)."""
-    from utils.batch_pipeline.word_validation import validate_words
-
     pcm, duration, spans = inspected
     if service not in _CALLABLE_SERVICES:
         raise VendorCallFailure('provider', 'provider_failed', VendorAttemptOutcome.LOCAL_FAILURE)
@@ -601,7 +600,12 @@ async def transcribe_async(item: WorkItem, language: str | None, inspected: tupl
         if not isinstance(detected, str) or not detected:
             raise ValueError('response language')
         fallback = any(word.get('speaker_fallback') for word in raw)
-        words = validate_words(
+        # Same ownership contract as the GPU window seam: clocks lying wholly
+        # outside the capture drop, edge-straddlers clamp into it, and only
+        # malformed in-domain clocks fail the response. A ghost-only response
+        # therefore classifies as empty_asr — the capture really contains no
+        # owned words — instead of a word_clock quarantine.
+        words = bounded_window_words(
             [{**{k: v for k, v in word.items() if k != 'speaker_fallback'}, 'word': word['text']} for word in raw],
             duration,
         )

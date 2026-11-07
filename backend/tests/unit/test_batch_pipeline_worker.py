@@ -279,7 +279,7 @@ def test_item_failures_log_class_and_stage_without_callback_or_private_content(s
                 return broken()
             if stage == 'word_clocks':
                 # Multiple windows of one item must still emit one failure.
-                return [[{'word': private_marker, 'timestamp': [-1, 0]}] for _ in samples]
+                return [[{'word': private_marker, 'timestamp': [1.0, 0.5]}] for _ in samples]
             return [[] for _ in samples]
 
     settings = {'on_failure': None}
@@ -476,7 +476,10 @@ def test_empty_recovery_remains_failure_and_healthy_sibling_survives(caplog):
 def test_recovery_only_runs_for_valid_empty_speech(mode):
     class Provider:
         def transcribe_batch(self, arrays):
-            clocks = [-2, -1] if mode == 'invalid' else [0, 1]
+            # A wholly pre-window clock is an unowned ghost now (a valid empty
+            # hypothesis recovery may retry); only an in-window reversed clock
+            # is malformed enough to skip recovery entirely.
+            clocks = [1.0, 0.5] if mode == 'invalid' else [0, 1]
             return [[{'word': 'synthetic', 'timestamp': clocks}] for _ in arrays]
 
     worker, *_ = setup_worker(

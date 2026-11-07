@@ -1398,10 +1398,10 @@ def test_bounded_words_reject_reversed_clocks():
     assert raised.value.reason == 'word_clock'
 
 
-def test_bounded_words_reject_wholly_negative_clocks():
-    with pytest.raises(BatchValidationError) as raised:
-        bounded_window_words([{'word': 'x', 'timestamp': [-3.0, -1.0]}], 4.0)
-    assert raised.value.reason == 'word_clock'
+def test_bounded_words_drop_wholly_negative_clocks():
+    # A clock that ends before the capture begins is a TDT start-state ghost:
+    # unowned by the window, never a reason to fail its real transcript.
+    assert bounded_window_words([{'word': 'x', 'timestamp': [-3.0, -1.0]}], 4.0) == []
 
 
 def test_bounded_words_reject_out_of_order_sequences():
