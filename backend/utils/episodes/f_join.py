@@ -227,6 +227,10 @@ def may_feed_llm(uid: str, row: Mapping[str, Any]) -> bool:
         return False
     if row.get('data_protection_level') not in {'standard', 'enhanced'}:
         return False
+    # Private cloud sync is the user's retention consent. Only an explicit True permits speech to reach Jev;
+    # an absent or false value keeps today's join (the same explicit-opt-in rule as the batch attach gate).
+    if row.get('private_cloud_sync_enabled') is not True:
+        return False
     if row.get('is_locked') is not False or row.get('discarded') is not False:
         return False
     if any(row.get(key, False) is not False for key in ('deleted', 'deferred', 'processing_deferred')):
@@ -387,6 +391,15 @@ def settle(
         metrics.record_boundary('f_later_member')
         return keep
     try:
+        # Predecessor and name reads come first. The candidate's stored privacy is the last read before Jev,
+        # so a lock, deletion, discard or consent change during those reads still keeps today's join.
+        previous = previous_transcript(uid, episode, conversation_id, pending, c, people_read_limit=people_read_limit)
+    except Exception as error:
+        logger.warning('event=episode_f_join outcome=previous_failed exception_type=%s', type(error).__name__)
+        metrics.record_boundary('f_no_answer')
+        _fallback('other')
+        return keep
+    try:
         allowed = _candidate_may_feed(uid, conversation_id, candidate_row, c)
     except Exception as error:
         logger.warning('event=episode_f_join outcome=gate_failed exception_type=%s', type(error).__name__)
@@ -394,20 +407,14 @@ def settle(
         _fallback('other')
         return keep
     if not allowed:
-        # Locked, deferred, local-only, held or another owner's conversation: its speech never reaches Jev.
+        # Locked, deferred, local-only, held, opted out or another owner's conversation: its speech never reaches Jev.
         metrics.record_boundary('f_no_answer')
-        return keep
-    try:
-        previous = previous_transcript(uid, episode, conversation_id, pending, c, people_read_limit=people_read_limit)
-    except Exception as error:
-        logger.warning('event=episode_f_join outcome=previous_failed exception_type=%s', type(error).__name__)
-        metrics.record_boundary('f_no_answer')
-        _fallback('other')
         return keep
     if not previous:
         metrics.record_boundary('f_no_answer')
         _fallback('unknown')
         return keep
+    # No read between the candidate gate above and this Jev question.
     state = incremental.f_boundary_state(previous, incremental.render_f_transcript(named))
     p_same = incremental.ask_same_occasion_f(state, ask=c.ask)
     if p_same is None:

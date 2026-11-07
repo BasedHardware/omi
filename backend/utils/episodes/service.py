@@ -1539,7 +1539,7 @@ def _synced_f_verdict(
     # Sync/late F adds <=24 document reads and <=1 Jev call per decision, including close:
     # 1 admitted owner candidate + 1 fresh candidate + 1 owner + 1 boundary authority
     # + 2 ownership docs + 1 predecessor
-    # + 2 names per transcript (4 total) + 1 post-Jev recheck + 1 pre-close refresh
+    # + 2 names per transcript (4 total) + 1 final candidate re-read before Jev + 1 post-Jev recheck + 1 pre-close refresh
     # + 4 close control docs + <=3 close members + 4 close candidates
     # (includes optimization-off re-reads). The 2-document initial query fails closed
     # when full, so only a window with <=1 result can reach the remaining reads.
@@ -1554,7 +1554,7 @@ def _synced_f_verdict(
         c,
         started_at=started,
         member=False,
-        candidate_row=fresh,
+        # No candidate_row: settle re-reads the candidate's stored privacy as its last read before Jev.
         people_read_limit=2,
     )
 

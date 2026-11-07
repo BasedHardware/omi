@@ -123,6 +123,7 @@ def _store_row(store, cid, text, *, minutes):
         'discarded': False,
         'is_locked': False,
         'data_protection_level': 'standard',
+        'private_cloud_sync_enabled': True,
         'visibility': 'private',
         'started_at': T0 + timedelta(minutes=minutes),
         'finished_at': T0 + timedelta(minutes=minutes + 1),
@@ -482,6 +483,80 @@ def test_a_synced_candidate_locked_after_intake_never_reaches_jev(store, monkeyp
     assert episode['id'] == first['id'] and episode['conversation_ids'] == ['c1', 'c2']
 
 
+@pytest.mark.parametrize('consent', ['missing', False], ids=['missing', 'off'])
+def test_a_synced_candidate_without_a_private_cloud_sync_opt_in_is_never_named_or_asked(store, monkeypatch, consent):
+    # Retention consent is an explicit opt-in on the row. An absent or false value keeps today's join, unasked.
+    first = _first_episode(store)
+    _store_row(store, 'c2', SECOND, minutes=12)
+    row = store.rows[('users', UID, 'conversations', 'c2')]
+    if consent == 'missing':
+        del row['private_cloud_sync_enabled']
+    else:
+        row['private_cloud_sync_enabled'] = consent
+    span = conversation_span(row)
+    monkeypatch.setattr(service, '_named_segments', lambda *a, **kw: pytest.fail('unconsented candidate was named'))
+    asked = []
+    ask = lambda *a, **k: asked.append(a) or SimpleNamespace(noul=lambda n: 0.05)  # noqa: E731
+    service._attach_recorded_synced(
+        UID, 'c2', row, span.recorded_start, span.recorded_end, _c(store, minutes=13, ask=ask)
+    )
+    assert asked == []
+    episode = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert episode['id'] == first['id'] and episode['conversation_ids'] == ['c1', 'c2']
+
+
+def test_a_predecessor_without_private_cloud_sync_consent_is_never_sent_to_jev(store):
+    first = _first_episode(store)
+    store.rows[('users', UID, 'conversations', 'c1')]['private_cloud_sync_enabled'] = False
+    _store_row(store, 'c2', SECOND, minutes=12)
+    row = store.rows[('users', UID, 'conversations', 'c2')]
+    span = conversation_span(row)
+    asked = []
+    ask = lambda state, *a, **k: asked.append(state) or SimpleNamespace(noul=lambda n: 0.05)  # noqa: E731
+    service._attach_recorded_synced(
+        UID, 'c2', row, span.recorded_start, span.recorded_end, _c(store, minutes=13, ask=ask)
+    )
+    assert asked == [], 'the previous transcript is consent-gated too'
+    episode = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert episode['id'] == first['id'] and episode['conversation_ids'] == ['c1', 'c2']
+
+
+@pytest.mark.parametrize(
+    'change',
+    [{'is_locked': True}, {'deleted': True}, {'private_cloud_sync_enabled': False}],
+    ids=['locked', 'deleted', 'consent_off'],
+)
+def test_a_candidate_changed_while_the_predecessor_is_read_never_reaches_jev(store, monkeypatch, change):
+    # The intake gate passed, then the candidate changed during the predecessor and name reads.
+    # The stored-privacy re-read is the last read before Jev, so the question is never asked.
+    first = _first_episode(store)
+    _store_row(store, 'c2', SECOND, minutes=12)
+    row = store.rows[('users', UID, 'conversations', 'c2')]
+    span = conversation_span(row)
+    real_previous = f_join.previous_transcript
+
+    def changing_previous(*a, **kw):
+        out = real_previous(*a, **kw)
+        row.update(change)
+        return out
+
+    monkeypatch.setattr(f_join, 'previous_transcript', changing_previous)
+    asked = []
+    ask = lambda state, *a, **k: asked.append(state) or SimpleNamespace(noul=lambda n: 0.05)  # noqa: E731
+    try:
+        service._attach_recorded_synced(
+            UID, 'c2', row, span.recorded_start, span.recorded_end, _c(store, minutes=13, ask=ask)
+        )
+    except EpisodeConflict as error:
+        # Placement itself refuses a deleted conversation, after F has already declined to ask.
+        assert str(error) == 'conversation_hidden' and 'deleted' in change
+        assert asked == []
+        return
+    assert asked == [], 'a candidate that changed during the reads must not reach Jev'
+    episode = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert episode['id'] == first['id'] and episode['conversation_ids'] == ['c1', 'c2']
+
+
 def test_an_unexpected_failure_closing_the_owner_keeps_todays_join(store, monkeypatch):
     first = _first_episode(store)
     _store_row(store, 'c2', SECOND, minutes=12)
@@ -583,6 +658,7 @@ EXCLUDED_CLASSES = [
     ('another_owner', {'owner_uid': 'someone-else'}),
     ('failed_status', {'status': 'failed'}),
     ('unknown_protection', {'data_protection_level': 'none'}),
+    ('private_cloud_sync_off', {'private_cloud_sync_enabled': False}),
 ]
 
 
