@@ -202,7 +202,7 @@ BODY_DIGEST = {
     # discarded-barrier scan is still covered by the same two driven callees.
     # Recorded-span recomputation is pure; barrier queries still run under the covered callees.
     # Re-reviewed 2026-11-06: C2 preload runner and deleted-blob refusals; serving query shapes unchanged.
-    'database.smart_merge.absorb_conversation': '99830b4608d94ab62545b450d4e4dfdb1fd43f03bcef4c58694e3865eacd839a',
+    'database.smart_merge.absorb_conversation': '9d36e10f45b2a708e53b5ec7b999247baf10b1443d1b80e758661b2f09180af2',
     'database.omi_flags.read_all': '58b65fc434cd3253a55aa54c6defc2a4cfc40dc33b565326b6c688eb8ed374d3',
     'database.omi_flags.read_audit': '12ee243338e5fc080b8e2f81223586837bb454f8d8e14d711f3805c74e258cfa',
     'database.client_telemetry.recent_owner_ids': '65fe8200d7ad9418b793ccb0fa53a172b2576a80bba644caa3b36cdb53b74510',
@@ -2411,7 +2411,8 @@ _add(
         reason='the discarded-barrier scan runs inside absorb_attempt through '
         'has_intervening_discarded/find_preceding_conversations, so the terminal '
         'stream records under those callees, never under absorb_conversation. '
-        'The revision-debt hook is a pure payload update with no query or read',
+        'The revision-debt hook is a pure payload update with no query or read; '
+        'passing the stored privacy state to the transcript codec adds no query',
         expect_observed=False,
         body_digest=BODY_DIGEST['database.smart_merge.absorb_conversation'],
     )
