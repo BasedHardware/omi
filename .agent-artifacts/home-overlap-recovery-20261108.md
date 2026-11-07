@@ -1,6 +1,6 @@
 # Home-overlap recovery verification
 
-Updated at: 2026-11-07T22:37:48.463176+00:00
+Updated at: 2026-11-07T23:24:16.510353+00:00
 
 Status: validation in progress; no push, merge or deployment in this recovery yet.
 
@@ -59,10 +59,10 @@ Logs and the exact backend file selection are under
   classifier exceptions; `watch-diagnostic.log` is queued for root-cause evidence.
 - PR metadata check passed all five checks after adding exact line-count exceptions.
 - First `make preflight` failed only at the Firestore query-shape file wall timeout
-  (900s, at 95 percent, no assertion failure reported). Full retry is queued with
+  (900s, at 95 percent, no assertion failure reported). Full retry **passed all 71 checks** in 2332.04s with
   local `BACKEND_UNIT_FILE_BUDGET_SECONDS=1800`; no checks or CI settings changed.
-  See `preflight-retry.log`. Runtime source/third-party closure, async blocking,
-  registry, lifecycle writes and several other checks passed on the first run.
+  The Firestore index guard passed all seven files in 1300.26s.
+  See `preflight-retry.log`.
 
 ## In flight / resume
 
@@ -74,8 +74,10 @@ The existing guarded runners are observable through these log files:
 - `detail-tests.log`: three focused detail widget/provider files.
 - `e2e-retry.log`: sync lifecycle and Watch Process Now with 600s harness budget.
 - `homesettle-retry.log` and `finalizer-logging-retry.log`: corrected fixtures, both passed.
-- `parity-retry.log`: formal callback-parity worker result.
-- `watch-diagnostic.log`: underlying Watch pipeline error capture.
+- `parity-retry.log`: admission timed out after 3600s without starting a test.
+- `parity-retry-long-wait.log`: formal callback-parity retry with 7200s admission budget.
+- `watch-diagnostic.log`: admission timed out after 3600s without starting a test.
+- `watch-diagnostic-long-wait.log`: bounded interactive diagnostic through the heavy gate.
 - `pr-body.md`: draft preserving the required attribution and footer.
 
 A host heartbeat is armed. Inspect ownership/liveness before stopping a runner;
