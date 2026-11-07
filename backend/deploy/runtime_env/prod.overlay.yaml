@@ -212,6 +212,10 @@ overlay:
           category: rollout
         OMI_CUSTOMER_DATA_PROJECT:
           value: based-hardware
+        BUCKET_OBJECT_LAKE:
+          value: ''
+        OBJECT_LAKE_KMS_KEY:
+          value: ''
         BUCKET_SCREEN_FRAMES:
           value: based-hardware-prod-screen-frames
         OMI_FIRESTORE_DATA_PLANE_PROJECT:
@@ -404,6 +408,10 @@ overlay:
           category: rollout
         OMI_CUSTOMER_DATA_PROJECT:
           value: based-hardware
+        BUCKET_OBJECT_LAKE:
+          value: ''
+        OBJECT_LAKE_KMS_KEY:
+          value: ''
         BUCKET_SCREEN_FRAMES:
           value: based-hardware-prod-screen-frames
         CONVERSATION_RELEVANCE_JEV_PERCENT:
@@ -746,6 +754,10 @@ overlay:
             value: backend-runtime@based-hardware.iam.gserviceaccount.com
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
+          BUCKET_OBJECT_LAKE:
+            value: ''
+          OBJECT_LAKE_KMS_KEY:
+            value: ''
           BUCKET_SCREEN_FRAMES:
             value: based-hardware-prod-screen-frames
           ACTION_ITEMS_LIST_STALE_CLIENT_REFUSE:
@@ -1105,6 +1117,10 @@ overlay:
             category: rollout
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
+          BUCKET_OBJECT_LAKE:
+            value: ''
+          OBJECT_LAKE_KMS_KEY:
+            value: ''
           BUCKET_SCREEN_FRAMES:
             value: based-hardware-prod-screen-frames
           LISTEN_FINALIZATION_DISPATCH_MODE:

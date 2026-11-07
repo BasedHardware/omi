@@ -55,6 +55,7 @@ LLM_FEATURES = frozenset(
         'jev_conversation_relevance',
         'jev_conversation_smart_merge',
         'jev_episode_boundary',
+        'jev_episode_boundary_f',
         'knowledge_graph',
         'memories',
         'notifications',

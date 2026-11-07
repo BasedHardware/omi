@@ -4,6 +4,7 @@ import math
 from typing import Any
 from uuid import uuid4
 
+from database.firestore_read_origin import read_origin
 from database.batch_pipeline_policy import (
     PROCESS_ENVIRONMENT,
     load_stage_policy,
@@ -659,6 +660,7 @@ def held_expired_stock(client, namespace):
     return jobs + results.where('held_expired_reason', '==', 'held_expired').count().get()[0][0].value
 
 
+@read_origin('job:batch_pipeline_quarantine_recovery:recovery_candidates')
 def recovery_candidates(client, namespace: str, owner_id: str | None, limit: int = 10, *, after_id: str | None = None):
     """Only unattempted or reconcilable units; failed STT never hot-loops."""
     collection = client.collection(f'{namespace}_jobs')
@@ -678,6 +680,7 @@ def recovery_candidates(client, namespace: str, owner_id: str | None, limit: int
     return [(doc.id, (doc.to_dict() or {})['owner_id']) for doc in query.limit(max(1, min(limit, 64))).stream()]
 
 
+@read_origin('job:batch_pipeline_quarantine_recovery:held_candidates')
 def held_candidates(client, namespace: str, limit: int = 32, *, after_id: str | None = None):
     """Held/failed_held units in document order for the partial scan; eligibility is rechecked per upload."""
     collection = client.collection(f'{namespace}_jobs')

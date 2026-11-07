@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-alert-rule-promql-on-cloud-monitoring",
+  "violated_contract": "An alert rule whose datasource is the Cloud Monitoring datasource must use the timeSeriesList query type, not promQL. The monitoring contract forbids promQL on that datasource, and a page rule that violates it turns main red for the whole Backend unit suite.",
+  "canonical_prevention": "test_no_alert_rule_uses_the_cloud_monitoring_promql_query_type in backend/tests/unit/test_daily_summary_monitoring_contract.py fails for any rule in backend/charts/monitoring/alert-rules.json whose node uses the Cloud Monitoring uid with a promQL node or model queryType. The rule must be expressed as timeSeriesList with the same metric, filter, aligner and threshold.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_daily_summary_monitoring_contract.py",
+    "backend/charts/monitoring/alert-rules.json"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/charts/monitoring/alert-rules.json",
+    "backend/charts/monitoring/alerts/critical-failures.json",
+    "backend/tests/unit/test_daily_summary_monitoring_contract.py"
+  ],
+  "status": "open"
+}

@@ -90,8 +90,11 @@ def rollout_hash(key: str, uid: str) -> float:
 def evaluate(rule: FlagRule, uid: str) -> Resolved:
     if not rule.active or uid in rule.deny_uids:
         return Resolved(False)
-    if uid not in rule.allow_uids and rollout_hash(rule.key, uid) > rule.rollout_percentage / 100:
-        return Resolved(False)
+    if uid not in rule.allow_uids:
+        if rule.rollout_percentage <= 0:
+            return Resolved(False)
+        if rule.rollout_percentage < 100 and rollout_hash(rule.key, uid) >= rule.rollout_percentage / 100:
+            return Resolved(False)
     return Resolved(True, rule.variant, rule.payload)
 
 

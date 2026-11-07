@@ -15,7 +15,9 @@ from typing import Any, Callable, Protocol, TypeVar
 from google.cloud import firestore
 from google.api_core.exceptions import AlreadyExists, FailedPrecondition, Aborted
 
+from config.firestore_read_levers import lever_enabled
 from config.batch_pipeline import contention_retry_enabled, control_candidate_fanout
+from database.firestore_read_origin import read_origin
 from database._client import get_data_plane_firestore_client
 from database.batch_pipeline_privacy import assert_batch_write_allowed
 from database.batch_pipeline_recovery import quarantine_fenced
@@ -741,6 +743,7 @@ TIMELINESS_ACTIVE_STATES = ('leased', 'result_ready')
 TIMELINESS_UNCOMMITTED_STATES = (*TIMELINESS_ACTIVE_STATES, 'ready', 'retry', 'vendor_held')
 TIMELINESS_HOLD_SCAN_LIMIT = 20
 TIMELINESS_PROJECTION_SCAN_LIMIT = 50
+TIMELINESS_BACKLOG_COUNT_LIMIT = 10_000
 
 
 def is_timeliness_hold(job: dict[str, Any], now: float) -> bool:
@@ -758,11 +761,15 @@ def is_terminal_empty(job: dict[str, Any]) -> bool:
     )
 
 
+@read_origin('job:batch_pipeline_store:timeliness_sample')
 def timeliness_sample(
     client: Any, namespace: str, epoch: float, now: float, sla: float, *, terminal_empty_processed: bool = False
 ) -> dict[str, Any]:
     """Unpublished units by wait leg: oldest ``enqueued_at`` at or after ``epoch``, counts past ``sla`` for the
-    new cohort, and backlog counts before ``epoch``.
+    new cohort, and backlog counts before ``epoch``. With ``batch_timeliness_leader`` on, each backlog
+    count is capped at 10,000 index entries: values at the cap are lower bounds. The assignment-held
+    backlog alert treats saturation as actionable stock, independently of its one-hour growth condition.
+    Lever 0 restores the exact, unbounded historical counts. Post-epoch counts stay exact.
 
     ``terminal_empty`` is always counted. With ``terminal_empty_processed`` those units leave the quarantined
     leg: its count subtracts them exactly, so a page of them can hide a younger unit but never a breach.
@@ -783,6 +790,11 @@ def timeliness_sample(
 
     def count(query):
         return int(query.count().get()[0][0].value)
+
+    def backlog_count(query):
+        if lever_enabled('batch_timeliness_leader'):
+            query = query.limit(TIMELINESS_BACKLOG_COUNT_LIMIT)
+        return count(query)
 
     def walk(query, field):
         docs = [doc.to_dict() for doc in query.order_by(field).limit(TIMELINESS_HOLD_SCAN_LIMIT).stream()]
@@ -896,10 +908,10 @@ def timeliness_sample(
         },
         'new_over_sla': over_sla,
         'backlog': {
-            'uncommitted_incl_holds': count(
+            'uncommitted_incl_holds': backlog_count(
                 jobs.where('state', 'in', list(TIMELINESS_UNCOMMITTED_STATES)).where('enqueued_at', '<', epoch)
             ),
-            **{leg: count(query.where(field, '<', epoch)) for leg, (query, field) in legs.items()},
+            **{leg: backlog_count(query.where(field, '<', epoch)) for leg, (query, field) in legs.items()},
         },
         'truncated': {
             'uncommitted': any(truncated for _, truncated in walks),

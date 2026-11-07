@@ -83,13 +83,34 @@ PUSHER_ACTIVE_WS_CONNECTIONS = Gauge(
 
 PUSHER_STORAGE_PCM_INFLIGHT_BYTES = Gauge(
     'omi_pusher_storage_pcm_inflight_bytes',
-    'PCM payload bytes submitted by pusher custody commits awaiting storage executor completion or cancellation',
+    'PCM payload bytes in custody storage awaits; enabled byte admission retains accounting until actual completion',
 )
 
 PUSHER_STORAGE_PCM_BUDGET_LIMIT_BYTES = Gauge(
     'omi_pusher_storage_pcm_budget_limit_bytes',
     'Pusher storage PCM byte budget limit; zero means no budget is enforced',
 )
+
+from utils.observability.reasons import PusherPcmErrorReason, PusherPcmStage, ReasonFamily, reason_label
+
+PUSHER_STORAGE_PCM_REFUSALS_TOTAL = Counter(
+    'omi_pusher_storage_pcm_refusals_total',
+    'Custody PCM submissions refused before storage; no receipt or ACK',
+    ['stage'],
+)
+
+for _pcm_stage in PusherPcmStage:
+    PUSHER_STORAGE_PCM_REFUSALS_TOTAL.labels(stage=reason_label(ReasonFamily.PUSHER_PCM, _pcm_stage, PusherPcmStage))
+
+PUSHER_STORAGE_PCM_ERRORS_TOTAL = Counter(
+    'omi_pusher_storage_pcm_errors_total',
+    'PCM admission accounting faults and late post-cancellation storage failures',
+    ['reason'],
+)
+for _pcm_error in PusherPcmErrorReason:
+    PUSHER_STORAGE_PCM_ERRORS_TOTAL.labels(
+        reason=reason_label(ReasonFamily.PUSHER_PCM, _pcm_error, PusherPcmErrorReason)
+    )
 
 PUSHER_QUEUE_DROPS = Counter(
     'pusher_queue_drops_total',
@@ -553,6 +574,7 @@ JEV_DECISION_LABELS = {
             'capture_resummary',
             'conversation_smart_merge',
             'episode_boundary',
+            'episode_boundary_f',
         }
     ),
     'outcome': frozenset(
@@ -794,6 +816,38 @@ OMI_CANDIDATE_INTEGRATION_SWEEP_TOTAL = Counter(
 )
 for _disposition in CANDIDATE_INTEGRATION_SWEEP_DISPOSITIONS:
     OMI_CANDIDATE_INTEGRATION_SWEEP_TOTAL.labels(disposition=_disposition)
+
+# Error-class sentinel (services/error_class_sentinel.py). Outcomes are pinned
+# literals: ok, truncated (counts unbounded, alerts suppressed), error (read
+# failed), permission_denied (logging.read grant missing on backend-runtime).
+OMI_ERROR_CLASS_SWEEP_TOTAL = Counter(
+    'omi_error_class_sweep_total',
+    'Error-class sentinel sweep ticks by outcome',
+    ['outcome'],
+)
+for _outcome in ('ok', 'truncated', 'error', 'permission_denied'):
+    OMI_ERROR_CLASS_SWEEP_TOTAL.labels(outcome=_outcome)
+OMI_ERROR_CLASS_ALERT_FIRING = Gauge(
+    'omi_error_class_alert_firing',
+    'Error classes currently firing a new/surge alert (1) on the last sweep tick',
+    ['fingerprint', 'service'],
+)
+# Monotonic firing signal the Grafana rule keys on (display gauge above cannot
+# be cleared reliably across instances). No pre-zeroed labels: a series appears
+# the first time that class fires.
+OMI_ERROR_CLASS_ALERT_FIRED_TOTAL = Counter(
+    'omi_error_class_alert_fired_total',
+    'Error-class new/surge alert firings by class',
+    ['fingerprint', 'service'],
+)
+# increase() over a series born at 1 and flat returns 0, so the paging rule
+# keys on this timestamp gauge instead: freshly fired = time() - max(...) is
+# small; a frozen or stale instance's value ages out of the window.
+OMI_ERROR_CLASS_LAST_FIRED_TIMESTAMP = Gauge(
+    'omi_error_class_last_fired_timestamp_seconds',
+    'Unix time of the most recent new/surge firing per error class',
+    ['fingerprint', 'service'],
+)
 
 
 LISTEN_FINALIZATION_JOB_STATUS = Gauge(
