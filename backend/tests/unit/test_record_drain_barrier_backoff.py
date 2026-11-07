@@ -1,6 +1,7 @@
 """Barrier-blocked record_pending rows back off by age instead of re-reading every 60 s."""
 
 import asyncio
+import logging
 from unittest.mock import Mock
 
 import pytest
@@ -32,6 +33,7 @@ def drained(monkeypatch):
             'state': 'record_pending',
             'available_at': 0,
             'enqueued_at': enqueued_at,
+            'record_content_id': 'c0ffee' * 4,
         }
 
         async def admission(store, pending):
@@ -80,3 +82,13 @@ def test_barrier_text_matches_the_raise_site():
     with pytest.raises(ValueError) as raised:
         require_record_audio_barrier({'status': 'in_progress'})
     assert str(raised.value) == BARRIER_NOT_CLOSED == shared_barrier
+
+
+def test_retry_line_carries_the_record_key_without_owner(drained, caplog):
+    run, live = drained
+    with caplog.at_level(logging.WARNING, logger=live.__name__):
+        run(100000.0 - 30, ValueError(live.BARRIER_NOT_CLOSED))
+    line = next(r.getMessage() for r in caplog.records if 'event=batch_live_admission outcome=retry' in r.getMessage())
+    # The record content prefix is the same key the sync pending line logs.
+    assert line.endswith(' record=' + ('c0ffee' * 4)[:16])
+    assert 'synthetic-owner' not in line

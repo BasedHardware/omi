@@ -133,7 +133,7 @@ def test_optout_scrubs_paged_transcripts_preserving_concurrent_edits_and_encodin
         raw = conversations.encode_conversation_for_write(uid, {'transcript_segments': segments}, level)
         user.collection('conversations').document(f'c{i}').set(dict(raw, data_protection_level=level))
     # Introduce an edit after ID enumeration and before the scrub transaction.
-    original = recurring_voice_privacy._client.run_transactional
+    original = recurring_voice_privacy.transcript_pointer._client.run_transactional
     edited = False
 
     def concurrent_edit(db, callback, **kwargs):
@@ -144,7 +144,7 @@ def test_optout_scrubs_paged_transcripts_preserving_concurrent_edits_and_encodin
             user.collection('conversations').document('c0').update({'transcript_segments': changed})
         return original(db, callback, **kwargs)
 
-    monkeypatch.setattr(recurring_voice_privacy._client, 'run_transactional', concurrent_edit)
+    monkeypatch.setattr(recurring_voice_privacy.transcript_pointer._client, 'run_transactional', concurrent_edit)
     speaker_auto_enroll.update_privacy(uid, {setting: False}, firestore_client=client)
     assert user.get().to_dict()[recurring_voices.INDEX] == {}
     assert list(user.collection(recurring_voices.COLLECTION).stream()) == []

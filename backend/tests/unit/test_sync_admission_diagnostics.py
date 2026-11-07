@@ -1,7 +1,9 @@
 """Admission diagnostics distinguish custody waits without releasing client audio."""
 
+import io
 import json
 import logging
+import wave
 from copy import deepcopy
 from types import SimpleNamespace
 
@@ -11,6 +13,7 @@ from config.policy import BatchUnitPolicy
 from database.firestore_transaction_retry import FirestoreContentionExhausted
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore
 from utils.batch_pipeline import intake, live_upload
+from utils.batch_pipeline.contracts import Priority
 
 
 @pytest.fixture(autouse=True)
@@ -123,7 +126,10 @@ async def test_record_wait_reason_retains_custody_without_alias(monkeypatch, cap
     else:
         assert store.rows == before
     messages = [record.getMessage() for record in caplog.records]
-    assert messages == [f'event=sync_record_upload outcome=pending reason={expected}']
+    # A hashed record key groups waits per recording; raw ids never reach the log.
+    record = '-' if case == 'mismatch' else content[:16]
+    assert messages == [f'event=sync_record_upload outcome=pending reason={expected} record={record}']
+    assert uid not in messages[0] and conversation not in messages[0]
 
 
 async def test_conversation_level_wait_is_memoized_and_repeated_without_upload_work(record_wait_memo):
@@ -181,3 +187,42 @@ async def test_intake_contention_logs_phase_and_monotonic_elapsed_without_error_
     assert [record.getMessage() for record in caplog.records] == [
         'event=batch_intake outcome=retry exception_type=FirestoreContentionExhausted phase=receipt_read elapsed_ms=500'
     ]
+
+
+def _wav(pcm: bytes) -> bytes:
+    buffer = io.BytesIO()
+    with wave.open(buffer, 'wb') as stream:
+        stream.setnchannels(1)
+        stream.setsampwidth(2)
+        stream.setframerate(16000)
+        stream.writeframes(pcm)
+    return buffer.getvalue()
+
+
+@pytest.mark.parametrize(
+    'wal_start,wal_pcm,cause',
+    [
+        (0.0, b'\x01\x00' * 16000, None),
+        (-0.5, b'\x01\x00' * 16000, 'wal_audio_outside_record'),
+        (0.0, b'\x02\x00' * 16000, 'audio_bytes_differ'),
+        (0.5, b'\x01\x00' * 16000, 'wal_audio_past_record'),
+    ],
+)
+def test_coverage_failure_logs_which_way_the_wal_and_record_disagree(monkeypatch, caplog, wal_start, wal_pcm, cause):
+    record_pcm = b'\x01\x00' * 16000  # one second of the record at t=0
+    unit = SimpleNamespace(wav=_wav(wal_pcm), capture_at=wal_start, duration_seconds=1.0)
+    monkeypatch.setattr(live_upload, 'decode_units', lambda paths: iter([unit]))
+    job = {
+        'segment_id': 'synthetic-segment',
+        'owner_id': 'synthetic-owner',
+        'capture_at': 0.0,
+        'audio_uri': 'synthetic-uri',
+        'duration_seconds': 1.0,
+        'priority': Priority.FRESH,
+    }
+    artifacts = SimpleNamespace(fetch_audio=lambda item: _wav(record_pcm))
+    with caplog.at_level(logging.INFO, logger=live_upload.__name__):
+        covered = live_upload._covered(['synthetic-audio.bin'], [job], artifacts)
+    assert covered is (cause is None)
+    messages = [record.getMessage() for record in caplog.records]
+    assert messages == ([] if cause is None else [f'event=sync_record_coverage outcome=unproven cause={cause}'])
