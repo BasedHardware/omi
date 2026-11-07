@@ -290,12 +290,21 @@ def test_grace_restore_never_runs_lake_steps(ceremony, monkeypatch):
     assert 'lake_prefix' not in events and 'lake_keys' not in events
 
 
-def test_merge_pointer_sources_get_independent_survivor_objects(world, monkeypatch):
-    from datetime import datetime, timedelta, timezone
+@pytest.fixture
+def merge_modules():
+    # Keep merge off the collection import graph. Import setup is excluded from
+    # the shared per-test CPU budget, just as module-level imports would be.
     from database import conversations as conversations_db, review_overlay_merge
     from utils.conversations import merge_conversations as merge
     from utils import notification_dispatch
 
+    return conversations_db, review_overlay_merge, merge, notification_dispatch
+
+
+def test_merge_pointer_sources_get_independent_survivor_objects(world, monkeypatch, merge_modules):
+    from datetime import datetime, timedelta, timezone
+
+    conversations_db, review_overlay_merge, merge, notification_dispatch = merge_modules
     _, store = world
     monkeypatch.setenv('OBJECT_LAKE_INLINE_MAX_BYTES', '0')
     monkeypatch.setattr(pointer._client, 'get_data_plane_firestore_client', lambda: store)
