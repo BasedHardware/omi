@@ -127,10 +127,9 @@ def resolve(uid: str, *, signup_platform: str | None = None, signup_os: str | No
         return 'firestore'
     try:
         epoch = _route_epoch(uid)  # One GET even on a process-cache hit.
-        plane = _cached(uid)
         entry = _cache.get(uid)
-        if plane is not None and entry is not None and entry[2] == epoch:
-            return plane
+        if entry is not None and entry[0] > time.monotonic() and entry[2] == epoch:
+            return entry[1]
         _cache.pop(uid, None)
         cached = redis_db.get_generic_cache(f'plane:v1:{uid}')
         if isinstance(cached, dict) and cached.get('epoch') == epoch and cached.get('plane') in ('firestore', 'cell'):
