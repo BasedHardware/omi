@@ -744,7 +744,13 @@ def get_pending_deletion_wipes(
         failed_at = data.get('wipe_failed_at')
         # A record with no ``wipe_failed_at`` predates the backoff and stays immediately
         # actionable: a missing timestamp must never be a reason to stop retrying a wipe.
-        if failed_at and failed_at + deletion_wipe_retry_delay(data.get('wipe_attempts') or 1) > now:
+        raw_attempts = data.get('wipe_attempts')
+        attempts = (
+            raw_attempts
+            if not isinstance(raw_attempts, bool) and isinstance(raw_attempts, int) and raw_attempts > 0
+            else 1
+        )
+        if failed_at and failed_at + deletion_wipe_retry_delay(attempts) > now:
             continue
         result.append(data | {'uid': doc.id})
 

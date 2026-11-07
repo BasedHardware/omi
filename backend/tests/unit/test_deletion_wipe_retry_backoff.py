@@ -131,6 +131,22 @@ def test_record_without_a_failure_timestamp_stays_actionable(monkeypatch):
     assert _uids(users.get_pending_deletion_wipes()) == ['no_ts']
 
 
+def test_corrupt_attempt_counter_defaults_to_first_attempt_without_aborting_scan(monkeypatch):
+    # A malformed wipe_attempts value must not raise inside get_pending_deletion_wipes
+    # or stall healthy records behind it.
+    _patch_db(
+        monkeypatch,
+        {
+            'failed': [
+                _failed('corrupt_str', minutes_ago=0, attempts='3'),
+                _failed('corrupt_bool', minutes_ago=0, attempts=True),
+                _failed('healthy', minutes_ago=0, attempts=1),
+            ]
+        },
+    )
+    assert _uids(users.get_pending_deletion_wipes()) == ['corrupt_str', 'corrupt_bool', 'healthy']
+
+
 def test_marking_a_wipe_failed_counts_the_attempt(monkeypatch):
     doc_ref = MagicMock()
     _patch_db(monkeypatch, doc_ref=doc_ref)
