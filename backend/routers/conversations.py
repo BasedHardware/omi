@@ -31,7 +31,7 @@ from database.legal_holds import destructive_operation_gate
 from utils.other.account_gate_http import account_gate_busy_http_exception
 from database.firestore_read_metrics import FirestoreReadSite
 from utils.list_version_check import ListVersionCheck
-from config.episodes import home_transcription_presentation_gate_enabled
+from config.episodes import home_step_projection_enabled, home_transcription_presentation_gate_enabled
 from utils.conversations import home_step, transcribing_hold
 from utils.conversations.list_filters import aware_datetime, reject_oversized_filter
 from database.vector_db import (
@@ -1000,7 +1000,7 @@ def get_conversations(
 
     held_request = home_membership.held_for(request)
     # Reader-enforced expiry changes the body without a writer-version bump.
-    time_dependent = home_transcription_presentation_gate_enabled()
+    time_dependent = home_transcription_presentation_gate_enabled() or home_step_projection_enabled()
     version_check = ListVersionCheck.start(None if held_request or time_dependent else request, uid, 'conversations')
     if version_check.not_modified is not None:
         return version_check.not_modified

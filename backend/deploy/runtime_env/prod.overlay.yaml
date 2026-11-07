@@ -47,6 +47,7 @@ overlay:
       env:
         HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
         HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
+        HOME_PROCESSING_MAX_AGE_SECONDS: {value: '21600', category: config}
         BATCH_FINAL_PASS_ENABLED:
           config_map: {name: prod-omi-backend-config, key: BATCH_FINAL_PASS_ENABLED}
           category: ops_kill
@@ -279,6 +280,7 @@ overlay:
       env:
         HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
         HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
+        HOME_PROCESSING_MAX_AGE_SECONDS: {value: '21600', category: config}
         BATCH_FINAL_PASS_ENABLED:
           config_map: {name: prod-omi-backend-config, key: BATCH_FINAL_PASS_ENABLED}
           category: ops_kill
@@ -552,6 +554,7 @@ overlay:
         env:
           HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
+          HOME_PROCESSING_MAX_AGE_SECONDS: {value: '21600', category: config}
           BATCH_FINAL_PASS_ENABLED: {value: 'true', category: ops_kill}
           # Plan C3 prod activation: new sr- obligations bind to /v2/enrichment/run on the enrichment queue,
           # served by backend-integration. Rows keep the binding they were created with, so the kill switch
@@ -924,6 +927,7 @@ overlay:
         env:
           HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
+          HOME_PROCESSING_MAX_AGE_SECONDS: {value: '21600', category: config}
           BATCH_FINAL_PASS_ENABLED: {value: 'true', category: ops_kill}
           # Standing batch vendor route table (lead2 863cd6, David 49b7e4/065da8): compact JSON of
           # backend/deploy/batch-pipeline/vendor_route_table.prod.json (en-overflow-1104b), pinned by
@@ -1327,6 +1331,7 @@ overlay:
         env:
           HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
+          HOME_PROCESSING_MAX_AGE_SECONDS: {value: '21600', category: config}
           BATCH_FINAL_PASS_ENABLED: {value: 'true', category: ops_kill}
           # Standing batch vendor route table (lead2 863cd6, David 49b7e4/065da8): compact JSON of
           # backend/deploy/batch-pipeline/vendor_route_table.prod.json (en-overflow-1104b), pinned by
@@ -1687,6 +1692,7 @@ overlay:
         env:
           HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
+          HOME_PROCESSING_MAX_AGE_SECONDS: {value: '21600', category: config}
           BATCH_FINAL_PASS_ENABLED: {value: 'true', category: ops_kill}
           # Standing batch vendor route table (lead2 863cd6, David 49b7e4/065da8): compact JSON of
           # backend/deploy/batch-pipeline/vendor_route_table.prod.json (en-overflow-1104b), pinned by

@@ -127,6 +127,8 @@ env:
     value: "true"
   - name: HOME_TRANSCRIPTION_DEADLINE_SECONDS
     value: "7200"
+  - name: HOME_PROCESSING_MAX_AGE_SECONDS
+    value: "21600"
   - name: RECORD_SEAL_OVERLAP_TRIM_ENABLED
     value: "true"
   - name: LISTEN_QUIET_FINALIZATION_ENABLED
