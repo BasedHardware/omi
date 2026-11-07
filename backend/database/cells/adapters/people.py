@@ -37,7 +37,8 @@ class CellPeople(Repo):
                 row.update(pinned=pinned, pinned_at=now if pinned else None, updated_at=now, revision=revision + 1)
                 self.store.state['generation'] += 1
             self.save(mutation_id, digest, person_id)
-        return PersonEntity.model_construct(**{**deepcopy(row), 'id': person_id})
+        data: dict[str, Any] = {**deepcopy(row), 'id': person_id}
+        return PersonEntity.model_construct(**data)
 
     @atomic
     def get_or_create_by_name(self, draft: PersonDraft, *, mutation_id: str | None = None) -> PersonEntity:
