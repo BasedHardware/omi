@@ -9,6 +9,7 @@ import uuid
 from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any, Iterator
+from database import chat_edits
 from database.action_item_codec import prepare_action_item_for_read, prepare_action_item_for_write
 from database.ports.action_items import (
     ActionItemDraft,
@@ -167,6 +168,11 @@ class CellActionItems(WorkflowRepo):
             payload['sync_requested'] = False
         if payload.get('completed') is True and row.get('completed') is True:
             payload['completed_at'] = row.get('completed_at')
+        if expected_chat_state is not None:
+            prior_chat = {key: row[key] for key in chat_edits.FIELDS['task'] if key in row}
+            if chat_edits.encode(prior_chat) != expected_chat_state['before']:
+                raise PermissionError('Edit target changed before write')
+            expected_chat_state['after'] = chat_edits.encode({**prior_chat, **payload})
         if (
             expected_chat_state is None
             and os.getenv('OMI_DEV_ACTION_ITEMS_SKIP_NOOP_WRITES_ENABLED', '').lower() != 'false'

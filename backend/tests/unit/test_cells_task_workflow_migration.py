@@ -56,7 +56,7 @@ def test_expand_only_numbering_and_b2_dependency():
     assert 'depends on B2 0002_write_fence.sql' in sql
     assert 'GENERATED ALWAYS AS' in sql
     assert 'ACCESS EXCLUSIVE' in sql
-    assert migrations[2].checksum == '1a52e25772bca09cd5ee56757eef54c511a3947c3bc210e71b7f2adda0d6a025'
+    assert migrations[2].checksum == 'a8448dae5d787fa8d580a262420990b545ec1c64ad996e3c68bbfe34dabf03d6'
     for migration in migrations[1:]:
         # Inspect statements, not the descriptive comments or string literals.
         statements = re.sub(r"--[^\n]*|'(?:''|[^'])*'", '', migration.sql)

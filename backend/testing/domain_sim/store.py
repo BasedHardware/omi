@@ -49,6 +49,19 @@ from models.other import VoiceReadiness, voice_readiness
 T = TypeVar('T')
 
 
+def _chat_encode(value):
+    """Independent reference for the chat snapshot wire encoding."""
+    if isinstance(value, datetime):
+        return {'__chat_datetime__': value.isoformat()}
+    if isinstance(value, bytes):
+        return {'__chat_bytes__': base64.b64encode(value).decode()}
+    if isinstance(value, dict):
+        return {key: _chat_encode(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_chat_encode(item) for item in value]
+    return value
+
+
 def _scalar_order(value):
     if value is None:
         return (0, 0)
@@ -642,6 +655,12 @@ class SimActionItems(_WorkflowRepo):
             payload['sync_requested'] = False
         if payload.get('completed') is True and row.get('completed') is True:
             payload['completed_at'] = row.get('completed_at')
+        if expected_chat_state is not None:
+            fields = ('description', 'completed', 'completed_at', 'due_at', 'updated_at', 'deleted', 'deleted_at')
+            prior_chat = {key: row[key] for key in fields if key in row}
+            if _chat_encode(prior_chat) != expected_chat_state['before']:
+                raise PermissionError('Edit target changed before write')
+            expected_chat_state['after'] = _chat_encode({**prior_chat, **payload})
         if (
             expected_chat_state is None
             and os.getenv('OMI_DEV_ACTION_ITEMS_SKIP_NOOP_WRITES_ENABLED', '').lower() != 'false'

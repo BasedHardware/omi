@@ -17,7 +17,7 @@ BEGIN
         RETURN NULL;
     END IF;
     RETURN encoded::timestamptz;
-EXCEPTION WHEN invalid_datetime_format OR datetime_field_overflow THEN
+EXCEPTION WHEN invalid_datetime_format OR datetime_field_overflow OR invalid_time_zone_displacement_value THEN
     RETURN NULL;
 END;
 $$;
