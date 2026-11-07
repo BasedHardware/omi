@@ -1,5 +1,7 @@
 """Owner-hash rings and per-class virtual service; no fleet-wide writer."""
 
+import time
+
 from config.batch_pipeline import scheduler_control_key
 from config.firestore_read_levers import lever_enabled
 from database.batch_pipeline_store import Transaction
@@ -38,7 +40,7 @@ def activate(tx: Transaction, control: dict, priority: int, now: float, key: str
             # The frontier above was read outside this transaction (admission_frontier_hint),
             # so pulls committed meanwhile are unseen. The store re-seeds the shard right after
             # this transaction commits, unless a pull reaches it first (consume_frontier_hint).
-            control[frontier_hint_field(priority)] = True
+            control[frontier_hint_field(priority)] = time.time()
             note(key, priority)
     control[field(priority, 'active')] = True
     for pool in ('batch', 'live'):
@@ -46,13 +48,25 @@ def activate(tx: Transaction, control: dict, priority: int, now: float, key: str
         control[key] = min(control[key], now)
 
 
-def consume_frontier_hint(control: dict, priority: int) -> None:
-    """A pull reaching a hinted shard before its re-seed ends the hint without a lift.
+# A pull this soon after a hinted activation may beat the post-commit re-seed; it lifts
+# the shard itself. Later pulls only consume the marker: lifting then would charge the
+# joiner for service other shards earned while it waited its turn.
+PULL_LIFT_WINDOW_SECONDS = 30.0
 
-    Lifting at pull time would charge the joiner for service other shards earned while
-    it waited its turn; the post-commit re-seed then finds no marker and does nothing.
+
+def consume_frontier_hint(tx: Transaction, control: dict, priority: int, now: float) -> bool:
+    """End a hinted activation at the shard's pull; lift only if the pull beat the re-seed.
+
+    Returns whether it lifted. The caller's control put clears the marker either way.
     """
-    control.pop(frontier_hint_field(priority), None)
+    stamped = control.pop(frontier_hint_field(priority), None)
+    if not isinstance(stamped, (int, float)) or isinstance(stamped, bool):
+        return False
+    if now - stamped > PULL_LIFT_WINDOW_SECONDS:
+        return False
+    key = field(priority, 'service')
+    control[key] = max(control[key], tx.service_frontier(priority))
+    return True
 
 
 def migrate_legacy(tx: Transaction, now: float) -> None:

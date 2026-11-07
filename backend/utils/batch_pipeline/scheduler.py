@@ -513,7 +513,7 @@ class Scheduler:
             if gpu.get('token'):
                 return None, 'reserved', observations
             control = read_control(tx, shard)
-            consume_frontier_hint(control, int(priority))
+            consume_frontier_hint(tx, control, int(priority), current_time())
             ring = control['rings'][str(int(priority))]
             eligible_queues, blocked = {}, set()
             owner_count = max(1, len(ring))

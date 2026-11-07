@@ -963,12 +963,13 @@ def reseed_hinted_activation(client: Any, namespace: str, key: str, priority: in
     that got there first consumed the marker, so waiting is never charged to the joiner.
     """
     service_key, marker = f'p{priority}_service', f'p{priority}_frontier_hint'
-    frontier = service_frontier(client, namespace, priority)
+    # Runs before the upload is acknowledged: one attempt, short RPC deadlines, no retries.
+    frontier = service_frontier(client, namespace, priority, timeout=RESEED_RPC_TIMEOUT_SECONDS)
     reference = client.collection(f'{namespace}_control').document(key)
 
     @firestore.transactional
     def lift(transaction):
-        snapshot = reference.get(transaction=transaction)
+        snapshot = reference.get(transaction=transaction, timeout=RESEED_RPC_TIMEOUT_SECONDS, retry=None)
         control = (snapshot.to_dict() or {}) if snapshot.exists else {}
         if not control.get(marker):
             return False
@@ -977,17 +978,23 @@ def reseed_hinted_activation(client: Any, namespace: str, key: str, priority: in
         )
         return True
 
-    return lift(client.transaction())
+    return lift(client.transaction(max_attempts=1))
 
 
-def service_frontier(client: Any, namespace: str, priority: int, *, transaction: Any = None) -> float:
+RESEED_RPC_TIMEOUT_SECONDS = 1.5
+
+
+def service_frontier(
+    client: Any, namespace: str, priority: int, *, transaction: Any = None, timeout: float | None = None
+) -> float:
     if priority not in (0, 1, 2):
         raise ValueError('bounded priority required')
     name = f'p{priority}_service'
+    bounded = {'timeout': timeout, 'retry': None} if timeout is not None else {}
     docs = list(
         client.collection(f'{namespace}_control')
         .order_by(name, direction=firestore.Query.DESCENDING)
         .limit(1)
-        .stream(transaction=transaction)
+        .stream(transaction=transaction, **bounded)
     )
     return docs[0].to_dict()[name] if docs else 0.0

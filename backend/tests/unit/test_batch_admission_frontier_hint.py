@@ -87,9 +87,10 @@ class _Client:
 
     def collection(self, name):
         assert name == 'batch_pipeline_dev_control'
-        return SimpleNamespace(document=lambda key: SimpleNamespace(get=lambda transaction=None: _Snap(self.doc)))
+        return SimpleNamespace(document=lambda key: SimpleNamespace(get=lambda transaction=None, **kw: _Snap(self.doc)))
 
     def transaction(self, **options):
+        self.tx_options = options
         return self.tx
 
 
@@ -105,11 +106,15 @@ def test_reseed_lifts_a_still_marked_shard_to_the_post_commit_frontier(monkeypat
 
     reads = []
     monkeypatch.setattr(
-        store_module, 'service_frontier', lambda c, ns, p, transaction=None: reads.append(transaction) or 900.0
+        store_module,
+        'service_frontier',
+        lambda c, ns, p, transaction=None, timeout=None: reads.append((transaction, timeout)) or 900.0,
     )
     client = _Client({'p2_service': 100.0, 'p2_frontier_hint': True})
     assert store_module.reseed_hinted_activation(client, 'batch_pipeline_dev', 'scheduler_07', 2) is True
-    assert reads == [None]  # frontier re-read outside any transaction
+    # Frontier re-read outside any transaction, with a short deadline (the upload ack waits on it).
+    assert reads == [(None, store_module.RESEED_RPC_TIMEOUT_SECONDS)]
+    assert client.tx_options == {'max_attempts': 1}
     _, update = client.tx.update.call_args.args
     assert update == {'p2_service': 900.0, 'p2_frontier_hint': firestore.DELETE_FIELD}
 
@@ -142,7 +147,7 @@ def test_activation_notes_the_shard_only_with_the_lever_on(monkeypatch):
     monkeypatch.delenv(levers.ENV_KEY, raising=False)
     doc = fresh()
     control.activate(tx, doc, 2, 1.0, 'scheduler_07')
-    assert doc['p2_frontier_hint'] is True and noted == [('scheduler_07', 2)]
+    assert isinstance(doc['p2_frontier_hint'], float) and noted == [('scheduler_07', 2)]
     control.activate(tx, doc, 2, 1.0, 'scheduler_07')  # already active: no second note
     assert noted == [('scheduler_07', 2)]
     monkeypatch.setenv(levers.ENV_KEY, '{"admission_frontier_hint": 0}')
@@ -151,12 +156,36 @@ def test_activation_notes_the_shard_only_with_the_lever_on(monkeypatch):
     assert 'p2_frontier_hint' not in doc and noted == [('scheduler_07', 2)]
 
 
-def test_a_pull_consumes_the_marker_without_lifting(monkeypatch):
+def test_a_late_pull_consumes_the_marker_without_lifting():
+    from utils.batch_pipeline.control import PULL_LIFT_WINDOW_SECONDS, consume_frontier_hint
+
+    tx = SimpleNamespace(service_frontier=lambda p: 500.0)
+    control = {'p1_service': 10.0, 'p1_frontier_hint': 1000.0}
+    assert consume_frontier_hint(tx, control, 1, 1000.0 + PULL_LIFT_WINDOW_SECONDS + 1) is False
+    assert control == {'p1_service': 10.0}  # waiting is never charged to the joiner
+
+
+def test_a_pull_that_beats_the_reseed_lifts_the_shard_itself():
+    # Luna reseed BLOCKING 1: a pull consuming the marker before the re-seed lands must not
+    # preserve the stale activation credit.
     from utils.batch_pipeline.control import consume_frontier_hint
 
-    control = {'p1_service': 10.0, 'p1_frontier_hint': True}
-    consume_frontier_hint(control, 1)
-    assert control == {'p1_service': 10.0}  # waiting is never charged to the joiner
+    reads = []
+    tx = SimpleNamespace(service_frontier=lambda p: reads.append(p) or 500.0)
+    control = {'p1_service': 10.0, 'p1_frontier_hint': 1000.0}
+    assert consume_frontier_hint(tx, control, 1, 1005.0) is True
+    assert control == {'p1_service': 500.0} and reads == [1]
+    earned = {'p1_service': 900.0, 'p1_frontier_hint': 1000.0}
+    consume_frontier_hint(tx, earned, 1, 1001.0)
+    assert earned == {'p1_service': 900.0}
+
+
+def test_no_marker_means_no_frontier_read():
+    from utils.batch_pipeline.control import consume_frontier_hint
+
+    tx = SimpleNamespace(service_frontier=lambda p: 1 / 0)
+    control = {'p1_service': 10.0}
+    assert consume_frontier_hint(tx, control, 1, 5.0) is False
 
 
 def test_store_run_reseeds_each_hinted_activation_after_commit(monkeypatch):

@@ -166,7 +166,7 @@ def entries():
             covered_by=('database.batch_pipeline_store.service_frontier',),
             reason='post-commit re-seed: the frontier query unchanged (no transaction) plus one direct control doc get',
             expect_observed=False,
-            body_digest='7683b3c3042a17f4275ce0964bdc7ec4248de18b1be646e036c2221261b69a69',
+            body_digest='b962f088769367e4902876ef9dd91de299238b945f13610829e5f1f1acd8d449',
         ),
         CoveredByEntry(
             'database.batch_pipeline_store.FirestoreStore.run',
@@ -305,7 +305,7 @@ def entries():
         DriverEntry(
             'database.batch_pipeline_store.service_frontier',
             domains={'namespace': namespaces, 'priority': [0, 1, 2]},
-            neutrals={'transaction': (None, 'transaction binding only')},
+            neutrals={'transaction': (None, 'transaction binding only'), 'timeout': (None, 'RPC deadline only')},
         ),
         CoveredByEntry(
             'database.batch_pipeline_store.FirestoreStore.control_candidates',
