@@ -28,6 +28,33 @@ def _client(firestore_client: Any = None) -> Any:
     return firestore_client if firestore_client is not None else get_firestore_client()
 
 
+def _normalize_non_empty_str(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    cleaned = value.strip()
+    return cleaned if cleaned else None
+
+
+def _normalize_utc(value: datetime | None) -> datetime:
+    if not isinstance(value, datetime):
+        return datetime.now(timezone.utc)
+    if value.tzinfo is None or value.tzinfo.utcoffset(value) is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def _normalize_cooldown(cooldown: Any) -> timedelta:
+    if not isinstance(cooldown, timedelta) or cooldown < timedelta(0):
+        return WEDGE_NUDGE_COOLDOWN
+    return cooldown
+
+
+def _snapshot_dict(snapshot: Any) -> dict[str, Any]:
+    if not getattr(snapshot, 'exists', False):
+        return {}
+    return snapshot.to_dict() or {}
+
+
 def claim_wedge_first_seen(
     uid: str,
     day: str,
@@ -36,16 +63,33 @@ def claim_wedge_first_seen(
     firestore_client: Any = None,
 ) -> bool:
     """Claim this uid's first-seen slot for ``day``; ``True`` only for the winner."""
+    clean_uid = _normalize_non_empty_str(uid)
+    clean_day = _normalize_non_empty_str(day)
+    if not clean_uid or not clean_day:
+        return False
+
     client = _client(firestore_client)
-    doc_ref = client.collection(CAPTURE_WEDGE_STATE_COLLECTION).document(uid)
-    stamp = now or datetime.now(timezone.utc)
+    collection = client.collection(CAPTURE_WEDGE_STATE_COLLECTION)
+    doc_ref = collection.document(clean_uid)
+    legacy_ref = collection.document(uid) if uid != clean_uid else None
+    stamp = _normalize_utc(now)
 
     def _txn(transaction: Any) -> bool:
         snapshot = doc_ref.get(transaction=transaction)
-        data = snapshot.to_dict() or {} if getattr(snapshot, 'exists', False) else {}
-        if data.get('first_seen_day') == day:
+        data = _snapshot_dict(snapshot)
+        legacy_data = _snapshot_dict(legacy_ref.get(transaction=transaction)) if legacy_ref is not None else {}
+
+        first_seen_day = data.get('first_seen_day')
+        legacy_first_seen = legacy_data.get('first_seen_day')
+        if (isinstance(first_seen_day, str) and first_seen_day.strip() == clean_day) or (
+            isinstance(legacy_first_seen, str) and legacy_first_seen.strip() == clean_day
+        ):
             return False
-        transaction.set(doc_ref, {'uid': uid, 'first_seen_day': day, 'updated_at': stamp}, merge=True)
+
+        payload: dict[str, Any] = {'uid': clean_uid, 'first_seen_day': clean_day, 'updated_at': stamp}
+        if data.get('last_nudge_at') is None and isinstance(legacy_data.get('last_nudge_at'), datetime):
+            payload['last_nudge_at'] = _normalize_utc(legacy_data['last_nudge_at'])
+        transaction.set(doc_ref, payload, merge=True)
         return True
 
     return firestore.transactional(_txn)(client.transaction())
@@ -64,20 +108,35 @@ def claim_wedge_nudge_cooldown(
     the process dies between claim and send the nudge is simply missed — the
     at-most-once tradeoff documented in the module docstring.
     """
+    clean_uid = _normalize_non_empty_str(uid)
+    if not clean_uid:
+        return False
+
+    effective_cooldown = _normalize_cooldown(cooldown)
+    now_utc = _normalize_utc(now)
     client = _client(firestore_client)
-    now = now or datetime.now(timezone.utc)
-    doc_ref = client.collection(CAPTURE_WEDGE_STATE_COLLECTION).document(uid)
+    collection = client.collection(CAPTURE_WEDGE_STATE_COLLECTION)
+    doc_ref = collection.document(clean_uid)
+    legacy_ref = collection.document(uid) if uid != clean_uid else None
 
     def _txn(transaction: Any) -> bool:
         snapshot = doc_ref.get(transaction=transaction)
-        data = snapshot.to_dict() or {} if getattr(snapshot, 'exists', False) else {}
-        last_nudge_at = data.get('last_nudge_at')
-        if isinstance(last_nudge_at, datetime):
-            if last_nudge_at.tzinfo is None:
-                last_nudge_at = last_nudge_at.replace(tzinfo=timezone.utc)
-            if now - last_nudge_at < cooldown:
-                return False
-        transaction.set(doc_ref, {'uid': uid, 'last_nudge_at': now, 'updated_at': now}, merge=True)
+        data = _snapshot_dict(snapshot)
+        legacy_data = _snapshot_dict(legacy_ref.get(transaction=transaction)) if legacy_ref is not None else {}
+
+        candidate_stamps = [
+            _normalize_utc(stamp)
+            for stamp in (data.get('last_nudge_at'), legacy_data.get('last_nudge_at'))
+            if isinstance(stamp, datetime)
+        ]
+        if candidate_stamps and now_utc - max(candidate_stamps) < effective_cooldown:
+            return False
+
+        payload: dict[str, Any] = {'uid': clean_uid, 'last_nudge_at': now_utc, 'updated_at': now_utc}
+        legacy_first_seen = legacy_data.get('first_seen_day')
+        if data.get('first_seen_day') is None and isinstance(legacy_first_seen, str) and legacy_first_seen.strip():
+            payload['first_seen_day'] = legacy_first_seen.strip()
+        transaction.set(doc_ref, payload, merge=True)
         return True
 
     return firestore.transactional(_txn)(client.transaction())
