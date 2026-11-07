@@ -7,11 +7,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:quick_actions/quick_actions.dart';
+import 'package:omi/app_globals.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/local_recordings_provider.dart';
 import 'package:omi/services/quick_actions_service.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/enums.dart';
 
 class _Device extends ChangeNotifier implements DeviceProvider {
@@ -24,8 +26,28 @@ class _Device extends ChangeNotifier implements DeviceProvider {
 
 class _Capture extends ChangeNotifier implements CaptureProvider {
   RecordingState state = RecordingState.stop;
+  int pauseCalls = 0;
+  int resumeCalls = 0;
+  Object? pauseError;
+  Object? resumeError;
+
   @override
   RecordingState get recordingState => state;
+
+  @override
+  Future<void> pauseCapture() async {
+    pauseCalls++;
+    final error = pauseError;
+    if (error != null) throw error;
+  }
+
+  @override
+  Future<void> resumeCapture() async {
+    resumeCalls++;
+    final error = resumeError;
+    if (error != null) throw error;
+  }
+
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
@@ -38,8 +60,11 @@ class _Recordings implements LocalRecordingsProvider {
 class _QuickActions extends QuickActions {
   final publications = <List<ShortcutItem>>[];
   Completer<void>? nextCompletion;
+  QuickActionHandler? handler;
   @override
-  Future<void> initialize(QuickActionHandler handler) async {}
+  Future<void> initialize(QuickActionHandler handler) async {
+    this.handler = handler;
+  }
   @override
   Future<void> setShortcutItems(List<ShortcutItem> items) {
     publications.add(items);
@@ -236,6 +261,70 @@ void main() {
     // The dedupe cache must still hold B's projection, not be rolled back to A.
     service.updateShortcuts(context);
     expect(native.publications, hasLength(3), reason: 'the superseding projection must keep deduping later updates');
+    await tester.pumpWidget(const SizedBox());
+    device.dispose();
+    capture.dispose();
+  });
+
+  testWidgets('mute and unmute shortcuts await capture commands and surface somethingWentWrong on failure',
+      (tester) async {
+    final en = lookupAppLocalizations(const Locale('en'));
+    final device = _Device()..connected = true;
+    final capture = _Capture();
+    final native = _QuickActions();
+    final service = QuickActionsService.forTesting(quickActions: native);
+    late BuildContext context;
+
+    await tester.pumpWidget(MultiProvider(
+      providers: [
+        ChangeNotifierProvider<DeviceProvider>.value(value: device),
+        ChangeNotifierProvider<CaptureProvider>.value(value: capture),
+      ],
+      child: MaterialApp(
+        navigatorKey: globalNavigatorKey,
+        locale: const Locale('en'),
+        theme: buildOmiTheme(),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          body: Builder(builder: (ctx) {
+            context = ctx;
+            return const SizedBox();
+          }),
+        ),
+      ),
+    ));
+
+    service.initialize(context);
+    expect(native.handler, isNotNull);
+
+    native.handler!('mute');
+    await tester.pump();
+    expect(capture.pauseCalls, 1);
+    expect(find.text(en.somethingWentWrong), findsNothing);
+
+    native.handler!('unmute');
+    await tester.pump();
+    expect(capture.resumeCalls, 1);
+    expect(find.text(en.somethingWentWrong), findsNothing);
+
+    capture.pauseError = StateError('pause failed');
+    native.handler!('mute');
+    await tester.pump();
+    expect(capture.pauseCalls, 2);
+    expect(find.text(en.somethingWentWrong), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.pump(const Duration(seconds: 5));
+    capture.pauseError = null;
+    capture.resumeError = StateError('resume failed');
+    native.handler!('unmute');
+    await tester.pump();
+    expect(capture.resumeCalls, 2);
+    expect(find.text(en.somethingWentWrong), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.pump(const Duration(seconds: 5));
     await tester.pumpWidget(const SizedBox());
     device.dispose();
     capture.dispose();
