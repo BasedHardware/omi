@@ -229,7 +229,7 @@ class SimStore:
         rows = sorted(
             (row['enqueued_at'], key, row)
             for (table, key), row in self.rows.items()
-            if table == 'jobs' and row.get('priority') == priority and row.get('merge_pending')
+            if table == 'jobs' and row.get('priority') == priority and row.get('merge_pending') is True
         )
         for enqueued_at, _, row in rows[:OLDEST_POLICY_HOLD_SCAN_LIMIT]:
             if not is_queue_dispositioned(row) and not is_policy_hold(row):
@@ -243,8 +243,11 @@ class SimStore:
             for segment_id in self._by_state.get('ready', ())
             if (row := self.rows[('jobs', segment_id)]).get('priority') == priority
             and row.get('merge_pending') is True
-            and (row.get('compute_decision') or {}).get('outcome') in {'unattempted', 'allowed'}
-            and row.get('available_at', float('inf')) <= now
+            and isinstance(row.get('compute_decision'), dict)
+            and row['compute_decision'].get('outcome') in {'unattempted', 'allowed'}
+            and isinstance(row.get('available_at'), (int, float))
+            and not isinstance(row.get('available_at'), bool)
+            and row['available_at'] <= now
         )
 
     def oldest_admissible_ready(self, priority: int, now: float) -> float | None:

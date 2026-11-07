@@ -800,3 +800,65 @@ def test_gpu_query_cadence_does_not_stale_per_pod_busy_time_heartbeat(monkeypatc
     assert registry.get_sample_value('omi_batch_pipeline_sampler_observed_at_seconds', scope) == 151
     sampler.refresh(store, 168)
     assert registry.get_sample_value('omi_batch_pipeline_metrics_refreshed_at_seconds', scope) == 168
+
+
+def test_postgres_store_oldest_and_ready_for_capacity_sql_and_validation_contracts():
+    from contextlib import contextmanager
+    from database.batch_pipeline_store import OLDEST_POLICY_HOLD_SCAN_LIMIT
+    from database.jobstore.postgres_store import PostgresStore
+
+    calls: list[tuple[str, tuple]] = []
+    rows_to_return: list[tuple] = []
+    scalar_to_return: list[tuple | None] = [(3,)]
+
+    class FakeCursor:
+        def __init__(self, rows, scalar):
+            self._rows = rows
+            self._scalar = scalar
+
+        def fetchall(self):
+            return list(self._rows)
+
+        def fetchone(self):
+            return self._scalar
+
+    class FakeConn:
+        def execute(self, sql, params=()):
+            calls.append((sql, params))
+            return FakeCursor(rows_to_return, scalar_to_return[0])
+
+    store = PostgresStore('batch_pipeline_test_unit', pool=Mock(), customer_client=Mock())
+
+    @contextmanager
+    def fake_read_conn():
+        yield FakeConn()
+
+    store._read_conn = fake_read_conn  # type: ignore[method-assign]
+
+    held_doc = {'compute_decision': {'outcome': 'held', 'reason': 'allowance_exhausted'}}
+    blind_doc = {'last_policy_hold': {'reason': 'allowance_exhausted', 'at': 5.0}}
+    commit_doc = {'compute_decision': {'outcome': 'unattempted', 'reason': 'admitted'}}
+
+    rows_to_return[:] = [(10.0, held_doc), (15.0, blind_doc), (22.0, commit_doc)]
+    assert store.oldest(2, ready_only=False) == 22.0
+    sql, params = calls[-1]
+    assert 'ORDER BY enqueued_at, key COLLATE "C" LIMIT %s' in sql
+    assert params == ('batch_pipeline_test_unit', 2, OLDEST_POLICY_HOLD_SCAN_LIMIT + 1)
+
+    rows_to_return[:] = [(float(n), held_doc) for n in range(OLDEST_POLICY_HOLD_SCAN_LIMIT + 1)]
+    assert math.isnan(store.oldest(2, ready_only=False))
+
+    rows_to_return[:] = [(float(n), held_doc) for n in range(OLDEST_POLICY_HOLD_SCAN_LIMIT)]
+    assert store.oldest(2, ready_only=False) is None
+
+    assert store.ready_for_capacity(1, 500.0) == 3
+    cap_sql, cap_params = calls[-1]
+    assert "state = 'ready'" in cap_sql
+    assert "doc->'compute_decision'->>'outcome' IN ('unattempted', 'allowed')" in cap_sql
+    assert cap_params == ('batch_pipeline_test_unit', 1, 500.0)
+
+    for bad in [None, (None,), (-1,), (1.5,), ('3',), (True,)]:
+        scalar_to_return[0] = bad
+        with pytest.raises(ValueError, match='nonnegative integer capacity count required'):
+            store.ready_for_capacity(1, 500.0)
+

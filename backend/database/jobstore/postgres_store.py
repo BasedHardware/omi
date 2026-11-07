@@ -273,6 +273,8 @@ class PostgresStore:
                 ).fetchone()
             return row[0]
         # The uncommitted-age proxy walks a bounded FIFO prefix past policy holds, as on Firestore.
+        # A prefix truncated at OLDEST_POLICY_HOLD_SCAN_LIMIT + 1 returns NaN (incomplete scan);
+        # a FIFO of <= OLDEST_POLICY_HOLD_SCAN_LIMIT holds is exhausted and returns None.
         with self._read_conn() as conn:
             rows = conn.execute(
                 'SELECT enqueued_at, doc FROM jobs WHERE namespace = %s AND priority = %s AND merge_pending '
@@ -293,7 +295,10 @@ class PostgresStore:
                 "AND doc->'compute_decision'->>'outcome' IN ('unattempted', 'allowed')",
                 (self.namespace, priority, now),
             ).fetchone()
-        return int(row[0])
+        count = row[0] if row else None
+        if type(count) is not int or count < 0:
+            raise ValueError('nonnegative integer capacity count required')
+        return count
 
     def oldest_admissible_ready(self, priority: int, now: float) -> float | None:
         """A bounded ready prefix walked past holds and deferred rows, as on Firestore."""
