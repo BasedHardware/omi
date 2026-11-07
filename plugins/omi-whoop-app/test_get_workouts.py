@@ -39,7 +39,7 @@ def module(name, **attributes):
 stubs = {
     "requests": module("requests", get=Mock(), post=Mock(), patch=Mock(), delete=Mock()),
     "dotenv": module("dotenv", load_dotenv=lambda: None),
-    "fastapi": module("fastapi", FastAPI=Framework, Request=Framework, Query=Framework, HTTPException=Exception),
+    "fastapi": module("fastapi", FastAPI=Framework, Request=Framework, Query=Framework, Depends=Framework, HTTPException=Exception),
     "fastapi.responses": module("fastapi.responses", HTMLResponse=Framework, RedirectResponse=Framework, JSONResponse=Framework),
     "models": module("models", ChatToolResponse=Response),
     "db": module("db", **{name: Mock() for name in (
