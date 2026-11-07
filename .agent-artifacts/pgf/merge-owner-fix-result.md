@@ -14,6 +14,12 @@ Verification update UTC: 2026-11-07T05:22:09.945366+00:00
 - The first full-selector run was deliberately stopped in its type-check phase, before any pytest file ran, so the new correction can be qualified coherently. Its environment phase passed; no type-check success is claimed.
 - The queued frozen job now runs the eight focused files separately, the exact requested `make preflight`, and the complete changed-file backend selector sequentially at one captured, tracked-clean commit. All phase outcomes are pending until its receipt is complete.
 
+Latest focused update UTC: 2026-11-07T05:25:57.701703+00:00
+
+- Canonical backend-cwd rerun: directory router **44 passed**; cell wipe **19 passed**; core cutover **68 passed**; plane probes **34 passed**. No skips in these four files (165 passed total).
+- Service ceremony file: **96 passed, 2 failed**. Both failures were the newly added total-heartbeat assertions, which missed the pre-existing final-completion heartbeat. They now assert exactly one legacy heartbeat between derived purge and Firestore deletion, and still assert no cell-step call while off; an unconditional extra cell heartbeat fails this contract.
+- The eight-file job stopped at that service failure; neither `make preflight` nor the final full selector was reached in that attempt. The entire frozen job will be retried after this test correction and this report update are committed, with no further tracked writes while qualification runs.
+
 ## Required items and commits
 
 1. Mode off must add no resolver coroutine/executor submission, and no wipe heartbeat: `c078158a3b80` gates all four async HTTP and two async WebSocket routing sites synchronously; `ef525bf9ce55` gates the entire account-deletion step before heartbeat. Regression families: `test_async_http_routing_submits_only_when_on`, `test_async_ws_routing_submits_only_when_on`, `test_off_wipe_never_enters_cell_step`, `test_worker_heartbeats_at_major_operation_boundaries`.
