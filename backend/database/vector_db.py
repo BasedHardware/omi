@@ -17,6 +17,16 @@ from database._client import data_plane_db as default_db_client
 from database.legal_holds import external_write_fence
 
 try:
+    from database.legal_holds import destructive_operation_gate
+except ImportError:
+    destructive_operation_gate = None
+
+try:
+    from database.legal_holds import finish_destructive_operation
+except ImportError:
+    finish_destructive_operation = None
+
+try:
     from database.legal_holds import (
         DestructiveOperationInProgress,
         LegalHoldActive,
@@ -650,6 +660,26 @@ def delete_canonical_memory_vectors(uid: str, memory_id: str | None = None) -> b
     return True
 
 
+def _retry_stale_vector_gate_finish(uid: str, token: str, outcome: str) -> None:
+    """Record the gate outcome once more if the context manager's finish failed.
+
+    A running gate blocks other provider writes until the six-hour stale bound.
+    Search cleanup is allowed to fail, but it must not leave that row running.
+    """
+
+    if finish_destructive_operation is None or not token:
+        return
+    try:
+        finish_destructive_operation(
+            uid,
+            kind='stale_vector_index_cleanup',
+            token=token,
+            outcome=outcome,
+        )
+    except Exception:
+        logger.warning('canonical memory vector delete gate finalization retry failed')
+
+
 def delete_canonical_memory_vectors_by_ids(uid: str, observed: List[tuple]) -> int:
     """Delete one user's canonical vectors for these observed commits in one call.
 
@@ -688,22 +718,41 @@ def delete_canonical_memory_vectors_by_ids(uid: str, observed: List[tuple]) -> i
         )
     if not clauses:
         return 0
-    if LegalHoldActive is None or LegalHoldAuthorityUnavailable is None or DestructiveOperationInProgress is None:
-        raise RuntimeError('destructive authority exceptions are unavailable')
-    # Stale-index cleanup runs on read paths. It must fence against deletion and
-    # legal holds, but it must not claim the exclusive account gate: a claim here
-    # makes every concurrent user delete fail with 409 account_gate_busy, and a
-    # skipped delete leaves the stale rows to be re-hydrated on the next search.
-    # Provider-write fencing is the same non-claiming mechanism used for upserts.
+    if (
+        destructive_operation_gate is None
+        or LegalHoldActive is None
+        or LegalHoldAuthorityUnavailable is None
+        or DestructiveOperationInProgress is None
+    ):
+        raise RuntimeError('destructive operation gate is unavailable')
+    gate_token: Optional[str] = None
+    provider_deleted = False
     try:
-        with external_write_fence(uid, firestore_client=default_db_client):
+        with destructive_operation_gate(uid, kind='stale_vector_index_cleanup') as gate_token:
             owner_index(index, uid, index_name=_pinecone_index_name).delete(
                 filter={'$and': [{'uid': {'$eq': uid}}, {'$or': clauses}]},
                 namespace=MEMORIES_NAMESPACE,
             )
+            provider_deleted = True
     except (LegalHoldActive, LegalHoldAuthorityUnavailable, DestructiveOperationInProgress):
-        logger.warning('canonical memory vector delete by ids skipped; destructive authority did not permit it')
-        return 0
+        if gate_token is not None:
+            _retry_stale_vector_gate_finish(
+                uid,
+                gate_token,
+                'completed' if provider_deleted else 'failed',
+            )
+        if not provider_deleted:
+            logger.warning('canonical memory vector delete by ids skipped; destructive authority did not permit it')
+            return 0
+    except Exception:
+        if gate_token is not None:
+            _retry_stale_vector_gate_finish(
+                uid,
+                gate_token,
+                'completed' if provider_deleted else 'failed',
+            )
+        if not provider_deleted:
+            raise
     logger.info('delete_canonical_memory_vectors_by_ids count=%d', len(clauses))
     return len(clauses)
 

@@ -1011,7 +1011,7 @@ def test_canonical_batch_delete_is_one_metadata_filter(monkeypatch):
 
     monkeypatch.setattr('database.vector_db.index', _Index())
     monkeypatch.setattr(vector_db, 'owner_index', lambda raw, uid, **kwargs: raw)
-    monkeypatch.setattr('database.vector_db.external_write_fence', lambda *args, **kwargs: _AllowGate())
+    monkeypatch.setattr('database.vector_db.destructive_operation_gate', lambda *args, **kwargs: _AllowGate())
     from database.vector_db import delete_canonical_memory_vectors_by_ids
 
     deleted = delete_canonical_memory_vectors_by_ids(
@@ -1061,48 +1061,35 @@ def test_canonical_batch_delete_is_one_metadata_filter(monkeypatch):
     ]
 
 
-def test_canonical_delete_fences_without_claiming_account_gate(monkeypatch):
-    fenced = []
-    deleted = []
+def test_canonical_delete_retries_gate_finish_when_exit_fails(monkeypatch):
+    finishes = []
 
     class _Index:
         def delete(self, *, ids=None, filter=None, namespace):
-            deleted.append(filter)
+            return None
 
-    def recording_fence(uid, **kwargs):
-        fenced.append((uid, kwargs))
-        return _AllowGate()
+    class _ExitFails:
+        def __enter__(self):
+            return 'token-1'
 
-    monkeypatch.setattr('database.vector_db.index', _Index())
-    monkeypatch.setattr(vector_db, 'owner_index', lambda raw, uid, **kwargs: raw)
-    monkeypatch.setattr('database.vector_db.external_write_fence', recording_fence)
-    # The read-path cleanup must never hold the exclusive account gate.
-    assert not hasattr(vector_db, 'destructive_operation_gate')
-    from database.vector_db import delete_canonical_memory_vectors_by_ids
-
-    count = delete_canonical_memory_vectors_by_ids('u1', [('stale-a', 'commit-a')])
-
-    assert count == 1
-    assert [uid for uid, _kwargs in fenced] == ['u1']
-    assert len(deleted) == 1
-
-
-def test_canonical_delete_provider_failure_propagates_after_fence(monkeypatch):
-    class _Index:
-        def delete(self, *, ids=None, filter=None, namespace):
-            raise RuntimeError('pinecone unavailable')
+        def __exit__(self, exc_type, exc, tb):
+            if exc_type is None:
+                raise RuntimeError('finish failed')
+            return False
 
     monkeypatch.setattr('database.vector_db.index', _Index())
     monkeypatch.setattr(vector_db, 'owner_index', lambda raw, uid, **kwargs: raw)
-    monkeypatch.setattr('database.vector_db.external_write_fence', lambda *args, **kwargs: _AllowGate())
+    monkeypatch.setattr('database.vector_db.destructive_operation_gate', lambda *args, **kwargs: _ExitFails())
+    monkeypatch.setattr(
+        'database.vector_db.finish_destructive_operation',
+        lambda uid, *, kind, token, outcome: finishes.append((uid, kind, token, outcome)),
+    )
     from database.vector_db import delete_canonical_memory_vectors_by_ids
 
-    try:
-        delete_canonical_memory_vectors_by_ids('u1', [('stale-a', 'commit-a')])
-    except RuntimeError as error:
-        assert str(error) == 'pinecone unavailable'
-    else:
-        raise AssertionError('provider failure must propagate to the search-side handler')
+    deleted = delete_canonical_memory_vectors_by_ids('u1', [('stale-a', 'commit-a')])
+
+    assert deleted == 1
+    assert finishes == [('u1', 'stale_vector_index_cleanup', 'token-1', 'completed')]
 
 
 def test_hydration_skips_stale_delete_when_legal_hold_blocks_it(monkeypatch):
@@ -1121,7 +1108,7 @@ def test_hydration_skips_stale_delete_when_legal_hold_blocks_it(monkeypatch):
 
     monkeypatch.setattr('database.vector_db.index', _Index())
     monkeypatch.setattr(vector_db, 'owner_index', lambda raw, uid, **kwargs: raw)
-    monkeypatch.setattr('database.vector_db.external_write_fence', blocked)
+    monkeypatch.setattr('database.vector_db.destructive_operation_gate', blocked)
 
     response = fetch_default_vector_memory_search(
         uid='u1',
