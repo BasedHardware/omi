@@ -649,7 +649,7 @@ def test_nontransactional_update_offloads_without_id_in_patch(lake_world, monkey
 
 
 def test_translation_preuploads_the_candidate_for_the_document_id(lake_world):
-    pointer_doc(lake_world)
+    pointer_doc(lake_world, visibility='shared')
     assert db.materialize_translation(
         UID, CID, 'segment-1', speech()[0]['text'], 'es', 'Synthetic translation', firestore_client=lake_world.store
     )
@@ -796,7 +796,9 @@ def test_final_pass_transaction_preloads(lake_world, monkeypatch, state):
 @pytest.mark.parametrize('state', ['present', 'absent', 'shredded', 'outage'])
 def test_smart_merge_transaction_preloads_both_rows(lake_world, monkeypatch, state):
     pointer_doc(lake_world)
-    donor = db.encode_conversation_for_write(UID, {'id': 'donor', 'transcript_segments': speech(21000)})
+    donor = db.encode_conversation_for_write(
+        UID, {'id': 'donor', 'transcript_segments': speech(21000)}, conversation_state={'visibility': 'shared'}
+    )
     donor['status'] = 'completed'
     lake_world.store.rows[('users', UID, 'conversations', 'donor')] = donor
     pointer.clear_memo()
@@ -858,10 +860,10 @@ def test_privacy_scrub_transaction_resolves_pointer_but_writes_inline(lake_world
 @pytest.mark.parametrize('state', ['present', 'absent', 'shredded', 'outage'])
 def test_legacy_review_undo_preloads_pointer_field_states(lake_world, monkeypatch, state):
     before = encode()
-    after = db.encode_conversation_for_write(UID, {'id': CID, 'transcript_segments': speech(21000)})
-    after.update(
-        data_protection_level='standard', status='completed', has_transcript_corrections=True, visibility='shared'
+    after = db.encode_conversation_for_write(
+        UID, {'id': CID, 'transcript_segments': speech(21000)}, conversation_state={'visibility': 'shared'}
     )
+    after.update(data_protection_level='standard', status='completed', has_transcript_corrections=True)
     lake_world.store.rows[PATH] = after
     change = ReviewChange(change_id='legacy-change', kind='other', title='Synthetic', created_at=NOW)
     journal = {

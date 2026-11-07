@@ -81,9 +81,13 @@ def encode(segments=None, level='standard'):
     )
 
 
-def pointer_doc(world, segments=None):
+def pointer_doc(world, segments=None, *, visibility=None):
     doc = encode(segments)
-    doc.update(status='completed', data_protection_level='standard', visibility='shared')
+    # Existing pointers remain readable at any visibility, including historical
+    # private rows; only tests exercising new uploads opt into shared visibility.
+    doc.update(status='completed', data_protection_level='standard')
+    if visibility is not None:
+        doc['visibility'] = visibility
     world.store.rows[PATH] = deepcopy(doc)
     pointer.clear_memo()
     return doc
@@ -243,7 +247,7 @@ def test_candidate_upload_churn_is_bounded_and_never_commits(lake_world):
 
 
 def test_candidate_upload_failure_aborts_without_inline_write(lake_world, monkeypatch):
-    doc = {'status': 'in_progress', 'transcript_segments': []}
+    doc = {'status': 'in_progress', 'transcript_segments': [], 'visibility': 'shared'}
     lake_world.store.rows[PATH] = deepcopy(doc)
     monkeypatch.setattr(lake, 'put_space_object', Mock(side_effect=lake.LakeFetchError('synthetic')))
     with pytest.raises(lake.LakeFetchError):
