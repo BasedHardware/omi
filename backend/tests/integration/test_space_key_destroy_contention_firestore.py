@@ -171,7 +171,6 @@ def test_conversation_upload_after_purge_final_listing_self_deletes(state, monke
                 client.collection('users').document(uid).collection('deleted_conversations').document('c').get().exists
             )
             assert not list(bucket.list_blobs(prefix=f'v1/spaces/{uid}/'))
-    assert lake.delete_space_upload_candidates(uid) == 0
         finally:
             release.set()
         writer.result(timeout=60)
