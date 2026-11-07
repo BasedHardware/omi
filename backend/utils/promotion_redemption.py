@@ -56,11 +56,12 @@ def _coupon_id(promo: dict) -> str:
 
 
 def _check_eligible(promo: dict, coupon: dict, subscription: dict) -> None:
-    items = subscription['items']['data']
+    items = (subscription.get('items') or {}).get('data') or []
     if len(items) != 1:
         raise RedemptionError(400, 'This code cannot be applied to your plan.')
-    price = items[0]['price']
-    product = price['product'] if isinstance(price['product'], str) else price['product']['id']
+    price = items[0].get('price') or {}
+    raw_product = price.get('product')
+    product = raw_product if isinstance(raw_product, str) else (raw_product or {}).get('id')
 
     if not coupon.get('valid'):
         raise _invalid()
@@ -72,13 +73,13 @@ def _check_eligible(promo: dict, coupon: dict, subscription: dict) -> None:
     minimum = restrictions.get('minimum_amount')
     if minimum:
         if (
-            restrictions.get('minimum_amount_currency') != price['currency']
+            restrictions.get('minimum_amount_currency') != price.get('currency')
             or (price.get('unit_amount') or 0) < minimum
         ):
             raise RedemptionError(400, 'This code is for a different plan.')
-    if promo.get('customer') and promo['customer'] != subscription['customer']:
+    if promo.get('customer') and promo['customer'] != subscription.get('customer'):
         raise _invalid()
-    if restrictions.get('first_time_transaction') and subscription['status'] != 'trialing':
+    if restrictions.get('first_time_transaction') and subscription.get('status') != 'trialing':
         raise RedemptionError(400, 'This code is only for new subscriptions.')
 
 
@@ -107,12 +108,14 @@ def redeem_promotion_code(uid: str, code: str) -> dict:
     if not redemptions_db.claim(promo['id'], uid=uid, subscription_id=subscription_id, coupon_id=coupon['id']):
         raise RedemptionError(409, 'This code has already been used.')
 
+    deactivated = False
     try:
         stripe.PromotionCode.modify(
             promo['id'],
             active=False,
             metadata={'redeemed_by_uid': uid, 'redeemed_subscription_id': subscription_id},
         )
+        deactivated = True
         updated = stripe.Subscription.modify(
             subscription_id,
             discounts=[{'coupon': coupon['id']}],
@@ -120,7 +123,7 @@ def redeem_promotion_code(uid: str, code: str) -> dict:
         ).to_dict()
     except Exception as e:
         logger.error(f"Promotion code redemption failed for {uid}: {sanitize(str(e))}")
-        _undo_claim(promo['id'])
+        _undo_claim(promo['id'], reactivate_code=deactivated)
         if isinstance(e, stripe.StripeError):
             raise RedemptionError(400, 'Could not apply this code. Please try again.') from e
         raise
@@ -129,7 +132,10 @@ def redeem_promotion_code(uid: str, code: str) -> dict:
     if updated.get('status') == 'trialing':
         applies_at = updated.get('trial_end')
     else:
-        applies_at = updated.get('current_period_end') or updated['items']['data'][0].get('current_period_end')
+        items_data = (updated.get('items') or {}).get('data') or []
+        applies_at = updated.get('current_period_end') or (
+            items_data[0].get('current_period_end') if items_data and isinstance(items_data[0], dict) else None
+        )
     return {
         'status': 'applied',
         'percent_off': coupon.get('percent_off'),
@@ -139,10 +145,10 @@ def redeem_promotion_code(uid: str, code: str) -> dict:
     }
 
 
-def _undo_claim(promotion_code_id: str) -> None:
-    try:
-        stripe.PromotionCode.modify(promotion_code_id, active=True)
-    except Exception as e:
-        logger.error(f"Could not reactivate promotion code {promotion_code_id}: {sanitize(str(e))}")
-        return
+def _undo_claim(promotion_code_id: str, *, reactivate_code: bool = True) -> None:
+    if reactivate_code:
+        try:
+            stripe.PromotionCode.modify(promotion_code_id, active=True)
+        except Exception as e:
+            logger.error(f"Could not reactivate promotion code {promotion_code_id}: {sanitize(str(e))}")
     redemptions_db.release(promotion_code_id)
