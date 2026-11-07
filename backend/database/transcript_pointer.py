@@ -15,6 +15,7 @@ from datetime import datetime
 import hashlib
 import json
 import logging
+from itertools import chain
 import sys
 import threading
 from typing import Any, Callable, List, Mapping
@@ -55,9 +56,10 @@ class TranscriptPointerUnloaded(TranscriptPointerError):
 class TranscriptUploadRequired(TranscriptPointerError):
     """Abort before writing; the owning boundary uploads outside Firestore."""
 
-    def __init__(self, uid, conversation_id, plaintext):
+    def __init__(self, uid, conversation_id, plaintext, source_digest):
         super().__init__('Transcript candidate must be uploaded outside the transaction')
         self.uid, self.conversation_id, self.plaintext = uid, conversation_id, plaintext
+        self.source_digest = source_digest
 
 
 class TranscriptMemoBudgetExceeded(TranscriptPointerFetchError):
@@ -215,37 +217,91 @@ def _consent_stamp(uid) -> object_lake.ConsentStamp:
     )
 
 
-def offload_or_inline(uid, conversation_id, segments: list, protect: Callable) -> bytes | str | dict:
+def _source_digest(segments):
+    try:
+        return hashlib.sha256(json.dumps(segments).encode('utf-8')).hexdigest()
+    except (TypeError, ValueError, RecursionError):
+        pass
+    # Optional grouping evidence can be non-JSON or cyclic; its protector drops
+    # that evidence while retaining the transcript. Stream a typed identity
+    # without repr/address instability or an extra copy of the transcript tree.
+    digest = hashlib.sha256(b'non-json:')
+    stack: list[tuple[Any, int | None]] = [(iter((segments,)), None)]
+    ancestors: set[int] = set()
+
+    def feed(kind, payload):
+        digest.update(kind)
+        digest.update(len(payload).to_bytes(8, 'big'))
+        digest.update(payload)
+
+    while stack:
+        iterator, ancestor = stack[-1]
+        try:
+            value = next(iterator)
+        except StopIteration:
+            stack.pop()
+            if ancestor is not None:
+                ancestors.remove(ancestor)
+            continue
+        if isinstance(value, (dict, list, tuple)):
+            kind = b'D' if isinstance(value, dict) else b'L'
+            if id(value) in ancestors:
+                feed(b'C', kind)
+                continue
+            feed(kind, str(len(value)).encode('ascii'))
+            ancestors.add(id(value))
+            children = chain.from_iterable(value.items()) if isinstance(value, dict) else iter(value)
+            stack.append((children, id(value)))
+        else:
+            try:
+                payload = json.dumps(value).encode('utf-8')
+            except (TypeError, ValueError, RecursionError):
+                feed(b'X', f'{type(value).__module__}.{type(value).__qualname__}'.encode('utf-8'))
+            else:
+                feed(b'V', payload)
+    return digest.hexdigest()
+
+
+def offload_or_inline(
+    uid, conversation_id, segments: list, protect: Callable, *, prepare_segments: Callable | None = None
+) -> bytes | str | dict:
+    admitted = bool(segments and conversation_id and config.write_admitted(uid))
+    # Retry identity precedes randomized sidecar protection. The reference's
+    # own sha256 still authenticates the actual protected JSON in the lake.
+    source_digest = _source_digest(segments) if admitted else ''
+    if prepare_segments is not None:
+        prepare_segments(segments)
     inline = protect(segments)
-    if not segments or not conversation_id or not config.write_admitted(uid):
+    # Recheck the kill switch after protection; a newly opened cohort starts
+    # on its next encode, while a newly closed cohort stops immediately.
+    if not admitted or not segments or not config.write_admitted(uid):
         return inline
-    # Threshold is compressed bytes, including for enhanced (hex + encryption).
     plaintext = json.dumps(segments).encode('utf-8')
     if len(zlib.compress(plaintext)) <= config.inline_max_bytes():
         return inline
     memo = _memo()
-    key = uid, conversation_id, hashlib.sha256(plaintext).hexdigest()
+    key = uid, conversation_id, source_digest
     try:
         ref = memo.uploaded[key]
     except KeyError:
         if _client.in_transaction_body():
-            # No inline commit: even the first live write may exceed 1 MiB.
-            # A replay recomputes this digest from its own transactional reads,
-            # so a changed source cannot publish a stale uploaded candidate.
-            raise TranscriptUploadRequired(uid, conversation_id, plaintext)
-        ref = _upload_candidate(uid, conversation_id, plaintext)
-    if not _client.in_transaction_body() and _memo_key(uid, ref) not in memo.decoded:
-        if isinstance(memo.decoded, _DecodedMemo):
-            memo.decoded.check_budget(_memo_key(uid, ref), segments)
-        memo.decoded[_memo_key(uid, ref)] = copy.deepcopy(segments)
+            raise TranscriptUploadRequired(uid, conversation_id, plaintext, source_digest)
+        ref = _upload_candidate(uid, conversation_id, plaintext, source_digest, cache_decoded=True)
     return ref.to_pointer_dict()
 
 
-def _upload_candidate(uid, conversation_id, plaintext):
+def _upload_candidate(uid, conversation_id, plaintext, source_digest, *, cache_decoded=False):
     if _client.in_transaction_body():
-        raise TranscriptUploadRequired(uid, conversation_id, plaintext)
+        raise TranscriptUploadRequired(uid, conversation_id, plaintext, source_digest)
     ref = object_lake.put_space_object(uid, 'transcript', conversation_id, plaintext, consent=_consent_stamp(uid))
-    _memo().uploaded[(uid, conversation_id, hashlib.sha256(plaintext).hexdigest())] = ref
+    memo = _memo()
+    key = _memo_key(uid, ref)
+    # Only direct pre-transaction encodes may warm reads. A transaction
+    # candidate must not mask a cold read of an existing identical reference.
+    # Cache actual upload bytes, never a later encryption of the same source.
+    if cache_decoded and key not in memo.decoded and len(memo.decoded) < 32:
+        memo.decoded[key] = _require_segment_list(json.loads(plaintext))
+    memo.uploaded[(uid, conversation_id, source_digest)] = ref
     return ref
 
 
@@ -270,15 +326,14 @@ def run_preloaded_operation(operation, *args, **kwargs):
                     result = operation(*args, **kwargs)
             except TranscriptUploadRequired as error:
                 document = error.uid, error.conversation_id
-                digest = hashlib.sha256(error.plaintext).hexdigest()
                 if document in uploaded:
                     upload_changes += 1
                 elif len(uploaded) >= 32:
                     raise TranscriptPointerFetchError('Transcript exceeds bounded upload document limit') from None
                 if content_changes + upload_changes > 3 or attempt == 67:
                     raise TranscriptPointerFetchError('Transcript changed during bounded upload retries') from None
-                uploaded[document] = digest
-                _upload_candidate(error.uid, error.conversation_id, error.plaintext)
+                uploaded[document] = error.source_digest
+                _upload_candidate(error.uid, error.conversation_id, error.plaintext, error.source_digest)
                 continue
             except TranscriptPointerUnloaded as error:
                 unloaded = error

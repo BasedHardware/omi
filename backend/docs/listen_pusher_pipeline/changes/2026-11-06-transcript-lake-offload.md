@@ -29,7 +29,13 @@ objects are filtered from list/MCP results; transport failures abort decisions.
 Admitted transactional encodes above the compressed inline threshold abort
 before staging the transcript write. The boundary uploads the candidate outside
 Firestore, then reruns the entire transaction from a fresh snapshot. Only the
-exact recomputed content digest may use that pointer. This includes live
+exact recomputed source digest may use that pointer. Retry identity is computed
+before randomized grouping-sidecar protection; the pointer hash still authenticates
+the actual protected JSON uploaded to the lake. Invalid optional grouping evidence
+retains its existing drop behavior, using a streamed typed fingerprint without
+copying the transcript tree. Transaction candidates do not warm existing-pointer
+reads; those still preload from the lake. Direct pre-transaction encodes cache
+the actual upload JSON, never a later encryption of the same source. This includes live
 `in_progress` rows, whose transcript may already exceed Firestore's 1 MiB limit.
 The C3 backfill primitive still uses an update-time CAS and skips live rows;
 failed backfill swaps retain readable inline data. Orphan cleanup belongs to C3.
@@ -41,7 +47,9 @@ they never become empty speech or ciphertext. An absent blob denotes a deleted
 conversation. Destroyed keys raise the distinct `TranscriptShredded` state;
 transactional domain operations refuse them as unavailable. An absent/shredded
 transcript removes only the transcript content signal: photos and the durable
-`has_content` marker still prevent empty-recording deletion. Corruption retains
+`has_content` marker still prevent empty-recording deletion. Every dictionary,
+including an empty malformed pointer, passes strict validation and therefore
+counts as unreadable content rather than an empty recording. Corruption retains
 the strict decoder's existing error. Turning lake reads off fails closed even
 on warm memo entries. The bounded public-chat decoder remains inline-only, so
 pointer documents are excluded from public-chat candidates.

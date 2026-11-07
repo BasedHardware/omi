@@ -405,12 +405,12 @@ def _prepare_conversation_for_write(
             data['transcript_segments'] = canonicalize_transcript_segments_for_storage(data['transcript_segments'])
         from utils.conversations.speaker_grouping_storage import protect_segments
 
-        protect_segments(data['transcript_segments'], uid)
         data['transcript_segments'] = transcript_pointer.offload_or_inline(
             uid,
             conversation_id or data.get('id'),
             data['transcript_segments'],
             lambda value: _protect_json_value(value, uid, level),
+            prepare_segments=lambda value: protect_segments(value, uid),
         )
         data['transcript_segments_compressed'] = True
     if match_scores.FIELD in data:
@@ -591,9 +591,10 @@ def raw_conversation_has_content(uid: str, conversation: Dict[str, Any]) -> bool
     Undecodable segments count as content: never delete data we cannot read.
     """
     raw_segments = conversation.get('transcript_segments')
-    if not isinstance(raw_segments, dict) and (conversation.get('has_content') or conversation.get('photos')):
+    other_content = bool(conversation.get('has_content')) or bool(conversation.get('photos'))
+    if not isinstance(raw_segments, dict) and other_content:
         return True
-    if not raw_segments:
+    if not raw_segments and not isinstance(raw_segments, dict):
         return False
     try:
         segments = _decode_transcript_segments_strict(
@@ -602,11 +603,11 @@ def raw_conversation_has_content(uid: str, conversation: Dict[str, Any]) -> bool
     except (transcript_pointer.TranscriptBlobAbsent, transcript_pointer.TranscriptShredded):
         # Only the transcript signal disappeared. Photos and the durable
         # content marker still forbid empty-recording deletion.
-        return bool(conversation.get('photos')) or bool(conversation.get('has_content'))
+        return other_content
     except (json.JSONDecodeError, TypeError, zlib.error, ValueError) as e:
         logger.error(f'raw_conversation_has_content: undecodable segments, assuming content. {uid} {e}')
         return True
-    return bool(segments) or bool(conversation.get('photos')) or bool(conversation.get('has_content'))
+    return bool(segments) or other_content
 
 
 def effective_user_title(user_title: Any) -> Optional[str]:
