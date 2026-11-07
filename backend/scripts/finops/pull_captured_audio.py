@@ -7,6 +7,7 @@ Lifecycle: rollout, default off; owner pipeline-approved; review 2026-11-21.
 """
 
 import argparse
+import hashlib
 from collections import defaultdict
 from datetime import datetime, timezone, timedelta
 from fractions import Fraction
@@ -76,7 +77,39 @@ def captured_hours(rows):
         'batch_captured_audio_hours': {day: float(hours) for day, hours in sorted(batch_days.items())},
         'unknown_manifest_rows': unknown,
         'conflicting_physical_sources': len(bad),
-        'denominator_complete': unknown == 0 and not bad and bool(sources),
+        'physical_capture_roots': len(sources) - len(bad),
+        'manifest_ranges_valid': unknown == 0 and not bad and bool(sources),
+        'denominator_complete': False,  # Valid rows alone cannot prove inventory coverage.
+        'inventory_receipt': None,
+    }
+
+
+def verify_inventory_coverage(capture, proof, manifest_digest, *, now=None):
+    """Require a fresh aggregate inventory attestation for this exact export."""
+    now = now or datetime.now(timezone.utc)
+    verified = False
+    try:
+        generated = datetime.fromisoformat(proof['generated_at'].replace('Z', '+00:00'))
+        valid_until = datetime.fromisoformat(proof['valid_until'].replace('Z', '+00:00'))
+        verified = bool(
+            capture['manifest_ranges_valid']
+            and proof.get('complete') is True
+            and proof.get('source') == 'retained_capture_manifest_inventory'
+            and proof.get('unknown_capture_roots') == 0
+            and proof.get('physical_capture_roots') == capture['physical_capture_roots']
+            and proof.get('captured_audio_hours') == capture['captured_audio_hours']
+            and set(capture['captured_audio_hours']) <= set(proof.get('covered_utc_days', []))
+            and proof.get('manifest_sha256') == manifest_digest
+            and isinstance(proof.get('source_receipt'), str)
+            and proof['source_receipt'].strip()
+            and generated <= now <= valid_until
+        )
+    except (KeyError, TypeError, ValueError):
+        pass
+    return {
+        **capture,
+        'denominator_complete': verified,
+        'inventory_receipt': proof['source_receipt'] if verified else None,
     }
 
 
@@ -92,6 +125,7 @@ def cost_per_captured_hour(capture, costs):
         components = row.get('components', {})
         known = (
             capture['denominator_complete']
+            and bool(capture.get('inventory_receipt'))
             and row.get('reconciled') is True
             and row.get('basis') == 'captured_utc_day'
             and row.get('gpu_excluded_from_cloud') is True
@@ -136,6 +170,11 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--manifests', type=Path, required=True)
     parser.add_argument('--costs', type=Path)
+    parser.add_argument(
+        '--inventory-coverage',
+        type=Path,
+        help='Fresh aggregate inventory proof bound to the consumed manifest SHA256 and UTC days',
+    )
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument(
         '--notes-receipts',
@@ -145,14 +184,30 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if os.getenv('PIPELINE_CAPTURE_COST_ENABLED', 'false').strip().lower() != 'true':
         parser.exit(0, 'captured-hour reporting disabled; prior reports are stale\n')
-    result = captured_hours(json.loads(line) for line in args.manifests.read_text().splitlines() if line.strip())
+    manifest_hash = hashlib.sha256()
+
+    def manifests():
+        with args.manifests.open('rb') as source:
+            for line in source:
+                manifest_hash.update(line)
+                if line.strip():
+                    yield json.loads(line)
+
+    result = captured_hours(manifests())
+    if args.inventory_coverage:
+        result = verify_inventory_coverage(
+            result, json.loads(args.inventory_coverage.read_text()), manifest_hash.hexdigest()
+        )
     result['cost'] = cost_per_captured_hour(result, json.loads(args.costs.read_text()) if args.costs else {})
     if args.notes_receipts:
         result['notes_rewrites'] = rewrite_census(
             json.loads(line) for line in args.notes_receipts.read_text().splitlines() if line.strip()
         )
     result['generated_at'] = datetime.now(timezone.utc).isoformat()
-    result['sources'] = {'capture': args.manifests.name, 'cost': args.costs.name if args.costs else None}
+    result['sources'] = {
+        'capture': 'retained_source_manifest_export',
+        'cost': 'reconciled_captured_day_cost_export' if args.costs else None,
+    }
     args.output.write_text(json.dumps(result, indent=2) + '\n')
 
 

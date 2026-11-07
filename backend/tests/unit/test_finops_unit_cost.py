@@ -7,6 +7,7 @@ They are deliberately hermetic: no GCP, no Firestore, no network.
 import importlib.util
 import json
 import pathlib
+from datetime import datetime, timezone
 
 import pytest
 
@@ -43,7 +44,7 @@ def test_capture_hour_union_counts_retry_live_and_reupload_once_across_midnight(
     report = capture.captured_hours(rows)
     assert report['captured_audio_hours'] == {'2026-11-07': 0.5, '2026-11-08': 0.5}
     assert report == capture.captured_hours(rows * 3)
-    assert report['denominator_complete']
+    assert report['manifest_ranges_valid'] and not report['denominator_complete']
     assert 'synthetic' not in json.dumps(report)
 
 
@@ -66,6 +67,20 @@ def test_capture_unknown_identity_and_conflicting_clock_are_never_guessed():
 
 def test_cost_requires_complete_denominator_and_reconciled_captured_day_sources():
     report = capture.captured_hours([_manifest()])
+    now = datetime(2026, 11, 8, tzinfo=timezone.utc)
+    proof = {
+        'source': 'retained_capture_manifest_inventory',
+        'complete': True,
+        'unknown_capture_roots': 0,
+        'physical_capture_roots': 1,
+        'covered_utc_days': ['2026-11-07', '2026-11-08'],
+        'captured_audio_hours': {'2026-11-07': 0.5, '2026-11-08': 0.5},
+        'manifest_sha256': 'exact-export',
+        'source_receipt': 'aggregate-inventory-receipt',
+        'generated_at': '2026-11-08T00:00:00Z',
+        'valid_until': '2026-11-09T00:00:00Z',
+    }
+    report = capture.verify_inventory_coverage(report, proof, 'exact-export', now=now)
     day = '2026-11-07'
     costs = {
         day: {
@@ -82,6 +97,35 @@ def test_cost_requires_complete_denominator_and_reconciled_captured_day_sources(
     costs[day]['basis'] = 'captured_utc_day'
     report['denominator_complete'] = False
     assert capture.cost_per_captured_hour(report, costs)[day]['status'] == 'unknown'
+
+
+@pytest.mark.parametrize('changed', ['missing', 'expired', 'wrong_hash', 'incomplete_population', 'missing_frames'])
+def test_valid_capture_ranges_cannot_publish_cost_without_inventory_coverage(changed):
+    report = capture.captured_hours([_manifest()])
+    proof = {
+        'source': 'retained_capture_manifest_inventory',
+        'complete': True,
+        'unknown_capture_roots': 0,
+        'physical_capture_roots': 1,
+        'covered_utc_days': ['2026-11-07', '2026-11-08'],
+        'captured_audio_hours': {'2026-11-07': 0.5, '2026-11-08': 0.5},
+        'manifest_sha256': 'export',
+        'source_receipt': 'aggregate-inventory-receipt',
+        'generated_at': '2026-11-08T00:00:00Z',
+        'valid_until': '2026-11-09T00:00:00Z',
+    }
+    if changed == 'missing':
+        proof = {}
+    elif changed == 'expired':
+        proof['valid_until'] = '2026-11-07T00:00:00Z'
+    elif changed == 'wrong_hash':
+        proof['manifest_sha256'] = 'another-export'
+    elif changed == 'incomplete_population':
+        proof['physical_capture_roots'] = 2
+    else:
+        proof['captured_audio_hours'] = {'2026-11-07': 1, '2026-11-08': 1}
+    checked = capture.verify_inventory_coverage(report, proof, 'export', now=datetime(2026, 11, 8, tzinfo=timezone.utc))
+    assert not checked['denominator_complete'] and checked['inventory_receipt'] is None
 
 
 def test_capture_report_dark_default_does_not_read_or_write(tmp_path, monkeypatch):
