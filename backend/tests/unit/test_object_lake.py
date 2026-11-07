@@ -578,6 +578,7 @@ def test_create_only_retry_does_not_delete_reused_referenced_object(storage, mon
     monkeypatch.setattr(LocalBlob, 'reload', fence_during_retry)
     with pytest.raises(lake.LakeWriteFenced):
         put()
+    monkeypatch.setattr(LocalBlob, 'reload', original)
     assert bucket.blob(ref.key).exists()
     assert any(path[0] == 'lake_upload_candidates' for path in store.rows)
     # The deleting orchestrator, rather than the retry, owns referenced content.

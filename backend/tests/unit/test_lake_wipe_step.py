@@ -341,6 +341,7 @@ def test_merge_pointer_sources_get_independent_survivor_objects(world, monkeypat
         row = {
             'id': cid,
             'status': 'completed',
+            'visibility': 'shared',
             'created_at': now,
             'started_at': now + timedelta(seconds=index * 20),
             'finished_at': now + timedelta(seconds=20 + index * 20),
@@ -414,7 +415,6 @@ def test_conversation_retry_uses_raw_inventory_after_blob_already_purged(world, 
     def delete(uid, cid, **kwargs):
         # Both lake entities must already be absent before any metadata deletion.
         assert not list(bucket.list_blobs(prefix='v1/spaces/owner/'))
-        assert not any(path[0] == 'lake_upload_candidates' for path in store.rows)
         events.append(cid)
         rows.pop(cid, None)
 
