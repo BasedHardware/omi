@@ -35,9 +35,9 @@ class DirectoryRoutingUnavailable(RuntimeError):
 routing_active = directory_routing.routing_active
 
 
-def directory_store() -> DirectoryStore:
+def directory_store(*, for_wipe: bool = False) -> DirectoryStore:
     global _store
-    if not routing_active():
+    if not for_wipe and not routing_active():
         raise RuntimeError('directory routing is off')
     with _lock:
         if _store is None:
@@ -164,7 +164,7 @@ def resolve(uid: str, *, signup_platform: str | None = None, signup_os: str | No
         if plane == 'cell':
             # Explicit enrollment only. The durable cell tombstone rejects a
             # resolver that read the old directory row before a wipe fence.
-            cell_store().enroll_space(uid, now=time.time())
+            store.enroll_cell(uid, lambda: cell_store().enroll_space(uid, now=time.time()))
         _remember(uid, plane, epoch)
         with suppress(Exception):
             redis_db.set_generic_cache(f'plane:v1:{uid}', {'plane': plane, 'epoch': epoch}, REDIS_TTL_SECONDS)

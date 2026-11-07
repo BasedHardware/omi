@@ -25,6 +25,7 @@ from utils.account_cutover.access import (
     cutover_enforcement_enabled,
     enforce_account_cutover_http_access,
     enforce_account_cutover_ws_access,
+    is_cutover_control_path,
 )
 from utils.api_key_families import FIREBASE_FAMILY, wrong_key_family_detail
 from utils.client_device import resolve_client_device
@@ -46,7 +47,9 @@ WS_AUTH_CODE_ACCOUNT_DELETION = 4005
 WS_AUTH_CODE_ACCOUNT_CUTOVER = 4006
 
 
-def _resolve_request_plane_or_503(uid, *, signup_platform=None, signup_os=None) -> None:
+def _resolve_request_plane_or_503(uid, *, request=None, signup_platform=None, signup_os=None) -> None:
+    if is_cutover_control_path(getattr(getattr(request, 'url', None), 'path', '')):
+        return
     try:
         if not directory_router.routing_active():
             return
@@ -260,7 +263,7 @@ def get_current_user_uid_readonly(
     uid = get_current_user_uid_for_deletion_status(authorization=authorization, _read_scope=_read_scope)
     enforce_account_deletion_http_access(uid)
     _enforce_cutover_http_if_request(uid, request)
-    _resolve_request_plane_or_503(uid)
+    _resolve_request_plane_or_503(uid, request=request)
     validate_byok_request(uid)
     return uid
 
@@ -291,7 +294,7 @@ def get_current_user_uid(
         raise HTTPException(status_code=401, detail="Invalid authorization token")
     enforce_account_deletion_http_access(uid)
     _enforce_cutover_http_if_request(uid, request)
-    _resolve_request_plane_or_503(uid, signup_platform=x_app_platform)
+    _resolve_request_plane_or_503(uid, request=request, signup_platform=x_app_platform)
 
     # Content-free telemetry and surface intent avoid customer-store
     # registration/recovery writes; security fences above and BYOK still apply.
@@ -359,7 +362,7 @@ def get_current_user_uid_no_byok_validation(
         raise HTTPException(status_code=401, detail="Invalid authorization token")
     enforce_account_deletion_http_access(uid)
     _enforce_cutover_http_if_request(uid, request)
-    _resolve_request_plane_or_503(uid, signup_platform=x_app_platform)
+    _resolve_request_plane_or_503(uid, request=request, signup_platform=x_app_platform)
 
     try:
         record_user_platform(uid, x_app_platform)

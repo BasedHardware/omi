@@ -438,7 +438,7 @@ def background_wipe_user_data(
         if required_failures:
             failed_operations = ', '.join(failure['operation'] for failure in required_failures)
             raise RuntimeError(f'required derived purge failed: {failed_operations}')
-        if directory_routing.routing_active():
+        if directory_routing.directory_configured():
             current_operation = 'cell_directory_purge'
             heartbeat()
             purge_owner_planes(uid)

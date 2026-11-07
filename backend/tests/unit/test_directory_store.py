@@ -196,5 +196,36 @@ def test_migrations_are_separate_and_idempotent(harness):
         path = Path(directory_module.__file__).parent / 'migrations'
         assert migrate(conn, directory=path) == []
         assert migrate(conn, directory=path) == []
-        assert current_version(conn) == 2
+        assert current_version(conn) == 3
         assert conn.execute("SELECT to_regclass('cell_docs')").fetchone()[0] is None
+
+
+def test_wipe_fence_survives_purge_and_blocks_all_route_creation(harness, uid):
+    store = harness.store
+    space = store.get_or_create_personal_space(uid, cell='cell1', now=NOW)
+    fence = store.tombstone_owner(uid, now=NOW + 1)
+    assert (fence.wipe_epoch, fence.cell) == (space.epoch + 1, 'cell1')
+    store.purge_owner(uid, now=NOW + 2)
+    assert store.tombstone_owner(uid, now=NOW + 3) == fence
+    with pytest.raises(directory_module.OwnerTombstoned):
+        store.get_or_create_personal_space(uid, cell='firestore', now=NOW + 4)
+    with pytest.raises(directory_module.OwnerTombstoned):
+        store.set_routing(uid, cell='cell1', now=NOW + 4)
+
+
+def test_tombstoned_owner_cannot_recreate_directory_indexes(harness, uid):
+    store = harness.store
+    other = harness.uid('live-index-neighbor')
+    store.get_or_create_personal_space(other, cell='firestore', now=NOW)
+    store.tombstone_owner(uid, now=NOW)
+    for create in (
+        lambda: store.upsert_token(uid, 'phone', uid + ':token', now=NOW),
+        lambda: store.add_member(other, uid, now=NOW),
+        lambda: store.add_member(uid, other, now=NOW),
+        lambda: store.register_public_conversation(uid + ':conversation', uid, visibility='public', now=NOW),
+    ):
+        with pytest.raises(directory_module.OwnerTombstoned):
+            create()
+    assert store.tokens_for_uid(uid) == []
+    assert store.memberships_for_uid(uid) == []
+    assert store.public_conversation_owner(uid + ':conversation') is None

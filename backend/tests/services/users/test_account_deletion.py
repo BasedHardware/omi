@@ -97,6 +97,8 @@ def _default_to_no_legal_hold(monkeypatch):
     # Existing cases below exercise the immediate kill-switch path. Grace
     # behavior is covered separately with the flag explicitly enabled.
     monkeypatch.setenv('DIRECTORY_ROUTING_MODE', 'off')
+    for suffix in ('DSN', 'HOST', 'DATABASE', 'USER'):
+        monkeypatch.delenv(f'DIRECTORY_PG_{suffix}', raising=False)
     monkeypatch.setattr(account_deletion, 'purge_owner_planes', lambda uid: {'status': 'noop'})
     monkeypatch.setenv('ACCOUNT_DELETION_GRACE_ENABLED', 'false')
     monkeypatch.setattr(account_deletion.deletion_grace_db, 'promote_grace_to_immediate', lambda _uid: None)
@@ -1514,6 +1516,7 @@ def test_background_wipe_user_data_preserves_order(monkeypatch, routing_on):
     calls = []
     monkeypatch.setenv('DIRECTORY_ROUTING_MODE', 'new_owners' if routing_on else 'off')
     if routing_on:
+        monkeypatch.setenv('DIRECTORY_PG_DSN', 'synthetic-configured-directory')
         monkeypatch.setattr(account_deletion, 'purge_owner_planes', lambda uid: calls.append(('cell', uid)))
     monkeypatch.setattr(
         account_deletion.users_db, 'mark_user_deletion_wipe_running', lambda uid: calls.append(('running', uid))
@@ -2576,8 +2579,10 @@ def test_account_wipe_requires_all_retained_vector_copies_to_be_removed(monkeypa
     assert result['best_effort_failures'] == []
 
 
-def test_required_cell_purge_failure_retries_before_firestore(monkeypatch):
-    monkeypatch.setenv('DIRECTORY_ROUTING_MODE', 'new_owners')
+@pytest.mark.parametrize('routing_mode', ['off', 'new_owners'])
+def test_required_cell_purge_failure_retries_before_firestore(monkeypatch, routing_mode):
+    monkeypatch.setenv('DIRECTORY_ROUTING_MODE', routing_mode)
+    monkeypatch.setenv('DIRECTORY_PG_DSN', 'synthetic-configured-directory')
     _stub_wipe_steps_after_billing(monkeypatch)
     monkeypatch.setattr(account_deletion, 'purge_owner_planes', MagicMock(side_effect=RuntimeError('directory down')))
     monkeypatch.setattr(account_deletion.users_db, 'delete_user_data', MagicMock())
@@ -2607,3 +2612,17 @@ def test_off_wipe_never_enters_cell_step(monkeypatch):
     # The single legacy heartbeat before Firestore is still required. A new
     # heartbeat for the skipped cell step would add a second event here.
     assert events[events.index('derived') + 1 : events.index('firestore')] == ['heartbeat']
+
+
+@pytest.mark.parametrize('routing_mode', ['off', 'new_owners'])
+def test_configured_purge_precedes_firestore_in_every_mode(monkeypatch, routing_mode):
+    _stub_wipe_steps_after_billing(monkeypatch)
+    monkeypatch.setenv('DIRECTORY_ROUTING_MODE', routing_mode)
+    monkeypatch.setenv('DIRECTORY_PG_HOST', 'synthetic-binding')
+    events = []
+    monkeypatch.setattr(account_deletion, 'purge_owner_planes', lambda uid: events.append('cell'))
+    monkeypatch.setattr(
+        account_deletion.users_db, 'delete_user_data', lambda uid: events.append('firestore') or {'status': 'ok'}
+    )
+    assert account_deletion.background_wipe_user_data('uid1') is True
+    assert events == ['cell', 'firestore']

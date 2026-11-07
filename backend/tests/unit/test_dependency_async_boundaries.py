@@ -67,7 +67,7 @@ def _loaded_dependencies() -> Iterator[tuple[ModuleType, ModuleType, ModuleType,
         'utils.other.endpoints',
         check_api_key_rate_limit=lambda **_kwargs: None,
         enforce_account_deletion_http_access=lambda _uid: None,
-        _resolve_request_plane_or_503=lambda _uid: None,
+        _resolve_request_plane_or_503=lambda _uid, **_kwargs: None,
     )
     mcp_memories = _module(
         'utils.mcp_memories',
@@ -145,7 +145,12 @@ def test_firebase_verification_uses_the_critical_executor() -> None:
                 ('user-1', None),
                 {},
             ),
-            (dependencies.db_executor, dependencies.auth_endpoints._resolve_request_plane_or_503, ('user-1',), {}),
+            (
+                dependencies.db_executor,
+                dependencies.auth_endpoints._resolve_request_plane_or_503,
+                ('user-1',),
+                {'request': None},
+            ),
         ]
 
 
@@ -576,7 +581,7 @@ def test_directory_resolution_keeps_the_event_loop_responsive() -> None:
             release = threading.Event()
             loop = asyncio.get_running_loop()
 
-            def blocking_resolve(_uid: str) -> None:
+            def blocking_resolve(_uid: str, *, request=None) -> None:
                 loop.call_soon_threadsafe(entered.set)
                 assert release.wait(timeout=2)
 

@@ -11,9 +11,9 @@ _store: CellStore | None = None
 _lock = threading.Lock()
 
 
-def cell_store() -> CellStore:
+def cell_store(*, for_wipe: bool = False) -> CellStore:
     global _store
-    if not directory_routing.routing_active():
+    if not for_wipe and not directory_routing.routing_active():
         raise RuntimeError('directory routing is off')
     with _lock:
         if _store is None:

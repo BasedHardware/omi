@@ -1,4 +1,4 @@
-"""Call-time directory enrollment controls; off creates no serving resources."""
+"""Call-time directory controls; erasure depends on bindings, serving on routing mode."""
 
 import math
 import os
@@ -43,6 +43,14 @@ def cell_pool_size() -> int:
 
 def wipe_writer_drain_seconds() -> float:
     return _bounded('CELL_WIPE_WRITER_DRAIN_SECONDS', 5.0, 60.0)
+
+
+def directory_configured() -> bool:
+    """Erasure is independent of routing, including partially configured bindings."""
+    return any(
+        os.getenv(name, '').strip()
+        for name in ('DIRECTORY_PG_DSN', 'DIRECTORY_PG_HOST', 'DIRECTORY_PG_DATABASE', 'DIRECTORY_PG_USER')
+    )
 
 
 def cell_wipe_enabled() -> bool:

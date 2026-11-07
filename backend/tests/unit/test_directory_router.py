@@ -408,3 +408,117 @@ def test_warm_resolver_and_invalidation_fail_closed_on_redis_loss(monkeypatch):
     monkeypatch.setattr(router.redis_db.r, 'set', Mock(side_effect=ConnectionError()))
     with pytest.raises(router.DirectoryRoutingUnavailable):
         router.invalidate('owner')
+
+
+@pytest.mark.parametrize('prefix', ['DIRECTORY', 'CELLS'])
+def test_wipe_accessor_available_when_routing_off(monkeypatch, prefix):
+    module = router if prefix == 'DIRECTORY' else cells_serving
+    accessor = module.directory_store if prefix == 'DIRECTORY' else module.cell_store
+    monkeypatch.setenv('DIRECTORY_ROUTING_MODE', 'off')
+    monkeypatch.setenv(f'{prefix}_PG_DSN', 'synthetic-local-dsn')
+    monkeypatch.setattr(module, '_store', None)
+    pool = Mock()
+    monkeypatch.setattr(module, 'Pool', pool)
+    with pytest.raises(RuntimeError, match='off'):
+        accessor()
+    pool.assert_not_called()
+    assert accessor(for_wipe=True) is accessor(for_wipe=True)
+    pool.assert_called_once_with('synthetic-local-dsn', size=2, connect=None)
+
+
+@pytest.mark.parametrize('suffix', ['DSN', 'HOST', 'DATABASE', 'USER'])
+def test_partial_directory_binding_requires_erasure(monkeypatch, suffix):
+    for name in ('DSN', 'HOST', 'DATABASE', 'USER'):
+        monkeypatch.delenv(f'DIRECTORY_PG_{name}', raising=False)
+    assert not directory_routing.directory_configured()
+    monkeypatch.setenv(f'DIRECTORY_PG_{suffix}', 'synthetic-binding')
+    assert directory_routing.directory_configured()
+
+
+@pytest.mark.parametrize(
+    'path',
+    [
+        '/v1/account/cutover/control',
+        '/v1/auth/refresh',
+        '/v1/users/delete-account',
+        '/v2/desktop/update-policy',
+        '/v1/updates/check',
+        '/health',
+        '/v1/health',
+    ],
+)
+@pytest.mark.parametrize(
+    'name',
+    [
+        'get_current_user_uid',
+        'get_current_user_uid_readonly',
+        'get_current_user_uid_no_byok_validation',
+    ],
+)
+def test_cutover_exempt_auth_does_not_resolve_product_plane(monkeypatch, name, path):
+    monkeypatch.setattr(endpoints, 'verify_token', lambda token: 'owner')
+    monkeypatch.setattr(endpoints, 'enforce_account_deletion_http_access', lambda uid: None)
+    monkeypatch.setattr(endpoints, '_enforce_cutover_http_if_request', lambda *args: None)
+    monkeypatch.setattr(endpoints, 'record_user_platform', lambda *args: None)
+    monkeypatch.setattr(endpoints, 'record_client_device', lambda *args, **kwargs: None)
+    monkeypatch.setattr(endpoints, 'validate_byok_request', lambda uid: None)
+    monkeypatch.setattr(endpoints, '_recover_locked_content_if_request', lambda *args: None)
+    monkeypatch.setattr(endpoints, 'load_rollout_cohorts', lambda uid: None)
+    resolver = Mock(side_effect=router.DirectoryRoutingUnavailable('directory down'))
+    monkeypatch.setattr(router, 'resolve', resolver)
+    request = SimpleNamespace(method='GET', url=SimpleNamespace(path=path))
+    assert getattr(endpoints, name)(authorization='Bearer token', request=request) == 'owner'
+    resolver.assert_not_called()
+    # The exemption must not extend to a product route or lookalike prefix.
+    for product_path in ('/v1/memories', '/v1/account/cutover-unsafe'):
+        request.url.path = product_path
+        with pytest.raises(HTTPException) as error:
+            getattr(endpoints, name)(authorization='Bearer token', request=request)
+        assert error.value.status_code == 503
+
+
+@pytest.mark.parametrize(
+    'name',
+    [
+        'get_current_user_id',
+        'get_uid_from_mcp_api_key',
+        'get_mcp_api_key_auth',
+        'get_api_key_auth',
+    ],
+)
+def test_async_cutover_exempt_auth_reaches_control_during_directory_outage(monkeypatch, name):
+    async def run(pool, fn, *args, **kwargs):
+        if fn is dependencies.auth.verify_id_token:
+            return {'uid': 'owner'}
+        if fn in (
+            dependencies.mcp_api_key_db.get_api_key_auth_result,
+            dependencies.dev_api_key_db.get_api_key_auth_result,
+        ):
+            return SimpleNamespace(context={'user_id': 'owner'}, repairs=())
+        return fn(*args, **kwargs)
+
+    async def noop(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(dependencies, 'run_blocking', run)
+    for helper in (
+        '_enforce_account_deletion_access',
+        '_enforce_cutover_access',
+        '_enforce_ladder_api',
+        '_check_api_key_rate_limit_async',
+    ):
+        monkeypatch.setattr(dependencies, helper, noop)
+    for helper in ('wrong_key_family_detail', 'malformed_api_key_detail'):
+        monkeypatch.setattr(dependencies, helper, lambda *args: None)
+    monkeypatch.setattr(dependencies, 'record_api_key_repairs', lambda **kwargs: None)
+    resolver = Mock(side_effect=router.DirectoryRoutingUnavailable('directory down'))
+    monkeypatch.setattr(router, 'resolve', resolver)
+    kwargs = (
+        {'credentials': SimpleNamespace(credentials='synthetic')}
+        if name == 'get_current_user_id'
+        else {'api_key': 'Bearer synthetic'}
+    )
+    kwargs['request'] = SimpleNamespace(url=SimpleNamespace(path='/v1/account/cutover/control'))
+    result = asyncio.run(getattr(dependencies, name)(**kwargs))
+    assert (result if isinstance(result, str) else result.uid) == 'owner'
+    resolver.assert_not_called()
