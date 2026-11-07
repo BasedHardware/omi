@@ -33,10 +33,16 @@ With `batch_timeliness_leader` enabled, historical counts stop at 10,000 per leg
 stock >=10,000 without requiring growth history or a positive delta. It stays actionable while capped
 stock is flat, including when the true stock is falling but still above the cap. Below the cap, the
 original >1000 stock and >50/hour growth condition applies. Lever 0 restores exact counts; the >=10,000
-stock condition still applies. Both branches require a fresh sample for 15 minutes. Inspect aggregate
+stock condition still applies. Each stock is joined to its matching observation with `and ignoring(leg)`
+before the fleet maximum; all replica/resource labels must match and the <900 comparison omits `bool`.
+Both branches, including the growth subquery, use that fresh fleet stock and retain the zero fallback.
+Both branches require a fresh sample for 15 minutes. The sampling interval is clamped to 60–600 seconds
+(default 300), keeping successful recurring observations below the 900-second freshness boundary
+through the full pending window. Configured 3600 now clamps to 600. Inspect aggregate
 recovery progress and repair the held leg without deleting audio or removing the Firestore read bound.
 All sampler gauges expire at collection after the configured sampling interval plus 60 seconds even
-with election disabled; failed refreshes and lever changes do not extend that deadline.
+with election disabled; failed refreshes and lever changes do not extend that deadline. Existing leases
+from older hourly samplers expire at their original deadline; this change does not revoke them.
 
 The low-stage selector names the two serving paid targets; retired Parakeet's
 persistent low stage must not cause this page. A pristine NaN stage does not

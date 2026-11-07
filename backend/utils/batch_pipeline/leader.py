@@ -24,6 +24,7 @@ import uuid
 from collections.abc import Callable
 
 from config.batch_pipeline_leader import leader_lease_enabled
+from config.batch_timeliness import MAX_INTERVAL_SECONDS
 
 logger = logging.getLogger(__name__)
 
@@ -34,8 +35,8 @@ PUMP_RECOVERY = 'pump_recovery'
 SERVING_MAINTENANCE = 'serving_maintenance'
 QUEUE_METRICS = 'queue_metrics'
 TIMELINESS_METRICS = 'timeliness_metrics'
-# Cover the supervised tick jitter and sample RPCs without a visibility gap
-# at each 300s boundary; the sampling cadence itself remains unchanged.
+# Cover supervised tick jitter and sample RPCs between configured samples;
+# the default sampling cadence remains 300s.
 TIMELINESS_LEASE_GRACE_SECONDS = 60.0
 ROLES = frozenset({PUMP_RECOVERY, SERVING_MAINTENANCE, QUEUE_METRICS, TIMELINESS_METRICS})
 
@@ -50,9 +51,10 @@ class LeaderLease:
         holder: str | None = None,
         clock: Callable[[], float] = time.time,
     ):
-        # Timeliness samples run at 60-3600s. Hold through the interval plus
+        # Timeliness samples run at 60-600s. Hold through the interval plus
         # bounded refresh grace, so samples stay visible during normal RPCs.
-        max_ttl = 3600 + TIMELINESS_LEASE_GRACE_SECONDS if role == TIMELINESS_METRICS else 600
+        # Existing longer leases remain live until their stored expiry.
+        max_ttl = MAX_INTERVAL_SECONDS + TIMELINESS_LEASE_GRACE_SECONDS if role == TIMELINESS_METRICS else 600
         if role not in ROLES or not 0 < ttl_seconds <= max_ttl:
             raise ValueError('static role and bounded lease TTL required')
         self.store = store

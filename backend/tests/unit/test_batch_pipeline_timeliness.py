@@ -8,7 +8,7 @@ import pytest
 
 from prometheus_client import CollectorRegistry
 
-from config.batch_timeliness import TERMINAL_EMPTY_IS_PROCESSED
+from config.batch_timeliness import TERMINAL_EMPTY_IS_PROCESSED, timeliness_interval_seconds
 from database.batch_pipeline_store import TIMELINESS_HOLD_SCAN_LIMIT, timeliness_sample
 from utils.batch_pipeline.leader import TIMELINESS_LEASE_GRACE_SECONDS
 from utils.batch_pipeline.metrics import QueueMetrics
@@ -467,10 +467,36 @@ def test_historical_counts_apply_limit_before_aggregation(monkeypatch, enabled, 
     if leg == 'assignment_held':
         rules = json.loads((BACKEND / 'charts/monitoring/alerts/critical-failures.json').read_text())
         alarm = next(rule for rule in rules if rule['uid'] == 'omi-batch-held-backlog-growing')
-        stock_metric = 'max(omi_batch_timeliness_backlog_units{leg="assignment_held"})'
+        stock_metric = (
+            'max(omi_batch_timeliness_backlog_units{leg="assignment_held"} '
+            'and ignoring(leg) ((time() - omi_batch_timeliness_observed_at_seconds) < 900))'
+        )
         assert f'({stock_metric} >= {TIMELINESS_BACKLOG_COUNT_LIMIT})' in alarm['data'][0]['model']['expr']
     # Post-epoch counts remain exact and unbounded.
     assert all(q._limit is None for q in queries if q not in historical)
+
+
+@pytest.mark.parametrize(
+    'configured,expected',
+    [
+        (None, 300),
+        ('', 300),
+        ('invalid', 300),
+        ('nan', 300),
+        ('0', 60),
+        ('59', 60),
+        ('60', 60),
+        ('300', 300),
+        ('600', 600),
+        ('601', 600),
+        ('3600', 600),
+    ],
+)
+def test_timeliness_interval_clamps_to_preserve_freshness_through_pending(monkeypatch, configured, expected):
+    monkeypatch.delenv('BATCH_TIMELINESS_INTERVAL_SECONDS', raising=False)
+    if configured is not None:
+        monkeypatch.setenv('BATCH_TIMELINESS_INTERVAL_SECONDS', configured)
+    assert timeliness_interval_seconds() == expected
 
 
 def _fleet(monkeypatch, interval=300):
@@ -482,10 +508,11 @@ def _fleet(monkeypatch, interval=300):
     monkeypatch.delenv('FIRESTORE_READ_LEVERS', raising=False)
     monkeypatch.setenv('BATCH_TIMELINESS_INTERVAL_SECONDS', str(interval))
     clock, lease_store = Clock(NOW), MemoryStore()
+    effective_interval = timeliness_interval_seconds()
     metrics = [
         QueueMetrics(
             CollectorRegistry(),
-            timeliness_leader=LeaderLease(lease_store, TIMELINESS_METRICS, ttl_seconds=interval, clock=clock),
+            timeliness_leader=LeaderLease(lease_store, TIMELINESS_METRICS, ttl_seconds=effective_interval, clock=clock),
         )
         for _ in range(2)
     ]
@@ -493,9 +520,10 @@ def _fleet(monkeypatch, interval=300):
     return metrics, store, clock
 
 
-@pytest.mark.parametrize('interval', [300, 3600])
-def test_fleet_sample_follower_zero_queries_and_handover(monkeypatch, interval):
-    metrics, store, clock = _fleet(monkeypatch, interval)
+@pytest.mark.parametrize('configured,interval', [(60, 60), (300, 300), (600, 600), (3600, 600)])
+def test_fleet_sample_follower_zero_queries_and_handover(monkeypatch, configured, interval):
+    metrics, store, clock = _fleet(monkeypatch, configured)
+    assert timeliness_interval_seconds() == interval
     first, second = metrics
     for m in metrics:
         assert list(m.timeliness_observed_at.collect()) == []
@@ -528,12 +556,13 @@ def test_fleet_sample_follower_zero_queries_and_handover(monkeypatch, interval):
     assert list(second.timeliness_observed_at.collect())[0].samples[0].value == clock.now
 
 
-@pytest.mark.parametrize('interval', [300, 3600])
-def test_follower_retries_after_refresh_grace_without_another_full_interval(monkeypatch, interval):
+@pytest.mark.parametrize('configured,interval', [(60, 60), (300, 300), (600, 600), (3600, 600)])
+def test_follower_retries_after_refresh_grace_without_another_full_interval(monkeypatch, configured, interval):
     from utils.batch_pipeline import metrics as metrics_module
     from utils.batch_pipeline.leader import TIMELINESS_LEASE_GRACE_SECONDS
 
-    metrics, store, clock = _fleet(monkeypatch, interval)
+    metrics, store, clock = _fleet(monkeypatch, configured)
+    assert timeliness_interval_seconds() == interval
     monkeypatch.setattr(metrics_module.time, 'monotonic', clock)
     first, follower = metrics
     follower.timeliness_leader.acquire = Mock(wraps=follower.timeliness_leader.acquire)
@@ -610,12 +639,13 @@ def test_alerts_aggregate_available_leader_and_keep_missing_sample_freshness():
     assert rules['omi-batch-timeliness-scan-blind']['noDataState'] == 'OK'
 
 
-@pytest.mark.parametrize('interval', [60, 300, 3600])
+@pytest.mark.parametrize('configured,interval', [(60, 60), (300, 300), (600, 600), (3600, 600)])
 @pytest.mark.parametrize('mode', ['elected', 'lever_zero', 'rollback'])
-def test_stalled_replica_expires_at_collection_without_refresh(monkeypatch, interval, mode):
+def test_stalled_replica_expires_at_collection_without_refresh(monkeypatch, configured, interval, mode):
     from utils.batch_pipeline import metrics as metrics_module
 
-    metrics, store, clock = _fleet(monkeypatch, interval)
+    metrics, store, clock = _fleet(monkeypatch, configured)
+    assert timeliness_interval_seconds() == interval
     monkeypatch.setattr(metrics_module.time, 'monotonic', clock)
     first, second = metrics
     if mode == 'lever_zero':
@@ -667,11 +697,13 @@ def test_lazy_election_uses_store_namespace_and_own_role_on_both_planes(monkeypa
     store.timeliness.assert_not_called()
 
 
+@pytest.mark.parametrize('configured,interval', [(60, 60), (300, 300), (600, 600), (3600, 600)])
 @pytest.mark.parametrize('mode', ['elected', 'lever_zero', 'rollback'])
-def test_failed_retry_does_not_revive_expired_replica(monkeypatch, mode):
+def test_failed_retry_does_not_revive_expired_replica(monkeypatch, configured, interval, mode):
     from utils.batch_pipeline import metrics as metrics_module
 
-    metrics, store, clock = _fleet(monkeypatch)
+    metrics, store, clock = _fleet(monkeypatch, configured)
+    assert timeliness_interval_seconds() == interval
     monkeypatch.setattr(metrics_module.time, 'monotonic', clock)
     first, second = metrics
     if mode == 'lever_zero':
@@ -679,7 +711,7 @@ def test_failed_retry_does_not_revive_expired_replica(monkeypatch, mode):
     first.refresh_timeliness(store, clock.now)
     if mode == 'rollback':
         monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"batch_timeliness_leader":0}')
-    clock.now += 300 + TIMELINESS_LEASE_GRACE_SECONDS + 1
+    clock.now += interval + TIMELINESS_LEASE_GRACE_SECONDS + 1
     second.refresh_timeliness(store, clock.now)
     assert list(first.timeliness_age.collect()) == []
     first.timeliness_leader.store = Mock(run=Mock(side_effect=RuntimeError('lease store down')))
@@ -693,10 +725,11 @@ def test_failed_retry_does_not_revive_expired_replica(monkeypatch, mode):
     assert store.timeliness.call_count == 3  # Fail-open still attempts the sample.
 
 
-def test_refresh_jitter_and_rpc_time_do_not_break_continuous_breach_visibility(monkeypatch):
+@pytest.mark.parametrize('configured', [60, 300, 600, 3600])
+def test_refresh_jitter_and_rpc_time_do_not_break_continuous_breach_visibility(monkeypatch, configured):
     from utils.batch_pipeline import metrics as metrics_module
 
-    metrics, store, clock = _fleet(monkeypatch)
+    metrics, store, clock = _fleet(monkeypatch, configured)
     monkeypatch.setattr(metrics_module.time, 'monotonic', clock)
     first = metrics[0]
     first.refresh_timeliness(store, clock.now)

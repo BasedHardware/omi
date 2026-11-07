@@ -11,6 +11,9 @@ import os
 SLA_SECONDS = 7200
 DEFAULT_EPOCH = '2026-11-02T06:09:00Z'
 DEFAULT_INTERVAL_SECONDS = 300.0
+# Keep successful samples fresh (<900s) continuously through the held-backlog
+# alert's 15m pending window, with 60s collection/lease refresh grace.
+MAX_INTERVAL_SECONDS = 600.0
 # David, 2026-11-02 10:45Z: "finished recording counts as processed". A terminal empty_asr unit with no recoverable
 # speech (failed held, measured held VAD speech exactly 0) leaves the 2h alarm; it stays a visible count. False puts
 # it back in the alarm.
@@ -40,4 +43,4 @@ def timeliness_interval_seconds() -> float:
         value = float(os.getenv('BATCH_TIMELINESS_INTERVAL_SECONDS', '') or DEFAULT_INTERVAL_SECONDS)
     except ValueError:
         return DEFAULT_INTERVAL_SECONDS
-    return min(3600.0, max(60.0, value)) if value == value else DEFAULT_INTERVAL_SECONDS
+    return min(MAX_INTERVAL_SECONDS, max(60.0, value)) if value == value else DEFAULT_INTERVAL_SECONDS

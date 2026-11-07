@@ -289,7 +289,7 @@
       "scope": "explicit-bridge"
     },
     {
-      "expression": "(((max(omi_batch_timeliness_backlog_units{leg=\"assignment_held\"}) > 1000) and on() (delta((max(omi_batch_timeliness_backlog_units{leg=\"assignment_held\"}))[1h:5m]) > 50)) or (max(omi_batch_timeliness_backlog_units{leg=\"assignment_held\"}) >= 10000) or on() vector(0)) * on() ((time() - max(omi_batch_timeliness_observed_at_seconds)) < bool 900)",
+      "expression": "(((max(omi_batch_timeliness_backlog_units{leg=\"assignment_held\"} and ignoring(leg) ((time() - omi_batch_timeliness_observed_at_seconds) < 900)) > 1000) and on() (delta((max(omi_batch_timeliness_backlog_units{leg=\"assignment_held\"} and ignoring(leg) ((time() - omi_batch_timeliness_observed_at_seconds) < 900)))[1h:5m]) > 50)) or (max(omi_batch_timeliness_backlog_units{leg=\"assignment_held\"} and ignoring(leg) ((time() - omi_batch_timeliness_observed_at_seconds) < 900)) >= 10000) or on() vector(0))",
       "file": "alerts/critical-failures.json",
       "issues": [],
       "metrics": [
