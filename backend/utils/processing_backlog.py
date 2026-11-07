@@ -50,7 +50,7 @@ def snapshot(uid: str, *, allowance=None, audio=None, summary=None, paid=None) -
     rate = float(recording_units_per_hour('batch'))
     estimate = seconds * rate / 3600 + max(0, summary.get('units', 0))
     remaining, budget = funded_processing.capacity(allowance)
-    active = is_active(summary) or rolls(summary, remaining)
+    active = is_active(summary) or rolls(summary, remaining, allowance=allowance)
     waiting = count + deferred > 0
     if waiting and paid is None:
         paid = funded_processing.paid_owner(uid)
@@ -160,7 +160,25 @@ def is_active(row: dict) -> bool:
     return row.get('state') == 'processing' and row.get('period') == funded_processing.period_id()
 
 
-def rolls(row: dict, remaining: float | None) -> bool:
+def _is_unlimited_transcription_plan(plan: Any) -> bool:
+    if not plan:
+        return False
+    try:
+        from config.plan_catalog import UNLIMITED_TRANSCRIPTION_PLAN_TYPES, PlanType
+
+        plan_type = plan if isinstance(plan, PlanType) else PlanType(plan)
+        return plan_type in UNLIMITED_TRANSCRIPTION_PLAN_TYPES
+    except (ImportError, ValueError, TypeError):
+        return False
+
+
+def rolls(
+    row: dict,
+    remaining: float | None = None,
+    *,
+    allowance: Any = None,
+    plan: Any = None,
+) -> bool:
     """An earlier month's tap or trial grant continues; a conversion stays in its month.
 
     ``remaining`` is the owner's current capacity; None is the catalog's
@@ -168,8 +186,18 @@ def rolls(row: dict, remaining: float | None) -> bool:
     consent never spends a new month's allowance. A trial grant keeps its own
     hours across the month, since the daily limit can carry it past the boundary.
     """
+    is_unlimited = (
+        remaining is None
+        or (
+            allowance is not None
+            and getattr(allowance, 'managed', True)
+            and getattr(allowance, 'limit_seconds', 0) is None
+        )
+        or (plan is not None and _is_unlimited_transcription_plan(plan))
+    )
+
     return (
-        (row.get('trial_grant') or (remaining is None and not row.get('automatic')))
+        (row.get('trial_grant') or (is_unlimited and not row.get('automatic')))
         and row.get('state') == 'processing'
         and isinstance(row.get('period'), str)
         and row['period'] < funded_processing.period_id()
@@ -186,7 +214,11 @@ def allowance_increased(previous: Any, current: Any) -> bool:
     def fields(value):
         if value is None:
             return {'plan': 'basic'}
-        return dict(value) if isinstance(value, dict) else value.model_dump()
+        if isinstance(value, dict):
+            return dict(value)
+        if hasattr(value, 'model_dump'):
+            return value.model_dump()
+        return dict(getattr(value, '__dict__', {}))
 
     old, new = fields(previous), fields(current)
     if old.get('plan') == new.get('plan') and old.get('current_price_id') == new.get('current_price_id'):

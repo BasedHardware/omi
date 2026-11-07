@@ -197,7 +197,8 @@ async def _process(uid, item) -> AttemptOutcome:
 async def _roll(uid: str, job: dict) -> dict:
     """An Unlimited owner's earlier-month tap continues on its own; anything else stays parked."""
     current = await run_blocking(db_executor, funded_processing.allowance, uid)
-    if not current.managed or not rolls(job, funded_processing.capacity(current)[0]):
+    remaining = funded_processing.capacity(current)[0]
+    if not current.managed or not rolls(job, remaining, allowance=current):
         return job
     rolled = await run_blocking(
         db_executor, partial(store.roll, uid, period=funded_processing.period_id(), cutoff=time.time())
@@ -501,7 +502,9 @@ async def subscription_changed_async(uid: str, event: dict, stripe_subscription:
     A trial's conversion to a real charge, or an allowance increase on an active subscription,
     releases within the plan's allowance. So does a new paid subscription created active (a
     purchase): its status rides in the payload, so this retries a checkout whose Stripe lookup
-    failed, and creation happens once per subscription, never at renewal. Only the creation of a
+    failed, and creation happens once per subscription, never at renewal. A recovered renewal
+    transitioning from past_due, unpaid, incomplete, or paused back to active releases held
+    backlog without requiring a plan or price increase. Only the creation of a
     trialing subscription grants the trial; a later update such as a plan change never does.
     """
     from utils.processing_backlog import allowance_increased
@@ -511,7 +514,12 @@ async def subscription_changed_async(uid: str, event: dict, stripe_subscription:
     previous_status = ((event.get('data') or {}).get('previous_attributes') or {}).get('status')
     created = event.get('type') == 'customer.subscription.created'
     purchased = created and is_paid_plan(current.plan)
-    if previous_status == 'trialing' or purchased or allowance_increased(previous, current):
+    renewal_recovered = (
+        previous_status in ('past_due', 'unpaid', 'incomplete', 'paused')
+        and status == 'active'
+        and is_paid_plan(current.plan)
+    )
+    if previous_status == 'trialing' or purchased or renewal_recovered or allowance_increased(previous, current):
         await upgrade_async(
             uid, f'subscription-upgrade:{event.get("id")}', intent_at=event.get('created'), status=status or ''
         )

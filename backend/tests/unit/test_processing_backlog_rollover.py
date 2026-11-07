@@ -109,14 +109,21 @@ def test_rolls_only_for_an_unlimited_owners_own_earlier_tap(monkeypatch, remaini
     assert backlog.rolls(row, remaining) is rolls
 
 
-@pytest.mark.parametrize('remaining,state', [(None, 'processing'), (100.0, 'waiting_choice')])
-def test_snapshot_shows_a_rolling_choice_as_processing_and_plus_as_waiting(monkeypatch, remaining, state):
+@pytest.mark.parametrize(
+    'remaining,allowance,state',
+    [
+        (None, SimpleNamespace(managed=True), 'processing'),
+        (44090.0, SimpleNamespace(managed=True, limit_seconds=None), 'processing'),
+        (100.0, SimpleNamespace(managed=True, limit_seconds=90000), 'waiting_choice'),
+    ],
+)
+def test_snapshot_shows_a_rolling_choice_as_processing_and_plus_as_waiting(monkeypatch, remaining, allowance, state):
     monkeypatch.setattr(funded, 'enabled', lambda uid, lane=None: True)
     monkeypatch.setattr(funded, 'period_id', lambda: '2026-11')
-    monkeypatch.setattr(funded, 'capacity', lambda allowance: (remaining, None if remaining is None else 1000.0))
+    monkeypatch.setattr(funded, 'capacity', lambda _allowance: (remaining, None if remaining is None else 1000.0))
     result = backlog.snapshot(
         UID,
-        allowance=SimpleNamespace(managed=True),
+        allowance=allowance,
         audio={'count': 4, 'seconds': 240},
         summary=october(),
         paid=True,
@@ -198,3 +205,69 @@ async def test_a_rolled_choice_spends_under_the_new_months_consent(visit, monkey
     await worker.run(UID)
     # The new cutoff admits a hold queued after October's; consent is November's, not October's.
     assert grants == [(UID, '2026-11')]
+
+
+async def test_pro_ladder_v1_october_choice_resumes_in_november_without_a_tap(visit, monkeypatch):
+    """Pro/Operator under ladder_v1 has units capacity (e.g. 44090.0) but unlimited transcription (limit_seconds is None)."""
+    allowance = SimpleNamespace(managed=True, limit_seconds=None, remaining_units=44090.0, budget_units=44090.0)
+    monkeypatch.setattr(funded, 'allowance', lambda uid: allowance)
+    monkeypatch.setattr(funded, 'capacity', lambda _allowance: (44090.0, 44090.0))
+    await worker.run(UID)
+    assert visit.calls == [('roll', '2026-11'), ('claim', 'november', '2026-11')]
+
+
+@pytest.mark.parametrize('prev_status', ['past_due', 'unpaid', 'incomplete', 'paused'])
+async def test_pro_renewal_recovery_triggers_upgrade_release(monkeypatch, prev_status):
+    """A (past_due/unpaid/incomplete/paused) -> active transition on a paid plan triggers upgrade_async."""
+    upgrades = []
+
+    async def fake_upgrade_async(uid, key, *, intent_at, status=''):
+        upgrades.append((uid, key, status))
+
+    monkeypatch.setattr(worker, 'upgrade_async', fake_upgrade_async)
+    event = {
+        'id': f'evt_recovered_{prev_status}',
+        'type': 'customer.subscription.updated',
+        'created': NOW,
+        'data': {'previous_attributes': {'status': prev_status}},
+    }
+    stripe_sub = {'id': 'sub_123', 'status': 'active'}
+    previous = SimpleNamespace(plan='operator', current_price_id='price_pro')
+    current = SimpleNamespace(plan='operator', current_price_id='price_pro')
+
+    await worker.subscription_changed_async(UID, event, stripe_sub, previous, current)
+    assert upgrades == [(UID, f'subscription-upgrade:evt_recovered_{prev_status}', 'active')]
+
+
+def test_snapshot_exhausted_ladder_pro_does_not_roll_processing(monkeypatch):
+    """A units-exhausted Pro account (managed=False, mode='on_device', limit_seconds=None) must not report active rolls or 'processing'."""
+    from utils.processing_backlog import snapshot, rolls
+
+    monkeypatch.setattr(funded, 'enabled', lambda _uid: True)
+    monkeypatch.setattr(funded, 'capacity', lambda _allowance: (0.0, 44090.0))
+
+    allowance = SimpleNamespace(
+        managed=False,
+        limit_seconds=None,
+        remaining_units=0.0,
+        budget_units=44090.0,
+        reason='usage_budget_exhausted',
+        mode='on_device',
+    )
+    summary = {
+        'state': 'processing',
+        'period': '2026-10',
+        'count': 1,
+        'seconds': 60,
+        'units': 1.0,
+    }
+    audio = {'count': 0, 'seconds': 0}
+
+    # Verify rolls() directly refuses when managed=False
+    assert not rolls(summary, remaining=0.0, allowance=allowance)
+
+    # Verify snapshot() reports capped rather than processing
+    result = snapshot(UID, allowance=allowance, summary=summary, audio=audio, paid=True)
+    assert result is not None
+    assert result.state == 'capped'
+    assert result.budget_exhausted is True
