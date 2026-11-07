@@ -436,6 +436,32 @@ def test_a_synced_join_the_model_calls_same_occasion_stays_one_episode(store):
     assert episode['id'] == first['id'] and episode['conversation_ids'] == ['c1', 'c2']
 
 
+@pytest.mark.parametrize('answer,opens_own', [(0.05, True), (0.9, False)], ids=['moved_on', 'same_occasion'])
+def test_a_sync_attach_retried_after_lost_cas_asks_jev_once(store, monkeypatch, answer, opens_own):
+    # sync_attach re-runs the whole attach after a lost CAS; each run used to ask Jev again (up to three times).
+    # Every attempt also keeps the first answer's placement: a moved-on candidate opens its own occasion each time.
+    _first_episode(store)
+    real_attach_recorded = service.attach_recorded
+    attempts = []
+
+    def lose_two_cas(uid, conversation_id, row, started, finished, c, **kwargs):
+        attempts.append(kwargs.get('new_occasion', False))
+        if len(attempts) <= 2:
+            raise EpisodeConflict('lost cas')
+        return real_attach_recorded(uid, conversation_id, row, started, finished, c, **kwargs)
+
+    monkeypatch.setattr(service, 'attach_recorded', lose_two_cas)
+    asked = []
+
+    def ask(state, questions, **kwargs):
+        asked.append(state)
+        return SimpleNamespace(noul=lambda name: answer)
+
+    _sync_attach(store, 'c2', SECOND, minutes=12, ask=ask)
+    assert attempts == [opens_own] * 3, 'the lost CAS must be retried twice, each with the first answer'
+    assert len(asked) == 1, 'a retry must reuse the first answer, never ask Jev again'
+
+
 @pytest.mark.parametrize('case', ['killed', 'outside_cohort', 'short_speech', 'short_gap', 'member_later'])
 def test_a_synced_join_that_f_does_not_decide_keeps_todays_join_without_a_question(store, monkeypatch, case):
     first = _first_episode(store)

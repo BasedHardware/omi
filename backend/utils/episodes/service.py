@@ -1500,33 +1500,57 @@ def _synced_f_verdict(
 
 
 def _attach_recorded_synced(
-    uid: str, conversation_id: str, row: Mapping[str, Any], started: datetime, finished: datetime, c: Collaborators
+    uid: str,
+    conversation_id: str,
+    row: Mapping[str, Any],
+    started: datetime,
+    finished: datetime,
+    c: Collaborators,
+    *,
+    attempts: Optional[dict[str, dict[str, Any]]] = None,
 ) -> dict[str, Any]:
     """Place a sync or late conversation on its recorded span and return the episode it joined or opened.
 
     Variant F may split it into its own occasion. Every failure keeps today's placement.
+
+    ``attempts`` is the state one sync attach shares across the lost-CAS retries of ``sync_attach``.
+    Jev answers once, on the first attempt. A retry places the conversation the way that answer
+    decided, and the owner closes at most once, so one sync attach asks Jev at most one question.
     """
-    try:
-        verdict = _synced_f_verdict(uid, conversation_id, row, started, finished, c)
-    except Exception as error:
-        f_join.synced_failed(error)
-        verdict = None
-    if verdict is None or verdict[1].action != 'close':
+    state = {} if attempts is None else attempts.setdefault(conversation_id, {})
+    if 'verdict' not in state:
+        try:
+            state['verdict'] = _synced_f_verdict(uid, conversation_id, row, started, finished, c)
+        except Exception as error:
+            f_join.synced_failed(error)
+            state['verdict'] = None
+    verdict = state['verdict']
+    if state.get('keep') or verdict is None or verdict[1].action != 'close':
         return attach_recorded(uid, conversation_id, row, started, finished, c)
-    owner, boundary = verdict
-    try:
-        # Same split as the live path: the owner closes where the candidate begins, under the member guard.
-        closed = _close(uid, owner, boundary.reason or 'moved_on', c, now=started, split_after=started)
-    except episodes_db.EpisodeConflict:
-        closed = None
-        metrics.record_boundary('f_later_member')
-    if closed is None:
-        # The owner changed while F answered: the join stays as today's.
-        return attach_recorded(uid, conversation_id, row, started, finished, c)
+    if not state.get('closed'):
+        owner, boundary = verdict
+        try:
+            # Same split as the live path: the owner closes where the candidate begins, under the member guard.
+            closed = _close(uid, owner, boundary.reason or 'moved_on', c, now=started, split_after=started)
+        except episodes_db.EpisodeConflict:
+            closed = None
+            metrics.record_boundary('f_later_member')
+        if closed is None:
+            # The owner changed while F answered: the join stays as today's, on every retry too.
+            state['keep'] = True
+            return attach_recorded(uid, conversation_id, row, started, finished, c)
+        state['closed'] = True
     return attach_recorded(uid, conversation_id, row, started, finished, c, new_occasion=True)
 
 
-def _attach_synced_once(uid: str, conversation_id: str, row: Mapping[str, Any], c: Collaborators) -> str:
+def _attach_synced_once(
+    uid: str,
+    conversation_id: str,
+    row: Mapping[str, Any],
+    c: Collaborators,
+    *,
+    attempts: Optional[dict[str, dict[str, Any]]] = None,
+) -> str:
     """A sync-finalized conversation joins its recorded-time owner (or forms a closed one).
 
     The branch below the recorded-time switch is the legacy rollback path.
@@ -1546,7 +1570,7 @@ def _attach_synced_once(uid: str, conversation_id: str, row: Mapping[str, Any], 
         span = conversation_span(row)
         if span is None:
             return 'no_episode'
-        _attach_recorded_synced(uid, conversation_id, row, span.recorded_start, span.recorded_end, c)
+        _attach_recorded_synced(uid, conversation_id, row, span.recorded_start, span.recorded_end, c, attempts=attempts)
         return 'recorded'
     if started is None:
         return 'no_episode'
@@ -1621,14 +1645,24 @@ def _record_recovered(
 def _attach_synced(
     uid: str, conversation_id: str, row: Mapping[str, Any], c: Collaborators, *, absorbed_from: Optional[str] = None
 ) -> str:
+    # sync_attach re-runs an attach after a lost CAS. Both attach paths share one attempts memo,
+    # so Jev answers once per sync attach however many times the attach runs.
+    attempts: dict[str, dict[str, Any]] = {}
+
+    def attach_once_shared(uid, conversation_id, row, c):
+        return _attach_synced_once(uid, conversation_id, row, c, attempts=attempts)
+
+    def attach_recorded_shared(uid, conversation_id, row, started, finished, c):
+        return _attach_recorded_synced(uid, conversation_id, row, started, finished, c, attempts=attempts)
+
     return sync_attach.attach(
         uid,
         conversation_id,
         row,
         c,
         absorbed_from=absorbed_from,
-        attach_once=_attach_synced_once,
-        attach_recorded=_attach_recorded_synced,
+        attach_once=attach_once_shared,
+        attach_recorded=attach_recorded_shared,
         repoint_absorbed=_repoint_absorbed,
         repoint_donors=_repoint_sync_donors,
         end_discarded=_end_discarded,
