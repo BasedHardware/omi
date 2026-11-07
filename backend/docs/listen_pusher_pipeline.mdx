@@ -9345,9 +9345,10 @@ tick, including an error tick, updates the Unix timestamp gauge
 `omi_batch_projection_pump_last_tick_seconds`; zero means never observed.
 Scope the missing/stale alert to the dedicated pump service.
 
-`BATCH_PIPELINE_SERVING_PROJECTION_SWEEP` defaults on; only `off` skips the
-serving reconcile sweep. Owner wakes, held drains, metrics refresh, maintenance
-and recovery dispatch keep their existing behavior. The pump ignores this
+`BATCH_PIPELINE_SERVING_PROJECTION_SWEEP` defaults on; `false`, `0`, `off`, or
+`no` (after trimming and lowercasing) skips the serving reconcile sweep. Owner
+wakes, held drains, metrics refresh, maintenance and recovery dispatch keep
+their existing behavior. The pump ignores this
 serving-only switch. `BATCH_PIPELINE_MAX_OWNER_DRAINS` sets the process's
 owner drain capacity at import (default 8, clamped 1-16; malformed uses 8).
 [Change and ramp](listen_pusher_pipeline/changes/2026-11-05-projection-pump.md).
@@ -9356,7 +9357,8 @@ owner drain capacity at import (default 8, clamped 1-16; malformed uses 8).
 
 ## Batch projection drain admission
 
-`PROJECTION_DRAIN_CLAIM_AWARE` defaults on; only `off` disables it. Initial
+`PROJECTION_DRAIN_CLAIM_AWARE` defaults on; `false`, `0`, `off`, or `no`
+(after trimming and lowercasing) disables it. Initial
 owner-drain admissions use a read-only Redis claim GET and fail open on errors.
 Claim-busy re-requests through `again` back off 5–15 seconds; productive
 `more=True` continuations retain immediate FIFO progress without the peek.

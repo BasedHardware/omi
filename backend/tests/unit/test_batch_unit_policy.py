@@ -108,6 +108,44 @@ def test_cohort_registry_and_live_switch_contract():
     )
 
 
+@pytest.mark.parametrize(
+    'name',
+    [
+        'BATCH_PIPELINE_SERVING_PROJECTION_SWEEP',
+        'BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED',
+        'PROJECTION_DRAIN_CLAIM_AWARE',
+        'PROJECTION_DRAIN_PRIVACY_BACKOFF',
+        'PROJECTION_PRIVACY_REFUSAL_RESUME',
+    ],
+)
+@pytest.mark.parametrize(
+    'value,expected',
+    [
+        ('off', False),
+        ('false', False),
+        ('0', False),
+        ('no', False),
+        ('on', True),
+        (None, True),
+        (' OFF ', False),
+        (' FaLsE ', False),
+        (' 0 ', False),
+        (' No ', False),
+    ],
+)
+@pytest.mark.parametrize('source', ['flags', 'environ'])
+def test_projection_kill_switch_explicit_off_values(monkeypatch, name, value, expected, source):
+    flags = {} if value is None else {name: value}
+    if source == 'environ':
+        if value is None:
+            monkeypatch.delenv(name, raising=False)
+        else:
+            monkeypatch.setenv(name, value)
+        assert kill_switch(name) is expected
+    else:
+        assert kill_switch(name, flags=flags) is expected
+
+
 @pytest.fixture(scope='module')
 def scoped_env_violations():
     from config.policy.guard import violations, registry_violations
