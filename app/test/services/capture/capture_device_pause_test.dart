@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/pages/episodes/episode_presentation.dart';
+import 'package:omi/providers/device_provider.dart';
 import 'package:omi/utils/enums.dart';
 
 import '../../support/capture/capture_replay_world.dart';
@@ -123,5 +125,79 @@ void main() {
     expect(world.controller.offlineMuted, false);
     expect(world.controller.recordingState, RecordingState.deviceRecord);
     expect(world.controller.isPaused, false);
+  });
+
+  test('relaunch while pendant is paused restores paused pendant ownership and keeps Pause/Resume controls available',
+      () async {
+    await world.controller.pauseCapture();
+    await world.settle();
+    expect(world.controller.isPaused, isTrue);
+    expect(world.controller.recordingState, RecordingState.pause);
+
+    world.killProcess();
+    await world.reconstructProcess();
+    world.deviceConnection = ScriptedDeviceConnection();
+
+    // Before streamDeviceRecording runs, connected Omi pendant while paused is restorable,
+    // whereas an unsupported device type (e.g. limitless) is not pause-capable.
+    expect(world.controller.liveCaptureSource, isNull);
+    expect(EpisodePresentation.hasActiveOrPausedPendantCapture(world.controller, connectedDevice: pendant), isTrue);
+    expect(EpisodePresentation.canPause(world.controller, connectedDevice: pendant), isTrue);
+    final limitless = pendant.copyWith(type: DeviceType.limitless);
+    expect(EpisodePresentation.canPause(world.controller, connectedDevice: limitless), isFalse);
+
+    // Foregrounding while capturePolicy.muted is true must not auto-start an idle pendant.
+    world.controller.updateRecordingDevice(pendant);
+    world.controller.onAppForegrounded();
+    await world.settle();
+    expect(world.controller.liveCaptureSource, isNull);
+    expect(world.deviceConnection!.openAudioSubscriptions, 0);
+
+    await world.controller.streamDeviceRecording(device: pendant);
+    await world.settle();
+
+    expect(world.controller.isPaused, isTrue);
+    expect(world.controller.recordingState, RecordingState.pause);
+    expect(world.controller.liveCaptureSource, 'omi');
+    expect(EpisodePresentation.canPause(world.controller), isTrue);
+    expect(world.deviceConnection!.openAudioSubscriptions, 0);
+
+    await world.controller.resumeCapture();
+    await world.settle();
+
+    expect(world.controller.isPaused, isFalse);
+    expect(world.controller.recordingState, RecordingState.deviceRecord);
+    expect(world.controller.liveCaptureSource, 'omi');
+    expect(EpisodePresentation.canPause(world.controller), isTrue);
+    expect(world.deviceConnection!.openAudioSubscriptions, 1);
+
+    await world.controller.stopStreamDeviceRecording();
+    await world.settle();
+    world.controller.updateRecordingDevice(pendant);
+    expect(world.controller.liveCaptureSource, isNull);
+    expect(world.controller.isPaused, isFalse);
+    expect(EpisodePresentation.hasActiveOrPausedPendantCapture(world.controller, connectedDevice: pendant), isFalse);
+    expect(EpisodePresentation.canPause(world.controller, connectedDevice: pendant), isFalse);
+  });
+
+  test('capabilityNormalizedDevice ignores empty or disconnected pairedDevice sentinel on relaunch', () {
+    final deviceProvider = DeviceProvider();
+    addTearDown(deviceProvider.dispose);
+
+    deviceProvider.pairedDevice = BtDevice.empty();
+    deviceProvider.connectedDevice = null;
+    expect(deviceProvider.capabilityNormalizedDevice, isNull);
+
+    deviceProvider.pairedDevice = pendant;
+    deviceProvider.connectedDevice = null;
+    expect(deviceProvider.capabilityNormalizedDevice, isNull);
+
+    deviceProvider.connectedDevice = pendant;
+    deviceProvider.pairedDevice = BtDevice.empty();
+    expect(deviceProvider.capabilityNormalizedDevice?.id, pendant.id);
+
+    final glass = pendant.copyWith(type: DeviceType.openglass);
+    deviceProvider.pairedDevice = glass;
+    expect(deviceProvider.capabilityNormalizedDevice?.type, DeviceType.openglass);
   });
 }

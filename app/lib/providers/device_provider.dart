@@ -86,12 +86,12 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   /// restarts must prefer that over the advertising-time [connectedDevice]
   /// so the Omi-button gate matches Device Settings.
   BtDevice? get capabilityNormalizedDevice {
-    final connected = connectedDevice;
-    final paired = pairedDevice;
-    if (paired != null && (connected == null || paired.id == connected.id)) {
+    final connected = connectedDevice != null && connectedDevice!.id.isNotEmpty ? connectedDevice : null;
+    final paired = pairedDevice != null && pairedDevice!.id.isNotEmpty ? pairedDevice : null;
+    if (paired != null && ((connected == null && isConnected) || paired.id == connected?.id)) {
       return paired;
     }
-    return connected ?? paired;
+    return connected;
   }
 
   DateTime? _deviceSessionStartedAt;

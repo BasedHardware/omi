@@ -212,6 +212,27 @@ extension _CaptureLiveRecovery on CaptureController {
     return _capture.stagedReadModel.phase == CapturePhase.idle && !isPaused;
   }
 
+  Future<void> _ensureConnectedPendantSessionIfIdle() async {
+    final device = _recordingDevice;
+    final staged = _capture.stagedReadModel;
+    if (_captureControllerDisposed ||
+        device == null ||
+        device.id.isEmpty ||
+        (device.type != DeviceType.omi && device.type != DeviceType.openglass) ||
+        _liveRecovery.deviceStoppedByCaller ||
+        _pendantSuspension != null ||
+        staged.phase != CapturePhase.idle ||
+        staged.phoneOwnsCapture ||
+        staged.callActive) {
+      return;
+    }
+    try {
+      await streamDeviceRecording(device: device);
+    } catch (error) {
+      Logger.debug('[Capture] idle pendant session restore failed: $error');
+    }
+  }
+
   void _startIdlePendantCapture(CaptureRecoveryObservedTrigger trigger) {
     if (!_idlePendantNeedsCapture) return;
     Logger.debug('[Capture] pendant connected with capture idle; starting device capture (${trigger.wireName})');

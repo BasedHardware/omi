@@ -2534,14 +2534,14 @@ class CaptureController extends ChangeNotifier
   }
 
   Future<void> _initiateDeviceAudioStreaming() async {
-    if (_fenceUplinkForSync()) return;
     final device = _recordingDevice;
     final staged = _capture.stagedReadModel;
-    if (device == null || _pendantSuspension != null || !staged.pendantOwns || staged.callActive) {
-      return;
-    }
+    if (device == null || device.id.isEmpty || _pendantSuspension != null || !staged.pendantOwns || staged.callActive) return;
     final deviceId = device.id;
-    if (deviceId.isEmpty) {
+    if (_fenceUplinkForSync()) {
+      if (!_captureControllerDisposed) {
+        updateRecordingState(isPaused ? RecordingState.pause : RecordingState.deviceRecord);
+      }
       return;
     }
     final deviceRevision = _deviceIdentityRevision;
@@ -2591,7 +2591,7 @@ class CaptureController extends ChangeNotifier
     }
     if (foregroundAudioReady) {
       await _preferences.saveBool('nativeBleForegroundReady', true);
-    } else {
+    } else if (!isPaused && !SyncWakeScope.syncOnly) {
       Logger.debug('[_initiateDeviceAudioStreaming] streamAudioToWs returned false for device $deviceId');
       return;
     }
@@ -4678,12 +4678,14 @@ class CaptureController extends ChangeNotifier
   Future<void> pauseCapture() async {
     final outcome = await _capture.dispatch(const PauseCaptureRequested());
     outcome.throwIfFailed();
+    await _ensureConnectedPendantSessionIfIdle();
   }
 
   /// Resume the source [pauseCapture] paused.
   Future<void> resumeCapture() async {
     final outcome = await _dispatchWithResumeFence(const ResumeCaptureRequested());
     outcome.throwIfFailed();
+    await _ensureConnectedPendantSessionIfIdle();
   }
 
   /// Writes the phone source's buffered tail to the WAL and, when connected, the socket.

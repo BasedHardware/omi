@@ -1,3 +1,4 @@
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/episode.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
@@ -120,9 +121,33 @@ abstract final class EpisodePresentation {
       state == CaptureDisplayState.capturing ||
       state == CaptureDisplayState.recording;
 
-  static bool canPause(CaptureProvider provider) =>
-      provider.liveCaptureSource != null &&
-      LiveCaptureCard.canPause(provider.recordingDevice, source: provider.liveCaptureSource);
+  static bool hasActiveOrPausedPendantCapture(CaptureProvider provider, {BtDevice? connectedDevice}) {
+    final source = provider.liveCaptureSource;
+    if (source != null && source != 'phone') return true;
+    final device = provider.recordingDevice ?? connectedDevice;
+    final isRestorablePendant = device != null &&
+        device.id.isNotEmpty &&
+        (device.type == DeviceType.omi || device.type == DeviceType.openglass);
+    if (!isRestorablePendant || provider.pendantPausedForPhone || provider.isCallActive) {
+      return false;
+    }
+    return provider.isPaused ||
+        provider.recordingState == RecordingState.deviceRecord ||
+        provider.recordingState == RecordingState.pause;
+  }
+
+  static bool canPause(CaptureProvider provider, {BtDevice? connectedDevice}) {
+    final device = provider.recordingDevice ?? connectedDevice;
+    final source = provider.liveCaptureSource ??
+        (hasActiveOrPausedPendantCapture(provider, connectedDevice: connectedDevice)
+            ? switch (device?.type) {
+                DeviceType.omi => 'omi',
+                DeviceType.openglass => 'openglass',
+                _ => null,
+              }
+            : null);
+    return source != null && LiveCaptureCard.canPause(device, source: source);
+  }
 
   /// How far the running notes reach, "Covers up to 9:28 AM · full notes when it wraps up".
   /// Notes with no moment behind them yet say when they last changed instead.
