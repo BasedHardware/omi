@@ -19,7 +19,8 @@ def test_watch_process_now_keeps_recovered_speech_visible(client, auth_headers, 
     classify_failure = pipeline.failure_from_exception
 
     def capture_failure(error, **kwargs):
-        failures.append(''.join(traceback.format_exception(error)))
+        failures.append(repr(error))
+        traceback.print_exception(error)
         return classify_failure(error, **kwargs)
 
     monkeypatch.setattr(pipeline, 'failure_from_exception', capture_failure)
@@ -58,6 +59,7 @@ def test_watch_process_now_keeps_recovered_speech_visible(client, auth_headers, 
     conversation = client.get('/v1/conversations/sync-created-conversation', headers=auth_headers)
     assert conversation.status_code == 200, conversation.text
     assert conversation.json()['discarded'] is False
+    assert conversation.json()['transcript_segments'][0]['text'] == 'Testing one two three.'
     row = conversations_db.get_conversation('123', 'sync-created-conversation')
     assert row['sync_relevance_user_kept'] is True
     assert reprocessed == ['sync-created-conversation']
