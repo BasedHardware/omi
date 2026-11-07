@@ -80,10 +80,27 @@ class _TrackingCaptureProvider extends CaptureProvider {
         );
 
   var forceProcessingCalls = 0;
+  var finishes = 0;
+
+  /// Makes Finish fail the way the capture owner reports an effect failure.
+  Object? finishFailure;
+
+  /// Holds Finish until completed: a stop waiting its turn behind server processing or reconnect.
+  Completer<void>? finishGate;
 
   @override
   Future<void> forceProcessingCurrentConversation() async {
     forceProcessingCalls++;
+  }
+
+  @override
+  Future<void> finishCapture() async {
+    finishes++;
+    final gate = finishGate;
+    if (gate != null) await gate.future;
+    final failure = finishFailure;
+    if (failure != null) throw failure;
+    return super.finishCapture();
   }
 }
 
@@ -125,6 +142,45 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
     expect(find.text('open-capture'), findsOneWidget);
     expect(find.byType(LiveEpisodePage), findsNothing);
+  });
+
+  testWidgets('Finish closes the live page at once while finishCapture waits on server processing (#19234)', (
+    tester,
+  ) async {
+    final harness = await _pumpCapturingPage(tester);
+    final gate = Completer<void>();
+    harness.capture.finishGate = gate;
+
+    final dynamic state = tester.state(find.byType(LiveEpisodePage));
+    unawaited(state.debugStopConversation(harness.capture) as Future<void>);
+    unawaited(state.debugStopConversation(harness.capture) as Future<void>);
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(find.byType(LiveEpisodePage), findsNothing, reason: 'Finish closes the live page immediately');
+    expect(find.text('open-capture'), findsOneWidget);
+    expect(harness.home.selectedIndex, HomeProvider.homeTab);
+
+    gate.complete();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(harness.capture.finishes, 1, reason: 'a second tap while leaving does not finish twice');
+    expect(harness.capture.forceProcessingCalls, 1);
+    expect(find.text('open-capture'), findsOneWidget, reason: 'Home is never closed');
+  });
+
+  testWidgets('a Finish that fails reports the error where the reader lands (#19234)', (tester) async {
+    final harness = await _pumpCapturingPage(tester);
+    harness.capture.finishFailure = StateError('refused');
+
+    await _stopFromPage(tester, harness.capture);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    expect(find.text(lookupAppLocalizations(const Locale('en')).somethingWentWrong), findsOneWidget);
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.byType(LiveEpisodePage), findsNothing);
+    expect(find.text('open-capture'), findsOneWidget);
   });
 
   // David, 2026-09-25: Finish is the only stop and is explicit, so the "Finished Conversation?"
