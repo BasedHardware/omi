@@ -52,12 +52,12 @@ def configure(
     token: str = typer.Option(..., "--token", help="Bearer token for the local Omi Desktop API."),
 ) -> None:
     ctx = _ctx(typer_ctx)
-    config = ctx.load_config()
-    profile = config.get_profile(ctx.profile_name)
-    profile.local_api_url = url.rstrip("/")
-    profile.local_token = token
-    config.set_profile(profile)
-    cfg.save(config)
+    with cfg.locked_config(ctx.load_config().path) as config:
+        profile = config.get_profile(ctx.profile_name)
+        profile.local_api_url = url.rstrip("/")
+        profile.local_token = token
+        config.set_profile(profile)
+        cfg.save(config)
     ctx.reload_config()
     payload = {
         "profile": profile.name,
