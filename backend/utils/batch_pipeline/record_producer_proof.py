@@ -119,3 +119,29 @@ def producer_tokens_dead(tokens, proof, *, producers_stopped=False):
         if current_start is None or current_start <= started + PRODUCER_START_MARGIN_SECONDS:
             return False
     return True
+
+
+def producers_quiesced(row, tokens, now=None):
+    """Aged completed capture whose identified producers can no longer append.
+
+    Repair-only exemption from the pod-restart proof. Pre-identity (bare True)
+    tokens still require the explicit operator attestation.
+    """
+    from config.record_seal_rules import live_producer_grace_seconds
+
+    grace = live_producer_grace_seconds()
+    if grace <= 0 or row.get('status') != 'completed' or not isinstance(tokens, dict) or not tokens:
+        return False
+    finish = row.get('finished_at')
+    if isinstance(finish, datetime):
+        if finish.tzinfo is None or finish.utcoffset() is None:
+            return False
+        finish = finish.timestamp()
+    if isinstance(finish, bool) or not isinstance(finish, (int, float)) or not math.isfinite(finish):
+        return False
+    now = time.time() if now is None else now
+    if now - finish < grace:
+        return False
+    return all(
+        isinstance(value, dict) and isinstance(value.get('pod'), str) and value['pod'] for value in tokens.values()
+    )

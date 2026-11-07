@@ -52,6 +52,7 @@ spec:
             - {name: RECORD_AUDIO_PARTIAL_ENABLED, value: {{ .Values.recordSealRules.partialEnabled | quote }}}
             - {name: RECORD_SEAL_OVERLAP_TRIM_ENABLED, value: {{ .Values.recordSealRules.overlapTrimEnabled | quote }}}
             - {name: RECORD_SEAL_UPLOAD_FAILED_REPAIR_ENABLED, value: {{ .Values.recordSealRules.uploadFailedRepairEnabled | quote }}}
+            - {name: RECORD_SEAL_LIVE_PRODUCER_GRACE_SECONDS, value: {{ .Values.recordSealRules.liveProducerGraceSeconds | quote }}}
             - {name: RECORD_SEAL_REPAIR_SERVER_FLAGS, value: {{ .Values.recordSealWorker.serverFlags | toJson | quote }}}
             - {name: BATCH_PIPELINE_WORKER_RELEASE, value: {{ .Release.Name | quote }}}
             - name: POD_NAMESPACE

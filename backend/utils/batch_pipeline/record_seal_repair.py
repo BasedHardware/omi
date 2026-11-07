@@ -15,7 +15,7 @@ from database.batch_pipeline_privacy import assert_batch_write_allowed, BatchPri
 from utils.batch_pipeline.contracts import Priority, WorkItem
 from utils.batch_pipeline.live import retained_record_units
 from utils.batch_pipeline.record_barrier import validate_record_tail
-from utils.batch_pipeline.record_producer_proof import producer_tokens_dead
+from utils.batch_pipeline.record_producer_proof import producer_tokens_dead, producers_quiesced
 from utils.batch_pipeline.record_seal_reasons import proof_reason, proof_diagnostics, tail_gap_bucket, TailGapRefusal
 from utils.other.storage import list_audio_chunks
 from utils.batch_pipeline import record_seal_profile
@@ -67,8 +67,9 @@ def seal_refusal(
         return 'already_partial'
     if row.get('record_upload_failed') and not (repair_upload_failed and upload_failed_repair_enabled()):
         return 'upload_failed'
-    if row.get('record_upload_sessions') and not producer_tokens_dead(
-        row['record_upload_sessions'], producer_proof, producers_stopped=producers_stopped
+    if row.get('record_upload_sessions') and not (
+        producer_tokens_dead(row['record_upload_sessions'], producer_proof, producers_stopped=producers_stopped)
+        or producers_quiesced(row, row['record_upload_sessions'])
     ):
         return 'upload_pending'
     if row.get('record_audio_closed') and not repair_closed:

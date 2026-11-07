@@ -5,6 +5,8 @@ recordSealRules:
   partialEnabled: true
   overlapTrimEnabled: true
   uploadFailedRepairEnabled: true
+  # Completed captures older than this stop waiting on a live pusher pod restart; 0 restores that rule.
+  liveProducerGraceSeconds: 3600
 image:
   repository: ""
   digest: ""
