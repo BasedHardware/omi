@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 from html import unescape
 import re
 from typing import Any, Optional
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 import httpx
 from fastapi import Body, FastAPI
@@ -74,11 +74,15 @@ def _safe_limit(limit: Any, default: int = 5) -> int:
     return max(1, min(limit, MAX_LIMIT))
 
 
-def _clean_text(value: Any) -> str:
-    if value is None:
+def _clean_text(value: Any, preserve_newlines: bool = False) -> str:
+    if value is None or isinstance(value, (bool, list, dict)):
         return ""
     text = unescape(str(value))
     text = re.sub(r"<[^>]+>", "", text)
+    text = re.sub(r"[\u200b-\u200f\u202a-\u202e\u2060\ufeff]", " ", text)
+    if preserve_newlines:
+        lines = [re.sub(r"[^\S\n\r]+", " ", line).strip() for line in text.splitlines()]
+        return "\n".join(line for line in lines if line).strip()
     text = re.sub(r"\s+", " ", text)
     return text.strip()
 
@@ -112,8 +116,14 @@ def _extract_names(items: Any, limit: int = 5) -> str:
 
 def _description_text(description: Any) -> str:
     if isinstance(description, dict):
-        description = description.get("value")
-    text = _clean_text(description)
+        description = description.get("value") or description.get("text") or ""
+    elif isinstance(description, list):
+        parts = [
+            _clean_text(d.get("value") if isinstance(d, dict) else d, preserve_newlines=True)
+            for d in description
+        ]
+        description = "\n".join(p for p in parts if p)
+    text = _clean_text(description, preserve_newlines=True)
     if len(text) > 900:
         text = text[:900].rstrip() + "..."
     return text
@@ -123,16 +133,46 @@ def _work_id(value: Any) -> Optional[str]:
     candidate = _clean_text(value)
     if not candidate:
         return None
-    candidate = candidate.strip("/")
-    candidate = candidate.removeprefix("works/")
-    if re.fullmatch(r"OL[0-9]+W", candidate, flags=re.IGNORECASE):
-        return candidate.upper()
+
+    candidate = candidate.strip("`'\"<>[]()")
+    if candidate.startswith(("http://", "https://")) or "openlibrary.org" in candidate.lower():
+        normalized_url = candidate if "://" in candidate else f"https://{candidate.lstrip('/')}"
+        try:
+            parsed = urlsplit(normalized_url)
+        except ValueError:
+            return None
+        host = (parsed.hostname or "").lower()
+        if host not in {"openlibrary.org", "www.openlibrary.org"}:
+            return None
+        candidate = parsed.path
+
+    candidate = candidate.strip().strip("/")
+    lower_cand = candidate.lower()
+    for prefix in ("works/", "work:", "#"):
+        if lower_cand.startswith(prefix):
+            candidate = candidate[len(prefix) :].strip().strip("/")
+            break
+    else:
+        if "/" in candidate and not re.match(r"^ol[0-9]+w(?:/|$)", lower_cand):
+            return None
+
+    first_segment = candidate.split("/", 1)[0].strip().removesuffix(".json")
+    if re.fullmatch(r"OL[0-9]+W", first_segment, flags=re.IGNORECASE):
+        return first_segment.upper()
     return None
 
 
 def _safe_isbn(value: Any) -> Optional[str]:
-    candidate = re.sub(r"[^0-9Xx]", "", _clean_text(value))
-    if len(candidate) in {10, 13}:
+    candidate = _clean_text(value).strip("`'\"<>[]()")
+    if not candidate:
+        return None
+    lower_cand = candidate.lower()
+    for prefix in ("isbn-13:", "isbn-10:", "isbn13:", "isbn10:", "isbn:", "isbn/", "isbn "):
+        if lower_cand.startswith(prefix):
+            candidate = candidate[len(prefix) :].strip()
+            break
+    candidate = re.sub(r"[\s\-\.]+", "", candidate)
+    if re.fullmatch(r"[0-9]{9}[0-9Xx]|[0-9]{13}", candidate):
         return candidate.upper()
     return None
 

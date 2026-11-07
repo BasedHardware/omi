@@ -63,10 +63,13 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from main import (
     _clean_text,
+    _description_text,
     _extract_names,
     _format_book,
     _format_subject_work,
+    _safe_isbn,
     _safe_limit,
+    _work_id,
     get_book_details,
     search_books,
     search_subject,
@@ -224,6 +227,67 @@ class TestOpenLibraryRobustnessAndNullGuards(unittest.TestCase):
             self.assertIsNone(resp.error)
             self.assertIn("Deep Learning", resp.result)
             self.assertIn("Author: unknown author", resp.result)
+
+    def test_work_id_extracts_from_slug_urls_and_rejects_non_works(self):
+        self.assertEqual(_work_id("OL45883W"), "OL45883W")
+        self.assertEqual(_work_id("ol45883w"), "OL45883W")
+        self.assertEqual(_work_id("works/OL45883W"), "OL45883W")
+        self.assertEqual(_work_id("/works/OL45883W/The_Lord_of_the_Rings"), "OL45883W")
+        self.assertEqual(
+            _work_id("https://openlibrary.org/works/OL45883W/The_Lord_of_the_Rings"),
+            "OL45883W",
+        )
+        self.assertEqual(
+            _work_id("https://www.openlibrary.org/works/OL45883W.json"),
+            "OL45883W",
+        )
+        self.assertEqual(_work_id("work: OL45883W"), "OL45883W")
+        self.assertEqual(_work_id("#OL45883W"), "OL45883W")
+        self.assertIsNone(_work_id("OL123M"))
+        self.assertIsNone(_work_id("https://example.com/works/OL45883W"))
+        self.assertIsNone(_work_id("/books/OL123M/OL45883W"))
+        self.assertIsNone(_work_id(True))
+        self.assertIsNone(_work_id(None))
+
+    def test_safe_isbn_normalizes_prefixes_and_rejects_prose(self):
+        self.assertEqual(_safe_isbn("0395193958"), "0395193958")
+        self.assertEqual(_safe_isbn("978-0-395-19395-8"), "9780395193958")
+        self.assertEqual(_safe_isbn("ISBN: 9780395193958"), "9780395193958")
+        self.assertEqual(_safe_isbn("isbn-10: 043942089x"), "043942089X")
+        self.assertIsNone(_safe_isbn("coca cola 1000ml"))
+        self.assertIsNone(_safe_isbn("12345X6789"))
+        self.assertIsNone(_safe_isbn(True))
+        self.assertIsNone(_safe_isbn(None))
+
+    def test_description_text_preserves_multiline_paragraphs(self):
+        raw = {"value": "First paragraph with  extra spaces.\n\nSecond paragraph.\n   Third line.  "}
+        self.assertEqual(
+            _description_text(raw),
+            "First paragraph with extra spaces.\nSecond paragraph.\nThird line.",
+        )
+        self.assertEqual(
+            _description_text(["Paragraph one", {"value": "Paragraph two"}]),
+            "Paragraph one\nParagraph two",
+        )
+
+    def test_get_book_details_with_slug_url_and_multiline_description(self):
+        mock_work = {
+            "title": "The Lord of the Rings",
+            "description": {"value": "Line one.\n\nLine two."},
+            "subjects": ["Fantasy"],
+            "created": {"value": "2009-12-11T00:00:00"},
+        }
+        with patch("main._request_json") as mock_req:
+            mock_req.return_value = mock_work
+            resp = asyncio.run(
+                get_book_details(
+                    {"work_id": "https://openlibrary.org/works/OL45883W/The_Lord_of_the_Rings"}
+                )
+            )
+            self.assertIsNone(resp.error)
+            mock_req.assert_called_once_with("/works/OL45883W.json")
+            self.assertIn("Open Library work: OL45883W", resp.result)
+            self.assertIn("Description: Line one.\nLine two.", resp.result)
 
 
 if __name__ == "__main__":

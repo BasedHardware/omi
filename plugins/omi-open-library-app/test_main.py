@@ -3,7 +3,7 @@ from urllib.parse import unquote
 
 from fastapi.testclient import TestClient
 
-from main import _subject_slug, app
+from main import _description_text, _safe_isbn, _subject_slug, _work_id, app
 
 
 def test_subject_slug_ascii():
@@ -101,3 +101,29 @@ def test_search_subject_missing_subject():
     resp = client.post("/tools/search_subject", json={"subject": "   "})
     assert resp.status_code == 200
     assert resp.json()["error"] == "Provide a subject to browse."
+
+
+def test_work_id_urls_slugs_and_prefixes():
+    assert _work_id("OL45883W") == "OL45883W"
+    assert _work_id("ol45883w") == "OL45883W"
+    assert _work_id("/works/OL45883W/The_Lord_of_the_Rings") == "OL45883W"
+    assert _work_id("https://openlibrary.org/works/OL45883W/The_Lord_of_the_Rings") == "OL45883W"
+    assert _work_id("https://www.openlibrary.org/works/OL45883W.json") == "OL45883W"
+    assert _work_id("work: OL45883W") == "OL45883W"
+    assert _work_id("#OL45883W") == "OL45883W"
+    assert _work_id("OL123M") is None
+    assert _work_id("https://example.com/works/OL45883W") is None
+    assert _work_id("/books/OL123M/OL45883W") is None
+
+
+def test_safe_isbn_prefixes_and_validation():
+    assert _safe_isbn("978-0-395-19395-8") == "9780395193958"
+    assert _safe_isbn("ISBN: 9780395193958") == "9780395193958"
+    assert _safe_isbn("isbn-10: 043942089x") == "043942089X"
+    assert _safe_isbn("coca cola 1000ml") is None
+    assert _safe_isbn("12345X6789") is None
+
+
+def test_description_text_preserves_multiline_paragraphs():
+    raw = {"value": "First paragraph with  extra spaces.\n\nSecond paragraph.\n   Third line.  "}
+    assert _description_text(raw) == "First paragraph with extra spaces.\nSecond paragraph.\nThird line."
