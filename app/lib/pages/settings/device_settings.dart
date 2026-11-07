@@ -17,7 +17,6 @@ import 'package:omi/pages/conversations/sync_page.dart';
 import 'package:omi/pages/conversations/sync_pending_work.dart';
 import 'package:omi/pages/home/firmware_update.dart';
 import 'package:omi/pages/home/omiglass_ota_update.dart';
-import 'package:omi/pages/onboarding/interactive_device_onboarding/interactive_device_onboarding_wrapper.dart';
 import 'package:omi/pages/settings/device/device_control_sheets.dart';
 import 'package:omi/pages/settings/device/device_info_groups.dart';
 import 'package:omi/pages/settings/device/device_live_sections.dart';
@@ -39,7 +38,6 @@ import 'package:omi/services/services.dart';
 import 'package:omi/services/sync_health_watchdog.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/analytics/intercom.dart';
-import 'package:omi/utils/device.dart';
 import 'package:omi/utils/error_message.dart';
 import 'package:omi/utils/firmware_update_build_policy.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -488,15 +486,6 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     return OmiSettingsGroup(
       header: l10n.device,
       children: [
-        // The interactive tutorial teaches CV1 button behaviour. DevKit, Glass and Neo share
-        // DeviceType.omi, so gate on the GATT model as well.
-        if (connected?.type == DeviceType.omi &&
-            DeviceUtils.isOmiCv1(modelNumber: paired?.modelNumber, deviceName: connected?.name))
-          OmiSettingsRow(
-            leading: const FaIcon(FontAwesomeIcons.graduationCap),
-            title: l10n.deviceTutorial,
-            onTap: () => routeToPage(context, const InteractiveDeviceOnboardingWrapper(allowExit: true)),
-          ),
         // Ray-Ban Meta: on-demand photo capture. The Meta AI app manages its firmware, so the
         // update rows are hidden for it.
         if (isRayBan)
