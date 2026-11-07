@@ -329,6 +329,8 @@ def test_backfill_lease_contention_is_incomplete_until_owner_finishes(modules, m
     day = '2026-10-01'
     monkeypatch.setenv('FINOPS_BACKFILL_FROM', day)
     monkeypatch.delenv('FINOPS_DATE', raising=False)
+    monkeypatch.setenv('FINOPS_AUTH', 'cloudrun')
+    monkeypatch.setenv('FINOPS_RUN_ROOT', '/unused-test-root')
     monkeypatch.setattr(entry.cloudrun, 'assert_runtime_identity', lambda: 'test-writer')
     monkeypatch.setattr(entry, 'acquire_lease', lambda date: False)
     monkeypatch.setattr(entry, 'takeover_if_stale', lambda date: False)
